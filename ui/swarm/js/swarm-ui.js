@@ -46,24 +46,17 @@
           </div>
         </section>
 
-        <section class="ph-pane" data-pane="sine">
+        <section class="ph-pane c64" data-pane="sine">
+          <div class="c64-banner">C64 SINE MODE</div>
           <div class="grid">
             <label>Kolor
               <select id="v_sine_color"><option value="amber">Amber</option><option value="green">Matrix Green</option></select>
             </label>
-            <label>Gęstość <input id="v_sine_density" type="range" min="0" max="240" step="10" value="20"></label>
-            <label>Glify (szybkość) <input id="v_sine_glyph" type="range" min="0.3" max="1.5" step="0.05" value="0.75"></label>
-            <label>Smuga (ilość) <input id="v_sine_trailCount" type="range" min="0" max="20" step="1" value="9"></label>
-            <label>Smuga (wygaszanie) <input id="v_sine_trailDecay" type="range" min="0" max="1" step="0.05" value="1"></label>
-            <label>Base lag (s) <input id="v_sine_base" type="range" min="0" max="0.8" step="0.02" value="0.12"></label>
-            <label>Step lag (s) <input id="v_sine_step" type="range" min="0" max="0.25" step="0.01" value="0.06"></label>
-            <label>Blob speed (s) <input id="v_sine_blob" type="range" min="8" max="60" step="1" value="28"></label>
-            <label>Amplitude min (px) <input id="v_sine_ampmin" type="range" min="5" max="120" step="1" value="20"></label>
-            <label>Amplitude max (px) <input id="v_sine_ampmax" type="range" min="10" max="160" step="1" value="90"></label>
-            <label>Freq min (rad/s) <input id="v_sine_freqmin" type="range" min="0.1" max="2" step="0.05" value="0.4"></label>
-            <label>Freq max (rad/s) <input id="v_sine_freqmax" type="range" min="0.2" max="3" step="0.05" value="1.2"></label>
-            <label>Vy min (px/s) <input id="v_sine_vymin" type="range" min="10" max="300" step="5" value="30"></label>
-            <label>Vy max (px/s) <input id="v_sine_vymax" type="range" min="20" max="500" step="5" value="120"></label>
+            <label>Gęstość <input id="v_sine_density" type="range" min="0" max="240" step="10" value="40"></label>
+            <label>Amplitude (% H) <input id="v_sine_ampfrac" type="range" min="0.05" max="0.49" step="0.01" value="0.42"></label>
+            <label>Wavelength (px) <input id="v_sine_wavelength" type="range" min="40" max="800" step="10" value="240"></label>
+            <label>Speed (px/s) <input id="v_sine_speed" type="range" min="20" max="600" step="10" value="160"></label>
+            <label class="ph-toggle"><input id="v_sine_quantize" type="checkbox" checked> Quantize positions</label>
           </div>
           <div class="row">
             <button id="v_sine_apply" class="ph-btn primary">Apply</button>
@@ -124,6 +117,12 @@
   .ph-spacer{ flex:1 1 auto; }
   .ph-pane{ display:none; padding:14px; }
   .ph-pane.active{ display:block; }
+  /* C64 styling cues for Sine pane */
+  .ph-pane.c64{ border:1px solid rgba(65,166,246,.25); background: linear-gradient(180deg, rgba(10,14,22,.85), rgba(8,10,16,.85)); }
+  .ph-pane.c64 .c64-banner{ display:inline-block; margin:4px 0 10px; padding:6px 10px; border:1px solid rgba(65,166,246,.5);
+    color:#41A6F6; text-shadow:0 0 8px rgba(65,166,246,.55); border-radius:8px; font:700 12px/1.1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing:.08em; }
+  .ph-pane.c64 label{ font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  .ph-pane.c64 input[type="range"]{ accent-color:#41A6F6; }
   .grid{ display:grid; grid-template-columns: repeat(2, minmax(200px, 1fr)); gap:12px 14px; }
   .row{ display:flex; gap:8px; padding:12px 2px; }
   label{ display:flex; align-items:center; justify-content:space-between; gap:12px; }
@@ -181,20 +180,26 @@
   // Helpers
   function val(id){ const el=document.getElementById(id); return el.type==='range'? Number(el.value): el.value; }
   function applyCommon(prefix, includeDensity=false){
-    const variant = val(`${prefix}_color`);
-    const density = val(`${prefix}_density`);
-    const glyph   = val(`${prefix}_glyph`);
-    const tc      = val(`${prefix}_trailCount`);
-    const td      = val(`${prefix}_trailDecay`);
-    const base    = val(`${prefix}_base`);
-    const step    = val(`${prefix}_step`);
-    const blob    = val(`${prefix}_blob`);
-    window.PocketHiveBees.setVariant(variant);
-    window.PocketHiveBees.setGlyphSpeedFactor(glyph);
-    window.PocketHiveBees.setTrail(tc, base, step);
-    window.PocketHiveBees.setTrailDecay(td);
-    window.PocketHiveBees.setBlobSpeed(blob);
-    if(includeDensity) window.PocketHiveBees.setDensity(density);
+    const getEl = (id)=> document.getElementById(id);
+    const vEl = getEl(`${prefix}_color`);
+    const dEl = getEl(`${prefix}_density`);
+    const gEl = getEl(`${prefix}_glyph`);
+    const tcEl = getEl(`${prefix}_trailCount`);
+    const tdEl = getEl(`${prefix}_trailDecay`);
+    const baseEl = getEl(`${prefix}_base`);
+    const stepEl = getEl(`${prefix}_step`);
+    const blobEl = getEl(`${prefix}_blob`);
+    if(vEl) window.PocketHiveBees.setVariant(vEl.value);
+    if(includeDensity && dEl) window.PocketHiveBees.setDensity(Number(dEl.value));
+    if(gEl) window.PocketHiveBees.setGlyphSpeedFactor(Number(gEl.value));
+    if(tcEl || baseEl || stepEl){
+      const tc = tcEl? Number(tcEl.value) : undefined;
+      const base = baseEl? Number(baseEl.value) : undefined;
+      const step = stepEl? Number(stepEl.value) : undefined;
+      window.PocketHiveBees.setTrail(tc, base, step);
+    }
+    if(tdEl) window.PocketHiveBees.setTrailDecay(Number(tdEl.value));
+    if(blobEl) window.PocketHiveBees.setBlobSpeed(Number(blobEl.value));
   }
 
   // Live preview: apply values immediately when controls change
@@ -205,10 +210,12 @@
       window.PocketHiveBees.setBezierParams({ durMin: val('v_bezier_durmin'), durMax: val('v_bezier_durmax') });
     } else if(prefix.includes('sine')){
       window.PocketHiveBees.setPattern('sine');
+      const qEl = document.getElementById('v_sine_quantize');
       window.PocketHiveBees.setSineParams({
-        ampMin: val('v_sine_ampmin'), ampMax: val('v_sine_ampmax'),
-        freqMin: val('v_sine_freqmin'), freqMax: val('v_sine_freqmax'),
-        vyMin: val('v_sine_vymin'), vyMax: val('v_sine_vymax')
+        ampFrac: val('v_sine_ampfrac'),
+        wavelength: val('v_sine_wavelength'),
+        speed: val('v_sine_speed'),
+        quantize: !!(qEl && qEl.checked)
       });
     } else if(prefix.includes('matrix')){
       window.PocketHiveBees.setPattern('matrix');

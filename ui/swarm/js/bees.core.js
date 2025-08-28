@@ -4,11 +4,24 @@
   const root = document.querySelector('.ph-bg-bees');
   if(!root) return;
 
+  // Precomputed 8-bit style sine table (C64-like): 256 samples over 0..2π scaled to [-1,1]
+  // Using a Float32Array for fast multiply; values are in range [-1, 1].
+  const SIN256 = new Float32Array(256);
+  for(let i=0;i<256;i++){
+    SIN256[i] = Math.sin((i/256) * Math.PI * 2);
+  }
+
   const state = {
     density: 20, variant: 'amber', pattern: 'bezier',
     glyphSpeedFactor: 0.75, trailCount: 9, trailBaseLag: 0.12, trailStepLag: 0.06, trailDecay: 1.00,
     durMin: 8, durMax: 16, stepMs: 33, blobSpeed: 28,
-    sine: { ampMin: 20, ampMax: 90, freqMin: 0.4, freqMax: 1.2, vyMin: 30, vyMax: 120 },
+    sine: {
+      // Simplified C64 traveling wave params
+      ampFrac: 0.42,        // amplitude as fraction of screen height
+      wavelength: 240,      // pixels per sine period
+      speed: 160,           // horizontal speed in px/s
+      quantize: true        // round positions for retro look
+    },
     rain: { vyMin: 80, vyMax: 220 }
   };
 
@@ -60,7 +73,7 @@
     return trails;
   }
 
-  function makeBeeBezier(w,h){
+  function makeBeeBezier(w,h, i, n){
     const wrap=document.createElement('div'); wrap.className='bee'; wrap.style.setProperty('--size', randint(12,18)+'px');
     const lead=document.createElement('span'); lead.className='glyph'; lead.textContent=randChar(); glyphTicker(lead); wrap.appendChild(lead);
     const trails=makeTrails(wrap, lead);
@@ -82,15 +95,31 @@
     return wrap;
   }
 
-  function makeBeeSine(w,h){
+  function makeBeeSine(w,h, i, n){
     const wrap=document.createElement('div'); wrap.className='bee'; wrap.style.setProperty('--size', randint(12,18)+'px');
     const lead=document.createElement('span'); lead.className='glyph'; lead.textContent=randChar(); glyphTicker(lead); wrap.appendChild(lead);
     const trails=makeTrails(wrap, lead);
-    const A=rand(state.sine.ampMin,state.sine.ampMax), omega=rand(state.sine.freqMin,state.sine.freqMax), phase=rand(0,Math.PI*2), x0=rand(0.1*w,0.9*w), vy=rand(state.sine.vyMin,state.sine.vyMax);
-    let y0=-40 - rand(0,200); const start=performance.now()-rand(0,2000);
+    // Simplified C64 traveling sine wave: all bees lie on the same wave (row)
+    // y = midY + amp * sin((x / wavelength) * 2π)
+    const ampFrac = Math.max(0.05, Math.min(0.49, Number(state.sine.ampFrac)||0.42));
+    const amp = Math.round(ampFrac * h);
+    const wavelength = Math.max(40, Math.min(800, Number(state.sine.wavelength)||240));
+    const speed = Math.max(10, Math.min(800, Number(state.sine.speed)||160)); // px/s, to the right
+    const spacing = Math.max(8, w / Math.max(1,n));
+    const midY = Math.round(h/2);
+    // Stable global start to sync the row
+    if(!window.__phSineStart) window.__phSineStart = performance.now();
+    const start = window.__phSineStart;
     const q=[]; const maxLag=state.trailBaseLag+state.trailCount*state.trailStepLag; const maxQ=Math.ceil((maxLag*1000)/state.stepMs)+4; let last=0;
     const loop=(now)=>{ if(now-last<state.stepMs) return requestAnimationFrame(loop); last=now;
-      const t=(now-start)/1000; let y=y0 + vy*t; if(y>h+60){ y0=-60; y=y0; } const x=x0 + A*Math.sin(omega*t + phase);
+      const t = (now - start) / 1000;
+      // Horizontal travel with wrap
+      let x = (i*spacing + (speed * t)) % (w + spacing);
+      if(x < -16) x += (w + spacing);
+      // Map x to sine index: idx = ((x / wavelength) * 256) mod 256
+      let idx = Math.floor(((x / wavelength) * 256)) & 255;
+      let y = midY + amp * SIN256[idx];
+      if(state.sine.quantize){ x = Math.round(x); y = Math.round(y); }
       q.push([x,y]); if(q.length>maxQ) q.shift();
       lead.style.transform=`translate(${x}px,${y}px) translate(-50%,-50%)`;
       for(let i=0;i<trails.length;i++){ const lagSec=state.trailBaseLag+i*state.trailStepLag; const idx=Math.max(0,q.length-Math.floor((lagSec*1000)/state.stepMs)); const p=q[idx]||q[0]||[x,y];
@@ -99,7 +128,7 @@
     return wrap;
   }
 
-  function makeBeeMatrix(w,h){
+  function makeBeeMatrix(w,h, i, n){
     const wrap=document.createElement('div'); wrap.className='bee'; wrap.style.setProperty('--size', randint(12,18)+'px');
     const lead=document.createElement('span'); lead.className='glyph'; lead.textContent=randChar(); glyphTicker(lead); wrap.appendChild(lead);
     const trails=makeTrails(wrap, lead);
@@ -121,7 +150,7 @@
     const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     const N = prefersReduced ? Math.min(20, Math.max(6, Math.floor(count*0.25))) : count;
     const factory = state.pattern==='bezier'? makeBeeBezier : state.pattern==='sine'? makeBeeSine : makeBeeMatrix;
-    for(let i=0;i<N;i++) layer.appendChild(factory(w,h));
+    for(let i=0;i<N;i++) layer.appendChild(factory(w,h,i,N));
   }
 
   // Public API
