@@ -1,82 +1,77 @@
 <!doctype html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8"/>
-  <title>PocketHive UI (MVP)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>PocketHive UI</title>
   <style>
-    body { font-family: system-ui, sans-serif; margin: 20px; }
-    .card { border: 1px solid #ccc; border-radius: 8px; padding: 12px; margin-bottom: 12px; }
-    #log { white-space: pre; font-family: ui-monospace, monospace; max-height: 40vh; overflow:auto; background:#f7f7f7; padding:8px; }
-    .grid { display:grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
-    .kpi { font-size: 28px; font-weight: 700; }
+    :root { --ph-yellow: #FFC107; }
+    html, body { height: 100%; margin: 0; font-family: Inter, Segoe UI, Arial, sans-serif; color: #e8eaed; }
+    body {
+      background: #0b1016 url('assets/bg.png') center/cover no-repeat fixed;
+      animation: bg-pan 40s ease-in-out infinite;
+    }
+    @keyframes bg-pan {
+      0% { background-position: 50% 50%; }
+      50% { background-position: 48% 52%; }
+      100% { background-position: 50% 50%; }
+    }
+    header {
+      display: flex; align-items: center; gap: 16px;
+      padding: 18px 22px; position: sticky; top: 0; z-index: 10;
+      background: rgba(8,10,14,0.75);
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+      backdrop-filter: blur(6px);
+    }
+    header img.logo { height: 44px; }
+    header .brand { font-weight: 800; font-size: 20px; }
+    header .accent { color: var(--ph-yellow); }
+    main { max-width: 1100px; margin: 24px auto; padding: 0 20px 40px; }
+    .controls { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:16px; }
+    .controls input, .controls button {
+      padding: 8px 10px; border-radius: 8px;
+      border: 1px solid rgba(255,255,255,0.15);
+      background: rgba(12,16,22,0.7); color:#fff;
+    }
+    .controls button { cursor: pointer; }
+    .kpi-grid { display:grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+    .card {
+      border: 1px solid rgba(255,255,255,0.12);
+      background: rgba(12,16,22,0.66);
+      border-radius: 14px; padding: 14px 16px;
+      box-shadow: 0 4px 28px rgba(0,0,0,0.25);
+    }
+    .kpi-title { color: #A9B2C3; font-size: 12px; text-transform: uppercase; }
+    .kpi-value { font-size: 34px; font-weight: 800; color: #fff; }
+    #log {
+      white-space: pre-wrap; font-family: monospace;
+      max-height: 40vh; overflow: auto;
+      background: rgba(0,0,0,0.35);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 12px; padding:10px;
+    }
   </style>
-  </head>
-  <body>
-  <h2>PocketHive — Live Status</h2>
-  <div class="grid">
-    <div class="card"><div>Generator TPS</div><div id="gen" class="kpi">0</div></div>
-    <div class="card"><div>Moderator TPS</div><div id="mod" class="kpi">0</div></div>
-    <div class="card"><div>Processor TPS</div><div id="proc" class="kpi">0</div></div>
-  </div>
-  <h3>Event Log</h3>
-  <div id="log"></div>
-  
-  <script>
-  function frame(cmd, headers, body) {
-    let h = Object.entries(headers||{}).map(([k,v])=>k+':'+v).join('\n');
-    return cmd + '\n' + h + '\n\n' + (body||'') + '\0';
-  }
-  function parseFrames(buffer) {
-    const text = buffer;
-    const parts = text.split('\0');
-    return parts.filter(p=>p.trim().length>0).map(p=>{
-      let [head, ...rest] = p.split('\n\n');
-      let lines = head.split('\n');
-      let command = lines.shift();
-      let headers = {};
-      lines.forEach(l=>{ let i=l.indexOf(':'); if(i>0) headers[l.slice(0,i)] = l.slice(i+1); });
-      return {command, headers, body: rest.join('\n\n')};
-    });
-  }
-  const wsUrl = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.hostname + ':15674/ws';
-  const ws = new WebSocket(wsUrl);
-  ws.onopen = () => {
-    ws.send(frame('CONNECT', {
-      'accept-version': '1.2',
-      'host': '/',
-      'login': 'guest',      // add creds if needed
-      'passcode': 'guest',
-      'heart-beat': '0,0'
-    }));
-    ws.send(frame('SUBSCRIBE', {
-      id: 'sub-1',
-      destination: '/exchange/status.exchange/#',
-      ack: 'auto'
-    }, ''));
-    log('Connected to RabbitMQ Web-STOMP at ' + wsUrl);
-  };
-  ws.onmessage = (e) => {
-    const frames = parseFrames(typeof e.data === 'string' ? e.data : '');
-    frames.forEach(f=>{
-      if(f.command === 'MESSAGE') {
-        try {
-          const data = JSON.parse(f.body);
-          if(data.service === 'generator') document.getElementById('gen').textContent = data.tps;
-          if(data.service === 'moderator') document.getElementById('mod').textContent = data.tps;
-          if(data.service === 'processor') document.getElementById('proc').textContent = data.tps;
-          log(JSON.stringify(data));
-        } catch(err) { log('Parse error: ' + err); }
-      }
-    });
-  };
-  ws.onerror = () => log('WebSocket error');
-  ws.onclose = () => log('WebSocket closed');
-  function log(msg){
-    const el = document.getElementById('log');
-    const time = new Date().toISOString();
-    el.textContent += '['+time+'] ' + msg + '\n';
-    el.scrollTop = el.scrollHeight;
-  }
-  </script>
-  </body>
-  </html>
+</head>
+<body>
+  <header>
+    <img class="logo" src="assets/logo.svg" alt="PocketHive Logo" />
+    <div class="brand">Pocket<span class="accent">Hive</span></div>
+  </header>
+  <main>
+    <div class="controls">
+      <input id="wsurl" size="40" value="ws://localhost:15674/ws"/>
+      <input id="login" value="guest"/>
+      <input id="pass" type="password" value="guest"/>
+      <button id="connect">Connect</button>
+      <span id="state"></span>
+    </div>
+    <div class="kpi-grid">
+      <div class="card"><div class="kpi-title">Generator TPS</div><div id="gen" class="kpi-value">0</div></div>
+      <div class="card"><div class="kpi-title">Moderator TPS</div><div id="mod" class="kpi-value">0</div></div>
+      <div class="card"><div class="kpi-title">Processor TPS</div><div id="proc" class="kpi-value">0</div></div>
+    </div>
+    <h3>Event Log</h3>
+    <div id="log"></div>
+  </main>
+</body>
+</html>
