@@ -10,73 +10,73 @@
     .grid { display:grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
     .kpi { font-size: 28px; font-weight: 700; }
   </style>
-</head>
-<body>
-<h2>PocketHive — Live Status</h2>
-<div class="grid">
-  <div class="card"><div>Generator TPS</div><div id="gen" class="kpi">0</div></div>
-  <div class="card"><div>Moderator TPS</div><div id="mod" class="kpi">0</div></div>
-  <div class="card"><div>Processor TPS</div><div id="proc" class="kpi">0</div></div>
-</div>
-<h3>Event Log</h3>
-<div id="log"></div>
-
-<script>
-function frame(cmd, headers, body) {
-  let h = Object.entries(headers||{}).map(([k,v])=>k+':'+v).join('\n');
-  return cmd + '\n' + h + '\n\n' + (body||'') + '\0';
-}
-function parseFrames(buffer) {
-  const text = buffer;
-  const parts = text.split('\0');
-  return parts.filter(p=>p.trim().length>0).map(p=>{
-    let [head, ...rest] = p.split('\n\n');
-    let lines = head.split('\n');
-    let command = lines.shift();
-    let headers = {};
-    lines.forEach(l=>{ let i=l.indexOf(':'); if(i>0) headers[l.slice(0,i)] = l.slice(i+1); });
-    return {command, headers, body: rest.join('\n\n')};
-  });
-}
-const wsUrl = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.hostname + ':15674/ws';
-const ws = new WebSocket(wsUrl);
-ws.onopen = () => {
-  ws.send(frame('CONNECT', {
-    'accept-version': '1.2',
-    'host': '/',
-    'login': 'guest',      // add creds if needed
-    'passcode': 'guest',
-    'heart-beat': '0,0'
-  }));
-  ws.send(frame('SUBSCRIBE', {
-    id: 'sub-1',
-    destination: '/exchange/status.exchange/#',
-    ack: 'auto'
-  }, ''));
-  log('Connected to RabbitMQ Web-STOMP at ' + wsUrl);
-};
-ws.onmessage = (e) => {
-  const frames = parseFrames(typeof e.data === 'string' ? e.data : '');
-  frames.forEach(f=>{
-    if(f.command === 'MESSAGE') {
-      try {
-        const data = JSON.parse(f.body);
-        if(data.service === 'generator') document.getElementById('gen').textContent = data.tps;
-        if(data.service === 'moderator') document.getElementById('mod').textContent = data.tps;
-        if(data.service === 'processor') document.getElementById('proc').textContent = data.tps;
-        log(JSON.stringify(data));
-      } catch(err) { log('Parse error: ' + err); }
-    }
-  });
-};
-ws.onerror = () => log('WebSocket error');
-ws.onclose = () => log('WebSocket closed');
-function log(msg){
-  const el = document.getElementById('log');
-  const time = new Date().toISOString();
-  el.textContent += '['+time+'] ' + msg + '\n';
-  el.scrollTop = el.scrollHeight;
-}
-</script>
-</body>
-</html>
+  </head>
+  <body>
+  <h2>PocketHive — Live Status</h2>
+  <div class="grid">
+    <div class="card"><div>Generator TPS</div><div id="gen" class="kpi">0</div></div>
+    <div class="card"><div>Moderator TPS</div><div id="mod" class="kpi">0</div></div>
+    <div class="card"><div>Processor TPS</div><div id="proc" class="kpi">0</div></div>
+  </div>
+  <h3>Event Log</h3>
+  <div id="log"></div>
+  
+  <script>
+  function frame(cmd, headers, body) {
+    let h = Object.entries(headers||{}).map(([k,v])=>k+':'+v).join('\n');
+    return cmd + '\n' + h + '\n\n' + (body||'') + '\0';
+  }
+  function parseFrames(buffer) {
+    const text = buffer;
+    const parts = text.split('\0');
+    return parts.filter(p=>p.trim().length>0).map(p=>{
+      let [head, ...rest] = p.split('\n\n');
+      let lines = head.split('\n');
+      let command = lines.shift();
+      let headers = {};
+      lines.forEach(l=>{ let i=l.indexOf(':'); if(i>0) headers[l.slice(0,i)] = l.slice(i+1); });
+      return {command, headers, body: rest.join('\n\n')};
+    });
+  }
+  const wsUrl = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.hostname + ':15674/ws';
+  const ws = new WebSocket(wsUrl);
+  ws.onopen = () => {
+    ws.send(frame('CONNECT', {
+      'accept-version': '1.2',
+      'host': '/',
+      'login': 'guest',      // add creds if needed
+      'passcode': 'guest',
+      'heart-beat': '0,0'
+    }));
+    ws.send(frame('SUBSCRIBE', {
+      id: 'sub-1',
+      destination: '/exchange/status.exchange/#',
+      ack: 'auto'
+    }, ''));
+    log('Connected to RabbitMQ Web-STOMP at ' + wsUrl);
+  };
+  ws.onmessage = (e) => {
+    const frames = parseFrames(typeof e.data === 'string' ? e.data : '');
+    frames.forEach(f=>{
+      if(f.command === 'MESSAGE') {
+        try {
+          const data = JSON.parse(f.body);
+          if(data.service === 'generator') document.getElementById('gen').textContent = data.tps;
+          if(data.service === 'moderator') document.getElementById('mod').textContent = data.tps;
+          if(data.service === 'processor') document.getElementById('proc').textContent = data.tps;
+          log(JSON.stringify(data));
+        } catch(err) { log('Parse error: ' + err); }
+      }
+    });
+  };
+  ws.onerror = () => log('WebSocket error');
+  ws.onclose = () => log('WebSocket closed');
+  function log(msg){
+    const el = document.getElementById('log');
+    const time = new Date().toISOString();
+    el.textContent += '['+time+'] ' + msg + '\n';
+    el.scrollTop = el.scrollHeight;
+  }
+  </script>
+  </body>
+  </html>

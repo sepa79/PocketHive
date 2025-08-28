@@ -1,0 +1,36 @@
+# --- General ---
+.DS_Store
+Thumbs.db
+*.log
+*.tmp
+*.swp
+*.swo
+
+# --- Git ---
+.orig
+
+# --- IDEs / Editors ---
+.idea/
+*.iml
+.vscode/
+.project
+.classpath
+.settings/
+
+# --- Java / Maven ---
+target/
+**/target/
+out/
+.mvn/wrapper/maven-wrapper.jar
+dependency-reduced-pom.xml
+
+# --- Docker / Compose ---
+.env
+docker-data/
+
+# --- Node / Frontend (future-proof) ---
+node_modules/
+dist/
+build/
+*.map
+
