@@ -1,0 +1,68 @@
+package com.example.generator;
+
+import com.example.Topology;
+import org.springframework.amqp.core.Message;
+import org.springframework.amqp.core.MessageBuilder;
+import org.springframework.amqp.core.MessageProperties;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.annotation.EnableScheduling;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Component;
+
+import java.nio.charset.StandardCharsets;
+import java.time.Instant;
+import java.util.UUID;
+import java.util.concurrent.atomic.AtomicLong;
+
+@Component
+@EnableScheduling
+public class Generator {
+
+  private final RabbitTemplate rabbit;
+  private final AtomicLong counter = new AtomicLong();
+  private final String instanceId = UUID.randomUUID().toString();
+
+  public Generator(RabbitTemplate rabbit) {
+    this.rabbit = rabbit;
+  }
+
+  @Value("${sim.gen.ratePerSec:5}")
+  private int ratePerSec;
+
+  @Scheduled(fixedRate = 1000)
+  public void tick() {
+    for (int i = 0; i < ratePerSec; i++) {
+      String id = UUID.randomUUID().toString();
+
+      String body = """
+        {
+          "id":"%s",
+          "path":"/api/test",
+          "method":"POST",
+          "body":"hello-world",
+          "createdAt":"%s"
+        }
+        """.formatted(id, Instant.now().toString());
+
+      Message msg = MessageBuilder
+          .withBody(body.getBytes(StandardCharsets.UTF_8))
+          .setContentType(MessageProperties.CONTENT_TYPE_JSON) // application/json
+          .setContentEncoding(StandardCharsets.UTF_8.name())
+          .setMessageId(id)
+          .setHeader("x-sim-service", "generator")
+          .build();
+
+      rabbit.convertAndSend(Topology.EXCHANGE, Topology.GEN_QUEUE, msg);
+      counter.incrementAndGet();
+    }
+  }
+
+  @Scheduled(fixedRate = 1000)
+  public void status() {
+    long tps = counter.getAndSet(0);
+    String json = "{\"service\":\"generator\",\"instance\":\"" + instanceId + "\",\"tps\":" + tps + "}";
+    rabbit.convertAndSend(Topology.STATUS_EXCHANGE, "generator.tps",
+        json.getBytes(StandardCharsets.UTF_8));
+  }
+}

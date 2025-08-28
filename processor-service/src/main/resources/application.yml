@@ -1,0 +1,8 @@
+spring:
+  application.name: processor-service
+  rabbitmq:
+    host: ${RABBITMQ_HOST:rabbitmq}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USER:guest}
+    password: ${RABBITMQ_PASS:guest}
+management.endpoints.web.exposure.include: health,info

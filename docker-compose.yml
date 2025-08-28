@@ -1,0 +1,42 @@
+version: "3.9"
+services:
+  rabbitmq:
+    build:
+      context: .
+      dockerfile: Dockerfile.rabbit
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+      - "15674:15674"
+
+  generator:
+    build:
+      context: .
+      dockerfile: generator-service/Dockerfile
+    environment:
+      RABBITMQ_HOST: rabbitmq
+    depends_on: [rabbitmq]
+
+  moderator:
+    build:
+      context: .
+      dockerfile: moderator-service/Dockerfile
+    environment:
+      RABBITMQ_HOST: rabbitmq
+    depends_on: [rabbitmq]
+
+  processor:
+    build:
+      context: .
+      dockerfile: processor-service/Dockerfile
+    environment:
+      RABBITMQ_HOST: rabbitmq
+    depends_on: [rabbitmq]
+
+  ui:
+    image: nginx:1.27-alpine
+    ports:
+      - "8088:80"
+    volumes:
+      - ./ui:/usr/share/nginx/html:ro
+    depends_on: [rabbitmq]
