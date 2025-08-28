@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 340" width="1200" height="340">
+  <title>PocketHive — README Logo</title>
+  <defs>
+    <style><![CDATA[
+      :root {
+        --amber: #FFC107;
+        --amber-50: #FFF8E1;
+        --ink: #1e1e1e;
+        --muted: #6b6b6b;
+      }
+      .title { font: 800 120px/1.0 "Inter", "Segoe UI", Arial, sans-serif; fill: var(--ink); }
+      .tag { font: 700 28px/1 "Inter", "Segoe UI", Arial, sans-serif; fill: var(--ink); text-transform: none; }
+      .badge { fill: var(--amber-50); stroke: var(--amber); stroke-width: 3; rx: 12; }
+      .hex-stroke { fill: none; stroke: var(--amber); stroke-width: 10; }
+      .hex-fill { fill: var(--amber-50); stroke: var(--amber); stroke-width: 6; }
+    ]]></style>
+    <g id="logo-hex">
+      <polygon class="hex-stroke" points="0,-48 41,-24 41,24 0,48 -41,24 -41,-24"/>
+      <polygon class="hex-fill" points="0,-25 21,-12 21,12 0,25 -21,12 -21,-12"/>
+    </g>
+  </defs>
+
+  <!-- Mark -->
+  <g transform="translate(90,100)">
+    <use href="#logo-hex" />
+  </g>
+
+  <!-- Wordmark -->
+  <text x="170" y="130" class="title">PocketHive</text>
+
+  <!-- Taglines on the same baseline -->
+  <!-- Left badge aligned to the start of 'Pocket' (x=170) -->
+  <g transform="translate(170,180)">
+    <rect class="badge" x="0" y="-26" width="360" height="44" />
+    <text class="tag" x="16" y="4">portable transaction</text>
+  </g>
+
+  <!-- Right badge aligned to the end of 'Hive' using text-anchor=end -->
+  <!-- We approximate the end of 'Hive' at x=170 + measured word width. Since exact glyph metrics
+       vary across renderers, we use an anchor reference position and text-anchor="end"
+       so 'swarm' ends at the same x. -->
+  <g transform="translate(870,180)">
+    <rect class="badge" x="-160" y="-26" width="160" height="44" />
+    <text class="tag" x="-12" y="4" text-anchor="end">swarm</text>
+  </g>
+</svg>

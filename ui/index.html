@@ -1,29 +1,23 @@
 <!doctype html>
-<html lang="en">
+<html lang="pl">
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>PocketHive UI</title>
+  <link rel="stylesheet" href="./swarm/css/pockethive-bees.css">
+  <link rel="stylesheet" href="./assets/css/app.css">
   <style>
-    :root { --ph-yellow: #FFC107; }
-    html, body { height: 100%; margin: 0; font-family: Inter, Segoe UI, Arial, sans-serif; color: #e8eaed; }
-    body {
-      background: #0b1016 url('assets/bg.png') center/cover no-repeat fixed;
-      animation: bg-pan 40s ease-in-out infinite;
-    }
-    @keyframes bg-pan {
-      0% { background-position: 50% 50%; }
-      50% { background-position: 48% 52%; }
-      100% { background-position: 50% 50%; }
-    }
     header {
       display: flex; align-items: center; gap: 16px;
-      padding: 18px 22px; position: sticky; top: 0; z-index: 10;
+      padding: 18px 22px; position: sticky; top: 0; z-index: 2;
       background: rgba(8,10,14,0.75);
       border-bottom: 1px solid rgba(255,255,255,0.08);
       backdrop-filter: blur(6px);
     }
-    header img.logo { height: 44px; }
+    header img.logo { height: 96px; width:auto; display:block; }
+    .header-right{ margin-left:auto; display:flex; align-items:center; gap:10px; }
+    .bg-toggle{ display:inline-flex; align-items:center; gap:8px; padding:6px 10px; border:1px solid rgba(255,255,255,0.15); border-radius:8px; background: rgba(12,16,22,0.7); font-size:12px; color:#fff; }
+    .bg-toggle input{ accent-color:#FFC107; }
     main { max-width: 1100px; margin: 24px auto; padding: 0 20px 40px; }
     .controls { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:16px; }
     .controls input, .controls button {
@@ -50,9 +44,13 @@
     }
   </style>
 </head>
-<body>
+<body class="ph-bg-bees">
   <header>
-    <img class="logo" src="assets/logo.svg" alt="PocketHive Logo" />
+    <img class="logo" src="./assets/logo.svg" alt="PocketHive Logo" />
+    <div class="header-right">
+      <label class="bg-toggle"><input type="checkbox" id="ph-old-bg"> Old UI BG</label>
+      <button id="ph-swarm-options" class="bg-toggle" style="cursor:pointer">Swarm Options</button>
+    </div>
   </header>
   <main>
     <div class="controls">
@@ -70,5 +68,9 @@
     <h3>Event Log</h3>
     <div id="log"></div>
   </main>
+
+  <script src="./swarm/js/bees.core.js"></script>
+  <script src="./swarm/js/swarm-ui.js"></script>
+  <script src="./assets/js/app.js"></script>
 </body>
 </html>

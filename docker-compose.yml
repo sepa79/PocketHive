@@ -8,6 +8,12 @@ services:
       - "5672:5672"
       - "15672:15672"
       - "15674:15674"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 10s
+      retries: 12
+      start_period: 5s
 
   generator:
     build:
@@ -15,7 +21,9 @@ services:
       dockerfile: generator-service/Dockerfile
     environment:
       RABBITMQ_HOST: rabbitmq
-    depends_on: [rabbitmq]
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
 
   moderator:
     build:
@@ -23,7 +31,9 @@ services:
       dockerfile: moderator-service/Dockerfile
     environment:
       RABBITMQ_HOST: rabbitmq
-    depends_on: [rabbitmq]
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
 
   processor:
     build:
@@ -31,7 +41,9 @@ services:
       dockerfile: processor-service/Dockerfile
     environment:
       RABBITMQ_HOST: rabbitmq
-    depends_on: [rabbitmq]
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
 
   ui:
     image: nginx:1.27-alpine
@@ -39,4 +51,6 @@ services:
       - "8088:80"
     volumes:
       - ./ui:/usr/share/nginx/html:ro
-    depends_on: [rabbitmq]
+    depends_on:
+      rabbitmq:
+        condition: service_healthy

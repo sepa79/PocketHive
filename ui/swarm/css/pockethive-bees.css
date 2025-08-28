@@ -1,0 +1,41 @@
+/* PocketHive – Swarm Matrix Bees (core) */
+:root{
+  --ph-bg:#0f1116; --ph-ink:#ffffff; --ph-muted:#9aa0a6;
+  --ph-amber:#FFC107; --ph-green:#00ff9c;
+  --blob-speed: 28s;
+}
+.ph-bg-bees{ background: linear-gradient(180deg,#0f1116 0%, #0b0d12 60%, #0f1116 100%);
+  color: var(--ph-ink); min-height: 100vh; position: relative; isolation: isolate; overflow:hidden; }
+.ph-bg-bees::before{ content:""; position: fixed; inset:-20%; z-index:-1; pointer-events:none;
+  background:
+    radial-gradient(50% 60% at 20% 20%, rgba(255,193,7,.18), transparent 60%),
+    radial-gradient(45% 55% at 80% 35%, rgba(255,255,255,.10), transparent 60%),
+    radial-gradient(55% 65% at 30% 80%, rgba(255,193,7,.12), transparent 65%);
+  filter: blur(40px) saturate(1.05); transform: translate3d(0,0,0) scale(1.1);
+  animation: ph-blob-wander var(--blob-speed) ease-in-out infinite alternate; }
+.ph-bg-bees.matrix-green::before{
+  background:
+    radial-gradient(50% 60% at 20% 20%, rgba(0,255,156,.22), transparent 60%),
+    radial-gradient(45% 55% at 80% 35%, rgba(255,255,255,.10), transparent 60%),
+    radial-gradient(55% 65% at 30% 80%, rgba(0,255,156,.16), transparent 65%);
+}
+@keyframes ph-blob-wander{ 0%{ transform:translate3d(-4%,-2%,0) scale(1.04) rotate(.1deg)}
+25%{ transform:translate3d(6%,-1%,0) scale(1.06) rotate(-.1deg)}
+50%{ transform:translate3d(2%,3%,0) scale(1.08) rotate(.15deg)}
+75%{ transform:translate3d(-3%,5%,0) scale(1.05) rotate(-.15deg)}
+100%{ transform:translate3d(5%,0,0) scale(1.07) rotate(.1deg)} }
+.bee-layer{ position: fixed; inset:0; pointer-events:none; z-index:0; filter: saturate(1.05); }
+.bee{ --bee-color: var(--ph-amber); position: absolute; left:0; top:0; }
+.matrix-green .bee{ --bee-color: var(--ph-green); }
+.bee > span{ position:absolute; left:0; top:0; display:block;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-weight:700; font-size: var(--size, 16px); letter-spacing:.02em;
+  color: color-mix(in srgb, var(--bee-color) 88%, #ffffff);
+  text-shadow: 0 0 3px color-mix(in srgb, var(--bee-color) 70%, transparent), 0 6px 8px rgba(0,0,0,.45);
+  mix-blend-mode: screen; transform: translate(-50%,-50%); will-change: transform, opacity; }
+.bee > span.glyph{ opacity:.96; }
+.bee > span.trail{ opacity: var(--op, .22); filter: blur(var(--blur, 1.2px));
+  color: color-mix(in srgb, var(--bee-color) var(--mix, 55%), #000);
+  text-shadow: 0 0 4px color-mix(in srgb, var(--bee-color) calc(var(--mix,55%)*.9), transparent), 0 8px 12px rgba(0,0,0,.55); }
+@media (prefers-reduced-motion: reduce){ .bee > span{ transition:none !important; } }
+

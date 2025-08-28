@@ -1,40 +1,27 @@
 # PocketHive
 
-![PocketHive](logo.png)
+![PocketHive logo](pockethive-logo-readme.svg)
 
-## Overview
-**PocketHive** is a lightweight, portable **transaction swarm simulator**.  
-It is designed to generate realistic loads against payment and API processing systems, with support for multiple protocols such as **ISO-8583**, **SOAP**, and **REST**.
-
-PocketHive focuses on being:
-- **Scalable**: Easily run multiple generators, moderators, and processors.
-- **Lightweight**: Packaged with Docker for portability.
-- **Observable**: Integrated with OpenTelemetry and Grafana dashboards for real-time monitoring.
-- **Extensible**: Components can be swapped or extended (e.g., different moderators, custom processors).
+**PocketHive** is a portable transaction swarm: compact, composable components that let you generate, moderate, process, and test workloads with clear boundaries and durable queues.
 
 ## Architecture
-The core architecture consists of the following pipeline:
 
-```
-[ Generator(s) ] --> [ Queue ] --> [ Moderator ] --> [ Queue ] --> [ Processor ] --> [ Test Environment ]
-```
+![Processing Flow](pockethive-flow.svg)
 
-- **Generator**: Produces messages (ISO-8583, SOAP, REST, etc.).
-- **Moderator**: Shapes and controls throughput (e.g., bursts, throttling).
-- **Processor**: Handles traffic routing into the target environment.
-- **Test Environment**: The system under test (mock or real).
+### Components
 
-All components communicate asynchronously through AMQP (RabbitMQ).
+- **Generator** — creates events/payloads at a configurable rate.
+- **Queue (A/B)** — durable FIFO buffers between stages; supports retries and dead‑letter queues; isolates backpressure.
+- **Moderator** — enforces validation, limits, and policy; tags and audits messages.
+- **Processor** — performs execution and scoring; produces side effects/outputs only.
+- **PostProcessor** — handles **metrics, telemetry, logs, export, and archival**. This stage centralizes observability so the Processor can stay minimal.
+- **Test Environment** — sandbox for A/B, simulations, and replays; bidirectional link with the Processor for rapid iteration.
 
-## User Interface
-PocketHive comes with a simple **web UI** that connects to RabbitMQ via Web-STOMP.  
-The UI provides live status of:
-- Generator throughput
-- Moderator throughput
-- Processor throughput
+### Notes
 
-## Observability
-- **OpenTelemetry** for distributed tracing and metrics.
-- **Grafana Dashboards** for monitoring test activity.
+- The **PostProcessor** was added in this iteration to own all metrics/telemetry concerns.
+- The diagram and the logo are SVG, resolution‑independent, and safe to embed directly in the repository.
 
 ---
+
+_PocketHive · portable transaction · swarm_
