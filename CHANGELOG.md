@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.1] - 2025-08-29
+Timestamp: 2025-08-29T10:50:00Z
+
+- UI: README available in Menu (`/readme.html`) with in‑app markdown render.
+- UI: Fix README images (logo + flow) — copy `docs/` to image, path rewriting, and Nginx alias for `/ui/*`.
+- UI: Remove white backgrounds under images; transparent flow diagram background for dark UI.
+- UI: Background selector moved under Menu; add HAL‑style background options icon next to WS health.
+- UI: WS health icon opens connection menu.
+- Docs: Simplified flow diagram (components, queues, direction, SUT) and README tweaks.
+
 ## [0.3.0] - 2025-08-29
 Timestamp: 2025-08-29T10:24:00Z
 

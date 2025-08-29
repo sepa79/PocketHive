@@ -1,14 +1,20 @@
 # PocketHive
 
 <p align="center">
-  <img alt="PocketHive" src="ui/assets/logo.svg" width="220" />
+  <img alt="PocketHive" src="ui/assets/logo.svg" width="100%" />
 </p>
 
 **PocketHive** is a portable transaction swarm: compact, composable components that let you generate, moderate, process, and test workloads with clear boundaries and durable queues.
 
 <p align="center">
-  <img alt="PocketHive Flow" src="pockethive-flow.svg" width="720" />
+  <img alt="PocketHive Flow" src="docs/pockethive-flow-v3.svg" width="820" />
 </p>
+
+### Architecture
+
+- UI connects to RabbitMQ via same‑origin Web‑STOMP proxy at `/ws`.
+- Services publish/consume via the `ph.hive` exchange and `ph.gen`/`ph.mod` queues.
+- Metrics/status flow back on `ph.control` which the UI subscribes to for charts.
 
 ## Stack & Ports
 

@@ -7,5 +7,5 @@ COPY ui/nginx.conf /etc/nginx/conf.d/default.conf
 COPY ui/ /usr/share/nginx/html/
 
 # Top-level metadata for UI
-COPY CHANGELOG.md VERSION /usr/share/nginx/html/
-
+COPY CHANGELOG.md VERSION README.md /usr/share/nginx/html/
+COPY docs/ /usr/share/nginx/html/docs/

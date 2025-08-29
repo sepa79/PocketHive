@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 640" width="1200" height="640" role="img" aria-label="PocketHive Simple Flow">
+  <defs>
+    <style>
+      .bg { fill: none; }
+      .box { fill:#f8fafc; stroke:#cbd5e1; stroke-width:2.5; rx:14; }
+      .title { font:700 18px/1.2 Inter, system-ui, Segoe UI, Arial, sans-serif; fill:#0f172a; }
+      .label { font:600 14px/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fill:#0b3d91; }
+      .text { font:500 14px/1.4 Inter, system-ui, Segoe UI, Arial, sans-serif; fill:#334155; }
+      .arrow { stroke:#334155; stroke-width:3.2; marker-end:url(#ah); fill:none; }
+      .arrow-blue { stroke:#0369a1; }
+    </style>
+    <marker id="ah" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#334155"/></marker>
+  </defs>
+  <rect class="bg" x="0" y="0" width="1200" height="640"/>
+  <text x="600" y="42" class="title" text-anchor="middle" font-size="24">PocketHive — Simple Flow</text>
+
+  <!-- Components row -->
+  <g transform="translate(40,110)">
+    <g id="gen"><rect class="box" x="0" y="0" width="180" height="100"/><text class="title" x="14" y="28">Generator</text><text class="text" x="14" y="54">produces traffic</text></g>
+    <g id="mq" transform="translate(230,0)"><rect class="box" x="0" y="0" width="250" height="160"/><text class="title" x="14" y="28">RabbitMQ</text>
+      <text class="text" x="14" y="56">exchange <tspan class="label">ph.hive</tspan></text>
+      <g transform="translate(14,76)"><rect class="box" x="0" y="0" width="90" height="28"/><text class="label" x="10" y="19">ph.gen</text></g>
+      <g transform="translate(116,76)"><rect class="box" x="0" y="0" width="90" height="28"/><text class="label" x="10" y="19">ph.mod</text></g>
+      <g transform="translate(14,112)"><rect class="box" x="0" y="0" width="120" height="28"/><text class="label" x="10" y="19">ph.control</text></g>
+    </g>
+    <g id="mod" transform="translate(520,0)"><rect class="box" x="0" y="0" width="180" height="100"/><text class="title" x="14" y="28">Moderator</text><text class="text" x="14" y="54">filters/rewrites</text></g>
+    <g id="proc" transform="translate(720,0)"><rect class="box" x="0" y="0" width="180" height="100"/><text class="title" x="14" y="28">Processor</text><text class="text" x="14" y="54">records metrics</text></g>
+    <g id="sut" transform="translate(920,0)"><rect class="box" x="0" y="0" width="200" height="100"/><text class="title" x="14" y="28">SUT</text><text class="text" x="14" y="54">System Under Test</text></g>
+  </g>
+
+  <!-- Data flow (left → right) -->
+  <path class="arrow" d="M220,160 C230,160 230,160 230,160"/>
+  <text class="label" x="135" y="150">→ ph.hive</text>
+  <path class="arrow" d="M480,160 C510,160 520,160 520,160"/>
+  <text class="label" x="382" y="152">ph.gen →</text>
+  <path class="arrow" d="M700,160 C710,160 720,160 720,160"/>
+  <text class="label" x="612" y="152">ph.mod →</text>
+  <path class="arrow" d="M900,160 C910,160 920,160 920,160"/>
+  <text class="text" x="915" y="152">→ requests</text>
+
+  <!-- Metrics/control back to UI -->
+  <g transform="translate(40,340)">
+    <g id="ui"><rect class="box" x="0" y="0" width="220" height="100"/><text class="title" x="14" y="28">UI</text><text class="text" x="14" y="54">charts + status</text></g>
+    <text class="label" x="250" y="60">/queue/ph.control</text>
+  </g>
+  <path class="arrow arrow-blue" d="M1040,200 C1040,260 1000,300 900,320"/>
+  <path class="arrow arrow-blue" d="M900,320 C720,360 500,360 260,360"/>
+  <text class="text" x="980" y="240">metrics → ph.control</text>
+  <text class="text" x="400" y="388">UI subscribes via Web‑STOMP</text>
+</svg>

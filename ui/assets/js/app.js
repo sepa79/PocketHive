@@ -257,8 +257,15 @@
     }
   });
 
-  // Initialize: load config, set defaults
-  (async () => { await loadConfig(); await setDefaultWsUrl(); })();
+  // Initialize: load config, set defaults, then try auto-connect
+  (async () => {
+    await loadConfig();
+    await setDefaultWsUrl();
+    try{
+      appendSys('Auto-connect attempt');
+      doConnect();
+    }catch{}
+  })();
 
   // Load VERSION and display in header if present
   (async () => {
@@ -279,6 +286,28 @@
     const toggle=(e)=>{ e && e.stopPropagation(); open=!open; dd.style.display=open?'block':'none'; };
     btn.addEventListener('click', toggle);
     document.addEventListener('click', (e)=>{ if(open && !dd.contains(e.target) && e.target!==btn){ open=false; dd.style.display='none'; } });
+  })();
+
+  // Move connection controls into header dropdown and toggle via WS health icon
+  (function(){
+    const host = document.getElementById('conn-dropdown');
+    const trigger = document.getElementById('status-ws') || document.getElementById('ph-conn-btn');
+    const controls = document.querySelector('.controls');
+    if(!host || !trigger || !controls) return;
+    host.appendChild(controls);
+    controls.style.display = 'block';
+    // make controls tidy in dropdown
+    controls.style.display = 'grid';
+    controls.style.gridTemplateColumns = '1fr 120px';
+    controls.style.gap = '8px';
+    // widen url row
+    const url = document.getElementById('wsurl'); if(url) url.style.gridColumn = '1 / span 2';
+    const stateLbl = document.getElementById('state'); if(stateLbl){ stateLbl.style.gridColumn = '1 / span 2'; stateLbl.style.alignSelf='center'; stateLbl.style.color='#9aa0a6'; }
+    let open=false;
+    const toggle=(e)=>{ e && e.stopPropagation(); open=!open; host.style.display = open ? 'block' : 'none'; };
+    trigger.addEventListener('click', toggle);
+    trigger.addEventListener('keydown', (e)=>{ if(e.key==='Enter' || e.key===' '){ e.preventDefault(); toggle(e); } });
+    document.addEventListener('click', (e)=>{ if(open && !host.contains(e.target) && e.target!==trigger){ open=false; host.style.display='none'; } });
   })();
 
   // Log user edits to connection fields (mask secrets)

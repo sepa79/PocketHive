@@ -138,6 +138,7 @@
     const swarmBtn = document.getElementById('ph-open-swarm');
     const swarmBtn2 = document.getElementById('ph-swarm-options');
     const netBtn = document.getElementById('ph-open-net');
+    const bgBtn = document.getElementById('bg-opts');
     // classes
     body.classList.toggle('ph-bg-bees', mode === 'bees');
     body.classList.toggle('ph-bg-net', mode === 'net');
@@ -145,9 +146,20 @@
     // buttons visibility
     const showSwarm = (mode === 'bees');
     const showNet = (mode === 'net');
-    if(swarmBtn){ swarmBtn.disabled = !showSwarm; swarmBtn.style.display = showSwarm ? '' : 'none'; }
-    if(swarmBtn2){ swarmBtn2.disabled = !showSwarm; swarmBtn2.style.display = showSwarm ? '' : 'none'; }
-    if(netBtn){ netBtn.disabled = !showNet; netBtn.style.display = showNet ? '' : 'none'; }
+    if(swarmBtn){ swarmBtn.disabled = !showSwarm; swarmBtn.style.display = 'none'; }
+    if(swarmBtn2){ swarmBtn2.disabled = !showSwarm; swarmBtn2.style.display = 'none'; }
+    if(netBtn){ netBtn.disabled = !showNet; netBtn.style.display = 'none'; }
+    if(bgBtn){
+      const visible = (mode === 'bees' || mode === 'net');
+      bgBtn.style.display = visible ? '' : 'none';
+      bgBtn.dataset.bg = mode;
+      bgBtn.onclick = (e)=>{
+        e.preventDefault();
+        if(mode === 'bees'){ if(swarmBtn) swarmBtn.click(); }
+        else if(mode === 'net'){ ensureNetLoaded().then(()=>{ if(netBtn) netBtn.click(); }); }
+      };
+      bgBtn.onkeydown = (e)=>{ if(e.key==='Enter' || e.key===' '){ e.preventDefault(); bgBtn.click(); } };
+    }
     // Control background engines to save CPU
     try{
       if(mode === 'bees'){

@@ -49,35 +49,43 @@
   <header>
     <img class="logo" src="./assets/logo.svg" alt="PocketHive Logo" />
     <div class="header-right">
-      <label class="bg-toggle" style="gap:8px">
-        <span>Background</span>
-        <select id="ph-bg-mode">
-          <option value="bees">Bees</option>
-          <option value="net">Network</option>
-          <option value="old">Old</option>
-        </select>
-      </label>
-      <button id="ph-swarm-options" class="bg-toggle" style="cursor:pointer">Swarm Options</button>
-      <button id="ph-open-net" class="bg-toggle" style="cursor:pointer">Network Options</button>
-      <div class="bg-toggle" style="gap:10px; align-items:center">
-        <div class="hal">
-          <span id="status-ui" class="hal-eye" data-state="connecting" title="UI Health"></span>
-          <span id="status-ws" class="hal-eye" data-state="idle" title="WebSocket to RabbitMQ"></span>
-        </div>
-        <span id="ph-version" title="Current Version">v…</span>
-        <div class="menu" style="position:relative">
-          <button id="menu-btn" class="bg-toggle" style="cursor:pointer">☰ Menu</button>
-          <div id="menu-dropdown" style="display:none; position:absolute; right:0; top:36px; background: rgba(12,16,22,0.95); border:1px solid rgba(255,255,255,0.15); border-radius:10px; min-width: 200px; box-shadow:0 6px 22px rgba(0,0,0,0.4);">
+      <!-- Hidden triggers for background option modals -->
+      <button id="ph-open-swarm" style="display:none"></button>
+      <button id="ph-open-net" style="display:none"></button>
+      <div class="menu" style="position:relative">
+        <button id="menu-btn" class="bg-toggle" style="cursor:pointer">☰ Menu</button>
+        <div id="menu-dropdown" style="display:none; position:absolute; right:0; top:36px; background: rgba(12,16,22,0.95); border:1px solid rgba(255,255,255,0.15); border-radius:10px; min-width: 240px; box-shadow:0 6px 22px rgba(0,0,0,0.4);">
+            <div style="padding:10px 12px; border-bottom:1px solid rgba(255,255,255,0.08); display:grid; gap:8px">
+              <label style="display:flex; align-items:center; justify-content:space-between; gap:10px">
+                <span>Background</span>
+                <select id="ph-bg-mode" style="min-width:140px">
+                  <option value="bees">Bees</option>
+                  <option value="net">Network</option>
+                  <option value="old">Old</option>
+                </select>
+              </label>
+            </div>
             <a href="/generator/" style="display:block; padding:10px 12px; color:#fff; text-decoration:none; border-bottom:1px solid rgba(255,255,255,0.08)">Open Generator</a>
+            <a href="/readme.html" style="display:block; padding:10px 12px; color:#fff; text-decoration:none; border-bottom:1px solid rgba(255,255,255,0.08)">README</a>
             <a href="/changelog.html" style="display:block; padding:10px 12px; color:#fff; text-decoration:none; border-bottom:1px solid rgba(255,255,255,0.08)">Changelog</a>
             <a href="/docs.html" style="display:block; padding:10px 12px; color:#fff; text-decoration:none;">API Docs</a>
           </div>
         </div>
+      <div class="bg-toggle" style="gap:10px; align-items:center">
+        <div class="hal">
+          <span id="status-ui" class="hal-eye" data-state="connecting" title="UI Health"></span>
+          <span id="status-ws" class="hal-eye" data-state="idle" title="WebSocket to RabbitMQ — click to open connection" role="button" tabindex="0"></span>
+          <span id="bg-opts" class="hal-eye hal-bg" title="Background Options" role="button" tabindex="0" style="display:none"></span>
+          <div class="menu" id="conn-menu" style="position:relative; display:inline-flex;">
+            <div id="conn-dropdown" style="display:none; position:absolute; right:0; top:36px; background: rgba(12,16,22,0.95); border:1px solid rgba(255,255,255,0.15); border-radius:10px; min-width: 340px; box-shadow:0 6px 22px rgba(0,0,0,0.4); padding:10px"></div>
+          </div>
+        </div>
+        <span id="ph-version" title="Current Version">v…</span>
       </div>
     </div>
   </header>
   <main>
-    <div class="controls">
+    <div class="controls" style="display:none">
       <input id="wsurl" size="40" value="ws://localhost:15674/ws"/>
       <input id="login" value="guest"/>
       <input id="pass" type="password" value="guest"/>
