@@ -212,6 +212,16 @@
   // Initialize: load config, set defaults
   (async () => { await loadConfig(); await setDefaultWsUrl(); })();
 
+  // Load VERSION and display in header if present
+  (async () => {
+    try{
+      const el = document.getElementById('ph-version');
+      if(!el) return;
+      const r = await fetch('./VERSION', {cache:'no-store'});
+      if(r.ok){ const txt = (await r.text()).trim(); if(txt) el.textContent = 'v'+txt; }
+    }catch{}
+  })();
+
   // Log user edits to connection fields (mask secrets)
   if(elUrl){ elUrl.addEventListener('change', ()=> { appendSys(`User set WebSocket URL: ${elUrl.value.trim()||'(empty)'}`); saveConn({ url: elUrl.value||'', login: (elUser&&elUser.value)||'', pass: (elPass&&elPass.value)||'', vhost: '/' }); }); }
   if(elUser){ elUser.addEventListener('change', ()=> { appendSys(`User set username: ${elUser.value||'(empty)'}`); saveConn({ url: (elUrl&&elUrl.value)||'', login: elUser.value||'', pass: (elPass&&elPass.value)||'', vhost: '/' }); }); }

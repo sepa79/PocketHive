@@ -29,7 +29,20 @@ public class Processor {
   @Scheduled(fixedRate = 1000)
   public void status(){
     long tps = counter.getAndSet(0);
-    String json = "{\"service\":\"processor\",\"instance\":\"" + instanceId + "\",\"tps\":" + tps + "}";
+    String name = "processor";
+    String location = System.getenv().getOrDefault("PH_LOCATION", System.getenv().getOrDefault("HOSTNAME", "local"));
+    String messageId = java.util.UUID.randomUUID().toString();
+    String timestamp = java.time.Instant.now().toString();
+    String traffic = Topology.EXCHANGE;
+    String json = "{" +
+      "\"name\":\"" + name + "\"," +
+      "\"location\":\"" + location + "\"," +
+      "\"instance\":\"" + instanceId + "\"," +
+      "\"messageId\":\"" + messageId + "\"," +
+      "\"timestamp\":\"" + timestamp + "\"," +
+      "\"traffic\":\"" + traffic + "\"," +
+      "\"tps\":" + tps +
+    "}";
     rabbit.convertAndSend(Topology.STATUS_EXCHANGE, "processor.tps", json);
   }
 }
