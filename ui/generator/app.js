@@ -5,6 +5,10 @@
   const fmt = (n) => Intl.NumberFormat().format(n);
   const kb = (b) => (b/1024).toFixed(1) + " KB";
 
+  const PH_CONN_KEY = 'pockethive.conn';
+  function loadConn(){ try{ const raw = localStorage.getItem(PH_CONN_KEY); return raw? JSON.parse(raw): null; }catch{ return null; } }
+  function defaultWs(){ const scheme = location.protocol === 'https:' ? 'wss' : 'ws'; return `${scheme}://${location.host}/ws`; }
+
   let client = null;
   let connected = false;
   let sendTimer = null;
@@ -76,6 +80,22 @@
   }
   function stopSending() { if (sendTimer) clearInterval(sendTimer); sendTimer = null; $("#btnStart").disabled = false; $("#btnStop").disabled = true; setStatus(connected ? "connected" : "disconnected", connected ? "ok" : "off"); }
   function resetMetrics() { metrics.sent = 0; metrics.ack = 0; metrics.errors = 0; metrics.inFlight = inflight.size; metrics.recv = 0; metrics.tStart = performance.now(); metrics.lastSecSent = 0; metrics.lastSecRecv = 0; metrics.latency = { count:0, total:0, min:Infinity, max:0, p95:0 }; latencySamples = []; updateMetrics(); }
-  window.addEventListener("DOMContentLoaded", () => { $("#session").textContent = sessionId; syncSlider("rps"); syncSlider("burst"); syncSlider("payloadBytes"); syncSlider("concurrency"); syncSlider("maxInflight"); syncSlider("jitter"); syncSlider("duration"); $("#btnConnect").addEventListener("click", connect); $("#btnDisconnect").addEventListener("click", disconnect); $("#btnSendOne").addEventListener("click", sendOne); $("#btnStart").addEventListener("click", startSending); $("#btnStop").addEventListener("click", stopSending); $("#btnReset").addEventListener("click", resetMetrics); $("#autoSession").addEventListener("change", () => { const on = $("#autoSession").checked; $("#sessionInput").classList.toggle("hidden", on); }); });
+  window.addEventListener("DOMContentLoaded", () => {
+    // Prefill connection fields from main UI if present; else default to same-origin /ws
+    try{
+      const c = loadConn();
+      if(c){
+        if(c.url) $("#brokerUrl").value = c.url; else $("#brokerUrl").value = defaultWs();
+        $("#vhost").value = c.vhost || '/';
+        if(c.login) $("#login").value = c.login;
+        if(c.pass) $("#passcode").value = c.pass;
+      } else {
+        $("#brokerUrl").value = defaultWs();
+        $("#vhost").value = '/';
+        $("#login").value = 'guest';
+        $("#passcode").value = 'guest';
+      }
+    }catch{}
+    $("#session").textContent = sessionId; syncSlider("rps"); syncSlider("burst"); syncSlider("payloadBytes"); syncSlider("concurrency"); syncSlider("maxInflight"); syncSlider("jitter"); syncSlider("duration"); $("#btnConnect").addEventListener("click", connect); $("#btnDisconnect").addEventListener("click", disconnect); $("#btnSendOne").addEventListener("click", sendOne); $("#btnStart").addEventListener("click", startSending); $("#btnStop").addEventListener("click", stopSending); $("#btnReset").addEventListener("click", resetMetrics); $("#autoSession").addEventListener("change", () => { const on = $("#autoSession").checked; $("#sessionInput").classList.toggle("hidden", on); });
+  });
 })();
-

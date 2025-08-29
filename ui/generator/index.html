@@ -7,18 +7,6 @@
   <link rel="stylesheet" href="style.css" />
   <!-- STOMP UMD -->
   <script src="https://unpkg.com/@stomp/stompjs@7.0.0/bundles/stomp.umd.js"></script>
-  <script>
-    // Default brokerUrl to same-origin /ws
-    document.addEventListener('DOMContentLoaded', () => {
-      const input = document.getElementById('brokerUrl');
-      if (input) {
-        const scheme = location.protocol === 'https:' ? 'wss' : 'ws';
-        const def = `${scheme}://${location.host}/ws`;
-        const cur = (input.value||'').trim();
-        if (!cur) input.value = def;
-      }
-    });
-  </script>
   <style>
     /* small tweak for back link */
     .topnav{display:flex;align-items:center;gap:12px;margin-bottom:8px}
@@ -223,4 +211,3 @@
   </script>
 </body>
 </html>
-

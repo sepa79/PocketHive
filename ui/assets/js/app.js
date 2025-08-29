@@ -1,5 +1,6 @@
 // Minimal STOMP over WebSocket client for RabbitMQ Web-STOMP
 (function(){
+  const PH_CONN_KEY = 'pockethive.conn';
   const qs = (id) => document.getElementById(id);
   const elUrl = qs('wsurl');
   const elUser = qs('login');
@@ -15,6 +16,17 @@
   const wsStatus = qs('status-ws');
   if(!elUrl || !btn) return;
 
+  function loadConn(){
+    try{
+      const raw = localStorage.getItem(PH_CONN_KEY);
+      if(!raw) return null;
+      return JSON.parse(raw);
+    }catch{ return null; }
+  }
+  function saveConn(obj){
+    try{ localStorage.setItem(PH_CONN_KEY, JSON.stringify(obj)); }catch{}
+  }
+
   // Compute default WS URL; prefer same-origin `/ws` proxied by Nginx
   (function setDefaultWsUrl(){
     try {
@@ -27,6 +39,13 @@
       // Prefer same-origin proxy when not explicitly customized by user
       if(!current || /^(ws|wss):\/\/(localhost|127\.0\.0\.1|\[?::1\]?)(:?\d+)?\/ws?$/i.test(current)){
         elUrl.value = sameOrigin;
+      }
+      // Load stored connection if present
+      const stored = loadConn();
+      if(stored){
+        if(stored.url) elUrl.value = stored.url;
+        if(elUser && stored.login) elUser.value = stored.login;
+        if(elPass && stored.pass) elPass.value = stored.pass;
       }
     } catch(e) { /* noop */ }
   })();
@@ -108,6 +127,8 @@
     }catch(e){ /* keep as-is */ }
     const login = (elUser && elUser.value) || 'guest';
     const passcode = (elPass && elPass.value) || 'guest';
+    // Persist connection for other pages (e.g., /generator)
+    saveConn({ url, login, pass: passcode, vhost: '/' });
     setState('Connecting...'); btn.disabled = true; btn.textContent = 'Connecting...';
     buffer=''; subIds = [];
     try {
@@ -178,9 +199,9 @@
   });
 
   // Log user edits to connection fields (mask secrets)
-  if(elUrl){ elUrl.addEventListener('change', ()=> appendSys(`User set WebSocket URL: ${elUrl.value.trim()||'(empty)'}`)); }
-  if(elUser){ elUser.addEventListener('change', ()=> appendSys(`User set username: ${elUser.value||'(empty)'}`)); }
-  if(elPass){ elPass.addEventListener('change', ()=> appendSys(`User updated password (len=${(elPass.value||'').length})`)); }
+  if(elUrl){ elUrl.addEventListener('change', ()=> { appendSys(`User set WebSocket URL: ${elUrl.value.trim()||'(empty)'}`); saveConn({ url: elUrl.value||'', login: (elUser&&elUser.value)||'', pass: (elPass&&elPass.value)||'', vhost: '/' }); }); }
+  if(elUser){ elUser.addEventListener('change', ()=> { appendSys(`User set username: ${elUser.value||'(empty)'}`); saveConn({ url: (elUrl&&elUrl.value)||'', login: elUser.value||'', pass: (elPass&&elPass.value)||'', vhost: '/' }); }); }
+  if(elPass){ elPass.addEventListener('change', ()=> { appendSys(`User updated password (len=${(elPass.value||'').length})`); saveConn({ url: (elUrl&&elUrl.value)||'', login: (elUser&&elUser.value)||'', pass: elPass.value||'', vhost: '/' }); }); }
 
   // Periodic healthcheck of UI reverse proxy
   (function startHealthPing(){
