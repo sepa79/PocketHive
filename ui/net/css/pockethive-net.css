@@ -49,11 +49,21 @@
   padding:0 16px; background: rgba(15,17,22,.6); backdrop-filter: blur(8px); border-bottom:1px solid rgba(255,255,255,.08);
   z-index:3; color:#fff; font:600 14px/1 Inter, system-ui, Arial, sans-serif; }
 .ph-nav-left{ display:flex; align-items:center; gap:10px; letter-spacing:.03em }
-.ph-btn{ appearance:none; border:1px solid rgba(255,255,255,.2); background: rgba(255,255,255,.08); color:#fff;
-  padding:8px 12px; border-radius:10px; cursor:pointer; }
-.ph-btn.primary{ border-color:transparent; background:#33E1FF; color:#111; font-weight:800; }
-.ph-small{ appearance:none; border:1px solid rgba(255,255,255,.2); background: rgba(255,255,255,.08); color:#fff;
-  padding:6px 10px; border-radius:10px; cursor:pointer; font-size:12px; }
+.ph-btn{
+  appearance:none; border:1px solid rgba(51,225,255,0.35); cursor:pointer; color:#0ff; font-weight:700;
+  padding:8px 12px; border-radius:12px; text-transform:uppercase; letter-spacing:0.04em;
+  background: radial-gradient(120% 120% at 10% 10%, rgba(51,225,255,0.25), rgba(51,225,255,0.06) 40%, rgba(255,255,255,0.05) 70%, rgba(0,0,0,0.0) 100%);
+  box-shadow: 0 0 20px rgba(51,225,255,0.15) inset, 0 0 16px rgba(51,225,255,0.18);
+}
+.ph-btn:hover{ box-shadow: 0 0 26px rgba(51,225,255,0.22) inset, 0 0 20px rgba(51,225,255,0.28); background: radial-gradient(120% 120% at 10% 10%, rgba(51,225,255,0.35), rgba(51,225,255,0.1) 50%, rgba(255,255,255,0.07) 75%, rgba(0,0,0,0.0) 100%); }
+.ph-btn:active{ transform: translateY(1px); filter: brightness(1.1); }
+.ph-btn.primary{ filter: brightness(1.15); }
+.ph-small{
+  appearance:none; border:1px solid rgba(51,225,255,0.35); cursor:pointer; color:#0ff; font-weight:700;
+  padding:6px 10px; border-radius:12px; font-size:12px; text-transform:uppercase; letter-spacing:0.04em;
+  background: radial-gradient(120% 120% at 10% 10%, rgba(51,225,255,0.18), rgba(51,225,255,0.06) 40%, rgba(255,255,255,0.04) 70%, rgba(0,0,0,0.0) 100%);
+  box-shadow: 0 0 12px rgba(51,225,255,0.12) inset, 0 0 12px rgba(51,225,255,0.16);
+}
 .ph-modal{ position:fixed; inset:0; display:grid; place-items:center; background: rgba(0,0,0,.35); z-index:4; }
 .ph-modal.hidden{ display:none; }
 .ph-modal-dialog{ width:min(980px, 92vw); max-height:86vh; overflow:auto; border-radius:16px;
@@ -61,8 +71,13 @@
 .ph-modal-head{ display:flex; align-items:center; justify-content:space-between; padding:14px 16px; border-bottom:1px solid rgba(255,255,255,.1); }
 .ph-x{ appearance:none; border:0; background:transparent; color:#fff; font-size:24px; cursor:pointer; }
 .ph-tabs{ display:flex; align-items:center; gap:6px; padding:10px 12px; border-bottom:1px solid rgba(255,255,255,.08); }
-.ph-tab{ appearance:none; border:1px solid rgba(255,255,255,.2); background: rgba(255,255,255,.06); color:#fff;
-  padding:6px 10px; border-radius:10px; cursor:pointer; }
+.ph-tab{
+  appearance:none; border:1px solid rgba(51,225,255,0.35); cursor:pointer; color:#0ff; font-weight:700;
+  padding:6px 12px; border-radius:12px; text-transform:uppercase; letter-spacing:0.04em;
+  background: radial-gradient(120% 120% at 10% 10%, rgba(51,225,255,0.22), rgba(51,225,255,0.06) 40%, rgba(255,255,255,0.05) 70%, rgba(0,0,0,0.0) 100%);
+  box-shadow: 0 0 16px rgba(51,225,255,0.14) inset, 0 0 14px rgba(51,225,255,0.16);
+}
+.ph-tab:hover{ box-shadow: 0 0 22px rgba(51,225,255,0.22) inset, 0 0 18px rgba(51,225,255,0.24); }
 .ph-tab.active{ background:#33E1FF; color:#111; border-color:transparent; font-weight:800; }
 .ph-spacer{ flex:1 1 auto; }
 .ph-pane{ display:none; padding:14px; }
