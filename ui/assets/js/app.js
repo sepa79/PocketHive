@@ -3,6 +3,7 @@
   const PH_CONN_KEY = 'pockethive.conn';
   const PH_CFG_URL = '/config.json';
   let PH_CONFIG = null;
+  let DEMO = false;
   const qs = (id) => document.getElementById(id);
   const elUrl = qs('wsurl');
   const elUser = qs('login');
@@ -18,11 +19,15 @@
   const wsStatus = qs('status-ws');
   const chartsEl = qs('charts');
   const toggleChartsBtn = qs('toggle-charts');
+  const broadcastBtn = qs('broadcast-status');
   const canvases = {
     generator: /** @type {HTMLCanvasElement|null} */(document.getElementById('chart-gen')),
     moderator: /** @type {HTMLCanvasElement|null} */(document.getElementById('chart-mod')),
     processor: /** @type {HTMLCanvasElement|null} */(document.getElementById('chart-proc'))
   };
+  // Logging toggles
+  const LOG_CTRL_RAW = true; // show raw control payloads in Event Log
+  const LOG_STOMP_DEBUG = true; // STOMP frame debug to System Logs
   // Swarm view elements
   const tabControl = document.getElementById('tab-control');
   const tabSwarm = document.getElementById('tab-swarm');
@@ -55,11 +60,54 @@
     activate('control');
   })();
 
+  // Log tabs handling (Control vs Topic)
+  (function(){
+    const tCtrl = document.getElementById('log-tab-control');
+    const tTop = document.getElementById('log-tab-topic');
+    const vCtrl = document.getElementById('log-control');
+    const vTop = document.getElementById('log-topic');
+    if(!tCtrl || !tTop || !vCtrl || !vTop) return;
+    const set = (which)=>{
+      if(which==='control'){
+        vCtrl.style.display='block'; vTop.style.display='none'; tCtrl.classList.add('tab-active'); tTop.classList.remove('tab-active');
+      } else {
+        vCtrl.style.display='none'; vTop.style.display='block'; tCtrl.classList.remove('tab-active'); tTop.classList.add('tab-active');
+      }
+    };
+    tCtrl.addEventListener('click', ()=> set('control'));
+    tTop.addEventListener('click', ()=> set('topic'));
+    set('control');
+  })();
+
+  // Topic sniffer (subscribe to any RK on control exchange)
+  (function(){
+    const subBtn = document.getElementById('topic-sub');
+    const unsubBtn = document.getElementById('topic-unsub');
+    const rkInput = /** @type {HTMLInputElement|null} */(document.getElementById('topic-rk'));
+    const log = document.getElementById('topic-log');
+    let sub = null;
+    function logLine(s){ if(!log) return; const ts=new Date().toISOString(); log.textContent += `[${ts}] ${s}\n`; log.scrollTop = log.scrollHeight; }
+    if(!subBtn || !unsubBtn || !rkInput) return;
+    subBtn.addEventListener('click', ()=>{
+      if(!client || !connected){ appendSys('[CTRL] Topic subscribe aborted: not connected'); return; }
+      const rk = (rkInput.value || 'ev.#').trim();
+      const dest = '/exchange/ph.control/' + rk;
+      try{
+        if(sub) { try{ sub.unsubscribe(); }catch{} sub=null; }
+        // eslint-disable-next-line no-undef
+        sub = client.subscribe(dest, (message)=>{ const b=message.body||''; logLine(`${message.headers.destination||''} ${b}`); }, { ack:'auto' });
+        appendSys(`[CTRL] SUB TOPIC ${dest}`);
+      }catch(e){ appendSys('Topic subscribe error: ' + (e && e.message ? e.message : String(e))); }
+    });
+    unsubBtn.addEventListener('click', ()=>{ if(sub){ try{ sub.unsubscribe(); appendSys('[CTRL] UNSUB TOPIC'); }catch{} sub=null; } });
+  })();
+
   // Swarm graph state
-  const SWARM_DEFAULT_HOLD = 3_000; // 3x default 1s schedule
+  const SWARM_DEFAULT_HOLD = 15_000; // 3x default 5s schedule (status.delta)
   const swarm = {
-    nodes: /** @type {Record<string,{id:string,label:string,service:string,x:number,y:number,last:number}>} */({}),
+    nodes: /** @type {Record<string,{id:string,label:string,service:string,x:number,y:number,last:number,tps?:number}>} */({}),
     edges: /** @type {Array<{a:string,b:string}>} */([]),
+    queues: /** @type {Record<string,{in:Set<string>, out:Set<string>}>} */({}),
     holdMs: SWARM_DEFAULT_HOLD
   };
   function setHoldMs(){ if(swarmHoldInput){ const v = Math.max(1, Number(swarmHoldInput.value)||3); swarm.holdMs = v*1000; } }
@@ -81,7 +129,35 @@
     }
     return swarm.nodes[id];
   }
-  function addEdge(a,b){ if(!swarm.edges.find(e=> (e.a===a && e.b===b))){ swarm.edges.push({a,b}); } }
+  function addEdge(a,b){ if(a===b) return; if(!swarm.edges.find(e=> (e.a===a && e.b===b))){ swarm.edges.push({a,b}); } }
+  function arr(x){ return Array.isArray(x)? x : (x!=null? [x] : []); }
+  function updateQueues(service, queuesObj){
+    if(!queuesObj) return false;
+    let changed=false;
+    const ins = arr(queuesObj.in).concat(arr(queuesObj.inQueues)).filter(Boolean);
+    const outs = arr(queuesObj.out).concat(arr(queuesObj.outQueues)).filter(Boolean);
+    const apply = (name, dir)=>{
+      const key = String(name);
+      if(!swarm.queues[key]) swarm.queues[key] = { in:new Set(), out:new Set() };
+      const set = dir==='in'? swarm.queues[key].in : swarm.queues[key].out;
+      const before = set.size; set.add(service);
+      if(set.size!==before) changed=true;
+    };
+    ins.forEach(q=> apply(q,'in'));
+    outs.forEach(q=> apply(q,'out'));
+    return changed;
+  }
+  function rebuildEdgesFromQueues(){
+    const edges=[];
+    for(const q of Object.values(swarm.queues)){
+      for(const prod of q.out){ for(const cons of q.in){ if(prod!==cons) edges.push({a:prod, b:cons}); } }
+    }
+    // include processor→sut if processor exists
+    if(swarm.nodes['processor']) edges.push({a:'processor', b:'sut'});
+    // de-dup
+    const uniq=[]; for(const e of edges){ if(!uniq.find(x=> x.a===e.a && x.b===e.b)) uniq.push(e); }
+    swarm.edges = uniq;
+  }
   function pruneExpired(){ const now=Date.now(); let changed=false; for(const k of Object.keys(swarm.nodes)){ if(k==='sut') continue; if(now - swarm.nodes[k].last > swarm.holdMs){ delete swarm.nodes[k]; changed=true; } } if(changed) { // rebuild edges
       swarm.edges = swarm.edges.filter(e=> swarm.nodes[e.a] && swarm.nodes[e.b]);
     }
@@ -90,9 +166,11 @@
     // draw edges
     for(const e of swarm.edges){ const a=swarm.nodes[e.a], b=swarm.nodes[e.b]; if(!a||!b) continue; const ln=document.createElementNS('http://www.w3.org/2000/svg','line'); ln.setAttribute('x1', String(a.x)); ln.setAttribute('y1', String(a.y)); ln.setAttribute('x2', String(b.x)); ln.setAttribute('y2', String(b.y)); ln.setAttribute('stroke','rgba(255,255,255,0.6)'); ln.setAttribute('stroke-width','3'); ln.setAttribute('stroke-linecap','round'); svg.appendChild(ln); }
     // draw nodes
-    for(const id of Object.keys(swarm.nodes)){ const n=swarm.nodes[id]; const g=document.createElementNS('http://www.w3.org/2000/svg','g'); g.setAttribute('transform',`translate(${n.x-50},${n.y-30})`);
-      const rect=document.createElementNS('http://www.w3.org/2000/svg','rect'); rect.setAttribute('x','0'); rect.setAttribute('y','0'); rect.setAttribute('width','100'); rect.setAttribute('height','60'); rect.setAttribute('rx','12'); rect.setAttribute('fill', id==='sut' ? 'rgba(3,169,244,0.2)' : 'rgba(255,255,255,0.08)'); rect.setAttribute('stroke','rgba(255,255,255,0.5)'); rect.setAttribute('stroke-width','2'); g.appendChild(rect);
-      const txt=document.createElementNS('http://www.w3.org/2000/svg','text'); txt.setAttribute('x','50'); txt.setAttribute('y','34'); txt.setAttribute('text-anchor','middle'); txt.setAttribute('fill','#ffffff'); txt.setAttribute('font-family','Inter, Segoe UI, Arial, sans-serif'); txt.setAttribute('font-size','14'); txt.textContent = n.label.toUpperCase(); g.appendChild(txt);
+    for(const id of Object.keys(swarm.nodes)){
+      const n=swarm.nodes[id]; const g=document.createElementNS('http://www.w3.org/2000/svg','g'); g.setAttribute('transform',`translate(${n.x-60},${n.y-34})`);
+      const rect=document.createElementNS('http://www.w3.org/2000/svg','rect'); rect.setAttribute('x','0'); rect.setAttribute('y','0'); rect.setAttribute('width','120'); rect.setAttribute('height','68'); rect.setAttribute('rx','12'); rect.setAttribute('fill', id==='sut' ? 'rgba(3,169,244,0.2)' : 'rgba(255,255,255,0.08)'); rect.setAttribute('stroke','rgba(255,255,255,0.5)'); rect.setAttribute('stroke-width','2'); g.appendChild(rect);
+      const title=document.createElementNS('http://www.w3.org/2000/svg','text'); title.setAttribute('x','60'); title.setAttribute('y','30'); title.setAttribute('text-anchor','middle'); title.setAttribute('fill','#ffffff'); title.setAttribute('font-family','Inter, Segoe UI, Arial, sans-serif'); title.setAttribute('font-size','13'); title.textContent = n.label.toUpperCase(); g.appendChild(title);
+      const tps=document.createElementNS('http://www.w3.org/2000/svg','text'); tps.setAttribute('x','60'); tps.setAttribute('y','50'); tps.setAttribute('text-anchor','middle'); tps.setAttribute('fill','rgba(255,255,255,0.8)'); tps.setAttribute('font-family','ui-monospace, SFMono-Regular, Menlo, Consolas, monospace'); tps.setAttribute('font-size','12'); tps.textContent = (typeof n.tps==='number')? (`TPS ${n.tps}`) : 'TPS –'; g.appendChild(tps);
       svg.appendChild(g); }
     if(swarmStats){ const count = Object.keys(swarm.nodes).length - (swarm.nodes['sut']?1:0); swarmStats.textContent = `components: ${Math.max(0,count)} | edges: ${swarm.edges.length}`; }
   }
@@ -113,6 +191,12 @@
       const res = await fetch(PH_CFG_URL, {cache:'no-store'});
       if(res.ok){
         PH_CONFIG = await res.json();
+        // Demo mode from config or URL (?demo=1)
+        try{
+          const qp = new URLSearchParams(window.location.search);
+          DEMO = !!(PH_CONFIG.demo || qp.get('demo')==='1');
+          if(DEMO) appendSys('Demo mode: WS disabled (no auto-connect, no health ping)');
+        }catch{}
         try{
           const subs = (PH_CONFIG && Array.isArray(PH_CONFIG.subscriptions) && PH_CONFIG.subscriptions.length)
             ? PH_CONFIG.subscriptions.join(', ')
@@ -244,11 +328,15 @@
         }
       }
     }catch(e){ appendSys('URL normalize error: ' + (e && e.message ? e.message : String(e))); /* keep as-is */ }
-    const login = (elUser && elUser.value) || 'guest';
-    const passcode = (elPass && elPass.value) || 'guest';
-    const vhost = (PH_CONFIG && PH_CONFIG.stomp && PH_CONFIG.stomp.vhost) || '/';
+    const cfgStomp = (PH_CONFIG && PH_CONFIG.stomp) || {};
+    const prefer = !!(PH_CONFIG && PH_CONFIG.preferConfig);
+    const login = (prefer ? (cfgStomp.login || '') : '') || (elUser && elUser.value) || 'guest';
+    const passcode = (prefer ? (cfgStomp.passcode || '') : '') || (elPass && elPass.value) || 'guest';
+    const vhost = cfgStomp.vhost || '/';
     // Persist connection for other pages (e.g., /generator)
     saveConn({ url, login, pass: passcode, vhost: '/' });
+    // Log connect params (mask pass)
+    try{ appendSys(`[CTRL] CONNECT url=${url} vhost=${vhost} login=${login} pass=***`); }catch{}
     setState('Connecting...'); btn.disabled = true; btn.textContent = 'Connecting...';
     setWsStatus('connecting');
     // eslint-disable-next-line no-undef
@@ -256,20 +344,21 @@
       brokerURL: url,
       connectHeaders: { login, passcode, host: vhost },
       reconnectDelay: 0,
-      debug: (s) => { appendSys(`[STOMP] ${s}`); }
+      debug: (s) => { if(LOG_STOMP_DEBUG) appendSys(`[STOMP] ${s}`); }
     });
     client.onConnect = (frame) => {
       connected = true;
       setState('Connected'); btn.disabled = false; btn.textContent = 'Disconnect';
       setWsStatus('connected');
       appendSys('CONNECTED ' + JSON.stringify(frame.headers || {}));
-      const subs = (PH_CONFIG && Array.isArray(PH_CONFIG.subscriptions) && PH_CONFIG.subscriptions.length)
-        ? PH_CONFIG.subscriptions
+      let subs = (PH_CONFIG && Array.isArray(PH_CONFIG.subscriptions) && PH_CONFIG.subscriptions.length)
+        ? PH_CONFIG.subscriptions.slice()
         : ['/queue/ph.control'];
+      // Always include control exchange event/signal routes so Events see everything
+      if(!subs.includes('/exchange/ph.control/ev.#')) subs.push('/exchange/ph.control/ev.#');
+      if(!subs.includes('/exchange/ph.control/sig.#')) subs.push('/exchange/ph.control/sig.#');
       if(!(PH_CONFIG && Array.isArray(PH_CONFIG.subscriptions) && PH_CONFIG.subscriptions.length)){
-        appendSys('No subscriptions from config; using fallback [/queue/ph.control]');
-      } else {
-        appendSys('Subscribing to configured destinations: ' + subs.join(', '));
+        appendSys('[CTRL] SUB using fallback [/queue/ph.control]');
       }
       subs.forEach(d => {
         try{
@@ -277,23 +366,45 @@
             const body = message.body || '';
             try{
               const obj = JSON.parse(body);
-              if(obj && typeof obj.tps !== 'undefined' && obj.service){
-                if(obj.service === 'generator' && genEl) genEl.textContent = String(obj.tps);
-                if(obj.service === 'moderator' && modEl) modEl.textContent = String(obj.tps);
-                if(obj.service === 'processor' && procEl) procEl.textContent = String(obj.tps);
-                if(obj.service === 'generator') addPoint('generator', obj.tps);
-                if(obj.service === 'moderator') addPoint('moderator', obj.tps);
-                if(obj.service === 'processor') addPoint('processor', obj.tps);
-                // Swarm: mark node as seen
-                const node = ensureNode(obj.service);
-                if(node){ node.last = Date.now(); redrawSwarm(); }
+              if(obj){
+                // Use API spec fields strictly: role/name, data.tps, queues{in,out}
+                const svc = obj.role || obj.name || obj.service; // prefer role/name
+                if(!svc) return;
+                // Swarm: mark node, update TPS
+                const node = ensureNode(svc);
+                const tpsVal = (obj && obj.data && typeof obj.data.tps==='number') ? obj.data.tps : (typeof obj.tps==='number' ? obj.tps : undefined);
+                if(node){ node.last = Date.now(); if(typeof tpsVal==='number') node.tps = tpsVal; }
+                // Queues discovery (per spec: queues{in,out})
+                const qobj = obj.queues;
+                const changed = updateQueues(svc, qobj);
+                if(changed) rebuildEdgesFromQueues();
+                // Log a concise control summary
+                try{
+                  const role = svc;
+                  const inst = obj.instance || '–';
+                  const ev = obj.event || 'status';
+                  const kind = obj.kind || (typeof tpsVal!=='undefined' ? 'status.delta' : 'status');
+                  const qin = obj.queues && Array.isArray(obj.queues.in) ? obj.queues.in.length : 0;
+                  const qout = obj.queues && Array.isArray(obj.queues.out) ? obj.queues.out.length : 0;
+                  appendSys(`[CTRL] RECV ${ev}/${kind} role=${role} inst=${inst} tps=${typeof tpsVal==='number'?tpsVal:'–'} in=${qin} out=${qout}`);
+                }catch{}
+                redrawSwarm();
+                // Control charts (if TPS provided)
+                if(typeof tpsVal !== 'undefined'){
+                  if(svc === 'generator' && genEl) genEl.textContent = String(tpsVal);
+                  if(svc === 'moderator' && modEl) modEl.textContent = String(tpsVal);
+                  if(svc === 'processor' && procEl) procEl.textContent = String(tpsVal);
+                  if(svc === 'generator') addPoint('generator', tpsVal);
+                  if(svc === 'moderator') addPoint('moderator', tpsVal);
+                  if(svc === 'processor') addPoint('processor', tpsVal);
+                }
               }
-              appendLog(`MSG ${message.headers.destination || ''} ${body}`);
+              if(LOG_CTRL_RAW) appendLog(`CTRL RAW ${message.headers.destination || ''} ${body}`);
             } catch(e){
-              appendLog(`MSG ${message.headers.destination || ''} ${body}`);
+              if(LOG_CTRL_RAW) appendLog(`CTRL RAW ${message.headers.destination || ''} ${body}`);
             }
           }, { ack:'auto' });
-          appendSys('SUBSCRIBE ' + d);
+          appendSys(`[CTRL] SUB ${d}`);
         }catch(e){ appendSys('Subscribe error: '+ (e && e.message ? e.message : String(e))); }
       });
     };
@@ -330,7 +441,7 @@
   });
 
   // Initialize: load config, set defaults, then try auto-connect
-  if(HAS_CONN){
+  if(HAS_CONN && !DEMO){
     (async () => {
       await loadConfig();
       await setDefaultWsUrl();
@@ -340,6 +451,7 @@
       }catch{}
     })();
   }
+  if(!HAS_CONN){ (async ()=>{ await loadConfig(); })(); }
 
   // Load VERSION and display in header if present
   (async () => {
@@ -394,6 +506,7 @@
   // Periodic healthcheck of UI reverse proxy
   (function startHealthPing(){
     if(!window.fetch) return; // older browsers
+    if(DEMO) return;
     let lastStatus = null;
     const ping = async () => {
       try{
@@ -410,6 +523,29 @@
     setInterval(ping, 15000);
   })();
 
+  // Hook broadcast button (located near charts toggle)
+  (function(){
+    const btn = document.getElementById('broadcast-status');
+    if(!btn) return;
+    btn.addEventListener('click', ()=>{
+      if(!client || !connected){ appendSys('[CTRL] SEND aborted: not connected'); return; }
+      const payload = {
+        type: 'status.request',
+        version: '1.0',
+        messageId: (crypto && crypto.randomUUID ? crypto.randomUUID() : (Math.random().toString(16).slice(2) + Date.now())),
+        timestamp: new Date().toISOString()
+      };
+      // New routing key scheme: sig.<type>[.<role>[.<instance>]]; broadcast uses only type
+      const rk = 'sig.status-request';
+      const dest = '/exchange/ph.control/' + rk;
+      try{
+        // eslint-disable-next-line no-undef
+        client.publish({ destination: dest, body: JSON.stringify(payload), headers: { 'content-type': 'application/json' } });
+        appendSys(`[CTRL] SEND ${rk} payload=status-request`);
+      }catch(e){ appendSys('Broadcast error: ' + (e && e.message ? e.message : String(e))); }
+    });
+  })();
+
   // Toggle charts visibility
   if(toggleChartsBtn && chartsEl){
     toggleChartsBtn.addEventListener('click', ()=>{
@@ -419,4 +555,6 @@
       if(show){ ['generator','moderator','processor'].forEach(s=> drawChart(s)); }
     });
   }
+
+  // (removed duplicate legacy broadcast handler)
 })();

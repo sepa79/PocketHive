@@ -7,6 +7,8 @@ public class Topology {
   public static final String MOD_QUEUE = cfg("PH_MOD_QUEUE", "ph.mod");
   // Control queue (shared control plane)
   public static final String CONTROL_QUEUE = cfg("PH_CONTROL_QUEUE", "ph.control");
+  // Control exchange (topic)
+  public static final String CONTROL_EXCHANGE = cfg("PH_CONTROL_EXCHANGE", "ph.control");
 
   private static String cfg(String key, String def){
     String v = System.getenv(key);

@@ -16,12 +16,36 @@
 - Services publish/consume via the `ph.hive` exchange and `ph.gen`/`ph.mod` queues.
 - Metrics/status flow back on `ph.control` which the UI subscribes to for charts.
 
+### Control-plane Events & Signals
+
+- Events (topic): `ev.{kind}.{role}.{instance}`
+  - `kind`: `status-full`, `status-delta`, `lifecycle.*`, `metric.*`, `alert`
+  - `role`: `generator|moderator|processor`
+  - `instance`: UUID/unique ID
+  - Envelope fields: `event, kind, version, role, instance, messageId, timestamp, queues{in,out}? , data`
+- Signals (topic-friendly): `sig.<type>[.<role>[.<instance>]]`
+  - Types are single-segment (no dots): `status-request`, `config-update`, `ping`, `link-request`
+  - Bindings examples:
+    - Global: `sig.status-request.#`
+    - Role: `sig.status-request.<role>.#`
+    - Instance: `sig.status-request.<role>.<instance>`
+  - UI broadcast sends: `/exchange/ph.control/sig.status-request`
+
+See also: Control Bindings page (Menu → Control Bindings) and `ui/spec/asyncapi.yaml`.
+
 ### Views
 
 - Control View: existing dashboard with charts, event log, and system log.
 - Swarm View: auto-discovers components from Control messages and draws a simple graph:
   - Nodes appear when the first message from a service is received (generator, moderator, processor). SUT appears when processor is seen.
   - Default hold time is 3s (3× of 1s status schedule); toolbar lets you adjust hold time and Clear & Restart.
+- Edges are built strictly from `queues.in/out` found in `status-full` events.
+
+### Demo mode (no WebSocket)
+
+- To host on static pages or preview without RabbitMQ, enable demo mode:
+  - Set `"demo": true` in `ui/config.json`, or open with query `?demo=1`.
+  - UI won’t auto-connect or ping `/healthz`, and connection controls are inert.
 
 ## Stack & Ports
 
@@ -92,33 +116,9 @@ Manual checks:
 
 - Authentication / `guest` user:
   - RabbitMQ blocks remote logins for the built‑in `guest` user by default. If you access the UI from a remote host, either use the UI’s same‑origin `/ws` proxy (recommended) or create a non‑guest user.
-  - Easiest: set defaults in Compose for RabbitMQ:
-
-    ```yaml
-    rabbitmq:
-      environment:
-        RABBITMQ_DEFAULT_USER: phuser
-        RABBITMQ_DEFAULT_PASS: phpass
-    ```
-
-  - Then set the same credentials in services or via env:
-
-    ```yaml
-    generator:
-      environment:
-        RABBITMQ_USER: phuser
-        RABBITMQ_PASS: phpass
-    moderator:
-      environment:
-        RABBITMQ_USER: phuser
-        RABBITMQ_PASS: phpass
-    processor:
-      environment:
-        RABBITMQ_USER: phuser
-        RABBITMQ_PASS: phpass
-    ```
-
-  - Alternative (dev only): relax `guest` loopback restriction via `rabbitmq.conf` mount.
+  - Default: use built‑in `guest`/`guest`. The UI connects through a same‑origin proxy so remote logins work without creating a new user.
+  - Optional: to create a dedicated non‑guest user, set `RABBITMQ_DEFAULT_USER`/`RABBITMQ_DEFAULT_PASS` in Compose and pass matching creds to services.
+  - Alternative (dev only): relax `guest` loopback restriction via `rabbitmq.conf` mount if connecting directly without the proxy.
 
 - Cannot access UI: ensure port 8088 is free or adjust the mapping in `docker-compose.yml`.
 

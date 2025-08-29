@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>PocketHive – Control Bindings</title>
+  <style>
+    :root{ color-scheme: dark; }
+    body{ margin:0; font: 16px/1.5 Inter, system-ui, Segoe UI, Arial, sans-serif; background:#0f1116; color:#e6eef8; }
+    header{ position:sticky; top:0; background: rgba(15,17,22,.8); border-bottom:1px solid rgba(255,255,255,.08); padding:12px 16px; backdrop-filter: blur(6px); }
+    main{ max-width: 980px; margin: 20px auto 60px; padding: 0 16px; }
+    h1,h2,h3{ line-height:1.2; margin: 18px 0 10px; }
+    h1{ font-size: 28px; } h2{ font-size: 22px; } h3{ font-size: 18px; }
+    p, ul, ol{ color:#c9d4e0; }
+    code, pre{ font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    pre{ background:#0b0f15; border:1px solid rgba(255,255,255,.1); border-radius:10px; padding:12px; overflow:auto; }
+    a{ color:#33E1FF; }
+    .muted{ color:#9aa0a6; font-size: 14px; }
+  </style>
+  <script>
+    async function load(){
+      const host = document.getElementById('md');
+      const mdUrl = '/rules/control-plane-rules.md';
+      try{
+        const res = await fetch(mdUrl, {cache:'no-store'});
+        const md = res.ok ? await res.text() : '# Rules not found';
+        host.innerHTML = render(md);
+      }catch(e){ host.textContent = 'Failed to load rules: ' + (e && e.message ? e.message : String(e)); }
+    }
+    function esc(s){ return s.replace(/[&<>]/g, c=> ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+    function inline(s){
+      s = s.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (m,a,src)=> `<img alt="${esc(a)}" src="${esc(src)}">`);
+      s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (m,txt,href)=> `<a href="${esc(href)}" target="_blank" rel="noopener">${esc(txt)}</a>`);
+      s = s.replace(/`([^`]+)`/g, (m,code)=> `<code>${esc(code)}</code>`);
+      return s;
+    }
+    function render(md){
+      const lines = md.replace(/\r\n?/g,'\n').split('\n');
+      let html='', inCode=false, buf=[];
+      for(let i=0;i<lines.length;i++){
+        const ln = lines[i];
+        if(/^```/.test(ln)){ if(inCode){ html+=`<pre><code>${esc(buf.join('\n'))}</code></pre>`; inCode=false; buf=[]; } else { inCode=true; } continue; }
+        if(inCode){ buf.push(ln); continue; }
+        if(/^#\s+/.test(ln)){ html+=`<h1>${esc(ln.replace(/^#\s+/,'')).trim()}</h1>`; continue; }
+        if(/^##\s+/.test(ln)){ html+=`<h2>${esc(ln.replace(/^##\s+/,'')).trim()}</h2>`; continue; }
+        if(/^###\s+/.test(ln)){ html+=`<h3>${esc(ln.replace(/^###\s+/,'')).trim()}</h3>`; continue; }
+        if(/^\s*[-*]\s+/.test(ln)){
+          const items=[ln.replace(/^\s*[-*]\s+/, '')];
+          while(i+1<lines.length && /^\s*[-*]\s+/.test(lines[i+1])){ items.push(lines[++i].replace(/^\s*[-*]\s+/,'')); }
+          html += `<ul>` + items.map(it=> `<li>${inline(it)}</li>`).join('') + `</ul>`; continue;
+        }
+        if(/^\s*$/.test(ln)){ html += ''; continue; }
+        html += `<p>${inline(ln)}</p>`;
+      }
+      return html;
+    }
+    document.addEventListener('DOMContentLoaded', load);
+  </script>
+</head>
+<body>
+  <header>
+    <div class="muted">PocketHive / Control Bindings</div>
+  </header>
+  <main>
+    <p class="muted">This page renders <code>rules/control-plane-rules.md</code> from the repository.</p>
+    <div id="md">Loading…</div>
+  </main>
+</body>
+</html>
+

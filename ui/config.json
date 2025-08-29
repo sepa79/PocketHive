@@ -1,8 +1,12 @@
 {
   "stomp": {
     "wsPath": "/ws",
-    "vhost": "/"
+    "vhost": "/",
+    "login": "guest",
+    "passcode": "guest"
   },
+  "preferConfig": true,
+  "demo": false,
   "subscriptions": [
     "/queue/ph.control"
   ],

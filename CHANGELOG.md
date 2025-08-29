@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.1] - 2025-08-29
+Timestamp: 2025-08-29T14:39:23Z
+
+- Auth: Default all components to RabbitMQ `guest/guest`; remove custom user creation script (`rabbitmq/add-user.sh`) and related Compose envs.
+- Compose: Stop setting `RABBITMQ_DEFAULT_USER/PASS`; services rely on defaults and `RABBITMQ_HOST` only.
+- UI: Defaults and placeholders use `guest/guest` (config.json, app.js, generator page, legacy controls).
+- Control-plane: Switch routing key kinds to kebab-case — `status-delta`, `status-full` (generator, moderator, processor, docs, spec, schema).
+- Docs: README, control-plane rules, AsyncAPI, and JSON schema updated to kebab-case and guest defaults.
+- RabbitMQ image: Do not copy `add-user.sh`. Note: `definitions.json` remains minimal; if it causes issues, consider removing it from the image.
+
 ## [0.4.0] - 2025-08-29
 Timestamp: 2025-08-29T11:05:00Z
 

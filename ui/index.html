@@ -70,8 +70,9 @@
               </label>
             </div>
             <a href="/generator/" style="display:block; padding:10px 12px; color:#fff; text-decoration:none; border-bottom:1px solid rgba(255,255,255,0.08)">Open Generator</a>
-            <a href="/readme.html" style="display:block; padding:10px 12px; color:#fff; text-decoration:none; border-bottom:1px solid rgba(255,255,255,0.08)">README</a>
-            <a href="/changelog.html" style="display:block; padding:10px 12px; color:#fff; text-decoration:none; border-bottom:1px solid rgba(255,255,255,0.08)">Changelog</a>
+          <a href="/readme.html" style="display:block; padding:10px 12px; color:#fff; text-decoration:none; border-bottom:1px solid rgba(255,255,255,0.08)">README</a>
+          <a href="/bindings.html" style="display:block; padding:10px 12px; color:#fff; text-decoration:none; border-bottom:1px solid rgba(255,255,255,0.08)">Control Bindings</a>
+          <a href="/changelog.html" style="display:block; padding:10px 12px; color:#fff; text-decoration:none; border-bottom:1px solid rgba(255,255,255,0.08)">Changelog</a>
             <a href="/docs.html" style="display:block; padding:10px 12px; color:#fff; text-decoration:none;">API Docs</a>
           </div>
         </div>
@@ -103,6 +104,7 @@
     </div>
     <div class="controls" style="margin-top:10px">
       <button id="toggle-charts">Toggle Charts</button>
+      <button id="broadcast-status" title="Broadcast status.request to all services">Request Full Status (broadcast)</button>
     </div>
     <div id="charts" class="card" style="display:none; padding:16px">
       <div class="kpi-title" style="margin-bottom:10px">RabbitMQ Control Stream — TPS (last 60s)</div>
@@ -121,8 +123,25 @@
         </div>
       </div>
     </div>
-    <h3>Event Log</h3>
-    <div id="log"></div>
+    <section class="card" style="margin-top:16px; padding:12px">
+      <div class="row" style="justify-content:space-between; align-items:center">
+        <div style="display:flex; gap:8px; align-items:center">
+          <button id="log-tab-control" class="tab-btn tab-active" type="button">Control Log</button>
+          <button id="log-tab-topic" class="tab-btn" type="button">Topic Sniffer</button>
+        </div>
+      </div>
+      <div id="log-control" aria-live="polite">
+        <div id="log"></div>
+      </div>
+      <div id="log-topic" style="display:none">
+        <div class="row" style="gap:8px; align-items:center; margin:6px 0 8px 0">
+          <input id="topic-rk" placeholder="Routing key (e.g., ev.# or ev.status-#)" style="flex:1 1 auto"/>
+          <button id="topic-sub" class="tab-btn" type="button">Subscribe</button>
+          <button id="topic-unsub" class="tab-btn" type="button">Unsubscribe</button>
+        </div>
+        <div id="topic-log" style="white-space: pre-wrap; font-family: monospace; max-height: 30vh; overflow:auto; background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.12); border-radius: 12px; padding:10px;"></div>
+      </div>
+    </section>
 
     <h3>System Logs</h3>
     <div id="syslog" style="white-space: pre-wrap; font-family: monospace; max-height: 30vh; overflow:auto; background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.12); border-radius: 12px; padding:10px;"></div>
@@ -139,7 +158,7 @@
   </style>
   <div id="view-swarm">
     <div id="swarm-toolbar">
-      <label>Hold time (s) <input id="swarm-hold" type="number" min="1" max="60" step="1" value="3" style="width:64px"></label>
+      <label>Hold time (s) <input id="swarm-hold" type="number" min="1" max="120" step="1" value="15" style="width:64px"></label>
       <button id="swarm-clear" class="tab-btn" style="cursor:pointer">Clear & Restart</button>
       <span class="small" id="swarm-stats" style="color:#9aa0a6"></span>
     </div>

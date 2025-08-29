@@ -11,4 +11,9 @@ public class RabbitConfig {
   @Bean Queue mod(){ return QueueBuilder.durable(Topology.MOD_QUEUE).build(); }
   @Bean Binding bindMod(){ return BindingBuilder.bind(mod()).to(direct()).with(Topology.MOD_QUEUE); }
   @Bean Queue control(){ return QueueBuilder.durable(Topology.CONTROL_QUEUE).build(); }
+  @Bean TopicExchange controlExchange(){ return new TopicExchange(Topology.CONTROL_EXCHANGE, true, false); }
+  // New signal routing: sig.<type>[.<role>[.<instance>]]
+  @Bean Binding bindSigGlobal(){ return BindingBuilder.bind(control()).to(controlExchange()).with("sig.status-request.#"); }
+  @Bean Binding bindSigRole(){ return BindingBuilder.bind(control()).to(controlExchange()).with("sig.status-request.processor.#"); }
+  @Bean Binding bindSigInstance(){ return BindingBuilder.bind(control()).to(controlExchange()).with("sig.status-request.processor.*"); }
 }
