@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.2] - 2025-08-29
+Timestamp: 2025-08-29T01:24:02Z
+
+- Docs: Add AsyncAPI spec (`ui/spec/asyncapi.yaml`) describing control/traffic contracts.
+- UI: Add API Docs page (`/docs.html`) and group header actions into a ☰ Menu dropdown.
+- UI: Fix changelog page showing duplicated header (remove extra static H1).
+- Config: Align exchanges across UI/backends — `ph.hive` (traffic), `ph.control` (control).
+
 ## [0.2.1] - 2025-08-29
 Timestamp: 2025-08-29T01:03:45Z
 

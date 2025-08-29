@@ -222,6 +222,17 @@
     }catch{}
   })();
 
+  // Simple header menu dropdown
+  (function(){
+    const btn = document.getElementById('menu-btn');
+    const dd = document.getElementById('menu-dropdown');
+    if(!btn || !dd) return;
+    let open=false;
+    const toggle=(e)=>{ e && e.stopPropagation(); open=!open; dd.style.display=open?'block':'none'; };
+    btn.addEventListener('click', toggle);
+    document.addEventListener('click', (e)=>{ if(open && !dd.contains(e.target) && e.target!==btn){ open=false; dd.style.display='none'; } });
+  })();
+
   // Log user edits to connection fields (mask secrets)
   if(elUrl){ elUrl.addEventListener('change', ()=> { appendSys(`User set WebSocket URL: ${elUrl.value.trim()||'(empty)'}`); saveConn({ url: elUrl.value||'', login: (elUser&&elUser.value)||'', pass: (elPass&&elPass.value)||'', vhost: '/' }); }); }
   if(elUser){ elUser.addEventListener('change', ()=> { appendSys(`User set username: ${elUser.value||'(empty)'}`); saveConn({ url: (elUrl&&elUrl.value)||'', login: elUser.value||'', pass: (elPass&&elPass.value)||'', vhost: '/' }); }); }

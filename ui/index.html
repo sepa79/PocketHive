@@ -50,12 +50,18 @@
     <div class="header-right">
       <label class="bg-toggle"><input type="checkbox" id="ph-old-bg"> Old UI BG</label>
       <button id="ph-swarm-options" class="bg-toggle" style="cursor:pointer">Swarm Options</button>
-      <a class="bg-toggle" href="/generator/" style="text-decoration:none">Open Generator</a>
       <div class="bg-toggle" style="gap:6px">
         <span id="status-ui" title="UI Health">🟡 UI</span>
         <span id="status-ws" title="WebSocket to RabbitMQ">⚪ WS</span>
         <span id="ph-version" title="Current Version">v…</span>
-        <a class="bg-toggle" href="/changelog.html" style="text-decoration:none">Changelog</a>
+        <div class="menu" style="position:relative">
+          <button id="menu-btn" class="bg-toggle" style="cursor:pointer">☰ Menu</button>
+          <div id="menu-dropdown" style="display:none; position:absolute; right:0; top:36px; background: rgba(12,16,22,0.95); border:1px solid rgba(255,255,255,0.15); border-radius:10px; min-width: 200px; box-shadow:0 6px 22px rgba(0,0,0,0.4);">
+            <a href="/generator/" style="display:block; padding:10px 12px; color:#fff; text-decoration:none; border-bottom:1px solid rgba(255,255,255,0.08)">Open Generator</a>
+            <a href="/changelog.html" style="display:block; padding:10px 12px; color:#fff; text-decoration:none; border-bottom:1px solid rgba(255,255,255,0.08)">Changelog</a>
+            <a href="/docs.html" style="display:block; padding:10px 12px; color:#fff; text-decoration:none;">API Docs</a>
+          </div>
+        </div>
       </div>
     </div>
   </header>
