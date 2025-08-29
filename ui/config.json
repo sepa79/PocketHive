@@ -4,15 +4,14 @@
     "vhost": "/"
   },
   "subscriptions": [
-    "/exchange/status.exchange/generator.tps",
-    "/exchange/status.exchange/moderator.tps",
-    "/exchange/status.exchange/processor.tps"
+    "/exchange/ph.control/generator.tps",
+    "/exchange/ph.control/moderator.tps",
+    "/exchange/ph.control/processor.tps"
   ],
   "amqp": {
-    "exchange": "sim.direct",
+    "exchange": "ph.hive",
     "genQueue": "gen.queue",
     "modQueue": "moderated.queue",
-    "statusExchange": "status.exchange"
+    "statusExchange": "ph.control"
   }
 }
-
