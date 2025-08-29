@@ -4,24 +4,83 @@
 
 **PocketHive** is a portable transaction swarm: compact, composable components that let you generate, moderate, process, and test workloads with clear boundaries and durable queues.
 
-## Architecture
+## Stack & Ports
 
-![Processing Flow](pockethive-flow.svg)
+- `rabbitmq` (with Web-STOMP): 5672 (AMQP), 15672 (Mgmt UI), 15674 (Web-STOMP, internal only)
+- `ui` (nginx static site): 8088 → serves UI, proxies WebSocket at `/ws` to RabbitMQ
+- `generator`, `moderator`, `processor`: Spring Boot services using AMQP
 
-### Components
+## Quick Start
 
-- **Generator** — creates events/payloads at a configurable rate.
-- **Queue (A/B)** — durable FIFO buffers between stages; supports retries and dead‑letter queues; isolates backpressure.
-- **Moderator** — enforces validation, limits, and policy; tags and audits messages.
-- **Processor** — performs execution and scoring; produces side effects/outputs only.
-- **PostProcessor** — handles **metrics, telemetry, logs, export, and archival**. This stage centralizes observability so the Processor can stay minimal.
-- **Test Environment** — sandbox for A/B, simulations, and replays; bidirectional link with the Processor for rapid iteration.
+Prereqs: Docker and Docker Compose.
 
-### Notes
+1) Build and start
 
-- The **PostProcessor** was added in this iteration to own all metrics/telemetry concerns.
-- The diagram and the logo are SVG, resolution‑independent, and safe to embed directly in the repository.
+```
+docker compose up -d --build
+```
+
+2) Open the UI
+
+- UI: http://localhost:8088
+- Click "Connect". The UI connects to RabbitMQ via same-origin WebSocket `ws://localhost:8088/ws`.
+
+3) RabbitMQ Management (optional)
+
+- http://localhost:15672 (guest / guest)
+- Web-STOMP plugin is enabled in the RabbitMQ image.
+
+## WebSocket Proxy (UI ←→ RabbitMQ)
+
+- The UI does not connect directly to `localhost:15674`. Instead, nginx proxies `/ws` → `rabbitmq:15674/ws`.
+- This avoids cross-origin/origin/CORS issues and works when the UI is accessed from a remote host.
+
+Relevant files:
+
+- `ui/nginx.conf` — reverse proxy for `/ws` and `/healthz`
+- `docker-compose.yml` — mounts nginx config and exposes port 8088; adds healthcheck for UI
+- `ui/assets/js/app.js` — defaults WS URL to same-origin `/ws`, includes system logs and health ping
+
+## Healthchecks
+
+- `rabbitmq`: built-in healthcheck via `rabbitmq-diagnostics ping`
+- `ui`: HTTP `GET /healthz` returns `200 ok` (nginx). Compose healthcheck pings it every 10s.
+
+Manual checks:
+
+- UI health: `curl -s http://localhost:8088/healthz` → `ok`
+- Mgmt UI: visit `http://localhost:15672`
+
+## UI Panels
+
+- Event Log: shows application events/messages from STOMP subscriptions.
+- System Logs: shows system and user actions:
+  - Connect/Disconnect clicks, edits of URL/username/password (password length only)
+  - WebSocket lifecycle (connecting URL, CONNECTED, subscriptions, errors, close)
+  - UI health transitions based on `/healthz`
+
+## Troubleshooting
+
+- WebSocket error in UI:
+  - Ensure UI health shows "healthy" (see System Logs) and `/healthz` returns `ok`.
+  - Verify RabbitMQ is healthy and Web-STOMP is enabled (Mgmt UI → Plugins).
+  - Check browser devtools → Network → WS for the `/ws` handshake (should be 101 Switching Protocols).
+  - If serving the UI over HTTPS, the app will use `wss://…/ws` automatically; ensure any reverse proxy forwards upgrades.
+  - Avoid manually pointing to `ws://localhost:15674/ws` unless you expose that port and handle origins.
+
+- Cannot access UI: ensure port 8088 is free or adjust the mapping in `docker-compose.yml`.
+
+## Development Notes
+
+- Static UI is served from `ui/`. Changes to HTML/CSS/JS are picked up on reload.
+- Nginx config lives in `ui/nginx.conf` and is mounted into the `ui` container. After changing it, restart just the UI:
+
+```
+docker compose up -d --build ui
+```
+
+- Services use environment `RABBITMQ_HOST=rabbitmq` inside the Compose network.
 
 ---
 
-_PocketHive · portable transaction · swarm_
+PocketHive · portable transaction · swarm
