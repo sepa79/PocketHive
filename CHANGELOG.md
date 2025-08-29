@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.0] - 2025-08-29
+Timestamp: 2025-08-29T10:24:00Z
+
+- UI: New "Network" background and 3‑mode selector (Bees / Network / Old).
+- UI: Auto‑apply controls for Network; performance pause for inactive backgrounds.
+- UI: HAL status eyes with center‑pulse animations and colorblind‑friendly contrast.
+- UI: Unified typography; improved dark dropdown styling and focus visibility.
+- UI: Removed duplicate top bars; simplified background UI logic.
+- UI: Nginx WS resolver fix so UI starts without RabbitMQ present.
+- Docs: Updated README with new visuals and notes.
+
 ## [0.2.3] - 2025-08-29
 Timestamp: 2025-08-29T02:20:00Z
 

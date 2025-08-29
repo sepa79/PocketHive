@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>PocketHive UI</title>
   <link rel="stylesheet" href="./swarm/css/pockethive-bees.css">
+  <link rel="stylesheet" href="./net/css/pockethive-net.css">
   <link rel="stylesheet" href="./assets/css/app.css">
   <style>
     header {
@@ -48,11 +49,21 @@
   <header>
     <img class="logo" src="./assets/logo.svg" alt="PocketHive Logo" />
     <div class="header-right">
-      <label class="bg-toggle"><input type="checkbox" id="ph-old-bg"> Old UI BG</label>
+      <label class="bg-toggle" style="gap:8px">
+        <span>Background</span>
+        <select id="ph-bg-mode">
+          <option value="bees">Bees</option>
+          <option value="net">Network</option>
+          <option value="old">Old</option>
+        </select>
+      </label>
       <button id="ph-swarm-options" class="bg-toggle" style="cursor:pointer">Swarm Options</button>
-      <div class="bg-toggle" style="gap:6px">
-        <span id="status-ui" title="UI Health">🟡 UI</span>
-        <span id="status-ws" title="WebSocket to RabbitMQ">⚪ WS</span>
+      <button id="ph-open-net" class="bg-toggle" style="cursor:pointer">Network Options</button>
+      <div class="bg-toggle" style="gap:10px; align-items:center">
+        <div class="hal">
+          <span id="status-ui" class="hal-eye" data-state="connecting" title="UI Health"></span>
+          <span id="status-ws" class="hal-eye" data-state="idle" title="WebSocket to RabbitMQ"></span>
+        </div>
         <span id="ph-version" title="Current Version">v…</span>
         <div class="menu" style="position:relative">
           <button id="menu-btn" class="bg-toggle" style="cursor:pointer">☰ Menu</button>

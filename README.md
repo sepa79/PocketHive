@@ -1,8 +1,14 @@
 # PocketHive
 
-![PocketHive logo](pockethive-logo-readme.svg)
+<p align="center">
+  <img alt="PocketHive" src="ui/assets/logo.svg" width="220" />
+</p>
 
 **PocketHive** is a portable transaction swarm: compact, composable components that let you generate, moderate, process, and test workloads with clear boundaries and durable queues.
+
+<p align="center">
+  <img alt="PocketHive Flow" src="pockethive-flow.svg" width="720" />
+</p>
 
 ## Stack & Ports
 
@@ -53,12 +59,14 @@ Manual checks:
 
 ## UI Panels
 
+- Backgrounds: selector for Bees / Network / Old; only the active background renders (others paused to save CPU).
 - Event Log: shows application events/messages from STOMP subscriptions.
 - System Logs: shows system and user actions:
   - Connect/Disconnect clicks, edits of URL/username/password (password length only)
   - WebSocket lifecycle (connecting URL, CONNECTED, subscriptions, errors, close)
   - UI health transitions based on `/healthz`
 - Browser Generator: standalone page at `/generator/` to publish messages via Web‑STOMP with configurable rate and payload.
+- HAL eyes: status indicators for UI and WS (green slow pulse = healthy/connected; blue modem pulse = connecting; red fast pulse = failed/closed/idle).
 
 ## Troubleshooting
 

@@ -91,13 +91,15 @@
 
   function setUiStatus(state){
     if(!uiStatus) return;
-    const map = { healthy:'🟢 UI', unhealthy:'🔴 UI', down:'⚫ UI', connecting:'🟡 UI' };
-    uiStatus.textContent = map[state] || '⚪ UI';
+    uiStatus.dataset.state = state || 'connecting';
+    uiStatus.setAttribute('aria-label', `UI ${state||''}`.trim());
+    uiStatus.title = `UI: ${state}`;
   }
   function setWsStatus(state){
     if(!wsStatus) return;
-    const map = { connected:'🟢 WS', connecting:'🔄 WS', error:'🔴 WS', closed:'⚫ WS', idle:'⚪ WS' };
-    wsStatus.textContent = map[state] || '⚪ WS';
+    wsStatus.dataset.state = state || 'idle';
+    wsStatus.setAttribute('aria-label', `WS ${state||''}`.trim());
+    wsStatus.title = `WebSocket: ${state}`;
   }
 
   // Charts helpers

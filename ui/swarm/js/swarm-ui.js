@@ -3,7 +3,7 @@
   const root = document.querySelector('.ph-bg-bees') || document.body;
   if(!root) return;
 
-  // Navbar removed: rely on the header with logo and external button
+  // No navbar here — rely on header controls only
 
   // Modal
   const modal = document.createElement('div');
@@ -131,38 +131,68 @@
   `;
   document.head.appendChild(style);
 
-  // Background mode toggle
+  // Background mode toggle (bees | net | old)
   const body = document.body;
-  const oldBg = document.getElementById('ph-old-bg');
+  const modeSelect = document.getElementById('ph-bg-mode');
   function applyBgMode(mode){
     const swarmBtn = document.getElementById('ph-open-swarm');
     const swarmBtn2 = document.getElementById('ph-swarm-options');
-    if(mode === 'old'){
-      body.classList.add('ph-bg-old');
-      body.classList.remove('ph-bg-bees');
-      if(swarmBtn){ swarmBtn.disabled = true; swarmBtn.style.display = 'none'; }
-      if(swarmBtn2){ swarmBtn2.disabled = true; swarmBtn2.style.display = 'none'; }
-    } else {
-      body.classList.add('ph-bg-bees');
-      body.classList.remove('ph-bg-old');
-      if(swarmBtn){ swarmBtn.disabled = false; swarmBtn.style.display = ''; }
-      if(swarmBtn2){ swarmBtn2.disabled = false; swarmBtn2.style.display = ''; }
-    }
+    const netBtn = document.getElementById('ph-open-net');
+    // classes
+    body.classList.toggle('ph-bg-bees', mode === 'bees');
+    body.classList.toggle('ph-bg-net', mode === 'net');
+    body.classList.toggle('ph-bg-old', mode === 'old');
+    // buttons visibility
+    const showSwarm = (mode === 'bees');
+    const showNet = (mode === 'net');
+    if(swarmBtn){ swarmBtn.disabled = !showSwarm; swarmBtn.style.display = showSwarm ? '' : 'none'; }
+    if(swarmBtn2){ swarmBtn2.disabled = !showSwarm; swarmBtn2.style.display = showSwarm ? '' : 'none'; }
+    if(netBtn){ netBtn.disabled = !showNet; netBtn.style.display = showNet ? '' : 'none'; }
+    // Control background engines to save CPU
+    try{
+      if(mode === 'bees'){
+        if(window.PocketHiveBees && window.PocketHiveBees.start) window.PocketHiveBees.start();
+        if(window.PocketHiveNet && window.PocketHiveNet.pause) window.PocketHiveNet.pause();
+      } else if(mode === 'net'){
+        ensureNetLoaded().then(()=>{
+          if(window.PocketHiveNet && window.PocketHiveNet.start) window.PocketHiveNet.start();
+          if(window.PocketHiveBees && window.PocketHiveBees.pause) window.PocketHiveBees.pause();
+        });
+      } else { // old image only
+        if(window.PocketHiveBees && window.PocketHiveBees.pause) window.PocketHiveBees.pause();
+        if(window.PocketHiveNet && window.PocketHiveNet.pause) window.PocketHiveNet.pause();
+      }
+    }catch(e){ /* ignore */ }
+    // persist + reflect in controls
     try { localStorage.setItem('ph-bg-mode', mode); } catch(e) {}
+    if(modeSelect && modeSelect.value !== mode) modeSelect.value = mode;
+    // no legacy checkbox handling
+  }
+  function loadScript(src){
+    return new Promise((resolve, reject)=>{
+      const s = document.createElement('script'); s.src = src; s.async = true;
+      s.onload = ()=> resolve(); s.onerror = (e)=> reject(e);
+      document.head.appendChild(s);
+    });
+  }
+  async function ensureNetLoaded(){
+    if(window.__PH_NET_LOADED) return;
+    // Add class first so scripts detect .ph-bg-net if needed
+    try {
+      await loadScript('./net/js/net.core.js');
+      await loadScript('./net/js/net.ui.js');
+      window.__PH_NET_LOADED = true;
+    } catch(e){ /* ignore load errors; options button will do nothing */ }
   }
   let saved = 'bees';
   try { saved = localStorage.getItem('ph-bg-mode') || 'bees'; } catch(e) {}
-  if(oldBg){
-    oldBg.checked = (saved === 'old');
-    applyBgMode(saved);
-    oldBg.addEventListener('change', ()=> applyBgMode(oldBg.checked ? 'old' : 'bees'));
-  } else {
-    applyBgMode(saved);
+  applyBgMode(saved);
+  if(modeSelect){
+    modeSelect.value = saved;
+    modeSelect.addEventListener('change', ()=> applyBgMode(modeSelect.value));
   }
 
   // Open/Close
-  const openBtn = document.getElementById('ph-open-swarm');
-  if(openBtn) openBtn.addEventListener('click', ()=> modal.classList.remove('hidden'));
   const swarmProxyBtn = document.getElementById('ph-swarm-options');
   if(swarmProxyBtn){ swarmProxyBtn.addEventListener('click', ()=> modal.classList.remove('hidden')); }
   modal.querySelector('#ph-close').addEventListener('click', ()=> modal.classList.add('hidden'));

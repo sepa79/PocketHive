@@ -15,6 +15,7 @@
     density: 20, variant: 'amber', pattern: 'bezier',
     glyphSpeedFactor: 0.75, trailCount: 9, trailBaseLag: 0.12, trailStepLag: 0.06, trailDecay: 1.00,
     durMin: 8, durMax: 16, stepMs: 33, blobSpeed: 28,
+    running: true,
     sine: {
       // Simplified C64 traveling wave params
       ampFrac: 0.42,        // amplitude as fraction of screen height
@@ -40,7 +41,7 @@
   const randChar = () => CHARS[Math.floor(Math.random()*CHARS.length)];
   const rand = (a,b)=> a + Math.random()*(b-a);
   const randint = (a,b)=> Math.floor(rand(a,b+1));
-  function glyphTicker(el){ (function tick(){ const t = randint(120,420)*state.glyphSpeedFactor; setTimeout(()=>{ el.textContent = randChar(); tick(); }, t); })(); }
+  function glyphTicker(el){ (function tick(){ const t = randint(120,420)*state.glyphSpeedFactor; setTimeout(()=>{ if(!state.running) return; el.textContent = randChar(); tick(); }, t); })(); }
 
   function randomPath(w,h){
     const x0 = rand(0.05*w,0.95*w), y0 = rand(0.05*h,0.95*h);
@@ -80,12 +81,12 @@
     const path=randomPath(w,h); const d=pathD(path); const dur=rand(state.durMin,state.durMax); const start=performance.now()-rand(0,dur)*1000;
     if (supportsMotion){
       lead.style.offsetPath=`path("${d}")`; trails.forEach(t=>t.style.offsetPath=`path("${d}")`);
-      const loop=(now)=>{ const t=((now-start)/(dur*1000))%1; lead.style.offsetDistance=(t*100)+'%';
+      const loop=(now)=>{ if(!state.running) return; const t=((now-start)/(dur*1000))%1; lead.style.offsetDistance=(t*100)+'%';
         for(let i=0;i<trails.length;i++){ const lag=state.trailBaseLag+i*state.trailStepLag; const dtd=(t - lag/dur + 1) % 1; trails[i].style.offsetDistance=(dtd*100)+'%'; }
         requestAnimationFrame(loop); }; requestAnimationFrame(loop);
     } else {
       const q=[]; const maxLag=state.trailBaseLag+state.trailCount*state.trailStepLag; const maxQ=Math.ceil((maxLag*1000)/state.stepMs)+4; let last=0;
-      const loop=(now)=>{ if(now-last<state.stepMs) return requestAnimationFrame(loop); last=now;
+      const loop=(now)=>{ if(!state.running) return; if(now-last<state.stepMs) return requestAnimationFrame(loop); last=now;
         const t=((now-start)/(dur*1000))%1; const [x,y]=cubic(path.p0,path.p1,path.p2,path.p3,t); q.push([x,y]); if(q.length>maxQ) q.shift();
         lead.style.transform=`translate(${x}px,${y}px) translate(-50%,-50%)`;
         for(let i=0;i<trails.length;i++){ const lagSec=state.trailBaseLag+i*state.trailStepLag; const idx=Math.max(0,q.length-Math.floor((lagSec*1000)/state.stepMs)); const p=q[idx]||q[0]||[x,y];
@@ -111,7 +112,7 @@
     if(!window.__phSineStart) window.__phSineStart = performance.now();
     const start = window.__phSineStart;
     const q=[]; const maxLag=state.trailBaseLag+state.trailCount*state.trailStepLag; const maxQ=Math.ceil((maxLag*1000)/state.stepMs)+4; let last=0;
-    const loop=(now)=>{ if(now-last<state.stepMs) return requestAnimationFrame(loop); last=now;
+    const loop=(now)=>{ if(!state.running) return; if(now-last<state.stepMs) return requestAnimationFrame(loop); last=now;
       const t = (now - start) / 1000;
       // Horizontal travel with wrap
       let x = (i*spacing + (speed * t)) % (w + spacing);
@@ -134,7 +135,7 @@
     const trails=makeTrails(wrap, lead);
     const x=rand(30,w-30), vy=rand(state.rain.vyMin,state.rain.vyMax); let y0=-rand(0,h); const start=performance.now()-rand(0,2000);
     const q=[]; const maxLag=state.trailBaseLag+state.trailCount*state.trailStepLag; const maxQ=Math.ceil((maxLag*1000)/state.stepMs)+4; let last=0;
-    const loop=(now)=>{ if(now-last<state.stepMs) return requestAnimationFrame(loop); last=now;
+    const loop=(now)=>{ if(!state.running) return; if(now-last<state.stepMs) return requestAnimationFrame(loop); last=now;
       const t=(now-start)/1000; let y=y0 + vy*t; if(y>h+40){ y0=-40; y=y0; }
       q.push([x,y]); if(q.length>maxQ) q.shift();
       lead.style.transform=`translate(${x}px,${y}px) translate(-50%,-50%)`;
@@ -170,6 +171,8 @@
     setSineParams(o){ if(o){ Object.assign(state.sine, o); } },
     setMatrixParams(o){ if(o){ Object.assign(state.rain, o); } },
     reseed(){ seed(state.density); },
+    start(){ if(state.running) return; state.running = true; seed(state.density); },
+    pause(){ state.running = false; },
     _getState(){ return JSON.parse(JSON.stringify(state)); }
   };
 
