@@ -33,11 +33,17 @@ input[type="range"]{ width:100%; }
 .badge{ display:inline-flex; align-items:center; gap:8px; border:1px solid var(--border); border-radius:999px; padding:6px 10px; font-size:.85rem; color:var(--muted)}
 .badge .dot{width:8px;height:8px;border-radius:50%}
 .dot.ok{background:var(--ok)} .dot.err{background:var(--err)} .dot.warn{background:var(--warn)} .dot.off{background:#475569}
-.btn{ background:#0f1720; color:var(--text); border:1px solid var(--border); padding:10px 14px; border-radius:12px; cursor:pointer; transition:transform .04s ease, background .2s ease;}
-.btn:hover{background:#131c27}
-.btn:active{transform:translateY(1px)}
-.btn.primary{background:var(--accent); color:#111; border-color:#f0b306}
-.btn.ghost{background:transparent}
+.btn{
+  appearance:none; border:1px solid rgba(51,225,255,0.35); cursor:pointer; color:#0ff; font-weight:700;
+  padding:10px 14px; border-radius:12px; text-transform:uppercase; letter-spacing:0.04em;
+  background: radial-gradient(120% 120% at 10% 10%, rgba(51,225,255,0.25), rgba(51,225,255,0.06) 40%, rgba(255,255,255,0.05) 70%, rgba(0,0,0,0.0) 100%);
+  box-shadow: 0 0 20px rgba(51,225,255,0.15) inset, 0 0 16px rgba(51,225,255,0.18);
+  transition: transform .04s ease, box-shadow .2s ease, background .2s ease;
+}
+.btn:hover{ box-shadow: 0 0 26px rgba(51,225,255,0.22) inset, 0 0 20px rgba(51,225,255,0.28); background: radial-gradient(120% 120% at 10% 10%, rgba(51,225,255,0.35), rgba(51,225,255,0.1) 50%, rgba(255,255,255,0.07) 75%, rgba(0,0,0,0.0) 100%); }
+.btn:active{ transform:translateY(1px); filter: brightness(1.08); }
+.btn.primary{ filter: brightness(1.15); }
+.btn.ghost{ background: transparent; }
 .btn[disabled]{opacity:.5; cursor:not-allowed}
 .kv-table{width:100%; border-collapse:collapse; margin-top:8px}
 .kv-table th,.kv-table td{border:1px solid var(--border); padding:8px; font-size:.9rem}
@@ -53,4 +59,3 @@ hr.sep{border:0; border-top:1px solid var(--border); margin:8px 0 16px 0}
 fieldset{border:1px solid var(--border); border-radius:12px; padding:12px}
 legend{color:var(--muted); padding:0 6px}
 .hidden{display:none}
-
