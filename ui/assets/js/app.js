@@ -167,12 +167,31 @@
     for(const e of swarm.edges){ const a=swarm.nodes[e.a], b=swarm.nodes[e.b]; if(!a||!b) continue; const ln=document.createElementNS('http://www.w3.org/2000/svg','line'); ln.setAttribute('x1', String(a.x)); ln.setAttribute('y1', String(a.y)); ln.setAttribute('x2', String(b.x)); ln.setAttribute('y2', String(b.y)); ln.setAttribute('stroke','rgba(255,255,255,0.6)'); ln.setAttribute('stroke-width','3'); ln.setAttribute('stroke-linecap','round'); svg.appendChild(ln); }
     // draw nodes
     for(const id of Object.keys(swarm.nodes)){
-      const n=swarm.nodes[id]; const g=document.createElementNS('http://www.w3.org/2000/svg','g'); g.setAttribute('transform',`translate(${n.x-60},${n.y-34})`);
-      const rect=document.createElementNS('http://www.w3.org/2000/svg','rect'); rect.setAttribute('x','0'); rect.setAttribute('y','0'); rect.setAttribute('width','120'); rect.setAttribute('height','68'); rect.setAttribute('rx','12'); rect.setAttribute('fill', id==='sut' ? 'rgba(3,169,244,0.2)' : 'rgba(255,255,255,0.08)'); rect.setAttribute('stroke','rgba(255,255,255,0.5)'); rect.setAttribute('stroke-width','2'); g.appendChild(rect);
-      const title=document.createElementNS('http://www.w3.org/2000/svg','text'); title.setAttribute('x','60'); title.setAttribute('y','30'); title.setAttribute('text-anchor','middle'); title.setAttribute('fill','#ffffff'); title.setAttribute('font-family','Inter, Segoe UI, Arial, sans-serif'); title.setAttribute('font-size','13'); title.textContent = n.label.toUpperCase(); g.appendChild(title);
-      const tps=document.createElementNS('http://www.w3.org/2000/svg','text'); tps.setAttribute('x','60'); tps.setAttribute('y','50'); tps.setAttribute('text-anchor','middle'); tps.setAttribute('fill','rgba(255,255,255,0.8)'); tps.setAttribute('font-family','ui-monospace, SFMono-Regular, Menlo, Consolas, monospace'); tps.setAttribute('font-size','12'); tps.textContent = (typeof n.tps==='number')? (`TPS ${n.tps}`) : 'TPS –'; g.appendChild(tps);
+      const n=swarm.nodes[id]; const g=document.createElementNS('http://www.w3.org/2000/svg','g'); g.setAttribute('transform',`translate(${n.x-60},${n.y-46})`);
+      const rect=document.createElementNS('http://www.w3.org/2000/svg','rect'); rect.setAttribute('x','0'); rect.setAttribute('y','0'); rect.setAttribute('width','120'); rect.setAttribute('height','92'); rect.setAttribute('rx','12'); rect.setAttribute('fill', id==='sut' ? 'rgba(3,169,244,0.2)' : 'rgba(255,255,255,0.08)'); rect.setAttribute('stroke','rgba(255,255,255,0.5)'); rect.setAttribute('stroke-width','2'); g.appendChild(rect);
+      const title=document.createElementNS('http://www.w3.org/2000/svg','text'); title.setAttribute('x','60'); title.setAttribute('y','24'); title.setAttribute('text-anchor','middle'); title.setAttribute('fill','#ffffff'); title.setAttribute('font-family','Inter, Segoe UI, Arial, sans-serif'); title.setAttribute('font-size','13'); title.textContent = n.label.toUpperCase(); g.appendChild(title);
+      const tps=document.createElementNS('http://www.w3.org/2000/svg','text'); tps.setAttribute('x','60'); tps.setAttribute('y','42'); tps.setAttribute('text-anchor','middle'); tps.setAttribute('fill','rgba(255,255,255,0.8)'); tps.setAttribute('font-family','ui-monospace, SFMono-Regular, Menlo, Consolas, monospace'); tps.setAttribute('font-size','12'); tps.textContent = (typeof n.tps==='number')? (`TPS ${n.tps}`) : 'TPS –'; g.appendChild(tps);
+      if(id !== 'sut'){
+        // compute IN/OUT queues for this service
+        const ins=[], outs=[];
+        for(const [qname, obj] of Object.entries(swarm.queues)){
+          if(obj.in && obj.in.has(n.id)) ins.push(qname);
+          if(obj.out && obj.out.has(n.id)) outs.push(qname);
+        }
+        const fmt = (arr)=>{
+          if(!arr.length) return '–';
+          const first = arr[0];
+          return arr.length>1 ? (first + '…') : first;
+        };
+        const inTxt = document.createElementNS('http://www.w3.org/2000/svg','text');
+        inTxt.setAttribute('x','60'); inTxt.setAttribute('y','62'); inTxt.setAttribute('text-anchor','middle'); inTxt.setAttribute('fill','rgba(255,255,255,0.9)'); inTxt.setAttribute('font-family','ui-monospace, SFMono-Regular, Menlo, Consolas, monospace'); inTxt.setAttribute('font-size','11');
+        inTxt.textContent = `IN  ${fmt(ins)}`; if(ins.length) inTxt.setAttribute('title', ins.join(', ')); g.appendChild(inTxt);
+        const outTxt = document.createElementNS('http://www.w3.org/2000/svg','text');
+        outTxt.setAttribute('x','60'); outTxt.setAttribute('y','78'); outTxt.setAttribute('text-anchor','middle'); outTxt.setAttribute('fill','rgba(255,255,255,0.9)'); outTxt.setAttribute('font-family','ui-monospace, SFMono-Regular, Menlo, Consolas, monospace'); outTxt.setAttribute('font-size','11');
+        outTxt.textContent = `OUT ${fmt(outs)}`; if(outs.length) outTxt.setAttribute('title', outs.join(', ')); g.appendChild(outTxt);
+      }
       svg.appendChild(g); }
-    if(swarmStats){ const count = Object.keys(swarm.nodes).length - (swarm.nodes['sut']?1:0); swarmStats.textContent = `components: ${Math.max(0,count)} | edges: ${swarm.edges.length}`; }
+    if(swarmStats){ const count = Object.keys(swarm.nodes).length - (swarm.nodes['sut']?1:0); const qCount = Object.keys(swarm.queues).length; swarmStats.textContent = `components: ${Math.max(0,count)} | queues: ${qCount} | edges: ${swarm.edges.length}`; }
   }
 
   function loadConn(){
