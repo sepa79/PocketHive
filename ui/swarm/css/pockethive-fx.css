@@ -1,0 +1,22 @@
+/* PocketHive – New Background FX (subtle waves/particles) */
+.ph-bg-fx{
+  --fx-accent: #FFC107;
+  --fx-bg1: #0e1218;
+  --fx-bg2: #0a0e14;
+  --fx-grad: radial-gradient(1200px 800px at 70% -20%, rgba(255,193,7,.06), rgba(0,0,0,0)),
+              radial-gradient(900px 700px at 10% 120%, rgba(3,169,244,.06), rgba(0,0,0,0));
+  background: linear-gradient(180deg,var(--fx-bg1) 0%, var(--fx-bg2) 60%, var(--fx-bg1) 100%), var(--fx-grad);
+  min-height: 100vh;
+  color:#fff;
+}
+.ph-bg-fx .fx-layer{ position: fixed; inset:0; pointer-events:none; z-index:-1; }
+.ph-bg-fx .fx-canvas{ width:100%; height:100%; display:block; filter: blur(0.4px) saturate(110%); opacity:0.9; }
+
+/* Gentle logo motion; slower when FX is active */
+header img.logo{ animation: ph-logo-bob 6s ease-in-out infinite; }
+.ph-bg-fx header img.logo{ animation-duration: 12s; animation-timing-function: ease-in-out; }
+@keyframes ph-logo-bob{
+  0%{ transform: translateY(0px) rotate(0deg); }
+  50%{ transform: translateY(-2px) rotate(-0.4deg); }
+  100%{ transform: translateY(0px) rotate(0deg); }
+}

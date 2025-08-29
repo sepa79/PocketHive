@@ -40,6 +40,10 @@ Relevant files:
 - `ui/nginx.conf` — reverse proxy for `/ws` and `/healthz`
 - `docker-compose.yml` — mounts nginx config and exposes port 8088; adds healthcheck for UI
 - `ui/assets/js/app.js` — defaults WS URL to same-origin `/ws`, includes system logs and health ping, and uses StompJS for Events handling.
+- Backgrounds:
+  - `ui/swarm/css/pockethive-fx.css` + `ui/swarm/js/fx.core.js` — new default FX background
+  - `ui/swarm/css/pockethive-bees.css` + `ui/swarm/js/bees.core.js` — Swarm Bees background with options
+  - `ui/swarm/js/swarm-ui.js` — unified modal to configure FX/Swarm (open via “Swarm Options”)
 
 ## Healthchecks
 

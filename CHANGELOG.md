@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.4] - 2025-08-29
+Timestamp: 2025-08-29T02:45:00Z
+
+- UI: Add new background FX (canvas-based) and group it together with Swarm in a unified "Background Effects" modal.
+- UI: Make FX the default background; retain toggle for Old UI BG.
+- UI: Slow down logo motion over the new FX for calmer visuals.
+
 ## [0.2.3] - 2025-08-29
 Timestamp: 2025-08-29T02:20:00Z
 

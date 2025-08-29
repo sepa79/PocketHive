@@ -11,10 +11,11 @@
   modal.innerHTML = `
     <div class="ph-modal-dialog">
       <div class="ph-modal-head">
-        <strong>Swarm Background</strong>
+        <strong>Background Effects</strong>
         <button id="ph-close" class="ph-x">×</button>
       </div>
       <div class="ph-tabs">
+        <button class="ph-tab" data-tab="fx">FX</button>
         <button class="ph-tab active" data-tab="bezier">Bezier</button>
         <button class="ph-tab" data-tab="sine">Sine (C64)</button>
         <button class="ph-tab" data-tab="matrix">Matrix down</button>
@@ -25,6 +26,18 @@
       </div>
 
       <div class="ph-tabpanes">
+        <section class="ph-pane" data-pane="fx">
+          <div class="grid">
+            <label>Intensity <input id="v_fx_intensity" type="range" min="0" max="200" step="5" value="80"></label>
+            <label>Speed <input id="v_fx_speed" type="range" min="0.02" max="1.0" step="0.02" value="0.12"></label>
+            <label>Accent hue <input id="v_fx_hue" type="range" min="0" max="360" step="1" value="46"></label>
+            <label>Alpha <input id="v_fx_alpha" type="range" min="0.02" max="0.6" step="0.02" value="0.14"></label>
+            <label class="ph-toggle"><input id="v_fx_set_default" type="checkbox"> Ustaw jako domyślne tło</label>
+          </div>
+          <div class="row">
+            <button id="v_fx_apply" class="ph-btn primary">Apply</button>
+          </div>
+        </section>
         <section class="ph-pane active" data-pane="bezier">
           <div class="grid">
             <label>Kolor
@@ -139,23 +152,29 @@
     const swarmBtn2 = document.getElementById('ph-swarm-options');
     if(mode === 'old'){
       body.classList.add('ph-bg-old');
-      body.classList.remove('ph-bg-bees');
+      body.classList.remove('ph-bg-bees'); body.classList.remove('ph-bg-fx');
       if(swarmBtn){ swarmBtn.disabled = true; swarmBtn.style.display = 'none'; }
       if(swarmBtn2){ swarmBtn2.disabled = true; swarmBtn2.style.display = 'none'; }
+    } else if(mode === 'fx'){
+      body.classList.add('ph-bg-fx');
+      body.classList.remove('ph-bg-old'); body.classList.remove('ph-bg-bees');
+      if(window.PocketHiveFX) window.PocketHiveFX.activate();
+      if(swarmBtn){ swarmBtn.disabled = false; swarmBtn.style.display = ''; }
+      if(swarmBtn2){ swarmBtn2.disabled = false; swarmBtn2.style.display = ''; }
     } else {
       body.classList.add('ph-bg-bees');
-      body.classList.remove('ph-bg-old');
+      body.classList.remove('ph-bg-old'); body.classList.remove('ph-bg-fx');
       if(swarmBtn){ swarmBtn.disabled = false; swarmBtn.style.display = ''; }
       if(swarmBtn2){ swarmBtn2.disabled = false; swarmBtn2.style.display = ''; }
     }
     try { localStorage.setItem('ph-bg-mode', mode); } catch(e) {}
   }
-  let saved = 'bees';
-  try { saved = localStorage.getItem('ph-bg-mode') || 'bees'; } catch(e) {}
+  let saved = 'fx';
+  try { saved = localStorage.getItem('ph-bg-mode') || 'fx'; } catch(e) {}
   if(oldBg){
     oldBg.checked = (saved === 'old');
     applyBgMode(saved);
-    oldBg.addEventListener('change', ()=> applyBgMode(oldBg.checked ? 'old' : 'bees'));
+    oldBg.addEventListener('change', ()=> applyBgMode(oldBg.checked ? 'old' : 'fx'));
   } else {
     applyBgMode(saved);
   }
@@ -174,7 +193,12 @@
   tabs.forEach(t => t.addEventListener('click', ()=>{
     tabs.forEach(x=>x.classList.remove('active')); panes.forEach(p=>p.classList.remove('active'));
     t.classList.add('active'); modal.querySelector(`.ph-pane[data-pane="${t.dataset.tab}"]`).classList.add('active');
-    autoApply(`v_${t.dataset.tab}`, true);
+    if(t.dataset.tab==='fx'){
+      applyBgMode('fx');
+    } else {
+      applyBgMode('bees');
+      autoApply(`v_${t.dataset.tab}`, true);
+    }
   }));
 
   // Helpers
@@ -272,3 +296,22 @@
   document.getElementById('ph-preset-med').addEventListener('click', ()=> preset('med'));
   document.getElementById('ph-preset-high').addEventListener('click', ()=> preset('high'));
 })();
+  // FX handlers
+  const fxApply = document.getElementById('v_fx_apply');
+  if(fxApply){
+    fxApply.addEventListener('click', ()=>{
+      if(window.PocketHiveFX){
+        const I = Number(document.getElementById('v_fx_intensity').value);
+        const S = Number(document.getElementById('v_fx_speed').value);
+        const H = Number(document.getElementById('v_fx_hue').value);
+        const A = Number(document.getElementById('v_fx_alpha').value);
+        window.PocketHiveFX.setIntensity(I);
+        window.PocketHiveFX.setSpeed(S);
+        window.PocketHiveFX.setHue(H);
+        window.PocketHiveFX.setAlpha(A);
+      }
+      const def = document.getElementById('v_fx_set_default');
+      if(def && def.checked){ try{ localStorage.setItem('ph-bg-mode','fx'); }catch(e){} }
+      applyBgMode('fx');
+    });
+  }

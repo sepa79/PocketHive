@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.4] - 2025-08-29
+Timestamp: 2025-08-29T02:45:00Z
+
+- Add new background FX (canvas-based) and group it with Swarm options in a unified modal.
+- Make FX the default background; keep Old UI BG as an option.
+- Slow logo motion when FX is active for a calmer feel.
+
 ## [0.2.3] - 2025-08-29
 Timestamp: 2025-08-29T02:20:00Z
 
