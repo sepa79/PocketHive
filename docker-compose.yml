@@ -64,6 +64,8 @@ services:
     volumes:
       - ./ui:/usr/share/nginx/html:ro
       - ./ui/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./CHANGELOG.md:/usr/share/nginx/html/CHANGELOG.md:ro
+      - ./VERSION:/usr/share/nginx/html/VERSION:ro
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/healthz | grep -q ok"]
       interval: 10s

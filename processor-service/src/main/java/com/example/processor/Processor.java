@@ -20,7 +20,7 @@ public class Processor {
 
   public Processor(RabbitTemplate rabbit){ this.rabbit = rabbit; }
 
-  @RabbitListener(queues = Topology.MOD_QUEUE)
+  @RabbitListener(queues = "${ph.modQueue:moderated.queue}")
   public void onModerated(byte[] payload){
     // MVP: pretend to process
     counter.incrementAndGet();

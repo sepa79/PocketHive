@@ -24,7 +24,7 @@ public class Moderator {
   }
 
   // Consume RAW AMQP message to avoid converter issues
-  @RabbitListener(queues = Topology.GEN_QUEUE)
+  @RabbitListener(queues = "${ph.genQueue:gen.queue}")
   public void onGenerated(Message message) {
     // forward the same message to the moderated queue (preserve body + props)
     rabbit.send(Topology.EXCHANGE, Topology.MOD_QUEUE, message);

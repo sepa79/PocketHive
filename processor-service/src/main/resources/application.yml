@@ -6,3 +6,10 @@ spring:
     username: ${RABBITMQ_USER:guest}
     password: ${RABBITMQ_PASS:guest}
 management.endpoints.web.exposure.include: health,info
+
+# PocketHive topology (overridable via env PH_*)
+ph:
+  exchange: ${PH_EXCHANGE:sim.direct}
+  genQueue: ${PH_GEN_QUEUE:gen.queue}
+  modQueue: ${PH_MOD_QUEUE:moderated.queue}
+  statusExchange: ${PH_STATUS_EXCHANGE:status.exchange}
