@@ -16,6 +16,13 @@
 - Services publish/consume via the `ph.hive` exchange and `ph.gen`/`ph.mod` queues.
 - Metrics/status flow back on `ph.control` which the UI subscribes to for charts.
 
+### Views
+
+- Control View: existing dashboard with charts, event log, and system log.
+- Swarm View: auto-discovers components from Control messages and draws a simple graph:
+  - Nodes appear when the first message from a service is received (generator, moderator, processor). SUT appears when processor is seen.
+  - Default hold time is 3s (3× of 1s status schedule); toolbar lets you adjust hold time and Clear & Restart.
+
 ## Stack & Ports
 
 - `rabbitmq` (with Web-STOMP): 5672 (AMQP), 15672 (Mgmt UI), 15674 (Web-STOMP, internal only)

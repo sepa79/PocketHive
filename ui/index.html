@@ -48,6 +48,10 @@
 <body class="ph-bg-bees">
   <header>
     <img class="logo" src="./assets/logo.svg" alt="PocketHive Logo" />
+    <nav class="nav-tabs">
+      <button id="tab-control" class="tab-btn tab-active" type="button">Control</button>
+      <button id="tab-swarm" class="tab-btn" type="button">Swarm</button>
+    </nav>
     <div class="header-right">
       <!-- Hidden triggers for background option modals -->
       <button id="ph-open-swarm" style="display:none"></button>
@@ -84,7 +88,7 @@
       </div>
     </div>
   </header>
-  <main>
+  <main id="view-control">
     <div class="controls" style="display:none">
       <input id="wsurl" size="40" value="ws://localhost:15674/ws"/>
       <input id="login" value="guest"/>
@@ -124,6 +128,23 @@
     <div id="syslog" style="white-space: pre-wrap; font-family: monospace; max-height: 30vh; overflow:auto; background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.12); border-radius: 12px; padding:10px;"></div>
   </main>
 
+  <style>
+    .nav-tabs{ display:flex; gap:8px; align-items:center; margin-left:14px; }
+    .tab-btn{ appearance:none; border:1px solid rgba(255,255,255,.2); background: rgba(255,255,255,.08); color:#fff; padding:8px 12px; border-radius:10px; cursor:pointer; }
+    .tab-btn:hover{ background: rgba(255,255,255,.12); }
+    .tab-active{ background:#33E1FF !important; color:#111 !important; font-weight:800 !important; border-color:transparent !important; }
+    #view-swarm{ display:none; max-width:1200px; margin: 24px auto; padding: 0 20px 40px; color:#fff; font-family: Inter, Segoe UI, Arial, sans-serif; }
+    #swarm-toolbar{ display:flex; gap:10px; align-items:center; margin-bottom:10px }
+    #swarm-canvas{ width:100%; height:480px; border:1px solid rgba(255,255,255,.12); border-radius:12px; background: rgba(0,0,0,.25); }
+  </style>
+  <div id="view-swarm">
+    <div id="swarm-toolbar">
+      <label>Hold time (s) <input id="swarm-hold" type="number" min="1" max="60" step="1" value="3" style="width:64px"></label>
+      <button id="swarm-clear" class="tab-btn" style="cursor:pointer">Clear & Restart</button>
+      <span class="small" id="swarm-stats" style="color:#9aa0a6"></span>
+    </div>
+    <svg id="swarm-canvas" viewBox="0 0 1200 480" preserveAspectRatio="xMidYMid meet" aria-label="Swarm view"></svg>
+  </div>
   <script src="./swarm/js/bees.core.js"></script>
   <script src="./swarm/js/swarm-ui.js"></script>
   <script src="https://unpkg.com/@stomp/stompjs@7.0.0/bundles/stomp.umd.js"></script>

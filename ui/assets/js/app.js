@@ -23,10 +23,79 @@
     moderator: /** @type {HTMLCanvasElement|null} */(document.getElementById('chart-mod')),
     processor: /** @type {HTMLCanvasElement|null} */(document.getElementById('chart-proc'))
   };
+  // Swarm view elements
+  const tabControl = document.getElementById('tab-control');
+  const tabSwarm = document.getElementById('tab-swarm');
+  const viewControl = document.getElementById('view-control');
+  const viewSwarm = document.getElementById('view-swarm');
+  const swarmSvg = /** @type {SVGSVGElement|null} */(document.getElementById('swarm-canvas'));
+  const swarmHoldInput = /** @type {HTMLInputElement|null} */(document.getElementById('swarm-hold'));
+  const swarmClearBtn = document.getElementById('swarm-clear');
+  const swarmStats = document.getElementById('swarm-stats');
   const series = { generator: [], moderator: [], processor: [] }; // {t:number,v:number}
   const WINDOW_MS = 60_000; // 60s window
   let rafPending = { generator:false, moderator:false, processor:false };
-  if(!elUrl || !btn) return;
+  const HAS_CONN = !!(elUrl && btn);
+
+  // Tabs handling
+  (function(){
+    if(!tabControl || !tabSwarm || !viewControl || !viewSwarm) return;
+    const activate = (which)=>{
+      if(which==='control'){
+        viewControl.style.display='block'; viewSwarm.style.display='none';
+        tabControl.classList.add('tab-active'); tabSwarm.classList.remove('tab-active');
+      } else {
+        viewControl.style.display='none'; viewSwarm.style.display='block';
+        tabControl.classList.remove('tab-active'); tabSwarm.classList.add('tab-active');
+        if(swarmSvg) redrawSwarm();
+      }
+    };
+    tabControl.addEventListener('click', ()=> activate('control'));
+    tabSwarm.addEventListener('click', ()=> activate('swarm'));
+    activate('control');
+  })();
+
+  // Swarm graph state
+  const SWARM_DEFAULT_HOLD = 3_000; // 3x default 1s schedule
+  const swarm = {
+    nodes: /** @type {Record<string,{id:string,label:string,service:string,x:number,y:number,last:number}>} */({}),
+    edges: /** @type {Array<{a:string,b:string}>} */([]),
+    holdMs: SWARM_DEFAULT_HOLD
+  };
+  function setHoldMs(){ if(swarmHoldInput){ const v = Math.max(1, Number(swarmHoldInput.value)||3); swarm.holdMs = v*1000; } }
+  if(swarmHoldInput){ swarmHoldInput.addEventListener('change', setHoldMs); setHoldMs(); }
+  if(swarmClearBtn){ swarmClearBtn.addEventListener('click', ()=>{ swarm.nodes={}; swarm.edges=[]; redrawSwarm(); if(swarmStats) swarmStats.textContent=''; }); }
+  function ensureNode(service){
+    if(!swarmSvg) return null;
+    const id = service;
+    if(!swarm.nodes[id]){
+      // simple layout: fixed columns
+      const map = { generator: [140, 160], moderator:[480,160], processor:[820,160], sut:[1060,160] };
+      const pos = map[id] || [100+Object.keys(swarm.nodes).length*140, 320];
+      swarm.nodes[id] = { id, label: id.charAt(0).toUpperCase()+id.slice(1), service:id, x: pos[0], y: pos[1], last: Date.now() };
+      // edges
+      if(id==='generator'){ if(swarm.nodes['moderator']) addEdge('generator','moderator'); }
+      if(id==='moderator'){ if(swarm.nodes['generator']) addEdge('generator','moderator'); if(swarm.nodes['processor']) addEdge('moderator','processor'); }
+      if(id==='processor'){ if(swarm.nodes['moderator']) addEdge('moderator','processor'); if(!swarm.nodes['sut']) { swarm.nodes['sut']={id:'sut',label:'SUT',service:'sut',x:1060,y:160,last:Date.now()}; addEdge('processor','sut'); } else { addEdge('processor','sut'); } }
+      redrawSwarm();
+    }
+    return swarm.nodes[id];
+  }
+  function addEdge(a,b){ if(!swarm.edges.find(e=> (e.a===a && e.b===b))){ swarm.edges.push({a,b}); } }
+  function pruneExpired(){ const now=Date.now(); let changed=false; for(const k of Object.keys(swarm.nodes)){ if(k==='sut') continue; if(now - swarm.nodes[k].last > swarm.holdMs){ delete swarm.nodes[k]; changed=true; } } if(changed) { // rebuild edges
+      swarm.edges = swarm.edges.filter(e=> swarm.nodes[e.a] && swarm.nodes[e.b]);
+    }
+  }
+  function redrawSwarm(){ if(!swarmSvg) return; pruneExpired(); const svg=swarmSvg; while(svg.firstChild) svg.removeChild(svg.firstChild);
+    // draw edges
+    for(const e of swarm.edges){ const a=swarm.nodes[e.a], b=swarm.nodes[e.b]; if(!a||!b) continue; const ln=document.createElementNS('http://www.w3.org/2000/svg','line'); ln.setAttribute('x1', String(a.x)); ln.setAttribute('y1', String(a.y)); ln.setAttribute('x2', String(b.x)); ln.setAttribute('y2', String(b.y)); ln.setAttribute('stroke','rgba(255,255,255,0.6)'); ln.setAttribute('stroke-width','3'); ln.setAttribute('stroke-linecap','round'); svg.appendChild(ln); }
+    // draw nodes
+    for(const id of Object.keys(swarm.nodes)){ const n=swarm.nodes[id]; const g=document.createElementNS('http://www.w3.org/2000/svg','g'); g.setAttribute('transform',`translate(${n.x-50},${n.y-30})`);
+      const rect=document.createElementNS('http://www.w3.org/2000/svg','rect'); rect.setAttribute('x','0'); rect.setAttribute('y','0'); rect.setAttribute('width','100'); rect.setAttribute('height','60'); rect.setAttribute('rx','12'); rect.setAttribute('fill', id==='sut' ? 'rgba(3,169,244,0.2)' : 'rgba(255,255,255,0.08)'); rect.setAttribute('stroke','rgba(255,255,255,0.5)'); rect.setAttribute('stroke-width','2'); g.appendChild(rect);
+      const txt=document.createElementNS('http://www.w3.org/2000/svg','text'); txt.setAttribute('x','50'); txt.setAttribute('y','34'); txt.setAttribute('text-anchor','middle'); txt.setAttribute('fill','#ffffff'); txt.setAttribute('font-family','Inter, Segoe UI, Arial, sans-serif'); txt.setAttribute('font-size','14'); txt.textContent = n.label.toUpperCase(); g.appendChild(txt);
+      svg.appendChild(g); }
+    if(swarmStats){ const count = Object.keys(swarm.nodes).length - (swarm.nodes['sut']?1:0); swarmStats.textContent = `components: ${Math.max(0,count)} | edges: ${swarm.edges.length}`; }
+  }
 
   function loadConn(){
     try{
@@ -215,6 +284,9 @@
                 if(obj.service === 'generator') addPoint('generator', obj.tps);
                 if(obj.service === 'moderator') addPoint('moderator', obj.tps);
                 if(obj.service === 'processor') addPoint('processor', obj.tps);
+                // Swarm: mark node as seen
+                const node = ensureNode(obj.service);
+                if(node){ node.last = Date.now(); redrawSwarm(); }
               }
               appendLog(`MSG ${message.headers.destination || ''} ${body}`);
             } catch(e){
@@ -247,7 +319,7 @@
     function cleanup(){ connected = false; setState('Disconnected'); btn.textContent = 'Connect'; btn.disabled = false; }
   }
 
-  btn.addEventListener('click', ()=>{
+  if(HAS_CONN) btn.addEventListener('click', ()=>{
     if(connected){
       appendSys('User action: Disconnect');
       try{ client && client.deactivate(); }catch(e){}
@@ -258,14 +330,16 @@
   });
 
   // Initialize: load config, set defaults, then try auto-connect
-  (async () => {
-    await loadConfig();
-    await setDefaultWsUrl();
-    try{
-      appendSys('Auto-connect attempt');
-      doConnect();
-    }catch{}
-  })();
+  if(HAS_CONN){
+    (async () => {
+      await loadConfig();
+      await setDefaultWsUrl();
+      try{
+        appendSys('Auto-connect attempt');
+        doConnect();
+      }catch{}
+    })();
+  }
 
   // Load VERSION and display in header if present
   (async () => {
@@ -311,9 +385,11 @@
   })();
 
   // Log user edits to connection fields (mask secrets)
-  if(elUrl){ elUrl.addEventListener('change', ()=> { appendSys(`User set WebSocket URL: ${elUrl.value.trim()||'(empty)'}`); saveConn({ url: elUrl.value||'', login: (elUser&&elUser.value)||'', pass: (elPass&&elPass.value)||'', vhost: '/' }); }); }
-  if(elUser){ elUser.addEventListener('change', ()=> { appendSys(`User set username: ${elUser.value||'(empty)'}`); saveConn({ url: (elUrl&&elUrl.value)||'', login: elUser.value||'', pass: (elPass&&elPass.value)||'', vhost: '/' }); }); }
-  if(elPass){ elPass.addEventListener('change', ()=> { appendSys(`User updated password (len=${(elPass.value||'').length})`); saveConn({ url: (elUrl&&elUrl.value)||'', login: (elUser&&elUser.value)||'', pass: elPass.value||'', vhost: '/' }); }); }
+  if(HAS_CONN){
+    if(elUrl){ elUrl.addEventListener('change', ()=> { appendSys(`User set WebSocket URL: ${elUrl.value.trim()||'(empty)'}`); saveConn({ url: elUrl.value||'', login: (elUser&&elUser.value)||'', pass: (elPass&&elPass.value)||'', vhost: '/' }); }); }
+    if(elUser){ elUser.addEventListener('change', ()=> { appendSys(`User set username: ${elUser.value||'(empty)'}`); saveConn({ url: (elUrl&&elUrl.value)||'', login: elUser.value||'', pass: (elPass&&elPass.value)||'', vhost: '/' }); }); }
+    if(elPass){ elPass.addEventListener('change', ()=> { appendSys(`User updated password (len=${(elPass.value||'').length})`); saveConn({ url: (elUrl&&elUrl.value)||'', login: (elUser&&elUser.value)||'', pass: elPass.value||'', vhost: '/' }); }); }
+  }
 
   // Periodic healthcheck of UI reverse proxy
   (function startHealthPing(){

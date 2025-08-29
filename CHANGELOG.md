@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.0] - 2025-08-29
+Timestamp: 2025-08-29T11:05:00Z
+
+- UI: Added top-level tabs (Control, Swarm); Control hosts existing charts/logs.
+- UI: New Swarm View — auto-discovers components from Control messages, draws nodes and links (Generator → Moderator → Processor → SUT), with hold time and Clear & Restart.
+- UI: Moved background selector into Menu; background options accessible via HAL-style icon near WS health.
+- UI: WS health icon opens connection menu; connection fields collapsed into dropdown.
+- UI: README available in app; fixed image paths and transparency; served docs/ and /ui alias in Nginx.
+- Docs: Simplified flow diagram with SUT and explicit data directions.
+
 ## [0.3.1] - 2025-08-29
 Timestamp: 2025-08-29T10:50:00Z
 
