@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>PocketHive – Generator</title>
+  <link rel="stylesheet" href="style.css" />
+  <!-- STOMP UMD -->
+  <script src="https://unpkg.com/@stomp/stompjs@7.0.0/bundles/stomp.umd.js"></script>
+  <script>
+    // Default brokerUrl to same-origin /ws
+    document.addEventListener('DOMContentLoaded', () => {
+      const input = document.getElementById('brokerUrl');
+      if (input) {
+        const scheme = location.protocol === 'https:' ? 'wss' : 'ws';
+        const def = `${scheme}://${location.host}/ws`;
+        const cur = (input.value||'').trim();
+        if (!cur) input.value = def;
+      }
+    });
+  </script>
+  <style>
+    /* small tweak for back link */
+    .topnav{display:flex;align-items:center;gap:12px;margin-bottom:8px}
+    .topnav a{color:#e6eef8;text-decoration:none;border:1px solid var(--border);padding:6px 10px;border-radius:10px}
+    .topnav a:hover{background:#131c27}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="topnav"><a href="/">← Back to Dashboard</a></div>
+    <header>
+      <div class="brand">
+        <img src="../pockethive-logo-readme.svg" alt="PocketHive" onerror="this.style.display='none'"/>
+        <strong>PocketHive – Browser Generator</strong>
+      </div>
+      <div class="badge">
+        <span class="dot off" id="statusDot"></span>
+        <span id="status">disconnected</span>
+      </div>
+    </header>
+
+    <div class="grid cols-2">
+      <section class="card">
+        <h3>Connection</h3>
+        <div class="grid">
+          <div class="row">
+            <label>Broker URL (WS/WSS)</label>
+            <input id="brokerUrl" type="text" placeholder="wss://rabbit.example.com:15674/ws" />
+          </div>
+          <div class="row">
+            <div>
+              <label>VHost</label>
+              <input id="vhost" type="text" placeholder="/" />
+            </div>
+            <div>
+              <label>Login</label>
+              <input id="login" type="text" placeholder="guest" />
+            </div>
+            <div>
+              <label>Passcode</label>
+              <input id="passcode" type="text" placeholder="guest" />
+            </div>
+          </div>
+          <div class="row">
+            <div class="badge">Session: <strong id="session"></strong></div>
+            <label class="small"><input type="checkbox" id="autoSession" checked /> Auto session ID</label>
+            <input id="sessionInput" class="hidden" type="text" placeholder="custom-session-id" />
+            <div style="flex:1"></div>
+            <label class="small"><input type="checkbox" id="debug" /> Debug logs</label>
+            <div>
+              <label class="small">Reconnect (ms)</label>
+              <input id="reconnectMs" type="number" value="0" min="0" />
+            </div>
+            <button class="btn" id="btnConnect">Connect</button>
+            <button class="btn ghost" id="btnDisconnect" disabled>Disconnect</button>
+          </div>
+        </div>
+        <hr class="sep" />
+        <div class="grid cols-2">
+          <div>
+            <h4>Routing</h4>
+            <div class="row">
+              <div>
+                <label>Exchange</label>
+                <input id="exchange" type="text" value="ph.jobs" />
+              </div>
+              <div>
+                <label>Routing key</label>
+                <input id="routingKey" type="text" value="generator.request" />
+              </div>
+            </div>
+            <div class="row">
+              <div>
+                <label>Result queue prefix</label>
+                <input id="resPrefix" type="text" value="ph.results." />
+              </div>
+              <div class="row">
+                <label class="small"><input type="checkbox" id="expectReply" checked /> Expect reply</label>
+                <label class="small"><input type="checkbox" id="backpressure" checked /> Backpressure</label>
+              </div>
+            </div>
+          </div>
+          <div>
+            <h4>Payload</h4>
+            <div class="row">
+              <textarea id="prompt" placeholder="Describe what you want to generate..."></textarea>
+            </div>
+            <div class="slider-row">
+              <label>Payload size</label>
+              <input id="payloadBytes" type="range" min="0" max="65536" value="1024" step="256" data-suffix=" B" />
+              <output class="val" id="payloadBytesVal"></output>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <h3>Generation Controls</h3>
+        <div class="grid">
+          <div class="row">
+            <div>
+              <label>Mode</label>
+              <select id="mode">
+                <option value="constant">Constant</option>
+                <option value="burst">Burst (per second)</option>
+                <option value="poisson">Poisson (stochastic)</option>
+              </select>
+            </div>
+            <div class="slider-row">
+              <label>Rate</label>
+              <input id="rps" type="range" min="0" max="1000" value="50" step="1" />
+              <output class="val" id="rpsVal"></output>
+            </div>
+          </div>
+          <div class="slider-row">
+            <label>Burst size</label>
+            <input id="burst" type="range" min="1" max="200" value="20" step="1" />
+            <output class="val" id="burstVal"></output>
+          </div>
+          <div class="slider-row">
+            <label>Concurrency</label>
+            <input id="concurrency" type="range" min="1" max="20" value="1" step="1" />
+            <output class="val" id="concurrencyVal"></output>
+          </div>
+          <div class="slider-row">
+            <label>Max in-flight</label>
+            <input id="maxInflight" type="range" min="0" max="5000" value="200" step="10" />
+            <output class="val" id="maxInflightVal"></output>
+          </div>
+          <div class="slider-row">
+            <label>Jitter</label>
+            <input id="jitter" type="range" min="0" max="100" value="10" step="1" data-suffix=" %" />
+            <output class="val" id="jitterVal"></output>
+          </div>
+          <div class="slider-row">
+            <label>Duration</label>
+            <input id="duration" type="range" min="0" max="3600" value="0" step="1" data-suffix=" s" />
+            <output class="val" id="durationVal"></output>
+          </div>
+
+          <div class="row">
+            <button class="btn primary" id="btnStart" disabled>Start</button>
+            <button class="btn" id="btnStop" disabled>Stop</button>
+            <button class="btn" id="btnSendOne" disabled>Send 1</button>
+            <button class="btn ghost" id="btnReset">Reset metrics</button>
+            <span class="small">Rate now: <strong id="rateNow">0</strong> msg/s</span>
+          </div>
+        </div>
+
+        <hr class="sep" />
+        <div class="grid">
+          <div class="metrics">
+            <div class="metric" id="mSent"><div class="big">0</div><div class="label">Sent</div></div>
+            <div class="metric" id="mAck"><div class="big">0</div><div class="label">Ack (replies)</div></div>
+            <div class="metric" id="mRecv"><div class="big">0</div><div class="label">Received</div></div>
+            <div class="metric" id="mInFlight"><div class="big">0</div><div class="label">In-flight</div></div>
+            <div class="metric" id="mRate"><div class="big">0.0</div><div class="label">Avg msg/s</div></div>
+            <div class="metric" id="mErr"><div class="big">0</div><div class="label">Errors</div></div>
+          </div>
+
+          <div class="metrics" style="margin-top:8px">
+            <div class="metric" id="mLatAvg"><div class="big">–</div><div class="label">Latency avg</div></div>
+            <div class="metric" id="mLatMin"><div class="big">–</div><div class="label">Latency min</div></div>
+            <div class="metric" id="mLatMax"><div class="big">–</div><div class="label">Latency max</div></div>
+            <div class="metric" id="mLatP95"><div class="big">–</div><div class="label">Latency p95</div></div>
+            <div class="metric"><div class="big" id="sessionShort">–</div><div class="label">Session</div></div>
+            <div class="metric"><div class="big" id="modeShort">–</div><div class="label">Mode</div></div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <section class="card" style="margin-top:16px">
+      <div class="row">
+        <h3 style="margin:0">Results & Log</h3>
+        <label class="small"><input type="checkbox" id="showJson" checked /> Show JSON</label>
+      </div>
+      <div id="log" aria-live="polite"></div>
+      <p class="small">
+        Tip: Make sure the RabbitMQ <em>Web-STOMP</em> plugin is enabled and reachable over WS/WSS.
+      </p>
+    </section>
+
+    <footer class="small" style="margin-top:12px">
+      <span>Web-STOMP defaults to port 15674 and <code>/ws</code> path when enabled. When using HTTPS, use WSS to avoid mixed content.</span>
+    </footer>
+  </div>
+
+  <script src="app.js"></script>
+  <script>
+    // update quick facts
+    const short = s => s.length>8 ? s.slice(0,8)+"…" : s;
+    document.addEventListener('DOMContentLoaded', () => {
+      const sess = document.getElementById('session');
+      const ss = document.getElementById('sessionShort');
+      const modeSel = document.getElementById('mode');
+      const ms = document.getElementById('modeShort');
+      const update = () => { ss.textContent = short(sess.textContent); ms.textContent = modeSel.value; };
+      update();
+      modeSel.addEventListener('change', update);
+    });
+  </script>
+</body>
+</html>
+

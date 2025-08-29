@@ -11,6 +11,8 @@
   const genEl = qs('gen');
   const modEl = qs('mod');
   const procEl = qs('proc');
+  const uiStatus = qs('status-ui');
+  const wsStatus = qs('status-ws');
   if(!elUrl || !btn) return;
 
   // Compute default WS URL; prefer same-origin `/ws` proxied by Nginx
@@ -37,6 +39,17 @@
   function setState(txt){ if(state) state.textContent = txt; }
   function appendLog(line){ if(!logEl) return; const ts=new Date().toISOString(); logEl.textContent += `[${ts}] ${line}\n`; logEl.scrollTop = logEl.scrollHeight; }
   function appendSys(line){ if(!sysEl) return; const ts=new Date().toISOString(); sysEl.textContent += `[${ts}] ${line}\n`; sysEl.scrollTop = sysEl.scrollHeight; }
+
+  function setUiStatus(state){
+    if(!uiStatus) return;
+    const map = { healthy:'🟢 UI', unhealthy:'🔴 UI', down:'⚫ UI', connecting:'🟡 UI' };
+    uiStatus.textContent = map[state] || '⚪ UI';
+  }
+  function setWsStatus(state){
+    if(!wsStatus) return;
+    const map = { connected:'🟢 WS', connecting:'🔄 WS', error:'🔴 WS', closed:'⚫ WS', idle:'⚪ WS' };
+    wsStatus.textContent = map[state] || '⚪ WS';
+  }
 
   function send(frame){ if(ws && ws.readyState === WebSocket.OPEN){ ws.send(frame); } }
 
@@ -99,6 +112,7 @@
     buffer=''; subIds = [];
     try {
       appendSys(`WS connecting: ${url}`);
+      setWsStatus('connecting');
       ws = new WebSocket(url, ['v12.stomp','v11.stomp','v10.stomp']);
     } catch(e){ appendLog('WebSocket init failed: '+e.message); btn.disabled=false; btn.textContent='Connect'; return; }
 
@@ -118,6 +132,7 @@
         if(f.command === 'CONNECTED'){
           connected = true;
           setState('Connected'); btn.disabled = false; btn.textContent = 'Disconnect';
+          setWsStatus('connected');
           appendSys('CONNECTED ' + JSON.stringify(f.headers));
           // Subscribe to TPS events
           ['/exchange/status.exchange/generator.tps',
@@ -146,8 +161,8 @@
     function cleanup(){
       connected = false; setState('Disconnected'); btn.textContent = 'Connect'; btn.disabled = false;
     }
-    ws.addEventListener('error', ()=>{ appendSys('WebSocket error'); });
-    ws.addEventListener('close', ()=>{ appendSys('Socket closed'); cleanup(); });
+    ws.addEventListener('error', ()=>{ appendSys('WebSocket error'); setWsStatus('error'); });
+    ws.addEventListener('close', ()=>{ appendSys('Socket closed'); setWsStatus('closed'); cleanup(); });
   }
 
   btn.addEventListener('click', ()=>{
@@ -177,9 +192,9 @@
         const ok = res.ok;
         const txt = await res.text().catch(()=> '');
         const status = ok && /ok/i.test(txt) ? 'healthy' : `unhealthy(${res.status})`;
-        if(status !== lastStatus){ appendSys(`UI health: ${status}`); lastStatus = status; }
+        if(status !== lastStatus){ appendSys(`UI health: ${status}`); setUiStatus(/healthy/.test(status)?'healthy':'unhealthy'); lastStatus = status; }
       }catch(e){
-        if(lastStatus !== 'down'){ appendSys('UI health: down'); lastStatus = 'down'; }
+        if(lastStatus !== 'down'){ appendSys('UI health: down'); setUiStatus('down'); lastStatus = 'down'; }
       }
     };
     ping();
