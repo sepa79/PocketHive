@@ -171,11 +171,17 @@
     if(swarmBtn2){ swarmBtn2.disabled = !showSwarm; swarmBtn2.style.display = 'none'; }
     if(netBtn){ netBtn.disabled = !showNet; netBtn.style.display = 'none'; }
     if(bgBtn){
-      const visible = (mode === 'bees' || mode === 'net');
-      bgBtn.style.display = visible ? '' : 'none';
+      // Always show Space Station icon; rotate when mode has options
+      const hasOpts = (mode === 'bees' || mode === 'net');
+      bgBtn.style.display = '';
       bgBtn.dataset.bg = mode;
+      bgBtn.setAttribute('data-hasopts', hasOpts ? '1' : '0');
+      bgBtn.title = hasOpts ? 'Background Options' : 'Choose Background';
       bgBtn.onclick = (e)=>{
         e.preventDefault();
+        // Open the header menu to expose background selector
+        try{ const mb=document.getElementById('menu-btn'); if(mb) mb.click(); }catch{}
+        // If current mode has options, open its modal as well
         if(mode === 'bees'){ if(swarmBtn) swarmBtn.click(); }
         else if(mode === 'net'){ ensureNetLoaded().then(()=>{ if(netBtn) netBtn.click(); }); }
       };
