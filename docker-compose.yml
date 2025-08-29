@@ -22,9 +22,9 @@ services:
     environment:
       RABBITMQ_HOST: rabbitmq
       PH_TRAFFIC_EXCHANGE: ph.hive
-      PH_GEN_QUEUE: gen.queue
-      PH_MOD_QUEUE: moderated.queue
-      PH_CONTROL_EXCHANGE: ph.control
+      PH_GEN_QUEUE: ph.gen
+      PH_MOD_QUEUE: ph.mod
+      PH_CONTROL_QUEUE: ph.control
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -36,9 +36,9 @@ services:
     environment:
       RABBITMQ_HOST: rabbitmq
       PH_TRAFFIC_EXCHANGE: ph.hive
-      PH_GEN_QUEUE: gen.queue
-      PH_MOD_QUEUE: moderated.queue
-      PH_CONTROL_EXCHANGE: ph.control
+      PH_GEN_QUEUE: ph.gen
+      PH_MOD_QUEUE: ph.mod
+      PH_CONTROL_QUEUE: ph.control
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -50,9 +50,9 @@ services:
     environment:
       RABBITMQ_HOST: rabbitmq
       PH_TRAFFIC_EXCHANGE: ph.hive
-      PH_GEN_QUEUE: gen.queue
-      PH_MOD_QUEUE: moderated.queue
-      PH_CONTROL_EXCHANGE: ph.control
+      PH_GEN_QUEUE: ph.gen
+      PH_MOD_QUEUE: ph.mod
+      PH_CONTROL_QUEUE: ph.control
     depends_on:
       rabbitmq:
         condition: service_healthy

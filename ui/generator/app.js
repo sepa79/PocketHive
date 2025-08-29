@@ -83,7 +83,7 @@
   }
   function sendOne() {
     if (!client || !connected) { log("Not connected."); return; }
-    const exchange = $("#exchange").value.trim() || "ph.jobs"; const routingKey = $("#routingKey").value.trim() || "generator.request"; const expectReply = $("#expectReply").checked;
+    const exchange = $("#exchange").value.trim() || "ph.hive"; const routingKey = $("#routingKey").value.trim() || "generator.request"; const expectReply = $("#expectReply").checked;
     const payloadSize = Number($("#payloadBytes").value); const prompt = $("#prompt").value.trim(); const nowIso = new Date().toISOString(); const correlationId = uuidv4();
     const body = { type: "GENERATION_REQUEST", prompt, sessionId, correlationId, timestamp: nowIso, payload: payloadSize > 0 ? randomAscii(payloadSize) : undefined };
     const headers = { "content-type":"application/json", "correlation-id": correlationId }; if (expectReply) headers["reply-to"] = (resultQueuePrefix + sessionId);

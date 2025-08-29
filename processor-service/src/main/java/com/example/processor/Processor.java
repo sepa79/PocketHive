@@ -36,6 +36,7 @@ public class Processor {
     String traffic = Topology.EXCHANGE;
     String json = "{" +
       "\"name\":\"" + name + "\"," +
+      "\"service\":\"" + name + "\"," +
       "\"location\":\"" + location + "\"," +
       "\"instance\":\"" + instanceId + "\"," +
       "\"messageId\":\"" + messageId + "\"," +
@@ -43,6 +44,13 @@ public class Processor {
       "\"traffic\":\"" + traffic + "\"," +
       "\"tps\":" + tps +
     "}";
-    rabbit.convertAndSend(Topology.STATUS_EXCHANGE, "processor.tps", json);
+    // Publish to control queue via default exchange (as String)
+    rabbit.convertAndSend("", Topology.CONTROL_QUEUE, json);
+  }
+
+  // Control-plane listener (no-op placeholder)
+  @RabbitListener(queues = "${ph.controlQueue:ph.control}")
+  public void onControl(String payload) {
+    // Future: handle control messages; for now, ignore or log
   }
 }

@@ -16,6 +16,16 @@
   const procEl = qs('proc');
   const uiStatus = qs('status-ui');
   const wsStatus = qs('status-ws');
+  const chartsEl = qs('charts');
+  const toggleChartsBtn = qs('toggle-charts');
+  const canvases = {
+    generator: /** @type {HTMLCanvasElement|null} */(document.getElementById('chart-gen')),
+    moderator: /** @type {HTMLCanvasElement|null} */(document.getElementById('chart-mod')),
+    processor: /** @type {HTMLCanvasElement|null} */(document.getElementById('chart-proc'))
+  };
+  const series = { generator: [], moderator: [], processor: [] }; // {t:number,v:number}
+  const WINDOW_MS = 60_000; // 60s window
+  let rafPending = { generator:false, moderator:false, processor:false };
   if(!elUrl || !btn) return;
 
   function loadConn(){
@@ -32,8 +42,18 @@
   async function loadConfig(){
     try{
       const res = await fetch(PH_CFG_URL, {cache:'no-store'});
-      if(res.ok){ PH_CONFIG = await res.json(); }
-    }catch{}
+      if(res.ok){
+        PH_CONFIG = await res.json();
+        try{
+          const subs = (PH_CONFIG && Array.isArray(PH_CONFIG.subscriptions) && PH_CONFIG.subscriptions.length)
+            ? PH_CONFIG.subscriptions.join(', ')
+            : '(none)';
+          appendSys(`Config loaded: stomp=${JSON.stringify(PH_CONFIG.stomp||{})}, subs=${subs}`);
+        }catch{}
+      } else {
+        appendSys(`Config fetch failed: HTTP ${res.status}`);
+      }
+    }catch(e){ appendSys('Config fetch error: '+ (e && e.message ? e.message : String(e))); }
   }
 
   // Compute default WS URL; prefer same-origin `/ws` proxied by Nginx
@@ -49,6 +69,7 @@
       // Prefer same-origin proxy when not explicitly customized by user
       if(!current || /^(ws|wss):\/\/(localhost|127\.0\.0\.1|\[?::1\]?)(:?\d+)?\/ws?$/i.test(current)){
         elUrl.value = sameOrigin;
+        appendSys(`Default WS URL set: ${elUrl.value}`);
       }
       // Load stored connection if present
       const stored = loadConn();
@@ -56,14 +77,13 @@
         if(stored.url) elUrl.value = stored.url;
         if(elUser && stored.login) elUser.value = stored.login;
         if(elPass && stored.pass) elPass.value = stored.pass;
+        appendSys(`Stored connection loaded: url=${stored.url||'(empty)'} login=${stored.login||'(empty)'} vhost=${stored.vhost||'/'}`);
       }
     } catch(e) { /* noop */ }
   }
 
-  let ws = null;
+  let client = null;
   let connected = false;
-  let buffer = '';
-  let subIds = [];
 
   function setState(txt){ if(state) state.textContent = txt; }
   function appendLog(line){ if(!logEl) return; const ts=new Date().toISOString(); logEl.textContent += `[${ts}] ${line}\n`; logEl.scrollTop = logEl.scrollHeight; }
@@ -80,48 +100,66 @@
     wsStatus.textContent = map[state] || '⚪ WS';
   }
 
-  function send(frame){ if(ws && ws.readyState === WebSocket.OPEN){ ws.send(frame); } }
-
-  function buildFrame(command, headers={}, body=''){
-    const lines = [command];
-    for(const k in headers){ if(headers[k] != null) lines.push(`${k}:${headers[k]}`); }
-    lines.push(''); // headers end
-    const head = lines.join('\n');
-    return head + (body || '') + '\u0000';
+  // Charts helpers
+  function addPoint(svc, v){
+    const now = Date.now();
+    const arr = series[svc];
+    arr.push({t:now, v: Number(v)||0});
+    // trim window
+    const cutoff = now - WINDOW_MS;
+    while(arr.length && arr[0].t < cutoff) arr.shift();
+    scheduleDraw(svc);
+  }
+  function scheduleDraw(svc){
+    if(!chartsEl || chartsEl.style.display === 'none') return;
+    if(rafPending[svc]) return;
+    rafPending[svc] = true;
+    requestAnimationFrame(()=>{ rafPending[svc] = false; drawChart(svc); });
+  }
+  function drawChart(svc){
+    const cv = canvases[svc];
+    if(!cv) return;
+    const ctx = cv.getContext('2d'); if(!ctx) return;
+    const w = cv.width, h = cv.height;
+    ctx.clearRect(0,0,w,h);
+    // axes
+    ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(40,10); ctx.lineTo(40,h-24); ctx.lineTo(w-6,h-24); ctx.stroke();
+    const now = Date.now();
+    const data = series[svc];
+    if(!data.length) return;
+    const xmin = now - WINDOW_MS, xmax = now;
+    let ymin = 0, ymax = 1;
+    for(const p of data){ if(p.v > ymax) ymax = p.v; }
+    // padding
+    ymax = Math.max(1, ymax * 1.1);
+    const xr = (x) => 40 + ( (x - xmin) / (xmax - xmin) ) * (w - 46);
+    const yr = (y) => (h - 24) - ( y / (ymax - ymin) ) * (h - 34);
+    // gridlines (3)
+    ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+    for(let i=1;i<=3;i++){ const gy = 10 + i*(h-34)/4; ctx.beginPath(); ctx.moveTo(40,gy); ctx.lineTo(w-6,gy); ctx.stroke(); }
+    // labels
+    ctx.fillStyle = 'rgba(255,255,255,0.7)'; ctx.font = '12px monospace';
+    ctx.fillText(String(Math.round(ymax)), 6, 12);
+    ctx.fillText('0', 28, h-24);
+    // line
+    ctx.strokeStyle = svc==='generator' ? '#4CAF50' : svc==='moderator' ? '#FFC107' : '#03A9F4';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    let started=false;
+    for(const p of data){ const x=xr(p.t), y=yr(p.v); if(!started){ ctx.moveTo(x,y); started=true; } else { ctx.lineTo(x,y); } }
+    ctx.stroke();
   }
 
-  function parseFrames(chunk){
-    buffer += chunk;
-    const frames = [];
-    let idx;
-    while((idx = buffer.indexOf('\u0000')) !== -1){
-      const raw = buffer.slice(0, idx);
-      buffer = buffer.slice(idx+1);
-      if(!raw.trim()) continue;
-      const parts = raw.split('\n');
-      const command = parts.shift();
-      const headers = {};
-      let line;
-      while(parts.length){
-        line = parts.shift();
-        if(line === '') break; // end headers
-        const sep = line.indexOf(':');
-        if(sep > -1){ headers[line.slice(0,sep)] = line.slice(sep+1); }
-      }
-      const body = parts.join('\n');
-      frames.push({command, headers, body});
-    }
-    return frames;
-  }
-
-  function subscribe(dest){
-    const id = `sub-${Math.random().toString(36).slice(2,8)}`;
-    subIds.push(id);
-    send(buildFrame('SUBSCRIBE', { id, destination: dest, ack: 'auto' }));
-  }
+  // Using StompJS (same as Generator UI)
 
   async function doConnect(){
-    if(connected){ try{ ws && ws.close(); }catch(e){} return; }
+    appendSys(`doConnect invoked (connected=${connected})`);
+    if(connected){
+      try{ if(client) client.deactivate(); }catch(e){}
+      return;
+    }
     let url = elUrl.value.trim() || `ws://${(window.location && window.location.host) || 'localhost:8088'}/ws`;
     // If user left localhost but page is opened from a remote host, swap host
     try{
@@ -134,75 +172,83 @@
           url = `${u.protocol}//${pageHost}${u.pathname || '/ws'}`;
         }
       }
-    }catch(e){ /* keep as-is */ }
+    }catch(e){ appendSys('URL normalize error: ' + (e && e.message ? e.message : String(e))); /* keep as-is */ }
     const login = (elUser && elUser.value) || 'guest';
     const passcode = (elPass && elPass.value) || 'guest';
     const vhost = (PH_CONFIG && PH_CONFIG.stomp && PH_CONFIG.stomp.vhost) || '/';
     // Persist connection for other pages (e.g., /generator)
     saveConn({ url, login, pass: passcode, vhost: '/' });
     setState('Connecting...'); btn.disabled = true; btn.textContent = 'Connecting...';
-    buffer=''; subIds = [];
-    try {
-      appendSys(`WS connecting: ${url}`);
-      setWsStatus('connecting');
-      ws = new WebSocket(url, ['v12.stomp','v11.stomp','v10.stomp']);
-    } catch(e){ appendLog('WebSocket init failed: '+e.message); btn.disabled=false; btn.textContent='Connect'; return; }
-
-    ws.addEventListener('open', ()=>{
-      const frame = buildFrame('CONNECT', {
-        'accept-version': '1.2,1.1,1.0',
-        host: vhost,
-        login, passcode,
-        'heart-beat': '10000,10000'
-      });
-      send(frame);
+    setWsStatus('connecting');
+    // eslint-disable-next-line no-undef
+    client = new StompJs.Client({
+      brokerURL: url,
+      connectHeaders: { login, passcode, host: vhost },
+      reconnectDelay: 0,
+      debug: (s) => { appendSys(`[STOMP] ${s}`); }
     });
-
-    ws.addEventListener('message', (ev)=>{
-      const frames = typeof ev.data === 'string' ? parseFrames(ev.data) : [];
-      for(const f of frames){
-        if(f.command === 'CONNECTED'){
-          connected = true;
-          setState('Connected'); btn.disabled = false; btn.textContent = 'Disconnect';
-          setWsStatus('connected');
-          appendSys('CONNECTED ' + JSON.stringify(f.headers));
-          // Subscribe to events from config (fallback to defaults)
-          const subs = (PH_CONFIG && Array.isArray(PH_CONFIG.subscriptions) && PH_CONFIG.subscriptions.length)
-            ? PH_CONFIG.subscriptions
-            : ['/exchange/status.exchange/generator.tps','/exchange/status.exchange/moderator.tps','/exchange/status.exchange/processor.tps'];
-          subs.forEach(d => { subscribe(d); appendSys('SUBSCRIBE ' + d); });
-        } else if(f.command === 'MESSAGE'){
-          let body = f.body || '';
-          try {
-            const obj = JSON.parse(body);
-            if(obj && typeof obj.tps !== 'undefined' && obj.service){
-              if(obj.service === 'generator' && genEl) genEl.textContent = String(obj.tps);
-              if(obj.service === 'moderator' && modEl) modEl.textContent = String(obj.tps);
-              if(obj.service === 'processor' && procEl) procEl.textContent = String(obj.tps);
-            }
-            appendLog(`MSG ${f.headers.destination || ''} ${body}`);
-          } catch(e){
-            appendLog(`MSG ${f.headers.destination || ''} ${body}`);
-          }
-        } else if(f.command === 'ERROR'){
-          appendSys('ERROR ' + (f.body || JSON.stringify(f.headers)));
-        }
+    client.onConnect = (frame) => {
+      connected = true;
+      setState('Connected'); btn.disabled = false; btn.textContent = 'Disconnect';
+      setWsStatus('connected');
+      appendSys('CONNECTED ' + JSON.stringify(frame.headers || {}));
+      const subs = (PH_CONFIG && Array.isArray(PH_CONFIG.subscriptions) && PH_CONFIG.subscriptions.length)
+        ? PH_CONFIG.subscriptions
+        : ['/queue/ph.control'];
+      if(!(PH_CONFIG && Array.isArray(PH_CONFIG.subscriptions) && PH_CONFIG.subscriptions.length)){
+        appendSys('No subscriptions from config; using fallback [/queue/ph.control]');
+      } else {
+        appendSys('Subscribing to configured destinations: ' + subs.join(', '));
       }
-    });
-
-    function cleanup(){
-      connected = false; setState('Disconnected'); btn.textContent = 'Connect'; btn.disabled = false;
+      subs.forEach(d => {
+        try{
+          client.subscribe(d, (message) => {
+            const body = message.body || '';
+            try{
+              const obj = JSON.parse(body);
+              if(obj && typeof obj.tps !== 'undefined' && obj.service){
+                if(obj.service === 'generator' && genEl) genEl.textContent = String(obj.tps);
+                if(obj.service === 'moderator' && modEl) modEl.textContent = String(obj.tps);
+                if(obj.service === 'processor' && procEl) procEl.textContent = String(obj.tps);
+                if(obj.service === 'generator') addPoint('generator', obj.tps);
+                if(obj.service === 'moderator') addPoint('moderator', obj.tps);
+                if(obj.service === 'processor') addPoint('processor', obj.tps);
+              }
+              appendLog(`MSG ${message.headers.destination || ''} ${body}`);
+            } catch(e){
+              appendLog(`MSG ${message.headers.destination || ''} ${body}`);
+            }
+          }, { ack:'auto' });
+          appendSys('SUBSCRIBE ' + d);
+        }catch(e){ appendSys('Subscribe error: '+ (e && e.message ? e.message : String(e))); }
+      });
+    };
+    client.onStompError = (frame) => {
+      appendSys('STOMP ERROR ' + (frame.headers && frame.headers.message ? frame.headers.message : '') + (frame.body ? (' | ' + frame.body) : ''));
+    };
+    client.onWebSocketError = (ev) => {
+      appendSys('WebSocket error (stompjs) ' + (ev && ev.message ? ev.message : '[event]'));
+      setWsStatus('error');
+    };
+    client.onWebSocketClose = (ev) => {
+      appendSys(`Socket closed (stompjs) code=${ev && typeof ev.code==='number'?ev.code:'?'} reason=${ev && ev.reason ? ev.reason : ''} clean=${ev && typeof ev.wasClean==='boolean'?ev.wasClean:'?'}`);
+      setWsStatus('closed');
+      cleanup();
+    };
+    try{
+      appendSys('Activating STOMP client');
+      client.activate();
+    }catch(e){
+      appendSys('Activation error: ' + (e && e.message ? e.message : String(e)));
+      setWsStatus('error'); btn.disabled=false; btn.textContent='Connect';
     }
-    ws.addEventListener('error', ()=>{ appendSys('WebSocket error'); setWsStatus('error'); });
-    ws.addEventListener('close', ()=>{ appendSys('Socket closed'); setWsStatus('closed'); cleanup(); });
+    function cleanup(){ connected = false; setState('Disconnected'); btn.textContent = 'Connect'; btn.disabled = false; }
   }
 
   btn.addEventListener('click', ()=>{
     if(connected){
-      // Graceful DISCONNECT
       appendSys('User action: Disconnect');
-      try{ appendSys('Sending DISCONNECT'); send(buildFrame('DISCONNECT')); }catch(e){}
-      try{ ws && ws.close(); }catch(e){}
+      try{ client && client.deactivate(); }catch(e){}
     } else {
       appendSys('User action: Connect');
       doConnect();
@@ -256,4 +302,14 @@
     ping();
     setInterval(ping, 15000);
   })();
+
+  // Toggle charts visibility
+  if(toggleChartsBtn && chartsEl){
+    toggleChartsBtn.addEventListener('click', ()=>{
+      const show = chartsEl.style.display === 'none';
+      chartsEl.style.display = show ? 'block' : 'none';
+      // redraw on show
+      if(show){ ['generator','moderator','processor'].forEach(s=> drawChart(s)); }
+    });
+  }
 })();

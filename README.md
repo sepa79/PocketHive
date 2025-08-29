@@ -23,7 +23,7 @@ docker compose up -d --build
 2) Open the UI
 
 - UI: http://localhost:8088
-- Click "Connect". The UI connects to RabbitMQ via same-origin WebSocket `ws://localhost:8088/ws`.
+- Click "Connect". The UI connects to RabbitMQ via same-origin WebSocket `ws://localhost:8088/ws` using StompJS (same client as the built‑in Generator).
 
 3) RabbitMQ Management (optional)
 
@@ -39,7 +39,7 @@ Relevant files:
 
 - `ui/nginx.conf` — reverse proxy for `/ws` and `/healthz`
 - `docker-compose.yml` — mounts nginx config and exposes port 8088; adds healthcheck for UI
-- `ui/assets/js/app.js` — defaults WS URL to same-origin `/ws`, includes system logs and health ping
+- `ui/assets/js/app.js` — defaults WS URL to same-origin `/ws`, includes system logs and health ping, and uses StompJS for Events handling.
 
 ## Healthchecks
 
@@ -68,6 +68,36 @@ Manual checks:
   - Check browser devtools → Network → WS for the `/ws` handshake (should be 101 Switching Protocols).
   - If serving the UI over HTTPS, the app will use `wss://…/ws` automatically; ensure any reverse proxy forwards upgrades.
   - Avoid manually pointing to `ws://localhost:15674/ws` unless you expose that port and handle origins.
+
+- Authentication / `guest` user:
+  - RabbitMQ blocks remote logins for the built‑in `guest` user by default. If you access the UI from a remote host, either use the UI’s same‑origin `/ws` proxy (recommended) or create a non‑guest user.
+  - Easiest: set defaults in Compose for RabbitMQ:
+
+    ```yaml
+    rabbitmq:
+      environment:
+        RABBITMQ_DEFAULT_USER: phuser
+        RABBITMQ_DEFAULT_PASS: phpass
+    ```
+
+  - Then set the same credentials in services or via env:
+
+    ```yaml
+    generator:
+      environment:
+        RABBITMQ_USER: phuser
+        RABBITMQ_PASS: phpass
+    moderator:
+      environment:
+        RABBITMQ_USER: phuser
+        RABBITMQ_PASS: phpass
+    processor:
+      environment:
+        RABBITMQ_USER: phuser
+        RABBITMQ_PASS: phpass
+    ```
+
+  - Alternative (dev only): relax `guest` loopback restriction via `rabbitmq.conf` mount.
 
 - Cannot access UI: ensure port 8088 is free or adjust the mapping in `docker-compose.yml`.
 

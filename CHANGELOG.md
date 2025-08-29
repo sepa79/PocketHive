@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.3] - 2025-08-29
+Timestamp: 2025-08-29T02:20:00Z
+
+- UI: Refactor Events connection to use StompJS (same as Generator) instead of a custom STOMP client.
+- UI: Improve diagnostics around connect/handshake and socket lifecycle; clearer syslog entries.
+- UI: Normalize CRLF handling in STOMP frame parsing (pre-refactor) to avoid missed CONNECTED frames.
+- Docs: Update README with authentication notes (RabbitMQ `guest` remote restriction), recommended non‑guest user setup, and troubleshooting.
+
 ## [0.2.2] - 2025-08-29
 Timestamp: 2025-08-29T01:24:02Z
 

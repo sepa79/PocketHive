@@ -5,6 +5,7 @@ import org.springframework.amqp.core.Message;
 import org.springframework.amqp.core.MessageBuilder;
 import org.springframework.amqp.core.MessageProperties;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -68,6 +69,7 @@ public class Generator {
     String traffic = Topology.EXCHANGE;
     String json = "{" +
       "\"name\":\"" + name + "\"," +
+      "\"service\":\"" + name + "\"," +
       "\"location\":\"" + location + "\"," +
       "\"instance\":\"" + instanceId + "\"," +
       "\"messageId\":\"" + messageId + "\"," +
@@ -75,6 +77,13 @@ public class Generator {
       "\"traffic\":\"" + traffic + "\"," +
       "\"tps\":" + tps +
     "}";
-    rabbit.convertAndSend(Topology.STATUS_EXCHANGE, "generator.tps", json.getBytes(StandardCharsets.UTF_8));
+    // Publish to control queue via default exchange (as String)
+    rabbit.convertAndSend("", Topology.CONTROL_QUEUE, json);
+  }
+
+  // Control-plane listener (no-op placeholder)
+  @RabbitListener(queues = "${ph.controlQueue:ph.control}")
+  public void onControl(String payload) {
+    // Future: handle control messages; for now, ignore or log
   }
 }

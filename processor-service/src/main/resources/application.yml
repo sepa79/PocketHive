@@ -9,7 +9,6 @@ management.endpoints.web.exposure.include: health,info
 
 # PocketHive topology (overridable via env PH_*)
 ph:
-  exchange: ${PH_EXCHANGE:sim.direct}
-  genQueue: ${PH_GEN_QUEUE:gen.queue}
-  modQueue: ${PH_MOD_QUEUE:moderated.queue}
-  statusExchange: ${PH_STATUS_EXCHANGE:status.exchange}
+  genQueue: ${PH_GEN_QUEUE:ph.gen}
+  modQueue: ${PH_MOD_QUEUE:ph.mod}
+  controlQueue: ${PH_CONTROL_QUEUE:ph.control}

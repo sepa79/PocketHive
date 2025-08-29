@@ -78,6 +78,26 @@
       <div class="card"><div class="kpi-title">Moderator TPS</div><div id="mod" class="kpi-value">0</div></div>
       <div class="card"><div class="kpi-title">Processor TPS</div><div id="proc" class="kpi-value">0</div></div>
     </div>
+    <div class="controls" style="margin-top:10px">
+      <button id="toggle-charts">Toggle Charts</button>
+    </div>
+    <div id="charts" class="card" style="display:none; padding:16px">
+      <div class="kpi-title" style="margin-bottom:10px">RabbitMQ Control Stream — TPS (last 60s)</div>
+      <div style="display:grid; grid-template-columns: 1fr; gap:16px">
+        <div>
+          <div class="kpi-title" style="margin-bottom:6px">Generator</div>
+          <canvas id="chart-gen" width="1000" height="180" style="width:100%; height:180px; background: rgba(0,0,0,0.25); border:1px solid rgba(255,255,255,0.1); border-radius:8px"></canvas>
+        </div>
+        <div>
+          <div class="kpi-title" style="margin-bottom:6px">Moderator</div>
+          <canvas id="chart-mod" width="1000" height="180" style="width:100%; height:180px; background: rgba(0,0,0,0.25); border:1px solid rgba(255,255,255,0.1); border-radius:8px"></canvas>
+        </div>
+        <div>
+          <div class="kpi-title" style="margin-bottom:6px">Processor</div>
+          <canvas id="chart-proc" width="1000" height="180" style="width:100%; height:180px; background: rgba(0,0,0,0.25); border:1px solid rgba(255,255,255,0.1); border-radius:8px"></canvas>
+        </div>
+      </div>
+    </div>
     <h3>Event Log</h3>
     <div id="log"></div>
 
@@ -87,6 +107,7 @@
 
   <script src="./swarm/js/bees.core.js"></script>
   <script src="./swarm/js/swarm-ui.js"></script>
+  <script src="https://unpkg.com/@stomp/stompjs@7.0.0/bundles/stomp.umd.js"></script>
   <script src="./assets/js/app.js"></script>
 </body>
 </html>

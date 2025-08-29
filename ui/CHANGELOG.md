@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.3] - 2025-08-29
+Timestamp: 2025-08-29T02:20:00Z
+
+- Refactor Events connection to use StompJS (same as Generator) instead of a custom STOMP client.
+- Improve diagnostics around connect/handshake and socket lifecycle; clearer syslog entries.
+- Normalize CRLF handling in STOMP frame parsing (pre-refactor) to avoid missed CONNECTED frames.
+
 ## [0.2.1] - 2025-08-29
 Timestamp: 2025-08-29T01:03:45Z
 
