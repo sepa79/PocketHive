@@ -3,9 +3,7 @@
 All notable changes to this project will be documented in this file.
 
 ## [0.2.0] - 2025-08-29
-
-Timestamp: 2025-08-29
-Time Spent: (log via `scripts/time-log.sh`)
+Timestamp: 2025-08-29T00:18:36Z
 
 - UI: Add Nginx reverse proxy for WebSocket at `/ws` to RabbitMQ Web‑STOMP (`rabbitmq:15674/ws`).
 - UI: Default WebSocket URL to same‑origin (`ws(s)://<host>/ws`) to avoid CORS/origin issues.
@@ -15,13 +13,11 @@ Time Spent: (log via `scripts/time-log.sh`)
 - Docs: Update README with stack, quick start, proxy, healthchecks, troubleshooting, and development notes.
 
 ## [0.1.1] - 2025-08-29
-
-Timestamp: 2025-08-29
+Timestamp: 2025-08-28T23:51:09Z
 
 - Initial UI wiring and assets.
 
 ## [0.1.0] - 2025-08-29
-
-Timestamp: 2025-08-29
+Timestamp: 2025-08-28T23:07:54Z
 
 - Initial repository setup.

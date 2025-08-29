@@ -82,16 +82,6 @@ docker compose up -d --build ui
 
 - Services use environment `RABBITMQ_HOST=rabbitmq` inside the Compose network.
 
-## Time Logging
-
-- Log time for updates and keep cumulative total:
-
-```
-scripts/time-log.sh -m 15 -d "Integrate generator UI under /generator" -v 0.2.1
-```
-
-- Entries go to `TIMELOG.md` and total minutes accumulate in `TOTAL_TIME_MINUTES`.
-- You can reference total time in release notes if desired.
 
 ---
 
