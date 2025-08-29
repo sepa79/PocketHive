@@ -1,0 +1,138 @@
+asyncapi: 2.6.0
+info:
+  title: PocketHive Control & Traffic API
+  version: 0.2.1
+  description: |
+    AsyncAPI specification documenting PocketHive messaging contracts.
+    - ph.control — control-plane status/telemetry for UI and orchestration
+    - ph.hive — traffic exchange for workload messages (generator → moderator → processor)
+servers:
+  control-ws:
+    url: ws://{host}/ws
+    protocol: stomp
+    description: Web-STOMP endpoint proxied by UI (use wss on HTTPS)
+    variables:
+      host:
+        default: localhost:8088
+  amqp:
+    url: amqp://{host}:{port}
+    protocol: amqp
+    variables:
+      host:
+        default: rabbitmq
+      port:
+        default: '5672'
+defaultContentType: application/json
+channels:
+  exchange/ph.control/generator.tps:
+    subscribe:
+      summary: Generator status events (TPS etc.)
+      message:
+        $ref: '#/components/messages/StatusEvent'
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: ph.control
+          type: topic
+          durable: true
+        routingKey: generator.tps
+  exchange/ph.control/moderator.tps:
+    subscribe:
+      summary: Moderator status events (TPS etc.)
+      message:
+        $ref: '#/components/messages/StatusEvent'
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: ph.control
+          type: topic
+          durable: true
+        routingKey: moderator.tps
+  exchange/ph.control/processor.tps:
+    subscribe:
+      summary: Processor status events (TPS etc.)
+      message:
+        $ref: '#/components/messages/StatusEvent'
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: ph.control
+          type: topic
+          durable: true
+        routingKey: processor.tps
+  exchange/ph.hive/generator.request:
+    publish:
+      summary: Workload generation request published by browser generator
+      message:
+        $ref: '#/components/messages/GenerationRequest'
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: ph.hive
+          type: direct
+          durable: true
+        routingKey: generator.request
+components:
+  messages:
+    StatusEvent:
+      name: StatusEvent
+      title: Service status/telemetry event
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/StatusPayload'
+    GenerationRequest:
+      name: GenerationRequest
+      title: Browser generator request
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/GenerationPayload'
+  schemas:
+    StatusPayload:
+      type: object
+      required: [name, location, instance, messageId, timestamp, traffic, tps]
+      properties:
+        name:
+          type: string
+          description: Component name (generator|moderator|processor)
+        location:
+          type: string
+          description: Deployment location/hostname/zone label
+        instance:
+          type: string
+          description: Instance ID of the service
+        messageId:
+          type: string
+          format: uuid
+        timestamp:
+          type: string
+          format: date-time
+        traffic:
+          type: string
+          description: Name of the traffic exchange the component uses (ph.hive)
+        tps:
+          type: integer
+          minimum: 0
+    GenerationPayload:
+      type: object
+      required: [type, sessionId, correlationId, timestamp]
+      properties:
+        type:
+          type: string
+          enum: [GENERATION_REQUEST]
+        sessionId:
+          type: string
+        correlationId:
+          type: string
+          format: uuid
+        timestamp:
+          type: string
+          format: date-time
+        prompt:
+          type: string
+        payload:
+          type: string
+          description: Optional blob for size simulation
