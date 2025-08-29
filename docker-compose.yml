@@ -21,6 +21,10 @@ services:
       dockerfile: generator-service/Dockerfile
     environment:
       RABBITMQ_HOST: rabbitmq
+      PH_EXCHANGE: sim.direct
+      PH_GEN_QUEUE: gen.queue
+      PH_MOD_QUEUE: moderated.queue
+      PH_STATUS_EXCHANGE: status.exchange
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -31,6 +35,10 @@ services:
       dockerfile: moderator-service/Dockerfile
     environment:
       RABBITMQ_HOST: rabbitmq
+      PH_EXCHANGE: sim.direct
+      PH_GEN_QUEUE: gen.queue
+      PH_MOD_QUEUE: moderated.queue
+      PH_STATUS_EXCHANGE: status.exchange
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -41,6 +49,10 @@ services:
       dockerfile: processor-service/Dockerfile
     environment:
       RABBITMQ_HOST: rabbitmq
+      PH_EXCHANGE: sim.direct
+      PH_GEN_QUEUE: gen.queue
+      PH_MOD_QUEUE: moderated.queue
+      PH_STATUS_EXCHANGE: status.exchange
     depends_on:
       rabbitmq:
         condition: service_healthy

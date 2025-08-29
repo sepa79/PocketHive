@@ -1,6 +1,8 @@
 // Minimal STOMP over WebSocket client for RabbitMQ Web-STOMP
 (function(){
   const PH_CONN_KEY = 'pockethive.conn';
+  const PH_CFG_URL = '/config.json';
+  let PH_CONFIG = null;
   const qs = (id) => document.getElementById(id);
   const elUrl = qs('wsurl');
   const elUser = qs('login');
@@ -27,14 +29,22 @@
     try{ localStorage.setItem(PH_CONN_KEY, JSON.stringify(obj)); }catch{}
   }
 
+  async function loadConfig(){
+    try{
+      const res = await fetch(PH_CFG_URL, {cache:'no-store'});
+      if(res.ok){ PH_CONFIG = await res.json(); }
+    }catch{}
+  }
+
   // Compute default WS URL; prefer same-origin `/ws` proxied by Nginx
-  (function setDefaultWsUrl(){
+  async function setDefaultWsUrl(){
     try {
       const pageHost = (window.location && window.location.host) || '';
       const hostOnly = (window.location && window.location.hostname) || '';
       const isLocalHost = /^(localhost|127\.0\.0\.1|\[?::1\]?)$/i.test(hostOnly);
       const scheme = (window.location && window.location.protocol === 'https:') ? 'wss' : 'ws';
-      const sameOrigin = `${scheme}://${pageHost}/ws`;
+      const wsPath = (PH_CONFIG && PH_CONFIG.stomp && PH_CONFIG.stomp.wsPath) || '/ws';
+      const sameOrigin = `${scheme}://${pageHost}${wsPath.startsWith('/')?wsPath:'/'+wsPath}`;
       const current = (elUrl.value || '').trim();
       // Prefer same-origin proxy when not explicitly customized by user
       if(!current || /^(ws|wss):\/\/(localhost|127\.0\.0\.1|\[?::1\]?)(:?\d+)?\/ws?$/i.test(current)){
@@ -48,7 +58,7 @@
         if(elPass && stored.pass) elPass.value = stored.pass;
       }
     } catch(e) { /* noop */ }
-  })();
+  }
 
   let ws = null;
   let connected = false;
@@ -110,7 +120,7 @@
     send(buildFrame('SUBSCRIBE', { id, destination: dest, ack: 'auto' }));
   }
 
-  function doConnect(){
+  async function doConnect(){
     if(connected){ try{ ws && ws.close(); }catch(e){} return; }
     let url = elUrl.value.trim() || `ws://${(window.location && window.location.host) || 'localhost:8088'}/ws`;
     // If user left localhost but page is opened from a remote host, swap host
@@ -127,6 +137,7 @@
     }catch(e){ /* keep as-is */ }
     const login = (elUser && elUser.value) || 'guest';
     const passcode = (elPass && elPass.value) || 'guest';
+    const vhost = (PH_CONFIG && PH_CONFIG.stomp && PH_CONFIG.stomp.vhost) || '/';
     // Persist connection for other pages (e.g., /generator)
     saveConn({ url, login, pass: passcode, vhost: '/' });
     setState('Connecting...'); btn.disabled = true; btn.textContent = 'Connecting...';
@@ -140,7 +151,7 @@
     ws.addEventListener('open', ()=>{
       const frame = buildFrame('CONNECT', {
         'accept-version': '1.2,1.1,1.0',
-        host: '/',
+        host: vhost,
         login, passcode,
         'heart-beat': '10000,10000'
       });
@@ -155,11 +166,11 @@
           setState('Connected'); btn.disabled = false; btn.textContent = 'Disconnect';
           setWsStatus('connected');
           appendSys('CONNECTED ' + JSON.stringify(f.headers));
-          // Subscribe to TPS events
-          ['/exchange/status.exchange/generator.tps',
-           '/exchange/status.exchange/moderator.tps',
-           '/exchange/status.exchange/processor.tps']
-            .forEach(d => { subscribe(d); appendSys('SUBSCRIBE ' + d); });
+          // Subscribe to events from config (fallback to defaults)
+          const subs = (PH_CONFIG && Array.isArray(PH_CONFIG.subscriptions) && PH_CONFIG.subscriptions.length)
+            ? PH_CONFIG.subscriptions
+            : ['/exchange/status.exchange/generator.tps','/exchange/status.exchange/moderator.tps','/exchange/status.exchange/processor.tps'];
+          subs.forEach(d => { subscribe(d); appendSys('SUBSCRIBE ' + d); });
         } else if(f.command === 'MESSAGE'){
           let body = f.body || '';
           try {
@@ -197,6 +208,9 @@
       doConnect();
     }
   });
+
+  // Initialize: load config, set defaults
+  (async () => { await loadConfig(); await setDefaultWsUrl(); })();
 
   // Log user edits to connection fields (mask secrets)
   if(elUrl){ elUrl.addEventListener('change', ()=> { appendSys(`User set WebSocket URL: ${elUrl.value.trim()||'(empty)'}`); saveConn({ url: elUrl.value||'', login: (elUser&&elUser.value)||'', pass: (elPass&&elPass.value)||'', vhost: '/' }); }); }

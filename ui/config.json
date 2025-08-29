@@ -1,0 +1,18 @@
+{
+  "stomp": {
+    "wsPath": "/ws",
+    "vhost": "/"
+  },
+  "subscriptions": [
+    "/exchange/status.exchange/generator.tps",
+    "/exchange/status.exchange/moderator.tps",
+    "/exchange/status.exchange/processor.tps"
+  ],
+  "amqp": {
+    "exchange": "sim.direct",
+    "genQueue": "gen.queue",
+    "modQueue": "moderated.queue",
+    "statusExchange": "status.exchange"
+  }
+}
+

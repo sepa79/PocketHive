@@ -5,6 +5,29 @@
   const fmt = (n) => Intl.NumberFormat().format(n);
   const kb = (b) => (b/1024).toFixed(1) + " KB";
 
+  // UUID v4 generator with fallbacks for older browsers
+  function uuidv4(){
+    try{
+      if (typeof crypto !== 'undefined'){
+        if (crypto.randomUUID) return crypto.randomUUID();
+        if (crypto.getRandomValues){
+          const b = crypto.getRandomValues(new Uint8Array(16));
+          b[6] = (b[6] & 0x0f) | 0x40; // version 4
+          b[8] = (b[8] & 0x3f) | 0x80; // variant 10xx
+          const h = Array.from(b, x => x.toString(16).padStart(2,'0'));
+          return `${h.slice(0,4).join('')}-${h.slice(4,6).join('')}-${h.slice(6,8).join('')}-${h.slice(8,10).join('')}-${h.slice(10).join('')}`;
+        }
+      }
+    }catch{}
+    // Math.random fallback (lower entropy but acceptable as last resort)
+    const b = new Uint8Array(16);
+    for(let i=0;i<16;i++) b[i] = (Math.random()*256)|0;
+    b[6] = (b[6] & 0x0f) | 0x40;
+    b[8] = (b[8] & 0x3f) | 0x80;
+    const h = Array.from(b, x => x.toString(16).padStart(2,'0'));
+    return `${h.slice(0,4).join('')}-${h.slice(4,6).join('')}-${h.slice(6,8).join('')}-${h.slice(8,10).join('')}-${h.slice(10).join('')}`;
+  }
+
   const PH_CONN_KEY = 'pockethive.conn';
   function loadConn(){ try{ const raw = localStorage.getItem(PH_CONN_KEY); return raw? JSON.parse(raw): null; }catch{ return null; } }
   function defaultWs(){ const scheme = location.protocol === 'https:' ? 'wss' : 'ws'; return `${scheme}://${location.host}/ws`; }
@@ -13,7 +36,7 @@
   let connected = false;
   let sendTimer = null;
   let lastTick = 0;
-  let sessionId = crypto.randomUUID();
+  let sessionId = uuidv4();
   let resultQueuePrefix = "ph.results.";
   const inflight = new Map();
   const metrics = { sent: 0, ack: 0, errors: 0, inFlight: 0, recv: 0, tStart: 0, lastSecSent: 0, lastSecRecv: 0, latency: { count:0, total:0, min:Infinity, max:0, p95:0 } };
@@ -42,7 +65,7 @@
     if (connected) return;
     const brokerURL = $("#brokerUrl").value.trim(); const vhost = $("#vhost").value.trim() || "/"; const login = $("#login").value.trim(); const passcode = $("#passcode").value.trim();
     if (!brokerURL || !login || !passcode) { log("Fill broker URL, login and passcode."); return; }
-    if ($("#autoSession").checked) { sessionId = crypto.randomUUID(); $("#session").textContent = sessionId; } else { sessionId = $("#sessionInput").value.trim() || sessionId; $("#session").textContent = sessionId; }
+    if ($("#autoSession").checked) { sessionId = uuidv4(); $("#session").textContent = sessionId; } else { sessionId = $("#sessionInput").value.trim() || sessionId; $("#session").textContent = sessionId; }
     resultQueuePrefix = $("#resPrefix").value.trim() || "ph.results.";
     // eslint-disable-next-line no-undef
     client = new StompJs.Client({ brokerURL, connectHeaders: { login, passcode, host: vhost }, reconnectDelay: Number($("#reconnectMs").value) || 0, debug: (s) => { if ($("#debug").checked) log("[DEBUG] " + s); } });
@@ -61,7 +84,7 @@
   function sendOne() {
     if (!client || !connected) { log("Not connected."); return; }
     const exchange = $("#exchange").value.trim() || "ph.jobs"; const routingKey = $("#routingKey").value.trim() || "generator.request"; const expectReply = $("#expectReply").checked;
-    const payloadSize = Number($("#payloadBytes").value); const prompt = $("#prompt").value.trim(); const nowIso = new Date().toISOString(); const correlationId = crypto.randomUUID();
+    const payloadSize = Number($("#payloadBytes").value); const prompt = $("#prompt").value.trim(); const nowIso = new Date().toISOString(); const correlationId = uuidv4();
     const body = { type: "GENERATION_REQUEST", prompt, sessionId, correlationId, timestamp: nowIso, payload: payloadSize > 0 ? randomAscii(payloadSize) : undefined };
     const headers = { "content-type":"application/json", "correlation-id": correlationId }; if (expectReply) headers["reply-to"] = (resultQueuePrefix + sessionId);
     try{ client.publish({ destination: `/exchange/${exchange}/${routingKey}`, body: JSON.stringify(body), headers }); metrics.sent++; metrics.inFlight++; inflight.set(correlationId, performance.now()); if (!metrics.tStart) metrics.tStart = performance.now(); } catch (e) { metrics.errors++; log("Publish error: " + e.message); }
