@@ -41,7 +41,7 @@ channels:
         schema:
           type: string
     subscribe:
-      summary: Control-plane events from all services
+      summary: PocketHive control-plane events from all services
       message:
         oneOf:
           - $ref: '#/components/messages/ControlStatusFull'
@@ -72,7 +72,7 @@ channels:
         description: Target instance (optional)
         schema: { type: string }
     publish:
-      summary: Control-plane signals to services
+      summary: PocketHive control-plane signals to services
       message:
         $ref: '#/components/messages/ControlSignal'
     bindings:
@@ -84,10 +84,10 @@ channels:
           durable: true
         routingKey: sig.{type}.{role}.{instance}
 
-  # Traffic example kept for reference
+  # PocketHive traffic example kept for reference
   exchange/ph.hive/generator.request:
     publish:
-      summary: Workload generation request published by browser generator
+      summary: Workload generation request published by PocketHive browser generator
       message:
         $ref: '#/components/messages/GenerationRequest'
     bindings:
@@ -138,7 +138,7 @@ components:
         $ref: '#/components/schemas/ControlSignalPayload'
     GenerationRequest:
       name: GenerationRequest
-      title: Browser generator request
+      title: PocketHive browser generator request
       contentType: application/json
       payload:
         $ref: '#/components/schemas/GenerationPayload'
@@ -254,4 +254,4 @@ components:
           type: string
         payload:
           type: string
-          description: Optional blob for size simulation
+          description: Optional blob for size padding
