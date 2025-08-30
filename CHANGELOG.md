@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.19] - 2025-08-30
+Timestamp: 2025-08-30T23:33:46Z
+
+- UI: Widen monolith status icon's front face for clearer orientation.
+
 ## [0.4.18] - 2025-08-30
 Timestamp: 2025-08-30T23:16:22Z
 
