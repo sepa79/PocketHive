@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.12] - 2025-08-30
+Timestamp: 2025-08-30T22:12:26Z
+
+- UI: Style TPS metric dropdown and options with shared menu dropdown theme.
+
 ## [0.4.11] - 2025-08-30
 Timestamp: 2025-08-30T22:02:56Z
 
