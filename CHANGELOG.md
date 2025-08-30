@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.20] - 2025-08-30
+Timestamp: 2025-08-30T23:39:40Z
+
+- UI: Reduce monolith icon depth to a quarter of its width for accurate proportions.
+
 ## [0.4.19] - 2025-08-30
 Timestamp: 2025-08-30T23:33:46Z
 
