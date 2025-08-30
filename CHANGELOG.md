@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.9] - 2025-08-30
+Timestamp: 2025-08-30T21:42:34Z
+
+- UI: Replace metric selection with menu-style dropdown using menu button theme.
+
 ## [0.4.8] - 2025-08-30
 Timestamp: 2025-08-30T21:32:51Z
 

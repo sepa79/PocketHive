@@ -105,11 +105,14 @@
     </div>
     <div class="controls" style="margin-top:10px">
       <button id="toggle-charts">Toggle Charts</button>
-      <select id="metric-select" class="tab-btn">
-        <option value="tps">TPS</option>
-        <option value="latency">End-to-End Latency</option>
-        <option value="hops">Per-Hop Count</option>
-      </select>
+      <div class="menu" style="position:relative">
+        <button id="metric-btn" class="tab-btn" style="cursor:pointer">TPS</button>
+        <div id="metric-dropdown" style="display:none; position:absolute; left:0; top:36px; background: rgba(12,16,22,0.95); border:1px solid rgba(255,255,255,0.15); border-radius:10px; min-width:220px; box-shadow:0 6px 22px rgba(0,0,0,0.4);">
+          <button data-metric="tps" type="button" style="display:block; width:100%; text-align:left; padding:10px 12px; background:none; border:none; color:#fff; cursor:pointer; border-bottom:1px solid rgba(255,255,255,0.08);">TPS</button>
+          <button data-metric="latency" type="button" style="display:block; width:100%; text-align:left; padding:10px 12px; background:none; border:none; color:#fff; cursor:pointer; border-bottom:1px solid rgba(255,255,255,0.08);">End-to-End Latency</button>
+          <button data-metric="hops" type="button" style="display:block; width:100%; text-align:left; padding:10px 12px; background:none; border:none; color:#fff; cursor:pointer;">Per-Hop Count</button>
+        </div>
+      </div>
         <label style="font-size:12px; display:flex; align-items:center; gap:6px; color:#fff;">
           Points
           <input id="event-limit" class="themed-input" type="number" value="600" min="60" max="10000" style="width:72px"/>

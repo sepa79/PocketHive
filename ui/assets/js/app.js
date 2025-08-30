@@ -19,7 +19,9 @@
   const wsStatus = qs('status-ws');
   const chartsEl = qs('charts');
   const toggleChartsBtn = qs('toggle-charts');
-  const metricSelect = qs('metric-select');
+  const metricBtn = qs('metric-btn');
+  const metricDropdown = qs('metric-dropdown');
+  let currentMetric = 'tps';
   const chartsTps = qs('charts-tps');
   const chartsLatency = qs('charts-latency');
   const chartsHops = qs('charts-hops');
@@ -638,14 +640,14 @@
     });
   })();
   function refreshCharts(){
-    const metric = metricSelect ? metricSelect.value : 'tps';
+    const metric = currentMetric;
     if(metric==='tps'){ ['generator','moderator','processor'].forEach(s=> drawChart(s)); }
     if(metric==='latency') drawChart('latency');
     if(metric==='hops') drawChart('hops');
   }
 
   function updateMetricView(){
-    const metric = metricSelect ? metricSelect.value : 'tps';
+    const metric = currentMetric;
     if(chartsTps) chartsTps.style.display = metric==='tps' ? 'grid' : 'none';
     if(chartsLatency) chartsLatency.style.display = metric==='latency' ? 'block' : 'none';
     if(chartsHops) chartsHops.style.display = metric==='hops' ? 'block' : 'none';
@@ -659,10 +661,26 @@
     if(chartsEl && chartsEl.style.display !== 'none') refreshCharts();
   }
 
-  if(metricSelect){
-    metricSelect.addEventListener('change', updateMetricView);
+  // Metric selector dropdown
+  (function(){
+    const btn = metricBtn;
+    const dd = metricDropdown;
+    if(!btn || !dd) return;
+    let open=false;
+    const toggle=(e)=>{ e && e.stopPropagation(); open=!open; dd.style.display=open?'block':'none'; };
+    btn.addEventListener('click', toggle);
+    document.addEventListener('click', (e)=>{ if(open && !dd.contains(e.target) && e.target!==btn){ open=false; dd.style.display='none'; } });
+    dd.querySelectorAll('button[data-metric]').forEach(item=>{
+      item.addEventListener('click', ()=>{
+        const metric = item.getAttribute('data-metric') || 'tps';
+        currentMetric = metric;
+        btn.textContent = item.textContent || 'TPS';
+        open=false; dd.style.display='none';
+        updateMetricView();
+      });
+    });
     updateMetricView();
-  }
+  })();
 
   // Toggle charts visibility
   if(toggleChartsBtn && chartsEl){
