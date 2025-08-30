@@ -1,0 +1,33 @@
+<configuration>
+  <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+  <property name="LOG_FILE" value="${LOG_FILE:-}"/>
+  <springProperty scope="context" name="rabbitmqHost" source="rabbitmq.host" defaultValue="rabbitmq"/>
+  <springProperty scope="context" name="rabbitmqUsername" source="rabbitmq.username" defaultValue="guest"/>
+  <springProperty scope="context" name="rabbitmqPassword" source="rabbitmq.password" defaultValue="guest"/>
+  <springProperty scope="context" name="logsExchange" source="logs.exchange" defaultValue="logs.exchange"/>
+  <springProperty scope="context" name="rmqLoggingEnabled" source="rabbitmq.logging.enabled" defaultValue="true"/>
+
+  <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+    <encoder>
+      <pattern>${CONSOLE_LOG_PATTERN}</pattern>
+    </encoder>
+  </appender>
+
+  <if condition='("${rmqLoggingEnabled}").equalsIgnoreCase("true")'>
+    <appender name="RABBIT" class="io.pockethive.logging.RabbitMqLogAppender">
+      <host>${rabbitmqHost}</host>
+      <username>${rabbitmqUsername}</username>
+      <password>${rabbitmqPassword}</password>
+      <exchange>${logsExchange}</exchange>
+    </appender>
+    <root level="INFO">
+      <appender-ref ref="CONSOLE"/>
+      <appender-ref ref="RABBIT"/>
+    </root>
+  </if>
+  <else>
+    <root level="INFO">
+      <appender-ref ref="CONSOLE"/>
+    </root>
+  </else>
+</configuration>
