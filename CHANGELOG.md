@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.11] - 2025-08-30
+Timestamp: 2025-08-30T22:02:56Z
+
+- UI: Match TPS dropdown menu styling to header Menu theme without bold text.
+
 ## [0.4.10] - 2025-08-30
 Timestamp: 2025-08-30T21:48:20Z
 

@@ -68,12 +68,12 @@
         <div class="header-right">
           <div class="menu" style="position:relative">
             <button id="menu-btn" class="bg-toggle" style="cursor:pointer">☰ Menu</button>
-            <div id="menu-dropdown" style="display:none; position:absolute; right:0; top:36px; background: rgba(12,16,22,0.95); border:1px solid rgba(255,255,255,0.15); border-radius:10px; min-width: 240px; box-shadow:0 6px 22px rgba(0,0,0,0.4);">
-                <a href="generator/" style="display:block; padding:10px 12px; color:#fff; text-decoration:none; border-bottom:1px solid rgba(255,255,255,0.08)">Open Generator</a>
-              <a href="readme.html" style="display:block; padding:10px 12px; color:#fff; text-decoration:none; border-bottom:1px solid rgba(255,255,255,0.08)">README</a>
-              <a href="bindings.html" style="display:block; padding:10px 12px; color:#fff; text-decoration:none; border-bottom:1px solid rgba(255,255,255,0.08)">Control Bindings</a>
-              <a href="changelog.html" style="display:block; padding:10px 12px; color:#fff; text-decoration:none; border-bottom:1px solid rgba(255,255,255,0.08)">Changelog</a>
-                <a href="docs.html" style="display:block; padding:10px 12px; color:#fff; text-decoration:none;">API Docs</a>
+            <div id="menu-dropdown" class="dropdown-panel" style="display:none; position:absolute; right:0; top:36px; min-width: 240px;">
+                <a href="generator/" class="dropdown-item">Open Generator</a>
+              <a href="readme.html" class="dropdown-item">README</a>
+              <a href="bindings.html" class="dropdown-item">Control Bindings</a>
+              <a href="changelog.html" class="dropdown-item">Changelog</a>
+                <a href="docs.html" class="dropdown-item">API Docs</a>
               </div>
           </div>
           <div class="bg-toggle" style="gap:10px; align-items:center">
@@ -107,10 +107,10 @@
       <button id="toggle-charts">Toggle Charts</button>
       <div class="menu" style="position:relative">
         <button id="metric-btn" class="tab-btn" style="cursor:pointer">TPS</button>
-        <div id="metric-dropdown" style="display:none; position:absolute; left:0; top:36px; background: rgba(12,16,22,0.95); border:1px solid rgba(255,255,255,0.15); border-radius:10px; min-width:220px; box-shadow:0 6px 22px rgba(0,0,0,0.4); z-index:10;">
-          <button data-metric="tps" type="button" style="display:block; width:100%; text-align:left; padding:10px 12px; background:none; border:none; color:#fff; cursor:pointer; border-bottom:1px solid rgba(255,255,255,0.08);">TPS</button>
-          <button data-metric="latency" type="button" style="display:block; width:100%; text-align:left; padding:10px 12px; background:none; border:none; color:#fff; cursor:pointer; border-bottom:1px solid rgba(255,255,255,0.08);">End-to-End Latency</button>
-          <button data-metric="hops" type="button" style="display:block; width:100%; text-align:left; padding:10px 12px; background:none; border:none; color:#fff; cursor:pointer;">Per-Hop Count</button>
+        <div id="metric-dropdown" class="dropdown-panel" style="display:none; position:absolute; left:0; top:36px; min-width:220px; z-index:10;">
+          <button data-metric="tps" type="button" class="dropdown-item">TPS</button>
+          <button data-metric="latency" type="button" class="dropdown-item">End-to-End Latency</button>
+          <button data-metric="hops" type="button" class="dropdown-item">Per-Hop Count</button>
         </div>
       </div>
         <label style="font-size:12px; display:flex; align-items:center; gap:6px; color:#fff;">
@@ -202,6 +202,27 @@
     }
     .btn-refresh:hover, .controls button:hover, #topic-sub:hover, #topic-unsub:hover, #swarm-clear:hover, #toggle-charts:hover{ box-shadow: 0 0 26px rgba(51,225,255,0.22) inset, 0 0 20px rgba(51,225,255,0.28); background: radial-gradient(120% 120% at 10% 10%, rgba(51,225,255,0.35), rgba(51,225,255,0.1) 50%, rgba(255,255,255,0.07) 75%, rgba(0,0,0,0.0) 100%); }
     .btn-refresh:active, .controls button:active, #topic-sub:active, #topic-unsub:active, #swarm-clear:active, #toggle-charts:active{ transform: translateY(1px); filter: brightness(1.1); }
+    .dropdown-panel{
+      background: rgba(12,16,22,0.95);
+      border:1px solid rgba(255,255,255,0.15);
+      border-radius:10px;
+      box-shadow:0 6px 22px rgba(0,0,0,0.4);
+    }
+    .dropdown-item{
+      display:block;
+      width:100%;
+      text-align:left;
+      padding:10px 12px;
+      background:none;
+      border:none;
+      color:#fff;
+      cursor:pointer;
+      font-weight:400;
+      text-decoration:none;
+      border-bottom:1px solid rgba(255,255,255,0.08);
+    }
+    .dropdown-item:last-child{ border-bottom:none; }
+    .dropdown-item:hover{ background:rgba(255,255,255,0.08); }
     select.tab-btn{
       padding-right:32px;
       background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath fill='%230ff' d='M6 8L0 0h12z'/%3E%3C/svg%3E");
