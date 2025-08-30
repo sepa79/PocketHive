@@ -1,4 +1,4 @@
-package com.example.moderator;
+package io.pockethive.processor;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.annotation.EnableScheduling;
 @Configuration

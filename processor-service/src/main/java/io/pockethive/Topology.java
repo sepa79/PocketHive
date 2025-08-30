@@ -1,4 +1,4 @@
-package com.example;
+package io.pockethive;
 
 public class Topology {
   // Traffic exchange (hive)
