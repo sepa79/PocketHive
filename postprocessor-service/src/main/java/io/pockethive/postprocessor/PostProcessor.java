@@ -7,6 +7,7 @@ import io.pockethive.Topology;
 import io.pockethive.observability.Hop;
 import io.pockethive.observability.ObservabilityContext;
 import io.pockethive.observability.ObservabilityContextUtil;
+import org.slf4j.MDC;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
@@ -40,8 +41,10 @@ public class PostProcessor {
                       @Header(value="x-ph-error", required=false) Boolean error){
     long hopMs = 0;
     long totalMs = 0;
+    ObservabilityContext ctx = null;
     try {
-      ObservabilityContext ctx = ObservabilityContextUtil.fromHeader(trace);
+      ctx = ObservabilityContextUtil.fromHeader(trace);
+      ObservabilityContextUtil.populateMdc(ctx);
       if(ctx!=null){
         List<Hop> hops = ctx.getHops();
         if(hops!=null && !hops.isEmpty()){
@@ -53,6 +56,8 @@ public class PostProcessor {
       }
     } catch(Exception e){
       log.warn("Failed to parse trace header", e);
+    } finally {
+      MDC.clear();
     }
     hopLatency.record(hopMs);
     totalLatency.record(totalMs);
