@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.2] - 2025-08-30
+Timestamp: 2025-08-30T16:58:33Z
+
+- UI: Replace heavy canvas network background with lightweight SVG animation to reduce GPU usage.
+
 ## [0.4.1] - 2025-08-29
 Timestamp: 2025-08-29T14:39:23Z
 
