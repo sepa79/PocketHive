@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.8] - 2025-08-30
+Timestamp: 2025-08-30T21:32:51Z
+
+- UI: Style chart metric dropdown to match the menu dropdown.
+
 ## [0.4.7] - 2025-08-30
 Timestamp: 2025-08-30T21:14:45Z
 
