@@ -1,6 +1,6 @@
-package com.example.generator;
+package io.pockethive.generator;
 
-import com.example.Topology;
+import io.pockethive.Topology;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.core.MessageBuilder;
 import org.springframework.amqp.core.MessageProperties;

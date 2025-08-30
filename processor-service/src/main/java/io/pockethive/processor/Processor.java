@@ -1,6 +1,6 @@
-package com.example.processor;
+package io.pockethive.processor;
 
-import com.example.Topology;
+import io.pockethive.Topology;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.scheduling.annotation.EnableScheduling;

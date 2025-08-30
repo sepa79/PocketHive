@@ -1,6 +1,6 @@
-package com.example.moderator;
+package io.pockethive.moderator;
 
-import com.example.Topology;
+import io.pockethive.Topology;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
