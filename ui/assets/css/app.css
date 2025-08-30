@@ -3,6 +3,8 @@
 :root{ color-scheme: dark; }
 body{
   margin:0;
+  background:#0f1116;
+  color:#fff;
   font-family: Inter, system-ui, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;

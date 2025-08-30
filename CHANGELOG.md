@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.4] - 2025-08-30
+Timestamp: 2025-08-30T20:43:37Z
+
+- UI: Remove animated network background, leaving a static dark backdrop.
+
 ## [0.4.3] - 2025-08-30
 Timestamp: 2025-08-30T17:06:56Z
 
