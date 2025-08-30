@@ -107,3 +107,13 @@ p{ color:#9aa0a6; }
               0 0 16px color-mix(in srgb, var(--hal) 26%, transparent),
               0 0 28px color-mix(in srgb, var(--hal) 16%, transparent);
 }
+
+/* Hover feedback for connection and background icons */
+#bg-opts{ cursor:pointer; }
+#bg-opts, #status-ws{ transition: box-shadow .15s, transform .15s; }
+#bg-opts:hover, #status-ws:hover{
+  transform: scale(1.08);
+  box-shadow: 0 0 10px rgba(0,0,0,.35) inset,
+              0 0 24px color-mix(in srgb, var(--hal) 40%, transparent),
+              0 0 44px color-mix(in srgb, var(--hal) 28%, transparent);
+}
