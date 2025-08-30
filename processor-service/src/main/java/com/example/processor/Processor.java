@@ -25,7 +25,8 @@ public class Processor {
   public Processor(RabbitTemplate rabbit){ this.rabbit = rabbit; try{ sendStatusFull(0); } catch(Exception ignore){} }
 
   @RabbitListener(queues = "${ph.modQueue:moderated.queue}")
-  public void onModerated(byte[] payload){
+  public void onModerated(byte[] payload,
+                          @Header(value = "x-ph-service", required = false) String service){
     // MVP: pretend to process
     counter.incrementAndGet();
   }

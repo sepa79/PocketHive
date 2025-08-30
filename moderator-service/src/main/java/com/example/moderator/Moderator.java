@@ -30,7 +30,8 @@ public class Moderator {
 
   // Consume RAW AMQP message to avoid converter issues
   @RabbitListener(queues = "${ph.genQueue:gen.queue}")
-  public void onGenerated(Message message) {
+  public void onGenerated(Message message,
+                          @Header(value = "x-ph-service", required = false) String service) {
     // forward the same message to the moderated queue (preserve body + props)
     rabbit.send(Topology.EXCHANGE, Topology.MOD_QUEUE, message);
     counter.incrementAndGet();
