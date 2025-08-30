@@ -119,7 +119,7 @@
     try{ window.PocketHiveNet.setDrift(drA, drS); }catch(e){}
     window.PocketHiveNet.reseed();
   }
-  document.getElementById('ph-preset-low').addEventListener('click', ()=> preset('low'));
-  document.getElementById('ph-preset-med').addEventListener('click', ()=> preset('med'));
-  document.getElementById('ph-preset-high').addEventListener('click', ()=> preset('high'));
+  modal.querySelector('#ph-preset-low').addEventListener('click', ()=> preset('low'));
+  modal.querySelector('#ph-preset-med').addEventListener('click', ()=> preset('med'));
+  modal.querySelector('#ph-preset-high').addEventListener('click', ()=> preset('high'));
 })();
