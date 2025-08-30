@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.16] - 2025-08-30
+Timestamp: 2025-08-30T22:58:51Z
+
+- UI: Narrow the monolith status icon and anchor it to the ground.
+
 ## [0.4.15] - 2025-08-30
 Timestamp: 2025-08-30T22:50:15Z
 
