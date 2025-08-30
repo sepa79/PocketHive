@@ -32,7 +32,7 @@
     latency: /** @type {HTMLCanvasElement|null} */(document.getElementById('chart-latency')),
     hops: /** @type {HTMLCanvasElement|null} */(document.getElementById('chart-hops'))
   };
-  const LOG_LIMIT_DEFAULT = 500;
+  const LOG_LIMIT_DEFAULT = 600;
   const EVENT_LIMIT_DEFAULT = 600;
   let logLimit = LOG_LIMIT_DEFAULT;
   let eventLimit = EVENT_LIMIT_DEFAULT;
@@ -55,14 +55,17 @@
   const WINDOW_MS = 60_000; // 60s window
   let rafPending = { generator:false, moderator:false, processor:false, latency:false, hops:false };
   const HAS_CONN = !!(elUrl && btn);
-  const logLimitInput = qs('log-limit');
-  if(logLimitInput){
-    logLimitInput.addEventListener('change', ()=>{
-      const v = Number(logLimitInput.value) || LOG_LIMIT_DEFAULT;
-      logLimit = Math.max(10, v);
-      if(logLines.length>logLimit){ logLines.splice(0, logLines.length - logLimit); if(logEl) logEl.textContent = logLines.join('\n'); }
-      if(sysLines.length>logLimit){ sysLines.splice(0, sysLines.length - logLimit); if(sysEl) sysEl.textContent = sysLines.join('\n'); }
-      if(topicLines.length>logLimit){ topicLines.splice(0, topicLines.length - logLimit); const tl=document.getElementById('topic-log'); if(tl) tl.textContent = topicLines.join('\n'); }
+  const logLimitInputs = ['log-limit','syslog-limit'].map(qs).filter(Boolean);
+  if(logLimitInputs.length){
+    logLimitInputs.forEach(inp=>{
+      inp.addEventListener('change', ()=>{
+        const v = Number(inp.value) || LOG_LIMIT_DEFAULT;
+        logLimit = Math.max(10, v);
+        logLimitInputs.forEach(el=>{ if(el) el.value = String(logLimit); });
+        if(logLines.length>logLimit){ logLines.splice(0, logLines.length - logLimit); if(logEl) logEl.textContent = logLines.join('\n'); }
+        if(sysLines.length>logLimit){ sysLines.splice(0, sysLines.length - logLimit); if(sysEl) sysEl.textContent = sysLines.join('\n'); }
+        if(topicLines.length>logLimit){ topicLines.splice(0, topicLines.length - logLimit); const tl=document.getElementById('topic-log'); if(tl) tl.textContent = topicLines.join('\n'); }
+      });
     });
   }
   const eventLimitInput = qs('event-limit');

@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.6] - 2025-08-30
+Timestamp: 2025-08-30T21:04:56Z
+
+- UI: Add themed line limit controls for control and system logs (default 600 lines).
+- UI: Style metric selection dropdown to match cyan button theme.
+
 ## [0.4.5] - 2025-08-30
 Timestamp: 2025-08-30T20:55:01Z
 
