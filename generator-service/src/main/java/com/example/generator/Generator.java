@@ -34,7 +34,7 @@ public class Generator {
     try{ sendStatusFull(0); } catch(Exception ignore){}
   }
 
-  @Value("${sim.gen.ratePerSec:5}")
+  @Value("${ph.gen.ratePerSec:5}")
   private int ratePerSec;
 
   @Scheduled(fixedRate = 1000)
@@ -57,7 +57,7 @@ public class Generator {
           .setContentType(MessageProperties.CONTENT_TYPE_JSON) // application/json
           .setContentEncoding(StandardCharsets.UTF_8.name())
           .setMessageId(id)
-          .setHeader("x-sim-service", "generator")
+          .setHeader("x-ph-service", "generator")
           .build();
 
       rabbit.convertAndSend(Topology.EXCHANGE, Topology.GEN_QUEUE, msg);
