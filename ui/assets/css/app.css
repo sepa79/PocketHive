@@ -106,3 +106,23 @@ p{ color:#9aa0a6; }
 }
 .dropdown-item:last-child{ border-bottom:none; }
 .dropdown-item:hover{ background:rgba(255,255,255,0.08); }
+
+/* Monolith status button */
+#broadcast-status{
+  appearance:none;
+  background:none;
+  border:none;
+  cursor:pointer;
+  width:40px;
+  height:40px;
+  padding:0;
+}
+#broadcast-status .monolith{
+  width:100%;
+  height:100%;
+  transition: transform .2s ease, filter .2s ease;
+}
+#broadcast-status:hover .monolith{
+  transform: translateY(-2px);
+  filter: drop-shadow(0 0 8px #33E1FF);
+}

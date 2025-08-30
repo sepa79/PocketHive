@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.15] - 2025-08-30
+Timestamp: 2025-08-30T22:50:15Z
+
+- UI: Swap Update Status button for Space Odyssey monolith icon with hover glow.
+
 ## [0.4.14] - 2025-08-30
 Timestamp: 2025-08-30T22:25:29Z
 
