@@ -13,6 +13,11 @@
     radial-gradient(55% 65% at 30% 80%, rgba(255,193,7,.12), transparent 65%);
   filter: blur(40px) saturate(1.05); transform: translate3d(0,0,0) scale(1.1);
   animation: ph-blob-wander var(--blob-speed) ease-in-out infinite alternate; }
+.ph-bg-bees .raster-layer{ position:fixed; inset:0; z-index:-1; pointer-events:none; overflow:hidden; }
+.ph-bg-bees:not(.c64-raster) .raster-layer{ display:none; }
+.raster-bar{ position:absolute; left:0; width:100%; height:24px; mix-blend-mode:screen; image-rendering:pixelated;
+  background:linear-gradient(to bottom,#000 0%,#352879 10%,#6C5EB5 20%,#70A4B2 30%,#9AD284 40%,#B8C76F 47%,#FFFFFF 50%,#B8C76F 53%,#9AD284 60%,#70A4B2 70%,#6C5EB5 80%,#352879 90%,#000 100%);
+}
 .ph-bg-bees.matrix-green::before{
   background:
     radial-gradient(50% 60% at 20% 20%, rgba(0,255,156,.22), transparent 60%),

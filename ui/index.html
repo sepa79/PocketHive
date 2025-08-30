@@ -76,22 +76,9 @@
       <button id="tab-swarm" class="tab-btn" type="button">Swarm</button>
     </nav>
     <div class="header-right">
-      <!-- Hidden triggers for background option modals -->
-      <button id="ph-open-swarm" style="display:none"></button>
-      <button id="ph-open-net" style="display:none"></button>
       <div class="menu" style="position:relative">
         <button id="menu-btn" class="bg-toggle" style="cursor:pointer">☰ Menu</button>
         <div id="menu-dropdown" style="display:none; position:absolute; right:0; top:36px; background: rgba(12,16,22,0.95); border:1px solid rgba(255,255,255,0.15); border-radius:10px; min-width: 240px; box-shadow:0 6px 22px rgba(0,0,0,0.4);">
-            <div style="padding:10px 12px; border-bottom:1px solid rgba(255,255,255,0.08); display:grid; gap:8px">
-              <label style="display:flex; align-items:center; justify-content:space-between; gap:10px">
-                <span>Background</span>
-                <select id="ph-bg-mode" style="min-width:140px">
-                  <option value="bees">Bees</option>
-                  <option value="net">Network</option>
-                  <option value="old">Old</option>
-                </select>
-              </label>
-            </div>
             <a href="generator/" style="display:block; padding:10px 12px; color:#fff; text-decoration:none; border-bottom:1px solid rgba(255,255,255,0.08)">Open Generator</a>
           <a href="readme.html" style="display:block; padding:10px 12px; color:#fff; text-decoration:none; border-bottom:1px solid rgba(255,255,255,0.08)">README</a>
           <a href="bindings.html" style="display:block; padding:10px 12px; color:#fff; text-decoration:none; border-bottom:1px solid rgba(255,255,255,0.08)">Control Bindings</a>
@@ -104,6 +91,15 @@
           <span id="status-ui" class="hal-eye" data-state="connecting" title="UI Health"></span>
           <span id="status-ws" class="hal-eye" data-state="idle" title="WebSocket to RabbitMQ — click to open connection" role="button" tabindex="0"></span>
           <span id="bg-opts" class="hal-eye hal-bg" title="Background Options" role="button" tabindex="0" style="display:none"></span>
+          <div class="menu" id="bg-menu" style="position:relative; display:inline-flex;">
+            <div id="bg-dropdown" style="display:none; position:absolute; right:0; top:36px; background: rgba(12,16,22,0.95); border:1px solid rgba(255,255,255,0.15); border-radius:10px; min-width: 160px; box-shadow:0 6px 22px rgba(0,0,0,0.4); padding:8px; flex-direction:column; gap:6px;">
+              <button class="bg-item" data-bg="bees" style="padding:6px 10px; background:none; border:0; color:#fff; text-align:left; cursor:pointer">Bees</button>
+              <button class="bg-item" data-bg="c64" style="padding:6px 10px; background:none; border:0; color:#fff; text-align:left; cursor:pointer">C64</button>
+              <button class="bg-item" data-bg="matrix" style="padding:6px 10px; background:none; border:0; color:#fff; text-align:left; cursor:pointer">Matrix</button>
+              <button class="bg-item" data-bg="net" style="padding:6px 10px; background:none; border:0; color:#fff; text-align:left; cursor:pointer">Net</button>
+              <button class="bg-item" data-bg="old" style="padding:6px 10px; background:none; border:0; color:#fff; text-align:left; cursor:pointer">Picture</button>
+            </div>
+          </div>
           <div class="menu" id="conn-menu" style="position:relative; display:inline-flex;">
             <div id="conn-dropdown" style="display:none; position:absolute; right:0; top:36px; background: rgba(12,16,22,0.95); border:1px solid rgba(255,255,255,0.15); border-radius:10px; min-width: 340px; box-shadow:0 6px 22px rgba(0,0,0,0.4); padding:10px"></div>
           </div>

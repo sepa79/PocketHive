@@ -4,12 +4,18 @@
   const root = document.querySelector('.ph-bg-bees');
   if(!root) return;
 
-  // Precomputed 8-bit style sine table (C64-like): 256 samples over 0..2π scaled to [-1,1]
-  // Using a Float32Array for fast multiply; values are in range [-1, 1].
-  const SIN256 = new Float32Array(256);
-  for(let i=0;i<256;i++){
-    SIN256[i] = Math.sin((i/256) * Math.PI * 2);
-  }
+  // Precomputed C64-style sine table: signed 8-bit values for 256 steps of a circle
+  // Table sourced from classic C64 demo techniques and quantized to match hardware
+  const SIN8 = new Int8Array([
+    0,3,6,9,12,16,19,22,25,28,31,34,37,40,43,46,49,51,54,57,60,63,65,68,71,73,76,78,81,83,85,88,
+    90,92,94,96,98,100,102,104,106,107,109,111,112,113,115,116,117,118,120,121,122,122,123,124,125,125,126,126,126,127,127,127,
+    127,127,127,127,126,126,126,125,125,124,123,122,122,121,120,118,117,116,115,113,112,111,109,107,106,104,102,100,98,96,94,92,
+    90,88,85,83,81,78,76,73,71,68,65,63,60,57,54,51,49,46,43,40,37,34,31,28,25,22,19,16,12,9,6,3,
+    0,-3,-6,-9,-12,-16,-19,-22,-25,-28,-31,-34,-37,-40,-43,-46,-49,-51,-54,-57,-60,-63,-65,-68,-71,-73,-76,-78,-81,-83,-85,-88,
+    -90,-92,-94,-96,-98,-100,-102,-104,-106,-107,-109,-111,-112,-113,-115,-116,-117,-118,-120,-121,-122,-122,-123,-124,-125,-125,-126,-126,-126,-127,-127,-127,
+    -127,-127,-127,-127,-126,-126,-126,-125,-125,-124,-123,-122,-122,-121,-120,-118,-117,-116,-115,-113,-112,-111,-109,-107,-106,-104,-102,-100,-98,-96,-94,-92,
+    -90,-88,-85,-83,-81,-78,-76,-73,-71,-68,-65,-63,-60,-57,-54,-51,-49,-46,-43,-40,-37,-34,-31,-28,-25,-22,-19,-16,-12,-9,-6,-3
+  ]);
 
   const state = {
     density: 20, variant: 'amber', pattern: 'bezier',
@@ -21,15 +27,36 @@
       ampFrac: 0.42,        // amplitude as fraction of screen height
       wavelength: 240,      // pixels per sine period
       speed: 160,           // horizontal speed in px/s
-      quantize: true        // round positions for retro look
+      ampXFrac: 0.10,       // horizontal sine amplitude fraction of width
+      wavelengthX: 160,     // horizontal sine wavelength
+      speedX: 80,           // horizontal sine speed
+      raster: false,        // raster bars toggle
+      rasterBars: 3,        // number of raster bars
+      rasterSpeed: 0.7      // raster vertical speed
     },
     rain: { vyMin: 80, vyMax: 220 }
   };
 
+  const rasterLayer = document.createElement('div'); rasterLayer.className = 'raster-layer'; root.appendChild(rasterLayer);
   const layer = document.createElement('div'); layer.className = 'bee-layer'; root.appendChild(layer);
   function applyVariant(){ root.classList.toggle('matrix-green', state.variant==='green'); }
   function applyBlobSpeed(){ document.documentElement.style.setProperty('--blob-speed', state.blobSpeed+'s'); }
   applyVariant(); applyBlobSpeed();
+
+  let rasterBars=[], rasterRAF=0;
+  function enableRaster(){
+    disableRaster();
+    const n=Math.max(1,Math.floor(state.sine.rasterBars||1));
+    for(let i=0;i<n;i++){ const b=document.createElement('div'); b.className='raster-bar'; rasterLayer.appendChild(b); rasterBars.push({el:b, phase:i*(Math.PI*2/n)}); }
+    const start=performance.now();
+    (function loop(now){
+      if(!state.sine.raster){ rasterRAF=0; return; }
+      const t=(now-start)/1000; const h=root.clientHeight||window.innerHeight; const mid=h/2; const amp=h*0.4; const sp=state.sine.rasterSpeed||0.7;
+      rasterBars.forEach(rb=>{ rb.el.style.transform=`translateY(${mid + amp*Math.sin(t*sp + rb.phase)}px)`; });
+      rasterRAF=requestAnimationFrame(loop);
+    })(start);
+  }
+  function disableRaster(){ rasterBars.forEach(rb=>rb.el.remove()); rasterBars=[]; cancelAnimationFrame(rasterRAF); rasterRAF=0; }
 
   const supportsMotion = (()=>{ try{
     const okPath = CSS && CSS.supports && CSS.supports('offset-path', 'path("M0,0 L100,0")');
@@ -100,27 +127,24 @@
     const wrap=document.createElement('div'); wrap.className='bee'; wrap.style.setProperty('--size', randint(12,18)+'px');
     const lead=document.createElement('span'); lead.className='glyph'; lead.textContent=randChar(); glyphTicker(lead); wrap.appendChild(lead);
     const trails=makeTrails(wrap, lead);
-    // Simplified C64 traveling sine wave: all bees lie on the same wave (row)
-    // y = midY + amp * sin((x / wavelength) * 2π)
-    const ampFrac = Math.max(0.05, Math.min(0.49, Number(state.sine.ampFrac)||0.42));
-    const amp = Math.round(ampFrac * h);
-    const wavelength = Math.max(40, Math.min(800, Number(state.sine.wavelength)||240));
-    const speed = Math.max(10, Math.min(800, Number(state.sine.speed)||160)); // px/s, to the right
-    const spacing = Math.max(8, w / Math.max(1,n));
-    const midY = Math.round(h/2);
-    // Stable global start to sync the row
+    const ampFrac=Math.max(0.05, Math.min(0.49, Number(state.sine.ampFrac)||0.42));
+    const amp=Math.round(ampFrac*h);
+    const wavelength=Math.max(40, Math.min(800, Number(state.sine.wavelength)||240));
+    const speed=Math.max(10, Math.min(800, Number(state.sine.speed)||160));
+    const ampXFrac=Math.max(0, Math.min(0.49, Number(state.sine.ampXFrac)||0.10));
+    const ampX=Math.round(ampXFrac*w);
+    const wavelengthX=Math.max(40, Math.min(800, Number(state.sine.wavelengthX)||160));
+    const speedX=Math.max(10, Math.min(800, Number(state.sine.speedX)||80));
+    const midX=Math.round(w/2), midY=Math.round(h/2);
     if(!window.__phSineStart) window.__phSineStart = performance.now();
-    const start = window.__phSineStart;
+    const start=window.__phSineStart; const phase=Math.floor((i/n)*256);
     const q=[]; const maxLag=state.trailBaseLag+state.trailCount*state.trailStepLag; const maxQ=Math.ceil((maxLag*1000)/state.stepMs)+4; let last=0;
     const loop=(now)=>{ if(!state.running) return; if(now-last<state.stepMs) return requestAnimationFrame(loop); last=now;
-      const t = (now - start) / 1000;
-      // Horizontal travel with wrap
-      let x = (i*spacing + (speed * t)) % (w + spacing);
-      if(x < -16) x += (w + spacing);
-      // Map x to sine index: idx = ((x / wavelength) * 256) mod 256
-      let idx = Math.floor(((x / wavelength) * 256)) & 255;
-      let y = midY + amp * SIN256[idx];
-      if(state.sine.quantize){ x = Math.round(x); y = Math.round(y); }
+      const t=(now-start)/1000;
+      const idxY=(Math.floor(((speed*t)/wavelength)*256)+phase) & 255;
+      const idxX=(Math.floor(((speedX*t)/wavelengthX)*256)+phase+64) & 255;
+      const x = midX + ((ampX * SIN8[idxX]) >> 7);
+      const y = midY + ((amp * SIN8[idxY]) >> 7);
       q.push([x,y]); if(q.length>maxQ) q.shift();
       lead.style.transform=`translate(${x}px,${y}px) translate(-50%,-50%)`;
       for(let i=0;i<trails.length;i++){ const lagSec=state.trailBaseLag+i*state.trailStepLag; const idx=Math.max(0,q.length-Math.floor((lagSec*1000)/state.stepMs)); const p=q[idx]||q[0]||[x,y];
@@ -166,9 +190,18 @@
     setTrailDecay(d){ state.trailDecay=Math.max(0, Math.min(1, Number(d)||0)); },
     setBlobSpeed(sec){ state.blobSpeed=Math.max(4, Number(sec)||28); applyBlobSpeed(); },
     // Pattern change requires reseed to rebuild paths/behaviour
-    setPattern(p){ state.pattern=(p==='sine'||p==='matrix')?p:'bezier'; seed(state.density); },
+    setPattern(p){
+      state.pattern=(p==='sine'||p==='matrix')?p:'bezier';
+      if(state.pattern==='sine'){
+        if(state.sine.raster){ enableRaster(); root.classList.add('c64-raster'); }
+        else { disableRaster(); root.classList.remove('c64-raster'); }
+      } else {
+        disableRaster(); root.classList.remove('c64-raster');
+      }
+      seed(state.density);
+    },
     setBezierParams(o){ if(o){ if(o.durMin!=null) state.durMin=Math.max(1,Number(o.durMin)); if(o.durMax!=null) state.durMax=Math.max(state.durMin,Number(o.durMax)); } },
-    setSineParams(o){ if(o){ Object.assign(state.sine, o); } },
+    setSineParams(o){ if(o){ Object.assign(state.sine, o); if(state.pattern==='sine'){ root.classList.toggle('c64-raster', !!state.sine.raster); state.sine.raster?enableRaster():disableRaster(); } } },
     setMatrixParams(o){ if(o){ Object.assign(state.rain, o); } },
     reseed(){ seed(state.density); },
     start(){ if(state.running) return; state.running = true; seed(state.density); },
