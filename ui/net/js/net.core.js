@@ -23,20 +23,20 @@
 
   // State
   const state = {
-    density: 54,
+    density: 20,
     theme: 'cyan',
     nodeSize: 2.6,
     linkDist: 200,
-    kNearest: 5,
-    extraLinks: 2,
+    kNearest: 3,
+    extraLinks: 1,
     forceConnected: true,
-    pulseSpeed: 0.9,
+    pulseSpeed: 0.8,
     driftAmp: 18,
     driftSpeed: 0.22,
-    edgeThickness: 1.0,
-    glowStrength: 14,
+    edgeThickness: 0.8,
+    glowStrength: 8,
     logoScale: 1.2,
-    logoOpacity: 0.12,
+    logoOpacity: 0,
     logoBlend: 'normal',
     // very subtle floating params
     logoFloatAmpX: 8,     // px

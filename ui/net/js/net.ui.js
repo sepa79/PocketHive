@@ -27,18 +27,18 @@
               <option value="green">Matrix Green</option>
             </select>
           </label>
-          <label>Gęstość <input id="net_density" type="range" min="0" max="300" step="6" value="54"></label>
+          <label>Gęstość <input id="net_density" type="range" min="0" max="300" step="6" value="20"></label>
           <label>Rozmiar węzła <input id="net_nodesize" type="range" min="1" max="6" step="0.2" value="2.6"></label>
           <label>Link distance (px) <input id="net_linkdist" type="range" min="60" max="360" step="10" value="200"></label>
-          <label>K-sąsiedzi <input id="net_k" type="range" min="1" max="10" step="1" value="5"></label>
-          <label>Dodatkowe linki / węzeł <input id="net_extra" type="range" min="0" max="6" step="1" value="2"></label>
+          <label>K-sąsiedzi <input id="net_k" type="range" min="1" max="10" step="1" value="3"></label>
+          <label>Dodatkowe linki / węzeł <input id="net_extra" type="range" min="0" max="6" step="1" value="1"></label>
           <label>Wymuś spójność <input id="net_force" type="checkbox" checked></label>
-          <label>Pulse speed <input id="net_pulse" type="range" min="0" max="2" step="0.05" value="0.9"></label>
-          <label>Edge thickness <input id="net_edge" type="range" min="0.5" max="3" step="0.05" value="1.0"></label>
-          <label>Glow strength <input id="net_glow" type="range" min="0" max="36" step="1" value="14"></label>
+          <label>Pulse speed <input id="net_pulse" type="range" min="0" max="2" step="0.05" value="0.8"></label>
+          <label>Edge thickness <input id="net_edge" type="range" min="0.5" max="3" step="0.05" value="0.8"></label>
+          <label>Glow strength <input id="net_glow" type="range" min="0" max="36" step="1" value="8"></label>
 
           <label>Logo scale <input id="net_logo_scale" type="range" min="0.2" max="2.0" step="0.02" value="1.2"></label>
-          <label>Logo opacity <input id="net_logo_op" type="range" min="0.02" max="0.6" step="0.02" value="0.12"></label>
+          <label>Logo opacity <input id="net_logo_op" type="range" min="0" max="0.6" step="0.02" value="0"></label>
           <label>Logo blend
             <select id="net_logo_blend">
               <option value="normal" selected>normal</option>

@@ -4,7 +4,6 @@
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>PocketHive UI</title>
-  <link rel="stylesheet" href="./swarm/css/pockethive-bees.css">
   <link rel="stylesheet" href="./net/css/pockethive-net.css">
   <link rel="stylesheet" href="./assets/css/app.css">
   <style>
@@ -18,21 +17,6 @@
     header img.logo { height: 96px; width:auto; display:block; }
     .header-right{ margin-left:auto; display:flex; align-items:center; gap:10px; }
     .bg-toggle{ display:inline-flex; align-items:center; gap:8px; padding:6px 10px; border:1px solid rgba(255,255,255,0.15); border-radius:8px; background: rgba(12,16,22,0.7); font-size:12px; color:#fff; }
-    .bg-toggle input{ accent-color:#FFC107; }
-    /* Space Station icon for background options */
-    #bg-opts{
-      width:28px; height:28px; display:inline-block; position:relative; border-radius:50%;
-      border:1px solid rgba(51,225,255,0.35);
-      background:
-        radial-gradient(closest-side, rgba(51,225,255,0.18), rgba(51,225,255,0.06) 60%, rgba(0,0,0,0) 61%),
-        repeating-conic-gradient(rgba(51,225,255,0.0) 0 86deg, rgba(51,225,255,0.45) 86deg 90deg);
-      box-shadow: 0 0 14px rgba(51,225,255,0.18) inset, 0 0 12px rgba(51,225,255,0.22);
-    }
-    #bg-opts::before{ content:""; position:absolute; inset:6px; border-radius:50%; border:1px solid rgba(51,225,255,0.45); box-shadow: 0 0 6px rgba(51,225,255,0.25) inset; }
-    #bg-opts::after{ content:""; position:absolute; left:50%; top:50%; width:4px; height:4px; margin:-2px 0 0 -2px; border-radius:50%; background:#33E1FF; box-shadow:0 0 6px rgba(51,225,255,0.8); }
-    #bg-opts[data-hasopts="1"]{ animation: station-spin 18s linear infinite; }
-    #bg-opts[data-hasopts="0"]{ animation: none; opacity: 0.9; }
-    @keyframes station-spin{ from{ transform: rotate(0deg); } to{ transform: rotate(360deg); } }
     /* Apply cyan glow theme to the header menu button */
     #menu-btn{
       appearance:none; border:1px solid rgba(51,225,255,0.35); cursor:pointer; color:#0ff; font-weight:700;
@@ -68,7 +52,7 @@
     }
   </style>
 </head>
-<body class="ph-bg-bees">
+<body class="ph-bg-net">
   <header>
     <img class="logo" src="./assets/logo.svg" alt="PocketHive Logo" />
     <nav class="nav-tabs">
@@ -90,16 +74,6 @@
         <div class="hal">
           <span id="status-ui" class="hal-eye" data-state="connecting" title="UI Health"></span>
           <span id="status-ws" class="hal-eye" data-state="idle" title="WebSocket to RabbitMQ — click to open connection" role="button" tabindex="0"></span>
-          <span id="bg-opts" class="hal-eye hal-bg" title="Background Options" role="button" tabindex="0" style="display:none"></span>
-          <div class="menu" id="bg-menu" style="position:relative; display:inline-flex;">
-            <div id="bg-dropdown" style="display:none; position:absolute; right:0; top:36px; background: rgba(12,16,22,0.95); border:1px solid rgba(255,255,255,0.15); border-radius:10px; min-width: 160px; box-shadow:0 6px 22px rgba(0,0,0,0.4); padding:8px; flex-direction:column; gap:6px;">
-              <button class="bg-item" data-bg="bees" style="padding:6px 10px; background:none; border:0; color:#fff; text-align:left; cursor:pointer">Bees</button>
-              <button class="bg-item" data-bg="c64" style="padding:6px 10px; background:none; border:0; color:#fff; text-align:left; cursor:pointer">C64</button>
-              <button class="bg-item" data-bg="matrix" style="padding:6px 10px; background:none; border:0; color:#fff; text-align:left; cursor:pointer">Matrix</button>
-              <button class="bg-item" data-bg="net" style="padding:6px 10px; background:none; border:0; color:#fff; text-align:left; cursor:pointer">Net</button>
-              <button class="bg-item" data-bg="old" style="padding:6px 10px; background:none; border:0; color:#fff; text-align:left; cursor:pointer">Picture</button>
-            </div>
-          </div>
           <div class="menu" id="conn-menu" style="position:relative; display:inline-flex;">
             <div id="conn-dropdown" style="display:none; position:absolute; right:0; top:36px; background: rgba(12,16,22,0.95); border:1px solid rgba(255,255,255,0.15); border-radius:10px; min-width: 340px; box-shadow:0 6px 22px rgba(0,0,0,0.4); padding:10px"></div>
           </div>
@@ -219,9 +193,9 @@
     </div>
     <svg id="swarm-canvas" viewBox="0 0 1200 480" preserveAspectRatio="xMidYMid meet" aria-label="Swarm view"></svg>
   </div>
-  <script src="./swarm/js/bees.core.js"></script>
-  <script src="./swarm/js/swarm-ui.js"></script>
   <script src="https://unpkg.com/@stomp/stompjs@7.0.0/bundles/stomp.umd.js"></script>
+  <script src="./net/js/net.core.js"></script>
+  <script src="./net/js/net.ui.js"></script>
   <script src="./assets/js/app.js"></script>
 </body>
 </html>

@@ -20,37 +20,6 @@ p{ color:#9aa0a6; }
   backdrop-filter: blur(6px);
 }
 
-/* Old UI background option */
-.ph-bg-old{
-  /* image path is relative to this CSS file (assets/css) */
-  background: #0f1116 url('../bg.png') center/cover fixed no-repeat;
-  color:#fff;
-  min-height: 100vh;
-}
-.ph-bg-old .bee-layer{ display:none !important; }
-
-/* Hide inactive background layers to avoid stacking */
-.ph-bg-net .bee-layer{ display:none !important; }
-.ph-bg-bees .net-layer, .ph-bg-bees .net-logo{ display:none !important; }
-.ph-bg-old .net-layer, .ph-bg-old .net-logo{ display:none !important; }
-
-/* Header controls: modern look for select */
-.bg-toggle select{
-  appearance: none;
-  background-color: rgba(15,17,22,0.85);
-  color: #e6eef8;
-  border: 1px solid rgba(255,255,255,0.22);
-  border-radius: 10px;
-  padding: 8px 34px 8px 12px;
-  line-height: 1.2;
-  box-shadow: 0 2px 10px rgba(0,0,0,.25) inset;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='%23e6eef8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
-  background-repeat: no-repeat; background-position: right 8px center; background-size: 16px;
-}
-.bg-toggle select:focus{ outline: 2px solid rgba(51,225,255,.45); outline-offset: 1px; }
-/* Dropdown option styling hint (some UAs) */
-.bg-toggle select option{ color: #e6eef8; background: #0f1116; }
-
 /* HAL status eyes */
 .hal{ display:flex; align-items:center; gap:10px; }
 .hal-eye{
@@ -61,11 +30,6 @@ p{ color:#9aa0a6; }
   box-shadow: 0 0 10px rgba(0,0,0,.35) inset, 0 0 10px color-mix(in srgb, var(--hal) 18%, transparent);
   outline: 1px solid rgba(255,255,255,0.14);
 }
-.hal-eye.hal-bg{ width:24px; height:24px; }
-#bg-opts[aria-hidden="true"]{ display:none }
-/* Thematic color for background icon */
-#bg-opts[data-bg="bees"]{ --hal:#FFC107; }
-#bg-opts[data-bg="net"]{ --hal:#33E1FF; }
 .hal-eye#status-ws{ cursor: pointer; }
 /* Inner core that pulses (center only) */
 .hal-eye::after{
@@ -108,10 +72,9 @@ p{ color:#9aa0a6; }
               0 0 28px color-mix(in srgb, var(--hal) 16%, transparent);
 }
 
-/* Hover feedback for connection and background icons */
-#bg-opts{ cursor:pointer; }
-#bg-opts, #status-ws{ transition: box-shadow .15s, transform .15s; }
-#bg-opts:hover, #status-ws:hover{
+/* Hover feedback for connection icon */
+#status-ws{ transition: box-shadow .15s, transform .15s; }
+#status-ws:hover{
   transform: scale(1.08);
   box-shadow: 0 0 10px rgba(0,0,0,.35) inset,
               0 0 24px color-mix(in srgb, var(--hal) 40%, transparent),
