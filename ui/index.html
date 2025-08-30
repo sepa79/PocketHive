@@ -107,7 +107,7 @@
       <button id="toggle-charts">Toggle Charts</button>
       <div class="menu" style="position:relative">
         <button id="metric-btn" class="tab-btn" style="cursor:pointer">TPS</button>
-        <div id="metric-dropdown" style="display:none; position:absolute; left:0; top:36px; background: rgba(12,16,22,0.95); border:1px solid rgba(255,255,255,0.15); border-radius:10px; min-width:220px; box-shadow:0 6px 22px rgba(0,0,0,0.4);">
+        <div id="metric-dropdown" style="display:none; position:absolute; left:0; top:36px; background: rgba(12,16,22,0.95); border:1px solid rgba(255,255,255,0.15); border-radius:10px; min-width:220px; box-shadow:0 6px 22px rgba(0,0,0,0.4); z-index:10;">
           <button data-metric="tps" type="button" style="display:block; width:100%; text-align:left; padding:10px 12px; background:none; border:none; color:#fff; cursor:pointer; border-bottom:1px solid rgba(255,255,255,0.08);">TPS</button>
           <button data-metric="latency" type="button" style="display:block; width:100%; text-align:left; padding:10px 12px; background:none; border:none; color:#fff; cursor:pointer; border-bottom:1px solid rgba(255,255,255,0.08);">End-to-End Latency</button>
           <button data-metric="hops" type="button" style="display:block; width:100%; text-align:left; padding:10px 12px; background:none; border:none; color:#fff; cursor:pointer;">Per-Hop Count</button>

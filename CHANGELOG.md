@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.10] - 2025-08-30
+Timestamp: 2025-08-30T21:48:20Z
+
+- UI: Raise chart metric dropdown above graphs so it remains clickable.
+
 ## [0.4.9] - 2025-08-30
 Timestamp: 2025-08-30T21:42:34Z
 
