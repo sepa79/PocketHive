@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.3] - 2025-08-30
+Timestamp: 2025-08-30T17:06:56Z
+
+- UI: Move Menu beneath the spacestation logo and spin the logo when hovered.
+
 ## [0.4.2] - 2025-08-30
 Timestamp: 2025-08-30T16:58:33Z
 
