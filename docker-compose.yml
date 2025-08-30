@@ -58,6 +58,19 @@ services:
       rabbitmq:
         condition: service_healthy
 
+  postprocessor:
+    build:
+      context: .
+      dockerfile: postprocessor-service/Dockerfile
+    environment:
+      RABBITMQ_HOST: rabbitmq
+      PH_TRAFFIC_EXCHANGE: ph.hive
+      PH_FINAL_QUEUE: ph.final
+      PH_CONTROL_QUEUE: ph.control
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+
   ui:
     build:
       context: .

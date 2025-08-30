@@ -10,5 +10,6 @@
     <module>generator-service</module>
     <module>moderator-service</module>
     <module>processor-service</module>
+    <module>postprocessor-service</module>
   </modules>
 </project>

@@ -1,0 +1,12 @@
+spring:
+  application.name: postprocessor-service
+  rabbitmq:
+    host: ${RABBITMQ_HOST:rabbitmq}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_DEFAULT_USER:guest}
+    password: ${RABBITMQ_DEFAULT_PASS:guest}
+management.endpoints.web.exposure.include: health,info,prometheus
+
+ph:
+  finalQueue: ${PH_FINAL_QUEUE:ph.final}
+  controlQueue: ${PH_CONTROL_QUEUE:ph.control}
