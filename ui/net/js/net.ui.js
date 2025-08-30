@@ -68,11 +68,12 @@
     </div>`;
   root.appendChild(modal);
 
-  document.addEventListener('click', (e)=>{
-    if(e.target && e.target.id==='ph-open-net'){ modal.classList.remove('hidden'); }
-    if(e.target && e.target.id==='ph-close'){ modal.classList.add('hidden'); }
-    if(e.target === modal){ modal.classList.add('hidden'); }
-  });
+  function open(){ modal.classList.remove('hidden'); }
+  function close(){ modal.classList.add('hidden'); }
+  modal.querySelector('#ph-close').addEventListener('click', close);
+  modal.addEventListener('click', (e)=>{ if(e.target === modal) close(); });
+  window.PocketHiveNet = window.PocketHiveNet || {};
+  window.PocketHiveNet.openOptions = open;
 
   const $ = sel => modal.querySelector(sel);
   const val = id => { const el = $('#'+id); return el.type==='range'? Number(el.value) : (el.type==='checkbox'? el.checked : el.value); };

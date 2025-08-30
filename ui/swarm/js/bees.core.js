@@ -21,6 +21,10 @@
       ampFrac: 0.42,        // amplitude as fraction of screen height
       wavelength: 240,      // pixels per sine period
       speed: 160,           // horizontal speed in px/s
+      ampXFrac: 0.10,       // horizontal sine amplitude fraction of width
+      wavelengthX: 160,     // horizontal sine wavelength
+      speedX: 80,           // horizontal sine speed
+      raster: false,        // raster bars toggle
       quantize: true        // round positions for retro look
     },
     rain: { vyMin: 80, vyMax: 220 }
@@ -106,6 +110,10 @@
     const amp = Math.round(ampFrac * h);
     const wavelength = Math.max(40, Math.min(800, Number(state.sine.wavelength)||240));
     const speed = Math.max(10, Math.min(800, Number(state.sine.speed)||160)); // px/s, to the right
+    const ampXFrac = Math.max(0, Math.min(0.49, Number(state.sine.ampXFrac)||0.10));
+    const ampX = Math.round(ampXFrac * w);
+    const wavelengthX = Math.max(40, Math.min(800, Number(state.sine.wavelengthX)||160));
+    const speedX = Math.max(10, Math.min(800, Number(state.sine.speedX)||80));
     const spacing = Math.max(8, w / Math.max(1,n));
     const midY = Math.round(h/2);
     // Stable global start to sync the row
@@ -114,9 +122,10 @@
     const q=[]; const maxLag=state.trailBaseLag+state.trailCount*state.trailStepLag; const maxQ=Math.ceil((maxLag*1000)/state.stepMs)+4; let last=0;
     const loop=(now)=>{ if(!state.running) return; if(now-last<state.stepMs) return requestAnimationFrame(loop); last=now;
       const t = (now - start) / 1000;
-      // Horizontal travel with wrap
+      // Horizontal travel with optional secondary sine
       let x = (i*spacing + (speed * t)) % (w + spacing);
       if(x < -16) x += (w + spacing);
+      x += ampX * SIN256[Math.floor((((speedX*t)+i*spacing)/wavelengthX)*256) & 255];
       // Map x to sine index: idx = ((x / wavelength) * 256) mod 256
       let idx = Math.floor(((x / wavelength) * 256)) & 255;
       let y = midY + amp * SIN256[idx];
@@ -168,7 +177,7 @@
     // Pattern change requires reseed to rebuild paths/behaviour
     setPattern(p){ state.pattern=(p==='sine'||p==='matrix')?p:'bezier'; seed(state.density); },
     setBezierParams(o){ if(o){ if(o.durMin!=null) state.durMin=Math.max(1,Number(o.durMin)); if(o.durMax!=null) state.durMax=Math.max(state.durMin,Number(o.durMax)); } },
-    setSineParams(o){ if(o){ Object.assign(state.sine, o); } },
+    setSineParams(o){ if(o){ Object.assign(state.sine, o); root.classList.toggle('c64-raster', !!state.sine.raster); } },
     setMatrixParams(o){ if(o){ Object.assign(state.rain, o); } },
     reseed(){ seed(state.density); },
     start(){ if(state.running) return; state.running = true; seed(state.density); },

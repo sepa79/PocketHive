@@ -56,7 +56,11 @@
             <label>Amplitude (% H) <input id="v_sine_ampfrac" type="range" min="0.05" max="0.49" step="0.01" value="0.42"></label>
             <label>Wavelength (px) <input id="v_sine_wavelength" type="range" min="40" max="800" step="10" value="240"></label>
             <label>Speed (px/s) <input id="v_sine_speed" type="range" min="20" max="600" step="10" value="160"></label>
+            <label>Amplitude X (% W) <input id="v_sine_ampx" type="range" min="0" max="0.49" step="0.01" value="0.10"></label>
+            <label>Wavelength X (px) <input id="v_sine_wavex" type="range" min="40" max="800" step="10" value="160"></label>
+            <label>Speed X (px/s) <input id="v_sine_spdx" type="range" min="20" max="600" step="10" value="80"></label>
             <label class="ph-toggle"><input id="v_sine_quantize" type="checkbox" checked> Quantize positions</label>
+            <label class="ph-toggle"><input id="v_sine_raster" type="checkbox"> Raster bars</label>
           </div>
           <div class="row">
             <button id="v_sine_apply" class="ph-btn primary">Apply</button>
@@ -152,60 +156,41 @@
   `;
   document.head.appendChild(style);
 
-  // Background mode toggle (bees | net | old)
+  // Background mode toggle
   const body = document.body;
-  const modeSelect = document.getElementById('ph-bg-mode');
+  const bgBtn = document.getElementById('bg-opts');
+  const bgMenu = document.getElementById('bg-menu');
+  const bgDropdown = document.getElementById('bg-dropdown');
   function applyBgMode(mode){
-    const swarmBtn = document.getElementById('ph-open-swarm');
-    const swarmBtn2 = document.getElementById('ph-swarm-options');
-    const netBtn = document.getElementById('ph-open-net');
-    const bgBtn = document.getElementById('bg-opts');
-    // classes
-    body.classList.toggle('ph-bg-bees', mode === 'bees');
+    body.classList.toggle('ph-bg-bees', mode === 'bees' || mode === 'c64' || mode === 'matrix');
     body.classList.toggle('ph-bg-net', mode === 'net');
     body.classList.toggle('ph-bg-old', mode === 'old');
-    // buttons visibility
-    const showSwarm = (mode === 'bees');
-    const showNet = (mode === 'net');
-    if(swarmBtn){ swarmBtn.disabled = !showSwarm; swarmBtn.style.display = 'none'; }
-    if(swarmBtn2){ swarmBtn2.disabled = !showSwarm; swarmBtn2.style.display = 'none'; }
-    if(netBtn){ netBtn.disabled = !showNet; netBtn.style.display = 'none'; }
     if(bgBtn){
-      // Always show Space Station icon; rotate when mode has options
-      const hasOpts = (mode === 'bees' || mode === 'net');
+      const hasOpts = mode !== 'old';
       bgBtn.style.display = '';
       bgBtn.dataset.bg = mode;
       bgBtn.setAttribute('data-hasopts', hasOpts ? '1' : '0');
-      bgBtn.title = hasOpts ? 'Background Options' : 'Choose Background';
-      bgBtn.onclick = (e)=>{
-        e.preventDefault();
-        // Open the header menu to expose background selector
-        try{ const mb=document.getElementById('menu-btn'); if(mb) mb.click(); }catch{}
-        // If current mode has options, open its modal as well
-        if(mode === 'bees'){ if(swarmBtn) swarmBtn.click(); }
-        else if(mode === 'net'){ ensureNetLoaded().then(()=>{ if(netBtn) netBtn.click(); }); }
-      };
-      bgBtn.onkeydown = (e)=>{ if(e.key==='Enter' || e.key===' '){ e.preventDefault(); bgBtn.click(); } };
     }
-    // Control background engines to save CPU
     try{
-      if(mode === 'bees'){
-        if(window.PocketHiveBees && window.PocketHiveBees.start) window.PocketHiveBees.start();
-        if(window.PocketHiveNet && window.PocketHiveNet.pause) window.PocketHiveNet.pause();
-      } else if(mode === 'net'){
+      if(mode === 'net'){
         ensureNetLoaded().then(()=>{
           if(window.PocketHiveNet && window.PocketHiveNet.start) window.PocketHiveNet.start();
           if(window.PocketHiveBees && window.PocketHiveBees.pause) window.PocketHiveBees.pause();
         });
-      } else { // old image only
+      } else if(mode === 'old'){
         if(window.PocketHiveBees && window.PocketHiveBees.pause) window.PocketHiveBees.pause();
         if(window.PocketHiveNet && window.PocketHiveNet.pause) window.PocketHiveNet.pause();
+      } else {
+        if(window.PocketHiveBees && window.PocketHiveBees.start) window.PocketHiveBees.start();
+        if(window.PocketHiveNet && window.PocketHiveNet.pause) window.PocketHiveNet.pause();
+        if(window.PocketHiveBees){
+          if(mode === 'c64') window.PocketHiveBees.setPattern('sine');
+          else if(mode === 'matrix') window.PocketHiveBees.setPattern('matrix');
+          else window.PocketHiveBees.setPattern('bezier');
+        }
       }
-    }catch(e){ /* ignore */ }
-    // persist + reflect in controls
+    }catch(e){}
     try { localStorage.setItem('ph-bg-mode', mode); } catch(e) {}
-    if(modeSelect && modeSelect.value !== mode) modeSelect.value = mode;
-    // no legacy checkbox handling
   }
   function loadScript(src){
     return new Promise((resolve, reject)=>{
@@ -226,25 +211,41 @@
   let saved = 'bees';
   try { saved = localStorage.getItem('ph-bg-mode') || 'bees'; } catch(e) {}
   applyBgMode(saved);
-  if(modeSelect){
-    modeSelect.value = saved;
-    modeSelect.addEventListener('change', ()=> applyBgMode(modeSelect.value));
-  }
-
-  // Open/Close
-  const swarmProxyBtn = document.getElementById('ph-swarm-options');
-  if(swarmProxyBtn){ swarmProxyBtn.addEventListener('click', ()=> modal.classList.remove('hidden')); }
   modal.querySelector('#ph-close').addEventListener('click', ()=> modal.classList.add('hidden'));
   modal.addEventListener('click', (e)=>{ if(e.target === modal) modal.classList.add('hidden'); });
 
   // Tabs
   const tabs = modal.querySelectorAll('.ph-tab');
   const panes = modal.querySelectorAll('.ph-pane');
+  function openSwarmModal(p){
+    modal.classList.remove('hidden');
+    tabs.forEach(x=>x.classList.remove('active'));
+    panes.forEach(z=>z.classList.remove('active'));
+    const t = modal.querySelector(`.ph-tab[data-tab="${p}"]`);
+    const pane = modal.querySelector(`.ph-pane[data-pane="${p}"]`);
+    if(t && pane){ t.classList.add('active'); pane.classList.add('active'); autoApply(`v_${p}`, true); }
+  }
   tabs.forEach(t => t.addEventListener('click', ()=>{
     tabs.forEach(x=>x.classList.remove('active')); panes.forEach(p=>p.classList.remove('active'));
     t.classList.add('active'); modal.querySelector(`.ph-pane[data-pane="${t.dataset.tab}"]`).classList.add('active');
     autoApply(`v_${t.dataset.tab}`, true);
   }));
+  if(bgBtn && bgDropdown){
+    bgBtn.addEventListener('click', (e)=>{ e.preventDefault(); bgDropdown.style.display = bgDropdown.style.display==='none'? 'block':'none'; });
+    document.addEventListener('click', (e)=>{ if(!bgMenu.contains(e.target) && e.target!==bgBtn) bgDropdown.style.display='none'; });
+    bgDropdown.querySelectorAll('.bg-item').forEach(b=>{
+      b.addEventListener('click', ()=>{
+        const m=b.dataset.bg;
+        bgDropdown.style.display='none';
+        applyBgMode(m);
+        if(m==='bees') openSwarmModal('bezier');
+        else if(m==='c64') openSwarmModal('sine');
+        else if(m==='matrix') openSwarmModal('matrix');
+        else if(m==='net') ensureNetLoaded().then(()=>{ if(window.PocketHiveNet && window.PocketHiveNet.openOptions) window.PocketHiveNet.openOptions(); });
+      });
+    });
+    bgBtn.onkeydown = (e)=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); bgBtn.click(); } };
+  }
 
   // Helpers
   function val(id){ const el=document.getElementById(id); return el.type==='range'? Number(el.value): el.value; }
@@ -284,7 +285,11 @@
         ampFrac: val('v_sine_ampfrac'),
         wavelength: val('v_sine_wavelength'),
         speed: val('v_sine_speed'),
-        quantize: !!(qEl && qEl.checked)
+        ampXFrac: val('v_sine_ampx'),
+        wavelengthX: val('v_sine_wavex'),
+        speedX: val('v_sine_spdx'),
+        quantize: !!(qEl && qEl.checked),
+        raster: !!(document.getElementById('v_sine_raster').checked)
       });
     } else if(prefix.includes('matrix')){
       window.PocketHiveBees.setPattern('matrix');

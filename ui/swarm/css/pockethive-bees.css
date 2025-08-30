@@ -13,6 +13,7 @@
     radial-gradient(55% 65% at 30% 80%, rgba(255,193,7,.12), transparent 65%);
   filter: blur(40px) saturate(1.05); transform: translate3d(0,0,0) scale(1.1);
   animation: ph-blob-wander var(--blob-speed) ease-in-out infinite alternate; }
+.ph-bg-bees.c64-raster::after{ content:""; position:fixed; inset:0; z-index:-1; pointer-events:none; background:repeating-linear-gradient(to bottom, rgba(65,166,246,.15) 0 2px, transparent 2px 4px); }
 .ph-bg-bees.matrix-green::before{
   background:
     radial-gradient(50% 60% at 20% 20%, rgba(0,255,156,.22), transparent 60%),
