@@ -19,11 +19,18 @@
   const wsStatus = qs('status-ws');
   const chartsEl = qs('charts');
   const toggleChartsBtn = qs('toggle-charts');
+  const metricSelect = qs('metric-select');
+  const chartsTps = qs('charts-tps');
+  const chartsLatency = qs('charts-latency');
+  const chartsHops = qs('charts-hops');
+  const chartsTitle = qs('charts-title');
   const broadcastBtn = qs('broadcast-status');
   const canvases = {
     generator: /** @type {HTMLCanvasElement|null} */(document.getElementById('chart-gen')),
     moderator: /** @type {HTMLCanvasElement|null} */(document.getElementById('chart-mod')),
-    processor: /** @type {HTMLCanvasElement|null} */(document.getElementById('chart-proc'))
+    processor: /** @type {HTMLCanvasElement|null} */(document.getElementById('chart-proc')),
+    latency: /** @type {HTMLCanvasElement|null} */(document.getElementById('chart-latency')),
+    hops: /** @type {HTMLCanvasElement|null} */(document.getElementById('chart-hops'))
   };
   // Logging toggles
   const LOG_CTRL_RAW = true; // show raw control payloads in Event Log
@@ -37,9 +44,9 @@
   const swarmHoldInput = /** @type {HTMLInputElement|null} */(document.getElementById('swarm-hold'));
   const swarmClearBtn = document.getElementById('swarm-clear');
   const swarmStats = document.getElementById('swarm-stats');
-  const series = { generator: [], moderator: [], processor: [] }; // {t:number,v:number}
+  const series = { generator: [], moderator: [], processor: [], latency: [], hops: [] }; // {t:number,v:number}
   const WINDOW_MS = 60_000; // 60s window
-  let rafPending = { generator:false, moderator:false, processor:false };
+  let rafPending = { generator:false, moderator:false, processor:false, latency:false, hops:false };
   const HAS_CONN = !!(elUrl && btn);
 
   // Tabs handling
@@ -318,7 +325,8 @@
     ctx.fillText(String(Math.round(ymax)), 6, 12);
     ctx.fillText('0', 28, h-24);
     // line
-    ctx.strokeStyle = svc==='generator' ? '#4CAF50' : svc==='moderator' ? '#FFC107' : '#03A9F4';
+    const colors = { generator:'#4CAF50', moderator:'#FFC107', processor:'#03A9F4', latency:'#E91E63', hops:'#9C27B0' };
+    ctx.strokeStyle = colors[svc] || '#FFFFFF';
     ctx.lineWidth = 2;
     ctx.beginPath();
     let started=false;
@@ -376,6 +384,7 @@
       // Always include control exchange event/signal routes so Events see everything
       if(!subs.includes('/exchange/ph.control/ev.#')) subs.push('/exchange/ph.control/ev.#');
       if(!subs.includes('/exchange/ph.control/sig.#')) subs.push('/exchange/ph.control/sig.#');
+      if(!subs.includes('/exchange/ph.control/ev.metric.#')) subs.push('/exchange/ph.control/ev.metric.#');
       if(!(PH_CONFIG && Array.isArray(PH_CONFIG.subscriptions) && PH_CONFIG.subscriptions.length)){
         appendSys('[CTRL] SUB using fallback [/queue/ph.control]');
       }
@@ -383,9 +392,18 @@
         try{
           client.subscribe(d, (message) => {
             const body = message.body || '';
+            const dest = message.headers.destination || '';
             try{
               const obj = JSON.parse(body);
-              if(obj){
+              if(dest.includes('/ev.metric.')){
+                const m = dest.match(/\/ev\.metric\.([^/]+)/);
+                const metricName = (obj.metric || obj.name || (m && m[1]) || '').toLowerCase();
+                const val = obj.value ?? (obj.data && obj.data.value) ?? obj.v;
+                if(typeof val === 'number'){
+                  if(metricName==='latency' || metricName==='end_to_end_latency' || metricName==='e2e') addPoint('latency', val);
+                  if(metricName==='hops' || metricName==='hop' || metricName==='hopcount') addPoint('hops', val);
+                }
+              } else if(obj){
                 // Use API spec fields strictly: role/name, data.tps, queues{in,out}
                 const svc = obj.role || obj.name || obj.service; // prefer role/name
                 if(!svc) return;
@@ -418,9 +436,9 @@
                   if(svc === 'processor') addPoint('processor', tpsVal);
                 }
               }
-              if(LOG_CTRL_RAW) appendLog(`CTRL RAW ${message.headers.destination || ''} ${body}`);
+              if(LOG_CTRL_RAW) appendLog(`CTRL RAW ${dest} ${body}`);
             } catch(e){
-              if(LOG_CTRL_RAW) appendLog(`CTRL RAW ${message.headers.destination || ''} ${body}`);
+              if(LOG_CTRL_RAW) appendLog(`CTRL RAW ${dest} ${body}`);
             }
           }, { ack:'auto' });
           appendSys(`[CTRL] SUB ${d}`);
@@ -564,14 +582,39 @@
       }catch(e){ appendSys('Broadcast error: ' + (e && e.message ? e.message : String(e))); }
     });
   })();
+  function refreshCharts(){
+    const metric = metricSelect ? metricSelect.value : 'tps';
+    if(metric==='tps'){ ['generator','moderator','processor'].forEach(s=> drawChart(s)); }
+    if(metric==='latency') drawChart('latency');
+    if(metric==='hops') drawChart('hops');
+  }
+
+  function updateMetricView(){
+    const metric = metricSelect ? metricSelect.value : 'tps';
+    if(chartsTps) chartsTps.style.display = metric==='tps' ? 'grid' : 'none';
+    if(chartsLatency) chartsLatency.style.display = metric==='latency' ? 'block' : 'none';
+    if(chartsHops) chartsHops.style.display = metric==='hops' ? 'block' : 'none';
+    if(chartsTitle){
+      chartsTitle.textContent = metric==='tps'
+        ? 'RabbitMQ Control Stream — TPS (last 60s)'
+        : metric==='latency'
+          ? 'End-to-End Latency (last 60s)'
+          : 'Per-Hop Count (last 60s)';
+    }
+    if(chartsEl && chartsEl.style.display !== 'none') refreshCharts();
+  }
+
+  if(metricSelect){
+    metricSelect.addEventListener('change', updateMetricView);
+    updateMetricView();
+  }
 
   // Toggle charts visibility
   if(toggleChartsBtn && chartsEl){
     toggleChartsBtn.addEventListener('click', ()=>{
       const show = chartsEl.style.display === 'none';
       chartsEl.style.display = show ? 'block' : 'none';
-      // redraw on show
-      if(show){ ['generator','moderator','processor'].forEach(s=> drawChart(s)); }
+      if(show) refreshCharts();
     });
   }
 

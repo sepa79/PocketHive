@@ -124,10 +124,15 @@
     </div>
     <div class="controls" style="margin-top:10px">
       <button id="toggle-charts">Toggle Charts</button>
+      <select id="metric-select">
+        <option value="tps">TPS</option>
+        <option value="latency">End-to-End Latency</option>
+        <option value="hops">Per-Hop Count</option>
+      </select>
     </div>
     <div id="charts" class="card" style="display:none; padding:16px">
-      <div class="kpi-title" style="margin-bottom:10px">RabbitMQ Control Stream — TPS (last 60s)</div>
-      <div style="display:grid; grid-template-columns: 1fr; gap:16px">
+      <div class="kpi-title" id="charts-title" style="margin-bottom:10px">RabbitMQ Control Stream — TPS (last 60s)</div>
+      <div id="charts-tps" style="display:grid; grid-template-columns: 1fr; gap:16px">
         <div>
           <div class="kpi-title" style="margin-bottom:6px">Generator</div>
           <canvas id="chart-gen" width="1000" height="180" style="width:100%; height:180px; background: rgba(0,0,0,0.25); border:1px solid rgba(255,255,255,0.1); border-radius:8px"></canvas>
@@ -140,6 +145,14 @@
           <div class="kpi-title" style="margin-bottom:6px">Processor</div>
           <canvas id="chart-proc" width="1000" height="180" style="width:100%; height:180px; background: rgba(0,0,0,0.25); border:1px solid rgba(255,255,255,0.1); border-radius:8px"></canvas>
         </div>
+      </div>
+      <div id="charts-latency" style="display:none">
+        <div class="kpi-title" style="margin-bottom:6px">End-to-End Latency</div>
+        <canvas id="chart-latency" width="1000" height="180" style="width:100%; height:180px; background: rgba(0,0,0,0.25); border:1px solid rgba(255,255,255,0.1); border-radius:8px"></canvas>
+      </div>
+      <div id="charts-hops" style="display:none">
+        <div class="kpi-title" style="margin-bottom:6px">Per-Hop Count</div>
+        <canvas id="chart-hops" width="1000" height="180" style="width:100%; height:180px; background: rgba(0,0,0,0.25); border:1px solid rgba(255,255,255,0.1); border-radius:8px"></canvas>
       </div>
     </div>
     <section class="card" style="margin-top:16px; padding:12px">
