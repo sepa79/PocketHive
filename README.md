@@ -51,7 +51,9 @@ See also: Control Bindings page (Menu → Control Bindings) and `ui/spec/asyncap
 
 - `rabbitmq` (with Web-STOMP): 5672 (AMQP), 15672 (Mgmt UI), 15674 (Web-STOMP, internal only)
 - `ui` (nginx static site): 8088 → serves UI, proxies WebSocket at `/ws` to RabbitMQ
-- `generator`, `moderator`, `processor`: Spring Boot services using AMQP
+- `generator`, `moderator`, `processor`, `postprocessor`: Spring Boot services using AMQP
+- `prometheus` (metrics store): 9090
+- `grafana` (dashboard): 3000 (admin / admin)
 
 ## Quick Start
 
@@ -72,6 +74,12 @@ docker compose up -d --build
 
 - http://localhost:15672 (guest / guest)
 - Web-STOMP plugin is enabled in the RabbitMQ image.
+
+4) Metrics and Dashboards (optional)
+
+- Prometheus: http://localhost:9090
+- Grafana: http://localhost:3000 (admin / admin)
+- Prometheus scrapes metrics from `postprocessor` at `/actuator/prometheus`.
 
 ## WebSocket Proxy (UI ←→ RabbitMQ)
 

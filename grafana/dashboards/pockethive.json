@@ -1,0 +1,22 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "panels": [
+    {
+      "type": "graph",
+      "title": "Postprocessor Heap Memory",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "jvm_memory_used_bytes{area=\"heap\",job=\"postprocessor\"}"
+        }
+      ],
+      "lines": true,
+      "id": 1
+    }
+  ],
+  "schemaVersion": 27,
+  "title": "PocketHive",
+  "version": 1
+}
