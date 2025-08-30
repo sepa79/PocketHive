@@ -96,10 +96,12 @@ p{ color:#9aa0a6; }
   padding:10px 12px;
   background:none;
   border:none;
+  box-shadow:none;
   color:#fff;
   cursor:pointer;
   font-weight:400;
   text-decoration:none;
+  text-transform:none;
   border-bottom:1px solid rgba(255,255,255,0.08);
 }
 .dropdown-item:last-child{ border-bottom:none; }

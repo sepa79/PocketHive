@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.13] - 2025-08-30
+Timestamp: 2025-08-30T22:20:47Z
+
+- UI: Align TPS dropdown buttons with header menu style.
+
 ## [0.4.12] - 2025-08-30
 Timestamp: 2025-08-30T22:12:26Z
 
