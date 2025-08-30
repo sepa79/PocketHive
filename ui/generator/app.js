@@ -4,6 +4,9 @@
   const $$ = (sel) => Array.from(document.querySelectorAll(sel));
   const fmt = (n) => Intl.NumberFormat().format(n);
   const kb = (b) => (b/1024).toFixed(1) + " KB";
+  const LOG_LIMIT_DEFAULT = 500;
+  let logLimit = LOG_LIMIT_DEFAULT;
+  const logLines = [];
 
   // UUID v4 generator with fallbacks for older browsers
   function uuidv4(){
@@ -42,7 +45,14 @@
   const metrics = { sent: 0, ack: 0, errors: 0, inFlight: 0, recv: 0, tStart: 0, lastSecSent: 0, lastSecRecv: 0, latency: { count:0, total:0, min:Infinity, max:0, p95:0 } };
   let latencySamples = [];
 
-  function log(msg) { const el = $("#log"); el.textContent += msg + "\n"; el.scrollTop = el.scrollHeight; }
+  function log(msg) {
+    const el = $("#log");
+    if(!el) return;
+    logLines.push(msg);
+    if(logLines.length>logLimit) logLines.shift();
+    el.textContent = logLines.join("\n");
+    el.scrollTop = el.scrollHeight;
+  }
   function setStatus(s, tone="off") { $("#status").textContent = s; const dot = $("#statusDot"); dot.className = "dot " + tone; }
   function updateMetrics() {
     $("#mSent .big").textContent = fmt(metrics.sent);
@@ -120,5 +130,14 @@
       }
     }catch{}
     $("#session").textContent = sessionId; syncSlider("rps"); syncSlider("burst"); syncSlider("payloadBytes"); syncSlider("concurrency"); syncSlider("maxInflight"); syncSlider("jitter"); syncSlider("duration"); $("#btnConnect").addEventListener("click", connect); $("#btnDisconnect").addEventListener("click", disconnect); $("#btnSendOne").addEventListener("click", sendOne); $("#btnStart").addEventListener("click", startSending); $("#btnStop").addEventListener("click", stopSending); $("#btnReset").addEventListener("click", resetMetrics); $("#autoSession").addEventListener("change", () => { const on = $("#autoSession").checked; $("#sessionInput").classList.toggle("hidden", on); });
+    const logLimitInput = $("#logLimit");
+    if(logLimitInput){
+      logLimitInput.addEventListener("change", ()=>{
+        const v = Number(logLimitInput.value) || LOG_LIMIT_DEFAULT;
+        logLimit = Math.max(10, v);
+        if(logLines.length>logLimit) logLines.splice(0, logLines.length - logLimit);
+        const el = $("#log"); if(el) el.textContent = logLines.join("\n");
+      });
+    }
   });
 })();
