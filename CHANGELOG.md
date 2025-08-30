@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.17] - 2025-08-30
+Timestamp: 2025-08-30T23:11:47Z
+
+- UI: Remove ground from monolith status icon and add subtle pulsing glow with hover effect.
+
 ## [0.4.16] - 2025-08-30
 Timestamp: 2025-08-30T22:58:51Z
 
