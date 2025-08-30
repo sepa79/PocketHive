@@ -41,7 +41,7 @@
     }
     #metric-select{
       appearance:none;
-      cursor:pointer; color:#0ff; font-weight:700;
+      cursor:pointer; color:#0ff; font-weight:700; text-transform:uppercase; letter-spacing:0.04em;
       padding:8px 32px 8px 12px; border-radius:12px;
       background: radial-gradient(120% 120% at 10% 10%, rgba(51,225,255,0.25), rgba(51,225,255,0.06) 40%, rgba(255,255,255,0.05) 70%, rgba(0,0,0,0.0) 100%);
       border:1px solid rgba(51,225,255,0.35);
@@ -156,7 +156,7 @@
       </div>
     </div>
     <section class="card" style="margin-top:16px; padding:12px">
-      <div class="row" style="justify-content:space-between; align-items:center">
+      <div class="row" style="display:flex; justify-content:space-between; align-items:center">
         <div style="display:flex; gap:8px; align-items:center">
           <button id="log-tab-control" class="tab-btn tab-active" type="button">Control Log</button>
           <button id="log-tab-topic" class="tab-btn" type="button">Topic Sniffer</button>
@@ -170,7 +170,7 @@
         <div id="log"></div>
       </div>
       <div id="log-topic" style="display:none">
-        <div class="row" style="gap:8px; align-items:center; margin:6px 0 8px 0">
+        <div class="row" style="display:flex; gap:8px; align-items:center; margin:6px 0 8px 0">
           <input id="topic-rk" placeholder="Routing key (e.g., ev.# or ev.status-#)" style="flex:1 1 auto"/>
           <button id="topic-sub" class="tab-btn" type="button">Subscribe</button>
           <button id="topic-unsub" class="tab-btn" type="button">Unsubscribe</button>
@@ -180,7 +180,7 @@
     </section>
 
     <section class="card" style="margin-top:16px; padding:12px">
-      <div class="row" style="justify-content:space-between; align-items:center">
+      <div class="row" style="display:flex; justify-content:space-between; align-items:center">
         <h3 style="margin:0">System Logs</h3>
         <label style="font-size:12px; display:flex; align-items:center; gap:6px; color:#fff;">
           Lines

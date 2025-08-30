@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.7] - 2025-08-30
+Timestamp: 2025-08-30T21:14:45Z
+
+- UI: Align log and system log line selectors in their header rows.
+- UI: Theme chart metric selector to match the menu button.
+
 ## [0.4.6] - 2025-08-30
 Timestamp: 2025-08-30T21:04:56Z
 
