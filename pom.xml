@@ -6,6 +6,7 @@
   <version>0.1.0</version>
   <packaging>pom</packaging>
   <modules>
+    <module>rabbitmq-logging</module>
     <module>observability</module>
     <module>generator-service</module>
     <module>moderator-service</module>
