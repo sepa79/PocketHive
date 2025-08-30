@@ -59,8 +59,9 @@
             <label>Amplitude X (% W) <input id="v_sine_ampx" type="range" min="0" max="0.49" step="0.01" value="0.10"></label>
             <label>Wavelength X (px) <input id="v_sine_wavex" type="range" min="40" max="800" step="10" value="160"></label>
             <label>Speed X (px/s) <input id="v_sine_spdx" type="range" min="20" max="600" step="10" value="80"></label>
-            <label class="ph-toggle"><input id="v_sine_quantize" type="checkbox" checked> Quantize positions</label>
             <label class="ph-toggle"><input id="v_sine_raster" type="checkbox"> Raster bars</label>
+            <label>Raster count <input id="v_sine_rbars" type="range" min="1" max="8" step="1" value="3"></label>
+            <label>Raster speed <input id="v_sine_rspeed" type="range" min="0.1" max="2" step="0.05" value="0.7"></label>
           </div>
           <div class="row">
             <button id="v_sine_apply" class="ph-btn primary">Apply</button>
@@ -174,16 +175,14 @@
     }
     try{
       if(mode === 'net'){
-        ensureNetLoaded().then(()=>{
-          if(window.PocketHiveNet && window.PocketHiveNet.start) window.PocketHiveNet.start();
-          if(window.PocketHiveBees && window.PocketHiveBees.pause) window.PocketHiveBees.pause();
-        });
+        if(window.PocketHiveBees && window.PocketHiveBees.pause) window.PocketHiveBees.pause();
+        ensureNetLoaded().then(()=>{ if(window.PocketHiveNet && window.PocketHiveNet.start) window.PocketHiveNet.start(); });
       } else if(mode === 'old'){
         if(window.PocketHiveBees && window.PocketHiveBees.pause) window.PocketHiveBees.pause();
         if(window.PocketHiveNet && window.PocketHiveNet.pause) window.PocketHiveNet.pause();
       } else {
-        if(window.PocketHiveBees && window.PocketHiveBees.start) window.PocketHiveBees.start();
         if(window.PocketHiveNet && window.PocketHiveNet.pause) window.PocketHiveNet.pause();
+        if(window.PocketHiveBees && window.PocketHiveBees.start) window.PocketHiveBees.start();
         if(window.PocketHiveBees){
           if(mode === 'c64') window.PocketHiveBees.setPattern('sine');
           else if(mode === 'matrix') window.PocketHiveBees.setPattern('matrix');
@@ -284,7 +283,6 @@
       window.PocketHiveBees.setBezierParams({ durMin: val('v_bezier_durmin'), durMax: val('v_bezier_durmax') });
     } else if(prefix.includes('sine')){
       window.PocketHiveBees.setPattern('sine');
-      const qEl = document.getElementById('v_sine_quantize');
       window.PocketHiveBees.setSineParams({
         ampFrac: val('v_sine_ampfrac'),
         wavelength: val('v_sine_wavelength'),
@@ -292,8 +290,9 @@
         ampXFrac: val('v_sine_ampx'),
         wavelengthX: val('v_sine_wavex'),
         speedX: val('v_sine_spdx'),
-        quantize: !!(qEl && qEl.checked),
-        raster: !!(document.getElementById('v_sine_raster').checked)
+        raster: !!(document.getElementById('v_sine_raster').checked),
+        rasterBars: val('v_sine_rbars'),
+        rasterSpeed: val('v_sine_rspeed')
       });
     } else if(prefix.includes('matrix')){
       window.PocketHiveBees.setPattern('matrix');
@@ -317,6 +316,10 @@
   modal.querySelector('[data-pane="sine"]').addEventListener('input', ()=> autoApply('v_sine', false));
   modal.querySelector('[data-pane="sine"]').addEventListener('change', ()=> autoApply('v_sine', true));
   document.getElementById('v_sine_reseed').addEventListener('click', ()=> window.PocketHiveBees.reseed());
+  const rT = document.getElementById('v_sine_raster');
+  const rCtrls = [document.getElementById('v_sine_rbars').parentElement, document.getElementById('v_sine_rspeed').parentElement];
+  function toggleR(){ const on=rT.checked; rCtrls.forEach(el=> el.style.display=on?'':'none'); }
+  rT.addEventListener('change', toggleR); toggleR();
 
   // Matrix
   const matrixApply = document.getElementById('v_matrix_apply');
@@ -327,23 +330,21 @@
   document.getElementById('v_matrix_reseed').addEventListener('click', ()=> window.PocketHiveBees.reseed());
 
   // Presets
-  function preset(lowMedHigh){
-    if(lowMedHigh==='low'){
-      window.PocketHiveBees.setDensity(12);
-      window.PocketHiveBees.setGlyphSpeedFactor(0.9);
-      window.PocketHiveBees.setTrail(6, 0.10, 0.05);
-      window.PocketHiveBees.setTrailDecay(0.7);
-    }else if(lowMedHigh==='med'){
-      window.PocketHiveBees.setDensity(60);
-      window.PocketHiveBees.setGlyphSpeedFactor(0.75);
-      window.PocketHiveBees.setTrail(9, 0.12, 0.06);
-      window.PocketHiveBees.setTrailDecay(1.0);
-    }else{
-      window.PocketHiveBees.setDensity(140);
-      window.PocketHiveBees.setGlyphSpeedFactor(0.6);
-      window.PocketHiveBees.setTrail(12, 0.14, 0.06);
-      window.PocketHiveBees.setTrailDecay(1.0);
-    }
+  function preset(level){
+    let density,glyph,tc,base,step,decay;
+    if(level==='low'){ density=12; glyph=0.9; tc=6; base=0.10; step=0.05; decay=0.7; }
+    else if(level==='med'){ density=60; glyph=0.75; tc=9; base=0.12; step=0.06; decay=1.0; }
+    else { density=140; glyph=0.6; tc=12; base=0.14; step=0.06; decay=1.0; }
+    window.PocketHiveBees.setDensity(density);
+    window.PocketHiveBees.setGlyphSpeedFactor(glyph);
+    window.PocketHiveBees.setTrail(tc, base, step);
+    window.PocketHiveBees.setTrailDecay(decay);
+    ['v_bezier_density','v_sine_density','v_matrix_density'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=density; });
+    ['v_bezier_glyph','v_matrix_glyph'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=glyph; });
+    ['v_bezier_trailCount','v_matrix_trailCount'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=tc; });
+    ['v_bezier_trailDecay','v_matrix_trailDecay'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=decay; });
+    ['v_bezier_base','v_matrix_base'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=base; });
+    ['v_bezier_step','v_matrix_step'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=step; });
     window.PocketHiveBees.reseed();
   }
   document.getElementById('ph-preset-low').addEventListener('click', ()=> preset('low'));

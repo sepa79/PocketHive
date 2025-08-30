@@ -31,7 +31,8 @@
       wavelengthX: 160,     // horizontal sine wavelength
       speedX: 80,           // horizontal sine speed
       raster: false,        // raster bars toggle
-      quantize: true        // round positions for retro look
+      rasterBars: 3,        // number of raster bars
+      rasterSpeed: 0.7      // raster vertical speed
     },
     rain: { vyMin: 80, vyMax: 220 }
   };
@@ -44,13 +45,14 @@
 
   let rasterBars=[], rasterRAF=0;
   function enableRaster(){
-    if(rasterBars.length) return;
-    for(let i=0;i<3;i++){ const b=document.createElement('div'); b.className='raster-bar'; rasterLayer.appendChild(b); rasterBars.push({el:b, phase:i*(Math.PI*2/3)}); }
+    disableRaster();
+    const n=Math.max(1,Math.floor(state.sine.rasterBars||1));
+    for(let i=0;i<n;i++){ const b=document.createElement('div'); b.className='raster-bar'; rasterLayer.appendChild(b); rasterBars.push({el:b, phase:i*(Math.PI*2/n)}); }
     const start=performance.now();
     (function loop(now){
       if(!state.sine.raster){ rasterRAF=0; return; }
-      const t=(now-start)/1000; const h=root.clientHeight||window.innerHeight; const mid=h/2; const amp=h*0.4;
-      rasterBars.forEach(rb=>{ rb.el.style.transform=`translateY(${mid + amp*Math.sin(t*0.7 + rb.phase)}px)`; });
+      const t=(now-start)/1000; const h=root.clientHeight||window.innerHeight; const mid=h/2; const amp=h*0.4; const sp=state.sine.rasterSpeed||0.7;
+      rasterBars.forEach(rb=>{ rb.el.style.transform=`translateY(${mid + amp*Math.sin(t*sp + rb.phase)}px)`; });
       rasterRAF=requestAnimationFrame(loop);
     })(start);
   }
@@ -141,14 +143,8 @@
       const t=(now-start)/1000;
       const idxY=(Math.floor(((speed*t)/wavelength)*256)+phase) & 255;
       const idxX=(Math.floor(((speedX*t)/wavelengthX)*256)+phase+64) & 255;
-      let x,y;
-      if(state.sine.quantize){
-        x = midX + ((ampX * SIN8[idxX]) >> 7);
-        y = midY + ((amp * SIN8[idxY]) >> 7);
-      } else {
-        x = midX + (ampX * SIN8[idxX]) / 128;
-        y = midY + (amp * SIN8[idxY]) / 128;
-      }
+      const x = midX + ((ampX * SIN8[idxX]) >> 7);
+      const y = midY + ((amp * SIN8[idxY]) >> 7);
       q.push([x,y]); if(q.length>maxQ) q.shift();
       lead.style.transform=`translate(${x}px,${y}px) translate(-50%,-50%)`;
       for(let i=0;i<trails.length;i++){ const lagSec=state.trailBaseLag+i*state.trailStepLag; const idx=Math.max(0,q.length-Math.floor((lagSec*1000)/state.stepMs)); const p=q[idx]||q[0]||[x,y];

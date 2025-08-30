@@ -105,25 +105,18 @@
   $('#net_reseed').addEventListener('click', ()=> window.PocketHiveNet.reseed());
 
   function preset(level){
-    if(level==='low'){
-      window.PocketHiveNet.setDensity(30);
-      window.PocketHiveNet.setLinking(180, 3, 1, true);
-      window.PocketHiveNet.setPulseSpeed(0.8);
-      window.PocketHiveNet.setDrift(14, 0.20);
-      window.PocketHiveNet.setEdgeThickness(0.9);
-    }else if(level==='med'){
-      window.PocketHiveNet.setDensity(54);
-      window.PocketHiveNet.setLinking(200, 5, 2, true);
-      window.PocketHiveNet.setPulseSpeed(0.9);
-      window.PocketHiveNet.setDrift(18, 0.22);
-      window.PocketHiveNet.setEdgeThickness(1.0);
-    }else{
-      window.PocketHiveNet.setDensity(120);
-      window.PocketHiveNet.setLinking(220, 6, 3, true);
-      window.PocketHiveNet.setPulseSpeed(1.1);
-      window.PocketHiveNet.setDrift(24, 0.28);
-      window.PocketHiveNet.setEdgeThickness(1.2);
-    }
+    let d,ld,k,extra,pulse,edge,drA,drS;
+    if(level==='low'){ d=30; ld=180; k=3; extra=1; pulse=0.8; edge=0.9; drA=14; drS=0.20; }
+    else if(level==='med'){ d=54; ld=200; k=5; extra=2; pulse=0.9; edge=1.0; drA=18; drS=0.22; }
+    else { d=120; ld=220; k=6; extra=3; pulse=1.1; edge=1.2; drA=24; drS=0.28; }
+    $('#net_density').value=d;
+    $('#net_linkdist').value=ld;
+    $('#net_k').value=k;
+    $('#net_extra').value=extra;
+    $('#net_pulse').value=pulse;
+    $('#net_edge').value=edge;
+    applyAll();
+    try{ window.PocketHiveNet.setDrift(drA, drS); }catch(e){}
     window.PocketHiveNet.reseed();
   }
   document.getElementById('ph-preset-low').addEventListener('click', ()=> preset('low'));
