@@ -232,7 +232,10 @@
     autoApply(`v_${t.dataset.tab}`, true);
   }));
   if(bgBtn && bgDropdown){
-    bgBtn.addEventListener('click', (e)=>{ e.preventDefault(); bgDropdown.style.display = bgDropdown.style.display==='none'? 'block':'none'; });
+    bgBtn.addEventListener('click', (e)=>{
+      e.preventDefault();
+      bgDropdown.style.display = (!bgDropdown.style.display || bgDropdown.style.display==='none') ? 'flex' : 'none';
+    });
     document.addEventListener('click', (e)=>{ if(!bgMenu.contains(e.target) && e.target!==bgBtn) bgDropdown.style.display='none'; });
     bgDropdown.querySelectorAll('.bg-item').forEach(b=>{
       b.addEventListener('click', ()=>{

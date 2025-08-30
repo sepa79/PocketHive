@@ -4,12 +4,18 @@
   const root = document.querySelector('.ph-bg-bees');
   if(!root) return;
 
-  // Precomputed 8-bit style sine table (C64-like): 256 samples over 0..2π scaled to [-1,1]
-  // Using a Float32Array for fast multiply; values are in range [-1, 1].
-  const SIN256 = new Float32Array(256);
-  for(let i=0;i<256;i++){
-    SIN256[i] = Math.sin((i/256) * Math.PI * 2);
-  }
+  // Precomputed C64-style sine table: signed 8-bit values for 256 steps of a circle
+  // Table sourced from classic C64 demo techniques and quantized to match hardware
+  const SIN8 = new Int8Array([
+    0,3,6,9,12,16,19,22,25,28,31,34,37,40,43,46,49,51,54,57,60,63,65,68,71,73,76,78,81,83,85,88,
+    90,92,94,96,98,100,102,104,106,107,109,111,112,113,115,116,117,118,120,121,122,122,123,124,125,125,126,126,126,127,127,127,
+    127,127,127,127,126,126,126,125,125,124,123,122,122,121,120,118,117,116,115,113,112,111,109,107,106,104,102,100,98,96,94,92,
+    90,88,85,83,81,78,76,73,71,68,65,63,60,57,54,51,49,46,43,40,37,34,31,28,25,22,19,16,12,9,6,3,
+    0,-3,-6,-9,-12,-16,-19,-22,-25,-28,-31,-34,-37,-40,-43,-46,-49,-51,-54,-57,-60,-63,-65,-68,-71,-73,-76,-78,-81,-83,-85,-88,
+    -90,-92,-94,-96,-98,-100,-102,-104,-106,-107,-109,-111,-112,-113,-115,-116,-117,-118,-120,-121,-122,-122,-123,-124,-125,-125,-126,-126,-126,-127,-127,-127,
+    -127,-127,-127,-127,-126,-126,-126,-125,-125,-124,-123,-122,-122,-121,-120,-118,-117,-116,-115,-113,-112,-111,-109,-107,-106,-104,-102,-100,-98,-96,-94,-92,
+    -90,-88,-85,-83,-81,-78,-76,-73,-71,-68,-65,-63,-60,-57,-54,-51,-49,-46,-43,-40,-37,-34,-31,-28,-25,-22,-19,-16,-12,-9,-6,-3
+  ]);
 
   const state = {
     density: 20, variant: 'amber', pattern: 'bezier',
@@ -135,9 +141,14 @@
       const t=(now-start)/1000;
       const idxY=(Math.floor(((speed*t)/wavelength)*256)+phase) & 255;
       const idxX=(Math.floor(((speedX*t)/wavelengthX)*256)+phase+64) & 255;
-      let x=midX + ampX * SIN256[idxX];
-      let y=midY + amp * SIN256[idxY];
-      if(state.sine.quantize){ x=Math.round(x); y=Math.round(y); }
+      let x,y;
+      if(state.sine.quantize){
+        x = midX + ((ampX * SIN8[idxX]) >> 7);
+        y = midY + ((amp * SIN8[idxY]) >> 7);
+      } else {
+        x = midX + (ampX * SIN8[idxX]) / 128;
+        y = midY + (amp * SIN8[idxY]) / 128;
+      }
       q.push([x,y]); if(q.length>maxQ) q.shift();
       lead.style.transform=`translate(${x}px,${y}px) translate(-50%,-50%)`;
       for(let i=0;i<trails.length;i++){ const lagSec=state.trailBaseLag+i*state.trailStepLag; const idx=Math.max(0,q.length-Math.floor((lagSec*1000)/state.stepMs)); const p=q[idx]||q[0]||[x,y];
