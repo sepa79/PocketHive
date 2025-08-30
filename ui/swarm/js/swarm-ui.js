@@ -90,7 +90,6 @@
         </section>
       </div>
     </div>`;
-  root.appendChild(modal);
 
   // Styles for navbar & modal
   const style = document.createElement('style');
@@ -155,6 +154,8 @@
   select{ appearance:none; background: rgba(255,255,255,.08); color:#fff; border:1px solid rgba(255,255,255,.2); border-radius:10px; padding:6px 10px; }
   `;
   document.head.appendChild(style);
+
+  root.appendChild(modal);
 
   // Background mode toggle
   const body = document.body;
