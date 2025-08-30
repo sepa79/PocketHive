@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.18] - 2025-08-30
+Timestamp: 2025-08-30T23:16:22Z
+
+- UI: Correct isometric angle of monolith status icon.
+
 ## [0.4.17] - 2025-08-30
 Timestamp: 2025-08-30T23:11:47Z
 
