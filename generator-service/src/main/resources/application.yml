@@ -6,7 +6,11 @@ spring:
     username: ${RABBITMQ_DEFAULT_USER:guest}
     password: ${RABBITMQ_DEFAULT_PASS:guest}
 management.endpoints.web.exposure.include: health,info
- 
+
+# Include traceId from MDC in log output
+logging:
+  pattern.level: "%5p [%X{traceId}]"
+
 # PocketHive topology (defaults overridable via env)
 ph:
   genQueue: ${PH_GEN_QUEUE:ph.gen}

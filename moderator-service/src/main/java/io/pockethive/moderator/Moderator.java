@@ -10,6 +10,9 @@ import org.springframework.stereotype.Component;
 import org.slf4j.Logger; import org.slf4j.LoggerFactory;
 import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.amqp.support.AmqpHeaders;
+import io.pockethive.observability.ObservabilityContext;
+import io.pockethive.observability.ObservabilityContextUtil;
+import org.slf4j.MDC;
 
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
@@ -31,10 +34,17 @@ public class Moderator {
   // Consume RAW AMQP message to avoid converter issues
   @RabbitListener(queues = "${ph.genQueue:gen.queue}")
   public void onGenerated(Message message,
-                          @Header(value = "x-ph-service", required = false) String service) {
-    // forward the same message to the moderated queue (preserve body + props)
-    rabbit.send(Topology.EXCHANGE, Topology.MOD_QUEUE, message);
-    counter.incrementAndGet();
+                          @Header(value = "x-ph-service", required = false) String service,
+                          @Header(value = ObservabilityContextUtil.HEADER, required = false) String trace) {
+    ObservabilityContext ctx = ObservabilityContextUtil.fromHeader(trace);
+    ObservabilityContextUtil.populateMdc(ctx);
+    try {
+      // forward the same message to the moderated queue (preserve body + props)
+      rabbit.send(Topology.EXCHANGE, Topology.MOD_QUEUE, message);
+      counter.incrementAndGet();
+    } finally {
+      MDC.clear();
+    }
   }
 
   @Scheduled(fixedRate = 5000)
@@ -42,11 +52,19 @@ public class Moderator {
 
   // Control-plane listener (no-op placeholder)
   @RabbitListener(queues = "${ph.controlQueue:ph.control}")
-  public void onControl(String payload, @Header(AmqpHeaders.RECEIVED_ROUTING_KEY) String rk) {
-    String p = payload==null?"" : (payload.length()>300? payload.substring(0,300)+"…" : payload);
-    log.info("[CTRL] RECV rk={} inst={} payload={}", rk, instanceId, p);
-    if(payload!=null && payload.contains("status.request")){
-      sendStatusFull(0);
+  public void onControl(String payload,
+                        @Header(AmqpHeaders.RECEIVED_ROUTING_KEY) String rk,
+                        @Header(value = ObservabilityContextUtil.HEADER, required = false) String trace) {
+    ObservabilityContext ctx = ObservabilityContextUtil.fromHeader(trace);
+    ObservabilityContextUtil.populateMdc(ctx);
+    try {
+      String p = payload==null?"" : (payload.length()>300? payload.substring(0,300)+"…" : payload);
+      log.info("[CTRL] RECV rk={} inst={} payload={}", rk, instanceId, p);
+      if(payload!=null && payload.contains("status.request")){
+        sendStatusFull(0);
+      }
+    } finally {
+      MDC.clear();
     }
   }
 

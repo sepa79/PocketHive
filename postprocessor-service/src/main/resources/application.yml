@@ -7,6 +7,10 @@ spring:
     password: ${RABBITMQ_DEFAULT_PASS:guest}
 management.endpoints.web.exposure.include: health,info,prometheus
 
+# Include traceId from MDC in log output
+logging:
+  pattern.level: "%5p [%X{traceId}]"
+
 ph:
   finalQueue: ${PH_FINAL_QUEUE:ph.final}
   controlQueue: ${PH_CONTROL_QUEUE:ph.control}

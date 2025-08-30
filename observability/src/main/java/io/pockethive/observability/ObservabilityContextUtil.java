@@ -6,6 +6,7 @@ import java.util.UUID;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.slf4j.MDC;
 
 public final class ObservabilityContextUtil {
     public static final String HEADER = "x-ph-trace";
@@ -42,6 +43,12 @@ public final class ObservabilityContextUtil {
             return MAPPER.readValue(header, ObservabilityContext.class);
         } catch (Exception e) {
             throw new IllegalStateException("Unable to deserialize observability context", e);
+        }
+    }
+
+    public static void populateMdc(ObservabilityContext ctx) {
+        if (ctx != null && ctx.getTraceId() != null) {
+            MDC.put("traceId", ctx.getTraceId());
         }
     }
 }

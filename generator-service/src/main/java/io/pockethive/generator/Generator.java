@@ -13,6 +13,9 @@ import org.springframework.stereotype.Component;
 import org.slf4j.Logger; import org.slf4j.LoggerFactory;
 import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.amqp.support.AmqpHeaders;
+import org.slf4j.MDC;
+import io.pockethive.observability.ObservabilityContext;
+import io.pockethive.observability.ObservabilityContextUtil;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
@@ -73,13 +76,21 @@ public class Generator {
 
   // Control-plane listener (no-op placeholder)
   @RabbitListener(queues = "${ph.controlQueue:ph.control}")
-  public void onControl(String payload, @Header(AmqpHeaders.RECEIVED_ROUTING_KEY) String rk) {
-    // Log control event
-    String p = payload==null?"" : (payload.length()>300? payload.substring(0,300)+"…" : payload);
-    log.info("[CTRL] RECV rk={} inst={} payload={}", rk, instanceId, p);
-    // Respond to status.request by emitting full snapshot
-    if(payload!=null && payload.contains("status.request")){
-      sendStatusFull(0);
+  public void onControl(String payload,
+                        @Header(AmqpHeaders.RECEIVED_ROUTING_KEY) String rk,
+                        @Header(value = ObservabilityContextUtil.HEADER, required = false) String trace) {
+    ObservabilityContext ctx = ObservabilityContextUtil.fromHeader(trace);
+    ObservabilityContextUtil.populateMdc(ctx);
+    try {
+      // Log control event
+      String p = payload==null?"" : (payload.length()>300? payload.substring(0,300)+"…" : payload);
+      log.info("[CTRL] RECV rk={} inst={} payload={}", rk, instanceId, p);
+      // Respond to status.request by emitting full snapshot
+      if(payload!=null && payload.contains("status.request")){
+        sendStatusFull(0);
+      }
+    } finally {
+      MDC.clear();
     }
   }
 
