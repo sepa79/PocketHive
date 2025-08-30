@@ -7,25 +7,21 @@
   <link rel="stylesheet" href="./assets/css/app.css">
   <style>
       header {
-        display: flex; align-items: flex-start; gap: 16px;
+        display: flex; align-items: center; gap: 16px;
       padding: 18px 22px; position: sticky; top: 0; z-index: 2;
       background: rgba(8,10,14,0.75);
       border-bottom: 1px solid rgba(255,255,255,0.08);
       backdrop-filter: blur(6px);
       }
       header img.logo { height: 96px; width:auto; display:block; }
-      .logo-wrap{ display:flex; flex-direction:column; align-items:center; }
-      .logo-wrap:hover img.logo{ animation: logo-spin 4s linear infinite; }
-      @keyframes logo-spin{ from{ transform:rotate(0deg); } to{ transform:rotate(360deg); } }
       .header-right{ margin-left:auto; display:flex; align-items:center; gap:10px; }
       .bg-toggle{ display:inline-flex; align-items:center; gap:8px; padding:6px 10px; border:1px solid rgba(255,255,255,0.15); border-radius:8px; background: rgba(12,16,22,0.7); font-size:12px; color:#fff; }
-      /* Menu button under the logo */
+      /* Apply cyan glow theme to the header menu button */
       #menu-btn{
         appearance:none; border:1px solid rgba(51,225,255,0.35); cursor:pointer; color:#0ff; font-weight:700;
-        padding:6px 10px; border-radius:10px; text-transform:uppercase; letter-spacing:0.04em;
+        padding:8px 12px; border-radius:12px; text-transform:uppercase; letter-spacing:0.04em;
         background: radial-gradient(120% 120% at 10% 10%, rgba(51,225,255,0.25), rgba(51,225,255,0.06) 40%, rgba(255,255,255,0.05) 70%, rgba(0,0,0,0.0) 100%);
         box-shadow: 0 0 20px rgba(51,225,255,0.15) inset, 0 0 16px rgba(51,225,255,0.18);
-        display:flex; flex-direction:column; align-items:center; gap:4px;
       }
       #menu-btn:hover{ box-shadow: 0 0 26px rgba(51,225,255,0.22) inset, 0 0 20px rgba(51,225,255,0.28); background: radial-gradient(120% 120% at 10% 10%, rgba(51,225,255,0.35), rgba(51,225,255,0.1) 50%, rgba(255,255,255,0.07) 75%, rgba(0,0,0,0.0) 100%); }
       #menu-btn:active{ transform: translateY(1px); filter: brightness(1.1); }
@@ -56,38 +52,37 @@
   </style>
 </head>
 <body>
-    <header>
-      <div class="logo-wrap">
+  <header>
         <img class="logo" src="./assets/logo.svg" alt="PocketHive Logo" />
-        <div class="menu" style="position:relative; margin-top:6px;">
-          <button id="menu-btn" style="cursor:pointer">Menu</button>
-          <div id="menu-dropdown" style="display:none; position:absolute; left:50%; transform:translateX(-50%); top:calc(100% + 6px); background: rgba(12,16,22,0.95); border:1px solid rgba(255,255,255,0.15); border-radius:10px; min-width: 240px; box-shadow:0 6px 22px rgba(0,0,0,0.4);">
-              <a href="generator/" style="display:block; padding:10px 12px; color:#fff; text-decoration:none; border-bottom:1px solid rgba(255,255,255,0.08)">Open Generator</a>
-            <a href="readme.html" style="display:block; padding:10px 12px; color:#fff; text-decoration:none; border-bottom:1px solid rgba(255,255,255,0.08)">README</a>
-            <a href="bindings.html" style="display:block; padding:10px 12px; color:#fff; text-decoration:none; border-bottom:1px solid rgba(255,255,255,0.08)">Control Bindings</a>
-            <a href="changelog.html" style="display:block; padding:10px 12px; color:#fff; text-decoration:none; border-bottom:1px solid rgba(255,255,255,0.08)">Changelog</a>
-              <a href="docs.html" style="display:block; padding:10px 12px; color:#fff; text-decoration:none;">API Docs</a>
-            </div>
-        </div>
-      </div>
-      <nav class="nav-tabs">
-        <button id="tab-control" class="tab-btn tab-active" type="button">Control</button>
-        <button id="tab-swarm" class="tab-btn" type="button">Swarm</button>
-      </nav>
-      <div class="header-right">
-        <div class="bg-toggle" style="gap:10px; align-items:center">
-          <div class="hal">
-            <span id="status-ui" class="hal-eye" data-state="connecting" title="UI Health"></span>
-            <span id="status-ws" class="hal-eye" data-state="idle" title="WebSocket to RabbitMQ — click to open connection" role="button" tabindex="0"></span>
-            <div class="menu" id="conn-menu" style="position:relative; display:inline-flex;">
-              <div id="conn-dropdown" style="display:none; position:absolute; right:0; top:36px; background: rgba(12,16,22,0.95); border:1px solid rgba(255,255,255,0.15); border-radius:10px; min-width: 340px; box-shadow:0 6px 22px rgba(0,0,0,0.4); padding:10px"></div>
-            </div>
+        <nav class="nav-tabs">
+          <button id="tab-control" class="tab-btn tab-active" type="button">Control</button>
+          <button id="tab-swarm" class="tab-btn" type="button">Swarm</button>
+        </nav>
+        <div class="header-right">
+          <div class="menu" style="position:relative">
+            <button id="menu-btn" class="bg-toggle" style="cursor:pointer">☰ Menu</button>
+            <div id="menu-dropdown" style="display:none; position:absolute; right:0; top:36px; background: rgba(12,16,22,0.95); border:1px solid rgba(255,255,255,0.15); border-radius:10px; min-width: 240px; box-shadow:0 6px 22px rgba(0,0,0,0.4);">
+                <a href="generator/" style="display:block; padding:10px 12px; color:#fff; text-decoration:none; border-bottom:1px solid rgba(255,255,255,0.08)">Open Generator</a>
+              <a href="readme.html" style="display:block; padding:10px 12px; color:#fff; text-decoration:none; border-bottom:1px solid rgba(255,255,255,0.08)">README</a>
+              <a href="bindings.html" style="display:block; padding:10px 12px; color:#fff; text-decoration:none; border-bottom:1px solid rgba(255,255,255,0.08)">Control Bindings</a>
+              <a href="changelog.html" style="display:block; padding:10px 12px; color:#fff; text-decoration:none; border-bottom:1px solid rgba(255,255,255,0.08)">Changelog</a>
+                <a href="docs.html" style="display:block; padding:10px 12px; color:#fff; text-decoration:none;">API Docs</a>
+              </div>
           </div>
-          <button id="broadcast-status" class="btn-refresh" title="Broadcast status.request to all services">Update Status</button>
-          <span id="ph-version" title="Current Version">v…</span>
+          <div class="bg-toggle" style="gap:10px; align-items:center">
+            <div class="hal">
+              <span id="status-ui" class="hal-eye" data-state="connecting" title="UI Health"></span>
+              <span id="status-ws" class="hal-eye" data-state="idle" title="WebSocket to RabbitMQ — click to open connection" role="button" tabindex="0"></span>
+              <div class="menu" id="conn-menu" style="position:relative; display:inline-flex;">
+                <div id="conn-dropdown" style="display:none; position:absolute; right:0; top:36px; background: rgba(12,16,22,0.95); border:1px solid rgba(255,255,255,0.15); border-radius:10px; min-width: 340px; box-shadow:0 6px 22px rgba(0,0,0,0.4); padding:10px"></div>
+              </div>
+            </div>
+            <button id="broadcast-status" class="btn-refresh" title="Broadcast status.request to all services">Update Status</button>
+            <span id="ph-version" title="Current Version">v…</span>
+          </div>
         </div>
-      </div>
-    </header>
+      </header>
+
   <main id="view-control">
     <div class="controls" style="display:none">
       <input id="wsurl" size="40" value="ws://localhost:15674/ws"/>

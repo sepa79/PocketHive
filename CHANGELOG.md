@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.5] - 2025-08-30
+Timestamp: 2025-08-30T20:55:01Z
+
+- UI: Restore menu to original header position and remove logo hover spin.
+
 ## [0.4.4] - 2025-08-30
 Timestamp: 2025-08-30T20:43:37Z
 
