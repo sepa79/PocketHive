@@ -32,6 +32,13 @@
     latency: /** @type {HTMLCanvasElement|null} */(document.getElementById('chart-latency')),
     hops: /** @type {HTMLCanvasElement|null} */(document.getElementById('chart-hops'))
   };
+  const LOG_LIMIT_DEFAULT = 500;
+  const EVENT_LIMIT_DEFAULT = 600;
+  let logLimit = LOG_LIMIT_DEFAULT;
+  let eventLimit = EVENT_LIMIT_DEFAULT;
+  const logLines = [];
+  const sysLines = [];
+  const topicLines = [];
   // Logging toggles
   const LOG_CTRL_RAW = true; // show raw control payloads in Event Log
   const LOG_STOMP_DEBUG = true; // STOMP frame debug to System Logs
@@ -48,6 +55,24 @@
   const WINDOW_MS = 60_000; // 60s window
   let rafPending = { generator:false, moderator:false, processor:false, latency:false, hops:false };
   const HAS_CONN = !!(elUrl && btn);
+  const logLimitInput = qs('log-limit');
+  if(logLimitInput){
+    logLimitInput.addEventListener('change', ()=>{
+      const v = Number(logLimitInput.value) || LOG_LIMIT_DEFAULT;
+      logLimit = Math.max(10, v);
+      if(logLines.length>logLimit){ logLines.splice(0, logLines.length - logLimit); if(logEl) logEl.textContent = logLines.join('\n'); }
+      if(sysLines.length>logLimit){ sysLines.splice(0, sysLines.length - logLimit); if(sysEl) sysEl.textContent = sysLines.join('\n'); }
+      if(topicLines.length>logLimit){ topicLines.splice(0, topicLines.length - logLimit); const tl=document.getElementById('topic-log'); if(tl) tl.textContent = topicLines.join('\n'); }
+    });
+  }
+  const eventLimitInput = qs('event-limit');
+  if(eventLimitInput){
+    eventLimitInput.addEventListener('change', ()=>{
+      const v = Number(eventLimitInput.value) || EVENT_LIMIT_DEFAULT;
+      eventLimit = Math.max(10, v);
+      trimSeries();
+    });
+  }
 
   // Tabs handling
   (function(){
@@ -93,7 +118,14 @@
     const rkInput = /** @type {HTMLInputElement|null} */(document.getElementById('topic-rk'));
     const log = document.getElementById('topic-log');
     let sub = null;
-    function logLine(s){ if(!log) return; const ts=new Date().toISOString(); log.textContent += `[${ts}] ${s}\n`; log.scrollTop = log.scrollHeight; }
+    function logLine(s){
+      if(!log) return;
+      const ts=new Date().toISOString();
+      topicLines.push(`[${ts}] ${s}`);
+      if(topicLines.length>logLimit) topicLines.splice(0, topicLines.length - logLimit);
+      log.textContent = topicLines.join('\n');
+      log.scrollTop = log.scrollHeight;
+    }
     if(!subBtn || !unsubBtn || !rkInput) return;
     subBtn.addEventListener('click', ()=>{
       if(!client || !connected){ appendSys('[CTRL] Topic subscribe aborted: not connected'); return; }
@@ -265,8 +297,22 @@
   let connected = false;
 
   function setState(txt){ if(state) state.textContent = txt; }
-  function appendLog(line){ if(!logEl) return; const ts=new Date().toISOString(); logEl.textContent += `[${ts}] ${line}\n`; logEl.scrollTop = logEl.scrollHeight; }
-  function appendSys(line){ if(!sysEl) return; const ts=new Date().toISOString(); sysEl.textContent += `[${ts}] ${line}\n`; sysEl.scrollTop = sysEl.scrollHeight; }
+  function appendLog(line){
+    if(!logEl) return;
+    const ts=new Date().toISOString();
+    logLines.push(`[${ts}] ${line}`);
+    if(logLines.length>logLimit) logLines.splice(0, logLines.length - logLimit);
+    logEl.textContent = logLines.join('\n');
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+  function appendSys(line){
+    if(!sysEl) return;
+    const ts=new Date().toISOString();
+    sysLines.push(`[${ts}] ${line}`);
+    if(sysLines.length>logLimit) sysLines.splice(0, sysLines.length - logLimit);
+    sysEl.textContent = sysLines.join('\n');
+    sysEl.scrollTop = sysEl.scrollHeight;
+  }
 
   function setUiStatus(state){
     if(!uiStatus) return;
@@ -281,12 +327,18 @@
     wsStatus.title = `WebSocket: ${state}`;
   }
 
+  function trimSeries(){
+    for(const key of Object.keys(series)){
+      const arr = series[key];
+      if(arr.length>eventLimit) arr.splice(0, arr.length - eventLimit);
+    }
+  }
   // Charts helpers
   function addPoint(svc, v){
     const now = Date.now();
     const arr = series[svc];
     arr.push({t:now, v: Number(v)||0});
-    // trim window
+    if(arr.length>eventLimit) arr.splice(0, arr.length - eventLimit);
     const cutoff = now - WINDOW_MS;
     while(arr.length && arr[0].t < cutoff) arr.shift();
     scheduleDraw(svc);
