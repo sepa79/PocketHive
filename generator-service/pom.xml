@@ -3,7 +3,7 @@
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>com.example</groupId>
-    <artifactId>sim-mvp-micro</artifactId>
+    <artifactId>pockethive-mvp</artifactId>
     <version>0.1.0</version>
   </parent>
   <artifactId>generator-service</artifactId>
