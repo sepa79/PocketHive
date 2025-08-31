@@ -133,3 +133,10 @@ p{ color:#9aa0a6; }
   from{filter:drop-shadow(0 0 2px #33E1FF);}
   to{filter:drop-shadow(0 0 6px #33E1FF);}
 }
+
+/* Radio telescope icon */
+.radio-telescope{
+  width:32px;
+  height:32px;
+  display:block;
+}
