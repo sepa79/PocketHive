@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.26] - 2025-08-31
+Timestamp: 2025-08-31T02:32:56Z
+
+- UI: Shift monolith glow to hover and keep a light static highlight to save resources.
+
 ## [0.4.25] - 2025-08-31
 Timestamp: 2025-08-31T02:27:47Z
 

@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.9] - 2025-08-31
+Timestamp: 2025-08-31T02:32:56Z
+
+- Move monolith glow to hover and keep a subtle static highlight when idle for lower resource use.
+
 ## [0.2.8] - 2025-08-31
 Timestamp: 2025-08-31T02:27:47Z
 
