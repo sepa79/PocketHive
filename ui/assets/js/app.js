@@ -565,16 +565,27 @@
     }catch{}
   })();
 
-  // Simple header menu dropdown
-  (function(){
-    const btn = document.getElementById('menu-btn');
-    const dd = document.getElementById('menu-dropdown');
-    if(!btn || !dd) return;
-    let open=false;
-    const toggle=(e)=>{ e && e.stopPropagation(); open=!open; dd.style.display=open?'block':'none'; };
-    btn.addEventListener('click', toggle);
-    document.addEventListener('click', (e)=>{ if(open && !dd.contains(e.target) && e.target!==btn){ open=false; dd.style.display='none'; } });
-  })();
+    // Simple header menu dropdown
+    (function(){
+      const btn = document.getElementById('menu-btn');
+      const dd = document.getElementById('menu-dropdown');
+      if(!btn || !dd) return;
+      let open=false;
+      const toggle=(e)=>{ e && e.stopPropagation(); open=!open; dd.style.display=open?'block':'none'; };
+      btn.addEventListener('click', toggle);
+      document.addEventListener('click', (e)=>{ if(open && !dd.contains(e.target) && e.target!==btn){ open=false; dd.style.display='none'; } });
+    })();
+
+    // Generator controls dropdown
+    (function(){
+      const btn = document.getElementById('gen-btn');
+      const dd = document.getElementById('gen-dropdown');
+      if(!btn || !dd) return;
+      let open=false;
+      const toggle=(e)=>{ e && e.stopPropagation(); open=!open; dd.style.display=open?'block':'none'; };
+      btn.addEventListener('click', toggle);
+      document.addEventListener('click', (e)=>{ if(open && !dd.contains(e.target) && e.target!==btn){ open=false; dd.style.display='none'; } });
+    })();
 
   // Move connection controls into header dropdown and toggle via WS health icon
   (function(){

@@ -3,10 +3,10 @@
   const $ = (sel) => document.querySelector(sel);
   const $$ = (sel) => Array.from(document.querySelectorAll(sel));
   const fmt = (n) => Intl.NumberFormat().format(n);
-  const kb = (b) => (b/1024).toFixed(1) + " KB";
-  const LOG_LIMIT_DEFAULT = 500;
-  let logLimit = LOG_LIMIT_DEFAULT;
-  const logLines = [];
+    const kb = (b) => (b/1024).toFixed(1) + " KB";
+    const LOG_LIMIT_DEFAULT = 500;
+    let logLimit = LOG_LIMIT_DEFAULT;
+    const logLines = [];
 
   // UUID v4 generator with fallbacks for older browsers
   function uuidv4(){
@@ -31,9 +31,13 @@
     return `${h.slice(0,4).join('')}-${h.slice(4,6).join('')}-${h.slice(6,8).join('')}-${h.slice(8,10).join('')}-${h.slice(10).join('')}`;
   }
 
-  const PH_CONN_KEY = 'pockethive.conn';
-  function loadConn(){ try{ const raw = localStorage.getItem(PH_CONN_KEY); return raw? JSON.parse(raw): null; }catch{ return null; } }
-  function defaultWs(){ const scheme = location.protocol === 'https:' ? 'wss' : 'ws'; return `${scheme}://${location.host}/ws`; }
+    const PH_CONN_KEY = 'pockethive.conn';
+    const CONFIG_URL = '/config.json';
+    let PH_CONFIG = null;
+    let GEN_EXCHANGE = 'ph.hive';
+    let GEN_RK = 'ph.gen';
+    function loadConn(){ try{ const raw = localStorage.getItem(PH_CONN_KEY); return raw? JSON.parse(raw): null; }catch{ return null; } }
+    function defaultWs(){ const scheme = location.protocol === 'https:' ? 'wss' : 'ws'; return `${scheme}://${location.host}/ws`; }
 
   let client = null;
   let connected = false;
@@ -71,20 +75,23 @@
   }
   function randomAscii(size) { const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_ .,:;!@#$%^&*()[]{}"; let out = ""; while (out.length < size) out += chars[Math.random()*chars.length|0]; return out; }
 
-  function connect() {
-    if (connected) return;
-    const brokerURL = $("#brokerUrl").value.trim(); const vhost = $("#vhost").value.trim() || "/"; const login = $("#login").value.trim(); const passcode = $("#passcode").value.trim();
-    if (!brokerURL || !login || !passcode) { log("Fill broker URL, login and passcode."); return; }
-    if ($("#autoSession").checked) { sessionId = uuidv4(); $("#session").textContent = sessionId; } else { sessionId = $("#sessionInput").value.trim() || sessionId; $("#session").textContent = sessionId; }
-    resultQueuePrefix = $("#resPrefix").value.trim() || "ph.results.";
-    // eslint-disable-next-line no-undef
-    client = new StompJs.Client({ brokerURL, connectHeaders: { login, passcode, host: vhost }, reconnectDelay: Number($("#reconnectMs").value) || 0, debug: (s) => { if ($("#debug").checked) log("[DEBUG] " + s); } });
-    client.onConnect = () => { connected = true; setStatus("connected", "ok"); $("#btnConnect").disabled = true; $("#btnDisconnect").disabled = false; $("#btnSendOne").disabled = false; $("#btnStart").disabled = false; log("Connected."); const q = resultQueuePrefix + sessionId; client.subscribe(`/queue/${q}`, onResult, { ack: "auto" }); log(`Subscribed to /queue/${q}`); };
-    client.onStompError = (frame) => { log("STOMP error: " + (frame.headers?.message || "") + "\n" + (frame.body || "")); setStatus("error", "err"); };
-    client.onWebSocketClose = () => { connected = false; setStatus("disconnected", "off"); $("#btnConnect").disabled = false; $("#btnDisconnect").disabled = true; $("#btnSendOne").disabled = true; $("#btnStart").disabled = true; stopSending(); log("Disconnected."); };
-    setStatus("connecting...", "warn"); client.activate();
-  }
-  function disconnect() { if (client) client.deactivate(); client = null; }
+    function connect() {
+      if (connected) return;
+      const c = loadConn() || {};
+      const brokerURL = c.url || defaultWs();
+      const vhost = c.vhost || '/';
+      const login = c.login || 'guest';
+      const passcode = c.pass || 'guest';
+      sessionId = uuidv4();
+      $("#session").textContent = sessionId;
+      // eslint-disable-next-line no-undef
+      client = new StompJs.Client({ brokerURL, connectHeaders: { login, passcode, host: vhost }, reconnectDelay: 0, debug: ()=>{} });
+      client.onConnect = () => { connected = true; setStatus("connected", "ok"); $("#btnSendOne").disabled = false; $("#btnStart").disabled = false; log("Connected."); const q = resultQueuePrefix + sessionId; client.subscribe(`/queue/${q}`, onResult, { ack: "auto" }); log(`Subscribed to /queue/${q}`); };
+      client.onStompError = (frame) => { log("STOMP error: " + (frame.headers?.message || "") + "\n" + (frame.body || "")); setStatus("error", "err"); };
+      client.onWebSocketClose = () => { connected = false; setStatus("disconnected", "off"); $("#btnSendOne").disabled = true; $("#btnStart").disabled = true; stopSending(); log("Disconnected."); };
+      setStatus("connecting...", "warn"); client.activate();
+    }
+    function disconnect() { if (client) client.deactivate(); client = null; }
   function onResult(message) {
     metrics.recv++;
     if (message && message.headers && message.headers["correlation-id"]) { const cid = message.headers["correlation-id"]; const t0 = inflight.get(cid); if (t0) { const dt = performance.now() - t0; metrics.ack++; metrics.inFlight = Math.max(0, metrics.inFlight - 1); inflight.delete(cid); const L = metrics.latency; L.count++; L.total += dt; L.min = Math.min(L.min, dt); L.max = Math.max(L.max, dt); latencySamples.push(dt); if (latencySamples.length > 2000) latencySamples.shift(); const s = [...latencySamples].sort((a,b)=>a-b); L.p95 = s[Math.floor(s.length*0.95)] || dt; } }
@@ -92,8 +99,8 @@
     updateMetrics();
   }
   function sendOne() {
-    if (!client || !connected) { log("Not connected."); return; }
-    const exchange = $("#exchange").value.trim() || "ph.hive"; const routingKey = $("#routingKey").value.trim() || "generator.request"; const expectReply = $("#expectReply").checked;
+      if (!client || !connected) { log("Not connected."); return; }
+      const exchange = GEN_EXCHANGE; const routingKey = GEN_RK; const expectReply = $("#expectReply").checked;
     const payloadSize = Number($("#payloadBytes").value); const prompt = $("#prompt").value.trim(); const nowIso = new Date().toISOString(); const correlationId = uuidv4();
     const body = { type: "GENERATION_REQUEST", prompt, sessionId, correlationId, timestamp: nowIso, payload: payloadSize > 0 ? randomAscii(payloadSize) : undefined };
     const headers = { "content-type":"application/json", "correlation-id": correlationId }; if (expectReply) headers["reply-to"] = (resultQueuePrefix + sessionId);
@@ -113,31 +120,31 @@
   }
   function stopSending() { if (sendTimer) clearInterval(sendTimer); sendTimer = null; $("#btnStart").disabled = false; $("#btnStop").disabled = true; setStatus(connected ? "connected" : "disconnected", connected ? "ok" : "off"); }
   function resetMetrics() { metrics.sent = 0; metrics.ack = 0; metrics.errors = 0; metrics.inFlight = inflight.size; metrics.recv = 0; metrics.tStart = performance.now(); metrics.lastSecSent = 0; metrics.lastSecRecv = 0; metrics.latency = { count:0, total:0, min:Infinity, max:0, p95:0 }; latencySamples = []; updateMetrics(); }
-  window.addEventListener("DOMContentLoaded", () => {
-    // Prefill connection fields from main UI if present; else default to same-origin /ws
-    try{
-      const c = loadConn();
-      if(c){
-        if(c.url) $("#brokerUrl").value = c.url; else $("#brokerUrl").value = defaultWs();
-        $("#vhost").value = c.vhost || '/';
-        if(c.login) $("#login").value = c.login;
-        if(c.pass) $("#passcode").value = c.pass;
-      } else {
-        $("#brokerUrl").value = defaultWs();
-        $("#vhost").value = '/';
-        $("#login").value = 'guest';
-        $("#passcode").value = 'guest';
-      }
-    }catch{}
-    $("#session").textContent = sessionId; syncSlider("rps"); syncSlider("burst"); syncSlider("payloadBytes"); syncSlider("concurrency"); syncSlider("maxInflight"); syncSlider("jitter"); syncSlider("duration"); $("#btnConnect").addEventListener("click", connect); $("#btnDisconnect").addEventListener("click", disconnect); $("#btnSendOne").addEventListener("click", sendOne); $("#btnStart").addEventListener("click", startSending); $("#btnStop").addEventListener("click", stopSending); $("#btnReset").addEventListener("click", resetMetrics); $("#autoSession").addEventListener("change", () => { const on = $("#autoSession").checked; $("#sessionInput").classList.toggle("hidden", on); });
-    const logLimitInput = $("#logLimit");
-    if(logLimitInput){
-      logLimitInput.addEventListener("change", ()=>{
-        const v = Number(logLimitInput.value) || LOG_LIMIT_DEFAULT;
-        logLimit = Math.max(10, v);
-        if(logLines.length>logLimit) logLines.splice(0, logLines.length - logLimit);
-        const el = $("#log"); if(el) el.textContent = logLines.join("\n");
+    window.addEventListener("DOMContentLoaded", () => {
+      fetch(CONFIG_URL).then(r=> r.json()).then(cfg=>{
+        PH_CONFIG = cfg;
+        if(cfg && cfg.amqp){
+          GEN_EXCHANGE = cfg.amqp.exchange || GEN_EXCHANGE;
+          GEN_RK = cfg.amqp.genQueue || GEN_RK;
+          if(cfg.amqp.resultPrefix) resultQueuePrefix = cfg.amqp.resultPrefix;
+        }
+      }).catch(()=>{}).finally(()=>{
+        $("#session").textContent = sessionId;
+        syncSlider("rps"); syncSlider("burst"); syncSlider("payloadBytes"); syncSlider("concurrency"); syncSlider("maxInflight"); syncSlider("jitter"); syncSlider("duration");
+        $("#btnSendOne").addEventListener("click", sendOne);
+        $("#btnStart").addEventListener("click", startSending);
+        $("#btnStop").addEventListener("click", stopSending);
+        $("#btnReset").addEventListener("click", resetMetrics);
+        const logLimitInput = $("#logLimit");
+        if(logLimitInput){
+          logLimitInput.addEventListener("change", ()=>{
+            const v = Number(logLimitInput.value) || LOG_LIMIT_DEFAULT;
+            logLimit = Math.max(10, v);
+            if(logLines.length>logLimit) logLines.splice(0, logLines.length - logLimit);
+            const el = $("#log"); if(el) el.textContent = logLines.join("\n");
+          });
+        }
+        connect();
       });
-    }
-  });
+    });
 })();
