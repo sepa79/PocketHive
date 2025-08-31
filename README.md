@@ -110,7 +110,6 @@ Manual checks:
   - Connect/Disconnect clicks, edits of URL/username/password (password length only)
   - WebSocket lifecycle (connecting URL, CONNECTED, subscriptions, errors, close)
   - UI health transitions based on `/healthz`
-- Browser Generator: standalone page at `/generator/` to publish messages via Web‑STOMP with configurable rate and payload.
 - HAL eyes: status indicators for UI and WS (green slow pulse = healthy/connected; blue modem pulse = connecting; red fast pulse = failed/closed/idle).
 
 ## Troubleshooting

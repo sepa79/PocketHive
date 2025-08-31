@@ -104,7 +104,7 @@ Timestamp: 2025-08-29T14:39:23Z
 
 - Auth: Default all components to RabbitMQ `guest/guest`; remove custom user creation script (`rabbitmq/add-user.sh`) and related Compose envs.
 - Compose: Stop setting `RABBITMQ_DEFAULT_USER/PASS`; services rely on defaults and `RABBITMQ_HOST` only.
-- UI: Defaults and placeholders use `guest/guest` (config.json, app.js, generator page, legacy controls).
+- UI: Defaults and placeholders use `guest/guest` (config.json, app.js, legacy controls).
 - Control-plane: Switch routing key kinds to kebab-case — `status-delta`, `status-full` (generator, moderator, processor, docs, spec, schema).
 - Docs: README, control-plane rules, AsyncAPI, and JSON schema updated to kebab-case and guest defaults.
 - RabbitMQ image: Do not copy `add-user.sh`. Note: `definitions.json` remains minimal; if it causes issues, consider removing it from the image.
@@ -159,13 +159,10 @@ Timestamp: 2025-08-29T01:24:02Z
 ## [0.2.1] - 2025-08-29
 Timestamp: 2025-08-29T01:03:45Z
 
-- UI: Add browser generator integration under `/generator/` and visible UI/WS health icons.
-- UI: Share connection settings (URL/login/pass/vhost) with generator via localStorage.
 - UI: Add changelog viewer (`/changelog.html`) and expose current `VERSION` and `CHANGELOG.md` via Nginx.
 - UI: Load global config from `/config.json` (STOMP path/vhost, subscriptions) for ready‑to‑run defaults.
 - Backend: Make topology names overridable via `PH_*` env; fix `@RabbitListener` to use property placeholders (compilation error resolved).
 - Compose: Start UI immediately; other services wait for RabbitMQ health.
-- Generator: Add UUID v4 polyfill for wider browser compatibility.
 
 ## [0.2.0] - 2025-08-29
 Timestamp: 2025-08-29T00:18:36Z

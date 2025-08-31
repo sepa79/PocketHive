@@ -5,20 +5,17 @@ All notable changes to this project will be documented in this file.
 ## [0.2.3] - 2025-08-29
 Timestamp: 2025-08-29T02:20:00Z
 
-- Refactor Events connection to use StompJS (same as Generator) instead of a custom STOMP client.
+- Refactor Events connection to use StompJS instead of a custom STOMP client.
 - Improve diagnostics around connect/handshake and socket lifecycle; clearer syslog entries.
 - Normalize CRLF handling in STOMP frame parsing (pre-refactor) to avoid missed CONNECTED frames.
 
 ## [0.2.1] - 2025-08-29
 Timestamp: 2025-08-29T01:03:45Z
 
-- UI: Add browser generator integration under `/generator/` and visible UI/WS health icons.
-- UI: Share connection settings (URL/login/pass/vhost) with generator via localStorage.
 - UI: Add changelog viewer (`/changelog.html`) and expose current `VERSION` and `CHANGELOG.md` via Nginx.
 - UI: Load global config from `/config.json` (STOMP path/vhost, subscriptions) for ready‑to‑run defaults.
 - Backend: Make topology names overridable via `PH_*` env; fix `@RabbitListener` to use property placeholders (compilation error resolved).
 - Compose: Start UI immediately; other services wait for RabbitMQ health.
-- Generator: Add UUID v4 polyfill for wider browser compatibility.
 
 ## [0.2.0] - 2025-08-29
 Timestamp: 2025-08-29T00:18:36Z

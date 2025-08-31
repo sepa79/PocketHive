@@ -84,20 +84,6 @@ channels:
           durable: true
         routingKey: sig.{type}.{role}.{instance}
 
-  # PocketHive traffic example kept for reference
-  exchange/ph.hive/generator.request:
-    publish:
-      summary: Workload generation request published by PocketHive browser generator
-      message:
-        $ref: '#/components/messages/GenerationRequest'
-    bindings:
-      amqp:
-        is: routingKey
-        exchange:
-          name: ph.hive
-          type: direct
-          durable: true
-        routingKey: generator.request
 components:
   messages:
     ControlStatusFull:
@@ -136,12 +122,6 @@ components:
       contentType: application/json
       payload:
         $ref: '#/components/schemas/ControlSignalPayload'
-    GenerationRequest:
-      name: GenerationRequest
-      title: PocketHive browser generator request
-      contentType: application/json
-      payload:
-        $ref: '#/components/schemas/GenerationPayload'
   schemas:
     ControlBase:
       type: object
@@ -235,23 +215,3 @@ components:
         version: { type: string }
         messageId: { type: string, format: uuid }
         timestamp: { type: string, format: date-time }
-    GenerationPayload:
-      type: object
-      required: [type, sessionId, correlationId, timestamp]
-      properties:
-        type:
-          type: string
-          enum: [GENERATION_REQUEST]
-        sessionId:
-          type: string
-        correlationId:
-          type: string
-          format: uuid
-        timestamp:
-          type: string
-          format: date-time
-        prompt:
-          type: string
-        payload:
-          type: string
-          description: Optional blob for size padding

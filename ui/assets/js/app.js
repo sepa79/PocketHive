@@ -425,7 +425,7 @@
     const login = (prefer ? (cfgStomp.login || '') : '') || (elUser && elUser.value) || 'guest';
     const passcode = (prefer ? (cfgStomp.passcode || '') : '') || (elPass && elPass.value) || 'guest';
     const vhost = cfgStomp.vhost || '/';
-    // Persist connection for other pages (e.g., /generator)
+    // Persist connection for reuse on other pages
     saveConn({ url, login, pass: passcode, vhost: '/' });
     // Log connect params (mask pass)
     try{ appendSys(`[CTRL] CONNECT url=${url} vhost=${vhost} login=${login} pass=***`); }catch{}
@@ -565,20 +565,16 @@
     }catch{}
   })();
 
-    // Generic dropdown helper
-    function setupDropdown(btnId, ddId){
-      const btn = document.getElementById(btnId);
-      const dd = document.getElementById(ddId);
-      if(!btn || !dd) return;
-      let open = false;
-      const toggle = (e)=>{ e && e.stopPropagation(); open=!open; dd.style.display = open ? 'block':'none'; };
-      btn.addEventListener('click', toggle);
-      document.addEventListener('click', (e)=>{ if(open && !dd.contains(e.target) && e.target!==btn){ open=false; dd.style.display='none'; } });
-    }
-
-    // Header menu and generator dropdowns
-    setupDropdown('menu-btn','menu-dropdown');
-    setupDropdown('gen-btn','gen-dropdown');
+  // Simple header menu dropdown
+  (function(){
+    const btn = document.getElementById('menu-btn');
+    const dd = document.getElementById('menu-dropdown');
+    if(!btn || !dd) return;
+    let open=false;
+    const toggle=(e)=>{ e && e.stopPropagation(); open=!open; dd.style.display=open?'block':'none'; };
+    btn.addEventListener('click', toggle);
+    document.addEventListener('click', (e)=>{ if(open && !dd.contains(e.target) && e.target!==btn){ open=false; dd.style.display='none'; } });
+  })();
 
   // Move connection controls into header dropdown and toggle via WS health icon
   (function(){
