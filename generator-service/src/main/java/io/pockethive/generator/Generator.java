@@ -7,6 +7,7 @@ import org.springframework.amqp.core.MessageProperties;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -29,12 +30,14 @@ public class Generator {
   private static final Logger log = LoggerFactory.getLogger(Generator.class);
   private final RabbitTemplate rabbit;
   private final AtomicLong counter = new AtomicLong();
-  private final String instanceId = UUID.randomUUID().toString();
+  private final String instanceId;
   private volatile boolean enabled = true;
   private volatile String mode = "auto";
 
-  public Generator(RabbitTemplate rabbit) {
+  public Generator(RabbitTemplate rabbit,
+                   @Qualifier("instanceId") String instanceId) {
     this.rabbit = rabbit;
+    this.instanceId = instanceId;
     // Emit full snapshot on startup
     try{ sendStatusFull(0); } catch(Exception ignore){}
   }
@@ -56,7 +59,7 @@ public class Generator {
     sendStatusDelta(tps);
   }
 
-  @RabbitListener(queues = "${ph.controlQueue:ph.control}")
+  @RabbitListener(queues = "#{@controlQueue}")
   public void onControl(String payload,
                         @Header(AmqpHeaders.RECEIVED_ROUTING_KEY) String rk,
                         @Header(value = ObservabilityContextUtil.HEADER, required = false) String trace) {
@@ -126,7 +129,7 @@ public class Generator {
 
   private String envelope(String role, String[] outQueues, long tps, String kind){
     String location = System.getenv().getOrDefault("PH_LOCATION", System.getenv().getOrDefault("HOSTNAME", "local"));
-    String messageId = java.util.UUID.randomUUID().toString();
+    String messageId = UUID.randomUUID().toString();
     String timestamp = java.time.Instant.now().toString();
     String traffic = Topology.EXCHANGE;
     StringBuilder sb = new StringBuilder(256);

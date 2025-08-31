@@ -5,6 +5,7 @@ info:
   description: |
     AsyncAPI specification documenting PocketHive messaging contracts.
     - ph.control — control-plane events, lifecycle, metrics, alerts, and signals
+    - Services consume control signals from queues `ph.control.<role>.<instance>` bound to the `ph.control` exchange
     - ph.hive — traffic exchange for workload messages (generator → moderator → processor)
 servers:
   control-ws:

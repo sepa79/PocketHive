@@ -7,6 +7,7 @@ These rules define non-negotiable contracts for emitting and consuming control-p
 - MUST include the envelope fields: `event`, `kind`, `version`, `role`, `instance`, `messageId`, `timestamp`.
 - SHOULD include `queues.in` and/or `queues.out` in `status-full` events (and whenever bindings change).
 - SHOULD send `status-delta` events every ~5 seconds with lightweight `data` (e.g., `{ tps }`).
+- MUST consume signals from a dedicated queue `ph.control.<role>.<instance>` bound to `ph.control` with `sig.#`, `sig.#.<role>`, and `sig.#.<role>.<instance>`.
 - MUST respond to signals routed to `sig.<type>[.<role>[.<instance>]]` (topic exchange), binding with wildcards as needed, e.g.:
   - Global: `sig.status-request.#`
   - Role:   `sig.status-request.<role>.#`

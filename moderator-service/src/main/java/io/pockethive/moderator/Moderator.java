@@ -13,6 +13,7 @@ import org.springframework.amqp.support.AmqpHeaders;
 import io.pockethive.observability.ObservabilityContext;
 import io.pockethive.observability.ObservabilityContextUtil;
 import org.slf4j.MDC;
+import org.springframework.beans.factory.annotation.Qualifier;
 
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
@@ -24,13 +25,15 @@ public class Moderator {
   private static final Logger log = LoggerFactory.getLogger(Moderator.class);
   private final RabbitTemplate rabbit;
   private final AtomicLong counter = new AtomicLong();
-  private final String instanceId = UUID.randomUUID().toString();
+  private final String instanceId;
   private volatile boolean rulesEnabled = false;
   private volatile String filter = "";
   private volatile int limit = 0;
 
-  public Moderator(RabbitTemplate rabbit) {
+  public Moderator(RabbitTemplate rabbit,
+                   @Qualifier("instanceId") String instanceId) {
     this.rabbit = rabbit;
+    this.instanceId = instanceId;
     try{ sendStatusFull(0); } catch(Exception ignore){}
   }
 
@@ -53,7 +56,7 @@ public class Moderator {
   @Scheduled(fixedRate = 5000)
   public void status() { long tps = counter.getAndSet(0); sendStatusDelta(tps); }
 
-  @RabbitListener(queues = "${ph.controlQueue:ph.control}")
+  @RabbitListener(queues = "#{@controlQueue}")
   public void onControl(String payload,
                         @Header(AmqpHeaders.RECEIVED_ROUTING_KEY) String rk,
                         @Header(value = ObservabilityContextUtil.HEADER, required = false) String trace) {
@@ -96,7 +99,7 @@ public class Moderator {
   }
   private String envelope(String role, String[] inQueues, String[] outQueues, long tps, String kind){
     String location = System.getenv().getOrDefault("PH_LOCATION", System.getenv().getOrDefault("HOSTNAME", "local"));
-    String messageId = java.util.UUID.randomUUID().toString();
+    String messageId = UUID.randomUUID().toString();
     String timestamp = java.time.Instant.now().toString();
     String traffic = Topology.EXCHANGE;
     StringBuilder sb = new StringBuilder(256);
