@@ -39,16 +39,6 @@
       "arguments": {}
     }
   ],
-  "queues": [
-    { "name": "ph.control.generator", "vhost": "/", "durable": true, "auto_delete": false, "arguments": {} },
-    { "name": "ph.control.moderator", "vhost": "/", "durable": true, "auto_delete": false, "arguments": {} },
-    { "name": "ph.control.processor", "vhost": "/", "durable": true, "auto_delete": false, "arguments": {} },
-    { "name": "ph.control.postprocessor", "vhost": "/", "durable": true, "auto_delete": false, "arguments": {} }
-  ],
-  "bindings": [
-    { "source": "ph.control", "vhost": "/", "destination": "ph.control.generator", "destination_type": "queue", "routing_key": "sig.#", "arguments": {} },
-    { "source": "ph.control", "vhost": "/", "destination": "ph.control.moderator", "destination_type": "queue", "routing_key": "sig.#", "arguments": {} },
-    { "source": "ph.control", "vhost": "/", "destination": "ph.control.processor", "destination_type": "queue", "routing_key": "sig.#", "arguments": {} },
-    { "source": "ph.control", "vhost": "/", "destination": "ph.control.postprocessor", "destination_type": "queue", "routing_key": "sig.#", "arguments": {} }
-  ]
+  "queues": [],
+  "bindings": []
 }

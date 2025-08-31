@@ -38,7 +38,7 @@ public class RabbitConfig {
   TopicExchange controlExchange(){ return new TopicExchange(Topology.CONTROL_EXCHANGE, true, false); }
 
   @Bean
-  Queue control(String controlQueue){ return QueueBuilder.durable(controlQueue).build(); }
+  Queue control(String controlQueue){ return QueueBuilder.nonDurable(controlQueue).autoDelete().build(); }
 
   @Bean
   Binding bindSigBroadcast(Queue control, TopicExchange controlExchange){
