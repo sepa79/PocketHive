@@ -447,13 +447,14 @@
       appendSys('CONNECTED ' + JSON.stringify(frame.headers || {}));
       let subs = (PH_CONFIG && Array.isArray(PH_CONFIG.subscriptions) && PH_CONFIG.subscriptions.length)
         ? PH_CONFIG.subscriptions.slice()
-        : ['/queue/ph.control'];
-      // Always include buzz exchange event/signal routes so Events see everything
-      if(!subs.includes('/exchange/ph.control/ev.#')) subs.push('/exchange/ph.control/ev.#');
-      if(!subs.includes('/exchange/ph.control/sig.#')) subs.push('/exchange/ph.control/sig.#');
+        : [];
+      // Always include control-plane routes using new status-full/delta scheme
+      if(!subs.includes('/exchange/ph.control/ev.status-full.#')) subs.push('/exchange/ph.control/ev.status-full.#');
+      if(!subs.includes('/exchange/ph.control/ev.status-delta.#')) subs.push('/exchange/ph.control/ev.status-delta.#');
       if(!subs.includes('/exchange/ph.control/ev.metric.#')) subs.push('/exchange/ph.control/ev.metric.#');
+      if(!subs.includes('/exchange/ph.control/sig.#')) subs.push('/exchange/ph.control/sig.#');
       if(!(PH_CONFIG && Array.isArray(PH_CONFIG.subscriptions) && PH_CONFIG.subscriptions.length)){
-        appendSys('[BUZZ] SUB using fallback [/queue/ph.control]');
+        appendSys('[BUZZ] SUB using defaults [ev.status-full, ev.status-delta, ev.metric, sig]');
       }
       subs.forEach(d => {
         try{
