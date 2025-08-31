@@ -87,6 +87,17 @@
     });
   }
 
+  function setupDropdown(btnId, ddId){
+    const btn = document.getElementById(btnId);
+    const dd = document.getElementById(ddId);
+    if(!btn || !dd) return {toggle:()=>{}};
+    let open=false;
+    const toggle=(e)=>{ e && e.stopPropagation(); open=!open; dd.style.display=open?'block':'none'; };
+    btn.addEventListener('click', toggle);
+    document.addEventListener('click', (e)=>{ if(open && !dd.contains(e.target) && e.target!==btn){ open=false; dd.style.display='none'; } });
+    return {toggle};
+  }
+
   // Tabs handling
   (function(){
     if(!tabControl || !tabHive || !viewControl || !viewHive) return;
@@ -102,8 +113,8 @@
         if(swarmSvg) redrawSwarm();
       }
     };
-    tabControl.addEventListener('click', ()=> activate('control'));
-    tabHive.addEventListener('click', ()=> activate('hive'));
+    tabControl.addEventListener('click', (e)=>{ e.preventDefault(); activate('control'); });
+    tabHive.addEventListener('click', (e)=>{ e.preventDefault(); activate('hive'); });
     activate(location.pathname==='/hive' ? 'hive' : 'control');
   })();
 
@@ -602,15 +613,7 @@
   })();
 
   // Simple header menu dropdown
-  (function(){
-    const btn = document.getElementById('menu-btn');
-    const dd = document.getElementById('menu-dropdown');
-    if(!btn || !dd) return;
-    let open=false;
-    const toggle=(e)=>{ e && e.stopPropagation(); open=!open; dd.style.display=open?'block':'none'; };
-    btn.addEventListener('click', toggle);
-    document.addEventListener('click', (e)=>{ if(open && !dd.contains(e.target) && e.target!==btn){ open=false; dd.style.display='none'; } });
-  })();
+  setupDropdown('menu-btn','menu-dropdown');
 
   // Move connection controls into header dropdown and toggle via WS health icon
   (function(){
@@ -627,12 +630,12 @@
     // widen url row
     const url = document.getElementById('wsurl'); if(url) url.style.gridColumn = '1 / span 2';
     const stateLbl = document.getElementById('state'); if(stateLbl){ stateLbl.style.gridColumn = '1 / span 2'; stateLbl.style.alignSelf='center'; stateLbl.style.color='#9aa0a6'; }
-    let open=false;
-    const toggle=(e)=>{ e && e.stopPropagation(); open=!open; host.style.display = open ? 'block' : 'none'; };
-    trigger.addEventListener('click', toggle);
+    const {toggle} = setupDropdown(trigger.id,'conn-dropdown');
     trigger.addEventListener('keydown', (e)=>{ if(e.key==='Enter' || e.key===' '){ e.preventDefault(); toggle(e); } });
-    document.addEventListener('click', (e)=>{ if(open && !host.contains(e.target) && e.target!==trigger){ open=false; host.style.display='none'; } });
   })();
+
+  // Generator controls dropdown
+  setupDropdown('gen-btn','gen-dropdown');
 
   // Log user edits to connection fields (mask secrets)
   if(HAS_CONN){

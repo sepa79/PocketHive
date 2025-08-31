@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <title>Generator</title>
+  <link rel="stylesheet" href="style.css"/>
+</head>
+<body>
+  <div class="controls">
+    <label>Rate (msg/s) <input id="rps" type="number" min="1" value="1"/></label>
+    <label>Payload bytes <input id="payload" type="number" min="0" value="0"/></label>
+    <div class="btn-row">
+      <button id="start" disabled>Start</button>
+      <button id="stop" disabled>Stop</button>
+    </div>
+  </div>
+  <pre id="log" class="log"></pre>
+  <script src="https://unpkg.com/@stomp/stompjs@7.0.0/bundles/stomp.umd.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

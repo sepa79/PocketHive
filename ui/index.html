@@ -4,6 +4,14 @@
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>PocketHive UI</title>
+  <link rel="icon" type="image/svg+xml" href="./assets/favicon/favicon.svg">
+  <link rel="icon" type="image/png" sizes="48x48" href="./assets/favicon/favicon-48.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="./assets/favicon/favicon-32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="./assets/favicon/favicon-16.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="./assets/favicon/apple-touch-icon.png">
+  <link rel="mask-icon" href="./assets/favicon/safari-pinned-tab.svg" color="#FFC107">
+  <link rel="manifest" href="./assets/favicon/site.webmanifest">
+  <meta name="theme-color" content="#0f1116">
   <link rel="stylesheet" href="./assets/css/app.css">
   <style>
       header {
@@ -73,6 +81,12 @@
                 <a href="bindings.html" class="dropdown-item">Control Bindings</a>
                 <a href="changelog.html" class="dropdown-item">Changelog</a>
                 <a href="docs.html" class="dropdown-item">API Docs</a>
+              </div>
+            </div>
+            <div class="menu" style="position:relative">
+              <button id="gen-btn" class="bg-toggle" style="cursor:pointer"><img src="./assets/favicon/favicon-32.png" class="icon" alt=""/>Generator</button>
+              <div id="gen-dropdown" class="dropdown-panel" style="display:none; position:absolute; right:0; top:36px; width:380px;">
+                <iframe src="generator/index.html" style="width:380px; height:420px; border:0; background: rgba(12,16,22,0.95); border-radius:10px;"></iframe>
               </div>
             </div>
             <div class="bg-toggle" style="gap:10px; align-items:center">
