@@ -22,66 +22,6 @@ p{ color:#9aa0a6; }
   backdrop-filter: blur(6px);
 }
 
-/* HAL status eyes */
-.hal{ display:flex; align-items:center; gap:10px; }
-.hal-eye{
-  --hal: #9aa0a6; /* base tint */
-  position: relative; width: 28px; height: 28px; border-radius: 50%;
-  background:
-    radial-gradient(100% 100% at 50% 50%, #000 0%, #111 40%, #0a0d12 100%);
-  box-shadow: 0 0 10px rgba(0,0,0,.35) inset, 0 0 10px color-mix(in srgb, var(--hal) 18%, transparent);
-  outline: 1px solid rgba(255,255,255,0.14);
-}
-.hal-eye#status-ws{ cursor: pointer; }
-/* Inner core that pulses (center only) */
-.hal-eye::after{
-  content:""; position:absolute; inset: 12%; border-radius:50%;
-  background:
-    radial-gradient(48% 48% at 50% 44%, #fff9 0%, #fff0 62%),
-    radial-gradient(70% 72% at 50% 56%, color-mix(in srgb, var(--hal) 95%, #000) 0%, transparent 72%);
-  filter: drop-shadow(0 0 8px color-mix(in srgb, var(--hal) 55%, transparent));
-  transform: scale(0.98);
-  opacity: .95;
-}
-@keyframes hal-core-slow{ 0%{ transform:scale(0.94); opacity:.70 } 50%{ transform:scale(1.06); opacity:.95 } 100%{ transform:scale(0.94); opacity:.70 } }
-@keyframes hal-core-fast{ 0%{ transform:scale(0.88); opacity:.60 } 50%{ transform:scale(1.12); opacity:1.0 } 100%{ transform:scale(0.88); opacity:.60 } }
-@keyframes hal-core-modem{ 0%,70%,100%{ transform:scale(0.95); opacity:.55 } 78%{ transform:scale(1.10); opacity:1 } 82%{ transform:scale(0.98); opacity:.70 } }
-/* UI states (HAL eyes policy) — center pulsing */
-#status-ui[data-state="healthy"], #status-ws[data-state="connected"]{ --hal:#00ff66; }
-#status-ui[data-state="healthy"]::after, #status-ws[data-state="connected"]::after{ animation: hal-core-slow 2.4s ease-in-out infinite; }
-#status-ui[data-state="unhealthy"], #status-ws[data-state="error"],
-#status-ui[data-state="down"], #status-ws[data-state="closed"], #status-ws[data-state="idle"]{ --hal:#ff0033; }
-#status-ui[data-state="unhealthy"]::after, #status-ws[data-state="error"]::after,
-#status-ui[data-state="down"]::after, #status-ws[data-state="closed"]::after, #status-ws[data-state="idle"]::after{ animation: hal-core-fast 0.7s ease-in-out infinite; }
-#status-ui[data-state="connecting"], #status-ws[data-state="connecting"]{ --hal:#00ccff; }
-#status-ui[data-state="connecting"]::after, #status-ws[data-state="connecting"]::after{ animation: hal-core-modem 1.1s linear infinite; }
-
-/* Stronger outer glow per state to increase contrast */
-#status-ui[data-state="healthy"], #status-ws[data-state="connected"]{
-  box-shadow: 0 0 10px rgba(0,0,0,.35) inset,
-              0 0 18px color-mix(in srgb, var(--hal) 30%, transparent),
-              0 0 34px color-mix(in srgb, var(--hal) 18%, transparent);
-}
-#status-ui[data-state*="unhealthy"], #status-ws[data-state="error"],
-#status-ui[data-state="down"], #status-ws[data-state="closed"], #status-ws[data-state="idle"]{
-  box-shadow: 0 0 10px rgba(0,0,0,.35) inset,
-              0 0 18px color-mix(in srgb, var(--hal) 36%, transparent),
-              0 0 36px color-mix(in srgb, var(--hal) 22%, transparent);
-}
-#status-ui[data-state="connecting"], #status-ws[data-state="connecting"]{
-  box-shadow: 0 0 10px rgba(0,0,0,.35) inset,
-              0 0 16px color-mix(in srgb, var(--hal) 26%, transparent),
-              0 0 28px color-mix(in srgb, var(--hal) 16%, transparent);
-}
-
-/* Hover feedback for connection icon */
-#status-ws{ transition: box-shadow .15s, transform .15s; }
-#status-ws:hover{
-  transform: scale(1.08);
-  box-shadow: 0 0 10px rgba(0,0,0,.35) inset,
-              0 0 24px color-mix(in srgb, var(--hal) 40%, transparent),
-              0 0 44px color-mix(in srgb, var(--hal) 28%, transparent);
-}
 /* Shared dropdown menu styling */
 .dropdown-panel{
   background: rgba(12,16,22,0.95);
@@ -107,29 +47,3 @@ p{ color:#9aa0a6; }
 .dropdown-item:last-child{ border-bottom:none; }
 .dropdown-item:hover{ background:rgba(255,255,255,0.08); }
 
-/* Monolith status button */
-#broadcast-status{
-  appearance:none;
-  background:none;
-  border:none;
-  cursor:pointer;
-  width:40px;
-  height:40px;
-  padding:0;
-}
-#broadcast-status .monolith{
-  width:100%;
-  height:100%;
-  animation: monolith-glow 2s ease-in-out infinite alternate;
-  transition: transform .2s ease;
-}
-#broadcast-status:hover .monolith{
-  transform: translateY(-2px);
-  animation: none;
-  filter: drop-shadow(0 0 8px #33E1FF);
-}
-
-@keyframes monolith-glow{
-  from{filter:drop-shadow(0 0 2px #33E1FF);}
-  to{filter:drop-shadow(0 0 6px #33E1FF);}
-}
