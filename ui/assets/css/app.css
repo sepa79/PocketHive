@@ -134,8 +134,9 @@ p{ color:#9aa0a6; }
   to{filter:drop-shadow(0 0 6px #33E1FF);}
 }
 
-/* Radar scan button */
-#radar-btn{
+/* Radar scan & connection buttons */
+#radar-btn,
+#ph-conn-btn{
   appearance:none;
   background:none;
   border:none;
@@ -146,14 +147,65 @@ p{ color:#9aa0a6; }
   position:relative;
   filter: drop-shadow(0 0 4px #33E1FF);
 }
-#radar-btn svg{ width:100%; height:100%; }
-#radar-btn .sweep{ transform-origin:12px 12px; animation:radar-sweep 2s linear infinite; }
-#radar-btn:hover{ animation:radar-pulse 1.2s ease-in-out infinite alternate; }
+#radar-btn:hover,
+#ph-conn-btn:hover{ animation:radar-pulse 1.2s ease-in-out infinite alternate; }
 #radar-btn::after{
   content:""; position:absolute; inset:0; border-radius:50%; border:2px solid #33E1FF;
   opacity:0; transform:scale(0.2); pointer-events:none;
 }
 #radar-btn.pinging::after{ animation:radar-ping 0.6s ease-out forwards; }
+#radar-btn .radar-icon,
+#ph-conn-btn .conn-icon{
+  display:block;
+  width:100%;
+  height:100%;
+  clip-path:polygon(50% 0%, 93% 25%, 93% 75%, 50% 100%, 7% 75%, 7% 25%);
+  box-shadow:0 0 0 2px #FFC107 inset;
+  position:relative;
+}
+#radar-btn .radar-icon .ring{
+  position:absolute;
+  border:2px solid #33E1FF;
+  border-left-color:transparent;
+  border-bottom-color:transparent;
+  border-radius:50%;
+  top:50%; left:50%;
+  transform:translate(-50%,-50%);
+}
+#radar-btn .radar-icon .ring.r1{ width:20px; height:20px; }
+#radar-btn .radar-icon .ring.r2{ width:12px; height:12px; }
+#radar-btn .radar-icon .dot{
+  position:absolute;
+  width:4px; height:4px;
+  background:#33E1FF;
+  border-radius:50%;
+  top:50%; left:50%;
+  transform:translate(-50%,-50%);
+}
+#radar-btn .radar-icon .sweep{
+  position:absolute;
+  width:2px; height:50%;
+  background:#33E1FF;
+  top:50%; left:50%;
+  transform-origin:0 0;
+  animation:radar-sweep 2s linear infinite;
+}
+#ph-conn-btn .conn-icon .node{
+  position:absolute;
+  width:6px; height:6px;
+  background:#33E1FF;
+  border-radius:50%;
+  top:50%; transform:translate(-50%,-50%);
+}
+#ph-conn-btn .conn-icon .node.left{ left:30%; }
+#ph-conn-btn .conn-icon .node.right{ left:70%; }
+#ph-conn-btn .conn-icon .link{
+  position:absolute;
+  top:50%; left:30%;
+  width:40%; height:2px;
+  background:#33E1FF;
+  transform:translateY(-50%);
+}
 @keyframes radar-sweep{ from{ transform:rotate(0deg); } to{ transform:rotate(360deg); } }
 @keyframes radar-pulse{ from{ transform:scale(1); } to{ transform:scale(1.08); } }
 @keyframes radar-ping{ from{ transform:scale(0.2); opacity:0.8; } to{ transform:scale(1.6); opacity:0; } }

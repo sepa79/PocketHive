@@ -78,19 +78,16 @@
           <div class="bg-toggle" style="gap:10px; align-items:center">
             <div class="hal">
               <span id="status-ui" class="hal-eye" data-state="connecting" title="UI Health"></span>
-              <span id="status-ws" class="hal-eye" data-state="idle" title="WebSocket to RabbitMQ — click to open connection" role="button" tabindex="0"></span>
-              <div class="menu" id="conn-menu" style="position:relative; display:inline-flex;">
-                <div id="conn-dropdown" style="display:none; position:absolute; right:0; top:36px; background: rgba(12,16,22,0.95); border:1px solid rgba(255,255,255,0.15); border-radius:10px; min-width: 340px; box-shadow:0 6px 22px rgba(0,0,0,0.4); padding:10px"></div>
-              </div>
+              <span id="status-ws" class="hal-eye" data-state="idle" title="WebSocket to RabbitMQ status"></span>
+            </div>
+            <div class="menu" id="conn-menu" style="position:relative; display:inline-flex;">
+              <button id="ph-conn-btn" title="Connection settings" aria-label="Connection settings">
+                <span class="conn-icon"><span class="node left"></span><span class="node right"></span><span class="link"></span></span>
+              </button>
+              <div id="conn-dropdown" style="display:none; position:absolute; right:0; top:36px; background: rgba(12,16,22,0.95); border:1px solid rgba(255,255,255,0.15); border-radius:10px; min-width: 340px; box-shadow:0 6px 22px rgba(0,0,0,0.4); padding:10px"></div>
             </div>
             <button id="radar-btn" title="Scan services" aria-label="Scan services">
-              <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polygon points="12 2 21 7 21 17 12 22 3 17 3 7" stroke="#FFC107"/>
-                <circle cx="12" cy="12" r="1" fill="#33E1FF" stroke="none"/>
-                <path class="sweep" d="M12 12l4-4" stroke="#33E1FF"/>
-                <path d="M12 7a5 5 0 0 1 5 5" stroke="#33E1FF"/>
-                <path d="M12 9a3 3 0 0 1 3 3" stroke="#33E1FF"/>
-              </svg>
+              <span class="radar-icon"><span class="ring r1"></span><span class="ring r2"></span><span class="dot"></span><span class="sweep"></span></span>
             </button>
             <button id="broadcast-status" title="Broadcast status.request to all services" aria-label="Broadcast status">
               <svg class="monolith" width="32" height="32" viewBox="0 0 32 32" aria-hidden="true">

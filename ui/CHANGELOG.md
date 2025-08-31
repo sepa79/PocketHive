@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.7] - 2025-08-31
+Timestamp: 2025-08-31T02:14:09Z
+
+- Rework radar into pure CSS and add Space Odyssey-themed connection icon.
+
 ## [0.2.6] - 2025-08-31
 Timestamp: 2025-08-31T02:04:08Z
 

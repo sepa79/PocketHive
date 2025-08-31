@@ -603,7 +603,7 @@
   // Move connection controls into header dropdown and toggle via WS health icon
   (function(){
     const host = document.getElementById('conn-dropdown');
-    const trigger = document.getElementById('status-ws') || document.getElementById('ph-conn-btn');
+    const trigger = document.getElementById('ph-conn-btn') || document.getElementById('status-ws');
     const controls = document.querySelector('.controls');
     if(!host || !trigger || !controls) return;
     host.appendChild(controls);
