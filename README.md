@@ -134,6 +134,7 @@ Manual checks:
 ## Development Notes
 
 - Static UI is served from `ui/`. Changes to HTML/CSS/JS are picked up on reload.
+- UI JavaScript is organized as ES modules under `ui/assets/js/` with dedicated `features/` and `menus/` helpers for easier maintenance.
 - Nginx config lives in `ui/nginx.conf` and is mounted into the `ui` container. After changing it, restart just the UI:
 
 ```
