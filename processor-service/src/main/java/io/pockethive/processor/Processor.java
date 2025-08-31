@@ -85,12 +85,12 @@ public class Processor {
   private void sendStatusDelta(long tps){
     String role = "processor";
     String rk = "ev.status-delta."+role+"."+instanceId;
-    rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, envelope(role, new String[]{Topology.MOD_QUEUE}, null, tps, "status.delta"));
+    rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, envelope(role, new String[]{Topology.MOD_QUEUE}, null, tps, "status-delta"));
   }
   private void sendStatusFull(long tps){
     String role = "processor";
     String rk = "ev.status-full."+role+"."+instanceId;
-    rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, envelope(role, new String[]{Topology.MOD_QUEUE}, null, tps, "status.full"));
+    rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, envelope(role, new String[]{Topology.MOD_QUEUE}, null, tps, "status-full"));
   }
   private String envelope(String role, String[] inQueues, String[] outQueues, long tps, String kind){
     String location = System.getenv().getOrDefault("PH_LOCATION", System.getenv().getOrDefault("HOSTNAME", "local"));

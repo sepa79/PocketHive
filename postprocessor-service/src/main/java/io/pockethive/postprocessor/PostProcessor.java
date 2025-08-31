@@ -121,7 +121,7 @@ public class PostProcessor {
     StringBuilder sb = new StringBuilder(256);
     sb.append('{')
       .append("\"event\":\"status\",")
-      .append("\"kind\":\"status.full\",")
+      .append("\"kind\":\"status-full\",")
       .append("\"version\":\"1.0\",")
       .append("\"role\":\"").append(role).append("\",")
       .append("\"instance\":\"").append(instanceId).append("\",")

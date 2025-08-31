@@ -90,12 +90,12 @@ public class Moderator {
   private void sendStatusDelta(long tps){
     String role = "moderator";
     String rk = "ev.status-delta."+role+"."+instanceId;
-    rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, envelope(role, new String[]{Topology.GEN_QUEUE}, new String[]{Topology.MOD_QUEUE}, tps, "status.delta"));
+    rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, envelope(role, new String[]{Topology.GEN_QUEUE}, new String[]{Topology.MOD_QUEUE}, tps, "status-delta"));
   }
   private void sendStatusFull(long tps){
     String role = "moderator";
     String rk = "ev.status-full."+role+"."+instanceId;
-    rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, envelope(role, new String[]{Topology.GEN_QUEUE}, new String[]{Topology.MOD_QUEUE}, tps, "status.full"));
+    rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, envelope(role, new String[]{Topology.GEN_QUEUE}, new String[]{Topology.MOD_QUEUE}, tps, "status-full"));
   }
   private String envelope(String role, String[] inQueues, String[] outQueues, long tps, String kind){
     String location = System.getenv().getOrDefault("PH_LOCATION", System.getenv().getOrDefault("HOSTNAME", "local"));

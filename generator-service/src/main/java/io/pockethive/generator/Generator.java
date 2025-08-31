@@ -116,14 +116,14 @@ public class Generator {
   private void sendStatusDelta(long tps){
     String role = "generator";
     String routingKey = "ev.status-delta." + role + "." + instanceId;
-    String json = envelope(role, null, tps, "status.delta");
+    String json = envelope(role, null, tps, "status-delta");
     rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, routingKey, json);
   }
 
   private void sendStatusFull(long tps){
     String role = "generator";
     String routingKey = "ev.status-full." + role + "." + instanceId;
-    String json = envelope(role, new String[]{Topology.GEN_QUEUE}, tps, "status.full");
+    String json = envelope(role, new String[]{Topology.GEN_QUEUE}, tps, "status-full");
     rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, routingKey, json);
   }
 

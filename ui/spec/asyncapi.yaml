@@ -149,7 +149,7 @@ components:
       required: [event, kind, version, role, instance, messageId, timestamp]
       properties:
         event: { type: string, enum: [status, lifecycle, metric, alert, link] }
-        kind: { type: string, description: Subtype (e.g., status.full, status.delta, lifecycle.running) }
+        kind: { type: string, description: Subtype (e.g., status-full, status-delta, lifecycle.running) }
         version: { type: string, description: Semver of event schema }
         role: { type: string, enum: [generator, moderator, processor] }
         instance: { type: string }
