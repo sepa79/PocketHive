@@ -497,7 +497,6 @@
           client.subscribe(d, (message) => {
             const body = message.body || '';
             const dest = message.headers.destination || '';
-            appendSys(`[BUZZ] RECV RAW ${dest} ${body}`);
             try{
               const obj = JSON.parse(body);
               if(dest.includes('/ev.metric.')){
