@@ -189,7 +189,7 @@
   })();
 
   // Hive graph state
-  const HIVE_DEFAULT_HOLD = 15_000; // 3x default 5s schedule (status.delta)
+  const HIVE_DEFAULT_HOLD = 15_000; // 3x default 5s schedule (status-delta)
   const hive = {
     nodes: /** @type {Record<string,{id:string,label:string,service:string,x:number,y:number,last:number,tps?:number}>} */({}),
     edges: /** @type {Array<{a:string,b:string}>} */([]),
@@ -524,7 +524,7 @@
                   const role = svc;
                   const inst = obj.instance || '–';
                   const ev = obj.event || 'status';
-                  const kind = obj.kind || (typeof tpsVal!=='undefined' ? 'status.delta' : 'status');
+                  const kind = obj.kind || (typeof tpsVal!=='undefined' ? 'status-delta' : 'status');
                   const qin = obj.queues && Array.isArray(obj.queues.in) ? obj.queues.in.length : 0;
                   const qout = obj.queues && Array.isArray(obj.queues.out) ? obj.queues.out.length : 0;
                   appendSys(`[BUZZ] RECV ${ev}/${kind} role=${role} inst=${inst} tps=${typeof tpsVal==='number'?tpsVal:'–'} in=${qin} out=${qout}`);
@@ -673,7 +673,7 @@
     btn.addEventListener('click', ()=>{
       if(!client || !connected){ appendSys('[BUZZ] SEND aborted: not connected'); return; }
       const payload = {
-        type: 'status.request',
+        type: 'status-request',
         version: '1.0',
         messageId: (crypto && crypto.randomUUID ? crypto.randomUUID() : (Math.random().toString(16).slice(2) + Date.now())),
         timestamp: new Date().toISOString()

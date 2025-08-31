@@ -15,6 +15,7 @@ import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.amqp.support.AmqpHeaders;
 import org.springframework.stereotype.Component;
+import org.springframework.beans.factory.annotation.Qualifier;
 
 import java.time.Duration;
 import java.util.List;
@@ -27,10 +28,13 @@ public class PostProcessor {
   private final DistributionSummary hopLatency;
   private final DistributionSummary totalLatency;
   private final Counter errorCounter;
-  private final String instanceId = UUID.randomUUID().toString();
+  private final String instanceId;
 
-  public PostProcessor(RabbitTemplate rabbit, MeterRegistry registry){
+  public PostProcessor(RabbitTemplate rabbit,
+                       MeterRegistry registry,
+                       @Qualifier("instanceId") String instanceId){
     this.rabbit = rabbit;
+    this.instanceId = instanceId;
     this.hopLatency = DistributionSummary.builder("postprocessor_hop_latency_ms").register(registry);
     this.totalLatency = DistributionSummary.builder("postprocessor_total_latency_ms").register(registry);
     this.errorCounter = Counter.builder("postprocessor_errors_total").register(registry);
@@ -78,7 +82,7 @@ public class PostProcessor {
     rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, payload);
   }
 
-  @RabbitListener(queues = "${ph.controlQueue:ph.control}")
+  @RabbitListener(queues = "#{@controlQueue.name}")
   public void onControl(String payload,
                         @Header(AmqpHeaders.RECEIVED_ROUTING_KEY) String rk,
                         @Header(value = ObservabilityContextUtil.HEADER, required = false) String trace){
@@ -111,13 +115,13 @@ public class PostProcessor {
 
   private String envelope(String role, String[] inQueues){
     String location = System.getenv().getOrDefault("PH_LOCATION", System.getenv().getOrDefault("HOSTNAME", "local"));
-    String messageId = java.util.UUID.randomUUID().toString();
+    String messageId = UUID.randomUUID().toString();
     String timestamp = java.time.Instant.now().toString();
     String traffic = Topology.EXCHANGE;
     StringBuilder sb = new StringBuilder(256);
     sb.append('{')
       .append("\"event\":\"status\",")
-      .append("\"kind\":\"status.full\",")
+      .append("\"kind\":\"status-full\",")
       .append("\"version\":\"1.0\",")
       .append("\"role\":\"").append(role).append("\",")
       .append("\"instance\":\"").append(instanceId).append("\",")

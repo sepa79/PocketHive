@@ -5,6 +5,7 @@ info:
   description: |
     AsyncAPI specification documenting PocketHive messaging contracts.
     - ph.control — control-plane events, lifecycle, metrics, alerts, and signals
+    - Services consume control signals from queues `ph.control.<role>.<instance>` bound to the `ph.control` exchange
     - ph.hive — traffic exchange for workload messages (generator → moderator → processor)
 servers:
   control-ws:
@@ -148,7 +149,7 @@ components:
       required: [event, kind, version, role, instance, messageId, timestamp]
       properties:
         event: { type: string, enum: [status, lifecycle, metric, alert, link] }
-        kind: { type: string, description: Subtype (e.g., status.full, status.delta, lifecycle.running) }
+        kind: { type: string, description: Subtype (e.g., status-full, status-delta, lifecycle.running) }
         version: { type: string, description: Semver of event schema }
         role: { type: string, enum: [generator, moderator, processor] }
         instance: { type: string }
@@ -231,7 +232,7 @@ components:
       type: object
       required: [type, version, messageId, timestamp]
       properties:
-        type: { type: string, enum: [status.request, config.update, ping, link.request] }
+        type: { type: string, enum: [status-request, config-update, ping, link-request] }
         version: { type: string }
         messageId: { type: string, format: uuid }
         timestamp: { type: string, format: date-time }

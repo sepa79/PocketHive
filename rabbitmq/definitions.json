@@ -39,23 +39,6 @@
       "arguments": {}
     }
   ],
-  "queues": [
-    {
-      "name": "ph.control",
-      "vhost": "/",
-      "durable": true,
-      "auto_delete": false,
-      "arguments": {}
-    }
-  ],
-  "bindings": [
-    {
-      "source": "ph.control",
-      "vhost": "/",
-      "destination": "ph.control",
-      "destination_type": "queue",
-      "routing_key": "sig.#",
-      "arguments": {}
-    }
-  ]
+  "queues": [],
+  "bindings": []
 }

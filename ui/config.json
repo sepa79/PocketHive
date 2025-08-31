@@ -8,12 +8,10 @@
   "preferConfig": true,
   "demo": false,
   "subscriptions": [
-    "/queue/ph.control"
   ],
   "amqp": {
     "exchange": "ph.hive",
     "genQueue": "ph.gen",
-    "modQueue": "ph.mod",
-    "controlQueue": "ph.control"
+    "modQueue": "ph.mod"
   }
 }

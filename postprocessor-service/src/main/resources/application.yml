@@ -13,4 +13,3 @@ logging:
 
 ph:
   finalQueue: ${PH_FINAL_QUEUE:ph.final}
-  controlQueue: ${PH_CONTROL_QUEUE:ph.control}
