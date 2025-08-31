@@ -44,7 +44,7 @@
   const sysLines = [];
   const topicLines = [];
   // Logging toggles
-  const LOG_BUZZ_RAW = true; // show raw buzz payloads in Event Log
+  const LOG_EVENTS_RAW = true; // show raw payloads in Events Log
   const LOG_STOMP_DEBUG = true; // STOMP frame debug to System Logs
   // Hive view elements
   const tabBuzz = document.getElementById('tab-buzz');
@@ -91,39 +91,38 @@
 
   // Tabs handling
   (function(){
-    if(!tabBuzz || !tabHive || !tabNectar || !viewBuzz || !viewHive || !viewNectar) return;
     const activate = (which)=>{
-      viewBuzz.style.display = (which==='buzz') ? 'block' : 'none';
-      viewHive.style.display = (which==='hive') ? 'block' : 'none';
-      viewNectar.style.display = (which==='nectar') ? 'block' : 'none';
-      tabBuzz.classList.toggle('tab-active', which==='buzz');
-      tabHive.classList.toggle('tab-active', which==='hive');
-      tabNectar.classList.toggle('tab-active', which==='nectar');
+      if(viewBuzz) viewBuzz.style.display = (which==='buzz') ? 'block' : 'none';
+      if(viewHive) viewHive.style.display = (which==='hive') ? 'block' : 'none';
+      if(viewNectar) viewNectar.style.display = (which==='nectar') ? 'block' : 'none';
+      if(tabBuzz) tabBuzz.classList.toggle('tab-active', which==='buzz');
+      if(tabHive) tabHive.classList.toggle('tab-active', which==='hive');
+      if(tabNectar) tabNectar.classList.toggle('tab-active', which==='nectar');
       if(which==='hive' && hiveSvg) redrawHive();
     };
-    tabBuzz.addEventListener('click', ()=> activate('buzz'));
-    tabHive.addEventListener('click', ()=> activate('hive'));
-    tabNectar.addEventListener('click', ()=> activate('nectar'));
+    if(tabBuzz) tabBuzz.addEventListener('click', ()=> activate('buzz'));
+    if(tabHive) tabHive.addEventListener('click', ()=> activate('hive'));
+    if(tabNectar) tabNectar.addEventListener('click', ()=> activate('nectar'));
     activate('buzz');
   })();
 
-  // Log tabs handling (Buzz vs Topic)
+  // Log tabs handling (Events vs Topic)
   (function(){
-    const tBuzz = document.getElementById('log-tab-buzz');
+    const tEvents = document.getElementById('log-tab-events');
     const tTop = document.getElementById('log-tab-topic');
-    const vBuzz = document.getElementById('log-buzz');
+    const vEvents = document.getElementById('log-events');
     const vTop = document.getElementById('log-topic');
-    if(!tBuzz || !tTop || !vBuzz || !vTop) return;
+    if(!tEvents || !tTop || !vEvents || !vTop) return;
     const set = (which)=>{
-      if(which==='buzz'){
-        vBuzz.style.display='block'; vTop.style.display='none'; tBuzz.classList.add('tab-active'); tTop.classList.remove('tab-active');
+      if(which==='events'){
+        vEvents.style.display='block'; vTop.style.display='none'; tEvents.classList.add('tab-active'); tTop.classList.remove('tab-active');
       } else {
-        vBuzz.style.display='none'; vTop.style.display='block'; tBuzz.classList.remove('tab-active'); tTop.classList.add('tab-active');
+        vEvents.style.display='none'; vTop.style.display='block'; tEvents.classList.remove('tab-active'); tTop.classList.add('tab-active');
       }
     };
-    tBuzz.addEventListener('click', ()=> set('buzz'));
+    tEvents.addEventListener('click', ()=> set('events'));
     tTop.addEventListener('click', ()=> set('topic'));
-    set('buzz');
+    set('events');
   })();
 
   // Topic sniffer (subscribe to any RK on buzz exchange)
@@ -503,9 +502,9 @@
                   if(svc === 'processor') addPoint('processor', tpsVal);
                 }
               }
-              if(LOG_BUZZ_RAW) appendLog(`BUZZ RAW ${dest} ${body}`);
+              if(LOG_EVENTS_RAW) appendLog(`EVENT RAW ${dest} ${body}`);
             } catch(e){
-              if(LOG_BUZZ_RAW) appendLog(`BUZZ RAW ${dest} ${body}`);
+              if(LOG_EVENTS_RAW) appendLog(`EVENT RAW ${dest} ${body}`);
             }
           }, { ack:'auto' });
           appendSys(`[BUZZ] SUB ${d}`);
