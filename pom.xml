@@ -7,6 +7,7 @@
   <packaging>pom</packaging>
   <modules>
     <module>observability</module>
+    <module>rabbitmq-logging</module>
     <module>generator-service</module>
     <module>moderator-service</module>
     <module>processor-service</module>

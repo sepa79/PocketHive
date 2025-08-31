@@ -48,6 +48,11 @@
       <artifactId>observability</artifactId>
       <version>${project.version}</version>
     </dependency>
+    <dependency>
+      <groupId>io.pockethive</groupId>
+      <artifactId>rabbitmq-logging</artifactId>
+      <version>${project.version}</version>
+    </dependency>
   </dependencies>
   <build>
     <plugins>

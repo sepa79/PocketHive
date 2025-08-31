@@ -1,0 +1,16 @@
+<configuration>
+  <include resource="org/springframework/boot/logging/logback/base.xml"/>
+
+  <appender name="RABBIT" class="io.pockethive.logging.RabbitMqLogAppender">
+    <host>${RABBITMQ_HOST:-localhost}</host>
+    <username>${RABBITMQ_DEFAULT_USER:-guest}</username>
+    <password>${RABBITMQ_DEFAULT_PASS:-guest}</password>
+    <exchange>${LOGS_EXCHANGE:-logs.exchange}</exchange>
+    <enabled>${RABBITMQ_LOGGING_ENABLED:-true}</enabled>
+  </appender>
+
+  <root level="INFO">
+    <appender-ref ref="CONSOLE"/>
+    <appender-ref ref="RABBIT"/>
+  </root>
+</configuration>
