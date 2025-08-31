@@ -15,10 +15,10 @@
   const genEl = qs('gen');
   const modEl = qs('mod');
   const procEl = qs('proc');
+  const postEl = qs('post');
   const uiStatus = qs('status-ui');
   const wsStatus = qs('status-ws');
   const chartsEl = qs('charts');
-  const toggleChartsBtn = qs('toggle-charts');
   const metricBtn = qs('metric-btn');
   const metricDropdown = qs('metric-dropdown');
   let currentMetric = 'tps';
@@ -31,6 +31,7 @@
     generator: /** @type {HTMLCanvasElement|null} */(document.getElementById('chart-gen')),
     moderator: /** @type {HTMLCanvasElement|null} */(document.getElementById('chart-mod')),
     processor: /** @type {HTMLCanvasElement|null} */(document.getElementById('chart-proc')),
+    postprocessor: /** @type {HTMLCanvasElement|null} */(document.getElementById('chart-post')),
     latency: /** @type {HTMLCanvasElement|null} */(document.getElementById('chart-latency')),
     hops: /** @type {HTMLCanvasElement|null} */(document.getElementById('chart-hops'))
   };
@@ -57,9 +58,9 @@
   const hiveHoldInput = /** @type {HTMLInputElement|null} */(document.getElementById('hive-hold'));
   const hiveClearBtn = document.getElementById('hive-clear');
   const hiveStats = document.getElementById('hive-stats');
-  const series = { generator: [], moderator: [], processor: [], latency: [], hops: [] }; // {t:number,v:number}
+  const series = { generator: [], moderator: [], processor: [], postprocessor: [], latency: [], hops: [] }; // {t:number,v:number}
   const WINDOW_MS = 60_000; // 60s window
-  let rafPending = { generator:false, moderator:false, processor:false, latency:false, hops:false };
+  let rafPending = { generator:false, moderator:false, processor:false, postprocessor:false, latency:false, hops:false };
   const HAS_CONN = !!(elUrl && btn);
   const logLimitInput = qs('log-limit');
   if(logLimitInput){
@@ -391,7 +392,7 @@
     ctx.fillText(String(Math.round(ymax)), 6, 12);
     ctx.fillText('0', 28, h-24);
     // line
-    const colors = { generator:'#4CAF50', moderator:'#FFC107', processor:'#03A9F4', latency:'#E91E63', hops:'#9C27B0' };
+    const colors = { generator:'#4CAF50', moderator:'#FFC107', processor:'#03A9F4', postprocessor:'#FF5722', latency:'#E91E63', hops:'#9C27B0' };
     ctx.strokeStyle = colors[svc] || '#FFFFFF';
     ctx.lineWidth = 2;
     ctx.beginPath();
@@ -497,9 +498,11 @@
                   if(svc === 'generator' && genEl) genEl.textContent = String(tpsVal);
                   if(svc === 'moderator' && modEl) modEl.textContent = String(tpsVal);
                   if(svc === 'processor' && procEl) procEl.textContent = String(tpsVal);
+                  if(svc === 'postprocessor' && postEl) postEl.textContent = String(tpsVal);
                   if(svc === 'generator') addPoint('generator', tpsVal);
                   if(svc === 'moderator') addPoint('moderator', tpsVal);
                   if(svc === 'processor') addPoint('processor', tpsVal);
+                  if(svc === 'postprocessor') addPoint('postprocessor', tpsVal);
                 }
               }
               if(LOG_EVENTS_RAW) appendLog(`EVENT RAW ${dest} ${body}`);
@@ -626,7 +629,7 @@
     setInterval(ping, 15000);
   })();
 
-  // Hook broadcast button (located near charts toggle)
+  // Hook broadcast button (next to metric selector)
   (function(){
     const btn = document.getElementById('broadcast-status');
     if(!btn) return;
@@ -650,7 +653,7 @@
   })();
   function refreshCharts(){
     const metric = currentMetric;
-    if(metric==='tps'){ ['generator','moderator','processor'].forEach(s=> drawChart(s)); }
+    if(metric==='tps'){ ['generator','moderator','processor','postprocessor'].forEach(s=> drawChart(s)); }
     if(metric==='latency') drawChart('latency');
     if(metric==='hops') drawChart('hops');
   }
@@ -690,15 +693,6 @@
     });
     updateMetricView();
   })();
-
-  // Toggle charts visibility
-  if(toggleChartsBtn && chartsEl){
-    toggleChartsBtn.addEventListener('click', ()=>{
-      const show = chartsEl.style.display === 'none';
-      chartsEl.style.display = show ? 'block' : 'none';
-      if(show) refreshCharts();
-    });
-  }
 
   // (removed duplicate legacy broadcast handler)
 })();
