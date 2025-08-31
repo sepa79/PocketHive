@@ -19,7 +19,9 @@
   const wsStatus = qs('status-ws');
   const chartsEl = qs('charts');
   const toggleChartsBtn = qs('toggle-charts');
-  const metricSelect = qs('metric-select');
+  const metricBtn = qs('metric-btn');
+  const metricDropdown = qs('metric-dropdown');
+  let currentMetric = 'tps';
   const chartsTps = qs('charts-tps');
   const chartsLatency = qs('charts-latency');
   const chartsHops = qs('charts-hops');
@@ -32,9 +34,11 @@
     latency: /** @type {HTMLCanvasElement|null} */(document.getElementById('chart-latency')),
     hops: /** @type {HTMLCanvasElement|null} */(document.getElementById('chart-hops'))
   };
-  const LOG_LIMIT_DEFAULT = 500;
+  const LOG_LIMIT_DEFAULT = 100;
+  const SYSLOG_LIMIT_DEFAULT = 100;
   const EVENT_LIMIT_DEFAULT = 600;
   let logLimit = LOG_LIMIT_DEFAULT;
+  let sysLogLimit = SYSLOG_LIMIT_DEFAULT;
   let eventLimit = EVENT_LIMIT_DEFAULT;
   const logLines = [];
   const sysLines = [];
@@ -59,10 +63,19 @@
   if(logLimitInput){
     logLimitInput.addEventListener('change', ()=>{
       const v = Number(logLimitInput.value) || LOG_LIMIT_DEFAULT;
-      logLimit = Math.max(10, v);
+      logLimit = Math.min(500, Math.max(10, v));
+      logLimitInput.value = String(logLimit);
       if(logLines.length>logLimit){ logLines.splice(0, logLines.length - logLimit); if(logEl) logEl.textContent = logLines.join('\n'); }
-      if(sysLines.length>logLimit){ sysLines.splice(0, sysLines.length - logLimit); if(sysEl) sysEl.textContent = sysLines.join('\n'); }
       if(topicLines.length>logLimit){ topicLines.splice(0, topicLines.length - logLimit); const tl=document.getElementById('topic-log'); if(tl) tl.textContent = topicLines.join('\n'); }
+    });
+  }
+  const sysLimitInput = qs('syslog-limit');
+  if(sysLimitInput){
+    sysLimitInput.addEventListener('change', ()=>{
+      const v = Number(sysLimitInput.value) || SYSLOG_LIMIT_DEFAULT;
+      sysLogLimit = Math.min(500, Math.max(10, v));
+      sysLimitInput.value = String(sysLogLimit);
+      if(sysLines.length>sysLogLimit){ sysLines.splice(0, sysLines.length - sysLogLimit); if(sysEl) sysEl.textContent = sysLines.join('\n'); }
     });
   }
   const eventLimitInput = qs('event-limit');
@@ -309,7 +322,7 @@
     if(!sysEl) return;
     const ts=new Date().toISOString();
     sysLines.push(`[${ts}] ${line}`);
-    if(sysLines.length>logLimit) sysLines.splice(0, sysLines.length - logLimit);
+      if(sysLines.length>sysLogLimit) sysLines.splice(0, sysLines.length - sysLogLimit);
     sysEl.textContent = sysLines.join('\n');
     sysEl.scrollTop = sysEl.scrollHeight;
   }
@@ -635,14 +648,14 @@
     });
   })();
   function refreshCharts(){
-    const metric = metricSelect ? metricSelect.value : 'tps';
+    const metric = currentMetric;
     if(metric==='tps'){ ['generator','moderator','processor'].forEach(s=> drawChart(s)); }
     if(metric==='latency') drawChart('latency');
     if(metric==='hops') drawChart('hops');
   }
 
   function updateMetricView(){
-    const metric = metricSelect ? metricSelect.value : 'tps';
+    const metric = currentMetric;
     if(chartsTps) chartsTps.style.display = metric==='tps' ? 'grid' : 'none';
     if(chartsLatency) chartsLatency.style.display = metric==='latency' ? 'block' : 'none';
     if(chartsHops) chartsHops.style.display = metric==='hops' ? 'block' : 'none';
@@ -656,10 +669,26 @@
     if(chartsEl && chartsEl.style.display !== 'none') refreshCharts();
   }
 
-  if(metricSelect){
-    metricSelect.addEventListener('change', updateMetricView);
+  // Metric selector dropdown
+  (function(){
+    const btn = metricBtn;
+    const dd = metricDropdown;
+    if(!btn || !dd) return;
+    let open=false;
+    const toggle=(e)=>{ e && e.stopPropagation(); open=!open; dd.style.display=open?'block':'none'; };
+    btn.addEventListener('click', toggle);
+    document.addEventListener('click', (e)=>{ if(open && !dd.contains(e.target) && e.target!==btn){ open=false; dd.style.display='none'; } });
+    dd.querySelectorAll('button[data-metric]').forEach(item=>{
+      item.addEventListener('click', ()=>{
+        const metric = item.getAttribute('data-metric') || 'tps';
+        currentMetric = metric;
+        btn.textContent = item.textContent || 'TPS';
+        open=false; dd.style.display='none';
+        updateMetricView();
+      });
+    });
     updateMetricView();
-  }
+  })();
 
   // Toggle charts visibility
   if(toggleChartsBtn && chartsEl){
