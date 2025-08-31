@@ -44,13 +44,15 @@
   const sysLines = [];
   const topicLines = [];
   // Logging toggles
-  const LOG_CTRL_RAW = true; // show raw control payloads in Event Log
+  const LOG_BUZZ_RAW = true; // show raw buzz payloads in Event Log
   const LOG_STOMP_DEBUG = true; // STOMP frame debug to System Logs
   // Hive view elements
-  const tabControl = document.getElementById('tab-control');
+  const tabBuzz = document.getElementById('tab-buzz');
   const tabHive = document.getElementById('tab-hive');
-  const viewControl = document.getElementById('view-control');
+  const tabNectar = document.getElementById('tab-nectar');
+  const viewBuzz = document.getElementById('view-buzz');
   const viewHive = document.getElementById('view-hive');
+  const viewNectar = document.getElementById('view-nectar');
   const hiveSvg = /** @type {SVGSVGElement|null} */(document.getElementById('hive-canvas'));
   const hiveHoldInput = /** @type {HTMLInputElement|null} */(document.getElementById('hive-hold'));
   const hiveClearBtn = document.getElementById('hive-clear');
@@ -89,42 +91,42 @@
 
   // Tabs handling
   (function(){
-    if(!tabControl || !tabHive || !viewControl || !viewHive) return;
+    if(!tabBuzz || !tabHive || !tabNectar || !viewBuzz || !viewHive || !viewNectar) return;
     const activate = (which)=>{
-      if(which==='control'){
-        viewControl.style.display='block'; viewHive.style.display='none';
-        tabControl.classList.add('tab-active'); tabHive.classList.remove('tab-active');
-      } else {
-        viewControl.style.display='none'; viewHive.style.display='block';
-        tabControl.classList.remove('tab-active'); tabHive.classList.add('tab-active');
-        if(hiveSvg) redrawHive();
-      }
+      viewBuzz.style.display = (which==='buzz') ? 'block' : 'none';
+      viewHive.style.display = (which==='hive') ? 'block' : 'none';
+      viewNectar.style.display = (which==='nectar') ? 'block' : 'none';
+      tabBuzz.classList.toggle('tab-active', which==='buzz');
+      tabHive.classList.toggle('tab-active', which==='hive');
+      tabNectar.classList.toggle('tab-active', which==='nectar');
+      if(which==='hive' && hiveSvg) redrawHive();
     };
-    tabControl.addEventListener('click', ()=> activate('control'));
+    tabBuzz.addEventListener('click', ()=> activate('buzz'));
     tabHive.addEventListener('click', ()=> activate('hive'));
-    activate('control');
+    tabNectar.addEventListener('click', ()=> activate('nectar'));
+    activate('buzz');
   })();
 
-  // Log tabs handling (Control vs Topic)
+  // Log tabs handling (Buzz vs Topic)
   (function(){
-    const tCtrl = document.getElementById('log-tab-control');
+    const tBuzz = document.getElementById('log-tab-buzz');
     const tTop = document.getElementById('log-tab-topic');
-    const vCtrl = document.getElementById('log-control');
+    const vBuzz = document.getElementById('log-buzz');
     const vTop = document.getElementById('log-topic');
-    if(!tCtrl || !tTop || !vCtrl || !vTop) return;
+    if(!tBuzz || !tTop || !vBuzz || !vTop) return;
     const set = (which)=>{
-      if(which==='control'){
-        vCtrl.style.display='block'; vTop.style.display='none'; tCtrl.classList.add('tab-active'); tTop.classList.remove('tab-active');
+      if(which==='buzz'){
+        vBuzz.style.display='block'; vTop.style.display='none'; tBuzz.classList.add('tab-active'); tTop.classList.remove('tab-active');
       } else {
-        vCtrl.style.display='none'; vTop.style.display='block'; tCtrl.classList.remove('tab-active'); tTop.classList.add('tab-active');
+        vBuzz.style.display='none'; vTop.style.display='block'; tBuzz.classList.remove('tab-active'); tTop.classList.add('tab-active');
       }
     };
-    tCtrl.addEventListener('click', ()=> set('control'));
+    tBuzz.addEventListener('click', ()=> set('buzz'));
     tTop.addEventListener('click', ()=> set('topic'));
-    set('control');
+    set('buzz');
   })();
 
-  // Topic sniffer (subscribe to any RK on control exchange)
+  // Topic sniffer (subscribe to any RK on buzz exchange)
   (function(){
     const subBtn = document.getElementById('topic-sub');
     const unsubBtn = document.getElementById('topic-unsub');
@@ -141,17 +143,17 @@
     }
     if(!subBtn || !unsubBtn || !rkInput) return;
     subBtn.addEventListener('click', ()=>{
-      if(!client || !connected){ appendSys('[CTRL] Topic subscribe aborted: not connected'); return; }
+      if(!client || !connected){ appendSys('[BUZZ] Topic subscribe aborted: not connected'); return; }
       const rk = (rkInput.value || 'ev.#').trim();
       const dest = '/exchange/ph.control/' + rk;
       try{
         if(sub) { try{ sub.unsubscribe(); }catch{} sub=null; }
         // eslint-disable-next-line no-undef
         sub = client.subscribe(dest, (message)=>{ const b=message.body||''; logLine(`${message.headers.destination||''} ${b}`); }, { ack:'auto' });
-        appendSys(`[CTRL] SUB TOPIC ${dest}`);
+        appendSys(`[BUZZ] SUB TOPIC ${dest}`);
       }catch(e){ appendSys('Topic subscribe error: ' + (e && e.message ? e.message : String(e))); }
     });
-    unsubBtn.addEventListener('click', ()=>{ if(sub){ try{ sub.unsubscribe(); appendSys('[CTRL] UNSUB TOPIC'); }catch{} sub=null; } });
+    unsubBtn.addEventListener('click', ()=>{ if(sub){ try{ sub.unsubscribe(); appendSys('[BUZZ] UNSUB TOPIC'); }catch{} sub=null; } });
   })();
 
   // Hive graph state
@@ -428,7 +430,7 @@
     // Persist connection for reuse
     saveConn({ url, login, pass: passcode, vhost: '/' });
     // Log connect params (mask pass)
-    try{ appendSys(`[CTRL] CONNECT url=${url} vhost=${vhost} login=${login} pass=***`); }catch{}
+    try{ appendSys(`[BUZZ] CONNECT url=${url} vhost=${vhost} login=${login} pass=***`); }catch{}
     setState('Connecting...'); btn.disabled = true; btn.textContent = 'Connecting...';
     setWsStatus('connecting');
     // eslint-disable-next-line no-undef
@@ -446,12 +448,12 @@
       let subs = (PH_CONFIG && Array.isArray(PH_CONFIG.subscriptions) && PH_CONFIG.subscriptions.length)
         ? PH_CONFIG.subscriptions.slice()
         : ['/queue/ph.control'];
-      // Always include control exchange event/signal routes so Events see everything
+      // Always include buzz exchange event/signal routes so Events see everything
       if(!subs.includes('/exchange/ph.control/ev.#')) subs.push('/exchange/ph.control/ev.#');
       if(!subs.includes('/exchange/ph.control/sig.#')) subs.push('/exchange/ph.control/sig.#');
       if(!subs.includes('/exchange/ph.control/ev.metric.#')) subs.push('/exchange/ph.control/ev.metric.#');
       if(!(PH_CONFIG && Array.isArray(PH_CONFIG.subscriptions) && PH_CONFIG.subscriptions.length)){
-        appendSys('[CTRL] SUB using fallback [/queue/ph.control]');
+        appendSys('[BUZZ] SUB using fallback [/queue/ph.control]');
       }
       subs.forEach(d => {
         try{
@@ -480,7 +482,7 @@
                 const qobj = obj.queues;
                 const changed = updateQueues(svc, qobj);
                 if(changed) rebuildEdgesFromQueues();
-                // Log a concise control summary
+                // Log a concise buzz summary
                 try{
                   const role = svc;
                   const inst = obj.instance || '–';
@@ -488,10 +490,10 @@
                   const kind = obj.kind || (typeof tpsVal!=='undefined' ? 'status.delta' : 'status');
                   const qin = obj.queues && Array.isArray(obj.queues.in) ? obj.queues.in.length : 0;
                   const qout = obj.queues && Array.isArray(obj.queues.out) ? obj.queues.out.length : 0;
-                  appendSys(`[CTRL] RECV ${ev}/${kind} role=${role} inst=${inst} tps=${typeof tpsVal==='number'?tpsVal:'–'} in=${qin} out=${qout}`);
+                  appendSys(`[BUZZ] RECV ${ev}/${kind} role=${role} inst=${inst} tps=${typeof tpsVal==='number'?tpsVal:'–'} in=${qin} out=${qout}`);
                 }catch{}
                 redrawHive();
-                // Control charts (if TPS provided)
+                // Buzz charts (if TPS provided)
                 if(typeof tpsVal !== 'undefined'){
                   if(svc === 'generator' && genEl) genEl.textContent = String(tpsVal);
                   if(svc === 'moderator' && modEl) modEl.textContent = String(tpsVal);
@@ -501,12 +503,12 @@
                   if(svc === 'processor') addPoint('processor', tpsVal);
                 }
               }
-              if(LOG_CTRL_RAW) appendLog(`CTRL RAW ${dest} ${body}`);
+              if(LOG_BUZZ_RAW) appendLog(`BUZZ RAW ${dest} ${body}`);
             } catch(e){
-              if(LOG_CTRL_RAW) appendLog(`CTRL RAW ${dest} ${body}`);
+              if(LOG_BUZZ_RAW) appendLog(`BUZZ RAW ${dest} ${body}`);
             }
           }, { ack:'auto' });
-          appendSys(`[CTRL] SUB ${d}`);
+          appendSys(`[BUZZ] SUB ${d}`);
         }catch(e){ appendSys('Subscribe error: '+ (e && e.message ? e.message : String(e))); }
       });
     };
@@ -630,7 +632,7 @@
     const btn = document.getElementById('broadcast-status');
     if(!btn) return;
     btn.addEventListener('click', ()=>{
-      if(!client || !connected){ appendSys('[CTRL] SEND aborted: not connected'); return; }
+      if(!client || !connected){ appendSys('[BUZZ] SEND aborted: not connected'); return; }
       const payload = {
         type: 'status.request',
         version: '1.0',
@@ -643,7 +645,7 @@
       try{
         // eslint-disable-next-line no-undef
         client.publish({ destination: dest, body: JSON.stringify(payload), headers: { 'content-type': 'application/json' } });
-        appendSys(`[CTRL] SEND ${rk} payload=status-request`);
+        appendSys(`[BUZZ] SEND ${rk} payload=status-request`);
       }catch(e){ appendSys('Broadcast error: ' + (e && e.message ? e.message : String(e))); }
     });
   })();
@@ -661,7 +663,7 @@
     if(chartsHops) chartsHops.style.display = metric==='hops' ? 'block' : 'none';
     if(chartsTitle){
       chartsTitle.textContent = metric==='tps'
-        ? 'RabbitMQ Control Stream — TPS (last 60s)'
+        ? 'RabbitMQ Buzz Stream — TPS (last 60s)'
         : metric==='latency'
           ? 'End-to-End Latency (last 60s)'
           : 'Per-Hop Count (last 60s)';
