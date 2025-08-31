@@ -5,6 +5,7 @@
     <groupId>io.pockethive</groupId>
     <artifactId>pockethive-mvp</artifactId>
     <version>0.1.0</version>
+    <relativePath>../pom.xml</relativePath>
   </parent>
   <artifactId>rabbitmq-logging</artifactId>
   <dependencies>
