@@ -2,6 +2,7 @@ package io.pockethive.postprocessor;
 
 import io.pockethive.Topology;
 import org.springframework.amqp.core.*;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -33,17 +34,21 @@ public class RabbitConfig {
   }
 
   @Bean
-  Binding bindSigBroadcast(Queue controlQueue, TopicExchange controlExchange){
+  Binding bindSigBroadcast(@Qualifier("controlQueue") Queue controlQueue,
+                           @Qualifier("controlExchange") TopicExchange controlExchange){
     return BindingBuilder.bind(controlQueue).to(controlExchange).with("sig.#");
   }
 
   @Bean
-  Binding bindSigRole(Queue controlQueue, TopicExchange controlExchange){
+  Binding bindSigRole(@Qualifier("controlQueue") Queue controlQueue,
+                      @Qualifier("controlExchange") TopicExchange controlExchange){
     return BindingBuilder.bind(controlQueue).to(controlExchange).with("sig.#." + ROLE);
   }
 
   @Bean
-  Binding bindSigInstance(Queue controlQueue, TopicExchange controlExchange, String instanceId){
+  Binding bindSigInstance(@Qualifier("controlQueue") Queue controlQueue,
+                          @Qualifier("controlExchange") TopicExchange controlExchange,
+                          String instanceId){
     return BindingBuilder.bind(controlQueue).to(controlExchange).with("sig.#." + ROLE + "." + instanceId);
   }
 }
