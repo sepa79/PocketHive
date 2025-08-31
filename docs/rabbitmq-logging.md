@@ -1,8 +1,8 @@
 # RabbitMQ Logging
 
 Services ship JSON-formatted log events to a RabbitMQ exchange using the
-off-the-shelf `AmqpAppender` from the
-`org.springframework.amqp:logback-amqp-appender` library combined with the
+off-the-shelf `AmqpAppender` provided by `spring-rabbit` (via
+`spring-boot-starter-amqp`) combined with
 `net.logstash.logback:logstash-logback-encoder`.
 
 ## Configuration
@@ -22,8 +22,8 @@ variables shown in parentheses):
 
 ## Usage
 
-Include the dependencies above and register the appender in your service's
-`logback.xml`:
+Ensure `spring-boot-starter-amqp` is on the classpath, add the encoder
+dependency, and register the appender in your service's `logback.xml`:
 
 ```xml
 <if condition='property("RABBITMQ_LOGGING_ENABLED", "true").equalsIgnoreCase("true")'>
