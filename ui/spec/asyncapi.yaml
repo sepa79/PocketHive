@@ -231,7 +231,7 @@ components:
       type: object
       required: [type, version, messageId, timestamp]
       properties:
-        type: { type: string, enum: [status.request, config.update, ping, link.request] }
+        type: { type: string, enum: [status-request, config-update, ping, link-request] }
         version: { type: string }
         messageId: { type: string, format: uuid }
         timestamp: { type: string, format: date-time }

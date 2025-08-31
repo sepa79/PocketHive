@@ -673,7 +673,7 @@
     btn.addEventListener('click', ()=>{
       if(!client || !connected){ appendSys('[BUZZ] SEND aborted: not connected'); return; }
       const payload = {
-        type: 'status.request',
+        type: 'status-request',
         version: '1.0',
         messageId: (crypto && crypto.randomUUID ? crypto.randomUUID() : (Math.random().toString(16).slice(2) + Date.now())),
         timestamp: new Date().toISOString()

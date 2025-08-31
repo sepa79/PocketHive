@@ -11,7 +11,7 @@ These rules define non-negotiable contracts for emitting and consuming control-p
   - Global: `sig.status-request.#`
   - Role:   `sig.status-request.<role>.#`
   - Direct: `sig.status-request.<role>.<instance>`
-- MUST publish a `status-full` event upon startup and upon receiving `status.request` (at any scope).
+- MUST publish a `status-full` event upon startup and upon receiving `status-request` (at any scope).
 - MAY publish `lifecycle.{state}`, `metric.*`, and `alert` events as appropriate.
 - UI MUST derive graph edges strictly from `queues.in/out` when present; otherwise render minimal default.
 - UI MUST treat `status.delta` as additive to the latest `status.full` snapshot.
