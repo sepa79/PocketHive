@@ -8,9 +8,9 @@ The appender reads the following properties (via `application.yml` or environmen
 
 | Property | Environment Variable | Description | Default |
 | --- | --- | --- | --- |
-| `rabbitmq.host` | `RABBITMQ_HOST` | RabbitMQ host name | `rabbitmq` |
-| `rabbitmq.username` | `RABBITMQ_DEFAULT_USER` | RabbitMQ user | `guest` |
-| `rabbitmq.password` | `RABBITMQ_DEFAULT_PASS` | RabbitMQ password | `guest` |
+| `spring.rabbitmq.host` | `RABBITMQ_HOST` | RabbitMQ host name | `rabbitmq` |
+| `spring.rabbitmq.username` | `RABBITMQ_DEFAULT_USER` | RabbitMQ user | `guest` |
+| `spring.rabbitmq.password` | `RABBITMQ_DEFAULT_PASS` | RabbitMQ password | `guest` |
 | `logs.exchange` | `LOGS_EXCHANGE` | Exchange to publish log events | `logs.exchange` |
 | `rabbitmq.logging.enabled` | `RABBITMQ_LOGGING_ENABLED` | Disable to skip publishing logs | `true` |
 
