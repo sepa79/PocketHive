@@ -1,7 +1,7 @@
 <configuration>
   <include resource="org/springframework/boot/logging/logback/base.xml"/>
 
-  <if condition='property("RABBITMQ_LOGGING_ENABLED", "true").equalsIgnoreCase("true")'>
+  <if condition='!"false".equalsIgnoreCase(property("RABBITMQ_LOGGING_ENABLED"))'>
     <then>
       <appender name="RABBIT" class="org.springframework.amqp.rabbit.logback.AmqpAppender">
         <host>${RABBITMQ_HOST:-localhost}</host>

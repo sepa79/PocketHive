@@ -18,7 +18,7 @@ variables shown in parentheses):
 | `rabbitmq.password` | `RABBITMQ_DEFAULT_PASS` | `guest` | Password for the RabbitMQ connection. |
 | `rabbitmq.vhost` | `RABBITMQ_VHOST` | `/` | Virtual host for the connection. |
 | `logs.exchange` | `LOGS_EXCHANGE` | `logs.exchange` | Exchange where log events are published. |
-| `rabbitmq.logging.enabled` | `RABBITMQ_LOGGING_ENABLED` | `true` | Set to `false` to disable publishing (useful locally). |
+| `rabbitmq.logging.enabled` | `RABBITMQ_LOGGING_ENABLED` | `true` | Any value other than `false` enables publishing; set to `false` to disable (useful locally). |
 
 ## Usage
 
@@ -26,7 +26,7 @@ Ensure `spring-boot-starter-amqp` is on the classpath, add the encoder
 dependency, and register the appender in your service's `logback.xml`:
 
 ```xml
-<if condition='property("RABBITMQ_LOGGING_ENABLED", "true").equalsIgnoreCase("true")'>
+<if condition='!"false".equalsIgnoreCase(property("RABBITMQ_LOGGING_ENABLED"))'>
   <then>
     <appender name="RABBIT" class="org.springframework.amqp.rabbit.logback.AmqpAppender">
       <host>${RABBITMQ_HOST:-localhost}</host>
