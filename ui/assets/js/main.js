@@ -1,16 +1,16 @@
 // Main bootstrap for dynamic panels
 const client = new StompJs.Client({ brokerURL: (location.protocol==='https:'?'wss://':'ws://') + location.host + '/ws' });
 window.phClient = client;
-const panelArea = document.getElementById('hive-panels');
-const containers = {};
 const panels = {generator:{}, moderator:{}, processor:{}, postprocessor:{}};
 const instances = {};
-['generator','moderator','processor','postprocessor'].forEach(role=>{
-  const div = document.createElement('div');
-  if(panelArea) panelArea.appendChild(div);
-  containers[role] = div;
-});
 const loaded = {generator:{}, moderator:{}, processor:{}, postprocessor:{}};
+
+const modal = document.getElementById('panel-modal');
+const modalTitle = document.getElementById('panel-title');
+const modalBody = document.getElementById('panel-body');
+const closeBtn = document.getElementById('panel-close');
+if(closeBtn) closeBtn.addEventListener('click', ()=>{ if(modal) modal.style.display='none'; });
+if(modal) modal.addEventListener('click', e=>{ if(e.target===modal) modal.style.display='none'; });
 client.onConnect = ()=>{
   // discover services via status-full events
   client.subscribe('/exchange/ph.control/ev.status-full.#', msg=>{
@@ -19,8 +19,8 @@ client.onConnect = ()=>{
       const role = body.role || body.name || body.service;
       const inst = body.instance || body.id;
       if(role && inst){
-        instances[role] = inst;
-        if(containers[role] && !loaded[role][inst]){
+        instances[role] = {id:inst, name: body.name || role};
+        if(!loaded[role][inst]){
           loaded[role][inst]=true;
           initPanel(role, inst);
         }
@@ -35,14 +35,10 @@ client.onConnect = ()=>{
 };
 client.activate();
 function initPanel(role, id){
-  const host = containers[role];
-  if(!host) return;
   import(`../../modules/${role}.js`).then(mod=>{
     const fn = mod[`render${role.charAt(0).toUpperCase()+role.slice(1)}Panel`];
     if(typeof fn==='function'){
       const el = document.createElement('div');
-      el.style.display='none';
-      host.appendChild(el);
       panels[role][id] = el;
       fn(el, id);
     }
@@ -50,14 +46,17 @@ function initPanel(role, id){
 }
 
 function showPanel(role){
-  const id = instances[role];
-  if(!id) return;
-  Object.values(panels).forEach(obj=>Object.values(obj).forEach(el=>{ el.style.display='none'; }));
-  const el = panels[role] && panels[role][id];
-  if(el) el.style.display='block';
+  const inst = instances[role];
+  if(!inst || !modal || !modalBody || !modalTitle) return;
+  const el = panels[role] && panels[role][inst.id];
+  if(!el) return;
+  modalBody.innerHTML='';
+  modalBody.appendChild(el);
+  modalTitle.textContent = `${inst.name || role} (${inst.id})`;
+  modal.style.display='flex';
   try{
-    const payload = {type:'status-request', role, instance:id};
-    client.publish({destination:`/exchange/ph.control/sig.status-request.${role}.${id}`, body:JSON.stringify(payload)});
+    const payload = {type:'status-request', role, instance:inst.id};
+    client.publish({destination:`/exchange/ph.control/sig.status-request.${role}.${inst.id}`, body:JSON.stringify(payload)});
   }catch(err){ console.error('status-request', err); }
 }
 window.phShowPanel = showPanel;
