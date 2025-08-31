@@ -9,16 +9,23 @@ const containers = {
 };
 const loaded = {generator:{}, moderator:{}, processor:{}, postprocessor:{}};
 client.onConnect = ()=>{
+  // discover services via status-full events
   client.subscribe('/exchange/ph.control/ev.status-full.#', msg=>{
     try{
       const body = JSON.parse(msg.body||'{}');
-      const role = body.role; const inst = body.instance;
+      const role = body.role || body.name || body.service;
+      const inst = body.instance || body.id;
       if(role && inst && containers[role] && !loaded[role][inst]){
         loaded[role][inst]=true;
         initPanel(role, inst);
       }
     }catch(e){ console.error(e); }
   });
+  // request current status from all services so panels appear automatically
+  try{
+    const payload = {type:'status-request', timestamp:new Date().toISOString()};
+    client.publish({destination:'/exchange/ph.control/sig.status-request', body:JSON.stringify(payload)});
+  }catch(err){ console.error('status-request', err); }
 };
 client.activate();
 function initPanel(role, id){
