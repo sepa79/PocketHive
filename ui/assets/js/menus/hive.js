@@ -1,3 +1,5 @@
+import { phShowPanel } from "../main.js";
+
 /**
  * Create the Hive panel that renders service nodes and queue edges as an SVG graph.
  *
@@ -95,7 +97,7 @@ export function initHiveMenu() {
       const n = hive.nodes[id];
       const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
       g.setAttribute('transform', `translate(${n.x - 60},${n.y - 46})`);
-      if (id !== 'sut') { g.style.cursor = 'pointer'; g.addEventListener('click', () => { if (window.phShowPanel) window.phShowPanel(id); }); }
+      if (id !== 'sut') { g.style.cursor = 'pointer'; g.addEventListener('click', () => { if (phShowPanel) phShowPanel(id); }); }
       const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
       rect.setAttribute('x', '0'); rect.setAttribute('y', '0');
       rect.setAttribute('width', '120'); rect.setAttribute('height', '92');
