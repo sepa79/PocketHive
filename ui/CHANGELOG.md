@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.4] - 2025-08-31
+Timestamp: 2025-08-31T01:32:04Z
+
+- Replace Swarm view with Hive featuring All, Swarm, and Swarmlets tabs and bee-themed icons; remove web generator link.
+
 ## [0.2.3] - 2025-08-29
 Timestamp: 2025-08-29T02:20:00Z
 

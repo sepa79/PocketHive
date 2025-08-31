@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.21] - 2025-08-31
+Timestamp: 2025-08-31T01:32:04Z
+
+- UI: Rename Swarm to Hive with tabs for All, Swarm, Swarmlets; remove web generator and add bee-themed icons.
+
 ## [0.4.20] - 2025-08-30
 Timestamp: 2025-08-30T23:39:40Z
 

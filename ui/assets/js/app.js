@@ -48,9 +48,9 @@
   const LOG_STOMP_DEBUG = true; // STOMP frame debug to System Logs
   // Swarm view elements
   const tabControl = document.getElementById('tab-control');
-  const tabSwarm = document.getElementById('tab-swarm');
+  const tabHive = document.getElementById('tab-hive');
   const viewControl = document.getElementById('view-control');
-  const viewSwarm = document.getElementById('view-swarm');
+  const viewHive = document.getElementById('view-hive');
   const swarmSvg = /** @type {SVGSVGElement|null} */(document.getElementById('swarm-canvas'));
   const swarmHoldInput = /** @type {HTMLInputElement|null} */(document.getElementById('swarm-hold'));
   const swarmClearBtn = document.getElementById('swarm-clear');
@@ -89,20 +89,43 @@
 
   // Tabs handling
   (function(){
-    if(!tabControl || !tabSwarm || !viewControl || !viewSwarm) return;
+    if(!tabControl || !tabHive || !viewControl || !viewHive) return;
     const activate = (which)=>{
       if(which==='control'){
-        viewControl.style.display='block'; viewSwarm.style.display='none';
-        tabControl.classList.add('tab-active'); tabSwarm.classList.remove('tab-active');
+        viewControl.style.display='block'; viewHive.style.display='none';
+        tabControl.classList.add('tab-active'); tabHive.classList.remove('tab-active');
       } else {
-        viewControl.style.display='none'; viewSwarm.style.display='block';
-        tabControl.classList.remove('tab-active'); tabSwarm.classList.add('tab-active');
-        if(swarmSvg) redrawSwarm();
+        viewControl.style.display='none'; viewHive.style.display='block';
+        tabControl.classList.remove('tab-active'); tabHive.classList.add('tab-active');
       }
     };
     tabControl.addEventListener('click', ()=> activate('control'));
-    tabSwarm.addEventListener('click', ()=> activate('swarm'));
+    tabHive.addEventListener('click', ()=> activate('hive'));
     activate('control');
+  })();
+
+  // Hive sub-tabs handling
+  (function(){
+    const tabAll = document.getElementById('hive-tab-all');
+    const tabSwarm = document.getElementById('hive-tab-swarm');
+    const tabSwarmlets = document.getElementById('hive-tab-swarmlets');
+    const viewAll = document.getElementById('hive-view-all');
+    const viewSwarm = document.getElementById('hive-view-swarm');
+    const viewSwarmlets = document.getElementById('hive-view-swarmlets');
+    if(!tabAll || !tabSwarm || !tabSwarmlets || !viewAll || !viewSwarm || !viewSwarmlets) return;
+    const activate = (which)=>{
+      viewAll.style.display = which==='all'? 'block':'none';
+      viewSwarm.style.display = which==='swarm'? 'block':'none';
+      viewSwarmlets.style.display = which==='swarmlets'? 'block':'none';
+      tabAll.classList.toggle('tab-active', which==='all');
+      tabSwarm.classList.toggle('tab-active', which==='swarm');
+      tabSwarmlets.classList.toggle('tab-active', which==='swarmlets');
+      if(which==='swarm' && swarmSvg) redrawSwarm();
+    };
+    tabAll.addEventListener('click', ()=> activate('all'));
+    tabSwarm.addEventListener('click', ()=> activate('swarm'));
+    tabSwarmlets.addEventListener('click', ()=> activate('swarmlets'));
+    activate('all');
   })();
 
   // Log tabs handling (Control vs Topic)
