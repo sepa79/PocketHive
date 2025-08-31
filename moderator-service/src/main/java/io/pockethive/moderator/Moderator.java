@@ -25,6 +25,9 @@ public class Moderator {
   private final RabbitTemplate rabbit;
   private final AtomicLong counter = new AtomicLong();
   private final String instanceId = UUID.randomUUID().toString();
+  private volatile boolean rulesEnabled = false;
+  private volatile String filter = "";
+  private volatile int limit = 0;
 
   public Moderator(RabbitTemplate rabbit) {
     this.rabbit = rabbit;
@@ -50,7 +53,6 @@ public class Moderator {
   @Scheduled(fixedRate = 5000)
   public void status() { long tps = counter.getAndSet(0); sendStatusDelta(tps); }
 
-  // Control-plane listener (no-op placeholder)
   @RabbitListener(queues = "${ph.controlQueue:ph.control}")
   public void onControl(String payload,
                         @Header(AmqpHeaders.RECEIVED_ROUTING_KEY) String rk,
@@ -60,8 +62,20 @@ public class Moderator {
     try {
       String p = payload==null?"" : (payload.length()>300? payload.substring(0,300)+"…" : payload);
       log.info("[CTRL] RECV rk={} inst={} payload={}", rk, instanceId, p);
-      if(payload!=null && payload.contains("status.request")){
-        sendStatusFull(0);
+      if(payload!=null){
+        try{
+          com.fasterxml.jackson.databind.JsonNode node = new com.fasterxml.jackson.databind.ObjectMapper().readTree(payload);
+          String type = node.path("type").asText();
+          if("status-request".equals(type)){
+            sendStatusFull(0);
+          }
+          if("config-update".equals(type)){
+            com.fasterxml.jackson.databind.JsonNode data = node.path("data");
+            if(data.has("rules")) rulesEnabled = data.get("rules").asBoolean(rulesEnabled);
+            if(data.has("filter")) filter = data.get("filter").asText(filter);
+            if(data.has("limit")) limit = data.get("limit").asInt(limit);
+          }
+        }catch(Exception e){ log.warn("control parse", e); }
       }
     } finally {
       MDC.clear();

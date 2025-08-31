@@ -24,6 +24,8 @@ public class Processor {
   private final RabbitTemplate rabbit;
   private final AtomicLong counter = new AtomicLong();
   private final String instanceId = UUID.randomUUID().toString();
+  private volatile int workers = 1;
+  private volatile String mode = "simulation";
 
   public Processor(RabbitTemplate rabbit){ this.rabbit = rabbit; try{ sendStatusFull(0); } catch(Exception ignore){} }
 
@@ -44,7 +46,6 @@ public class Processor {
   @Scheduled(fixedRate = 5000)
   public void status(){ long tps = counter.getAndSet(0); sendStatusDelta(tps); }
 
-  // Control-plane listener (no-op placeholder)
   @RabbitListener(queues = "${ph.controlQueue:ph.control}")
   public void onControl(String payload,
                         @Header(AmqpHeaders.RECEIVED_ROUTING_KEY) String rk,
@@ -54,8 +55,19 @@ public class Processor {
     try {
       String p = payload==null?"" : (payload.length()>300? payload.substring(0,300)+"…" : payload);
       log.info("[CTRL] RECV rk={} inst={} payload={}", rk, instanceId, p);
-      if(payload!=null && payload.contains("status.request")){
-        sendStatusFull(0);
+      if(payload!=null){
+        try{
+          com.fasterxml.jackson.databind.JsonNode node = new com.fasterxml.jackson.databind.ObjectMapper().readTree(payload);
+          String type = node.path("type").asText();
+          if("status-request".equals(type)){
+            sendStatusFull(0);
+          }
+          if("config-update".equals(type)){
+            com.fasterxml.jackson.databind.JsonNode data = node.path("data");
+            if(data.has("workers")) workers = data.get("workers").asInt(workers);
+            if(data.has("mode")) mode = data.get("mode").asText(mode);
+          }
+        }catch(Exception e){ log.warn("control parse", e); }
       }
     } finally {
       MDC.clear();
