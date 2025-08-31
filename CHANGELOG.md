@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.27] - 2025-08-31
+Timestamp: 2025-08-31T02:38:13Z
+
+- UI: Restore HAL eye status indicators and hamburger menu button.
+
 ## [0.4.26] - 2025-08-31
 Timestamp: 2025-08-31T02:32:56Z
 
