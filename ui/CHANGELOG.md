@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.6] - 2025-08-31
+Timestamp: 2025-08-31T02:04:08Z
+
+- Color hexagon outlines to match the logo and brighten icon glyphs.
+- Animate radar icon with spinning sweep, hover pulse, and click ping.
+
 ## [0.2.5] - 2025-08-31
 Timestamp: 2025-08-31T01:50:27Z
 

@@ -27,6 +27,7 @@
   const chartsHops = qs('charts-hops');
   const chartsTitle = qs('charts-title');
   const broadcastBtn = qs('broadcast-status');
+  const radarBtn = qs('radar-btn');
   const canvases = {
     generator: /** @type {HTMLCanvasElement|null} */(document.getElementById('chart-gen')),
     moderator: /** @type {HTMLCanvasElement|null} */(document.getElementById('chart-mod')),
@@ -668,6 +669,18 @@
         client.publish({ destination: dest, body: JSON.stringify(payload), headers: { 'content-type': 'application/json' } });
         appendSys(`[CTRL] SEND ${rk} payload=status-request`);
       }catch(e){ appendSys('Broadcast error: ' + (e && e.message ? e.message : String(e))); }
+    });
+  })();
+
+  // Radar ping visual effect
+  (function(){
+    const btn = radarBtn;
+    if(!btn) return;
+    btn.addEventListener('click', ()=>{
+      btn.classList.remove('pinging');
+      // trigger reflow to restart animation
+      void btn.offsetWidth;
+      btn.classList.add('pinging');
     });
   })();
   function refreshCharts(){

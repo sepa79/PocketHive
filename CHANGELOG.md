@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.23] - 2025-08-31
+Timestamp: 2025-08-31T02:04:08Z
+
+- UI: Color hexagon outlines like the logo and lighten icon glyphs for better visibility.
+- UI: Animate radar icon with spinning sweep, hover pulse, and click ping effect.
+
 ## [0.4.22] - 2025-08-31
 Timestamp: 2025-08-31T01:50:27Z
 
