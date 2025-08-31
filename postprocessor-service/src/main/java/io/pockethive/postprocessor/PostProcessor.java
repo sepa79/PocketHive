@@ -7,6 +7,7 @@ import io.pockethive.Topology;
 import io.pockethive.observability.Hop;
 import io.pockethive.observability.ObservabilityContext;
 import io.pockethive.observability.ObservabilityContextUtil;
+import io.pockethive.observability.StatusEnvelopeBuilder;
 import org.slf4j.MDC;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -19,7 +20,6 @@ import org.springframework.beans.factory.annotation.Qualifier;
 
 import java.time.Duration;
 import java.util.List;
-import java.util.UUID;
 
 @Component
 public class PostProcessor {
@@ -109,33 +109,13 @@ public class PostProcessor {
   private void sendStatusFull(){
     String role = "postprocessor";
     String rk = "ev.status-full."+role+"."+instanceId;
-    String payload = envelope(role, new String[]{Topology.FINAL_QUEUE});
+    String payload = new StatusEnvelopeBuilder()
+        .kind("status-full")
+        .role(role)
+        .instance(instanceId)
+        .traffic(Topology.EXCHANGE)
+        .inQueues(Topology.FINAL_QUEUE)
+        .toJson();
     rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, payload);
-  }
-
-  private String envelope(String role, String[] inQueues){
-    String location = System.getenv().getOrDefault("PH_LOCATION", System.getenv().getOrDefault("HOSTNAME", "local"));
-    String messageId = UUID.randomUUID().toString();
-    String timestamp = java.time.Instant.now().toString();
-    String traffic = Topology.EXCHANGE;
-    StringBuilder sb = new StringBuilder(256);
-    sb.append('{')
-      .append("\"event\":\"status\",")
-      .append("\"kind\":\"status-full\",")
-      .append("\"version\":\"1.0\",")
-      .append("\"role\":\"").append(role).append("\",")
-      .append("\"instance\":\"").append(instanceId).append("\",")
-      .append("\"location\":\"").append(location).append("\",")
-      .append("\"messageId\":\""+messageId+"\",")
-      .append("\"timestamp\":\""+timestamp+"\",")
-      .append("\"traffic\":\""+traffic+"\"");
-    if(inQueues!=null && inQueues.length>0){
-      sb.append(',').append("\"queues\":{\"in\":[");
-      for(int i=0;i<inQueues.length;i++){ if(i>0) sb.append(','); sb.append('"').append(inQueues[i]).append('"'); }
-      sb.append("]}");
-    }
-    sb.append(',').append("\"data\":{}");
-    sb.append('}');
-    return sb.toString();
   }
 }

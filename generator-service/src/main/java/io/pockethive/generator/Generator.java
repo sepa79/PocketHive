@@ -17,6 +17,7 @@ import org.springframework.amqp.support.AmqpHeaders;
 import org.slf4j.MDC;
 import io.pockethive.observability.ObservabilityContext;
 import io.pockethive.observability.ObservabilityContextUtil;
+import io.pockethive.observability.StatusEnvelopeBuilder;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
@@ -116,40 +117,27 @@ public class Generator {
   private void sendStatusDelta(long tps){
     String role = "generator";
     String routingKey = "ev.status-delta." + role + "." + instanceId;
-    String json = envelope(role, null, tps, "status-delta");
+    String json = new StatusEnvelopeBuilder()
+        .kind("status-delta")
+        .role(role)
+        .instance(instanceId)
+        .traffic(Topology.EXCHANGE)
+        .tps(tps)
+        .toJson();
     rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, routingKey, json);
   }
 
   private void sendStatusFull(long tps){
     String role = "generator";
     String routingKey = "ev.status-full." + role + "." + instanceId;
-    String json = envelope(role, new String[]{Topology.GEN_QUEUE}, tps, "status-full");
+    String json = new StatusEnvelopeBuilder()
+        .kind("status-full")
+        .role(role)
+        .instance(instanceId)
+        .traffic(Topology.EXCHANGE)
+        .outQueues(Topology.GEN_QUEUE)
+        .tps(tps)
+        .toJson();
     rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, routingKey, json);
-  }
-
-  private String envelope(String role, String[] outQueues, long tps, String kind){
-    String location = System.getenv().getOrDefault("PH_LOCATION", System.getenv().getOrDefault("HOSTNAME", "local"));
-    String messageId = UUID.randomUUID().toString();
-    String timestamp = java.time.Instant.now().toString();
-    String traffic = Topology.EXCHANGE;
-    StringBuilder sb = new StringBuilder(256);
-    sb.append('{')
-      .append("\"event\":\"status\",")
-      .append("\"kind\":\"").append(kind).append("\",")
-      .append("\"version\":\"1.0\",")
-      .append("\"role\":\"").append(role).append("\",")
-      .append("\"instance\":\"").append(instanceId).append("\",")
-      .append("\"location\":\"").append(location).append("\",")
-      .append("\"messageId\":\"").append(messageId).append("\",")
-      .append("\"timestamp\":\"").append(timestamp).append("\",")
-      .append("\"traffic\":\"").append(traffic).append("\"");
-    if(outQueues!=null && outQueues.length>0){
-      sb.append(',').append("\"queues\":{\"out\":[");
-      for(int i=0;i<outQueues.length;i++){ if(i>0) sb.append(','); sb.append('"').append(outQueues[i]).append('"'); }
-      sb.append("]}");
-    }
-    sb.append(',').append("\"data\":{\"tps\":").append(tps).append('}');
-    sb.append('}');
-    return sb.toString();
   }
 }
