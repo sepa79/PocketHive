@@ -14,7 +14,7 @@
 
 - UI connects to RabbitMQ via same‑origin Web‑STOMP proxy at `/ws`.
 - Services publish/consume via the `ph.hive` exchange and `ph.gen`/`ph.mod` queues.
-- Metrics/status flow back on the `ph.control` exchange, with each service auto-declaring its own `ph.control.<role>.<instance>` queue for broadcasts and direct signals.
+- Metrics/status flow back on the `ph.control` exchange, with each service auto-declaring a durable `ph.control.<role>.<instance>` queue for broadcasts and direct signals.
 
 ### Control-plane Events & Signals
 

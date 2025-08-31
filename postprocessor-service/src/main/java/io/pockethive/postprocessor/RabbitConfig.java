@@ -15,11 +15,6 @@ public class RabbitConfig {
   public String instanceId(){ return UUID.randomUUID().toString(); }
 
   @Bean
-  public String controlQueue(String instanceId){
-    return Topology.CONTROL_QUEUE + "." + ROLE + "." + instanceId;
-  }
-
-  @Bean
   TopicExchange direct(){ return new TopicExchange(Topology.EXCHANGE, true, false); }
 
   @Bean
@@ -32,20 +27,23 @@ public class RabbitConfig {
   TopicExchange controlExchange(){ return new TopicExchange(Topology.CONTROL_EXCHANGE, true, false); }
 
   @Bean
-  Queue control(String controlQueue){ return QueueBuilder.nonDurable(controlQueue).autoDelete().build(); }
-
-  @Bean
-  Binding bindSigBroadcast(Queue control, TopicExchange controlExchange){
-    return BindingBuilder.bind(control).to(controlExchange).with("sig.#");
+  Queue controlQueue(String instanceId){
+    String name = Topology.CONTROL_QUEUE + "." + ROLE + "." + instanceId;
+    return QueueBuilder.durable(name).build();
   }
 
   @Bean
-  Binding bindSigRole(Queue control, TopicExchange controlExchange){
-    return BindingBuilder.bind(control).to(controlExchange).with("sig.#." + ROLE);
+  Binding bindSigBroadcast(Queue controlQueue, TopicExchange controlExchange){
+    return BindingBuilder.bind(controlQueue).to(controlExchange).with("sig.#");
   }
 
   @Bean
-  Binding bindSigInstance(Queue control, TopicExchange controlExchange, String instanceId){
-    return BindingBuilder.bind(control).to(controlExchange).with("sig.#." + ROLE + "." + instanceId);
+  Binding bindSigRole(Queue controlQueue, TopicExchange controlExchange){
+    return BindingBuilder.bind(controlQueue).to(controlExchange).with("sig.#." + ROLE);
+  }
+
+  @Bean
+  Binding bindSigInstance(Queue controlQueue, TopicExchange controlExchange, String instanceId){
+    return BindingBuilder.bind(controlQueue).to(controlExchange).with("sig.#." + ROLE + "." + instanceId);
   }
 }

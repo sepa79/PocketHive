@@ -82,7 +82,7 @@ public class PostProcessor {
     rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, payload);
   }
 
-  @RabbitListener(queues = "#{@controlQueue}")
+  @RabbitListener(queues = "#{@controlQueue.name}")
   public void onControl(String payload,
                         @Header(AmqpHeaders.RECEIVED_ROUTING_KEY) String rk,
                         @Header(value = ObservabilityContextUtil.HEADER, required = false) String trace){

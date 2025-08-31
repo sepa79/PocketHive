@@ -52,7 +52,7 @@ public class Processor {
   @Scheduled(fixedRate = 5000)
   public void status(){ long tps = counter.getAndSet(0); sendStatusDelta(tps); }
 
-  @RabbitListener(queues = "#{@controlQueue}")
+  @RabbitListener(queues = "#{@controlQueue.name}")
   public void onControl(String payload,
                         @Header(AmqpHeaders.RECEIVED_ROUTING_KEY) String rk,
                         @Header(value = ObservabilityContextUtil.HEADER, required = false) String trace) {
