@@ -54,6 +54,8 @@ See also: Control Bindings page (Menu → Control Bindings) and `ui/spec/asyncap
 - `generator`, `moderator`, `processor`, `postprocessor`: Spring Boot services using AMQP
 - `prometheus` (metrics store): 9090
 - `grafana` (dashboard): 3000 (admin / admin)
+- `loki` (log store): 3100
+- `promtail` (log shipper): 9080
 
 ## Quick Start
 
@@ -78,7 +80,7 @@ docker compose up -d --build
 4) Metrics and Dashboards (optional)
 
 - Prometheus: http://localhost:9090
-- Grafana: http://localhost:3000 (admin / admin)
+- Grafana: http://localhost:3000 (admin / admin) with Prometheus and Loki datasources and a "Loki Logs" dashboard for viewing application logs
 - Prometheus scrapes metrics from `postprocessor` at `/actuator/prometheus`.
 
 ## WebSocket Proxy (UI ←→ RabbitMQ)

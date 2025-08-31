@@ -5,6 +5,9 @@
   <artifactId>pockethive-mvp</artifactId>
   <version>0.1.0</version>
   <packaging>pom</packaging>
+  <properties>
+    <logstash.logback.version>8.1</logstash.logback.version>
+  </properties>
   <modules>
     <module>observability</module>
     <module>generator-service</module>
