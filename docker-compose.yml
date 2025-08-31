@@ -120,6 +120,7 @@ services:
       - "3000:3000"
     depends_on:
       - prometheus
+      - loki
 
   loki:
     image: grafana/loki:2.9.1
