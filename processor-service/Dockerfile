@@ -3,6 +3,7 @@ FROM maven:3.9.7-eclipse-temurin-21-alpine AS build
 WORKDIR /app
 # copy parent pom and module sources
 COPY pom.xml ./
+COPY rabbitmq-logging/pom.xml rabbitmq-logging/pom.xml
 COPY generator-service/pom.xml generator-service/pom.xml
 COPY moderator-service/pom.xml moderator-service/pom.xml
 COPY processor-service/pom.xml processor-service/pom.xml
@@ -10,6 +11,7 @@ COPY observability/pom.xml observability/pom.xml
 COPY postprocessor-service/pom.xml postprocessor-service/pom.xml
 COPY log-aggregator-service/pom.xml log-aggregator-service/pom.xml
 COPY generator-service/src generator-service/src
+COPY rabbitmq-logging/src rabbitmq-logging/src
 COPY moderator-service/src moderator-service/src
 COPY processor-service/src processor-service/src
 COPY observability/src observability/src
