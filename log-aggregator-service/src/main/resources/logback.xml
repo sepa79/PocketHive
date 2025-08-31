@@ -1,6 +1,13 @@
 <configuration>
   <include resource="org/springframework/boot/logging/logback/base.xml"/>
 
+  <logger name="org.springframework.amqp" level="WARN" additivity="false">
+    <appender-ref ref="CONSOLE"/>
+  </logger>
+  <logger name="com.rabbitmq" level="WARN" additivity="false">
+    <appender-ref ref="CONSOLE"/>
+  </logger>
+
   <if condition='!"false".equalsIgnoreCase(property("RABBITMQ_LOGGING_ENABLED"))'>
     <then>
       <appender name="RABBIT" class="org.springframework.amqp.rabbit.logback.AmqpAppender">

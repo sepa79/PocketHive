@@ -51,3 +51,18 @@ dependency, and register the appender in your service's `logback.xml`:
 ```
 
 Each log event is serialized as JSON and published to the configured exchange.
+
+### Avoiding logging loops
+
+AMQP client libraries are noisy and, if routed through the `AmqpAppender`,
+would generate recursive log traffic. Define dedicated loggers that send those
+categories only to the console:
+
+```xml
+<logger name="org.springframework.amqp" level="WARN" additivity="false">
+  <appender-ref ref="CONSOLE"/>
+</logger>
+<logger name="com.rabbitmq" level="WARN" additivity="false">
+  <appender-ref ref="CONSOLE"/>
+</logger>
+```
