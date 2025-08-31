@@ -1,31 +1,53 @@
 # RabbitMQ Logging
 
-The `rabbitmq-logging` module provides a Logback appender that publishes JSON log events to a RabbitMQ exchange.
+Services ship JSON-formatted log events to a RabbitMQ exchange using the
+off-the-shelf `AmqpAppender` from the
+`org.springframework.amqp:logback-amqp-appender` library combined with the
+`net.logstash.logback:logstash-logback-encoder`.
 
 ## Configuration
 
-The appender reads its connection settings from the following keys (environment variables shown in parentheses):
+The appender reads its connection settings from the following keys (environment
+variables shown in parentheses):
 
 | Key | Env Var | Default | Description |
 |-----|---------|---------|-------------|
 | `rabbitmq.host` | `RABBITMQ_HOST` | `localhost` | RabbitMQ host to connect to. |
+| `rabbitmq.port` | `RABBITMQ_PORT` | `5672` | RabbitMQ port. |
 | `rabbitmq.username` | `RABBITMQ_DEFAULT_USER` | `guest` | Username for the RabbitMQ connection. |
 | `rabbitmq.password` | `RABBITMQ_DEFAULT_PASS` | `guest` | Password for the RabbitMQ connection. |
+| `rabbitmq.vhost` | `RABBITMQ_VHOST` | `/` | Virtual host for the connection. |
 | `logs.exchange` | `LOGS_EXCHANGE` | `logs.exchange` | Exchange where log events are published. |
 | `rabbitmq.logging.enabled` | `RABBITMQ_LOGGING_ENABLED` | `true` | Set to `false` to disable publishing (useful locally). |
 
 ## Usage
 
-Add the `rabbitmq-logging` module as a dependency and register the appender in your service's `logback.xml`:
+Include the dependencies above and register the appender in your service's
+`logback.xml`:
 
 ```xml
-<appender name="RABBIT" class="io.pockethive.logging.RabbitMqLogAppender">
-  <host>${RABBITMQ_HOST:-localhost}</host>
-  <username>${RABBITMQ_DEFAULT_USER:-guest}</username>
-  <password>${RABBITMQ_DEFAULT_PASS:-guest}</password>
-  <exchange>${LOGS_EXCHANGE:-logs.exchange}</exchange>
-  <enabled>${RABBITMQ_LOGGING_ENABLED:-true}</enabled>
-</appender>
+<if condition='property("RABBITMQ_LOGGING_ENABLED", "true").equalsIgnoreCase("true")'>
+  <then>
+    <appender name="RABBIT" class="org.springframework.amqp.rabbit.logback.AmqpAppender">
+      <host>${RABBITMQ_HOST:-localhost}</host>
+      <port>${RABBITMQ_PORT:-5672}</port>
+      <username>${RABBITMQ_DEFAULT_USER:-guest}</username>
+      <password>${RABBITMQ_DEFAULT_PASS:-guest}</password>
+      <virtualHost>${RABBITMQ_VHOST:-/}</virtualHost>
+      <exchangeName>${LOGS_EXCHANGE:-logs.exchange}</exchangeName>
+      <encoder class="net.logstash.logback.encoder.LogstashEncoder"/>
+    </appender>
+    <root level="INFO">
+      <appender-ref ref="CONSOLE"/>
+      <appender-ref ref="RABBIT"/>
+    </root>
+  </then>
+  <else>
+    <root level="INFO">
+      <appender-ref ref="CONSOLE"/>
+    </root>
+  </else>
+</if>
 ```
 
 Each log event is serialized as JSON and published to the configured exchange.
