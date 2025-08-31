@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.25] - 2025-08-31
+Timestamp: 2025-08-31T02:27:47Z
+
+- UI: Swap menu for monolith icon, remove HAL eyes, and refresh radar and connection buttons with new health indicator.
+
 ## [0.4.24] - 2025-08-31
 Timestamp: 2025-08-31T02:14:09Z
 

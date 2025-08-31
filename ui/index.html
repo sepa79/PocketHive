@@ -66,28 +66,31 @@
           <button id="tab-hive" class="tab-btn" type="button"><img src="./assets/icons/hive.svg" class="icon" alt="" />Hive</button>
         </nav>
         <div class="header-right">
-          <div class="menu" style="position:relative">
-            <button id="menu-btn" class="bg-toggle" style="cursor:pointer">☰ Menu</button>
+          <div class="menu" id="main-menu" style="position:relative">
+            <button id="menu-btn" title="Menu" aria-label="Menu">
+              <svg class="monolith" width="32" height="32" viewBox="0 0 32 32" aria-hidden="true">
+                <polygon points="10,8 18,8 18,26 10,26" fill="#111"/>
+                <polygon points="18,8 20,6 20,24 18,26" fill="#1a1a1a"/>
+                <polygon points="10,8 18,8 20,6 12,6" fill="#222"/>
+              </svg>
+            </button>
             <div id="menu-dropdown" class="dropdown-panel" style="display:none; position:absolute; right:0; top:36px; min-width: 240px;">
               <a href="readme.html" class="dropdown-item">README</a>
               <a href="bindings.html" class="dropdown-item">Control Bindings</a>
               <a href="changelog.html" class="dropdown-item">Changelog</a>
-                <a href="docs.html" class="dropdown-item">API Docs</a>
-              </div>
+              <a href="docs.html" class="dropdown-item">API Docs</a>
+            </div>
           </div>
           <div class="bg-toggle" style="gap:10px; align-items:center">
-            <div class="hal">
-              <span id="status-ui" class="hal-eye" data-state="connecting" title="UI Health"></span>
-              <span id="status-ws" class="hal-eye" data-state="idle" title="WebSocket to RabbitMQ status"></span>
-            </div>
+            <span id="status-ui" class="health-indicator" data-state="checking" title="System Health"></span>
             <div class="menu" id="conn-menu" style="position:relative; display:inline-flex;">
               <button id="ph-conn-btn" title="Connection settings" aria-label="Connection settings">
-                <span class="conn-icon"><span class="node left"></span><span class="node right"></span><span class="link"></span></span>
+                <span class="conn-icon"><span class="dish"></span><span class="stand"></span><span class="wave"></span></span>
               </button>
               <div id="conn-dropdown" style="display:none; position:absolute; right:0; top:36px; background: rgba(12,16,22,0.95); border:1px solid rgba(255,255,255,0.15); border-radius:10px; min-width: 340px; box-shadow:0 6px 22px rgba(0,0,0,0.4); padding:10px"></div>
             </div>
             <button id="radar-btn" title="Scan services" aria-label="Scan services">
-              <span class="radar-icon"><span class="ring r1"></span><span class="ring r2"></span><span class="dot"></span><span class="sweep"></span></span>
+              <span class="radar-icon"><span class="sweep"></span></span>
             </button>
             <button id="broadcast-status" title="Broadcast status.request to all services" aria-label="Broadcast status">
               <svg class="monolith" width="32" height="32" viewBox="0 0 32 32" aria-hidden="true">

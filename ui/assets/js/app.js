@@ -16,7 +16,10 @@
   const modEl = qs('mod');
   const procEl = qs('proc');
   const uiStatus = qs('status-ui');
-  const wsStatus = qs('status-ws');
+  const connBtn = qs('ph-conn-btn');
+  if(connBtn) connBtn.dataset.state = 'searching';
+  let uiHealth = 'checking';
+  let wsHealth = 'searching';
   const chartsEl = qs('charts');
   const toggleChartsBtn = qs('toggle-charts');
   const metricBtn = qs('metric-btn');
@@ -351,17 +354,34 @@
     sysEl.scrollTop = sysEl.scrollHeight;
   }
 
-  function setUiStatus(state){
+  function updateHealth(){
     if(!uiStatus) return;
-    uiStatus.dataset.state = state || 'connecting';
-    uiStatus.setAttribute('aria-label', `UI ${state||''}`.trim());
-    uiStatus.title = `UI: ${state}`;
+    let state;
+    if(uiHealth==='checking') state='checking';
+    else {
+      const uiOk = uiHealth==='good';
+      const wsOk = wsHealth==='connected';
+      if(uiOk && wsOk) state='good';
+      else if(!uiOk && !wsOk) state='down';
+      else state='warn';
+    }
+    uiStatus.dataset.state = state;
+    uiStatus.setAttribute('aria-label', `Health ${state}`);
+    uiStatus.title = `Health: ${state}`;
+  }
+  function setUiStatus(state){
+    uiHealth = state || 'checking';
+    updateHealth();
   }
   function setWsStatus(state){
-    if(!wsStatus) return;
-    wsStatus.dataset.state = state || 'idle';
-    wsStatus.setAttribute('aria-label', `WS ${state||''}`.trim());
-    wsStatus.title = `WebSocket: ${state}`;
+    if(connBtn){
+      const vis = {connecting:'searching', closed:'searching', error:'searching', idle:'searching'}[state||''] || state || 'searching';
+      connBtn.dataset.state = vis;
+      connBtn.setAttribute('aria-label', `WS ${state||''}`.trim());
+      connBtn.title = `WebSocket: ${state}`;
+      wsHealth = state || 'idle';
+      updateHealth();
+    }
   }
 
   function trimSeries(){
@@ -603,7 +623,7 @@
   // Move connection controls into header dropdown and toggle via WS health icon
   (function(){
     const host = document.getElementById('conn-dropdown');
-    const trigger = document.getElementById('ph-conn-btn') || document.getElementById('status-ws');
+    const trigger = connBtn;
     const controls = document.querySelector('.controls');
     if(!host || !trigger || !controls) return;
     host.appendChild(controls);
@@ -636,11 +656,12 @@
     let lastStatus = null;
     const ping = async () => {
       try{
+        setUiStatus('checking');
         const res = await fetch('/healthz', {cache:'no-store'});
         const ok = res.ok;
         const txt = await res.text().catch(()=> '');
-        const status = ok && /ok/i.test(txt) ? 'healthy' : `unhealthy(${res.status})`;
-        if(status !== lastStatus){ appendSys(`UI health: ${status}`); setUiStatus(/healthy/.test(status)?'healthy':'unhealthy'); lastStatus = status; }
+        const status = ok && /ok/i.test(txt) ? 'good' : `warn(${res.status})`;
+        if(status !== lastStatus){ appendSys(`UI health: ${status}`); setUiStatus(/good/.test(status)?'good':'warn'); lastStatus = status; }
       }catch(e){
         if(lastStatus !== 'down'){ appendSys('UI health: down'); setUiStatus('down'); lastStatus = 'down'; }
       }
