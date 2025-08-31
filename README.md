@@ -36,9 +36,11 @@ See also: Control Bindings page (Menu → Control Bindings) and `ui/spec/asyncap
 ### Views
 
 - Control View: existing dashboard with charts, event log, and system log.
-- Swarm View: auto-discovers components from Control messages and draws a simple graph:
-  - Nodes appear when the first message from a service is received (generator, moderator, processor). SUT appears when processor is seen.
-  - Default hold time is 3s (3× of 1s status schedule); toolbar lets you adjust hold time and Clear & Restart.
+- Hive View: top-level tab with All / Swarm / Swarmlets sub-tabs.
+  - Swarm tab auto-discovers components from Control messages and draws a simple graph:
+    - Nodes appear when the first message from a service is received (generator, moderator, processor). SUT appears when processor is seen.
+    - Default hold time is 3s (3× of 1s status schedule); toolbar lets you adjust hold time and Clear & Restart.
+  - Swarmlets tab currently shows a placeholder; portable in-browser modules will appear here later.
 - Edges are built strictly from `queues.in/out` found in `status-full` events.
 
 ### Demo mode (no WebSocket)

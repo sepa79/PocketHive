@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.4] - 2025-08-31
+Timestamp: 2025-08-31T01:09:09Z
+
+- Rename Swarm top-level tab to Hive with All/Swarm/Swarmlets tabs and bee icons.
+
 ## [0.2.3] - 2025-08-29
 Timestamp: 2025-08-29T02:20:00Z
 
