@@ -331,13 +331,43 @@
 
   function setUiStatus(state){
     if(!uiStatus) return;
-    uiStatus.dataset.state = state || 'connecting';
+    state = state || 'connecting';
+    const badge = uiStatus.querySelector('.badge');
+    uiStatus.classList.remove('ok','warn','err','scan');
+    if(badge) badge.classList.remove('ok','warn','err');
+    const cls = state==='healthy'
+      ? 'ok'
+      : state==='unhealthy'
+        ? 'warn'
+        : (state==='down')
+          ? 'err'
+          : (state==='connecting'
+            ? 'scan'
+            : '');
+    if(cls){
+      uiStatus.classList.add(cls);
+      if(badge && cls!=='scan') badge.classList.add(cls);
+    }
     uiStatus.setAttribute('aria-label', `UI ${state||''}`.trim());
     uiStatus.title = `UI: ${state}`;
   }
   function setWsStatus(state){
     if(!wsStatus) return;
-    wsStatus.dataset.state = state || 'idle';
+    state = state || 'idle';
+    const badge = wsStatus.querySelector('.badge');
+    wsStatus.classList.remove('ok','warn','err','scan');
+    if(badge) badge.classList.remove('ok','warn','err');
+    const cls = state==='connected'
+      ? 'ok'
+      : state==='error' || state==='closed' || state==='idle'
+        ? 'err'
+        : state==='connecting'
+          ? 'scan'
+          : '';
+    if(cls){
+      wsStatus.classList.add(cls);
+      if(badge && cls!=='scan') badge.classList.add(cls);
+    }
     wsStatus.setAttribute('aria-label', `WS ${state||''}`.trim());
     wsStatus.title = `WebSocket: ${state}`;
   }

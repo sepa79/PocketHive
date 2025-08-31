@@ -13,6 +13,7 @@
   <link rel="manifest" href="./assets/favicon/site.webmanifest">
   <meta name="theme-color" content="#0f1116">
   <link rel="stylesheet" href="./assets/css/app.css">
+  <link rel="stylesheet" href="./assets/css/icons.css">
   <style>
       header {
         display: flex; align-items: center; gap: 16px;
@@ -85,19 +86,27 @@
               </div>
           </div>
           <div class="bg-toggle" style="gap:10px; align-items:center">
-            <div class="hal">
-              <span id="status-ui" class="hal-eye" data-state="connecting" title="UI Health"></span>
-              <span id="status-ws" class="hal-eye" data-state="idle" title="WebSocket to RabbitMQ — click to open connection" role="button" tabindex="0"></span>
-              <div class="menu" id="conn-menu" style="position:relative; display:inline-flex;">
-                <div id="conn-dropdown" style="display:none; position:absolute; right:0; top:36px; background: rgba(12,16,22,0.95); border:1px solid rgba(255,255,255,0.15); border-radius:10px; min-width: 340px; box-shadow:0 6px 22px rgba(0,0,0,0.4); padding:10px"></div>
-              </div>
+            <div id="status-ui" class="hal scan is-animating" style="--size:28px" title="UI Health">
+              <span class="disc"></span>
+              <span class="outer-halo" aria-hidden="true"></span>
+              <span class="badge"><span class="dot"></span></span>
             </div>
-            <button id="broadcast-status" title="Broadcast status.request to all services" aria-label="Broadcast status">
-              <svg class="monolith" width="32" height="32" viewBox="0 0 32 32" aria-hidden="true">
-                <polygon points="10,8 18,8 18,26 10,26" fill="#111"/>
-                <polygon points="18,8 20,6 20,24 18,26" fill="#1a1a1a"/>
-                <polygon points="10,8 18,8 20,6 12,6" fill="#222"/>
-              </svg>
+            <div id="status-ws" class="hal err is-animating" style="--size:28px" title="WebSocket to RabbitMQ — click to open connection" role="button" tabindex="0">
+              <span class="disc"></span>
+              <span class="outer-halo" aria-hidden="true"></span>
+              <span class="badge err"><span class="dot"></span></span>
+            </div>
+            <div class="menu" id="conn-menu" style="position:relative; display:inline-flex;">
+              <div id="conn-dropdown" style="display:none; position:absolute; right:0; top:36px; background: rgba(12,16,22,0.95); border:1px solid rgba(255,255,255,0.15); border-radius:10px; min-width: 340px; box-shadow:0 6px 22px rgba(0,0,0,0.4); padding:10px"></div>
+            </div>
+            <button id="broadcast-status" title="Broadcast status.request to all services" aria-label="Broadcast status" style="width:40px;height:40px;padding:0;background:none;border:none;cursor:pointer;">
+              <div class="monolith is-animating" style="--w:32px; --h:32px;">
+                <i class="face"></i>
+                <i class="rim near"></i>
+                <i class="rim far"></i>
+                <i class="diag"></i>
+                <i class="sheen" aria-hidden="true"></i>
+              </div>
             </button>
             <span id="ph-version" title="Current Version">v…</span>
           </div>
