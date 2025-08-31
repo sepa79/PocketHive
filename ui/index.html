@@ -4,6 +4,14 @@
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>PocketHive UI</title>
+  <link rel="icon" type="image/svg+xml" href="./assets/favicon/favicon.svg">
+  <link rel="icon" type="image/png" sizes="48x48" href="./assets/favicon/favicon-48.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="./assets/favicon/favicon-32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="./assets/favicon/favicon-16.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="./assets/favicon/apple-touch-icon.png">
+  <link rel="mask-icon" href="./assets/favicon/safari-pinned-tab.svg" color="#FFC107">
+  <link rel="manifest" href="./assets/favicon/site.webmanifest">
+  <meta name="theme-color" content="#0f1116">
   <link rel="stylesheet" href="./assets/css/app.css">
   <style>
       header {
@@ -63,13 +71,12 @@
         <img class="logo" src="./assets/logo.svg" alt="PocketHive Logo" />
         <nav class="nav-tabs">
           <button id="tab-control" class="tab-btn tab-active" type="button">Control</button>
-          <button id="tab-swarm" class="tab-btn" type="button">Swarm</button>
+          <button id="tab-hive" class="tab-btn" type="button"><img src="./assets/hive.svg" alt="" class="tab-icon">Hive</button>
         </nav>
         <div class="header-right">
           <div class="menu" style="position:relative">
             <button id="menu-btn" class="bg-toggle" style="cursor:pointer">☰ Menu</button>
             <div id="menu-dropdown" class="dropdown-panel" style="display:none; position:absolute; right:0; top:36px; min-width: 240px;">
-                <a href="generator/" class="dropdown-item">Open Generator</a>
               <a href="readme.html" class="dropdown-item">README</a>
               <a href="bindings.html" class="dropdown-item">Control Bindings</a>
               <a href="changelog.html" class="dropdown-item">Changelog</a>
@@ -196,26 +203,27 @@
     }
     .tab-btn:hover{ box-shadow: 0 0 26px rgba(51,225,255,0.22) inset, 0 0 20px rgba(51,225,255,0.28); background: radial-gradient(120% 120% at 10% 10%, rgba(51,225,255,0.35), rgba(51,225,255,0.1) 50%, rgba(255,255,255,0.07) 75%, rgba(0,0,0,0.0) 100%); }
     .tab-active{ background:#33E1FF !important; color:#111 !important; font-weight:800 !important; border-color:transparent !important; }
-    #view-swarm{ display:none; max-width:1200px; margin: 24px auto; padding: 0 20px 40px; color:#fff; font-family: Inter, Segoe UI, Arial, sans-serif; }
-    #swarm-toolbar{ display:flex; gap:10px; align-items:center; margin-bottom:10px }
-    #swarm-canvas{ width:100%; height:480px; border:1px solid rgba(255,255,255,.12); border-radius:12px; background: rgba(0,0,0,.25); }
-    .controls > button, #topic-sub, #topic-unsub, #swarm-clear, #toggle-charts{
+    #view-hive{ display:none; max-width:1200px; margin: 24px auto; padding: 0 20px 40px; color:#fff; font-family: Inter, Segoe UI, Arial, sans-serif; }
+    #hive-toolbar{ display:flex; gap:10px; align-items:center; margin-bottom:10px }
+    #hive-canvas{ width:100%; height:480px; border:1px solid rgba(255,255,255,.12); border-radius:12px; background: rgba(0,0,0,.25); }
+    .controls > button, #topic-sub, #topic-unsub, #hive-clear, #toggle-charts{
       appearance:none; border:none; cursor:pointer; color:#0ff; font-weight:700;
       padding:8px 12px; border-radius:12px; text-transform:uppercase; letter-spacing:0.04em;
       background: radial-gradient(120% 120% at 10% 10%, rgba(51,225,255,0.25), rgba(51,225,255,0.06) 40%, rgba(255,255,255,0.05) 70%, rgba(0,0,0,0.0) 100%);
       border:1px solid rgba(51,225,255,0.35);
       box-shadow: 0 0 20px rgba(51,225,255,0.15) inset, 0 0 16px rgba(51,225,255,0.18);
     }
-    .controls > button:hover, #topic-sub:hover, #topic-unsub:hover, #swarm-clear:hover, #toggle-charts:hover{ box-shadow: 0 0 26px rgba(51,225,255,0.22) inset, 0 0 20px rgba(51,225,255,0.28); background: radial-gradient(120% 120% at 10% 10%, rgba(51,225,255,0.35), rgba(51,225,255,0.1) 50%, rgba(255,255,255,0.07) 75%, rgba(0,0,0,0.0) 100%); }
-    .controls > button:active, #topic-sub:active, #topic-unsub:active, #swarm-clear:active, #toggle-charts:active{ transform: translateY(1px); filter: brightness(1.1); }
+    .controls > button:hover, #topic-sub:hover, #topic-unsub:hover, #hive-clear:hover, #toggle-charts:hover{ box-shadow: 0 0 26px rgba(51,225,255,0.22) inset, 0 0 20px rgba(51,225,255,0.28); background: radial-gradient(120% 120% at 10% 10%, rgba(51,225,255,0.35), rgba(51,225,255,0.1) 50%, rgba(255,255,255,0.07) 75%, rgba(0,0,0,0.0) 100%); }
+    .controls > button:active, #topic-sub:active, #topic-unsub:active, #hive-clear:active, #toggle-charts:active{ transform: translateY(1px); filter: brightness(1.1); }
+    .tab-icon{ width:16px; height:16px; margin-right:6px; vertical-align:middle; }
   </style>
-  <div id="view-swarm">
-    <div id="swarm-toolbar">
-      <label>Hold time (s) <input id="swarm-hold" type="number" min="1" max="120" step="1" value="15" style="width:64px"></label>
-      <button id="swarm-clear" class="tab-btn" style="cursor:pointer">Clear & Restart</button>
-      <span class="small" id="swarm-stats" style="color:#9aa0a6"></span>
+  <div id="view-hive">
+    <div id="hive-toolbar">
+      <label>Hold time (s) <input id="hive-hold" type="number" min="1" max="120" step="1" value="15" style="width:64px"></label>
+      <button id="hive-clear" class="tab-btn" style="cursor:pointer">Clear & Restart</button>
+      <span class="small" id="hive-stats" style="color:#9aa0a6"></span>
     </div>
-    <svg id="swarm-canvas" viewBox="0 0 1200 480" preserveAspectRatio="xMidYMid meet" aria-label="Swarm view"></svg>
+    <svg id="hive-canvas" viewBox="0 0 1200 480" preserveAspectRatio="xMidYMid meet" aria-label="Hive view"></svg>
   </div>
   <script src="https://unpkg.com/@stomp/stompjs@7.0.0/bundles/stomp.umd.js"></script>
   <script src="./assets/js/app.js"></script>

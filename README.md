@@ -36,7 +36,7 @@ See also: Control Bindings page (Menu → Control Bindings) and `ui/spec/asyncap
 ### Views
 
 - Control View: existing dashboard with charts, event log, and system log.
-- Swarm View: auto-discovers components from Control messages and draws a simple graph:
+- Hive View: auto-discovers components from Control messages and draws a simple graph:
   - Nodes appear when the first message from a service is received (generator, moderator, processor). SUT appears when processor is seen.
   - Default hold time is 3s (3× of 1s status schedule); toolbar lets you adjust hold time and Clear & Restart.
 - Edges are built strictly from `queues.in/out` found in `status-full` events.
@@ -110,7 +110,6 @@ Manual checks:
   - Connect/Disconnect clicks, edits of URL/username/password (password length only)
   - WebSocket lifecycle (connecting URL, CONNECTED, subscriptions, errors, close)
   - UI health transitions based on `/healthz`
-- Browser Generator: standalone page at `/generator/` to publish messages via Web‑STOMP with configurable rate and payload.
 - HAL eyes: status indicators for UI and WS (green slow pulse = healthy/connected; blue modem pulse = connecting; red fast pulse = failed/closed/idle).
 
 ## Troubleshooting

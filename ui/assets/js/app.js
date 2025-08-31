@@ -46,15 +46,15 @@
   // Logging toggles
   const LOG_CTRL_RAW = true; // show raw control payloads in Event Log
   const LOG_STOMP_DEBUG = true; // STOMP frame debug to System Logs
-  // Swarm view elements
+  // Hive view elements
   const tabControl = document.getElementById('tab-control');
-  const tabSwarm = document.getElementById('tab-swarm');
+  const tabHive = document.getElementById('tab-hive');
   const viewControl = document.getElementById('view-control');
-  const viewSwarm = document.getElementById('view-swarm');
-  const swarmSvg = /** @type {SVGSVGElement|null} */(document.getElementById('swarm-canvas'));
-  const swarmHoldInput = /** @type {HTMLInputElement|null} */(document.getElementById('swarm-hold'));
-  const swarmClearBtn = document.getElementById('swarm-clear');
-  const swarmStats = document.getElementById('swarm-stats');
+  const viewHive = document.getElementById('view-hive');
+  const hiveSvg = /** @type {SVGSVGElement|null} */(document.getElementById('hive-canvas'));
+  const hiveHoldInput = /** @type {HTMLInputElement|null} */(document.getElementById('hive-hold'));
+  const hiveClearBtn = document.getElementById('hive-clear');
+  const hiveStats = document.getElementById('hive-stats');
   const series = { generator: [], moderator: [], processor: [], latency: [], hops: [] }; // {t:number,v:number}
   const WINDOW_MS = 60_000; // 60s window
   let rafPending = { generator:false, moderator:false, processor:false, latency:false, hops:false };
@@ -89,19 +89,19 @@
 
   // Tabs handling
   (function(){
-    if(!tabControl || !tabSwarm || !viewControl || !viewSwarm) return;
+    if(!tabControl || !tabHive || !viewControl || !viewHive) return;
     const activate = (which)=>{
       if(which==='control'){
-        viewControl.style.display='block'; viewSwarm.style.display='none';
-        tabControl.classList.add('tab-active'); tabSwarm.classList.remove('tab-active');
+        viewControl.style.display='block'; viewHive.style.display='none';
+        tabControl.classList.add('tab-active'); tabHive.classList.remove('tab-active');
       } else {
-        viewControl.style.display='none'; viewSwarm.style.display='block';
-        tabControl.classList.remove('tab-active'); tabSwarm.classList.add('tab-active');
-        if(swarmSvg) redrawSwarm();
+        viewControl.style.display='none'; viewHive.style.display='block';
+        tabControl.classList.remove('tab-active'); tabHive.classList.add('tab-active');
+        if(hiveSvg) redrawHive();
       }
     };
     tabControl.addEventListener('click', ()=> activate('control'));
-    tabSwarm.addEventListener('click', ()=> activate('swarm'));
+    tabHive.addEventListener('click', ()=> activate('hive'));
     activate('control');
   })();
 
@@ -154,34 +154,34 @@
     unsubBtn.addEventListener('click', ()=>{ if(sub){ try{ sub.unsubscribe(); appendSys('[CTRL] UNSUB TOPIC'); }catch{} sub=null; } });
   })();
 
-  // Swarm graph state
-  const SWARM_DEFAULT_HOLD = 15_000; // 3x default 5s schedule (status.delta)
-  const swarm = {
+  // Hive graph state
+  const HIVE_DEFAULT_HOLD = 15_000; // 3x default 5s schedule (status.delta)
+  const hive = {
     nodes: /** @type {Record<string,{id:string,label:string,service:string,x:number,y:number,last:number,tps?:number}>} */({}),
     edges: /** @type {Array<{a:string,b:string}>} */([]),
     queues: /** @type {Record<string,{in:Set<string>, out:Set<string>}>} */({}),
-    holdMs: SWARM_DEFAULT_HOLD
+    holdMs: HIVE_DEFAULT_HOLD
   };
-  function setHoldMs(){ if(swarmHoldInput){ const v = Math.max(1, Number(swarmHoldInput.value)||3); swarm.holdMs = v*1000; } }
-  if(swarmHoldInput){ swarmHoldInput.addEventListener('change', setHoldMs); setHoldMs(); }
-  if(swarmClearBtn){ swarmClearBtn.addEventListener('click', ()=>{ swarm.nodes={}; swarm.edges=[]; redrawSwarm(); if(swarmStats) swarmStats.textContent=''; }); }
+  function setHoldMs(){ if(hiveHoldInput){ const v = Math.max(1, Number(hiveHoldInput.value)||3); hive.holdMs = v*1000; } }
+  if(hiveHoldInput){ hiveHoldInput.addEventListener('change', setHoldMs); setHoldMs(); }
+  if(hiveClearBtn){ hiveClearBtn.addEventListener('click', ()=>{ hive.nodes={}; hive.edges=[]; redrawHive(); if(hiveStats) hiveStats.textContent=''; }); }
   function ensureNode(service){
-    if(!swarmSvg) return null;
+    if(!hiveSvg) return null;
     const id = service;
-    if(!swarm.nodes[id]){
+    if(!hive.nodes[id]){
       // simple layout: fixed columns
       const map = { generator: [140, 160], moderator:[480,160], processor:[820,160], sut:[1060,160] };
-      const pos = map[id] || [100+Object.keys(swarm.nodes).length*140, 320];
-      swarm.nodes[id] = { id, label: id.charAt(0).toUpperCase()+id.slice(1), service:id, x: pos[0], y: pos[1], last: Date.now() };
+      const pos = map[id] || [100+Object.keys(hive.nodes).length*140, 320];
+      hive.nodes[id] = { id, label: id.charAt(0).toUpperCase()+id.slice(1), service:id, x: pos[0], y: pos[1], last: Date.now() };
       // edges
-      if(id==='generator'){ if(swarm.nodes['moderator']) addEdge('generator','moderator'); }
-      if(id==='moderator'){ if(swarm.nodes['generator']) addEdge('generator','moderator'); if(swarm.nodes['processor']) addEdge('moderator','processor'); }
-      if(id==='processor'){ if(swarm.nodes['moderator']) addEdge('moderator','processor'); if(!swarm.nodes['sut']) { swarm.nodes['sut']={id:'sut',label:'SUT',service:'sut',x:1060,y:160,last:Date.now()}; addEdge('processor','sut'); } else { addEdge('processor','sut'); } }
-      redrawSwarm();
+      if(id==='generator'){ if(hive.nodes['moderator']) addEdge('generator','moderator'); }
+      if(id==='moderator'){ if(hive.nodes['generator']) addEdge('generator','moderator'); if(hive.nodes['processor']) addEdge('moderator','processor'); }
+      if(id==='processor'){ if(hive.nodes['moderator']) addEdge('moderator','processor'); if(!hive.nodes['sut']) { hive.nodes['sut']={id:'sut',label:'SUT',service:'sut',x:1060,y:160,last:Date.now()}; addEdge('processor','sut'); } else { addEdge('processor','sut'); } }
+      redrawHive();
     }
-    return swarm.nodes[id];
+    return hive.nodes[id];
   }
-  function addEdge(a,b){ if(a===b) return; if(!swarm.edges.find(e=> (e.a===a && e.b===b))){ swarm.edges.push({a,b}); } }
+  function addEdge(a,b){ if(a===b) return; if(!hive.edges.find(e=> (e.a===a && e.b===b))){ hive.edges.push({a,b}); } }
   function arr(x){ return Array.isArray(x)? x : (x!=null? [x] : []); }
   function updateQueues(service, queuesObj){
     if(!queuesObj) return false;
@@ -190,8 +190,8 @@
     const outs = arr(queuesObj.out).concat(arr(queuesObj.outQueues)).filter(Boolean);
     const apply = (name, dir)=>{
       const key = String(name);
-      if(!swarm.queues[key]) swarm.queues[key] = { in:new Set(), out:new Set() };
-      const set = dir==='in'? swarm.queues[key].in : swarm.queues[key].out;
+      if(!hive.queues[key]) hive.queues[key] = { in:new Set(), out:new Set() };
+      const set = dir==='in'? hive.queues[key].in : hive.queues[key].out;
       const before = set.size; set.add(service);
       if(set.size!==before) changed=true;
     };
@@ -201,32 +201,32 @@
   }
   function rebuildEdgesFromQueues(){
     const edges=[];
-    for(const q of Object.values(swarm.queues)){
+    for(const q of Object.values(hive.queues)){
       for(const prod of q.out){ for(const cons of q.in){ if(prod!==cons) edges.push({a:prod, b:cons}); } }
     }
     // include processor→sut if processor exists
-    if(swarm.nodes['processor']) edges.push({a:'processor', b:'sut'});
+    if(hive.nodes['processor']) edges.push({a:'processor', b:'sut'});
     // de-dup
     const uniq=[]; for(const e of edges){ if(!uniq.find(x=> x.a===e.a && x.b===e.b)) uniq.push(e); }
-    swarm.edges = uniq;
+    hive.edges = uniq;
   }
-  function pruneExpired(){ const now=Date.now(); let changed=false; for(const k of Object.keys(swarm.nodes)){ if(k==='sut') continue; if(now - swarm.nodes[k].last > swarm.holdMs){ delete swarm.nodes[k]; changed=true; } } if(changed) { // rebuild edges
-      swarm.edges = swarm.edges.filter(e=> swarm.nodes[e.a] && swarm.nodes[e.b]);
+  function pruneExpired(){ const now=Date.now(); let changed=false; for(const k of Object.keys(hive.nodes)){ if(k==='sut') continue; if(now - hive.nodes[k].last > hive.holdMs){ delete hive.nodes[k]; changed=true; } } if(changed) { // rebuild edges
+      hive.edges = hive.edges.filter(e=> hive.nodes[e.a] && hive.nodes[e.b]);
     }
   }
-  function redrawSwarm(){ if(!swarmSvg) return; pruneExpired(); const svg=swarmSvg; while(svg.firstChild) svg.removeChild(svg.firstChild);
+  function redrawHive(){ if(!hiveSvg) return; pruneExpired(); const svg=hiveSvg; while(svg.firstChild) svg.removeChild(svg.firstChild);
     // draw edges
-    for(const e of swarm.edges){ const a=swarm.nodes[e.a], b=swarm.nodes[e.b]; if(!a||!b) continue; const ln=document.createElementNS('http://www.w3.org/2000/svg','line'); ln.setAttribute('x1', String(a.x)); ln.setAttribute('y1', String(a.y)); ln.setAttribute('x2', String(b.x)); ln.setAttribute('y2', String(b.y)); ln.setAttribute('stroke','rgba(255,255,255,0.6)'); ln.setAttribute('stroke-width','3'); ln.setAttribute('stroke-linecap','round'); svg.appendChild(ln); }
+    for(const e of hive.edges){ const a=hive.nodes[e.a], b=hive.nodes[e.b]; if(!a||!b) continue; const ln=document.createElementNS('http://www.w3.org/2000/svg','line'); ln.setAttribute('x1', String(a.x)); ln.setAttribute('y1', String(a.y)); ln.setAttribute('x2', String(b.x)); ln.setAttribute('y2', String(b.y)); ln.setAttribute('stroke','rgba(255,255,255,0.6)'); ln.setAttribute('stroke-width','3'); ln.setAttribute('stroke-linecap','round'); svg.appendChild(ln); }
     // draw nodes
-    for(const id of Object.keys(swarm.nodes)){
-      const n=swarm.nodes[id]; const g=document.createElementNS('http://www.w3.org/2000/svg','g'); g.setAttribute('transform',`translate(${n.x-60},${n.y-46})`);
+    for(const id of Object.keys(hive.nodes)){
+      const n=hive.nodes[id]; const g=document.createElementNS('http://www.w3.org/2000/svg','g'); g.setAttribute('transform',`translate(${n.x-60},${n.y-46})`);
       const rect=document.createElementNS('http://www.w3.org/2000/svg','rect'); rect.setAttribute('x','0'); rect.setAttribute('y','0'); rect.setAttribute('width','120'); rect.setAttribute('height','92'); rect.setAttribute('rx','12'); rect.setAttribute('fill', id==='sut' ? 'rgba(3,169,244,0.2)' : 'rgba(255,255,255,0.08)'); rect.setAttribute('stroke','rgba(255,255,255,0.5)'); rect.setAttribute('stroke-width','2'); g.appendChild(rect);
       const title=document.createElementNS('http://www.w3.org/2000/svg','text'); title.setAttribute('x','60'); title.setAttribute('y','24'); title.setAttribute('text-anchor','middle'); title.setAttribute('fill','#ffffff'); title.setAttribute('font-family','Inter, Segoe UI, Arial, sans-serif'); title.setAttribute('font-size','13'); title.textContent = n.label.toUpperCase(); g.appendChild(title);
       const tps=document.createElementNS('http://www.w3.org/2000/svg','text'); tps.setAttribute('x','60'); tps.setAttribute('y','42'); tps.setAttribute('text-anchor','middle'); tps.setAttribute('fill','rgba(255,255,255,0.8)'); tps.setAttribute('font-family','ui-monospace, SFMono-Regular, Menlo, Consolas, monospace'); tps.setAttribute('font-size','12'); tps.textContent = (typeof n.tps==='number')? (`TPS ${n.tps}`) : 'TPS –'; g.appendChild(tps);
       if(id !== 'sut'){
         // compute IN/OUT queues for this service
         const ins=[], outs=[];
-        for(const [qname, obj] of Object.entries(swarm.queues)){
+        for(const [qname, obj] of Object.entries(hive.queues)){
           if(obj.in && obj.in.has(n.id)) ins.push(qname);
           if(obj.out && obj.out.has(n.id)) outs.push(qname);
         }
@@ -243,7 +243,7 @@
         outTxt.textContent = `OUT ${fmt(outs)}`; if(outs.length) outTxt.setAttribute('title', outs.join(', ')); g.appendChild(outTxt);
       }
       svg.appendChild(g); }
-    if(swarmStats){ const count = Object.keys(swarm.nodes).length - (swarm.nodes['sut']?1:0); const qCount = Object.keys(swarm.queues).length; swarmStats.textContent = `components: ${Math.max(0,count)} | queues: ${qCount} | edges: ${swarm.edges.length}`; }
+    if(hiveStats){ const count = Object.keys(hive.nodes).length - (hive.nodes['sut']?1:0); const qCount = Object.keys(hive.queues).length; hiveStats.textContent = `components: ${Math.max(0,count)} | queues: ${qCount} | edges: ${hive.edges.length}`; }
   }
 
   function loadConn(){
@@ -425,7 +425,7 @@
     const login = (prefer ? (cfgStomp.login || '') : '') || (elUser && elUser.value) || 'guest';
     const passcode = (prefer ? (cfgStomp.passcode || '') : '') || (elPass && elPass.value) || 'guest';
     const vhost = cfgStomp.vhost || '/';
-    // Persist connection for other pages (e.g., /generator)
+    // Persist connection for reuse
     saveConn({ url, login, pass: passcode, vhost: '/' });
     // Log connect params (mask pass)
     try{ appendSys(`[CTRL] CONNECT url=${url} vhost=${vhost} login=${login} pass=***`); }catch{}
@@ -472,7 +472,7 @@
                 // Use API spec fields strictly: role/name, data.tps, queues{in,out}
                 const svc = obj.role || obj.name || obj.service; // prefer role/name
                 if(!svc) return;
-                // Swarm: mark node, update TPS
+                // Hive: mark node, update TPS
                 const node = ensureNode(svc);
                 const tpsVal = (obj && obj.data && typeof obj.data.tps==='number') ? obj.data.tps : (typeof obj.tps==='number' ? obj.tps : undefined);
                 if(node){ node.last = Date.now(); if(typeof tpsVal==='number') node.tps = tpsVal; }
@@ -490,7 +490,7 @@
                   const qout = obj.queues && Array.isArray(obj.queues.out) ? obj.queues.out.length : 0;
                   appendSys(`[CTRL] RECV ${ev}/${kind} role=${role} inst=${inst} tps=${typeof tpsVal==='number'?tpsVal:'–'} in=${qin} out=${qout}`);
                 }catch{}
-                redrawSwarm();
+                redrawHive();
                 // Control charts (if TPS provided)
                 if(typeof tpsVal !== 'undefined'){
                   if(svc === 'generator' && genEl) genEl.textContent = String(tpsVal);
