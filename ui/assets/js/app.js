@@ -15,10 +15,10 @@
   const genEl = qs('gen');
   const modEl = qs('mod');
   const procEl = qs('proc');
+  const postEl = qs('post');
   const uiStatus = qs('status-ui');
   const wsStatus = qs('status-ws');
   const chartsEl = qs('charts');
-  const toggleChartsBtn = qs('toggle-charts');
   const metricBtn = qs('metric-btn');
   const metricDropdown = qs('metric-dropdown');
   let currentMetric = 'tps';
@@ -31,6 +31,7 @@
     generator: /** @type {HTMLCanvasElement|null} */(document.getElementById('chart-gen')),
     moderator: /** @type {HTMLCanvasElement|null} */(document.getElementById('chart-mod')),
     processor: /** @type {HTMLCanvasElement|null} */(document.getElementById('chart-proc')),
+    postprocessor: /** @type {HTMLCanvasElement|null} */(document.getElementById('chart-post')),
     latency: /** @type {HTMLCanvasElement|null} */(document.getElementById('chart-latency')),
     hops: /** @type {HTMLCanvasElement|null} */(document.getElementById('chart-hops'))
   };
@@ -44,20 +45,22 @@
   const sysLines = [];
   const topicLines = [];
   // Logging toggles
-  const LOG_CTRL_RAW = true; // show raw control payloads in Event Log
+  const LOG_EVENTS_RAW = true; // show raw payloads in Events Log
   const LOG_STOMP_DEBUG = true; // STOMP frame debug to System Logs
   // Hive view elements
-  const tabControl = document.getElementById('tab-control');
+  const tabBuzz = document.getElementById('tab-buzz');
   const tabHive = document.getElementById('tab-hive');
-  const viewControl = document.getElementById('view-control');
+  const tabNectar = document.getElementById('tab-nectar');
+  const viewBuzz = document.getElementById('view-buzz');
   const viewHive = document.getElementById('view-hive');
+  const viewNectar = document.getElementById('view-nectar');
   const hiveSvg = /** @type {SVGSVGElement|null} */(document.getElementById('hive-canvas'));
   const hiveHoldInput = /** @type {HTMLInputElement|null} */(document.getElementById('hive-hold'));
   const hiveClearBtn = document.getElementById('hive-clear');
   const hiveStats = document.getElementById('hive-stats');
-  const series = { generator: [], moderator: [], processor: [], latency: [], hops: [] }; // {t:number,v:number}
+  const series = { generator: [], moderator: [], processor: [], postprocessor: [], latency: [], hops: [] }; // {t:number,v:number}
   const WINDOW_MS = 60_000; // 60s window
-  let rafPending = { generator:false, moderator:false, processor:false, latency:false, hops:false };
+  let rafPending = { generator:false, moderator:false, processor:false, postprocessor:false, latency:false, hops:false };
   const HAS_CONN = !!(elUrl && btn);
   const logLimitInput = qs('log-limit');
   if(logLimitInput){
@@ -89,42 +92,41 @@
 
   // Tabs handling
   (function(){
-    if(!tabControl || !tabHive || !viewControl || !viewHive) return;
     const activate = (which)=>{
-      if(which==='control'){
-        viewControl.style.display='block'; viewHive.style.display='none';
-        tabControl.classList.add('tab-active'); tabHive.classList.remove('tab-active');
-      } else {
-        viewControl.style.display='none'; viewHive.style.display='block';
-        tabControl.classList.remove('tab-active'); tabHive.classList.add('tab-active');
-        if(hiveSvg) redrawHive();
-      }
+      if(viewBuzz) viewBuzz.style.display = (which==='buzz') ? 'block' : 'none';
+      if(viewHive) viewHive.style.display = (which==='hive') ? 'block' : 'none';
+      if(viewNectar) viewNectar.style.display = (which==='nectar') ? 'block' : 'none';
+      if(tabBuzz) tabBuzz.classList.toggle('tab-active', which==='buzz');
+      if(tabHive) tabHive.classList.toggle('tab-active', which==='hive');
+      if(tabNectar) tabNectar.classList.toggle('tab-active', which==='nectar');
+      if(which==='hive' && hiveSvg) redrawHive();
     };
-    tabControl.addEventListener('click', ()=> activate('control'));
-    tabHive.addEventListener('click', ()=> activate('hive'));
-    activate('control');
+    if(tabBuzz) tabBuzz.addEventListener('click', ()=> activate('buzz'));
+    if(tabHive) tabHive.addEventListener('click', ()=> activate('hive'));
+    if(tabNectar) tabNectar.addEventListener('click', ()=> activate('nectar'));
+    activate('buzz');
   })();
 
-  // Log tabs handling (Control vs Topic)
+  // Log tabs handling (Events vs Topic)
   (function(){
-    const tCtrl = document.getElementById('log-tab-control');
+    const tEvents = document.getElementById('log-tab-events');
     const tTop = document.getElementById('log-tab-topic');
-    const vCtrl = document.getElementById('log-control');
+    const vEvents = document.getElementById('log-events');
     const vTop = document.getElementById('log-topic');
-    if(!tCtrl || !tTop || !vCtrl || !vTop) return;
+    if(!tEvents || !tTop || !vEvents || !vTop) return;
     const set = (which)=>{
-      if(which==='control'){
-        vCtrl.style.display='block'; vTop.style.display='none'; tCtrl.classList.add('tab-active'); tTop.classList.remove('tab-active');
+      if(which==='events'){
+        vEvents.style.display='block'; vTop.style.display='none'; tEvents.classList.add('tab-active'); tTop.classList.remove('tab-active');
       } else {
-        vCtrl.style.display='none'; vTop.style.display='block'; tCtrl.classList.remove('tab-active'); tTop.classList.add('tab-active');
+        vEvents.style.display='none'; vTop.style.display='block'; tEvents.classList.remove('tab-active'); tTop.classList.add('tab-active');
       }
     };
-    tCtrl.addEventListener('click', ()=> set('control'));
+    tEvents.addEventListener('click', ()=> set('events'));
     tTop.addEventListener('click', ()=> set('topic'));
-    set('control');
+    set('events');
   })();
 
-  // Topic sniffer (subscribe to any RK on control exchange)
+  // Topic sniffer (subscribe to any RK on buzz exchange)
   (function(){
     const subBtn = document.getElementById('topic-sub');
     const unsubBtn = document.getElementById('topic-unsub');
@@ -141,17 +143,17 @@
     }
     if(!subBtn || !unsubBtn || !rkInput) return;
     subBtn.addEventListener('click', ()=>{
-      if(!client || !connected){ appendSys('[CTRL] Topic subscribe aborted: not connected'); return; }
+      if(!client || !connected){ appendSys('[BUZZ] Topic subscribe aborted: not connected'); return; }
       const rk = (rkInput.value || 'ev.#').trim();
       const dest = '/exchange/ph.control/' + rk;
       try{
         if(sub) { try{ sub.unsubscribe(); }catch{} sub=null; }
         // eslint-disable-next-line no-undef
         sub = client.subscribe(dest, (message)=>{ const b=message.body||''; logLine(`${message.headers.destination||''} ${b}`); }, { ack:'auto' });
-        appendSys(`[CTRL] SUB TOPIC ${dest}`);
+        appendSys(`[BUZZ] SUB TOPIC ${dest}`);
       }catch(e){ appendSys('Topic subscribe error: ' + (e && e.message ? e.message : String(e))); }
     });
-    unsubBtn.addEventListener('click', ()=>{ if(sub){ try{ sub.unsubscribe(); appendSys('[CTRL] UNSUB TOPIC'); }catch{} sub=null; } });
+    unsubBtn.addEventListener('click', ()=>{ if(sub){ try{ sub.unsubscribe(); appendSys('[BUZZ] UNSUB TOPIC'); }catch{} sub=null; } });
   })();
 
   // Hive graph state
@@ -390,7 +392,7 @@
     ctx.fillText(String(Math.round(ymax)), 6, 12);
     ctx.fillText('0', 28, h-24);
     // line
-    const colors = { generator:'#4CAF50', moderator:'#FFC107', processor:'#03A9F4', latency:'#E91E63', hops:'#9C27B0' };
+    const colors = { generator:'#4CAF50', moderator:'#FFC107', processor:'#03A9F4', postprocessor:'#FF5722', latency:'#E91E63', hops:'#9C27B0' };
     ctx.strokeStyle = colors[svc] || '#FFFFFF';
     ctx.lineWidth = 2;
     ctx.beginPath();
@@ -428,7 +430,7 @@
     // Persist connection for reuse
     saveConn({ url, login, pass: passcode, vhost: '/' });
     // Log connect params (mask pass)
-    try{ appendSys(`[CTRL] CONNECT url=${url} vhost=${vhost} login=${login} pass=***`); }catch{}
+    try{ appendSys(`[BUZZ] CONNECT url=${url} vhost=${vhost} login=${login} pass=***`); }catch{}
     setState('Connecting...'); btn.disabled = true; btn.textContent = 'Connecting...';
     setWsStatus('connecting');
     // eslint-disable-next-line no-undef
@@ -446,12 +448,12 @@
       let subs = (PH_CONFIG && Array.isArray(PH_CONFIG.subscriptions) && PH_CONFIG.subscriptions.length)
         ? PH_CONFIG.subscriptions.slice()
         : ['/queue/ph.control'];
-      // Always include control exchange event/signal routes so Events see everything
+      // Always include buzz exchange event/signal routes so Events see everything
       if(!subs.includes('/exchange/ph.control/ev.#')) subs.push('/exchange/ph.control/ev.#');
       if(!subs.includes('/exchange/ph.control/sig.#')) subs.push('/exchange/ph.control/sig.#');
       if(!subs.includes('/exchange/ph.control/ev.metric.#')) subs.push('/exchange/ph.control/ev.metric.#');
       if(!(PH_CONFIG && Array.isArray(PH_CONFIG.subscriptions) && PH_CONFIG.subscriptions.length)){
-        appendSys('[CTRL] SUB using fallback [/queue/ph.control]');
+        appendSys('[BUZZ] SUB using fallback [/queue/ph.control]');
       }
       subs.forEach(d => {
         try{
@@ -480,7 +482,7 @@
                 const qobj = obj.queues;
                 const changed = updateQueues(svc, qobj);
                 if(changed) rebuildEdgesFromQueues();
-                // Log a concise control summary
+                // Log a concise buzz summary
                 try{
                   const role = svc;
                   const inst = obj.instance || '–';
@@ -488,25 +490,27 @@
                   const kind = obj.kind || (typeof tpsVal!=='undefined' ? 'status.delta' : 'status');
                   const qin = obj.queues && Array.isArray(obj.queues.in) ? obj.queues.in.length : 0;
                   const qout = obj.queues && Array.isArray(obj.queues.out) ? obj.queues.out.length : 0;
-                  appendSys(`[CTRL] RECV ${ev}/${kind} role=${role} inst=${inst} tps=${typeof tpsVal==='number'?tpsVal:'–'} in=${qin} out=${qout}`);
+                  appendSys(`[BUZZ] RECV ${ev}/${kind} role=${role} inst=${inst} tps=${typeof tpsVal==='number'?tpsVal:'–'} in=${qin} out=${qout}`);
                 }catch{}
                 redrawHive();
-                // Control charts (if TPS provided)
+                // Buzz charts (if TPS provided)
                 if(typeof tpsVal !== 'undefined'){
                   if(svc === 'generator' && genEl) genEl.textContent = String(tpsVal);
                   if(svc === 'moderator' && modEl) modEl.textContent = String(tpsVal);
                   if(svc === 'processor' && procEl) procEl.textContent = String(tpsVal);
+                  if(svc === 'postprocessor' && postEl) postEl.textContent = String(tpsVal);
                   if(svc === 'generator') addPoint('generator', tpsVal);
                   if(svc === 'moderator') addPoint('moderator', tpsVal);
                   if(svc === 'processor') addPoint('processor', tpsVal);
+                  if(svc === 'postprocessor') addPoint('postprocessor', tpsVal);
                 }
               }
-              if(LOG_CTRL_RAW) appendLog(`CTRL RAW ${dest} ${body}`);
+              if(LOG_EVENTS_RAW) appendLog(`EVENT RAW ${dest} ${body}`);
             } catch(e){
-              if(LOG_CTRL_RAW) appendLog(`CTRL RAW ${dest} ${body}`);
+              if(LOG_EVENTS_RAW) appendLog(`EVENT RAW ${dest} ${body}`);
             }
           }, { ack:'auto' });
-          appendSys(`[CTRL] SUB ${d}`);
+          appendSys(`[BUZZ] SUB ${d}`);
         }catch(e){ appendSys('Subscribe error: '+ (e && e.message ? e.message : String(e))); }
       });
     };
@@ -625,12 +629,12 @@
     setInterval(ping, 15000);
   })();
 
-  // Hook broadcast button (located near charts toggle)
+  // Hook broadcast button (next to metric selector)
   (function(){
     const btn = document.getElementById('broadcast-status');
     if(!btn) return;
     btn.addEventListener('click', ()=>{
-      if(!client || !connected){ appendSys('[CTRL] SEND aborted: not connected'); return; }
+      if(!client || !connected){ appendSys('[BUZZ] SEND aborted: not connected'); return; }
       const payload = {
         type: 'status.request',
         version: '1.0',
@@ -643,13 +647,13 @@
       try{
         // eslint-disable-next-line no-undef
         client.publish({ destination: dest, body: JSON.stringify(payload), headers: { 'content-type': 'application/json' } });
-        appendSys(`[CTRL] SEND ${rk} payload=status-request`);
+        appendSys(`[BUZZ] SEND ${rk} payload=status-request`);
       }catch(e){ appendSys('Broadcast error: ' + (e && e.message ? e.message : String(e))); }
     });
   })();
   function refreshCharts(){
     const metric = currentMetric;
-    if(metric==='tps'){ ['generator','moderator','processor'].forEach(s=> drawChart(s)); }
+    if(metric==='tps'){ ['generator','moderator','processor','postprocessor'].forEach(s=> drawChart(s)); }
     if(metric==='latency') drawChart('latency');
     if(metric==='hops') drawChart('hops');
   }
@@ -661,7 +665,7 @@
     if(chartsHops) chartsHops.style.display = metric==='hops' ? 'block' : 'none';
     if(chartsTitle){
       chartsTitle.textContent = metric==='tps'
-        ? 'RabbitMQ Control Stream — TPS (last 60s)'
+        ? 'RabbitMQ Buzz Stream — TPS (last 60s)'
         : metric==='latency'
           ? 'End-to-End Latency (last 60s)'
           : 'Per-Hop Count (last 60s)';
@@ -689,15 +693,6 @@
     });
     updateMetricView();
   })();
-
-  // Toggle charts visibility
-  if(toggleChartsBtn && chartsEl){
-    toggleChartsBtn.addEventListener('click', ()=>{
-      const show = chartsEl.style.display === 'none';
-      chartsEl.style.display = show ? 'block' : 'none';
-      if(show) refreshCharts();
-    });
-  }
 
   // (removed duplicate legacy broadcast handler)
 })();

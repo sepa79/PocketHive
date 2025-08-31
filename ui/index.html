@@ -48,7 +48,7 @@
       color:#fff;
     }
     .controls button { cursor: pointer; }
-    .kpi-grid { display:grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+    .kpi-grid { display:grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
     .card {
       border: 1px solid rgba(255,255,255,0.12);
       background: rgba(12,16,22,0.66);
@@ -70,15 +70,16 @@
   <header>
         <img class="logo" src="./assets/logo.svg" alt="PocketHive Logo" />
         <nav class="nav-tabs">
-          <button id="tab-control" class="tab-btn tab-active" type="button">Control</button>
-          <button id="tab-hive" class="tab-btn" type="button"><img src="./assets/hive.svg" alt="" class="tab-icon">Hive</button>
+          <button id="tab-hive" class="tab-btn tab-active" type="button"><img src="./assets/hive.svg" alt="" class="tab-icon">Hive</button>
+          <button id="tab-buzz" class="tab-btn" type="button"><img src="./assets/buzz.svg" alt="" class="tab-icon">Buzz</button>
+          <button id="tab-nectar" class="tab-btn" type="button"><img src="./assets/nectar.svg" alt="" class="tab-icon">Nectar</button>
         </nav>
         <div class="header-right">
           <div class="menu" style="position:relative">
             <button id="menu-btn" class="bg-toggle" style="cursor:pointer">☰ Menu</button>
             <div id="menu-dropdown" class="dropdown-panel" style="display:none; position:absolute; right:0; top:36px; min-width: 240px;">
               <a href="readme.html" class="dropdown-item">README</a>
-              <a href="bindings.html" class="dropdown-item">Control Bindings</a>
+              <a href="bindings.html" class="dropdown-item">Buzz Bindings</a>
               <a href="changelog.html" class="dropdown-item">Changelog</a>
                 <a href="docs.html" class="dropdown-item">API Docs</a>
               </div>
@@ -103,7 +104,7 @@
         </div>
       </header>
 
-  <main id="view-control">
+  <main id="view-buzz">
     <div class="controls" style="display:none">
       <input id="wsurl" size="40" value="ws://localhost:15674/ws"/>
       <input id="login" value="guest"/>
@@ -111,55 +112,10 @@
       <button id="connect">Connect</button>
       <span id="state"></span>
     </div>
-    <div class="kpi-grid">
-      <div class="card"><div class="kpi-title">Generator TPS</div><div id="gen" class="kpi-value">0</div></div>
-      <div class="card"><div class="kpi-title">Moderator TPS</div><div id="mod" class="kpi-value">0</div></div>
-      <div class="card"><div class="kpi-title">Processor TPS</div><div id="proc" class="kpi-value">0</div></div>
-    </div>
-    <div class="controls" style="margin-top:10px">
-      <button id="toggle-charts">Toggle Charts</button>
-      <div class="menu" style="position:relative">
-        <button id="metric-btn" class="tab-btn" style="cursor:pointer">TPS</button>
-        <div id="metric-dropdown" class="dropdown-panel" style="display:none; position:absolute; left:0; top:36px; min-width:220px; z-index:10;">
-          <button data-metric="tps" type="button" class="dropdown-item">TPS</button>
-          <button data-metric="latency" type="button" class="dropdown-item">End-to-End Latency</button>
-          <button data-metric="hops" type="button" class="dropdown-item">Per-Hop Count</button>
-        </div>
-      </div>
-        <label style="font-size:12px; display:flex; align-items:center; gap:6px; color:#fff;">
-          Points
-          <input id="event-limit" class="themed-input" type="number" value="600" min="60" max="10000" style="width:72px"/>
-        </label>
-      </div>
-    <div id="charts" class="card" style="display:none; padding:16px">
-      <div class="kpi-title" id="charts-title" style="margin-bottom:10px">RabbitMQ Control Stream — TPS (last 60s)</div>
-      <div id="charts-tps" style="display:grid; grid-template-columns: 1fr; gap:16px">
-        <div>
-          <div class="kpi-title" style="margin-bottom:6px">Generator</div>
-          <canvas id="chart-gen" width="1000" height="180" style="width:100%; height:180px; background: rgba(0,0,0,0.25); border:1px solid rgba(255,255,255,0.1); border-radius:8px"></canvas>
-        </div>
-        <div>
-          <div class="kpi-title" style="margin-bottom:6px">Moderator</div>
-          <canvas id="chart-mod" width="1000" height="180" style="width:100%; height:180px; background: rgba(0,0,0,0.25); border:1px solid rgba(255,255,255,0.1); border-radius:8px"></canvas>
-        </div>
-        <div>
-          <div class="kpi-title" style="margin-bottom:6px">Processor</div>
-          <canvas id="chart-proc" width="1000" height="180" style="width:100%; height:180px; background: rgba(0,0,0,0.25); border:1px solid rgba(255,255,255,0.1); border-radius:8px"></canvas>
-        </div>
-      </div>
-      <div id="charts-latency" style="display:none">
-        <div class="kpi-title" style="margin-bottom:6px">End-to-End Latency</div>
-        <canvas id="chart-latency" width="1000" height="180" style="width:100%; height:180px; background: rgba(0,0,0,0.25); border:1px solid rgba(255,255,255,0.1); border-radius:8px"></canvas>
-      </div>
-      <div id="charts-hops" style="display:none">
-        <div class="kpi-title" style="margin-bottom:6px">Per-Hop Count</div>
-        <canvas id="chart-hops" width="1000" height="180" style="width:100%; height:180px; background: rgba(0,0,0,0.25); border:1px solid rgba(255,255,255,0.1); border-radius:8px"></canvas>
-      </div>
-    </div>
     <section class="card" style="margin-top:16px; padding:12px">
       <div class="row" style="display:flex; justify-content:space-between; align-items:center">
         <div style="display:flex; gap:8px; align-items:center">
-          <button id="log-tab-control" class="tab-btn tab-active" type="button">Control Log</button>
+          <button id="log-tab-events" class="tab-btn tab-active" type="button">Events Log</button>
           <button id="log-tab-topic" class="tab-btn" type="button">Topic Sniffer</button>
         </div>
         <label style="font-size:12px; display:flex; align-items:center; gap:6px; color:#fff;">
@@ -167,7 +123,7 @@
           <input id="log-limit" class="themed-input" type="number" value="100" min="10" max="500" style="width:72px"/>
         </label>
       </div>
-      <div id="log-control" aria-live="polite">
+        <div id="log-events" aria-live="polite">
         <div id="log"></div>
       </div>
       <div id="log-topic" style="display:none">
@@ -203,29 +159,81 @@
     }
     .tab-btn:hover{ box-shadow: 0 0 26px rgba(51,225,255,0.22) inset, 0 0 20px rgba(51,225,255,0.28); background: radial-gradient(120% 120% at 10% 10%, rgba(51,225,255,0.35), rgba(51,225,255,0.1) 50%, rgba(255,255,255,0.07) 75%, rgba(0,0,0,0.0) 100%); }
     .tab-active{ background:#33E1FF !important; color:#111 !important; font-weight:800 !important; border-color:transparent !important; }
-    #view-hive{ display:none; max-width:1200px; margin: 24px auto; padding: 0 20px 40px; color:#fff; font-family: Inter, Segoe UI, Arial, sans-serif; }
+      #view-hive{ display:none; max-width:1200px; margin: 24px auto; padding: 0 20px 40px; color:#fff; font-family: Inter, Segoe UI, Arial, sans-serif; }
+      #view-nectar{ display:none; max-width:1100px; margin: 24px auto; padding: 0 20px 40px; }
     #hive-toolbar{ display:flex; gap:10px; align-items:center; margin-bottom:10px }
     #hive-canvas{ width:100%; height:480px; border:1px solid rgba(255,255,255,.12); border-radius:12px; background: rgba(0,0,0,.25); }
-    .controls > button, #topic-sub, #topic-unsub, #hive-clear, #toggle-charts{
+    .controls > button, #topic-sub, #topic-unsub, #hive-clear{
       appearance:none; border:none; cursor:pointer; color:#0ff; font-weight:700;
       padding:8px 12px; border-radius:12px; text-transform:uppercase; letter-spacing:0.04em;
       background: radial-gradient(120% 120% at 10% 10%, rgba(51,225,255,0.25), rgba(51,225,255,0.06) 40%, rgba(255,255,255,0.05) 70%, rgba(0,0,0,0.0) 100%);
       border:1px solid rgba(51,225,255,0.35);
       box-shadow: 0 0 20px rgba(51,225,255,0.15) inset, 0 0 16px rgba(51,225,255,0.18);
     }
-    .controls > button:hover, #topic-sub:hover, #topic-unsub:hover, #hive-clear:hover, #toggle-charts:hover{ box-shadow: 0 0 26px rgba(51,225,255,0.22) inset, 0 0 20px rgba(51,225,255,0.28); background: radial-gradient(120% 120% at 10% 10%, rgba(51,225,255,0.35), rgba(51,225,255,0.1) 50%, rgba(255,255,255,0.07) 75%, rgba(0,0,0,0.0) 100%); }
-    .controls > button:active, #topic-sub:active, #topic-unsub:active, #hive-clear:active, #toggle-charts:active{ transform: translateY(1px); filter: brightness(1.1); }
+    .controls > button:hover, #topic-sub:hover, #topic-unsub:hover, #hive-clear:hover{ box-shadow: 0 0 26px rgba(51,225,255,0.22) inset, 0 0 20px rgba(51,225,255,0.28); background: radial-gradient(120% 120% at 10% 10%, rgba(51,225,255,0.35), rgba(51,225,255,0.1) 50%, rgba(255,255,255,0.07) 75%, rgba(0,0,0,0.0) 100%); }
+    .controls > button:active, #topic-sub:active, #topic-unsub:active, #hive-clear:active{ transform: translateY(1px); filter: brightness(1.1); }
     .tab-icon{ width:16px; height:16px; margin-right:6px; vertical-align:middle; }
   </style>
-  <div id="view-hive">
-    <div id="hive-toolbar">
-      <label>Hold time (s) <input id="hive-hold" type="number" min="1" max="120" step="1" value="15" style="width:64px"></label>
-      <button id="hive-clear" class="tab-btn" style="cursor:pointer">Clear & Restart</button>
-      <span class="small" id="hive-stats" style="color:#9aa0a6"></span>
+    <div id="view-hive">
+      <div id="hive-toolbar">
+        <label>Hold time (s) <input id="hive-hold" type="number" min="1" max="120" step="1" value="15" style="width:64px"></label>
+        <button id="hive-clear" class="tab-btn" style="cursor:pointer">Clear & Restart</button>
+        <span class="small" id="hive-stats" style="color:#9aa0a6"></span>
+      </div>
+      <svg id="hive-canvas" viewBox="0 0 1200 480" preserveAspectRatio="xMidYMid meet" aria-label="Hive view"></svg>
     </div>
-    <svg id="hive-canvas" viewBox="0 0 1200 480" preserveAspectRatio="xMidYMid meet" aria-label="Hive view"></svg>
-  </div>
-  <script src="https://unpkg.com/@stomp/stompjs@7.0.0/bundles/stomp.umd.js"></script>
-  <script src="./assets/js/app.js"></script>
+    <div id="view-nectar">
+      <div class="kpi-grid">
+        <div class="card"><div class="kpi-title">Generator TPS</div><div id="gen" class="kpi-value">0</div></div>
+        <div class="card"><div class="kpi-title">Moderator TPS</div><div id="mod" class="kpi-value">0</div></div>
+        <div class="card"><div class="kpi-title">Processor TPS</div><div id="proc" class="kpi-value">0</div></div>
+        <div class="card"><div class="kpi-title">Postprocessor TPS</div><div id="post" class="kpi-value">0</div></div>
+      </div>
+      <div class="controls" style="margin-top:10px">
+        <div class="menu" style="position:relative">
+          <button id="metric-btn" class="tab-btn" style="cursor:pointer">TPS</button>
+          <div id="metric-dropdown" class="dropdown-panel" style="display:none; position:absolute; left:0; top:36px; min-width:220px; z-index:10;">
+            <button data-metric="tps" type="button" class="dropdown-item">TPS</button>
+            <button data-metric="latency" type="button" class="dropdown-item">End-to-End Latency</button>
+            <button data-metric="hops" type="button" class="dropdown-item">Per-Hop Count</button>
+          </div>
+        </div>
+        <label style="font-size:12px; display:flex; align-items:center; gap:6px; color:#fff;">
+          Points
+          <input id="event-limit" class="themed-input" type="number" value="600" min="60" max="10000" style="width:72px"/>
+        </label>
+      </div>
+      <div id="charts" class="card" style="padding:16px">
+        <div class="kpi-title" id="charts-title" style="margin-bottom:10px">RabbitMQ Buzz Stream — TPS (last 60s)</div>
+        <div id="charts-tps" style="display:grid; grid-template-columns: 1fr; gap:16px">
+          <div>
+            <div class="kpi-title" style="margin-bottom:6px">Generator</div>
+            <canvas id="chart-gen" width="1000" height="180" style="width:100%; height:180px; background: rgba(0,0,0,0.25); border:1px solid rgba(255,255,255,0.1); border-radius:8px"></canvas>
+          </div>
+          <div>
+            <div class="kpi-title" style="margin-bottom:6px">Moderator</div>
+            <canvas id="chart-mod" width="1000" height="180" style="width:100%; height:180px; background: rgba(0,0,0,0.25); border:1px solid rgba(255,255,255,0.1); border-radius:8px"></canvas>
+          </div>
+          <div>
+            <div class="kpi-title" style="margin-bottom:6px">Processor</div>
+            <canvas id="chart-proc" width="1000" height="180" style="width:100%; height:180px; background: rgba(0,0,0,0.25); border:1px solid rgba(255,255,255,0.1); border-radius:8px"></canvas>
+          </div>
+          <div>
+            <div class="kpi-title" style="margin-bottom:6px">Postprocessor</div>
+            <canvas id="chart-post" width="1000" height="180" style="width:100%; height:180px; background: rgba(0,0,0,0.25); border:1px solid rgba(255,255,255,0.1); border-radius:8px"></canvas>
+          </div>
+        </div>
+        <div id="charts-latency" style="display:none">
+          <div class="kpi-title" style="margin-bottom:6px">End-to-End Latency</div>
+          <canvas id="chart-latency" width="1000" height="180" style="width:100%; height:180px; background: rgba(0,0,0,0.25); border:1px solid rgba(255,255,255,0.1); border-radius:8px"></canvas>
+        </div>
+        <div id="charts-hops" style="display:none">
+          <div class="kpi-title" style="margin-bottom:6px">Per-Hop Count</div>
+          <canvas id="chart-hops" width="1000" height="180" style="width:100%; height:180px; background: rgba(0,0,0,0.25); border:1px solid rgba(255,255,255,0.1); border-radius:8px"></canvas>
+        </div>
+      </div>
+    </div>
+    <script src="https://unpkg.com/@stomp/stompjs@7.0.0/bundles/stomp.umd.js"></script>
+    <script src="./assets/js/app.js"></script>
 </body>
 </html>
