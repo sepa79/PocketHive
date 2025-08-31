@@ -71,6 +71,21 @@ services:
       rabbitmq:
         condition: service_healthy
 
+  log-aggregator:
+    build:
+      context: .
+      dockerfile: log-aggregator-service/Dockerfile
+    environment:
+      RABBITMQ_HOST: rabbitmq
+      PH_LOGS_EXCHANGE: logs.exchange
+      PH_LOGS_QUEUE: logs.agg
+      PH_LOKI_URL: http://loki:3100
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      loki:
+        condition: service_started
+
   ui:
     build:
       context: .
@@ -105,3 +120,23 @@ services:
       - "3000:3000"
     depends_on:
       - prometheus
+
+  loki:
+    image: grafana/loki:2.9.1
+    command: -config.file=/etc/loki/config.yml
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./loki/config.yml:/etc/loki/config.yml:ro
+
+  promtail:
+    image: grafana/promtail:2.9.1
+    command: -config.file=/etc/promtail/config.yml
+    ports:
+      - "9080:9080"
+    volumes:
+      - ./promtail/config.yml:/etc/promtail/config.yml:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      - loki

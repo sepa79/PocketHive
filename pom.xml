@@ -12,5 +12,6 @@
     <module>moderator-service</module>
     <module>processor-service</module>
     <module>postprocessor-service</module>
+    <module>log-aggregator-service</module>
   </modules>
 </project>

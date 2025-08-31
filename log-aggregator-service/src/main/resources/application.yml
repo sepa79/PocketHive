@@ -1,0 +1,18 @@
+spring:
+  application.name: log-aggregator
+  rabbitmq:
+    host: ${RABBITMQ_HOST:rabbitmq}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_DEFAULT_USER:guest}
+    password: ${RABBITMQ_DEFAULT_PASS:guest}
+management.endpoints.web.exposure.include: health,info
+logging:
+  pattern.level: "%5p [%X{traceId}]"
+ph:
+  logsQueue: ${PH_LOGS_QUEUE:logs.agg}
+  loki:
+    url: ${PH_LOKI_URL:http://loki:3100}
+    maxRetries: ${PH_LOKI_MAX_RETRIES:3}
+    backoffMs: ${PH_LOKI_BACKOFF_MS:500}
+    batchSize: ${PH_LOKI_BATCH_SIZE:100}
+    flushIntervalMs: ${PH_LOKI_FLUSH_INTERVAL_MS:1000}

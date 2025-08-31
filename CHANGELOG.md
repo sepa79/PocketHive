@@ -2,6 +2,103 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.20] - 2025-08-30
+Timestamp: 2025-08-30T23:39:40Z
+
+- UI: Reduce monolith icon depth to a quarter of its width for accurate proportions.
+
+## [0.4.19] - 2025-08-30
+Timestamp: 2025-08-30T23:33:46Z
+
+- UI: Widen monolith status icon's front face for clearer orientation.
+
+## [0.4.18] - 2025-08-30
+Timestamp: 2025-08-30T23:16:22Z
+
+- UI: Correct isometric angle of monolith status icon.
+
+## [0.4.17] - 2025-08-30
+Timestamp: 2025-08-30T23:11:47Z
+
+- UI: Remove ground from monolith status icon and add subtle pulsing glow with hover effect.
+
+## [0.4.16] - 2025-08-30
+Timestamp: 2025-08-30T22:58:51Z
+
+- UI: Narrow the monolith status icon and anchor it to the ground.
+
+## [0.4.15] - 2025-08-30
+Timestamp: 2025-08-30T22:50:15Z
+
+- UI: Swap Update Status button for Space Odyssey monolith icon with hover glow.
+
+## [0.4.14] - 2025-08-30
+Timestamp: 2025-08-30T22:25:29Z
+
+- UI: Allow separate line limits for Control and System Logs with 10–500 range.
+
+## [0.4.13] - 2025-08-30
+Timestamp: 2025-08-30T22:20:47Z
+
+- UI: Align TPS dropdown buttons with header menu style.
+
+## [0.4.12] - 2025-08-30
+Timestamp: 2025-08-30T22:12:26Z
+
+- UI: Style TPS metric dropdown and options with shared menu dropdown theme.
+
+## [0.4.11] - 2025-08-30
+Timestamp: 2025-08-30T22:02:56Z
+
+- UI: Match TPS dropdown menu styling to header Menu theme without bold text.
+
+## [0.4.10] - 2025-08-30
+Timestamp: 2025-08-30T21:48:20Z
+
+- UI: Raise chart metric dropdown above graphs so it remains clickable.
+
+## [0.4.9] - 2025-08-30
+Timestamp: 2025-08-30T21:42:34Z
+
+- UI: Replace metric selection with menu-style dropdown using menu button theme.
+
+## [0.4.8] - 2025-08-30
+Timestamp: 2025-08-30T21:32:51Z
+
+- UI: Style chart metric dropdown to match the menu dropdown.
+
+## [0.4.7] - 2025-08-30
+Timestamp: 2025-08-30T21:14:45Z
+
+- UI: Align log and system log line selectors in their header rows.
+- UI: Theme chart metric selector to match the menu button.
+
+## [0.4.6] - 2025-08-30
+Timestamp: 2025-08-30T21:04:56Z
+
+- UI: Add themed line limit controls for control and system logs (default 600 lines).
+- UI: Style metric selection dropdown to match cyan button theme.
+
+## [0.4.5] - 2025-08-30
+Timestamp: 2025-08-30T20:55:01Z
+
+- UI: Restore menu to original header position and remove logo hover spin.
+
+## [0.4.4] - 2025-08-30
+Timestamp: 2025-08-30T20:43:37Z
+
+- UI: Remove animated network background, leaving a static dark backdrop.
+
+## [0.4.3] - 2025-08-30
+Timestamp: 2025-08-30T17:06:56Z
+
+- UI: Move Menu beneath the spacestation logo and spin the logo when hovered.
+
+## [0.4.2] - 2025-08-30
+Timestamp: 2025-08-30T16:58:33Z
+
+- UI: Replace heavy canvas network background with lightweight SVG animation to reduce GPU usage.
+
 ## [0.4.1] - 2025-08-29
 Timestamp: 2025-08-29T14:39:23Z
 
