@@ -19,7 +19,7 @@ services:
   generator:
     build:
       context: .
-      dockerfile: generator-service/Dockerfile
+      dockerfile: hive-generator-service/Dockerfile
     environment:
       RABBITMQ_HOST: rabbitmq
       PH_TRAFFIC_EXCHANGE: ph.hive
@@ -33,7 +33,7 @@ services:
   moderator:
     build:
       context: .
-      dockerfile: moderator-service/Dockerfile
+      dockerfile: hive-moderator-service/Dockerfile
     environment:
       RABBITMQ_HOST: rabbitmq
       PH_TRAFFIC_EXCHANGE: ph.hive
@@ -47,7 +47,7 @@ services:
   processor:
     build:
       context: .
-      dockerfile: processor-service/Dockerfile
+      dockerfile: hive-processor-service/Dockerfile
     environment:
       RABBITMQ_HOST: rabbitmq
       PH_TRAFFIC_EXCHANGE: ph.hive
@@ -61,7 +61,7 @@ services:
   postprocessor:
     build:
       context: .
-      dockerfile: postprocessor-service/Dockerfile
+      dockerfile: hive-postprocessor-service/Dockerfile
     environment:
       RABBITMQ_HOST: rabbitmq
       PH_TRAFFIC_EXCHANGE: ph.hive

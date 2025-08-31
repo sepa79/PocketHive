@@ -7,10 +7,10 @@
   <packaging>pom</packaging>
   <modules>
     <module>observability</module>
-    <module>generator-service</module>
-    <module>moderator-service</module>
-    <module>processor-service</module>
-    <module>postprocessor-service</module>
+    <module>hive-generator-service</module>
+    <module>hive-moderator-service</module>
+    <module>hive-processor-service</module>
+    <module>hive-postprocessor-service</module>
     <module>log-aggregator-service</module>
   </modules>
 </project>

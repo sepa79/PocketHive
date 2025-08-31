@@ -244,8 +244,31 @@
         outTxt.setAttribute('x','60'); outTxt.setAttribute('y','78'); outTxt.setAttribute('text-anchor','middle'); outTxt.setAttribute('fill','rgba(255,255,255,0.9)'); outTxt.setAttribute('font-family','ui-monospace, SFMono-Regular, Menlo, Consolas, monospace'); outTxt.setAttribute('font-size','11');
         outTxt.textContent = `OUT ${fmt(outs)}`; if(outs.length) outTxt.setAttribute('title', outs.join(', ')); g.appendChild(outTxt);
       }
+      g.style.cursor='pointer';
+      g.addEventListener('click', ()=> openConfig(n));
       svg.appendChild(g); }
     if(hiveStats){ const count = Object.keys(hive.nodes).length - (hive.nodes['sut']?1:0); const qCount = Object.keys(hive.queues).length; hiveStats.textContent = `components: ${Math.max(0,count)} | queues: ${qCount} | edges: ${hive.edges.length}`; }
+  }
+
+  function openConfig(node){
+    if(!node || node.service==='sut') return;
+    if(!client || !connected){ appendSys('[HIVE] Config aborted: not connected'); return; }
+    const data = {};
+    if(node.service==='generator'){
+      const val = prompt('Generator rate per second', String(node.ratePerSec||5));
+      if(val===null) return;
+      data.ratePerSec = Number(val);
+    }else{
+      const val = confirm('Enable ' + node.label + '?');
+      data.enabled = val;
+    }
+    const payload = { type:'config.update', version:'1.0', role: node.service, instance: node.id, data };
+    const rk = 'sig.config-update.' + node.service;
+    try{
+      // eslint-disable-next-line no-undef
+      client.publish({ destination: '/exchange/ph.control/' + rk, body: JSON.stringify(payload), headers:{'content-type':'application/json'} });
+      appendSys(`[HIVE] SEND ${rk} payload=config.update`);
+    }catch(e){ appendSys('Config send error: ' + (e && e.message ? e.message : String(e))); }
   }
 
   function loadConn(){
