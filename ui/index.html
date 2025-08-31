@@ -169,13 +169,20 @@
 
     <section class="card" style="margin-top:16px; padding:12px">
       <div class="row" style="display:flex; justify-content:space-between; align-items:center">
-        <h3 style="margin:0">System Logs</h3>
+        <div style="display:flex; gap:8px; align-items:center">
+          <h3 style="margin:0">System Logs</h3>
+          <button id="syslog-tab-out" class="tab-btn tab-active" type="button">OUT</button>
+          <button id="syslog-tab-in" class="tab-btn" type="button">IN</button>
+          <button id="syslog-tab-other" class="tab-btn" type="button">Other</button>
+        </div>
         <label style="font-size:12px; display:flex; align-items:center; gap:6px; color:#fff;">
           Lines
           <input id="syslog-limit" class="themed-input" type="number" value="100" min="10" max="500" style="width:72px"/>
         </label>
       </div>
-      <div id="syslog" style="white-space: pre-wrap; font-family: monospace; max-height: 30vh; overflow:auto; background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.12); border-radius: 12px; padding:10px;"></div>
+      <div id="syslog-out" style="white-space: pre-wrap; font-family: monospace; max-height: 30vh; overflow:auto; background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.12); border-radius: 12px; padding:10px;"></div>
+      <div id="syslog-in" style="display:none; white-space: pre-wrap; font-family: monospace; max-height: 30vh; overflow:auto; background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.12); border-radius: 12px; padding:10px;"></div>
+      <div id="syslog-other" style="display:none; white-space: pre-wrap; font-family: monospace; max-height: 30vh; overflow:auto; background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.12); border-radius: 12px; padding:10px;"></div>
     </section>
   </main>
 

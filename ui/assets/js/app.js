@@ -11,7 +11,9 @@
   const btn = qs('connect');
   const state = qs('state');
   const logEl = qs('log');
-  const sysEl = qs('syslog');
+  const sysOutEl = qs('syslog-out');
+  const sysInEl = qs('syslog-in');
+  const sysOtherEl = qs('syslog-other');
   const genEl = qs('gen');
   const modEl = qs('mod');
   const procEl = qs('proc');
@@ -42,7 +44,9 @@
   let sysLogLimit = SYSLOG_LIMIT_DEFAULT;
   let eventLimit = EVENT_LIMIT_DEFAULT;
   const logLines = [];
-  const sysLines = [];
+  const sysOutLines = [];
+  const sysInLines = [];
+  const sysOtherLines = [];
   const topicLines = [];
   // Logging toggles
   const LOG_EVENTS_RAW = true; // show raw payloads in Events Log
@@ -78,7 +82,12 @@
       const v = Number(sysLimitInput.value) || SYSLOG_LIMIT_DEFAULT;
       sysLogLimit = Math.min(500, Math.max(10, v));
       sysLimitInput.value = String(sysLogLimit);
-      if(sysLines.length>sysLogLimit){ sysLines.splice(0, sysLines.length - sysLogLimit); if(sysEl) sysEl.textContent = sysLines.join('\n'); }
+      [sysOutLines, sysInLines, sysOtherLines].forEach(arr=>{
+        if(arr.length>sysLogLimit) arr.splice(0, arr.length - sysLogLimit);
+      });
+      if(sysOutEl) sysOutEl.textContent = sysOutLines.join('\n');
+      if(sysInEl) sysInEl.textContent = sysInLines.join('\n');
+      if(sysOtherEl) sysOtherEl.textContent = sysOtherLines.join('\n');
     });
   }
   const eventLimitInput = qs('event-limit');
@@ -124,6 +133,29 @@
     tEvents.addEventListener('click', ()=> set('events'));
     tTop.addEventListener('click', ()=> set('topic'));
     set('events');
+  })();
+
+  // System log tabs handling (OUT, IN, Other)
+  (function(){
+    const tOut = document.getElementById('syslog-tab-out');
+    const tIn = document.getElementById('syslog-tab-in');
+    const tOther = document.getElementById('syslog-tab-other');
+    const vOut = document.getElementById('syslog-out');
+    const vIn = document.getElementById('syslog-in');
+    const vOther = document.getElementById('syslog-other');
+    if(!tOut || !tIn || !tOther || !vOut || !vIn || !vOther) return;
+    const set = (which)=>{
+      vOut.style.display = which==='out'? 'block':'none';
+      vIn.style.display = which==='in'? 'block':'none';
+      vOther.style.display = which==='other'? 'block':'none';
+      tOut.classList.toggle('tab-active', which==='out');
+      tIn.classList.toggle('tab-active', which==='in');
+      tOther.classList.toggle('tab-active', which==='other');
+    };
+    tOut.addEventListener('click', ()=>set('out'));
+    tIn.addEventListener('click', ()=>set('in'));
+    tOther.addEventListener('click', ()=>set('other'));
+    set('out');
   })();
 
   // Topic sniffer (subscribe to any RK on buzz exchange)
@@ -322,12 +354,15 @@
     logEl.scrollTop = logEl.scrollHeight;
   }
   function appendSys(line){
-    if(!sysEl) return;
     const ts=new Date().toISOString();
-    sysLines.push(`[${ts}] ${line}`);
-      if(sysLines.length>sysLogLimit) sysLines.splice(0, sysLines.length - sysLogLimit);
-    sysEl.textContent = sysLines.join('\n');
-    sysEl.scrollTop = sysEl.scrollHeight;
+    const entry = `[${ts}] ${line}`;
+    let arr, el;
+    if(/\bSEND\b/.test(line)) { arr = sysOutLines; el = sysOutEl; }
+    else if(/\bRECV\b/.test(line)) { arr = sysInLines; el = sysInEl; }
+    else { arr = sysOtherLines; el = sysOtherEl; }
+    arr.push(entry);
+    if(arr.length>sysLogLimit) arr.splice(0, arr.length - sysLogLimit);
+    if(el){ el.textContent = arr.join('\n'); el.scrollTop = el.scrollHeight; }
   }
 
   function setUiStatus(state){
