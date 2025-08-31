@@ -11,7 +11,9 @@
   const btn = qs('connect');
   const state = qs('state');
   const logEl = qs('log');
-  const sysEl = qs('syslog');
+  const sysOutEl = qs('syslog-out');
+  const sysInEl = qs('syslog-in');
+  const sysOtherEl = qs('syslog-other');
   const genEl = qs('gen');
   const modEl = qs('mod');
   const procEl = qs('proc');
@@ -42,7 +44,9 @@
   let sysLogLimit = SYSLOG_LIMIT_DEFAULT;
   let eventLimit = EVENT_LIMIT_DEFAULT;
   const logLines = [];
-  const sysLines = [];
+  const sysOutLines = [];
+  const sysInLines = [];
+  const sysOtherLines = [];
   const topicLines = [];
   // Logging toggles
   const LOG_EVENTS_RAW = true; // show raw payloads in Events Log
@@ -78,7 +82,12 @@
       const v = Number(sysLimitInput.value) || SYSLOG_LIMIT_DEFAULT;
       sysLogLimit = Math.min(500, Math.max(10, v));
       sysLimitInput.value = String(sysLogLimit);
-      if(sysLines.length>sysLogLimit){ sysLines.splice(0, sysLines.length - sysLogLimit); if(sysEl) sysEl.textContent = sysLines.join('\n'); }
+      [sysOutLines, sysInLines, sysOtherLines].forEach(arr=>{
+        if(arr.length>sysLogLimit) arr.splice(0, arr.length - sysLogLimit);
+      });
+      if(sysOutEl) sysOutEl.textContent = sysOutLines.join('\n');
+      if(sysInEl) sysInEl.textContent = sysInLines.join('\n');
+      if(sysOtherEl) sysOtherEl.textContent = sysOtherLines.join('\n');
     });
   }
   const eventLimitInput = qs('event-limit');
@@ -124,6 +133,29 @@
     tEvents.addEventListener('click', ()=> set('events'));
     tTop.addEventListener('click', ()=> set('topic'));
     set('events');
+  })();
+
+  // System log tabs handling (OUT, IN, Other)
+  (function(){
+    const tOut = document.getElementById('syslog-tab-out');
+    const tIn = document.getElementById('syslog-tab-in');
+    const tOther = document.getElementById('syslog-tab-other');
+    const vOut = document.getElementById('syslog-out');
+    const vIn = document.getElementById('syslog-in');
+    const vOther = document.getElementById('syslog-other');
+    if(!tOut || !tIn || !tOther || !vOut || !vIn || !vOther) return;
+    const set = (which)=>{
+      vOut.style.display = which==='out'? 'block':'none';
+      vIn.style.display = which==='in'? 'block':'none';
+      vOther.style.display = which==='other'? 'block':'none';
+      tOut.classList.toggle('tab-active', which==='out');
+      tIn.classList.toggle('tab-active', which==='in');
+      tOther.classList.toggle('tab-active', which==='other');
+    };
+    tOut.addEventListener('click', ()=>set('out'));
+    tIn.addEventListener('click', ()=>set('in'));
+    tOther.addEventListener('click', ()=>set('other'));
+    set('out');
   })();
 
   // Topic sniffer (subscribe to any RK on buzz exchange)
@@ -222,6 +254,7 @@
     // draw nodes
     for(const id of Object.keys(hive.nodes)){
       const n=hive.nodes[id]; const g=document.createElementNS('http://www.w3.org/2000/svg','g'); g.setAttribute('transform',`translate(${n.x-60},${n.y-46})`);
+      if(id !== 'sut'){ g.style.cursor='pointer'; g.addEventListener('click', ()=>{ if(window.phShowPanel) window.phShowPanel(id); }); }
       const rect=document.createElementNS('http://www.w3.org/2000/svg','rect'); rect.setAttribute('x','0'); rect.setAttribute('y','0'); rect.setAttribute('width','120'); rect.setAttribute('height','92'); rect.setAttribute('rx','12'); rect.setAttribute('fill', id==='sut' ? 'rgba(3,169,244,0.2)' : 'rgba(255,255,255,0.08)'); rect.setAttribute('stroke','rgba(255,255,255,0.5)'); rect.setAttribute('stroke-width','2'); g.appendChild(rect);
       const title=document.createElementNS('http://www.w3.org/2000/svg','text'); title.setAttribute('x','60'); title.setAttribute('y','24'); title.setAttribute('text-anchor','middle'); title.setAttribute('fill','#ffffff'); title.setAttribute('font-family','Inter, Segoe UI, Arial, sans-serif'); title.setAttribute('font-size','13'); title.textContent = n.label.toUpperCase(); g.appendChild(title);
       const tps=document.createElementNS('http://www.w3.org/2000/svg','text'); tps.setAttribute('x','60'); tps.setAttribute('y','42'); tps.setAttribute('text-anchor','middle'); tps.setAttribute('fill','rgba(255,255,255,0.8)'); tps.setAttribute('font-family','ui-monospace, SFMono-Regular, Menlo, Consolas, monospace'); tps.setAttribute('font-size','12'); tps.textContent = (typeof n.tps==='number')? (`TPS ${n.tps}`) : 'TPS –'; g.appendChild(tps);
@@ -321,12 +354,15 @@
     logEl.scrollTop = logEl.scrollHeight;
   }
   function appendSys(line){
-    if(!sysEl) return;
     const ts=new Date().toISOString();
-    sysLines.push(`[${ts}] ${line}`);
-      if(sysLines.length>sysLogLimit) sysLines.splice(0, sysLines.length - sysLogLimit);
-    sysEl.textContent = sysLines.join('\n');
-    sysEl.scrollTop = sysEl.scrollHeight;
+    const entry = `[${ts}] ${line}`;
+    let arr, el;
+    if(/\bSEND\b/.test(line)) { arr = sysOutLines; el = sysOutEl; }
+    else if(/\bRECV\b/.test(line)) { arr = sysInLines; el = sysInEl; }
+    else { arr = sysOtherLines; el = sysOtherEl; }
+    arr.push(entry);
+    if(arr.length>sysLogLimit) arr.splice(0, arr.length - sysLogLimit);
+    if(el){ el.textContent = arr.join('\n'); el.scrollTop = el.scrollHeight; }
   }
 
   function setUiStatus(state){
@@ -447,13 +483,14 @@
       appendSys('CONNECTED ' + JSON.stringify(frame.headers || {}));
       let subs = (PH_CONFIG && Array.isArray(PH_CONFIG.subscriptions) && PH_CONFIG.subscriptions.length)
         ? PH_CONFIG.subscriptions.slice()
-        : ['/queue/ph.control'];
-      // Always include buzz exchange event/signal routes so Events see everything
-      if(!subs.includes('/exchange/ph.control/ev.#')) subs.push('/exchange/ph.control/ev.#');
-      if(!subs.includes('/exchange/ph.control/sig.#')) subs.push('/exchange/ph.control/sig.#');
+        : [];
+      // Always include control-plane routes using new status-full/delta scheme
+      if(!subs.includes('/exchange/ph.control/ev.status-full.#')) subs.push('/exchange/ph.control/ev.status-full.#');
+      if(!subs.includes('/exchange/ph.control/ev.status-delta.#')) subs.push('/exchange/ph.control/ev.status-delta.#');
       if(!subs.includes('/exchange/ph.control/ev.metric.#')) subs.push('/exchange/ph.control/ev.metric.#');
+      if(!subs.includes('/exchange/ph.control/sig.#')) subs.push('/exchange/ph.control/sig.#');
       if(!(PH_CONFIG && Array.isArray(PH_CONFIG.subscriptions) && PH_CONFIG.subscriptions.length)){
-        appendSys('[BUZZ] SUB using fallback [/queue/ph.control]');
+        appendSys('[BUZZ] SUB using defaults [ev.status-full, ev.status-delta, ev.metric, sig]');
       }
       subs.forEach(d => {
         try{

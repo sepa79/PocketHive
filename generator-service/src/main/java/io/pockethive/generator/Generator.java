@@ -30,6 +30,8 @@ public class Generator {
   private final RabbitTemplate rabbit;
   private final AtomicLong counter = new AtomicLong();
   private final String instanceId = UUID.randomUUID().toString();
+  private volatile boolean enabled = true;
+  private volatile String mode = "auto";
 
   public Generator(RabbitTemplate rabbit) {
     this.rabbit = rabbit;
@@ -42,29 +44,9 @@ public class Generator {
 
   @Scheduled(fixedRate = 1000)
   public void tick() {
+    if(!enabled) return;
     for (int i = 0; i < ratePerSec; i++) {
-      String id = UUID.randomUUID().toString();
-
-      String body = """
-        {
-          "id":"%s",
-          "path":"/api/test",
-          "method":"POST",
-          "body":"hello-world",
-          "createdAt":"%s"
-        }
-        """.formatted(id, Instant.now().toString());
-
-      Message msg = MessageBuilder
-          .withBody(body.getBytes(StandardCharsets.UTF_8))
-          .setContentType(MessageProperties.CONTENT_TYPE_JSON) // application/json
-          .setContentEncoding(StandardCharsets.UTF_8.name())
-          .setMessageId(id)
-          .setHeader("x-ph-service", "generator")
-          .build();
-
-      rabbit.convertAndSend(Topology.EXCHANGE, Topology.GEN_QUEUE, msg);
-      counter.incrementAndGet();
+      sendOnce();
     }
   }
 
@@ -74,7 +56,6 @@ public class Generator {
     sendStatusDelta(tps);
   }
 
-  // Control-plane listener (no-op placeholder)
   @RabbitListener(queues = "${ph.controlQueue:ph.control}")
   public void onControl(String payload,
                         @Header(AmqpHeaders.RECEIVED_ROUTING_KEY) String rk,
@@ -82,16 +63,49 @@ public class Generator {
     ObservabilityContext ctx = ObservabilityContextUtil.fromHeader(trace);
     ObservabilityContextUtil.populateMdc(ctx);
     try {
-      // Log control event
       String p = payload==null?"" : (payload.length()>300? payload.substring(0,300)+"…" : payload);
       log.info("[CTRL] RECV rk={} inst={} payload={}", rk, instanceId, p);
-      // Respond to status.request by emitting full snapshot
-      if(payload!=null && payload.contains("status.request")){
-        sendStatusFull(0);
+      if(payload!=null){
+        try{
+          com.fasterxml.jackson.databind.JsonNode node = new com.fasterxml.jackson.databind.ObjectMapper().readTree(payload);
+          String type = node.path("type").asText();
+          if("status-request".equals(type)){
+            sendStatusFull(0);
+          }
+          if("config-update".equals(type)){
+            com.fasterxml.jackson.databind.JsonNode data = node.path("data");
+            if(data.has("ratePerSec")) ratePerSec = data.get("ratePerSec").asInt(ratePerSec);
+            if(data.has("enabled")) enabled = data.get("enabled").asBoolean(enabled);
+            if(data.has("mode")) mode = data.get("mode").asText(mode);
+            if(data.has("singleRequest") && data.get("singleRequest").asBoolean()) sendOnce();
+          }
+        }catch(Exception e){ log.warn("control parse", e); }
       }
     } finally {
       MDC.clear();
     }
+  }
+
+  private void sendOnce(){
+    String id = UUID.randomUUID().toString();
+    String body = """
+      {
+        \"id\":\"%s\",
+        \"path\":\"/api/test\",
+        \"method\":\"POST\",
+        \"body\":\"hello-world\",
+        \"createdAt\":\"%s\"
+      }
+      """.formatted(id, Instant.now().toString());
+    Message msg = MessageBuilder
+        .withBody(body.getBytes(StandardCharsets.UTF_8))
+        .setContentType(MessageProperties.CONTENT_TYPE_JSON)
+        .setContentEncoding(StandardCharsets.UTF_8.name())
+        .setMessageId(id)
+        .setHeader("x-ph-service", "generator")
+        .build();
+    rabbit.convertAndSend(Topology.EXCHANGE, Topology.GEN_QUEUE, msg);
+    counter.incrementAndGet();
   }
 
 

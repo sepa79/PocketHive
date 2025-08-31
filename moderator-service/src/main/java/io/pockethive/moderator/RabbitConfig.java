@@ -18,4 +18,7 @@ public class RabbitConfig {
   @Bean Binding bindSigGlobal(){ return BindingBuilder.bind(control()).to(controlExchange()).with("sig.status-request.#"); }
   @Bean Binding bindSigRole(){ return BindingBuilder.bind(control()).to(controlExchange()).with("sig.status-request.moderator.#"); }
   @Bean Binding bindSigInstance(){ return BindingBuilder.bind(control()).to(controlExchange()).with("sig.status-request.moderator.*"); }
+  @Bean Binding bindCfgGlobal(){ return BindingBuilder.bind(control()).to(controlExchange()).with("sig.config-update.#"); }
+  @Bean Binding bindCfgRole(){ return BindingBuilder.bind(control()).to(controlExchange()).with("sig.config-update.moderator.#"); }
+  @Bean Binding bindCfgInstance(){ return BindingBuilder.bind(control()).to(controlExchange()).with("sig.config-update.moderator.*"); }
 }
