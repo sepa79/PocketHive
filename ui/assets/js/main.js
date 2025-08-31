@@ -1,12 +1,13 @@
 // Main bootstrap for dynamic panels
 const client = new StompJs.Client({ brokerURL: (location.protocol==='https:'?'wss://':'ws://') + location.host + '/ws' });
 window.phClient = client;
-const containers = {
-  generator: document.getElementById('generator-panels'),
-  moderator: document.getElementById('moderator-panels'),
-  processor: document.getElementById('processor-panels'),
-  postprocessor: document.getElementById('postprocessor-panels')
-};
+const hiveView = document.getElementById('view-hive');
+const containers = {};
+['generator','moderator','processor','postprocessor'].forEach(role=>{
+  const div = document.createElement('div');
+  if(hiveView) hiveView.appendChild(div);
+  containers[role] = div;
+});
 const loaded = {generator:{}, moderator:{}, processor:{}, postprocessor:{}};
 client.onConnect = ()=>{
   // discover services via status-full events
