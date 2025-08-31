@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.22] - 2025-08-31
+Timestamp: 2025-08-31T01:50:27Z
+
+- UI: Wrap Hive, Swarm, and Swarmlets icons in hexagon outlines and add radar icon beside the monolith status indicator.
+
 ## [0.4.21] - 2025-08-31
 Timestamp: 2025-08-31T01:32:04Z
 
