@@ -71,6 +71,21 @@ services:
       rabbitmq:
         condition: service_healthy
 
+  log-aggregator:
+    build:
+      context: .
+      dockerfile: log-aggregator-service/Dockerfile
+    environment:
+      RABBITMQ_HOST: rabbitmq
+      PH_LOGS_EXCHANGE: logs.exchange
+      PH_LOGS_QUEUE: logs.agg
+      PH_LOKI_URL: http://loki:3100
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      loki:
+        condition: service_started
+
   ui:
     build:
       context: .
