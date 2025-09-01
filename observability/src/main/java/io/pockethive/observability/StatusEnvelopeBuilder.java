@@ -47,6 +47,14 @@ public class StatusEnvelopeBuilder {
         return this;
     }
 
+    /**
+     * Flag indicating whether the component is currently enabled.
+     */
+    public StatusEnvelopeBuilder enabled(boolean enabled) {
+        root.put("enabled", enabled);
+        return this;
+    }
+
     public StatusEnvelopeBuilder traffic(String traffic) {
         root.put("traffic", traffic);
         return this;
@@ -63,6 +71,16 @@ public class StatusEnvelopeBuilder {
         if (queues != null && queues.length > 0) {
             this.queues.put("out", Arrays.asList(queues));
         }
+        return this;
+    }
+
+    /**
+     * Attach an arbitrary key/value pair to the {@code data} section of the
+     * envelope. This is used for exposing component configuration parameters
+     * such as tuning knobs in {@code status-full} events.
+     */
+    public StatusEnvelopeBuilder data(String key, Object value) {
+        data.put(key, value);
         return this;
     }
 

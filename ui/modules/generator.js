@@ -1,8 +1,7 @@
 export function renderGeneratorPanel(containerEl, instanceId){
   const client = window.phClient;
-  containerEl.innerHTML = `\n    <div class="card" data-role="generator">\n      <h3>Generator ${instanceId}</h3>\n      <label>Rate per sec <input id="rate" type="range" min="0" max="100" value="5"></label>\n      <label>Mode <select id="mode"><option value="auto">Auto</option><option value="manual">Manual</option></select></label>\n      <div class="controls">\n        <button id="start">Start</button>\n        <button id="stop">Stop</button>\n        <button id="once">Once</button>\n      </div>\n      <div>TPS: <span id="tps">0</span></div>\n      <div>Latency: <span id="lat">0</span> ms</div>\n    </div>`;
+  containerEl.innerHTML = `\n    <div class="card" data-role="generator">\n      <h3>Generator ${instanceId}</h3>\n      <label>Rate per sec <input id="rate" type="range" min="0" max="100" value="5"></label>\n      <div class="controls">\n        <button id="start">Start</button>\n        <button id="stop">Stop</button>\n        <button id="once">Once</button>\n      </div>\n      <div>TPS: <span id="tps">0</span></div>\n      <div>Latency: <span id="lat">0</span> ms</div>\n    </div>`;
   const rate = containerEl.querySelector('#rate');
-  const mode = containerEl.querySelector('#mode');
   const startBtn = containerEl.querySelector('#start');
   const stopBtn = containerEl.querySelector('#stop');
   const onceBtn = containerEl.querySelector('#once');
@@ -14,7 +13,6 @@ export function renderGeneratorPanel(containerEl, instanceId){
     client.publish({destination:`/exchange/ph.control/${rk}`, body: JSON.stringify(payload)});
   }
   rate && rate.addEventListener('input', ()=> sendConfig({ratePerSec:Number(rate.value)}));
-  mode && mode.addEventListener('change', ()=> sendConfig({mode:mode.value}));
   startBtn && startBtn.addEventListener('click', ()=> sendConfig({enabled:true}));
   stopBtn && stopBtn.addEventListener('click', ()=> sendConfig({enabled:false}));
   onceBtn && onceBtn.addEventListener('click', ()=> sendConfig({singleRequest:true}));

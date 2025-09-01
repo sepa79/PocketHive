@@ -29,6 +29,7 @@ public class PostProcessor {
   private final DistributionSummary totalLatency;
   private final Counter errorCounter;
   private final String instanceId;
+  private volatile boolean enabled = true;
 
   public PostProcessor(RabbitTemplate rabbit,
                        MeterRegistry registry,
@@ -45,6 +46,7 @@ public class PostProcessor {
   public void onFinal(byte[] payload,
                       @Header(value="x-ph-trace", required=false) String trace,
                       @Header(value="x-ph-error", required=false) Boolean error){
+    if(!enabled) return;
     long hopMs = 0;
     long totalMs = 0;
     ObservabilityContext ctx = null;
@@ -96,6 +98,10 @@ public class PostProcessor {
           com.fasterxml.jackson.databind.JsonNode node = new com.fasterxml.jackson.databind.ObjectMapper().readTree(payload);
           String type = node.path("type").asText();
           if("status-request".equals(type)) sendStatusFull();
+          if("config-update".equals(type)){
+            com.fasterxml.jackson.databind.JsonNode dataNode = node.path("data");
+            if(dataNode.has("enabled")) enabled = dataNode.get("enabled").asBoolean(enabled);
+          }
           if("reset".equals(type)){
             // no-op reset placeholder
           }
@@ -115,6 +121,7 @@ public class PostProcessor {
         .instance(instanceId)
         .traffic(Topology.EXCHANGE)
         .inQueues(Topology.FINAL_QUEUE)
+        .enabled(enabled)
         .toJson();
     rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, payload);
   }

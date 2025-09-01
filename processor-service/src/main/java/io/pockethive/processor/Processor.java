@@ -1,6 +1,7 @@
 package io.pockethive.processor;
 
 import io.pockethive.Topology;
+import org.springframework.amqp.core.Message;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.scheduling.annotation.EnableScheduling;
@@ -15,6 +16,7 @@ import io.pockethive.observability.StatusEnvelopeBuilder;
 import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Qualifier;
 
+import java.time.Instant;
 import java.util.concurrent.atomic.AtomicLong;
 
 @Component
@@ -25,6 +27,7 @@ public class Processor {
   private final RabbitTemplate rabbit;
   private final AtomicLong counter = new AtomicLong();
   private final String instanceId;
+  private volatile boolean enabled = true;
   private volatile int workers = 1;
   private volatile String mode = "simulation";
 
@@ -36,14 +39,24 @@ public class Processor {
   }
 
   @RabbitListener(queues = "${ph.modQueue:moderated.queue}")
-  public void onModerated(byte[] payload,
-                          @Header(value = "x-ph-service", required = false) String service,
+  public void onModerated(Message message,
                           @Header(value = ObservabilityContextUtil.HEADER, required = false) String trace){
+    Instant received = Instant.now();
     ObservabilityContext ctx = ObservabilityContextUtil.fromHeader(trace);
+    if(ctx==null){
+      ctx = ObservabilityContextUtil.init("processor", instanceId);
+      ctx.getHops().clear();
+    }
     ObservabilityContextUtil.populateMdc(ctx);
     try {
-      // MVP: pretend to process
-      counter.incrementAndGet();
+      if(enabled){
+        counter.incrementAndGet();
+        Instant processed = Instant.now();
+        ObservabilityContextUtil.appendHop(ctx, "processor", instanceId, received, processed);
+        message.getMessageProperties().setHeader("x-ph-service", "processor");
+        message.getMessageProperties().setHeader(ObservabilityContextUtil.HEADER, ObservabilityContextUtil.toHeader(ctx));
+        rabbit.send(Topology.EXCHANGE, Topology.FINAL_QUEUE, message);
+      }
     } finally {
       MDC.clear();
     }
@@ -70,6 +83,7 @@ public class Processor {
           }
           if("config-update".equals(type)){
             com.fasterxml.jackson.databind.JsonNode data = node.path("data");
+            if(data.has("enabled")) enabled = data.get("enabled").asBoolean(enabled);
             if(data.has("workers")) workers = data.get("workers").asInt(workers);
             if(data.has("mode")) mode = data.get("mode").asText(mode);
           }
@@ -91,7 +105,9 @@ public class Processor {
         .instance(instanceId)
         .traffic(Topology.EXCHANGE)
         .inQueues(Topology.MOD_QUEUE)
+        .outQueues(Topology.FINAL_QUEUE)
         .tps(tps)
+        .enabled(enabled)
         .toJson();
     rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, payload);
   }
@@ -104,7 +120,11 @@ public class Processor {
         .instance(instanceId)
         .traffic(Topology.EXCHANGE)
         .inQueues(Topology.MOD_QUEUE)
+        .outQueues(Topology.FINAL_QUEUE)
         .tps(tps)
+        .enabled(enabled)
+        .data("workers", workers)
+        .data("mode", mode)
         .toJson();
     rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, payload);
   }

@@ -26,6 +26,7 @@ public class Moderator {
   private final RabbitTemplate rabbit;
   private final AtomicLong counter = new AtomicLong();
   private final String instanceId;
+  private volatile boolean enabled = true;
   private volatile boolean rulesEnabled = false;
   private volatile String filter = "";
   private volatile int limit = 0;
@@ -45,9 +46,11 @@ public class Moderator {
     ObservabilityContext ctx = ObservabilityContextUtil.fromHeader(trace);
     ObservabilityContextUtil.populateMdc(ctx);
     try {
-      // forward the same message to the moderated queue (preserve body + props)
-      rabbit.send(Topology.EXCHANGE, Topology.MOD_QUEUE, message);
-      counter.incrementAndGet();
+      if(enabled){
+        // forward the same message to the moderated queue (preserve body + props)
+        rabbit.send(Topology.EXCHANGE, Topology.MOD_QUEUE, message);
+        counter.incrementAndGet();
+      }
     } finally {
       MDC.clear();
     }
@@ -74,6 +77,7 @@ public class Moderator {
           }
           if("config-update".equals(type)){
             com.fasterxml.jackson.databind.JsonNode data = node.path("data");
+            if(data.has("enabled")) enabled = data.get("enabled").asBoolean(enabled);
             if(data.has("rules")) rulesEnabled = data.get("rules").asBoolean(rulesEnabled);
             if(data.has("filter")) filter = data.get("filter").asText(filter);
             if(data.has("limit")) limit = data.get("limit").asInt(limit);
@@ -98,6 +102,7 @@ public class Moderator {
         .inQueues(Topology.GEN_QUEUE)
         .outQueues(Topology.MOD_QUEUE)
         .tps(tps)
+        .enabled(enabled)
         .toJson();
     rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, payload);
   }
@@ -112,6 +117,10 @@ public class Moderator {
         .inQueues(Topology.GEN_QUEUE)
         .outQueues(Topology.MOD_QUEUE)
         .tps(tps)
+        .enabled(enabled)
+        .data("rules", rulesEnabled)
+        .data("filter", filter)
+        .data("limit", limit)
         .toJson();
     rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, payload);
   }

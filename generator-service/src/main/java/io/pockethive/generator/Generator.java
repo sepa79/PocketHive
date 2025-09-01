@@ -33,7 +33,6 @@ public class Generator {
   private final AtomicLong counter = new AtomicLong();
   private final String instanceId;
   private volatile boolean enabled = true;
-  private volatile String mode = "auto";
 
   public Generator(RabbitTemplate rabbit,
                    @Qualifier("instanceId") String instanceId) {
@@ -80,7 +79,6 @@ public class Generator {
             com.fasterxml.jackson.databind.JsonNode data = node.path("data");
             if(data.has("ratePerSec")) ratePerSec = data.get("ratePerSec").asInt(ratePerSec);
             if(data.has("enabled")) enabled = data.get("enabled").asBoolean(enabled);
-            if(data.has("mode")) mode = data.get("mode").asText(mode);
             if(data.has("singleRequest") && data.get("singleRequest").asBoolean()) sendOnce();
           }
         }catch(Exception e){ log.warn("control parse", e); }
@@ -123,6 +121,8 @@ public class Generator {
         .instance(instanceId)
         .traffic(Topology.EXCHANGE)
         .tps(tps)
+        .enabled(enabled)
+        .data("ratePerSec", ratePerSec)
         .toJson();
     rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, routingKey, json);
   }
@@ -137,6 +137,8 @@ public class Generator {
         .traffic(Topology.EXCHANGE)
         .outQueues(Topology.GEN_QUEUE)
         .tps(tps)
+        .enabled(enabled)
+        .data("ratePerSec", ratePerSec)
         .toJson();
     rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, routingKey, json);
   }
