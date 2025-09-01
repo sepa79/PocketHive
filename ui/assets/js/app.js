@@ -27,6 +27,23 @@ import { initNectarMenu } from './menus/nectar.js';
   let connected = false;
 
   const { appendLog, appendSys } = initBuzzMenu({ getClient: () => client, isConnected: () => connected });
+  window.phAppendSys = appendSys;
+  window.phAppendLog = appendLog;
+  if (window.phClient && typeof window.phClient.publish === 'function') {
+    const origPublish = window.phClient.publish.bind(window.phClient);
+    window.phClient.publish = (params) => {
+      try {
+        origPublish(params);
+        const dest = (params && params.destination) || '';
+        let payloadType = '';
+        try { payloadType = JSON.parse(params.body || '{}').type || ''; } catch {}
+        const rk = dest.replace('/exchange/ph.control/', '');
+        appendSys(`[BUZZ] SEND ${rk}${payloadType ? ` payload=${payloadType}` : ''}`);
+      } catch (e) {
+        appendSys('Publish error: ' + (e && e.message ? e.message : String(e)));
+      }
+    };
+  }
   const hive = initHiveMenu();
   const nectar = initNectarMenu(appState);
 
