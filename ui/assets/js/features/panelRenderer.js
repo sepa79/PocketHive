@@ -13,14 +13,13 @@ export function initPanel(panels, role, id, initial) {
 }
 
 export function showPanel(role, instances, panels, modalRefs, client) {
-  const { modal, modalBody, modalTitle } = modalRefs;
+  const { modal, modalBody } = modalRefs;
   const inst = instances[role];
-  if (!inst || !modal || !modalBody || !modalTitle) return;
+  if (!inst || !modal || !modalBody) return;
   const el = panels[role] && panels[role][inst.id];
   if (!el) return;
   modalBody.innerHTML = '';
   modalBody.appendChild(el);
-  modalTitle.textContent = `${inst.name || role} (${inst.id})`;
   modal.style.display = 'flex';
   try {
     const payload = { type: 'status-request', role, instance: inst.id };

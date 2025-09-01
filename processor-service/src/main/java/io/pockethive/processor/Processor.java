@@ -28,8 +28,6 @@ public class Processor {
   private final AtomicLong counter = new AtomicLong();
   private final String instanceId;
   private volatile boolean enabled = true;
-  private volatile int workers = 1;
-  private volatile String mode = "simulation";
 
   public Processor(RabbitTemplate rabbit,
                    @Qualifier("instanceId") String instanceId){
@@ -84,8 +82,6 @@ public class Processor {
           if("config-update".equals(type)){
             com.fasterxml.jackson.databind.JsonNode data = node.path("data");
             if(data.has("enabled")) enabled = data.get("enabled").asBoolean(enabled);
-            if(data.has("workers")) workers = data.get("workers").asInt(workers);
-            if(data.has("mode")) mode = data.get("mode").asText(mode);
           }
         }catch(Exception e){ log.warn("control parse", e); }
       }
@@ -98,14 +94,26 @@ public class Processor {
 
   private void sendStatusDelta(long tps){
     String role = "processor";
+    String controlQueue = Topology.CONTROL_QUEUE + "." + role + "." + instanceId;
     String rk = "ev.status-delta."+role+"."+instanceId;
     String payload = new StatusEnvelopeBuilder()
         .kind("status-delta")
         .role(role)
         .instance(instanceId)
         .traffic(Topology.EXCHANGE)
-        .inQueue(Topology.MOD_QUEUE, Topology.MOD_QUEUE)
-        .publishes(Topology.FINAL_QUEUE)
+        .workIn(Topology.MOD_QUEUE)
+        .workRoutes(Topology.MOD_QUEUE)
+        .workOut(Topology.FINAL_QUEUE)
+        .controlIn(controlQueue)
+        .controlRoutes(
+            "sig.config-update",
+            "sig.config-update."+role,
+            "sig.config-update."+role+"."+instanceId,
+            "sig.status-request",
+            "sig.status-request."+role,
+            "sig.status-request."+role+"."+instanceId
+        )
+        .controlOut(rk)
         .tps(tps)
         .enabled(enabled)
         .toJson();
@@ -113,18 +121,28 @@ public class Processor {
   }
   private void sendStatusFull(long tps){
     String role = "processor";
+    String controlQueue = Topology.CONTROL_QUEUE + "." + role + "." + instanceId;
     String rk = "ev.status-full."+role+"."+instanceId;
     String payload = new StatusEnvelopeBuilder()
         .kind("status-full")
         .role(role)
         .instance(instanceId)
         .traffic(Topology.EXCHANGE)
-        .inQueue(Topology.MOD_QUEUE, Topology.MOD_QUEUE)
-        .publishes(Topology.FINAL_QUEUE)
+        .workIn(Topology.MOD_QUEUE)
+        .workRoutes(Topology.MOD_QUEUE)
+        .workOut(Topology.FINAL_QUEUE)
+        .controlIn(controlQueue)
+        .controlRoutes(
+            "sig.config-update",
+            "sig.config-update."+role,
+            "sig.config-update."+role+"."+instanceId,
+            "sig.status-request",
+            "sig.status-request."+role,
+            "sig.status-request."+role+"."+instanceId
+        )
+        .controlOut(rk)
         .tps(tps)
         .enabled(enabled)
-        .data("workers", workers)
-        .data("mode", mode)
         .toJson();
     rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, payload);
   }

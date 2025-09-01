@@ -7,7 +7,6 @@ const instances = {};
 const loaded = { generator: {}, moderator: {}, processor: {}, postprocessor: {} };
 
 const modal = document.getElementById('panel-modal');
-const modalTitle = document.getElementById('panel-title');
 const modalBody = document.getElementById('panel-body');
 const closeBtn = document.getElementById('panel-close');
 if (closeBtn) closeBtn.addEventListener('click', () => { if (modal) modal.style.display = 'none'; });
@@ -35,7 +34,7 @@ const client = setupStompClient(handleStatusFull);
 window.phClient = client;
 
 function phShowPanel(role) {
-  showPanel(role, instances, panels, { modal, modalBody, modalTitle }, client);
+  showPanel(role, instances, panels, { modal, modalBody }, client);
 }
 
 export { phShowPanel };

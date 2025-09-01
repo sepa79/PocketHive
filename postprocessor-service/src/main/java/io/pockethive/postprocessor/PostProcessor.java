@@ -102,9 +102,6 @@ public class PostProcessor {
             com.fasterxml.jackson.databind.JsonNode dataNode = node.path("data");
             if(dataNode.has("enabled")) enabled = dataNode.get("enabled").asBoolean(enabled);
           }
-          if("reset".equals(type)){
-            // no-op reset placeholder
-          }
         }catch(Exception e){ log.warn("control parse", e); }
       }
     } finally {
@@ -114,13 +111,25 @@ public class PostProcessor {
 
   private void sendStatusFull(){
     String role = "postprocessor";
+    String controlQueue = Topology.CONTROL_QUEUE + "." + role + "." + instanceId;
     String rk = "ev.status-full."+role+"."+instanceId;
     String payload = new StatusEnvelopeBuilder()
         .kind("status-full")
         .role(role)
         .instance(instanceId)
         .traffic(Topology.EXCHANGE)
-        .inQueue(Topology.FINAL_QUEUE, Topology.FINAL_QUEUE)
+        .workIn(Topology.FINAL_QUEUE)
+        .workRoutes(Topology.FINAL_QUEUE)
+        .controlIn(controlQueue)
+        .controlRoutes(
+            "sig.config-update",
+            "sig.config-update."+role,
+            "sig.config-update."+role+"."+instanceId,
+            "sig.status-request",
+            "sig.status-request."+role,
+            "sig.status-request."+role+"."+instanceId
+        )
+        .controlOut(rk)
         .enabled(enabled)
         .toJson();
     rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, payload);

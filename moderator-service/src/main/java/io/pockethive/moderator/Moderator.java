@@ -27,9 +27,6 @@ public class Moderator {
   private final AtomicLong counter = new AtomicLong();
   private final String instanceId;
   private volatile boolean enabled = true;
-  private volatile boolean rulesEnabled = false;
-  private volatile String filter = "";
-  private volatile int limit = 0;
 
   public Moderator(RabbitTemplate rabbit,
                    @Qualifier("instanceId") String instanceId) {
@@ -78,9 +75,6 @@ public class Moderator {
           if("config-update".equals(type)){
             com.fasterxml.jackson.databind.JsonNode data = node.path("data");
             if(data.has("enabled")) enabled = data.get("enabled").asBoolean(enabled);
-            if(data.has("rules")) rulesEnabled = data.get("rules").asBoolean(rulesEnabled);
-            if(data.has("filter")) filter = data.get("filter").asText(filter);
-            if(data.has("limit")) limit = data.get("limit").asInt(limit);
           }
         }catch(Exception e){ log.warn("control parse", e); }
       }
@@ -93,14 +87,26 @@ public class Moderator {
 
   private void sendStatusDelta(long tps){
     String role = "moderator";
+    String controlQueue = Topology.CONTROL_QUEUE + "." + role + "." + instanceId;
     String rk = "ev.status-delta."+role+"."+instanceId;
     String payload = new StatusEnvelopeBuilder()
         .kind("status-delta")
         .role(role)
         .instance(instanceId)
         .traffic(Topology.EXCHANGE)
-        .inQueue(Topology.GEN_QUEUE, Topology.GEN_QUEUE)
-        .publishes(Topology.MOD_QUEUE)
+        .workIn(Topology.GEN_QUEUE)
+        .workRoutes(Topology.GEN_QUEUE)
+        .workOut(Topology.MOD_QUEUE)
+        .controlIn(controlQueue)
+        .controlRoutes(
+            "sig.config-update",
+            "sig.config-update."+role,
+            "sig.config-update."+role+"."+instanceId,
+            "sig.status-request",
+            "sig.status-request."+role,
+            "sig.status-request."+role+"."+instanceId
+        )
+        .controlOut(rk)
         .tps(tps)
         .enabled(enabled)
         .toJson();
@@ -108,19 +114,28 @@ public class Moderator {
   }
   private void sendStatusFull(long tps){
     String role = "moderator";
+    String controlQueue = Topology.CONTROL_QUEUE + "." + role + "." + instanceId;
     String rk = "ev.status-full."+role+"."+instanceId;
     String payload = new StatusEnvelopeBuilder()
         .kind("status-full")
         .role(role)
         .instance(instanceId)
         .traffic(Topology.EXCHANGE)
-        .inQueue(Topology.GEN_QUEUE, Topology.GEN_QUEUE)
-        .publishes(Topology.MOD_QUEUE)
+        .workIn(Topology.GEN_QUEUE)
+        .workRoutes(Topology.GEN_QUEUE)
+        .workOut(Topology.MOD_QUEUE)
+        .controlIn(controlQueue)
+        .controlRoutes(
+            "sig.config-update",
+            "sig.config-update."+role,
+            "sig.config-update."+role+"."+instanceId,
+            "sig.status-request",
+            "sig.status-request."+role,
+            "sig.status-request."+role+"."+instanceId
+        )
+        .controlOut(rk)
         .tps(tps)
         .enabled(enabled)
-        .data("rules", rulesEnabled)
-        .data("filter", filter)
-        .data("limit", limit)
         .toJson();
     rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, payload);
   }

@@ -47,9 +47,9 @@ export function initHiveMenu() {
   function updateQueues(service, evt) {
     if (!evt) return false;
     let changed = false;
-    const ins = [];
-    if (evt.inQueue && evt.inQueue.name) ins.push(evt.inQueue.name);
-    const outs = arr(evt.publishes).filter(Boolean);
+    const queues = evt.queues || {};
+    const ins = Array.isArray(queues.in) ? queues.in : (evt.inQueue && evt.inQueue.name ? [evt.inQueue.name] : []);
+    const outs = Array.isArray(queues.out) ? queues.out : arr(evt.publishes).filter(Boolean);
     const apply = (name, dir) => {
       const key = String(name);
       if (!hive.queues[key]) hive.queues[key] = { in: new Set(), out: new Set() };
