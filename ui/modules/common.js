@@ -27,7 +27,7 @@ function setupCommonInfo(infoEl){
   };
 }
 
-export function renderCommonPanel(containerEl, role, instanceId, extraHtml=''){
+function renderCommonPanel(containerEl, role, instanceId, extraHtml = '') {
   const title = role.charAt(0).toUpperCase() + role.slice(1);
   containerEl.innerHTML = `
     <div class="card" data-role="${role}">
@@ -55,7 +55,7 @@ export function renderCommonPanel(containerEl, role, instanceId, extraHtml=''){
   return infoRefs;
 }
 
-export function applyCommonStatus(evt, refs){
+function applyCommonStatus(evt, refs) {
   if(!evt) return;
   const {
     workInEl, workRoutesEl, workOutEl,
@@ -91,3 +91,5 @@ export function applyCommonStatus(evt, refs){
     });
   }
 }
+
+export { renderCommonPanel, applyCommonStatus };
