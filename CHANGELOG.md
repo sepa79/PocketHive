@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.3] - 2025-09-01
+Timestamp: 2025-09-01T22:06:01Z
+
+- Docker: disable WireMock request journaling for lean performance tests.
+
 ## [0.5.2] - 2025-09-01
 Timestamp: 2025-09-01T21:54:24Z
 
