@@ -27,6 +27,8 @@ public class Moderator {
   private final AtomicLong counter = new AtomicLong();
   private final String instanceId;
   private volatile boolean enabled = true;
+  private static final long STATUS_INTERVAL_MS = 5000L;
+  private volatile long lastStatusTs = System.currentTimeMillis();
 
   public Moderator(RabbitTemplate rabbit,
                    @Qualifier("instanceId") String instanceId) {
@@ -53,8 +55,14 @@ public class Moderator {
     }
   }
 
-  @Scheduled(fixedRate = 5000)
-  public void status() { long tps = counter.getAndSet(0); sendStatusDelta(tps); }
+  @Scheduled(fixedRate = STATUS_INTERVAL_MS)
+  public void status() {
+    long now = System.currentTimeMillis();
+    long elapsed = now - lastStatusTs;
+    lastStatusTs = now;
+    long tps = elapsed > 0 ? counter.getAndSet(0) * 1000 / elapsed : 0;
+    sendStatusDelta(tps);
+  }
 
   @RabbitListener(queues = "#{@controlQueue.name}")
   public void onControl(String payload,

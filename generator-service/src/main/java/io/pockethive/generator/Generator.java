@@ -33,6 +33,8 @@ public class Generator {
   private final AtomicLong counter = new AtomicLong();
   private final String instanceId;
   private volatile boolean enabled = true;
+  private static final long STATUS_INTERVAL_MS = 5000L;
+  private volatile long lastStatusTs = System.currentTimeMillis();
 
   public Generator(RabbitTemplate rabbit,
                    @Qualifier("instanceId") String instanceId) {
@@ -53,9 +55,12 @@ public class Generator {
     }
   }
 
-  @Scheduled(fixedRate = 5000)
+  @Scheduled(fixedRate = STATUS_INTERVAL_MS)
   public void status() {
-    long tps = counter.getAndSet(0);
+    long now = System.currentTimeMillis();
+    long elapsed = now - lastStatusTs;
+    lastStatusTs = now;
+    long tps = elapsed > 0 ? counter.getAndSet(0) * 1000 / elapsed : 0;
     sendStatusDelta(tps);
   }
 
