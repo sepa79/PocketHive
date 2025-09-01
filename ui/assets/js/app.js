@@ -170,8 +170,9 @@ import { initNectarMenu } from './menus/nectar.js';
                   const inst = obj.instance || '–';
                   const ev = obj.event || 'status';
                   const kind = obj.kind || (typeof tpsVal!=='undefined' ? 'status-delta' : 'status');
-                  const qin = obj.inQueue ? 1 : 0;
-                  const qout = Array.isArray(obj.publishes) ? obj.publishes.length : 0;
+                  const queues = obj.queues || {};
+                  const qin = Array.isArray(queues.in) ? queues.in.length : (obj.inQueue ? 1 : 0);
+                  const qout = Array.isArray(queues.out) ? queues.out.length : (Array.isArray(obj.publishes) ? obj.publishes.length : 0);
                   appendSys(`[BUZZ] RECV ${ev}/${kind} role=${role} inst=${inst} tps=${typeof tpsVal==='number'?tpsVal:'–'} in=${qin} out=${qout}`);
                 }catch{}
                 hive.redrawHive();
