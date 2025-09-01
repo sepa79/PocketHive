@@ -43,6 +43,41 @@ import { initNectarMenu } from './menus/nectar.js';
   let connected = false;
 
   const { appendLog, appendSys } = initBuzzMenu({ getClient: () => client, isConnected: () => connected });
+  window.phAppendSys = appendSys;
+  window.phAppendLog = appendLog;
+  const existingClient = window.phClient;
+  Object.defineProperty(window, 'phClient', {
+    get() { return client; },
+    set(value) {
+      client = value;
+      if (value && typeof value.publish === 'function') {
+        const origPublish = value.publish.bind(value);
+        value.publish = (params) => {
+          try {
+            origPublish(params);
+            const dest = (params && params.destination) || '';
+            const rk = dest.replace('/exchange/ph.control/', '');
+            let bodyStr = params && typeof params.body === 'string' ? params.body : '';
+            let payloadType = '';
+            if (bodyStr) {
+              try {
+                const obj = JSON.parse(bodyStr);
+                payloadType = obj.type || '';
+                bodyStr = JSON.stringify(obj, null, 2);
+              } catch {
+                /* body is not JSON; leave as is */
+              }
+            }
+            appendSys(`[BUZZ] SEND ${rk}${payloadType ? ` payload=${payloadType}` : ''}${bodyStr ? `\n${bodyStr}` : ''}`);
+          } catch (e) {
+            appendSys('Publish error: ' + (e && e.message ? e.message : String(e)));
+          }
+        };
+      }
+    },
+    configurable: true,
+  });
+  if (existingClient) window.phClient = existingClient;
   const hive = initHiveMenu();
   const nectar = initNectarMenu(appState);
 
@@ -105,7 +140,7 @@ import { initNectarMenu } from './menus/nectar.js';
   }
 
   startHealthPing({ appendSys, setUiStatus, demo: DEMO });
-  setupBroadcast(client, appendSys, () => connected);
+  setupBroadcast(() => client, appendSys, () => connected);
   initMetricSelector(appState, nectar.updateMetricView);
   initConnectionDropdown();
 
@@ -163,44 +198,45 @@ import { initNectarMenu } from './menus/nectar.js';
           client.subscribe(`/exchange/ph.control/${d}`, (message) => {
             const body = message.body || '';
             const dest = message.headers.destination || '';
-            try{
-              const obj = JSON.parse(body);
-              if(dest.includes('/ev.metric.')){
+            const rk = dest.replace('/exchange/ph.control/', '');
+            let summary = '';
+            let obj = null;
+            try { obj = JSON.parse(body); } catch {}
+            if (dest.includes('/ev.metric.')) {
+              if (obj) {
                 const m = dest.match(/\/ev\.metric\.([^/]+)/);
                 const metricName = (obj.metric || obj.name || (m && m[1]) || '').toLowerCase();
                 const val = obj.value ?? (obj.data && obj.data.value) ?? obj.v;
-                if(typeof val === 'number'){
-                  if(metricName==='latency' || metricName==='end_to_end_latency' || metricName==='e2e') nectar.addPoint('latency', val);
-                  if(metricName==='hops' || metricName==='hop' || metricName==='hopcount') nectar.addPoint('hops', val);
+                summary = `${metricName}${typeof val === 'number' ? '=' + val : ''}`;
+                if (typeof val === 'number') {
+                  if (metricName === 'latency' || metricName === 'end_to_end_latency' || metricName === 'e2e') nectar.addPoint('latency', val);
+                  if (metricName === 'hops' || metricName === 'hop' || metricName === 'hopcount') nectar.addPoint('hops', val);
                 }
-              } else if(obj){
-                const svc = obj.role || obj.name || obj.service;
-                if(!svc) return;
+              } else {
+                summary = body.length > 80 ? body.slice(0, 77) + '…' : body;
+              }
+            } else if (obj) {
+              const svc = obj.role || obj.name || obj.service;
+              const ev = obj.event || obj.type || obj.kind || 'status';
+              const inst = obj.instance || '–';
+              summary = `${ev}${svc ? ` role=${svc}` : ''}${inst ? ` inst=${inst}` : ''}`;
+              if (svc) {
                 const node = hive.ensureNode(svc);
-                const tpsVal = (obj && obj.data && typeof obj.data.tps==='number') ? obj.data.tps : (typeof obj.tps==='number' ? obj.tps : undefined);
-                if(node){ node.last = Date.now(); if(typeof tpsVal==='number') node.tps = tpsVal; }
+                const tpsVal = (obj && obj.data && typeof obj.data.tps === 'number') ? obj.data.tps : (typeof obj.tps === 'number' ? obj.tps : undefined);
+                if (node) { node.last = Date.now(); if (typeof tpsVal === 'number') node.tps = tpsVal; }
                 const changed = hive.updateQueues(svc, obj);
-                if(changed) hive.rebuildEdgesFromQueues();
-                try{
-                  const role = svc;
-                  const inst = obj.instance || '–';
-                  const ev = obj.event || 'status';
-                  const kind = obj.kind || (typeof tpsVal!=='undefined' ? 'status-delta' : 'status');
-                  const queues = obj.queues || {};
-                  const qin = Array.isArray(queues.in) ? queues.in.length : (obj.inQueue ? 1 : 0);
-                  const qout = Array.isArray(queues.out) ? queues.out.length : (Array.isArray(obj.publishes) ? obj.publishes.length : 0);
-                  appendSys(`[BUZZ] RECV ${ev}/${kind} role=${role} inst=${inst} tps=${typeof tpsVal==='number'?tpsVal:'–'} in=${qin} out=${qout}`);
-                }catch{}
+                if (changed) hive.rebuildEdgesFromQueues();
                 hive.redrawHive();
-                if(typeof tpsVal !== 'undefined'){
+                if (typeof tpsVal !== 'undefined') {
                   nectar.updateTps(svc, tpsVal);
                   nectar.addPoint(svc, tpsVal);
                 }
               }
-              if(LOG_EVENTS_RAW) appendLog(`EVENT RAW ${dest} ${body}`);
-            } catch(e){
-              if(LOG_EVENTS_RAW) appendLog(`EVENT RAW ${dest} ${body}`);
+            } else {
+              summary = body.length > 80 ? body.slice(0, 77) + '…' : body;
             }
+            appendSys(`[BUZZ] RECV ${rk}${summary ? ` ${summary}` : ''}`);
+            if (LOG_EVENTS_RAW) appendLog(`EVENT RAW ${dest} ${body}`);
           }, { ack:'auto' });
           appendSys(`[BUZZ] SUB ${d}`);
         }catch(e){ appendSys('Subscribe error: ' + (e && e.message ? e.message : String(e))); }

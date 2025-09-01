@@ -109,11 +109,24 @@ Manual checks:
 
 - Backgrounds: selector for Bees / Network / Old; only the active background renders (others paused to save CPU).
 - Event Log: shows application events/messages from STOMP subscriptions.
+- Buzz panel: logs STOMP traffic with separate OUT and IN views:
+  - **OUT** logs every `publish` with the destination routing key and a pretty-printed JSON body so the full payload is visible.
+  - **IN** records each message received from subscriptions, summarising `event`, `role`, and `instance` fields (or truncating the body) to keep lines readable.
 - System Logs: shows system and user actions:
   - Connect/Disconnect clicks, edits of URL/username/password (password length only)
   - WebSocket lifecycle (connecting URL, CONNECTED, subscriptions, errors, close)
   - UI health transitions based on `/healthz`
 - HAL eyes: status indicators for UI and WS (green slow pulse = healthy/connected; blue modem pulse = connecting; red fast pulse = failed/closed/idle).
+
+## UI Controls
+
+- **View tabs** — switch between Hive, Buzz and Nectar panels.
+- **Menu (☰)** — links to README, Buzz bindings, changelog and API docs.
+- **WebSocket eye** — click to connect or disconnect from RabbitMQ.
+- **Monolith button** — broadcasts a global `status-request` signal; the publish shows in the OUT log.
+- **Buzz view** — Event Log and Topic Sniffer tabs with line limits and Subscribe/Unsubscribe controls; System Logs provide OUT/IN/Other filters.
+- **Hive view** — holds a duration input and a Clear & Restart button for the graph.
+- **Nectar view** — metric dropdown (TPS, latency, hops) and points input to adjust chart history.
 
 ## Troubleshooting
 
