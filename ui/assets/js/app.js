@@ -89,7 +89,7 @@ import { initNectarMenu } from './menus/nectar.js';
   }
 
   startHealthPing({ appendSys, setUiStatus, demo: DEMO });
-  setupBroadcast(client, appendSys, () => connected);
+  setupBroadcast(() => client, appendSys, () => connected);
   initMetricSelector(appState, nectar.updateMetricView);
   initConnectionDropdown();
 
