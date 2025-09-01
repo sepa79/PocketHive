@@ -1,13 +1,17 @@
-import { setupCommonInfo, applyCommonStatus } from './common.js';
+import { renderCommonPanel, applyCommonStatus } from './common.js';
 
 export function renderPostprocessorPanel(containerEl, instanceId, initial){
   const client = window.phClient;
-  containerEl.innerHTML = `\n    <div class="card" data-role="postprocessor">\n      <h3>PostProcessor ${instanceId}</h3>\n      <div class="info"></div>\n      <div>Hop Latency: <span id="hop">0</span> ms</div>\n      <div>Total Latency: <span id="total">0</span> ms</div>\n      <div>Errors: <span id="err">0</span></div>\n      <button id="reset">Reset</button>\n    </div>`;
+  const extra = `
+      <div>Hop Latency: <span id="hop">0</span> ms</div>
+      <div>Total Latency: <span id="total">0</span> ms</div>
+      <div>Errors: <span id="err">0</span></div>
+      <button id="reset">Reset</button>`;
+  const common = renderCommonPanel(containerEl, 'postprocessor', instanceId, extra);
   const hopEl = containerEl.querySelector('#hop');
   const totalEl = containerEl.querySelector('#total');
   const errEl = containerEl.querySelector('#err');
   const resetBtn = containerEl.querySelector('#reset');
-  const common = setupCommonInfo(containerEl.querySelector('.info'));
   if(resetBtn){
     resetBtn.addEventListener('click', ()=>{
       const payload={type:'reset',role:'postprocessor',instance:instanceId};

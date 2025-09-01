@@ -1,13 +1,16 @@
-import { setupCommonInfo, applyCommonStatus } from './common.js';
+import { renderCommonPanel, applyCommonStatus } from './common.js';
 
 export function renderProcessorPanel(containerEl, instanceId, initial){
   const client = window.phClient;
-  containerEl.innerHTML = `\n    <div class="card" data-role="processor">\n      <h3>Processor ${instanceId}</h3>\n      <div class="info"></div>\n      <label>Workers <input id="workers" type="number" min="1" value="1"></label>\n      <label>Mode <select id="mode"><option value="simulation">Simulation</option><option value="real">Real</option></select></label>\n      <div>TPS: <span id="tps">0</span> Errors: <span id="err">0</span></div>\n    </div>`;
+  const extra = `
+      <label>Workers <input id="workers" type="number" min="1" value="1"></label>
+      <label>Mode <select id="mode"><option value="simulation">Simulation</option><option value="real">Real</option></select></label>
+      <div>TPS: <span id="tps">0</span> Errors: <span id="err">0</span></div>`;
+  const common = renderCommonPanel(containerEl, 'processor', instanceId, extra);
   const workers = containerEl.querySelector('#workers');
   const mode = containerEl.querySelector('#mode');
   const tpsEl = containerEl.querySelector('#tps');
   const errEl = containerEl.querySelector('#err');
-  const common = setupCommonInfo(containerEl.querySelector('.info'));
   function sendConfig(){
     const data={workers:workers?Number(workers.value):1, mode:mode?mode.value:''};
     const payload={type:'config-update',role:'processor',instance:instanceId,data};

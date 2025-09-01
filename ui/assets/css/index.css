@@ -135,3 +135,11 @@
       font-weight:600;
       color:#fff;
     }
+    .info .block-title{
+      font-size:10px;
+      color:#A9B2C3;
+      text-transform:uppercase;
+      letter-spacing:0.05em;
+      margin:8px 0 4px;
+    }
+    .custom{ margin-top:12px; }

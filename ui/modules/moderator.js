@@ -1,13 +1,19 @@
-import { setupCommonInfo, applyCommonStatus } from './common.js';
+import { renderCommonPanel, applyCommonStatus } from './common.js';
 
 export function renderModeratorPanel(containerEl, instanceId, initial){
   const client = window.phClient;
-  containerEl.innerHTML = `\n    <div class="card" data-role="moderator">\n      <h3>Moderator ${instanceId}</h3>\n      <div class="info"></div>\n      <form class="controls">\n        <label><input type="checkbox" id="rules"> Enable rules</label>\n        <label>Filter <input id="filter" type="text"></label>\n        <label>Limit <input id="limit" type="number" value="0"></label>\n      </form>\n      <div>TPS: <span id="tps">0</span></div>\n    </div>`;
+  const extra = `
+      <form class="controls">
+        <label><input type="checkbox" id="rules"> Enable rules</label>
+        <label>Filter <input id="filter" type="text"></label>
+        <label>Limit <input id="limit" type="number" value="0"></label>
+      </form>
+      <div>TPS: <span id="tps">0</span></div>`;
+  const common = renderCommonPanel(containerEl, 'moderator', instanceId, extra);
   const rules = containerEl.querySelector('#rules');
   const filter = containerEl.querySelector('#filter');
   const limit = containerEl.querySelector('#limit');
   const tpsEl = containerEl.querySelector('#tps');
-  const common = setupCommonInfo(containerEl.querySelector('.info'));
   function sendConfig(){
     const data={rules:rules&&rules.checked, filter:filter?filter.value:'', limit:limit?Number(limit.value):0};
     const payload={type:'config-update',role:'moderator',instance:instanceId,data};
