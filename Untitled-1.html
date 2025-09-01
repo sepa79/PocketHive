@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Animated Connection Icon (Pure CSS + tiny JS for Morse)</title>
+<style>
+  :root {
+    --bg: #f7f7f9;
+    --connected: #22c55e;  /* vivid green */
+    --connecting: #3b82f6; /* blue-ish */
+    --offline: #ef4444;    /* red */
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    background: var(--bg);
+    font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+  }
+
+  .wrap { display: grid; gap: 20px; justify-items: center; }
+
+  .shape {
+    --color: #111; /* default */
+    --width: 360px;
+    --height: 360px;
+
+    --apex-y: 180px;
+    --tri-half: 63px; /* 30% reduction from 90px */
+    --tri-height: 150px;
+    --semi-d: 200px; /* diameter of the semicircle */
+
+    position: relative;
+    width: var(--width);
+    height: var(--height);
+    color: var(--color);
+  }
+
+  /* STATES (toggle by class on .shape) */
+  .shape.status-connecting { --color: var(--connecting); }
+  .shape.status-connected  { --color: var(--connected); }
+  .shape.status-offline    { --color: var(--offline); }
+
+  /* Base geometry */
+  .semicircle {
+    position: absolute;
+    left: 40%; /* moved 10% to the left */
+    top: calc(var(--apex-y) - calc(var(--semi-d) / 4));
+    transform: translate(-50%, 0) rotate(45deg);
+    transform-origin: center bottom;
+    width: var(--semi-d);
+    height: calc(var(--semi-d) / 2);
+    background: #111; /* fully visible */
+    border-bottom-left-radius: var(--semi-d) var(--semi-d);
+    border-bottom-right-radius: var(--semi-d) var(--semi-d);
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
+    z-index: 0;
+  }
+
+  /* Highlight layer */
+  .highlight {
+    position: absolute;
+    left: 40%;
+    top: calc(var(--apex-y) - calc(var(--semi-d) / 4));
+    transform: translate(-50%, 0) rotate(45deg);
+    transform-origin: center bottom;
+    width: var(--semi-d);
+    height: calc(var(--semi-d) / 2);
+    border-bottom-left-radius: var(--semi-d) var(--semi-d);
+    border-bottom-right-radius: var(--semi-d) var(--semi-d);
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
+    box-shadow: 0 0 25px rgba(255,255,255,0.6);
+    z-index: 1;
+    pointer-events: none;
+  }
+
+  .semicircle .antenna {
+    position: absolute;
+    left: 50%;
+    top: -50%; /* antenna outside the semicircle */
+    width: 2px;
+    height: calc(var(--semi-d) / 2);
+    background: currentColor;
+    transform: translate(-50%, 0) rotate(0deg);
+    transform-origin: bottom center;
+    pointer-events: none;
+    z-index: 2; /* antenna above highlight */
+  }
+
+  /* ===== Tip & signal rings as real elements for JS-controlled Morse ===== */
+  .semicircle .antenna .tip {
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translate(-50%, 0);
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: currentColor;
+    filter: drop-shadow(0 0 0 currentColor);
+    transition: transform 120ms ease, filter 120ms ease, opacity 120ms ease;
+    opacity: 0.9;
+  }
+  .semicircle .antenna .ring {
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    width: 28px; height: 28px;
+    border: 3px solid currentColor;
+    border-radius: 50%;
+    transform: translate(-50%, 0) scale(0.3);
+    opacity: 0;
+  }
+
+  /* Triangle */
+  .triangle {
+    position: absolute;
+    left: 50%;
+    top: var(--apex-y);
+    transform: translateX(-50%);
+    width: 0;
+    height: 0;
+    border-left: var(--tri-half) solid transparent;
+    border-right: var(--tri-half) solid transparent;
+    border-bottom: var(--tri-height) solid #111; /* fully visible */
+  }
+
+  /* ========== STATE ANIMATIONS ========== */
+  .shape.status-connecting .antenna .ring.r1 { animation: pingStrong 900ms ease-out infinite; }
+  .shape.status-connecting .antenna .ring.r2 { animation: pingStrong 900ms ease-out 300ms infinite; }
+  .shape.status-connecting .antenna .tip.on {
+    transform: translate(-50%, 0) scale(1.35);
+    filter: drop-shadow(0 0 10px currentColor) drop-shadow(0 0 16px currentColor);
+    opacity: 1;
+  }
+
+  .shape.status-connected .antenna .ring.r1 { animation: pingSoft 1500ms ease-out infinite; }
+  .shape.status-connected .antenna .ring.r2 { animation: pingSoft 1500ms ease-out 750ms infinite; }
+  .shape.status-connected .antenna .tip { animation: tipBreath 1600ms ease-in-out infinite; }
+
+  .shape.status-offline .antenna .ring { display: none; }
+  .shape.status-offline .semicircle, .shape.status-offline .triangle { opacity: 1; }
+  .shape.status-offline .antenna .tip { animation: redGlow 1000ms ease-in-out infinite; }
+
+  @keyframes pingStrong {
+    0%   { transform: translate(-50%, 0) scale(0.35); opacity: 0.0; }
+    10%  { opacity: 0.9; }
+    70%  { transform: translate(-50%, 0) scale(1.15); opacity: 0.0; }
+    100% { transform: translate(-50%, 0) scale(1.2); opacity: 0; }
+  }
+  @keyframes pingSoft {
+    0%   { transform: translate(-50%, 0) scale(0.4); opacity: 0.0; }
+    20%  { opacity: 0.5; }
+    80%  { transform: translate(-50%, 0) scale(1.05); opacity: 0.0; }
+    100% { transform: translate(-50%, 0) scale(1.1); opacity: 0; }
+  }
+  @keyframes tipBreath {
+    0%, 100% { transform: translate(-50%, 0) scale(1.0); filter: drop-shadow(0 0 6px currentColor); }
+    50% { transform: translate(-50%, 0) scale(1.12); filter: drop-shadow(0 0 10px currentColor); }
+  }
+  @keyframes redGlow {
+    0%, 100% { transform: translate(-50%, 0) scale(0.95); filter: drop-shadow(0 0 6px currentColor); }
+    50% { transform: translate(-50%, 0) scale(1.15); filter: drop-shadow(0 0 14px currentColor); }
+  }
+
+  .controls { display: flex; gap: 8px; }
+  .controls button {
+    border: 1px solid #ddd; background: white; padding: 6px 10px; border-radius: 8px; cursor: pointer;
+  }
+  .controls button[data-state="connecting"] { color: var(--connecting); border-color: currentColor; }
+  .controls button[data-state="connected"]  { color: var(--connected);  border-color: currentColor; }
+  .controls button[data-state="offline"]    { color: var(--offline);    border-color: currentColor; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div id="icon" class="shape status-connecting" aria-live="polite" aria-label="connection status: connecting">
+      <div class="semicircle" aria-hidden="true"></div>
+      <div class="highlight" aria-hidden="true"></div>
+      <div class="semicircle antenna-wrapper" aria-hidden="true">
+        <div class="antenna" aria-hidden="true">
+          <div class="tip" aria-hidden="true"></div>
+          <span class="ring r1" aria-hidden="true"></span>
+          <span class="ring r2" aria-hidden="true"></span>
+        </div>
+      </div>
+      <div class="triangle" aria-hidden="true"></div>
+    </div>
+
+    <div class="controls" aria-hidden="true">
+      <button type="button" data-state="connecting">Connecting</button>
+      <button type="button" data-state="connected">Connected</button>
+      <button type="button" data-state="offline">No connection</button>
+    </div>
+  </div>
+
+  <script>
+    const icon = document.getElementById('icon');
+    const states = ['status-connecting', 'status-connected', 'status-offline'];
+    document.querySelectorAll('.controls [data-state]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        states.forEach(s => icon.classList.remove(s));
+        const next = 'status-' + btn.dataset.state;
+        icon.classList.add(next);
+        icon.setAttribute('aria-label', 'connection status: ' + btn.textContent.toLowerCase());
+      });
+    });
+
+    const DOT = 1, DASH = 3, GAP = 1, CHAR_GAP = 3;
+    const stomp = [DOT, GAP, DOT, GAP, DOT, CHAR_GAP, DASH, CHAR_GAP, DASH, GAP, DASH, GAP, DASH, CHAR_GAP, DASH, GAP, DASH, CHAR_GAP, DOT, GAP, DASH, GAP, DASH, GAP, DOT];
+    const unitMs = 140;
+    let morseTimer = null;
+
+    function startMorse() {
+      stopMorse();
+      const tip = icon.querySelector('.antenna .tip');
+      if (!tip) return;
+      let i = 0;
+      function step() {
+        const isOn = (i % 2 === 0);
+        const duration = stomp[i] || CHAR_GAP;
+        tip.classList.toggle('on', isOn);
+        morseTimer = setTimeout(() => {
+          i = (i + 1) % stomp.length;
+          step();
+        }, duration * unitMs);
+      }
+      step();
+    }
+    function stopMorse() {
+      if (morseTimer) clearTimeout(morseTimer);
+      morseTimer = null;
+      const tip = icon.querySelector('.antenna .tip');
+      if (tip) tip.classList.remove('on');
+    }
+
+    const observer = new MutationObserver(() => {
+      if (icon.classList.contains('status-connecting')) startMorse();
+      else stopMorse();
+    });
+    observer.observe(icon, { attributes: true, attributeFilter: ['class'] });
+    if (icon.classList.contains('status-connecting')) startMorse();
+  </script>
+</body>
+</html>
