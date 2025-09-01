@@ -19,8 +19,11 @@ import io.pockethive.observability.ObservabilityContext;
 import io.pockethive.observability.ObservabilityContextUtil;
 import io.pockethive.observability.StatusEnvelopeBuilder;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -32,14 +35,17 @@ public class Generator {
   private final RabbitTemplate rabbit;
   private final AtomicLong counter = new AtomicLong();
   private final String instanceId;
+  private final MessageConfig messageConfig;
   private volatile boolean enabled = true;
   private static final long STATUS_INTERVAL_MS = 5000L;
   private volatile long lastStatusTs = System.currentTimeMillis();
 
   public Generator(RabbitTemplate rabbit,
-                   @Qualifier("instanceId") String instanceId) {
+                   @Qualifier("instanceId") String instanceId,
+                   MessageConfig messageConfig) {
     this.rabbit = rabbit;
     this.instanceId = instanceId;
+    this.messageConfig = messageConfig;
     // Emit full snapshot on startup
     try{ sendStatusFull(0); } catch(Exception ignore){}
   }
@@ -95,15 +101,19 @@ public class Generator {
 
   private void sendOnce(){
     String id = UUID.randomUUID().toString();
-    String body = """
-      {
-        \"id\":\"%s\",
-        \"path\":\"/api/test\",
-        \"method\":\"POST\",
-        \"body\":\"hello-world\",
-        \"createdAt\":\"%s\"
-      }
-      """.formatted(id, Instant.now().toString());
+    Map<String,Object> payload = new LinkedHashMap<>();
+    payload.put("id", id);
+    payload.put("path", messageConfig.getPath());
+    payload.put("method", messageConfig.getMethod());
+    payload.put("headers", messageConfig.getHeaders());
+    payload.put("body", messageConfig.getBody());
+    payload.put("createdAt", Instant.now().toString());
+    String body;
+    try{
+      body = new ObjectMapper().writeValueAsString(payload);
+    }catch(Exception e){
+      body = "{}";
+    }
     Message msg = MessageBuilder
         .withBody(body.getBytes(StandardCharsets.UTF_8))
         .setContentType(MessageProperties.CONTENT_TYPE_JSON)

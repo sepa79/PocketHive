@@ -15,3 +15,5 @@ logging:
 ph:
   genQueue: ${PH_GEN_QUEUE:ph.gen}
   modQueue: ${PH_MOD_QUEUE:ph.mod}
+  processor:
+    baseUrl: ${PH_BASE_URL:http://wiremock}

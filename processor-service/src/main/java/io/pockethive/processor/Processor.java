@@ -27,14 +27,18 @@ public class Processor {
   private final RabbitTemplate rabbit;
   private final AtomicLong counter = new AtomicLong();
   private final String instanceId;
+  private final String baseUrl;
   private volatile boolean enabled = true;
   private static final long STATUS_INTERVAL_MS = 5000L;
   private volatile long lastStatusTs = System.currentTimeMillis();
 
   public Processor(RabbitTemplate rabbit,
-                   @Qualifier("instanceId") String instanceId){
+                   @Qualifier("instanceId") String instanceId,
+                   @Qualifier("baseUrl") String baseUrl){
     this.rabbit = rabbit;
     this.instanceId = instanceId;
+    this.baseUrl = baseUrl;
+    log.info("Base URL: {}", baseUrl);
     try{ sendStatusFull(0); } catch(Exception ignore){}
   }
 
