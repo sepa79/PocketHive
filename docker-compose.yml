@@ -131,13 +131,13 @@ services:
       - ./loki/config.yml:/etc/loki/config.yml:ro
 
   wiremock:
-    image: wiremock/wiremock:3.9.1
+    image: wiremock/wiremock:3.13.1
     command: ["--disable-journal"]
     ports:
       - "8080:8080"
     volumes:
-      - ./wiremock/mappings:/home/wiremock/mappings:ro
-      - ./wiremock/__files:/home/wiremock/__files:ro
+      - ./wiremock/mappings:/home/wiremock/mappings
+      - ./wiremock/__files:/home/wiremock/__files
 
   promtail:
     image: grafana/promtail:2.9.1

@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.2] - 2025-09-01
+Timestamp: 2025-09-01T21:54:24Z
+
+- Docker: upgrade WireMock image and relax volume permissions so the container starts without MissingResourceException.
+
 ## [0.5.1] - 2025-09-01
 Timestamp: 2025-09-01T21:36:58Z
 
