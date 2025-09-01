@@ -9,6 +9,12 @@ Timestamp: 2025-09-01T23:35:26Z
 - Processor: expose configurable base URL (default `http://wiremock`) for downstream calls.
 - UI: add dedicated sections for message template and base URL, requiring explicit confirmation for updates.
 
+## [0.5.4] - 2025-09-01
+Timestamp: 2025-09-01T22:21:33Z
+
+- UI: ensure Buzz OUT panel logs broadcast and UI control messages by fetching the STOMP client on demand.
+- Docs: expand README and requirements to describe Buzz IN/OUT logs and UI controls.
+
 ## [0.5.3] - 2025-09-01
 Timestamp: 2025-09-01T22:06:01Z
 
