@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 ## [0.5.1] - 2025-09-01
 Timestamp: 2025-09-01T21:36:58Z
 
-- UI: add top-menu links to RabbitMQ, Prometheus, Grafana, and WireMock, pre-filled with default credentials where applicable.
+- UI: add top-bar icon links to RabbitMQ, Prometheus, Grafana, and WireMock, pre-filled with default credentials where applicable.
 
 ## [0.5.0] - 2025-09-01
 Timestamp: 2025-09-01T21:21:35Z
