@@ -6,6 +6,7 @@ All notable changes to this project will be documented in this file.
 Timestamp: 2025-09-01T22:21:33Z
 
 - UI: ensure Buzz OUT panel logs broadcast and UI control messages by fetching the STOMP client on demand.
+- Docs: expand README and requirements to describe Buzz IN/OUT logs and UI controls.
 
 ## [0.5.0] - 2025-09-01
 Timestamp: 2025-09-01T21:21:35Z

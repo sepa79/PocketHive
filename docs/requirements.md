@@ -14,9 +14,11 @@ PocketHive is a portable transaction swarm: a set of small, composable services 
 
 ### UI
 - Connects to RabbitMQ using Web-STOMP and provides Connect/Disconnect controls.
-- Logs STOMP traffic in the Buzz panel with pretty-printed outgoing messages and trimmed incoming entries.
+- Logs STOMP traffic in the Buzz panel with separate OUT and IN views:
+  - OUT lists each publish with the routing key and a pretty-printed JSON body.
+  - IN captures all subscription messages and shows a concise summary of the payload.
 - Offers Start/Stop generator control and a broadcast button that emits a global `status-request`.
-- Displays event logs, system logs, Hive visualization, metrics dashboards, and health indicators.
+- Provides view tabs, log filters, metric selectors, and graph controls for user interaction.
 
 ### Generator Service
 - Produces HTTP-like transaction messages at a configurable rate per second.
