@@ -7,6 +7,22 @@ import { initBuzzMenu } from './menus/buzz.js';
 import { initHiveMenu } from './menus/hive.js';
 import { initNectarMenu } from './menus/nectar.js';
 
+(function initServiceLinks() {
+  try {
+    const host = window.location.hostname;
+    const services = {
+      'link-rabbitmq': `http://guest:guest@${host}:15672/`,
+      'link-prometheus': `http://${host}:9090/`,
+      'link-grafana': `http://admin:admin@${host}:3000/`,
+      'link-wiremock': `http://${host}:8080/__admin/`
+    };
+    Object.entries(services).forEach(([id, url]) => {
+      const el = document.getElementById(id);
+      if (el) el.href = url;
+    });
+  } catch {}
+})();
+
 // Minimal STOMP over WebSocket client for RabbitMQ Web-STOMP
 (function(){
   const PH_CONN_KEY = 'pockethive.conn';
