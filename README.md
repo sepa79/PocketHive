@@ -84,6 +84,12 @@ docker compose up -d --build
 - Grafana: http://localhost:3000 (admin / admin) with Prometheus and Loki datasources and a "Loki Logs" dashboard for viewing application logs
 - Prometheus scrapes metrics from `postprocessor` at `/actuator/prometheus`.
 
+## Service Configuration
+
+- **Generator** builds HTTP requests from `ph.gen.message.*` settings. Defaults send a `POST /api/test` with body `hello-world` and no headers.
+- **Processor** reads `ph.proc.base-url` to determine the downstream base URL, defaulting to `http://wiremock`.
+- The UI exposes dedicated sections for both settings, and changes take effect only after pressing **Confirm Changes**.
+
 ## WebSocket Proxy (UI ←→ RabbitMQ)
 
 - The UI does not connect directly to `localhost:15674`. Instead, nginx proxies `/ws` → `rabbitmq:15674/ws`.

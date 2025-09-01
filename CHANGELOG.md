@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.4] - 2025-09-01
+Timestamp: 2025-09-01T23:29:03Z
+
+- Generator: construct HTTP messages from configuration with Hello World defaults for path, method, headers, and body.
+- Processor: expose configurable base URL (default `http://wiremock`) for downstream calls.
+- UI: add dedicated sections for message template and base URL, requiring explicit confirmation for updates.
+
 ## [0.5.3] - 2025-09-01
 Timestamp: 2025-09-01T22:06:01Z
 
