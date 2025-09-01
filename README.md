@@ -143,6 +143,10 @@ docker compose up -d --build ui
 
 - Services use environment `RABBITMQ_HOST=rabbitmq` inside the Compose network.
 
+- Node tooling (linting/tests) lives in `package.json` at the repo root:
+  - `npm install` installs dev dependencies.
+  - `npm run lint` checks `ui/assets/js` with ESLint.
+  - `npm test` executes Vitest.
 
 ---
 

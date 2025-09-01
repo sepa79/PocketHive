@@ -1,0 +1,16 @@
+{
+  "name": "pockethive",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Development tooling for PocketHive",
+  "scripts": {
+    "build": "echo \"no build step\"",
+    "lint": "eslint ui/assets/js",
+    "test": "vitest run --passWithNoTests"
+  },
+  "devDependencies": {
+    "eslint": "^9.34.0",
+    "vitest": "^3.2.4"
+  },
+  "license": "MIT"
+}
