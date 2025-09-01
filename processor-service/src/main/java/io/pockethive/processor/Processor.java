@@ -94,14 +94,19 @@ public class Processor {
 
   private void sendStatusDelta(long tps){
     String role = "processor";
+    String controlQueue = Topology.CONTROL_QUEUE + "." + role + "." + instanceId;
     String rk = "ev.status-delta."+role+"."+instanceId;
     String payload = new StatusEnvelopeBuilder()
         .kind("status-delta")
         .role(role)
         .instance(instanceId)
         .traffic(Topology.EXCHANGE)
-        .inQueue(Topology.MOD_QUEUE, Topology.MOD_QUEUE)
-        .publishes(Topology.FINAL_QUEUE)
+        .workIn(Topology.MOD_QUEUE)
+        .workRoutes(Topology.MOD_QUEUE)
+        .workOut(Topology.FINAL_QUEUE)
+        .controlIn(controlQueue)
+        .controlRoutes("sig.#", "sig.#."+role, "sig.#."+role+"."+instanceId)
+        .controlOut(rk)
         .tps(tps)
         .enabled(enabled)
         .toJson();
@@ -109,14 +114,19 @@ public class Processor {
   }
   private void sendStatusFull(long tps){
     String role = "processor";
+    String controlQueue = Topology.CONTROL_QUEUE + "." + role + "." + instanceId;
     String rk = "ev.status-full."+role+"."+instanceId;
     String payload = new StatusEnvelopeBuilder()
         .kind("status-full")
         .role(role)
         .instance(instanceId)
         .traffic(Topology.EXCHANGE)
-        .inQueue(Topology.MOD_QUEUE, Topology.MOD_QUEUE)
-        .publishes(Topology.FINAL_QUEUE)
+        .workIn(Topology.MOD_QUEUE)
+        .workRoutes(Topology.MOD_QUEUE)
+        .workOut(Topology.FINAL_QUEUE)
+        .controlIn(controlQueue)
+        .controlRoutes("sig.#", "sig.#."+role, "sig.#."+role+"."+instanceId)
+        .controlOut(rk)
         .tps(tps)
         .enabled(enabled)
         .toJson();

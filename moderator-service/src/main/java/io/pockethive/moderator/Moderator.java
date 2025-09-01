@@ -87,14 +87,19 @@ public class Moderator {
 
   private void sendStatusDelta(long tps){
     String role = "moderator";
+    String controlQueue = Topology.CONTROL_QUEUE + "." + role + "." + instanceId;
     String rk = "ev.status-delta."+role+"."+instanceId;
     String payload = new StatusEnvelopeBuilder()
         .kind("status-delta")
         .role(role)
         .instance(instanceId)
         .traffic(Topology.EXCHANGE)
-        .inQueue(Topology.GEN_QUEUE, Topology.GEN_QUEUE)
-        .publishes(Topology.MOD_QUEUE)
+        .workIn(Topology.GEN_QUEUE)
+        .workRoutes(Topology.GEN_QUEUE)
+        .workOut(Topology.MOD_QUEUE)
+        .controlIn(controlQueue)
+        .controlRoutes("sig.#", "sig.#."+role, "sig.#."+role+"."+instanceId)
+        .controlOut(rk)
         .tps(tps)
         .enabled(enabled)
         .toJson();
@@ -102,14 +107,19 @@ public class Moderator {
   }
   private void sendStatusFull(long tps){
     String role = "moderator";
+    String controlQueue = Topology.CONTROL_QUEUE + "." + role + "." + instanceId;
     String rk = "ev.status-full."+role+"."+instanceId;
     String payload = new StatusEnvelopeBuilder()
         .kind("status-full")
         .role(role)
         .instance(instanceId)
         .traffic(Topology.EXCHANGE)
-        .inQueue(Topology.GEN_QUEUE, Topology.GEN_QUEUE)
-        .publishes(Topology.MOD_QUEUE)
+        .workIn(Topology.GEN_QUEUE)
+        .workRoutes(Topology.GEN_QUEUE)
+        .workOut(Topology.MOD_QUEUE)
+        .controlIn(controlQueue)
+        .controlRoutes("sig.#", "sig.#."+role, "sig.#."+role+"."+instanceId)
+        .controlOut(rk)
         .tps(tps)
         .enabled(enabled)
         .toJson();

@@ -111,13 +111,18 @@ public class PostProcessor {
 
   private void sendStatusFull(){
     String role = "postprocessor";
+    String controlQueue = Topology.CONTROL_QUEUE + "." + role + "." + instanceId;
     String rk = "ev.status-full."+role+"."+instanceId;
     String payload = new StatusEnvelopeBuilder()
         .kind("status-full")
         .role(role)
         .instance(instanceId)
         .traffic(Topology.EXCHANGE)
-        .inQueue(Topology.FINAL_QUEUE, Topology.FINAL_QUEUE)
+        .workIn(Topology.FINAL_QUEUE)
+        .workRoutes(Topology.FINAL_QUEUE)
+        .controlIn(controlQueue)
+        .controlRoutes("sig.#", "sig.#."+role, "sig.#."+role+"."+instanceId)
+        .controlOut(rk)
         .enabled(enabled)
         .toJson();
     rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, payload);

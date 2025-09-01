@@ -107,7 +107,10 @@
     .info{
       margin-top:8px;
     }
-    .info .status-block,
+    .info .status-block{
+      display:block;
+      margin-bottom:8px;
+    }
     .info .config-block{
       display:grid;
       grid-template-columns: repeat(auto-fit,minmax(120px,1fr));
@@ -120,6 +123,7 @@
       border:1px solid rgba(255,255,255,0.08);
       border-radius:8px;
       padding:6px 8px;
+      width:100%;
     }
     .info .status-item .label,
     .info .config-item .label{
@@ -134,6 +138,7 @@
       font-size:14px;
       font-weight:600;
       color:#fff;
+      overflow-wrap:anywhere;
     }
     .info .block-title{
       font-size:10px;

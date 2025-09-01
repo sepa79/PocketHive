@@ -22,6 +22,9 @@ public class StatusEnvelopeBuilder {
     private final Map<String, Object> data = new LinkedHashMap<>();
     private final Map<String, Object> inQueue = new LinkedHashMap<>();
     private final List<String> publishes = new ArrayList<>();
+    private final Map<String, Object> queues = new LinkedHashMap<>();
+    private final Map<String, Object> work = new LinkedHashMap<>();
+    private final Map<String, Object> control = new LinkedHashMap<>();
 
     public StatusEnvelopeBuilder() {
         root.put("event", "status");
@@ -58,6 +61,45 @@ public class StatusEnvelopeBuilder {
 
     public StatusEnvelopeBuilder traffic(String traffic) {
         root.put("traffic", traffic);
+        return this;
+    }
+
+    private void add(Map<String, Object> target, String key, String... values) {
+        if (values != null && values.length > 0) {
+            List<String> list = (List<String>) target.computeIfAbsent(key, k -> new ArrayList<String>());
+            for (String v : values) {
+                if (v != null && !v.isBlank()) list.add(v);
+            }
+        }
+    }
+
+    public StatusEnvelopeBuilder workIn(String... names) {
+        add(work, "in", names);
+        return this;
+    }
+
+    public StatusEnvelopeBuilder workRoutes(String... rks) {
+        add(work, "routes", rks);
+        return this;
+    }
+
+    public StatusEnvelopeBuilder workOut(String... rks) {
+        add(work, "out", rks);
+        return this;
+    }
+
+    public StatusEnvelopeBuilder controlIn(String... names) {
+        add(control, "in", names);
+        return this;
+    }
+
+    public StatusEnvelopeBuilder controlRoutes(String... rks) {
+        add(control, "routes", rks);
+        return this;
+    }
+
+    public StatusEnvelopeBuilder controlOut(String... rks) {
+        add(control, "out", rks);
         return this;
     }
 
@@ -111,6 +153,9 @@ public class StatusEnvelopeBuilder {
         if (!publishes.isEmpty()) {
             root.put("publishes", publishes);
         }
+        if (!work.isEmpty()) queues.put("work", work);
+        if (!control.isEmpty()) queues.put("control", control);
+        if (!queues.isEmpty()) root.put("queues", queues);
         root.put("data", data.isEmpty() ? Collections.emptyMap() : data);
         try {
             return MAPPER.writeValueAsString(root);
