@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.3] - 2025-09-01
+Timestamp: 2025-09-01T22:06:01Z
+
+- Docker: disable WireMock request journaling for lean performance tests.
+
+## [0.5.2] - 2025-09-01
+Timestamp: 2025-09-01T21:54:24Z
+
+- Docker: upgrade WireMock image and relax volume permissions so the container starts without MissingResourceException.
+
+## [0.5.1] - 2025-09-01
+Timestamp: 2025-09-01T21:36:58Z
+
+- UI: add top-bar icon links to RabbitMQ, Prometheus, Grafana, and WireMock, pre-filled with default credentials where applicable.
+
 ## [0.5.0] - 2025-09-01
 Timestamp: 2025-09-01T21:21:35Z
 
