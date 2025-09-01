@@ -40,10 +40,19 @@ import { initNectarMenu } from './menus/nectar.js';
           try {
             origPublish(params);
             const dest = (params && params.destination) || '';
-            let payloadType = '';
-            try { payloadType = JSON.parse(params.body || '{}').type || ''; } catch {}
             const rk = dest.replace('/exchange/ph.control/', '');
-            appendSys(`[BUZZ] SEND ${rk}${payloadType ? ` payload=${payloadType}` : ''}`);
+            let bodyStr = params && typeof params.body === 'string' ? params.body : '';
+            let payloadType = '';
+            if (bodyStr) {
+              try {
+                const obj = JSON.parse(bodyStr);
+                payloadType = obj.type || '';
+                bodyStr = JSON.stringify(obj, null, 2);
+              } catch {
+                /* body is not JSON; leave as is */
+              }
+            }
+            appendSys(`[BUZZ] SEND ${rk}${payloadType ? ` payload=${payloadType}` : ''}${bodyStr ? `\n${bodyStr}` : ''}`);
           } catch (e) {
             appendSys('Publish error: ' + (e && e.message ? e.message : String(e)));
           }

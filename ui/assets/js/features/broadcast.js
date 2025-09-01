@@ -24,7 +24,6 @@ export function setupBroadcast(getClient, appendSys, isConnected) {
     const dest = '/exchange/ph.control/' + rk;
     try {
       client.publish({ destination: dest, body: JSON.stringify(payload), headers: { 'content-type': 'application/json' } });
-      appendSys(`[BUZZ] SEND ${rk} payload=status-request`);
     } catch (e) {
       appendSys('Broadcast error: ' + (e && e.message ? e.message : String(e)));
     }
