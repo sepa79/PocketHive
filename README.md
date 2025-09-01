@@ -109,6 +109,7 @@ Manual checks:
 
 - Backgrounds: selector for Bees / Network / Old; only the active background renders (others paused to save CPU).
 - Event Log: shows application events/messages from STOMP subscriptions.
+- Buzz panel: logs STOMP traffic with separate OUT (pretty-printed publishes) and IN (trimmed receives) views.
 - System Logs: shows system and user actions:
   - Connect/Disconnect clicks, edits of URL/username/password (password length only)
   - WebSocket lifecycle (connecting URL, CONNECTED, subscriptions, errors, close)
