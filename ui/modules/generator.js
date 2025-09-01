@@ -13,6 +13,8 @@ export function renderGeneratorPanel(containerEl, instanceId, initial){
     const payload = {type:'config-update', role:'generator', instance:instanceId, data};
     const rk = `sig.config-update.generator.${instanceId}`;
     client.publish({destination:`/exchange/ph.control/${rk}`, body: JSON.stringify(payload)});
+    const srPayload = {type:'status-request', role:'generator', instance:instanceId};
+    client.publish({destination:`/exchange/ph.control/sig.status-request.generator.${instanceId}`, body: JSON.stringify(srPayload)});
   }
   rate && rate.addEventListener('input', ()=>{ const v=Number(rate.value); if(rateVal) rateVal.textContent=String(v); sendConfig({ratePerSec:v}); });
   onceBtn && onceBtn.addEventListener('click', ()=> sendConfig({singleRequest:true}));

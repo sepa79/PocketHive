@@ -48,6 +48,9 @@ export function renderCommonPanel(containerEl, role, instanceId, extraHtml = '')
       const payload = {type:'config-update', role, instance:instanceId, data:{enabled}};
       const rk = `sig.config-update.${role}.${instanceId}`;
       client.publish({destination:`/exchange/ph.control/${rk}`, body: JSON.stringify(payload)});
+      const srPayload = {type:'status-request', role, instance:instanceId};
+      const srk = `sig.status-request.${role}.${instanceId}`;
+      client.publish({destination:`/exchange/ph.control/${srk}`, body: JSON.stringify(srPayload)});
     };
     startBtn && startBtn.addEventListener('click', ()=>sendEnabled(true));
     stopBtn && stopBtn.addEventListener('click', ()=>sendEnabled(false));
