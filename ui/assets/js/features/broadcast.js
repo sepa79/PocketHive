@@ -10,10 +10,7 @@ export function setupBroadcast(getClient, appendSys, isConnected) {
   if (!btn) return;
   btn.addEventListener('click', () => {
     const client = getClient();
-    if (!client || !isConnected()) {
-      appendSys('[BUZZ] SEND aborted: not connected');
-      return;
-    }
+    if (!client || !isConnected()) return;
     const payload = {
       type: 'status-request',
       version: '1.0',
