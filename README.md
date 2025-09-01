@@ -72,6 +72,7 @@ docker compose up -d --build
 
 - UI: http://localhost:8088
 - Click "Connect". The UI connects to RabbitMQ via same-origin WebSocket `ws://localhost:8088/ws` using StompJS (same client as the built‑in Generator).
+- The top bar hosts icon links to RabbitMQ, Prometheus, and Grafana. The WireMock button opens a dropdown that fetches the request journal from `/__admin/requests` and lists method, URL, and status.
 
 3) RabbitMQ Management (optional)
 

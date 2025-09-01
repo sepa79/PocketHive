@@ -19,6 +19,7 @@ PocketHive is a portable transaction swarm: a set of small, composable services 
   - IN captures all subscription messages and shows a concise summary of the payload.
 - Offers Start/Stop generator control and a broadcast button that emits a global `status-request`.
 - Provides view tabs, log filters, metric selectors, and graph controls for user interaction.
+- Shows a WireMock request journal via a toolbar dropdown, fetching `/__admin/requests` and listing method, URL, and status.
 
 ### Generator Service
 - Produces HTTP-like transaction messages at a configurable rate per second.

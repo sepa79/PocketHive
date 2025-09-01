@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.5] - 2025-09-01
+Timestamp: 2025-09-01T23:41:12Z
+
+- UI: add dropdown under WireMock icon to view request journal from `/__admin/requests`.
+- Chore: remove unused ESLint directive in Buzz menu.
+
 ## [0.5.4] - 2025-09-01
 Timestamp: 2025-09-01T22:21:33Z
 
