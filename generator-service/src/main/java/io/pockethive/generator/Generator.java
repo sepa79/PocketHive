@@ -20,6 +20,7 @@ import io.pockethive.observability.ObservabilityContextUtil;
 import io.pockethive.observability.StatusEnvelopeBuilder;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.core.type.TypeReference;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.LinkedHashMap;
@@ -91,6 +92,13 @@ public class Generator {
             if(data.has("ratePerSec")) ratePerSec = data.get("ratePerSec").asInt(ratePerSec);
             if(data.has("enabled")) enabled = data.get("enabled").asBoolean(enabled);
             if(data.has("singleRequest") && data.get("singleRequest").asBoolean()) sendOnce();
+            if(data.has("path")) messageConfig.setPath(data.get("path").asText(messageConfig.getPath()));
+            if(data.has("method")) messageConfig.setMethod(data.get("method").asText(messageConfig.getMethod()));
+            if(data.has("body")) messageConfig.setBody(data.get("body").asText(messageConfig.getBody()));
+            if(data.has("headers") && data.get("headers").isObject()){
+              Map<String,String> h = new ObjectMapper().convertValue(data.get("headers"), new TypeReference<Map<String,String>>(){});
+              messageConfig.setHeaders(h);
+            }
           }
         }catch(Exception e){ log.warn("control parse", e); }
       }
@@ -150,6 +158,10 @@ public class Generator {
         .tps(tps)
         .enabled(enabled)
         .data("ratePerSec", ratePerSec)
+        .data("path", messageConfig.getPath())
+        .data("method", messageConfig.getMethod())
+        .data("body", messageConfig.getBody())
+        .data("headers", messageConfig.getHeaders())
         .toJson();
     rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, routingKey, json);
   }
@@ -177,6 +189,10 @@ public class Generator {
         .tps(tps)
         .enabled(enabled)
         .data("ratePerSec", ratePerSec)
+        .data("path", messageConfig.getPath())
+        .data("method", messageConfig.getMethod())
+        .data("body", messageConfig.getBody())
+        .data("headers", messageConfig.getHeaders())
         .toJson();
     rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, routingKey, json);
   }

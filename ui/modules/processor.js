@@ -2,9 +2,21 @@ import { renderCommonPanel, applyCommonStatus } from './common.js';
 
 export function renderProcessorPanel(containerEl, instanceId, initial){
   const client = window.phClient;
-  const common = renderCommonPanel(containerEl, 'processor', instanceId, '');
+  const extra = `<label>Base URL <input id="baseUrl" type="text"></label>`;
+  const common = renderCommonPanel(containerEl, 'processor', instanceId, extra);
+  const baseUrlInp = containerEl.querySelector('#baseUrl');
+  function sendConfig(data){
+    const payload = {type:'config-update', role:'processor', instance:instanceId, data};
+    const rk = `sig.config-update.processor.${instanceId}`;
+    client.publish({destination:`/exchange/ph.control/${rk}`, body: JSON.stringify(payload)});
+    const srPayload = {type:'status-request', role:'processor', instance:instanceId};
+    client.publish({destination:`/exchange/ph.control/sig.status-request.processor.${instanceId}`, body: JSON.stringify(srPayload)});
+  }
+  baseUrlInp && baseUrlInp.addEventListener('change', ()=> sendConfig({baseUrl:baseUrlInp.value}));
   function apply(evt){
     if(!evt) return;
+    const data = evt.data||{};
+    if(data.baseUrl!=null && baseUrlInp) baseUrlInp.value = data.baseUrl;
     applyCommonStatus(evt, common);
   }
   if(client){
