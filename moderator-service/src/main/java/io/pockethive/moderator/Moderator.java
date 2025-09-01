@@ -98,7 +98,14 @@ public class Moderator {
         .workRoutes(Topology.GEN_QUEUE)
         .workOut(Topology.MOD_QUEUE)
         .controlIn(controlQueue)
-        .controlRoutes("sig.#", "sig.#."+role, "sig.#."+role+"."+instanceId)
+        .controlRoutes(
+            "sig.config-update",
+            "sig.config-update."+role,
+            "sig.config-update."+role+"."+instanceId,
+            "sig.status-request",
+            "sig.status-request."+role,
+            "sig.status-request."+role+"."+instanceId
+        )
         .controlOut(rk)
         .tps(tps)
         .enabled(enabled)
@@ -118,7 +125,14 @@ public class Moderator {
         .workRoutes(Topology.GEN_QUEUE)
         .workOut(Topology.MOD_QUEUE)
         .controlIn(controlQueue)
-        .controlRoutes("sig.#", "sig.#."+role, "sig.#."+role+"."+instanceId)
+        .controlRoutes(
+            "sig.config-update",
+            "sig.config-update."+role,
+            "sig.config-update."+role+"."+instanceId,
+            "sig.status-request",
+            "sig.status-request."+role,
+            "sig.status-request."+role+"."+instanceId
+        )
         .controlOut(rk)
         .tps(tps)
         .enabled(enabled)

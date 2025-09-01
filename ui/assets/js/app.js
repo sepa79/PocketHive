@@ -141,7 +141,7 @@ import { initNectarMenu } from './menus/nectar.js';
       setWsStatus('open');
       const subs = (PH_CONFIG && Array.isArray(PH_CONFIG.subscriptions) && PH_CONFIG.subscriptions.length)
         ? PH_CONFIG.subscriptions
-        : ['sig.#','ev.#'];
+        : ['sig.config-update.#','sig.status-request.#','ev.#'];
       subs.forEach(d => {
         try{
           client.subscribe(`/exchange/ph.control/${d}`, (message) => {

@@ -122,7 +122,14 @@ public class Generator {
         .instance(instanceId)
         .traffic(Topology.EXCHANGE)
         .controlIn(controlQueue)
-        .controlRoutes("sig.#", "sig.#."+role, "sig.#."+role+"."+instanceId)
+        .controlRoutes(
+            "sig.config-update",
+            "sig.config-update."+role,
+            "sig.config-update."+role+"."+instanceId,
+            "sig.status-request",
+            "sig.status-request."+role,
+            "sig.status-request."+role+"."+instanceId
+        )
         .controlOut(routingKey)
         .workOut(Topology.GEN_QUEUE)
         .tps(tps)
@@ -142,7 +149,14 @@ public class Generator {
         .instance(instanceId)
         .traffic(Topology.EXCHANGE)
         .controlIn(controlQueue)
-        .controlRoutes("sig.#", "sig.#."+role, "sig.#."+role+"."+instanceId)
+        .controlRoutes(
+            "sig.config-update",
+            "sig.config-update."+role,
+            "sig.config-update."+role+"."+instanceId,
+            "sig.status-request",
+            "sig.status-request."+role,
+            "sig.status-request."+role+"."+instanceId
+        )
         .controlOut(routingKey)
         .workOut(Topology.GEN_QUEUE)
         .tps(tps)

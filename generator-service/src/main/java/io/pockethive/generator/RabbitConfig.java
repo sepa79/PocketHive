@@ -28,21 +28,40 @@ public class RabbitConfig {
   }
 
   @Bean
-  Binding bindSigBroadcast(@Qualifier("controlQueue") Queue controlQueue,
+  Binding bindConfigGlobal(@Qualifier("controlQueue") Queue controlQueue,
                            @Qualifier("controlExchange") TopicExchange controlExchange){
-    return BindingBuilder.bind(controlQueue).to(controlExchange).with("sig.#");
+    return BindingBuilder.bind(controlQueue).to(controlExchange).with("sig.config-update");
   }
 
   @Bean
-  Binding bindSigRole(@Qualifier("controlQueue") Queue controlQueue,
-                      @Qualifier("controlExchange") TopicExchange controlExchange){
-    return BindingBuilder.bind(controlQueue).to(controlExchange).with("sig.#." + ROLE);
+  Binding bindConfigRole(@Qualifier("controlQueue") Queue controlQueue,
+                         @Qualifier("controlExchange") TopicExchange controlExchange){
+    return BindingBuilder.bind(controlQueue).to(controlExchange).with("sig.config-update." + ROLE);
   }
 
   @Bean
-  Binding bindSigInstance(@Qualifier("controlQueue") Queue controlQueue,
-                          @Qualifier("controlExchange") TopicExchange controlExchange,
-                          String instanceId){
-    return BindingBuilder.bind(controlQueue).to(controlExchange).with("sig.#." + ROLE + "." + instanceId);
+  Binding bindConfigInstance(@Qualifier("controlQueue") Queue controlQueue,
+                             @Qualifier("controlExchange") TopicExchange controlExchange,
+                             String instanceId){
+    return BindingBuilder.bind(controlQueue).to(controlExchange).with("sig.config-update." + ROLE + "." + instanceId);
+  }
+
+  @Bean
+  Binding bindStatusGlobal(@Qualifier("controlQueue") Queue controlQueue,
+                           @Qualifier("controlExchange") TopicExchange controlExchange){
+    return BindingBuilder.bind(controlQueue).to(controlExchange).with("sig.status-request");
+  }
+
+  @Bean
+  Binding bindStatusRole(@Qualifier("controlQueue") Queue controlQueue,
+                         @Qualifier("controlExchange") TopicExchange controlExchange){
+    return BindingBuilder.bind(controlQueue).to(controlExchange).with("sig.status-request." + ROLE);
+  }
+
+  @Bean
+  Binding bindStatusInstance(@Qualifier("controlQueue") Queue controlQueue,
+                             @Qualifier("controlExchange") TopicExchange controlExchange,
+                             String instanceId){
+    return BindingBuilder.bind(controlQueue).to(controlExchange).with("sig.status-request." + ROLE + "." + instanceId);
   }
 }
