@@ -27,14 +27,18 @@ public class Processor {
   private final RabbitTemplate rabbit;
   private final AtomicLong counter = new AtomicLong();
   private final String instanceId;
+  private volatile String baseUrl;
   private volatile boolean enabled = true;
   private static final long STATUS_INTERVAL_MS = 5000L;
   private volatile long lastStatusTs = System.currentTimeMillis();
 
   public Processor(RabbitTemplate rabbit,
-                   @Qualifier("instanceId") String instanceId){
+                   @Qualifier("instanceId") String instanceId,
+                   @Qualifier("baseUrl") String baseUrl){
     this.rabbit = rabbit;
     this.instanceId = instanceId;
+    this.baseUrl = baseUrl;
+    log.info("Base URL: {}", baseUrl);
     try{ sendStatusFull(0); } catch(Exception ignore){}
   }
 
@@ -90,6 +94,7 @@ public class Processor {
           if("config-update".equals(type)){
             com.fasterxml.jackson.databind.JsonNode data = node.path("data");
             if(data.has("enabled")) enabled = data.get("enabled").asBoolean(enabled);
+            if(data.has("baseUrl")) baseUrl = data.get("baseUrl").asText(baseUrl);
           }
         }catch(Exception e){ log.warn("control parse", e); }
       }
@@ -124,6 +129,7 @@ public class Processor {
         .controlOut(rk)
         .tps(tps)
         .enabled(enabled)
+        .data("baseUrl", baseUrl)
         .toJson();
     rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, payload);
   }
@@ -151,6 +157,7 @@ public class Processor {
         .controlOut(rk)
         .tps(tps)
         .enabled(enabled)
+        .data("baseUrl", baseUrl)
         .toJson();
     rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, payload);
   }

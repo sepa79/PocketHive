@@ -32,16 +32,33 @@ export function renderCommonPanel(containerEl, role, instanceId, extraHtml = '')
   containerEl.innerHTML = `
     <div class="card" data-role="${role}">
       <h3>${title} ${instanceId}</h3>
-      <div class="info"></div>
-      <div class="controls common-controls">
-        <button data-action="start">Start</button>
-        <button data-action="stop">Stop</button>
+      <div class="tab-buttons">
+        <button class="tab-btn tab-active" data-tab="status">Status</button>
+        <button class="tab-btn" data-tab="config">Config</button>
       </div>
-      <div class="custom">${extraHtml}</div>
+      <div class="tab-content" data-tab="status">
+        <div class="info"></div>
+      </div>
+      <div class="tab-content" data-tab="config" style="display:none">
+        <div class="controls common-controls">
+          <button data-action="start">Start</button>
+          <button data-action="stop">Stop</button>
+        </div>
+        <div class="custom">${extraHtml}</div>
+      </div>
     </div>`;
   const infoRefs = setupCommonInfo(containerEl.querySelector('.info'));
   const startBtn = containerEl.querySelector('[data-action="start"]');
   const stopBtn = containerEl.querySelector('[data-action="stop"]');
+  const tabBtns = containerEl.querySelectorAll('.tab-btn');
+  const tabContents = containerEl.querySelectorAll('.tab-content');
+  tabBtns.forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const tab = btn.getAttribute('data-tab');
+      tabBtns.forEach(b=>b.classList.toggle('tab-active', b===btn));
+      tabContents.forEach(c=>{ c.style.display = c.getAttribute('data-tab')===tab ? 'block':'none'; });
+    });
+  });
   const client = window.phClient;
   if(client){
     const sendEnabled = enabled => {
