@@ -163,16 +163,15 @@ import { initNectarMenu } from './menus/nectar.js';
                 const node = hive.ensureNode(svc);
                 const tpsVal = (obj && obj.data && typeof obj.data.tps==='number') ? obj.data.tps : (typeof obj.tps==='number' ? obj.tps : undefined);
                 if(node){ node.last = Date.now(); if(typeof tpsVal==='number') node.tps = tpsVal; }
-                const qobj = obj.queues;
-                const changed = hive.updateQueues(svc, qobj);
+                const changed = hive.updateQueues(svc, obj);
                 if(changed) hive.rebuildEdgesFromQueues();
                 try{
                   const role = svc;
                   const inst = obj.instance || '–';
                   const ev = obj.event || 'status';
                   const kind = obj.kind || (typeof tpsVal!=='undefined' ? 'status-delta' : 'status');
-                  const qin = obj.queues && Array.isArray(obj.queues.in) ? obj.queues.in.length : 0;
-                  const qout = obj.queues && Array.isArray(obj.queues.out) ? obj.queues.out.length : 0;
+                  const qin = obj.inQueue ? 1 : 0;
+                  const qout = Array.isArray(obj.publishes) ? obj.publishes.length : 0;
                   appendSys(`[BUZZ] RECV ${ev}/${kind} role=${role} inst=${inst} tps=${typeof tpsVal==='number'?tpsVal:'–'} in=${qin} out=${qout}`);
                 }catch{}
                 hive.redrawHive();

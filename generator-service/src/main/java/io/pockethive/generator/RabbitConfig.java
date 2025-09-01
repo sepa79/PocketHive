@@ -19,12 +19,6 @@ public class RabbitConfig {
   TopicExchange direct(){ return new TopicExchange(Topology.EXCHANGE, true, false); }
 
   @Bean
-  Queue gen(){ return QueueBuilder.durable(Topology.GEN_QUEUE).build(); }
-
-  @Bean
-  Binding bindGen(){ return BindingBuilder.bind(gen()).to(direct()).with(Topology.GEN_QUEUE); }
-
-  @Bean
   TopicExchange controlExchange(){ return new TopicExchange(Topology.CONTROL_EXCHANGE, true, false); }
 
   @Bean

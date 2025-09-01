@@ -20,7 +20,8 @@ public class StatusEnvelopeBuilder {
 
     private final Map<String, Object> root = new LinkedHashMap<>();
     private final Map<String, Object> data = new LinkedHashMap<>();
-    private final Map<String, List<String>> queues = new LinkedHashMap<>();
+    private final Map<String, Object> inQueue = new LinkedHashMap<>();
+    private final List<String> publishes = new ArrayList<>();
 
     public StatusEnvelopeBuilder() {
         root.put("event", "status");
@@ -47,22 +48,51 @@ public class StatusEnvelopeBuilder {
         return this;
     }
 
+    /**
+     * Flag indicating whether the component is currently enabled.
+     */
+    public StatusEnvelopeBuilder enabled(boolean enabled) {
+        root.put("enabled", enabled);
+        return this;
+    }
+
     public StatusEnvelopeBuilder traffic(String traffic) {
         root.put("traffic", traffic);
         return this;
     }
 
-    public StatusEnvelopeBuilder inQueues(String... queues) {
-        if (queues != null && queues.length > 0) {
-            this.queues.put("in", Arrays.asList(queues));
+    /**
+     * Describe the queue this component consumes from and the routing keys
+     * bound to it.
+     */
+    public StatusEnvelopeBuilder inQueue(String name, String... routingKeys) {
+        if (name != null && !name.isBlank()) {
+            inQueue.put("name", name);
+            if (routingKeys != null && routingKeys.length > 0) {
+                inQueue.put("routingKeys", Arrays.asList(routingKeys));
+            }
         }
         return this;
     }
 
-    public StatusEnvelopeBuilder outQueues(String... queues) {
-        if (queues != null && queues.length > 0) {
-            this.queues.put("out", Arrays.asList(queues));
+    /**
+     * Topics used when publishing results downstream on the traffic
+     * exchange.
+     */
+    public StatusEnvelopeBuilder publishes(String... topics) {
+        if (topics != null && topics.length > 0) {
+            publishes.addAll(Arrays.asList(topics));
         }
+        return this;
+    }
+
+    /**
+     * Attach an arbitrary key/value pair to the {@code data} section of the
+     * envelope. This is used for exposing component configuration parameters
+     * such as tuning knobs in {@code status-full} events.
+     */
+    public StatusEnvelopeBuilder data(String key, Object value) {
+        data.put(key, value);
         return this;
     }
 
@@ -75,8 +105,11 @@ public class StatusEnvelopeBuilder {
      * Serialise the collected fields into a JSON document.
      */
     public String toJson() {
-        if (!queues.isEmpty()) {
-            root.put("queues", queues);
+        if (!inQueue.isEmpty()) {
+            root.put("inQueue", inQueue);
+        }
+        if (!publishes.isEmpty()) {
+            root.put("publishes", publishes);
         }
         root.put("data", data.isEmpty() ? Collections.emptyMap() : data);
         try {

@@ -1,11 +1,12 @@
-export function initPanel(panels, role, id) {
-  return import(`../../modules/${role}.js`)
+export function initPanel(panels, role, id, initial) {
+  return import(`../../../modules/${role}.js`)
     .then(mod => {
       const fn = mod[`render${role.charAt(0).toUpperCase() + role.slice(1)}Panel`];
       if (typeof fn === 'function') {
         const el = document.createElement('div');
         panels[role][id] = el;
-        fn(el, id);
+        // pass initial status snapshot so panels can render immediately
+        fn(el, id, initial);
       }
     })
     .catch(err => console.error('module load', err));
