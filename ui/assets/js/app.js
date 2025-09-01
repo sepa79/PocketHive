@@ -6,6 +6,7 @@ import { initMetricSelector } from './features/metricSelector.js';
 import { initBuzzMenu } from './menus/buzz.js';
 import { initHiveMenu } from './menus/hive.js';
 import { initNectarMenu } from './menus/nectar.js';
+import { initWiremockJournal } from './features/wiremockJournal.js';
 
 (function initServiceLinks() {
   try {
@@ -13,8 +14,7 @@ import { initNectarMenu } from './menus/nectar.js';
     const services = {
       'link-rabbitmq': `http://guest:guest@${host}:15672/`,
       'link-prometheus': `http://${host}:9090/`,
-      'link-grafana': `http://admin:admin@${host}:3000/`,
-      'link-wiremock': `http://${host}:8080/__admin/`
+      'link-grafana': `http://admin:admin@${host}:3000/`
     };
     Object.entries(services).forEach(([id, url]) => {
       const el = document.getElementById(id);
@@ -22,6 +22,8 @@ import { initNectarMenu } from './menus/nectar.js';
     });
   } catch {}
 })();
+
+initWiremockJournal();
 
 // Minimal STOMP over WebSocket client for RabbitMQ Web-STOMP
 (function(){

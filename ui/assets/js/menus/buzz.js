@@ -141,7 +141,6 @@ export function initBuzzMenu({ getClient, isConnected }) {
       const dest = '/exchange/ph.control/' + rk;
       try {
         if (sub) { try { sub.unsubscribe(); } catch {} sub = null; }
-        // eslint-disable-next-line no-undef
         sub = client.subscribe(dest, (message) => {
           const b = message.body || '';
           logLine(`${message.headers.destination || ''} ${b}`);
