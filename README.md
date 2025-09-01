@@ -56,6 +56,7 @@ See also: Control Bindings page (Menu → Control Bindings) and `ui/spec/asyncap
 - `grafana` (dashboard): 3000 (admin / admin)
 - `loki` (log store): 3100
 - `promtail` (log shipper): 9080
+- `wiremock` (HTTP stub server for NFT tests; journal disabled): 8080
 
 ## Quick Start
 

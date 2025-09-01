@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.0] - 2025-09-01
+Timestamp: 2025-09-01T21:21:35Z
+
+- Observability: integrate Loki and Promtail logging stack with a dedicated log-aggregator service, RabbitMQ logback appender, and Grafana dashboards; services wait for the log-aggregator and route AMQP logs to console.
+- UI: refactor Hive panels into modular components with shared controls and a common status renderer; panels auto-request and render initial status, display generator rate and queue bindings/config, open controls in modals, toggle visibility, and provide tabbed system logs.
+- Control: announce inbound queues and publishing topics, use explicit control topics and dedicated per-service control queues; actions request status and status blocks expand with queue topology.
+- Processor: declare final queue binding and forward moderated messages to the postprocessor.
+- TPS: measure throughput using elapsed intervals across Generator, Moderator, and Processor.
+- Docker: add Wiremock service for NFT tests with journaling disabled.
+
 ## [0.4.20] - 2025-08-30
 Timestamp: 2025-08-30T23:39:40Z
 
