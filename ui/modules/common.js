@@ -1,10 +1,12 @@
 export function setupCommonInfo(infoEl){
   if(!infoEl) return {};
   infoEl.innerHTML = `
-    <div>IN: <span data-field="in"></span></div>
-    <div>Routes: <span data-field="routes"></span></div>
-    <div>Publishes: <span data-field="pub"></span></div>
-    <div data-field="cfg"></div>
+    <div class="status-block">
+      <div class="status-item"><span class="label">IN</span><span class="value" data-field="in"></span></div>
+      <div class="status-item"><span class="label">Routes</span><span class="value" data-field="routes"></span></div>
+      <div class="status-item"><span class="label">Publishes</span><span class="value" data-field="pub"></span></div>
+    </div>
+    <div class="config-block" data-field="cfg"></div>
   `;
   return {
     inEl: infoEl.querySelector('[data-field="in"]'),
@@ -38,7 +40,8 @@ export function applyCommonStatus(evt, refs){
     for(const [k,v] of Object.entries(data)) entries.push([k,v]);
     entries.forEach(([k,v])=>{
       const d=document.createElement('div');
-      d.textContent=`${k}: ${v}`;
+      d.className='config-item';
+      d.innerHTML=`<span class="label">${k}</span><span class="value">${v}</span>`;
       cfgEl.appendChild(d);
     });
   }

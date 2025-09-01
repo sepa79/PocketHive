@@ -103,3 +103,35 @@
     .controls > button:hover, #topic-sub:hover, #topic-unsub:hover, #hive-clear:hover{ box-shadow: 0 0 26px rgba(51,225,255,0.22) inset, 0 0 20px rgba(51,225,255,0.28); background: radial-gradient(120% 120% at 10% 10%, rgba(51,225,255,0.35), rgba(51,225,255,0.1) 50%, rgba(255,255,255,0.07) 75%, rgba(0,0,0,0.0) 100%); }
     .controls > button:active, #topic-sub:active, #topic-unsub:active, #hive-clear:active{ transform: translateY(1px); filter: brightness(1.1); }
     .tab-icon{ width:16px; height:16px; margin-right:6px; vertical-align:middle; }
+    /* Hive component info styling */
+    .info{
+      margin-top:8px;
+    }
+    .info .status-block,
+    .info .config-block{
+      display:grid;
+      grid-template-columns: repeat(auto-fit,minmax(120px,1fr));
+      gap:8px;
+      margin-bottom:8px;
+    }
+    .info .status-item,
+    .info .config-item{
+      background: rgba(255,255,255,0.05);
+      border:1px solid rgba(255,255,255,0.08);
+      border-radius:8px;
+      padding:6px 8px;
+    }
+    .info .status-item .label,
+    .info .config-item .label{
+      display:block;
+      font-size:10px;
+      color:#A9B2C3;
+      text-transform:uppercase;
+      letter-spacing:0.05em;
+    }
+    .info .status-item .value,
+    .info .config-item .value{
+      font-size:14px;
+      font-weight:600;
+      color:#fff;
+    }
