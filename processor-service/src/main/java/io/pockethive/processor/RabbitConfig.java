@@ -25,12 +25,6 @@ public class RabbitConfig {
   Binding bindMod(){ return BindingBuilder.bind(mod()).to(direct()).with(Topology.MOD_QUEUE); }
 
   @Bean
-  Queue fin(){ return QueueBuilder.durable(Topology.FINAL_QUEUE).build(); }
-
-  @Bean
-  Binding bindFin(){ return BindingBuilder.bind(fin()).to(direct()).with(Topology.FINAL_QUEUE); }
-
-  @Bean
   TopicExchange controlExchange(){ return new TopicExchange(Topology.CONTROL_EXCHANGE, true, false); }
 
   @Bean

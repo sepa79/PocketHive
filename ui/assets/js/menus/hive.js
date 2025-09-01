@@ -44,11 +44,12 @@ export function initHiveMenu() {
   }
   function addEdge(a, b) { if (a === b) return; if (!hive.edges.find(e => (e.a === a && e.b === b))) { hive.edges.push({ a, b }); } }
   function arr(x) { return Array.isArray(x) ? x : (x != null ? [x] : []); }
-  function updateQueues(service, queuesObj) {
-    if (!queuesObj) return false;
+  function updateQueues(service, evt) {
+    if (!evt) return false;
     let changed = false;
-    const ins = arr(queuesObj.in).concat(arr(queuesObj.inQueues)).filter(Boolean);
-    const outs = arr(queuesObj.out).concat(arr(queuesObj.outQueues)).filter(Boolean);
+    const ins = [];
+    if (evt.inQueue && evt.inQueue.name) ins.push(evt.inQueue.name);
+    const outs = arr(evt.publishes).filter(Boolean);
     const apply = (name, dir) => {
       const key = String(name);
       if (!hive.queues[key]) hive.queues[key] = { in: new Set(), out: new Set() };

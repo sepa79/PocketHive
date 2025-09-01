@@ -114,12 +114,15 @@ public class Generator {
 
   private void sendStatusDelta(long tps){
     String role = "generator";
+    String controlQueue = Topology.CONTROL_QUEUE + "." + role + "." + instanceId;
     String routingKey = "ev.status-delta." + role + "." + instanceId;
     String json = new StatusEnvelopeBuilder()
         .kind("status-delta")
         .role(role)
         .instance(instanceId)
         .traffic(Topology.EXCHANGE)
+        .inQueue(controlQueue, "sig.#", "sig.#."+role, "sig.#."+role+"."+instanceId)
+        .publishes(Topology.GEN_QUEUE)
         .tps(tps)
         .enabled(enabled)
         .data("ratePerSec", ratePerSec)
@@ -129,13 +132,15 @@ public class Generator {
 
   private void sendStatusFull(long tps){
     String role = "generator";
+    String controlQueue = Topology.CONTROL_QUEUE + "." + role + "." + instanceId;
     String routingKey = "ev.status-full." + role + "." + instanceId;
     String json = new StatusEnvelopeBuilder()
         .kind("status-full")
         .role(role)
         .instance(instanceId)
         .traffic(Topology.EXCHANGE)
-        .outQueues(Topology.GEN_QUEUE)
+        .inQueue(controlQueue, "sig.#", "sig.#."+role, "sig.#."+role+"."+instanceId)
+        .publishes(Topology.GEN_QUEUE)
         .tps(tps)
         .enabled(enabled)
         .data("ratePerSec", ratePerSec)

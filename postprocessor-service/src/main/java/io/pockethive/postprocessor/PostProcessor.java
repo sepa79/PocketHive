@@ -120,7 +120,7 @@ public class PostProcessor {
         .role(role)
         .instance(instanceId)
         .traffic(Topology.EXCHANGE)
-        .inQueues(Topology.FINAL_QUEUE)
+        .inQueue(Topology.FINAL_QUEUE, Topology.FINAL_QUEUE)
         .enabled(enabled)
         .toJson();
     rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, payload);
