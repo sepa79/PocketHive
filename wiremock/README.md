@@ -1,2 +1,3 @@
 Wiremock mappings for NFT tests.
-Place stub definitions under `mappings/` and static responses in `__files/`.
+
+Mount stub definitions under `mappings/` and static responses in `__files/`. Journaling is disabled for lean test runs. The container listens on port 8080.

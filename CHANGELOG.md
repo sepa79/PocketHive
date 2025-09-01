@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.21] - 2025-09-01
+Timestamp: 2025-09-01T21:05:54Z
+
+- TPS: measure throughput using elapsed intervals across Generator, Moderator, and Processor.
+- Docker: add Wiremock service for NFT tests with journaling disabled.
+
 ## [0.4.20] - 2025-08-30
 Timestamp: 2025-08-30T23:39:40Z
 
