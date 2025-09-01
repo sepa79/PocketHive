@@ -29,21 +29,30 @@ import { initNectarMenu } from './menus/nectar.js';
   const { appendLog, appendSys } = initBuzzMenu({ getClient: () => client, isConnected: () => connected });
   window.phAppendSys = appendSys;
   window.phAppendLog = appendLog;
-  if (window.phClient && typeof window.phClient.publish === 'function') {
-    const origPublish = window.phClient.publish.bind(window.phClient);
-    window.phClient.publish = (params) => {
-      try {
-        origPublish(params);
-        const dest = (params && params.destination) || '';
-        let payloadType = '';
-        try { payloadType = JSON.parse(params.body || '{}').type || ''; } catch {}
-        const rk = dest.replace('/exchange/ph.control/', '');
-        appendSys(`[BUZZ] SEND ${rk}${payloadType ? ` payload=${payloadType}` : ''}`);
-      } catch (e) {
-        appendSys('Publish error: ' + (e && e.message ? e.message : String(e)));
+  const existingClient = window.phClient;
+  Object.defineProperty(window, 'phClient', {
+    get() { return client; },
+    set(value) {
+      client = value;
+      if (value && typeof value.publish === 'function') {
+        const origPublish = value.publish.bind(value);
+        value.publish = (params) => {
+          try {
+            origPublish(params);
+            const dest = (params && params.destination) || '';
+            let payloadType = '';
+            try { payloadType = JSON.parse(params.body || '{}').type || ''; } catch {}
+            const rk = dest.replace('/exchange/ph.control/', '');
+            appendSys(`[BUZZ] SEND ${rk}${payloadType ? ` payload=${payloadType}` : ''}`);
+          } catch (e) {
+            appendSys('Publish error: ' + (e && e.message ? e.message : String(e)));
+          }
+        };
       }
-    };
-  }
+    },
+    configurable: true,
+  });
+  if (existingClient) window.phClient = existingClient;
   const hive = initHiveMenu();
   const nectar = initNectarMenu(appState);
 
