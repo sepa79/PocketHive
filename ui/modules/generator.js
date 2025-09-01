@@ -4,15 +4,11 @@ export function renderGeneratorPanel(containerEl, instanceId, initial){
   const client = window.phClient;
   const extra = `
       <label>Rate per sec <span id="rateVal">5</span> <input id="rate" type="range" min="0" max="100" value="5"></label>
-      <div class="controls"><button id="once">Once</button></div>
-      <div>TPS: <span id="tps">0</span></div>
-      <div>Latency: <span id="lat">0</span> ms</div>`;
+      <div class="controls"><button id="once">Once</button></div>`;
   const common = renderCommonPanel(containerEl, 'generator', instanceId, extra);
   const rate = containerEl.querySelector('#rate');
   const rateVal = containerEl.querySelector('#rateVal');
   const onceBtn = containerEl.querySelector('#once');
-  const tpsEl = containerEl.querySelector('#tps');
-  const latEl = containerEl.querySelector('#lat');
   function sendConfig(data){
     const payload = {type:'config-update', role:'generator', instance:instanceId, data};
     const rk = `sig.config-update.generator.${instanceId}`;
@@ -27,9 +23,6 @@ export function renderGeneratorPanel(containerEl, instanceId, initial){
     applyCommonStatus(evt, common);
   }
   if(client){
-    client.subscribe(`/exchange/ph.control/ev.metric.generator.${instanceId}`, msg=>{
-      try{ const data=JSON.parse(msg.body||'{}').data||{}; if(data.tps!=null && tpsEl) tpsEl.textContent=String(data.tps); if(data.latencyMs!=null && latEl) latEl.textContent=String(data.latencyMs); }catch(e){}
-    });
     client.subscribe(`/exchange/ph.control/ev.status-full.generator.${instanceId}`, msg=>{ try{ apply(JSON.parse(msg.body||'{}')); }catch(e){} });
     apply(initial);
     const payload={type:'status-request',role:'generator',instance:instanceId};

@@ -27,9 +27,6 @@ public class Moderator {
   private final AtomicLong counter = new AtomicLong();
   private final String instanceId;
   private volatile boolean enabled = true;
-  private volatile boolean rulesEnabled = false;
-  private volatile String filter = "";
-  private volatile int limit = 0;
 
   public Moderator(RabbitTemplate rabbit,
                    @Qualifier("instanceId") String instanceId) {
@@ -78,9 +75,6 @@ public class Moderator {
           if("config-update".equals(type)){
             com.fasterxml.jackson.databind.JsonNode data = node.path("data");
             if(data.has("enabled")) enabled = data.get("enabled").asBoolean(enabled);
-            if(data.has("rules")) rulesEnabled = data.get("rules").asBoolean(rulesEnabled);
-            if(data.has("filter")) filter = data.get("filter").asText(filter);
-            if(data.has("limit")) limit = data.get("limit").asInt(limit);
           }
         }catch(Exception e){ log.warn("control parse", e); }
       }
@@ -118,9 +112,6 @@ public class Moderator {
         .publishes(Topology.MOD_QUEUE)
         .tps(tps)
         .enabled(enabled)
-        .data("rules", rulesEnabled)
-        .data("filter", filter)
-        .data("limit", limit)
         .toJson();
     rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, payload);
   }

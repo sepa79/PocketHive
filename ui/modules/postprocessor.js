@@ -5,19 +5,11 @@ export function renderPostprocessorPanel(containerEl, instanceId, initial){
   const extra = `
       <div>Hop Latency: <span id="hop">0</span> ms</div>
       <div>Total Latency: <span id="total">0</span> ms</div>
-      <div>Errors: <span id="err">0</span></div>
-      <button id="reset">Reset</button>`;
+      <div>Errors: <span id="err">0</span></div>`;
   const common = renderCommonPanel(containerEl, 'postprocessor', instanceId, extra);
   const hopEl = containerEl.querySelector('#hop');
   const totalEl = containerEl.querySelector('#total');
   const errEl = containerEl.querySelector('#err');
-  const resetBtn = containerEl.querySelector('#reset');
-  if(resetBtn){
-    resetBtn.addEventListener('click', ()=>{
-      const payload={type:'reset',role:'postprocessor',instance:instanceId};
-      client.publish({destination:`/exchange/ph.control/sig.reset.postprocessor.${instanceId}`, body:JSON.stringify(payload)});
-    });
-  }
   function apply(evt){
     if(!evt) return;
     applyCommonStatus(evt, common);

@@ -28,8 +28,6 @@ public class Processor {
   private final AtomicLong counter = new AtomicLong();
   private final String instanceId;
   private volatile boolean enabled = true;
-  private volatile int workers = 1;
-  private volatile String mode = "simulation";
 
   public Processor(RabbitTemplate rabbit,
                    @Qualifier("instanceId") String instanceId){
@@ -84,8 +82,6 @@ public class Processor {
           if("config-update".equals(type)){
             com.fasterxml.jackson.databind.JsonNode data = node.path("data");
             if(data.has("enabled")) enabled = data.get("enabled").asBoolean(enabled);
-            if(data.has("workers")) workers = data.get("workers").asInt(workers);
-            if(data.has("mode")) mode = data.get("mode").asText(mode);
           }
         }catch(Exception e){ log.warn("control parse", e); }
       }
@@ -123,8 +119,6 @@ public class Processor {
         .publishes(Topology.FINAL_QUEUE)
         .tps(tps)
         .enabled(enabled)
-        .data("workers", workers)
-        .data("mode", mode)
         .toJson();
     rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, payload);
   }

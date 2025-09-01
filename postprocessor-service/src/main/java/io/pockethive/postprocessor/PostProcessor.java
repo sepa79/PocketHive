@@ -102,9 +102,6 @@ public class PostProcessor {
             com.fasterxml.jackson.databind.JsonNode dataNode = node.path("data");
             if(dataNode.has("enabled")) enabled = dataNode.get("enabled").asBoolean(enabled);
           }
-          if("reset".equals(type)){
-            // no-op reset placeholder
-          }
         }catch(Exception e){ log.warn("control parse", e); }
       }
     } finally {
