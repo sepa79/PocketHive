@@ -1,5 +1,5 @@
 export function initPanel(panels, role, id) {
-  return import(`../../modules/${role}.js`)
+  return import(`../../../modules/${role}.js`)
     .then(mod => {
       const fn = mod[`render${role.charAt(0).toUpperCase() + role.slice(1)}Panel`];
       if (typeof fn === 'function') {
