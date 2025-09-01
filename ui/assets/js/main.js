@@ -22,7 +22,8 @@ function handleStatusFull(msg) {
       instances[role] = { id: inst, name: body.name || role };
       if (!loaded[role][inst]) {
         loaded[role][inst] = true;
-        initPanel(panels, role, inst);
+        // seed panel with the snapshot that announced the instance
+        initPanel(panels, role, inst, body);
       }
     }
   } catch (e) {
