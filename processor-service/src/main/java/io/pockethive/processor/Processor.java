@@ -29,6 +29,7 @@ public class Processor {
   private final String instanceId;
   private volatile boolean enabled = true;
   private static final long STATUS_INTERVAL_MS = 5000L;
+  private volatile long lastStatusTs = System.currentTimeMillis();
 
   public Processor(RabbitTemplate rabbit,
                    @Qualifier("instanceId") String instanceId){
@@ -63,7 +64,10 @@ public class Processor {
 
   @Scheduled(fixedRate = STATUS_INTERVAL_MS)
   public void status(){
-    long tps = counter.getAndSet(0) * 1000 / STATUS_INTERVAL_MS;
+    long now = System.currentTimeMillis();
+    long elapsed = now - lastStatusTs;
+    lastStatusTs = now;
+    long tps = elapsed > 0 ? counter.getAndSet(0) * 1000 / elapsed : 0;
     sendStatusDelta(tps);
   }
 
