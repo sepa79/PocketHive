@@ -6,6 +6,7 @@ scrape_configs:
     static_configs:
       - targets: ['localhost:9090']
   - job_name: 'postprocessor'
+    scrape_interval: 5s
     metrics_path: /actuator/prometheus
     static_configs:
       - targets: ['postprocessor:8080']

@@ -27,6 +27,7 @@ public class PostProcessor {
   private final RabbitTemplate rabbit;
   private final DistributionSummary hopLatency;
   private final DistributionSummary totalLatency;
+  private final DistributionSummary hopCount;
   private final Counter errorCounter;
   private final String instanceId;
   private volatile boolean enabled = true;
@@ -38,6 +39,7 @@ public class PostProcessor {
     this.instanceId = instanceId;
     this.hopLatency = DistributionSummary.builder("postprocessor_hop_latency_ms").register(registry);
     this.totalLatency = DistributionSummary.builder("postprocessor_total_latency_ms").register(registry);
+    this.hopCount = DistributionSummary.builder("postprocessor_hops").register(registry);
     this.errorCounter = Counter.builder("postprocessor_errors_total").register(registry);
     try{ sendStatusFull(); } catch(Exception ignore){}
   }
@@ -49,6 +51,7 @@ public class PostProcessor {
     if(!enabled) return;
     long hopMs = 0;
     long totalMs = 0;
+    int hopCnt = 0;
     ObservabilityContext ctx = null;
     try {
       ctx = ObservabilityContextUtil.fromHeader(trace);
@@ -56,6 +59,7 @@ public class PostProcessor {
       if(ctx!=null){
         List<Hop> hops = ctx.getHops();
         if(hops!=null && !hops.isEmpty()){
+          hopCnt = hops.size();
           Hop last = hops.get(hops.size()-1);
           hopMs = Duration.between(last.getReceivedAt(), last.getProcessedAt()).toMillis();
           Hop first = hops.get(0);
@@ -69,19 +73,9 @@ public class PostProcessor {
     }
     hopLatency.record(hopMs);
     totalLatency.record(totalMs);
+    hopCount.record(hopCnt);
     boolean isError = Boolean.TRUE.equals(error);
     if(isError) errorCounter.increment();
-    sendMetric(hopMs, totalMs, isError);
-  }
-
-  private void sendMetric(long hopMs, long totalMs, boolean error){
-    String payload = "{"+
-      "\"event\":\"metric\","+
-      "\"role\":\"postprocessor\","+
-      "\"instance\":\""+instanceId+"\","+
-      "\"data\":{\"hopLatencyMs\":"+hopMs+",\"totalLatencyMs\":"+totalMs+",\"errors\":"+(error?1:0)+"}}";
-    String rk = "ev.metric.postprocessor."+instanceId;
-    rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, payload);
   }
 
   @RabbitListener(queues = "#{@controlQueue.name}")

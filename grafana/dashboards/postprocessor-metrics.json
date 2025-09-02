@@ -1,0 +1,50 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "panels": [
+    {
+      "type": "graph",
+      "title": "Hop Latency (ms)",
+      "datasource": "Prometheus",
+      "targets": [
+        { "expr": "rate(postprocessor_hop_latency_ms_sum[1m]) / rate(postprocessor_hop_latency_ms_count[1m])" }
+      ],
+      "lines": true,
+      "id": 1
+    },
+    {
+      "type": "graph",
+      "title": "Total Latency (ms)",
+      "datasource": "Prometheus",
+      "targets": [
+        { "expr": "rate(postprocessor_total_latency_ms_sum[1m]) / rate(postprocessor_total_latency_ms_count[1m])" }
+      ],
+      "lines": true,
+      "id": 2
+    },
+    {
+      "type": "graph",
+      "title": "Hop Count",
+      "datasource": "Prometheus",
+      "targets": [
+        { "expr": "rate(postprocessor_hops_sum[1m]) / rate(postprocessor_hops_count[1m])" }
+      ],
+      "lines": true,
+      "id": 3
+    },
+    {
+      "type": "graph",
+      "title": "Errors per Second",
+      "datasource": "Prometheus",
+      "targets": [
+        { "expr": "rate(postprocessor_errors_total[1m])" }
+      ],
+      "lines": true,
+      "id": 4
+    }
+  ],
+  "schemaVersion": 27,
+  "title": "PostProcessor Metrics",
+  "version": 1
+}
