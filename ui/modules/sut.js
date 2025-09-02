@@ -1,7 +1,14 @@
 export function renderSutPanel(containerEl, baseUrl) {
   const display = (baseUrl || '').replace(/\/$/, '');
-  const adminUrl = new URL('/wiremock/__admin', window.location.origin).toString();
-  const reqUrl = new URL('/wiremock/__admin/requests?limit=25', window.location.origin).toString();
+  let adminUrl = '/wiremock/__admin';
+  let reqUrl = '/wiremock/__admin/requests?limit=25';
+  try {
+    const u = new URL(baseUrl || '/', window.location.href);
+    const port = u.port ? `:${u.port}` : '';
+    const origin = `${u.protocol}//${window.location.hostname}${port}`;
+    adminUrl = new URL('/__admin', origin).toString();
+    reqUrl = new URL('/__admin/requests?limit=25', origin).toString();
+  } catch {}
   containerEl.innerHTML = `
     <div class="card" data-role="sut">
       <h3>WireMock – <a href="${display}" target="_blank" rel="noopener">${display}</a></h3>
@@ -28,11 +35,12 @@ export function renderSutPanel(containerEl, baseUrl) {
   });
   const adminEl = containerEl.querySelector('.admin-output');
   const reqEl = containerEl.querySelector('.requests-output');
+  const fetchOpts = { mode: 'cors', headers: { 'Accept': 'application/json' } };
   async function loadAdmin() {
     if (!adminEl) return;
     adminEl.textContent = 'Loading…';
     try {
-      const res = await fetch(adminUrl);
+      const res = await fetch(adminUrl, fetchOpts);
       if (!res.ok) { adminEl.textContent = `HTTP ${res.status}`; return; }
       const data = await res.json();
       adminEl.textContent = JSON.stringify(data, null, 2);
@@ -46,7 +54,7 @@ export function renderSutPanel(containerEl, baseUrl) {
     reqLoaded = true;
     reqEl.innerHTML = '<div style="color:#fff;">Loading…</div>';
     try {
-      const res = await fetch(reqUrl);
+      const res = await fetch(reqUrl, fetchOpts);
       if (!res.ok) { reqEl.innerHTML = `<div style="color:#f66;">HTTP ${res.status}</div>`; return; }
       const data = await res.json();
       const requests = Array.isArray(data && data.requests) ? data.requests : [];

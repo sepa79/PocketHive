@@ -275,7 +275,8 @@ export function initHiveMenu() {
     try {
       const u = new URL(url, window.location.href);
       hive.sutWiremock = /wiremock/i.test(u.hostname);
-      u.hostname = window.location.hostname;
+      const port = u.port ? `:${u.port}` : '';
+      u.host = `${window.location.hostname}${port}`;
       hive.sutUrl = u.toString();
     } catch {
       hive.sutUrl = url;
