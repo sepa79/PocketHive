@@ -156,7 +156,7 @@ services:
         "--record-mappings",             # auto-record mappings (if needed for tests)
         # "--no-request-journal",          # disable detailed journaling for perf (optional, see note below)
         "--max-request-journal-entries=1000", # avoid memory blowup, keep it reasonable
-        "--enable-cors",                  # allow cross-origin admin access
+        "--enable-stub-cors",             # allow cross-origin access
       ]
     environment:
       JAVA_OPTS: >-

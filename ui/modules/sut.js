@@ -39,8 +39,7 @@ export function renderSutPanel(containerEl, baseUrl) {
     mode: 'cors',
     credentials: 'omit',
     headers: {
-      'Accept': 'application/json',
-      'Access-Control-Allow-Origin': '*'
+      'Accept': 'application/json'
     }
   };
   async function loadAdmin() {
