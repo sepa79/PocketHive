@@ -25,8 +25,7 @@ body:not(.dark) {
 }
 
 /* links */
-a { @apply text-phl-link dark:text-ph-link; }
-a:hover { @apply underline; }
+a { @apply text-phl-link dark:text-ph-link no-underline hover:no-underline; }
 
 /* focus ring */
 :focus-visible {
