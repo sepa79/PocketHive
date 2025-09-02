@@ -17,11 +17,15 @@ import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.amqp.support.AmqpHeaders;
 import org.springframework.stereotype.Component;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.scheduling.annotation.EnableScheduling;
+import org.springframework.scheduling.annotation.Scheduled;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicLong;
 
 @Component
+@EnableScheduling
 public class PostProcessor {
   private static final Logger log = LoggerFactory.getLogger(PostProcessor.class);
   private final RabbitTemplate rabbit;
@@ -31,6 +35,9 @@ public class PostProcessor {
   private final Counter errorCounter;
   private final String instanceId;
   private volatile boolean enabled = true;
+  private final AtomicLong counter = new AtomicLong();
+  private static final long STATUS_INTERVAL_MS = 5000L;
+  private volatile long lastStatusTs = System.currentTimeMillis();
 
   public PostProcessor(RabbitTemplate rabbit,
                        MeterRegistry registry,
@@ -41,7 +48,7 @@ public class PostProcessor {
     this.totalLatency = DistributionSummary.builder("postprocessor_total_latency_ms").register(registry);
     this.hopCount = DistributionSummary.builder("postprocessor_hops").register(registry);
     this.errorCounter = Counter.builder("postprocessor_errors_total").register(registry);
-    try{ sendStatusFull(); } catch(Exception ignore){}
+    try{ sendStatusFull(0); } catch(Exception ignore){}
   }
 
   @RabbitListener(queues = "${ph.finalQueue:ph.final}")
@@ -74,8 +81,18 @@ public class PostProcessor {
     hopLatency.record(hopMs);
     totalLatency.record(totalMs);
     hopCount.record(hopCnt);
+    counter.incrementAndGet();
     boolean isError = Boolean.TRUE.equals(error);
     if(isError) errorCounter.increment();
+  }
+
+  @Scheduled(fixedRate = STATUS_INTERVAL_MS)
+  public void status(){
+    long now = System.currentTimeMillis();
+    long elapsed = now - lastStatusTs;
+    lastStatusTs = now;
+    long tps = elapsed > 0 ? counter.getAndSet(0) * 1000 / elapsed : 0;
+    sendStatusDelta(tps);
   }
 
   @RabbitListener(queues = "#{@controlQueue.name}")
@@ -91,7 +108,7 @@ public class PostProcessor {
         try{
           com.fasterxml.jackson.databind.JsonNode node = new com.fasterxml.jackson.databind.ObjectMapper().readTree(payload);
           String type = node.path("type").asText();
-          if("status-request".equals(type)) sendStatusFull();
+          if("status-request".equals(type)) sendStatusFull(0);
           if("config-update".equals(type)){
             com.fasterxml.jackson.databind.JsonNode dataNode = node.path("data");
             if(dataNode.has("enabled")) enabled = dataNode.get("enabled").asBoolean(enabled);
@@ -103,7 +120,33 @@ public class PostProcessor {
     }
   }
 
-  private void sendStatusFull(){
+  private void sendStatusDelta(long tps){
+    String role = "postprocessor";
+    String controlQueue = Topology.CONTROL_QUEUE + "." + role + "." + instanceId;
+    String rk = "ev.status-delta."+role+"."+instanceId;
+    String payload = new StatusEnvelopeBuilder()
+        .kind("status-delta")
+        .role(role)
+        .instance(instanceId)
+        .traffic(Topology.EXCHANGE)
+        .workIn(Topology.FINAL_QUEUE)
+        .controlIn(controlQueue)
+        .controlRoutes(
+            "sig.config-update",
+            "sig.config-update."+role,
+            "sig.config-update."+role+"."+instanceId,
+            "sig.status-request",
+            "sig.status-request."+role,
+            "sig.status-request."+role+"."+instanceId
+        )
+        .controlOut(rk)
+        .tps(tps)
+        .enabled(enabled)
+        .toJson();
+    rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, payload);
+  }
+
+  private void sendStatusFull(long tps){
     String role = "postprocessor";
     String controlQueue = Topology.CONTROL_QUEUE + "." + role + "." + instanceId;
     String rk = "ev.status-full."+role+"."+instanceId;
@@ -124,6 +167,7 @@ public class PostProcessor {
             "sig.status-request."+role+"."+instanceId
         )
         .controlOut(rk)
+        .tps(tps)
         .enabled(enabled)
         .toJson();
     rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, payload);

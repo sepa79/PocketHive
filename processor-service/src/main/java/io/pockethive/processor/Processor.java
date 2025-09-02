@@ -68,11 +68,11 @@ public class Processor {
     try {
       if(enabled){
         counter.incrementAndGet();
-        Instant processed = Instant.now();
-        ObservabilityContextUtil.appendHop(ctx, "processor", instanceId, received, processed);
         String raw = new String(message.getBody(), StandardCharsets.UTF_8);
         log.info("Forwarding to SUT: {}", raw);
         byte[] resp = sendToSut(message.getBody());
+        Instant processed = Instant.now();
+        ObservabilityContextUtil.appendHop(ctx, "processor", instanceId, received, processed);
         Message out = MessageBuilder
             .withBody(resp)
             .setContentType(MessageProperties.CONTENT_TYPE_JSON)

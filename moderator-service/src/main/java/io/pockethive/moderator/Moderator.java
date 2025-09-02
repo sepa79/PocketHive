@@ -2,6 +2,7 @@ package io.pockethive.moderator;
 
 import io.pockethive.Topology;
 import org.springframework.amqp.core.Message;
+import org.springframework.amqp.core.MessageBuilder;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.scheduling.annotation.EnableScheduling;
@@ -17,6 +18,7 @@ import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Qualifier;
 
 import java.util.concurrent.atomic.AtomicLong;
+import java.time.Instant;
 
 @Component
 @EnableScheduling
@@ -42,13 +44,23 @@ public class Moderator {
   public void onGenerated(Message message,
                           @Header(value = "x-ph-service", required = false) String service,
                           @Header(value = ObservabilityContextUtil.HEADER, required = false) String trace) {
+    Instant received = Instant.now();
     ObservabilityContext ctx = ObservabilityContextUtil.fromHeader(trace);
+    if(ctx==null){
+      ctx = ObservabilityContextUtil.init("moderator", instanceId);
+      ctx.getHops().clear();
+    }
     ObservabilityContextUtil.populateMdc(ctx);
     try {
       if(enabled){
-        // forward the same message to the moderated queue (preserve body + props)
-        rabbit.send(Topology.EXCHANGE, Topology.MOD_QUEUE, message);
         counter.incrementAndGet();
+        Instant processed = Instant.now();
+        ObservabilityContextUtil.appendHop(ctx, "moderator", instanceId, received, processed);
+        Message out = MessageBuilder.fromMessage(message)
+            .setHeader("x-ph-service", "moderator")
+            .setHeader(ObservabilityContextUtil.HEADER, ObservabilityContextUtil.toHeader(ctx))
+            .build();
+        rabbit.send(Topology.EXCHANGE, Topology.MOD_QUEUE, out);
       }
     } finally {
       MDC.clear();
