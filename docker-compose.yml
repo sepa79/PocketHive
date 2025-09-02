@@ -103,8 +103,8 @@ services:
 
   ui:
     build:
-      context: .
-      dockerfile: ui/Dockerfile
+      context: ./ui
+      dockerfile: Dockerfile
     ports:
       - "8088:80"
     healthcheck:
