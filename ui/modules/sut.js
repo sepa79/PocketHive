@@ -1,8 +1,10 @@
 export function renderSutPanel(containerEl, baseUrl) {
-  const base = (baseUrl || '').replace(/\/$/, '');
+  const display = (baseUrl || '').replace(/\/$/, '');
+  const adminUrl = '/wiremock/__admin';
+  const reqUrl = '/wiremock/__admin/requests?limit=25';
   containerEl.innerHTML = `
     <div class="card" data-role="sut">
-      <h3>SUT</h3>
+      <h3>WireMock – <a href="${display}" target="_blank" rel="noopener">${display}</a></h3>
       <div class="tab-buttons">
         <button class="tab-btn tab-active" data-tab="admin">Admin</button>
         <button class="tab-btn" data-tab="requests">Requests</button>
@@ -30,7 +32,7 @@ export function renderSutPanel(containerEl, baseUrl) {
     if (!adminEl) return;
     adminEl.textContent = 'Loading…';
     try {
-      const res = await fetch(`${base}/__admin`);
+      const res = await fetch(adminUrl);
       if (!res.ok) { adminEl.textContent = `HTTP ${res.status}`; return; }
       const data = await res.json();
       adminEl.textContent = JSON.stringify(data, null, 2);
@@ -44,7 +46,7 @@ export function renderSutPanel(containerEl, baseUrl) {
     reqLoaded = true;
     reqEl.innerHTML = '<div style="color:#fff;">Loading…</div>';
     try {
-      const res = await fetch(`${base}/__admin/requests?limit=25`);
+      const res = await fetch(reqUrl);
       if (!res.ok) { reqEl.innerHTML = `<div style="color:#f66;">HTTP ${res.status}</div>`; return; }
       const data = await res.json();
       const requests = Array.isArray(data && data.requests) ? data.requests : [];
