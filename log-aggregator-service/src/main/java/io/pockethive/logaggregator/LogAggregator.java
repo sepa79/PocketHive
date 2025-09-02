@@ -73,8 +73,9 @@ public class LogAggregator {
     List<Map<String,Object>> streams = new ArrayList<>();
     for(var e: grouped.entrySet()){
       Map<String,String> labels = new HashMap<>();
-      labels.put("service", e.getKey().service());
-      labels.put("traceId", e.getKey().traceId());
+      if(!e.getKey().service().isBlank()) labels.put("service", e.getKey().service());
+      if(!e.getKey().traceId().isBlank()) labels.put("traceId", e.getKey().traceId());
+      if(labels.isEmpty()) labels.put("service", "unknown");
       Map<String,Object> stream = new HashMap<>();
       stream.put("stream", labels);
       stream.put("values", e.getValue());
