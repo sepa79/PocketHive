@@ -126,6 +126,9 @@ public class Processor {
       method = node.path("method").asText("GET").toUpperCase();
       String reqBody = node.path("body").asText("");
       target = buildUri(path);
+      if(target == null){
+        return true;
+      }
       HttpRequest.Builder req = HttpRequest.newBuilder(target);
       JsonNode headers = node.path("headers");
       if(headers.isObject()){
@@ -154,11 +157,15 @@ public class Processor {
 
   private URI buildUri(String path){
     String p = path==null?"":path;
+    if(baseUrl == null || baseUrl.isBlank()){
+      log.warn("No baseUrl configured, cannot build target URI for path='{}'", p);
+      return null;
+    }
     try{
       return URI.create(baseUrl).resolve(p);
     }catch(Exception e){
       log.warn("Invalid URI base='{}' path='{}'", baseUrl, p, e);
-      return URI.create("http://localhost");
+      return null;
     }
   }
 
