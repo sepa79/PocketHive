@@ -10,4 +10,5 @@ public class RabbitConfig {
   @Bean TopicExchange logsExchange(){ return new TopicExchange(Topology.LOGS_EXCHANGE, true, false); }
   @Bean Queue logQueue(){ return QueueBuilder.durable(Topology.LOGS_QUEUE).build(); }
   @Bean Binding bindLogs(){ return BindingBuilder.bind(logQueue()).to(logsExchange()).with("#"); }
+  @Bean TopicExchange metricsExchange(){ return new TopicExchange(Topology.METRICS_EXCHANGE, true, false); }
 }

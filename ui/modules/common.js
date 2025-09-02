@@ -13,6 +13,11 @@ function setupCommonInfo(infoEl){
       <div class="status-item"><span class="label">Routes</span><span class="value" data-field="ctrl-routes"></span></div>
       <div class="status-item"><span class="label">Publishes</span><span class="value" data-field="ctrl-out"></span></div>
     </div>
+    <div class="block-title">Errors</div>
+    <div class="status-block error-block">
+      <div class="status-item"><span class="label">Rate</span><span class="value" data-field="err-rate"></span></div>
+      <div class="status-item"><span class="label">State</span><span class="value" data-field="err-state"></span></div>
+    </div>
     <div class="block-title">Config</div>
     <div class="config-block" data-field="cfg"></div>
   `;
@@ -23,6 +28,8 @@ function setupCommonInfo(infoEl){
     ctrlInEl: infoEl.querySelector('[data-field="ctrl-in"]'),
     ctrlRoutesEl: infoEl.querySelector('[data-field="ctrl-routes"]'),
     ctrlOutEl: infoEl.querySelector('[data-field="ctrl-out"]'),
+    errRateEl: infoEl.querySelector('[data-field="err-rate"]'),
+    errStateEl: infoEl.querySelector('[data-field="err-state"]'),
     cfgEl: infoEl.querySelector('[data-field="cfg"]')
   };
 }

@@ -16,3 +16,9 @@ ph:
     backoffMs: ${PH_LOKI_BACKOFF_MS:500}
     batchSize: ${PH_LOKI_BATCH_SIZE:100}
     flushIntervalMs: ${PH_LOKI_FLUSH_INTERVAL_MS:1000}
+  metrics:
+    exchange: ${PH_METRICS_EXCHANGE:ph.metrics}
+    errorRateRk: ${PH_METRICS_ERROR_RATE_RK:metrics.error-rate}
+    errorRateIntervalMs: ${PH_METRICS_ERROR_RATE_INTERVAL_MS:60000}
+  grafana:
+    url: ${PH_GRAFANA_URL:http://grafana:3000}
