@@ -1,6 +1,6 @@
 import { NavLink, Outlet } from 'react-router-dom';
 import { useUIState } from '../state/ui';
-import logo from '@legacy/assets/logo.svg';
+import logo from '@/assets/logo.svg';
 
 export default function Layout() {
   const { sidebarOpen, toggleSidebar } = useUIState();

@@ -7,12 +7,6 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
-      '@legacy': path.resolve(__dirname, '../UI-Legacy'),
-    },
-  },
-  server: {
-    fs: {
-      allow: ['..'],
     },
   },
 });

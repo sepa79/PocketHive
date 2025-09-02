@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 280" width="900" height="280">
+  <style>
+    /* Znak */
+    .hex        { fill:none; stroke:#FFC107; stroke-width:8; }
+    .edge       { stroke:#FFC107; stroke-width:2.5; }
+    .node       { fill:#ffffff; stroke:#0f1116; stroke-width:2; }
+    .panel      { fill:#0f1116; stroke:#ffffff; stroke-width:2; }
+    .lensOuter  { fill:#222; stroke:#999; stroke-width:3; }
+    .lensInner  { fill:url(#grad); }
+    .vent       { fill:#444; }
+
+    /* Typografia */
+    .brand      { font:800 76px 'Inter','Segoe UI',Arial,sans-serif; }
+    .brandPocket{ fill:#ffffff; }
+    .brandHive  { fill:#FFC107; }
+    .tagLeft    { font:500 26px 'Inter','Segoe UI',Arial,sans-serif; fill:#999; }
+    .tagRight   { font:700 34px 'Inter','Segoe UI',Arial,sans-serif; fill:#FFC107; text-anchor:end; }
+  </style>
+
+  <defs>
+    <radialGradient id="grad" cx="50%" cy="50%" r="50%">
+      <stop offset="0%"  stop-color="#FF3C2E"/>
+      <stop offset="40%" stop-color="#B20E00"/>
+      <stop offset="100%" stop-color="#400000"/>
+    </radialGradient>
+  </defs>
+
+  <!-- === ZNAK === -->
+  <g transform="translate(0,30)">
+    <polygon class="hex" points="110,20 190,65 190,155 110,200 30,155 30,65"/>
+    <line class="edge" x1="110" y1="110" x2="110" y2="50"/>
+    <line class="edge" x1="110" y1="110" x2="160" y2="85"/>
+    <line class="edge" x1="110" y1="110" x2="160" y2="135"/>
+    <line class="edge" x1="110" y1="110" x2="110" y2="170"/>
+    <line class="edge" x1="110" y1="110" x2="60"  y2="135"/>
+    <line class="edge" x1="110" y1="110" x2="60"  y2="85"/>
+    <rect class="panel" x="86" y="70" width="48" height="80" rx="6"/>
+    <circle class="lensOuter" cx="110" cy="100" r="20"/>
+    <circle class="lensInner" cx="110" cy="100" r="14"/>
+    <rect class="vent" x="92" y="125" width="36" height="4"/>
+    <rect class="vent" x="92" y="133" width="36" height="4"/>
+    <rect class="vent" x="92" y="141" width="36" height="4"/>
+    <circle class="node" cx="110" cy="50"  r="7"/>
+    <circle class="node" cx="160" cy="85"  r="7"/>
+    <circle class="node" cx="160" cy="135" r="7"/>
+    <circle class="node" cx="110" cy="170" r="7"/>
+    <circle class="node" cx="60"  cy="135" r="7"/>
+    <circle class="node" cx="60"  cy="85"  r="7"/>
+  </g>
+
+  <!-- === TEKST === -->
+  <g transform="translate(260,148)">
+    <!-- Pocket (276) + Hive (150) bez spacji -->
+    <text class="brand" y="0">
+      <tspan class="brandPocket" x="0"   textLength="276" lengthAdjust="spacingAndGlyphs">Pocket</tspan><tspan class="brandHive" x="276" textLength="150" lengthAdjust="spacingAndGlyphs">Hive</tspan>
+    </text>
+
+    <!-- Tagline: identyczne szerokości jak powyżej -->
+    <text class="tagLeft"  x="0"   y="34" textLength="276" lengthAdjust="spacingAndGlyphs">portable transaction</text>
+    <text class="tagRight" x="426" y="34" textLength="150" lengthAdjust="spacingAndGlyphs">swarm</text>
+  </g>
+</svg>
