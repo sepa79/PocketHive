@@ -71,6 +71,18 @@ services:
       log-aggregator:
         condition: service_started
 
+  trigger:
+    image: ghcr.io/pockethive/trigger-service:latest
+    environment:
+      RABBITMQ_HOST: rabbitmq
+      PH_TRAFFIC_EXCHANGE: ph.hive
+      PH_GEN_QUEUE: ph.gen
+      PH_MOD_QUEUE: ph.mod
+      PH_CONTROL_QUEUE: ph.control
+    depends_on:
+      log-aggregator:
+        condition: service_started
+
   log-aggregator:
     build:
       context: .
