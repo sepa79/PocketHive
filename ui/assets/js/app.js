@@ -38,7 +38,7 @@ initWiremockJournal();
   const btn = qs('connect');
   const stateLbl = qs('state');
   const uiStatus = qs('status-ui');
-  const wsStatus = qs('status-ws');
+  const wsStatus = qs('ph-conn-btn');
   const appState = { currentMetric: 'tps' };
 
   let client = null;

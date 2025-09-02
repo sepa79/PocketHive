@@ -4,7 +4,7 @@
  */
 export function initConnectionDropdown() {
   const host = document.getElementById('conn-dropdown');
-  const trigger = document.getElementById('status-ws') || document.getElementById('ph-conn-btn');
+  const trigger = document.getElementById('ph-conn-btn');
   const controls = document.querySelector('.controls');
   if (!host || !trigger || !controls) return;
   host.appendChild(controls);

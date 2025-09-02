@@ -99,14 +99,14 @@ p{ color:#9aa0a6; }
 }
 
 /* Connection status icon */
-#status-ws{
+#ph-conn-btn{
   position:relative;
   width:28px;
   height:28px;
   cursor:pointer;
   overflow:visible;
 }
-#status-ws .conn-icon{
+#ph-conn-btn .conn-icon{
   --apex-y:180px;
   --tri-half:63px;
   --tri-height:86px;
@@ -120,11 +120,11 @@ p{ color:#9aa0a6; }
   transform-origin:top left;
   color:var(--color,#ef4444);
 }
-#status-ws.status-connecting .conn-icon{ --color:#3b82f6; }
-#status-ws.status-connected .conn-icon{ --color:#22c55e; }
-#status-ws.status-offline .conn-icon{ --color:#ef4444; }
+#ph-conn-btn.status-connecting .conn-icon{ --color:#3b82f6; }
+#ph-conn-btn.status-connected .conn-icon{ --color:#22c55e; }
+#ph-conn-btn.status-offline .conn-icon{ --color:#ef4444; }
 
-#status-ws .semicircle{
+#ph-conn-btn .semicircle{
   position:absolute;
   left:40%;
   top:calc(var(--apex-y) - (var(--semi-d) / 4));
@@ -140,7 +140,7 @@ p{ color:#9aa0a6; }
   z-index:0;
 }
 
-#status-ws .semicircle .accent{
+#ph-conn-btn .semicircle .accent{
   position:absolute;
   bottom:0;
   left:50%;
@@ -154,7 +154,7 @@ p{ color:#9aa0a6; }
   border-top-right-radius:0;
 }
 
-#status-ws .highlight{
+#ph-conn-btn .highlight{
   position:absolute;
   left:40%;
   top:calc(var(--apex-y) - (var(--semi-d) / 4));
@@ -171,7 +171,7 @@ p{ color:#9aa0a6; }
   pointer-events:none;
 }
 
-#status-ws .semicircle .antenna{
+#ph-conn-btn .semicircle .antenna{
   position:absolute;
   left:50%;
   top:-50%;
@@ -184,7 +184,7 @@ p{ color:#9aa0a6; }
   z-index:2;
 }
 
-#status-ws .semicircle .antenna .tip{
+#ph-conn-btn .semicircle .antenna .tip{
   position:absolute;
   bottom:100%;
   left:50%;
@@ -198,7 +198,7 @@ p{ color:#9aa0a6; }
   opacity:0.9;
 }
 
-#status-ws .semicircle .antenna .ring{
+#ph-conn-btn .semicircle .antenna .ring{
   position:absolute;
   bottom:100%;
   left:50%;
@@ -210,7 +210,7 @@ p{ color:#9aa0a6; }
   opacity:0;
 }
 
-#status-ws .triangle{
+#ph-conn-btn .triangle{
   position:absolute;
   left:50%;
   top:var(--apex-y);
@@ -223,21 +223,21 @@ p{ color:#9aa0a6; }
   z-index:0;
 }
 
-#status-ws.status-connecting .antenna .ring.r1{ animation:pingStrong 900ms ease-out infinite; }
-#status-ws.status-connecting .antenna .ring.r2{ animation:pingStrong 900ms ease-out 300ms infinite; }
-#status-ws.status-connecting .antenna .tip.on{
+#ph-conn-btn.status-connecting .antenna .ring.r1{ animation:pingStrong 900ms ease-out infinite; }
+#ph-conn-btn.status-connecting .antenna .ring.r2{ animation:pingStrong 900ms ease-out 300ms infinite; }
+#ph-conn-btn.status-connecting .antenna .tip.on{
   transform:translate(-50%,0) scale(1.35);
   filter:drop-shadow(0 0 10px currentColor) drop-shadow(0 0 16px currentColor);
   opacity:1;
 }
 
-#status-ws.status-connected .antenna .ring.r1{ animation:pingSoft 1500ms ease-out infinite; }
-#status-ws.status-connected .antenna .ring.r2{ animation:pingSoft 1500ms ease-out 750ms infinite; }
-#status-ws.status-connected .antenna .tip{ animation:tipBreath 1600ms ease-in-out infinite; }
+#ph-conn-btn.status-connected .antenna .ring.r1{ animation:pingSoft 1500ms ease-out infinite; }
+#ph-conn-btn.status-connected .antenna .ring.r2{ animation:pingSoft 1500ms ease-out 750ms infinite; }
+#ph-conn-btn.status-connected .antenna .tip{ animation:tipBreath 1600ms ease-in-out infinite; }
 
-#status-ws.status-offline .antenna .ring{ display:none; }
-#status-ws.status-offline .semicircle, #status-ws.status-offline .triangle{ opacity:1; }
-#status-ws.status-offline .antenna .tip{ animation:redGlow 1000ms ease-in-out infinite; }
+#ph-conn-btn.status-offline .antenna .ring{ display:none; }
+#ph-conn-btn.status-offline .semicircle, #ph-conn-btn.status-offline .triangle{ opacity:1; }
+#ph-conn-btn.status-offline .antenna .tip{ animation:redGlow 1000ms ease-in-out infinite; }
 
 @keyframes pingStrong{
   0%{ transform:translate(-50%,0) scale(0.4); opacity:0; }
