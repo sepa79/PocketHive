@@ -101,6 +101,7 @@ initWiremockJournal();
       const res = await fetch(PH_CFG_URL, {cache:'no-store'});
       if(res.ok){
         PH_CONFIG = await res.json();
+        if (hive && typeof hive.setConfig === 'function') hive.setConfig(PH_CONFIG);
         try{
           const qp = new URLSearchParams(window.location.search);
           DEMO = !!(PH_CONFIG.demo || qp.get('demo')==='1');
@@ -218,20 +219,21 @@ initWiremockJournal();
                 summary = body.length > 80 ? body.slice(0, 77) + '…' : body;
               }
             } else if (obj) {
-              const svc = obj.role || obj.name || obj.service;
+              const role = obj.role || obj.service || obj.name;
+              const inst = obj.instance || obj.name || '–';
               const ev = obj.event || obj.type || obj.kind || 'status';
-              const inst = obj.instance || '–';
-              summary = `${ev}${svc ? ` role=${svc}` : ''}${inst ? ` inst=${inst}` : ''}`;
-              if (svc) {
-                const node = hive.ensureNode(svc);
+              summary = `${ev}${role ? ` role=${role}` : ''}${inst ? ` inst=${inst}` : ''}`;
+              if (role) {
+                const node = hive.ensureNode(role, inst);
                 const tpsVal = (obj && obj.data && typeof obj.data.tps === 'number') ? obj.data.tps : (typeof obj.tps === 'number' ? obj.tps : undefined);
                 if (node) { node.last = Date.now(); if (typeof tpsVal === 'number') node.tps = tpsVal; }
-                const changed = hive.updateQueues(svc, obj);
+                const changed = hive.updateQueues(role, obj);
                 if (changed) hive.rebuildEdgesFromQueues();
+                if (role === 'processor' && obj.data && obj.data.baseUrl) hive.setSutUrl(obj.data.baseUrl);
                 hive.redrawHive();
                 if (typeof tpsVal !== 'undefined') {
-                  nectar.updateTps(svc, tpsVal);
-                  nectar.addPoint(svc, tpsVal);
+                  nectar.updateTps(role, tpsVal);
+                  nectar.addPoint(role, tpsVal);
                 }
               }
             } else {

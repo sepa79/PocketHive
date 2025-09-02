@@ -3,7 +3,7 @@ import { phShowPanel } from "../main.js";
 /**
  * Create the Hive panel that renders service nodes and queue edges as an SVG graph.
  *
- * @returns {{ensureNode: Function, updateQueues: Function, rebuildEdgesFromQueues: Function, redrawHive: Function}}
+ * @returns {{ensureNode: Function, updateQueues: Function, rebuildEdgesFromQueues: Function, redrawHive: Function, setSutUrl: Function, setConfig: Function}}
  *          Methods for maintaining and redrawing the hive topology.
  */
 export function initHiveMenu() {
@@ -13,10 +13,12 @@ export function initHiveMenu() {
   const hiveClearBtn = document.getElementById('hive-clear');
   const hiveStats = document.getElementById('hive-stats');
   const hive = {
-    nodes: /** @type {Record<string,{id:string,label:string,service:string,x:number,y:number,last:number,tps?:number}>} */({}),
+    nodes: /** @type {Record<string,{id:string,label:string,service:string,x:number,y:number,last:number,tps?:number,name?:string,type?:string}>} */({}),
     edges: /** @type {Array<{a:string,b:string}>} */([]),
-    queues: /** @type {Record<string,{in:Set<string>, out:Set<string>}>} */({}),
-    holdMs: HIVE_DEFAULT_HOLD
+    queues: /** @type {Record<string,{in:Set<string>, out:Set<string>, info?:any}>} */({}),
+    holdMs: HIVE_DEFAULT_HOLD,
+    sutUrl: /** @type {string|null} */(null),
+    config: /** @type {any} */(null)
   };
   function setHoldMs() { if (hiveHoldInput) { const v = Math.max(1, Number(hiveHoldInput.value) || 3); hive.holdMs = v * 1000; } }
   if (hiveHoldInput) { hiveHoldInput.addEventListener('change', setHoldMs); setHoldMs(); }
@@ -28,22 +30,41 @@ export function initHiveMenu() {
       if (hiveStats) hiveStats.textContent = '';
     });
   }
-  function ensureNode(service) {
+  function ensureNode(role, name) {
     if (!hiveSvg) return null;
-    const id = service;
+    const id = role;
     if (!hive.nodes[id]) {
       const map = { generator: [140, 160], moderator: [480, 160], processor: [820, 160], sut: [1060, 160] };
       const pos = map[id] || [100 + Object.keys(hive.nodes).length * 140, 320];
-      hive.nodes[id] = { id, label: id.charAt(0).toUpperCase() + id.slice(1), service: id, x: pos[0], y: pos[1], last: Date.now() };
+      hive.nodes[id] = { id, label: role.charAt(0).toUpperCase() + role.slice(1), service: id, x: pos[0], y: pos[1], last: Date.now(), name, type: role };
       if (id === 'generator') { if (hive.nodes['moderator']) addEdge('generator', 'moderator'); }
       if (id === 'moderator') { if (hive.nodes['generator']) addEdge('generator', 'moderator'); if (hive.nodes['processor']) addEdge('moderator', 'processor'); }
       if (id === 'processor') { if (hive.nodes['moderator']) addEdge('moderator', 'processor'); if (!hive.nodes['sut']) { hive.nodes['sut'] = { id: 'sut', label: 'SUT', service: 'sut', x: 1060, y: 160, last: Date.now() }; addEdge('processor', 'sut'); } else { addEdge('processor', 'sut'); } }
       redrawHive();
     }
+    if (name) hive.nodes[id].name = name;
     return hive.nodes[id];
   }
   function addEdge(a, b) { if (a === b) return; if (!hive.edges.find(e => (e.a === a && e.b === b))) { hive.edges.push({ a, b }); } }
   function arr(x) { return Array.isArray(x) ? x : (x != null ? [x] : []); }
+  async function fetchQueueInfo(name) {
+    if (!hive.config) return;
+    try {
+      const host = window.location.hostname;
+      const vhost = encodeURIComponent((hive.config.stomp && hive.config.stomp.vhost) || '/');
+      const url = `http://${host}:15672/api/queues/${vhost}/${encodeURIComponent(name)}`;
+      const login = hive.config.stomp && hive.config.stomp.login;
+      const pass = hive.config.stomp && hive.config.stomp.passcode;
+      const headers = login ? { 'Authorization': 'Basic ' + btoa(`${login}:${pass}`) } : {};
+      const res = await fetch(url, { headers });
+      if (res.ok) {
+        hive.queues[name].info = await res.json();
+        redrawHive();
+      }
+    } catch {
+      /* ignore */
+    }
+  }
   function updateQueues(service, evt) {
     if (!evt) return false;
     let changed = false;
@@ -52,7 +73,7 @@ export function initHiveMenu() {
     const outs = Array.isArray(queues.out) ? queues.out : arr(evt.publishes).filter(Boolean);
     const apply = (name, dir) => {
       const key = String(name);
-      if (!hive.queues[key]) hive.queues[key] = { in: new Set(), out: new Set() };
+      if (!hive.queues[key]) { hive.queues[key] = { in: new Set(), out: new Set() }; fetchQueueInfo(key); }
       const set = dir === 'in' ? hive.queues[key].in : hive.queues[key].out;
       const before = set.size; set.add(service);
       if (set.size !== before) changed = true;
@@ -94,6 +115,43 @@ export function initHiveMenu() {
       ln.setAttribute('stroke-linecap', 'round');
       svg.appendChild(ln);
     }
+    for (const [qname, q] of Object.entries(hive.queues)) {
+      const prods = [...q.out].map(id => hive.nodes[id]).filter(Boolean);
+      const cons = [...q.in].map(id => hive.nodes[id]).filter(Boolean);
+      if (!prods.length || !cons.length) continue;
+      const avg = vals => vals.reduce((s, v) => s + v, 0) / vals.length;
+      const x = (avg(prods.map(n => n.x)) + avg(cons.map(n => n.x))) / 2;
+      const y = (avg(prods.map(n => n.y)) + avg(cons.map(n => n.y))) / 2;
+      const gq = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+      gq.setAttribute('transform', `translate(${x - 60},${y - 16})`);
+      const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      rect.setAttribute('x', '0'); rect.setAttribute('y', '0');
+      rect.setAttribute('width', '120'); rect.setAttribute('height', '32');
+      rect.setAttribute('rx', '6');
+      rect.setAttribute('fill', 'rgba(255,255,255,0.12)');
+      rect.setAttribute('stroke', 'rgba(255,255,255,0.5)');
+      rect.setAttribute('stroke-width', '1');
+      gq.appendChild(rect);
+      const txt1 = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      txt1.setAttribute('x', '60'); txt1.setAttribute('y', '14');
+      txt1.setAttribute('text-anchor', 'middle');
+      txt1.setAttribute('fill', '#fff');
+      txt1.setAttribute('font-family', 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace');
+      txt1.setAttribute('font-size', '11');
+      txt1.textContent = qname;
+      gq.appendChild(txt1);
+      const info = q.info || {};
+      const txt2 = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      txt2.setAttribute('x', '60'); txt2.setAttribute('y', '26');
+      txt2.setAttribute('text-anchor', 'middle');
+      txt2.setAttribute('fill', 'rgba(255,255,255,0.9)');
+      txt2.setAttribute('font-family', 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace');
+      txt2.setAttribute('font-size', '10');
+      const msgs = (typeof info.messages === 'number') ? info.messages : (typeof info.messages_ready === 'number' ? info.messages_ready : null);
+      txt2.textContent = msgs != null ? `msg ${msgs}` : '';
+      gq.appendChild(txt2);
+      svg.appendChild(gq);
+    }
     for (const id of Object.keys(hive.nodes)) {
       const n = hive.nodes[id];
       const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
@@ -107,15 +165,23 @@ export function initHiveMenu() {
       rect.setAttribute('stroke', 'rgba(255,255,255,0.5)');
       rect.setAttribute('stroke-width', '2');
       g.appendChild(rect);
-      const title = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-      title.setAttribute('x', '60'); title.setAttribute('y', '24');
-      title.setAttribute('text-anchor', 'middle'); title.setAttribute('fill', '#ffffff');
-      title.setAttribute('font-family', 'Inter, Segoe UI, Arial, sans-serif');
-      title.setAttribute('font-size', '13');
-      title.textContent = n.label.toUpperCase();
-      g.appendChild(title);
+      const typeTxt = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      typeTxt.setAttribute('x', '60'); typeTxt.setAttribute('y', '20');
+      typeTxt.setAttribute('text-anchor', 'middle'); typeTxt.setAttribute('fill', '#ffffff');
+      typeTxt.setAttribute('font-family', 'Inter, Segoe UI, Arial, sans-serif');
+      typeTxt.setAttribute('font-size', '13');
+      typeTxt.textContent = (n.type || n.label || '').toUpperCase();
+      g.appendChild(typeTxt);
+      const nameTxt = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      nameTxt.setAttribute('x', '60'); nameTxt.setAttribute('y', '36');
+      nameTxt.setAttribute('text-anchor', 'middle');
+      nameTxt.setAttribute('fill', 'rgba(255,255,255,0.9)');
+      nameTxt.setAttribute('font-family', 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace');
+      nameTxt.setAttribute('font-size', '12');
+      nameTxt.textContent = n.name || '–';
+      g.appendChild(nameTxt);
       const tps = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-      tps.setAttribute('x', '60'); tps.setAttribute('y', '42');
+      tps.setAttribute('x', '60'); tps.setAttribute('y', '52');
       tps.setAttribute('text-anchor', 'middle');
       tps.setAttribute('fill', 'rgba(255,255,255,0.8)');
       tps.setAttribute('font-family', 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace');
@@ -130,21 +196,29 @@ export function initHiveMenu() {
         }
         const fmt = (arr) => { if (!arr.length) return '–'; const first = arr[0]; return arr.length > 1 ? (first + '…') : first; };
         const inTxt = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-        inTxt.setAttribute('x', '60'); inTxt.setAttribute('y', '62');
+        inTxt.setAttribute('x', '60'); inTxt.setAttribute('y', '68');
         inTxt.setAttribute('text-anchor', 'middle');
         inTxt.setAttribute('fill', 'rgba(255,255,255,0.9)');
         inTxt.setAttribute('font-family', 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace');
         inTxt.setAttribute('font-size', '11');
         inTxt.textContent = `IN  ${fmt(ins)}`; if (ins.length) inTxt.setAttribute('title', ins.join(', ')); g.appendChild(inTxt);
         const outTxt = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-        outTxt.setAttribute('x', '60'); outTxt.setAttribute('y', '78');
+        outTxt.setAttribute('x', '60'); outTxt.setAttribute('y', '84');
         outTxt.setAttribute('text-anchor', 'middle');
         outTxt.setAttribute('fill', 'rgba(255,255,255,0.9)');
         outTxt.setAttribute('font-family', 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace');
         outTxt.setAttribute('font-size', '11');
         outTxt.textContent = `OUT ${fmt(outs)}`; if (outs.length) outTxt.setAttribute('title', outs.join(', ')); g.appendChild(outTxt);
       }
-      svg.appendChild(g);
+      if (id === 'sut' && hive.sutUrl) {
+        const link = document.createElementNS('http://www.w3.org/2000/svg', 'a');
+        link.setAttribute('href', hive.sutUrl);
+        link.setAttribute('target', '_blank');
+        link.appendChild(g);
+        svg.appendChild(link);
+      } else {
+        svg.appendChild(g);
+      }
     }
     if (hiveStats) {
       const count = Object.keys(hive.nodes).length - (hive.nodes['sut'] ? 1 : 0);
@@ -152,5 +226,7 @@ export function initHiveMenu() {
       hiveStats.textContent = `components: ${Math.max(0, count)} | queues: ${qCount} | edges: ${hive.edges.length}`;
     }
   }
-  return { ensureNode, updateQueues, rebuildEdgesFromQueues, redrawHive };
+  function setSutUrl(url) { hive.sutUrl = url; redrawHive(); }
+  function setConfig(cfg) { hive.config = cfg; }
+  return { ensureNode, updateQueues, rebuildEdgesFromQueues, redrawHive, setSutUrl, setConfig };
 }
