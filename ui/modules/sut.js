@@ -1,7 +1,7 @@
 export function renderSutPanel(containerEl, baseUrl) {
   const display = (baseUrl || '').replace(/\/$/, '');
-  const adminUrl = '/wiremock/__admin';
-  const reqUrl = '/wiremock/__admin/requests?limit=25';
+  const adminUrl = new URL('/wiremock/__admin', window.location.origin).toString();
+  const reqUrl = new URL('/wiremock/__admin/requests?limit=25', window.location.origin).toString();
   containerEl.innerHTML = `
     <div class="card" data-role="sut">
       <h3>WireMock – <a href="${display}" target="_blank" rel="noopener">${display}</a></h3>
