@@ -101,21 +101,21 @@ p{ color:#9aa0a6; }
 /* Connection status icon */
 #ph-conn-btn{
   position:relative;
-  width:28px;
-  height:28px;
+  width:32px;
+  height:32px;
   cursor:pointer;
   overflow:visible;
 }
 #ph-conn-btn .conn-icon{
-  --apex-y:6.38px;
-  --tri-half:4.9px;
-  --tri-height:6.69px;
-  --semi-d:15.56px;
+  --apex-y:7.29px;
+  --tri-half:5.6px;
+  --tri-height:7.65px;
+  --semi-d:17.78px;
   position:absolute;
   top:0;
   left:0;
-  width:28px;
-  height:28px;
+  width:32px;
+  height:32px;
   color:var(--color,#ef4444);
 }
 #ph-conn-btn.status-connecting .conn-icon{ --color:#3b82f6; }
@@ -187,8 +187,8 @@ p{ color:#9aa0a6; }
   bottom:100%;
   left:50%;
   transform:translate(-50%,0);
-  width:14px;
-  height:14px;
+  width:16px;
+  height:16px;
   border-radius:50%;
   background:currentColor;
   filter:drop-shadow(0 0 0 currentColor);
@@ -200,8 +200,8 @@ p{ color:#9aa0a6; }
   position:absolute;
   bottom:100%;
   left:50%;
-  width:28px;
-  height:28px;
+  width:32px;
+  height:32px;
   border:3px solid currentColor;
   border-radius:50%;
   transform:translate(-50%,0) scale(0.3);
