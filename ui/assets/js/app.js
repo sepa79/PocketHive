@@ -14,8 +14,7 @@ import { initWiremockJournal } from './features/wiremockJournal.js';
     const services = {
       'link-rabbitmq': `http://${host}:15672/`,
       'link-prometheus': `http://${host}:9090/`,
-      'link-grafana': `http://${host}:3000/`,
-      'link-loki': `http://${host}:3100/`
+      'link-grafana': `http://${host}:3000/`
     };
     Object.entries(services).forEach(([id, url]) => {
       const el = document.getElementById(id);
