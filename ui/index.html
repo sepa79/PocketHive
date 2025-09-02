@@ -1,184 +1,20 @@
 <!doctype html>
-<html lang="pl">
-<head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>PocketHive UI</title>
-  <link rel="icon" type="image/svg+xml" href="./assets/favicon/favicon.svg">
-  <link rel="icon" type="image/png" sizes="48x48" href="./assets/favicon/favicon-48.png">
-  <link rel="icon" type="image/png" sizes="32x32" href="./assets/favicon/favicon-32.png">
-  <link rel="icon" type="image/png" sizes="16x16" href="./assets/favicon/favicon-16.png">
-  <link rel="apple-touch-icon" sizes="180x180" href="./assets/favicon/apple-touch-icon.png">
-  <link rel="mask-icon" href="./assets/favicon/safari-pinned-tab.svg" color="#FFC107">
-    <link rel="manifest" href="./assets/favicon/site.webmanifest">
-    <meta name="theme-color" content="#0f1116">
-    <link rel="stylesheet" href="./assets/css/app.css">
-    <link rel="stylesheet" href="./assets/css/index.css">
-</head>
-<body>
-  <header>
-        <img class="logo" src="./assets/logo.svg" alt="PocketHive Logo" />
-        <nav class="nav-tabs">
-          <button id="tab-hive" class="tab-btn tab-active" type="button"><img src="./assets/hive.svg" alt="" class="tab-icon">Hive</button>
-          <button id="tab-buzz" class="tab-btn" type="button"><img src="./assets/buzz.svg" alt="" class="tab-icon">Buzz</button>
-          <button id="tab-nectar" class="tab-btn" type="button"><img src="./assets/nectar.svg" alt="" class="tab-icon">Nectar</button>
-        </nav>
-        <div class="header-right">
-          <div class="service-links">
-            <a id="link-rabbitmq" href="#" target="_blank" rel="noopener" aria-label="RabbitMQ"><img src="./assets/icons/rabbitmq.svg" alt="RabbitMQ"></a>
-            <a id="link-prometheus" href="#" target="_blank" rel="noopener" aria-label="Prometheus"><img src="./assets/icons/prometheus.svg" alt="Prometheus"></a>
-            <a id="link-grafana" href="#" target="_blank" rel="noopener" aria-label="Grafana"><img src="./assets/icons/grafana.svg" alt="Grafana"></a>
-            <a id="link-wiremock" href="#" target="_blank" rel="noopener" aria-label="WireMock"><img src="./assets/icons/wiremock.svg" alt="WireMock"></a>
-          </div>
-          <div class="menu" style="position:relative">
-            <button id="menu-btn" class="bg-toggle" style="cursor:pointer">☰ Menu</button>
-            <div id="menu-dropdown" class="dropdown-panel" style="display:none; position:absolute; right:0; top:36px; min-width: 240px;">
-              <a href="readme.html" class="dropdown-item">README</a>
-              <a href="bindings.html" class="dropdown-item">Buzz Bindings</a>
-              <a href="changelog.html" class="dropdown-item">Changelog</a>
-              <a href="docs.html" class="dropdown-item">API Docs</a>
-            </div>
-          </div>
-          <div class="bg-toggle" style="gap:10px; align-items:center">
-            <div class="hal">
-              <span id="status-ui" class="hal-eye" data-state="connecting" title="UI Health"></span>
-              <span id="status-ws" class="hal-eye" data-state="idle" title="WebSocket to RabbitMQ — click to open connection" role="button" tabindex="0"></span>
-              <div class="menu" id="conn-menu" style="position:relative; display:inline-flex;">
-                <div id="conn-dropdown" style="display:none; position:absolute; right:0; top:36px; background: rgba(12,16,22,0.95); border:1px solid rgba(255,255,255,0.15); border-radius:10px; min-width: 340px; box-shadow:0 6px 22px rgba(0,0,0,0.4); padding:10px"></div>
-              </div>
-            </div>
-            <button id="broadcast-status" title="Broadcast status-request to all services" aria-label="Broadcast status">
-              <svg class="monolith" width="32" height="32" viewBox="0 0 32 32" aria-hidden="true">
-                <polygon points="10,8 18,8 18,26 10,26" fill="#111"/>
-                <polygon points="18,8 20,6 20,24 18,26" fill="#1a1a1a"/>
-                <polygon points="10,8 18,8 20,6 12,6" fill="#222"/>
-              </svg>
-            </button>
-            <span id="ph-version" title="Current Version">v…</span>
-          </div>
-        </div>
-      </header>
-
-  <main id="view-buzz">
-    <div class="controls" style="display:none">
-      <input id="wsurl" size="40" value="ws://localhost:15674/ws"/>
-      <input id="login" value="guest"/>
-      <input id="pass" type="password" value="guest"/>
-      <button id="connect">Connect</button>
-      <span id="state"></span>
-    </div>
-    <section class="card" style="margin-top:16px; padding:12px">
-      <div class="row" style="display:flex; justify-content:space-between; align-items:center">
-        <div style="display:flex; gap:8px; align-items:center">
-          <button id="log-tab-events" class="tab-btn tab-active" type="button">Events Log</button>
-          <button id="log-tab-topic" class="tab-btn" type="button">Topic Sniffer</button>
-        </div>
-        <label style="font-size:12px; display:flex; align-items:center; gap:6px; color:#fff;">
-          Lines
-          <input id="log-limit" class="themed-input" type="number" value="100" min="10" max="500" style="width:72px"/>
-        </label>
-      </div>
-        <div id="log-events" aria-live="polite">
-        <div id="log"></div>
-      </div>
-      <div id="log-topic" style="display:none">
-        <div class="row" style="display:flex; gap:8px; align-items:center; margin:6px 0 8px 0">
-          <input id="topic-rk" placeholder="Routing key (e.g., ev.# or ev.status-#)" style="flex:1 1 auto"/>
-          <button id="topic-sub" class="tab-btn" type="button">Subscribe</button>
-          <button id="topic-unsub" class="tab-btn" type="button">Unsubscribe</button>
-        </div>
-        <div id="topic-log" style="white-space: pre-wrap; font-family: monospace; max-height: 30vh; overflow:auto; background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.12); border-radius: 12px; padding:10px;"></div>
-      </div>
-    </section>
-
-    <section class="card" style="margin-top:16px; padding:12px">
-      <div class="row" style="display:flex; justify-content:space-between; align-items:center">
-        <div style="display:flex; gap:8px; align-items:center">
-          <h3 style="margin:0">System Logs</h3>
-          <button id="syslog-tab-out" class="tab-btn tab-active" type="button">OUT</button>
-          <button id="syslog-tab-in" class="tab-btn" type="button">IN</button>
-          <button id="syslog-tab-other" class="tab-btn" type="button">Other</button>
-        </div>
-        <label style="font-size:12px; display:flex; align-items:center; gap:6px; color:#fff;">
-          Lines
-          <input id="syslog-limit" class="themed-input" type="number" value="100" min="10" max="500" style="width:72px"/>
-        </label>
-      </div>
-      <div id="syslog-out" style="white-space: pre-wrap; font-family: monospace; max-height: 30vh; overflow:auto; background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.12); border-radius: 12px; padding:10px;"></div>
-      <div id="syslog-in" style="display:none; white-space: pre-wrap; font-family: monospace; max-height: 30vh; overflow:auto; background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.12); border-radius: 12px; padding:10px;"></div>
-      <div id="syslog-other" style="display:none; white-space: pre-wrap; font-family: monospace; max-height: 30vh; overflow:auto; background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.12); border-radius: 12px; padding:10px;"></div>
-    </section>
-  </main>
-
-    <div id="view-hive">
-      <div id="hive-toolbar">
-        <label>Hold time (s) <input id="hive-hold" type="number" min="1" max="120" step="1" value="15" style="width:64px"></label>
-        <button id="hive-clear" class="tab-btn" style="cursor:pointer">Clear & Restart</button>
-        <span class="small" id="hive-stats" style="color:#9aa0a6"></span>
-      </div>
-      <svg id="hive-canvas" viewBox="0 0 1200 480" preserveAspectRatio="xMidYMid meet" aria-label="Hive view"></svg>
-    </div>
-    <div id="view-nectar">
-      <div class="kpi-grid">
-        <div class="card"><div class="kpi-title">Generator TPS</div><div id="gen" class="kpi-value">0</div></div>
-        <div class="card"><div class="kpi-title">Moderator TPS</div><div id="mod" class="kpi-value">0</div></div>
-        <div class="card"><div class="kpi-title">Processor TPS</div><div id="proc" class="kpi-value">0</div></div>
-        <div class="card"><div class="kpi-title">Postprocessor TPS</div><div id="post" class="kpi-value">0</div></div>
-      </div>
-      <div class="controls" style="margin-top:10px">
-        <div class="menu" style="position:relative">
-          <button id="metric-btn" class="tab-btn" style="cursor:pointer">TPS</button>
-          <div id="metric-dropdown" class="dropdown-panel" style="display:none; position:absolute; left:0; top:36px; min-width:220px; z-index:10;">
-            <button data-metric="tps" type="button" class="dropdown-item">TPS</button>
-            <button data-metric="latency" type="button" class="dropdown-item">End-to-End Latency</button>
-            <button data-metric="hops" type="button" class="dropdown-item">Per-Hop Count</button>
-          </div>
-        </div>
-        <label style="font-size:12px; display:flex; align-items:center; gap:6px; color:#fff;">
-          Points
-          <input id="event-limit" class="themed-input" type="number" value="600" min="60" max="10000" style="width:72px"/>
-        </label>
-      </div>
-      <div id="charts" class="card" style="padding:16px">
-        <div class="kpi-title" id="charts-title" style="margin-bottom:10px">RabbitMQ Buzz Stream — TPS (last 60s)</div>
-        <div id="charts-tps" style="display:grid; grid-template-columns: 1fr; gap:16px">
-          <div>
-            <div class="kpi-title" style="margin-bottom:6px">Generator</div>
-            <canvas id="chart-gen" width="1000" height="180" style="width:100%; height:180px; background: rgba(0,0,0,0.25); border:1px solid rgba(255,255,255,0.1); border-radius:8px"></canvas>
-          </div>
-          <div>
-            <div class="kpi-title" style="margin-bottom:6px">Moderator</div>
-            <canvas id="chart-mod" width="1000" height="180" style="width:100%; height:180px; background: rgba(0,0,0,0.25); border:1px solid rgba(255,255,255,0.1); border-radius:8px"></canvas>
-          </div>
-          <div>
-            <div class="kpi-title" style="margin-bottom:6px">Processor</div>
-            <canvas id="chart-proc" width="1000" height="180" style="width:100%; height:180px; background: rgba(0,0,0,0.25); border:1px solid rgba(255,255,255,0.1); border-radius:8px"></canvas>
-          </div>
-          <div>
-            <div class="kpi-title" style="margin-bottom:6px">Postprocessor</div>
-            <canvas id="chart-post" width="1000" height="180" style="width:100%; height:180px; background: rgba(0,0,0,0.25); border:1px solid rgba(255,255,255,0.1); border-radius:8px"></canvas>
-          </div>
-        </div>
-        <div id="charts-latency" style="display:none">
-          <div class="kpi-title" style="margin-bottom:6px">End-to-End Latency</div>
-          <canvas id="chart-latency" width="1000" height="180" style="width:100%; height:180px; background: rgba(0,0,0,0.25); border:1px solid rgba(255,255,255,0.1); border-radius:8px"></canvas>
-        </div>
-        <div id="charts-hops" style="display:none">
-          <div class="kpi-title" style="margin-bottom:6px">Per-Hop Count</div>
-          <canvas id="chart-hops" width="1000" height="180" style="width:100%; height:180px; background: rgba(0,0,0,0.25); border:1px solid rgba(255,255,255,0.1); border-radius:8px"></canvas>
-        </div>
-      </div>
-  </div>
-
-  <div id="panel-modal">
-    <div class="modal-content">
-      <button id="panel-close" aria-label="Close">×</button>
-      <div id="panel-body"></div>
-    </div>
-  </div>
-
-  <script src="https://unpkg.com/@stomp/stompjs@7.0.0/bundles/stomp.umd.js"></script>
-  <script type="module" src="./assets/js/main.js"></script>
-  <script type="module" src="./assets/js/app.js"></script>
-</body>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PocketHive UI</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="48x48" href="/favicon/favicon-48.png" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon/favicon-16.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/favicon/apple-touch-icon.png" />
+    <link rel="mask-icon" href="/favicon/safari-pinned-tab.svg" color="#FFC107" />
+    <link rel="manifest" href="/favicon/site.webmanifest" />
+    <meta name="theme-color" content="#0f1116" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
 </html>
