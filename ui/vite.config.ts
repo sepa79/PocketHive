@@ -8,7 +8,6 @@ export default defineConfig({
     alias: {
       '@': path.resolve(__dirname, './src'),
       '@legacy': path.resolve(__dirname, '../UI-Legacy'),
-      '@legacyAssets': path.resolve(__dirname, '../UI-Legacy/assets'),
     },
   },
   server: {
