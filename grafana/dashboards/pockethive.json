@@ -8,7 +8,7 @@
       "title": "Postprocessor Heap Memory",
       "datasource": "Prometheus",
       "targets": [
-        { "expr": "jvm_memory_used_bytes{area="heap",job="postprocessor"}" }
+        { "expr": "jvm_memory_used_bytes{area=\"heap\",job=\"postprocessor\"}" }
       ],
       "lines": true,
       "id": 1,
@@ -19,7 +19,7 @@
       "title": "Processor Heap Memory",
       "datasource": "Prometheus",
       "targets": [
-        { "expr": "jvm_memory_used_bytes{area="heap",job="processor"}" }
+        { "expr": "jvm_memory_used_bytes{area=\"heap\",job=\"processor\"}" }
       ],
       "lines": true,
       "id": 2,
@@ -30,7 +30,7 @@
       "title": "Moderator Heap Memory",
       "datasource": "Prometheus",
       "targets": [
-        { "expr": "jvm_memory_used_bytes{area="heap",job="moderator"}" }
+        { "expr": "jvm_memory_used_bytes{area=\"heap\",job=\"moderator\"}" }
       ],
       "lines": true,
       "id": 3,
@@ -41,7 +41,7 @@
       "title": "Generator Heap Memory",
       "datasource": "Prometheus",
       "targets": [
-        { "expr": "jvm_memory_used_bytes{area="heap",job="generator"}" }
+        { "expr": "jvm_memory_used_bytes{area=\"heap\",job=\"generator\"}" }
       ],
       "lines": true,
       "id": 4,
