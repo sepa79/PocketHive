@@ -2,6 +2,7 @@ import { Link, NavLink } from 'react-router-dom'
 import { Menu, Sun, MoonStar } from 'lucide-react'
 import Logo from './Logo'
 import { useUiStore } from '../lib/store'
+import Button from './ui/Button'
 
 const navLinkClass = ({ isActive }: { isActive: boolean }) =>
   `px-3 py-2 rounded-xl text-sm transition-colors
@@ -15,13 +16,14 @@ export default function TopNav() {
   return (
     <header className="sticky top-0 z-40 border-b border-phl-border dark:border-ph-border bg-phl-bg/70 dark:bg-ph-bg/70 backdrop-blur">
       <div className="mx-auto flex max-w-[1400px] items-center gap-3 px-4 py-3">
-        <button
+        <Button
           aria-label="Toggle sidebar"
-          className="rounded-xl p-2 hover:bg-phl-surface/70 dark:hover:bg-ph-surface/70"
+          variant="ghost"
+          size="icon"
           onClick={toggleSidebar}
         >
           <Menu size={18} />
-        </button>
+        </Button>
 
         <Link to="/" className="flex items-center gap-3">
           <Logo className="h-9 w-9" />
@@ -49,14 +51,16 @@ export default function TopNav() {
             Nectar
           </NavLink>
 
-          <button
+          <Button
             aria-label="Toggle theme"
-            className="ml-2 rounded-xl p-2 hover:bg-phl-surface/70 dark:hover:bg-ph-surface/70"
+            variant="ghost"
+            size="icon"
+            className="ml-2"
             onClick={toggleTheme}
             title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`}
           >
             {theme === 'dark' ? <Sun size={18} /> : <MoonStar size={18} />}
-          </button>
+          </Button>
         </nav>
       </div>
     </header>

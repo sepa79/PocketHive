@@ -1,4 +1,5 @@
 import Card from '@components/ui/Card'
+import Button from '@components/ui/Button'
 import { useQuery } from '@tanstack/react-query'
 
 export default function Home() {
@@ -12,6 +13,10 @@ export default function Home() {
       <Card title="Home" subtitle="Welcome to PocketHive.">
         <p className="opacity-90">This is the themed React shell. Use the top/side navigation to explore Hive, Buzz, and Nectar placeholders.</p>
         <p className="mt-4">{isLoading ? 'Loading...' : data}</p>
+        <div className="mt-4 flex gap-2">
+          <Button>Accent action</Button>
+          <Button variant="secondary">Secondary</Button>
+        </div>
       </Card>
 
       <Card title="Quick links">
