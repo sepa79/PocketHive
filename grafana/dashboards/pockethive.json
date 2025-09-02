@@ -48,6 +48,8 @@
       "gridPos": { "h": 8, "w": 24, "x": 0, "y": 24 }
     }
   ],
+  "refresh": "5s",
+  "time": { "from": "now-15m", "to": "now" },
   "schemaVersion": 27,
   "title": "PocketHive",
   "version": 1
