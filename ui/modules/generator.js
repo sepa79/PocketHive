@@ -5,7 +5,7 @@ export function renderGeneratorPanel(containerEl, instanceId, initial){
   const extra = `
       <div class="section">
         <div class="block-title">General</div>
-        <label>Rate per sec <span id="rateVal">5</span> <input id="rate" type="range" min="0" max="100" value="5"></label>
+        <label>Rate per sec <span id="rateVal">5.0</span> <input id="rate" type="range" min="0" max="100" step="0.1" value="5" style="width:400px"></label>
         <div class="controls"><button id="once">Once</button></div>
         <div class="controls"><button id="confirmGeneral">Confirm Changes</button></div>
       </div>
@@ -34,7 +34,7 @@ export function renderGeneratorPanel(containerEl, instanceId, initial){
     const srPayload = {type:'status-request', role:'generator', instance:instanceId};
     client.publish({destination:`/exchange/ph.control/sig.status-request.generator.${instanceId}`, body: JSON.stringify(srPayload)});
   }
-  rate && rate.addEventListener('input', ()=>{ const v=Number(rate.value); if(rateVal) rateVal.textContent=String(v); });
+  rate && rate.addEventListener('input', ()=>{ const v=Number(rate.value); if(rateVal) rateVal.textContent=v.toFixed(1); });
   confirmGeneral && confirmGeneral.addEventListener('click', ()=>{ const v=Number(rate.value); sendConfig({ratePerSec:v}); });
   onceBtn && onceBtn.addEventListener('click', ()=> sendConfig({singleRequest:true}));
   confirmMessage && confirmMessage.addEventListener('click', ()=>{
@@ -45,7 +45,7 @@ export function renderGeneratorPanel(containerEl, instanceId, initial){
   function apply(evt){
     if(!evt) return;
     const data=evt.data||{};
-    if(data.ratePerSec!=null && rate){ rate.value=data.ratePerSec; if(rateVal) rateVal.textContent=String(data.ratePerSec); }
+      if(data.ratePerSec!=null && rate){ rate.value=data.ratePerSec; if(rateVal) rateVal.textContent=Number(data.ratePerSec).toFixed(1); }
     if(data.path!=null && pathInp) pathInp.value=data.path;
     if(data.method!=null && methodInp) methodInp.value=data.method;
     if(data.body!=null && bodyInp) bodyInp.value=data.body;
