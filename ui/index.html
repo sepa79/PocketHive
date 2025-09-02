@@ -47,7 +47,20 @@
           <div class="bg-toggle" style="gap:10px; align-items:center">
             <div class="hal">
               <span id="status-ui" class="hal-eye" data-state="connecting" title="UI Health"></span>
-              <span id="status-ws" class="hal-eye" data-state="idle" title="WebSocket to RabbitMQ — click to open connection" role="button" tabindex="0"></span>
+              <div id="status-ws" class="status-offline" data-state="idle" title="WebSocket to RabbitMQ — click to open connection" role="button" tabindex="0" aria-label="WS idle">
+                <div class="conn-icon">
+                  <div class="semicircle" aria-hidden="true"></div>
+                  <div class="highlight" aria-hidden="true"></div>
+                  <div class="semicircle antenna-wrapper" aria-hidden="true">
+                    <div class="antenna" aria-hidden="true">
+                      <div class="tip" aria-hidden="true"></div>
+                      <span class="ring r1" aria-hidden="true"></span>
+                      <span class="ring r2" aria-hidden="true"></span>
+                    </div>
+                  </div>
+                  <div class="triangle" aria-hidden="true"></div>
+                </div>
+              </div>
               <div class="menu" id="conn-menu" style="position:relative; display:inline-flex;">
                 <div id="conn-dropdown" style="display:none; position:absolute; right:0; top:36px; background: rgba(12,16,22,0.95); border:1px solid rgba(255,255,255,0.15); border-radius:10px; min-width: 340px; box-shadow:0 6px 22px rgba(0,0,0,0.4); padding:10px"></div>
               </div>

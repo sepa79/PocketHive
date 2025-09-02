@@ -91,7 +91,17 @@ initWiremockJournal();
 
   function setState(txt){ if(stateLbl) stateLbl.textContent = txt; }
   function setUiStatus(state){ if(!uiStatus) return; uiStatus.dataset.state = state || 'connecting'; uiStatus.setAttribute('aria-label', `UI ${state||''}`.trim()); uiStatus.title = `UI: ${state}`; }
-  function setWsStatus(state){ if(!wsStatus) return; wsStatus.dataset.state = state || 'idle'; wsStatus.setAttribute('aria-label', `WS ${state||''}`.trim()); wsStatus.title = `WebSocket: ${state}`; }
+  function setWsStatus(state){
+    if(!wsStatus) return;
+    wsStatus.dataset.state = state || 'idle';
+    wsStatus.setAttribute('aria-label', `WS ${state||''}`.trim());
+    wsStatus.title = `WebSocket: ${state}`;
+    wsStatus.classList.remove('status-connecting','status-connected','status-offline');
+    const cls = (state === 'connected' || state === 'open') ? 'status-connected'
+      : state === 'connecting' ? 'status-connecting'
+      : 'status-offline';
+    wsStatus.classList.add(cls);
+  }
 
   function loadConn(){ try{ const raw = localStorage.getItem(PH_CONN_KEY); if(!raw) return null; return JSON.parse(raw); }catch{ return null; } }
   function saveConn(obj){ try{ localStorage.setItem(PH_CONN_KEY, JSON.stringify(obj)); }catch{} }
