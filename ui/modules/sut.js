@@ -17,7 +17,7 @@ export function renderSutPanel(containerEl, baseUrl) {
         <button class="tab-btn" data-tab="requests">Requests</button>
       </div>
       <div class="tab-content" data-tab="admin">
-        <pre class="admin-output" style="white-space:pre-wrap;word-break:break-all;padding:8px;max-height:60vh;overflow:auto;background:#1e1e1e;color:#fff;"></pre>
+        <div class="admin-output" style="padding:8px;max-height:60vh;overflow:auto;"></div>
       </div>
       <div class="tab-content" data-tab="requests" style="display:none">
         <div class="requests-output" style="padding:8px;max-height:60vh;overflow:auto;"></div>
@@ -44,14 +44,31 @@ export function renderSutPanel(containerEl, baseUrl) {
   };
   async function loadAdmin() {
     if (!adminEl) return;
-    adminEl.textContent = 'Loading…';
+    adminEl.innerHTML = '<div style="color:#fff;">Loading…</div>';
     try {
       const res = await fetch(adminUrl, fetchOpts);
-      if (!res.ok) { adminEl.textContent = `HTTP ${res.status}`; return; }
+      if (!res.ok) { adminEl.innerHTML = `<div style="color:#f66;">HTTP ${res.status}</div>`; return; }
       const data = await res.json();
-      adminEl.textContent = JSON.stringify(data, null, 2);
+      const mappings = Array.isArray(data && data.mappings) ? data.mappings : [];
+      if (!mappings.length) { adminEl.innerHTML = '<div style="color:#9aa0a6;">No mappings</div>'; return; }
+      const table = document.createElement('table');
+      table.style.width = '100%';
+      table.style.borderCollapse = 'collapse';
+      table.innerHTML = '<thead><tr><th style="text-align:left;padding:4px 8px;">Method</th><th style="text-align:left;padding:4px 8px;">URL</th><th style="text-align:left;padding:4px 8px;">Status</th></tr></thead>';
+      const tbody = document.createElement('tbody');
+      mappings.forEach(m => {
+        const tr = document.createElement('tr');
+        const method = m.request && m.request.method ? m.request.method : '';
+        const url = m.request && (m.request.url || m.request.urlPath) ? (m.request.url || m.request.urlPath) : '';
+        const status = m.response && m.response.status ? m.response.status : '';
+        tr.innerHTML = `<td style="padding:4px 8px;">${method}</td><td style="padding:4px 8px;">${url}</td><td style="padding:4px 8px;">${status}</td>`;
+        tbody.appendChild(tr);
+      });
+      table.appendChild(tbody);
+      adminEl.innerHTML = '';
+      adminEl.appendChild(table);
     } catch (e) {
-      adminEl.textContent = `Error: ${e && e.message ? e.message : 'fetch failed'}`;
+      adminEl.innerHTML = `<div style="color:#f66;">Error: ${e && e.message ? e.message : 'fetch failed'}</div>`;
     }
   }
   let reqLoaded = false;
