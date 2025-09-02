@@ -1,9 +1,10 @@
 module.exports = [
   {
-    files: ["**/*.js"],
+    files: ["**/*.js", "**/*.jsx"],
     languageOptions: {
       ecmaVersion: "latest",
-      sourceType: "module"
+      sourceType: "module",
+      parserOptions: { ecmaFeatures: { jsx: true } }
     },
     rules: {}
   }

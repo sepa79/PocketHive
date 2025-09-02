@@ -1,0 +1,17 @@
+{
+  "stomp": {
+    "wsPath": "/ws",
+    "vhost": "/",
+    "login": "guest",
+    "passcode": "guest"
+  },
+  "preferConfig": true,
+  "demo": false,
+  "subscriptions": [
+  ],
+  "amqp": {
+    "exchange": "ph.hive",
+    "genQueue": "ph.gen",
+    "modQueue": "ph.mod"
+  }
+}

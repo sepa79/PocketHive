@@ -5,7 +5,7 @@
   "description": "Development tooling for PocketHive",
   "scripts": {
     "build": "echo \"no build step\"",
-    "lint": "eslint ui/assets/js",
+    "lint": "eslint \"ui/src/**/*.{js,jsx}\"",
     "test": "vitest run --passWithNoTests"
   },
   "devDependencies": {

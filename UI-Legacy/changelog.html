@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>PocketHive – Changelog</title>
+  <link rel="icon" type="image/svg+xml" href="./assets/favicon/favicon.svg">
+  <link rel="icon" type="image/png" sizes="48x48" href="./assets/favicon/favicon-48.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="./assets/favicon/favicon-32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="./assets/favicon/favicon-16.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="./assets/favicon/apple-touch-icon.png">
+  <link rel="mask-icon" href="./assets/favicon/safari-pinned-tab.svg" color="#FFC107">
+  <link rel="manifest" href="./assets/favicon/site.webmanifest">
+  <meta name="theme-color" content="#0f1116">
+  <link rel="stylesheet" href="./assets/css/app.css">
+  <style>
+    body{margin:0; font-family: ui-sans-serif,system-ui,Segoe UI,Roboto,Helvetica,Arial; color:#e6eef8; background:#0b0f14}
+    header{display:flex;align-items:center;gap:12px;padding:16px 20px;border-bottom:1px solid rgba(255,255,255,.1);background:#0c1118;position:sticky;top:0}
+    header a{color:#e6eef8;text-decoration:none;border:1px solid rgba(255,255,255,.2);padding:6px 10px;border-radius:10px}
+    main{max-width:900px;margin:20px auto;padding:0 16px 24px}
+    pre{white-space:pre-wrap;background:#0b1017;border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:12px}
+    h1,h2,h3{margin:14px 0 8px}
+    .muted{color:#9aa8bd}
+  </style>
+</head>
+<body>
+  <header>
+    <a href="/">← Back</a>
+    <div style="margin-left:auto" class="muted">Version: <span id="ver">…</span></div>
+  </header>
+  <main>
+    <div id="chg"></div>
+  </main>
+  <script>
+    async function loadText(path){ try{ const r=await fetch(path,{cache:'no-store'}); if(!r.ok) return null; return await r.text(); }catch{ return null; } }
+    function renderMarkdown(md){
+      // Tiny MD to HTML: headers and bullets only, rest in <pre>
+      const lines = md.split(/\r?\n/);
+      const out=[]; let inList=false; let buf=[];
+      const flushPre=()=>{ if(buf.length){ out.push('<pre>'+buf.join('\n').replace(/[&<>]/g,s=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[s]))+'</pre>'); buf=[]; } };
+      for(const line of lines){
+        if(/^###\s+/.test(line)){ flushPre(); if(inList){ out.push('</ul>'); inList=false;} out.push('<h3>'+line.replace(/^###\s+/,'')+'</h3>'); continue; }
+        if(/^##\s+/.test(line)){ flushPre(); if(inList){ out.push('</ul>'); inList=false;} out.push('<h2>'+line.replace(/^##\s+/,'')+'</h2>'); continue; }
+        if(/^#\s+/.test(line)){ flushPre(); if(inList){ out.push('</ul>'); inList=false;} out.push('<h1>'+line.replace(/^#\s+/,'')+'</h1>'); continue; }
+        if(/^\s*-\s+/.test(line)){ flushPre(); if(!inList){ out.push('<ul>'); inList=true; } out.push('<li>'+line.replace(/^\s*-\s+/, '')+'</li>'); continue; }
+        if(line.trim()===''){ flushPre(); if(inList){ out.push('</ul>'); inList=false; } out.push('<div style="height:6px"></div>'); continue; }
+        buf.push(line);
+      }
+      flushPre(); if(inList) out.push('</ul>');
+      return out.join('\n');
+    }
+    (async ()=>{
+      const v = await loadText('../VERSION'); if(v) document.getElementById('ver').textContent = v.trim();
+      const md = await loadText('./CHANGELOG.md');
+      document.getElementById('chg').innerHTML = md ? renderMarkdown(md) : '<pre>CHANGELOG.md not available</pre>';
+    })();
+  </script>
+</body>
+</html>
