@@ -72,7 +72,7 @@ docker compose up -d --build
 
 - UI: http://localhost:8088
 - Click "Connect". The UI connects to RabbitMQ via same-origin WebSocket `ws://localhost:8088/ws` using StompJS (same client as the built‑in Generator).
-- The top bar hosts icon links to RabbitMQ, Prometheus, and Grafana. The WireMock button opens a dropdown that fetches the request journal from `/__admin/requests` and lists method, URL, and status.
+- The top bar hosts icon links to RabbitMQ, Prometheus, and Grafana. The WireMock button opens a dropdown that fetches the last 25 requests from `/__admin/requests` and lists method, URL, and status.
 
 3) RabbitMQ Management (optional)
 
@@ -88,7 +88,7 @@ docker compose up -d --build
 ## Service Configuration
 
 - **Generator** builds HTTP requests from `ph.gen.message.*` settings. Defaults send a `POST /api/test` with body `hello-world` and no headers.
-- **Processor** reads `ph.proc.base-url` to determine the downstream base URL, defaulting to `http://wiremock`.
+- **Processor** reads `ph.proc.base-url` to determine the downstream base URL, defaulting to `http://wiremock:8080`, and forwards moderated messages unchanged to the system under test using the message's path and headers.
 - The UI exposes dedicated sections for both settings, and changes take effect only after pressing **Confirm Changes**.
 
 ## WebSocket Proxy (UI ←→ RabbitMQ)
