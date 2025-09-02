@@ -116,7 +116,7 @@ p{ color:#9aa0a6; }
   left:0;
   width:360px;
   height:360px;
-  transform:scale(0.14) translate(-44px,-66px);
+  transform:scale(0.1) translate(-40px,-26px);
   transform-origin:top left;
   color:var(--color,#ef4444);
 }
