@@ -8,12 +8,44 @@
       "title": "Postprocessor Heap Memory",
       "datasource": "Prometheus",
       "targets": [
-        {
-          "expr": "jvm_memory_used_bytes{area=\"heap\",job=\"postprocessor\"}"
-        }
+        { "expr": "jvm_memory_used_bytes{area="heap",job="postprocessor"}" }
       ],
       "lines": true,
-      "id": 1
+      "id": 1,
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 0 }
+    },
+    {
+      "type": "graph",
+      "title": "Processor Heap Memory",
+      "datasource": "Prometheus",
+      "targets": [
+        { "expr": "jvm_memory_used_bytes{area="heap",job="processor"}" }
+      ],
+      "lines": true,
+      "id": 2,
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 8 }
+    },
+    {
+      "type": "graph",
+      "title": "Moderator Heap Memory",
+      "datasource": "Prometheus",
+      "targets": [
+        { "expr": "jvm_memory_used_bytes{area="heap",job="moderator"}" }
+      ],
+      "lines": true,
+      "id": 3,
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 16 }
+    },
+    {
+      "type": "graph",
+      "title": "Generator Heap Memory",
+      "datasource": "Prometheus",
+      "targets": [
+        { "expr": "jvm_memory_used_bytes{area="heap",job="generator"}" }
+      ],
+      "lines": true,
+      "id": 4,
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 24 }
     }
   ],
   "schemaVersion": 27,
