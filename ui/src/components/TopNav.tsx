@@ -5,7 +5,7 @@ import { useUiStore } from '../lib/store'
 import Button from './ui/Button'
 
 const baseLink =
-  'inline-flex items-center justify-center rounded-xl px-3 py-2 text-sm font-semibold uppercase tracking-wide transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-phl-accent2 dark:focus-visible:ring-ph-accent2 focus-visible:ring-offset-phl-bg dark:focus-visible:ring-offset-ph-bg active:translate-y-px'
+  'inline-flex items-center justify-center rounded-xl px-4 py-2 text-sm font-semibold uppercase tracking-wide transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-phl-accent2 dark:focus-visible:ring-ph-accent2 focus-visible:ring-offset-phl-bg dark:focus-visible:ring-offset-ph-bg active:translate-y-px'
 
 const navLinkClass = ({ isActive }: { isActive: boolean }) =>
   `${baseLink} ${
@@ -43,7 +43,7 @@ export default function TopNav() {
           </div>
         </Link>
 
-        <nav className="ml-auto flex items-center gap-1">
+        <nav className="ml-auto flex items-center gap-2">
           <NavLink to="/" className={navLinkClass} end>
             Home
           </NavLink>

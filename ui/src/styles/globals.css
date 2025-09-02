@@ -8,7 +8,7 @@
 html, body, #root { height: 100%; }
 
 body {
-  @apply bg-phl-bg dark:bg-ph-bg text-phl-text dark:text-ph-text antialiased;
+  @apply font-sans bg-phl-bg dark:bg-ph-bg text-phl-text dark:text-ph-text antialiased;
 }
 
 html.dark body {
