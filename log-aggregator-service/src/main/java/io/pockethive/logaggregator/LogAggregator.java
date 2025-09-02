@@ -3,6 +3,7 @@ package io.pockethive.logaggregator;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.amqp.core.Message;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.EnableScheduling;
@@ -14,6 +15,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Instant;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
@@ -41,8 +43,9 @@ public class LogAggregator {
   }
 
   @RabbitListener(queues = "${ph.logsQueue:logs.agg}")
-  public void onLog(String json){
+  public void onLog(Message message){
     try{
+      String json = new String(message.getBody(), StandardCharsets.UTF_8);
       LogEntry entry = mapper.readValue(json, LogEntry.class);
       buffer.add(entry);
     } catch(Exception e){

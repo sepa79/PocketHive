@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.7] - 2025-09-02
+Timestamp: 2025-09-02T14:44:30Z
+
+- Log aggregator: parse raw AMQP messages, tolerate unknown fields, and ensure every Loki stream has a label (defaulting to `service="unknown"`).
+
 ## [0.5.6] - 2025-09-01
 Timestamp: 2025-09-01T23:45:28Z
 
