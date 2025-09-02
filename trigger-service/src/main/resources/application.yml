@@ -1,0 +1,21 @@
+spring:
+  application.name: trigger-service
+  rabbitmq:
+    host: ${RABBITMQ_HOST:rabbitmq}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_DEFAULT_USER:guest}
+    password: ${RABBITMQ_DEFAULT_PASS:guest}
+management.endpoints.web.exposure.include: health,info
+
+logging:
+  pattern.level: "%5p [%X{traceId}]"
+
+ph:
+  trigger:
+    intervalMs: 60000
+    actionType: shell
+    command: echo hello
+    url: http://localhost
+    method: GET
+    body: ""
+    headers: {}

@@ -72,12 +72,15 @@ services:
         condition: service_started
 
   trigger:
-    image: ghcr.io/pockethive/trigger-service:latest
+    build:
+      context: .
+      dockerfile: trigger-service/Dockerfile
     environment:
       RABBITMQ_HOST: rabbitmq
       PH_TRAFFIC_EXCHANGE: ph.hive
       PH_GEN_QUEUE: ph.gen
       PH_MOD_QUEUE: ph.mod
+      PH_FINAL_QUEUE: ph.final
       PH_CONTROL_QUEUE: ph.control
     depends_on:
       log-aggregator:
