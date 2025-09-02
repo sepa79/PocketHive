@@ -11,7 +11,8 @@
         { "expr": "rate(postprocessor_hop_latency_ms_sum[1m]) / rate(postprocessor_hop_latency_ms_count[1m])" }
       ],
       "lines": true,
-      "id": 1
+      "id": 1,
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 0 }
     },
     {
       "type": "graph",
@@ -21,7 +22,8 @@
         { "expr": "rate(postprocessor_total_latency_ms_sum[1m]) / rate(postprocessor_total_latency_ms_count[1m])" }
       ],
       "lines": true,
-      "id": 2
+      "id": 2,
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 8 }
     },
     {
       "type": "graph",
@@ -31,7 +33,8 @@
         { "expr": "rate(postprocessor_hops_sum[1m]) / rate(postprocessor_hops_count[1m])" }
       ],
       "lines": true,
-      "id": 3
+      "id": 3,
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 16 }
     },
     {
       "type": "graph",
@@ -41,7 +44,8 @@
         { "expr": "rate(postprocessor_errors_total[1m])" }
       ],
       "lines": true,
-      "id": 4
+      "id": 4,
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 24 }
     }
   ],
   "schemaVersion": 27,
