@@ -5,7 +5,7 @@ import { useUiStore } from '../lib/store'
 import Button from './ui/Button'
 
 const baseLink =
-  'inline-flex items-center justify-center rounded-xl px-5 py-2.5 text-sm font-semibold uppercase tracking-wide transition no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-phl-accent2 dark:focus-visible:ring-ph-accent2 focus-visible:ring-offset-phl-bg dark:focus-visible:ring-offset-ph-bg active:translate-y-px'
+  'inline-flex items-center justify-center rounded-xl px-6 py-3 text-sm font-semibold uppercase tracking-wide transition no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-phl-accent2 dark:focus-visible:ring-ph-accent2 focus-visible:ring-offset-phl-bg dark:focus-visible:ring-offset-ph-bg active:translate-y-px'
 
 const navLinkClass = ({ isActive }: { isActive: boolean }) =>
   `${baseLink} ${

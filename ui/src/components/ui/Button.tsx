@@ -23,7 +23,7 @@ export default function Button({
   }
 
   const sizes: Record<typeof size, string> = {
-    default: 'px-5 py-2.5',
+    default: 'px-6 py-3',
     icon: 'h-8 w-8 p-0'
   }
 
