@@ -38,6 +38,7 @@ public class LogAggregator {
   private final String metricsExchange;
   private final String metricsRk;
   private final String grafanaBase;
+  private final String selfService;
 
   public LogAggregator(
       RabbitTemplate rabbit,
@@ -47,7 +48,8 @@ public class LogAggregator {
       @Value("${ph.loki.batchSize:100}") int batchSize,
       @Value("${ph.metrics.exchange:ph.metrics}") String metricsExchange,
       @Value("${ph.metrics.errorRateRk:metrics.error-rate}") String metricsRk,
-      @Value("${ph.grafana.url:http://grafana:3000}") String grafanaBase) {
+      @Value("${ph.grafana.url:http://grafana:3000}") String grafanaBase,
+      @Value("${spring.application.name:log-aggregator}") String selfService) {
     this.rabbit = rabbit;
     this.lokiUri = URI.create(lokiBase + "/loki/api/v1/push");
     this.lokiQueryUri = URI.create(lokiBase + "/loki/api/v1/query");
@@ -57,13 +59,16 @@ public class LogAggregator {
     this.metricsExchange = metricsExchange;
     this.metricsRk = metricsRk;
     this.grafanaBase = grafanaBase.endsWith("/") ? grafanaBase.substring(0, grafanaBase.length()-1) : grafanaBase;
+    this.selfService = selfService;
   }
 
   @RabbitListener(queues = "${ph.logsQueue:logs.agg}")
   public void onLog(Message message){
     try{
       LogEntry entry = mapper.readValue(message.getBody(), LogEntry.class);
-      buffer.add(entry);
+      if(!selfService.equals(entry.service())){
+        buffer.add(entry);
+      }
     } catch(Exception e){
       log.warn("Failed to decode log message", e);
     }
