@@ -6,6 +6,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.amqp.core.Message;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -59,9 +60,9 @@ public class LogAggregator {
   }
 
   @RabbitListener(queues = "${ph.logsQueue:logs.agg}")
-  public void onLog(byte[] body){
+  public void onLog(Message message){
     try{
-      LogEntry entry = mapper.readValue(body, LogEntry.class);
+      LogEntry entry = mapper.readValue(message.getBody(), LogEntry.class);
       buffer.add(entry);
     } catch(Exception e){
       log.warn("Failed to decode log message", e);
@@ -125,7 +126,7 @@ public class LogAggregator {
       payload.put("totals", totals);
       payload.put("components", comps);
       String json = mapper.writeValueAsString(payload);
-      rabbit.convertAndSend(metricsExchange, metricsRk, json);
+      rabbit.convertAndSend(metricsExchange, metricsRk, json.getBytes(StandardCharsets.UTF_8));
     }catch(Exception e){
       log.warn("error-rate", e);
     }
