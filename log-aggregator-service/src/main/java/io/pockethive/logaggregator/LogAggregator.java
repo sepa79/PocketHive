@@ -3,6 +3,7 @@ package io.pockethive.logaggregator;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.amqp.core.Message;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.EnableScheduling;
@@ -41,9 +42,9 @@ public class LogAggregator {
   }
 
   @RabbitListener(queues = "${ph.logsQueue:logs.agg}")
-  public void onLog(byte[] body){
+  public void onLog(Message message){
     try{
-      LogEntry entry = mapper.readValue(body, LogEntry.class);
+      LogEntry entry = mapper.readValue(message.getBody(), LogEntry.class);
       buffer.add(entry);
     } catch(Exception e){
       log.warn("Failed to decode log message", e);
