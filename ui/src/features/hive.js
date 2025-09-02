@@ -1,5 +1,3 @@
-const phShowPanel = null;
-
 export function initHiveMenu() {
   const HIVE_DEFAULT_HOLD = 15000;
   const hiveSvg = /** @type {SVGSVGElement|null} */(document.getElementById('hive-canvas'));
@@ -163,10 +161,9 @@ export function initHiveMenu() {
       const n = hive.nodes[id];
       const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
       g.setAttribute('transform', `translate(${n.x - 60},${n.y - 46})`);
-      if (id !== 'sut') {
-        g.style.cursor = 'pointer';
-        g.addEventListener('click', () => { if (phShowPanel) phShowPanel(id); });
-      } else if (hive.sutWiremock) {
+        if (id !== 'sut') {
+          // placeholder for future component panels
+        } else if (hive.sutWiremock) {
         g.style.cursor = 'pointer';
         g.addEventListener('click', () => { showSutPanel(); });
       }
@@ -249,20 +246,12 @@ export function initHiveMenu() {
       hiveStats.textContent = `components: ${Math.max(0, count)} | queues: ${qCount} | edges: ${hive.edges.length}`;
     }
   }
-  async function showSutPanel() {
+  function showSutPanel() {
     if (!hive.sutUrl || !hive.sutWiremock) return;
     const modal = document.getElementById('panel-modal');
     const modalBody = document.getElementById('panel-body');
     if (!modal || !modalBody) return;
-    modalBody.innerHTML = '';
-    try {
-      const mod = await import('../../../modules/sut.js');
-      if (typeof mod.renderSutPanel === 'function') {
-        mod.renderSutPanel(modalBody, hive.sutUrl);
-      }
-    } catch {
-      modalBody.textContent = 'Failed to load SUT panel';
-    }
+    modalBody.textContent = 'SUT panel coming soon…';
     modal.style.display = 'flex';
   }
   function setSutUrl(url) {
