@@ -41,6 +41,7 @@ See also: Control Bindings page (Menu → Control Bindings) and `ui/spec/asyncap
 - Hive View: auto-discovers components from Control messages and draws a simple graph:
   - Nodes appear when the first message from a service is received (generator, moderator, processor). SUT appears when processor is seen.
   - Default hold time is 3s (3× of 1s status schedule); toolbar lets you adjust hold time and Clear & Restart.
+  - Click a node to view component details.
 - Edges are built strictly from `queues.in/out` found in `status-full` events.
 
 ### Demo mode (no WebSocket)
@@ -142,7 +143,7 @@ Manual checks:
 - **WebSocket eye** — click to connect or disconnect from RabbitMQ.
 - **Monolith button** — broadcasts a global `status-request` signal; the publish shows in the OUT log.
 - **Buzz view** — Event Log and Topic Sniffer tabs with line limits and Subscribe/Unsubscribe controls; System Logs provide OUT/IN/Other filters.
-- **Hive view** — holds a duration input and a Clear & Restart button for the graph.
+- **Hive view** — holds a duration input, a Clear & Restart button for the graph, and shows component details when nodes are selected.
 - **Nectar view** — metric dropdown (TPS, latency, hops) and points input to adjust chart history.
 
 ## Troubleshooting
