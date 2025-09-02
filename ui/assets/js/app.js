@@ -101,6 +101,11 @@ initWiremockJournal();
       : state === 'connecting' ? 'status-connecting'
       : 'status-offline';
     wsStatus.classList.add(cls);
+    const tip = wsStatus.querySelector('.tip');
+    if(tip){
+      if(cls === 'status-connecting') tip.classList.add('on');
+      else tip.classList.remove('on');
+    }
   }
 
   function loadConn(){ try{ const raw = localStorage.getItem(PH_CONN_KEY); if(!raw) return null; return JSON.parse(raw); }catch{ return null; } }

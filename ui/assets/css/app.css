@@ -132,7 +132,7 @@ p{ color:#9aa0a6; }
   transform-origin:center bottom;
   width:var(--semi-d);
   height:calc(var(--semi-d) / 2);
-  background:#111;
+  background:#d1d5db;
   border-bottom-left-radius:var(--semi-d) var(--semi-d);
   border-bottom-right-radius:var(--semi-d) var(--semi-d);
   border-top-left-radius:0;
@@ -204,7 +204,7 @@ p{ color:#9aa0a6; }
   height:0;
   border-left:var(--tri-half) solid transparent;
   border-right:var(--tri-half) solid transparent;
-  border-bottom:var(--tri-height) solid #111;
+  border-bottom:var(--tri-height) solid #d1d5db;
   z-index:0;
 }
 
