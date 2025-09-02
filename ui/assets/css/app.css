@@ -107,17 +107,15 @@ p{ color:#9aa0a6; }
   overflow:visible;
 }
 #ph-conn-btn .conn-icon{
-  --apex-y:180px;
-  --tri-half:63px;
-  --tri-height:86px;
-  --semi-d:200px;
+  --apex-y:6.38px;
+  --tri-half:4.9px;
+  --tri-height:6.69px;
+  --semi-d:15.56px;
   position:absolute;
   top:0;
   left:0;
-  width:360px;
-  height:360px;
-  transform:scale(0.14) translate(-44px,-98px);
-  transform-origin:top left;
+  width:28px;
+  height:28px;
   color:var(--color,#ef4444);
 }
 #ph-conn-btn.status-connecting .conn-icon{ --color:#3b82f6; }
