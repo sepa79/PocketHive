@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.10] - 2025-09-02
+Timestamp: 2025-09-02T16:50:02Z
+
+- UI: enhance hive view with component details.
+
 ## [0.5.9] - 2025-09-02
 Timestamp: 2025-09-02T14:44:30Z
 
