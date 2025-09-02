@@ -1,9 +1,15 @@
 export function renderSutPanel(containerEl, baseUrl) {
   const base = baseUrl ? new URL(baseUrl, window.location.href) : null;
-  const origin = window.location.origin;
-  const root = base
-    ? new URL(base.pathname.replace(/\/$/, '') + '/', origin).toString()
-    : new URL('/wiremock/', origin).toString();
+  let root;
+  if (base) {
+    if (/^wiremock$/i.test(base.hostname)) {
+      base.hostname = window.location.hostname;
+    }
+    base.pathname = base.pathname.replace(/\/$/, '') + '/';
+    root = base.toString();
+  } else {
+    root = new URL('/wiremock/', window.location.origin).toString();
+  }
   const display = root.replace(/\/$/, '');
   const adminUrl = new URL('__admin', root).toString();
   const reqUrl = new URL('__admin/requests?limit=25', root).toString();
