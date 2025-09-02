@@ -148,24 +148,34 @@ public class Processor {
       // Determine body publisher from supplied body node
       JsonNode bodyNode = node.path("body");
       HttpRequest.BodyPublisher bodyPublisher;
+      String bodyStr = null;
       if(bodyNode.isMissingNode() || bodyNode.isNull()){
         bodyPublisher = HttpRequest.BodyPublishers.noBody();
       }else if(bodyNode.isTextual()){
-        bodyPublisher = HttpRequest.BodyPublishers.ofString(bodyNode.asText(), StandardCharsets.UTF_8);
+        bodyStr = bodyNode.asText();
+        bodyPublisher = HttpRequest.BodyPublishers.ofString(bodyStr, StandardCharsets.UTF_8);
       }else{
-        bodyPublisher = HttpRequest.BodyPublishers.ofString(MAPPER.writeValueAsString(bodyNode), StandardCharsets.UTF_8);
+        bodyStr = MAPPER.writeValueAsString(bodyNode);
+        bodyPublisher = HttpRequest.BodyPublishers.ofString(bodyStr, StandardCharsets.UTF_8);
       }
 
       req.method(method, bodyPublisher);
 
+      String headersStr = headers.isObject()? headers.toString() : "";
+      String bodySnippet = bodyStr==null?"": (bodyStr.length()>300? bodyStr.substring(0,300)+"…": bodyStr);
+      log.info("HTTP {} {} headers={} body={}", method, target, headersStr, bodySnippet);
+
       HttpResponse<String> resp = http.send(req.build(), HttpResponse.BodyHandlers.ofString());
+      log.info("HTTP {} {} -> {} body={} headers={}", method, target, resp.statusCode(),
+          snippet(resp.body()), resp.headers().map());
+
       var result = MAPPER.createObjectNode();
       result.put("status", resp.statusCode());
       result.set("headers", MAPPER.valueToTree(resp.headers().map()));
       result.put("body", resp.body());
       return MAPPER.writeValueAsBytes(result);
     }catch(Exception e){
-      log.warn("HTTP request failed for {} {}", method, target, e);
+      log.error("HTTP request failed for {} {}: {}", method, target, e.toString(), e);
       return MAPPER.createObjectNode().put("error", e.toString()).toString().getBytes(StandardCharsets.UTF_8);
     }
   }
@@ -182,6 +192,11 @@ public class Processor {
       log.warn("Invalid URI base='{}' path='{}'", baseUrl, p, e);
       return null;
     }
+  }
+
+  private static String snippet(String s){
+    if(s==null) return "";
+    return s.length()>300? s.substring(0,300)+"…" : s;
   }
 
   private void sendStatusDelta(long tps){
