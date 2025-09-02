@@ -18,6 +18,7 @@ export function initHiveMenu() {
     queues: /** @type {Record<string,{in:Set<string>, out:Set<string>, info?:any}>} */({}),
     holdMs: HIVE_DEFAULT_HOLD,
     sutUrl: /** @type {string|null} */(null),
+    sutWiremock: false,
     config: /** @type {any} */(null)
   };
   function setHoldMs() { if (hiveHoldInput) { const v = Math.max(1, Number(hiveHoldInput.value) || 3); hive.holdMs = v * 1000; } }
@@ -169,7 +170,13 @@ export function initHiveMenu() {
       const n = hive.nodes[id];
       const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
       g.setAttribute('transform', `translate(${n.x - 60},${n.y - 46})`);
-      if (id !== 'sut') { g.style.cursor = 'pointer'; g.addEventListener('click', () => { if (phShowPanel) phShowPanel(id); }); }
+      if (id !== 'sut') {
+        g.style.cursor = 'pointer';
+        g.addEventListener('click', () => { if (phShowPanel) phShowPanel(id); });
+      } else if (hive.sutWiremock) {
+        g.style.cursor = 'pointer';
+        g.addEventListener('click', () => { showSutPanel(); });
+      }
       const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
       rect.setAttribute('x', '0'); rect.setAttribute('y', '0');
       rect.setAttribute('width', '120'); rect.setAttribute('height', '92');
@@ -230,20 +237,15 @@ export function initHiveMenu() {
         outTxt.textContent = `OUT ${fmt(outs)}`; if (outs.length) outTxt.setAttribute('title', outs.join(', ')); g.appendChild(outTxt);
       }
       if (id === 'sut' && hive.sutUrl) {
-        const link = document.createElementNS('http://www.w3.org/2000/svg', 'a');
-        let href = hive.sutUrl;
-        try {
-          const u = new URL(href, window.location.href);
-          if (u.hostname && u.hostname.toLowerCase().includes('wiremock')) {
-            href = `${u.origin}/__admin/requests`;
-          }
-        } catch {
-          /* ignore URL parse errors */
+        if (hive.sutWiremock) {
+          svg.appendChild(g);
+        } else {
+          const link = document.createElementNS('http://www.w3.org/2000/svg', 'a');
+          link.setAttribute('href', hive.sutUrl);
+          link.setAttribute('target', '_blank');
+          link.appendChild(g);
+          svg.appendChild(link);
         }
-        link.setAttribute('href', href);
-        link.setAttribute('target', '_blank');
-        link.appendChild(g);
-        svg.appendChild(link);
       } else {
         svg.appendChild(g);
       }
@@ -254,7 +256,34 @@ export function initHiveMenu() {
       hiveStats.textContent = `components: ${Math.max(0, count)} | queues: ${qCount} | edges: ${hive.edges.length}`;
     }
   }
-  function setSutUrl(url) { hive.sutUrl = url; redrawHive(); }
+  async function showSutPanel() {
+    if (!hive.sutUrl || !hive.sutWiremock) return;
+    const modal = document.getElementById('panel-modal');
+    const modalBody = document.getElementById('panel-body');
+    if (!modal || !modalBody) return;
+    modalBody.innerHTML = '';
+    try {
+      const mod = await import('../../../modules/sut.js');
+      if (typeof mod.renderSutPanel === 'function') {
+        mod.renderSutPanel(modalBody, hive.sutUrl);
+      }
+    } catch {
+      modalBody.textContent = 'Failed to load SUT panel';
+    }
+    modal.style.display = 'flex';
+  }
+  function setSutUrl(url) {
+    try {
+      const u = new URL(url, window.location.href);
+      hive.sutWiremock = /wiremock/i.test(u.hostname);
+      u.hostname = window.location.hostname;
+      hive.sutUrl = u.toString();
+    } catch {
+      hive.sutUrl = url;
+      hive.sutWiremock = false;
+    }
+    redrawHive();
+  }
   function setConfig(cfg) { hive.config = cfg; }
   return { ensureNode, updateQueues, rebuildEdgesFromQueues, redrawHive, setSutUrl, setConfig };
 }
