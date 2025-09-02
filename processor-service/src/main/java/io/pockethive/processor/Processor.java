@@ -123,7 +123,8 @@ public class Processor {
       String path = node.path("path").asText("/");
       String method = node.path("method").asText("GET").toUpperCase();
       String reqBody = node.path("body").asText("");
-      HttpRequest.Builder req = HttpRequest.newBuilder().uri(URI.create(buildUrl(path)));
+      URI target = buildUri(path);
+      HttpRequest.Builder req = HttpRequest.newBuilder(target);
       JsonNode headers = node.path("headers");
       if(headers.isObject()){
         headers.fields().forEachRemaining(e -> req.header(e.getKey(), e.getValue().asText()));
@@ -141,11 +142,14 @@ public class Processor {
     }
   }
 
-  private String buildUrl(String path){
-    if(path==null) path="";
-    if(baseUrl.endsWith("/") && path.startsWith("/")) return baseUrl + path.substring(1);
-    if(!baseUrl.endsWith("/") && !path.startsWith("/")) return baseUrl + "/" + path;
-    return baseUrl + path;
+  private URI buildUri(String path){
+    String p = path==null?"":path;
+    try{
+      return URI.create(baseUrl).resolve(p);
+    }catch(Exception e){
+      log.warn("Invalid URI base='{}' path='{}'", baseUrl, p, e);
+      return URI.create("http://localhost");
+    }
   }
 
   private void sendStatusDelta(long tps){
