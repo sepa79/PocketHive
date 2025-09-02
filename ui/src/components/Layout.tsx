@@ -1,17 +1,17 @@
-import { Outlet } from 'react-router-dom';
-import TopNav from '@components/TopNav';
-import SideNav from '@components/SideNav';
+import TopNav from './TopNav'
+import SideNav from './SideNav'
+import { Outlet } from 'react-router-dom'
 
 export default function Layout() {
   return (
-    <div className="min-h-screen flex flex-col bg-background text-text">
+    <div className="min-h-screen">
       <TopNav />
-      <div className="flex flex-1">
+      <div className="mx-auto flex max-w-[1400px]">
         <SideNav />
-        <main className="flex-1 p-4">
+        <main className="flex-1 space-y-4 p-4 md:p-6 lg:p-8">
           <Outlet />
         </main>
       </div>
     </div>
-  );
+  )
 }

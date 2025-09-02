@@ -1,8 +1,9 @@
+import Card from '@components/ui/Card'
+
 export default function Nectar() {
   return (
-    <div className="space-y-2">
-      <h1 className="text-2xl font-bold">Nectar</h1>
-      <p>Nectar content goes here.</p>
-    </div>
-  );
+    <Card title="Nectar" subtitle="Observability placeholder">
+      <p className="opacity-90">This section will host metrics, logs and diagnostics.</p>
+    </Card>
+  )
 }

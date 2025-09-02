@@ -1,36 +1,64 @@
-import { Menu, Moon, Sun } from 'lucide-react';
-import { Link } from 'react-router-dom';
-import { useUIStore } from '@lib/store';
+import { Link, NavLink } from 'react-router-dom'
+import { Menu, Sun, MoonStar } from 'lucide-react'
+import Logo from './Logo'
+import { useUiStore } from '../lib/store'
+
+const navLinkClass = ({ isActive }: { isActive: boolean }) =>
+  `px-3 py-2 rounded-xl text-sm transition-colors
+   ${isActive ? 'bg-phl-surface dark:bg-ph-surface text-phl-text dark:text-white' : 'text-phl-muted dark:text-ph-muted hover:bg-phl-surface/70 dark:hover:bg-ph-surface/70 hover:text-phl-text dark:hover:text-white'}`
 
 export default function TopNav() {
-  const toggleSidebar = useUIStore((s) => s.toggleSidebar);
-  const theme = useUIStore((s) => s.theme);
-  const toggleTheme = useUIStore((s) => s.toggleTheme);
+  const toggleSidebar = useUiStore((s) => s.toggleSidebar)
+  const theme = useUiStore((s) => s.theme)
+  const toggleTheme = useUiStore((s) => s.toggleTheme)
 
   return (
-    <header className="flex items-center justify-between bg-card border-b border-accent px-4 h-14">
-      <div className="flex items-center gap-2">
+    <header className="sticky top-0 z-40 border-b border-phl-border dark:border-ph-border bg-phl-bg/70 dark:bg-ph-bg/70 backdrop-blur">
+      <div className="mx-auto flex max-w-[1400px] items-center gap-3 px-4 py-3">
         <button
-          className="md:hidden"
-          onClick={toggleSidebar}
           aria-label="Toggle sidebar"
+          className="rounded-xl p-2 hover:bg-phl-surface/70 dark:hover:bg-ph-surface/70"
+          onClick={toggleSidebar}
         >
-          <Menu size={24} />
+          <Menu size={18} />
         </button>
-        <img src="/logo.svg" alt="PocketHive" className="h-6 w-6" />
-        <Link to="/" className="font-bold text-lg">
-          PocketHive
+
+        <Link to="/" className="flex items-center gap-3">
+          <Logo className="h-9 w-9" />
+          <div className="leading-tight">
+            <span className="block text-lg font-semibold">
+              <span className="bg-clip-text text-transparent bg-gradient-to-r from-cyan-300 to-amber-300">
+                PocketHive
+              </span>
+            </span>
+            <span className="text-[11px] tracking-wide text-phl-muted dark:text-ph-muted">portable transaction swarm</span>
+          </div>
         </Link>
-        <nav className="hidden md:flex gap-4 ml-4">
-          <Link to="/">Home</Link>
-          <Link to="/hive">Hive</Link>
-          <Link to="/buzz">Buzz</Link>
-          <Link to="/nectar">Nectar</Link>
+
+        <nav className="ml-auto flex items-center gap-1">
+          <NavLink to="/" className={navLinkClass} end>
+            Home
+          </NavLink>
+          <NavLink to="/hive" className={navLinkClass}>
+            Hive
+          </NavLink>
+          <NavLink to="/buzz" className={navLinkClass}>
+            Buzz
+          </NavLink>
+          <NavLink to="/nectar" className={navLinkClass}>
+            Nectar
+          </NavLink>
+
+          <button
+            aria-label="Toggle theme"
+            className="ml-2 rounded-xl p-2 hover:bg-phl-surface/70 dark:hover:bg-ph-surface/70"
+            onClick={toggleTheme}
+            title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`}
+          >
+            {theme === 'dark' ? <Sun size={18} /> : <MoonStar size={18} />}
+          </button>
         </nav>
       </div>
-      <button onClick={toggleTheme} aria-label="Toggle theme">
-        {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
-      </button>
     </header>
-  );
+  )
 }
