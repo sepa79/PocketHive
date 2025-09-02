@@ -1,7 +1,8 @@
 export function renderSutPanel(containerEl, baseUrl) {
   const base = baseUrl ? new URL(baseUrl, window.location.href) : null;
   let displayRoot;
-  let fetchRoot;
+  let adminUrl;
+  let reqUrl;
   if (base) {
     const clone = new URL(base.toString());
     if (/^wiremock$/i.test(clone.hostname)) {
@@ -9,14 +10,21 @@ export function renderSutPanel(containerEl, baseUrl) {
     }
     clone.pathname = clone.pathname.replace(/\/$/, '') + '/';
     displayRoot = clone.toString();
-    fetchRoot = clone.origin === window.location.origin ? displayRoot
-      : new URL('/wiremock/', window.location.origin).toString();
+    if (clone.origin === window.location.origin) {
+      adminUrl = new URL('__admin', displayRoot).toString();
+      reqUrl = new URL('__admin/requests?limit=25', displayRoot).toString();
+    } else {
+      const proxyRoot = new URL('/wiremock/', window.location.origin).toString();
+      adminUrl = new URL('__admin', proxyRoot).toString();
+      reqUrl = new URL('__admin/requests?limit=25', proxyRoot).toString();
+    }
   } else {
-    displayRoot = fetchRoot = new URL('/wiremock/', window.location.origin).toString();
+    const proxyRoot = new URL('/wiremock/', window.location.origin).toString();
+    displayRoot = proxyRoot;
+    adminUrl = new URL('__admin', proxyRoot).toString();
+    reqUrl = new URL('__admin/requests?limit=25', proxyRoot).toString();
   }
   const display = displayRoot.replace(/\/$/, '');
-  const adminUrl = new URL('__admin', fetchRoot).toString();
-  const reqUrl = new URL('__admin/requests?limit=25', fetchRoot).toString();
   containerEl.innerHTML = `
     <div class="card" data-role="sut">
       <h3>WireMock – <a href="${display}" target="_blank" rel="noopener">${display}</a></h3>
