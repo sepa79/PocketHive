@@ -104,7 +104,7 @@ p{ color:#9aa0a6; }
   width:28px;
   height:28px;
   cursor:pointer;
-  overflow:hidden;
+  overflow:visible;
 }
 #status-ws .conn-icon{
   --apex-y:180px;
@@ -116,7 +116,7 @@ p{ color:#9aa0a6; }
   left:0;
   width:360px;
   height:360px;
-  transform:scale(0.1) translate(-40px,-26px);
+  transform:scale(0.14) translate(-28px,-18px);
   transform-origin:top left;
   color:var(--color,#ef4444);
 }
@@ -138,6 +138,20 @@ p{ color:#9aa0a6; }
   border-top-left-radius:0;
   border-top-right-radius:0;
   z-index:0;
+}
+
+#status-ws .semicircle .accent{
+  position:absolute;
+  bottom:0;
+  left:50%;
+  transform:translate(-50%,0);
+  width:calc(var(--semi-d) * 0.6);
+  height:calc(var(--semi-d) * 0.3);
+  background:#6b7280;
+  border-bottom-left-radius:calc(var(--semi-d) * 0.6) calc(var(--semi-d) * 0.6);
+  border-bottom-right-radius:calc(var(--semi-d) * 0.6) calc(var(--semi-d) * 0.6);
+  border-top-left-radius:0;
+  border-top-right-radius:0;
 }
 
 #status-ws .highlight{
@@ -228,20 +242,20 @@ p{ color:#9aa0a6; }
 @keyframes pingStrong{
   0%{ transform:translate(-50%,0) scale(0.4); opacity:0; }
   10%{ opacity:0.9; }
-  70%{ transform:translate(-50%,0) scale(1.4); opacity:0; }
-  100%{ transform:translate(-50%,0) scale(1.5); opacity:0; }
+  70%{ transform:translate(-50%,0) scale(2.2); opacity:0; }
+  100%{ transform:translate(-50%,0) scale(2.4); opacity:0; }
 }
 @keyframes pingSoft{
   0%{ transform:translate(-50%,0) scale(0.5); opacity:0; }
   20%{ opacity:0.6; }
-  80%{ transform:translate(-50%,0) scale(1.2); opacity:0; }
-  100%{ transform:translate(-50%,0) scale(1.3); opacity:0; }
+  80%{ transform:translate(-50%,0) scale(1.6); opacity:0; }
+  100%{ transform:translate(-50%,0) scale(1.8); opacity:0; }
 }
 @keyframes tipBreath{
   0%,100%{ transform:translate(-50%,0) scale(1); filter:drop-shadow(0 0 8px currentColor); }
-  50%{ transform:translate(-50%,0) scale(1.2); filter:drop-shadow(0 0 14px currentColor); }
+  50%{ transform:translate(-50%,0) scale(1.4); filter:drop-shadow(0 0 18px currentColor); }
 }
 @keyframes redGlow{
   0%,100%{ transform:translate(-50%,0) scale(0.95); filter:drop-shadow(0 0 8px currentColor); }
-  50%{ transform:translate(-50%,0) scale(1.25); filter:drop-shadow(0 0 18px currentColor); }
+  50%{ transform:translate(-50%,0) scale(1.35); filter:drop-shadow(0 0 22px currentColor); }
 }

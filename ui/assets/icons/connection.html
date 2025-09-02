@@ -61,6 +61,20 @@
     z-index: 0;
   }
 
+  .semicircle .accent {
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    transform: translate(-50%, 0);
+    width: calc(var(--semi-d) * 0.6);
+    height: calc(var(--semi-d) * 0.3);
+    background: #6b7280;
+    border-bottom-left-radius: calc(var(--semi-d) * 0.6) calc(var(--semi-d) * 0.6);
+    border-bottom-right-radius: calc(var(--semi-d) * 0.6) calc(var(--semi-d) * 0.6);
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
+  }
+
   /* Highlight layer */
   .highlight {
     position: absolute;
@@ -150,22 +164,22 @@
   @keyframes pingStrong {
     0%   { transform: translate(-50%, 0) scale(0.4); opacity: 0.0; }
     10%  { opacity: 0.9; }
-    70%  { transform: translate(-50%, 0) scale(1.4); opacity: 0.0; }
-    100% { transform: translate(-50%, 0) scale(1.5); opacity: 0; }
+    70%  { transform: translate(-50%, 0) scale(2.2); opacity: 0.0; }
+    100% { transform: translate(-50%, 0) scale(2.4); opacity: 0; }
   }
   @keyframes pingSoft {
     0%   { transform: translate(-50%, 0) scale(0.5); opacity: 0.0; }
     20%  { opacity: 0.6; }
-    80%  { transform: translate(-50%, 0) scale(1.2); opacity: 0.0; }
-    100% { transform: translate(-50%, 0) scale(1.3); opacity: 0; }
+    80%  { transform: translate(-50%, 0) scale(1.6); opacity: 0.0; }
+    100% { transform: translate(-50%, 0) scale(1.8); opacity: 0; }
   }
   @keyframes tipBreath {
     0%, 100% { transform: translate(-50%, 0) scale(1.0); filter: drop-shadow(0 0 8px currentColor); }
-    50% { transform: translate(-50%, 0) scale(1.2); filter: drop-shadow(0 0 14px currentColor); }
+    50% { transform: translate(-50%, 0) scale(1.4); filter: drop-shadow(0 0 18px currentColor); }
   }
   @keyframes redGlow {
     0%, 100% { transform: translate(-50%, 0) scale(0.95); filter: drop-shadow(0 0 8px currentColor); }
-    50% { transform: translate(-50%, 0) scale(1.25); filter: drop-shadow(0 0 18px currentColor); }
+    50% { transform: translate(-50%, 0) scale(1.35); filter: drop-shadow(0 0 22px currentColor); }
   }
 
   .controls { display: flex; gap: 8px; }
@@ -180,7 +194,9 @@
 <body>
   <div class="wrap">
     <div id="icon" class="shape status-connecting" aria-live="polite" aria-label="connection status: connecting">
-      <div class="semicircle" aria-hidden="true"></div>
+      <div class="semicircle" aria-hidden="true">
+        <div class="accent" aria-hidden="true"></div>
+      </div>
       <div class="highlight" aria-hidden="true"></div>
       <div class="semicircle antenna-wrapper" aria-hidden="true">
         <div class="antenna" aria-hidden="true">
