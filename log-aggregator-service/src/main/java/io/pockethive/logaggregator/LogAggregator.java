@@ -3,6 +3,7 @@ package io.pockethive.logaggregator;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.amqp.core.Message;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.EnableScheduling;
@@ -14,6 +15,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Instant;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
@@ -41,9 +43,10 @@ public class LogAggregator {
   }
 
   @RabbitListener(queues = "${ph.logsQueue:logs.agg}")
-  public void onLog(byte[] body){
+  public void onLog(Message message){
     try{
-      LogEntry entry = mapper.readValue(body, LogEntry.class);
+      String json = new String(message.getBody(), StandardCharsets.UTF_8);
+      LogEntry entry = mapper.readValue(json, LogEntry.class);
       buffer.add(entry);
     } catch(Exception e){
       log.warn("Failed to decode log message", e);
@@ -72,8 +75,9 @@ public class LogAggregator {
     List<Map<String,Object>> streams = new ArrayList<>();
     for(var e: grouped.entrySet()){
       Map<String,String> labels = new HashMap<>();
-      labels.put("service", e.getKey().service());
-      labels.put("traceId", e.getKey().traceId());
+      if(!e.getKey().service().isBlank()) labels.put("service", e.getKey().service());
+      if(!e.getKey().traceId().isBlank()) labels.put("traceId", e.getKey().traceId());
+      if(labels.isEmpty()) labels.put("service", "unknown");
       Map<String,Object> stream = new HashMap<>();
       stream.put("stream", labels);
       stream.put("values", e.getValue());
