@@ -18,6 +18,7 @@ import io.pockethive.observability.ObservabilityContextUtil;
 import io.pockethive.observability.StatusEnvelopeBuilder;
 import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Qualifier;
+import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.DistributionSummary;
 import io.micrometer.core.instrument.MeterRegistry;
 
@@ -27,7 +28,6 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
-import java.util.concurrent.atomic.AtomicLong;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -38,7 +38,8 @@ public class Processor {
 
   private static final Logger log = LoggerFactory.getLogger(Processor.class);
   private final RabbitTemplate rabbit;
-  private final AtomicLong counter = new AtomicLong();
+  private final Counter messageCounter;
+  private double lastCount = 0;
   private final String instanceId;
   private volatile String baseUrl;
   private volatile boolean enabled = true;
@@ -56,6 +57,10 @@ public class Processor {
     this.instanceId = instanceId;
     this.baseUrl = baseUrl;
     this.sutLatency = DistributionSummary.builder("processor_request_time_ms").register(registry);
+    this.messageCounter = Counter.builder("processor_messages_total")
+        .tag("service", "processor")
+        .tag("instance", instanceId)
+        .register(registry);
     log.info("Base URL: {}", baseUrl);
     try{ sendStatusFull(0); } catch(Exception ignore){}
   }
@@ -72,7 +77,6 @@ public class Processor {
     ObservabilityContextUtil.populateMdc(ctx);
     try {
       if(enabled){
-        counter.incrementAndGet();
         String raw = new String(message.getBody(), StandardCharsets.UTF_8);
         log.info("Forwarding to SUT: {}", raw);
         byte[] resp = sendToSut(message.getBody());
@@ -86,6 +90,7 @@ public class Processor {
             .setHeader(ObservabilityContextUtil.HEADER, ObservabilityContextUtil.toHeader(ctx))
             .build();
         rabbit.send(Topology.EXCHANGE, Topology.FINAL_QUEUE, out);
+        messageCounter.increment();
       }
     } finally {
       MDC.clear();
@@ -97,7 +102,12 @@ public class Processor {
     long now = System.currentTimeMillis();
     long elapsed = now - lastStatusTs;
     lastStatusTs = now;
-    long tps = elapsed > 0 ? counter.getAndSet(0) * 1000 / elapsed : 0;
+    double total = messageCounter.count();
+    long tps = 0;
+    if(elapsed > 0){
+      tps = (long)((total - lastCount) * 1000 / elapsed);
+    }
+    lastCount = total;
     sendStatusDelta(tps);
   }
 

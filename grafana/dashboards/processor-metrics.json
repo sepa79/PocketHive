@@ -1,0 +1,22 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "panels": [
+    {
+      "type": "graph",
+      "title": "Processor TPS",
+      "datasource": "Prometheus",
+      "targets": [
+        { "expr": "rate(processor_messages_total[1m])", "legendFormat": "{{service}} {{instance}}" }
+      ],
+      "lines": true,
+      "id": 1,
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 0 }
+    }
+  ],
+  "schemaVersion": 27,
+  "title": "Processor Metrics",
+  "version": 1
+}
+
