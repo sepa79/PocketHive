@@ -30,7 +30,7 @@
 
     --apex-y: 180px;
     --tri-half: 63px; /* 30% reduction from 90px */
-    --tri-height: 150px;
+    --tri-height: 86px;
     --semi-d: 200px; /* diameter of the semicircle */
 
     position: relative;
@@ -148,24 +148,24 @@
   .shape.status-offline .antenna .tip { animation: redGlow 1000ms ease-in-out infinite; }
 
   @keyframes pingStrong {
-    0%   { transform: translate(-50%, 0) scale(0.35); opacity: 0.0; }
+    0%   { transform: translate(-50%, 0) scale(0.4); opacity: 0.0; }
     10%  { opacity: 0.9; }
-    70%  { transform: translate(-50%, 0) scale(1.15); opacity: 0.0; }
-    100% { transform: translate(-50%, 0) scale(1.2); opacity: 0; }
+    70%  { transform: translate(-50%, 0) scale(1.4); opacity: 0.0; }
+    100% { transform: translate(-50%, 0) scale(1.5); opacity: 0; }
   }
   @keyframes pingSoft {
-    0%   { transform: translate(-50%, 0) scale(0.4); opacity: 0.0; }
-    20%  { opacity: 0.5; }
-    80%  { transform: translate(-50%, 0) scale(1.05); opacity: 0.0; }
-    100% { transform: translate(-50%, 0) scale(1.1); opacity: 0; }
+    0%   { transform: translate(-50%, 0) scale(0.5); opacity: 0.0; }
+    20%  { opacity: 0.6; }
+    80%  { transform: translate(-50%, 0) scale(1.2); opacity: 0.0; }
+    100% { transform: translate(-50%, 0) scale(1.3); opacity: 0; }
   }
   @keyframes tipBreath {
-    0%, 100% { transform: translate(-50%, 0) scale(1.0); filter: drop-shadow(0 0 6px currentColor); }
-    50% { transform: translate(-50%, 0) scale(1.12); filter: drop-shadow(0 0 10px currentColor); }
+    0%, 100% { transform: translate(-50%, 0) scale(1.0); filter: drop-shadow(0 0 8px currentColor); }
+    50% { transform: translate(-50%, 0) scale(1.2); filter: drop-shadow(0 0 14px currentColor); }
   }
   @keyframes redGlow {
-    0%, 100% { transform: translate(-50%, 0) scale(0.95); filter: drop-shadow(0 0 6px currentColor); }
-    50% { transform: translate(-50%, 0) scale(1.15); filter: drop-shadow(0 0 14px currentColor); }
+    0%, 100% { transform: translate(-50%, 0) scale(0.95); filter: drop-shadow(0 0 8px currentColor); }
+    50% { transform: translate(-50%, 0) scale(1.25); filter: drop-shadow(0 0 18px currentColor); }
   }
 
   .controls { display: flex; gap: 8px; }

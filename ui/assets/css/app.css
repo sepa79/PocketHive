@@ -109,14 +109,14 @@ p{ color:#9aa0a6; }
 #status-ws .conn-icon{
   --apex-y:180px;
   --tri-half:63px;
-  --tri-height:150px;
+  --tri-height:86px;
   --semi-d:200px;
   position:absolute;
   top:0;
   left:0;
   width:360px;
   height:360px;
-  transform:scale(0.077);
+  transform:scale(0.14) translate(-44px,-66px);
   transform-origin:top left;
   color:var(--color,#ef4444);
 }
@@ -198,10 +198,11 @@ p{ color:#9aa0a6; }
 
 #status-ws .triangle{
   position:absolute;
-  left:20%;
+  left:50%;
   top:var(--apex-y);
   width:0;
   height:0;
+  transform:translateX(-50%);
   border-left:var(--tri-half) solid transparent;
   border-right:var(--tri-half) solid transparent;
   border-bottom:var(--tri-height) solid #d1d5db;
@@ -225,22 +226,22 @@ p{ color:#9aa0a6; }
 #status-ws.status-offline .antenna .tip{ animation:redGlow 1000ms ease-in-out infinite; }
 
 @keyframes pingStrong{
-  0%{ transform:translate(-50%,0) scale(0.35); opacity:0; }
+  0%{ transform:translate(-50%,0) scale(0.4); opacity:0; }
   10%{ opacity:0.9; }
-  70%{ transform:translate(-50%,0) scale(1.15); opacity:0; }
-  100%{ transform:translate(-50%,0) scale(1.2); opacity:0; }
+  70%{ transform:translate(-50%,0) scale(1.4); opacity:0; }
+  100%{ transform:translate(-50%,0) scale(1.5); opacity:0; }
 }
 @keyframes pingSoft{
-  0%{ transform:translate(-50%,0) scale(0.4); opacity:0; }
-  20%{ opacity:0.5; }
-  80%{ transform:translate(-50%,0) scale(1.05); opacity:0; }
-  100%{ transform:translate(-50%,0) scale(1.1); opacity:0; }
+  0%{ transform:translate(-50%,0) scale(0.5); opacity:0; }
+  20%{ opacity:0.6; }
+  80%{ transform:translate(-50%,0) scale(1.2); opacity:0; }
+  100%{ transform:translate(-50%,0) scale(1.3); opacity:0; }
 }
 @keyframes tipBreath{
-  0%,100%{ transform:translate(-50%,0) scale(1); filter:drop-shadow(0 0 6px currentColor); }
-  50%{ transform:translate(-50%,0) scale(1.12); filter:drop-shadow(0 0 10px currentColor); }
+  0%,100%{ transform:translate(-50%,0) scale(1); filter:drop-shadow(0 0 8px currentColor); }
+  50%{ transform:translate(-50%,0) scale(1.2); filter:drop-shadow(0 0 14px currentColor); }
 }
 @keyframes redGlow{
-  0%,100%{ transform:translate(-50%,0) scale(0.95); filter:drop-shadow(0 0 6px currentColor); }
-  50%{ transform:translate(-50%,0) scale(1.15); filter:drop-shadow(0 0 14px currentColor); }
+  0%,100%{ transform:translate(-50%,0) scale(0.95); filter:drop-shadow(0 0 8px currentColor); }
+  50%{ transform:translate(-50%,0) scale(1.25); filter:drop-shadow(0 0 18px currentColor); }
 }
