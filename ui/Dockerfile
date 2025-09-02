@@ -1,14 +1,20 @@
 # Stage 1: build
 FROM node:20-alpine AS builder
 WORKDIR /app
-COPY package.json package-lock.json ./
+
+# Install dependencies using UI package manifests
+COPY ui/package.json ui/package-lock.json ./
 RUN npm ci
-COPY . .
+
+# Copy UI source code
+COPY ui/ ./
 RUN npm run build
 
 # Stage 2: nginx
 FROM nginx:alpine
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+
+# Supply custom nginx config and build output
+COPY ui/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=builder /app/dist /usr/share/nginx/html
 EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]
