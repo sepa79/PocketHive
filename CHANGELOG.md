@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.7] - 2025-09-02
+Timestamp: 2025-09-02T12:42:27Z
+
+- Generator: support sub-1 TPS rates by accumulating fractional requests.
+- UI: add numeric input for generator rate and stretch slider to panel width.
+
 ## [0.5.6] - 2025-09-01
 Timestamp: 2025-09-01T23:45:28Z
 

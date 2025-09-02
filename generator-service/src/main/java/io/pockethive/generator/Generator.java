@@ -52,12 +52,17 @@ public class Generator {
   }
 
   @Value("${ph.gen.ratePerSec:5}")
-  private int ratePerSec;
+  private volatile double ratePerSec;
+
+  private double carryOver = 0;
 
   @Scheduled(fixedRate = 1000)
   public void tick() {
     if(!enabled) return;
-    for (int i = 0; i < ratePerSec; i++) {
+    double planned = ratePerSec + carryOver;
+    int whole = (int) Math.floor(planned);
+    carryOver = planned - whole;
+    for (int i = 0; i < whole; i++) {
       sendOnce();
     }
   }
@@ -89,7 +94,7 @@ public class Generator {
           }
           if("config-update".equals(type)){
             com.fasterxml.jackson.databind.JsonNode data = node.path("data");
-            if(data.has("ratePerSec")) ratePerSec = data.get("ratePerSec").asInt(ratePerSec);
+            if(data.has("ratePerSec")) ratePerSec = data.get("ratePerSec").asDouble(ratePerSec);
             if(data.has("enabled")) enabled = data.get("enabled").asBoolean(enabled);
             if(data.has("singleRequest") && data.get("singleRequest").asBoolean()) sendOnce();
             if(data.has("path")) messageConfig.setPath(data.get("path").asText(messageConfig.getPath()));
