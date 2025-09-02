@@ -52,9 +52,8 @@ export function initHiveMenu() {
   async function fetchQueueInfo(name) {
     if (!hive.config) return;
     try {
-      const host = window.location.hostname;
       const vhost = encodeURIComponent((hive.config.stomp && hive.config.stomp.vhost) || '/');
-      const url = `http://${host}:15672/api/queues/${vhost}/${encodeURIComponent(name)}`;
+      const url = `/rmq/api/queues/${vhost}/${encodeURIComponent(name)}`;
       const login = hive.config.stomp && hive.config.stomp.login;
       const pass = hive.config.stomp && hive.config.stomp.passcode;
       const headers = login ? { 'Authorization': 'Basic ' + btoa(`${login}:${pass}`) } : {};
