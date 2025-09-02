@@ -8,12 +8,14 @@ COPY moderator-service/pom.xml moderator-service/pom.xml
 COPY processor-service/pom.xml processor-service/pom.xml
 COPY observability/pom.xml observability/pom.xml
 COPY postprocessor-service/pom.xml postprocessor-service/pom.xml
+COPY trigger-service/pom.xml trigger-service/pom.xml
 COPY log-aggregator-service/src log-aggregator-service/src
 COPY generator-service/src generator-service/src
 COPY moderator-service/src moderator-service/src
 COPY processor-service/src processor-service/src
 COPY observability/src observability/src
 COPY postprocessor-service/src postprocessor-service/src
+COPY trigger-service/src trigger-service/src
 RUN mvn -q -B -DskipTests -pl log-aggregator-service -am package
 
 # ---- Runtime ----
