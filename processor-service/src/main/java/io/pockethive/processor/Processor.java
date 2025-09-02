@@ -2,6 +2,8 @@ package io.pockethive.processor;
 
 import io.pockethive.Topology;
 import org.springframework.amqp.core.Message;
+import org.springframework.amqp.core.MessageBuilder;
+import org.springframework.amqp.core.MessageProperties;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.scheduling.annotation.EnableScheduling;
@@ -68,13 +70,17 @@ public class Processor {
         counter.incrementAndGet();
         Instant processed = Instant.now();
         ObservabilityContextUtil.appendHop(ctx, "processor", instanceId, received, processed);
-        message.getMessageProperties().setHeader("x-ph-service", "processor");
-        message.getMessageProperties().setHeader(ObservabilityContextUtil.HEADER, ObservabilityContextUtil.toHeader(ctx));
-        boolean error = sendToSut(message.getBody());
-        if(error){
-          message.getMessageProperties().setHeader("x-ph-error", true);
-        }
-        rabbit.send(Topology.EXCHANGE, Topology.FINAL_QUEUE, message);
+        String raw = new String(message.getBody(), StandardCharsets.UTF_8);
+        log.info("Forwarding to SUT: {}", raw);
+        byte[] resp = sendToSut(message.getBody());
+        Message out = MessageBuilder
+            .withBody(resp)
+            .setContentType(MessageProperties.CONTENT_TYPE_JSON)
+            .setContentEncoding(StandardCharsets.UTF_8.name())
+            .setHeader("x-ph-service", "processor")
+            .setHeader(ObservabilityContextUtil.HEADER, ObservabilityContextUtil.toHeader(ctx))
+            .build();
+        rabbit.send(Topology.EXCHANGE, Topology.FINAL_QUEUE, out);
       }
     } finally {
       MDC.clear();
@@ -117,7 +123,7 @@ public class Processor {
       MDC.clear();
     }
   }
-  private boolean sendToSut(byte[] bodyBytes){
+  private byte[] sendToSut(byte[] bodyBytes){
     String method = "GET";
     URI target = null;
     try{
@@ -127,31 +133,23 @@ public class Processor {
       String reqBody = node.path("body").asText("");
       target = buildUri(path);
       if(target == null){
-        return true;
+        return MAPPER.createObjectNode().put("error", "invalid baseUrl").toString().getBytes(StandardCharsets.UTF_8);
       }
       HttpRequest.Builder req = HttpRequest.newBuilder(target);
       JsonNode headers = node.path("headers");
       if(headers.isObject()){
         headers.fields().forEachRemaining(e -> req.header(e.getKey(), e.getValue().asText()));
       }
-      if("GET".equals(method) || "DELETE".equals(method)){
-        req.method(method, HttpRequest.BodyPublishers.noBody());
-      } else {
-        req.method(method, HttpRequest.BodyPublishers.ofString(reqBody, StandardCharsets.UTF_8));
-      }
+      req.method(method, HttpRequest.BodyPublishers.ofString(reqBody, StandardCharsets.UTF_8));
       HttpResponse<String> resp = http.send(req.build(), HttpResponse.BodyHandlers.ofString());
-      if(resp.statusCode() >= 400){
-        String body = resp.body();
-        if(body != null && body.length() > 300){
-          body = body.substring(0,300) + "…";
-        }
-        log.warn("SUT response status={} for {} {} body={}", resp.statusCode(), method, target, body);
-        return true;
-      }
-      return false;
+      var result = MAPPER.createObjectNode();
+      result.put("status", resp.statusCode());
+      result.set("headers", MAPPER.valueToTree(resp.headers().map()));
+      result.put("body", resp.body());
+      return MAPPER.writeValueAsBytes(result);
     }catch(Exception e){
       log.warn("HTTP request failed for {} {}", method, target, e);
-      return true;
+      return MAPPER.createObjectNode().put("error", e.toString()).toString().getBytes(StandardCharsets.UTF_8);
     }
   }
 
