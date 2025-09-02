@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.11] - 2025-09-02
+Timestamp: 2025-09-02T17:23:07Z
+
+- Trigger: introduce service for scheduled external calls and include it in the Compose stack.
+- UI: source version from the root VERSION file.
+
 ## [0.5.10] - 2025-09-02
 Timestamp: 2025-09-02T16:50:02Z
 
