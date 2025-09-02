@@ -118,12 +118,14 @@ public class Processor {
     }
   }
   private boolean sendToSut(byte[] bodyBytes){
+    String method = "GET";
+    URI target = null;
     try{
       JsonNode node = MAPPER.readTree(bodyBytes);
       String path = node.path("path").asText("/");
-      String method = node.path("method").asText("GET").toUpperCase();
+      method = node.path("method").asText("GET").toUpperCase();
       String reqBody = node.path("body").asText("");
-      URI target = buildUri(path);
+      target = buildUri(path);
       HttpRequest.Builder req = HttpRequest.newBuilder(target);
       JsonNode headers = node.path("headers");
       if(headers.isObject()){
@@ -134,10 +136,18 @@ public class Processor {
       } else {
         req.method(method, HttpRequest.BodyPublishers.ofString(reqBody, StandardCharsets.UTF_8));
       }
-      HttpResponse<Void> resp = http.send(req.build(), HttpResponse.BodyHandlers.discarding());
-      return resp.statusCode() >= 400;
+      HttpResponse<String> resp = http.send(req.build(), HttpResponse.BodyHandlers.ofString());
+      if(resp.statusCode() >= 400){
+        String body = resp.body();
+        if(body != null && body.length() > 300){
+          body = body.substring(0,300) + "…";
+        }
+        log.warn("SUT response status={} for {} {} body={}", resp.statusCode(), method, target, body);
+        return true;
+      }
+      return false;
     }catch(Exception e){
-      log.warn("HTTP request failed", e);
+      log.warn("HTTP request failed for {} {}", method, target, e);
       return true;
     }
   }
