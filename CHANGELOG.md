@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.12] - 2025-09-02
+Timestamp: 2025-09-02T20:54:45Z
+
+- Grafana: remove the Loki Logs dashboard
+
 ## [0.5.11] - 2025-09-02
 Timestamp: 2025-09-02T17:23:07Z
 

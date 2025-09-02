@@ -5,10 +5,10 @@
   "panels": [
     {
       "type": "graph",
-      "title": "Postprocessor Heap Memory",
+      "title": "Hop Latency (ms)",
       "datasource": "Prometheus",
       "targets": [
-        { "expr": "jvm_memory_used_bytes{area=\"heap\",job=\"postprocessor\"}" }
+        { "expr": "rate(postprocessor_hop_latency_ms_sum[1m]) / rate(postprocessor_hop_latency_ms_count[1m])" }
       ],
       "lines": true,
       "id": 1,
@@ -16,10 +16,10 @@
     },
     {
       "type": "graph",
-      "title": "Processor Heap Memory",
+      "title": "Total Latency (ms)",
       "datasource": "Prometheus",
       "targets": [
-        { "expr": "jvm_memory_used_bytes{area=\"heap\",job=\"processor\"}" }
+        { "expr": "rate(postprocessor_total_latency_ms_sum[1m]) / rate(postprocessor_total_latency_ms_count[1m])" }
       ],
       "lines": true,
       "id": 2,
@@ -27,10 +27,10 @@
     },
     {
       "type": "graph",
-      "title": "Moderator Heap Memory",
+      "title": "Hop Count",
       "datasource": "Prometheus",
       "targets": [
-        { "expr": "jvm_memory_used_bytes{area=\"heap\",job=\"moderator\"}" }
+        { "expr": "rate(postprocessor_hops_sum[1m]) / rate(postprocessor_hops_count[1m])" }
       ],
       "lines": true,
       "id": 3,
@@ -38,10 +38,10 @@
     },
     {
       "type": "graph",
-      "title": "Generator Heap Memory",
+      "title": "Errors per Second",
       "datasource": "Prometheus",
       "targets": [
-        { "expr": "jvm_memory_used_bytes{area=\"heap\",job=\"generator\"}" }
+        { "expr": "rate(postprocessor_errors_total[1m])" }
       ],
       "lines": true,
       "id": 4,
@@ -51,6 +51,6 @@
   "refresh": "5s",
   "time": { "from": "now-15m", "to": "now" },
   "schemaVersion": 27,
-  "title": "PocketHive",
+  "title": "PostProcessor Metrics",
   "version": 1
 }

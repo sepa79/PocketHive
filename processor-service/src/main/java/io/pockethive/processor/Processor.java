@@ -18,6 +18,9 @@ import io.pockethive.observability.ObservabilityContextUtil;
 import io.pockethive.observability.StatusEnvelopeBuilder;
 import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Qualifier;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.DistributionSummary;
+import io.micrometer.core.instrument.MeterRegistry;
 
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -25,7 +28,6 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
-import java.util.concurrent.atomic.AtomicLong;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -36,21 +38,29 @@ public class Processor {
 
   private static final Logger log = LoggerFactory.getLogger(Processor.class);
   private final RabbitTemplate rabbit;
-  private final AtomicLong counter = new AtomicLong();
+  private final Counter messageCounter;
+  private double lastCount = 0;
   private final String instanceId;
   private volatile String baseUrl;
   private volatile boolean enabled = true;
+  private final DistributionSummary sutLatency;
   private static final long STATUS_INTERVAL_MS = 5000L;
   private volatile long lastStatusTs = System.currentTimeMillis();
   private static final ObjectMapper MAPPER = new ObjectMapper();
   private final HttpClient http = HttpClient.newHttpClient();
 
   public Processor(RabbitTemplate rabbit,
+                   MeterRegistry registry,
                    @Qualifier("instanceId") String instanceId,
                    @Qualifier("baseUrl") String baseUrl){
     this.rabbit = rabbit;
     this.instanceId = instanceId;
     this.baseUrl = baseUrl;
+    this.sutLatency = DistributionSummary.builder("processor_request_time_ms").register(registry);
+    this.messageCounter = Counter.builder("processor_messages_total")
+        .tag("service", "processor")
+        .tag("instance", instanceId)
+        .register(registry);
     log.info("Base URL: {}", baseUrl);
     try{ sendStatusFull(0); } catch(Exception ignore){}
   }
@@ -67,12 +77,11 @@ public class Processor {
     ObservabilityContextUtil.populateMdc(ctx);
     try {
       if(enabled){
-        counter.incrementAndGet();
-        Instant processed = Instant.now();
-        ObservabilityContextUtil.appendHop(ctx, "processor", instanceId, received, processed);
         String raw = new String(message.getBody(), StandardCharsets.UTF_8);
         log.info("Forwarding to SUT: {}", raw);
         byte[] resp = sendToSut(message.getBody());
+        Instant processed = Instant.now();
+        ObservabilityContextUtil.appendHop(ctx, "processor", instanceId, received, processed);
         Message out = MessageBuilder
             .withBody(resp)
             .setContentType(MessageProperties.CONTENT_TYPE_JSON)
@@ -81,6 +90,7 @@ public class Processor {
             .setHeader(ObservabilityContextUtil.HEADER, ObservabilityContextUtil.toHeader(ctx))
             .build();
         rabbit.send(Topology.EXCHANGE, Topology.FINAL_QUEUE, out);
+        messageCounter.increment();
       }
     } finally {
       MDC.clear();
@@ -92,7 +102,12 @@ public class Processor {
     long now = System.currentTimeMillis();
     long elapsed = now - lastStatusTs;
     lastStatusTs = now;
-    long tps = elapsed > 0 ? counter.getAndSet(0) * 1000 / elapsed : 0;
+    double total = messageCounter.count();
+    long tps = 0;
+    if(elapsed > 0){
+      tps = (long)((total - lastCount) * 1000 / elapsed);
+    }
+    lastCount = total;
     sendStatusDelta(tps);
   }
 
@@ -124,6 +139,7 @@ public class Processor {
     }
   }
   private byte[] sendToSut(byte[] bodyBytes){
+    long start = System.currentTimeMillis();
     String method = "GET";
     URI target = null;
     try{
@@ -134,6 +150,8 @@ public class Processor {
       // Resolve final target URL from configured base and provided path
       target = buildUri(path);
       if(target == null){
+        long dur = System.currentTimeMillis() - start;
+        sutLatency.record(dur);
         return MAPPER.createObjectNode().put("error", "invalid baseUrl").toString().getBytes(StandardCharsets.UTF_8);
       }
 
@@ -166,8 +184,10 @@ public class Processor {
       log.info("HTTP {} {} headers={} body={}", method, target, headersStr, bodySnippet);
 
       HttpResponse<String> resp = http.send(req.build(), HttpResponse.BodyHandlers.ofString());
-      log.info("HTTP {} {} -> {} body={} headers={}", method, target, resp.statusCode(),
-          snippet(resp.body()), resp.headers().map());
+      long dur = System.currentTimeMillis() - start;
+      sutLatency.record(dur);
+      log.info("HTTP {} {} -> {} body={} headers={} ({} ms)", method, target, resp.statusCode(),
+          snippet(resp.body()), resp.headers().map(), dur);
 
       var result = MAPPER.createObjectNode();
       result.put("status", resp.statusCode());
@@ -175,7 +195,9 @@ public class Processor {
       result.put("body", resp.body());
       return MAPPER.writeValueAsBytes(result);
     }catch(Exception e){
-      log.error("HTTP request failed for {} {}: {}", method, target, e.toString(), e);
+      long dur = System.currentTimeMillis() - start;
+      sutLatency.record(dur);
+      log.error("HTTP request failed for {} {}: {} ({} ms)", method, target, e.toString(), dur, e);
       return MAPPER.createObjectNode().put("error", e.toString()).toString().getBytes(StandardCharsets.UTF_8);
     }
   }

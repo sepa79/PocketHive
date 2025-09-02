@@ -127,12 +127,16 @@ public class Generator {
     }catch(Exception e){
       body = "{}";
     }
+    ObservabilityContext ctx = ObservabilityContextUtil.init("generator", instanceId);
+    Instant now = Instant.now();
+    ObservabilityContextUtil.appendHop(ctx, "generator", instanceId, now, now);
     Message msg = MessageBuilder
         .withBody(body.getBytes(StandardCharsets.UTF_8))
         .setContentType(MessageProperties.CONTENT_TYPE_JSON)
         .setContentEncoding(StandardCharsets.UTF_8.name())
         .setMessageId(id)
         .setHeader("x-ph-service", "generator")
+        .setHeader(ObservabilityContextUtil.HEADER, ObservabilityContextUtil.toHeader(ctx))
         .build();
     rabbit.convertAndSend(Topology.EXCHANGE, Topology.GEN_QUEUE, msg);
     counter.incrementAndGet();
