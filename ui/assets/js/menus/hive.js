@@ -47,6 +47,7 @@ export function initHiveMenu() {
   }
   function addEdge(a, b) { if (a === b) return; if (!hive.edges.find(e => (e.a === a && e.b === b))) { hive.edges.push({ a, b }); } }
   function arr(x) { return Array.isArray(x) ? x : (x != null ? [x] : []); }
+  function truncate(str, max = 18) { return (str && str.length > max) ? str.slice(0, max - 1) + '…' : (str || ''); }
   async function fetchQueueInfo(name) {
     if (!hive.config) return;
     try {
@@ -69,8 +70,18 @@ export function initHiveMenu() {
     if (!evt) return false;
     let changed = false;
     const queues = evt.queues || {};
-    const ins = Array.isArray(queues.in) ? queues.in : (evt.inQueue && evt.inQueue.name ? [evt.inQueue.name] : []);
-    const outs = Array.isArray(queues.out) ? queues.out : arr(evt.publishes).filter(Boolean);
+    const ins = [
+      ...(Array.isArray(queues.in) ? queues.in : []),
+      ...(queues.work && Array.isArray(queues.work.in) ? queues.work.in : []),
+      ...(queues.control && Array.isArray(queues.control.in) ? queues.control.in : []),
+      ...(evt.inQueue && evt.inQueue.name ? [evt.inQueue.name] : [])
+    ];
+    const outs = [
+      ...(Array.isArray(queues.out) ? queues.out : []),
+      ...(queues.work && Array.isArray(queues.work.out) ? queues.work.out : []),
+      ...(queues.control && Array.isArray(queues.control.out) ? queues.control.out : []),
+      ...arr(evt.publishes).filter(Boolean)
+    ];
     const apply = (name, dir) => {
       const key = String(name);
       if (!hive.queues[key]) { hive.queues[key] = { in: new Set(), out: new Set() }; fetchQueueInfo(key); }
@@ -138,7 +149,9 @@ export function initHiveMenu() {
       txt1.setAttribute('fill', '#fff');
       txt1.setAttribute('font-family', 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace');
       txt1.setAttribute('font-size', '11');
-      txt1.textContent = qname;
+      const qDisp = truncate(qname, 20);
+      txt1.textContent = qDisp;
+      if (qDisp !== qname) txt1.setAttribute('title', qname);
       gq.appendChild(txt1);
       const info = q.info || {};
       const txt2 = document.createElementNS('http://www.w3.org/2000/svg', 'text');
@@ -178,7 +191,9 @@ export function initHiveMenu() {
       nameTxt.setAttribute('fill', 'rgba(255,255,255,0.9)');
       nameTxt.setAttribute('font-family', 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace');
       nameTxt.setAttribute('font-size', '12');
-      nameTxt.textContent = n.name || '–';
+      const dispName = truncate(n.name || '–', 18);
+      nameTxt.textContent = dispName;
+      if (n.name && dispName !== n.name) nameTxt.setAttribute('title', n.name);
       g.appendChild(nameTxt);
       const tps = document.createElementNS('http://www.w3.org/2000/svg', 'text');
       tps.setAttribute('x', '60'); tps.setAttribute('y', '52');
@@ -194,7 +209,11 @@ export function initHiveMenu() {
           if (obj.in && obj.in.has(n.id)) ins.push(qname);
           if (obj.out && obj.out.has(n.id)) outs.push(qname);
         }
-        const fmt = (arr) => { if (!arr.length) return '–'; const first = arr[0]; return arr.length > 1 ? (first + '…') : first; };
+        const fmt = (arr) => {
+          if (!arr.length) return '–';
+          const first = truncate(arr[0], 16);
+          return arr.length > 1 ? `${first}…` : first;
+        };
         const inTxt = document.createElementNS('http://www.w3.org/2000/svg', 'text');
         inTxt.setAttribute('x', '60'); inTxt.setAttribute('y', '68');
         inTxt.setAttribute('text-anchor', 'middle');
