@@ -9,7 +9,7 @@
       "datasource": "Loki",
       "targets": [
         {
-          "expr": "{app=~\".*\"}"
+          "expr": "{app=~\".+\"}"
         }
       ],
       "id": 1
