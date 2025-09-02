@@ -9,7 +9,7 @@ export function initWiremockJournal() {
 
   let open = false;
   const host = window.location.hostname;
-  const url = `http://${host}:8080/__admin/requests`;
+  const url = `http://${host}:8080/__admin/requests?limit=25`;
 
   async function loadJournal() {
     panel.innerHTML = '<div style="padding:8px;color:#fff;">Loading…</div>';

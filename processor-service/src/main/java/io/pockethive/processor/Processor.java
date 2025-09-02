@@ -2,12 +2,15 @@ package io.pockethive.processor;
 
 import io.pockethive.Topology;
 import org.springframework.amqp.core.Message;
+import org.springframework.amqp.core.MessageBuilder;
+import org.springframework.amqp.core.MessageProperties;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
-import org.slf4j.Logger; import org.slf4j.LoggerFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.amqp.support.AmqpHeaders;
 import io.pockethive.observability.ObservabilityContext;
@@ -16,8 +19,16 @@ import io.pockethive.observability.StatusEnvelopeBuilder;
 import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Qualifier;
 
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.concurrent.atomic.AtomicLong;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 @Component
 @EnableScheduling
@@ -31,6 +42,8 @@ public class Processor {
   private volatile boolean enabled = true;
   private static final long STATUS_INTERVAL_MS = 5000L;
   private volatile long lastStatusTs = System.currentTimeMillis();
+  private static final ObjectMapper MAPPER = new ObjectMapper();
+  private final HttpClient http = HttpClient.newHttpClient();
 
   public Processor(RabbitTemplate rabbit,
                    @Qualifier("instanceId") String instanceId,
@@ -57,9 +70,17 @@ public class Processor {
         counter.incrementAndGet();
         Instant processed = Instant.now();
         ObservabilityContextUtil.appendHop(ctx, "processor", instanceId, received, processed);
-        message.getMessageProperties().setHeader("x-ph-service", "processor");
-        message.getMessageProperties().setHeader(ObservabilityContextUtil.HEADER, ObservabilityContextUtil.toHeader(ctx));
-        rabbit.send(Topology.EXCHANGE, Topology.FINAL_QUEUE, message);
+        String raw = new String(message.getBody(), StandardCharsets.UTF_8);
+        log.info("Forwarding to SUT: {}", raw);
+        byte[] resp = sendToSut(message.getBody());
+        Message out = MessageBuilder
+            .withBody(resp)
+            .setContentType(MessageProperties.CONTENT_TYPE_JSON)
+            .setContentEncoding(StandardCharsets.UTF_8.name())
+            .setHeader("x-ph-service", "processor")
+            .setHeader(ObservabilityContextUtil.HEADER, ObservabilityContextUtil.toHeader(ctx))
+            .build();
+        rabbit.send(Topology.EXCHANGE, Topology.FINAL_QUEUE, out);
       }
     } finally {
       MDC.clear();
@@ -102,8 +123,81 @@ public class Processor {
       MDC.clear();
     }
   }
+  private byte[] sendToSut(byte[] bodyBytes){
+    String method = "GET";
+    URI target = null;
+    try{
+      JsonNode node = MAPPER.readTree(bodyBytes);
+      String path = node.path("path").asText("/");
+      method = node.path("method").asText("GET").toUpperCase();
 
+      // Resolve final target URL from configured base and provided path
+      target = buildUri(path);
+      if(target == null){
+        return MAPPER.createObjectNode().put("error", "invalid baseUrl").toString().getBytes(StandardCharsets.UTF_8);
+      }
 
+      HttpRequest.Builder req = HttpRequest.newBuilder(target);
+
+      // Copy headers from message
+      JsonNode headers = node.path("headers");
+      if(headers.isObject()){
+        headers.fields().forEachRemaining(e -> req.header(e.getKey(), e.getValue().asText()));
+      }
+
+      // Determine body publisher from supplied body node
+      JsonNode bodyNode = node.path("body");
+      HttpRequest.BodyPublisher bodyPublisher;
+      String bodyStr = null;
+      if(bodyNode.isMissingNode() || bodyNode.isNull()){
+        bodyPublisher = HttpRequest.BodyPublishers.noBody();
+      }else if(bodyNode.isTextual()){
+        bodyStr = bodyNode.asText();
+        bodyPublisher = HttpRequest.BodyPublishers.ofString(bodyStr, StandardCharsets.UTF_8);
+      }else{
+        bodyStr = MAPPER.writeValueAsString(bodyNode);
+        bodyPublisher = HttpRequest.BodyPublishers.ofString(bodyStr, StandardCharsets.UTF_8);
+      }
+
+      req.method(method, bodyPublisher);
+
+      String headersStr = headers.isObject()? headers.toString() : "";
+      String bodySnippet = bodyStr==null?"": (bodyStr.length()>300? bodyStr.substring(0,300)+"…": bodyStr);
+      log.info("HTTP {} {} headers={} body={}", method, target, headersStr, bodySnippet);
+
+      HttpResponse<String> resp = http.send(req.build(), HttpResponse.BodyHandlers.ofString());
+      log.info("HTTP {} {} -> {} body={} headers={}", method, target, resp.statusCode(),
+          snippet(resp.body()), resp.headers().map());
+
+      var result = MAPPER.createObjectNode();
+      result.put("status", resp.statusCode());
+      result.set("headers", MAPPER.valueToTree(resp.headers().map()));
+      result.put("body", resp.body());
+      return MAPPER.writeValueAsBytes(result);
+    }catch(Exception e){
+      log.error("HTTP request failed for {} {}: {}", method, target, e.toString(), e);
+      return MAPPER.createObjectNode().put("error", e.toString()).toString().getBytes(StandardCharsets.UTF_8);
+    }
+  }
+
+  private URI buildUri(String path){
+    String p = path==null?"":path;
+    if(baseUrl == null || baseUrl.isBlank()){
+      log.warn("No baseUrl configured, cannot build target URI for path='{}'", p);
+      return null;
+    }
+    try{
+      return URI.create(baseUrl).resolve(p);
+    }catch(Exception e){
+      log.warn("Invalid URI base='{}' path='{}'", baseUrl, p, e);
+      return null;
+    }
+  }
+
+  private static String snippet(String s){
+    if(s==null) return "";
+    return s.length()>300? s.substring(0,300)+"…" : s;
+  }
 
   private void sendStatusDelta(long tps){
     String role = "processor";

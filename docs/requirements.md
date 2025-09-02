@@ -35,7 +35,8 @@ PocketHive is a portable transaction swarm: a set of small, composable services 
 - Sends periodic `status-delta` and startup `status-full` events describing queue flow.
 
 ### Processor Service
-- Consumes moderated messages, appends observability context, and forwards to the final queue.
+- Consumes moderated messages, logs each one, and relays it to the system under test using the configured base URL combined with the message's path.
+- Forwards the SUT's response (status, headers, body) to the final queue without modifying it.
 - Supports enable/disable via control messages and replies to `status-request`.
 - Control messages may override the downstream `baseUrl` without requiring a restart.
 - Emits periodic `status-delta` and startup `status-full` events.

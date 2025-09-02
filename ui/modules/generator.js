@@ -5,7 +5,10 @@ export function renderGeneratorPanel(containerEl, instanceId, initial){
   const extra = `
       <div class="section">
         <div class="block-title">General</div>
-        <label>Rate per sec <span id="rateVal">5</span> <input id="rate" type="range" min="0" max="100" value="5"></label>
+        <label style="display:flex;align-items:center;gap:8px;width:100%;">Rate per sec 
+          <input id="rateInput" type="number" min="0" max="100" step="0.1" value="5" style="width:5em">
+          <input id="rate" type="range" min="0" max="100" step="0.1" value="5" style="flex:1">
+        </label>
         <div class="controls"><button id="once">Once</button></div>
         <div class="controls"><button id="confirmGeneral">Confirm Changes</button></div>
       </div>
@@ -19,7 +22,7 @@ export function renderGeneratorPanel(containerEl, instanceId, initial){
       </div>`;
   const common = renderCommonPanel(containerEl, 'generator', instanceId, extra);
   const rate = containerEl.querySelector('#rate');
-  const rateVal = containerEl.querySelector('#rateVal');
+  const rateInput = containerEl.querySelector('#rateInput');
   const onceBtn = containerEl.querySelector('#once');
   const confirmGeneral = containerEl.querySelector('#confirmGeneral');
   const pathInp = containerEl.querySelector('#msgPath');
@@ -34,8 +37,9 @@ export function renderGeneratorPanel(containerEl, instanceId, initial){
     const srPayload = {type:'status-request', role:'generator', instance:instanceId};
     client.publish({destination:`/exchange/ph.control/sig.status-request.generator.${instanceId}`, body: JSON.stringify(srPayload)});
   }
-  rate && rate.addEventListener('input', ()=>{ const v=Number(rate.value); if(rateVal) rateVal.textContent=String(v); });
-  confirmGeneral && confirmGeneral.addEventListener('click', ()=>{ const v=Number(rate.value); sendConfig({ratePerSec:v}); });
+  rate && rate.addEventListener('input', ()=>{ const v=Number(rate.value); if(rateInput) rateInput.value=v; });
+  rateInput && rateInput.addEventListener('input', ()=>{ const v=Number(rateInput.value); if(rate) rate.value=v; });
+  confirmGeneral && confirmGeneral.addEventListener('click', ()=>{ const v=Number(rateInput ? rateInput.value : rate.value); sendConfig({ratePerSec:v}); });
   onceBtn && onceBtn.addEventListener('click', ()=> sendConfig({singleRequest:true}));
   confirmMessage && confirmMessage.addEventListener('click', ()=>{
     let h={};
@@ -45,7 +49,7 @@ export function renderGeneratorPanel(containerEl, instanceId, initial){
   function apply(evt){
     if(!evt) return;
     const data=evt.data||{};
-    if(data.ratePerSec!=null && rate){ rate.value=data.ratePerSec; if(rateVal) rateVal.textContent=String(data.ratePerSec); }
+      if(data.ratePerSec!=null && rate){ rate.value=data.ratePerSec; if(rateInput) rateInput.value=Number(data.ratePerSec); }
     if(data.path!=null && pathInp) pathInp.value=data.path;
     if(data.method!=null && methodInp) methodInp.value=data.method;
     if(data.body!=null && bodyInp) bodyInp.value=data.body;

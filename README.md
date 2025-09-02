@@ -75,7 +75,7 @@ docker compose up -d --build
 
 - UI: http://localhost:8088
 - Click "Connect". The UI connects to RabbitMQ via same-origin WebSocket `ws://localhost:8088/ws` using StompJS (same client as the built‑in Generator).
-- The top bar hosts icon links to RabbitMQ, Prometheus, and Grafana. The WireMock button opens a dropdown that fetches the request journal from `/__admin/requests` and lists method, URL, and status.
+- The top bar hosts icon links to RabbitMQ, Prometheus, and Grafana. The WireMock button opens a dropdown that fetches the last 25 requests from `/__admin/requests` and lists method, URL, and status.
 
 3) RabbitMQ Management (optional)
 
@@ -95,7 +95,7 @@ Services accept `config-update` messages on the control exchange to adjust behav
 
 - **Generator** builds HTTP requests from `ph.gen.message.*` settings. Defaults send a `POST /api/test` with body `hello-world` and no headers. Config updates can start or stop generation, change `ratePerSec`, fire a one-off request, or modify the request method, path, headers, and body.
 - **Moderator** forwards messages from the generator when enabled. A `config-update` can toggle moderation on or off.
-- **Processor** reads `ph.proc.base-url` to determine the downstream base URL, defaulting to `http://wiremock`. Config updates may enable/disable processing or override `baseUrl` without restarts.
+- **Processor** reads `ph.proc.base-url` to determine the downstream base URL, defaulting to `http://wiremock`,  and forwards moderated messages unchanged to the system under test using the message's path and headers. Config updates may enable/disable processing or override `baseUrl` without restarts.
 - **Postprocessor** records hop and total latency metrics and error counts before emitting them as metric events. It can also be disabled via `config-update`.
 - All services propagate an `x-ph-trace` header to capture trace IDs and hop timing across the pipeline.
 - The UI exposes dedicated sections for generator and processor settings, and changes take effect only after pressing **Confirm Changes**.
