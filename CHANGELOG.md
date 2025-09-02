@@ -2,10 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.5.7] - 2025-09-02
+## [0.5.9] - 2025-09-02
 Timestamp: 2025-09-02T14:44:30Z
 
 - Log aggregator: parse raw AMQP messages, tolerate unknown fields, and ensure every Loki stream has a label (defaulting to `service="unknown"`).
+
+## [0.5.8] - 2025-09-02
+Timestamp: 2025-09-02T12:52:14Z
+
+- Processor: forward moderated messages unchanged to the system under test and relay the response to the final queue.
+- Processor: default base URL includes WireMock port 8080.
+- UI: cap WireMock journal view to the 25 most recent requests.
+
+## [0.5.7] - 2025-09-02
+Timestamp: 2025-09-02T12:42:27Z
+
+- Generator: support sub-1 TPS rates by accumulating fractional requests.
+- UI: add numeric input for generator rate and stretch slider to panel width.
 
 ## [0.5.6] - 2025-09-01
 Timestamp: 2025-09-01T23:45:28Z

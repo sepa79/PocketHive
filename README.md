@@ -15,6 +15,8 @@
 - UI connects to RabbitMQ via same‑origin Web‑STOMP proxy at `/ws`.
 - Services publish/consume via the `ph.hive` exchange and `ph.gen`/`ph.mod` queues.
 - Metrics/status flow back on the `ph.control` exchange, with each service auto-declaring a durable `ph.control.<role>.<instance>` queue for broadcasts and direct signals.
+- Logs emitted by the services are routed to `logs.exchange` and consumed by the log‑aggregator, which batches them to Loki.
+- Services propagate an `x-ph-trace` header to record trace IDs and hop timing across the flow.
 
 ### Control-plane Events & Signals
 
@@ -56,6 +58,7 @@ See also: Control Bindings page (Menu → Control Bindings) and `ui/spec/asyncap
 - `grafana` (dashboard): 3000 (admin / admin)
 - `loki` (log store): 3100
 - `promtail` (log shipper): 9080
+- `log-aggregator` (RabbitMQ → Loki): internal
 - `wiremock` (HTTP stub server for NFT tests; journal disabled): 8080
 
 ## Quick Start
@@ -72,7 +75,7 @@ docker compose up -d --build
 
 - UI: http://localhost:8088
 - Click "Connect". The UI connects to RabbitMQ via same-origin WebSocket `ws://localhost:8088/ws` using StompJS (same client as the built‑in Generator).
-- The top bar hosts icon links to RabbitMQ, Prometheus, and Grafana. The WireMock button opens a dropdown that fetches the request journal from `/__admin/requests` and lists method, URL, and status.
+- The top bar hosts icon links to RabbitMQ, Prometheus, and Grafana. The WireMock button opens a dropdown that fetches the last 25 requests from `/__admin/requests` and lists method, URL, and status.
 
 3) RabbitMQ Management (optional)
 
@@ -84,12 +87,18 @@ docker compose up -d --build
 - Prometheus: http://localhost:9090
 - Grafana: http://localhost:3000 (admin / admin) with Prometheus and Loki datasources and a "Loki Logs" dashboard for viewing application logs
 - Prometheus scrapes metrics from `postprocessor` at `/actuator/prometheus`.
+- The log‑aggregator service consumes log events from RabbitMQ and pushes them to Loki.
 
 ## Service Configuration
 
-- **Generator** builds HTTP requests from `ph.gen.message.*` settings. Defaults send a `POST /api/test` with body `hello-world` and no headers.
-- **Processor** reads `ph.proc.base-url` to determine the downstream base URL, defaulting to `http://wiremock`.
-- The UI exposes dedicated sections for both settings, and changes take effect only after pressing **Confirm Changes**.
+Services accept `config-update` messages on the control exchange to adjust behaviour at runtime:
+
+- **Generator** builds HTTP requests from `ph.gen.message.*` settings. Defaults send a `POST /api/test` with body `hello-world` and no headers. Config updates can start or stop generation, change `ratePerSec`, fire a one-off request, or modify the request method, path, headers, and body.
+- **Moderator** forwards messages from the generator when enabled. A `config-update` can toggle moderation on or off.
+- **Processor** reads `ph.proc.base-url` to determine the downstream base URL, defaulting to `http://wiremock`,  and forwards moderated messages unchanged to the system under test using the message's path and headers. Config updates may enable/disable processing or override `baseUrl` without restarts.
+- **Postprocessor** records hop and total latency metrics and error counts before emitting them as metric events. It can also be disabled via `config-update`.
+- All services propagate an `x-ph-trace` header to capture trace IDs and hop timing across the pipeline.
+- The UI exposes dedicated sections for generator and processor settings, and changes take effect only after pressing **Confirm Changes**.
 
 ## WebSocket Proxy (UI ←→ RabbitMQ)
 

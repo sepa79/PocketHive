@@ -12,9 +12,9 @@ import { initWiremockJournal } from './features/wiremockJournal.js';
   try {
     const host = window.location.hostname;
     const services = {
-      'link-rabbitmq': `http://guest:guest@${host}:15672/`,
+      'link-rabbitmq': `http://${host}:15672/`,
       'link-prometheus': `http://${host}:9090/`,
-      'link-grafana': `http://admin:admin@${host}:3000/`
+      'link-grafana': `http://${host}:3000/`
     };
     Object.entries(services).forEach(([id, url]) => {
       const el = document.getElementById(id);
