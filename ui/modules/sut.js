@@ -1,12 +1,12 @@
 export function renderSutPanel(containerEl, baseUrl) {
   const display = (baseUrl || '').replace(/\/$/, '');
-  let adminUrl = '/__admin';
+  let adminUrl = '/__admin/';
   let reqUrl = '/__admin/requests?limit=25';
   try {
     const u = new URL(baseUrl || '/', window.location.href);
     const port = u.port ? `:${u.port}` : '';
     const origin = `${u.protocol}//${window.location.hostname}${port}`;
-    adminUrl = new URL('/__admin', origin).toString();
+    adminUrl = new URL('/__admin/', origin).toString();
     reqUrl = new URL('/__admin/requests?limit=25', origin).toString();
   } catch {}
   containerEl.innerHTML = `
