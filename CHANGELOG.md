@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.6.0] - 2025-09-02
+Timestamp: 2025-09-02T22:51:35Z
+
+- WireMock: enable cross-origin admin access
+- WireMock: return 200 JSON for generator's default `/api/test` request
+- UI: request WireMock admin using browser hostname and CORS headers
+
 ## [0.5.12] - 2025-09-02
 Timestamp: 2025-09-02T20:54:45Z
 

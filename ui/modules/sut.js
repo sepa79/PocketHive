@@ -1,7 +1,14 @@
 export function renderSutPanel(containerEl, baseUrl) {
   const display = (baseUrl || '').replace(/\/$/, '');
-  const adminUrl = new URL('/wiremock/__admin', window.location.origin).toString();
-  const reqUrl = new URL('/wiremock/__admin/requests?limit=25', window.location.origin).toString();
+  let adminUrl = '/__admin/';
+  let reqUrl = '/__admin/requests?limit=25';
+  try {
+    const u = new URL(baseUrl || '/', window.location.href);
+    const port = u.port ? `:${u.port}` : '';
+    const origin = `${u.protocol}//${window.location.hostname}${port}`;
+    adminUrl = new URL('/__admin/', origin).toString();
+    reqUrl = new URL('/__admin/requests?limit=25', origin).toString();
+  } catch {}
   containerEl.innerHTML = `
     <div class="card" data-role="sut">
       <h3>WireMock – <a href="${display}" target="_blank" rel="noopener">${display}</a></h3>
@@ -10,7 +17,7 @@ export function renderSutPanel(containerEl, baseUrl) {
         <button class="tab-btn" data-tab="requests">Requests</button>
       </div>
       <div class="tab-content" data-tab="admin">
-        <pre class="admin-output" style="white-space:pre-wrap;word-break:break-all;padding:8px;max-height:60vh;overflow:auto;background:#1e1e1e;color:#fff;"></pre>
+        <div class="admin-output" style="padding:8px;max-height:60vh;overflow:auto;"></div>
       </div>
       <div class="tab-content" data-tab="requests" style="display:none">
         <div class="requests-output" style="padding:8px;max-height:60vh;overflow:auto;"></div>
@@ -28,16 +35,41 @@ export function renderSutPanel(containerEl, baseUrl) {
   });
   const adminEl = containerEl.querySelector('.admin-output');
   const reqEl = containerEl.querySelector('.requests-output');
+  const fetchOpts = {
+    mode: 'cors',
+    credentials: 'omit',
+    headers: {
+      'Accept': 'application/json',
+      'Access-Control-Allow-Origin': '*'
+    }
+  };
   async function loadAdmin() {
     if (!adminEl) return;
-    adminEl.textContent = 'Loading…';
+    adminEl.innerHTML = '<div style="color:#fff;">Loading…</div>';
     try {
-      const res = await fetch(adminUrl);
-      if (!res.ok) { adminEl.textContent = `HTTP ${res.status}`; return; }
+      const res = await fetch(adminUrl, fetchOpts);
+      if (!res.ok) { adminEl.innerHTML = `<div style="color:#f66;">HTTP ${res.status}</div>`; return; }
       const data = await res.json();
-      adminEl.textContent = JSON.stringify(data, null, 2);
+      const mappings = Array.isArray(data && data.mappings) ? data.mappings : [];
+      if (!mappings.length) { adminEl.innerHTML = '<div style="color:#9aa0a6;">No mappings</div>'; return; }
+      const table = document.createElement('table');
+      table.style.width = '100%';
+      table.style.borderCollapse = 'collapse';
+      table.innerHTML = '<thead><tr><th style="text-align:left;padding:4px 8px;">Method</th><th style="text-align:left;padding:4px 8px;">URL</th><th style="text-align:left;padding:4px 8px;">Status</th></tr></thead>';
+      const tbody = document.createElement('tbody');
+      mappings.forEach(m => {
+        const tr = document.createElement('tr');
+        const method = m.request && m.request.method ? m.request.method : '';
+        const url = m.request && (m.request.url || m.request.urlPath) ? (m.request.url || m.request.urlPath) : '';
+        const status = m.response && m.response.status ? m.response.status : '';
+        tr.innerHTML = `<td style="padding:4px 8px;">${method}</td><td style="padding:4px 8px;">${url}</td><td style="padding:4px 8px;">${status}</td>`;
+        tbody.appendChild(tr);
+      });
+      table.appendChild(tbody);
+      adminEl.innerHTML = '';
+      adminEl.appendChild(table);
     } catch (e) {
-      adminEl.textContent = `Error: ${e && e.message ? e.message : 'fetch failed'}`;
+      adminEl.innerHTML = `<div style="color:#f66;">Error: ${e && e.message ? e.message : 'fetch failed'}</div>`;
     }
   }
   let reqLoaded = false;
@@ -46,7 +78,7 @@ export function renderSutPanel(containerEl, baseUrl) {
     reqLoaded = true;
     reqEl.innerHTML = '<div style="color:#fff;">Loading…</div>';
     try {
-      const res = await fetch(reqUrl);
+      const res = await fetch(reqUrl, fetchOpts);
       if (!res.ok) { reqEl.innerHTML = `<div style="color:#f66;">HTTP ${res.status}</div>`; return; }
       const data = await res.json();
       const requests = Array.isArray(data && data.requests) ? data.requests : [];
