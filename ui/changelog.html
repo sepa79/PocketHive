@@ -50,7 +50,7 @@
       return out.join('\n');
     }
     (async ()=>{
-      const v = await loadText('./VERSION'); if(v) document.getElementById('ver').textContent = v.trim();
+      const v = await loadText('../VERSION'); if(v) document.getElementById('ver').textContent = v.trim();
       const md = await loadText('./CHANGELOG.md');
       document.getElementById('chg').innerHTML = md ? renderMarkdown(md) : '<pre>CHANGELOG.md not available</pre>';
     })();
