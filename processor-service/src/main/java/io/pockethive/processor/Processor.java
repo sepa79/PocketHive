@@ -7,7 +7,8 @@ import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
-import org.slf4j.Logger; import org.slf4j.LoggerFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.amqp.support.AmqpHeaders;
 import io.pockethive.observability.ObservabilityContext;
@@ -16,8 +17,16 @@ import io.pockethive.observability.StatusEnvelopeBuilder;
 import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Qualifier;
 
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.concurrent.atomic.AtomicLong;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 @Component
 @EnableScheduling
@@ -31,6 +40,8 @@ public class Processor {
   private volatile boolean enabled = true;
   private static final long STATUS_INTERVAL_MS = 5000L;
   private volatile long lastStatusTs = System.currentTimeMillis();
+  private static final ObjectMapper MAPPER = new ObjectMapper();
+  private final HttpClient http = HttpClient.newHttpClient();
 
   public Processor(RabbitTemplate rabbit,
                    @Qualifier("instanceId") String instanceId,
@@ -59,6 +70,10 @@ public class Processor {
         ObservabilityContextUtil.appendHop(ctx, "processor", instanceId, received, processed);
         message.getMessageProperties().setHeader("x-ph-service", "processor");
         message.getMessageProperties().setHeader(ObservabilityContextUtil.HEADER, ObservabilityContextUtil.toHeader(ctx));
+        boolean error = sendToSut(message.getBody());
+        if(error){
+          message.getMessageProperties().setHeader("x-ph-error", true);
+        }
         rabbit.send(Topology.EXCHANGE, Topology.FINAL_QUEUE, message);
       }
     } finally {
@@ -102,8 +117,36 @@ public class Processor {
       MDC.clear();
     }
   }
+  private boolean sendToSut(byte[] bodyBytes){
+    try{
+      JsonNode node = MAPPER.readTree(bodyBytes);
+      String path = node.path("path").asText("/");
+      String method = node.path("method").asText("GET").toUpperCase();
+      String reqBody = node.path("body").asText("");
+      HttpRequest.Builder req = HttpRequest.newBuilder().uri(URI.create(buildUrl(path)));
+      JsonNode headers = node.path("headers");
+      if(headers.isObject()){
+        headers.fields().forEachRemaining(e -> req.header(e.getKey(), e.getValue().asText()));
+      }
+      if("GET".equals(method) || "DELETE".equals(method)){
+        req.method(method, HttpRequest.BodyPublishers.noBody());
+      } else {
+        req.method(method, HttpRequest.BodyPublishers.ofString(reqBody, StandardCharsets.UTF_8));
+      }
+      HttpResponse<Void> resp = http.send(req.build(), HttpResponse.BodyHandlers.discarding());
+      return resp.statusCode() >= 400;
+    }catch(Exception e){
+      log.warn("HTTP request failed", e);
+      return true;
+    }
+  }
 
-
+  private String buildUrl(String path){
+    if(path==null) path="";
+    if(baseUrl.endsWith("/") && path.startsWith("/")) return baseUrl + path.substring(1);
+    if(!baseUrl.endsWith("/") && !path.startsWith("/")) return baseUrl + "/" + path;
+    return baseUrl + path;
+  }
 
   private void sendStatusDelta(long tps){
     String role = "processor";
