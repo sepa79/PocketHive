@@ -130,17 +130,34 @@ public class Processor {
       JsonNode node = MAPPER.readTree(bodyBytes);
       String path = node.path("path").asText("/");
       method = node.path("method").asText("GET").toUpperCase();
-      String reqBody = node.path("body").asText("");
+
+      // Resolve final target URL from configured base and provided path
       target = buildUri(path);
       if(target == null){
         return MAPPER.createObjectNode().put("error", "invalid baseUrl").toString().getBytes(StandardCharsets.UTF_8);
       }
+
       HttpRequest.Builder req = HttpRequest.newBuilder(target);
+
+      // Copy headers from message
       JsonNode headers = node.path("headers");
       if(headers.isObject()){
         headers.fields().forEachRemaining(e -> req.header(e.getKey(), e.getValue().asText()));
       }
-      req.method(method, HttpRequest.BodyPublishers.ofString(reqBody, StandardCharsets.UTF_8));
+
+      // Determine body publisher from supplied body node
+      JsonNode bodyNode = node.path("body");
+      HttpRequest.BodyPublisher bodyPublisher;
+      if(bodyNode.isMissingNode() || bodyNode.isNull()){
+        bodyPublisher = HttpRequest.BodyPublishers.noBody();
+      }else if(bodyNode.isTextual()){
+        bodyPublisher = HttpRequest.BodyPublishers.ofString(bodyNode.asText(), StandardCharsets.UTF_8);
+      }else{
+        bodyPublisher = HttpRequest.BodyPublishers.ofString(MAPPER.writeValueAsString(bodyNode), StandardCharsets.UTF_8);
+      }
+
+      req.method(method, bodyPublisher);
+
       HttpResponse<String> resp = http.send(req.build(), HttpResponse.BodyHandlers.ofString());
       var result = MAPPER.createObjectNode();
       result.put("status", resp.statusCode());
