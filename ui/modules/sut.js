@@ -1,7 +1,7 @@
 export function renderSutPanel(containerEl, baseUrl) {
   const display = (baseUrl || '').replace(/\/$/, '');
-  let adminUrl = '/wiremock/__admin';
-  let reqUrl = '/wiremock/__admin/requests?limit=25';
+  let adminUrl = '/__admin';
+  let reqUrl = '/__admin/requests?limit=25';
   try {
     const u = new URL(baseUrl || '/', window.location.href);
     const port = u.port ? `:${u.port}` : '';
@@ -35,7 +35,14 @@ export function renderSutPanel(containerEl, baseUrl) {
   });
   const adminEl = containerEl.querySelector('.admin-output');
   const reqEl = containerEl.querySelector('.requests-output');
-  const fetchOpts = { mode: 'cors', headers: { 'Accept': 'application/json' } };
+  const fetchOpts = {
+    mode: 'cors',
+    credentials: 'omit',
+    headers: {
+      'Accept': 'application/json',
+      'Access-Control-Allow-Origin': '*'
+    }
+  };
   async function loadAdmin() {
     if (!adminEl) return;
     adminEl.textContent = 'Loading…';
