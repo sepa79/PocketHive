@@ -231,7 +231,16 @@ export function initHiveMenu() {
       }
       if (id === 'sut' && hive.sutUrl) {
         const link = document.createElementNS('http://www.w3.org/2000/svg', 'a');
-        link.setAttribute('href', hive.sutUrl);
+        let href = hive.sutUrl;
+        try {
+          const u = new URL(href, window.location.href);
+          if (u.hostname && u.hostname.toLowerCase().includes('wiremock')) {
+            href = `${u.origin}/__admin/requests`;
+          }
+        } catch {
+          /* ignore URL parse errors */
+        }
+        link.setAttribute('href', href);
         link.setAttribute('target', '_blank');
         link.appendChild(g);
         svg.appendChild(link);
