@@ -5,14 +5,16 @@ export function renderSutPanel(containerEl, baseUrl) {
   let reqUrl;
   if (base) {
     const clone = new URL(base.toString());
+    let forceProxy = false;
     if (/^wiremock$/i.test(clone.hostname)) {
       clone.hostname = window.location.hostname;
+      forceProxy = true;
     }
     clone.pathname = clone.pathname.replace(/\/$/, '') + '/';
     displayRoot = clone.toString();
-    if (clone.origin === window.location.origin) {
-      adminUrl = new URL('__admin', displayRoot).toString();
-      reqUrl = new URL('__admin/requests?limit=25', displayRoot).toString();
+    if (!forceProxy && clone.origin === window.location.origin) {
+      adminUrl = new URL('./__admin', displayRoot).toString();
+      reqUrl = new URL('./__admin/requests?limit=25', displayRoot).toString();
     } else {
       const proxyRoot = new URL('/wiremock/', window.location.origin).toString();
       adminUrl = new URL('__admin', proxyRoot).toString();
