@@ -160,7 +160,7 @@ import { initNectarMenu } from './menus/nectar.js';
     try{
       const el = document.getElementById('ph-version');
       if(!el) return;
-      const r = await fetch('./VERSION', {cache:'no-store'});
+      const r = await fetch('../VERSION', {cache:'no-store'});
       if(r.ok){ const txt = (await r.text()).trim(); if(txt) el.textContent = 'v'+txt; }
     }catch{}
   })();

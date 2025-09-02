@@ -37,7 +37,7 @@
   <script>
     async function loadText(p){ try{ const r=await fetch(p,{cache:'no-store'}); return r.ok? await r.text(): null; }catch{ return null; } }
     (async()=>{
-      const v = await loadText('./VERSION'); if(v) document.getElementById('ver').textContent=v.trim();
+      const v = await loadText('../VERSION'); if(v) document.getElementById('ver').textContent=v.trim();
       const y = await loadText('./spec/asyncapi.yaml');
       document.getElementById('spec').textContent = y || 'asyncapi.yaml not available';
     })();
