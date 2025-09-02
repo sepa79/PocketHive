@@ -4,9 +4,15 @@ import Logo from './Logo'
 import { useUiStore } from '../lib/store'
 import Button from './ui/Button'
 
+const baseLink =
+  'inline-flex items-center justify-center rounded-xl px-3 py-2 text-sm font-semibold uppercase tracking-wide transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-phl-accent2 dark:focus-visible:ring-ph-accent2 focus-visible:ring-offset-phl-bg dark:focus-visible:ring-offset-ph-bg active:translate-y-px'
+
 const navLinkClass = ({ isActive }: { isActive: boolean }) =>
-  `px-3 py-2 rounded-xl text-sm transition-colors
-   ${isActive ? 'bg-phl-surface dark:bg-ph-surface text-phl-text dark:text-white' : 'text-phl-muted dark:text-ph-muted hover:bg-phl-surface/70 dark:hover:bg-ph-surface/70 hover:text-phl-text dark:hover:text-white'}`
+  `${baseLink} ${
+    isActive
+      ? 'bg-phl-accent2 dark:bg-ph-accent2 text-phl-bg dark:text-ph-bg border border-transparent shadow-[0_0_20px_rgba(51,225,255,0.35)]'
+      : 'text-phl-accent2 dark:text-ph-accent2 border border-phl-accent2/35 dark:border-ph-accent2/35 bg-[radial-gradient(120%_120%_at_10%_10%,rgba(51,225,255,0.25),rgba(51,225,255,0.06)_40%,rgba(255,255,255,0.05)_70%,rgba(0,0,0,0)_100%)] shadow-[0_0_20px_rgba(51,225,255,0.15)_inset,0_0_16px_rgba(51,225,255,0.18)] hover:bg-[radial-gradient(120%_120%_at_10%_10%,rgba(51,225,255,0.35),rgba(51,225,255,0.1)_50%,rgba(255,255,255,0.07)_75%,rgba(0,0,0,0)_100%)] hover:shadow-[0_0_26px_rgba(51,225,255,0.22)_inset,0_0_20px_rgba(51,225,255,0.28)]'
+  }`
 
 export default function TopNav() {
   const toggleSidebar = useUiStore((s) => s.toggleSidebar)
