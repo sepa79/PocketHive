@@ -97,6 +97,7 @@ Services accept `config-update` messages on the control exchange to adjust behav
 - **Moderator** forwards messages from the generator when enabled. A `config-update` can toggle moderation on or off.
 - **Processor** reads `ph.proc.base-url` to determine the downstream base URL, defaulting to `http://wiremock`,  and forwards moderated messages unchanged to the system under test using the message's path and headers. Config updates may enable/disable processing or override `baseUrl` without restarts.
 - **Postprocessor** records hop and total latency metrics and error counts before emitting them as metric events. It can also be disabled via `config-update`.
+- **Trigger** executes shell commands or REST calls based on `ph.trigger.*` settings. Config updates can enable or disable triggering, adjust `intervalMs` and `actionType`, or fire a one-off action.
 - All services propagate an `x-ph-trace` header to capture trace IDs and hop timing across the pipeline.
 - The UI exposes dedicated sections for generator and processor settings, and changes take effect only after pressing **Confirm Changes**.
 

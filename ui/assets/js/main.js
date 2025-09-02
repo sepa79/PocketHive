@@ -2,9 +2,9 @@
 import { setupStompClient } from './features/stompClient.js';
 import { initPanel, showPanel } from './features/panelRenderer.js';
 
-const panels = { generator: {}, moderator: {}, processor: {}, postprocessor: {} };
+const panels = { generator: {}, moderator: {}, processor: {}, postprocessor: {}, trigger: {} };
 const instances = {};
-const loaded = { generator: {}, moderator: {}, processor: {}, postprocessor: {} };
+const loaded = { generator: {}, moderator: {}, processor: {}, postprocessor: {}, trigger: {} };
 
 const modal = document.getElementById('panel-modal');
 const modalBody = document.getElementById('panel-body');

@@ -32,7 +32,7 @@ export function initHiveMenu() {
     if (!hiveSvg) return null;
     const id = service;
     if (!hive.nodes[id]) {
-      const map = { generator: [140, 160], moderator: [480, 160], processor: [820, 160], sut: [1060, 160] };
+      const map = { generator: [140, 160], moderator: [480, 160], processor: [820, 160], sut: [1060, 160], trigger: [140, 320] };
       const pos = map[id] || [100 + Object.keys(hive.nodes).length * 140, 320];
       hive.nodes[id] = { id, label: id.charAt(0).toUpperCase() + id.slice(1), service: id, x: pos[0], y: pos[1], last: Date.now() };
       if (id === 'generator') { if (hive.nodes['moderator']) addEdge('generator', 'moderator'); }

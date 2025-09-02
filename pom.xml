@@ -15,5 +15,6 @@
     <module>processor-service</module>
     <module>postprocessor-service</module>
     <module>log-aggregator-service</module>
+    <module>trigger-service</module>
   </modules>
 </project>
