@@ -272,13 +272,11 @@ export function initHiveMenu() {
     modal.style.display = 'flex';
   }
   function setSutUrl(url) {
+    hive.sutUrl = url;
     try {
       const u = new URL(url, window.location.href);
       hive.sutWiremock = /wiremock/i.test(u.hostname);
-      u.hostname = window.location.hostname;
-      hive.sutUrl = u.toString();
     } catch {
-      hive.sutUrl = url;
       hive.sutWiremock = false;
     }
     redrawHive();
