@@ -1,6 +1,7 @@
 import { NavLink, Outlet } from 'react-router-dom'
 import { Hexagon, Radio, Droplet } from 'lucide-react'
 import MonolithIcon from '../icons/Monolith'
+import Health from '../components/Health'
 import { useUIStore } from '../store'
 import { useEffect } from 'react'
 
@@ -28,14 +29,32 @@ export default function Layout() {
       <header className="flex items-center gap-4 p-4 sticky top-0 z-10 backdrop-blur border-b border-white/10 bg-[#080a0e]/75">
         <img className="logo" src="/logo.svg" alt="PocketHive Logo" />
         <nav className="nav-tabs">
-          <NavLink to="/hive" className="tab-btn">
-            <Hexagon strokeWidth={1.5} className="tab-icon mr-1 text-white/80" />Hive
+          <NavLink
+            to="/hive"
+            className={({ isActive }) =>
+              `tab-btn flex items-center${isActive ? ' tab-active' : ''}`
+            }
+          >
+            <Hexagon strokeWidth={1.5} className="tab-icon text-white/80" />
+            Hive
           </NavLink>
-          <NavLink to="/buzz" className="tab-btn">
-            <Radio strokeWidth={1.5} className="tab-icon mr-1 text-white/80" />Buzz
+          <NavLink
+            to="/buzz"
+            className={({ isActive }) =>
+              `tab-btn flex items-center${isActive ? ' tab-active' : ''}`
+            }
+          >
+            <Radio strokeWidth={1.5} className="tab-icon text-white/80" />
+            Buzz
           </NavLink>
-          <NavLink to="/nectar" className="tab-btn">
-            <Droplet strokeWidth={1.5} className="tab-icon mr-1 text-white/80" />Nectar
+          <NavLink
+            to="/nectar"
+            className={({ isActive }) =>
+              `tab-btn flex items-center${isActive ? ' tab-active' : ''}`
+            }
+          >
+            <Droplet strokeWidth={1.5} className="tab-icon text-white/80" />
+            Nectar
           </NavLink>
         </nav>
         <div className="header-right">
@@ -45,14 +64,16 @@ export default function Layout() {
             <a id="link-grafana" href={services.grafana} target="_blank" rel="noopener" aria-label="Grafana"><img src="/icons/grafana.svg" alt="Grafana" /></a>
             <a id="link-wiremock" href={services.wiremock} target="_blank" rel="noopener" aria-label="WireMock"><img src="/icons/wiremock.svg" alt="WireMock" /></a>
           </div>
+          <Health />
+          <div className="h-6 w-px bg-white/20 mx-2" />
           <div className="menu relative">
             <button
               id="menu-btn"
-              className="bg-toggle"
+              className="inline-flex items-center justify-center p-0 bg-transparent border-0 cursor-pointer"
               onClick={toggleSidebar}
               aria-label="Menu"
             >
-              <MonolithIcon className="h-4 w-4" />
+              <MonolithIcon className="h-6 w-6" />
             </button>
             {sidebarOpen && (
               <div id="menu-dropdown" className="dropdown-panel absolute right-0 mt-2" onMouseLeave={closeSidebar}>
