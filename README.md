@@ -10,6 +10,8 @@
   <img alt="PocketHive Flow" src="docs/pockethive-flow-v3.svg" width="820" />
 </p>
 
+The legacy static interface now lives under `UI-Legacy` for reference. A new React 18 + Vite UI resides in `/ui` and continues to serve the existing assets without changes.
+
 ### Architecture
 
 - UI connects to RabbitMQ via same‑origin Web‑STOMP proxy at `/ws`.
@@ -105,7 +107,7 @@ Relevant files:
 
 - `ui/nginx.conf` — reverse proxy for `/ws` and `/healthz`
 - `docker-compose.yml` — mounts nginx config and exposes port 8088; adds healthcheck for UI
-- `ui/assets/js/app.js` — defaults WS URL to same-origin `/ws`, includes system logs and health ping, and uses StompJS for Events handling.
+- `ui/src/main.tsx` — React entry point that wires providers, routing, and WebSocket connection logic.
 
 ## Healthchecks
 
@@ -159,8 +161,9 @@ Manual checks:
 
 ## Development Notes
 
-- Static UI is served from `ui/`. Changes to HTML/CSS/JS are picked up on reload.
-- UI JavaScript is organized as ES modules under `ui/assets/js/` with dedicated `features/` and `menus/` helpers for easier maintenance.
+- The React UI lives in `ui/` (Vite + TypeScript). Assets remain under `ui/assets/` and are served without changes.
+- Run `cd ui && npm install` once, then `npm run dev` for development or `npm run build` for production.
+- Legacy static sources are preserved in `UI-Legacy` for reference.
 - Nginx config lives in `ui/nginx.conf` and is mounted into the `ui` container. After changing it, restart just the UI:
 
 ```
@@ -171,7 +174,7 @@ docker compose up -d --build ui
 
 - Node tooling (linting/tests) lives in `package.json` at the repo root:
   - `npm install` installs dev dependencies.
-  - `npm run lint` checks `ui/assets/js` with ESLint.
+  - `npm run lint` runs ESLint.
   - `npm test` executes Vitest.
 
 ---

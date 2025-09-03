@@ -1,0 +1,258 @@
+asyncapi: 2.6.0
+info:
+  title: PocketHive Control & Traffic API
+  version: 0.4.0
+  description: |
+    AsyncAPI specification documenting PocketHive messaging contracts.
+    - ph.control — control-plane events, lifecycle, metrics, alerts, and signals
+    - Services consume control signals from queues `ph.control.<role>.<instance>` bound to the `ph.control` exchange
+    - ph.hive — traffic exchange for workload messages (generator → moderator → processor)
+servers:
+  control-ws:
+    url: ws://{host}/ws
+    protocol: stomp
+    description: Web-STOMP endpoint proxied by UI (use wss on HTTPS)
+    variables:
+      host:
+        default: localhost:8088
+  amqp:
+    url: amqp://{host}:{port}
+    protocol: amqp
+    variables:
+      host:
+        default: rabbitmq
+      port:
+        default: '5672'
+defaultContentType: application/json
+channels:
+  # Control-plane events (emitted by services)
+  exchange/ph.control/ev.{kind}.{role}.{instance}:
+    parameters:
+      kind:
+        description: Event kind, including subtype (e.g., status-delta, status-full, lifecycle.running)
+        schema:
+          type: string
+      role:
+        description: Service role
+        schema:
+          type: string
+          enum: [generator, moderator, processor]
+      instance:
+        description: Instance identifier (UUID or unique string)
+        schema:
+          type: string
+    subscribe:
+      summary: PocketHive control-plane events from all services
+      message:
+        oneOf:
+          - $ref: '#/components/messages/ControlStatusFull'
+          - $ref: '#/components/messages/ControlStatusDelta'
+          - $ref: '#/components/messages/ControlLifecycle'
+          - $ref: '#/components/messages/ControlMetric'
+          - $ref: '#/components/messages/ControlAlert'
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: ph.control
+          type: topic
+          durable: true
+        routingKey: ev.{kind}.{role}.{instance}
+
+  # Control-plane signals (sent to services)
+  # Pattern: sig.<type>[.<role>[.<instance>]]
+  exchange/ph.control/sig.{type}.{role}.{instance}:
+    parameters:
+      type:
+        description: Signal type (single segment, kebab-case)
+        schema: { type: string, enum: [status-request, config-update, ping, link-request] }
+      role:
+        description: Target role (optional)
+        schema: { type: string, enum: [generator, moderator, processor] }
+      instance:
+        description: Target instance (optional)
+        schema: { type: string }
+    publish:
+      summary: PocketHive control-plane signals to services
+      message:
+        $ref: '#/components/messages/ControlSignal'
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: ph.control
+          type: topic
+          durable: true
+        routingKey: sig.{type}.{role}.{instance}
+
+  # PocketHive traffic example kept for reference
+  exchange/ph.hive/generator.request:
+    publish:
+      summary: Workload generation request published by PocketHive browser generator
+      message:
+        $ref: '#/components/messages/GenerationRequest'
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: ph.hive
+          type: direct
+          durable: true
+        routingKey: generator.request
+components:
+  messages:
+    ControlStatusFull:
+      name: ControlStatusFull
+      title: Control — Status (full snapshot)
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/ControlStatusFullPayload'
+    ControlStatusDelta:
+      name: ControlStatusDelta
+      title: Control — Status (delta)
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/ControlStatusDeltaPayload'
+    ControlLifecycle:
+      name: ControlLifecycle
+      title: Control — Lifecycle
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/ControlLifecyclePayload'
+    ControlMetric:
+      name: ControlMetric
+      title: Control — Metric
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/ControlMetricPayload'
+    ControlAlert:
+      name: ControlAlert
+      title: Control — Alert
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/ControlAlertPayload'
+    ControlSignal:
+      name: ControlSignal
+      title: Control — Signal to services
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/ControlSignalPayload'
+    GenerationRequest:
+      name: GenerationRequest
+      title: PocketHive browser generator request
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/GenerationPayload'
+  schemas:
+    ControlBase:
+      type: object
+      required: [event, kind, version, role, instance, messageId, timestamp]
+      properties:
+        event: { type: string, enum: [status, lifecycle, metric, alert, link] }
+        kind: { type: string, description: Subtype (e.g., status-full, status-delta, lifecycle.running) }
+        version: { type: string, description: Semver of event schema }
+        role: { type: string, enum: [generator, moderator, processor] }
+        instance: { type: string }
+        location: { type: string }
+        messageId: { type: string, format: uuid }
+        timestamp: { type: string, format: date-time }
+        traffic: { type: string }
+        queues:
+          type: object
+          properties:
+            in:  { type: array, items: { type: string } }
+            out: { type: array, items: { type: string } }
+        data: { type: object, additionalProperties: true }
+
+    ControlStatusFullPayload:
+      allOf:
+        - $ref: '#/components/schemas/ControlBase'
+        - type: object
+          properties:
+            event: { const: status }
+            kind: { const: status-full }
+            data:
+              type: object
+              required: [tps]
+              properties:
+                tps: { type: integer, minimum: 0 }
+
+    ControlStatusDeltaPayload:
+      allOf:
+        - $ref: '#/components/schemas/ControlBase'
+        - type: object
+          properties:
+            event: { const: status }
+            kind: { const: status-delta }
+            data:
+              type: object
+              required: [tps]
+              properties:
+                tps: { type: integer, minimum: 0 }
+
+    ControlLifecyclePayload:
+      allOf:
+        - $ref: '#/components/schemas/ControlBase'
+        - type: object
+          properties:
+            event: { const: lifecycle }
+            data:
+              type: object
+              required: [state]
+              properties:
+                state: { type: string, enum: [starting, running, degraded, stopping, stopped, error] }
+                reason: { type: string }
+
+    ControlMetricPayload:
+      allOf:
+        - $ref: '#/components/schemas/ControlBase'
+        - type: object
+          properties:
+            event: { const: metric }
+            data:
+              type: object
+              additionalProperties:
+                type: number
+
+    ControlAlertPayload:
+      allOf:
+        - $ref: '#/components/schemas/ControlBase'
+        - type: object
+          properties:
+            event: { const: alert }
+            data:
+              type: object
+              required: [level, code, message]
+              properties:
+                level: { type: string, enum: [info, warn, error] }
+                code: { type: string }
+                message: { type: string }
+
+    ControlSignalPayload:
+      type: object
+      required: [type, version, messageId, timestamp]
+      properties:
+        type: { type: string, enum: [status-request, config-update, ping, link-request] }
+        version: { type: string }
+        messageId: { type: string, format: uuid }
+        timestamp: { type: string, format: date-time }
+    GenerationPayload:
+      type: object
+      required: [type, sessionId, correlationId, timestamp]
+      properties:
+        type:
+          type: string
+          enum: [GENERATION_REQUEST]
+        sessionId:
+          type: string
+        correlationId:
+          type: string
+          format: uuid
+        timestamp:
+          type: string
+          format: date-time
+        prompt:
+          type: string
+        payload:
+          type: string
+          description: Optional blob for size padding

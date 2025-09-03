@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.6.1] - 2025-09-03
+Timestamp: 2025-09-03T12:18:00Z
+
+- UI: archive the static site under `UI-Legacy` and scaffold a React 18 + Vite app in `/ui` with the Hive view and menu.
+
 ## [0.6.0] - 2025-09-02
 Timestamp: 2025-09-02T22:51:35Z
 

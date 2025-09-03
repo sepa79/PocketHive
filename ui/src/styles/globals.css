@@ -1,0 +1,19 @@
+@import "/css/index.css";
+@import "/css/app.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@keyframes plug-in {
+  from {
+    transform: translateX(-8px);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+.animate-plug-in {
+  animation: plug-in 0.6s ease-in-out infinite alternate;
+}

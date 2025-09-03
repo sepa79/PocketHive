@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>PocketHive – README</title>
+  <link rel="icon" type="image/svg+xml" href="/assets/favicon/favicon.svg">
+  <link rel="icon" type="image/png" sizes="48x48" href="/assets/favicon/favicon-48.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon/favicon-32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon/favicon-16.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/assets/favicon/apple-touch-icon.png">
+  <link rel="mask-icon" href="/assets/favicon/safari-pinned-tab.svg" color="#FFC107">
+  <link rel="manifest" href="/assets/favicon/site.webmanifest">
+  <meta name="theme-color" content="#0f1116">
+  <style>
+    :root{ color-scheme: dark; }
+    body{ margin:0; font: 16px/1.5 Inter, system-ui, Segoe UI, Arial, sans-serif; background:#0f1116; color:#e6eef8; }
+    header{ position:sticky; top:0; background: rgba(15,17,22,.8); border-bottom:1px solid rgba(255,255,255,.08); padding:12px 16px; backdrop-filter: blur(6px); }
+    main{ max-width: 980px; margin: 20px auto 60px; padding: 0 16px; }
+    h1,h2,h3{ line-height:1.2; margin: 18px 0 10px; }
+    h1{ font-size: 28px; } h2{ font-size: 22px; } h3{ font-size: 18px; }
+    p, ul, ol{ color:#c9d4e0; }
+    code, pre{ font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    pre{ background:#0b0f15; border:1px solid rgba(255,255,255,.1); border-radius:10px; padding:12px; overflow:auto; }
+    a{ color:#33E1FF; }
+    img{ max-width:100%; height:auto; background:transparent; border-radius:6px; border:1px solid rgba(255,255,255,.12); }
+    .muted{ color:#9aa0a6; font-size: 14px; }
+  </style>
+  <script>
+    async function load(){
+      const el = document.getElementById('md');
+      try{
+        const res = await fetch('/README.md', {cache:'no-store'});
+        const md = res.ok ? await res.text() : '# README not found';
+        el.innerHTML = render(md);
+        // Fix common relative paths for in-app view
+        document.querySelectorAll('#md img').forEach(img=>{
+          const orig = img.getAttribute('src') || '';
+          if(!orig) return;
+          // Repo uses 'ui/assets/...'; in app, alias /ui/ maps to docroot
+          if(/^ui\//.test(orig)) img.setAttribute('src', '/' + orig.replace(/^\/?/, ''));
+          else if(/^docs\//.test(orig)) img.setAttribute('src', '/' + orig.replace(/^\/?/, ''));
+          else if(/^\.\//.test(orig)) img.setAttribute('src', orig.replace(/^\./, ''));
+          img.referrerPolicy='no-referrer';
+        });
+      }catch(e){ el.textContent = 'Failed to load README: ' + (e && e.message ? e.message : String(e)); }
+    }
+    function esc(s){ return s.replace(/[&<>]/g, c=> ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+    function render(md){
+      // very small markdown-to-html: headings, code blocks, inline code, lists, images, links, paragraphs
+      const lines = md.replace(/\r\n?/g,'\n').split('\n');
+      let html = '', inCode = false, codeBuf=[];
+      for(let i=0;i<lines.length;i++){
+        let ln = lines[i];
+        if(/^```/.test(ln)){ if(inCode){ html += `<pre><code>${esc(codeBuf.join('\n'))}</code></pre>`; inCode=false; codeBuf=[]; } else { inCode=true; } continue; }
+        if(inCode){ codeBuf.push(ln); continue; }
+        if(/^#\s+/.test(ln)){ html += `<h1>${esc(ln.replace(/^#\s+/,'')).trim()}</h1>`; continue; }
+        if(/^##\s+/.test(ln)){ html += `<h2>${esc(ln.replace(/^##\s+/,'')).trim()}</h2>`; continue; }
+        if(/^###\s+/.test(ln)){ html += `<h3>${esc(ln.replace(/^###\s+/,'')).trim()}</h3>`; continue; }
+        if(/^\s*[-*]\s+/.test(ln)){
+          const items=[ln.replace(/^\s*[-*]\s+/, '')];
+          while(i+1<lines.length && /^\s*[-*]\s+/.test(lines[i+1])){ items.push(lines[++i].replace(/^\s*[-*]\s+/,'')); }
+          html += `<ul>` + items.map(it=> `<li>${inline(it)}</li>`).join('') + `</ul>`; continue;
+        }
+        if(/^\s*$/.test(ln)){ html += ''; continue; }
+        html += `<p>${inline(ln)}</p>`;
+      }
+      return html;
+    }
+    function inline(s){
+      // images ![alt](src)
+      s = s.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (m,alt,src)=> `<img alt="${esc(alt)}" src="${esc(src)}">`);
+      // links [text](href)
+      s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (m,txt,href)=> `<a href="${esc(href)}" target="_blank" rel="noopener">${esc(txt)}</a>`);
+      // inline code `code`
+      s = s.replace(/`([^`]+)`/g, (m,code)=> `<code>${esc(code)}</code>`);
+      return s;
+    }
+    document.addEventListener('DOMContentLoaded', load);
+  </script>
+</head>
+<body>
+  <header>
+    <div class="muted">PocketHive / README</div>
+  </header>
+  <main>
+    <div id="md">Loading…</div>
+  </main>
+</body>
+</html>
