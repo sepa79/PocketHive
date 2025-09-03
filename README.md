@@ -6,9 +6,19 @@
 
 **PocketHive** is a portable transaction swarm: compact, composable components that let you generate, moderate, process, and test workloads with clear boundaries and durable queues.
 
-<p align="center">
-  <img alt="PocketHive Flow" src="docs/pockethive-flow-v3.svg" width="820" />
-</p>
+```mermaid
+flowchart LR
+    G[Generator\nproduces traffic] -->|ph.gen| MQ((RabbitMQ))
+    MQ -->|ph.gen| M[Moderator\nfilters/rewrites]
+    M -->|ph.mod| MQ
+    MQ -->|ph.mod| P[Processor\ncalls SUT]
+    P -->|ph.final| MQ
+    MQ -->|ph.final| PP[Postprocessor\ncollects metrics]
+    P -->|HTTP| S[SUT\nSystem Under Test]
+    T[Trigger\nfires actions] -.->|ph.control| MQ
+    LA[Log Aggregator\nbatches logs] -.->|logs.exchange| MQ
+    MQ -.->|ph.control| UI[UI\ncharts & control]
+```
 
 The legacy static interface now lives under `UI-Legacy` for reference. A new React 18 + Vite UI resides in `/ui` and continues to serve the existing assets without changes.
 
