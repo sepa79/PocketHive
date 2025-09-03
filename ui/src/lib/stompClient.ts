@@ -1,22 +1,20 @@
-import { Client } from '@stomp/stompjs'
+import { Client, type StompSubscription } from '@stomp/stompjs'
 import type { Component } from '../types/hive'
 
 export type ComponentListener = (components: Component[]) => void
 
 let client: Client | null = null
+let controlSub: StompSubscription | null = null
 let listeners: ComponentListener[] = []
-let connected = false
 
-export function connect() {
-  if (connected) return
-  const url = import.meta.env.VITE_STOMP_URL
-  if (!url) {
-    console.warn('STOMP URL not configured')
-    return
+export function setClient(newClient: Client | null) {
+  if (controlSub) {
+    controlSub.unsubscribe()
+    controlSub = null
   }
-  client = new Client({ brokerURL: url })
-  client.onConnect = () => {
-    client?.subscribe('/exchange/control', (msg) => {
+  client = newClient
+  if (client) {
+    controlSub = client.subscribe('/exchange/control', (msg) => {
       try {
         const body = JSON.parse(msg.body) as Component[]
         listeners.forEach((l) => l(body))
@@ -25,8 +23,6 @@ export function connect() {
       }
     })
   }
-  client.activate()
-  connected = true
 }
 
 export function subscribeComponents(fn: ComponentListener) {

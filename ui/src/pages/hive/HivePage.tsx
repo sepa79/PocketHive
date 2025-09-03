@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import ComponentList from './ComponentList'
 import ComponentDetail from './ComponentDetail'
-import { connect, subscribeComponents } from '../../lib/stompClient'
+import { subscribeComponents } from '../../lib/stompClient'
 import type { Component } from '../../types/hive'
 
 export default function HivePage() {
@@ -10,7 +10,6 @@ export default function HivePage() {
   const [search, setSearch] = useState('')
 
   useEffect(() => {
-    connect()
     const unsub = subscribeComponents(setComponents)
     return () => unsub()
   }, [])

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Plug, Square } from 'lucide-react'
 import { Client } from '@stomp/stompjs'
+import { setClient as setStompClient } from '../lib/stompClient'
 
 export default function Connectivity() {
   const [state, setState] = useState<'connected' | 'connecting' | 'disconnected'>('disconnected')
@@ -19,9 +20,18 @@ export default function Connectivity() {
       brokerURL: url,
       connectHeaders: { login, passcode },
       reconnectDelay: 0,
-      onConnect: () => setState('connected'),
-      onWebSocketClose: () => setState('disconnected'),
-      onStompError: () => setState('disconnected'),
+      onConnect: () => {
+        setState('connected')
+        setStompClient(client)
+      },
+      onWebSocketClose: () => {
+        setState('disconnected')
+        setStompClient(null)
+      },
+      onStompError: () => {
+        setState('disconnected')
+        setStompClient(null)
+      },
     })
     client.activate()
     clientRef.current = client
@@ -31,6 +41,7 @@ export default function Connectivity() {
     clientRef.current?.deactivate()
     clientRef.current = null
     setState('disconnected')
+    setStompClient(null)
   }
 
   useEffect(() => {
