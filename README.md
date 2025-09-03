@@ -113,7 +113,7 @@ The legacy static interface now lives under `UI-Legacy` for reference. A new Rea
 - Events (topic): `ev.{kind}.{role}.{instance}`
   - `kind`: `status-full`, `status-delta`, `lifecycle.*`, `metric.*`, `alert`
   - `role`: `generator|moderator|processor`
-  - `instance`: UUID/unique ID
+  - `instance`: bee name generated on startup
   - Envelope fields: `event, kind, version, role, instance, messageId, timestamp, queues{in,out}? , data`
 - Signals (topic-friendly): `sig.<type>[.<role>[.<instance>]]`
   - Types are single-segment (no dots): `status-request`, `config-update`, `ping`, `link-request`
@@ -173,6 +173,25 @@ docker compose up -d --build
 - Grafana: http://localhost:3000 (admin / admin) with Prometheus and Loki datasources
 - Prometheus scrapes metrics from `postprocessor` at `/actuator/prometheus`.
 - The log‑aggregator service consumes log events from RabbitMQ and pushes them to Loki.
+
+## Service Naming
+
+Every service generates a whimsical "bee name" when it starts to make log lines and metrics
+easier to trace back to a specific instance. Names follow the pattern
+`<bee-role>-bee-<funny1>-<funny2>-<id>` where `bee-role` is a themed alias for the component type and `id`
+is a random four character segment of a UUID for uniqueness. The mapping is:
+
+- generator → seeder
+- moderator → guardian
+- processor → worker
+- postprocessor → forager
+- trigger → herald
+- log-aggregator → scribe
+
+The two `funny` parts are chosen from predefined lists to maximize variety while avoiding spaces
+or `. # *`. The chosen name is logged on startup and exposed through the `/actuator/info` endpoint
+under `beeName`. Future services should call `BeeNameGenerator.generate("<role>")` from the
+`observability` module; the utility applies the mapping automatically to stay consistent.
 
 ## Service Configuration
 
