@@ -1,5 +1,3 @@
-import Connectivity from '../components/Connectivity'
-
 export default function Hive() {
   const nodes = [
     { id: 'generator', x: 140, y: 160, label: 'GENERATOR' },
@@ -18,7 +16,6 @@ export default function Hive() {
   return (
     <div id="view-hive" style={{ maxWidth: '1200px', margin: '24px auto', padding: '0 20px 40px', color: '#fff' }}>
       <div id="hive-toolbar" style={{ display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '10px' }}>
-        <Connectivity />
         <label>
           Hold time (s)
           <input id="hive-hold" type="number" min="1" max="120" step="1" defaultValue={15} style={{ width: '64px', marginLeft: '4px' }} />

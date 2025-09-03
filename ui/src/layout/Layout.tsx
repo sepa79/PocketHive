@@ -2,6 +2,7 @@ import { NavLink, Outlet } from 'react-router-dom'
 import { Hexagon, Radio, Droplet } from 'lucide-react'
 import MonolithIcon from '../icons/Monolith'
 import Health from '../components/Health'
+import Connectivity from '../components/Connectivity'
 import { useUIStore } from '../store'
 import { useEffect } from 'react'
 
@@ -64,6 +65,7 @@ export default function Layout() {
             <a id="link-grafana" href={services.grafana} target="_blank" rel="noopener" aria-label="Grafana"><img src="/icons/grafana.svg" alt="Grafana" /></a>
             <a id="link-wiremock" href={services.wiremock} target="_blank" rel="noopener" aria-label="WireMock"><img src="/icons/wiremock.svg" alt="WireMock" /></a>
           </div>
+          <Connectivity />
           <Health />
           <div className="h-6 w-px bg-white/20 mx-2" />
           <div className="menu relative">
