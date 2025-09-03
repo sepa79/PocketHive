@@ -68,7 +68,6 @@ export default function Layout() {
           <div className="h-6 w-px bg-white/20 mx-2" />
           <div className="menu relative">
             <button
-              id="menu-btn"
               className="inline-flex items-center justify-center p-0 bg-transparent border-0 cursor-pointer"
               onClick={toggleSidebar}
               aria-label="Menu"
