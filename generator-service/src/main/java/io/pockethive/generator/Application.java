@@ -16,7 +16,7 @@ public class Application {
   private static final Logger log = LoggerFactory.getLogger(Application.class);
 
   public static void main(String[] args){
-    String beeName = BeeNameGenerator.generate();
+    String beeName = BeeNameGenerator.generate("generator");
     System.setProperty("bee.name", beeName);
     log.info("Bee name: {}", beeName);
     SpringApplication.run(Application.class, args);
