@@ -8,17 +8,40 @@
     "event": { "type": "string", "enum": ["status", "lifecycle", "metric", "alert", "link"] },
     "kind": { "type": "string" },
     "version": { "type": "string" },
-    "role": { "type": "string", "enum": ["generator", "moderator", "processor"] },
+    "role": { "type": "string", "enum": ["generator", "moderator", "processor", "postprocessor", "trigger"] },
     "instance": { "type": "string" },
     "location": { "type": "string" },
     "messageId": { "type": "string", "format": "uuid" },
     "timestamp": { "type": "string", "format": "date-time" },
+    "enabled": { "type": "boolean" },
     "traffic": { "type": "string" },
+    "inQueue": {
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "routingKeys": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "publishes": { "type": "array", "items": { "type": "string" } },
     "queues": {
       "type": "object",
       "properties": {
-        "in":  { "type": "array", "items": { "type": "string" } },
-        "out": { "type": "array", "items": { "type": "string" } }
+        "work": {
+          "type": "object",
+          "properties": {
+            "in": { "type": "array", "items": { "type": "string" } },
+            "out": { "type": "array", "items": { "type": "string" } },
+            "routes": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "control": {
+          "type": "object",
+          "properties": {
+            "in": { "type": "array", "items": { "type": "string" } },
+            "out": { "type": "array", "items": { "type": "string" } },
+            "routes": { "type": "array", "items": { "type": "string" } }
+          }
+        }
       }
     },
     "data": { "type": "object", "additionalProperties": true }

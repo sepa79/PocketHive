@@ -2,15 +2,29 @@ export interface ControlEvent {
   event: 'status' | 'lifecycle' | 'metric' | 'alert' | 'link';
   kind: string;
   version: string;
-  role: 'generator' | 'moderator' | 'processor';
+  role: 'generator' | 'moderator' | 'processor' | 'postprocessor' | 'trigger';
   instance: string;
   location?: string;
   messageId: string;
   timestamp: string;
+  enabled?: boolean;
   traffic?: string;
+  inQueue?: {
+    name: string;
+    routingKeys?: string[];
+  };
+  publishes?: string[];
   queues?: {
-    in?: string[];
-    out?: string[];
+    work?: {
+      in?: string[];
+      out?: string[];
+      routes?: string[];
+    };
+    control?: {
+      in?: string[];
+      out?: string[];
+      routes?: string[];
+    };
   };
   data?: Record<string, unknown>;
 }
