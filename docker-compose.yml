@@ -149,14 +149,14 @@ services:
     image: wiremock/wiremock:3.13.1
     command:
       [
-        "--verbose",                     # useful logs for debugging
-        "--disable-banner",              # cleaner output
-        "--async-response-enabled",      # enable async responses (better throughput)
-        "--global-response-templating",  # allows templating across all stubs
-        "--record-mappings",             # auto-record mappings (if needed for tests)
-        # "--no-request-journal",          # disable detailed journaling for perf (optional, see note below)
+        "--verbose",                          # useful logs for debugging
+        "--disable-banner",                   # cleaner output
+        "--async-response-enabled",           # enable async responses (better throughput)
+        "--global-response-templating",       # allows templating across all stubs
+        "--record-mappings",                  # auto-record mappings (if needed for tests)
+        # "--no-request-journal",             # disable detailed journaling for perf (optional, see note below)
         "--max-request-journal-entries=1000", # avoid memory blowup, keep it reasonable
-        "--enable-cors",                  # allow cross-origin access
+        "--enable-stub-cors",                # allow cross-origin access
       ]
     environment:
       LANG: en_US.UTF-8
