@@ -1,10 +1,9 @@
 import { render } from '@testing-library/react';
-import React from 'react';
 import { describe, test, expect } from 'vitest';
 import { BeeNodeShape } from '../BeeNodeShape';
 import { roleShape } from '../shapeMap';
-import { BeeTitle, Role } from '../../role';
-import { statusToColor, BeeColors, Status } from '../../theme';
+import { BeeTitle, type Role } from '../../role';
+import { statusToColor, BeeColors, type Status } from '../../theme';
 
 describe('role to shape mapping', () => {
   test('map contains all roles', () => {

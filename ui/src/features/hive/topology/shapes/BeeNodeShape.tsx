@@ -1,5 +1,5 @@
-import React from 'react';
-import { BeeColors, BeeSizes, Status } from '../theme';
+import type { FC } from 'react';
+import { BeeColors, BeeSizes, type Status } from '../theme';
 import { hexagon, shield, roundedRect, triangleRight, documentFolded, cylinder } from './paths';
 import type { Role } from '../role';
 
@@ -14,7 +14,7 @@ export interface NodeVisualProps {
   progress?: number; // for Postprocessor
 }
 
-export const BeeNodeShape: React.FC<NodeVisualProps> = ({
+export const BeeNodeShape: FC<NodeVisualProps> = ({
   role,
   status,
   title,

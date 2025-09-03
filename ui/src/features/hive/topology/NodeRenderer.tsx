@@ -1,7 +1,7 @@
-import React from 'react';
+import type { FC } from 'react';
 import { BeeNodeShape } from './shapes/BeeNodeShape';
-import { BeeTitle, Role } from './role';
-import { Status } from './theme';
+import { BeeTitle, type Role } from './role';
+import type { Status } from './theme';
 
 export interface NodeData {
   id: string;
@@ -18,7 +18,7 @@ interface NodeRendererProps {
   selected?: boolean;
 }
 
-export const NodeRenderer: React.FC<NodeRendererProps> = ({ node, selected }) => {
+export const NodeRenderer: FC<NodeRendererProps> = ({ node, selected }) => {
   const { role, status, name, progress, x, y } = node;
   const title = BeeTitle[role];
   return (
