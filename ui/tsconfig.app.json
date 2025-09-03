@@ -22,7 +22,10 @@
     "noUnusedParameters": true,
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true,
-    "noUncheckedSideEffectImports": true
+    "noUncheckedSideEffectImports": true,
+    "paths": {
+      "@spec/*": ["../spec/*"]
+    }
   },
-  "include": ["src", "../spec/control-events.schema.json"]
+  "include": ["src", "../spec/**/*.json"]
 }
