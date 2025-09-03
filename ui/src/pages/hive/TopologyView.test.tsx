@@ -20,7 +20,7 @@ const updateNodePosition = vi.fn<(id: string, x: number, y: number) => void>()
 
 vi.mock('react-force-graph', () => ({
   __esModule: true,
-  default: (props: GraphProps) => {
+  ForceGraph2D: (props: GraphProps) => {
     ;(globalThis as unknown as { __GRAPH_PROPS__: GraphProps }).__GRAPH_PROPS__ = props
     return React.createElement('div')
   },

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import ForceGraph2D from 'react-force-graph'
+import { ForceGraph2D } from 'react-force-graph'
 import { subscribeTopology, updateNodePosition, type Topology } from '../../lib/stompClient'
 import './TopologyView.css'
 
