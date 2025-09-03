@@ -1,0 +1,28 @@
+java:
+  version: 21
+ui:
+  port: 80
+dependencies:
+  allowed:
+    - "org.springframework"
+    - "com.fasterxml.jackson"
+  denied:
+    - "log4j:log4j"
+packages:
+  api: "..api.."
+  app: "..app.."
+  domain: "..domain.."
+  infra: "..infra.."
+testing:
+  required:
+    - junit5
+    - archunit
+  optional:
+    - cucumber
+commits: conventional
+ci:
+  required_checks:
+    - build
+    - test
+    - lint
+    - commitlint
