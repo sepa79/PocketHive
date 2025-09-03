@@ -1,4 +1,5 @@
-import { Client, IMessage } from '@stomp/stompjs';
+import { Client } from '@stomp/stompjs';
+import type { IMessage } from '@stomp/stompjs';
 import type { StatusMessage, ControlAck, ControlCommand } from '../types/hive';
 
 type MessageHandler = (msg: StatusMessage | ControlAck) => void;

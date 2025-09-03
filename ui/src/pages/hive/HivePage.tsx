@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { StatusMessage, ControlCommand } from '../../types/hive';
-import { createHiveClient, HiveClient } from '../../lib/stompClient';
+import { createHiveClient } from '../../lib/stompClient';
+import type { HiveClient } from '../../lib/stompClient';
 import ComponentList from './ComponentList';
 import ComponentDetail from './ComponentDetail';
 
@@ -8,7 +9,7 @@ export default function HivePage() {
   const [components, setComponents] = useState<StatusMessage[]>([]);
   const [selected, setSelected] = useState<StatusMessage | null>(null);
   const [toast, setToast] = useState<string | null>(null);
-  const clientRef = useRef<HiveClient>();
+  const clientRef = useRef<HiveClient | null>(null);
 
   useEffect(() => {
     clientRef.current = createHiveClient((msg) => {
@@ -40,7 +41,7 @@ export default function HivePage() {
 
   return (
     <div className="flex h-full">
-      <ComponentList components={components} onSelect={setSelected} />
+      <ComponentList components={components} onSelect={(c) => setSelected(c)} />
       {selected && (
         <ComponentDetail
           component={selected}

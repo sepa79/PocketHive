@@ -1,10 +1,10 @@
 import { useState } from 'react';
-import type { ComponentSummary } from '../../types/hive';
+import type { StatusMessage } from '../../types/hive';
 import { healthColor } from '../../lib/health';
 
 interface Props {
-  components: ComponentSummary[];
-  onSelect: (c: ComponentSummary) => void;
+  components: StatusMessage[];
+  onSelect: (c: StatusMessage) => void;
 }
 
 export default function ComponentList({ components, onSelect }: Props) {
