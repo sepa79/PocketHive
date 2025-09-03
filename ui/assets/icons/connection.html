@@ -23,21 +23,21 @@
 
   .wrap { display: grid; gap: 20px; justify-items: center; }
 
-  .shape {
-    --color: #111; /* default */
-    --width: 360px;
-    --height: 360px;
+    .shape {
+      --color: #d1d5db; /* default */
+      --width: 32px;
+      --height: 32px;
 
-    --apex-y: 180px;
-    --tri-half: 63px; /* 30% reduction from 90px */
-    --tri-height: 150px;
-    --semi-d: 200px; /* diameter of the semicircle */
+      --apex-y: 7.29px;
+      --tri-half: 5.6px; /* 30% reduction from 90px */
+      --tri-height: 7.65px;
+      --semi-d: 17.78px; /* diameter of the semicircle */
 
-    position: relative;
-    width: var(--width);
-    height: var(--height);
-    color: var(--color);
-  }
+      position: relative;
+      width: var(--width);
+      height: var(--height);
+      color: var(--color);
+    }
 
   /* STATES (toggle by class on .shape) */
   .shape.status-connecting { --color: var(--connecting); }
@@ -53,12 +53,26 @@
     transform-origin: center bottom;
     width: var(--semi-d);
     height: calc(var(--semi-d) / 2);
-    background: #111; /* fully visible */
+    background: #d1d5db; /* fully visible */
     border-bottom-left-radius: var(--semi-d) var(--semi-d);
     border-bottom-right-radius: var(--semi-d) var(--semi-d);
     border-top-left-radius: 0;
     border-top-right-radius: 0;
     z-index: 0;
+  }
+
+  .semicircle .accent {
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    transform: translate(-50%, 0);
+    width: calc(var(--semi-d) * 0.6);
+    height: calc(var(--semi-d) * 0.3);
+    background: #6b7280;
+    border-bottom-left-radius: calc(var(--semi-d) * 0.6) calc(var(--semi-d) * 0.6);
+    border-bottom-right-radius: calc(var(--semi-d) * 0.6) calc(var(--semi-d) * 0.6);
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
   }
 
   /* Highlight layer */
@@ -93,29 +107,29 @@
   }
 
   /* ===== Tip & signal rings as real elements for JS-controlled Morse ===== */
-  .semicircle .antenna .tip {
-    position: absolute;
-    bottom: 100%;
-    left: 50%;
-    transform: translate(-50%, 0);
-    width: 14px;
-    height: 14px;
-    border-radius: 50%;
-    background: currentColor;
-    filter: drop-shadow(0 0 0 currentColor);
-    transition: transform 120ms ease, filter 120ms ease, opacity 120ms ease;
-    opacity: 0.9;
-  }
-  .semicircle .antenna .ring {
-    position: absolute;
-    bottom: 100%;
-    left: 50%;
-    width: 28px; height: 28px;
-    border: 3px solid currentColor;
-    border-radius: 50%;
-    transform: translate(-50%, 0) scale(0.3);
-    opacity: 0;
-  }
+    .semicircle .antenna .tip {
+      position: absolute;
+      bottom: 100%;
+      left: 50%;
+      transform: translate(-50%, 0);
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: currentColor;
+      filter: drop-shadow(0 0 0 currentColor);
+      transition: transform 120ms ease, filter 120ms ease, opacity 120ms ease;
+      opacity: 0.9;
+    }
+    .semicircle .antenna .ring {
+      position: absolute;
+      bottom: 100%;
+      left: 50%;
+      width: 32px; height: 32px;
+      border: 3px solid currentColor;
+      border-radius: 50%;
+      transform: translate(-50%, 0) scale(0.3);
+      opacity: 0;
+    }
 
   /* Triangle */
   .triangle {
@@ -127,7 +141,7 @@
     height: 0;
     border-left: var(--tri-half) solid transparent;
     border-right: var(--tri-half) solid transparent;
-    border-bottom: var(--tri-height) solid #111; /* fully visible */
+    border-bottom: var(--tri-height) solid #d1d5db; /* fully visible */
   }
 
   /* ========== STATE ANIMATIONS ========== */
@@ -148,24 +162,24 @@
   .shape.status-offline .antenna .tip { animation: redGlow 1000ms ease-in-out infinite; }
 
   @keyframes pingStrong {
-    0%   { transform: translate(-50%, 0) scale(0.35); opacity: 0.0; }
+    0%   { transform: translate(-50%, 0) scale(0.4); opacity: 0.0; }
     10%  { opacity: 0.9; }
-    70%  { transform: translate(-50%, 0) scale(1.15); opacity: 0.0; }
-    100% { transform: translate(-50%, 0) scale(1.2); opacity: 0; }
+    70%  { transform: translate(-50%, 0) scale(2.2); opacity: 0.0; }
+    100% { transform: translate(-50%, 0) scale(2.4); opacity: 0; }
   }
   @keyframes pingSoft {
-    0%   { transform: translate(-50%, 0) scale(0.4); opacity: 0.0; }
-    20%  { opacity: 0.5; }
-    80%  { transform: translate(-50%, 0) scale(1.05); opacity: 0.0; }
-    100% { transform: translate(-50%, 0) scale(1.1); opacity: 0; }
+    0%   { transform: translate(-50%, 0) scale(0.5); opacity: 0.0; }
+    20%  { opacity: 0.6; }
+    80%  { transform: translate(-50%, 0) scale(1.6); opacity: 0.0; }
+    100% { transform: translate(-50%, 0) scale(1.8); opacity: 0; }
   }
   @keyframes tipBreath {
-    0%, 100% { transform: translate(-50%, 0) scale(1.0); filter: drop-shadow(0 0 6px currentColor); }
-    50% { transform: translate(-50%, 0) scale(1.12); filter: drop-shadow(0 0 10px currentColor); }
+    0%, 100% { transform: translate(-50%, 0) scale(1.0); filter: drop-shadow(0 0 8px currentColor); }
+    50% { transform: translate(-50%, 0) scale(1.4); filter: drop-shadow(0 0 18px currentColor); }
   }
   @keyframes redGlow {
-    0%, 100% { transform: translate(-50%, 0) scale(0.95); filter: drop-shadow(0 0 6px currentColor); }
-    50% { transform: translate(-50%, 0) scale(1.15); filter: drop-shadow(0 0 14px currentColor); }
+    0%, 100% { transform: translate(-50%, 0) scale(0.95); filter: drop-shadow(0 0 8px currentColor); }
+    50% { transform: translate(-50%, 0) scale(1.35); filter: drop-shadow(0 0 22px currentColor); }
   }
 
   .controls { display: flex; gap: 8px; }
@@ -180,7 +194,9 @@
 <body>
   <div class="wrap">
     <div id="icon" class="shape status-connecting" aria-live="polite" aria-label="connection status: connecting">
-      <div class="semicircle" aria-hidden="true"></div>
+      <div class="semicircle" aria-hidden="true">
+        <div class="accent" aria-hidden="true"></div>
+      </div>
       <div class="highlight" aria-hidden="true"></div>
       <div class="semicircle antenna-wrapper" aria-hidden="true">
         <div class="antenna" aria-hidden="true">
