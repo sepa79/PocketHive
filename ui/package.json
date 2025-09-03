@@ -3,12 +3,13 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "scripts": {
-    "dev": "vite",
-    "build": "tsc -b && vite build",
-    "lint": "eslint .",
-    "preview": "vite preview"
-  },
+    "scripts": {
+      "dev": "vite",
+      "build": "tsc -b && vite build",
+      "lint": "eslint .",
+      "preview": "vite preview",
+      "test": "vitest run"
+    },
   "dependencies": {
     "@stomp/stompjs": "^7.1.1",
     "@tanstack/react-query": "^5.85.9",
@@ -29,9 +30,10 @@
     "eslint-plugin-react-refresh": "^0.4.20",
     "globals": "^16.3.0",
     "postcss": "^8.5.6",
-    "tailwindcss": "^3.4.17",
-    "typescript": "~5.8.3",
-    "typescript-eslint": "^8.39.1",
-    "vite": "^7.1.2"
+      "tailwindcss": "^3.4.17",
+      "typescript": "~5.8.3",
+      "typescript-eslint": "^8.39.1",
+      "vite": "^7.1.2",
+      "vitest": "^2.1.5"
+    }
   }
-}
