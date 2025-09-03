@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.6.3] - 2025-09-03
+Timestamp: 2025-09-03T22:57:37Z
+
+- UI: render interactive topology view with draggable nodes, zoom/pan, and queue tooltips.
+- UI: preserve node positions across STOMP topology updates.
+
 ## [0.6.2] - 2025-09-03
 Timestamp: 2025-09-03T19:33:17Z
 

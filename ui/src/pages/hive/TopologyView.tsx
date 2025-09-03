@@ -1,0 +1,53 @@
+import { useEffect, useState } from 'react'
+import ForceGraph2D from 'react-force-graph-2d'
+import {
+  subscribeTopology,
+  updateNodePosition,
+  type Topology,
+} from '../../lib/stompClient'
+import './TopologyView.css'
+
+interface GraphNode {
+  id: string
+  x?: number
+  y?: number
+}
+
+interface GraphLink {
+  source: string
+  target: string
+  queue: string
+}
+
+interface GraphData {
+  nodes: GraphNode[]
+  links: GraphLink[]
+}
+
+export default function TopologyView() {
+  const [data, setData] = useState<GraphData>({ nodes: [], links: [] })
+
+  useEffect(() => {
+    const unsub = subscribeTopology((topo: Topology) => {
+      setData({
+        nodes: topo.nodes.map((n) => ({ ...n })),
+        links: topo.edges.map((e) => ({ source: e.from, target: e.to, queue: e.queue })),
+      })
+    })
+    return () => unsub()
+  }, [])
+
+  return (
+    <div className="topology-container">
+      <ForceGraph2D
+        graphData={data as unknown as GraphData}
+        enableNodeDrag
+        cooldownTicks={0}
+        nodeLabel="id"
+        linkLabel={(l) => (l as GraphLink).queue}
+        onNodeDragEnd={(n) =>
+          updateNodePosition(String(n.id), n.x ?? 0, n.y ?? 0)}
+      />
+    </div>
+  )
+}

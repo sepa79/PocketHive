@@ -128,7 +128,9 @@ See also: Control Bindings page (Menu → Control Bindings) and `ui/spec/asyncap
 ### Views
 
 - Control View: existing dashboard with charts, event log, and system log.
-- Hive View: auto-discovers components from Control messages and draws a simple graph:
+- Hive View: auto-discovers components from Control messages and draws an interactive graph.
+  - Drag nodes; zoom and pan the canvas.
+  - Hover a node to view queue metadata.
   - Nodes appear when the first message from a service is received (generator, moderator, processor). SUT appears when processor is seen.
   - Default hold time is 3s (3× of 1s status schedule); toolbar lets you adjust hold time and Clear & Restart.
   - Click a node to view component details.
@@ -237,7 +239,7 @@ Manual checks:
   - Connect/Disconnect clicks, edits of URL/username/password (password length only)
   - WebSocket lifecycle (connecting URL, CONNECTED, subscriptions, errors, close)
   - UI health transitions based on `/healthz`
-- Hive panel: lists live components and queue stats.
+- Hive panel: lists live components and queue stats and includes an interactive topology tab.
 - HAL eyes: status indicators for UI and WS (green slow pulse = healthy/connected; blue modem pulse = connecting; red fast pulse = failed/closed/idle).
 
 ## UI Controls
@@ -247,7 +249,7 @@ Manual checks:
 - **WebSocket eye** — click to connect or disconnect from RabbitMQ.
 - **Monolith button** — broadcasts a global `status-request` signal; the publish shows in the OUT log.
 - **Buzz view** — IN, OUT and Other logs with a Config tab and Topic Sniffer; subscriptions are editable.
-- **Hive view** — searchable component list; selecting an item opens a detail drawer with queue stats and config-update action.
+- **Hive view** — searchable component list with a topology tab for draggable nodes and queue tooltips; selecting an item opens a detail drawer with queue stats and config-update action.
 - **Nectar view** — metric dropdown (TPS, latency, hops) and points input to adjust chart history.
 
 ## Troubleshooting
