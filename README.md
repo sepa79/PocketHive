@@ -44,12 +44,6 @@ See also: Control Bindings page (Menu → Control Bindings) and `ui/spec/asyncap
   - Click a node to view component details.
 - Edges are built strictly from `queues.in/out` found in `status-full` events.
 
-### Demo mode (no WebSocket)
-
-- To host on static pages or preview without RabbitMQ, enable demo mode:
-  - Set `"demo": true` in `ui/config.json`, or open with query `?demo=1`.
-  - UI won’t auto-connect or ping `/healthz`, and connection controls are inert.
-
 ## Stack & Ports
 
 - `rabbitmq` (with Web-STOMP): 5672 (AMQP), 15672 (Mgmt UI), 15674 (Web-STOMP, internal only)
@@ -58,7 +52,7 @@ See also: Control Bindings page (Menu → Control Bindings) and `ui/spec/asyncap
 - `prometheus` (metrics store): 9090
 - `grafana` (dashboard): 3000 (admin / admin)
 - `loki` (log store): 3100
-- `promtail` (log shipper): 9080
+- `promtail` (legacy log shipper; disabled—logs are routed via RabbitMQ)
 - `log-aggregator` (RabbitMQ → Loki): internal
 - `wiremock` (HTTP stub server for NFT tests; journal disabled): 8080
 
@@ -76,7 +70,7 @@ docker compose up -d --build
 
 - UI: http://localhost:8088
 - Click "Connect". The UI connects to RabbitMQ via same-origin WebSocket `ws://localhost:8088/ws` using StompJS (same client as the built‑in Generator).
-- The top bar hosts icon links to RabbitMQ, Prometheus, and Grafana. The WireMock button opens a dropdown that fetches the last 25 requests from `/__admin/requests` and lists method, URL, and status.
+- The top bar hosts icon links to RabbitMQ, Prometheus, Grafana, and WireMock. The WireMock icon opens the admin console (`/__admin/`) in a new tab.
 
 3) RabbitMQ Management (optional)
 
