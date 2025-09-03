@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Plug, Square } from 'lucide-react'
 import { Client } from '@stomp/stompjs'
 import { setClient as setStompClient } from '../lib/stompClient'
+import { logOther } from '../lib/logs'
 
 export default function Connectivity() {
   const [state, setState] = useState<'connected' | 'connecting' | 'disconnected'>('disconnected')
@@ -23,14 +24,17 @@ export default function Connectivity() {
       onConnect: () => {
         setState('connected')
         setStompClient(client)
+        logOther('STOMP connected')
       },
       onWebSocketClose: () => {
         setState('disconnected')
         setStompClient(null)
+        logOther('STOMP disconnected')
       },
       onStompError: () => {
         setState('disconnected')
         setStompClient(null)
+        logOther('STOMP error')
       },
     })
     client.activate()
@@ -42,6 +46,7 @@ export default function Connectivity() {
     clientRef.current = null
     setState('disconnected')
     setStompClient(null)
+    logOther('STOMP disconnected')
   }
 
   useEffect(() => {

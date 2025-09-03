@@ -1,5 +1,6 @@
 import { Client, type StompSubscription } from '@stomp/stompjs'
 import type { Component } from '../types/hive'
+import { logIn, logOut } from './logs'
 
 export type ComponentListener = (components: Component[]) => void
 
@@ -14,6 +15,24 @@ export function setClient(newClient: Client | null) {
   }
   client = newClient
   if (client) {
+    const origPublish = client.publish.bind(client)
+    client.publish = ((params) => {
+      logOut(params.destination, params.body ?? '')
+      origPublish(params)
+    }) as typeof client.publish
+
+    const origSubscribe = client.subscribe.bind(client)
+    client.subscribe = ((destination, callback, headers) => {
+      return origSubscribe(
+        destination,
+        (msg) => {
+          logIn(msg.headers.destination || destination, msg.body)
+          callback(msg)
+        },
+        headers,
+      )
+    }) as typeof client.subscribe
+
     controlSub = client.subscribe('/exchange/control', (msg) => {
       try {
         const body = JSON.parse(msg.body) as Component[]
