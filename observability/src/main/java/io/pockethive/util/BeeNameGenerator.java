@@ -1,6 +1,7 @@
 package io.pockethive.util;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -41,13 +42,23 @@ public final class BeeNameGenerator {
 
   private BeeNameGenerator() {}
 
+  private static final Map<String, String> ROLE_MAP =
+      Map.of(
+          "generator", "seeder",
+          "moderator", "guardian",
+          "processor", "worker",
+          "postprocessor", "forager",
+          "trigger", "herald",
+          "log-aggregator", "scribe");
+
   public static String generate(String role) {
+    String mappedRole = ROLE_MAP.getOrDefault(role.toLowerCase(), role);
     String first = randomFrom(FIRST_PARTS);
     String second = randomFrom(SECOND_PARTS);
     String id = UUID.randomUUID().toString().substring(0, 4);
     return String.format(
         "%s-bee-%s-%s-%s",
-        sanitize(role), sanitize(first), sanitize(second), id);
+        sanitize(mappedRole), sanitize(first), sanitize(second), id);
   }
 
   private static String randomFrom(List<String> options) {
