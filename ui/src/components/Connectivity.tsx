@@ -26,15 +26,23 @@ export default function Connectivity() {
         setStompClient(client)
         logOther('STOMP connected')
       },
-      onWebSocketClose: () => {
+      onWebSocketClose: (evt) => {
         setState('disconnected')
         setStompClient(null)
-        logOther('STOMP disconnected')
+        logOther(
+          `STOMP disconnected (code ${'code' in evt ? evt.code : 'n/a'}, reason ${'reason' in evt ? evt.reason : 'n/a'})`,
+        )
       },
-      onStompError: () => {
+      onWebSocketError: (evt) => {
+        const err = evt as unknown as ErrorEvent
+        logOther(`STOMP socket error: ${err.message || err.type}`)
+      },
+      onStompError: (frame) => {
         setState('disconnected')
         setStompClient(null)
-        logOther('STOMP error')
+        const msg = frame.headers.message
+        const body = frame.body
+        logOther(`STOMP error: ${msg}${body ? ` - ${body}` : ''}`)
       },
     })
     client.activate()

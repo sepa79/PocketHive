@@ -33,7 +33,7 @@ export function setClient(newClient: Client | null) {
       )
     }) as typeof client.subscribe
 
-    controlSub = client.subscribe('/exchange/control', (msg) => {
+    controlSub = client.subscribe('/exchange/control/', (msg) => {
       try {
         const body = JSON.parse(msg.body) as Component[]
         listeners.forEach((l) => l(body))
