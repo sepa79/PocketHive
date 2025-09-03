@@ -10,12 +10,17 @@ export interface HiveClient {
 }
 
 export function createHiveClient(handler: MessageHandler): HiveClient {
-  const mock = import.meta.env.VITE_MOCK === 'true';
-  return mock ? createMockClient(handler) : createStompClient(handler);
+  const url = import.meta.env.VITE_STOMP_URL as string | undefined;
+  const mock = import.meta.env.VITE_MOCK === 'true' || !url;
+
+  if (!url && !mock) {
+    console.warn('VITE_STOMP_URL not set, falling back to mock client');
+  }
+
+  return mock ? createMockClient(handler) : createStompClient(handler, url!);
 }
 
-function createStompClient(handler: MessageHandler): HiveClient {
-  const url = import.meta.env.VITE_STOMP_URL as string;
+function createStompClient(handler: MessageHandler, url: string): HiveClient {
   const sub = import.meta.env.VITE_CONTROL_SUB as string;
   const pub = import.meta.env.VITE_CONTROL_PUB as string;
 
