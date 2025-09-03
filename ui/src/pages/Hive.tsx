@@ -1,3 +1,5 @@
+import Connectivity from '../components/Connectivity'
+
 export default function Hive() {
   const nodes = [
     { id: 'generator', x: 140, y: 160, label: 'GENERATOR' },
@@ -16,6 +18,7 @@ export default function Hive() {
   return (
     <div id="view-hive" style={{ maxWidth: '1200px', margin: '24px auto', padding: '0 20px 40px', color: '#fff' }}>
       <div id="hive-toolbar" style={{ display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '10px' }}>
+        <Connectivity />
         <label>
           Hold time (s)
           <input id="hive-hold" type="number" min="1" max="120" step="1" defaultValue={15} style={{ width: '64px', marginLeft: '4px' }} />
@@ -23,7 +26,7 @@ export default function Hive() {
         <button id="hive-clear" className="tab-btn" style={{ cursor: 'pointer' }}>Clear &amp; Restart</button>
         <span id="hive-stats" className="small" style={{ color: '#9aa0a6' }}>Demo graph</span>
       </div>
-      <svg id="hive-canvas" viewBox="0 0 1200 480" preserveAspectRatio="xMidYMid meet" aria-label="Hive view">
+      <svg id="hive-canvas" viewBox="0 0 1200 480" preserveAspectRatio="xMidYMid meet" style={{ width: '100%', height: '480px' }} aria-label="Hive view">
         {edges.map((e) => {
           const a = find(e.a)
           const b = find(e.b)
