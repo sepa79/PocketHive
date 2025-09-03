@@ -159,6 +159,7 @@ services:
         "--enable-cors",                  # allow cross-origin access
       ]
     environment:
+      LANG: en_US.UTF-8
       JAVA_OPTS: >-
         -XX:+UseG1GC
         -XX:+ParallelRefProcEnabled
