@@ -1,6 +1,6 @@
 import { Client, type StompSubscription } from '@stomp/stompjs'
 import type { Component } from '../types/hive'
-import { validateControlEvent, type ControlEvent } from '../types/control'
+import { isControlEvent, type ControlEvent } from '../types/control'
 import { logIn, logOut } from './logs'
 
 export type ComponentListener = (components: Component[]) => void
@@ -40,8 +40,8 @@ export function setClient(newClient: Client | null, destination = controlDestina
     controlSub = client.subscribe(controlDestination, (msg) => {
       try {
         const raw = JSON.parse(msg.body)
-        if (!validateControlEvent(raw)) return
-        const evt = raw as unknown as ControlEvent
+        if (!isControlEvent(raw)) return
+        const evt = raw as ControlEvent
         const id = evt.instance
         const comp: Component = components[id] || {
           id,

@@ -1,6 +1,3 @@
-import Ajv from 'ajv';
-import schema from '@spec/control-events.schema.json' assert { type: 'json' };
-
 export interface ControlEvent {
   event: 'status' | 'lifecycle' | 'metric' | 'alert' | 'link';
   kind: string;
@@ -18,5 +15,16 @@ export interface ControlEvent {
   data?: Record<string, unknown>;
 }
 
-const ajv = new Ajv();
-export const validateControlEvent = ajv.compile(schema);
+export function isControlEvent(raw: unknown): raw is ControlEvent {
+  if (!raw || typeof raw !== 'object') return false
+  const evt = raw as ControlEvent
+  return (
+    typeof evt.event === 'string' &&
+    typeof evt.kind === 'string' &&
+    typeof evt.version === 'string' &&
+    typeof evt.role === 'string' &&
+    typeof evt.instance === 'string' &&
+    typeof evt.messageId === 'string' &&
+    typeof evt.timestamp === 'string'
+  )
+}

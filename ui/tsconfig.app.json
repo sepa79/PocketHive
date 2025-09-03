@@ -22,10 +22,7 @@
     "noUnusedParameters": true,
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true,
-    "noUncheckedSideEffectImports": true,
-    "paths": {
-      "@spec/*": ["../spec/*"]
-    }
+    "noUncheckedSideEffectImports": true
   },
-  "include": ["src", "../spec/**/*.json"]
+  "include": ["src"]
 }
