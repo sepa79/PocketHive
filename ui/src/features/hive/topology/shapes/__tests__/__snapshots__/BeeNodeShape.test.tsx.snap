@@ -1,0 +1,343 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`BeeNodeShape snapshots > Gatekeeper 1`] = `
+<div>
+  <svg>
+    <g
+      class="bee-node "
+    >
+      <circle
+        cx="0"
+        cy="0"
+        fill="none"
+        r="78"
+        stroke="var(--ph-ok)"
+        stroke-dasharray="0"
+        stroke-opacity="0.8"
+      />
+      <path
+        d="
+    M -70,-24
+    H 70
+    Q 70,0 0,36
+    Q -70,0 -70,-24
+    Z
+  "
+        fill="var(--ph-node-fill)"
+        stroke="var(--ph-node-stroke)"
+      />
+      <g
+        fill="var(--ph-text)"
+        text-anchor="middle"
+      >
+        <text
+          font-size="12"
+          font-weight="700"
+          y="-8"
+        >
+          Gatekeeper
+        </text>
+        <text
+          font-size="11"
+          y="10"
+        >
+          alpha
+        </text>
+      </g>
+    </g>
+  </svg>
+</div>
+`;
+
+exports[`BeeNodeShape snapshots > LogAggregator 1`] = `
+<div>
+  <svg>
+    <g
+      class="bee-node "
+    >
+      <circle
+        cx="0"
+        cy="0"
+        fill="none"
+        r="78"
+        stroke="var(--ph-ok)"
+        stroke-dasharray="0"
+        stroke-opacity="0.8"
+      />
+      <path
+        d="
+    M -70,-36 H 54 L 70,-20 V 36 H -70 Z
+  "
+        fill="var(--ph-node-fill)"
+        stroke="var(--ph-node-stroke)"
+      />
+      <path
+        d="
+    M 54,-36 L 54,-20 L 70,-20
+  "
+        fill="none"
+        stroke="var(--ph-node-stroke)"
+      />
+      <g
+        opacity="0.5"
+      >
+        <line
+          stroke="var(--ph-node-stroke)"
+          x1="-40"
+          x2="30"
+          y1="-8"
+          y2="-8"
+        />
+        <line
+          stroke="var(--ph-node-stroke)"
+          x1="-40"
+          x2="18"
+          y1="8"
+          y2="8"
+        />
+      </g>
+      <g
+        fill="var(--ph-text)"
+        text-anchor="middle"
+      >
+        <text
+          font-size="12"
+          font-weight="700"
+          y="-8"
+        >
+          Scribe
+        </text>
+        <text
+          font-size="11"
+          y="10"
+        >
+          alpha
+        </text>
+      </g>
+    </g>
+  </svg>
+</div>
+`;
+
+exports[`BeeNodeShape snapshots > Postprocessor 1`] = `
+<div>
+  <svg>
+    <g
+      class="bee-node "
+    >
+      <circle
+        cx="0"
+        cy="0"
+        fill="none"
+        r="78"
+        stroke="var(--ph-ok)"
+        stroke-dasharray="0"
+        stroke-opacity="0.8"
+      />
+      <ellipse
+        cx="0"
+        cy="-36"
+        fill="var(--ph-node-fill)"
+        rx="70"
+        ry="8.64"
+        stroke="var(--ph-node-stroke)"
+      />
+      <rect
+        fill="var(--ph-node-fill)"
+        height="72"
+        stroke="var(--ph-node-stroke)"
+        width="140"
+        x="-70"
+        y="-36"
+      />
+      <ellipse
+        cx="0"
+        cy="36"
+        fill="var(--ph-node-fill)"
+        rx="70"
+        ry="8.64"
+        stroke="var(--ph-node-stroke)"
+      />
+      <path
+        d="M 0,0 m 4.776122516674678e-15,-78 A 78,78 0 0 1 4.897660523286455,-77.84608481740518"
+        fill="none"
+        stroke="var(--ph-ok)"
+        stroke-width="3"
+      />
+      <g
+        fill="var(--ph-text)"
+        text-anchor="middle"
+      >
+        <text
+          font-size="12"
+          font-weight="700"
+          y="-8"
+        >
+          BeeCounter
+        </text>
+        <text
+          font-size="11"
+          y="10"
+        >
+          alpha
+        </text>
+      </g>
+    </g>
+  </svg>
+</div>
+`;
+
+exports[`BeeNodeShape snapshots > Seeder 1`] = `
+<div>
+  <svg>
+    <g
+      class="bee-node "
+    >
+      <circle
+        cx="0"
+        cy="0"
+        fill="none"
+        r="78"
+        stroke="var(--ph-ok)"
+        stroke-dasharray="0"
+        stroke-opacity="0.8"
+      />
+      <path
+        d="M -60.62,-36 L 60.62,-36 L 70,0 L 60.62,36 L -60.62,36 L -70,0 Z"
+        fill="var(--ph-node-fill)"
+        stroke="var(--ph-node-stroke)"
+      />
+      <g
+        fill="var(--ph-text)"
+        text-anchor="middle"
+      >
+        <text
+          font-size="12"
+          font-weight="700"
+          y="-8"
+        >
+          Seeder
+        </text>
+        <text
+          font-size="11"
+          y="10"
+        >
+          alpha
+        </text>
+      </g>
+    </g>
+  </svg>
+</div>
+`;
+
+exports[`BeeNodeShape snapshots > Trigger 1`] = `
+<div>
+  <svg>
+    <g
+      class="bee-node "
+    >
+      <circle
+        cx="0"
+        cy="0"
+        fill="none"
+        r="78"
+        stroke="var(--ph-ok)"
+        stroke-dasharray="0"
+        stroke-opacity="0.8"
+      />
+      <path
+        d="M -70,-36 L 70,0 L -70,36 Z"
+        fill="var(--ph-node-fill)"
+        stroke="var(--ph-node-stroke)"
+      />
+      <polyline
+        fill="none"
+        points="-6,-10 4,0 -6,10"
+        stroke="var(--ph-node-stroke)"
+      />
+      <g
+        fill="var(--ph-text)"
+        text-anchor="middle"
+      >
+        <text
+          font-size="12"
+          font-weight="700"
+          y="-8"
+        >
+          Activator
+        </text>
+        <text
+          font-size="11"
+          y="10"
+        >
+          alpha
+        </text>
+      </g>
+    </g>
+  </svg>
+</div>
+`;
+
+exports[`BeeNodeShape snapshots > Worker 1`] = `
+<div>
+  <svg>
+    <g
+      class="bee-node "
+    >
+      <circle
+        cx="0"
+        cy="0"
+        fill="none"
+        r="78"
+        stroke="var(--ph-ok)"
+        stroke-dasharray="0"
+        stroke-opacity="0.8"
+      />
+      <path
+        d="
+    M -60,-36
+    H 60 A 10,10 0 0 1 70,-26
+    V 26 A 10,10 0 0 1 60,36
+    H -60 A 10,10 0 0 1 -70,26
+    V -26 A 10,10 0 0 1 -60,-36
+    Z
+  "
+        fill="var(--ph-node-fill)"
+        stroke="var(--ph-node-stroke)"
+      />
+      <g
+        opacity="0.5"
+      >
+        <polyline
+          fill="none"
+          points="-20,-6 -8,0 -20,6"
+          stroke="var(--ph-node-stroke)"
+        />
+        <polyline
+          fill="none"
+          points="0,-6 12,0 0,6"
+          stroke="var(--ph-node-stroke)"
+        />
+      </g>
+      <g
+        fill="var(--ph-text)"
+        text-anchor="middle"
+      >
+        <text
+          font-size="12"
+          font-weight="700"
+          y="-8"
+        >
+          Worker
+        </text>
+        <text
+          font-size="11"
+          y="10"
+        >
+          alpha
+        </text>
+      </g>
+    </g>
+  </svg>
+</div>
+`;
