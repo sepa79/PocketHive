@@ -7,6 +7,7 @@ Timestamp: 2025-09-03T22:57:37Z
 
 - UI: render interactive topology view with draggable nodes, zoom/pan, and queue tooltips.
 - UI: preserve node positions across STOMP topology updates.
+- Services: map roles to bee aliases and generate role-based bee names without spaces.
 
 ## [0.6.2] - 2025-09-03
 Timestamp: 2025-09-03T19:33:17Z
