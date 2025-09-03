@@ -1,5 +1,6 @@
 import { Client, type StompSubscription } from '@stomp/stompjs'
 import type { Component } from '../types/hive'
+import { validateControlEvent, type ControlEvent } from '../types/control'
 import { logIn, logOut } from './logs'
 
 export type ComponentListener = (components: Component[]) => void
@@ -8,6 +9,7 @@ let client: Client | null = null
 let controlSub: StompSubscription | null = null
 let listeners: ComponentListener[] = []
 let controlDestination = '/exchange/control/'
+const components: Record<string, Component> = {}
 
 export function setClient(newClient: Client | null, destination = controlDestination) {
   if (controlSub) {
@@ -37,8 +39,28 @@ export function setClient(newClient: Client | null, destination = controlDestina
 
     controlSub = client.subscribe(controlDestination, (msg) => {
       try {
-        const body = JSON.parse(msg.body) as Component[]
-        listeners.forEach((l) => l(body))
+        const raw = JSON.parse(msg.body)
+        if (!validateControlEvent(raw)) return
+        const evt = raw as unknown as ControlEvent
+        const id = evt.instance
+        const comp: Component = components[id] || {
+          id,
+          name: evt.role,
+          lastHeartbeat: 0,
+          queues: [],
+        }
+        comp.name = evt.role
+        comp.version = evt.version
+        comp.lastHeartbeat = new Date(evt.timestamp).getTime()
+        comp.status = evt.kind
+        if (evt.queues) {
+          comp.queues = [
+            ...(evt.queues.in?.map((q: string) => ({ name: q, role: 'consumer' as const })) ?? []),
+            ...(evt.queues.out?.map((q: string) => ({ name: q, role: 'producer' as const })) ?? []),
+          ]
+        }
+        components[id] = comp
+        listeners.forEach((l) => l(Object.values(components)))
       } catch {
         // ignore parsing errors
       }
@@ -48,6 +70,7 @@ export function setClient(newClient: Client | null, destination = controlDestina
 
 export function subscribeComponents(fn: ComponentListener) {
   listeners.push(fn)
+  fn(Object.values(components))
   return () => {
     listeners = listeners.filter((l) => l !== fn)
   }
