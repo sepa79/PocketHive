@@ -7,13 +7,15 @@ export type ComponentListener = (components: Component[]) => void
 let client: Client | null = null
 let controlSub: StompSubscription | null = null
 let listeners: ComponentListener[] = []
+let controlDestination = '/exchange/control/'
 
-export function setClient(newClient: Client | null) {
+export function setClient(newClient: Client | null, destination = controlDestination) {
   if (controlSub) {
     controlSub.unsubscribe()
     controlSub = null
   }
   client = newClient
+  controlDestination = destination
   if (client) {
     const origPublish = client.publish.bind(client)
     client.publish = ((params) => {
@@ -22,18 +24,18 @@ export function setClient(newClient: Client | null) {
     }) as typeof client.publish
 
     const origSubscribe = client.subscribe.bind(client)
-    client.subscribe = ((destination, callback, headers) => {
+    client.subscribe = ((dest, callback, headers) => {
       return origSubscribe(
-        destination,
+        dest,
         (msg) => {
-          logIn(msg.headers.destination || destination, msg.body)
+          logIn(msg.headers.destination || dest, msg.body)
           callback(msg)
         },
         headers,
       )
     }) as typeof client.subscribe
 
-    controlSub = client.subscribe('/exchange/control/', (msg) => {
+    controlSub = client.subscribe(controlDestination, (msg) => {
       try {
         const body = JSON.parse(msg.body) as Component[]
         listeners.forEach((l) => l(body))

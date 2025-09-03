@@ -13,6 +13,7 @@ export default function Connectivity() {
   })
   const [login, setLogin] = useState('guest')
   const [passcode, setPasscode] = useState('guest')
+  const [subscription, setSubscription] = useState('/exchange/control/')
   const clientRef = useRef<Client | null>(null)
 
   function connect() {
@@ -23,7 +24,7 @@ export default function Connectivity() {
       reconnectDelay: 0,
       onConnect: () => {
         setState('connected')
-        setStompClient(client)
+        setStompClient(client, subscription)
         logOther('STOMP connected')
       },
       onWebSocketClose: (evt) => {
@@ -62,6 +63,12 @@ export default function Connectivity() {
     return () => disconnect()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  useEffect(() => {
+    if (state === 'connected' && clientRef.current) {
+      setStompClient(clientRef.current, subscription)
+    }
+  }, [state, subscription])
 
   const toggle = () => {
     if (state === 'connected') {
@@ -122,6 +129,14 @@ export default function Connectivity() {
               className="w-full rounded border border-white/20 bg-transparent px-1 py-0.5"
               value={url}
               onChange={(e) => setUrl(e.target.value)}
+            />
+          </label>
+          <label className="mb-1 block">
+            <span className="mb-0.5 block">Subscription</span>
+            <input
+              className="w-full rounded border border-white/20 bg-transparent px-1 py-0.5"
+              value={subscription}
+              onChange={(e) => setSubscription(e.target.value)}
             />
           </label>
           <button
