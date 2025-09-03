@@ -6,14 +6,16 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
-import java.util.UUID;
+import io.pockethive.util.BeeNameGenerator;
 
 @Configuration
 public class RabbitConfig {
   private static final String ROLE = "moderator";
 
   @Bean
-  public String instanceId(){ return UUID.randomUUID().toString(); }
+  public String instanceId(){
+    return System.getProperty("bee.name", BeeNameGenerator.generate());
+  }
 
   @Bean
   TopicExchange direct(){ return new TopicExchange(Topology.EXCHANGE, true, false); }
