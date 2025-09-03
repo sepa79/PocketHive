@@ -14,13 +14,13 @@ PocketHive is a portable transaction swarm: a set of small, composable services 
 ## Component Requirements
 
 ### UI
-- Connects to RabbitMQ using Web-STOMP and provides Connect/Disconnect controls.
-- Logs STOMP traffic in the Buzz panel with separate OUT and IN views:
+- Connects to RabbitMQ using Web-STOMP and reuses a shared client across modules.
+- Buzz panel logs STOMP traffic in separate IN, OUT, and Other tabs and lists current binds and URLs in a Config tab:
   - OUT lists each publish with the routing key and a pretty-printed JSON body.
   - IN captures all subscription messages and shows a concise summary of the payload.
-- Offers Start/Stop generator control and a broadcast button that emits a global `status-request`.
-- Provides view tabs, log filters, metric selectors, and graph controls for user interaction.
-- Provides an icon link to the WireMock admin console.
+  - Other captures UI events and diagnostics.
+- Hive page lists active components and shows queue stats, allowing `config.update` messages from a detail drawer.
+- Provides view tabs and a link to the WireMock admin console.
 
 ### Generator Service
 - Produces HTTP-like transaction messages at a configurable rate per second.

@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.6.2] - 2025-09-03
+Timestamp: 2025-09-03T19:33:17Z
+
+- UI: add STOMP client with shared connection, log streams, and configuration tab in Buzz.
+- UI: build Hive page with live component list, detail drawer, and queue panel.
+
 ## [0.6.1] - 2025-09-03
 Timestamp: 2025-09-03T12:18:00Z
 

@@ -210,14 +210,15 @@ Manual checks:
 ## UI Panels
 
 - Backgrounds: selector for Bees / Network / Old; only the active background renders (others paused to save CPU).
-- Event Log: shows application events/messages from STOMP subscriptions.
-- Buzz panel: logs STOMP traffic with separate OUT and IN views:
+- Buzz panel: logs STOMP traffic with separate IN, OUT and Other views and lists current binds and URLs in a Config tab:
   - **OUT** logs every `publish` with the destination routing key and a pretty-printed JSON body so the full payload is visible.
   - **IN** records each message received from subscriptions, summarising `event`, `role`, and `instance` fields (or truncating the body) to keep lines readable.
+  - **Other** captures UI events and diagnostics.
 - System Logs: shows system and user actions:
   - Connect/Disconnect clicks, edits of URL/username/password (password length only)
   - WebSocket lifecycle (connecting URL, CONNECTED, subscriptions, errors, close)
   - UI health transitions based on `/healthz`
+- Hive panel: lists live components and queue stats.
 - HAL eyes: status indicators for UI and WS (green slow pulse = healthy/connected; blue modem pulse = connecting; red fast pulse = failed/closed/idle).
 
 ## UI Controls
@@ -226,8 +227,8 @@ Manual checks:
 - **Menu (☰)** — links to README, Buzz bindings, changelog and API docs.
 - **WebSocket eye** — click to connect or disconnect from RabbitMQ.
 - **Monolith button** — broadcasts a global `status-request` signal; the publish shows in the OUT log.
-- **Buzz view** — Event Log and Topic Sniffer tabs with line limits and Subscribe/Unsubscribe controls; System Logs provide OUT/IN/Other filters.
-- **Hive view** — holds a duration input, a Clear & Restart button for the graph, and shows component details when nodes are selected.
+- **Buzz view** — IN, OUT and Other logs with a Config tab and Topic Sniffer; subscriptions are editable.
+- **Hive view** — searchable component list; selecting an item opens a detail drawer with queue stats and config-update action.
 - **Nectar view** — metric dropdown (TPS, latency, hops) and points input to adjust chart history.
 
 ## Troubleshooting

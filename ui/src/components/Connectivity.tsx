@@ -1,16 +1,18 @@
 import { useEffect, useRef, useState } from 'react'
 import { Plug, Square } from 'lucide-react'
 import { Client } from '@stomp/stompjs'
+import { setClient as setStompClient } from '../lib/stompClient'
+import { logOther } from '../lib/logs'
+import { getConfig, setConfig } from '../lib/config'
 
 export default function Connectivity() {
   const [state, setState] = useState<'connected' | 'connecting' | 'disconnected'>('disconnected')
   const [menuOpen, setMenuOpen] = useState(false)
-  const [url, setUrl] = useState(() => {
-    const host = typeof window !== 'undefined' ? window.location.hostname : 'localhost'
-    return `ws://${host}:15674/ws`
-  })
-  const [login, setLogin] = useState('guest')
-  const [passcode, setPasscode] = useState('guest')
+  const cfg = getConfig()
+  const [url, setUrl] = useState(cfg.stompUrl)
+  const [login, setLogin] = useState(cfg.stompUser)
+  const [passcode, setPasscode] = useState(cfg.stompPasscode)
+  const [subscription, setSubscription] = useState(cfg.stompSubscription)
   const clientRef = useRef<Client | null>(null)
 
   function connect() {
@@ -19,9 +21,29 @@ export default function Connectivity() {
       brokerURL: url,
       connectHeaders: { login, passcode },
       reconnectDelay: 0,
-      onConnect: () => setState('connected'),
-      onWebSocketClose: () => setState('disconnected'),
-      onStompError: () => setState('disconnected'),
+      onConnect: () => {
+        setState('connected')
+        setStompClient(client, subscription)
+        logOther('STOMP connected')
+      },
+      onWebSocketClose: (evt) => {
+        setState('disconnected')
+        setStompClient(null)
+        logOther(
+          `STOMP disconnected (code ${'code' in evt ? evt.code : 'n/a'}, reason ${'reason' in evt ? evt.reason : 'n/a'})`,
+        )
+      },
+      onWebSocketError: (evt) => {
+        const err = evt as unknown as ErrorEvent
+        logOther(`STOMP socket error: ${err.message || err.type}`)
+      },
+      onStompError: (frame) => {
+        setState('disconnected')
+        setStompClient(null)
+        const msg = frame.headers.message
+        const body = frame.body
+        logOther(`STOMP error: ${msg}${body ? ` - ${body}` : ''}`)
+      },
     })
     client.activate()
     clientRef.current = client
@@ -31,6 +53,8 @@ export default function Connectivity() {
     clientRef.current?.deactivate()
     clientRef.current = null
     setState('disconnected')
+    setStompClient(null)
+    logOther('STOMP disconnected')
   }
 
   useEffect(() => {
@@ -38,6 +62,12 @@ export default function Connectivity() {
     return () => disconnect()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  useEffect(() => {
+    if (state === 'connected' && clientRef.current) {
+      setStompClient(clientRef.current, subscription)
+    }
+  }, [state, subscription])
 
   const toggle = () => {
     if (state === 'connected') {
@@ -80,7 +110,10 @@ export default function Connectivity() {
             <input
               className="w-full rounded border border-white/20 bg-transparent px-1 py-0.5"
               value={login}
-              onChange={(e) => setLogin(e.target.value)}
+              onChange={(e) => {
+                setLogin(e.target.value)
+                setConfig({ stompUser: e.target.value })
+              }}
             />
           </label>
           <label className="mb-1 block">
@@ -89,7 +122,10 @@ export default function Connectivity() {
               type="password"
               className="w-full rounded border border-white/20 bg-transparent px-1 py-0.5"
               value={passcode}
-              onChange={(e) => setPasscode(e.target.value)}
+              onChange={(e) => {
+                setPasscode(e.target.value)
+                setConfig({ stompPasscode: e.target.value })
+              }}
             />
           </label>
           <label className="mb-1 block">
@@ -97,7 +133,21 @@ export default function Connectivity() {
             <input
               className="w-full rounded border border-white/20 bg-transparent px-1 py-0.5"
               value={url}
-              onChange={(e) => setUrl(e.target.value)}
+              onChange={(e) => {
+                setUrl(e.target.value)
+                setConfig({ stompUrl: e.target.value })
+              }}
+            />
+          </label>
+          <label className="mb-1 block">
+            <span className="mb-0.5 block">Subscription</span>
+            <input
+              className="w-full rounded border border-white/20 bg-transparent px-1 py-0.5"
+              value={subscription}
+              onChange={(e) => {
+                setSubscription(e.target.value)
+                setConfig({ stompSubscription: e.target.value })
+              }}
             />
           </label>
           <button
