@@ -53,11 +53,18 @@ export function setClient(newClient: Client | null, destination = controlDestina
         comp.version = evt.version
         comp.lastHeartbeat = new Date(evt.timestamp).getTime()
         comp.status = evt.kind
-        if (evt.queues) {
-          comp.queues = [
-            ...(evt.queues.in?.map((q: string) => ({ name: q, role: 'consumer' as const })) ?? []),
-            ...(evt.queues.out?.map((q: string) => ({ name: q, role: 'producer' as const })) ?? []),
-          ]
+        if (evt.queues || evt.inQueue) {
+          const q: { name: string; role: 'producer' | 'consumer' }[] = []
+          if (evt.queues) {
+            q.push(...(evt.queues.work?.in?.map((n) => ({ name: n, role: 'consumer' as const })) ?? []))
+            q.push(...(evt.queues.work?.out?.map((n) => ({ name: n, role: 'producer' as const })) ?? []))
+            q.push(...(evt.queues.control?.in?.map((n) => ({ name: n, role: 'consumer' as const })) ?? []))
+            q.push(...(evt.queues.control?.out?.map((n) => ({ name: n, role: 'producer' as const })) ?? []))
+          }
+          if (evt.inQueue?.name) {
+            q.push({ name: evt.inQueue.name, role: 'consumer' })
+          }
+          comp.queues = q
         }
         components[id] = comp
         listeners.forEach((l) => l(Object.values(components)))

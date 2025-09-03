@@ -36,7 +36,7 @@ channels:
         description: Service role
         schema:
           type: string
-          enum: [generator, moderator, processor]
+          enum: [generator, moderator, processor, postprocessor, trigger]
       instance:
         description: Instance identifier (UUID or unique string)
         schema:
@@ -68,7 +68,7 @@ channels:
         schema: { type: string, enum: [status-request, config-update, ping, link-request] }
       role:
         description: Target role (optional)
-        schema: { type: string, enum: [generator, moderator, processor] }
+        schema: { type: string, enum: [generator, moderator, processor, postprocessor, trigger] }
       instance:
         description: Target instance (optional)
         schema: { type: string }
@@ -151,17 +151,34 @@ components:
         event: { type: string, enum: [status, lifecycle, metric, alert, link] }
         kind: { type: string, description: Subtype (e.g., status-full, status-delta, lifecycle.running) }
         version: { type: string, description: Semver of event schema }
-        role: { type: string, enum: [generator, moderator, processor] }
+        role: { type: string, enum: [generator, moderator, processor, postprocessor, trigger] }
         instance: { type: string }
         location: { type: string }
         messageId: { type: string, format: uuid }
         timestamp: { type: string, format: date-time }
+        enabled: { type: boolean }
         traffic: { type: string }
+        inQueue:
+          type: object
+          properties:
+            name: { type: string }
+            routingKeys: { type: array, items: { type: string } }
+        publishes: { type: array, items: { type: string } }
         queues:
           type: object
           properties:
-            in:  { type: array, items: { type: string } }
-            out: { type: array, items: { type: string } }
+            work:
+              type: object
+              properties:
+                in: { type: array, items: { type: string } }
+                out: { type: array, items: { type: string } }
+                routes: { type: array, items: { type: string } }
+            control:
+              type: object
+              properties:
+                in: { type: array, items: { type: string } }
+                out: { type: array, items: { type: string } }
+                routes: { type: array, items: { type: string } }
         data: { type: object, additionalProperties: true }
 
     ControlStatusFullPayload:
