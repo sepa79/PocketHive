@@ -1,5 +1,6 @@
 import { NavLink, Outlet } from 'react-router-dom'
-import { Menu, Hexagon, Radio, Droplet } from 'lucide-react'
+import { Hexagon, Radio, Droplet } from 'lucide-react'
+import MonolithIcon from '../icons/Monolith'
 import { useUIStore } from '../store'
 import { useEffect } from 'react'
 
@@ -45,15 +46,20 @@ export default function Layout() {
             <a id="link-wiremock" href={services.wiremock} target="_blank" rel="noopener" aria-label="WireMock"><img src="/icons/wiremock.svg" alt="WireMock" /></a>
           </div>
           <div className="menu relative">
-            <button id="menu-btn" className="bg-toggle" onClick={toggleSidebar}>
-              <Menu className="inline mr-1 h-4 w-4" /> Menu
+            <button
+              id="menu-btn"
+              className="bg-toggle"
+              onClick={toggleSidebar}
+              aria-label="Menu"
+            >
+              <MonolithIcon className="h-4 w-4" />
             </button>
             {sidebarOpen && (
               <div id="menu-dropdown" className="dropdown-panel absolute right-0 mt-2" onMouseLeave={closeSidebar}>
-                <NavLink to="/readme" className="dropdown-item" onClick={closeSidebar}>README</NavLink>
-                <NavLink to="/bindings" className="dropdown-item" onClick={closeSidebar}>Buzz Bindings</NavLink>
-                <NavLink to="/changelog" className="dropdown-item" onClick={closeSidebar}>Changelog</NavLink>
-                <NavLink to="/docs" className="dropdown-item" onClick={closeSidebar}>API Docs</NavLink>
+                <a href="/docs/readme.html" className="dropdown-item" onClick={closeSidebar}>README</a>
+                <a href="/docs/bindings.html" className="dropdown-item" onClick={closeSidebar}>Buzz Bindings</a>
+                <a href="/docs/changelog.html" className="dropdown-item" onClick={closeSidebar}>Changelog</a>
+                <a href="/docs/docs.html" className="dropdown-item" onClick={closeSidebar}>API Docs</a>
               </div>
             )}
           </div>
