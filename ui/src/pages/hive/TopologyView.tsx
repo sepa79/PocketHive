@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ForceGraph2D, type LinkObject, type NodeObject } from 'react-force-graph'
+import { ForceGraph2D } from 'react-force-graph'
 import {
   subscribeTopology,
   updateNodePosition,
@@ -7,11 +7,15 @@ import {
 } from '../../lib/stompClient'
 import './TopologyView.css'
 
-interface GraphNode extends NodeObject {
+interface GraphNode {
   id: string
+  x?: number
+  y?: number
 }
 
-interface GraphLink extends LinkObject {
+interface GraphLink {
+  source: string
+  target: string
   queue: string
 }
 
@@ -36,7 +40,7 @@ export default function TopologyView() {
   return (
     <div className="topology-container">
       <ForceGraph2D
-        graphData={data}
+        graphData={data as unknown as GraphData}
         enableNodeDrag
         cooldownTicks={0}
         nodeLabel="id"
