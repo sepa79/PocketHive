@@ -3,17 +3,16 @@ import { Plug, Square } from 'lucide-react'
 import { Client } from '@stomp/stompjs'
 import { setClient as setStompClient } from '../lib/stompClient'
 import { logOther } from '../lib/logs'
+import { getConfig, setConfig } from '../lib/config'
 
 export default function Connectivity() {
   const [state, setState] = useState<'connected' | 'connecting' | 'disconnected'>('disconnected')
   const [menuOpen, setMenuOpen] = useState(false)
-  const [url, setUrl] = useState(() => {
-    const host = typeof window !== 'undefined' ? window.location.hostname : 'localhost'
-    return `ws://${host}:15674/ws`
-  })
-  const [login, setLogin] = useState('guest')
-  const [passcode, setPasscode] = useState('guest')
-  const [subscription, setSubscription] = useState('/exchange/control/')
+  const cfg = getConfig()
+  const [url, setUrl] = useState(cfg.stompUrl)
+  const [login, setLogin] = useState(cfg.stompUser)
+  const [passcode, setPasscode] = useState(cfg.stompPasscode)
+  const [subscription, setSubscription] = useState(cfg.stompSubscription)
   const clientRef = useRef<Client | null>(null)
 
   function connect() {
@@ -111,7 +110,10 @@ export default function Connectivity() {
             <input
               className="w-full rounded border border-white/20 bg-transparent px-1 py-0.5"
               value={login}
-              onChange={(e) => setLogin(e.target.value)}
+              onChange={(e) => {
+                setLogin(e.target.value)
+                setConfig({ stompUser: e.target.value })
+              }}
             />
           </label>
           <label className="mb-1 block">
@@ -120,7 +122,10 @@ export default function Connectivity() {
               type="password"
               className="w-full rounded border border-white/20 bg-transparent px-1 py-0.5"
               value={passcode}
-              onChange={(e) => setPasscode(e.target.value)}
+              onChange={(e) => {
+                setPasscode(e.target.value)
+                setConfig({ stompPasscode: e.target.value })
+              }}
             />
           </label>
           <label className="mb-1 block">
@@ -128,7 +133,10 @@ export default function Connectivity() {
             <input
               className="w-full rounded border border-white/20 bg-transparent px-1 py-0.5"
               value={url}
-              onChange={(e) => setUrl(e.target.value)}
+              onChange={(e) => {
+                setUrl(e.target.value)
+                setConfig({ stompUrl: e.target.value })
+              }}
             />
           </label>
           <label className="mb-1 block">
@@ -136,7 +144,10 @@ export default function Connectivity() {
             <input
               className="w-full rounded border border-white/20 bg-transparent px-1 py-0.5"
               value={subscription}
-              onChange={(e) => setSubscription(e.target.value)}
+              onChange={(e) => {
+                setSubscription(e.target.value)
+                setConfig({ stompSubscription: e.target.value })
+              }}
             />
           </label>
           <button

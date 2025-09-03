@@ -8,7 +8,7 @@ export type ComponentListener = (components: Component[]) => void
 let client: Client | null = null
 let controlSub: StompSubscription | null = null
 let listeners: ComponentListener[] = []
-let controlDestination = '/exchange/control/'
+let controlDestination = '/exchange/ph.control/ev.#'
 const components: Record<string, Component> = {}
 
 export function setClient(newClient: Client | null, destination = controlDestination) {

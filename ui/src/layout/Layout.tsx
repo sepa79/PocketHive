@@ -5,6 +5,7 @@ import Health from '../components/Health'
 import Connectivity from '../components/Connectivity'
 import { useUIStore } from '../store'
 import { useEffect } from 'react'
+import { useConfig } from '../lib/config'
 
 export default function Layout() {
   const { sidebarOpen, toggleSidebar, closeSidebar } = useUIStore()
@@ -17,13 +18,8 @@ export default function Layout() {
     return () => window.removeEventListener('keydown', handler)
   }, [closeSidebar])
 
-  const host = typeof window !== 'undefined' ? window.location.hostname : 'localhost'
-  const services = {
-    rabbitmq: `http://${host}:15672/`,
-    prometheus: `http://${host}:9090/`,
-    grafana: `http://${host}:3000/`,
-    wiremock: `http://${host}:8080/__admin/`,
-  }
+  const { rabbitmq, prometheus, grafana, wiremock } = useConfig()
+  const services = { rabbitmq, prometheus, grafana, wiremock }
 
   return (
     <div className="min-h-screen text-white">
