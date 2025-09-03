@@ -1,11 +1,23 @@
 import { useEffect, useState } from 'react'
-import { ForceGraph2D } from 'react-force-graph'
-import { subscribeTopology, updateNodePosition, type Topology } from '../../lib/stompClient'
+import { ForceGraph2D, type LinkObject, type NodeObject } from 'react-force-graph'
+import {
+  subscribeTopology,
+  updateNodePosition,
+  type Topology,
+} from '../../lib/stompClient'
 import './TopologyView.css'
 
+interface GraphNode extends NodeObject {
+  id: string
+}
+
+interface GraphLink extends LinkObject {
+  queue: string
+}
+
 interface GraphData {
-  nodes: { id: string; x?: number; y?: number }[]
-  links: { source: string; target: string; queue: string }[]
+  nodes: GraphNode[]
+  links: GraphLink[]
 }
 
 export default function TopologyView() {
@@ -27,10 +39,10 @@ export default function TopologyView() {
         graphData={data}
         enableNodeDrag
         cooldownTicks={0}
-        nodeLabel={(n: { id: string }) => n.id}
-        linkLabel={(l: { queue: string }) => l.queue}
-        onNodeDragEnd={(n: { id: string; x: number; y: number }) =>
-          updateNodePosition(n.id, n.x, n.y)}
+        nodeLabel="id"
+        linkLabel={(l) => (l as GraphLink).queue}
+        onNodeDragEnd={(n) =>
+          updateNodePosition(String(n.id), n.x ?? 0, n.y ?? 0)}
       />
     </div>
   )
