@@ -1,5 +1,5 @@
 import Ajv from 'ajv';
-import schema from '../../../spec/control-events.schema.json' assert { type: 'json' };
+import schema from '../../../spec/control-events.schema.json';
 
 export interface ControlEvent {
   event: 'status' | 'lifecycle' | 'metric' | 'alert' | 'link';
