@@ -8,16 +8,94 @@
 
 ```mermaid
 flowchart LR
-    G[Generator\nproduces traffic] -->|ph.gen| MQ((RabbitMQ))
-    MQ -->|ph.gen| M[Moderator\nfilters/rewrites]
-    M -->|ph.mod| MQ
-    MQ -->|ph.mod| P[Processor\ncalls SUT]
-    P -->|ph.final| MQ
-    MQ -->|ph.final| PP[Postprocessor\ncollects metrics]
-    P -->|HTTP| S[SUT\nSystem Under Test]
-    T[Trigger\nfires actions] -.->|ph.control| MQ
-    LA[Log Aggregator\nbatches logs] -.->|logs.exchange| MQ
-    MQ -.->|ph.control| UI[UI\ncharts & control]
+  %% Components (apps & services)
+  UI[UI<br/>charts &amp; control]
+  G[Generator<br/>produces traffic]
+  M[Moderator<br/>filters/rewrites]
+  P[Processor<br/>calls SUT]
+  PP[Postprocessor<br/>collects metrics]
+  T[Trigger<br/>fires actions]
+  LA[Log Aggregator<br/>batches &amp; ships logs]
+  LOKI[Loki<br/>log store]
+  S[SUT<br/>System Under Test]
+
+  %% Exchanges
+  Xhive((exchange<br/>ph.hive))
+  Xctrl((exchange<br/>ph.control))
+  Xlogs((exchange<br/>logs.exchange))
+
+  %% Queues
+  Qgen[(queue<br/>ph.gen)]
+  Qmod[(queue<br/>ph.mod)]
+  Qfinal[(queue<br/>ph.final)]
+  Qctrl[(queue<br/>ph.control)]
+  Qlogs[(queue<br/>logs)]
+
+  %% Bindings
+  Xhive -->|bind rk=ph.gen| Qgen
+  Xhive -->|bind rk=ph.mod| Qmod
+  Xhive -->|bind rk=ph.final| Qfinal
+  Xctrl -->|bind| Qctrl
+  Xlogs -->|bind| Qlogs
+
+  %% ENTRY POINT (highlighted) → UI
+  EP((ENTRY))
+  EP -->|user opens app| UI
+
+  %% Business flow via ph.hive
+  G -->|publish rk=ph.gen| Xhive
+  Qgen -->|consume| M
+
+  M -->|publish rk=ph.mod| Xhive
+  Qmod -->|consume| P
+
+  P -->|publish rk=ph.final| Xhive
+  Qfinal -->|consume| PP
+
+  %% Control channel (dashed)
+  T  -.->|publish ph.control| Xctrl
+  UI -.->|publish ph.control: User Actions| Xctrl
+  Qctrl -.->|consume| G
+  Qctrl -.->|consume| M
+  Qctrl -.->|consume| P
+  Qctrl -.->|consume| PP
+  Qctrl -.->|consume| UI
+
+  %% Logs: all components publish; LA consumes and ships to Loki
+  G  -.->|publish logs.exchange| Xlogs
+  M  -.->|publish logs.exchange| Xlogs
+  P  -.->|publish logs.exchange| Xlogs
+  PP -.->|publish logs.exchange| Xlogs
+  UI -.->|publish logs.exchange| Xlogs
+  T  -.->|publish logs.exchange| Xlogs
+
+  Qlogs -.->|consume| LA
+  LA -->|push| LOKI
+
+  %% Direct HTTP call to SUT
+  P -->|HTTP| S
+
+  %% Styling
+  classDef app fill:#0f1116,stroke:#9aa0a6,color:#ffffff,stroke-width:1;
+  classDef ui  fill:#0f1116,stroke:#ab47bc,color:#ffffff,stroke-width:1;
+  classDef svc fill:#0f1116,stroke:#66bb6a,color:#ffffff,stroke-width:1;
+  classDef infra fill:#0f1116,stroke:#5e6a7d,color:#d1d5db,stroke-width:1;
+
+  classDef ex  fill:#1f2430,stroke:#ffc107,color:#ffc107,stroke-width:1.5;
+  classDef q   fill:#11161e,stroke:#4fc3f7,color:#4fc3f7,stroke-width:1.5;
+
+  classDef entry fill:#0f1116,stroke:#00e676,color:#00e676,stroke-width:2;
+
+  class G,M,P,PP,T app;
+  class UI ui;
+  class S svc;
+  class LA,LOKI infra;
+  class Xhive,Xctrl,Xlogs ex;
+  class Qgen,Qmod,Qfinal,Qctrl,Qlogs q;
+  class EP entry;
+
+  %% Extra highlight on UI border (thicker green)
+  style UI stroke:#00e676,stroke-width:3px;
 ```
 
 The legacy static interface now lives under `UI-Legacy` for reference. A new React 18 + Vite UI resides in `/ui` and continues to serve the existing assets without changes.
