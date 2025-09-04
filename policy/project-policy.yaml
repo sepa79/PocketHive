@@ -1,3 +1,7 @@
+# References to consolidated rules and specifications
+docs_paths:
+  rules: docs/rules/
+  spec: docs/spec/
 java:
   version: 21
 ui:
