@@ -104,6 +104,14 @@ export default function ComponentDetail({ component, onClose }: Props) {
         <div>Uptime: {formatSeconds(component.uptimeSec)}</div>
         <div>Last heartbeat: {timeAgo(component.lastHeartbeat)}</div>
         <div>Env: {component.env ?? '—'}</div>
+        <div>
+          Enabled:{' '}
+          {component.config?.enabled === false
+            ? 'false'
+            : component.config?.enabled === true
+            ? 'true'
+            : '—'}
+        </div>
       </div>
       <div className="p-4 border border-white/10 rounded mb-4 text-sm text-white/60 space-y-2">
         {renderForm(component.name, form, setForm, single)}

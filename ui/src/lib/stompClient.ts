@@ -75,23 +75,27 @@ export function setClient(newClient: Client | null, destination = controlDestina
   client = newClient
   controlDestination = destination
   if (client) {
-    const origPublish = client.publish.bind(client)
-    client.publish = ((params) => {
-      logOut(params.destination, params.body ?? '')
-      origPublish(params)
-    }) as typeof client.publish
+    const wrapped = (client as any)._phWrapped
+    if (!wrapped) {
+      const origPublish = client.publish.bind(client)
+      client.publish = ((params) => {
+        logOut(params.destination, params.body ?? '')
+        origPublish(params)
+      }) as typeof client.publish
 
-    const origSubscribe = client.subscribe.bind(client)
-    client.subscribe = ((dest, callback, headers) => {
-      return origSubscribe(
-        dest,
-        (msg) => {
-          logIn(msg.headers.destination || dest, msg.body)
-          callback(msg)
-        },
-        headers,
-      )
-    }) as typeof client.subscribe
+      const origSubscribe = client.subscribe.bind(client)
+      client.subscribe = ((dest, callback, headers) => {
+        return origSubscribe(
+          dest,
+          (msg) => {
+            logIn(msg.headers.destination || dest, msg.body)
+            callback(msg)
+          },
+          headers,
+        )
+      }) as typeof client.subscribe
+      ;(client as any)._phWrapped = true
+    }
 
     controlSub = client.subscribe(controlDestination, (msg) => {
       try {
@@ -109,7 +113,10 @@ export function setClient(newClient: Client | null, destination = controlDestina
         comp.version = evt.version
         comp.lastHeartbeat = new Date(evt.timestamp).getTime()
         comp.status = evt.kind
-        if (evt.data) comp.config = evt.data
+        const cfg = { ...(comp.config || {}) }
+        if (evt.data) Object.assign(cfg, evt.data)
+        if (typeof evt.enabled === 'boolean') cfg.enabled = evt.enabled
+        if (Object.keys(cfg).length > 0) comp.config = cfg
         if (evt.queues || evt.inQueue) {
           const q: { name: string; role: 'producer' | 'consumer' }[] = []
           if (evt.queues) {
