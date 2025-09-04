@@ -1,3 +1,5 @@
+import { useUIStore } from '../store'
+
 export type LogEntry = {
   ts: number
   destination: string
@@ -20,12 +22,11 @@ const listeners: Record<LogType, Listener[]> = {
   other: [],
 }
 
-const MAX_LOGS = 200
-
 function addLog(type: LogType, entry: LogEntry) {
   const arr = logs[type]
   arr.push(entry)
-  if (arr.length > MAX_LOGS) arr.shift()
+  const maxLogs = useUIStore.getState().messageLimit
+  while (arr.length > maxLogs) arr.shift()
   listeners[type].forEach((l) => l([...arr]))
 }
 
