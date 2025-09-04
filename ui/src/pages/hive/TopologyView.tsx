@@ -70,14 +70,33 @@ export default function TopologyView() {
   const paintNode = (node: NodeData, ctx: CanvasRenderingContext2D) => {
     let img = imgCache.current[node.id]
     if (!img) {
+      const css = getComputedStyle(document.documentElement)
+      const vars = `
+        :root{
+          --ph-node-fill:${css.getPropertyValue('--ph-node-fill').trim()};
+          --ph-node-stroke:${css.getPropertyValue('--ph-node-stroke').trim()};
+          --ph-text:${css.getPropertyValue('--ph-text').trim()};
+          --ph-ok:${css.getPropertyValue('--ph-ok').trim()};
+          --ph-warn:${css.getPropertyValue('--ph-warn').trim()};
+          --ph-err:${css.getPropertyValue('--ph-err').trim()};
+          --ph-ghost:${css.getPropertyValue('--ph-ghost').trim()};
+        }`
       const svg = renderToStaticMarkup(
         <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox={`${-size / 2} ${-size / 2} ${size} ${size}`}>
+          <style>{vars}</style>
           <NodeRenderer node={{ ...node, x: 0, y: 0 }} />
         </svg>,
       )
       img = new Image()
       img.src = `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(svg)))}`
-      img.onload = () => fgRef.current?.refresh()
+      img.onload = () => {
+        const ref = fgRef.current
+        if (ref && typeof ref.refresh === 'function') {
+          ref.refresh()
+        } else {
+          console.debug('ForceGraph ref missing refresh()', ref)
+        }
+      }
       imgCache.current[node.id] = img
     }
     if (img.complete) {

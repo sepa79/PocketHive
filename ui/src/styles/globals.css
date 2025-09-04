@@ -5,6 +5,16 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --ph-node-fill: #1e293b;
+  --ph-node-stroke: #e2e8f0;
+  --ph-text: #f8fafc;
+  --ph-ok: #22c55e;
+  --ph-warn: #fbbf24;
+  --ph-err: #ef4444;
+  --ph-ghost: #9ca3af;
+}
+
 @keyframes plug-in {
   from {
     transform: translateX(-8px);
