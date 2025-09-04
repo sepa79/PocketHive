@@ -13,6 +13,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.amqp.rabbit.listener.RabbitListenerEndpointRegistry;
+import org.springframework.amqp.rabbit.listener.MessageListenerContainer;
 import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.amqp.support.AmqpHeaders;
 import org.springframework.stereotype.Component;
@@ -35,15 +37,18 @@ public class PostProcessor {
   private final Counter errorCounter;
   private final String instanceId;
   private volatile boolean enabled = true;
+  private final RabbitListenerEndpointRegistry registry;
   private final AtomicLong counter = new AtomicLong();
   private static final long STATUS_INTERVAL_MS = 5000L;
   private volatile long lastStatusTs = System.currentTimeMillis();
 
   public PostProcessor(RabbitTemplate rabbit,
                        MeterRegistry registry,
-                       @Qualifier("instanceId") String instanceId){
+                       @Qualifier("instanceId") String instanceId,
+                       RabbitListenerEndpointRegistry listenerRegistry){
     this.rabbit = rabbit;
     this.instanceId = instanceId;
+    this.registry = listenerRegistry;
     this.hopLatency = DistributionSummary.builder("postprocessor_hop_latency_ms").register(registry);
     this.totalLatency = DistributionSummary.builder("postprocessor_total_latency_ms").register(registry);
     this.hopCount = DistributionSummary.builder("postprocessor_hops").register(registry);
@@ -51,7 +56,7 @@ public class PostProcessor {
     try{ sendStatusFull(0); } catch(Exception ignore){}
   }
 
-  @RabbitListener(queues = "${ph.finalQueue:ph.final}")
+  @RabbitListener(id = "workListener", queues = "${ph.finalQueue:ph.final}")
   public void onFinal(byte[] payload,
                       @Header(value="x-ph-trace", required=false) String trace,
                       @Header(value="x-ph-error", required=false) Boolean error){
@@ -111,7 +116,16 @@ public class PostProcessor {
           if("status-request".equals(type)) sendStatusFull(0);
           if("config-update".equals(type)){
             com.fasterxml.jackson.databind.JsonNode dataNode = node.path("data");
-            if(dataNode.has("enabled")) enabled = dataNode.get("enabled").asBoolean(enabled);
+            if(dataNode.has("enabled")){
+              boolean newEnabled = dataNode.get("enabled").asBoolean(enabled);
+              if(newEnabled != enabled){
+                enabled = newEnabled;
+                MessageListenerContainer c = registry.getListenerContainer("workListener");
+                if(c != null){
+                  if(enabled) c.start(); else c.stop();
+                }
+              }
+            }
           }
         }catch(Exception e){ log.warn("control parse", e); }
       }
