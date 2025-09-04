@@ -54,11 +54,30 @@ export default function TopologyView() {
 
   useEffect(() => {
     const unsub = subscribeTopology((topo: Topology) => {
-      const nodes = topo.nodes.map((n, i) => ({
-        ...n,
-        x: n.x ?? i * 80,
-        y: n.y ?? 0,
-      }))
+      const adjacency = new Map<string, string[]>()
+      topo.edges.forEach((e) => {
+        const arr = adjacency.get(e.from) ?? []
+        arr.push(e.to)
+        adjacency.set(e.from, arr)
+      })
+      const generators = topo.nodes.filter((n) => n.type === 'generator')
+      const visited = new Set<string>()
+      const order: string[] = []
+      const q: string[] = generators.map((g) => g.id)
+      while (q.length) {
+        const id = q.shift()!
+        if (visited.has(id)) continue
+        visited.add(id)
+        order.push(id)
+        ;(adjacency.get(id) ?? []).forEach((next) => q.push(next))
+      }
+      const connectedNodes = order
+        .map((id) => topo.nodes.find((n) => n.id === id)!)
+        .map((n, idx) => ({ ...n, x: n.x ?? idx * 80, y: n.y ?? 0 }))
+      const unconnectedNodes = topo.nodes
+        .filter((n) => !visited.has(n.id))
+        .map((n, idx) => ({ ...n, x: n.x ?? idx * 80, y: n.y ?? 80 }))
+      const nodes = [...connectedNodes, ...unconnectedNodes]
       setData({
         nodes,
         links: topo.edges.map((e) => ({ source: e.from, target: e.to, queue: e.queue })),
@@ -129,7 +148,11 @@ export default function TopologyView() {
     ctx.closePath()
   }
 
-  const drawNode = (node: GraphNode, ctx: CanvasRenderingContext2D) => {
+  const drawNode = (
+    node: GraphNode,
+    ctx: CanvasRenderingContext2D,
+    globalScale: number,
+  ) => {
     const shape = getShape(node.type)
     const size = 8
     ctx.beginPath()
@@ -160,6 +183,13 @@ export default function TopologyView() {
     ctx.lineWidth = 1
     ctx.fill()
     ctx.stroke()
+    const label = node.id
+    const fontSize = 8 / globalScale
+    ctx.font = `${fontSize}px sans-serif`
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'top'
+    ctx.fillStyle = '#000'
+    ctx.fillText(label, node.x ?? 0, (node.y ?? 0) + size + 2 / globalScale)
   }
 
   const polygonPoints = (sides: number) => {
@@ -211,7 +241,7 @@ export default function TopologyView() {
         linkWidth={() => 2}
         linkDirectionalArrowLength={4}
         linkCanvasObjectMode={() => 'after'}
-        linkCanvasObject={(link, ctx) => {
+        linkCanvasObject={(link, ctx, globalScale) => {
           const l = link as GraphLink & {
             source: { x: number; y: number }
             target: { x: number; y: number }
@@ -220,16 +250,25 @@ export default function TopologyView() {
           if (!source || !target) return
           const x = (source.x + target.x) / 2
           const y = (source.y + target.y) / 2
-          ctx.font = '6px sans-serif'
+          const fontSize = 6 / globalScale
+          const pad = 2 / globalScale
+          const yLabel = y + fontSize
+          ctx.font = `${fontSize}px sans-serif`
           const textWidth = ctx.measureText(queue).width
           ctx.fillStyle = 'rgba(0,0,0,0.6)'
-          ctx.fillRect(x - textWidth / 2 - 2, y - 4, textWidth + 4, 8)
+          ctx.fillRect(
+            x - textWidth / 2 - pad,
+            yLabel - pad,
+            textWidth + pad * 2,
+            fontSize + pad * 2,
+          )
           ctx.textAlign = 'center'
-          ctx.textBaseline = 'middle'
+          ctx.textBaseline = 'top'
           ctx.fillStyle = '#fff'
-          ctx.fillText(queue, x, y)
+          ctx.fillText(queue, x, yLabel)
         }}
-        nodeCanvasObject={(node, ctx) => drawNode(node as GraphNode, ctx)}
+        nodeCanvasObject={(node, ctx, globalScale) =>
+          drawNode(node as GraphNode, ctx, globalScale)}
         onNodeDragEnd={(n) =>
           updateNodePosition(String(n.id), n.x ?? 0, n.y ?? 0)}
       />
