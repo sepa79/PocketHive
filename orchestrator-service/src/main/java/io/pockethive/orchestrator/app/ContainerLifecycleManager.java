@@ -20,7 +20,11 @@ public class ContainerLifecycleManager {
     }
 
     public Swarm startSwarm(String swarmId) {
-        String containerId = docker.createAndStartContainer(template.getImage());
+        return startSwarm(swarmId, template.getImage());
+    }
+
+    public Swarm startSwarm(String swarmId, String image) {
+        String containerId = docker.createAndStartContainer(image);
         Swarm swarm = new Swarm(swarmId, containerId);
         swarm.setStatus(SwarmStatus.RUNNING);
         registry.register(swarm);
