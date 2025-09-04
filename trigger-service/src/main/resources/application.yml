@@ -15,7 +15,7 @@ ph:
     intervalMs: 60000
     actionType: shell
     command: echo hello
-    url: http://localhost
+    url: ${PH_TRIGGER_URL:http://wiremock}
     method: GET
     body: ""
     headers: {}

@@ -45,8 +45,13 @@ export default function Connectivity() {
         logOther(`STOMP error: ${msg}${body ? ` - ${body}` : ''}`)
       },
     })
-    client.activate()
-    clientRef.current = client
+    try {
+      client.activate()
+      clientRef.current = client
+    } catch (error) {
+      setState('disconnected')
+      logOther(`STOMP activation failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    }
   }
 
   function disconnect() {

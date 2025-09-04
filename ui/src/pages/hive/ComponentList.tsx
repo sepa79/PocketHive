@@ -17,8 +17,8 @@ export default function ComponentList({ components, selectedId, onSelect }: Prop
     try {
       await sendConfigUpdate(comp, { enabled: !enabled })
       await requestStatusFull(comp)
-    } catch {
-      // ignore errors for now
+    } catch (error) {
+      console.error('Failed to update component config:', error)
     }
   }
   return (
@@ -31,7 +31,9 @@ export default function ComponentList({ components, selectedId, onSelect }: Prop
           }`}
           onClick={() => {
             onSelect(c)
-            requestStatusFull(c).catch(() => {})
+            requestStatusFull(c).catch((error) => {
+              console.error('Failed to request status:', error)
+            })
           }}
         >
           <div className="flex items-center justify-between gap-2">

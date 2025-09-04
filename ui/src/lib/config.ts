@@ -18,7 +18,7 @@ const config: UIConfig = {
   prometheus: `http://${host}:9090/`,
   grafana: `http://${host}:3000/`,
   wiremock: `http://${host}:8080/__admin/`,
-  stompUrl: `ws://${host}:15674/ws`,
+  stompUrl: `/ws`,
   stompUser: 'guest',
   stompPasscode: 'guest',
   stompSubscription: '/exchange/ph.control/ev.#',

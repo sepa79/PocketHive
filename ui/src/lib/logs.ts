@@ -26,7 +26,9 @@ function addLog(type: LogType, entry: LogEntry) {
   const arr = logs[type]
   arr.push(entry)
   const maxLogs = useUIStore.getState().messageLimit
-  while (arr.length > maxLogs) arr.shift()
+  if (arr.length > maxLogs) {
+    arr.splice(0, arr.length - maxLogs)
+  }
   listeners[type].forEach((l) => l([...arr]))
 }
 
