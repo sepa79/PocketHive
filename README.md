@@ -248,7 +248,7 @@ Manual checks:
 - **WebSocket eye** — click to connect or disconnect from RabbitMQ.
 - **Monolith button** — broadcasts a global `status-request` signal; the publish shows in the OUT log.
 - **Buzz view** — IN, OUT and Other logs with a Config tab and Topic Sniffer; subscriptions are editable.
-- **Hive view** — searchable component list with a topology tab for draggable nodes, queue tooltips, and a legend of component shapes; selecting an item opens a detail drawer with queue stats and config-update action.
+- **Hive view** — searchable component list with start/stop toggles, a topology tab for draggable nodes, queue tooltips, and a legend of component shapes; selecting an item opens a detail drawer showing enabled state with editable settings and a confirmable config-update action.
 - **Nectar view** — metric dropdown (TPS, latency, hops) and points input to adjust chart history.
 
 ## Troubleshooting
