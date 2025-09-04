@@ -46,7 +46,9 @@ const shapeOrder: NodeShape[] = [
 export default function TopologyView() {
   const [data, setData] = useState<GraphData>({ nodes: [], links: [] })
   const containerRef = useRef<HTMLDivElement>(null)
-  const graphRef = useRef<ForceGraphMethods | null>(null)
+  const graphRef = useRef<ForceGraphMethods<GraphNode, GraphLink> | undefined>(
+    undefined,
+  )
   const [dims, setDims] = useState({ width: 0, height: 0 })
   const shapeMapRef = useRef<Record<string, NodeShape>>({ sut: 'circle' })
 
