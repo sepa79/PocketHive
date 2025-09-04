@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { subscribeLogs, type LogEntry } from '../lib/logs'
 import { useConfig } from '../lib/config'
+import { useUIStore } from '../store'
 
 type LogTab = 'in' | 'out' | 'other'
 type Tab = LogTab | 'config'
@@ -36,10 +37,22 @@ function ConfigView() {
 
 export default function Buzz() {
   const [tab, setTab] = useState<Tab>('in')
+  const { messageLimit, setMessageLimit } = useUIStore()
+  const [inputValue, setInputValue] = useState(messageLimit.toString())
+
+  const handleLimitChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value
+    setInputValue(value)
+    const num = parseInt(value)
+    if (!isNaN(num)) {
+      setMessageLimit(num)
+    }
+  }
+
   return (
     <div className="card mt-6 p-4">
       <h2 className="kpi-title mb-2">Buzz</h2>
-      <div className="mb-2 flex gap-2">
+      <div className="mb-2 flex gap-2 items-center">
         <button
           className={`rounded px-2 py-1 text-sm ${tab === 'in' ? 'bg-white/20' : 'hover:bg-white/10'}`}
           onClick={() => setTab('in')}
@@ -64,6 +77,17 @@ export default function Buzz() {
         >
           Config
         </button>
+        <div className="ml-auto flex items-center gap-1 text-xs">
+          <span className="text-white/60">Limit:</span>
+          <input
+            type="number"
+            min="10"
+            max="500"
+            value={inputValue}
+            onChange={handleLimitChange}
+            className="w-12 rounded border border-white/20 bg-white/10 px-1 py-0.5 text-center text-xs"
+          />
+        </div>
       </div>
       <div className="h-96 overflow-auto rounded border border-white/20 p-2">
         {tab === 'config' ? <ConfigView /> : <LogView type={tab} />}
