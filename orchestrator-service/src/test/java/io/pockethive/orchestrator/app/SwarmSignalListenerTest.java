@@ -26,6 +26,6 @@ class SwarmSignalListenerTest {
 
         verify(lifecycle).startSwarm("sw1", "img");
         verify(rabbit).convertAndSend(eq(io.pockethive.Topology.CONTROL_EXCHANGE),
-                eq("ev.status-full.orchestrator.inst"), any());
+                eq("ev.status-full.orchestrator.inst"), any(Object.class));
     }
 }
