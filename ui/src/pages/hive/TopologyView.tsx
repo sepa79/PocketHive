@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import ForceGraph2D, { ForceGraphMethods } from 'react-force-graph-2d'
+import ForceGraph2D, { type ForceGraphMethods } from 'react-force-graph-2d'
 import {
   subscribeTopology,
   updateNodePosition,
@@ -46,7 +46,7 @@ const shapeOrder: NodeShape[] = [
 export default function TopologyView() {
   const [data, setData] = useState<GraphData>({ nodes: [], links: [] })
   const containerRef = useRef<HTMLDivElement>(null)
-  const graphRef = useRef<ForceGraphMethods>()
+  const graphRef = useRef<ForceGraphMethods | null>(null)
   const [dims, setDims] = useState({ width: 0, height: 0 })
   const shapeMapRef = useRef<Record<string, NodeShape>>({ sut: 'circle' })
 
