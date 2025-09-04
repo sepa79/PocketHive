@@ -52,7 +52,8 @@ test('node position updates after drag', () => {
   const props = (globalThis as unknown as { __GRAPH_PROPS__: GraphProps }).__GRAPH_PROPS__
   expect(typeof props.width).toBe('number')
   expect(typeof props.height).toBe('number')
-  expect(props.graphData.nodes[0].x).toBeUndefined()
+  expect(props.graphData.nodes[0].x).toBe(0)
+  expect(props.graphData.nodes[0].y).toBe(0)
   act(() => {
     props.onNodeDragEnd({ id: 'a', x: 10, y: 20 })
   })

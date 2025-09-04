@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import ForceGraph2D from 'react-force-graph-2d'
+import ForceGraph2D, { ForceGraphMethods } from 'react-force-graph-2d'
 import {
   subscribeTopology,
   updateNodePosition,
@@ -46,13 +46,19 @@ const shapeOrder: NodeShape[] = [
 export default function TopologyView() {
   const [data, setData] = useState<GraphData>({ nodes: [], links: [] })
   const containerRef = useRef<HTMLDivElement>(null)
+  const graphRef = useRef<ForceGraphMethods>()
   const [dims, setDims] = useState({ width: 0, height: 0 })
   const shapeMapRef = useRef<Record<string, NodeShape>>({ sut: 'circle' })
 
   useEffect(() => {
     const unsub = subscribeTopology((topo: Topology) => {
+      const nodes = topo.nodes.map((n, i) => ({
+        ...n,
+        x: n.x ?? i * 80,
+        y: n.y ?? 0,
+      }))
       setData({
-        nodes: topo.nodes.map((n) => ({ ...n })),
+        nodes,
         links: topo.edges.map((e) => ({ source: e.from, target: e.to, queue: e.queue })),
       })
     })
@@ -184,9 +190,14 @@ export default function TopologyView() {
 
   const types = Array.from(new Set(data.nodes.map((n) => n.type)))
 
+  useEffect(() => {
+    if (data.nodes.length) graphRef.current?.zoomToFit?.(0, 20)
+  }, [dims, data.nodes.length])
+
   return (
     <div ref={containerRef} className="topology-container">
       <ForceGraph2D
+        ref={graphRef}
         width={dims.width}
         height={dims.height}
         graphData={data as unknown as GraphData}
@@ -207,10 +218,10 @@ export default function TopologyView() {
           if (!source || !target) return
           const x = (source.x + target.x) / 2
           const y = (source.y + target.y) / 2
-          ctx.font = '8px sans-serif'
+          ctx.font = '6px sans-serif'
           const textWidth = ctx.measureText(queue).width
           ctx.fillStyle = 'rgba(0,0,0,0.6)'
-          ctx.fillRect(x - textWidth / 2 - 2, y - 6, textWidth + 4, 12)
+          ctx.fillRect(x - textWidth / 2 - 2, y - 4, textWidth + 4, 8)
           ctx.textAlign = 'center'
           ctx.textBaseline = 'middle'
           ctx.fillStyle = '#fff'
@@ -220,6 +231,12 @@ export default function TopologyView() {
         onNodeDragEnd={(n) =>
           updateNodePosition(String(n.id), n.x ?? 0, n.y ?? 0)}
       />
+      <button
+        className="reset-view"
+        onClick={() => graphRef.current?.zoomToFit?.(0, 20)}
+      >
+        Reset View
+      </button>
       <div className="topology-legend">
         {types.map((t) => {
           const shape = getShape(t)
