@@ -16,6 +16,19 @@ services:
       retries: 12
       start_period: 5s
 
+  orchestrator:
+    build:
+      context: .
+      dockerfile: orchestrator-service/Dockerfile
+    environment:
+      RABBITMQ_HOST: rabbitmq
+      PH_CONTROL_EXCHANGE: ph.control
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+
   generator:
     build:
       context: .
