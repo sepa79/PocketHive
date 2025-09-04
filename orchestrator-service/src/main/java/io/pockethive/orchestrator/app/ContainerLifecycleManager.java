@@ -16,9 +16,9 @@ public class ContainerLifecycleManager {
         this.registry = registry;
     }
 
-    public Swarm startSwarm(String image) {
+    public Swarm startSwarm(String swarmId, String image) {
         String containerId = docker.createAndStartContainer(image);
-        Swarm swarm = new Swarm(containerId);
+        Swarm swarm = new Swarm(swarmId, containerId);
         swarm.setStatus(SwarmStatus.RUNNING);
         registry.register(swarm);
         return swarm;

@@ -8,16 +8,16 @@ class SwarmRegistryTest {
     @Test
     void registerAndFind() {
         SwarmRegistry registry = new SwarmRegistry();
-        Swarm swarm = new Swarm("container");
+        Swarm swarm = new Swarm("s1", "container");
         registry.register(swarm);
 
-        assertTrue(registry.find(swarm.getId()).isPresent());
+        assertTrue(registry.find("s1").isPresent());
     }
 
     @Test
     void updateStatus() {
         SwarmRegistry registry = new SwarmRegistry();
-        Swarm swarm = new Swarm("container");
+        Swarm swarm = new Swarm("s1", "container");
         registry.register(swarm);
 
         registry.updateStatus(swarm.getId(), SwarmStatus.RUNNING);

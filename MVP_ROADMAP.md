@@ -72,9 +72,9 @@
 - [x] Add swarm registry and status tracking
 
 #### 1.2 Control Plane Extensions
-- [ ] Add swarm-specific routing keys: `sig.swarm-create.<swarmId>`
-- [ ] Extend status events with `swarmId` field
-- [ ] Update observability module with swarm context
+- [x] Add swarm-specific routing keys: `sig.swarm-create.<swarmId>`
+- [x] Extend status events with `swarmId` field
+- [x] Update observability module with swarm context
 
 #### 1.3 Docker Integration
 - [ ] Add Orchestrator to docker-compose.yml

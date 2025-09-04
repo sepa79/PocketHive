@@ -23,11 +23,12 @@ class ContainerLifecycleManagerTest {
         when(docker.createAndStartContainer("img")).thenReturn("cid");
         ContainerLifecycleManager manager = new ContainerLifecycleManager(docker, registry);
 
-        Swarm swarm = manager.startSwarm("img");
+        Swarm swarm = manager.startSwarm("sw1", "img");
 
+        assertEquals("sw1", swarm.getId());
         assertEquals("cid", swarm.getContainerId());
         assertEquals(SwarmStatus.RUNNING, swarm.getStatus());
-        assertTrue(registry.find(swarm.getId()).isPresent());
+        assertTrue(registry.find("sw1").isPresent());
         verify(docker).createAndStartContainer("img");
     }
 
