@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ForceGraph2D, type ForceGraphMethods } from 'react-force-graph'
+import { ForceGraph2D } from 'react-force-graph'
 import { renderToStaticMarkup } from 'react-dom/server'
 import {
   subscribeTopology,
@@ -61,7 +61,7 @@ export default function TopologyView() {
     }
   }, [topology, components])
 
-  const fgRef = useRef<ForceGraphMethods<NodeData, GraphLink>>()
+  const fgRef = useRef<{ refresh: () => void } | null>(null)
   const imgCache = useRef<Record<string, HTMLImageElement>>({})
   const size = Math.max(BeeSizes.w, BeeSizes.h) + BeeSizes.halo * 2
 
@@ -93,7 +93,7 @@ export default function TopologyView() {
         nodeLabel="id"
         linkLabel={(l) => (l as GraphLink).queue}
         nodeCanvasObject={(n, ctx) => paintNode(n as NodeData, ctx)}
-        nodePointerAreaPaint={(n, ctx) => paintNode(n as NodeData, ctx)}
+        nodePointerAreaPaint={(n, _color, ctx) => paintNode(n as NodeData, ctx)}
         onNodeDragEnd={(n) =>
           updateNodePosition(String((n as NodeData).id), n.x ?? 0, n.y ?? 0)}
       />
