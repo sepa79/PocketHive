@@ -123,7 +123,7 @@ The legacy static interface now lives under `UI-Legacy` for reference. A new Rea
     - Instance: `sig.status-request.<role>.<instance>`
   - UI broadcast sends: `/exchange/ph.control/sig.status-request`
 
-See also: Control Bindings page (Menu → Control Bindings) and `ui/spec/asyncapi.yaml`.
+See also: Control Bindings page (Menu → Control Bindings) and `docs/spec/asyncapi.yaml`.
 
 ### Views
 

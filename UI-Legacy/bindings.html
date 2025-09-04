@@ -28,7 +28,7 @@
   <script type="module">
     async function load(){
       const host = document.getElementById('md');
-      const mdUrl = '/rules/control-plane-rules.md';
+      const mdUrl = '/docs/rules/control-plane-rules.md';
       try{
         const res = await fetch(mdUrl, {cache:'no-store'});
         const md = res.ok ? await res.text() : '# Rules not found';
@@ -70,7 +70,7 @@
     <div class="muted">PocketHive / Buzz Bindings</div>
   </header>
   <main>
-    <p class="muted">This page renders <code>rules/control-plane-rules.md</code> from the repository.</p>
+    <p class="muted">This page renders <code>docs/rules/control-plane-rules.md</code> from the repository.</p>
     <div id="md">Loading…</div>
   </main>
 </body>
