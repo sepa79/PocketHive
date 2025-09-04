@@ -17,5 +17,6 @@
     <module>postprocessor-service</module>
     <module>log-aggregator-service</module>
     <module>trigger-service</module>
+    <module>orchestrator-service</module>
   </modules>
 </project>

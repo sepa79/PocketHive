@@ -1,0 +1,25 @@
+server:
+  port: 8091
+
+spring:
+  application:
+    name: orchestrator-service
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: 5672
+    username: guest
+    password: guest
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      show-details: always
+
+logging:
+  level:
+    io.pockethive.orchestrator: DEBUG
+    com.github.dockerjava: INFO
