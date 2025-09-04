@@ -194,6 +194,28 @@ export default function TopologyView() {
         cooldownTicks={0}
         nodeLabel="id"
         linkLabel={(l) => (l as GraphLink).queue}
+        linkColor={() => '#66aaff'}
+        linkWidth={() => 2}
+        linkDirectionalArrowLength={4}
+        linkCanvasObjectMode={() => 'after'}
+        linkCanvasObject={(link, ctx) => {
+          const l = link as GraphLink & {
+            source: { x: number; y: number }
+            target: { x: number; y: number }
+          }
+          const { source, target, queue } = l
+          if (!source || !target) return
+          const x = (source.x + target.x) / 2
+          const y = (source.y + target.y) / 2
+          ctx.font = '8px sans-serif'
+          const textWidth = ctx.measureText(queue).width
+          ctx.fillStyle = 'rgba(0,0,0,0.6)'
+          ctx.fillRect(x - textWidth / 2 - 2, y - 6, textWidth + 4, 12)
+          ctx.textAlign = 'center'
+          ctx.textBaseline = 'middle'
+          ctx.fillStyle = '#fff'
+          ctx.fillText(queue, x, y)
+        }}
         nodeCanvasObject={(node, ctx) => drawNode(node as GraphNode, ctx)}
         onNodeDragEnd={(n) =>
           updateNodePosition(String(n.id), n.x ?? 0, n.y ?? 0)}
@@ -230,6 +252,13 @@ export default function TopologyView() {
             </div>
           )
         })}
+        <div className="legend-item">
+          <svg width="12" height="12" className="legend-icon">
+            <line x1="1" y1="6" x2="9" y2="6" stroke="#66aaff" strokeWidth="2" />
+            <polygon points="9,4 11,6 9,8" fill="#66aaff" />
+          </svg>
+          <span>queue</span>
+        </div>
       </div>
     </div>
   )
