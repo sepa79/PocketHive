@@ -51,7 +51,7 @@ export default function HivePage() {
     <div className="h-[calc(100vh-64px)] flex flex-col">
       <div className="p-4 border-b border-white/10 flex gap-4">
         <select
-          className="rounded bg-white/5 p-2 text-white"
+          className="rounded bg-white/5 p-2 text-white border border-white/10 [color-scheme:dark]"
           value={typeFilter}
           onChange={(e) => setTypeFilter(e.target.value)}
         >
@@ -63,7 +63,7 @@ export default function HivePage() {
           ))}
         </select>
         <select
-          className="rounded bg-white/5 p-2 text-white"
+          className="rounded bg-white/5 p-2 text-white border border-white/10 [color-scheme:dark]"
           value={healthFilter}
           onChange={(e) => setHealthFilter(e.target.value as HealthStatus | 'all')}
         >

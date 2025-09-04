@@ -7,6 +7,7 @@ export default defineConfig({
   plugins: [react() as any],
   publicDir: 'assets',
   test: {
-    environment: 'jsdom'
+    environment: 'jsdom',
+    include: ['src/**/*.test.ts', 'src/**/*.test.tsx']
   }
 })

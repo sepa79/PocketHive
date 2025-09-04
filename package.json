@@ -9,6 +9,7 @@
     "test": "vitest run --passWithNoTests"
   },
   "devDependencies": {
+    "@commitlint/config-conventional": "^19.8.1",
     "eslint": "^9.34.0",
     "jsdom": "^26.1.0",
     "vitest": "^3.2.4"
