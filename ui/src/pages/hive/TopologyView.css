@@ -3,8 +3,30 @@
   height: 100%;
   background: radial-gradient(circle at center, #1e1e1e, #0d0d0d);
   transition: background 0.3s ease;
+  position: relative;
 }
 
 .topology-container:hover {
   background: radial-gradient(circle at center, #272727, #0f0f0f);
+}
+
+.topology-legend {
+  position: absolute;
+  bottom: 10px;
+  left: 10px;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.legend-icon {
+  flex-shrink: 0;
 }

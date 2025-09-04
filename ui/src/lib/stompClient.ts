@@ -4,7 +4,12 @@ import { isControlEvent, type ControlEvent } from '../types/control'
 import { logIn, logOut } from './logs'
 
 export type ComponentListener = (components: Component[]) => void
-export interface TopologyNode { id: string; x?: number; y?: number }
+export interface TopologyNode {
+  id: string
+  type: string
+  x?: number
+  y?: number
+}
 export interface TopologyEdge { from: string; to: string; queue: string }
 export interface Topology { nodes: TopologyNode[]; edges: TopologyEdge[] }
 export type TopologyListener = (topology: Topology) => void
@@ -47,11 +52,12 @@ function buildTopology(): Topology {
   })
   const nodes: TopologyNode[] = Object.values(components).map((c) => ({
     id: c.id,
+    type: c.name,
     x: nodePositions[c.id]?.x,
     y: nodePositions[c.id]?.y,
   }))
   if (components['processor']) {
-    nodes.push({ id: 'sut', x: nodePositions['sut']?.x, y: nodePositions['sut']?.y })
+    nodes.push({ id: 'sut', type: 'sut', x: nodePositions['sut']?.x, y: nodePositions['sut']?.y })
   }
   return { nodes, edges: uniq }
 }

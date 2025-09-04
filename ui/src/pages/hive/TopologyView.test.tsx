@@ -5,6 +5,7 @@ import { vi, test, expect } from 'vitest'
 
 interface Node {
   id: string
+  type: string
   x?: number
   y?: number
 }
@@ -12,9 +13,10 @@ interface Node {
 interface GraphProps {
   graphData: { nodes: Node[]; links: unknown[] }
   onNodeDragEnd: (n: { id: string; x: number; y: number }) => void
+  [key: string]: unknown
 }
 
-const data = { nodes: [{ id: 'a' } as Node], edges: [] as unknown[] }
+const data = { nodes: [{ id: 'a', type: 'generator' } as Node], edges: [] as unknown[] }
 let listener: (t: { nodes: Node[]; edges: unknown[] }) => void
 const updateNodePosition = vi.fn<(id: string, x: number, y: number) => void>()
 
