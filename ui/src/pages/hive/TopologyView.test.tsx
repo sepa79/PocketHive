@@ -77,7 +77,7 @@ vi.mock('../../lib/stompClient', () => {
 })
 
 test('node position updates after drag and edge depth styles', () => {
-  render(<TopologyView />)
+  const { unmount } = render(<TopologyView />)
   const props = (globalThis as unknown as { __GRAPH_PROPS__: GraphProps }).__GRAPH_PROPS__
   expect(typeof props.width).toBe('number')
   expect(typeof props.height).toBe('number')
@@ -118,4 +118,15 @@ test('node position updates after drag and edge depth styles', () => {
     1,
   )
   expect(ctx.fillText).toHaveBeenCalledWith('2', expect.any(Number), expect.any(Number))
+  unmount()
+})
+
+test('filters nodes and edges based on visibleIds', async () => {
+  const { unmount } = render(<TopologyView visibleIds={['a']} />)
+  await Promise.resolve()
+  const props = (globalThis as unknown as { __GRAPH_PROPS__: GraphProps }).__GRAPH_PROPS__
+  expect(props.graphData.nodes).toHaveLength(1)
+  expect(props.graphData.nodes[0].id).toBe('a')
+  expect(props.graphData.links).toHaveLength(0)
+  unmount()
 })

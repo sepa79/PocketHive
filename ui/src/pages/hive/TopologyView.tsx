@@ -31,6 +31,7 @@ interface GraphData {
 interface Props {
   selectedId?: string
   onSelect?: (id: string) => void
+  visibleIds?: string[]
 }
 
 type NodeShape =
@@ -51,7 +52,7 @@ const shapeOrder: NodeShape[] = [
   'star',
 ]
 
-export default function TopologyView({ selectedId, onSelect }: Props) {
+export default function TopologyView({ selectedId, onSelect, visibleIds = [] }: Props) {
   const [data, setData] = useState<GraphData>({ nodes: [], links: [] })
   const containerRef = useRef<HTMLDivElement>(null)
   const graphRef = useRef<ForceGraphMethods<GraphNode, GraphLink> | undefined>(
@@ -61,22 +62,40 @@ export default function TopologyView({ selectedId, onSelect }: Props) {
   const shapeMapRef = useRef<Record<string, NodeShape>>({ sut: 'circle' })
   const [queueDepths, setQueueDepths] = useState<Record<string, number>>({})
   const [queueCounts, setQueueCounts] = useState<Record<string, number>>({})
+  const visibleRef = useRef<string[]>(visibleIds)
+  const compsRef = useRef<Component[]>([])
+
+  const filterGraphData = (d: GraphData, visible: string[]): GraphData => {
+    if (!visible.length) return d
+    const set = new Set(visible)
+    return {
+      nodes: d.nodes.filter((n) => set.has(n.id)),
+      links: d.links.filter((l) => set.has(l.source) && set.has(l.target)),
+    }
+  }
+
+  const updateQueues = (comps: Component[], visible: string[]) => {
+    const depths: Record<string, number> = {}
+    const counts: Record<string, number> = {}
+    const set = visible.length ? new Set(visible) : null
+    comps.forEach((c) => {
+      if (set && !set.has(c.id)) return
+      counts[c.id] = c.queues.length
+      c.queues.forEach((q) => {
+        if (typeof q.depth === 'number') {
+          const d = depths[q.name]
+          depths[q.name] = d === undefined ? q.depth : Math.max(d, q.depth)
+        }
+      })
+    })
+    setQueueDepths(depths)
+    setQueueCounts(counts)
+  }
 
   useEffect(() => {
     const unsub = subscribeComponents((comps: Component[]) => {
-      const depths: Record<string, number> = {}
-      const counts: Record<string, number> = {}
-      comps.forEach((c) => {
-        counts[c.id] = c.queues.length
-        c.queues.forEach((q) => {
-          if (typeof q.depth === 'number') {
-            const d = depths[q.name]
-            depths[q.name] = d === undefined ? q.depth : Math.max(d, q.depth)
-          }
-        })
-      })
-      setQueueDepths(depths)
-      setQueueCounts(counts)
+      compsRef.current = comps
+      updateQueues(comps, visibleRef.current)
     })
     return () => unsub()
   }, [])
@@ -111,13 +130,21 @@ export default function TopologyView({ selectedId, onSelect }: Props) {
         .filter((n) => !visited.has(n.id))
         .map((n, idx) => ({ ...n, x: n.x ?? idx * 80, y: n.y ?? 80 }))
       const nodes = [...connectedNodes, ...unconnectedNodes]
-      setData({
-        nodes,
-        links: topo.edges.map((e) => ({ source: e.from, target: e.to, queue: e.queue })),
-      })
+      const links = topo.edges.map((e) => ({
+        source: e.from,
+        target: e.to,
+        queue: e.queue,
+      }))
+      setData(filterGraphData({ nodes, links }, visibleRef.current))
     })
     return () => unsub()
   }, [])
+
+  useEffect(() => {
+    visibleRef.current = visibleIds
+    setData((d) => filterGraphData(d, visibleIds))
+    updateQueues(compsRef.current, visibleIds)
+  }, [visibleIds])
 
   useEffect(() => {
     const el = containerRef.current
