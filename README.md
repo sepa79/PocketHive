@@ -237,9 +237,8 @@ Manual checks:
   - **Other** captures UI events and diagnostics.
 - System Logs: shows system and user actions:
   - Connect/Disconnect clicks, edits of URL/username/password (password length only)
-  - WebSocket lifecycle (connecting URL, CONNECTED, subscriptions, errors, close)
   - UI health transitions based on `/healthz`
-- Hive panel: lists live components and queue stats and includes an interactive topology tab.
+- Hive panel: lists live components and queue stats and includes an interactive topology tab with type-based shapes and legend.
 - HAL eyes: status indicators for UI and WS (green slow pulse = healthy/connected; blue modem pulse = connecting; red fast pulse = failed/closed/idle).
 
 ## UI Controls
@@ -249,7 +248,7 @@ Manual checks:
 - **WebSocket eye** — click to connect or disconnect from RabbitMQ.
 - **Monolith button** — broadcasts a global `status-request` signal; the publish shows in the OUT log.
 - **Buzz view** — IN, OUT and Other logs with a Config tab and Topic Sniffer; subscriptions are editable.
-- **Hive view** — searchable component list with a topology tab for draggable nodes and queue tooltips; selecting an item opens a detail drawer with queue stats and config-update action.
+- **Hive view** — searchable component list with a topology tab for draggable nodes, queue tooltips, and a legend of component shapes; selecting an item opens a detail drawer with queue stats and config-update action.
 - **Nectar view** — metric dropdown (TPS, latency, hops) and points input to adjust chart history.
 
 ## Troubleshooting

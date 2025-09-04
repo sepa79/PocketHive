@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.0] - 2025-09-04
+Timestamp: 2025-09-04T01:41:55Z
+
+- UI: topology nodes render with type-specific shapes and a legend, plus smaller queue labels and arrows for clarity.
+- UI: topology view lays out components in a linear row, resizes with its container, and includes a reset button.
+
 ## [0.6.3] - 2025-09-03
 Timestamp: 2025-09-03T22:57:37Z
 
