@@ -10,6 +10,7 @@ COPY observability/pom.xml observability/pom.xml
 COPY postprocessor-service/pom.xml postprocessor-service/pom.xml
 COPY log-aggregator-service/pom.xml log-aggregator-service/pom.xml
 COPY generator-service/pom.xml generator-service/pom.xml
+COPY orchestrator-service/pom.xml orchestrator-service/pom.xml
 COPY trigger-service/src trigger-service/src
 COPY moderator-service/src moderator-service/src
 COPY processor-service/src processor-service/src
@@ -17,6 +18,7 @@ COPY observability/src observability/src
 COPY postprocessor-service/src postprocessor-service/src
 COPY log-aggregator-service/src log-aggregator-service/src
 COPY generator-service/src generator-service/src
+COPY orchestrator-service/src orchestrator-service/src
 # build only this module (+ its dependencies) to get a fat jar with Boot repackage
 RUN mvn -q -B -DskipTests -pl trigger-service -am package
 
