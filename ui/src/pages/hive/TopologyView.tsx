@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import ForceGraph2D from 'react-force-graph-2d'
 import {
   subscribeTopology,
@@ -25,8 +25,29 @@ interface GraphData {
   links: GraphLink[]
 }
 
+type NodeShape =
+  | 'circle'
+  | 'square'
+  | 'triangle'
+  | 'diamond'
+  | 'pentagon'
+  | 'hexagon'
+  | 'star'
+
+const shapeOrder: NodeShape[] = [
+  'square',
+  'triangle',
+  'diamond',
+  'pentagon',
+  'hexagon',
+  'star',
+]
+
 export default function TopologyView() {
   const [data, setData] = useState<GraphData>({ nodes: [], links: [] })
+  const containerRef = useRef<HTMLDivElement>(null)
+  const [dims, setDims] = useState({ width: 0, height: 0 })
+  const shapeMapRef = useRef<Record<string, NodeShape>>({ sut: 'circle' })
 
   useEffect(() => {
     const unsub = subscribeTopology((topo: Topology) => {
@@ -38,15 +59,70 @@ export default function TopologyView() {
     return () => unsub()
   }, [])
 
-  const shapeMap: Record<string, 'circle' | 'square' | 'triangle' | 'diamond'> = {
-    generator: 'triangle',
-    processor: 'square',
-    postprocessor: 'diamond',
-    sut: 'circle',
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+    const update = () =>
+      setDims({ width: el.clientWidth, height: el.clientHeight })
+    update()
+    if (typeof ResizeObserver !== 'undefined') {
+      const ro = new ResizeObserver(update)
+      ro.observe(el)
+      return () => ro.disconnect()
+    }
+    window.addEventListener('resize', update)
+    return () => window.removeEventListener('resize', update)
+  }, [])
+
+  const getShape = (type: string): NodeShape => {
+    const map = shapeMapRef.current
+    if (!map[type]) {
+      const used = new Set(Object.values(map))
+      const next = shapeOrder.find((s) => !used.has(s)) ?? 'circle'
+      map[type] = next
+    }
+    return map[type]
+  }
+
+  const drawPolygon = (
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    sides: number,
+    size: number,
+  ) => {
+    for (let i = 0; i < sides; i++) {
+      const angle = -Math.PI / 2 + (2 * Math.PI * i) / sides
+      const px = x + size * Math.cos(angle)
+      const py = y + size * Math.sin(angle)
+      if (i === 0) ctx.moveTo(px, py)
+      else ctx.lineTo(px, py)
+    }
+    ctx.closePath()
+  }
+
+  const drawStar = (
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    size: number,
+  ) => {
+    let rot = -Math.PI / 2
+    const spikes = 5
+    const step = Math.PI / spikes
+    for (let i = 0; i < spikes * 2; i++) {
+      const r = i % 2 === 0 ? size : size / 2
+      const px = x + Math.cos(rot) * r
+      const py = y + Math.sin(rot) * r
+      if (i === 0) ctx.moveTo(px, py)
+      else ctx.lineTo(px, py)
+      rot += step
+    }
+    ctx.closePath()
   }
 
   const drawNode = (node: GraphNode, ctx: CanvasRenderingContext2D) => {
-    const shape = shapeMap[node.type] || 'circle'
+    const shape = getShape(node.type)
     const size = 8
     ctx.beginPath()
     if (shape === 'square') {
@@ -62,6 +138,12 @@ export default function TopologyView() {
       ctx.lineTo(node.x ?? 0, (node.y ?? 0) + size)
       ctx.lineTo((node.x ?? 0) - size, node.y ?? 0)
       ctx.closePath()
+    } else if (shape === 'pentagon') {
+      drawPolygon(ctx, node.x ?? 0, node.y ?? 0, 5, size)
+    } else if (shape === 'hexagon') {
+      drawPolygon(ctx, node.x ?? 0, node.y ?? 0, 6, size)
+    } else if (shape === 'star') {
+      drawStar(ctx, node.x ?? 0, node.y ?? 0, size)
     } else {
       ctx.arc(node.x ?? 0, node.y ?? 0, size, 0, 2 * Math.PI)
     }
@@ -72,11 +154,41 @@ export default function TopologyView() {
     ctx.stroke()
   }
 
+  const polygonPoints = (sides: number) => {
+    const r = 5
+    const cx = 6
+    const cy = 6
+    const pts: string[] = []
+    for (let i = 0; i < sides; i++) {
+      const angle = -Math.PI / 2 + (2 * Math.PI * i) / sides
+      pts.push(`${cx + r * Math.cos(angle)},${cy + r * Math.sin(angle)}`)
+    }
+    return pts.join(' ')
+  }
+
+  const starPoints = () => {
+    const outer = 5
+    const inner = 2.5
+    const cx = 6
+    const cy = 6
+    const pts: string[] = []
+    let rot = -Math.PI / 2
+    const step = Math.PI / 5
+    for (let i = 0; i < 10; i++) {
+      const r = i % 2 === 0 ? outer : inner
+      pts.push(`${cx + Math.cos(rot) * r},${cy + Math.sin(rot) * r}`)
+      rot += step
+    }
+    return pts.join(' ')
+  }
+
   const types = Array.from(new Set(data.nodes.map((n) => n.type)))
 
   return (
-    <div className="topology-container">
+    <div ref={containerRef} className="topology-container">
       <ForceGraph2D
+        width={dims.width}
+        height={dims.height}
         graphData={data as unknown as GraphData}
         enableNodeDrag
         cooldownTicks={0}
@@ -88,7 +200,7 @@ export default function TopologyView() {
       />
       <div className="topology-legend">
         {types.map((t) => {
-          const shape = shapeMap[t] || 'circle'
+          const shape = getShape(t)
           return (
             <div key={t} className="legend-item">
               <svg width="12" height="12" className="legend-icon">
@@ -100,6 +212,15 @@ export default function TopologyView() {
                 )}
                 {shape === 'diamond' && (
                   <polygon points="6,1 11,6 6,11 1,6" fill="#ffcc00" stroke="black" />
+                )}
+                {shape === 'pentagon' && (
+                  <polygon points={polygonPoints(5)} fill="#ffcc00" stroke="black" />
+                )}
+                {shape === 'hexagon' && (
+                  <polygon points={polygonPoints(6)} fill="#ffcc00" stroke="black" />
+                )}
+                {shape === 'star' && (
+                  <polygon points={starPoints()} fill="#ffcc00" stroke="black" />
                 )}
                 {shape === 'circle' && (
                   <circle cx="6" cy="6" r="5" fill="#ffcc00" stroke="black" />

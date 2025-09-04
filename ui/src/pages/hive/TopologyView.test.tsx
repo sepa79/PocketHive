@@ -1,3 +1,6 @@
+/**
+ * @vitest-environment jsdom
+ */
 import { render, act } from '@testing-library/react'
 import TopologyView from './TopologyView'
 import React from 'react'
@@ -47,6 +50,8 @@ vi.mock('../../lib/stompClient', () => {
 test('node position updates after drag', () => {
   render(<TopologyView />)
   const props = (globalThis as unknown as { __GRAPH_PROPS__: GraphProps }).__GRAPH_PROPS__
+  expect(typeof props.width).toBe('number')
+  expect(typeof props.height).toBe('number')
   expect(props.graphData.nodes[0].x).toBeUndefined()
   act(() => {
     props.onNodeDragEnd({ id: 'a', x: 10, y: 20 })

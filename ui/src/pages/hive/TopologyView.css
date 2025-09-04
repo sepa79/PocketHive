@@ -1,6 +1,7 @@
 .topology-container {
   width: 100%;
   height: 100%;
+  flex: 1 1 auto;
   background: radial-gradient(circle at center, #1e1e1e, #0d0d0d);
   transition: background 0.3s ease;
   position: relative;
