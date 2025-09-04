@@ -16,6 +16,13 @@ export default function HivePage() {
     return () => unsub()
   }, [])
 
+  useEffect(() => {
+    if (selected) {
+      const updated = components.find((c) => c.id === selected.id)
+      if (updated) setSelected(updated)
+    }
+  }, [components])
+
   const filtered = components.filter((c) =>
     c.name.toLowerCase().includes(search.toLowerCase()) ||
     c.id.toLowerCase().includes(search.toLowerCase()),

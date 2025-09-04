@@ -167,3 +167,17 @@ export async function sendConfigUpdate(id: string, config: unknown) {
   })
 }
 
+export async function requestStatus(id: string) {
+  return new Promise<void>((resolve, reject) => {
+    if (!client || !client.active) {
+      reject(new Error('STOMP client not connected'))
+      return
+    }
+    client.publish({
+      destination: `/app/status.request.${id}`,
+      body: JSON.stringify({}),
+    })
+    resolve()
+  })
+}
+
