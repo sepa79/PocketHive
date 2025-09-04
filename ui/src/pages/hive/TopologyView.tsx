@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ForceGraph2D } from 'react-force-graph'
+import ForceGraph2D from 'react-force-graph-2d'
 import { renderToStaticMarkup } from 'react-dom/server'
 import {
   subscribeTopology,

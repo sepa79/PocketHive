@@ -22,9 +22,9 @@ const data = { nodes: [{ id: 'a' } as Node], edges: [] as unknown[] }
 let topoListener: (t: { nodes: Node[]; edges: unknown[] }) => void
 const updateNodePosition = vi.fn<(id: string, x: number, y: number) => void>()
 
-vi.mock('react-force-graph', () => ({
+vi.mock('react-force-graph-2d', () => ({
   __esModule: true,
-  ForceGraph2D: (props: GraphProps) => {
+  default: (props: GraphProps) => {
     ;(globalThis as unknown as { __GRAPH_PROPS__: GraphProps }).__GRAPH_PROPS__ = props
     return React.createElement('div')
   },
