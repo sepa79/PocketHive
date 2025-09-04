@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://pockethive.dev/spec/control-events.schema.json",
+  "$id": "https://pockethive.dev/docs/spec/control-events.schema.json",
   "title": "PocketHive Control Event",
   "type": "object",
   "required": ["event", "kind", "version", "role", "instance", "messageId", "timestamp"],

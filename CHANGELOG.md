@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.1] - 2025-09-04
+Timestamp: 2025-09-04T11:16:25Z
+
+- Docs: relocate spec and control-plane rules under docs/ and update references and UI Dockerfile.
+
 ## [0.7.0] - 2025-09-04
 Timestamp: 2025-09-04T01:41:55Z
 
@@ -259,7 +264,7 @@ Timestamp: 2025-08-29T02:20:00Z
 ## [0.2.2] - 2025-08-29
 Timestamp: 2025-08-29T01:24:02Z
 
-- Docs: Add AsyncAPI spec (`ui/spec/asyncapi.yaml`) describing control/traffic contracts.
+- Docs: Add AsyncAPI spec (`docs/spec/asyncapi.yaml`) describing control/traffic contracts.
 - UI: Add API Docs page (`/docs.html`) and group header actions into a ☰ Menu dropdown.
 - UI: Fix changelog page showing duplicated header (remove extra static H1).
 - Config: Align exchanges across UI/backends — `ph.hive` (traffic), `ph.control` (control).

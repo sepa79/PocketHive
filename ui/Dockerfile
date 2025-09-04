@@ -18,5 +18,3 @@ COPY --from=build /app/dist/ /usr/share/nginx/html/
 # Include project metadata and docs
 COPY CHANGELOG.md VERSION README.md /usr/share/nginx/html/
 COPY docs/ /usr/share/nginx/html/docs/
-COPY rules/ /usr/share/nginx/html/rules/
-COPY spec/ /usr/share/nginx/html/spec/

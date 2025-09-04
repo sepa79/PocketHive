@@ -21,5 +21,5 @@ These rules define non-negotiable contracts for emitting and consuming control-p
 - UI MUST treat `status-delta` as additive to the latest `status-full` snapshot.
 
 Artifacts:
-- AsyncAPI: `ui/spec/asyncapi.yaml` (channels `ev.*` and `sig.*`).
-- JSON Schema: `ui/spec/control-events.schema.json`.
+- AsyncAPI: `docs/spec/asyncapi.yaml` (channels `ev.*` and `sig.*`).
+- JSON Schema: `docs/spec/control-events.schema.json`.
