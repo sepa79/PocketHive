@@ -11,6 +11,7 @@
   </properties>
   <modules>
     <module>observability</module>
+    <module>orchestrator-service</module>
     <module>generator-service</module>
     <module>moderator-service</module>
     <module>processor-service</module>
