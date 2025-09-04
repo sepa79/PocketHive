@@ -27,7 +27,10 @@ export default function ComponentList({ components, selectedId, onSelect }: Prop
           className={`p-2 rounded cursor-pointer border border-transparent hover:border-white/20 ${
             selectedId === c.id ? 'bg-white/10' : ''
           }`}
-          onClick={() => onSelect(c)}
+          onClick={() => {
+            onSelect(c)
+            requestStatus(c.id).catch(() => {})
+          }}
         >
           <div className="flex items-center justify-between gap-2">
             <div>

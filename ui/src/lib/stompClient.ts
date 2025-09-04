@@ -109,6 +109,7 @@ export function setClient(newClient: Client | null, destination = controlDestina
         comp.version = evt.version
         comp.lastHeartbeat = new Date(evt.timestamp).getTime()
         comp.status = evt.kind
+        if (evt.data) comp.config = evt.data
         if (evt.queues || evt.inQueue) {
           const q: { name: string; role: 'producer' | 'consumer' }[] = []
           if (evt.queues) {

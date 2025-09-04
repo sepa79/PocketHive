@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { Component } from '../../types/hive'
 import { sendConfigUpdate, requestStatus } from '../../lib/stompClient'
 import QueuesPanel from './QueuesPanel'
@@ -12,6 +12,19 @@ interface Props {
 export default function ComponentDetail({ component, onClose }: Props) {
   const [toast, setToast] = useState<string | null>(null)
   const [form, setForm] = useState<Record<string, any>>({})
+
+  useEffect(() => {
+    const cfg = component.config || {}
+    const init: Record<string, any> = { ...cfg }
+    if (cfg.headers && typeof cfg.headers === 'object') {
+      try {
+        init.headers = JSON.stringify(cfg.headers, null, 2)
+      } catch {
+        init.headers = ''
+      }
+    }
+    setForm(init)
+  }, [component.id, component.config])
 
   const handleSubmit = async () => {
     const cfg: any = {}
