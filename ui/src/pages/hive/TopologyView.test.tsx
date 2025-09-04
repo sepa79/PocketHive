@@ -11,6 +11,7 @@ interface Node {
   type: string
   x?: number
   y?: number
+  enabled?: boolean
 }
 
 interface GraphProps {

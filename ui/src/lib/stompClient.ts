@@ -9,6 +9,7 @@ export interface TopologyNode {
   type: string
   x?: number
   y?: number
+  enabled?: boolean
 }
 export interface TopologyEdge { from: string; to: string; queue: string }
 export interface Topology { nodes: TopologyNode[]; edges: TopologyEdge[] }
@@ -55,9 +56,16 @@ function buildTopology(): Topology {
     type: c.name,
     x: nodePositions[c.id]?.x,
     y: nodePositions[c.id]?.y,
+    enabled: c.config?.enabled !== false,
   }))
   if (components['processor']) {
-    nodes.push({ id: 'sut', type: 'sut', x: nodePositions['sut']?.x, y: nodePositions['sut']?.y })
+    nodes.push({
+      id: 'sut',
+      type: 'sut',
+      x: nodePositions['sut']?.x,
+      y: nodePositions['sut']?.y,
+      enabled: true,
+    })
   }
   return { nodes, edges: uniq }
 }
