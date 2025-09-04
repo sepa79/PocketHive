@@ -1,5 +1,5 @@
 import { NavLink, Outlet } from 'react-router-dom'
-import { Hexagon, Radio, Droplet } from 'lucide-react'
+import { Hexagon, Radio, Droplet, Crown } from 'lucide-react'
 import MonolithIcon from '../icons/Monolith'
 import Health from '../components/Health'
 import Connectivity from '../components/Connectivity'
@@ -43,6 +43,15 @@ export default function Layout() {
           >
             <Radio strokeWidth={1.5} className="tab-icon text-white/80" />
             Buzz
+          </NavLink>
+          <NavLink
+            to="/orchestrator"
+            className={({ isActive }) =>
+              `tab-btn flex items-center${isActive ? ' tab-active' : ''}`
+            }
+          >
+            <Crown strokeWidth={1.5} className="tab-icon text-white/80" />
+            Orchestrator
           </NavLink>
           <NavLink
             to="/nectar"

@@ -4,6 +4,7 @@ import Home from './pages/Home'
 import HivePage from './pages/hive/HivePage'
 import Buzz from './pages/Buzz'
 import Nectar from './pages/Nectar'
+import Orchestrator from './pages/Orchestrator'
 
 export default function App() {
   return (
@@ -12,6 +13,7 @@ export default function App() {
         <Route index element={<Home />} />
           <Route path="hive" element={<HivePage />} />
         <Route path="buzz" element={<Buzz />} />
+        <Route path="orchestrator" element={<Orchestrator />} />
         <Route path="nectar" element={<Nectar />} />
       </Route>
     </Routes>
