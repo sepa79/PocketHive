@@ -154,29 +154,33 @@ export function updateNodePosition(id: string, x: number, y: number) {
   emitTopology()
 }
 
-export async function sendConfigUpdate(id: string, config: unknown) {
+export async function sendConfigUpdate(component: Component, config: unknown) {
   return new Promise<void>((resolve, reject) => {
     if (!client || !client.active) {
       reject(new Error('STOMP client not connected'))
       return
     }
+    const { id, name } = component
+    const payload = { type: 'config-update', role: name, instance: id, data: config }
     client.publish({
-      destination: `/app/config.update.${id}`,
-      body: JSON.stringify(config),
+      destination: `/exchange/ph.control/sig.config-update.${name}.${id}`,
+      body: JSON.stringify(payload),
     })
     resolve()
   })
 }
 
-export async function requestStatus(id: string) {
+export async function requestStatusFull(component: Component) {
   return new Promise<void>((resolve, reject) => {
     if (!client || !client.active) {
       reject(new Error('STOMP client not connected'))
       return
     }
+    const { id, name } = component
+    const payload = { type: 'status-request', role: name, instance: id }
     client.publish({
-      destination: `/app/status.request.${id}`,
-      body: JSON.stringify({}),
+      destination: `/exchange/ph.control/sig.status-request.${name}.${id}`,
+      body: JSON.stringify(payload),
     })
     resolve()
   })
