@@ -13,5 +13,5 @@
     "jsdom": "^26.1.0",
     "vitest": "^3.2.4"
   },
-  "license": "MIT"
+  "license": "GPL-3.0-or-later"
 }
