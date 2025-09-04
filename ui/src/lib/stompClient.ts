@@ -9,6 +9,7 @@ export interface TopologyNode {
   type: string
   x?: number
   y?: number
+  enabled?: boolean
 }
 export interface TopologyEdge { from: string; to: string; queue: string }
 export interface Topology { nodes: TopologyNode[]; edges: TopologyEdge[] }
@@ -55,9 +56,16 @@ function buildTopology(): Topology {
     type: c.name,
     x: nodePositions[c.id]?.x,
     y: nodePositions[c.id]?.y,
+    enabled: c.config?.enabled !== false,
   }))
   if (components['processor']) {
-    nodes.push({ id: 'sut', type: 'sut', x: nodePositions['sut']?.x, y: nodePositions['sut']?.y })
+    nodes.push({
+      id: 'sut',
+      type: 'sut',
+      x: nodePositions['sut']?.x,
+      y: nodePositions['sut']?.y,
+      enabled: true,
+    })
   }
   return { nodes, edges: uniq }
 }
@@ -75,23 +83,27 @@ export function setClient(newClient: Client | null, destination = controlDestina
   client = newClient
   controlDestination = destination
   if (client) {
-    const origPublish = client.publish.bind(client)
-    client.publish = ((params) => {
-      logOut(params.destination, params.body ?? '')
-      origPublish(params)
-    }) as typeof client.publish
+    const wrapped = (client as any)._phWrapped
+    if (!wrapped) {
+      const origPublish = client.publish.bind(client)
+      client.publish = ((params) => {
+        logOut(params.destination, params.body ?? '')
+        origPublish(params)
+      }) as typeof client.publish
 
-    const origSubscribe = client.subscribe.bind(client)
-    client.subscribe = ((dest, callback, headers) => {
-      return origSubscribe(
-        dest,
-        (msg) => {
-          logIn(msg.headers.destination || dest, msg.body)
-          callback(msg)
-        },
-        headers,
-      )
-    }) as typeof client.subscribe
+      const origSubscribe = client.subscribe.bind(client)
+      client.subscribe = ((dest, callback, headers) => {
+        return origSubscribe(
+          dest,
+          (msg) => {
+            logIn(msg.headers.destination || dest, msg.body)
+            callback(msg)
+          },
+          headers,
+        )
+      }) as typeof client.subscribe
+      ;(client as any)._phWrapped = true
+    }
 
     controlSub = client.subscribe(controlDestination, (msg) => {
       try {
@@ -109,6 +121,10 @@ export function setClient(newClient: Client | null, destination = controlDestina
         comp.version = evt.version
         comp.lastHeartbeat = new Date(evt.timestamp).getTime()
         comp.status = evt.kind
+        const cfg = { ...(comp.config || {}) }
+        if (evt.data) Object.assign(cfg, evt.data)
+        if (typeof evt.enabled === 'boolean') cfg.enabled = evt.enabled
+        if (Object.keys(cfg).length > 0) comp.config = cfg
         if (evt.queues || evt.inQueue) {
           const q: { name: string; role: 'producer' | 'consumer' }[] = []
           if (evt.queues) {
@@ -153,15 +169,33 @@ export function updateNodePosition(id: string, x: number, y: number) {
   emitTopology()
 }
 
-export async function sendConfigUpdate(id: string, config: unknown) {
+export async function sendConfigUpdate(component: Component, config: unknown) {
   return new Promise<void>((resolve, reject) => {
     if (!client || !client.active) {
       reject(new Error('STOMP client not connected'))
       return
     }
+    const { id, name } = component
+    const payload = { type: 'config-update', role: name, instance: id, data: config }
     client.publish({
-      destination: `/app/config.update.${id}`,
-      body: JSON.stringify(config),
+      destination: `/exchange/ph.control/sig.config-update.${name}.${id}`,
+      body: JSON.stringify(payload),
+    })
+    resolve()
+  })
+}
+
+export async function requestStatusFull(component: Component) {
+  return new Promise<void>((resolve, reject) => {
+    if (!client || !client.active) {
+      reject(new Error('STOMP client not connected'))
+      return
+    }
+    const { id, name } = component
+    const payload = { type: 'status-request', role: name, instance: id }
+    client.publish({
+      destination: `/exchange/ph.control/sig.status-request.${name}.${id}`,
+      body: JSON.stringify(payload),
     })
     resolve()
   })

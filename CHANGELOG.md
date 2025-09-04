@@ -3,8 +3,10 @@
 All notable changes to this project will be documented in this file.
 
 ## [0.7.1] - 2025-09-04
-Timestamp: 2025-09-04T11:16:25Z
+Timestamp: 2025-09-04T11:28:55Z
 
+- UI: add start/stop toggle and manual status refresh for each component.
+- UI: send config updates over role-specific control routes and show enabled state in drawers; disabled components appear gray in topology.
 - Docs: relocate spec and control-plane rules under docs/ and update references and UI Dockerfile.
 
 ## [0.7.0] - 2025-09-04

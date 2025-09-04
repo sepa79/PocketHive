@@ -17,5 +17,6 @@ export interface Component {
   env?: string
   status?: string
   queues: QueueInfo[]
+  config?: Record<string, unknown>
 }
 

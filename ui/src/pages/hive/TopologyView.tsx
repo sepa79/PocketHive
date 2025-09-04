@@ -12,6 +12,7 @@ interface GraphNode {
   type: string
   x?: number
   y?: number
+  enabled?: boolean
 }
 
 interface GraphLink {
@@ -178,7 +179,7 @@ export default function TopologyView() {
     } else {
       ctx.arc(node.x ?? 0, node.y ?? 0, size, 0, 2 * Math.PI)
     }
-    ctx.fillStyle = '#ffcc00'
+    ctx.fillStyle = node.enabled === false ? '#999999' : '#ffcc00'
     ctx.strokeStyle = '#000'
     ctx.lineWidth = 1
     ctx.fill()
