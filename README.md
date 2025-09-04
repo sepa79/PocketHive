@@ -4,7 +4,7 @@
   <img alt="PocketHive" src="ui/assets/logo.svg" width="100%" />
 </p>
 
-**PocketHive** is a portable transaction swarm: compact, composable components that let you generate, moderate, process, and test workloads with clear boundaries and durable queues.
+**PocketHive** is a portable transaction swarm: compact, composable components that let you generate, moderate, process, and test workloads with clear boundaries and durable queues. An orchestrator service manages swarm containers via Docker and communicates with all services over AMQP.
 
 ```mermaid
 flowchart LR
