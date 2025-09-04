@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.8.0] - 2025-09-04
+Timestamp: 2025-09-04T17:17:36Z
+
+- **BREAKING**: Remove all legacy UI files and directories (`UI-Legacy/`, `ui/assets/js/`)
+- Clean up codebase by eliminating unused static JavaScript modules
+- Update documentation to reflect React-only UI architecture
+- Bump version to 0.8.0 to reflect major cleanup
+
 ## [0.7.1] - 2025-09-04
 Timestamp: 2025-09-04T11:28:55Z
 

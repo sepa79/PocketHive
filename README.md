@@ -98,7 +98,7 @@ flowchart LR
   style UI stroke:#00e676,stroke-width:3px;
 ```
 
-The legacy static interface now lives under `UI-Legacy` for reference. A new React 18 + Vite UI resides in `/ui` and continues to serve the existing assets without changes.
+The UI is built with React 18 + Vite and resides in `/ui`.
 
 ### Architecture
 
@@ -270,9 +270,8 @@ Manual checks:
 
 ## Development Notes
 
-- The React UI lives in `ui/` (Vite + TypeScript). Assets remain under `ui/assets/` and are served without changes.
+- The React UI lives in `ui/` (Vite + TypeScript). Assets remain under `ui/assets/`.
 - Run `cd ui && npm install` once, then `npm run dev` for development or `npm run build` for production.
-- Legacy static sources are preserved in `UI-Legacy` for reference.
 - Nginx config lives in `ui/nginx.conf` and is mounted into the `ui` container. After changing it, restart just the UI:
 
 ```
