@@ -45,7 +45,13 @@ export default function HivePage() {
         </div>
       </div>
       <div className="hidden md:flex flex-1 overflow-auto">
-        <TopologyView />
+        <TopologyView
+          selectedId={selected?.id}
+          onSelect={(id) => {
+            const comp = components.find((c) => c.id === id)
+            if (comp) setSelected(comp)
+          }}
+        />
       </div>
       <div className="hidden lg:flex w-1/3 xl:w-1/4 border-l border-white/10 overflow-hidden">
         {selected ? (

@@ -26,6 +26,11 @@ interface GraphData {
   links: GraphLink[]
 }
 
+interface Props {
+  selectedId?: string
+  onSelect?: (id: string) => void
+}
+
 type NodeShape =
   | 'circle'
   | 'square'
@@ -44,7 +49,7 @@ const shapeOrder: NodeShape[] = [
   'star',
 ]
 
-export default function TopologyView() {
+export default function TopologyView({ selectedId, onSelect }: Props) {
   const [data, setData] = useState<GraphData>({ nodes: [], links: [] })
   const containerRef = useRef<HTMLDivElement>(null)
   const graphRef = useRef<ForceGraphMethods<GraphNode, GraphLink> | undefined>(
@@ -156,6 +161,12 @@ export default function TopologyView() {
   ) => {
     const shape = getShape(node.type)
     const size = 8
+    if (selectedId === node.id) {
+      ctx.beginPath()
+      ctx.arc(node.x ?? 0, node.y ?? 0, size + 4, 0, 2 * Math.PI)
+      ctx.fillStyle = 'rgba(255,255,255,0.1)'
+      ctx.fill()
+    }
     ctx.beginPath()
     if (shape === 'square') {
       ctx.rect((node.x ?? 0) - size, (node.y ?? 0) - size, size * 2, size * 2)
@@ -276,6 +287,7 @@ export default function TopologyView() {
           drawNode(node as GraphNode, ctx, globalScale)}
         onNodeDragEnd={(n) =>
           updateNodePosition(String(n.id), n.x ?? 0, n.y ?? 0)}
+        onNodeClick={(n) => onSelect?.(String(n.id))}
       />
       <button
         className="reset-view"
