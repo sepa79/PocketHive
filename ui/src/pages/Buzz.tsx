@@ -50,7 +50,7 @@ export default function Buzz() {
   }
 
   return (
-    <div className="card mt-6 p-4">
+    <div className="card mt-6 p-4 h-[calc(100vh-112px)] flex flex-col">
       <h2 className="kpi-title mb-2">Buzz</h2>
       <div className="mb-2 flex gap-2 items-center">
         <button
@@ -89,7 +89,7 @@ export default function Buzz() {
           />
         </div>
       </div>
-      <div className="h-96 overflow-auto rounded border border-white/20 p-2">
+      <div className="flex-1 overflow-auto rounded border border-white/20 p-2">
         {tab === 'config' ? <ConfigView /> : <LogView type={tab} />}
       </div>
     </div>
