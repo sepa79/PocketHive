@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.8.1] - 2025-09-04
+Timestamp: 2025-09-04T17:55:20Z
+
+- Build: centralize module parent version via revision property and bump to 0.8.1.
+- UI: let Hive, Buzz, and Nectar views fill the viewport with flexible layouts.
+
 ## [0.8.0] - 2025-09-04
 Timestamp: 2025-09-04T17:17:36Z
 

@@ -4,7 +4,7 @@
   <parent>
     <groupId>io.pockethive</groupId>
     <artifactId>pockethive-mvp</artifactId>
-    <version>0.8.0</version>
+    <version>${revision}</version>
   </parent>
   <artifactId>moderator-service</artifactId>
   <properties>

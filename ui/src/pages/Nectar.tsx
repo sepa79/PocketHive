@@ -1,7 +1,7 @@
 export default function Nectar() {
   return (
-    <div className="card" style={{ marginTop: '24px', padding: '16px' }}>
-      <h2 className="kpi-title" style={{ marginBottom: '8px' }}>Nectar</h2>
+    <div className="card mt-6 p-4 h-[calc(100vh-112px)]">
+      <h2 className="kpi-title mb-2">Nectar</h2>
       <p>Coming soon</p>
     </div>
   )

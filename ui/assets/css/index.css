@@ -20,7 +20,7 @@
       }
       #menu-btn:hover{ box-shadow: 0 0 26px rgba(51,225,255,0.22) inset, 0 0 20px rgba(51,225,255,0.28); background: radial-gradient(120% 120% at 10% 10%, rgba(51,225,255,0.35), rgba(51,225,255,0.1) 50%, rgba(255,255,255,0.07) 75%, rgba(0,0,0,0.0) 100%); }
       #menu-btn:active{ transform: translateY(1px); filter: brightness(1.1); }
-    main { max-width: 1100px; margin: 24px auto; padding: 0 20px 40px; }
+    main { margin: 24px 0; padding: 0 20px 40px; }
     .controls { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:16px; }
     .controls input, .controls select {
       padding: 8px 10px; border-radius: 8px;

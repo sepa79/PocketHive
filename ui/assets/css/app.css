@@ -10,7 +10,7 @@ body{
   -moz-osx-font-smoothing: grayscale;
 }
 button, input, select, textarea{ font: inherit; }
-main{ padding: 64px 20px 24px; max-width: 1000px; margin: 0 auto; color:#fff; font-family: Inter, Segoe UI, Arial, sans-serif;}
+main{ margin: 24px 0; padding: 0 20px 40px; color:#fff; font-family: Inter, Segoe UI, Arial, sans-serif; }
 h1{ font-weight:800; letter-spacing:.02em; }
 p{ color:#9aa0a6; }
 .card{
