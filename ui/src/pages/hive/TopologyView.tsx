@@ -184,12 +184,16 @@ export default function TopologyView() {
     ctx.fill()
     ctx.stroke()
     const label = node.id
-    const fontSize = 8 / globalScale
+    const fontSize = 10 / globalScale
     ctx.font = `${fontSize}px sans-serif`
     ctx.textAlign = 'center'
     ctx.textBaseline = 'top'
-    ctx.fillStyle = '#000'
-    ctx.fillText(label, node.x ?? 0, (node.y ?? 0) + size + 2 / globalScale)
+    ctx.fillStyle = '#fff'
+    ctx.fillText(
+      label,
+      node.x ?? 0,
+      (node.y ?? 0) + size + 4 / globalScale,
+    )
   }
 
   const polygonPoints = (sides: number) => {
