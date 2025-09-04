@@ -61,7 +61,9 @@ export default function TopologyView() {
     }
   }, [topology, components])
 
-  const fgRef = useRef<{ refresh: () => void } | null>(null)
+  // react-force-graph doesn't export its ref type, so use `any` to hold the instance
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const fgRef = useRef<any>(null)
   const imgCache = useRef<Record<string, HTMLImageElement>>({})
   const size = Math.max(BeeSizes.w, BeeSizes.h) + BeeSizes.halo * 2
 
