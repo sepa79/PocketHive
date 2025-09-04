@@ -2,9 +2,11 @@ import { useEffect, useRef, useState } from 'react'
 import ForceGraph2D, { type ForceGraphMethods } from 'react-force-graph-2d'
 import {
   subscribeTopology,
+  subscribeComponents,
   updateNodePosition,
   type Topology,
 } from '../../lib/stompClient'
+import type { Component } from '../../types/hive'
 import './TopologyView.css'
 
 interface GraphNode {
@@ -57,6 +59,31 @@ export default function TopologyView({ selectedId, onSelect }: Props) {
   )
   const [dims, setDims] = useState({ width: 0, height: 0 })
   const shapeMapRef = useRef<Record<string, NodeShape>>({ sut: 'circle' })
+  const [queueDepths, setQueueDepths] = useState<Record<string, number>>({})
+  const [queueCounts, setQueueCounts] = useState<Record<string, number>>({})
+
+  useEffect(() => {
+    const unsub = subscribeComponents((comps: Component[]) => {
+      const depths: Record<string, number> = {}
+      const counts: Record<string, number> = {}
+      comps.forEach((c) => {
+        counts[c.id] = c.queues.length
+        c.queues.forEach((q) => {
+          if (typeof q.depth === 'number') {
+            const d = depths[q.name]
+            depths[q.name] = d === undefined ? q.depth : Math.max(d, q.depth)
+          }
+        })
+      })
+      setQueueDepths(depths)
+      setQueueCounts(counts)
+    })
+    return () => unsub()
+  }, [])
+
+  useEffect(() => {
+    ;(graphRef.current as any)?.refresh?.()
+  }, [queueDepths, queueCounts])
 
   useEffect(() => {
     const unsub = subscribeTopology((topo: Topology) => {
@@ -206,6 +233,21 @@ export default function TopologyView({ selectedId, onSelect }: Props) {
       node.x ?? 0,
       (node.y ?? 0) + size + 4 / globalScale,
     )
+    const count = queueCounts[node.id] ?? 0
+    if (count > 0) {
+      const r = 4 / globalScale
+      const bx = (node.x ?? 0) + size
+      const by = (node.y ?? 0) - size
+      ctx.beginPath()
+      ctx.arc(bx, by, r, 0, 2 * Math.PI)
+      ctx.fillStyle = '#333'
+      ctx.fill()
+      ctx.fillStyle = '#fff'
+      ctx.font = `${r * 1.5}px sans-serif`
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.fillText(String(count), bx, by)
+    }
   }
 
   const polygonPoints = (sides: number) => {
@@ -253,8 +295,14 @@ export default function TopologyView({ selectedId, onSelect }: Props) {
         cooldownTicks={0}
         nodeLabel="id"
         linkLabel={(l) => (l as GraphLink).queue}
-        linkColor={() => '#66aaff'}
-        linkWidth={() => 2}
+        linkColor={(l) => {
+          const depth = queueDepths[(l as GraphLink).queue] ?? 0
+          return depth > 0 ? '#ff6666' : '#66aaff'
+        }}
+        linkWidth={(l) => {
+          const depth = queueDepths[(l as GraphLink).queue] ?? 0
+          return 2 + Math.log(depth + 1)
+        }}
         linkDirectionalArrowLength={4}
         linkCanvasObjectMode={() => 'after'}
         linkCanvasObject={(link, ctx, globalScale) => {
@@ -328,11 +376,25 @@ export default function TopologyView({ selectedId, onSelect }: Props) {
           )
         })}
         <div className="legend-item">
-          <svg width="12" height="12" className="legend-icon">
-            <line x1="1" y1="6" x2="9" y2="6" stroke="#66aaff" strokeWidth="2" />
-            <polygon points="9,4 11,6 9,8" fill="#66aaff" />
+          <svg width="30" height="6" className="legend-icon">
+            <line x1="1" y1="3" x2="29" y2="3" stroke="#66aaff" strokeWidth="2" />
           </svg>
-          <span>queue</span>
+          <span>queue (empty)</span>
+        </div>
+        <div className="legend-item">
+          <svg width="30" height="6" className="legend-icon">
+            <line x1="1" y1="3" x2="29" y2="3" stroke="#ff6666" strokeWidth="4" />
+          </svg>
+          <span>queue (deep)</span>
+        </div>
+        <div className="legend-item">
+          <div className="legend-icon node-badge">
+            <svg width="12" height="12">
+              <circle cx="6" cy="6" r="5" fill="#ffcc00" stroke="black" />
+            </svg>
+            <span className="badge">n</span>
+          </div>
+          <span>#queues</span>
         </div>
       </div>
     </div>

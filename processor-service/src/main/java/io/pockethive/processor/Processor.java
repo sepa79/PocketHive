@@ -6,6 +6,8 @@ import org.springframework.amqp.core.MessageBuilder;
 import org.springframework.amqp.core.MessageProperties;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.amqp.rabbit.listener.RabbitListenerEndpointRegistry;
+import org.springframework.amqp.rabbit.listener.MessageListenerContainer;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -43,6 +45,7 @@ public class Processor {
   private final String instanceId;
   private volatile String baseUrl;
   private volatile boolean enabled = true;
+  private final RabbitListenerEndpointRegistry registry;
   private final DistributionSummary sutLatency;
   private static final long STATUS_INTERVAL_MS = 5000L;
   private volatile long lastStatusTs = System.currentTimeMillis();
@@ -52,10 +55,12 @@ public class Processor {
   public Processor(RabbitTemplate rabbit,
                    MeterRegistry registry,
                    @Qualifier("instanceId") String instanceId,
-                   @Qualifier("baseUrl") String baseUrl){
+                   @Qualifier("baseUrl") String baseUrl,
+                   RabbitListenerEndpointRegistry listenerRegistry){
     this.rabbit = rabbit;
     this.instanceId = instanceId;
     this.baseUrl = baseUrl;
+    this.registry = listenerRegistry;
     this.sutLatency = DistributionSummary.builder("processor_request_time_ms").register(registry);
     this.messageCounter = Counter.builder("processor_messages_total")
         .tag("service", "processor")
@@ -65,7 +70,7 @@ public class Processor {
     try{ sendStatusFull(0); } catch(Exception ignore){}
   }
 
-  @RabbitListener(queues = "${ph.modQueue:moderated.queue}")
+  @RabbitListener(id = "workListener", queues = "${ph.modQueue:moderated.queue}")
   public void onModerated(Message message,
                           @Header(value = ObservabilityContextUtil.HEADER, required = false) String trace){
     Instant received = Instant.now();
@@ -129,7 +134,16 @@ public class Processor {
           }
           if("config-update".equals(type)){
             com.fasterxml.jackson.databind.JsonNode data = node.path("data");
-            if(data.has("enabled")) enabled = data.get("enabled").asBoolean(enabled);
+            if(data.has("enabled")){
+              boolean newEnabled = data.get("enabled").asBoolean(enabled);
+              if(newEnabled != enabled){
+                enabled = newEnabled;
+                MessageListenerContainer c = registry.getListenerContainer("workListener");
+                if(c != null){
+                  if(enabled) c.start(); else c.stop();
+                }
+              }
+            }
             if(data.has("baseUrl")) baseUrl = data.get("baseUrl").asText(baseUrl);
           }
         }catch(Exception e){ log.warn("control parse", e); }

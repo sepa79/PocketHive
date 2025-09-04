@@ -5,6 +5,8 @@ import org.springframework.amqp.core.Message;
 import org.springframework.amqp.core.MessageBuilder;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.amqp.rabbit.listener.RabbitListenerEndpointRegistry;
+import org.springframework.amqp.rabbit.listener.MessageListenerContainer;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -28,19 +30,22 @@ public class Moderator {
   private final RabbitTemplate rabbit;
   private final AtomicLong counter = new AtomicLong();
   private final String instanceId;
+  private final RabbitListenerEndpointRegistry registry;
   private volatile boolean enabled = true;
   private static final long STATUS_INTERVAL_MS = 5000L;
   private volatile long lastStatusTs = System.currentTimeMillis();
 
   public Moderator(RabbitTemplate rabbit,
-                   @Qualifier("instanceId") String instanceId) {
+                   @Qualifier("instanceId") String instanceId,
+                   RabbitListenerEndpointRegistry registry) {
     this.rabbit = rabbit;
     this.instanceId = instanceId;
+    this.registry = registry;
     try{ sendStatusFull(0); } catch(Exception ignore){}
   }
 
   // Consume RAW AMQP message to avoid converter issues
-  @RabbitListener(queues = "${ph.genQueue:gen.queue}")
+  @RabbitListener(id = "workListener", queues = "${ph.genQueue:gen.queue}")
   public void onGenerated(Message message,
                           @Header(value = "x-ph-service", required = false) String service,
                           @Header(value = ObservabilityContextUtil.HEADER, required = false) String trace) {
@@ -94,7 +99,16 @@ public class Moderator {
           }
           if("config-update".equals(type)){
             com.fasterxml.jackson.databind.JsonNode data = node.path("data");
-            if(data.has("enabled")) enabled = data.get("enabled").asBoolean(enabled);
+            if(data.has("enabled")){
+              boolean newEnabled = data.get("enabled").asBoolean(enabled);
+              if(newEnabled != enabled){
+                enabled = newEnabled;
+                MessageListenerContainer c = registry.getListenerContainer("workListener");
+                if(c != null){
+                  if(enabled) c.start(); else c.stop();
+                }
+              }
+            }
           }
         }catch(Exception e){ log.warn("control parse", e); }
       }
