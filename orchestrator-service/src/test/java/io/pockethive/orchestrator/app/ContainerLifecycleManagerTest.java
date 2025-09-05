@@ -49,9 +49,9 @@ class ContainerLifecycleManagerTest {
         manager.stopSwarm(swarm.getId());
 
         verify(docker).stopAndRemoveContainer("cid");
-        verify(amqp).deleteQueue("ph.gen." + swarm.getId());
-        verify(amqp).deleteQueue("ph.mod." + swarm.getId());
-        verify(amqp).deleteQueue("ph.final." + swarm.getId());
+        verify(amqp).deleteQueue("ph." + swarm.getId() + ".gen");
+        verify(amqp).deleteQueue("ph." + swarm.getId() + ".mod");
+        verify(amqp).deleteQueue("ph." + swarm.getId() + ".final");
         assertEquals(SwarmStatus.STOPPED, swarm.getStatus());
     }
 
@@ -70,11 +70,11 @@ class ContainerLifecycleManagerTest {
 
         verify(docker).stopAndRemoveContainer("c1");
         verify(docker).stopAndRemoveContainer("c2");
-        verify(amqp).deleteQueue("ph.gen.sw1");
-        verify(amqp).deleteQueue("ph.mod.sw1");
-        verify(amqp).deleteQueue("ph.final.sw1");
-        verify(amqp).deleteQueue("ph.gen.sw2");
-        verify(amqp).deleteQueue("ph.mod.sw2");
-        verify(amqp).deleteQueue("ph.final.sw2");
+        verify(amqp).deleteQueue("ph.sw1.gen");
+        verify(amqp).deleteQueue("ph.sw1.mod");
+        verify(amqp).deleteQueue("ph.sw1.final");
+        verify(amqp).deleteQueue("ph.sw2.gen");
+        verify(amqp).deleteQueue("ph.sw2.mod");
+        verify(amqp).deleteQueue("ph.sw2.final");
     }
 }

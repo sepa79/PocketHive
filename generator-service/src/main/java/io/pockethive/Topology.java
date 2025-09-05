@@ -1,11 +1,11 @@
 package io.pockethive;
 
 public class Topology {
-  // Traffic exchange (hive)
-  public static final String EXCHANGE = cfg("PH_TRAFFIC_EXCHANGE", "ph.hive");
   public static final String SWARM_ID = cfg("PH_SWARM_ID", "default");
-  public static final String GEN_QUEUE = cfg("PH_GEN_QUEUE", "ph.gen." + SWARM_ID);
-  public static final String MOD_QUEUE = cfg("PH_MOD_QUEUE", "ph.mod." + SWARM_ID);
+  // Traffic exchange (hive)
+  public static final String EXCHANGE = cfg("PH_TRAFFIC_EXCHANGE", "ph." + SWARM_ID + ".hive");
+  public static final String GEN_QUEUE = cfg("PH_GEN_QUEUE", "ph." + SWARM_ID + ".gen");
+  public static final String MOD_QUEUE = cfg("PH_MOD_QUEUE", "ph." + SWARM_ID + ".mod");
   // Control queue (shared control plane)
   public static final String CONTROL_QUEUE = cfg("PH_CONTROL_QUEUE", "ph.control");
   // Control exchange (topic)

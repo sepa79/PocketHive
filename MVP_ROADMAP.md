@@ -87,7 +87,7 @@
 **Goal**: Run multiple isolated swarms simultaneously
 
 #### 2.1 Queue Isolation
-- [ ] Implement swarm-specific queue naming: `ph.gen.<swarmId>`
+- [ ] Implement swarm-specific queue naming: `ph.<swarmId>.gen`
 - [ ] Update all services to use swarm-aware queue bindings
 - [ ] Add queue cleanup on swarm destruction
 

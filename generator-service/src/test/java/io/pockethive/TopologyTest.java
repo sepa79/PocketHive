@@ -27,8 +27,8 @@ class TopologyTest {
     void genQueueIncludesSwarmId() throws Exception {
         String q1 = loadGenQueue("swarmA");
         String q2 = loadGenQueue("swarmB");
-        assertEquals("ph.gen.swarmA", q1);
-        assertEquals("ph.gen.swarmB", q2);
+        assertEquals("ph.swarmA.gen", q1);
+        assertEquals("ph.swarmB.gen", q2);
         assertNotEquals(q1, q2);
     }
 }

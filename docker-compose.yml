@@ -38,7 +38,7 @@ services:
       dockerfile: generator-service/Dockerfile
     environment:
       RABBITMQ_HOST: rabbitmq
-      PH_TRAFFIC_EXCHANGE: ph.hive
+      PH_TRAFFIC_EXCHANGE: ph.swarm1.hive
       PH_CONTROL_QUEUE: ph.control
       PH_SWARM_ID: swarm1
     depends_on:
@@ -51,7 +51,7 @@ services:
       dockerfile: moderator-service/Dockerfile
     environment:
       RABBITMQ_HOST: rabbitmq
-      PH_TRAFFIC_EXCHANGE: ph.hive
+      PH_TRAFFIC_EXCHANGE: ph.swarm1.hive
       PH_CONTROL_QUEUE: ph.control
       PH_SWARM_ID: swarm1
     depends_on:
@@ -64,7 +64,7 @@ services:
       dockerfile: processor-service/Dockerfile
     environment:
       RABBITMQ_HOST: rabbitmq
-      PH_TRAFFIC_EXCHANGE: ph.hive
+      PH_TRAFFIC_EXCHANGE: ph.swarm1.hive
       PH_CONTROL_QUEUE: ph.control
       PH_SWARM_ID: swarm1
     depends_on:
@@ -77,7 +77,7 @@ services:
       dockerfile: postprocessor-service/Dockerfile
     environment:
       RABBITMQ_HOST: rabbitmq
-      PH_TRAFFIC_EXCHANGE: ph.hive
+      PH_TRAFFIC_EXCHANGE: ph.swarm1.hive
       PH_CONTROL_QUEUE: ph.control
       PH_SWARM_ID: swarm1
     depends_on:
@@ -90,7 +90,7 @@ services:
       dockerfile: trigger-service/Dockerfile
     environment:
       RABBITMQ_HOST: rabbitmq
-      PH_TRAFFIC_EXCHANGE: ph.hive
+      PH_TRAFFIC_EXCHANGE: ph.swarm1.hive
       PH_CONTROL_QUEUE: ph.control
       PH_SWARM_ID: swarm1
     depends_on:

@@ -37,9 +37,9 @@ public class ContainerLifecycleManager {
     public void stopSwarm(String swarmId) {
         registry.find(swarmId).ifPresent(swarm -> {
             docker.stopAndRemoveContainer(swarm.getContainerId());
-            amqp.deleteQueue("ph.gen." + swarmId);
-            amqp.deleteQueue("ph.mod." + swarmId);
-            amqp.deleteQueue("ph.final." + swarmId);
+            amqp.deleteQueue("ph." + swarmId + ".gen");
+            amqp.deleteQueue("ph." + swarmId + ".mod");
+            amqp.deleteQueue("ph." + swarmId + ".final");
             swarm.setStatus(SwarmStatus.STOPPED);
         });
     }
