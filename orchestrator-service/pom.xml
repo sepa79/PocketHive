@@ -12,6 +12,7 @@
     <spring.boot.version>3.3.2</spring.boot.version>
     <docker-java.version>3.3.0</docker-java.version>
     <archunit.version>1.2.1</archunit.version>
+    <httpcomponents.version>5.0.3</httpcomponents.version>
   </properties>
   <dependencyManagement>
     <dependencies>
@@ -76,6 +77,11 @@
       <groupId>com.github.docker-java</groupId>
       <artifactId>docker-java-transport-httpclient5</artifactId>
       <version>${docker-java.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.httpcomponents.core5</groupId>
+      <artifactId>httpcore5-h2</artifactId>
+      <version>${httpcomponents.version}</version>
     </dependency>
     <dependency>
       <groupId>org.springframework.boot</groupId>
