@@ -24,4 +24,6 @@ RUN mvn -q -B -DskipTests -pl log-aggregator-service -am package
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
 COPY --from=build /app/log-aggregator-service/target/*.jar app.jar
-ENTRYPOINT ["java","-jar","/app/app.jar"]
+COPY log-aggregator-service/entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+ENTRYPOINT ["/app/entrypoint.sh"]

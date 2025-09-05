@@ -18,6 +18,8 @@ The service batches incoming messages and sends them to Loki with labels for `se
 
 The `ph.logs` exchange and `ph.logs.agg` queue are provisioned separately (see `rabbitmq/definitions.json`); the aggregator does not create them at runtime.
 
+At startup the container polls RabbitMQ's management API until the `PH_LOGS_QUEUE` exists, ensuring the broker has loaded its definitions before the application begins consuming messages.
+
 ## Running
 
 Add the service to your Compose file and provide the RabbitMQ and Loki connection settings.
