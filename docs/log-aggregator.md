@@ -20,6 +20,8 @@ The `ph.logs` exchange and `ph.logs.agg` queue are provisioned separately (see `
 
 At startup the container polls RabbitMQ's management API until the `PH_LOGS_QUEUE` exists, ensuring the broker has loaded its definitions before the application begins consuming messages.
 
+When running under `docker-compose`, the service's health check now allows up to five minutes for this startup phase so dependent containers only begin once the aggregator is fully ready.
+
 ## Running
 
 Add the service to your Compose file and provide the RabbitMQ and Loki connection settings.

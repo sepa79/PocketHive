@@ -13,8 +13,8 @@ services:
       test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
       interval: 5s
       timeout: 10s
-      retries: 12
-      start_period: 5s
+      retries: 24
+      start_period: 30s
 
   orchestrator:
     build:
@@ -119,8 +119,8 @@ services:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/actuator/health | grep -q UP"]
       interval: 10s
       timeout: 5s
-      retries: 6
-      start_period: 5s
+      retries: 30
+      start_period: 30s
 
   ui:
     build:
