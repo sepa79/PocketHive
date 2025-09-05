@@ -28,6 +28,8 @@ services:
     depends_on:
       rabbitmq:
         condition: service_healthy
+      log-aggregator:
+        condition: service_healthy
 
   generator:
     build:
@@ -41,7 +43,7 @@ services:
       PH_CONTROL_QUEUE: ph.control
     depends_on:
       log-aggregator:
-        condition: service_started
+        condition: service_healthy
 
   moderator:
     build:
@@ -55,7 +57,7 @@ services:
       PH_CONTROL_QUEUE: ph.control
     depends_on:
       log-aggregator:
-        condition: service_started
+        condition: service_healthy
 
   processor:
     build:
@@ -69,7 +71,7 @@ services:
       PH_CONTROL_QUEUE: ph.control
     depends_on:
       log-aggregator:
-        condition: service_started
+        condition: service_healthy
 
   postprocessor:
     build:
@@ -82,7 +84,7 @@ services:
       PH_CONTROL_QUEUE: ph.control
     depends_on:
       log-aggregator:
-        condition: service_started
+        condition: service_healthy
 
   trigger:
     build:
@@ -97,7 +99,7 @@ services:
       PH_CONTROL_QUEUE: ph.control
     depends_on:
       log-aggregator:
-        condition: service_started
+        condition: service_healthy
 
   log-aggregator:
     build:
@@ -113,6 +115,12 @@ services:
         condition: service_healthy
       loki:
         condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/actuator/health | grep -q UP"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 5s
 
   ui:
     build:
