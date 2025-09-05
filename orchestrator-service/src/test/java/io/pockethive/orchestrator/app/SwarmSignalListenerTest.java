@@ -28,4 +28,15 @@ class SwarmSignalListenerTest {
         verify(rabbit).convertAndSend(eq(io.pockethive.Topology.CONTROL_EXCHANGE),
                 eq("ev.status-full.orchestrator.inst"), any(Object.class));
     }
+
+    @Test
+    void logsErrorWhenStartFails() {
+        when(lifecycle.startSwarm("sw1", "img")).thenThrow(new RuntimeException("boom"));
+        SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst");
+
+        listener.handle("img", "sig.swarm-create.sw1");
+
+        verify(lifecycle).startSwarm("sw1", "img");
+        verifyNoInteractions(rabbit);
+    }
 }

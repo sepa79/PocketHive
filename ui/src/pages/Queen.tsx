@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { startSwarm } from '../lib/stompClient'
 
-export default function Orchestrator() {
+export default function Queen() {
   const [swarmId, setSwarmId] = useState('')
   const [image, setImage] = useState('')
 
@@ -15,7 +15,7 @@ export default function Orchestrator() {
 
   return (
     <div className="card mt-6 p-4 h-[calc(100vh-112px)]">
-      <h2 className="kpi-title mb-2">Orchestrator</h2>
+      <h2 className="kpi-title mb-2">Queen</h2>
       <form onSubmit={handleSubmit} className="space-y-2">
         <div>
           <label htmlFor="swarmId" className="block text-sm mb-1">

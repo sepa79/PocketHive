@@ -27,6 +27,15 @@ export default function Layout() {
         <img className="logo" src="/logo.svg" alt="PocketHive Logo" />
         <nav className="nav-tabs">
           <NavLink
+            to="/queen"
+            className={({ isActive }) =>
+              `tab-btn flex items-center${isActive ? ' tab-active' : ''}`
+            }
+          >
+            <Crown strokeWidth={1.5} className="tab-icon text-white/80" />
+            Queen
+          </NavLink>
+          <NavLink
             to="/hive"
             className={({ isActive }) =>
               `tab-btn flex items-center${isActive ? ' tab-active' : ''}`
@@ -43,15 +52,6 @@ export default function Layout() {
           >
             <Radio strokeWidth={1.5} className="tab-icon text-white/80" />
             Buzz
-          </NavLink>
-          <NavLink
-            to="/orchestrator"
-            className={({ isActive }) =>
-              `tab-btn flex items-center${isActive ? ' tab-active' : ''}`
-            }
-          >
-            <Crown strokeWidth={1.5} className="tab-icon text-white/80" />
-            Orchestrator
           </NavLink>
           <NavLink
             to="/nectar"
