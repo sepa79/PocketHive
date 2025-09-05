@@ -1,5 +1,5 @@
 import { NavLink, Outlet } from 'react-router-dom'
-import { Hexagon, Radio, Droplet } from 'lucide-react'
+import { Hexagon, Radio, Droplet, Crown } from 'lucide-react'
 import MonolithIcon from '../icons/Monolith'
 import Health from '../components/Health'
 import Connectivity from '../components/Connectivity'
@@ -26,6 +26,15 @@ export default function Layout() {
       <header className="flex items-center gap-4 p-4 sticky top-0 z-10 backdrop-blur border-b border-white/10 bg-[#080a0e]/75">
         <img className="logo" src="/logo.svg" alt="PocketHive Logo" />
         <nav className="nav-tabs">
+          <NavLink
+            to="/queen"
+            className={({ isActive }) =>
+              `tab-btn flex items-center${isActive ? ' tab-active' : ''}`
+            }
+          >
+            <Crown strokeWidth={1.5} className="tab-icon text-white/80" />
+            Queen
+          </NavLink>
           <NavLink
             to="/hive"
             className={({ isActive }) =>

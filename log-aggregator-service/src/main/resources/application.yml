@@ -5,11 +5,15 @@ spring:
     port: ${RABBITMQ_PORT:5672}
     username: ${RABBITMQ_DEFAULT_USER:guest}
     password: ${RABBITMQ_DEFAULT_PASS:guest}
-management.endpoints.web.exposure.include: health,info
+    listener:
+      simple:
+        auto-declare: false
+        missing-queues-fatal: true
+management.endpoints.web.exposure.include: health,info,prometheus
 logging:
   pattern.level: "%5p [%X{traceId}]"
 ph:
-  logsQueue: ${PH_LOGS_QUEUE:logs.agg}
+  logsQueue: ${PH_LOGS_QUEUE:ph.logs.agg}
   loki:
     url: ${PH_LOKI_URL:http://loki:3100}
     maxRetries: ${PH_LOKI_MAX_RETRIES:3}

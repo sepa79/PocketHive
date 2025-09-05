@@ -20,9 +20,14 @@ public final class ObservabilityContextUtil {
     }
 
     public static ObservabilityContext init(String service, String instance) {
+        return init(service, instance, null);
+    }
+
+    public static ObservabilityContext init(String service, String instance, String swarmId) {
         ObservabilityContext ctx = new ObservabilityContext();
         ctx.setTraceId(UUID.randomUUID().toString());
         ctx.setHops(new ArrayList<>());
+        ctx.setSwarmId(swarmId);
         appendHop(ctx, service, instance, Instant.now(), Instant.now());
         return ctx;
     }
@@ -51,8 +56,13 @@ public final class ObservabilityContextUtil {
     }
 
     public static void populateMdc(ObservabilityContext ctx) {
-        if (ctx != null && ctx.getTraceId() != null) {
-            MDC.put("traceId", ctx.getTraceId());
+        if (ctx != null) {
+            if (ctx.getTraceId() != null) {
+                MDC.put("traceId", ctx.getTraceId());
+            }
+            if (ctx.getSwarmId() != null) {
+                MDC.put("swarmId", ctx.getSwarmId());
+            }
         }
     }
 }

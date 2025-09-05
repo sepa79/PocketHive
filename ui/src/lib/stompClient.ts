@@ -201,3 +201,17 @@ export async function requestStatusFull(component: Component) {
   })
 }
 
+export async function startSwarm(id: string, image: string) {
+  return new Promise<void>((resolve, reject) => {
+    if (!client || !client.active) {
+      reject(new Error('STOMP client not connected'))
+      return
+    }
+    client.publish({
+      destination: `/exchange/ph.control/sig.swarm-create.${id}`,
+      body: image,
+    })
+    resolve()
+  })
+}
+

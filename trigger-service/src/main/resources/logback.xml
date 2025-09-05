@@ -16,7 +16,7 @@
         <username>${RABBITMQ_DEFAULT_USER:-guest}</username>
         <password>${RABBITMQ_DEFAULT_PASS:-guest}</password>
         <virtualHost>${RABBITMQ_VHOST:-/}</virtualHost>
-        <exchangeName>${LOGS_EXCHANGE:-logs.exchange}</exchangeName>
+        <exchangeName>${PH_LOGS_EXCHANGE:-ph.logs}</exchangeName>
         <encoder class="net.logstash.logback.encoder.LogstashEncoder"/>
       </appender>
 

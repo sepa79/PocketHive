@@ -10,11 +10,26 @@ services:
       - "15672:15672"
       - "15674:15674"
     healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 5672"]
       interval: 5s
       timeout: 10s
-      retries: 12
-      start_period: 5s
+      retries: 24
+      start_period: 30s
+
+  orchestrator:
+    build:
+      context: .
+      dockerfile: orchestrator-service/Dockerfile
+    environment:
+      RABBITMQ_HOST: rabbitmq
+      PH_CONTROL_EXCHANGE: ph.control
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      log-aggregator:
+        condition: service_healthy
 
   generator:
     build:
@@ -28,7 +43,7 @@ services:
       PH_CONTROL_QUEUE: ph.control
     depends_on:
       log-aggregator:
-        condition: service_started
+        condition: service_healthy
 
   moderator:
     build:
@@ -42,7 +57,7 @@ services:
       PH_CONTROL_QUEUE: ph.control
     depends_on:
       log-aggregator:
-        condition: service_started
+        condition: service_healthy
 
   processor:
     build:
@@ -56,7 +71,7 @@ services:
       PH_CONTROL_QUEUE: ph.control
     depends_on:
       log-aggregator:
-        condition: service_started
+        condition: service_healthy
 
   postprocessor:
     build:
@@ -69,7 +84,7 @@ services:
       PH_CONTROL_QUEUE: ph.control
     depends_on:
       log-aggregator:
-        condition: service_started
+        condition: service_healthy
 
   trigger:
     build:
@@ -84,7 +99,7 @@ services:
       PH_CONTROL_QUEUE: ph.control
     depends_on:
       log-aggregator:
-        condition: service_started
+        condition: service_healthy
 
   log-aggregator:
     build:
@@ -92,14 +107,22 @@ services:
       dockerfile: log-aggregator-service/Dockerfile
     environment:
       RABBITMQ_HOST: rabbitmq
-      PH_LOGS_EXCHANGE: logs.exchange
-      PH_LOGS_QUEUE: logs.agg
+      PH_LOGS_EXCHANGE: ph.logs
+      PH_LOGS_QUEUE: ph.logs.agg
       PH_LOKI_URL: http://loki:3100
     depends_on:
       rabbitmq:
-        condition: service_healthy
+        condition: service_started
       loki:
         condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/actuator/health | grep -q UP"]
+      interval: 5s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    ports:
+      - "1080:8080"
 
   ui:
     build:
@@ -120,8 +143,6 @@ services:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
     ports:
       - "9090:9090"
-    depends_on:
-      - postprocessor
 
   grafana:
     image: grafana/grafana

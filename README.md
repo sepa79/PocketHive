@@ -4,7 +4,12 @@
   <img alt="PocketHive" src="ui/assets/logo.svg" width="100%" />
 </p>
 
-**PocketHive** is a portable transaction swarm: compact, composable components that let you generate, moderate, process, and test workloads with clear boundaries and durable queues.
+**PocketHive** is a portable transaction swarm: compact, composable components that let you generate, moderate, process, and test workloads with clear boundaries and durable queues. A queen (orchestrator) service manages swarm containers via Docker and communicates with all services over AMQP. Swarm templates in `orchestrator-service/src/main/resources/templates` define container images to launch.
+
+### Implementation Status
+
+- **Completed**: Phase 1 – Orchestrator Foundation (dynamic swarm creation, control-plane hooks, Docker integration)
+- **In Progress**: Phase 2 – Multi-Swarm Support
 
 ```mermaid
 flowchart LR
@@ -22,14 +27,14 @@ flowchart LR
   %% Exchanges
   Xhive((exchange<br/>ph.hive))
   Xctrl((exchange<br/>ph.control))
-  Xlogs((exchange<br/>logs.exchange))
+  Xlogs((exchange<br/>ph.logs))
 
   %% Queues
   Qgen[(queue<br/>ph.gen)]
   Qmod[(queue<br/>ph.mod)]
   Qfinal[(queue<br/>ph.final)]
   Qctrl[(queue<br/>ph.control)]
-  Qlogs[(queue<br/>logs)]
+  Qlogs[(queue<br/>ph.logs.agg)]
 
   %% Bindings
   Xhive -->|bind rk=ph.gen| Qgen
@@ -62,12 +67,12 @@ flowchart LR
   Qctrl -.->|consume| UI
 
   %% Logs: all components publish; LA consumes and ships to Loki
-  G  -.->|publish logs.exchange| Xlogs
-  M  -.->|publish logs.exchange| Xlogs
-  P  -.->|publish logs.exchange| Xlogs
-  PP -.->|publish logs.exchange| Xlogs
-  UI -.->|publish logs.exchange| Xlogs
-  T  -.->|publish logs.exchange| Xlogs
+  G  -.->|publish ph.logs| Xlogs
+  M  -.->|publish ph.logs| Xlogs
+  P  -.->|publish ph.logs| Xlogs
+  PP -.->|publish ph.logs| Xlogs
+  UI -.->|publish ph.logs| Xlogs
+  T  -.->|publish ph.logs| Xlogs
 
   Qlogs -.->|consume| LA
   LA -->|push| LOKI
@@ -105,7 +110,7 @@ The UI is built with React 18 + Vite and resides in `/ui`.
 - UI connects to RabbitMQ via same‑origin Web‑STOMP proxy at `/ws`.
 - Services publish/consume via the `ph.hive` exchange and `ph.gen`/`ph.mod` queues.
 - Metrics/status flow back on the `ph.control` exchange, with each service auto-declaring a durable `ph.control.<role>.<instance>` queue for broadcasts and direct signals.
-- Logs emitted by the services are routed to `logs.exchange` and consumed by the log‑aggregator, which batches them to Loki.
+- Logs emitted by the services are routed to `ph.logs` and consumed by the log‑aggregator, which batches them to Loki.
 - Services propagate an `x-ph-trace` header to record trace IDs and hop timing across the flow.
 
 ### Control-plane Events & Signals
@@ -141,6 +146,7 @@ See also: Control Bindings page (Menu → Control Bindings) and `docs/spec/async
 - `rabbitmq` (with Web-STOMP): 5672 (AMQP), 15672 (Mgmt UI), 15674 (Web-STOMP, internal only)
 - `ui` (nginx static site): 8088 → serves UI, proxies WebSocket at `/ws` to RabbitMQ
 - `generator`, `moderator`, `processor`, `postprocessor`, `trigger`: Spring Boot services using AMQP
+- Each service waits for RabbitMQ to report healthy before starting
 - `prometheus` (metrics store): 9090
 - `grafana` (dashboard): 3000 (admin / admin)
 - `loki` (log store): 3100
@@ -239,16 +245,18 @@ Manual checks:
   - Connect/Disconnect clicks, edits of URL/username/password (password length only)
   - UI health transitions based on `/healthz`
 - Hive panel: lists live components and queue stats and includes an interactive topology tab with type-based shapes and legend.
+- Queen panel: start new swarms by providing an ID and choosing a template.
 - HAL eyes: status indicators for UI and WS (green slow pulse = healthy/connected; blue modem pulse = connecting; red fast pulse = failed/closed/idle).
 
 ## UI Controls
 
-- **View tabs** — switch between Hive, Buzz and Nectar panels.
+- **View tabs** — switch between Queen, Hive, Buzz and Nectar panels.
 - **Menu (☰)** — links to README, Buzz bindings, changelog and API docs.
 - **WebSocket eye** — click to connect or disconnect from RabbitMQ.
 - **Monolith button** — broadcasts a global `status-request` signal; the publish shows in the OUT log.
 - **Buzz view** — IN, OUT and Other logs with a Config tab and Topic Sniffer; subscriptions are editable.
 - **Hive view** — searchable component list with start/stop toggles, a topology tab for draggable nodes, queue tooltips, and a legend of component shapes; selecting an item opens a detail drawer showing enabled state with editable settings and a confirmable config-update action.
+- **Queen view** — form for launching swarms by ID and template.
 - **Nectar view** — metric dropdown (TPS, latency, hops) and points input to adjust chart history.
 
 ## Troubleshooting

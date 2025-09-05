@@ -34,8 +34,8 @@
 ### Target MVP Architecture
 ```
                     ┌─────────────────────────────────────────────────┐
-                    │                 QueenBee                        │
-                    │           (Swarm Orchestrator)                  │
+                    │               Orchestrator                     │
+                    │           (Swarm Orchestrator)                 │
                     └─────────────────┬───────────────────────────────┘
                                       │
         ┌─────────────────────────────┼─────────────────────────────────┐
@@ -62,26 +62,26 @@
 
 ## Implementation Phases
 
-### Phase 1: QueenBee Foundation (Week 1-2)
+### Phase 1: Orchestrator Foundation (Week 1-2)
 **Goal**: Enable dynamic swarm creation and management
 
-#### 1.1 QueenBee Service Creation
-- [ ] Create `queenbee-service` module
-- [ ] Add Docker API client dependency
-- [ ] Implement basic container lifecycle management
-- [ ] Add swarm registry and status tracking
+#### 1.1 Orchestrator Service Creation
+- [x] Create `orchestrator-service` module
+- [x] Add Docker API client dependency
+- [x] Implement basic container lifecycle management
+- [x] Add swarm registry and status tracking
 
 #### 1.2 Control Plane Extensions
-- [ ] Add swarm-specific routing keys: `sig.swarm-create.<swarmId>`
-- [ ] Extend status events with `swarmId` field
-- [ ] Update observability module with swarm context
+- [x] Add swarm-specific routing keys: `sig.swarm-create.<swarmId>`
+- [x] Extend status events with `swarmId` field
+- [x] Update observability module with swarm context
 
 #### 1.3 Docker Integration
-- [ ] Add QueenBee to docker-compose.yml
-- [ ] Mount Docker socket for container management
-- [ ] Create swarm template configurations
+- [x] Add Orchestrator to docker-compose.yml
+- [x] Mount Docker socket for container management
+- [x] Create swarm template configurations
 
-**Deliverable**: Single REST swarm can be created dynamically via QueenBee
+**Deliverable**: Single REST swarm can be created dynamically via the orchestrator
 
 ### Phase 2: Multi-Swarm Support (Week 3-4)
 **Goal**: Run multiple isolated swarms simultaneously
@@ -230,18 +230,15 @@ Timeline View:
 ### New Services Architecture
 
 ```
-queenbee-service/
-├── src/main/java/io/pockethive/queenbee/
-│   ├── QueenBeeApplication.java
-│   ├── controller/
-│   │   └── SwarmController.java
-│   ├── service/
-│   │   ├── SwarmOrchestrator.java
-│   │   ├── DockerService.java
+orchestrator-service/
+├── src/main/java/io/pockethive/orchestrator/
+│   ├── OrchestratorApplication.java
+│   ├── app/
+│   │   └── ContainerLifecycleManager.java
+│   ├── domain/
 │   │   └── SwarmRegistry.java
-│   └── model/
-│       ├── SwarmTemplate.java
-│       └── SwarmStatus.java
+│   └── infra/docker/
+│       └── DockerContainerClient.java
 ├── Dockerfile
 └── pom.xml
 
@@ -264,8 +261,8 @@ scenario-manager-service/
 
 ```yaml
 # Additional services for MVP
-queenbee:
-  build: ./queenbee-service
+orchestrator:
+  build: ./orchestrator-service
   volumes:
     - /var/run/docker.sock:/var/run/docker.sock
   environment:
@@ -314,9 +311,9 @@ ui/src/pages/
 ## Success Criteria
 
 ### Phase 1 Success
-- [ ] QueenBee can create/destroy single REST swarm
+- [x] Orchestrator can create/destroy single REST swarm
 - [ ] Swarm appears in UI with unique identifier
-- [ ] Basic swarm lifecycle management working
+- [x] Basic swarm lifecycle management working
 
 ### Phase 2 Success
 - [ ] 3+ REST swarms running simultaneously
@@ -376,13 +373,13 @@ ui/src/pages/
 ## Next Steps
 
 1. **Immediate (This Week)**
-   - Create QueenBee service skeleton
-   - Set up development environment for new services
-   - Begin Phase 1 implementation
+   - [x] Create orchestrator service skeleton
+   - [x] Set up development environment for new services
+   - [x] Begin Phase 1 implementation
 
 2. **Short Term (Next 2 Weeks)**
-   - Complete QueenBee basic functionality
-   - Test dynamic swarm creation
+   - [x] Complete orchestrator basic functionality
+   - [x] Test dynamic swarm creation
    - Begin multi-swarm support
 
 3. **Medium Term (Next Month)**

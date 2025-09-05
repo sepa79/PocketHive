@@ -37,8 +37,34 @@
       "auto_delete": false,
       "internal": false,
       "arguments": {}
+    },
+    {
+      "name": "ph.logs",
+      "vhost": "/",
+      "type": "topic",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
     }
   ],
-  "queues": [],
-  "bindings": []
+  "queues": [
+    {
+      "name": "ph.logs.agg",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {}
+    }
+  ],
+  "bindings": [
+    {
+      "source": "ph.logs",
+      "vhost": "/",
+      "destination": "ph.logs.agg",
+      "destination_type": "queue",
+      "routing_key": "#",
+      "arguments": {}
+    }
+  ]
 }

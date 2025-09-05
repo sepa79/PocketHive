@@ -1,0 +1,11 @@
+spring:
+  application.name: orchestrator-service
+  rabbitmq:
+    host: ${RABBITMQ_HOST:rabbitmq}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_DEFAULT_USER:guest}
+    password: ${RABBITMQ_DEFAULT_PASS:guest}
+management.endpoints.web.exposure.include: health,info,prometheus
+
+logging:
+  pattern.level: "%5p [%X{traceId}]"

@@ -51,6 +51,11 @@ public class StatusEnvelopeBuilder {
         return this;
     }
 
+    public StatusEnvelopeBuilder swarmId(String swarmId) {
+        root.put("swarmId", swarmId);
+        return this;
+    }
+
     /**
      * Flag indicating whether the component is currently enabled.
      */

@@ -12,10 +12,11 @@
   <modules>
     <module>observability</module>
     <module>generator-service</module>
-    <module>moderator-service</module>
-    <module>processor-service</module>
-    <module>postprocessor-service</module>
     <module>log-aggregator-service</module>
+    <module>moderator-service</module>
+    <module>orchestrator-service</module>
+    <module>postprocessor-service</module>
+    <module>processor-service</module>
     <module>trigger-service</module>
   </modules>
 </project>

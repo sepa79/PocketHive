@@ -6,6 +6,7 @@ import java.util.List;
 public class ObservabilityContext {
     private String traceId;
     private List<Hop> hops = new ArrayList<>();
+    private String swarmId;
 
     public ObservabilityContext() {
     }
@@ -29,5 +30,13 @@ public class ObservabilityContext {
 
     public void setHops(List<Hop> hops) {
         this.hops = hops;
+    }
+
+    public String getSwarmId() {
+        return swarmId;
+    }
+
+    public void setSwarmId(String swarmId) {
+        this.swarmId = swarmId;
     }
 }
