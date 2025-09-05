@@ -11,7 +11,7 @@ log() {
 }
 
 log "waiting for RabbitMQ queue '$QUEUE' on '$HOST'"
-while ! wget -qO- --user="$USER" --password="$PASS" "http://$HOST:15672/api/queues/%2f/$QUEUE" >/dev/null 2>&1; do
+while ! curl -fsS -u "$USER:$PASS" "http://$HOST:15672/api/queues/%2f/$QUEUE" >/dev/null; do
   log "queue not found, retrying in 5s"
   sleep 5
 done
