@@ -146,6 +146,7 @@ See also: Control Bindings page (Menu → Control Bindings) and `docs/spec/async
 - `rabbitmq` (with Web-STOMP): 5672 (AMQP), 15672 (Mgmt UI), 15674 (Web-STOMP, internal only)
 - `ui` (nginx static site): 8088 → serves UI, proxies WebSocket at `/ws` to RabbitMQ
 - `generator`, `moderator`, `processor`, `postprocessor`, `trigger`: Spring Boot services using AMQP
+- Each service waits for RabbitMQ to report healthy before starting
 - `prometheus` (metrics store): 9090
 - `grafana` (dashboard): 3000 (admin / admin)
 - `loki` (log store): 3100

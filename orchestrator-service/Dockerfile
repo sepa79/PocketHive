@@ -25,5 +25,8 @@ RUN mvn -q -B -DskipTests -pl orchestrator-service -am package
 # ---- Runtime ----
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
+RUN apk add --no-cache curl
 COPY --from=build /app/orchestrator-service/target/*.jar app.jar
-ENTRYPOINT ["java","-jar","/app/app.jar"]
+COPY orchestrator-service/entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+ENTRYPOINT ["/app/entrypoint.sh"]

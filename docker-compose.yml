@@ -28,8 +28,6 @@ services:
     depends_on:
       rabbitmq:
         condition: service_healthy
-      log-aggregator:
-        condition: service_healthy
 
   generator:
     build:
@@ -42,7 +40,7 @@ services:
       PH_MOD_QUEUE: ph.mod
       PH_CONTROL_QUEUE: ph.control
     depends_on:
-      log-aggregator:
+      rabbitmq:
         condition: service_healthy
 
   moderator:
@@ -56,7 +54,7 @@ services:
       PH_MOD_QUEUE: ph.mod
       PH_CONTROL_QUEUE: ph.control
     depends_on:
-      log-aggregator:
+      rabbitmq:
         condition: service_healthy
 
   processor:
@@ -70,7 +68,7 @@ services:
       PH_MOD_QUEUE: ph.mod
       PH_CONTROL_QUEUE: ph.control
     depends_on:
-      log-aggregator:
+      rabbitmq:
         condition: service_healthy
 
   postprocessor:
@@ -83,7 +81,7 @@ services:
       PH_FINAL_QUEUE: ph.final
       PH_CONTROL_QUEUE: ph.control
     depends_on:
-      log-aggregator:
+      rabbitmq:
         condition: service_healthy
 
   trigger:
@@ -98,7 +96,7 @@ services:
       PH_FINAL_QUEUE: ph.final
       PH_CONTROL_QUEUE: ph.control
     depends_on:
-      log-aggregator:
+      rabbitmq:
         condition: service_healthy
 
   log-aggregator:
