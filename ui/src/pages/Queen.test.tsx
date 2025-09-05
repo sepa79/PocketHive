@@ -13,7 +13,7 @@ vi.mock('../lib/stompClient', () => ({
 test('starts swarm on submit', () => {
   render(<Queen />)
   fireEvent.change(screen.getByLabelText(/swarm id/i), { target: { value: 'sw1' } })
-  fireEvent.change(screen.getByLabelText(/image/i), { target: { value: 'img:latest' } })
+  fireEvent.change(screen.getByLabelText(/template/i), { target: { value: 'rest' } })
   fireEvent.click(screen.getByText('Start'))
-  expect(startSwarm).toHaveBeenCalledWith('sw1', 'img:latest')
+  expect(startSwarm).toHaveBeenCalledWith('sw1', 'generator-service:latest')
 })

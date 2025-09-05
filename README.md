@@ -244,7 +244,7 @@ Manual checks:
   - Connect/Disconnect clicks, edits of URL/username/password (password length only)
   - UI health transitions based on `/healthz`
 - Hive panel: lists live components and queue stats and includes an interactive topology tab with type-based shapes and legend.
-- Queen panel: start new swarms by providing an ID and container image.
+- Queen panel: start new swarms by providing an ID and choosing a template.
 - HAL eyes: status indicators for UI and WS (green slow pulse = healthy/connected; blue modem pulse = connecting; red fast pulse = failed/closed/idle).
 
 ## UI Controls
@@ -255,7 +255,7 @@ Manual checks:
 - **Monolith button** — broadcasts a global `status-request` signal; the publish shows in the OUT log.
 - **Buzz view** — IN, OUT and Other logs with a Config tab and Topic Sniffer; subscriptions are editable.
 - **Hive view** — searchable component list with start/stop toggles, a topology tab for draggable nodes, queue tooltips, and a legend of component shapes; selecting an item opens a detail drawer showing enabled state with editable settings and a confirmable config-update action.
-- **Queen view** — form for launching swarms by ID and image.
+- **Queen view** — form for launching swarms by ID and template.
 - **Nectar view** — metric dropdown (TPS, latency, hops) and points input to adjust chart history.
 
 ## Troubleshooting

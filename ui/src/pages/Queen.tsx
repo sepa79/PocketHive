@@ -1,16 +1,19 @@
 import { useState } from 'react'
 import { startSwarm } from '../lib/stompClient'
+import { templates } from '../lib/templates'
 
 export default function Queen() {
   const [swarmId, setSwarmId] = useState('')
-  const [image, setImage] = useState('')
+  const [templateId, setTemplateId] = useState('')
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!swarmId || !image) return
-    await startSwarm(swarmId, image)
+    if (!swarmId || !templateId) return
+    const template = templates.find((t) => t.id === templateId)
+    if (!template) return
+    await startSwarm(swarmId, template.image)
     setSwarmId('')
-    setImage('')
+    setTemplateId('')
   }
 
   return (
@@ -29,15 +32,22 @@ export default function Queen() {
           />
         </div>
         <div>
-          <label htmlFor="image" className="block text-sm mb-1">
-            Image
+          <label htmlFor="template" className="block text-sm mb-1">
+            Template
           </label>
-          <input
-            id="image"
-            value={image}
-            onChange={(e) => setImage(e.target.value)}
+          <select
+            id="template"
+            value={templateId}
+            onChange={(e) => setTemplateId(e.target.value)}
             className="w-full rounded border border-white/20 bg-white/10 px-2 py-1 text-sm"
-          />
+          >
+            <option value="">Select template</option>
+            {templates.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+              </option>
+            ))}
+          </select>
         </div>
         <button
           type="submit"
