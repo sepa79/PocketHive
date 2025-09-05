@@ -13,8 +13,9 @@ logging:
 
 # PocketHive topology (defaults overridable via env)
 ph:
-  genQueue: ${PH_GEN_QUEUE:ph.gen}
-  modQueue: ${PH_MOD_QUEUE:ph.mod}
+  swarmId: ${PH_SWARM_ID:default}
+  genQueue: ${PH_GEN_QUEUE:ph.gen.${ph.swarmId}}
+  modQueue: ${PH_MOD_QUEUE:ph.mod.${ph.swarmId}}
   gen:
     message:
       path: /api/test

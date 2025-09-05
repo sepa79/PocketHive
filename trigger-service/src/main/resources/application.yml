@@ -11,6 +11,10 @@ logging:
   pattern.level: "%5p [%X{traceId}]"
 
 ph:
+  swarmId: ${PH_SWARM_ID:default}
+  genQueue: ${PH_GEN_QUEUE:ph.gen.${ph.swarmId}}
+  modQueue: ${PH_MOD_QUEUE:ph.mod.${ph.swarmId}}
+  finalQueue: ${PH_FINAL_QUEUE:ph.final.${ph.swarmId}}
   trigger:
     intervalMs: 60000
     actionType: shell
