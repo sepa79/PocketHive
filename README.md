@@ -25,21 +25,21 @@ flowchart LR
   S[SUT<br/>System Under Test]
 
   %% Exchanges
-  Xhive((exchange<br/>ph.hive))
+  Xhive((exchange<br/>ph.swarm.hive))
   Xctrl((exchange<br/>ph.control))
   Xlogs((exchange<br/>ph.logs))
 
   %% Queues
-  Qgen[(queue<br/>ph.gen)]
-  Qmod[(queue<br/>ph.mod)]
-  Qfinal[(queue<br/>ph.final)]
+  Qgen[(queue<br/>ph.swarm.gen)]
+  Qmod[(queue<br/>ph.swarm.mod)]
+  Qfinal[(queue<br/>ph.swarm.final)]
   Qctrl[(queue<br/>ph.control)]
   Qlogs[(queue<br/>ph.logs.agg)]
 
   %% Bindings
-  Xhive -->|bind rk=ph.gen| Qgen
-  Xhive -->|bind rk=ph.mod| Qmod
-  Xhive -->|bind rk=ph.final| Qfinal
+  Xhive -->|bind rk=ph.swarm.gen| Qgen
+  Xhive -->|bind rk=ph.swarm.mod| Qmod
+  Xhive -->|bind rk=ph.swarm.final| Qfinal
   Xctrl -->|bind| Qctrl
   Xlogs -->|bind| Qlogs
 
@@ -47,14 +47,14 @@ flowchart LR
   EP((ENTRY))
   EP -->|user opens app| UI
 
-  %% Business flow via ph.hive
-  G -->|publish rk=ph.gen| Xhive
+  %% Business flow via ph.swarm.hive
+  G -->|publish rk=ph.swarm.gen| Xhive
   Qgen -->|consume| M
 
-  M -->|publish rk=ph.mod| Xhive
+  M -->|publish rk=ph.swarm.mod| Xhive
   Qmod -->|consume| P
 
-  P -->|publish rk=ph.final| Xhive
+  P -->|publish rk=ph.swarm.final| Xhive
   Qfinal -->|consume| PP
 
   %% Control channel (dashed)
@@ -108,7 +108,7 @@ The UI is built with React 18 + Vite and resides in `/ui`.
 ### Architecture
 
 - UI connects to RabbitMQ via same‑origin Web‑STOMP proxy at `/ws`.
-- Services publish/consume via the `ph.hive` exchange and `ph.gen`/`ph.mod` queues.
+- Services publish/consume via the `ph.<swarmId>.hive` exchange and `ph.<swarmId>.gen`/`ph.<swarmId>.mod` queues.
 - Metrics/status flow back on the `ph.control` exchange, with each service auto-declaring a durable `ph.control.<role>.<instance>` queue for broadcasts and direct signals.
 - Logs emitted by the services are routed to `ph.logs` and consumed by the log‑aggregator, which batches them to Loki.
 - Services propagate an `x-ph-trace` header to record trace IDs and hop timing across the flow.

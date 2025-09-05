@@ -45,7 +45,7 @@ public class Moderator {
   }
 
   // Consume RAW AMQP message to avoid converter issues
-  @RabbitListener(id = "workListener", queues = "${ph.genQueue:gen.queue}")
+  @RabbitListener(id = "workListener", queues = "${ph.genQueue:ph.default.gen}")
   public void onGenerated(Message message,
                           @Header(value = "x-ph-service", required = false) String service,
                           @Header(value = ObservabilityContextUtil.HEADER, required = false) String trace) {

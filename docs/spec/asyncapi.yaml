@@ -6,7 +6,7 @@ info:
     AsyncAPI specification documenting PocketHive messaging contracts.
     - ph.control — control-plane events, lifecycle, metrics, alerts, and signals
     - Services consume control signals from queues `ph.control.<role>.<instance>` bound to the `ph.control` exchange
-    - ph.hive — traffic exchange for workload messages (generator → moderator → processor)
+    - ph.{swarmId}.hive — traffic exchange for workload messages (generator → moderator → processor)
 servers:
   control-ws:
     url: ws://{host}/ws
@@ -86,7 +86,7 @@ channels:
         routingKey: sig.{type}.{role}.{instance}
 
   # PocketHive traffic example kept for reference
-  exchange/ph.hive/generator.request:
+  exchange/ph.{swarmId}.hive/generator.request:
     publish:
       summary: Workload generation request published by PocketHive browser generator
       message:
@@ -95,7 +95,7 @@ channels:
       amqp:
         is: routingKey
         exchange:
-          name: ph.hive
+          name: ph.{swarmId}.hive
           type: direct
           durable: true
         routingKey: generator.request

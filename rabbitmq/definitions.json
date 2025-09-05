@@ -30,7 +30,7 @@
       "arguments": {}
     },
     {
-      "name": "ph.hive",
+      "name": "ph.swarm1.hive",
       "vhost": "/",
       "type": "topic",
       "durable": true,

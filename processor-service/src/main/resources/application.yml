@@ -13,7 +13,9 @@ logging:
 
 # PocketHive topology (overridable via env PH_*)
 ph:
-  genQueue: ${PH_GEN_QUEUE:ph.gen}
-  modQueue: ${PH_MOD_QUEUE:ph.mod}
+  swarmId: ${PH_SWARM_ID:default}
+  genQueue: ${PH_GEN_QUEUE:ph.${ph.swarmId}.gen}
+  modQueue: ${PH_MOD_QUEUE:ph.${ph.swarmId}.mod}
+  finalQueue: ${PH_FINAL_QUEUE:ph.${ph.swarmId}.final}
   processor:
     baseUrl: ${PH_BASE_URL:http://wiremock:8080}

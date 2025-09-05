@@ -70,7 +70,7 @@ public class Processor {
     try{ sendStatusFull(0); } catch(Exception ignore){}
   }
 
-  @RabbitListener(id = "workListener", queues = "${ph.modQueue:moderated.queue}")
+  @RabbitListener(id = "workListener", queues = "${ph.modQueue:ph.default.mod}")
   public void onModerated(Message message,
                           @Header(value = ObservabilityContextUtil.HEADER, required = false) String trace){
     Instant received = Instant.now();

@@ -56,7 +56,7 @@ public class PostProcessor {
     try{ sendStatusFull(0); } catch(Exception ignore){}
   }
 
-  @RabbitListener(id = "workListener", queues = "${ph.finalQueue:ph.final}")
+  @RabbitListener(id = "workListener", queues = "${ph.finalQueue:ph.default.final}")
   public void onFinal(byte[] payload,
                       @Header(value="x-ph-trace", required=false) String trace,
                       @Header(value="x-ph-error", required=false) Boolean error){
