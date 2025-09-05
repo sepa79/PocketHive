@@ -16,6 +16,8 @@ The `log-aggregator` service consumes log events from RabbitMQ and forwards them
 
 The service batches incoming messages and sends them to Loki with labels for `service` and `traceId`.
 
+The `ph.logs` exchange and `ph.logs.agg` queue are provisioned separately (see `rabbitmq/definitions.json`); the aggregator does not create them at runtime.
+
 ## Running
 
 Add the service to your Compose file and provide the RabbitMQ and Loki connection settings.
