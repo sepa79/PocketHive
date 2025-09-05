@@ -1,7 +1,7 @@
 package io.pockethive.orchestrator.infra.docker;
 
 import com.github.dockerjava.api.DockerClient;
-import com.github.dockerjava.api.client.DockerClientConfig;
+import com.github.dockerjava.core.DockerClientConfig;
 import com.github.dockerjava.core.DefaultDockerClientConfig;
 import com.github.dockerjava.core.DockerClientImpl;
 import com.github.dockerjava.transport.httpclient5.ApacheDockerHttpClient;
