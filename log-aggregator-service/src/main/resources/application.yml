@@ -9,7 +9,7 @@ spring:
       simple:
         auto-declare: false
         missing-queues-fatal: true
-management.endpoints.web.exposure.include: health,info
+management.endpoints.web.exposure.include: health,info,prometheus
 logging:
   pattern.level: "%5p [%X{traceId}]"
 ph:

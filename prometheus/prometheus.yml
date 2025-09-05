@@ -5,6 +5,11 @@ scrape_configs:
   - job_name: 'prometheus'
     static_configs:
       - targets: ['localhost:9090']
+  - job_name: 'log-aggregator'
+    scrape_interval: 5s
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ['log-aggregator:8080']
   - job_name: 'postprocessor'
     scrape_interval: 5s
     metrics_path: /actuator/prometheus

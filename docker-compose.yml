@@ -10,7 +10,7 @@ services:
       - "15672:15672"
       - "15674:15674"
     healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 5672"]
       interval: 5s
       timeout: 10s
       retries: 24
@@ -42,8 +42,6 @@ services:
       PH_MOD_QUEUE: ph.mod
       PH_CONTROL_QUEUE: ph.control
     depends_on:
-      rabbitmq:
-        condition: service_healthy
       log-aggregator:
         condition: service_healthy
 
@@ -58,8 +56,6 @@ services:
       PH_MOD_QUEUE: ph.mod
       PH_CONTROL_QUEUE: ph.control
     depends_on:
-      rabbitmq:
-        condition: service_healthy
       log-aggregator:
         condition: service_healthy
 
@@ -74,8 +70,6 @@ services:
       PH_MOD_QUEUE: ph.mod
       PH_CONTROL_QUEUE: ph.control
     depends_on:
-      rabbitmq:
-        condition: service_healthy
       log-aggregator:
         condition: service_healthy
 
@@ -89,8 +83,6 @@ services:
       PH_FINAL_QUEUE: ph.final
       PH_CONTROL_QUEUE: ph.control
     depends_on:
-      rabbitmq:
-        condition: service_healthy
       log-aggregator:
         condition: service_healthy
 
@@ -106,8 +98,6 @@ services:
       PH_FINAL_QUEUE: ph.final
       PH_CONTROL_QUEUE: ph.control
     depends_on:
-      rabbitmq:
-        condition: service_healthy
       log-aggregator:
         condition: service_healthy
 
@@ -122,15 +112,17 @@ services:
       PH_LOKI_URL: http://loki:3100
     depends_on:
       rabbitmq:
-        condition: service_healthy
+        condition: service_started
       loki:
         condition: service_started
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/actuator/health | grep -q UP"]
-      interval: 10s
-      timeout: 5s
-      retries: 30
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/actuator/health | grep -q UP"]
+      interval: 5s
+      timeout: 10s
+      retries: 10
       start_period: 30s
+    ports:
+      - "1080:8080"
 
   ui:
     build:
@@ -151,8 +143,6 @@ services:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
     ports:
       - "9090:9090"
-    depends_on:
-      - postprocessor
 
   grafana:
     image: grafana/grafana
