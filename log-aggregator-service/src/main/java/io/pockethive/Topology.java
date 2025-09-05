@@ -1,8 +1,8 @@
 package io.pockethive;
 
 public class Topology {
-  public static final String LOGS_EXCHANGE = cfg("PH_LOGS_EXCHANGE", "logs.exchange");
-  public static final String LOGS_QUEUE = cfg("PH_LOGS_QUEUE", "logs.agg");
+  public static final String LOGS_EXCHANGE = cfg("PH_LOGS_EXCHANGE", "ph.logs");
+  public static final String LOGS_QUEUE = cfg("PH_LOGS_QUEUE", "ph.logs.agg");
 
   private static String cfg(String key, String def){
     String v = System.getenv(key);

@@ -42,7 +42,7 @@ public class LogAggregator {
     this.batchSize = batchSize;
   }
 
-  @RabbitListener(queues = "${ph.logsQueue:logs.agg}")
+  @RabbitListener(queues = "${ph.logsQueue:ph.logs.agg}")
   public void onLog(Message message){
     try{
       String json = new String(message.getBody(), StandardCharsets.UTF_8);

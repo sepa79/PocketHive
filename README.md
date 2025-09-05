@@ -27,14 +27,14 @@ flowchart LR
   %% Exchanges
   Xhive((exchange<br/>ph.hive))
   Xctrl((exchange<br/>ph.control))
-  Xlogs((exchange<br/>logs.exchange))
+  Xlogs((exchange<br/>ph.logs))
 
   %% Queues
   Qgen[(queue<br/>ph.gen)]
   Qmod[(queue<br/>ph.mod)]
   Qfinal[(queue<br/>ph.final)]
   Qctrl[(queue<br/>ph.control)]
-  Qlogs[(queue<br/>logs)]
+  Qlogs[(queue<br/>ph.logs.agg)]
 
   %% Bindings
   Xhive -->|bind rk=ph.gen| Qgen
@@ -67,12 +67,12 @@ flowchart LR
   Qctrl -.->|consume| UI
 
   %% Logs: all components publish; LA consumes and ships to Loki
-  G  -.->|publish logs.exchange| Xlogs
-  M  -.->|publish logs.exchange| Xlogs
-  P  -.->|publish logs.exchange| Xlogs
-  PP -.->|publish logs.exchange| Xlogs
-  UI -.->|publish logs.exchange| Xlogs
-  T  -.->|publish logs.exchange| Xlogs
+  G  -.->|publish ph.logs| Xlogs
+  M  -.->|publish ph.logs| Xlogs
+  P  -.->|publish ph.logs| Xlogs
+  PP -.->|publish ph.logs| Xlogs
+  UI -.->|publish ph.logs| Xlogs
+  T  -.->|publish ph.logs| Xlogs
 
   Qlogs -.->|consume| LA
   LA -->|push| LOKI
@@ -110,7 +110,7 @@ The UI is built with React 18 + Vite and resides in `/ui`.
 - UI connects to RabbitMQ via same‑origin Web‑STOMP proxy at `/ws`.
 - Services publish/consume via the `ph.hive` exchange and `ph.gen`/`ph.mod` queues.
 - Metrics/status flow back on the `ph.control` exchange, with each service auto-declaring a durable `ph.control.<role>.<instance>` queue for broadcasts and direct signals.
-- Logs emitted by the services are routed to `logs.exchange` and consumed by the log‑aggregator, which batches them to Loki.
+- Logs emitted by the services are routed to `ph.logs` and consumed by the log‑aggregator, which batches them to Loki.
 - Services propagate an `x-ph-trace` header to record trace IDs and hop timing across the flow.
 
 ### Control-plane Events & Signals

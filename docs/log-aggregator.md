@@ -6,8 +6,8 @@ The `log-aggregator` service consumes log events from RabbitMQ and forwards them
 
 | Environment Variable | Description | Default |
 |---------------------|-------------|---------|
-| `PH_LOGS_EXCHANGE`  | RabbitMQ exchange to bind for log messages. | `logs.exchange` |
-| `PH_LOGS_QUEUE`     | Queue name used by the aggregator. | `logs.agg` |
+| `PH_LOGS_EXCHANGE`  | RabbitMQ exchange to bind for log messages. | `ph.logs` |
+| `PH_LOGS_QUEUE`     | Queue name used by the aggregator. | `ph.logs.agg` |
 | `PH_LOKI_URL`       | Base URL for Loki ("/loki/api/v1/push" is appended). | `http://loki:3100` |
 | `PH_LOKI_MAX_RETRIES` | Number of attempts for pushing a batch. | `3` |
 | `PH_LOKI_BACKOFF_MS` | Initial backoff in milliseconds between retries. | `500` |

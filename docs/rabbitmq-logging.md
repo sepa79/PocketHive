@@ -17,7 +17,7 @@ variables shown in parentheses):
 | `rabbitmq.username` | `RABBITMQ_DEFAULT_USER` | `guest` | Username for the RabbitMQ connection. |
 | `rabbitmq.password` | `RABBITMQ_DEFAULT_PASS` | `guest` | Password for the RabbitMQ connection. |
 | `rabbitmq.vhost` | `RABBITMQ_VHOST` | `/` | Virtual host for the connection. |
-| `logs.exchange` | `LOGS_EXCHANGE` | `logs.exchange` | Exchange where log events are published. |
+| `logs.exchange` | `LOGS_EXCHANGE` | `ph.logs` | Exchange where log events are published. |
 | `rabbitmq.logging.enabled` | `RABBITMQ_LOGGING_ENABLED` | `true` | Any value other than `false` enables publishing; set to `false` to disable (useful locally). |
 
 ## Usage
@@ -34,7 +34,7 @@ dependency, and register the appender in your service's `logback.xml`:
       <username>${RABBITMQ_DEFAULT_USER:-guest}</username>
       <password>${RABBITMQ_DEFAULT_PASS:-guest}</password>
       <virtualHost>${RABBITMQ_VHOST:-/}</virtualHost>
-      <exchangeName>${LOGS_EXCHANGE:-logs.exchange}</exchangeName>
+      <exchangeName>${LOGS_EXCHANGE:-ph.logs}</exchangeName>
       <encoder class="net.logstash.logback.encoder.LogstashEncoder"/>
     </appender>
     <root level="INFO">
