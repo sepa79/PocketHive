@@ -18,5 +18,6 @@
     <module>postprocessor-service</module>
     <module>processor-service</module>
     <module>trigger-service</module>
+    <module>swarm-controller-service</module>
   </modules>
 </project>
