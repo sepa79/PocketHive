@@ -161,8 +161,12 @@ Prereqs: Docker and Docker Compose.
 
 1) Build and start
 
-```
+```bash
+# Docker Hub (default)
 docker compose up -d --build
+
+# AWS ECR / GHCR variant (avoids Docker Hub limits)
+docker compose -f docker-compose.ecr.yml up -d --build
 ```
 
 2) Open the UI
