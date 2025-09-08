@@ -163,7 +163,7 @@ services:
       - ./loki/config.yml:/etc/loki/config.yml:ro
 
   wiremock:
-    image: public.ecr.aws/wiremock/wiremock:3.13.1
+    image: wiremock/wiremock:3.13.1
     command:
       [
         "--verbose",                          # useful logs for debugging
