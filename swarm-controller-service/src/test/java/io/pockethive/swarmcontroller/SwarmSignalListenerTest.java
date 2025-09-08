@@ -69,4 +69,14 @@ class SwarmSignalListenerTest {
         startsWith("ev.status-full.swarm-controller.inst"), any(Object.class));
     verifyNoInteractions(lifecycle);
   }
+
+  @Test
+  void emitsPeriodicStatusDelta() {
+    SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst");
+    reset(rabbit);
+    listener.status();
+    verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
+        startsWith("ev.status-delta.swarm-controller.inst"), any(Object.class));
+    verifyNoInteractions(lifecycle);
+  }
 }

@@ -113,6 +113,7 @@ The UI is built with React 18 + Vite and resides in `/ui`.
 - Metrics/status flow back on the `ph.control` exchange, with each service auto-declaring a durable `ph.control.<role>.<instance>` queue for broadcasts and direct signals.
 - Logs emitted by the services are routed to `ph.logs` and consumed by the log‑aggregator, which batches them to Loki.
 - Services propagate an `x-ph-trace` header to record trace IDs and hop timing across the flow.
+- New services must implement the control-plane contract: declare a `ph.control.<role>.<instance>` queue, handle `status-request` and `config-update` signals at global, role and instance scope, publish a startup `status-full`, and emit `status-delta` roughly every 5 s. See [`docs/rules/control-plane-rules.md`](docs/rules/control-plane-rules.md) for details.
 
 ### Control-plane Events & Signals
 
