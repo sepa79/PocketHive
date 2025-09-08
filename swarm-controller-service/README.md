@@ -11,4 +11,20 @@ existing per-bee control messages without introducing new routing patterns.
   `sig.status-request.<role>.<instance>` messages for each bee.
 - Tag all emitted metrics with the `swarm_id` label and expose a friendly bee name alongside a UUID.
 
+## Build & Run
+
+Build the Docker image from the repo root:
+
+```sh
+docker build -f swarm-controller-service/Dockerfile .
+```
+
+Run locally with Docker Compose (RabbitMQ must be running):
+
+```sh
+PH_SWARM_ID=swarm1 docker compose up swarm-controller
+```
+
+The container relies on `RABBITMQ_HOST`, `PH_CONTROL_EXCHANGE`, `PH_CONTROL_QUEUE`, and `PH_SWARM_ID` environment variables.
+
 See [control-plane rules](../docs/rules/control-plane-rules.md) for canonical signal formats.

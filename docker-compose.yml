@@ -32,6 +32,19 @@ services:
       log-aggregator:
         condition: service_healthy
 
+  swarm-controller:
+    build:
+      context: .
+      dockerfile: swarm-controller-service/Dockerfile
+    environment:
+      RABBITMQ_HOST: rabbitmq
+      PH_CONTROL_EXCHANGE: ph.control
+      PH_CONTROL_QUEUE: ph.control
+      PH_SWARM_ID: swarm1
+    depends_on:
+      log-aggregator:
+        condition: service_healthy
+
   generator:
     build:
       context: .
