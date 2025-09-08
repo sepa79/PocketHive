@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.8.2] - 2025-09-08
+Timestamp: 2025-09-08T10:27:41Z
+
+- Traffic: scope exchanges and queues by swarm ID (`ph.<swarmId>.hive`, `ph.<swarmId>.gen`, `ph.<swarmId>.mod`).
+- Orchestrator: remove swarm-specific queues after containers stop.
+- Docs: note `PH_SWARM_ID` env for multi-swarm isolation.
+
 ## [0.8.1] - 2025-09-04
 Timestamp: 2025-09-04T17:55:20Z
 

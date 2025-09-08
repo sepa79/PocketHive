@@ -109,6 +109,7 @@ The UI is built with React 18 + Vite and resides in `/ui`.
 
 - UI connects to RabbitMQ via same‑origin Web‑STOMP proxy at `/ws`.
 - Services publish/consume via the `ph.<swarmId>.hive` exchange and `ph.<swarmId>.gen`/`ph.<swarmId>.mod` queues.
+- Each service reads a `PH_SWARM_ID` env (default `default`) to scope these names, allowing multiple isolated swarms.
 - Metrics/status flow back on the `ph.control` exchange, with each service auto-declaring a durable `ph.control.<role>.<instance>` queue for broadcasts and direct signals.
 - Logs emitted by the services are routed to `ph.logs` and consumed by the log‑aggregator, which batches them to Loki.
 - Services propagate an `x-ph-trace` header to record trace IDs and hop timing across the flow.
