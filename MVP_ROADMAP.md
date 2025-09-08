@@ -1,7 +1,7 @@
 # PocketHive MVP Roadmap
 ## From Current State to JMeter-like Load Testing Framework
 
-### Current State (v0.8.0)
+### Current State (v0.8.2)
 - Single swarm with basic REST support
 - Manual configuration via UI
 - WireMock integration for testing
@@ -87,12 +87,12 @@
 **Goal**: Run multiple isolated swarms simultaneously
 
 #### 2.1 Queue Isolation
-- [ ] Implement swarm-specific queue naming: `ph.gen.<swarmId>`
-- [ ] Update all services to use swarm-aware queue bindings
-- [ ] Add queue cleanup on swarm destruction
+- [x] Implement swarm-specific queue naming: `ph.<swarmId>.gen`
+- [x] Update all services to use swarm-aware queue bindings
+- [x] Add queue cleanup on swarm destruction
 
 #### 2.2 Service Modifications
-- [ ] Add `PH_SWARM_ID` environment variable to all services
+- [x] Add `PH_SWARM_ID` environment variable to all services
 - [ ] Update bee name generation to include swarm ID
 - [ ] Modify metrics to include swarm labels
 

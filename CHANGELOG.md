@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.8.2] - 2025-09-08
+Timestamp: 2025-09-08T10:27:41Z
+
+- Traffic: scope exchanges and queues by swarm ID (`ph.<swarmId>.hive`, `ph.<swarmId>.gen`, `ph.<swarmId>.mod`).
+- Orchestrator: remove swarm-specific queues after containers stop.
+- Docs: note `PH_SWARM_ID` env for multi-swarm isolation.
+
 ## [0.8.1] - 2025-09-04
 Timestamp: 2025-09-04T17:55:20Z
 
@@ -283,7 +290,7 @@ Timestamp: 2025-08-29T01:24:02Z
 - Docs: Add AsyncAPI spec (`docs/spec/asyncapi.yaml`) describing control/traffic contracts.
 - UI: Add API Docs page (`/docs.html`) and group header actions into a ☰ Menu dropdown.
 - UI: Fix changelog page showing duplicated header (remove extra static H1).
-- Config: Align exchanges across UI/backends — `ph.hive` (traffic), `ph.control` (control).
+- Config: Align exchanges across UI/backends — `ph.<swarmId>.hive` (traffic), `ph.control` (control).
 
 ## [0.2.1] - 2025-08-29
 Timestamp: 2025-08-29T01:03:45Z

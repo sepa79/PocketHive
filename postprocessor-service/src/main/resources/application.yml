@@ -12,4 +12,5 @@ logging:
   pattern.level: "%5p [%X{traceId}]"
 
 ph:
-  finalQueue: ${PH_FINAL_QUEUE:ph.final}
+  swarmId: ${PH_SWARM_ID:default}
+  finalQueue: ${PH_FINAL_QUEUE:ph.${ph.swarmId}.final}
