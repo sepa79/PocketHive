@@ -5,6 +5,7 @@ PocketHive is a portable transaction swarm: a set of small, composable services 
 
 ## Overall System Requirements
 - Provide a Docker Compose environment orchestrating RabbitMQ, UI, and services.
+- Pull container images from Docker Hub by default; an alternative compose file uses AWS's public ECR (Wiremock from GHCR) to avoid Docker Hub rate limits.
 - Components communicate via swarm-scoped `ph.<swarmId>.hive` exchanges and durable queues.
 - Services read a `PH_SWARM_ID` env (default `default`) to derive these names.
 - Control-plane messaging flows through the `ph.control` exchange using `sig.*` routing keys for commands and `ev.*` for status or metrics.

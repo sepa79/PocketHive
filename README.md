@@ -144,7 +144,7 @@ See also: Control Bindings page (Menu → Control Bindings) and `docs/spec/async
 
 ## Stack & Ports
 
-- `rabbitmq` (with Web-STOMP): 5672 (AMQP), 15672 (Mgmt UI), 15674 (Web-STOMP, internal only)
+- `rabbitmq` (Web-STOMP, config & definitions mounted): 5672 (AMQP), 15672 (Mgmt UI), 15674 (Web-STOMP, internal only)
 - `ui` (nginx static site): 8088 → serves UI, proxies WebSocket at `/ws` to RabbitMQ
 - `generator`, `moderator`, `processor`, `postprocessor`, `trigger`: Spring Boot services using AMQP
 - Each service waits for RabbitMQ to report healthy before starting
@@ -159,10 +159,18 @@ See also: Control Bindings page (Menu → Control Bindings) and `docs/spec/async
 
 Prereqs: Docker and Docker Compose.
 
-1) Build and start
+1) Build and start using Docker Hub images
 
-```
+```bash
 docker compose up -d --build
+```
+
+The stack pulls RabbitMQ, Prometheus, Grafana, Loki, and Wiremock from Docker Hub.
+
+To avoid Docker Hub rate limits, an alternative compose file pulls from AWS's public ECR (Wiremock from GHCR):
+
+```bash
+docker compose -f docker-compose.ecr.yml up -d --build
 ```
 
 2) Open the UI
@@ -222,7 +230,8 @@ Services accept `config-update` messages on the control exchange to adjust behav
 Relevant files:
 
 - `ui/nginx.conf` — reverse proxy for `/ws` and `/healthz`
-- `docker-compose.yml` — mounts nginx config and exposes port 8088; adds healthcheck for UI
+- `docker-compose.yml` — mounts nginx config, exposes port 8088, and pulls observability images from Docker Hub
+- `docker-compose.ecr.yml` — explicit compose file that pulls RabbitMQ, Prometheus, Grafana, and Loki from AWS's public ECR and Wiremock from GHCR
 - `ui/src/main.tsx` — React entry point that wires providers, routing, and WebSocket connection logic.
 
 ## Healthchecks

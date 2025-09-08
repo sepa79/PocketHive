@@ -1,7 +1,7 @@
 version: "3.9"
 services:
   rabbitmq:
-    image: rabbitmq:3.13-management-alpine
+    image: public.ecr.aws/docker/library/rabbitmq:3.13-management-alpine
     environment:
       RABBITMQ_MANAGEMENT_LOAD_DEFINITIONS: "/etc/rabbitmq/definitions.json"
     ports:
@@ -137,14 +137,14 @@ services:
       start_period: 5s
 
   prometheus:
-    image: bitnami/prometheus:latest
+    image: public.ecr.aws/bitnami/prometheus:latest
     volumes:
       - ./prometheus/prometheus.yml:/opt/bitnami/prometheus/conf/prometheus.yml:ro
     ports:
       - "9090:9090"
 
   grafana:
-    image: bitnami/grafana:latest
+    image: public.ecr.aws/bitnami/grafana:latest
     environment:
       GF_SECURITY_ADMIN_USER: admin
       GF_SECURITY_ADMIN_PASSWORD: admin
@@ -158,7 +158,7 @@ services:
       - loki
 
   loki:
-    image: bitnami/grafana-loki:latest
+    image: public.ecr.aws/bitnami/grafana-loki:latest
     command: -config.file=/opt/bitnami/grafana-loki/conf/loki.yml
     ports:
       - "3100:3100"
@@ -166,7 +166,7 @@ services:
       - ./loki/config.yml:/opt/bitnami/grafana-loki/conf/loki.yml:ro
 
   wiremock:
-    image: wiremock/wiremock:3.13.1
+    image: ghcr.io/wiremock/wiremock:3.13.1-1
     command:
       [
         "--verbose",                          # useful logs for debugging
@@ -195,7 +195,7 @@ services:
 
   # promtail:
   #   # disabled: logs are shipped via RabbitMQ and aggregated to Loki
-  #   image: bitnami/promtail:latest
+  #   image: public.ecr.aws/bitnami/promtail:latest
   #   command: -config.file=/opt/bitnami/promtail/conf/promtail.yml
   #   ports:
   #     - "9080:9080"

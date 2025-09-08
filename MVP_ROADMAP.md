@@ -1,7 +1,7 @@
 # PocketHive MVP Roadmap
 ## From Current State to JMeter-like Load Testing Framework
 
-### Current State (v0.8.2)
+### Current State (v0.8.3)
 - Single swarm with basic REST support
 - Manual configuration via UI
 - WireMock integration for testing

@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.8.3] - 2025-09-08
+Timestamp: 2025-09-08T13:57:56Z
+
+- Docker: default compose uses Docker Hub images; optional `docker-compose.ecr.yml` pulls RabbitMQ, Prometheus, Grafana, and Loki from AWS's public ECR and Wiremock from GHCR.
+- RabbitMQ: enable Web-STOMP via mounted `enabled_plugins`.
+- Docs: document ECR-based startup commands.
+
 ## [0.8.2] - 2025-09-08
 Timestamp: 2025-09-08T10:27:41Z
 
