@@ -159,21 +159,19 @@ See also: Control Bindings page (Menu → Control Bindings) and `docs/spec/async
 
 Prereqs: Docker and Docker Compose.
 
-1) Build and start using Docker Hub images
+1) Build and start using AWS ECR images
 
 ```bash
 docker compose up -d --build
 ```
 
-The default stack pulls RabbitMQ, Prometheus, Grafana, Loki, and Wiremock from Docker Hub.
+The stack pulls RabbitMQ, Prometheus, Grafana, and Loki from AWS's public ECR and Wiremock from GitHub Container Registry, avoiding Docker Hub rate limits.
 
-To pull Bitnami images from AWS ECR (and Wiremock from GHCR) instead, use the alternate compose file:
+An explicit `docker-compose.ecr.yml` with the same registry sources is also provided:
 
 ```bash
 docker compose -f docker-compose.ecr.yml up -d --build
 ```
-
-The ECR variant sources Bitnami images for Prometheus, Grafana, and Loki from AWS's public ECR and Wiremock from GitHub Container Registry to avoid Docker Hub rate limits.
 
 2) Open the UI
 
@@ -232,7 +230,8 @@ Services accept `config-update` messages on the control exchange to adjust behav
 Relevant files:
 
 - `ui/nginx.conf` — reverse proxy for `/ws` and `/healthz`
-- `docker-compose.yml` — mounts nginx config, exposes port 8088, and uses official Docker Hub images; see `docker-compose.ecr.yml` for the AWS ECR/GHCR variant
+- `docker-compose.yml` — mounts nginx config, exposes port 8088, and pulls observability images from AWS's public ECR (Wiremock from GHCR)
+- `docker-compose.ecr.yml` — explicit compose file with the same registry-qualified images
 - `ui/src/main.tsx` — React entry point that wires providers, routing, and WebSocket connection logic.
 
 ## Healthchecks

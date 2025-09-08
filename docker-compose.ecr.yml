@@ -3,7 +3,6 @@ services:
   rabbitmq:
     image: public.ecr.aws/docker/library/rabbitmq:3.13-management-alpine
     environment:
-      RABBITMQ_PLUGINS: "rabbitmq_management rabbitmq_web_stomp"
       RABBITMQ_MANAGEMENT_LOAD_DEFINITIONS: "/etc/rabbitmq/definitions.json"
     ports:
       - "5672:5672"
@@ -11,6 +10,7 @@ services:
       - "15674:15674"
     volumes:
       - ./rabbitmq/definitions.json:/etc/rabbitmq/definitions.json:ro
+      - ./rabbitmq/enabled_plugins:/etc/rabbitmq/enabled_plugins:ro
       - ./rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
     healthcheck:
       test: ["CMD-SHELL", "nc -z 127.0.0.1 5672"]
