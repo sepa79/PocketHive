@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { startSwarm } from '../lib/stompClient'
+import { createSwarm } from '../lib/stompClient'
 import { templates } from '../lib/templates'
 
 export default function Queen() {
@@ -11,7 +11,7 @@ export default function Queen() {
     if (!swarmId || !templateId) return
     const template = templates.find((t) => t.id === templateId)
     if (!template) return
-    await startSwarm(swarmId, template.image)
+    await createSwarm(swarmId, template.image)
     setSwarmId('')
     setTemplateId('')
   }
@@ -53,7 +53,7 @@ export default function Queen() {
           type="submit"
           className="mt-2 rounded bg-white/20 hover:bg-white/30 px-2 py-1 text-sm"
         >
-          Start
+          Create
         </button>
       </form>
     </div>

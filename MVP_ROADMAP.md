@@ -97,9 +97,9 @@
 - [x] Modify metrics to include swarm labels
 
 #### 2.3 UI Enhancements
-- [ ] Add "Create Swarm" button and form
-- [ ] Display swarms as grouped components
-- [ ] Add swarm-level start/stop controls
+ - [x] Add "Create Swarm" button and form
+ - [x] Display swarms as grouped components
+ - [x] Add swarm-level start/stop controls
 
 **Deliverable**: Multiple REST swarms running independently
 

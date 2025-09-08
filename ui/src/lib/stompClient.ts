@@ -111,13 +111,16 @@ export function setClient(newClient: Client | null, destination = controlDestina
         if (!isControlEvent(raw)) return
         const evt = raw as ControlEvent
         const id = evt.instance
+        const swarmId = id.split('-')[0]
         const comp: Component = components[id] || {
           id,
           name: evt.role,
+          swarmId,
           lastHeartbeat: 0,
           queues: [],
         }
         comp.name = evt.role
+        comp.swarmId = swarmId
         comp.version = evt.version
         comp.lastHeartbeat = new Date(evt.timestamp).getTime()
         comp.status = evt.kind
@@ -201,7 +204,7 @@ export async function requestStatusFull(component: Component) {
   })
 }
 
-export async function startSwarm(id: string, image: string) {
+export async function createSwarm(id: string, image: string) {
   return new Promise<void>((resolve, reject) => {
     if (!client || !client.active) {
       reject(new Error('STOMP client not connected'))
@@ -210,6 +213,34 @@ export async function startSwarm(id: string, image: string) {
     client.publish({
       destination: `/exchange/ph.control/sig.swarm-create.${id}`,
       body: image,
+    })
+    resolve()
+  })
+}
+
+export async function startSwarm(id: string) {
+  return new Promise<void>((resolve, reject) => {
+    if (!client || !client.active) {
+      reject(new Error('STOMP client not connected'))
+      return
+    }
+    client.publish({
+      destination: `/exchange/ph.control/sig.swarm-start.${id}`,
+      body: '',
+    })
+    resolve()
+  })
+}
+
+export async function stopSwarm(id: string) {
+  return new Promise<void>((resolve, reject) => {
+    if (!client || !client.active) {
+      reject(new Error('STOMP client not connected'))
+      return
+    }
+    client.publish({
+      destination: `/exchange/ph.control/sig.swarm-stop.${id}`,
+      body: '',
     })
     resolve()
   })

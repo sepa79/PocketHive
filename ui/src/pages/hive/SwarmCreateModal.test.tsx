@@ -2,16 +2,16 @@
  * @vitest-environment jsdom
  */
 import { render, screen, fireEvent } from '@testing-library/react'
-import Queen from './Queen'
+import SwarmCreateModal from './SwarmCreateModal'
 import { vi, test, expect } from 'vitest'
-import { createSwarm } from '../lib/stompClient'
+import { createSwarm } from '../../lib/stompClient'
 
-vi.mock('../lib/stompClient', () => ({
+vi.mock('../../lib/stompClient', () => ({
   createSwarm: vi.fn(),
 }))
 
-test('creates swarm on submit', () => {
-  render(<Queen />)
+test('submits new swarm', () => {
+  render(<SwarmCreateModal onClose={() => {}} />)
   fireEvent.change(screen.getByLabelText(/swarm id/i), { target: { value: 'sw1' } })
   fireEvent.change(screen.getByLabelText(/template/i), { target: { value: 'rest' } })
   fireEvent.click(screen.getByText('Create'))
