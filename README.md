@@ -165,6 +165,12 @@ Prereqs: Docker and Docker Compose.
 docker compose up -d --build
 ```
 
+An equivalent compose file `docker-compose.ecr.yml` is kept for explicit AWS ECR references:
+
+```bash
+docker compose -f docker-compose.ecr.yml up -d --build
+```
+
 The stack pulls Prometheus, Grafana, and Loki from AWS's public ECR and Wiremock from GitHub Container Registry to avoid Docker Hub rate limits.
 
 2) Open the UI
@@ -224,7 +230,7 @@ Services accept `config-update` messages on the control exchange to adjust behav
 Relevant files:
 
 - `ui/nginx.conf` — reverse proxy for `/ws` and `/healthz`
-- `docker-compose.yml` — mounts nginx config, exposes port 8088, and uses AWS ECR/GHCR images
+- `docker-compose.yml` — mounts nginx config, exposes port 8088, and uses AWS ECR/GHCR images (see `docker-compose.ecr.yml` for an explicit ECR variant)
 - `ui/src/main.tsx` — React entry point that wires providers, routing, and WebSocket connection logic.
 
 ## Healthchecks

@@ -1,0 +1,204 @@
+version: "3.9"
+services:
+  rabbitmq:
+    build:
+      context: .
+      dockerfile: Dockerfile.rabbit
+    environment: {}
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+      - "15674:15674"
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 5672"]
+      interval: 5s
+      timeout: 10s
+      retries: 24
+      start_period: 30s
+
+  orchestrator:
+    build:
+      context: .
+      dockerfile: orchestrator-service/Dockerfile
+    environment:
+      RABBITMQ_HOST: rabbitmq
+      PH_CONTROL_EXCHANGE: ph.control
+      PH_SWARM_ID: swarm1
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      log-aggregator:
+        condition: service_healthy
+
+  generator:
+    build:
+      context: .
+      dockerfile: generator-service/Dockerfile
+    environment:
+      RABBITMQ_HOST: rabbitmq
+      PH_TRAFFIC_EXCHANGE: ph.swarm1.hive
+      PH_CONTROL_QUEUE: ph.control
+      PH_SWARM_ID: swarm1
+    depends_on:
+      log-aggregator:
+        condition: service_healthy
+
+  moderator:
+    build:
+      context: .
+      dockerfile: moderator-service/Dockerfile
+    environment:
+      RABBITMQ_HOST: rabbitmq
+      PH_TRAFFIC_EXCHANGE: ph.swarm1.hive
+      PH_CONTROL_QUEUE: ph.control
+      PH_SWARM_ID: swarm1
+    depends_on:
+      log-aggregator:
+        condition: service_healthy
+
+  processor:
+    build:
+      context: .
+      dockerfile: processor-service/Dockerfile
+    environment:
+      RABBITMQ_HOST: rabbitmq
+      PH_TRAFFIC_EXCHANGE: ph.swarm1.hive
+      PH_CONTROL_QUEUE: ph.control
+      PH_SWARM_ID: swarm1
+    depends_on:
+      log-aggregator:
+        condition: service_healthy
+
+  postprocessor:
+    build:
+      context: .
+      dockerfile: postprocessor-service/Dockerfile
+    environment:
+      RABBITMQ_HOST: rabbitmq
+      PH_TRAFFIC_EXCHANGE: ph.swarm1.hive
+      PH_CONTROL_QUEUE: ph.control
+      PH_SWARM_ID: swarm1
+    depends_on:
+      log-aggregator:
+        condition: service_healthy
+
+  trigger:
+    build:
+      context: .
+      dockerfile: trigger-service/Dockerfile
+    environment:
+      RABBITMQ_HOST: rabbitmq
+      PH_TRAFFIC_EXCHANGE: ph.swarm1.hive
+      PH_CONTROL_QUEUE: ph.control
+      PH_SWARM_ID: swarm1
+    depends_on:
+      log-aggregator:
+        condition: service_healthy
+
+  log-aggregator:
+    build:
+      context: .
+      dockerfile: log-aggregator-service/Dockerfile
+    environment:
+      RABBITMQ_HOST: rabbitmq
+      PH_LOGS_EXCHANGE: ph.logs
+      PH_LOGS_QUEUE: ph.logs.agg
+      PH_LOKI_URL: http://loki:3100
+    depends_on:
+      rabbitmq:
+        condition: service_started
+      loki:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/actuator/health | grep -q UP"]
+      interval: 5s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    ports:
+      - "1080:8080"
+
+  ui:
+    build:
+      context: .
+      dockerfile: ui/Dockerfile
+    ports:
+      - "8088:80"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/healthz | grep -q ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 5s
+
+  prometheus:
+    image: public.ecr.aws/prometheus/prometheus:v2.49.1
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+
+  grafana:
+    image: public.ecr.aws/grafana/grafana:10.4.2
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+      - loki
+
+  loki:
+    image: public.ecr.aws/grafana/loki:2.9.1
+    command: -config.file=/etc/loki/config.yml
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./loki/config.yml:/etc/loki/config.yml:ro
+
+  wiremock:
+    image: ghcr.io/wiremock/wiremock:3.13.1-1
+    command:
+      [
+        "--verbose",                          # useful logs for debugging
+        "--disable-banner",                   # cleaner output
+        "--async-response-enabled",           # enable async responses (better throughput)
+        "--global-response-templating",       # allows templating across all stubs
+        "--record-mappings",                  # auto-record mappings (if needed for tests)
+        # "--no-request-journal",             # disable detailed journaling for perf (optional, see note below)
+        "--max-request-journal-entries=1000", # avoid memory blowup, keep it reasonable
+        "--enable-stub-cors",                # allow cross-origin access
+      ]
+    environment:
+      LANG: en_US.UTF-8
+      JAVA_OPTS: >-
+        -XX:+UseG1GC
+        -XX:+ParallelRefProcEnabled
+        -XX:MaxRAMPercentage=75
+        -XX:+HeapDumpOnOutOfMemoryError
+        -Djava.net.preferIPv4Stack=true
+        -Djava.awt.headless=true
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./wiremock/mappings:/home/wiremock/mappings
+      - ./wiremock/__files:/home/wiremock/__files
+
+  # promtail:
+  #   # disabled: logs are shipped via RabbitMQ and aggregated to Loki
+  #   image: public.ecr.aws/grafana/promtail:2.9.1
+  #   command: -config.file=/etc/promtail/config.yml
+  #   ports:
+  #     - "9080:9080"
+  #   volumes:
+  #     - ./promtail/config.yml:/etc/promtail/config.yml:ro
+  #     - /var/lib/docker/containers:/var/lib/docker/containers:ro
+  #     - /var/run/docker.sock:/var/run/docker.sock:ro
+  #   depends_on:
+  #     - loki
