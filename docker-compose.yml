@@ -1,7 +1,7 @@
 version: "3.9"
 services:
   rabbitmq:
-    image: public.ecr.aws/docker/library/rabbitmq:3.13-management-alpine
+    image: rabbitmq:3.13-management-alpine
     environment:
       RABBITMQ_PLUGINS: "rabbitmq_management rabbitmq_web_stomp"
       RABBITMQ_MANAGEMENT_LOAD_DEFINITIONS: "/etc/rabbitmq/definitions.json"

@@ -165,7 +165,7 @@ Prereqs: Docker and Docker Compose.
 docker compose up -d --build
 ```
 
-The default stack pulls Prometheus, Grafana, Loki, and Wiremock from Docker Hub.
+The default stack pulls RabbitMQ, Prometheus, Grafana, Loki, and Wiremock from Docker Hub.
 
 To pull Bitnami images from AWS ECR (and Wiremock from GHCR) instead, use the alternate compose file:
 
