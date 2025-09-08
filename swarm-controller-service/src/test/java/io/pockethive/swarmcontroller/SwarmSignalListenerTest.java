@@ -21,6 +21,7 @@ class SwarmSignalListenerTest {
   @Test
   void startsSwarmWhenIdMatches() {
     SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst");
+    reset(rabbit);
     listener.handle("", "sig.swarm-start." + Topology.SWARM_ID);
     verify(lifecycle).start();
     verifyNoMoreInteractions(lifecycle);
@@ -29,6 +30,7 @@ class SwarmSignalListenerTest {
   @Test
   void ignoresStartForOtherSwarm() {
     SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst");
+    reset(rabbit);
     listener.handle("", "sig.swarm-start.other");
     verifyNoInteractions(lifecycle);
   }
@@ -36,6 +38,7 @@ class SwarmSignalListenerTest {
   @Test
   void stopsSwarmWhenIdMatches() {
     SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst");
+    reset(rabbit);
     listener.handle("", "sig.swarm-stop." + Topology.SWARM_ID);
     verify(lifecycle).stop();
     verifyNoMoreInteractions(lifecycle);
@@ -44,6 +47,7 @@ class SwarmSignalListenerTest {
   @Test
   void ignoresStopForOtherSwarm() {
     SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst");
+    reset(rabbit);
     listener.handle("", "sig.swarm-stop.other");
     verifyNoInteractions(lifecycle);
   }
@@ -51,7 +55,16 @@ class SwarmSignalListenerTest {
   @Test
   void repliesToStatusRequest() {
     SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst");
+    reset(rabbit);
     listener.handle("{}", "sig.status-request.swarm-controller.inst");
+    verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
+        startsWith("ev.status-full.swarm-controller.inst"), any(Object.class));
+    verifyNoInteractions(lifecycle);
+  }
+
+  @Test
+  void emitsStatusOnStartup() {
+    new SwarmSignalListener(lifecycle, rabbit, "inst");
     verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
         startsWith("ev.status-full.swarm-controller.inst"), any(Object.class));
     verifyNoInteractions(lifecycle);

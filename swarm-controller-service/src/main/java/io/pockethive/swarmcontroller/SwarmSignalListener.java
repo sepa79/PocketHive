@@ -25,6 +25,11 @@ public class SwarmSignalListener {
     this.lifecycle = lifecycle;
     this.rabbit = rabbit;
     this.instanceId = instanceId;
+    try {
+      sendStatus();
+    } catch (Exception e) {
+      log.warn("initial status", e);
+    }
   }
 
   @RabbitListener(queues = "#{controlQueue.name}")
