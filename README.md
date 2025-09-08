@@ -162,12 +162,10 @@ Prereqs: Docker and Docker Compose.
 1) Build and start
 
 ```bash
-# Docker Hub (default)
 docker compose up -d --build
-
-# AWS ECR / GHCR variant (avoids Docker Hub limits)
-docker compose -f docker-compose.ecr.yml up -d --build
 ```
+
+The stack pulls Prometheus, Grafana, and Loki from AWS's public ECR and Wiremock from GitHub Container Registry to avoid Docker Hub rate limits.
 
 2) Open the UI
 
@@ -226,8 +224,7 @@ Services accept `config-update` messages on the control exchange to adjust behav
 Relevant files:
 
 - `ui/nginx.conf` — reverse proxy for `/ws` and `/healthz`
-- `docker-compose.yml` — mounts nginx config and exposes port 8088; adds healthcheck for UI
-- `docker-compose.ecr.yml` — pulls images from AWS ECR (Wiremock from GitHub Container Registry) to bypass Docker Hub limits
+- `docker-compose.yml` — mounts nginx config, exposes port 8088, and uses AWS ECR/GHCR images
 - `ui/src/main.tsx` — React entry point that wires providers, routing, and WebSocket connection logic.
 
 ## Healthchecks
@@ -280,7 +277,7 @@ Manual checks:
   - Optional: to create a dedicated non‑guest user, set `RABBITMQ_DEFAULT_USER`/`RABBITMQ_DEFAULT_PASS` in Compose and pass matching creds to services.
   - Alternative (dev only): relax `guest` loopback restriction via `rabbitmq.conf` mount if connecting directly without the proxy.
 
-- Cannot access UI: ensure port 8088 is free or adjust the mapping in `docker-compose.yml` or `docker-compose.ecr.yml`.
+- Cannot access UI: ensure port 8088 is free or adjust the mapping in `docker-compose.yml`.
 
 ## Development Notes
 
