@@ -5,6 +5,8 @@ existing per-bee control messages without introducing new routing patterns.
 
 ## Responsibilities
 - Listen for `sig.swarm-start.<swarmId>` and `sig.swarm-stop.<swarmId>` events.
+- Respond on the control channel to `sig.status-request` and `sig.config-update` messages for the
+  `swarm-controller` role.
 - Resolve swarm membership and emit `sig.config-update.<role>.<instance>` or
   `sig.status-request.<role>.<instance>` messages for each bee.
 - Tag all emitted metrics with the `swarm_id` label and expose a friendly bee name alongside a UUID.
