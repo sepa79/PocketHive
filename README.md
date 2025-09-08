@@ -187,8 +187,8 @@ docker compose up -d --build
 
 Every service generates a whimsical "bee name" when it starts to make log lines and metrics
 easier to trace back to a specific instance. Names follow the pattern
-`<bee-role>-bee-<funny1>-<funny2>-<id>` where `bee-role` is a themed alias for the component type and `id`
-is a random four character segment of a UUID for uniqueness. The mapping is:
+`<swarm>-<bee-role>-bee-<funny1>-<funny2>-<id>` where `swarm` is the swarm ID, `bee-role` is a themed alias
+for the component type and `id` is a random four character segment of a UUID for uniqueness. The mapping is:
 
 - generator → seeder
 - moderator → guardian
@@ -199,7 +199,7 @@ is a random four character segment of a UUID for uniqueness. The mapping is:
 
 The two `funny` parts are chosen from predefined lists to maximize variety while avoiding spaces
 or `. # *`. The chosen name is logged on startup and exposed through the `/actuator/info` endpoint
-under `beeName`. Future services should call `BeeNameGenerator.generate("<role>")` from the
+under `beeName`. Future services should call `BeeNameGenerator.generate("<role>", swarmId)` from the
 `observability` module; the utility applies the mapping automatically to stay consistent.
 
 ## Service Configuration

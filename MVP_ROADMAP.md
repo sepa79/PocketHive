@@ -93,8 +93,8 @@
 
 #### 2.2 Service Modifications
 - [x] Add `PH_SWARM_ID` environment variable to all services
-- [ ] Update bee name generation to include swarm ID
-- [ ] Modify metrics to include swarm labels
+- [x] Update bee name generation to include swarm ID
+- [x] Modify metrics to include swarm labels
 
 #### 2.3 UI Enhancements
 - [ ] Add "Create Swarm" button and form

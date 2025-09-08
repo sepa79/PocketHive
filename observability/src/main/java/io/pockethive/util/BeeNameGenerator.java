@@ -52,13 +52,18 @@ public final class BeeNameGenerator {
           "log-aggregator", "scribe");
 
   public static String generate(String role) {
+    return generate(role, null);
+  }
+
+  public static String generate(String role, String swarmId) {
     String mappedRole = ROLE_MAP.getOrDefault(role.toLowerCase(), role);
     String first = randomFrom(FIRST_PARTS);
     String second = randomFrom(SECOND_PARTS);
     String id = UUID.randomUUID().toString().substring(0, 4);
+    String swarm = swarmId == null || swarmId.isBlank() ? "default" : sanitize(swarmId);
     return String.format(
-        "%s-bee-%s-%s-%s",
-        sanitize(mappedRole), sanitize(first), sanitize(second), id);
+        "%s-%s-bee-%s-%s-%s",
+        swarm, sanitize(mappedRole), sanitize(first), sanitize(second), id);
   }
 
   private static String randomFrom(List<String> options) {
