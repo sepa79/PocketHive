@@ -194,8 +194,9 @@ for the component type and `id` is a random four character segment of a UUID for
 - moderator → guardian
 - processor → worker
 - postprocessor → forager
-- trigger → herald
+- trigger → buzzer
 - log-aggregator → scribe
+- swarm-controller → marshal
 
 The two `funny` parts are chosen from predefined lists to maximize variety while avoiding spaces
 or `. # *`. The chosen name is logged on startup and exposed through the `/actuator/info` endpoint

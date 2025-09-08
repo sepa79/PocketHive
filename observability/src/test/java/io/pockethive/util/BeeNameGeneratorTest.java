@@ -11,4 +11,16 @@ class BeeNameGeneratorTest {
     assertTrue(name.startsWith("sw1-seeder-bee-"));
     assertEquals(6, name.split("-").length);
   }
+
+  @Test
+  void mapsTriggerToBuzzer() {
+    String name = BeeNameGenerator.generate("trigger", "sw1");
+    assertTrue(name.startsWith("sw1-buzzer-bee-"));
+  }
+
+  @Test
+  void mapsSwarmControllerToMarshal() {
+    String name = BeeNameGenerator.generate("swarm-controller", "sw1");
+    assertTrue(name.startsWith("sw1-marshal-bee-"));
+  }
 }

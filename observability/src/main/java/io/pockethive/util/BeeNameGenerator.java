@@ -48,8 +48,9 @@ public final class BeeNameGenerator {
           "moderator", "guardian",
           "processor", "worker",
           "postprocessor", "forager",
-          "trigger", "herald",
-          "log-aggregator", "scribe");
+          "trigger", "buzzer",
+          "log-aggregator", "scribe",
+          "swarm-controller", "marshal");
 
   public static String generate(String role) {
     return generate(role, null);
