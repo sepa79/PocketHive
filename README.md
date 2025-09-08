@@ -167,13 +167,13 @@ docker compose up -d --build
 
 The default stack pulls Prometheus, Grafana, Loki, and Wiremock from Docker Hub.
 
-To pull from AWS ECR/GHCR instead, use the alternate compose file:
+To pull Bitnami images from AWS ECR (and Wiremock from GHCR) instead, use the alternate compose file:
 
 ```bash
 docker compose -f docker-compose.ecr.yml up -d --build
 ```
 
-The ECR variant sources Prometheus, Grafana, and Loki from AWS's public ECR and Wiremock from GitHub Container Registry to avoid Docker Hub rate limits.
+The ECR variant sources Bitnami images for Prometheus, Grafana, and Loki from AWS's public ECR and Wiremock from GitHub Container Registry to avoid Docker Hub rate limits.
 
 2) Open the UI
 

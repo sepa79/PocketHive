@@ -134,20 +134,20 @@ services:
       start_period: 5s
 
   prometheus:
-    image: public.ecr.aws/prometheus/prometheus:v2.49.1
+    image: public.ecr.aws/bitnami/prometheus:latest
     volumes:
-      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/prometheus.yml:/opt/bitnami/prometheus/conf/prometheus.yml:ro
     ports:
       - "9090:9090"
 
   grafana:
-    image: public.ecr.aws/grafana/grafana:10.4.2
+    image: public.ecr.aws/bitnami/grafana:latest
     environment:
       GF_SECURITY_ADMIN_USER: admin
       GF_SECURITY_ADMIN_PASSWORD: admin
     volumes:
-      - ./grafana/provisioning:/etc/grafana/provisioning:ro
-      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - ./grafana/provisioning:/opt/bitnami/grafana/conf/provisioning:ro
+      - ./grafana/dashboards:/opt/bitnami/grafana/data/dashboards:ro
     ports:
       - "3000:3000"
     depends_on:
@@ -155,12 +155,12 @@ services:
       - loki
 
   loki:
-    image: public.ecr.aws/grafana/loki:2.9.1
-    command: -config.file=/etc/loki/config.yml
+    image: public.ecr.aws/bitnami/grafana-loki:latest
+    command: -config.file=/opt/bitnami/grafana-loki/conf/loki.yml
     ports:
       - "3100:3100"
     volumes:
-      - ./loki/config.yml:/etc/loki/config.yml:ro
+      - ./loki/config.yml:/opt/bitnami/grafana-loki/conf/loki.yml:ro
 
   wiremock:
     image: ghcr.io/wiremock/wiremock:3.13.1-1
@@ -192,12 +192,12 @@ services:
 
   # promtail:
   #   # disabled: logs are shipped via RabbitMQ and aggregated to Loki
-  #   image: public.ecr.aws/grafana/promtail:2.9.1
-  #   command: -config.file=/etc/promtail/config.yml
+  #   image: public.ecr.aws/bitnami/promtail:latest
+  #   command: -config.file=/opt/bitnami/promtail/conf/promtail.yml
   #   ports:
   #     - "9080:9080"
   #   volumes:
-  #     - ./promtail/config.yml:/etc/promtail/config.yml:ro
+  #     - ./promtail/config.yml:/opt/bitnami/promtail/conf/promtail.yml:ro
   #     - /var/lib/docker/containers:/var/lib/docker/containers:ro
   #     - /var/run/docker.sock:/var/run/docker.sock:ro
   #   depends_on:
