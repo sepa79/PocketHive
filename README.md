@@ -165,7 +165,7 @@ Prereqs: Docker and Docker Compose.
 docker compose up -d --build
 ```
 
-The default stack pulls Prometheus, Grafana, and Loki from Bitnami's Docker Hub repositories and Wiremock from Docker Hub.
+The default stack pulls Prometheus, Grafana, Loki, and Wiremock from Docker Hub.
 
 To pull from AWS ECR/GHCR instead, use the alternate compose file:
 
@@ -232,7 +232,7 @@ Services accept `config-update` messages on the control exchange to adjust behav
 Relevant files:
 
 - `ui/nginx.conf` — reverse proxy for `/ws` and `/healthz`
-- `docker-compose.yml` — mounts nginx config, exposes port 8088, and uses Docker Hub images (Bitnami & official); see `docker-compose.ecr.yml` for the AWS ECR/GHCR variant
+- `docker-compose.yml` — mounts nginx config, exposes port 8088, and uses official Docker Hub images; see `docker-compose.ecr.yml` for the AWS ECR/GHCR variant
 - `ui/src/main.tsx` — React entry point that wires providers, routing, and WebSocket connection logic.
 
 ## Healthchecks

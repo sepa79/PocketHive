@@ -134,20 +134,20 @@ services:
       start_period: 5s
 
   prometheus:
-    image: bitnami/prometheus:latest
+    image: prom/prometheus
     volumes:
-      - ./prometheus/prometheus.yml:/opt/bitnami/prometheus/conf/prometheus.yml:ro
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
     ports:
       - "9090:9090"
 
   grafana:
-    image: bitnami/grafana:latest
+    image: grafana/grafana
     environment:
       GF_SECURITY_ADMIN_USER: admin
       GF_SECURITY_ADMIN_PASSWORD: admin
     volumes:
-      - ./grafana/provisioning:/opt/bitnami/grafana/conf/provisioning:ro
-      - ./grafana/dashboards:/opt/bitnami/grafana/data/dashboards:ro
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
     ports:
       - "3000:3000"
     depends_on:
@@ -155,12 +155,12 @@ services:
       - loki
 
   loki:
-    image: bitnami/grafana-loki:latest
-    command: -config.file=/bitnami/grafana-loki/conf/config.yml
+    image: grafana/loki:2.9.1
+    command: -config.file=/etc/loki/config.yml
     ports:
       - "3100:3100"
     volumes:
-      - ./loki/config.yml:/bitnami/grafana-loki/conf/config.yml:ro
+      - ./loki/config.yml:/etc/loki/config.yml:ro
 
   wiremock:
     image: wiremock/wiremock:3.13.1
