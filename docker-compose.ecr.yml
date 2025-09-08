@@ -135,14 +135,14 @@ services:
       start_period: 5s
 
   prometheus:
-    image: public.ecr.aws/prometheus/prometheus
+    image: public.ecr.aws/prometheus/prometheus:v2.49.1
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
     ports:
       - "9090:9090"
 
   grafana:
-    image: public.ecr.aws/grafana/grafana
+    image: public.ecr.aws/grafana/grafana:10.4.2
     environment:
       GF_SECURITY_ADMIN_USER: admin
       GF_SECURITY_ADMIN_PASSWORD: admin
