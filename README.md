@@ -144,7 +144,7 @@ See also: Control Bindings page (Menu → Control Bindings) and `docs/spec/async
 
 ## Stack & Ports
 
-- `rabbitmq` (with Web-STOMP): 5672 (AMQP), 15672 (Mgmt UI), 15674 (Web-STOMP, internal only)
+- `rabbitmq` (Web-STOMP, config & definitions mounted): 5672 (AMQP), 15672 (Mgmt UI), 15674 (Web-STOMP, internal only)
 - `ui` (nginx static site): 8088 → serves UI, proxies WebSocket at `/ws` to RabbitMQ
 - `generator`, `moderator`, `processor`, `postprocessor`, `trigger`: Spring Boot services using AMQP
 - Each service waits for RabbitMQ to report healthy before starting
