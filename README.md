@@ -113,6 +113,7 @@ The UI is built with React 18 + Vite and resides in `/ui`.
 - Metrics/status flow back on the `ph.control` exchange, with each service auto-declaring a durable `ph.control.<role>.<instance>` queue for broadcasts and direct signals.
 - Logs emitted by the services are routed to `ph.logs` and consumed by the log‑aggregator, which batches them to Loki.
 - Services propagate an `x-ph-trace` header to record trace IDs and hop timing across the flow.
+- New services must implement the control-plane contract: declare a `ph.control.<role>.<instance>` queue, handle `status-request` and `config-update` signals at global, role and instance scope, publish a startup `status-full`, and emit `status-delta` roughly every 5 s. See [`docs/rules/control-plane-rules.md`](docs/rules/control-plane-rules.md) for details.
 
 ### Control-plane Events & Signals
 
@@ -187,19 +188,20 @@ docker compose up -d --build
 
 Every service generates a whimsical "bee name" when it starts to make log lines and metrics
 easier to trace back to a specific instance. Names follow the pattern
-`<bee-role>-bee-<funny1>-<funny2>-<id>` where `bee-role` is a themed alias for the component type and `id`
-is a random four character segment of a UUID for uniqueness. The mapping is:
+`<swarm>-<bee-role>-bee-<funny1>-<funny2>-<id>` where `swarm` is the swarm ID, `bee-role` is a themed alias
+for the component type and `id` is a random four character segment of a UUID for uniqueness. The mapping is:
 
 - generator → seeder
 - moderator → guardian
 - processor → worker
 - postprocessor → forager
-- trigger → herald
+- trigger → buzzer
 - log-aggregator → scribe
+- swarm-controller → marshal
 
 The two `funny` parts are chosen from predefined lists to maximize variety while avoiding spaces
 or `. # *`. The chosen name is logged on startup and exposed through the `/actuator/info` endpoint
-under `beeName`. Future services should call `BeeNameGenerator.generate("<role>")` from the
+under `beeName`. Future services should call `BeeNameGenerator.generate("<role>", swarmId)` from the
 `observability` module; the utility applies the mapping automatically to stay consistent.
 
 ## Service Configuration
@@ -245,8 +247,8 @@ Manual checks:
 - System Logs: shows system and user actions:
   - Connect/Disconnect clicks, edits of URL/username/password (password length only)
   - UI health transitions based on `/healthz`
-- Hive panel: lists live components and queue stats and includes an interactive topology tab with type-based shapes and legend.
-- Queen panel: start new swarms by providing an ID and choosing a template.
+- Hive panel: lists live components grouped by swarm, with per-swarm start/stop controls and an interactive topology tab with type-based shapes and legend.
+- Queen panel: create new swarms by providing an ID and choosing a template.
 - HAL eyes: status indicators for UI and WS (green slow pulse = healthy/connected; blue modem pulse = connecting; red fast pulse = failed/closed/idle).
 
 ## UI Controls
@@ -256,7 +258,7 @@ Manual checks:
 - **WebSocket eye** — click to connect or disconnect from RabbitMQ.
 - **Monolith button** — broadcasts a global `status-request` signal; the publish shows in the OUT log.
 - **Buzz view** — IN, OUT and Other logs with a Config tab and Topic Sniffer; subscriptions are editable.
-- **Hive view** — searchable component list with start/stop toggles, a topology tab for draggable nodes, queue tooltips, and a legend of component shapes; selecting an item opens a detail drawer showing enabled state with editable settings and a confirmable config-update action.
+- **Hive view** — searchable component list grouped by swarm with per-swarm start/stop controls, a topology tab for draggable nodes, queue tooltips, and a legend of component shapes; selecting an item opens a detail drawer showing enabled state with editable settings and a confirmable config-update action.
 - **Queen view** — form for launching swarms by ID and template.
 - **Nectar view** — metric dropdown (TPS, latency, hops) and points input to adjust chart history.
 

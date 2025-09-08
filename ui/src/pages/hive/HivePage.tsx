@@ -2,13 +2,21 @@ import { useEffect, useState } from 'react'
 import ComponentList from './ComponentList'
 import ComponentDetail from './ComponentDetail'
 import TopologyView from './TopologyView'
-import { subscribeComponents } from '../../lib/stompClient'
+import SwarmCreateModal from './SwarmCreateModal'
+import {
+  subscribeComponents,
+  requestStatusFull,
+  startSwarm,
+  stopSwarm,
+} from '../../lib/stompClient'
 import type { Component } from '../../types/hive'
 
 export default function HivePage() {
   const [components, setComponents] = useState<Component[]>([])
   const [selected, setSelected] = useState<Component | null>(null)
   const [search, setSearch] = useState('')
+  const [showCreate, setShowCreate] = useState(false)
+  const [swarmMsg, setSwarmMsg] = useState<Record<string, string>>({})
 
   useEffect(() => {
     const unsub = subscribeComponents(setComponents)
@@ -27,21 +35,99 @@ export default function HivePage() {
     c.id.toLowerCase().includes(search.toLowerCase()),
   )
 
+  const grouped = filtered.reduce<Record<string, Component[]>>((acc, c) => {
+    const swarm = c.swarmId || 'default'
+    acc[swarm] = acc[swarm] || []
+    acc[swarm].push(c)
+    return acc
+  }, {})
+
+  const swarmStatus = (comps: Component[]) => {
+    const enabled = comps.map((c) => c.config?.enabled !== false)
+    if (enabled.every(Boolean)) return 'running'
+    if (enabled.every((e) => !e)) return 'stopped'
+    return 'partial'
+  }
+
+  const handleStart = async (id: string) => {
+    try {
+      await startSwarm(id)
+      const comps = components.filter((c) => c.swarmId === id)
+      await Promise.all(comps.map((c) => requestStatusFull(c)))
+      setSwarmMsg((m) => ({ ...m, [id]: 'Swarm started' }))
+    } catch {
+      setSwarmMsg((m) => ({ ...m, [id]: 'Failed to start swarm' }))
+    }
+  }
+
+  const handleStop = async (id: string) => {
+    try {
+      await stopSwarm(id)
+      const comps = components.filter((c) => c.swarmId === id)
+      await Promise.all(comps.map((c) => requestStatusFull(c)))
+      setSwarmMsg((m) => ({ ...m, [id]: 'Swarm stopped' }))
+    } catch {
+      setSwarmMsg((m) => ({ ...m, [id]: 'Failed to stop swarm' }))
+    }
+  }
+
   return (
     <div className="flex h-[calc(100vh-64px)] overflow-hidden">
       <div className="w-full md:w-1/3 xl:w-1/4 border-r border-white/10 p-4 flex flex-col">
-        <input
-          className="w-full rounded bg-white/5 p-2 text-white"
-          placeholder="Search components"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
-        <div className="mt-4 flex-1 overflow-hidden">
-          <ComponentList
-            components={filtered}
-            onSelect={(c) => setSelected(c)}
-            selectedId={selected?.id}
+        <div className="flex items-center gap-2">
+          <input
+            className="flex-1 rounded bg-white/5 p-2 text-white"
+            placeholder="Search components"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
           />
+          <button
+            className="rounded bg-white/20 hover:bg-white/30 px-2 py-1 text-sm"
+            onClick={() => setShowCreate(true)}
+          >
+            Create Swarm
+          </button>
+        </div>
+        <div className="mt-4 flex-1 overflow-y-auto">
+          {Object.entries(grouped)
+            .sort(([a], [b]) => a.localeCompare(b))
+            .map(([id, comps]) => {
+              const status = swarmStatus(comps)
+              return (
+                <div key={id} className="mb-4">
+                  <div className="flex items-center justify-between mb-1">
+                    <div className="font-medium">{id}</div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-white/60">{status}</span>
+                      {status !== 'running' && (
+                        <button
+                          className="p-1 rounded bg-white/10 hover:bg-white/20 text-xs"
+                          onClick={() => handleStart(id)}
+                        >
+                          Start
+                        </button>
+                      )}
+                      {status !== 'stopped' && (
+                        <button
+                          className="p-1 rounded bg-white/10 hover:bg-white/20 text-xs"
+                          onClick={() => handleStop(id)}
+                        >
+                          Stop
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  {swarmMsg[id] && (
+                    <div className="text-xs text-white/70 mb-1">{swarmMsg[id]}</div>
+                  )}
+                  <ComponentList
+                    components={comps}
+                    onSelect={(c) => setSelected(c)}
+                    selectedId={selected?.id}
+                  />
+                </div>
+              )
+            })}
         </div>
       </div>
       <div className="hidden md:flex flex-1 overflow-auto">
@@ -60,6 +146,7 @@ export default function HivePage() {
           <div className="p-4 text-white/50 overflow-y-auto">Select a component</div>
         )}
       </div>
+      {showCreate && <SwarmCreateModal onClose={() => setShowCreate(false)} />}
     </div>
   )
 }

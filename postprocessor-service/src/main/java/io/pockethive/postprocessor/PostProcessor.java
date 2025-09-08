@@ -49,10 +49,26 @@ public class PostProcessor {
     this.rabbit = rabbit;
     this.instanceId = instanceId;
     this.registry = listenerRegistry;
-    this.hopLatency = DistributionSummary.builder("postprocessor_hop_latency_ms").register(registry);
-    this.totalLatency = DistributionSummary.builder("postprocessor_total_latency_ms").register(registry);
-    this.hopCount = DistributionSummary.builder("postprocessor_hops").register(registry);
-    this.errorCounter = Counter.builder("postprocessor_errors_total").register(registry);
+    this.hopLatency = DistributionSummary.builder("postprocessor_hop_latency_ms")
+        .tag("service", "postprocessor")
+        .tag("instance", instanceId)
+        .tag("swarm", Topology.SWARM_ID)
+        .register(registry);
+    this.totalLatency = DistributionSummary.builder("postprocessor_total_latency_ms")
+        .tag("service", "postprocessor")
+        .tag("instance", instanceId)
+        .tag("swarm", Topology.SWARM_ID)
+        .register(registry);
+    this.hopCount = DistributionSummary.builder("postprocessor_hops")
+        .tag("service", "postprocessor")
+        .tag("instance", instanceId)
+        .tag("swarm", Topology.SWARM_ID)
+        .register(registry);
+    this.errorCounter = Counter.builder("postprocessor_errors_total")
+        .tag("service", "postprocessor")
+        .tag("instance", instanceId)
+        .tag("swarm", Topology.SWARM_ID)
+        .register(registry);
     try{ sendStatusFull(0); } catch(Exception ignore){}
   }
 

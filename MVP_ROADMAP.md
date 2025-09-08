@@ -93,13 +93,13 @@
 
 #### 2.2 Service Modifications
 - [x] Add `PH_SWARM_ID` environment variable to all services
-- [ ] Update bee name generation to include swarm ID
-- [ ] Modify metrics to include swarm labels
+- [x] Update bee name generation to include swarm ID
+- [x] Modify metrics to include swarm labels
 
 #### 2.3 UI Enhancements
-- [ ] Add "Create Swarm" button and form
-- [ ] Display swarms as grouped components
-- [ ] Add swarm-level start/stop controls
+ - [x] Add "Create Swarm" button and form
+ - [x] Display swarms as grouped components
+ - [x] Add swarm-level start/stop controls
 
 **Deliverable**: Multiple REST swarms running independently
 

@@ -61,10 +61,15 @@ public class Processor {
     this.instanceId = instanceId;
     this.baseUrl = baseUrl;
     this.registry = listenerRegistry;
-    this.sutLatency = DistributionSummary.builder("processor_request_time_ms").register(registry);
+    this.sutLatency = DistributionSummary.builder("processor_request_time_ms")
+        .tag("service", "processor")
+        .tag("instance", instanceId)
+        .tag("swarm", Topology.SWARM_ID)
+        .register(registry);
     this.messageCounter = Counter.builder("processor_messages_total")
         .tag("service", "processor")
         .tag("instance", instanceId)
+        .tag("swarm", Topology.SWARM_ID)
         .register(registry);
     log.info("Base URL: {}", baseUrl);
     try{ sendStatusFull(0); } catch(Exception ignore){}

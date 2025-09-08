@@ -17,6 +17,7 @@
     <module>orchestrator-service</module>
     <module>postprocessor-service</module>
     <module>processor-service</module>
+    <module>swarm-controller-service</module>
     <module>trigger-service</module>
   </modules>
 </project>

@@ -1,5 +1,6 @@
 package io.pockethive.generator;
 
+import io.pockethive.Topology;
 import io.pockethive.util.BeeNameGenerator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -16,7 +17,7 @@ public class Application {
   private static final Logger log = LoggerFactory.getLogger(Application.class);
 
   public static void main(String[] args){
-    String beeName = BeeNameGenerator.generate("generator");
+    String beeName = BeeNameGenerator.generate("generator", Topology.SWARM_ID);
     System.setProperty("bee.name", beeName);
     log.info("Bee name: {}", beeName);
     SpringApplication.run(Application.class, args);

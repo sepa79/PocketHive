@@ -10,6 +10,7 @@ COPY observability/pom.xml observability/pom.xml
 COPY postprocessor-service/pom.xml postprocessor-service/pom.xml
 COPY trigger-service/pom.xml trigger-service/pom.xml
 COPY orchestrator-service/pom.xml orchestrator-service/pom.xml
+COPY swarm-controller-service/pom.xml swarm-controller-service/pom.xml
 COPY log-aggregator-service/src log-aggregator-service/src
 COPY generator-service/src generator-service/src
 COPY moderator-service/src moderator-service/src
@@ -18,6 +19,7 @@ COPY observability/src observability/src
 COPY postprocessor-service/src postprocessor-service/src
 COPY trigger-service/src trigger-service/src
 COPY orchestrator-service/src orchestrator-service/src
+COPY swarm-controller-service/src swarm-controller-service/src
 RUN mvn -q -B -DskipTests -pl log-aggregator-service -am package
 
 # ---- Runtime ----

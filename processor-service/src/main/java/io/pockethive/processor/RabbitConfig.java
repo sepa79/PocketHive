@@ -14,7 +14,7 @@ public class RabbitConfig {
 
   @Bean
   public String instanceId(){
-    return System.getProperty("bee.name", BeeNameGenerator.generate(ROLE));
+    return System.getProperty("bee.name", BeeNameGenerator.generate(ROLE, Topology.SWARM_ID));
   }
 
   @Bean
