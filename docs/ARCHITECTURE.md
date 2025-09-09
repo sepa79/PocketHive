@@ -13,6 +13,12 @@ PocketHive coordinates work through a layered control plane:
 - **Herald** – per‑swarm controller started by the Queen; it provisions message queues and launches worker containers.
 - **Bees** – the worker services inside each swarm.
 
+### Queen (Orchestrator)
+The Queen coordinates the entire hive. It loads scenario plans, spins up or tears down swarms, and hands each Herald the fragment of the plan it should execute.
+
+### Herald (Swarm Controller)
+A Herald governs one swarm. After receiving its plan from the Queen it declares the swarm's exchanges and queues, launches the bee containers described in the template and fans out config signals to individual bees.
+
 ### Swarm bootstrap
 When a new swarm is requested, the Queen spawns a Herald. The Herald declares the required exchanges and queues, then starts the bee containers defined by the swarm template.
 
