@@ -293,7 +293,7 @@ docker compose up -d --build ui
 
 - Node tooling (linting/tests) lives in `package.json` at the repo root:
   - `npm install` installs dev dependencies.
-  - `npm run lint` runs ESLint.
+  - `npm run lint` runs ESLint on `ui/src/**/*.{ts,tsx}`.
   - `npm test` executes Vitest.
 
 ---
