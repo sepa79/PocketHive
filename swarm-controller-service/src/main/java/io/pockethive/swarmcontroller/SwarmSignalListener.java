@@ -1,9 +1,13 @@
 package io.pockethive.swarmcontroller;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.Topology;
 import io.pockethive.observability.StatusEnvelopeBuilder;
+import io.pockethive.swarmcontroller.SwarmStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.amqp.support.AmqpHeaders;
@@ -21,14 +25,17 @@ public class SwarmSignalListener {
   private final SwarmLifecycle lifecycle;
   private final RabbitTemplate rabbit;
   private final String instanceId;
+  private final ObjectMapper mapper;
   private static final long STATUS_INTERVAL_MS = 5000L;
 
   public SwarmSignalListener(SwarmLifecycle lifecycle,
                              RabbitTemplate rabbit,
-                             @Qualifier("instanceId") String instanceId) {
+                             @Qualifier("instanceId") String instanceId,
+                             ObjectMapper mapper) {
     this.lifecycle = lifecycle;
     this.rabbit = rabbit;
     this.instanceId = instanceId;
+    this.mapper = mapper;
     try {
       sendStatusFull();
     } catch (Exception e) {
@@ -39,6 +46,9 @@ public class SwarmSignalListener {
   @RabbitListener(queues = "#{controlQueue.name}")
   public void handle(String body, @Header(AmqpHeaders.RECEIVED_ROUTING_KEY) String routingKey) {
     if (routingKey == null) return;
+    MDC.put("swarm_id", Topology.SWARM_ID);
+    MDC.put("service", ROLE);
+    MDC.put("instance", instanceId);
     if (routingKey.startsWith("sig.swarm-start.")) {
       String swarmId = routingKey.substring("sig.swarm-start.".length());
       if (Topology.SWARM_ID.equals(swarmId)) {
@@ -56,7 +66,17 @@ public class SwarmSignalListener {
       sendStatusFull();
     } else if (routingKey.startsWith("sig.config-update")) {
       log.info("Config update received: {} payload={} ", routingKey, body);
+      try {
+        JsonNode node = mapper.readTree(body);
+        JsonNode enabledNode = node.path("data").path("enabled");
+        if (enabledNode.isBoolean() && !enabledNode.asBoolean()) {
+          log.warn("Ignoring attempt to disable swarm-controller");
+        }
+      } catch (Exception e) {
+        log.warn("config parse", e);
+      }
     }
+    MDC.clear();
   }
 
   @Scheduled(fixedRate = STATUS_INTERVAL_MS)
@@ -72,6 +92,8 @@ public class SwarmSignalListener {
         .role(ROLE)
         .instance(instanceId)
         .swarmId(Topology.SWARM_ID)
+        .enabled(true)
+        .data("swarmStatus", lifecycle.getStatus().name())
         .controlIn(controlQueue)
         .controlRoutes(
             "sig.config-update",
@@ -83,7 +105,6 @@ public class SwarmSignalListener {
             "sig.swarm-start.*",
             "sig.swarm-stop.*")
         .controlOut(rk)
-        .enabled(true)
         .toJson();
     rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, payload);
   }
@@ -96,6 +117,8 @@ public class SwarmSignalListener {
         .role(ROLE)
         .instance(instanceId)
         .swarmId(Topology.SWARM_ID)
+        .enabled(true)
+        .data("swarmStatus", lifecycle.getStatus().name())
         .controlIn(controlQueue)
         .controlRoutes(
             "sig.config-update",
@@ -107,7 +130,6 @@ public class SwarmSignalListener {
             "sig.swarm-start.*",
             "sig.swarm-stop.*")
         .controlOut(rk)
-        .enabled(true)
         .toJson();
     rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, payload);
   }

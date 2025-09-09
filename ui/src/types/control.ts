@@ -2,7 +2,7 @@ export interface ControlEvent {
   event: 'status' | 'lifecycle' | 'metric' | 'alert' | 'link';
   kind: string;
   version: string;
-  role: 'generator' | 'moderator' | 'processor' | 'postprocessor' | 'trigger';
+  role: 'generator' | 'moderator' | 'processor' | 'postprocessor' | 'trigger' | 'swarm-controller';
   instance: string;
   location?: string;
   messageId: string;

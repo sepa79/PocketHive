@@ -1,16 +1,24 @@
 package io.pockethive.swarmcontroller;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.Topology;
 import org.springframework.amqp.core.*;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.boot.actuate.autoconfigure.metrics.MeterRegistryCustomizer;
+import io.micrometer.core.instrument.MeterRegistry;
 
 import io.pockethive.util.BeeNameGenerator;
 
 @Configuration
 public class RabbitConfig {
   private static final String ROLE = "swarm-controller";
+
+  @Bean
+  ObjectMapper objectMapper() {
+    return new ObjectMapper();
+  }
 
   @Bean
   public String instanceId() {
@@ -76,5 +84,14 @@ public class RabbitConfig {
                              String instanceId) {
     return BindingBuilder.bind(controlQueue).to(controlExchange)
         .with("sig.status-request." + ROLE + "." + instanceId);
+  }
+
+  @Bean
+  MeterRegistryCustomizer<MeterRegistry> metricsCommonTags(String instanceId) {
+    return registry -> registry.config().commonTags(
+        "swarm_id", Topology.SWARM_ID,
+        "service", ROLE,
+        "instance", instanceId
+    );
   }
 }

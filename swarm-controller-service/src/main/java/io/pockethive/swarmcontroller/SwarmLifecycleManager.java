@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.Topology;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.amqp.core.*;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -45,6 +46,9 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
 
   @Override
   public void start(String planJson) {
+    MDC.put("swarm_id", Topology.SWARM_ID);
+    MDC.put("service", "swarm-controller");
+    MDC.put("instance", instanceId);
     log.info("Starting swarm {}", Topology.SWARM_ID);
     try {
       SwarmPlan plan = mapper.readValue(planJson, SwarmPlan.class);
@@ -75,11 +79,16 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
       status = SwarmStatus.RUNNING;
     } catch (JsonProcessingException e) {
       log.warn("Invalid plan payload", e);
+    } finally {
+      MDC.clear();
     }
   }
 
   @Override
   public void stop() {
+    MDC.put("swarm_id", Topology.SWARM_ID);
+    MDC.put("service", "swarm-controller");
+    MDC.put("instance", instanceId);
     log.info("Stopping swarm {}", Topology.SWARM_ID);
     for (String id : containers.values()) {
       docker.stopAndRemoveContainer(id);
@@ -110,12 +119,14 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
             "sig.swarm-start.*",
             "sig.swarm-stop.*")
         .controlOut(rk)
-        .enabled(false)
+        .enabled(true)
         .toJson();
     rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, payload);
     status = SwarmStatus.STOPPED;
+    MDC.clear();
   }
 
+  @Override
   public SwarmStatus getStatus() {
     return status;
   }
