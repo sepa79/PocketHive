@@ -11,6 +11,7 @@
   </properties>
   <modules>
     <module>observability</module>
+    <module>common/topology-core</module>
     <module>generator-service</module>
     <module>log-aggregator-service</module>
     <module>moderator-service</module>
@@ -19,5 +20,6 @@
     <module>processor-service</module>
     <module>swarm-controller-service</module>
     <module>trigger-service</module>
+    <module>test</module>
   </modules>
 </project>
