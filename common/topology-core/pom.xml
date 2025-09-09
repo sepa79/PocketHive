@@ -5,6 +5,7 @@
     <groupId>io.pockethive</groupId>
     <artifactId>pockethive-mvp</artifactId>
     <version>${revision}</version>
+    <relativePath>../..</relativePath>
   </parent>
   <artifactId>topology-core</artifactId>
   <properties>
