@@ -9,3 +9,4 @@
 - Review the [rules](../rules/) and [specifications](../spec/) before making changes.
 - Follow project policy and Conventional Commits.
 - When adding or removing Maven modules, update the root `pom.xml` `<modules>` section and commit any new module folders; otherwise builds fail with `Child module ... does not exist`.
+- Ensure service Dockerfiles copy new modules' POMs and sources so Docker builds can resolve them.

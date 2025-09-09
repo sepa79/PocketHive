@@ -16,3 +16,4 @@ Key guidelines include:
 - Output must be production ready: typed, formatted and secure.
 - Follow project policy and Conventional Commits.
 - Keep the root `pom.xml` `<modules>` list in sync with actual module folders to prevent `Child module ... does not exist` build errors.
+- Update service Dockerfiles to copy any new modules' `pom.xml` and sources so container builds succeed.
