@@ -1,6 +1,6 @@
 package io.pockethive.orchestrator.app;
 
-import io.pockethive.orchestrator.domain.Swarm;
+import io.pockethive.orchestrator.domain.*;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -20,7 +20,8 @@ class SwarmSignalListenerTest {
     @Test
     void createsSwarmOnSignal() {
         when(lifecycle.startSwarm("sw1", "img")).thenReturn(new Swarm("sw1", "cid"));
-        SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst");
+        SwarmTemplate template = new SwarmTemplate();
+        SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", template);
 
         listener.handle("img", "sig.swarm-create.sw1");
 
@@ -32,11 +33,24 @@ class SwarmSignalListenerTest {
     @Test
     void logsErrorWhenStartFails() {
         when(lifecycle.startSwarm("sw1", "img")).thenThrow(new RuntimeException("boom"));
-        SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst");
+        SwarmTemplate template = new SwarmTemplate();
+        SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", template);
 
         listener.handle("img", "sig.swarm-create.sw1");
 
         verify(lifecycle).startSwarm("sw1", "img");
         verifyNoInteractions(rabbit);
+    }
+
+    @Test
+    void sendsPlanOnHeraldReady() {
+        SwarmTemplate template = new SwarmTemplate();
+        SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", template);
+
+        listener.handle("", "ev.ready.herald.inst");
+
+        verify(rabbit).convertAndSend(eq(io.pockethive.Topology.CONTROL_EXCHANGE),
+                eq("sig.swarm-start." + io.pockethive.Topology.SWARM_ID),
+                eq(new SwarmPlan(io.pockethive.Topology.SWARM_ID, template)));
     }
 }
