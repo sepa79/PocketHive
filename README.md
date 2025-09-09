@@ -103,7 +103,7 @@ flowchart LR
   style UI stroke:#00e676,stroke-width:3px;
 ```
 
-The UI is built with React 18 + Vite and resides in `/ui`.
+The UI is built with React 19 + Vite and resides in `/ui`.
 
 ### Architecture
 
