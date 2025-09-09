@@ -16,6 +16,18 @@ PocketHive coordinates work through a layered control plane:
 ### Swarm bootstrap
 When a new swarm is requested, the Queen spawns a Herald. The Herald declares the required exchanges and queues, then starts the bee containers defined by the swarm template.
 
+## Multi-Region & Queue Adapters
+PocketHive will support swarms running in multiple geolocations. Each swarm connects to a region-local broker while the Queen coordinates them through the control plane. Regions remain isolated from each other’s traffic yet share common naming and signalling conventions.
+
+To enable broker diversity, messaging will flow through pluggable queue adapters. The core interface will expose publish and consume operations and minimal lifecycle hooks. Implementations for AMQP, Kafka, SQS and others can plug in without altering domain code.
+
+### Adding a new driver
+1. Implement the adapter interface for the target broker.
+2. Provide configuration mapping and wiring inside the swarm controller.
+3. Register the driver with the Queen so swarms may select it at launch time.
+
+This feature is planned and not yet implemented.
+
 ## Layers
 Every service follows a hexagonal layout:
 - **api** – inbound ports and DTOs.

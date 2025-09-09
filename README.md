@@ -10,6 +10,7 @@
 
 - **Completed**: Phase 1 – Orchestrator Foundation (dynamic swarm creation, control-plane hooks, Docker integration)
 - **In Progress**: Phase 2 – Multi-Swarm Support
+- **Planned**: Multi-Region & Queue Adapters – distributed queues will be pluggable. See [Multi-Region & Queue Adapters](docs/ARCHITECTURE.md#multi-region--queue-adapters).
 
 ```mermaid
 flowchart LR
