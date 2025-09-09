@@ -25,17 +25,31 @@ class SwarmSignalListenerTest {
   void startsSwarmWhenIdMatches() {
     when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
     SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", new ObjectMapper());
-    reset(rabbit);
+    reset(lifecycle, rabbit);
+    when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
     listener.handle("plan", "sig.swarm-start." + Topology.SWARM_ID);
     verify(lifecycle).start("plan");
+    verify(lifecycle).getStatus();
     verifyNoMoreInteractions(lifecycle);
+  }
+
+  @Test
+  void emitsStatusOnStartSignal() {
+    when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
+    SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", new ObjectMapper());
+    reset(lifecycle, rabbit);
+    when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
+    listener.handle("plan", "sig.swarm-start." + Topology.SWARM_ID);
+    verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
+        startsWith("ev.status-full.swarm-controller.inst"),
+        argThat((String p) -> p.contains("\"swarmStatus\":\"RUNNING\"") && p.contains("\"enabled\":true")));
   }
 
   @Test
   void ignoresStartForOtherSwarm() {
     when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
     SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", new ObjectMapper());
-    reset(rabbit);
+    reset(lifecycle, rabbit);
     listener.handle("", "sig.swarm-start.other");
     verifyNoInteractions(lifecycle);
   }
@@ -44,7 +58,7 @@ class SwarmSignalListenerTest {
   void stopsSwarmWhenIdMatches() {
     when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
     SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", new ObjectMapper());
-    reset(rabbit);
+    reset(lifecycle, rabbit);
     listener.handle("", "sig.swarm-stop." + Topology.SWARM_ID);
     verify(lifecycle).stop();
     verifyNoMoreInteractions(lifecycle);
@@ -54,7 +68,7 @@ class SwarmSignalListenerTest {
   void ignoresStopForOtherSwarm() {
     when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
     SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", new ObjectMapper());
-    reset(rabbit);
+    reset(lifecycle, rabbit);
     listener.handle("", "sig.swarm-stop.other");
     verifyNoInteractions(lifecycle);
   }
@@ -63,12 +77,14 @@ class SwarmSignalListenerTest {
   void repliesToStatusRequest() {
     when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
     SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", new ObjectMapper());
-    reset(rabbit);
+    reset(lifecycle, rabbit);
+    when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
     listener.handle("{}", "sig.status-request.swarm-controller.inst");
     verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
         startsWith("ev.status-full.swarm-controller.inst"),
         argThat((String p) -> p.contains("\"swarmStatus\":\"RUNNING\"") && p.contains("\"enabled\":true")));
-    verifyNoInteractions(lifecycle);
+    verify(lifecycle).getStatus();
+    verifyNoMoreInteractions(lifecycle);
   }
 
   @Test
@@ -78,20 +94,22 @@ class SwarmSignalListenerTest {
     verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
         startsWith("ev.status-full.swarm-controller.inst"),
         argThat((String p) -> p.contains("\"swarmStatus\":\"RUNNING\"") && p.contains("\"enabled\":true")));
-    verifyNoInteractions(lifecycle);
+    verify(lifecycle).getStatus();
+    verifyNoMoreInteractions(lifecycle);
   }
 
   @Test
   void emitsPeriodicStatusDelta() {
     when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
     SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", new ObjectMapper());
-    reset(rabbit);
+    reset(lifecycle, rabbit);
     when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
     listener.status();
     verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
         startsWith("ev.status-delta.swarm-controller.inst"),
         argThat((String p) -> p.contains("\"swarmStatus\":\"RUNNING\"") && p.contains("\"enabled\":true")));
-    verifyNoInteractions(lifecycle);
+    verify(lifecycle).getStatus();
+    verifyNoMoreInteractions(lifecycle);
   }
 
   @Test
