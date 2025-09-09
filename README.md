@@ -4,7 +4,7 @@
   <img alt="PocketHive" src="ui/assets/logo.svg" width="100%" />
 </p>
 
-**PocketHive** is a portable transaction swarm: compact, composable components that let you generate, moderate, process, and test workloads with clear boundaries and durable queues. A queen (orchestrator) service manages swarm containers via Docker and communicates with all services over AMQP. Swarm templates in `orchestrator-service/src/main/resources/templates` define container images to launch.
+**PocketHive** is a portable transaction swarm: compact, composable components that let you generate, moderate, process, and test workloads with clear boundaries and durable queues. The Queen service remains as the global scheduler and manages swarms via Docker. For each swarm it now launches a Herald controller that provisions AMQP queues and worker containers. Swarm templates in `orchestrator-service/src/main/resources/templates` define container images to launch.
 
 ### Implementation Status
 
@@ -248,7 +248,7 @@ Manual checks:
   - Connect/Disconnect clicks, edits of URL/username/password (password length only)
   - UI health transitions based on `/healthz`
 - Hive panel: lists live components grouped by swarm, with per-swarm start/stop controls and an interactive topology tab with type-based shapes and legend.
-- Queen panel: create new swarms by providing an ID and choosing a template.
+- Queen panel: create new swarms by providing an ID and choosing a template; each swarm spawns a Herald to set up queues and bee containers.
 - HAL eyes: status indicators for UI and WS (green slow pulse = healthy/connected; blue modem pulse = connecting; red fast pulse = failed/closed/idle).
 
 ## UI Controls
@@ -259,7 +259,7 @@ Manual checks:
 - **Monolith button** — broadcasts a global `status-request` signal; the publish shows in the OUT log.
 - **Buzz view** — IN, OUT and Other logs with a Config tab and Topic Sniffer; subscriptions are editable.
 - **Hive view** — searchable component list grouped by swarm with per-swarm start/stop controls, a topology tab for draggable nodes, queue tooltips, and a legend of component shapes; selecting an item opens a detail drawer showing enabled state with editable settings and a confirmable config-update action.
-- **Queen view** — form for launching swarms by ID and template.
+- **Queen view** — form for launching swarms by ID and template; starting a swarm spins up a Herald controller.
 - **Nectar view** — metric dropdown (TPS, latency, hops) and points input to adjust chart history.
 
 ## Troubleshooting
