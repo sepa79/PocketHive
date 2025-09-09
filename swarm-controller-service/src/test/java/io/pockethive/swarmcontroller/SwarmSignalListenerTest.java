@@ -66,7 +66,7 @@ class SwarmSignalListenerTest {
     listener.handle("{}", "sig.status-request.swarm-controller.inst");
     verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
         startsWith("ev.status-full.swarm-controller.inst"),
-        argThat(p -> p.toString().contains("\"swarmStatus\":\"RUNNING\"")));
+        argThat((String p) -> p.contains("\"swarmStatus\":\"RUNNING\"")));
     verifyNoInteractions(lifecycle);
   }
 
@@ -76,7 +76,7 @@ class SwarmSignalListenerTest {
     new SwarmSignalListener(lifecycle, rabbit, "inst");
     verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
         startsWith("ev.status-full.swarm-controller.inst"),
-        argThat(p -> p.toString().contains("\"swarmStatus\":\"RUNNING\"")));
+        argThat((String p) -> p.contains("\"swarmStatus\":\"RUNNING\"")));
     verifyNoInteractions(lifecycle);
   }
 
@@ -89,7 +89,7 @@ class SwarmSignalListenerTest {
     listener.status();
     verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
         startsWith("ev.status-delta.swarm-controller.inst"),
-        argThat(p -> p.toString().contains("\"swarmStatus\":\"RUNNING\"")));
+        argThat((String p) -> p.contains("\"swarmStatus\":\"RUNNING\"")));
     verifyNoInteractions(lifecycle);
   }
 }
