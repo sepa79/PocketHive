@@ -1,5 +1,6 @@
 package io.pockethive.swarmcontroller;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.Topology;
 import org.springframework.amqp.core.*;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -13,6 +14,11 @@ import io.pockethive.util.BeeNameGenerator;
 @Configuration
 public class RabbitConfig {
   private static final String ROLE = "swarm-controller";
+
+  @Bean
+  ObjectMapper objectMapper() {
+    return new ObjectMapper();
+  }
 
   @Bean
   public String instanceId() {
