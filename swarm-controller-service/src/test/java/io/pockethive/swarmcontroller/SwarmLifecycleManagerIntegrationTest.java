@@ -8,6 +8,9 @@ import org.springframework.amqp.rabbit.junit.RabbitAvailable;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.amqp.rabbit.core.RabbitAdmin;
+import org.springframework.boot.test.mock.mockito.MockBean;
+
+import io.pockethive.swarmcontroller.infra.docker.DockerContainerClient;
 
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
@@ -19,6 +22,9 @@ class SwarmLifecycleManagerIntegrationTest {
 
   @Autowired
   AmqpAdmin amqp;
+
+  @MockBean
+  DockerContainerClient docker;
 
   @AfterEach
   void cleanup() {
