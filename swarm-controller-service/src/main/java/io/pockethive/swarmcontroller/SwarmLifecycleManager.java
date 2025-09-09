@@ -119,7 +119,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
             "sig.swarm-start.*",
             "sig.swarm-stop.*")
         .controlOut(rk)
-        .enabled(false)
+        .enabled(true)
         .toJson();
     rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, payload);
     status = SwarmStatus.STOPPED;

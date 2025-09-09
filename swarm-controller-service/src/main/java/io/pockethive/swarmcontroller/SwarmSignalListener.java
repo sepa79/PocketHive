@@ -1,5 +1,7 @@
 package io.pockethive.swarmcontroller;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.Topology;
 import io.pockethive.observability.StatusEnvelopeBuilder;
 import io.pockethive.swarmcontroller.SwarmStatus;
@@ -23,14 +25,17 @@ public class SwarmSignalListener {
   private final SwarmLifecycle lifecycle;
   private final RabbitTemplate rabbit;
   private final String instanceId;
+  private final ObjectMapper mapper;
   private static final long STATUS_INTERVAL_MS = 5000L;
 
   public SwarmSignalListener(SwarmLifecycle lifecycle,
                              RabbitTemplate rabbit,
-                             @Qualifier("instanceId") String instanceId) {
+                             @Qualifier("instanceId") String instanceId,
+                             ObjectMapper mapper) {
     this.lifecycle = lifecycle;
     this.rabbit = rabbit;
     this.instanceId = instanceId;
+    this.mapper = mapper;
     try {
       sendStatusFull();
     } catch (Exception e) {
@@ -61,6 +66,15 @@ public class SwarmSignalListener {
       sendStatusFull();
     } else if (routingKey.startsWith("sig.config-update")) {
       log.info("Config update received: {} payload={} ", routingKey, body);
+      try {
+        JsonNode node = mapper.readTree(body);
+        JsonNode enabledNode = node.path("data").path("enabled");
+        if (enabledNode.isBoolean() && !enabledNode.asBoolean()) {
+          log.warn("Ignoring attempt to disable swarm-controller");
+        }
+      } catch (Exception e) {
+        log.warn("config parse", e);
+      }
     }
     MDC.clear();
   }
@@ -78,7 +92,7 @@ public class SwarmSignalListener {
         .role(ROLE)
         .instance(instanceId)
         .swarmId(Topology.SWARM_ID)
-        .enabled(lifecycle.getStatus() == SwarmStatus.RUNNING)
+        .enabled(true)
         .data("swarmStatus", lifecycle.getStatus().name())
         .controlIn(controlQueue)
         .controlRoutes(
@@ -103,7 +117,7 @@ public class SwarmSignalListener {
         .role(ROLE)
         .instance(instanceId)
         .swarmId(Topology.SWARM_ID)
-        .enabled(lifecycle.getStatus() == SwarmStatus.RUNNING)
+        .enabled(true)
         .data("swarmStatus", lifecycle.getStatus().name())
         .controlIn(controlQueue)
         .controlRoutes(

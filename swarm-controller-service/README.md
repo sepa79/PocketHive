@@ -1,6 +1,6 @@
 # SwarmController Service
 
-Acts as the Herald for a swarm. SwarmController manages the lifecycle of a single swarm, provisioning
+Acts as the Marshal for a swarm. SwarmController manages the lifecycle of a single swarm, provisioning
 its queues and relaying control signals. It consumes swarm-level signals and fans out existing per-bee
 control messages without introducing new routing patterns.
 
