@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.9.0] - 2025-09-09
+Timestamp: 2025-09-09T18:39:00Z
+
+- SwarmController: introduce service to orchestrate swarm lifecycle and handle control signals.
+- Swarm: UI supports creating swarms and incorporates swarm ID in bee names and metrics.
+- Build: centralize topology constants in a shared module and copy shared modules into service images.
+- Fix: resolve topology-core parent POM and update bee role aliases.
+- Docs: expand guidance on control signals, orchestration roles, and multi-region queue adapters.
+
 ## [0.8.2] - 2025-09-08
 Timestamp: 2025-09-08T10:27:41Z
 
