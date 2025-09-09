@@ -43,7 +43,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
       for (String suffix : suffixes) {
         Queue q = QueueBuilder.durable("ph." + Topology.SWARM_ID + "." + suffix).build();
         amqp.declareQueue(q);
-        Binding b = BindingBuilder.bind(q).to(hive).with(suffix).noargs();
+        Binding b = BindingBuilder.bind(q).to(hive).with(suffix);
         amqp.declareBinding(b);
       }
     } catch (JsonProcessingException e) {
