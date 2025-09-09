@@ -1,6 +1,6 @@
 package io.pockethive.swarmcontroller;
 
 public interface SwarmLifecycle {
-  void start();
+  void start(String planJson);
   void stop();
 }
