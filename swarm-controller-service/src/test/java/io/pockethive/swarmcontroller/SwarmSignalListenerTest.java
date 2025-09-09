@@ -22,8 +22,8 @@ class SwarmSignalListenerTest {
   void startsSwarmWhenIdMatches() {
     SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst");
     reset(rabbit);
-    listener.handle("", "sig.swarm-start." + Topology.SWARM_ID);
-    verify(lifecycle).start();
+    listener.handle("plan", "sig.swarm-start." + Topology.SWARM_ID);
+    verify(lifecycle).start("plan");
     verifyNoMoreInteractions(lifecycle);
   }
 

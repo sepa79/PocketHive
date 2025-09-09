@@ -43,7 +43,7 @@ public class SwarmSignalListener {
       String swarmId = routingKey.substring("sig.swarm-start.".length());
       if (Topology.SWARM_ID.equals(swarmId)) {
         log.info("Start signal for swarm {}", swarmId);
-        lifecycle.start();
+        lifecycle.start(body);
       }
     } else if (routingKey.startsWith("sig.swarm-stop.")) {
       String swarmId = routingKey.substring("sig.swarm-stop.".length());
