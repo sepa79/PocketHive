@@ -8,18 +8,26 @@ import org.slf4j.LoggerFactory;
 import org.springframework.amqp.core.*;
 import org.springframework.stereotype.Component;
 
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
+
+import io.pockethive.swarmcontroller.infra.docker.DockerContainerClient;
 
 @Component
 public class SwarmLifecycleManager implements SwarmLifecycle {
   private static final Logger log = LoggerFactory.getLogger(SwarmLifecycleManager.class);
   private final AmqpAdmin amqp;
   private final ObjectMapper mapper;
+  private final DockerContainerClient docker;
+  private final Map<String, String> containers = new HashMap<>();
+  private SwarmStatus status = SwarmStatus.STOPPED;
 
-  public SwarmLifecycleManager(AmqpAdmin amqp, ObjectMapper mapper) {
+  public SwarmLifecycleManager(AmqpAdmin amqp, ObjectMapper mapper, DockerContainerClient docker) {
     this.amqp = amqp;
     this.mapper = mapper;
+    this.docker = docker;
   }
 
   @Override
@@ -37,6 +45,10 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
             if (bee.work().in() != null) suffixes.add(bee.work().in());
             if (bee.work().out() != null) suffixes.add(bee.work().out());
           }
+          if (bee.image() != null) {
+            String containerId = docker.createAndStartContainer(bee.image());
+            containers.put(bee.role(), containerId);
+          }
         }
       }
 
@@ -46,6 +58,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
         Binding b = BindingBuilder.bind(q).to(hive).with(suffix);
         amqp.declareBinding(b);
       }
+      status = SwarmStatus.RUNNING;
     } catch (JsonProcessingException e) {
       log.warn("Invalid plan payload", e);
     }
@@ -54,5 +67,14 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
   @Override
   public void stop() {
     log.info("Stopping swarm {}", Topology.SWARM_ID);
+    for (String id : containers.values()) {
+      docker.stopAndRemoveContainer(id);
+    }
+    containers.clear();
+    status = SwarmStatus.STOPPED;
+  }
+
+  public SwarmStatus getStatus() {
+    return status;
   }
 }
