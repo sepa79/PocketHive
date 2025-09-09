@@ -58,4 +58,22 @@ class SwarmLifecycleManagerTest {
         argThat((String s) -> s.contains("\"enabled\":false")));
     assertEquals(SwarmStatus.STOPPED, manager.getStatus());
   }
+
+  @Test
+  void handlesMultipleBeesSharingRole() throws Exception {
+    SwarmLifecycleManager manager = new SwarmLifecycleManager(amqp, mapper, docker, rabbit, "inst");
+    SwarmPlan plan = new SwarmPlan(List.of(
+        new SwarmPlan.Bee("gen", "img1", null),
+        new SwarmPlan.Bee("gen", "img2", null)));
+    when(docker.createAndStartContainer("img1")).thenReturn("c1");
+    when(docker.createAndStartContainer("img2")).thenReturn("c2");
+
+    manager.start(mapper.writeValueAsString(plan));
+    manager.stop();
+
+    verify(docker).createAndStartContainer("img1");
+    verify(docker).createAndStartContainer("img2");
+    verify(docker).stopAndRemoveContainer("c1");
+    verify(docker).stopAndRemoveContainer("c2");
+  }
 }

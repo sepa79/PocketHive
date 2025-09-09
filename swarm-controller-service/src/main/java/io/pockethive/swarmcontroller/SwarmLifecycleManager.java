@@ -13,8 +13,10 @@ import org.springframework.stereotype.Component;
 
 import io.pockethive.observability.StatusEnvelopeBuilder;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -28,7 +30,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
   private final DockerContainerClient docker;
   private final RabbitTemplate rabbit;
   private final String instanceId;
-  private final Map<String, String> containers = new HashMap<>();
+  private final Map<String, List<String>> containers = new HashMap<>();
   private final Set<String> declaredQueues = new HashSet<>();
   private SwarmStatus status = SwarmStatus.STOPPED;
 
@@ -64,7 +66,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
           }
           if (bee.image() != null) {
             String containerId = docker.createAndStartContainer(bee.image());
-            containers.put(bee.role(), containerId);
+            containers.computeIfAbsent(bee.role(), r -> new ArrayList<>()).add(containerId);
           }
         }
       }
@@ -90,9 +92,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
     MDC.put("service", "swarm-controller");
     MDC.put("instance", instanceId);
     log.info("Stopping swarm {}", Topology.SWARM_ID);
-    for (String id : containers.values()) {
-      docker.stopAndRemoveContainer(id);
-    }
+    containers.values().forEach(ids -> ids.forEach(docker::stopAndRemoveContainer));
     containers.clear();
 
     for (String suffix : declaredQueues) {
