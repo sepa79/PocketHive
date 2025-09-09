@@ -6,7 +6,11 @@ import io.pockethive.Topology;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.core.*;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
+
+import io.pockethive.observability.StatusEnvelopeBuilder;
 
 import java.util.HashMap;
 import java.util.HashSet;
@@ -21,13 +25,22 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
   private final AmqpAdmin amqp;
   private final ObjectMapper mapper;
   private final DockerContainerClient docker;
+  private final RabbitTemplate rabbit;
+  private final String instanceId;
   private final Map<String, String> containers = new HashMap<>();
+  private final Set<String> declaredQueues = new HashSet<>();
   private SwarmStatus status = SwarmStatus.STOPPED;
 
-  public SwarmLifecycleManager(AmqpAdmin amqp, ObjectMapper mapper, DockerContainerClient docker) {
+  public SwarmLifecycleManager(AmqpAdmin amqp,
+                               ObjectMapper mapper,
+                               DockerContainerClient docker,
+                               RabbitTemplate rabbit,
+                               @Qualifier("instanceId") String instanceId) {
     this.amqp = amqp;
     this.mapper = mapper;
     this.docker = docker;
+    this.rabbit = rabbit;
+    this.instanceId = instanceId;
   }
 
   @Override
@@ -57,6 +70,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
         amqp.declareQueue(q);
         Binding b = BindingBuilder.bind(q).to(hive).with(suffix);
         amqp.declareBinding(b);
+        declaredQueues.add(suffix);
       }
       status = SwarmStatus.RUNNING;
     } catch (JsonProcessingException e) {
@@ -71,6 +85,34 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
       docker.stopAndRemoveContainer(id);
     }
     containers.clear();
+
+    for (String suffix : declaredQueues) {
+      amqp.deleteQueue("ph." + Topology.SWARM_ID + "." + suffix);
+    }
+    amqp.deleteExchange("ph." + Topology.SWARM_ID + ".hive");
+    declaredQueues.clear();
+
+    String controlQueue = Topology.CONTROL_QUEUE + ".swarm-controller." + instanceId;
+    String rk = "ev.status-delta.swarm-controller." + instanceId;
+    String payload = new StatusEnvelopeBuilder()
+        .kind("status-delta")
+        .role("swarm-controller")
+        .instance(instanceId)
+        .swarmId(Topology.SWARM_ID)
+        .controlIn(controlQueue)
+        .controlRoutes(
+            "sig.config-update",
+            "sig.config-update.swarm-controller",
+            "sig.config-update.swarm-controller." + instanceId,
+            "sig.status-request",
+            "sig.status-request.swarm-controller",
+            "sig.status-request.swarm-controller." + instanceId,
+            "sig.swarm-start.*",
+            "sig.swarm-stop.*")
+        .controlOut(rk)
+        .enabled(false)
+        .toJson();
+    rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, payload);
     status = SwarmStatus.STOPPED;
   }
 

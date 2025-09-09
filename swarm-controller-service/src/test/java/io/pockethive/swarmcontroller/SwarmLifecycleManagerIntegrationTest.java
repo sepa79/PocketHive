@@ -3,16 +3,19 @@ package io.pockethive.swarmcontroller;
 import io.pockethive.Topology;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.amqp.core.AmqpAdmin;
+import org.springframework.amqp.core.*;
 import org.springframework.amqp.rabbit.junit.RabbitAvailable;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.amqp.rabbit.core.RabbitAdmin;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.boot.test.mock.mockito.MockBean;
 
 import io.pockethive.swarmcontroller.infra.docker.DockerContainerClient;
 
-import static org.junit.jupiter.api.Assertions.assertNotNull;
+import java.io.IOException;
+
+import static org.junit.jupiter.api.Assertions.*;
 
 @SpringBootTest
 @RabbitAvailable
@@ -22,6 +25,12 @@ class SwarmLifecycleManagerIntegrationTest {
 
   @Autowired
   AmqpAdmin amqp;
+
+  @Autowired
+  RabbitTemplate rabbit;
+
+  @Autowired
+  String instanceId;
 
   @MockBean
   DockerContainerClient docker;
@@ -55,5 +64,44 @@ class SwarmLifecycleManagerIntegrationTest {
       ch.exchangeDeclarePassive("ph." + Topology.SWARM_ID + ".hive");
       return null;
     });
+  }
+
+  @Test
+  void stopCleansUpResourcesAndEmitsStoppedEvent() {
+    String plan = """
+        {"bees":[
+          {"role":"generator","work":{"out":"gen"}},
+          {"role":"moderator","work":{"in":"gen","out":"mod"}},
+          {"role":"processor","work":{"in":"mod","out":"final"}},
+          {"role":"postprocessor","work":{"in":"final"}}
+        ]}
+        """;
+
+    Queue q = new Queue("test-status", false, false, true);
+    amqp.declareQueue(q);
+    Binding b = BindingBuilder.bind(q)
+        .to(new TopicExchange(Topology.CONTROL_EXCHANGE))
+        .with("ev.status-delta.swarm-controller." + instanceId);
+    amqp.declareBinding(b);
+
+    manager.start(plan);
+    assertNotNull(amqp.getQueueProperties("ph." + Topology.SWARM_ID + ".gen"));
+
+    manager.stop();
+
+    assertNull(amqp.getQueueProperties("ph." + Topology.SWARM_ID + ".gen"));
+    assertNull(amqp.getQueueProperties("ph." + Topology.SWARM_ID + ".mod"));
+    assertNull(amqp.getQueueProperties("ph." + Topology.SWARM_ID + ".final"));
+    assertThrows(IOException.class, () -> ((RabbitAdmin) amqp).getRabbitTemplate().execute(ch -> {
+      ch.exchangeDeclarePassive("ph." + Topology.SWARM_ID + ".hive");
+      return null;
+    }));
+
+    Message msg = rabbit.receive(q.getName(), 5000);
+    assertNotNull(msg);
+    String body = new String(msg.getBody());
+    assertTrue(body.contains("\"enabled\":false"));
+
+    amqp.deleteQueue(q.getName());
   }
 }

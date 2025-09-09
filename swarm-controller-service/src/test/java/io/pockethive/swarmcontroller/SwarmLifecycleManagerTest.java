@@ -7,12 +7,14 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.amqp.core.AmqpAdmin;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import io.pockethive.Topology;
 
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
+import static org.mockito.ArgumentMatchers.*;
 
 @ExtendWith(MockitoExtension.class)
 class SwarmLifecycleManagerTest {
@@ -20,12 +22,14 @@ class SwarmLifecycleManagerTest {
   AmqpAdmin amqp;
   @Mock
   DockerContainerClient docker;
+  @Mock
+  RabbitTemplate rabbit;
 
   ObjectMapper mapper = new ObjectMapper();
 
   @Test
   void startLaunchesContainers() throws Exception {
-    SwarmLifecycleManager manager = new SwarmLifecycleManager(amqp, mapper, docker);
+    SwarmLifecycleManager manager = new SwarmLifecycleManager(amqp, mapper, docker, rabbit, "inst");
     SwarmPlan plan = new SwarmPlan(List.of(
         new SwarmPlan.Bee("gen", "img1", null),
         new SwarmPlan.Bee("mod", "img2", null)));
@@ -41,7 +45,7 @@ class SwarmLifecycleManagerTest {
 
   @Test
   void stopRemovesContainersAndUpdatesStatus() throws Exception {
-    SwarmLifecycleManager manager = new SwarmLifecycleManager(amqp, mapper, docker);
+    SwarmLifecycleManager manager = new SwarmLifecycleManager(amqp, mapper, docker, rabbit, "inst");
     SwarmPlan plan = new SwarmPlan(List.of(new SwarmPlan.Bee("gen", "img1", null)));
     when(docker.createAndStartContainer("img1")).thenReturn("c1");
     manager.start(mapper.writeValueAsString(plan));
@@ -49,6 +53,9 @@ class SwarmLifecycleManagerTest {
     manager.stop();
 
     verify(docker).stopAndRemoveContainer("c1");
+    verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
+        startsWith("ev.status-delta.swarm-controller.inst"),
+        argThat((String s) -> s.contains("\"enabled\":false")));
     assertEquals(SwarmStatus.STOPPED, manager.getStatus());
   }
 }
