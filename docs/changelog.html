@@ -26,10 +26,23 @@
 <body>
   <header>
     <a href="/">← Back</a>
-    <div style="margin-left:auto" class="muted">Version: <span id="ver">…</span></div>
+    <div style="margin-left:auto" class="muted">Version: <span id="ver">0.9.1</span></div>
   </header>
   <main>
-    <div id="chg"></div>
+    <div id="chg">
+      <h2>[0.9.1] - 2025-09-09</h2>
+      <pre>Timestamp: 2025-09-09T23:22:21Z</pre>
+      <div style="height:6px"></div>
+      <ul>
+        <li>SwarmController: emit status after startup.</li>
+        <li>SwarmControllerService: support multiple containers per role.</li>
+        <li>Herald: add status controls, metrics, and handshake between queen and herald.</li>
+        <li>SwarmController: manage container lifecycle with Docker and clean up resources on stop.</li>
+        <li>Fix: keep controller enabled, provide ObjectMapper bean, and remove invalid binding builder call.</li>
+        <li>Docs: outline scenario manager and swarm lifecycle.</li>
+        <li>Tests: verify queue provisioning and RabbitTemplate messaging conversions.</li>
+      </ul>
+    </div>
   </main>
   <script>
     async function loadText(path){ try{ const r=await fetch(path,{cache:'no-store'}); if(!r.ok) return null; return await r.text(); }catch{ return null; } }

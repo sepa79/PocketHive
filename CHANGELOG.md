@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.9.1] - 2025-09-09
+Timestamp: 2025-09-09T23:22:21Z
+
+- SwarmController: emit status after startup.
+- SwarmControllerService: support multiple containers per role.
+- Herald: add status controls, metrics, and handshake between queen and herald.
+- SwarmController: manage container lifecycle with Docker and clean up resources on stop.
+- Fix: keep controller enabled, provide ObjectMapper bean, and remove invalid binding builder call.
+- Docs: outline scenario manager and swarm lifecycle.
+- Tests: verify queue provisioning and RabbitTemplate messaging conversions.
+
 ## [0.9.0] - 2025-09-09
 Timestamp: 2025-09-09T18:39:00Z
 
