@@ -1,7 +1,8 @@
 # SwarmController Service
 
-SwarmController manages the lifecycle of a single swarm. It consumes swarm-level signals and fans out
-existing per-bee control messages without introducing new routing patterns.
+Acts as the Herald for a swarm. SwarmController manages the lifecycle of a single swarm, provisioning
+its queues and relaying control signals. It consumes swarm-level signals and fans out existing per-bee
+control messages without introducing new routing patterns.
 
 ## Responsibilities
 - Listen for `sig.swarm-start.<swarmId>` and `sig.swarm-stop.<swarmId>` events.
