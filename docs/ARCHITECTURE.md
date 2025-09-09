@@ -20,7 +20,54 @@ The Queen coordinates the entire hive. It loads scenario plans, spins up or tear
 A Herald governs one swarm. After receiving its plan from the Queen it declares the swarm's exchanges and queues, launches the bee containers described in the template and fans out config signals to individual bees.
 
 ### Swarm bootstrap
-When a new swarm is requested, the Queen spawns a Herald. The Herald declares the required exchanges and queues, then starts the bee containers defined by the swarm template.
+When a new swarm is requested, the Queen spawns a Herald and coordinates over the shared `ph.control` topic exchange:
+
+1. Herald declares its control queue `ph.control.herald.<instance>` bound to `ph.control` for `sig.*` and `ev.*` topics.
+2. Herald emits `ev.ready.herald.<instance>` to signal readiness.
+3. Queen waits for the ready event and publishes `sig.swarm-start.<swarmId>` to the Herald queue with the resolved **SwarmPlan**.
+4. Herald expands queue suffixes with the swarm id, declares `ph.<swarmId>.hive` and all required queues, then launches the bee containers.
+5. Future adjustments or shutdowns use signals such as `sig.swarm-stop.<swarmId>` on the same exchange.
+
+### Swarm Plan Template
+Queens hand Heralds a resolved plan describing the swarm composition:
+
+```yaml
+id: rest
+exchange: hive
+bees:
+  - role: generator
+    image: generator-service:latest
+    work:
+      out: gen
+  - role: moderator
+    image: moderator-service:latest
+    work:
+      in: gen
+      out: mod
+  - role: processor
+    image: processor-service:latest
+    work:
+      in: mod
+      out: final
+  - role: postprocessor
+    image: postprocessor-service:latest
+    work:
+      in: final
+```
+
+Herald prefixes each `work.in/out` with the swarm id to form queues like `ph.<swarmId>.gen` and binds them to the `ph.<swarmId>.hive` exchange using the same suffix as routing key.
+
+### Control-plane signals
+Communication between the Queen and Herald uses these topics on `ph.control`:
+
+| Direction | Routing key | Body | Purpose |
+|-----------|-------------|------|---------|
+| Queen → Herald | `sig.swarm-start.<swarmId>` | `SwarmPlan` | Start swarm |
+| Queen → Herald | `sig.swarm-stop.<swarmId>` | _(empty)_ | Stop swarm |
+| Queen → Herald (optional) | `sig.config-update...` | Partial plan | Adjust running swarm |
+| Queen → Herald (optional) | `sig.status-request...` | _(empty)_ | Request status |
+| Herald → Queen | `ev.ready.herald.<instance>` | _(empty)_ | Herald is listening |
+| Herald → Queen | `ev.status-full.swarm-controller.<instance>` | Status snapshot | Report state |
 
 ## Multi-Region & Queue Adapters
 PocketHive will support swarms running in multiple geolocations. Each swarm connects to a region-local broker while the Queen coordinates them through the control plane. Regions remain isolated from each other’s traffic yet share common naming and signalling conventions.
