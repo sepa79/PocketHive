@@ -6,6 +6,16 @@ PocketHive delivers modular Java microservices and a React UI that together hand
 ## System context
 Services communicate over HTTP and AMQP. Each service exposes APIs and consumes messages while remaining independent.
 
+## Orchestration hierarchy
+PocketHive coordinates work through a layered control plane:
+
+- **Queen** – global scheduler that creates and stops swarms.
+- **Herald** – per‑swarm controller started by the Queen; it provisions message queues and launches worker containers.
+- **Bees** – the worker services inside each swarm.
+
+### Swarm bootstrap
+When a new swarm is requested, the Queen spawns a Herald. The Herald declares the required exchanges and queues, then starts the bee containers defined by the swarm template.
+
 ## Layers
 Every service follows a hexagonal layout:
 - **api** – inbound ports and DTOs.
