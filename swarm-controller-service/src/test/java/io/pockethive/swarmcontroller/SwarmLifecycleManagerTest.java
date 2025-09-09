@@ -55,7 +55,7 @@ class SwarmLifecycleManagerTest {
     verify(docker).stopAndRemoveContainer("c1");
     verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
         startsWith("ev.status-delta.swarm-controller.inst"),
-        argThat(s -> s.contains("\"enabled\":false")));
+        argThat((String s) -> s.contains("\"enabled\":false")));
     assertEquals(SwarmStatus.STOPPED, manager.getStatus());
   }
 }
