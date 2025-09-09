@@ -15,3 +15,4 @@ Key guidelines include:
 - Stick to approved technologies (Java 21, React, JUnit 5, Cucumber, ArchUnit, existing AMQP/HTTP libs).
 - Output must be production ready: typed, formatted and secure.
 - Follow project policy and Conventional Commits.
+- Keep the root `pom.xml` `<modules>` list in sync with actual module folders to prevent `Child module ... does not exist` build errors.
