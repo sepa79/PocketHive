@@ -43,6 +43,9 @@ export default function HivePage() {
   }, {})
 
   const swarmStatus = (comps: Component[]) => {
+    const herald = comps.find((c) => c.name === 'swarm-controller')
+    const status = (herald?.config?.swarmStatus as string | undefined)?.toLowerCase()
+    if (status) return status
     const enabled = comps.map((c) => c.config?.enabled !== false)
     if (enabled.every(Boolean)) return 'running'
     if (enabled.every((e) => !e)) return 'stopped'
@@ -98,7 +101,7 @@ export default function HivePage() {
                   <div className="flex items-center justify-between mb-1">
                     <div className="font-medium">{id}</div>
                     <div className="flex items-center gap-2">
-                      <span className="text-xs text-white/60">{status}</span>
+                      <span className="text-xs text-white/60">Herald: {status}</span>
                       {status !== 'running' && (
                         <button
                           className="p-1 rounded bg-white/10 hover:bg-white/20 text-xs"
