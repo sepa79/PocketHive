@@ -1,31 +1,24 @@
-# SwarmController Service
+# Swarm Controller Service
 
-Acts as the Marshal for a swarm. SwarmController manages the lifecycle of a single swarm, provisioning
-its queues and relaying control signals. It consumes swarm-level signals and fans out existing per-bee
-control messages without introducing new routing patterns.
+Marshal that manages a single swarm: provisions queues, launches bee containers and relays control signals.
 
 ## Responsibilities
-- Listen for `sig.swarm-start.<swarmId>` and `sig.swarm-stop.<swarmId>` events.
-- Respond on the control channel to `sig.status-request` and `sig.config-update` messages for the
-  `swarm-controller` role.
-- Resolve swarm membership and emit `sig.config-update.<role>.<instance>` or
-  `sig.status-request.<role>.<instance>` messages for each bee.
-- Tag all emitted metrics with the `swarm_id` label and expose a friendly bee name alongside a UUID.
+- Expand swarm plans into concrete queue names.
+- Launch and monitor bee containers.
+- Route config signals to individual services and report status.
 
-## Build & Run
+## Parameters
+- `PH_SWARM_ID` – identifier for the swarm scope (default `default`).
+- `RABBITMQ_HOST` – broker hostname (default `rabbitmq`).
 
-Build the Docker image from the repo root:
+## Signals
+- Consumes `sig.config-update.swarm-controller.*` for runtime changes.
+- Responds to `sig.status-request.swarm-controller.*` with `ev.status-full` events.
 
-```sh
-docker build -f swarm-controller-service/Dockerfile .
+## Docker
+```bash
+docker build -t swarm-controller-service:latest .
+docker run --rm swarm-controller-service:latest
 ```
 
-Run locally with Docker Compose (RabbitMQ must be running):
-
-```sh
-PH_SWARM_ID=swarm1 docker compose up swarm-controller
-```
-
-The container relies on `RABBITMQ_HOST`, `PH_CONTROL_EXCHANGE`, `PH_CONTROL_QUEUE`, and `PH_SWARM_ID` environment variables.
-
-See [control-plane rules](../docs/rules/control-plane-rules.md) for canonical signal formats.
+See [control-plane rules](../docs/rules/control-plane-rules.md) for full signal formats.

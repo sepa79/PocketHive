@@ -10,7 +10,7 @@ Services communicate over HTTP and AMQP. Each service exposes APIs and consumes 
 PocketHive coordinates work through a layered control plane:
 
 - **Queen** – global scheduler that creates and stops swarms.
-- **Marshal** – per‑swarm controller started by the Queen; it provisions message queues and launches worker containers.
+- **Marshal** – per-swarm controller started by the Queen; it provisions message queues and launches worker containers.
 - **Bees** – the worker services inside each swarm.
 
 ### Queen (Orchestrator)
@@ -19,14 +19,21 @@ The Queen coordinates the entire hive. It loads scenario plans, spins up or tear
 ### Marshal (Swarm Controller)
 A Marshal governs one swarm. After receiving its plan from the Queen it declares the swarm's exchanges and queues, launches the bee containers described in the template and fans out config signals to individual bees.
 
-### Swarm bootstrap
-When a new swarm is requested, the Queen spawns a Marshal and coordinates over the shared `ph.control` topic exchange:
+## Swarm coordination
 
+### Handshake
 1. Marshal declares its control queue `ph.control.herald.<instance>` bound to `ph.control` for `sig.*` and `ev.*` topics.
 2. Marshal emits `ev.ready.herald.<instance>` to signal readiness.
 3. Queen waits for the ready event and publishes `sig.swarm-start.<swarmId>` to the Marshal queue with the resolved **SwarmPlan**.
-4. Marshal expands queue suffixes with the swarm id, declares `ph.<swarmId>.hive` and all required queues, then launches the bee containers.
-5. Future adjustments or shutdowns use signals such as `sig.swarm-stop.<swarmId>` on the same exchange.
+
+### Queue provisioning
+- Marshal expands queue suffixes with the swarm id.
+- Declares `ph.<swarmId>.hive` and all required queues.
+- Binds each queue to the exchange using its suffix as the routing key.
+
+### Container lifecycle
+- Marshal launches the bee containers defined in the plan.
+- Runtime adjustments or shutdowns use signals such as `sig.swarm-stop.<swarmId>` on `ph.control`.
 
 ### Swarm Plan Template
 Queens hand Marshals a resolved plan describing the swarm composition:
@@ -79,17 +86,15 @@ To enable broker diversity, messaging will flow through pluggable queue adapters
 2. Provide configuration mapping and wiring inside the swarm controller.
 3. Register the driver with the Queen so swarms may select it at launch time.
 
-This feature is planned and not yet implemented.
-
 ## Layers
 Every service follows a hexagonal layout:
 - **api** – inbound ports and DTOs.
 - **app** – use cases and orchestration.
-- **domain** – business rules, framework‑free.
+- **domain** – business rules, framework-free.
 - **infra** – adapters for persistence, messaging and external systems.
 
 ## Boundaries
-Cross‑service calls go through API or message contracts only. Shared libraries live outside the domain to keep it pure.
+Cross-service calls go through API or message contracts only. Shared libraries live outside the domain to keep it pure.
 
 ## Testing strategy
 - JUnit 5 for unit and integration tests.
@@ -100,4 +105,4 @@ Cross‑service calls go through API or message contracts only. Shared libraries
 Principle of least privilege, encrypted transport, no secrets in code or logs.
 
 ## Versioning
-Semantic Versioning with per‑service change logs.
+Semantic Versioning with per-service change logs.
