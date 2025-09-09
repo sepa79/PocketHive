@@ -20,3 +20,28 @@
 - Tag metrics with `swarm_id`, `service`, and `instance` and emit traceable logs.
 - Surface controller status in the UI and wire create/start/stop controls.
 - Extend integration tests to cover swarm start/stop through SwarmController.
+
+---
+
+## Scenario Manager Service
+
+SwarmController retrieves SwarmPlans from the `scenario-manager-service` REST API. The service exposes:
+
+- `POST /scenarios` – create scenario definitions
+- `GET /scenarios/{id}` – fetch a scenario
+- `PUT /scenarios/{id}` – update a stored scenario
+- `DELETE /scenarios/{id}` – remove a scenario
+
+Refer to the [MVP Roadmap](MVP_ROADMAP.md#scenario-manager-service) for delivery milestones.
+
+## Orchestrator–herald ready-start handshake
+
+On startup the herald declares `ph.control.herald.<instance>` and publishes `ev.ready.herald.<instance>`. The orchestrator responds with `sig.swarm-start.<swarmId>` containing the target SwarmPlan.
+
+## SwarmPlan parsing, queue provisioning, and bee container lifecycle
+
+After receiving `sig.swarm-start`, the controller expands the SwarmPlan, declares the `ph.<swarmId>.hive` exchange, provisions all `work.in/out` queues, and launches bee containers for each role. Bees receive `sig.config-update` and `sig.status-request` messages to manage their lifecycle.
+
+## Swarm shutdown cleanup and observability/UI hooks
+
+Handling `sig.swarm-stop.<swarmId>` stops bee containers, deletes queues, and flushes swarm metrics. Resulting events allow the UI to remove the swarm from its dashboards. See the [MVP Roadmap](MVP_ROADMAP.md#swarmcontroller-lifecycle) for the broader execution flow.

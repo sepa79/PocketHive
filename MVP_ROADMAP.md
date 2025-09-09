@@ -306,6 +306,27 @@ ui/src/pages/
     └── ResultsAnalysis.tsx     # Post-test analysis
 ```
 
+### Scenario Manager Service
+
+The `scenario-manager-service` stores reusable SwarmPlans and exposes a RESTful CRUD API:
+
+- `POST /scenarios` – create a new scenario definition
+- `GET /scenarios/{id}` – retrieve a scenario
+- `PUT /scenarios/{id}` – update an existing scenario
+- `DELETE /scenarios/{id}` – remove a scenario
+
+These endpoints supply the orchestrator and SwarmController with plans at runtime. See the
+[SwarmController Plan](SWARM_CONTROLLER_PLAN.md#scenario-manager-service) for controller integration details.
+
+### SwarmController Lifecycle
+
+- The SwarmController coordinates swarm execution. Key steps are outlined in the
+[SwarmController Plan](SWARM_CONTROLLER_PLAN.md#orchestrator-herald-ready-start-handshake):
+
+- [Orchestrator–herald ready-start handshake](SWARM_CONTROLLER_PLAN.md#orchestrator-herald-ready-start-handshake)
+- [SwarmPlan parsing, queue provisioning, and bee container lifecycle](SWARM_CONTROLLER_PLAN.md#swarmplan-parsing-queue-provisioning-and-bee-container-lifecycle)
+- [Swarm shutdown cleanup and observability/UI hooks](SWARM_CONTROLLER_PLAN.md#swarm-shutdown-cleanup-and-observability-ui-hooks)
+
 ---
 
 ## Success Criteria
