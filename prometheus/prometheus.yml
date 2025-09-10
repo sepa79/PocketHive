@@ -30,3 +30,8 @@ scrape_configs:
     metrics_path: /actuator/prometheus
     static_configs:
       - targets: ['generator:8080']
+  - job_name: 'scenario-manager'
+    scrape_interval: 5s
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ['scenario-manager:8080']

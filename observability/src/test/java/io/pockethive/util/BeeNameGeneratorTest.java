@@ -19,8 +19,8 @@ class BeeNameGeneratorTest {
   }
 
   @Test
-  void mapsSwarmControllerToMarshal() {
+  void mapsSwarmControllerToQueen() {
     String name = BeeNameGenerator.generate("swarm-controller", "sw1");
-    assertTrue(name.startsWith("sw1-marshal-bee-"));
+    assertTrue(name.startsWith("sw1-queen-bee-"));
   }
 }

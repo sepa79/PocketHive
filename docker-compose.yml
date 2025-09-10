@@ -116,6 +116,19 @@ services:
       log-aggregator:
         condition: service_healthy
 
+  scenario-manager:
+    build:
+      context: .
+      dockerfile: scenario-manager-service/Dockerfile
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/actuator/health | grep -q UP"]
+      interval: 5s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    ports:
+      - "1081:8080"
+
   log-aggregator:
     build:
       context: .

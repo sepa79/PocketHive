@@ -1,0 +1,24 @@
+id: mock-1
+name: Mock-1
+description: Sample scenario with generator, moderator, processor and postprocessor.
+template:
+  image: swarm-controller-service:latest
+  bees:
+    - role: generator
+      image: generator-service:latest
+      work:
+        out: gen
+    - role: moderator
+      image: moderator-service:latest
+      work:
+        in: gen
+        out: mod
+    - role: processor
+      image: processor-service:latest
+      work:
+        in: mod
+        out: final
+    - role: postprocessor
+      image: postprocessor-service:latest
+      work:
+        in: final
