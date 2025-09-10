@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { Client } from '@stomp/stompjs'
 import { setClient, createSwarm, startSwarm, stopSwarm } from './stompClient'
+import { defaultBees } from './defaultBees'
 import { subscribeLogs, type LogEntry, resetLogs } from './logs'
 
 /**
@@ -13,10 +14,10 @@ describe('swarm lifecycle', () => {
     const publish = vi.fn()
     const subscribe = vi.fn().mockReturnValue({ unsubscribe() {} })
     setClient({ active: true, publish, subscribe } as unknown as Client)
-    await createSwarm('sw1', { template: { image: 'img:latest', bees: [] } })
+    await createSwarm('sw1', { template: { image: 'img:latest', bees: defaultBees } })
     expect(publish).toHaveBeenCalledWith({
       destination: '/exchange/ph.control/sig.swarm-create.sw1',
-      body: JSON.stringify({ template: { image: 'img:latest', bees: [] } }),
+      body: JSON.stringify({ template: { image: 'img:latest', bees: defaultBees } }),
     })
   })
 

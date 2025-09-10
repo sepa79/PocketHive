@@ -36,7 +36,21 @@ Manual checks:
 - Start the swarm with the play button next to its entry.
 
 ### Scenario and swarm API
-- STOMP `sig.swarm-create.<swarmId>` to `/exchange/ph.control/sig.swarm-create.<swarmId>` with body `{ "template": { "image": "<image>", "bees": [] } }`.
+- STOMP `sig.swarm-create.<swarmId>` to `/exchange/ph.control/sig.swarm-create.<swarmId>` with body:
+
+  ```json
+  {
+    "template": {
+      "image": "<image>",
+      "bees": [
+        { "role": "generator", "image": "generator-service:latest", "work": { "out": "gen" } },
+        { "role": "moderator", "image": "moderator-service:latest", "work": { "in": "gen", "out": "mod" } },
+        { "role": "processor", "image": "processor-service:latest", "work": { "in": "mod", "out": "final" } },
+        { "role": "postprocessor", "image": "postprocessor-service:latest", "work": { "in": "final" } }
+      ]
+    }
+  }
+  ```
 - STOMP `sig.swarm-start.<swarmId>` with an empty body to begin execution.
 
 ## Troubleshooting
