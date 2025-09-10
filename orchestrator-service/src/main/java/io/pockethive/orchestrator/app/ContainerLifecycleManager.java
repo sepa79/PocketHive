@@ -22,13 +22,14 @@ public class ContainerLifecycleManager {
         this.amqp = amqp;
     }
 
-    public Swarm startSwarm(String swarmId) {
-        return startSwarm(swarmId, template.getImage());
+    public Swarm startSwarm(String swarmId, String instanceId) {
+        return startSwarm(swarmId, template.getImage(), instanceId);
     }
 
-    public Swarm startSwarm(String swarmId, String image) {
-        String containerId = docker.createAndStartContainer(image);
-        Swarm swarm = new Swarm(swarmId, containerId);
+    public Swarm startSwarm(String swarmId, String image, String instanceId) {
+        java.util.Map<String, String> env = java.util.Map.of("JAVA_TOOL_OPTIONS", "-Dbee.name=" + instanceId);
+        String containerId = docker.createAndStartContainer(image, env);
+        Swarm swarm = new Swarm(swarmId, instanceId, containerId);
         swarm.setStatus(SwarmStatus.RUNNING);
         registry.register(swarm);
         return swarm;

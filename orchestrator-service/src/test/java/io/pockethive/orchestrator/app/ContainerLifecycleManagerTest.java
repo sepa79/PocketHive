@@ -26,22 +26,23 @@ class ContainerLifecycleManagerTest {
         SwarmRegistry registry = new SwarmRegistry();
         SwarmTemplate template = new SwarmTemplate();
         template.setImage("img");
-        when(docker.createAndStartContainer("img")).thenReturn("cid");
+        when(docker.createAndStartContainer(eq("img"), anyMap())).thenReturn("cid");
         ContainerLifecycleManager manager = new ContainerLifecycleManager(docker, registry, template, amqp);
 
-        Swarm swarm = manager.startSwarm("sw1");
+        Swarm swarm = manager.startSwarm("sw1", "inst1");
 
         assertEquals("sw1", swarm.getId());
+        assertEquals("inst1", swarm.getInstanceId());
         assertEquals("cid", swarm.getContainerId());
         assertEquals(SwarmStatus.RUNNING, swarm.getStatus());
         assertTrue(registry.find("sw1").isPresent());
-        verify(docker).createAndStartContainer("img");
+        verify(docker).createAndStartContainer(eq("img"), anyMap());
     }
 
     @Test
     void stopSwarmStopsContainer() {
         SwarmRegistry registry = new SwarmRegistry();
-        Swarm swarm = new Swarm("cid");
+        Swarm swarm = new Swarm("sw1", "inst1", "cid");
         registry.register(swarm);
         SwarmTemplate template = new SwarmTemplate();
         ContainerLifecycleManager manager = new ContainerLifecycleManager(docker, registry, template, amqp);
@@ -58,8 +59,8 @@ class ContainerLifecycleManagerTest {
     @Test
     void stopSwarmIsolatesQueuesPerSwarmId() {
         SwarmRegistry registry = new SwarmRegistry();
-        Swarm sw1 = new Swarm("sw1", "c1");
-        Swarm sw2 = new Swarm("sw2", "c2");
+        Swarm sw1 = new Swarm("sw1", "inst1", "c1");
+        Swarm sw2 = new Swarm("sw2", "inst2", "c2");
         registry.register(sw1);
         registry.register(sw2);
         SwarmTemplate template = new SwarmTemplate();

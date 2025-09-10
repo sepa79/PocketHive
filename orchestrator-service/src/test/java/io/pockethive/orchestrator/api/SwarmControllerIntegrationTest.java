@@ -43,22 +43,24 @@ class SwarmControllerIntegrationTest {
 
     @Test
     void createStartStopFlow() throws Exception {
-        given(docker.createAndStartContainer(anyString())).willReturn("c1");
+        ArgumentCaptor<java.util.Map<String, String>> envCaptor = ArgumentCaptor.forClass(java.util.Map.class);
+        given(docker.createAndStartContainer(anyString(), anyMap())).willReturn("c1");
 
         mvc.perform(post("/swarms")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"id\":\"sw1\",\"scenarioId\":\"default\"}"))
                 .andExpect(status().isAccepted());
 
-        verify(docker).createAndStartContainer("swarm-controller-service:latest");
-        assertThat(planRegistry.find("c1")).isPresent();
+        verify(docker).createAndStartContainer(eq("swarm-controller-service:latest"), envCaptor.capture());
+        String beeName = envCaptor.getValue().get("JAVA_TOOL_OPTIONS").replace("-Dbee.name=", "");
+        assertThat(planRegistry.find(beeName)).isPresent();
 
-        listener.handle("ev.ready.swarm-controller.c1");
+        listener.handle("ev.ready.swarm-controller." + beeName);
 
         ArgumentCaptor<SwarmPlan> captor = ArgumentCaptor.forClass(SwarmPlan.class);
         verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("sig.swarm-start.sw1"), captor.capture());
         assertThat(captor.getValue().id()).isEqualTo("sw1");
-        assertThat(planRegistry.find("c1")).isEmpty();
+        assertThat(planRegistry.find(beeName)).isEmpty();
 
         mvc.perform(delete("/swarms/sw1"))
                 .andExpect(status().isNoContent());

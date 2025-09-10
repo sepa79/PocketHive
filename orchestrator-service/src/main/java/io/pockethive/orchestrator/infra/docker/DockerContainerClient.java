@@ -11,9 +11,13 @@ public class DockerContainerClient {
         this.dockerClient = dockerClient;
     }
 
-    public String createAndStartContainer(String image) {
+    public String createAndStartContainer(String image, java.util.Map<String, String> env) {
+        String[] envArray = env.entrySet().stream()
+                .map(e -> e.getKey() + "=" + e.getValue())
+                .toArray(String[]::new);
         CreateContainerResponse response = dockerClient.createContainerCmd(image)
                 .withHostConfig(HostConfig.newHostConfig())
+                .withEnv(envArray)
                 .exec();
         dockerClient.startContainerCmd(response.getId()).exec();
         return response.getId();

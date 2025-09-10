@@ -30,16 +30,19 @@ public class SwarmController {
         ScenarioPlan scenario = scenarioRepository.find(req.scenarioId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Scenario not found"));
         SwarmPlan plan = new SwarmPlan(req.id(), scenario.template());
-        Swarm swarm = lifecycleManager.startSwarm(req.id(), plan.template().getImage());
-        planRegistry.register(swarm.getContainerId(), plan);
+        String beeName = io.pockethive.util.BeeNameGenerator.generate("swarm-controller", req.id());
+        Swarm swarm = lifecycleManager.startSwarm(req.id(), plan.template().getImage(), beeName);
+        planRegistry.register(beeName, plan);
         return ResponseEntity.accepted().build();
     }
 
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(@PathVariable String id) {
-        lifecycleManager.stopSwarm(id);
-        swarmRegistry.find(id).ifPresent(s -> planRegistry.remove(s.getContainerId()));
-        swarmRegistry.remove(id);
+        swarmRegistry.find(id).ifPresent(s -> {
+            lifecycleManager.stopSwarm(id);
+            planRegistry.remove(s.getInstanceId());
+            swarmRegistry.remove(id);
+        });
         return ResponseEntity.noContent().build();
     }
 

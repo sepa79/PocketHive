@@ -26,15 +26,15 @@ class SwarmSignalListenerTest {
         SwarmPlanRegistry registry = new SwarmPlanRegistry();
         SwarmTemplate template = new SwarmTemplate();
         SwarmPlan plan = new SwarmPlan("sw1", template);
-        registry.register("c1", plan);
+        registry.register("inst1", plan);
         SwarmSignalListener listener = new SwarmSignalListener(rabbit, registry);
 
-        listener.handle("ev.ready.swarm-controller.c1");
+        listener.handle("ev.ready.swarm-controller.inst1");
 
         ArgumentCaptor<SwarmPlan> captor = ArgumentCaptor.forClass(SwarmPlan.class);
         verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("sig.swarm-start.sw1"), captor.capture());
         assertThat(captor.getValue()).isEqualTo(plan);
-        assertThat(registry.find("c1")).isEmpty();
+        assertThat(registry.find("inst1")).isEmpty();
     }
 
     @Test
@@ -42,7 +42,7 @@ class SwarmSignalListenerTest {
         SwarmPlanRegistry registry = new SwarmPlanRegistry();
         SwarmSignalListener listener = new SwarmSignalListener(rabbit, registry);
 
-        listener.handle("ev.ready.other-controller.c1");
+        listener.handle("ev.ready.other-controller.inst1");
 
         verifyNoInteractions(rabbit);
     }
