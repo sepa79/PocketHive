@@ -25,6 +25,7 @@ import org.springframework.stereotype.Component;
 @EnableScheduling
 public class SwarmSignalListener {
     private static final String ROLE = "orchestrator";
+    private static final String SCOPE = "hive";
     private static final long STATUS_INTERVAL_MS = 5000L;
 
     private final AmqpTemplate rabbit;
@@ -91,7 +92,7 @@ public class SwarmSignalListener {
             .kind("status-full")
             .role(ROLE)
             .instance(instanceId)
-            .swarmId(Topology.SWARM_ID)
+            .swarmId(SCOPE)
             .enabled(true)
             .controlIn(controlQueue)
             .controlRoutes(
@@ -117,7 +118,7 @@ public class SwarmSignalListener {
             .kind("status-delta")
             .role(ROLE)
             .instance(instanceId)
-            .swarmId(Topology.SWARM_ID)
+            .swarmId(SCOPE)
             .enabled(true)
             .controlIn(controlQueue)
             .controlRoutes(

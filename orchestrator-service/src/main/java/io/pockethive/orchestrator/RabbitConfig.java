@@ -11,10 +11,11 @@ import io.pockethive.util.BeeNameGenerator;
 @Configuration
 public class RabbitConfig {
     private static final String ROLE = "orchestrator";
+    private static final String SCOPE = "hive";
 
     @Bean
     public String instanceId(){
-        return System.getProperty("bee.name", BeeNameGenerator.generate(ROLE, Topology.SWARM_ID));
+        return System.getProperty("bee.name", BeeNameGenerator.generate(ROLE, SCOPE));
     }
 
     @Bean
