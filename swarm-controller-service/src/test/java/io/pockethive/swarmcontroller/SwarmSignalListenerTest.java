@@ -101,7 +101,10 @@ class SwarmSignalListenerTest {
     listener.handle(mapper.writeValueAsString(plan), "sig.swarm-template." + Topology.SWARM_ID);
     reset(rabbit);
     listener.handle("{\"data\":{\"enabled\":false}}", "ev.ready.gen.a");
-    verify(rabbit, never()).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("ev.swarm-created." + Topology.SWARM_ID), any());
+    verify(rabbit, never()).convertAndSend(
+        eq(Topology.CONTROL_EXCHANGE),
+        eq("ev.swarm-created." + Topology.SWARM_ID),
+        anyString());
   }
 
   @Test
