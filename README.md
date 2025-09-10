@@ -20,7 +20,7 @@ flowchart LR
 ## Quick start
 1. Install Docker.
 2. Run `docker compose up -d` to launch RabbitMQ, services and the UI.
-3. Open <http://localhost:8088> to explore the swarm.
+3. Open <http://localhost:8088>. Only the Orchestrator (Queen) runs initially. Create and start swarms from the Hive view by selecting a scenario.
 
 ## Documentation
 - [Docs index](docs/README.md)

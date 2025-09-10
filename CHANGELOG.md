@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.9.2] - 2025-09-10
+Timestamp: 2025-09-10T15:30:28Z
+
+- Docs: remove Queen tab references, note only Queen runs initially and describe scenario-based swarm creation.
+- Docs: document `GET /scenarios`, STOMP `sig.swarm-create`/`sig.swarm-start` endpoints and update architecture diagrams.
+
 ## [0.9.1] - 2025-09-09
 Timestamp: 2025-09-09T23:22:21Z
 

@@ -106,6 +106,24 @@ A Marshal governs one swarm. After receiving its plan from the Queen it declares
 
 ## Swarm coordination
 
+### Scenario selection and swarm startup
+1. UI fetches available scenarios with `GET /scenarios`.
+2. User creates a swarm via STOMP `sig.swarm-create.<swarmId>` containing the image and scenario id.
+3. Queen launches a Marshal for the swarm.
+4. The swarm starts when the UI sends `sig.swarm-start.<swarmId>`.
+
+```mermaid
+sequenceDiagram
+  participant UI
+  participant QN as "Orchestrator (Queen)"
+  participant MSH as "Swarm Controller (Marshal)"
+  UI->>QN: GET /scenarios
+  UI->>QN: sig.swarm-create.<swarmId>
+  QN-->>MSH: launch Marshal
+  UI->>QN: sig.swarm-start.<swarmId>
+  QN->>MSH: sig.swarm-start.<swarmId>
+```
+
 ### Handshake
 1. Marshal declares its control queue `ph.control.swarm-controller.<instance>` bound to `ph.control` for `sig.*` and `ev.*` topics.
 2. Marshal emits `ev.ready.swarm-controller.<instance>` to signal readiness.
