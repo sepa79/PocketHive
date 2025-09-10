@@ -13,3 +13,7 @@ This living roadmap tracks major PocketHive milestones.
 - External scenario configuration service
 - Redis-backed test data source
 - Multi-region operation and pluggable queue adapters
+
+---
+
+For the original MVP plan, see [MVP_ROADMAP.md](../MVP_ROADMAP.md).

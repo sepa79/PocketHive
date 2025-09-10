@@ -8,6 +8,7 @@ Welcome to the PocketHive documentation hub. Use these resources to understand t
 ## Roadmap
 - [Project Roadmap](ROADMAP.md)
 - [Release Notes](../CHANGELOG.md)
+- [Original MVP Roadmap](../MVP_ROADMAP.md)
 
 ## Usage
 - [Usage Guide](USAGE.md)
