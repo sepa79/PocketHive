@@ -17,6 +17,7 @@ export default function HivePage() {
   const [search, setSearch] = useState('')
   const [showCreate, setShowCreate] = useState(false)
   const [swarmMsg, setSwarmMsg] = useState<Record<string, string>>({})
+  const [activeSwarm, setActiveSwarm] = useState<string | null>(null)
 
   useEffect(() => {
     const unsub = subscribeComponents(setComponents)
@@ -30,9 +31,18 @@ export default function HivePage() {
     }
   }, [components, selected])
 
-  const filtered = components.filter((c) =>
-    c.name.toLowerCase().includes(search.toLowerCase()) ||
-    c.id.toLowerCase().includes(search.toLowerCase()),
+  useEffect(() => {
+    setSelected(null)
+  }, [activeSwarm])
+
+  const filtered = components.filter(
+    (c) =>
+      (c.name.toLowerCase().includes(search.toLowerCase()) ||
+        c.id.toLowerCase().includes(search.toLowerCase())) &&
+      (!activeSwarm ||
+        (activeSwarm === 'default'
+          ? !c.swarmId
+          : c.swarmId === activeSwarm)),
   )
 
   const grouped = filtered.reduce<Record<string, Component[]>>((acc, c) => {
@@ -92,14 +102,34 @@ export default function HivePage() {
           </button>
         </div>
         <div className="mt-4 flex-1 overflow-y-auto">
+          {activeSwarm && (
+            <button
+              className="mb-2 text-xs underline"
+              onClick={() => setActiveSwarm(null)}
+            >
+              Back to all swarms
+            </button>
+          )}
           {Object.entries(grouped)
             .sort(([a], [b]) => a.localeCompare(b))
+            .filter(([id]) => !activeSwarm || id === activeSwarm)
             .map(([id, comps]) => {
               const status = swarmStatus(comps)
               return (
-                <div key={id} className="mb-4">
+                <div
+                  key={id}
+                  className="mb-4 border border-white/20 rounded p-2"
+                >
                   <div className="flex items-center justify-between mb-1">
-                    <div className="font-medium">{id}</div>
+                    <div
+                      className="font-medium cursor-pointer"
+                      onClick={() =>
+                        !activeSwarm &&
+                        setActiveSwarm(id === 'default' ? 'default' : id)
+                      }
+                    >
+                      {id}
+                    </div>
                     <div className="flex items-center gap-2">
                       <span className="text-xs text-white/60">Marshal: {status}</span>
                       {status !== 'running' && (
@@ -140,6 +170,9 @@ export default function HivePage() {
             const comp = components.find((c) => c.id === id)
             if (comp) setSelected(comp)
           }}
+          swarmId={activeSwarm ?? undefined}
+          onSwarmSelect={(id) =>
+            setActiveSwarm(id === 'default' ? 'default' : id)}
         />
       </div>
       <div className="hidden lg:flex w-1/3 xl:w-1/4 border-l border-white/10 overflow-hidden">

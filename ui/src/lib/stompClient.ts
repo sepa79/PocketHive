@@ -10,6 +10,7 @@ export interface TopologyNode {
   x?: number
   y?: number
   enabled?: boolean
+  swarmId?: string
 }
 export interface TopologyEdge { from: string; to: string; queue: string }
 export interface Topology { nodes: TopologyNode[]; edges: TopologyEdge[] }
@@ -70,6 +71,7 @@ function buildTopology(): Topology {
     x: nodePositions[c.id]?.x,
     y: nodePositions[c.id]?.y,
     enabled: c.config?.enabled !== false,
+    swarmId: c.swarmId,
   }))
   if (components['processor']) {
     nodes.push({
@@ -221,15 +223,20 @@ export async function requestStatusFull(component: Component) {
   })
 }
 
-export async function createSwarm(id: string, image: string) {
+export async function createSwarm(
+  id: string,
+  image: string,
+  scenario?: string,
+) {
   return new Promise<void>((resolve, reject) => {
     if (!client || !client.active) {
       reject(new Error('STOMP client not connected'))
       return
     }
+    const body = scenario ? JSON.stringify({ image, scenario }) : image
     client.publish({
       destination: `/exchange/ph.control/sig.swarm-create.${id}`,
-      body: image,
+      body,
     })
     resolve()
   })

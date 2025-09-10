@@ -15,6 +15,7 @@ interface GraphNode {
   x?: number
   y?: number
   enabled?: boolean
+  swarmId?: string
 }
 
 interface GraphLink {
@@ -31,6 +32,8 @@ interface GraphData {
 interface Props {
   selectedId?: string
   onSelect?: (id: string) => void
+  swarmId?: string
+  onSwarmSelect?: (id: string) => void
 }
 
 type NodeShape =
@@ -51,7 +54,7 @@ const shapeOrder: NodeShape[] = [
   'star',
 ]
 
-export default function TopologyView({ selectedId, onSelect }: Props) {
+export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSelect }: Props) {
   const [data, setData] = useState<GraphData>({ nodes: [], links: [] })
   const containerRef = useRef<HTMLDivElement>(null)
   const graphRef = useRef<ForceGraphMethods<GraphNode, GraphLink> | undefined>(
@@ -61,6 +64,9 @@ export default function TopologyView({ selectedId, onSelect }: Props) {
   const shapeMapRef = useRef<Record<string, NodeShape>>({ sut: 'circle' })
   const [queueDepths, setQueueDepths] = useState<Record<string, number>>({})
   const [queueCounts, setQueueCounts] = useState<Record<string, number>>({})
+  const [bounds, setBounds] = useState<
+    Record<string, { minX: number; minY: number; maxX: number; maxY: number }>
+  >({})
 
   useEffect(() => {
     const unsub = subscribeComponents((comps: Component[]) => {
@@ -82,7 +88,7 @@ export default function TopologyView({ selectedId, onSelect }: Props) {
   }, [])
 
   useEffect(() => {
-    ;(graphRef.current as any)?.refresh?.()
+    ;(graphRef.current as unknown as { refresh?: () => void })?.refresh?.()
   }, [queueDepths, queueCounts])
 
   useEffect(() => {
@@ -110,14 +116,35 @@ export default function TopologyView({ selectedId, onSelect }: Props) {
       const unconnectedNodes = topo.nodes
         .filter((n) => !visited.has(n.id))
         .map((n, idx) => ({ ...n, x: n.x ?? idx * 80, y: n.y ?? 80 }))
-      const nodes = [...connectedNodes, ...unconnectedNodes]
-      setData({
-        nodes,
-        links: topo.edges.map((e) => ({ source: e.from, target: e.to, queue: e.queue })),
-      })
+      let nodes = [...connectedNodes, ...unconnectedNodes]
+      if (swarmId) {
+        nodes = nodes.filter((n) =>
+          swarmId === 'default' ? !n.swarmId : n.swarmId === swarmId,
+        )
+      }
+      const ids = new Set(nodes.map((n) => n.id))
+      const links = topo.edges
+        .filter((e) => ids.has(e.from) && ids.has(e.to))
+        .map((e) => ({ source: e.from, target: e.to, queue: e.queue }))
+      setData({ nodes, links })
     })
     return () => unsub()
-  }, [])
+  }, [swarmId])
+
+  useEffect(() => {
+    const b: Record<string, { minX: number; minY: number; maxX: number; maxY: number }> = {}
+    data.nodes.forEach((n) => {
+      const s = n.swarmId || 'default'
+      const bn =
+        b[s] || { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity }
+      bn.minX = Math.min(bn.minX, n.x ?? 0)
+      bn.maxX = Math.max(bn.maxX, n.x ?? 0)
+      bn.minY = Math.min(bn.minY, n.y ?? 0)
+      bn.maxY = Math.max(bn.maxY, n.y ?? 0)
+      b[s] = bn
+    })
+    setBounds(b)
+  }, [data])
 
   useEffect(() => {
     const el = containerRef.current
@@ -331,11 +358,38 @@ export default function TopologyView({ selectedId, onSelect }: Props) {
           ctx.fillStyle = '#fff'
           ctx.fillText(queue, x, yLabel)
         }}
+        onRenderFramePre={(ctx) => {
+          if (!swarmId) {
+            ctx.save()
+            ctx.strokeStyle = 'rgba(255,255,255,0.2)'
+            ctx.fillStyle = 'rgba(255,255,255,0.05)'
+            Object.values(bounds).forEach((b) => {
+              const pad = 10
+              ctx.fillRect(
+                b.minX - pad,
+                b.minY - pad,
+                b.maxX - b.minX + pad * 2,
+                b.maxY - b.minY + pad * 2,
+              )
+              ctx.strokeRect(
+                b.minX - pad,
+                b.minY - pad,
+                b.maxX - b.minX + pad * 2,
+                b.maxY - b.minY + pad * 2,
+              )
+            })
+            ctx.restore()
+          }
+        }}
         nodeCanvasObject={(node, ctx, globalScale) =>
           drawNode(node as GraphNode, ctx, globalScale)}
         onNodeDragEnd={(n) =>
           updateNodePosition(String(n.id), n.x ?? 0, n.y ?? 0)}
-        onNodeClick={(n) => onSelect?.(String(n.id))}
+        onNodeClick={(n) => {
+          const node = n as GraphNode
+          if (swarmId) onSelect?.(String(node.id))
+          else onSwarmSelect?.(node.swarmId ?? 'default')
+        }}
       />
       <button
         className="reset-view"

@@ -13,10 +13,10 @@ describe('swarm lifecycle', () => {
     const publish = vi.fn()
     const subscribe = vi.fn().mockReturnValue({ unsubscribe() {} })
     setClient({ active: true, publish, subscribe } as unknown as Client)
-    await createSwarm('sw1', 'img:latest')
+    await createSwarm('sw1', 'img:latest', 'sc1')
     expect(publish).toHaveBeenCalledWith({
       destination: '/exchange/ph.control/sig.swarm-create.sw1',
-      body: 'img:latest',
+      body: JSON.stringify({ image: 'img:latest', scenario: 'sc1' }),
     })
   })
 

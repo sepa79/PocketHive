@@ -12,6 +12,7 @@ interface Node {
   x?: number
   y?: number
   enabled?: boolean
+  swarmId?: string
 }
 
 interface GraphProps {
@@ -29,8 +30,9 @@ interface GraphProps {
 
 const data = {
   nodes: [
-    { id: 'a', type: 'generator' } as Node,
-    { id: 'b', type: 'processor' } as Node,
+    { id: 'a', type: 'generator', swarmId: 'sw1' } as Node,
+    { id: 'b', type: 'processor', swarmId: 'sw1' } as Node,
+    { id: 'c', type: 'generator' } as Node,
   ],
   edges: [{ from: 'a', to: 'b', queue: 'q' }] as unknown[],
 }
@@ -39,12 +41,23 @@ const components = [
   {
     id: 'a',
     name: 'generator',
+    swarmId: 'sw1',
     queues: [
       { name: 'q', role: 'producer', depth: 5 },
       { name: 'q2', role: 'producer' },
     ],
   },
-  { id: 'b', name: 'processor', queues: [{ name: 'q', role: 'consumer' }] },
+  {
+    id: 'b',
+    name: 'processor',
+    swarmId: 'sw1',
+    queues: [{ name: 'q', role: 'consumer' }],
+  },
+  {
+    id: 'c',
+    name: 'generator',
+    queues: [],
+  },
 ]
 const updateNodePosition = vi.fn<(id: string, x: number, y: number) => void>()
 
@@ -118,4 +131,11 @@ test('node position updates after drag and edge depth styles', () => {
     1,
   )
   expect(ctx.fillText).toHaveBeenCalledWith('2', expect.any(Number), expect.any(Number))
+})
+
+test('filters nodes for default swarm', () => {
+  render(<TopologyView swarmId="default" />)
+  const props = (globalThis as unknown as { __GRAPH_PROPS__: GraphProps }).__GRAPH_PROPS__
+  expect(props.graphData.nodes).toHaveLength(1)
+  expect(props.graphData.nodes[0].id).toBe('c')
 })

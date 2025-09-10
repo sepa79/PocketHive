@@ -4,7 +4,7 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import '@testing-library/jest-dom/vitest'
-import { vi, test, expect, beforeEach } from 'vitest'
+import { vi, test, expect, beforeEach, type Mock } from 'vitest'
 import HivePage from './HivePage'
 import type { Component } from '../../types/hive'
 import { subscribeComponents, startSwarm, stopSwarm, requestStatusFull } from '../../lib/stompClient'
@@ -29,19 +29,28 @@ const comps: Component[] = [
     queues: [],
     config: { swarmStatus: 'STOPPED', enabled: true },
   },
+  {
+    id: 'orphan',
+    name: 'generator',
+    lastHeartbeat: 0,
+    queues: [],
+    config: { enabled: true },
+  },
 ]
 
 let listener: ((c: Component[]) => void) | null = null
 
 beforeEach(() => {
-  ;(subscribeComponents as unknown as any).mockImplementation((fn: (c: Component[]) => void) => {
-    listener = fn
-    fn(comps)
-    return () => {}
-  })
-  ;(startSwarm as unknown as any).mockReset()
-  ;(stopSwarm as unknown as any).mockReset()
-  ;(requestStatusFull as unknown as any).mockResolvedValue(undefined)
+  ;(subscribeComponents as unknown as Mock).mockImplementation(
+    (fn: (c: Component[]) => void) => {
+      listener = fn
+      fn(comps)
+      return () => {}
+    },
+  )
+  ;(startSwarm as unknown as Mock).mockReset()
+  ;(stopSwarm as unknown as Mock).mockReset()
+  ;(requestStatusFull as unknown as Mock).mockResolvedValue(undefined)
 })
 
 test('renders marshal status and start/stop controls', async () => {
@@ -52,8 +61,18 @@ test('renders marshal status and start/stop controls', async () => {
   expect(startSwarm).toHaveBeenCalledWith('sw1')
 
   comps[0].config = { swarmStatus: 'RUNNING', enabled: true }
-  listener && listener([...comps])
+  if (listener) listener([...comps])
   expect(await screen.findByText(/Marshal: running/i)).toBeTruthy()
-  await user.click(screen.getByRole('button', { name: /stop/i }))
+  await user.click(screen.getAllByRole('button', { name: /stop/i })[1])
   expect(stopSwarm).toHaveBeenCalledWith('sw1')
+})
+
+test('shows unassigned components when selecting default swarm', async () => {
+  const user = userEvent.setup()
+  render(<HivePage />)
+  const [def] = screen.getAllByText('default')
+  expect(def).toBeTruthy()
+  await user.click(def)
+  const gens = await screen.findAllByText('generator')
+  expect(gens.length).toBeGreaterThan(0)
 })
