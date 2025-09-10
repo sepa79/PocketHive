@@ -75,4 +75,11 @@ class ScenarioControllerTest {
                         .content("{\"id\":\"\",\"name\":\"\"}"))
                 .andExpect(status().isBadRequest());
     }
+
+    @Test
+    void pathTraversalRejected() throws Exception {
+        String body = "{\"id\":\"../evil\",\"name\":\"Hack\"}";
+        mvc.perform(post("/scenarios").contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isBadRequest());
+    }
 }

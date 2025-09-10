@@ -28,11 +28,12 @@ test('submits selected scenario', async () => {
   await screen.findByText('basic')
   fireEvent.change(screen.getByLabelText(/swarm id/i), { target: { value: 'sw1' } })
   fireEvent.change(screen.getByLabelText(/scenario/i), { target: { value: 'basic' } })
-  await waitFor(() =>
-    expect(fetchMock).toHaveBeenCalledWith('/scenario-manager/scenarios/basic'),
-  )
+  await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/scenario-manager/scenarios/basic'))
+  await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2))
   fireEvent.click(screen.getByText('Create'))
-  expect(createSwarm).toHaveBeenCalledWith('sw1', detail)
+  await waitFor(() =>
+    expect(createSwarm).toHaveBeenCalledWith('sw1', detail),
+  )
 })
 
 test('does not submit when scenario selection is cleared', async () => {
@@ -48,13 +49,12 @@ test('does not submit when scenario selection is cleared', async () => {
   await screen.findByText('basic')
   fireEvent.change(screen.getByLabelText(/swarm id/i), { target: { value: 'sw1' } })
   fireEvent.change(screen.getByLabelText(/scenario/i), { target: { value: 'basic' } })
-  await waitFor(() =>
-    expect(fetchMock).toHaveBeenCalledWith('/scenario-manager/scenarios/basic'),
-  )
+  await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/scenario-manager/scenarios/basic'))
+  await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2))
 
   fireEvent.change(screen.getByLabelText(/scenario/i), { target: { value: '' } })
   fireEvent.click(screen.getByText('Create'))
 
-  expect(createSwarm).not.toHaveBeenCalled()
+  await waitFor(() => expect(createSwarm).not.toHaveBeenCalled())
   await screen.findByText(/swarm id and scenario required/i)
 })

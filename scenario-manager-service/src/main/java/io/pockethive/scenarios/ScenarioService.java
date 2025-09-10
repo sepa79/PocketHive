@@ -67,7 +67,7 @@ public class ScenarioService {
         scenarios.remove(id);
         Format format = formats.remove(id);
         if (format != null) {
-            Files.deleteIfExists(storageDir.resolve(filename(id, format)));
+            Files.deleteIfExists(pathFor(id, format));
         }
     }
 
@@ -78,11 +78,24 @@ public class ScenarioService {
     private void write(Scenario scenario, Format format) throws IOException {
         (format == Format.JSON ? jsonMapper : yamlMapper)
             .writerWithDefaultPrettyPrinter()
-            .writeValue(storageDir.resolve(filename(scenario.getId(), format)).toFile(), scenario);
+            .writeValue(pathFor(scenario.getId(), format).toFile(), scenario);
     }
 
-    private String filename(String id, Format format) {
-        return id + (format == Format.JSON ? ".json" : ".yaml");
+    private Path pathFor(String id, Format format) {
+        String fileName = sanitize(id) + (format == Format.JSON ? ".json" : ".yaml");
+        Path path = storageDir.resolve(fileName).normalize();
+        if (!path.startsWith(storageDir)) {
+            throw new IllegalArgumentException("Invalid scenario id");
+        }
+        return path;
+    }
+
+    private String sanitize(String id) {
+        String cleaned = Paths.get(id).getFileName().toString();
+        if (!cleaned.equals(id) || cleaned.contains("..") || cleaned.isBlank()) {
+            throw new IllegalArgumentException("Invalid scenario id");
+        }
+        return cleaned;
     }
 
     public static Format formatFrom(String contentType) {
