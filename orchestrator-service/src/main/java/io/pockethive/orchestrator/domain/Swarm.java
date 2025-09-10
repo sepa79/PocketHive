@@ -1,25 +1,28 @@
 package io.pockethive.orchestrator.domain;
 
 import java.time.Instant;
+
 public class Swarm {
     private final String id;
+    private final String instanceId;
     private final String containerId;
     private SwarmStatus status;
     private final Instant createdAt;
 
-    public Swarm(String id, String containerId) {
+    public Swarm(String id, String instanceId, String containerId) {
         this.id = id;
+        this.instanceId = instanceId;
         this.containerId = containerId;
         this.status = SwarmStatus.CREATED;
         this.createdAt = Instant.now();
     }
 
-    public Swarm(String containerId) {
-        this(java.util.UUID.randomUUID().toString(), containerId);
-    }
-
     public String getId() {
         return id;
+    }
+
+    public String getInstanceId() {
+        return instanceId;
     }
 
     public String getContainerId() {

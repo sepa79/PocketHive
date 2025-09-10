@@ -26,4 +26,8 @@ public class SwarmRegistry {
             swarm.setStatus(status);
         }
     }
+
+    public int count() {
+        return swarms.size();
+    }
 }

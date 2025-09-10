@@ -3,7 +3,7 @@
 These rules define non-negotiable contracts for emitting and consuming control-plane messages.
 
 - MUST emit control events on `ph.control` topic exchange with routing key pattern: `ev.{kind}.{role}.{instance}`.
-- MUST use `role` ∈ {`generator`,`moderator`,`processor`} — do not use ambiguous `name`.
+- MUST use `role` ∈ {`generator`,`moderator`,`processor`,`postprocessor`,`trigger`,`swarm-controller`,`orchestrator`} — do not use ambiguous `name`.
 - MUST include the envelope fields: `event`, `kind`, `version`, `role`, `instance`, `messageId`, `timestamp`.
 - SHOULD include `queues.in` and/or `queues.out` in `status-full` events (and whenever bindings change).
 - SHOULD send `status-delta` events every ~5 seconds with lightweight `data` (e.g., `{ tps }`).

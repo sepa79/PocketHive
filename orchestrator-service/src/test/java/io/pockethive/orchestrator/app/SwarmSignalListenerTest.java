@@ -1,56 +1,67 @@
 package io.pockethive.orchestrator.app;
 
-import io.pockethive.orchestrator.domain.*;
+import io.pockethive.Topology;
+import io.pockethive.orchestrator.domain.SwarmPlan;
+import io.pockethive.orchestrator.domain.SwarmPlanRegistry;
+import io.pockethive.orchestrator.domain.SwarmTemplate;
+import io.pockethive.orchestrator.domain.SwarmRegistry;
+import io.pockethive.orchestrator.domain.ScenarioRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.amqp.core.AmqpTemplate;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class SwarmSignalListenerTest {
     @Mock
-    ContainerLifecycleManager lifecycle;
-    @Mock
     AmqpTemplate rabbit;
+    @Mock
+    ScenarioRepository scenarios;
+    @Mock
+    ContainerLifecycleManager lifecycle;
 
     @Test
-    void createsSwarmOnSignal() {
-        when(lifecycle.startSwarm("sw1", "img")).thenReturn(new Swarm("sw1", "cid"));
+    void dispatchesPlanWhenControllerReady() {
+        SwarmPlanRegistry registry = new SwarmPlanRegistry();
         SwarmTemplate template = new SwarmTemplate();
-        SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", template);
+        SwarmPlan plan = new SwarmPlan("sw1", template);
+        registry.register("inst1", plan);
+        SwarmSignalListener listener = new SwarmSignalListener(rabbit, registry, new SwarmRegistry(), scenarios, lifecycle, "inst0");
+        reset(rabbit);
 
-        listener.handle("img", "sig.swarm-create.sw1");
+        listener.handle("", "ev.ready.swarm-controller.inst1");
 
-        verify(lifecycle).startSwarm("sw1", "img");
-        verify(rabbit).convertAndSend(eq(io.pockethive.Topology.CONTROL_EXCHANGE),
-                eq("ev.status-full.orchestrator.inst"), any(Object.class));
+        ArgumentCaptor<SwarmPlan> captor = ArgumentCaptor.forClass(SwarmPlan.class);
+        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("sig.swarm-start.sw1"), captor.capture());
+        assertThat(captor.getValue()).isEqualTo(plan);
+        assertThat(registry.find("inst1")).isEmpty();
     }
 
     @Test
-    void logsErrorWhenStartFails() {
-        when(lifecycle.startSwarm("sw1", "img")).thenThrow(new RuntimeException("boom"));
-        SwarmTemplate template = new SwarmTemplate();
-        SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", template);
+    void ignoresNonReadyEvents() {
+        SwarmPlanRegistry registry = new SwarmPlanRegistry();
+        SwarmSignalListener listener = new SwarmSignalListener(rabbit, registry, new SwarmRegistry(), scenarios, lifecycle, "inst0");
+        reset(rabbit);
 
-        listener.handle("img", "sig.swarm-create.sw1");
+        listener.handle("", "ev.ready.other-controller.inst1");
 
-        verify(lifecycle).startSwarm("sw1", "img");
         verifyNoInteractions(rabbit);
     }
 
     @Test
-    void sendsPlanOnSwarmControllerReady() {
-        SwarmTemplate template = new SwarmTemplate();
-        SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", template);
+    void respondsToStatusRequest() {
+        SwarmSignalListener listener = new SwarmSignalListener(rabbit, new SwarmPlanRegistry(), new SwarmRegistry(), scenarios, lifecycle, "inst1");
+        reset(rabbit);
 
-        listener.handle("", "ev.ready.swarm-controller.inst");
+        listener.handle("", "sig.status-request.orchestrator.inst1");
 
-        verify(rabbit).convertAndSend(eq(io.pockethive.Topology.CONTROL_EXCHANGE),
-                eq("sig.swarm-start." + io.pockethive.Topology.SWARM_ID),
-                eq(new SwarmPlan(io.pockethive.Topology.SWARM_ID, template)));
+        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("ev.status-full.orchestrator.inst1"), any(Object.class));
     }
 }
