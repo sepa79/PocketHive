@@ -1,9 +1,24 @@
 # Postprocessor Service
 
-Collects metrics from the final stage of the pipeline and emits aggregated results.
+Aggregates metrics from final responses and publishes them for analysis.
 
 ## Responsibilities
-- Consume processed messages from `ph.<swarmId>.final`.
-- Record latency and error metrics tagged with swarm and bee identifiers.
+- Consume messages from `ph.<swarmId>.final`.
+- Record hop and total latency metrics and error counts.
+- Emit metric events to the control exchange.
 
-See [control-plane rules](../docs/rules/control-plane-rules.md) for signal formats.
+## Parameters
+- `PH_SWARM_ID` – identifier for the swarm scope (default `default`).
+- `RABBITMQ_HOST` – broker hostname (default `rabbitmq`).
+
+## Signals
+- Consumes `sig.config-update.postprocessor.*` for runtime changes.
+- Responds to `sig.status-request.postprocessor.*` with `ev.status-full` events.
+
+## Docker
+```bash
+docker build -t postprocessor-service:latest .
+docker run --rm postprocessor-service:latest
+```
+
+See [control-plane rules](../docs/rules/control-plane-rules.md) for full signal formats.
