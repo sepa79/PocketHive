@@ -5,4 +5,19 @@ public interface SwarmLifecycle {
   void start(String planJson);
   void stop();
   SwarmStatus getStatus();
+  /**
+   * Record readiness of a component identified by role and instance.
+   * @return true when all expected components are ready
+   */
+  boolean markReady(String role, String instance);
+
+  /**
+   * Apply the first scenario step configuration while keeping components disabled.
+   */
+  void applyScenarioStep(String stepJson);
+
+  /**
+   * Enable all components and begin scenario execution.
+   */
+  void enableAll();
 }
