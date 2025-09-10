@@ -76,7 +76,7 @@ class SwarmControllerIntegrationTest {
     void emitsStatusOnRequest() {
         reset(rabbit);
         listener.handle("sig.status-request.orchestrator." + instanceId);
-        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("ev.status-full.orchestrator." + instanceId), any());
+        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("ev.status-full.orchestrator." + instanceId), any(Object.class));
     }
 }
 

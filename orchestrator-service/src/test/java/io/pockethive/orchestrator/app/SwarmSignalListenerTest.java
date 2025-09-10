@@ -57,6 +57,6 @@ class SwarmSignalListenerTest {
 
         listener.handle("sig.status-request.orchestrator.inst1");
 
-        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("ev.status-full.orchestrator.inst1"), any());
+        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("ev.status-full.orchestrator.inst1"), any(Object.class));
     }
 }
