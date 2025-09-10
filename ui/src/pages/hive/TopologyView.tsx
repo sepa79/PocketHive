@@ -118,7 +118,9 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
         .map((n, idx) => ({ ...n, x: n.x ?? idx * 80, y: n.y ?? 80 }))
       let nodes = [...connectedNodes, ...unconnectedNodes]
       if (swarmId) {
-        nodes = nodes.filter((n) => n.swarmId === swarmId)
+        nodes = nodes.filter((n) =>
+          swarmId === 'default' ? !n.swarmId : n.swarmId === swarmId,
+        )
       }
       const ids = new Set(nodes.map((n) => n.id))
       const links = topo.edges
@@ -386,7 +388,7 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
         onNodeClick={(n) => {
           const node = n as GraphNode
           if (swarmId) onSelect?.(String(node.id))
-          else if (node.swarmId) onSwarmSelect?.(node.swarmId)
+          else onSwarmSelect?.(node.swarmId ?? 'default')
         }}
       />
       <button

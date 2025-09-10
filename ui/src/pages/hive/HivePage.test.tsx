@@ -29,6 +29,13 @@ const comps: Component[] = [
     queues: [],
     config: { swarmStatus: 'STOPPED', enabled: true },
   },
+  {
+    id: 'orphan',
+    name: 'generator',
+    lastHeartbeat: 0,
+    queues: [],
+    config: { enabled: true },
+  },
 ]
 
 let listener: ((c: Component[]) => void) | null = null
@@ -56,6 +63,16 @@ test('renders marshal status and start/stop controls', async () => {
   comps[0].config = { swarmStatus: 'RUNNING', enabled: true }
   if (listener) listener([...comps])
   expect(await screen.findByText(/Marshal: running/i)).toBeTruthy()
-  await user.click(screen.getByRole('button', { name: /stop/i }))
+  await user.click(screen.getAllByRole('button', { name: /stop/i })[1])
   expect(stopSwarm).toHaveBeenCalledWith('sw1')
+})
+
+test('shows unassigned components when selecting default swarm', async () => {
+  const user = userEvent.setup()
+  render(<HivePage />)
+  const [def] = screen.getAllByText('default')
+  expect(def).toBeTruthy()
+  await user.click(def)
+  const gens = await screen.findAllByText('generator')
+  expect(gens.length).toBeGreaterThan(0)
 })

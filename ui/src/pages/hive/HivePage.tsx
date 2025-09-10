@@ -39,7 +39,10 @@ export default function HivePage() {
     (c) =>
       (c.name.toLowerCase().includes(search.toLowerCase()) ||
         c.id.toLowerCase().includes(search.toLowerCase())) &&
-      (!activeSwarm || c.swarmId === activeSwarm),
+      (!activeSwarm ||
+        (activeSwarm === 'default'
+          ? !c.swarmId
+          : c.swarmId === activeSwarm)),
   )
 
   const grouped = filtered.reduce<Record<string, Component[]>>((acc, c) => {
@@ -120,7 +123,10 @@ export default function HivePage() {
                   <div className="flex items-center justify-between mb-1">
                     <div
                       className="font-medium cursor-pointer"
-                      onClick={() => !activeSwarm && setActiveSwarm(id)}
+                      onClick={() =>
+                        !activeSwarm &&
+                        setActiveSwarm(id === 'default' ? 'default' : id)
+                      }
                     >
                       {id}
                     </div>
@@ -165,7 +171,8 @@ export default function HivePage() {
             if (comp) setSelected(comp)
           }}
           swarmId={activeSwarm ?? undefined}
-          onSwarmSelect={(id) => setActiveSwarm(id)}
+          onSwarmSelect={(id) =>
+            setActiveSwarm(id === 'default' ? 'default' : id)}
         />
       </div>
       <div className="hidden lg:flex w-1/3 xl:w-1/4 border-l border-white/10 overflow-hidden">
