@@ -9,6 +9,9 @@ Welcome to the PocketHive documentation hub. Use these resources to understand t
 - [Project Roadmap](ROADMAP.md)
 - [Release Notes](../CHANGELOG.md)
 
+## Usage
+- [Usage Guide](USAGE.md)
+
 ## Services
 - [Orchestrator](../orchestrator-service/README.md)
 - [Swarm Controller](../swarm-controller-service/README.md)
