@@ -5,6 +5,7 @@ import io.pockethive.orchestrator.domain.SwarmPlan;
 import io.pockethive.orchestrator.domain.SwarmPlanRegistry;
 import io.pockethive.orchestrator.domain.SwarmTemplate;
 import io.pockethive.orchestrator.domain.SwarmRegistry;
+import io.pockethive.orchestrator.domain.ScenarioRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -21,6 +22,10 @@ import static org.mockito.Mockito.*;
 class SwarmSignalListenerTest {
     @Mock
     AmqpTemplate rabbit;
+    @Mock
+    ScenarioRepository scenarios;
+    @Mock
+    ContainerLifecycleManager lifecycle;
 
     @Test
     void dispatchesPlanWhenControllerReady() {
@@ -28,10 +33,10 @@ class SwarmSignalListenerTest {
         SwarmTemplate template = new SwarmTemplate();
         SwarmPlan plan = new SwarmPlan("sw1", template);
         registry.register("inst1", plan);
-        SwarmSignalListener listener = new SwarmSignalListener(rabbit, registry, new SwarmRegistry(), "inst0");
+        SwarmSignalListener listener = new SwarmSignalListener(rabbit, registry, new SwarmRegistry(), scenarios, lifecycle, "inst0");
         reset(rabbit);
 
-        listener.handle("ev.ready.swarm-controller.inst1");
+        listener.handle("", "ev.ready.swarm-controller.inst1");
 
         ArgumentCaptor<SwarmPlan> captor = ArgumentCaptor.forClass(SwarmPlan.class);
         verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("sig.swarm-start.sw1"), captor.capture());
@@ -42,20 +47,20 @@ class SwarmSignalListenerTest {
     @Test
     void ignoresNonReadyEvents() {
         SwarmPlanRegistry registry = new SwarmPlanRegistry();
-        SwarmSignalListener listener = new SwarmSignalListener(rabbit, registry, new SwarmRegistry(), "inst0");
+        SwarmSignalListener listener = new SwarmSignalListener(rabbit, registry, new SwarmRegistry(), scenarios, lifecycle, "inst0");
         reset(rabbit);
 
-        listener.handle("ev.ready.other-controller.inst1");
+        listener.handle("", "ev.ready.other-controller.inst1");
 
         verifyNoInteractions(rabbit);
     }
 
     @Test
     void respondsToStatusRequest() {
-        SwarmSignalListener listener = new SwarmSignalListener(rabbit, new SwarmPlanRegistry(), new SwarmRegistry(), "inst1");
+        SwarmSignalListener listener = new SwarmSignalListener(rabbit, new SwarmPlanRegistry(), new SwarmRegistry(), scenarios, lifecycle, "inst1");
         reset(rabbit);
 
-        listener.handle("sig.status-request.orchestrator.inst1");
+        listener.handle("", "sig.status-request.orchestrator.inst1");
 
         verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("ev.status-full.orchestrator.inst1"), any(Object.class));
     }

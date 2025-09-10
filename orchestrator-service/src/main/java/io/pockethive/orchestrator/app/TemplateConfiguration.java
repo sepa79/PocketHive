@@ -14,7 +14,7 @@ public class TemplateConfiguration {
     @Bean
     public SwarmTemplate swarmTemplate() throws IOException {
         ObjectMapper mapper = new ObjectMapper(new YAMLFactory());
-        try (InputStream in = getClass().getClassLoader().getResourceAsStream("templates/rest-swarm.yml")) {
+        try (InputStream in = getClass().getClassLoader().getResourceAsStream("templates/swarm.yml")) {
             return mapper.readValue(in, SwarmTemplate.class);
         }
     }
