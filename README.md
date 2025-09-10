@@ -6,12 +6,12 @@ PocketHive is a portable transaction swarm. It orchestrates containerised compon
 
 ```mermaid
 flowchart LR
-  SC[Scenario] --> O[Orchestrator]
+  SC[Scenario] --> O[Orchestrator (Queen)]
   UI[UI] <--> O
   O --> SW[Swarm]
   subgraph SW
     direction TB
-    M[Marshal] --> W[(Workers)]
+    M[Swarm Controller (Marshal)] --> W[(Workers (Bees))]
   end
   W --> SUT[(System Under Test)]
   W --> OBS[Observability]

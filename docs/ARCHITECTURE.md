@@ -9,9 +9,9 @@ Services communicate over HTTP and AMQP. Each service exposes APIs and consumes 
 ### High-level flow
 ```mermaid
 flowchart LR
-  SC[Scenario] --> QN[Queen]
-  QN --> MSH[Marshal]
-  MSH --> BW[(Bees)] --> SUT[(System Under Test)]
+  SC[Scenario] --> QN[Orchestrator (Queen)]
+  QN --> MSH[Swarm Controller (Marshal)]
+  MSH --> BW[(Workers (Bees))] --> SUT[(System Under Test)]
   BW --> OBS[Observability]
 ```
 
@@ -27,8 +27,8 @@ flowchart LR
 flowchart LR
   %% Actors
   SC[Scenario]
-  QN[Queen]
-  MSH[Marshal]
+  QN[Orchestrator (Queen)]
+  MSH[Swarm Controller (Marshal)]
   G[Generator]
   M[Moderator]
   P[Processor]
@@ -84,7 +84,7 @@ flowchart LR
 ### Observability
 ```mermaid
 flowchart LR
-  B[(Bees)] -->|logs| LA[Log Aggregator] --> LK[Loki]
+  B[(Workers (Bees))] -->|logs| LA[Log Aggregator] --> LK[Loki]
   B -->|metrics| PR[Prometheus]
   LA --> GF[Grafana]
   LK --> GF
@@ -113,11 +113,11 @@ A Marshal governs one swarm. After receiving its plan from the Queen it declares
 
 ```mermaid
 sequenceDiagram
-  participant Marshal
-  participant Queen
-  Note over Marshal: declares ph.control.swarm-controller.<instance>
-  Marshal->>Queen: ev.ready.swarm-controller.<instance>
-  Queen->>Marshal: sig.swarm-start.<swarmId> (SwarmPlan)
+  participant MSH as "Swarm Controller (Marshal)"
+  participant QN as "Orchestrator (Queen)"
+  Note over MSH: declares ph.control.swarm-controller.<instance>
+  MSH->>QN: ev.ready.swarm-controller.<instance>
+  QN->>MSH: sig.swarm-start.<swarmId> (SwarmPlan)
 ```
 
 ### Queue provisioning
@@ -138,14 +138,14 @@ flowchart TB
 
 ```mermaid
 sequenceDiagram
-  participant Queen
-  participant Marshal
-  participant Bee
-  Queen->>Marshal: sig.swarm-start.<swarmId>
-  Marshal->>Bee: launch container
-  Bee->>Marshal: status-full
-  Queen->>Marshal: sig.swarm-stop.<swarmId>
-  Marshal->>Bee: stop container
+  participant QN as "Orchestrator (Queen)"
+  participant MSH as "Swarm Controller (Marshal)"
+  participant WS as "Worker Service (Bee)"
+  QN->>MSH: sig.swarm-start.<swarmId>
+  MSH->>WS: launch container
+  WS->>MSH: status-full
+  QN->>MSH: sig.swarm-stop.<swarmId>
+  MSH->>WS: stop container
 ```
 
 ### Swarm Plan Template
