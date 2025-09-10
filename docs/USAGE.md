@@ -32,11 +32,12 @@ Manual checks:
 
 ## Swarm launch
 - Open the Hive view and choose **Create Swarm**.
-- Enter a swarm ID and controller image and submit to create the swarm.
-- Start the swarm with the play button next to its entry.
+- Enter a swarm ID and select a scenario. The modal fetches the list from
+  `/scenario-manager/scenarios` and loads the chosen scenario's JSON.
+- Submit to create the swarm, then start it with the play button next to its entry.
 
 ### Scenario and swarm API
-- STOMP `sig.swarm-create.<swarmId>` to `/exchange/ph.control/sig.swarm-create.<swarmId>` with body `{ "template": { "image": "<image>", "bees": [] } }`.
+- STOMP `sig.swarm-create.<swarmId>` to `/exchange/ph.control/sig.swarm-create.<swarmId>` with body `<scenario JSON>`.
 - STOMP `sig.swarm-start.<swarmId>` with an empty body to begin execution.
 
 ## Troubleshooting
