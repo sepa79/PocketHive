@@ -20,12 +20,12 @@ export default function SwarmCreateModal({ onClose }: Props) {
   }, [])
 
   useEffect(() => {
-    if (scenarioName) {
-      fetch(`/scenario-manager/scenarios/${scenarioName}`)
-        .then((res) => res.json())
-        .then((data) => setScenario(data))
-        .catch(() => setScenario(null))
-    }
+    setScenario(null)
+    if (!scenarioName) return
+    fetch(`/scenario-manager/scenarios/${scenarioName}`)
+      .then((res) => res.json())
+      .then((data) => setScenario(data))
+      .catch(() => setScenario(null))
   }, [scenarioName])
 
   const handleSubmit = async (e: React.FormEvent) => {
