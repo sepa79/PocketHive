@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { createSwarm } from '../../lib/stompClient'
+import { defaultBees } from '../../lib/defaultBees'
 
 interface Props {
   onClose: () => void
@@ -39,7 +40,7 @@ export default function SwarmCreateModal({ onClose }: Props) {
       return
     }
     try {
-      await createSwarm(swarmId.trim(), scenario)
+      await createSwarm(swarmId.trim(), { template: { image: image.trim(), bees: defaultBees } })
       setMessage('Swarm created')
       setSwarmId('')
       setScenarioName('')

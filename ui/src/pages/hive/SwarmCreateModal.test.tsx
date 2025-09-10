@@ -5,6 +5,7 @@ import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/re
 import SwarmCreateModal from './SwarmCreateModal'
 import { vi, test, expect, afterEach } from 'vitest'
 import { createSwarm } from '../../lib/stompClient'
+import { defaultBees } from '../../lib/defaultBees'
 
 vi.mock('../../lib/stompClient', () => ({
   createSwarm: vi.fn(),
