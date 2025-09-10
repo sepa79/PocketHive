@@ -25,3 +25,18 @@ describe('useUIStore messageLimit', () => {
     expect(useUIStore.getState().messageLimit).toBe(250)
   })
 })
+
+describe('useUIStore debugMode', () => {
+  beforeEach(() => {
+    useUIStore.setState({ debugMode: false })
+  })
+
+  it('has default value of false', () => {
+    expect(useUIStore.getState().debugMode).toBe(false)
+  })
+
+  it('toggles debug mode', () => {
+    useUIStore.getState().toggleDebug()
+    expect(useUIStore.getState().debugMode).toBe(true)
+  })
+})

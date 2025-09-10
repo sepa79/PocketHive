@@ -1,0 +1,23 @@
+import { describe, it, expect } from 'vitest'
+import { render, screen, waitFor } from '@testing-library/react'
+import '@testing-library/jest-dom/vitest'
+import SwarmDebugPanel from './SwarmDebugPanel'
+import { logHandshake, resetLogs } from '../lib/logs'
+
+/**
+ * @vitest-environment jsdom
+ */
+
+describe('SwarmDebugPanel', () => {
+  it('renders handshake timeline for swarms', async () => {
+    resetLogs()
+    render(<SwarmDebugPanel />)
+    logHandshake('/exchange/ph.control/sig.swarm-template.sw1', '{}')
+    await waitFor(() => screen.getByText('Swarm sw1'))
+    expect(screen.getByText(/created: pending/)).toBeInTheDocument()
+    logHandshake('/exchange/ph.control/ev.swarm-created.sw1', '{}')
+    await waitFor(() => {
+      expect(screen.getByText(/created:/)).not.toHaveTextContent('pending')
+    })
+  })
+})

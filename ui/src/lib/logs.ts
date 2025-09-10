@@ -57,3 +57,10 @@ export function subscribeLogs(type: LogType, fn: Listener) {
     listeners[type] = listeners[type].filter((l) => l !== fn)
   }
 }
+
+export function resetLogs() {
+  ;(Object.keys(logs) as LogType[]).forEach((k) => {
+    logs[k] = []
+    listeners[k].forEach((l) => l([]))
+  })
+}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { logHandshake, subscribeLogs, type LogEntry } from './logs'
+import { logHandshake, subscribeLogs, type LogEntry, resetLogs } from './logs'
 
 /**
  * @vitest-environment jsdom
@@ -7,6 +7,7 @@ import { logHandshake, subscribeLogs, type LogEntry } from './logs'
 
 describe('handshake logs', () => {
   it('collects handshake entries', () => {
+    resetLogs()
     let entries: LogEntry[] = []
     const unsubscribe = subscribeLogs('handshake', (l) => {
       entries = l

@@ -1,0 +1,62 @@
+import { useEffect, useState } from 'react'
+import { subscribeLogs, type LogEntry } from '../lib/logs'
+
+interface SwarmState {
+  template?: number
+  created?: number
+  started?: number
+}
+
+export default function SwarmDebugPanel() {
+  const [swarms, setSwarms] = useState<Record<string, SwarmState>>({})
+
+  useEffect(() => {
+    return subscribeLogs('handshake', (entries: LogEntry[]) => {
+      setSwarms((prev) => {
+        const next = { ...prev }
+        entries.forEach((e) => {
+          const ts = e.ts
+          const d = e.destination
+          let m
+          if ((m = d.match(/sig\.swarm-template\.([^/]+)$/))) {
+            const id = m[1]
+            next[id] = { ...(next[id] || {}), template: ts }
+          } else if ((m = d.match(/ev\.swarm-created\.([^/]+)$/))) {
+            const id = m[1]
+            next[id] = { ...(next[id] || {}), created: ts }
+          } else if ((m = d.match(/sig\.swarm-start\.([^/]+)$/))) {
+            const id = m[1]
+            next[id] = { ...(next[id] || {}), started: ts }
+          }
+        })
+        return { ...next }
+      })
+    })
+  }, [])
+
+  const now = Date.now()
+
+  return (
+    <div className="mt-4 space-y-2 text-xs font-mono">
+      {Object.entries(swarms).map(([id, s]) => {
+        const delayed = s.template && !s.created && now - s.template > 5000
+        return (
+          <div key={id} className="p-2 rounded border border-white/20">
+            <div className="font-bold mb-1">Swarm {id}</div>
+            <ul className="space-y-0.5">
+              <li>template: {s.template ? new Date(s.template).toLocaleTimeString() : 'pending'}</li>
+              <li className={delayed ? 'text-red-400' : ''}>
+                created: {s.created ? new Date(s.created).toLocaleTimeString() : 'pending'}
+              </li>
+              {s.created && (
+                <li>
+                  started: {s.started ? new Date(s.started).toLocaleTimeString() : 'pending'}
+                </li>
+              )}
+            </ul>
+          </div>
+        )
+      })}
+    </div>
+  )
+}

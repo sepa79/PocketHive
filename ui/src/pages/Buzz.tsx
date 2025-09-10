@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { subscribeLogs, type LogEntry } from '../lib/logs'
 import { useConfig } from '../lib/config'
 import { useUIStore } from '../store'
+import SwarmDebugPanel from '../components/SwarmDebugPanel'
 
 type LogTab = 'in' | 'out' | 'other' | 'handshake'
 type Tab = LogTab | 'config'
@@ -37,7 +38,7 @@ function ConfigView() {
 
 export default function Buzz() {
   const [tab, setTab] = useState<Tab>('in')
-  const { messageLimit, setMessageLimit } = useUIStore()
+  const { messageLimit, setMessageLimit, debugMode } = useUIStore()
   const [inputValue, setInputValue] = useState(messageLimit.toString())
 
   const handleLimitChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -98,6 +99,7 @@ export default function Buzz() {
       <div className="flex-1 overflow-auto rounded border border-white/20 p-2">
         {tab === 'config' ? <ConfigView /> : <LogView type={tab} />}
       </div>
+      {debugMode && <SwarmDebugPanel />}
     </div>
   )
 }

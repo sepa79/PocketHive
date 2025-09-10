@@ -8,7 +8,7 @@ import { useEffect } from 'react'
 import { useConfig } from '../lib/config'
 
 export default function Layout() {
-  const { sidebarOpen, toggleSidebar, closeSidebar } = useUIStore()
+  const { sidebarOpen, toggleSidebar, closeSidebar, debugMode, toggleDebug } = useUIStore()
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -72,6 +72,13 @@ export default function Layout() {
           </div>
           <Connectivity />
           <Health />
+          <div className="h-6 w-px bg-white/20 mx-2" />
+          <button
+            className={`rounded px-2 py-1 text-xs ${debugMode ? 'bg-white/20' : 'hover:bg-white/10'}`}
+            onClick={toggleDebug}
+          >
+            Debug
+          </button>
           <div className="h-6 w-px bg-white/20 mx-2" />
           <div className="menu relative">
             <button

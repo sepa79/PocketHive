@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { Client } from '@stomp/stompjs'
 import { setClient, createSwarm, startSwarm, stopSwarm } from './stompClient'
-import { subscribeLogs, type LogEntry } from './logs'
+import { subscribeLogs, type LogEntry, resetLogs } from './logs'
 
 /**
  * @vitest-environment jsdom
@@ -43,6 +43,7 @@ describe('swarm lifecycle', () => {
   })
 
   it('logs handshake events', () => {
+    resetLogs()
     const publish = vi.fn()
     let cb: (msg: { body: string; headers: Record<string, string> }) => void = () => {}
     const subscribe = vi.fn().mockImplementation(
@@ -57,6 +58,20 @@ describe('swarm lifecycle', () => {
       entries = l
     })
     cb({ body: '{}', headers: { destination: '/exchange/ph.control/ev.ready.swarm-controller.inst' } })
-    expect(entries[0].destination).toContain('ev.ready.swarm-controller.inst')
+    expect(entries[entries.length - 1].destination).toContain('ev.ready.swarm-controller.inst')
+  })
+
+  it('logs swarm template signal as handshake', () => {
+    resetLogs()
+    const publish = vi.fn()
+    const subscribe = vi.fn().mockReturnValue({ unsubscribe() {} })
+    const c = { active: true, publish, subscribe } as unknown as Client
+    setClient(c)
+    let entries: LogEntry[] = []
+    subscribeLogs('handshake', (l) => {
+      entries = l
+    })
+    c.publish({ destination: '/exchange/ph.control/sig.swarm-template.sw1', body: '{}' })
+    expect(entries[entries.length - 1].destination).toContain('sig.swarm-template.sw1')
   })
 })

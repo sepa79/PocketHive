@@ -30,7 +30,9 @@ const nodePositions: Record<string, { x: number; y: number }> = {}
 function isHandshake(dest: string) {
   return (
     dest.startsWith('/exchange/ph.control/ev.ready.swarm-controller.') ||
-    dest.startsWith('/exchange/ph.control/ev.swarm-created.')
+    dest.startsWith('/exchange/ph.control/ev.swarm-created.') ||
+    dest.startsWith('/exchange/ph.control/sig.swarm-template.') ||
+    dest.startsWith('/exchange/ph.control/sig.swarm-start.')
   )
 }
 
