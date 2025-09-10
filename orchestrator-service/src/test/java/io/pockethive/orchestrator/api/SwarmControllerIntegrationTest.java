@@ -17,6 +17,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.*;
+import org.mockito.ArgumentCaptor;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -54,8 +55,9 @@ class SwarmControllerIntegrationTest {
 
         listener.handle("ev.ready.swarm-controller.c1");
 
-        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("sig.swarm-start.sw1"),
-                argThat(o -> o instanceof SwarmPlan sp && sp.id().equals("sw1")));
+        ArgumentCaptor<SwarmPlan> captor = ArgumentCaptor.forClass(SwarmPlan.class);
+        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("sig.swarm-start.sw1"), captor.capture());
+        assertThat(captor.getValue().id()).isEqualTo("sw1");
         assertThat(planRegistry.find("c1")).isEmpty();
 
         mvc.perform(delete("/swarms/sw1"))
