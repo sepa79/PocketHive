@@ -55,6 +55,17 @@ class SwarmSignalListenerTest {
   }
 
   @Test
+  void handlesTemplateWithoutStarting() {
+    when(lifecycle.getStatus()).thenReturn(SwarmStatus.STOPPED);
+    SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", new ObjectMapper());
+    reset(lifecycle, rabbit);
+    listener.handle("tmpl", "sig.swarm-template." + Topology.SWARM_ID);
+    verify(lifecycle).prepare("tmpl");
+    verify(rabbit).convertAndSend(Topology.CONTROL_EXCHANGE, "ev.swarm-created." + Topology.SWARM_ID, "");
+    verifyNoMoreInteractions(lifecycle);
+  }
+
+  @Test
   void stopsSwarmWhenIdMatches() {
     when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
     SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", new ObjectMapper());

@@ -107,16 +107,16 @@ A Marshal governs one swarm. After receiving its plan from the Queen it declares
 ## Swarm coordination
 
 ### Handshake
-1. Marshal declares its control queue `ph.control.herald.<instance>` bound to `ph.control` for `sig.*` and `ev.*` topics.
-2. Marshal emits `ev.ready.herald.<instance>` to signal readiness.
+1. Marshal declares its control queue `ph.control.swarm-controller.<instance>` bound to `ph.control` for `sig.*` and `ev.*` topics.
+2. Marshal emits `ev.ready.swarm-controller.<instance>` to signal readiness.
 3. Queen waits for the ready event and publishes `sig.swarm-start.<swarmId>` to the Marshal queue with the resolved **SwarmPlan**.
 
 ```mermaid
 sequenceDiagram
   participant Marshal
   participant Queen
-  Note over Marshal: declares ph.control.herald.<instance>
-  Marshal->>Queen: ev.ready.herald.<instance>
+  Note over Marshal: declares ph.control.swarm-controller.<instance>
+  Marshal->>Queen: ev.ready.swarm-controller.<instance>
   Queen->>Marshal: sig.swarm-start.<swarmId> (SwarmPlan)
 ```
 
@@ -186,7 +186,7 @@ Communication between the Queen and Marshal uses these topics on `ph.control`:
 | Queen → Marshal | `sig.swarm-stop.<swarmId>` | _(empty)_ | Stop swarm |
 | Queen → Marshal (optional) | `sig.config-update...` | Partial plan | Adjust running swarm |
 | Queen → Marshal (optional) | `sig.status-request...` | _(empty)_ | Request status |
-| Marshal → Queen | `ev.ready.herald.<instance>` | _(empty)_ | Marshal is listening |
+| Marshal → Queen | `ev.ready.swarm-controller.<instance>` | _(empty)_ | Marshal is listening |
 | Marshal → Queen | `ev.status-full.swarm-controller.<instance>` | Status snapshot | Report state |
 
 ## Multi-Region & Queue Adapters

@@ -6,6 +6,8 @@ interface UIState {
   closeSidebar: () => void
   messageLimit: number
   setMessageLimit: (limit: number) => void
+  debugMode: boolean
+  toggleDebug: () => void
 }
 
 export const useUIStore = create<UIState>((set) => ({
@@ -14,4 +16,6 @@ export const useUIStore = create<UIState>((set) => ({
   closeSidebar: () => set({ sidebarOpen: false }),
   messageLimit: 100,
   setMessageLimit: (limit: number) => set({ messageLimit: Math.max(10, Math.min(500, limit)) }),
+  debugMode: false,
+  toggleDebug: () => set((s) => ({ debugMode: !s.debugMode })),
 }))

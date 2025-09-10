@@ -6,7 +6,7 @@ export type LogEntry = {
   body: string
 }
 
-type LogType = 'in' | 'out' | 'other'
+type LogType = 'in' | 'out' | 'other' | 'handshake'
 
 type Listener = (logs: LogEntry[]) => void
 
@@ -14,12 +14,14 @@ const logs: Record<LogType, LogEntry[]> = {
   in: [],
   out: [],
   other: [],
+  handshake: [],
 }
 
 const listeners: Record<LogType, Listener[]> = {
   in: [],
   out: [],
   other: [],
+  handshake: [],
 }
 
 function addLog(type: LogType, entry: LogEntry) {
@@ -44,10 +46,21 @@ export function logOther(message: string) {
   addLog('other', { ts: Date.now(), destination: '', body: message })
 }
 
+export function logHandshake(destination: string, body: string) {
+  addLog('handshake', { ts: Date.now(), destination, body })
+}
+
 export function subscribeLogs(type: LogType, fn: Listener) {
   listeners[type].push(fn)
   fn([...logs[type]])
   return () => {
     listeners[type] = listeners[type].filter((l) => l !== fn)
   }
+}
+
+export function resetLogs() {
+  ;(Object.keys(logs) as LogType[]).forEach((k) => {
+    logs[k] = []
+    listeners[k].forEach((l) => l([]))
+  })
 }

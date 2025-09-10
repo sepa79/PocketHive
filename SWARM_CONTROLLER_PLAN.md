@@ -1,8 +1,8 @@
 # SwarmController Integration Plan
 
 ## Phase 1 – Control channel handshake
-- Subscribe to the `ph.control` exchange and declare `ph.control.herald.<instance>`.
-- Emit `ev.ready.herald.<instance>` on startup.
+- Subscribe to the `ph.control` exchange and declare `ph.control.swarm-controller.<instance>`.
+- Emit `ev.ready.swarm-controller.<instance>` on startup.
 - Queen responds with `sig.swarm-start.<swarmId>` carrying the SwarmPlan.
 
 ## Phase 2 – Plan expansion and queue provisioning
@@ -34,9 +34,9 @@ SwarmController retrieves SwarmPlans from the `scenario-manager-service` REST AP
 
 Refer to the [MVP Roadmap](MVP_ROADMAP.md#scenario-manager-service) for delivery milestones.
 
-## Orchestrator–herald ready-start handshake
+## Orchestrator–swarm-controller ready-start handshake
 
-On startup the herald declares `ph.control.herald.<instance>` and publishes `ev.ready.herald.<instance>`. The orchestrator responds with `sig.swarm-start.<swarmId>` containing the target SwarmPlan.
+On startup the swarm-controller declares `ph.control.swarm-controller.<instance>` and publishes `ev.ready.swarm-controller.<instance>`. The orchestrator responds with `sig.swarm-start.<swarmId>` containing the target SwarmPlan.
 
 ## SwarmPlan parsing, queue provisioning, and bee container lifecycle
 

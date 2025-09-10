@@ -18,6 +18,6 @@ class ReadyEmitterTest {
     void emitsReadyEventOnStartup() {
         ReadyEmitter emitter = new ReadyEmitter(rabbit, "inst");
         emitter.emit();
-        verify(rabbit).convertAndSend(Topology.CONTROL_EXCHANGE, "ev.ready.herald.inst", "");
+        verify(rabbit).convertAndSend(Topology.CONTROL_EXCHANGE, "ev.ready.swarm-controller.inst", "");
     }
 }

@@ -49,7 +49,14 @@ public class SwarmSignalListener {
     MDC.put("swarm_id", Topology.SWARM_ID);
     MDC.put("service", ROLE);
     MDC.put("instance", instanceId);
-    if (routingKey.startsWith("sig.swarm-start.")) {
+    if (routingKey.startsWith("sig.swarm-template.")) {
+      String swarmId = routingKey.substring("sig.swarm-template.".length());
+      if (Topology.SWARM_ID.equals(swarmId)) {
+        log.info("Template signal for swarm {}", swarmId);
+        lifecycle.prepare(body);
+        rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, "ev.swarm-created." + swarmId, "");
+      }
+    } else if (routingKey.startsWith("sig.swarm-start.")) {
       String swarmId = routingKey.substring("sig.swarm-start.".length());
       if (Topology.SWARM_ID.equals(swarmId)) {
         log.info("Start signal for swarm {}", swarmId);
@@ -103,6 +110,7 @@ public class SwarmSignalListener {
             "sig.status-request",
             "sig.status-request." + ROLE,
             "sig.status-request." + ROLE + "." + instanceId,
+            "sig.swarm-template.*",
             "sig.swarm-start.*",
             "sig.swarm-stop.*")
         .controlOut(rk)
@@ -128,6 +136,7 @@ public class SwarmSignalListener {
             "sig.status-request",
             "sig.status-request." + ROLE,
             "sig.status-request." + ROLE + "." + instanceId,
+            "sig.swarm-template.*",
             "sig.swarm-start.*",
             "sig.swarm-stop.*")
         .controlOut(rk)

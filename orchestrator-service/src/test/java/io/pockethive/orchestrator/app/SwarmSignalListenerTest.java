@@ -43,11 +43,11 @@ class SwarmSignalListenerTest {
     }
 
     @Test
-    void sendsPlanOnHeraldReady() {
+    void sendsPlanOnSwarmControllerReady() {
         SwarmTemplate template = new SwarmTemplate();
         SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", template);
 
-        listener.handle("", "ev.ready.herald.inst");
+        listener.handle("", "ev.ready.swarm-controller.inst");
 
         verify(rabbit).convertAndSend(eq(io.pockethive.Topology.CONTROL_EXCHANGE),
                 eq("sig.swarm-start." + io.pockethive.Topology.SWARM_ID),

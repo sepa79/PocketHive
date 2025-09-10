@@ -57,7 +57,7 @@ public class SwarmSignalListener {
             } catch (Exception e) {
                 log.error("Failed to start swarm {}", swarmId, e);
             }
-        } else if (routingKey.startsWith("ev.ready.herald.")) {
+        } else if (routingKey.startsWith("ev.ready.swarm-controller.")) {
             SwarmPlan plan = new SwarmPlan(Topology.SWARM_ID, template);
             rabbit.convertAndSend(Topology.CONTROL_EXCHANGE,
                     "sig.swarm-start." + Topology.SWARM_ID, plan);

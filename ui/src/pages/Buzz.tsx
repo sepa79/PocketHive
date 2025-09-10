@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react'
 import { subscribeLogs, type LogEntry } from '../lib/logs'
 import { useConfig } from '../lib/config'
 import { useUIStore } from '../store'
+import SwarmDebugPanel from '../components/SwarmDebugPanel'
 
-type LogTab = 'in' | 'out' | 'other'
+type LogTab = 'in' | 'out' | 'other' | 'handshake'
 type Tab = LogTab | 'config'
 
 function LogView({ type }: { type: LogTab }) {
@@ -37,7 +38,7 @@ function ConfigView() {
 
 export default function Buzz() {
   const [tab, setTab] = useState<Tab>('in')
-  const { messageLimit, setMessageLimit } = useUIStore()
+  const { messageLimit, setMessageLimit, debugMode } = useUIStore()
   const [inputValue, setInputValue] = useState(messageLimit.toString())
 
   const handleLimitChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -72,6 +73,12 @@ export default function Buzz() {
           Other
         </button>
         <button
+          className={`rounded px-2 py-1 text-sm ${tab === 'handshake' ? 'bg-white/20' : 'hover:bg-white/10'}`}
+          onClick={() => setTab('handshake')}
+        >
+          Handshake
+        </button>
+        <button
           className={`rounded px-2 py-1 text-sm ${tab === 'config' ? 'bg-white/20' : 'hover:bg-white/10'}`}
           onClick={() => setTab('config')}
         >
@@ -92,6 +99,7 @@ export default function Buzz() {
       <div className="flex-1 overflow-auto rounded border border-white/20 p-2">
         {tab === 'config' ? <ConfigView /> : <LogView type={tab} />}
       </div>
+      {debugMode && <SwarmDebugPanel />}
     </div>
   )
 }

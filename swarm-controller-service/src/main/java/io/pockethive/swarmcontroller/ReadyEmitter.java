@@ -23,7 +23,7 @@ public class ReadyEmitter {
 
     @EventListener(ApplicationReadyEvent.class)
     public void emit() {
-        String rk = "ev.ready.herald." + instanceId;
+        String rk = "ev.ready.swarm-controller." + instanceId;
         rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, "");
     }
 }
