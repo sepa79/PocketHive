@@ -16,6 +16,7 @@ import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+import java.util.regex.Pattern;
 
 @Component
 @EnableScheduling
@@ -97,7 +98,7 @@ public class SwarmSignalListener {
       }
     } else if (routingKey.startsWith("ev.ready.")) {
       String rest = routingKey.substring("ev.ready.".length());
-      String[] parts = rest.split("\.", 2);
+      String[] parts = rest.split(Pattern.quote("."), 2);
       if (parts.length == 2) {
         try {
           JsonNode node = mapper.readTree(body);
