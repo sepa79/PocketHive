@@ -1,11 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { createSwarm } from '../../lib/stompClient'
-
-interface Scenario {
-  id: string
-  name: string
-  image: string
-}
 
 interface Props {
   onClose: () => void
@@ -13,37 +7,24 @@ interface Props {
 
 export default function SwarmCreateModal({ onClose }: Props) {
   const [swarmId, setSwarmId] = useState('')
-  const [scenarioId, setScenarioId] = useState('')
-  const [scenarios, setScenarios] = useState<Scenario[]>([])
+  const [image, setImage] = useState('')
   const [message, setMessage] = useState<string | null>(null)
-
-  useEffect(() => {
-    fetch('/scenarios')
-      .then((r) => r.json())
-      .then((data: Scenario[]) => setScenarios(data))
-      .catch(() => setScenarios([]))
-  }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!swarmId.trim() || !scenarioId) {
-      setMessage('Swarm ID and scenario required')
+    if (!swarmId.trim() || !image.trim()) {
+      setMessage('Swarm ID and image required')
       return
     }
     if (!/^[a-zA-Z0-9-]+$/.test(swarmId)) {
       setMessage('Invalid swarm ID')
       return
     }
-    const scenario = scenarios.find((s) => s.id === scenarioId)
-    if (!scenario) {
-      setMessage('Scenario not found')
-      return
-    }
     try {
-      await createSwarm(swarmId.trim(), scenario.image, scenario.id)
+      await createSwarm(swarmId.trim(), { template: { image: image.trim(), bees: [] } })
       setMessage('Swarm created')
       setSwarmId('')
-      setScenarioId('')
+      setImage('')
     } catch {
       setMessage('Failed to create swarm')
     }
@@ -66,22 +47,15 @@ export default function SwarmCreateModal({ onClose }: Props) {
             />
           </div>
           <div>
-            <label htmlFor="scenario" className="block text-sm mb-1">
-              Scenario
+            <label htmlFor="image" className="block text-sm mb-1">
+              Image
             </label>
-            <select
-              id="scenario"
-              value={scenarioId}
-              onChange={(e) => setScenarioId(e.target.value)}
+            <input
+              id="image"
+              value={image}
+              onChange={(e) => setImage(e.target.value)}
               className="w-full rounded border border-white/20 bg-white/10 px-2 py-1 text-sm"
-            >
-              <option value="">Select scenario</option>
-              {scenarios.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
+            />
           </div>
           <div className="flex justify-end gap-2 pt-2">
             <button

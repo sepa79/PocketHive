@@ -1,17 +1,15 @@
 # SwarmController Integration Plan
 
 ## Swarm creation sequence
-1. UI fetches scenarios with `GET /scenarios`.
-2. UI publishes `sig.swarm-create.<swarmId>` (body `{"image":"<image>","scenario":"<id>"}`).
-3. Queen launches the SwarmController and responds with `sig.swarm-template.<swarmId>`.
-4. UI starts the swarm by sending `sig.swarm-start.<swarmId>`.
+1. UI publishes `sig.swarm-create.<swarmId>` with body `{ "template": { "image": "<image>", "bees": [] } }`.
+2. Queen launches the SwarmController and responds with `sig.swarm-template.<swarmId>`.
+3. UI starts the swarm by sending `sig.swarm-start.<swarmId>`.
 
 ```mermaid
 sequenceDiagram
   participant UI
   participant QN as "Orchestrator (Queen)"
   participant SC as "SwarmController"
-  UI->>QN: GET /scenarios
   UI->>QN: sig.swarm-create.<swarmId>
   QN-->>SC: launch controller
   UI->>QN: sig.swarm-start.<swarmId>
