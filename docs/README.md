@@ -23,5 +23,8 @@ Welcome to the PocketHive documentation hub. Use these resources to understand t
 - [Trigger](../trigger-service/README.md)
 - [Log Aggregator](../log-aggregator-service/README.md)
 
+## Core Modules
+- [Topology Core](../common/topology-core/README.md)
+
 ## Contributing
 - [Contributor Guide](../CONTRIBUTING.md)
