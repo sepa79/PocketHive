@@ -6,8 +6,23 @@ PocketHive delivers modular Java microservices and a React UI that together hand
 ## System context
 Services communicate over HTTP and AMQP. Each service exposes APIs and consumes messages while remaining independent.
 
-### Overall topology
+### High-level flow
+```mermaid
+flowchart LR
+  SC[Scenario] --> QN[Queen]
+  QN --> MSH[Marshal]
+  MSH --> BW[(Bees)] --> SUT[(System Under Test)]
+  BW --> OBS[Observability]
+```
 
+### Queue pipeline
+```mermaid
+flowchart LR
+  G[Generator] --> Qgen[(queue gen)] --> M[Moderator] --> Qmod[(queue mod)] --> P[Processor] --> Qfinal[(queue final)] --> PP[Postprocessor]
+  P --> S[SUT]
+```
+
+### Topology with exchanges
 ```mermaid
 flowchart LR
   %% Actors
@@ -64,6 +79,16 @@ flowchart LR
   class QN,MSH,S svc;
   class Xhive,Xctrl ex;
   class Qgen,Qmod,Qfinal,Qctrl q;
+```
+
+### Observability
+```mermaid
+flowchart LR
+  B[(Bees)] -->|logs| LA[Log Aggregator] --> LK[Loki]
+  B -->|metrics| PR[Prometheus]
+  LA --> GF[Grafana]
+  LK --> GF
+  PR --> GF
 ```
 
 ## Orchestration hierarchy
