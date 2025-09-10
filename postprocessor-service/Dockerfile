@@ -13,6 +13,7 @@ COPY log-aggregator-service/pom.xml log-aggregator-service/pom.xml
 COPY trigger-service/pom.xml trigger-service/pom.xml
 COPY orchestrator-service/pom.xml orchestrator-service/pom.xml
 COPY swarm-controller-service/pom.xml swarm-controller-service/pom.xml
+COPY scenario-manager-service/pom.xml scenario-manager-service/pom.xml
 COPY common/topology-core/src common/topology-core/src
 COPY test/src test/src
 COPY observability/src observability/src
@@ -24,6 +25,7 @@ COPY log-aggregator-service/src log-aggregator-service/src
 COPY trigger-service/src trigger-service/src
 COPY orchestrator-service/src orchestrator-service/src
 COPY swarm-controller-service/src swarm-controller-service/src
+COPY scenario-manager-service/src scenario-manager-service/src
 RUN mvn -q -B -DskipTests -pl postprocessor-service -am package
 
 # ---- Runtime ----
