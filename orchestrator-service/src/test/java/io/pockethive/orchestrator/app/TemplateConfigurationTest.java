@@ -10,6 +10,8 @@ class TemplateConfigurationTest {
     void loadsTemplateFromYaml() throws Exception {
         TemplateConfiguration cfg = new TemplateConfiguration();
         SwarmTemplate template = cfg.swarmTemplate();
-        assertEquals("generator-service:latest", template.getImage());
+        assertEquals("swarm-controller-service:latest", template.getImage());
+        assertEquals(2, template.getBees().size());
+        assertEquals("generator", template.getBees().get(0).role());
     }
 }

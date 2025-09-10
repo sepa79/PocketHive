@@ -3,7 +3,6 @@ package io.pockethive.orchestrator.app;
 import io.pockethive.Topology;
 import io.pockethive.orchestrator.domain.SwarmPlan;
 import io.pockethive.orchestrator.domain.SwarmPlanRegistry;
-import io.pockethive.orchestrator.domain.SwarmTemplate;
 import io.pockethive.orchestrator.domain.SwarmRegistry;
 import io.pockethive.orchestrator.domain.ScenarioRepository;
 import org.junit.jupiter.api.Test;
@@ -30,17 +29,17 @@ class SwarmSignalListenerTest {
     @Test
     void dispatchesPlanWhenControllerReady() {
         SwarmPlanRegistry registry = new SwarmPlanRegistry();
-        SwarmTemplate template = new SwarmTemplate();
-        SwarmPlan plan = new SwarmPlan("sw1", template);
+        SwarmPlan plan = new SwarmPlan("sw1", java.util.List.of(
+            new SwarmPlan.Bee("generator", "img", new SwarmPlan.Work("in", "out"))));
         registry.register("inst1", plan);
         SwarmSignalListener listener = new SwarmSignalListener(rabbit, registry, new SwarmRegistry(), scenarios, lifecycle, "inst0");
         reset(rabbit);
 
         listener.handle("", "ev.ready.swarm-controller.inst1");
 
-        ArgumentCaptor<SwarmPlan> captor = ArgumentCaptor.forClass(SwarmPlan.class);
+        ArgumentCaptor<java.util.Map<String, Object>> captor = ArgumentCaptor.forClass(java.util.Map.class);
         verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("sig.swarm-start.sw1"), captor.capture());
-        assertThat(captor.getValue()).isEqualTo(plan);
+        assertThat(captor.getValue().get("bees")).isEqualTo(plan.bees());
         assertThat(registry.find("inst1")).isEmpty();
     }
 

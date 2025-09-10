@@ -58,9 +58,9 @@ public class SwarmSignalListener {
             String swarmId = routingKey.substring("sig.swarm-create.".length());
             ScenarioPlan scenario = scenarios.find(body).orElse(null);
             if (scenario != null) {
-                SwarmPlan plan = new SwarmPlan(swarmId, scenario.template());
+                SwarmPlan plan = scenario.toSwarmPlan(swarmId);
                 String beeName = BeeNameGenerator.generate("swarm-controller", swarmId);
-                lifecycle.startSwarm(swarmId, plan.template().getImage(), beeName);
+                lifecycle.startSwarm(swarmId, scenario.template().getImage(), beeName);
                 plans.register(beeName, plan);
             }
         } else if (routingKey.startsWith("sig.swarm-stop.")) {
@@ -72,7 +72,7 @@ public class SwarmSignalListener {
             String inst = routingKey.substring("ev.ready.swarm-controller.".length());
             plans.remove(inst).ifPresent(plan ->
                 rabbit.convertAndSend(Topology.CONTROL_EXCHANGE,
-                    "sig.swarm-start." + plan.id(), plan));
+                    "sig.swarm-start." + plan.id(), java.util.Map.of("bees", plan.bees())));
         } else if (routingKey.startsWith("sig.status-request")) {
             sendStatusFull();
         }
