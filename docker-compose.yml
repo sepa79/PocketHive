@@ -33,6 +33,7 @@ services:
         condition: service_healthy
 
   swarm-controller:
+    profiles: ["bees"]
     build:
       context: .
       dockerfile: swarm-controller-service/Dockerfile
@@ -46,6 +47,7 @@ services:
         condition: service_healthy
 
   generator:
+    profiles: ["bees"]
     build:
       context: .
       dockerfile: generator-service/Dockerfile
@@ -59,6 +61,7 @@ services:
         condition: service_healthy
 
   moderator:
+    profiles: ["bees"]
     build:
       context: .
       dockerfile: moderator-service/Dockerfile
@@ -72,6 +75,7 @@ services:
         condition: service_healthy
 
   processor:
+    profiles: ["bees"]
     build:
       context: .
       dockerfile: processor-service/Dockerfile
@@ -85,6 +89,7 @@ services:
         condition: service_healthy
 
   postprocessor:
+    profiles: ["bees"]
     build:
       context: .
       dockerfile: postprocessor-service/Dockerfile
@@ -98,6 +103,7 @@ services:
         condition: service_healthy
 
   trigger:
+    profiles: ["bees"]
     build:
       context: .
       dockerfile: trigger-service/Dockerfile
