@@ -1,7 +1,6 @@
 package io.pockethive.orchestrator.app;
 
 import io.pockethive.Topology;
-import io.pockethive.orchestrator.domain.SwarmPlan;
 import io.pockethive.orchestrator.domain.SwarmPlanRegistry;
 import io.pockethive.orchestrator.domain.SwarmRegistry;
 import io.pockethive.orchestrator.infra.docker.DockerContainerClient;
@@ -51,9 +50,9 @@ class SwarmLifecycleIntegrationTest {
 
         listener.handle("", "ev.ready.swarm-controller." + beeName);
 
-        ArgumentCaptor<SwarmPlan> planCaptor = ArgumentCaptor.forClass(SwarmPlan.class);
+        ArgumentCaptor<java.util.Map<String, Object>> planCaptor = ArgumentCaptor.forClass(java.util.Map.class);
         verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("sig.swarm-start.sw1"), planCaptor.capture());
-        assertThat(planCaptor.getValue().id()).isEqualTo("sw1");
+        assertThat(planCaptor.getValue().get("bees")).isNotNull();
         assertThat(planRegistry.find(beeName)).isEmpty();
 
         listener.handle("", "sig.swarm-stop.sw1");

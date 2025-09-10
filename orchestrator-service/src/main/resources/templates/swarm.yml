@@ -1,1 +1,12 @@
 image: swarm-controller-service:latest
+bees:
+  - role: generator
+    image: generator-service:latest
+    work:
+      in: gen
+      out: mod
+  - role: moderator
+    image: moderator-service:latest
+    work:
+      in: mod
+      out: final
