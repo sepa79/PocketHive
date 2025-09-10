@@ -8,7 +8,7 @@
     "event": { "type": "string", "enum": ["status", "lifecycle", "metric", "alert", "link"] },
     "kind": { "type": "string" },
     "version": { "type": "string" },
-    "role": { "type": "string", "enum": ["generator", "moderator", "processor", "postprocessor", "trigger"] },
+    "role": { "type": "string", "enum": ["generator", "moderator", "processor", "postprocessor", "trigger", "swarm-controller", "orchestrator"] },
     "instance": { "type": "string" },
     "location": { "type": "string" },
     "messageId": { "type": "string", "format": "uuid" },

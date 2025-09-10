@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.amqp.core.AmqpAdmin;
 import org.springframework.amqp.core.AmqpTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
@@ -19,7 +20,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.*;
 import org.mockito.ArgumentCaptor;
 import static org.mockito.BDDMockito.given;
-import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -33,6 +34,9 @@ class SwarmControllerIntegrationTest {
     SwarmSignalListener listener;
     @Autowired
     SwarmPlanRegistry planRegistry;
+    @Autowired
+    @Qualifier("instanceId")
+    String instanceId;
 
     @MockBean
     DockerContainerClient docker;
@@ -66,6 +70,13 @@ class SwarmControllerIntegrationTest {
                 .andExpect(status().isNoContent());
 
         verify(docker).stopAndRemoveContainer("c1");
+    }
+
+    @Test
+    void emitsStatusOnRequest() {
+        reset(rabbit);
+        listener.handle("sig.status-request.orchestrator." + instanceId);
+        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("ev.status-full.orchestrator." + instanceId), any());
     }
 }
 

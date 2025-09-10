@@ -1,34 +1,112 @@
 package io.pockethive.orchestrator.app;
 
 import io.pockethive.Topology;
+import io.pockethive.observability.StatusEnvelopeBuilder;
 import io.pockethive.orchestrator.domain.SwarmPlanRegistry;
+import io.pockethive.orchestrator.domain.SwarmRegistry;
 import org.springframework.amqp.core.AmqpTemplate;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.amqp.support.AmqpHeaders;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.messaging.handler.annotation.Header;
+import org.springframework.scheduling.annotation.EnableScheduling;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 /**
- * Listens for swarm controller readiness events and dispatches swarm start signals.
+ * Handles control-plane signals for orchestrator and dispatches swarm plans when
+ * controllers become ready.
  */
 @Component
+@EnableScheduling
 public class SwarmSignalListener {
+    private static final String ROLE = "orchestrator";
+    private static final long STATUS_INTERVAL_MS = 5000L;
+
     private final AmqpTemplate rabbit;
     private final SwarmPlanRegistry plans;
+    private final SwarmRegistry registry;
+    private final String instanceId;
 
-    public SwarmSignalListener(AmqpTemplate rabbit, SwarmPlanRegistry plans) {
+    public SwarmSignalListener(AmqpTemplate rabbit,
+                               SwarmPlanRegistry plans,
+                               SwarmRegistry registry,
+                               @Qualifier("instanceId") String instanceId) {
         this.rabbit = rabbit;
         this.plans = plans;
+        this.registry = registry;
+        this.instanceId = instanceId;
+        try {
+            sendStatusFull();
+        } catch (Exception ignore) {}
     }
 
     @RabbitListener(queues = "#{controlQueue.name}")
     public void handle(@Header(AmqpHeaders.RECEIVED_ROUTING_KEY) String routingKey) {
-        if (routingKey != null && routingKey.startsWith("ev.ready.swarm-controller.")) {
-            String instance = routingKey.substring("ev.ready.swarm-controller.".length());
-            plans.remove(instance).ifPresent(plan ->
-                    rabbit.convertAndSend(Topology.CONTROL_EXCHANGE,
-                            "sig.swarm-start." + plan.id(), plan));
+        if (routingKey == null) return;
+        if (routingKey.startsWith("ev.ready.swarm-controller.")) {
+            String inst = routingKey.substring("ev.ready.swarm-controller.".length());
+            plans.remove(inst).ifPresent(plan ->
+                rabbit.convertAndSend(Topology.CONTROL_EXCHANGE,
+                    "sig.swarm-start." + plan.id(), plan));
+        } else if (routingKey.startsWith("sig.status-request")) {
+            sendStatusFull();
         }
+    }
+
+    @Scheduled(fixedRate = STATUS_INTERVAL_MS)
+    public void status() {
+        sendStatusDelta();
+    }
+
+    private void sendStatusFull() {
+        String controlQueue = Topology.CONTROL_QUEUE + "." + ROLE + "." + instanceId;
+        String rk = "ev.status-full." + ROLE + "." + instanceId;
+        String json = new StatusEnvelopeBuilder()
+            .kind("status-full")
+            .role(ROLE)
+            .instance(instanceId)
+            .swarmId(Topology.SWARM_ID)
+            .enabled(true)
+            .controlIn(controlQueue)
+            .controlRoutes(
+                "sig.config-update",
+                "sig.config-update." + ROLE,
+                "sig.config-update." + ROLE + "." + instanceId,
+                "sig.status-request",
+                "sig.status-request." + ROLE,
+                "sig.status-request." + ROLE + "." + instanceId,
+                "sig.swarm-create.*",
+                "ev.ready.swarm-controller.*")
+            .controlOut(rk)
+            .data("swarmCount", registry.count())
+            .toJson();
+        rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, json);
+    }
+
+    private void sendStatusDelta() {
+        String controlQueue = Topology.CONTROL_QUEUE + "." + ROLE + "." + instanceId;
+        String rk = "ev.status-delta." + ROLE + "." + instanceId;
+        String json = new StatusEnvelopeBuilder()
+            .kind("status-delta")
+            .role(ROLE)
+            .instance(instanceId)
+            .swarmId(Topology.SWARM_ID)
+            .enabled(true)
+            .controlIn(controlQueue)
+            .controlRoutes(
+                "sig.config-update",
+                "sig.config-update." + ROLE,
+                "sig.config-update." + ROLE + "." + instanceId,
+                "sig.status-request",
+                "sig.status-request." + ROLE,
+                "sig.status-request." + ROLE + "." + instanceId,
+                "sig.swarm-create.*",
+                "ev.ready.swarm-controller.*")
+            .controlOut(rk)
+            .data("swarmCount", registry.count())
+            .toJson();
+        rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, json);
     }
 }
 
