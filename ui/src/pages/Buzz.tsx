@@ -3,7 +3,7 @@ import { subscribeLogs, type LogEntry } from '../lib/logs'
 import { useConfig } from '../lib/config'
 import { useUIStore } from '../store'
 
-type LogTab = 'in' | 'out' | 'other'
+type LogTab = 'in' | 'out' | 'other' | 'handshake'
 type Tab = LogTab | 'config'
 
 function LogView({ type }: { type: LogTab }) {
@@ -70,6 +70,12 @@ export default function Buzz() {
           onClick={() => setTab('other')}
         >
           Other
+        </button>
+        <button
+          className={`rounded px-2 py-1 text-sm ${tab === 'handshake' ? 'bg-white/20' : 'hover:bg-white/10'}`}
+          onClick={() => setTab('handshake')}
+        >
+          Handshake
         </button>
         <button
           className={`rounded px-2 py-1 text-sm ${tab === 'config' ? 'bg-white/20' : 'hover:bg-white/10'}`}

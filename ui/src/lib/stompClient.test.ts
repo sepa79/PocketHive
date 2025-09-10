@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { setClient, createSwarm, startSwarm, stopSwarm } from './stompClient'
+import { subscribeLogs, type LogEntry } from './logs'
 
 /**
  * @vitest-environment jsdom
@@ -38,5 +39,23 @@ describe('swarm lifecycle', () => {
       destination: '/exchange/ph.control/sig.swarm-stop.sw1',
       body: '',
     })
+  })
+
+  it('logs handshake events', () => {
+    const publish = vi.fn()
+    let cb: (msg: { body: string; headers: Record<string, string> }) => void
+    const subscribe = vi.fn().mockImplementation(
+      (_dest: string, fn: (msg: { body: string; headers: Record<string, string> }) => void) => {
+        cb = fn
+        return { unsubscribe() {} }
+      },
+    )
+    setClient({ active: true, publish, subscribe } as any)
+    let entries: LogEntry[] = []
+    subscribeLogs('handshake', (l) => {
+      entries = l
+    })
+    cb({ body: '{}', headers: { destination: '/exchange/ph.control/ev.ready.swarm-controller.inst' } })
+    expect(entries[0].destination).toContain('ev.ready.swarm-controller.inst')
   })
 })

@@ -1,7 +1,7 @@
 import { Client, type StompSubscription } from '@stomp/stompjs'
 import type { Component } from '../types/hive'
 import { isControlEvent, type ControlEvent } from '../types/control'
-import { logIn, logOut } from './logs'
+import { logIn, logOut, logHandshake } from './logs'
 
 export type ComponentListener = (components: Component[]) => void
 export interface TopologyNode {
@@ -15,13 +15,24 @@ export interface TopologyEdge { from: string; to: string; queue: string }
 export interface Topology { nodes: TopologyNode[]; edges: TopologyEdge[] }
 export type TopologyListener = (topology: Topology) => void
 
-let client: Client | null = null
+interface WrappedClient extends Client {
+  _phWrapped?: boolean
+}
+
+let client: WrappedClient | null = null
 let controlSub: StompSubscription | null = null
 let listeners: ComponentListener[] = []
 let topoListeners: TopologyListener[] = []
 let controlDestination = '/exchange/ph.control/ev.#'
 const components: Record<string, Component> = {}
 const nodePositions: Record<string, { x: number; y: number }> = {}
+
+function isHandshake(dest: string) {
+  return (
+    dest.startsWith('/exchange/ph.control/ev.ready.swarm-controller.') ||
+    dest.startsWith('/exchange/ph.control/ev.swarm-created.')
+  )
+}
 
 function buildTopology(): Topology {
   const queues: Record<string, { prod: Set<string>; cons: Set<string> }> = {}
@@ -83,11 +94,13 @@ export function setClient(newClient: Client | null, destination = controlDestina
   client = newClient
   controlDestination = destination
   if (client) {
-    const wrapped = (client as any)._phWrapped
+    const wrapped = client._phWrapped
     if (!wrapped) {
       const origPublish = client.publish.bind(client)
       client.publish = ((params) => {
-        logOut(params.destination, params.body ?? '')
+        const body = params.body ?? ''
+        logOut(params.destination, body)
+        if (isHandshake(params.destination)) logHandshake(params.destination, body)
         origPublish(params)
       }) as typeof client.publish
 
@@ -96,13 +109,15 @@ export function setClient(newClient: Client | null, destination = controlDestina
         return origSubscribe(
           dest,
           (msg) => {
-            logIn(msg.headers.destination || dest, msg.body)
+            const d = msg.headers.destination || dest
+            logIn(d, msg.body)
+            if (isHandshake(d)) logHandshake(d, msg.body)
             callback(msg)
           },
           headers,
         )
       }) as typeof client.subscribe
-      ;(client as any)._phWrapped = true
+      client._phWrapped = true
     }
 
     controlSub = client.subscribe(controlDestination, (msg) => {
