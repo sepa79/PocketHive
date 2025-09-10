@@ -14,6 +14,7 @@ COPY postprocessor-service/pom.xml postprocessor-service/pom.xml
 COPY log-aggregator-service/pom.xml log-aggregator-service/pom.xml
 COPY trigger-service/pom.xml trigger-service/pom.xml
 COPY swarm-controller-service/pom.xml swarm-controller-service/pom.xml
+COPY scenario-manager-service/pom.xml scenario-manager-service/pom.xml
 COPY common/topology-core/src common/topology-core/src
 COPY test/src test/src
 COPY orchestrator-service/src orchestrator-service/src
@@ -25,6 +26,7 @@ COPY postprocessor-service/src postprocessor-service/src
 COPY log-aggregator-service/src log-aggregator-service/src
 COPY trigger-service/src trigger-service/src
 COPY swarm-controller-service/src swarm-controller-service/src
+COPY scenario-manager-service/src scenario-manager-service/src
 # build only this module (+ its dependencies) to get a fat jar with Boot repackage
 RUN mvn -q -B -DskipTests -pl orchestrator-service -am package
 

@@ -1,0 +1,94 @@
+package io.pockethive.scenarios;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
+
+import jakarta.annotation.PostConstruct;
+import java.io.IOException;
+import java.nio.file.*;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+
+@Service
+public class ScenarioService {
+    public enum Format { JSON, YAML }
+
+    private final Path storageDir;
+    private final ObjectMapper jsonMapper = new ObjectMapper();
+    private final ObjectMapper yamlMapper = new ObjectMapper(new YAMLFactory());
+    private final Map<String, Scenario> scenarios = new ConcurrentHashMap<>();
+    private final Map<String, Format> formats = new ConcurrentHashMap<>();
+
+    public ScenarioService(@Value("${scenarios.dir:scenarios}") String dir) throws IOException {
+        this.storageDir = Paths.get(dir);
+        Files.createDirectories(this.storageDir);
+    }
+
+    @PostConstruct
+    void init() throws IOException {
+        try (DirectoryStream<Path> stream = Files.newDirectoryStream(storageDir, "*.{json,yaml,yml}")) {
+            for (Path path : stream) {
+                Format format = path.toString().endsWith(".json") ? Format.JSON : Format.YAML;
+                Scenario scenario = read(path, format);
+                scenarios.put(scenario.getId(), scenario);
+                formats.put(scenario.getId(), format);
+            }
+        }
+    }
+
+    public List<Scenario> findAll() {
+        return new ArrayList<>(scenarios.values());
+    }
+
+    public Optional<Scenario> find(String id) {
+        return Optional.ofNullable(scenarios.get(id));
+    }
+
+    public Scenario create(Scenario scenario, Format format) throws IOException {
+        if (scenarios.putIfAbsent(scenario.getId(), scenario) != null) {
+            throw new IllegalArgumentException("Scenario already exists");
+        }
+        formats.put(scenario.getId(), format);
+        write(scenario, format);
+        return scenario;
+    }
+
+    public Scenario update(String id, Scenario scenario, Format format) throws IOException {
+        scenario.setId(id);
+        scenarios.put(id, scenario);
+        formats.put(id, format);
+        write(scenario, format);
+        return scenario;
+    }
+
+    public void delete(String id) throws IOException {
+        scenarios.remove(id);
+        Format format = formats.remove(id);
+        if (format != null) {
+            Files.deleteIfExists(storageDir.resolve(filename(id, format)));
+        }
+    }
+
+    private Scenario read(Path path, Format format) throws IOException {
+        return (format == Format.JSON ? jsonMapper : yamlMapper).readValue(path.toFile(), Scenario.class);
+    }
+
+    private void write(Scenario scenario, Format format) throws IOException {
+        (format == Format.JSON ? jsonMapper : yamlMapper)
+            .writerWithDefaultPrettyPrinter()
+            .writeValue(storageDir.resolve(filename(scenario.getId(), format)).toFile(), scenario);
+    }
+
+    private String filename(String id, Format format) {
+        return id + (format == Format.JSON ? ".json" : ".yaml");
+    }
+
+    public static Format formatFrom(String contentType) {
+        if (contentType != null && contentType.toLowerCase().contains("yaml")) {
+            return Format.YAML;
+        }
+        return Format.JSON;
+    }
+}
