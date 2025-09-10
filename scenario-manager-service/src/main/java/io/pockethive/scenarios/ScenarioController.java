@@ -49,4 +49,9 @@ public class ScenarioController {
         service.delete(id);
         return ResponseEntity.noContent().build();
     }
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    void invalidId() {
+    }
 }
