@@ -99,7 +99,21 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
             if (bee.work().out() != null) suffixes.add(bee.work().out());
           }
           if (bee.image() != null) {
-            String containerId = docker.createContainer(bee.image());
+            Map<String, String> env = new HashMap<>();
+            env.put("PH_SWARM_ID", Topology.SWARM_ID);
+            if (bee.env() != null) {
+              for (Map.Entry<String, String> e : bee.env().entrySet()) {
+                String value = e.getValue();
+                if (bee.work() != null) {
+                  if (bee.work().in() != null)
+                    value = value.replace("${in}", "ph." + Topology.SWARM_ID + "." + bee.work().in());
+                  if (bee.work().out() != null)
+                    value = value.replace("${out}", "ph." + Topology.SWARM_ID + "." + bee.work().out());
+                }
+                env.put(e.getKey(), value);
+              }
+            }
+            String containerId = docker.createContainer(bee.image(), env);
             containers.computeIfAbsent(bee.role(), r -> new ArrayList<>()).add(containerId);
           }
         }

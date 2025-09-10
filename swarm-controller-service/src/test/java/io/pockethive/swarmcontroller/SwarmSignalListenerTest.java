@@ -97,7 +97,9 @@ class SwarmSignalListenerTest {
     SwarmLifecycleManager manager = new SwarmLifecycleManager(amqp, mapper, docker, rabbit, "inst");
     SwarmSignalListener listener = new SwarmSignalListener(manager, rabbit, "inst", mapper);
     reset(rabbit);
-    SwarmPlan plan = new SwarmPlan(List.of(new SwarmPlan.Bee("gen", "img1", null), new SwarmPlan.Bee("mod", "img2", null)));
+    SwarmPlan plan = new SwarmPlan(List.of(
+        new SwarmPlan.Bee("gen", "img1", null, null),
+        new SwarmPlan.Bee("mod", "img2", null, null)));
     listener.handle(mapper.writeValueAsString(plan), "sig.swarm-template." + Topology.SWARM_ID);
     reset(rabbit);
     listener.handle("{\"data\":{\"enabled\":false}}", "ev.ready.gen.a");
@@ -115,7 +117,9 @@ class SwarmSignalListenerTest {
     SwarmLifecycleManager manager = new SwarmLifecycleManager(amqp, mapper, docker, rabbit, "inst");
     SwarmSignalListener listener = new SwarmSignalListener(manager, rabbit, "inst", mapper);
     reset(rabbit);
-    SwarmPlan plan = new SwarmPlan(List.of(new SwarmPlan.Bee("gen", "img1", null), new SwarmPlan.Bee("mod", "img2", null)));
+    SwarmPlan plan = new SwarmPlan(List.of(
+        new SwarmPlan.Bee("gen", "img1", null, null),
+        new SwarmPlan.Bee("mod", "img2", null, null)));
     listener.handle(mapper.writeValueAsString(plan), "sig.swarm-template." + Topology.SWARM_ID);
     reset(rabbit);
     listener.handle("{\"data\":{\"enabled\":false}}", "ev.ready.gen.a");
