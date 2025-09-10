@@ -1,1 +1,1 @@
-image: generator-service:latest
+image: swarm-controller-service:latest

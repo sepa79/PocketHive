@@ -69,4 +69,10 @@ public class RabbitConfig {
                                String instanceId){
         return BindingBuilder.bind(controlQueue).to(controlExchange).with("sig.status-request." + ROLE + "." + instanceId);
     }
+
+    @Bean
+    Binding bindControllerReady(@Qualifier("controlQueue") Queue controlQueue,
+                                @Qualifier("controlExchange") TopicExchange controlExchange){
+        return BindingBuilder.bind(controlQueue).to(controlExchange).with("ev.ready.swarm-controller.*");
+    }
 }
