@@ -4,12 +4,12 @@
 PocketHive delivers modular Java microservices and a React UI that together handle event processing and moderation.
 
 ## System context
-Services communicate over HTTP and AMQP. Each service exposes APIs and consumes messages while remaining independent.
+Services communicate over HTTP and AMQP. Each service exposes APIs and consumes messages while remaining independent. The Scenario Manager provides REST endpoints that the UI queries to load swarm plans.
 
 ### High-level flow
 ```mermaid
 flowchart LR
-  SC[Scenario] --> QN[Orchestrator (Queen)]
+  SM[Scenario Manager] --> QN[Orchestrator (Queen)]
   QN --> MSH[Swarm Controller (Marshal)]
   MSH --> BW[(Workers (Bees))] --> SUT[(System Under Test)]
   BW --> OBS[Observability]
@@ -107,7 +107,7 @@ A Marshal governs one swarm. After receiving its plan from the Queen it declares
 ## Swarm coordination
 
 ### Swarm startup
-1. User creates a swarm via STOMP `sig.swarm-create.<swarmId>` containing the scenario plan.
+1. UI fetches a scenario from the Scenario Manager and creates a swarm via STOMP `sig.swarm-create.<swarmId>` containing that plan.
 2. Queen launches a Marshal for the swarm.
 3. The swarm starts when the UI sends `sig.swarm-start.<swarmId>`.
 
