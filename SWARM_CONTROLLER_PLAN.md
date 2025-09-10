@@ -1,7 +1,21 @@
 # SwarmController Integration Plan
 
 ## Swarm creation sequence
-1. UI publishes `sig.swarm-create.<swarmId>` with body `{ "template": { "image": "<image>", "bees": [] } }`.
+1. UI publishes `sig.swarm-create.<swarmId>` with body:
+
+   ```json
+   {
+     "template": {
+       "image": "<image>",
+       "bees": [
+         { "role": "generator", "image": "generator-service:latest", "work": { "out": "gen" } },
+         { "role": "moderator", "image": "moderator-service:latest", "work": { "in": "gen", "out": "mod" } },
+         { "role": "processor", "image": "processor-service:latest", "work": { "in": "mod", "out": "final" } },
+         { "role": "postprocessor", "image": "postprocessor-service:latest", "work": { "in": "final" } }
+       ]
+     }
+   }
+   ```
 2. Queen launches the SwarmController and responds with `sig.swarm-template.<swarmId>`.
 3. UI starts the swarm by sending `sig.swarm-start.<swarmId>`.
 
