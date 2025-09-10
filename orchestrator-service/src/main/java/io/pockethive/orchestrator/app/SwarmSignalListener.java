@@ -3,11 +3,11 @@ package io.pockethive.orchestrator.app;
 import io.pockethive.Topology;
 import io.pockethive.observability.StatusEnvelopeBuilder;
 import io.pockethive.orchestrator.domain.ScenarioPlan;
-import io.pockethive.orchestrator.domain.ScenarioRepository;
 import io.pockethive.orchestrator.domain.SwarmPlan;
 import io.pockethive.orchestrator.domain.SwarmPlanRegistry;
 import io.pockethive.orchestrator.domain.SwarmRegistry;
 import io.pockethive.util.BeeNameGenerator;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.amqp.core.AmqpTemplate;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.amqp.support.AmqpHeaders;
@@ -30,21 +30,21 @@ public class SwarmSignalListener {
     private final AmqpTemplate rabbit;
     private final SwarmPlanRegistry plans;
     private final SwarmRegistry registry;
-    private final ScenarioRepository scenarios;
     private final ContainerLifecycleManager lifecycle;
+    private final ObjectMapper json;
     private final String instanceId;
 
     public SwarmSignalListener(AmqpTemplate rabbit,
                                SwarmPlanRegistry plans,
                                SwarmRegistry registry,
-                               ScenarioRepository scenarios,
                                ContainerLifecycleManager lifecycle,
+                               ObjectMapper json,
                                @Qualifier("instanceId") String instanceId) {
         this.rabbit = rabbit;
         this.plans = plans;
         this.registry = registry;
-        this.scenarios = scenarios;
         this.lifecycle = lifecycle;
+        this.json = json;
         this.instanceId = instanceId;
         try {
             sendStatusFull();
@@ -56,12 +56,13 @@ public class SwarmSignalListener {
         if (routingKey == null) return;
         if (routingKey.startsWith("sig.swarm-create.")) {
             String swarmId = routingKey.substring("sig.swarm-create.".length());
-            ScenarioPlan scenario = scenarios.find(body).orElse(null);
-            if (scenario != null) {
+            try {
+                ScenarioPlan scenario = json.readValue(body, ScenarioPlan.class);
                 SwarmPlan plan = scenario.toSwarmPlan(swarmId);
                 String beeName = BeeNameGenerator.generate("swarm-controller", swarmId);
                 lifecycle.startSwarm(swarmId, scenario.template().getImage(), beeName);
                 plans.register(beeName, plan);
+            } catch (Exception ignore) {
             }
         } else if (routingKey.startsWith("sig.swarm-stop.")) {
             String swarmId = routingKey.substring("sig.swarm-stop.".length());

@@ -223,20 +223,15 @@ export async function requestStatusFull(component: Component) {
   })
 }
 
-export async function createSwarm(
-  id: string,
-  image: string,
-  scenario?: string,
-) {
+export async function createSwarm(id: string, scenario: unknown) {
   return new Promise<void>((resolve, reject) => {
     if (!client || !client.active) {
       reject(new Error('STOMP client not connected'))
       return
     }
-    const body = scenario ? JSON.stringify({ image, scenario }) : image
     client.publish({
       destination: `/exchange/ph.control/sig.swarm-create.${id}`,
-      body,
+      body: JSON.stringify(scenario),
     })
     resolve()
   })

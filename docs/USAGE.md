@@ -30,15 +30,13 @@ Manual checks:
 - **Buzz view** displays IN, OUT and Other logs with a Config tab and Topic Sniffer.
 - **Hive view** provides per-swarm start/stop controls, topology, and settings drawers with confirmable config updates.
 
-## Scenario selection and swarm launch
+## Swarm launch
 - Open the Hive view and choose **Create Swarm**.
-- The modal fetches available scenarios from `GET /scenarios` and lists them in a dropdown.
-- Enter a swarm ID, pick a scenario and submit to create the swarm.
+- Enter a swarm ID and controller image and submit to create the swarm.
 - Start the swarm with the play button next to its entry.
 
 ### Scenario and swarm API
-- `GET /scenarios` – list available scenarios.
-- STOMP `sig.swarm-create.<swarmId>` to `/exchange/ph.control/sig.swarm-create.<swarmId>` with body `{"image":"<image>","scenario":"<id>"}`.
+- STOMP `sig.swarm-create.<swarmId>` to `/exchange/ph.control/sig.swarm-create.<swarmId>` with body `{ "template": { "image": "<image>", "bees": [] } }`.
 - STOMP `sig.swarm-start.<swarmId>` with an empty body to begin execution.
 
 ## Troubleshooting

@@ -4,7 +4,7 @@ import io.pockethive.Topology;
 import io.pockethive.orchestrator.domain.SwarmPlan;
 import io.pockethive.orchestrator.domain.SwarmPlanRegistry;
 import io.pockethive.orchestrator.domain.SwarmRegistry;
-import io.pockethive.orchestrator.domain.ScenarioRepository;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -22,8 +22,6 @@ class SwarmSignalListenerTest {
     @Mock
     AmqpTemplate rabbit;
     @Mock
-    ScenarioRepository scenarios;
-    @Mock
     ContainerLifecycleManager lifecycle;
 
     @Test
@@ -32,7 +30,7 @@ class SwarmSignalListenerTest {
         SwarmPlan plan = new SwarmPlan("sw1", java.util.List.of(
             new SwarmPlan.Bee("generator", "img", new SwarmPlan.Work("in", "out"))));
         registry.register("inst1", plan);
-        SwarmSignalListener listener = new SwarmSignalListener(rabbit, registry, new SwarmRegistry(), scenarios, lifecycle, "inst0");
+        SwarmSignalListener listener = new SwarmSignalListener(rabbit, registry, new SwarmRegistry(), lifecycle, new ObjectMapper(), "inst0");
         reset(rabbit);
 
         listener.handle("", "ev.ready.swarm-controller.inst1");
@@ -46,7 +44,7 @@ class SwarmSignalListenerTest {
     @Test
     void ignoresNonReadyEvents() {
         SwarmPlanRegistry registry = new SwarmPlanRegistry();
-        SwarmSignalListener listener = new SwarmSignalListener(rabbit, registry, new SwarmRegistry(), scenarios, lifecycle, "inst0");
+        SwarmSignalListener listener = new SwarmSignalListener(rabbit, registry, new SwarmRegistry(), lifecycle, new ObjectMapper(), "inst0");
         reset(rabbit);
 
         listener.handle("", "ev.ready.other-controller.inst1");
@@ -56,7 +54,7 @@ class SwarmSignalListenerTest {
 
     @Test
     void respondsToStatusRequest() {
-        SwarmSignalListener listener = new SwarmSignalListener(rabbit, new SwarmPlanRegistry(), new SwarmRegistry(), scenarios, lifecycle, "inst1");
+        SwarmSignalListener listener = new SwarmSignalListener(rabbit, new SwarmPlanRegistry(), new SwarmRegistry(), lifecycle, new ObjectMapper(), "inst1");
         reset(rabbit);
 
         listener.handle("", "sig.status-request.orchestrator.inst1");
