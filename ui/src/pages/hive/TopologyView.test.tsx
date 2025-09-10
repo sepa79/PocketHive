@@ -12,6 +12,7 @@ interface Node {
   x?: number
   y?: number
   enabled?: boolean
+  swarmId?: string
 }
 
 interface GraphProps {
@@ -29,8 +30,8 @@ interface GraphProps {
 
 const data = {
   nodes: [
-    { id: 'a', type: 'generator' } as Node,
-    { id: 'b', type: 'processor' } as Node,
+    { id: 'a', type: 'generator', swarmId: 'sw1' } as Node,
+    { id: 'b', type: 'processor', swarmId: 'sw1' } as Node,
   ],
   edges: [{ from: 'a', to: 'b', queue: 'q' }] as unknown[],
 }
@@ -39,12 +40,18 @@ const components = [
   {
     id: 'a',
     name: 'generator',
+    swarmId: 'sw1',
     queues: [
       { name: 'q', role: 'producer', depth: 5 },
       { name: 'q2', role: 'producer' },
     ],
   },
-  { id: 'b', name: 'processor', queues: [{ name: 'q', role: 'consumer' }] },
+  {
+    id: 'b',
+    name: 'processor',
+    swarmId: 'sw1',
+    queues: [{ name: 'q', role: 'consumer' }],
+  },
 ]
 const updateNodePosition = vi.fn<(id: string, x: number, y: number) => void>()
 

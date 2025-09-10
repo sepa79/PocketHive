@@ -1,6 +1,11 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { createSwarm } from '../../lib/stompClient'
-import { templates } from '../../lib/templates'
+
+interface Scenario {
+  id: string
+  name: string
+  image: string
+}
 
 interface Props {
   onClose: () => void
@@ -8,29 +13,37 @@ interface Props {
 
 export default function SwarmCreateModal({ onClose }: Props) {
   const [swarmId, setSwarmId] = useState('')
-  const [templateId, setTemplateId] = useState('')
+  const [scenarioId, setScenarioId] = useState('')
+  const [scenarios, setScenarios] = useState<Scenario[]>([])
   const [message, setMessage] = useState<string | null>(null)
+
+  useEffect(() => {
+    fetch('/scenarios')
+      .then((r) => r.json())
+      .then((data: Scenario[]) => setScenarios(data))
+      .catch(() => setScenarios([]))
+  }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!swarmId.trim() || !templateId) {
-      setMessage('Swarm ID and template required')
+    if (!swarmId.trim() || !scenarioId) {
+      setMessage('Swarm ID and scenario required')
       return
     }
     if (!/^[a-zA-Z0-9-]+$/.test(swarmId)) {
       setMessage('Invalid swarm ID')
       return
     }
-    const template = templates.find((t) => t.id === templateId)
-    if (!template) {
-      setMessage('Template not found')
+    const scenario = scenarios.find((s) => s.id === scenarioId)
+    if (!scenario) {
+      setMessage('Scenario not found')
       return
     }
     try {
-      await createSwarm(swarmId.trim(), template.image)
+      await createSwarm(swarmId.trim(), scenario.image, scenario.id)
       setMessage('Swarm created')
       setSwarmId('')
-      setTemplateId('')
+      setScenarioId('')
     } catch {
       setMessage('Failed to create swarm')
     }
@@ -53,19 +66,19 @@ export default function SwarmCreateModal({ onClose }: Props) {
             />
           </div>
           <div>
-            <label htmlFor="template" className="block text-sm mb-1">
-              Template
+            <label htmlFor="scenario" className="block text-sm mb-1">
+              Scenario
             </label>
             <select
-              id="template"
-              value={templateId}
-              onChange={(e) => setTemplateId(e.target.value)}
+              id="scenario"
+              value={scenarioId}
+              onChange={(e) => setScenarioId(e.target.value)}
               className="w-full rounded border border-white/20 bg-white/10 px-2 py-1 text-sm"
             >
-              <option value="">Select template</option>
-              {templates.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
+              <option value="">Select scenario</option>
+              {scenarios.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
                 </option>
               ))}
             </select>

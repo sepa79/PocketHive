@@ -14,10 +14,10 @@ describe('SwarmDebugPanel', () => {
     render(<SwarmDebugPanel />)
     logHandshake('/exchange/ph.control/sig.swarm-template.sw1', '{}')
     await waitFor(() => screen.getByText('Swarm sw1'))
-    expect(screen.getByText(/created: pending/)).toBeInTheDocument()
+    expect(screen.getByText(/created: pending/)).toBeTruthy()
     logHandshake('/exchange/ph.control/ev.swarm-created.sw1', '{}')
     await waitFor(() => {
-      expect(screen.getByText(/created:/)).not.toHaveTextContent('pending')
+      expect(screen.getByText(/created:/).textContent).not.toContain('pending')
     })
   })
 })

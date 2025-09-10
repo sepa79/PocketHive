@@ -31,18 +31,20 @@ const comps: Component[] = [
   },
 ]
 
-let listener: ((c: Component[]) => void) | null = null
+  let listener: ((c: Component[]) => void) | null = null
 
-beforeEach(() => {
-  ;(subscribeComponents as unknown as any).mockImplementation((fn: (c: Component[]) => void) => {
-    listener = fn
-    fn(comps)
-    return () => {}
+  beforeEach(() => {
+    ;(subscribeComponents as unknown as vi.Mock).mockImplementation(
+      (fn: (c: Component[]) => void) => {
+        listener = fn
+        fn(comps)
+        return () => {}
+      },
+    )
+    ;(startSwarm as unknown as vi.Mock).mockReset()
+    ;(stopSwarm as unknown as vi.Mock).mockReset()
+    ;(requestStatusFull as unknown as vi.Mock).mockResolvedValue(undefined)
   })
-  ;(startSwarm as unknown as any).mockReset()
-  ;(stopSwarm as unknown as any).mockReset()
-  ;(requestStatusFull as unknown as any).mockResolvedValue(undefined)
-})
 
 test('renders marshal status and start/stop controls', async () => {
   const user = userEvent.setup()
@@ -51,8 +53,8 @@ test('renders marshal status and start/stop controls', async () => {
   await user.click(screen.getByRole('button', { name: /start/i }))
   expect(startSwarm).toHaveBeenCalledWith('sw1')
 
-  comps[0].config = { swarmStatus: 'RUNNING', enabled: true }
-  listener && listener([...comps])
+    comps[0].config = { swarmStatus: 'RUNNING', enabled: true }
+    if (listener) listener([...comps])
   expect(await screen.findByText(/Marshal: running/i)).toBeTruthy()
   await user.click(screen.getByRole('button', { name: /stop/i }))
   expect(stopSwarm).toHaveBeenCalledWith('sw1')
