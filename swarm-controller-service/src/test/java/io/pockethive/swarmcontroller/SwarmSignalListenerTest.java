@@ -3,12 +3,17 @@ package io.pockethive.swarmcontroller;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.Topology;
 import io.pockethive.swarmcontroller.SwarmStatus;
-import static org.mockito.ArgumentMatchers.argThat;
+import io.pockethive.swarmcontroller.SwarmPlan;
+import io.pockethive.swarmcontroller.infra.docker.DockerContainerClient;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.amqp.core.AmqpAdmin;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
+
+import java.util.List;
+import static org.mockito.ArgumentMatchers.argThat;
 
 import static org.mockito.Mockito.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -61,8 +66,8 @@ class SwarmSignalListenerTest {
     reset(lifecycle, rabbit);
     listener.handle("tmpl", "sig.swarm-template." + Topology.SWARM_ID);
     verify(lifecycle).prepare("tmpl");
-    verify(rabbit).convertAndSend(Topology.CONTROL_EXCHANGE, "ev.swarm-created." + Topology.SWARM_ID, "");
     verifyNoMoreInteractions(lifecycle);
+    verifyNoInteractions(rabbit);
   }
 
   @Test
@@ -82,6 +87,40 @@ class SwarmSignalListenerTest {
     reset(lifecycle, rabbit);
     listener.handle("", "sig.swarm-stop.other");
     verifyNoInteractions(lifecycle);
+  }
+
+  @Test
+  void partialReadinessDoesNotEmitSwarmCreated() throws Exception {
+    AmqpAdmin amqp = mock(AmqpAdmin.class);
+    DockerContainerClient docker = mock(DockerContainerClient.class);
+    ObjectMapper mapper = new ObjectMapper();
+    SwarmLifecycleManager manager = new SwarmLifecycleManager(amqp, mapper, docker, rabbit, "inst");
+    SwarmSignalListener listener = new SwarmSignalListener(manager, rabbit, "inst", mapper);
+    reset(rabbit);
+    SwarmPlan plan = new SwarmPlan(List.of(new SwarmPlan.Bee("gen", "img1", null), new SwarmPlan.Bee("mod", "img2", null)));
+    listener.handle(mapper.writeValueAsString(plan), "sig.swarm-template." + Topology.SWARM_ID);
+    reset(rabbit);
+    listener.handle("{\"data\":{\"enabled\":false}}", "ev.ready.gen.a");
+    verify(rabbit, never()).convertAndSend(
+        eq(Topology.CONTROL_EXCHANGE),
+        eq("ev.swarm-created." + Topology.SWARM_ID),
+        anyString());
+  }
+
+  @Test
+  void fullReadinessEmitsSwarmCreated() throws Exception {
+    AmqpAdmin amqp = mock(AmqpAdmin.class);
+    DockerContainerClient docker = mock(DockerContainerClient.class);
+    ObjectMapper mapper = new ObjectMapper();
+    SwarmLifecycleManager manager = new SwarmLifecycleManager(amqp, mapper, docker, rabbit, "inst");
+    SwarmSignalListener listener = new SwarmSignalListener(manager, rabbit, "inst", mapper);
+    reset(rabbit);
+    SwarmPlan plan = new SwarmPlan(List.of(new SwarmPlan.Bee("gen", "img1", null), new SwarmPlan.Bee("mod", "img2", null)));
+    listener.handle(mapper.writeValueAsString(plan), "sig.swarm-template." + Topology.SWARM_ID);
+    reset(rabbit);
+    listener.handle("{\"data\":{\"enabled\":false}}", "ev.ready.gen.a");
+    listener.handle("{\"data\":{\"enabled\":false}}", "ev.ready.mod.b");
+    verify(rabbit).convertAndSend(Topology.CONTROL_EXCHANGE, "ev.swarm-created." + Topology.SWARM_ID, "");
   }
 
   @Test

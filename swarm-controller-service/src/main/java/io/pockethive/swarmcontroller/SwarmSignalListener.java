@@ -16,6 +16,7 @@ import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+import java.util.regex.Pattern;
 
 @Component
 @EnableScheduling
@@ -54,13 +55,25 @@ public class SwarmSignalListener {
       if (Topology.SWARM_ID.equals(swarmId)) {
         log.info("Template signal for swarm {}", swarmId);
         lifecycle.prepare(body);
-        rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, "ev.swarm-created." + swarmId, "");
       }
     } else if (routingKey.startsWith("sig.swarm-start.")) {
       String swarmId = routingKey.substring("sig.swarm-start.".length());
       if (Topology.SWARM_ID.equals(swarmId)) {
         log.info("Start signal for swarm {}", swarmId);
         lifecycle.start(body);
+        sendStatusFull();
+      }
+    } else if (routingKey.startsWith("sig.scenario-part.")) {
+      String swarmId = routingKey.substring("sig.scenario-part.".length());
+      if (Topology.SWARM_ID.equals(swarmId)) {
+        log.info("Scenario part for swarm {}", swarmId);
+        lifecycle.applyScenarioStep(body);
+      }
+    } else if (routingKey.startsWith("sig.scenario-start.")) {
+      String swarmId = routingKey.substring("sig.scenario-start.".length());
+      if (Topology.SWARM_ID.equals(swarmId)) {
+        log.info("Scenario start for swarm {}", swarmId);
+        lifecycle.enableAll();
         sendStatusFull();
       }
     } else if (routingKey.startsWith("sig.swarm-stop.")) {
@@ -82,6 +95,23 @@ public class SwarmSignalListener {
         }
       } catch (Exception e) {
         log.warn("config parse", e);
+      }
+    } else if (routingKey.startsWith("ev.ready.")) {
+      String rest = routingKey.substring("ev.ready.".length());
+      String[] parts = rest.split(Pattern.quote("."), 2);
+      if (parts.length == 2) {
+        try {
+          JsonNode node = mapper.readTree(body);
+          boolean enabled = node.path("data").path("enabled").asBoolean(true);
+          if (!enabled) {
+            boolean allReady = lifecycle.markReady(parts[0], parts[1]);
+            if (allReady) {
+              rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, "ev.swarm-created." + Topology.SWARM_ID, "");
+            }
+          }
+        } catch (Exception e) {
+          log.warn("ready parse", e);
+        }
       }
     }
     MDC.clear();
@@ -112,6 +142,8 @@ public class SwarmSignalListener {
             "sig.status-request." + ROLE + "." + instanceId,
             "sig.swarm-template.*",
             "sig.swarm-start.*",
+            "sig.scenario-part.*",
+            "sig.scenario-start.*",
             "sig.swarm-stop.*")
         .controlOut(rk)
         .toJson();
@@ -138,6 +170,8 @@ public class SwarmSignalListener {
             "sig.status-request." + ROLE + "." + instanceId,
             "sig.swarm-template.*",
             "sig.swarm-start.*",
+            "sig.scenario-part.*",
+            "sig.scenario-start.*",
             "sig.swarm-stop.*")
         .controlOut(rk)
         .toJson();

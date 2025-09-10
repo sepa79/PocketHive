@@ -19,6 +19,9 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 import io.pockethive.swarmcontroller.infra.docker.DockerContainerClient;
 
@@ -32,8 +35,14 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
   private final String instanceId;
   private final Map<String, List<String>> containers = new HashMap<>();
   private final Set<String> declaredQueues = new HashSet<>();
+  private final Map<String, Integer> expectedReady = new HashMap<>();
+  private final Map<String, List<String>> instancesByRole = new HashMap<>();
+  private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
+  private final List<ScenarioTask> scheduledTasks = new ArrayList<>();
   private SwarmStatus status = SwarmStatus.STOPPED;
   private String template;
+
+  private record ScenarioTask(long delayMs, String routingKey, String body) {}
 
   public SwarmLifecycleManager(AmqpAdmin amqp,
                                ObjectMapper mapper,
@@ -78,9 +87,13 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
       TopicExchange hive = new TopicExchange("ph." + Topology.SWARM_ID + ".hive", true, false);
       amqp.declareExchange(hive);
 
+      expectedReady.clear();
+      instancesByRole.clear();
+
       Set<String> suffixes = new HashSet<>();
       if (plan.bees() != null) {
         for (SwarmPlan.Bee bee : plan.bees()) {
+          expectedReady.merge(bee.role(), 1, Integer::sum);
           if (bee.work() != null) {
             if (bee.work().in() != null) suffixes.add(bee.work().in());
             if (bee.work().out() != null) suffixes.add(bee.work().out());
@@ -151,5 +164,82 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
   @Override
   public SwarmStatus getStatus() {
     return status;
+  }
+
+  @Override
+  public synchronized boolean markReady(String role, String instance) {
+    instancesByRole.computeIfAbsent(role, r -> new ArrayList<>());
+    if (!instancesByRole.get(role).contains(instance)) {
+      instancesByRole.get(role).add(instance);
+    }
+    return isFullyReady();
+  }
+
+  private boolean isFullyReady() {
+    for (Map.Entry<String, Integer> e : expectedReady.entrySet()) {
+      int count = instancesByRole.getOrDefault(e.getKey(), List.of()).size();
+      if (count < e.getValue()) {
+        return false;
+      }
+    }
+    return !expectedReady.isEmpty();
+  }
+
+  @Override
+  public synchronized void applyScenarioStep(String stepJson) {
+    try {
+      scheduledTasks.clear();
+      var root = mapper.readTree(stepJson);
+      var schedule = root.path("schedule");
+      if (schedule.isArray()) {
+        for (var n : schedule) {
+          long delay = n.path("delayMs").asLong(0);
+          String rk = n.path("routingKey").asText();
+          String body = n.path("body").toString();
+          scheduledTasks.add(new ScenarioTask(delay, rk, body));
+        }
+      }
+
+      var config = root.path("config");
+      var data = mapper.createObjectNode();
+      if (config.isObject()) {
+        data.setAll((com.fasterxml.jackson.databind.node.ObjectNode) config);
+      }
+      data.put("enabled", false);
+      var wrapper = mapper.createObjectNode();
+      wrapper.set("data", data);
+      String payload = wrapper.toString();
+
+      for (var entry : instancesByRole.entrySet()) {
+        for (String inst : entry.getValue()) {
+          String rk = "sig.config-update." + entry.getKey() + "." + inst;
+          rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, payload);
+        }
+      }
+
+      rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, "ev.swarm-ready." + Topology.SWARM_ID, "");
+    } catch (Exception e) {
+      log.warn("scenario step", e);
+    }
+  }
+
+  @Override
+  public synchronized void enableAll() {
+    var data = mapper.createObjectNode();
+    data.put("enabled", true);
+    var wrapper = mapper.createObjectNode();
+    wrapper.set("data", data);
+    String payload = wrapper.toString();
+
+    for (var entry : instancesByRole.entrySet()) {
+      for (String inst : entry.getValue()) {
+        String rk = "sig.config-update." + entry.getKey() + "." + inst;
+        rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, payload);
+      }
+    }
+    status = SwarmStatus.RUNNING;
+    for (ScenarioTask t : scheduledTasks) {
+      scheduler.schedule(() -> rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, t.routingKey, t.body), t.delayMs, TimeUnit.MILLISECONDS);
+    }
   }
 }
