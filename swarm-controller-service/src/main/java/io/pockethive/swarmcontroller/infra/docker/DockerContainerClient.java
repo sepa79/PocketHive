@@ -19,6 +19,17 @@ public class DockerContainerClient {
     return response.getId();
   }
 
+  public String createContainer(String image) {
+    CreateContainerResponse response = dockerClient.createContainerCmd(image)
+        .withHostConfig(HostConfig.newHostConfig())
+        .exec();
+    return response.getId();
+  }
+
+  public void startContainer(String containerId) {
+    dockerClient.startContainerCmd(containerId).exec();
+  }
+
   public void stopAndRemoveContainer(String containerId) {
     dockerClient.stopContainerCmd(containerId).exec();
     dockerClient.removeContainerCmd(containerId).exec();

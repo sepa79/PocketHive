@@ -321,9 +321,9 @@ These endpoints supply the orchestrator and SwarmController with plans at runtim
 ### SwarmController Lifecycle
 
 - The SwarmController coordinates swarm execution. Key steps are outlined in the
-[SwarmController Plan](SWARM_CONTROLLER_PLAN.md#orchestrator-herald-ready-start-handshake):
+[SwarmController Plan](SWARM_CONTROLLER_PLAN.md#orchestrator-swarm-controller-ready-start-handshake):
 
-- [Orchestrator–herald ready-start handshake](SWARM_CONTROLLER_PLAN.md#orchestrator-herald-ready-start-handshake)
+- [Orchestrator–swarm-controller ready-start handshake](SWARM_CONTROLLER_PLAN.md#orchestrator-swarm-controller-ready-start-handshake)
 - [SwarmPlan parsing, queue provisioning, and bee container lifecycle](SWARM_CONTROLLER_PLAN.md#swarmplan-parsing-queue-provisioning-and-bee-container-lifecycle)
 - [Swarm shutdown cleanup and observability/UI hooks](SWARM_CONTROLLER_PLAN.md#swarm-shutdown-cleanup-and-observability-ui-hooks)
 

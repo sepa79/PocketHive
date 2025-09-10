@@ -33,6 +33,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
   private final Map<String, List<String>> containers = new HashMap<>();
   private final Set<String> declaredQueues = new HashSet<>();
   private SwarmStatus status = SwarmStatus.STOPPED;
+  private String template;
 
   public SwarmLifecycleManager(AmqpAdmin amqp,
                                ObjectMapper mapper,
@@ -53,7 +54,27 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
     MDC.put("instance", instanceId);
     log.info("Starting swarm {}", Topology.SWARM_ID);
     try {
-      SwarmPlan plan = mapper.readValue(planJson, SwarmPlan.class);
+      if (containers.isEmpty()) {
+        prepare(planJson);
+      } else if (template == null) {
+        template = planJson;
+      }
+      containers.values().forEach(ids -> ids.forEach(docker::startContainer));
+      status = SwarmStatus.RUNNING;
+    } finally {
+      MDC.clear();
+    }
+  }
+
+  @Override
+  public void prepare(String templateJson) {
+    MDC.put("swarm_id", Topology.SWARM_ID);
+    MDC.put("service", "swarm-controller");
+    MDC.put("instance", instanceId);
+    log.info("Preparing swarm {}", Topology.SWARM_ID);
+    try {
+      this.template = templateJson;
+      SwarmPlan plan = mapper.readValue(templateJson, SwarmPlan.class);
       TopicExchange hive = new TopicExchange("ph." + Topology.SWARM_ID + ".hive", true, false);
       amqp.declareExchange(hive);
 
@@ -65,22 +86,23 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
             if (bee.work().out() != null) suffixes.add(bee.work().out());
           }
           if (bee.image() != null) {
-            String containerId = docker.createAndStartContainer(bee.image());
+            String containerId = docker.createContainer(bee.image());
             containers.computeIfAbsent(bee.role(), r -> new ArrayList<>()).add(containerId);
           }
         }
       }
 
       for (String suffix : suffixes) {
-        Queue q = QueueBuilder.durable("ph." + Topology.SWARM_ID + "." + suffix).build();
-        amqp.declareQueue(q);
-        Binding b = BindingBuilder.bind(q).to(hive).with(suffix);
-        amqp.declareBinding(b);
-        declaredQueues.add(suffix);
+        if (!declaredQueues.contains(suffix)) {
+          Queue q = QueueBuilder.durable("ph." + Topology.SWARM_ID + "." + suffix).build();
+          amqp.declareQueue(q);
+          Binding b = BindingBuilder.bind(q).to(hive).with(suffix);
+          amqp.declareBinding(b);
+          declaredQueues.add(suffix);
+        }
       }
-      status = SwarmStatus.RUNNING;
     } catch (JsonProcessingException e) {
-      log.warn("Invalid plan payload", e);
+      log.warn("Invalid template payload", e);
     } finally {
       MDC.clear();
     }
