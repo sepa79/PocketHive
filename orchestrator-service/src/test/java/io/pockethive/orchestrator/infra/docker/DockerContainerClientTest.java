@@ -16,7 +16,7 @@ import static org.mockito.Mockito.*;
 class DockerContainerClientTest {
 
     @Test
-    void setsNetworkModeFromEnv() {
+    void usesResolvedNetworkMode() {
         DockerClient docker = mock(DockerClient.class);
         CreateContainerCmd create = mock(CreateContainerCmd.class);
         StartContainerCmd start = mock(StartContainerCmd.class);
@@ -28,11 +28,16 @@ class DockerContainerClientTest {
         when(create.exec()).thenReturn(resp);
         when(docker.startContainerCmd("cid")).thenReturn(start);
 
-        DockerContainerClient client = new DockerContainerClient(docker);
+        DockerContainerClient client = new DockerContainerClient(docker) {
+            @Override
+            public String resolveControlNetwork() {
+                return "net1";
+            }
+        };
         client.createAndStartContainer("img", Map.of());
 
         ArgumentCaptor<HostConfig> hostCaptor = ArgumentCaptor.forClass(HostConfig.class);
         verify(create).withHostConfig(hostCaptor.capture());
-        assertThat(hostCaptor.getValue().getNetworkMode()).isEqualTo(System.getenv("CONTROL_NETWORK"));
+        assertThat(hostCaptor.getValue().getNetworkMode()).isEqualTo("net1");
     }
 }

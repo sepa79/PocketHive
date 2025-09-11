@@ -42,6 +42,7 @@ class SwarmLifecycleIntegrationTest {
     void createStartStopFlow() {
         ArgumentCaptor<java.util.Map<String,String>> envCaptor = ArgumentCaptor.forClass(java.util.Map.class);
         given(docker.createAndStartContainer(anyString(), anyMap())).willReturn("c1");
+        given(docker.resolveControlNetwork()).willReturn("ctrl-net");
 
         String body = "{\"id\":\"mock-1\",\"template\":{\"image\":\"pockethive-swarm-controller:latest\",\"bees\":[]}}";
         listener.handle(body, "sig.swarm-create.sw1");
@@ -53,11 +54,8 @@ class SwarmLifecycleIntegrationTest {
         assertThat(env)
                 .containsEntry("PH_CONTROL_EXCHANGE", Topology.CONTROL_EXCHANGE)
                 .containsEntry("RABBITMQ_HOST", "rabbitmq")
-                .containsEntry("PH_LOGS_EXCHANGE", "ph.logs");
-        String net = System.getenv("CONTROL_NETWORK");
-        if (net != null) {
-            assertThat(env).containsEntry("CONTROL_NETWORK", net);
-        }
+                .containsEntry("PH_LOGS_EXCHANGE", "ph.logs")
+                .containsEntry("CONTROL_NETWORK", "ctrl-net");
 
         listener.handle("", "ev.ready.swarm-controller." + beeName);
 
