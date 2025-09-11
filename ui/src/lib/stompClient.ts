@@ -33,7 +33,6 @@ function isHandshake(dest: string) {
   return (
     dest.startsWith('/exchange/ph.control/ev.ready.swarm-controller.') ||
     dest.startsWith('/exchange/ph.control/ev.swarm-created.') ||
-    dest.startsWith('/exchange/ph.control/sig.swarm-template.') ||
     dest.startsWith('/exchange/ph.control/sig.swarm-start.')
   )
 }
@@ -116,11 +115,11 @@ export function setClient(newClient: Client | null, destination = controlDestina
           (msg) => {
             const d = msg.headers.destination || dest
             logIn(d, msg.body)
-            if (/\/exchange\/ph\.control\/ev\..*(?:-failed|\.error)/.test(d)) {
+            if (/\/exchange\/ph\.control\/sig\..*\.error/.test(d)) {
               logError(d, msg.body)
               const { setToast } = useUIStore.getState()
               const evt = d.split('/').pop() || ''
-              const name = evt.replace(/^ev\./, '').replace(/\./g, ' ')
+              const name = evt.replace(/^(?:ev|sig)\./, '').replace(/\./g, ' ')
               const suffix = msg.body ? `: ${msg.body}` : ''
               setToast(`Error: ${name}${suffix}`)
             }

@@ -25,22 +25,6 @@ class SwarmSignalListenerTest {
     ContainerLifecycleManager lifecycle;
 
     @Test
-    void publishesTemplateWhenSwarmCreated() throws Exception {
-        SwarmPlanRegistry registry = new SwarmPlanRegistry();
-        SwarmSignalListener listener = new SwarmSignalListener(rabbit, registry, new SwarmRegistry(), lifecycle, new ObjectMapper(), "inst0");
-        reset(rabbit);
-        when(lifecycle.startSwarm(anyString(), anyString(), anyString()))
-            .thenReturn(new io.pockethive.orchestrator.domain.Swarm("sw1", "inst1", "c1"));
-
-        String body = "{\"template\":{\"image\":\"img\",\"bees\":[]}}";
-        listener.handle(body, "sig.swarm-create.sw1");
-
-        ArgumentCaptor<String> payload = ArgumentCaptor.forClass(String.class);
-        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("sig.swarm-template.sw1"), payload.capture());
-        assertThat(payload.getValue()).contains("\"image\":\"img\"");
-    }
-
-    @Test
     void dispatchesPlanWhenControllerReady() {
         SwarmPlanRegistry registry = new SwarmPlanRegistry();
         SwarmPlan plan = new SwarmPlan("sw1", java.util.List.of(
@@ -87,11 +71,12 @@ class SwarmSignalListenerTest {
         reset(rabbit);
 
         String body = "{" +
+            "\"id\":\"mock-1\"," +
             "\"template\":{\"image\":\"img\",\"bees\":[{" +
             "\"role\":\"generator\",\"image\":\"img\",\"work\":{\"in\":\"in\",\"out\":\"out\"}}]}}";
         listener.handle(body, "sig.swarm-create.sw1");
 
-        verify(rabbit).convertAndSend(Topology.CONTROL_EXCHANGE, "ev.swarm-create-failed.sw1", "boom");
+        verify(rabbit).convertAndSend(Topology.CONTROL_EXCHANGE, "sig.swarm-create.error.sw1", "boom");
         verifyNoMoreInteractions(rabbit);
     }
 }

@@ -12,12 +12,9 @@ describe('SwarmDebugPanel', () => {
   it('renders handshake timeline for swarms', async () => {
     resetLogs()
     render(<SwarmDebugPanel />)
-    logHandshake('/exchange/ph.control/sig.swarm-template.sw1', '{}')
-    await waitFor(() => screen.getByText('Swarm sw1'))
-    expect(screen.getByText(/created: pending/)).toBeTruthy()
     logHandshake('/exchange/ph.control/ev.swarm-created.sw1', '{}')
-    await waitFor(() => {
-      expect(screen.getByText(/created:/).textContent).not.toContain('pending')
-    })
+    await waitFor(() => screen.getByText('Swarm sw1'))
+    expect(screen.getByText(/created:/).textContent).not.toContain('pending')
+    expect(screen.getByText(/started: pending/)).toBeTruthy()
   })
 })

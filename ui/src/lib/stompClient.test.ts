@@ -63,20 +63,6 @@ describe('swarm lifecycle', () => {
     expect(entries[entries.length - 1].destination).toContain('ev.ready.swarm-controller.inst')
   })
 
-  it('logs swarm template signal as handshake', () => {
-    resetLogs()
-    const publish = vi.fn()
-    const subscribe = vi.fn().mockReturnValue({ unsubscribe() {} })
-    const c = { active: true, publish, subscribe } as unknown as Client
-    setClient(c)
-    let entries: LogEntry[] = []
-    subscribeLogs('handshake', (l) => {
-      entries = l
-    })
-    c.publish({ destination: '/exchange/ph.control/sig.swarm-template.sw1', body: '{}' })
-    expect(entries[entries.length - 1].destination).toContain('sig.swarm-template.sw1')
-  })
-
   it('logs error events and sets toast', () => {
     resetLogs()
     useUIStore.setState({ toast: null })
@@ -93,9 +79,9 @@ describe('swarm lifecycle', () => {
     subscribeLogs('error', (l) => {
       entries = l
     })
-    cb({ body: 'boom', headers: { destination: '/exchange/ph.control/ev.swarm-create-failed.sw1' } })
-    expect(entries[0].destination).toContain('ev.swarm-create-failed.sw1')
+    cb({ body: 'boom', headers: { destination: '/exchange/ph.control/sig.swarm-create.error.sw1' } })
+    expect(entries[0].destination).toContain('sig.swarm-create.error.sw1')
     expect(entries[0].body).toBe('boom')
-    expect(useUIStore.getState().toast).toBe('Error: swarm-create-failed sw1: boom')
+    expect(useUIStore.getState().toast).toBe('Error: swarm-create error sw1: boom')
   })
 })

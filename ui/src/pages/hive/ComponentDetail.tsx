@@ -39,7 +39,7 @@ export default function ComponentDetail({ component, onClose }: Props) {
           try {
             cfg.headers = JSON.parse(form.headers)
           } catch {
-            /* ignore invalid JSON */
+            cfg.headers = undefined
           }
         }
         break
@@ -57,7 +57,7 @@ export default function ComponentDetail({ component, onClose }: Props) {
           try {
             cfg.headers = JSON.parse(form.headers)
           } catch {
-            /* ignore invalid JSON */
+            cfg.headers = undefined
           }
         }
         break
@@ -147,7 +147,7 @@ function renderForm(
     key: string,
     type: string = 'text',
     extra?: { placeholder?: string },
-  ) => (
+  ): JSX.Element => (
     <input
       className="w-full rounded bg-white/10 px-2 py-1"
       type={type}

@@ -85,25 +85,7 @@ channels:
           durable: true
         routingKey: sig.{type}.{role}.{instance}
 
-  exchange/ph.control/sig.swarm-template.{swarmId}:
-    parameters:
-      swarmId:
-        description: Swarm identifier
-        schema: { type: string }
-    publish:
-      summary: Swarm template for a newly created swarm
-      message:
-        $ref: '#/components/messages/SwarmTemplate'
-    bindings:
-      amqp:
-        is: routingKey
-        exchange:
-          name: ph.control
-          type: topic
-          durable: true
-        routingKey: sig.swarm-template.{swarmId}
-
-  exchange/ph.control/ev.swarm-create-failed.{swarmId}:
+  exchange/ph.control/sig.swarm-create.error.{swarmId}:
     parameters:
       swarmId:
         description: Swarm identifier
@@ -119,7 +101,7 @@ channels:
           name: ph.control
           type: topic
           durable: true
-        routingKey: ev.swarm-create-failed.{swarmId}
+        routingKey: sig.swarm-create.error.{swarmId}
 
   # PocketHive traffic example kept for reference
   exchange/ph.{swarmId}.hive/generator.request:
@@ -173,12 +155,6 @@ components:
       contentType: application/json
       payload:
         $ref: '#/components/schemas/ControlSignalPayload'
-    SwarmTemplate:
-      name: SwarmTemplate
-      title: Swarm template payload
-      contentType: application/json
-      payload:
-        $ref: '#/components/schemas/SwarmTemplatePayload'
     GenerationRequest:
       name: GenerationRequest
       title: PocketHive browser generator request
@@ -322,24 +298,3 @@ components:
         payload:
           type: string
           description: Optional blob for size padding
-    SwarmTemplatePayload:
-      type: object
-      required: [image, bees]
-      additionalProperties: false
-      properties:
-        image: { type: string }
-        bees:
-          type: array
-          items:
-            type: object
-            required: [role, image]
-            additionalProperties: false
-            properties:
-              role: { type: string }
-              image: { type: string }
-              work:
-                type: object
-                additionalProperties: false
-                properties:
-                  in: { type: string }
-                  out: { type: string }
