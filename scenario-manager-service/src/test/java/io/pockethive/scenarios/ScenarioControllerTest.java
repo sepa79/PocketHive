@@ -37,12 +37,12 @@ class ScenarioControllerTest {
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.id").value("1"));
 
-        mvc.perform(get("/scenarios"))
+        mvc.perform(get("/scenarios").accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].id").value("1"))
                 .andExpect(jsonPath("$[0].name").value("Test"));
 
-        mvc.perform(get("/scenarios/1"))
+        mvc.perform(get("/scenarios/1").accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.name").value("Test"));
 
@@ -54,7 +54,7 @@ class ScenarioControllerTest {
         mvc.perform(delete("/scenarios/1"))
                 .andExpect(status().isNoContent());
 
-        mvc.perform(get("/scenarios/1"))
+        mvc.perform(get("/scenarios/1").accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isNotFound());
     }
 
@@ -65,7 +65,7 @@ class ScenarioControllerTest {
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.id").value("2"));
 
-        mvc.perform(get("/scenarios/2"))
+        mvc.perform(get("/scenarios/2").accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.name").value("Yaml"));
     }
