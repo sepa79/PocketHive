@@ -13,7 +13,7 @@ export default function SwarmCreateModal({ onClose }: Props) {
   const [message, setMessage] = useState<string | null>(null)
 
   useEffect(() => {
-    fetch('/scenario-manager/scenarios')
+    fetch('/scenario-manager/scenarios/names')
       .then((res) => res.json())
       .then((data) => setScenarios(data))
       .catch(() => setScenarios([]))

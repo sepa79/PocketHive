@@ -37,6 +37,12 @@ public class ScenarioController {
         return service.findAll();
     }
 
+    @GetMapping("/names")
+    public List<String> names() {
+        log.info("Listing scenario names");
+        return service.listScenarioNames();
+    }
+
     @GetMapping("/{id}")
     public Scenario one(@PathVariable String id) {
         log.info("Fetching scenario {}", id);

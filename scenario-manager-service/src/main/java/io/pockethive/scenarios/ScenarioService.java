@@ -42,6 +42,13 @@ public class ScenarioService {
         return new ArrayList<>(scenarios.values());
     }
 
+    public List<String> listScenarioNames() {
+        return scenarios.values().stream()
+                .map(Scenario::getId)
+                .sorted()
+                .toList();
+    }
+
     public Optional<Scenario> find(String id) {
         return Optional.ofNullable(scenarios.get(id));
     }

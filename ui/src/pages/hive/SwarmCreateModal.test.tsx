@@ -26,7 +26,7 @@ test('loads available scenarios on mount', async () => {
   await screen.findByText('basic')
   await screen.findByText('advanced')
 
-  expect(fetchMock).toHaveBeenCalledWith('/scenario-manager/scenarios')
+  expect(fetchMock).toHaveBeenCalledWith('/scenario-manager/scenarios/names')
 })
 
 test('submits selected scenario', async () => {
