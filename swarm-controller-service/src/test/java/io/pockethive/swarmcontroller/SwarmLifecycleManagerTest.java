@@ -140,7 +140,7 @@ class SwarmLifecycleManagerTest {
 
     verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
         eq("sig.config-update.gen.g1"),
-        argThat(p -> p.contains("\"enabled\":false") && p.contains("\"foo\":\"bar\"")));
+        argThat((String p) -> p.contains("\"enabled\":false") && p.contains("\"foo\":\"bar\"")));
     verify(rabbit).convertAndSend(Topology.CONTROL_EXCHANGE,
         "ev.swarm-ready." + Topology.SWARM_ID, "");
 
@@ -151,10 +151,10 @@ class SwarmLifecycleManagerTest {
 
     verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
         eq("sig.config-update.gen.g1"),
-        argThat(p -> p.contains("\"enabled\":true")));
+        argThat((String p) -> p.contains("\"enabled\":true")));
     verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
         eq("rk"),
-        argThat(p -> p.contains("\"msg\":\"hi\"")));
+        argThat((String p) -> p.contains("\"msg\":\"hi\"")));
     assertEquals(SwarmStatus.RUNNING, manager.getStatus());
   }
 }
