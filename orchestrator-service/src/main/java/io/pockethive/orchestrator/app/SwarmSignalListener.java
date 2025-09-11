@@ -8,6 +8,8 @@ import io.pockethive.orchestrator.domain.SwarmPlanRegistry;
 import io.pockethive.orchestrator.domain.SwarmRegistry;
 import io.pockethive.util.BeeNameGenerator;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.amqp.core.AmqpTemplate;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.amqp.support.AmqpHeaders;
@@ -27,6 +29,7 @@ public class SwarmSignalListener {
     private static final String ROLE = "orchestrator";
     private static final String SCOPE = "hive";
     private static final long STATUS_INTERVAL_MS = 5000L;
+    private static final Logger log = LoggerFactory.getLogger(SwarmSignalListener.class);
 
     private final AmqpTemplate rabbit;
     private final SwarmPlanRegistry plans;
@@ -49,7 +52,9 @@ public class SwarmSignalListener {
         this.instanceId = instanceId;
         try {
             sendStatusFull();
-        } catch (Exception ignore) {}
+        } catch (Exception e) {
+            log.warn("initial status", e);
+        }
     }
 
     @RabbitListener(queues = "#{controlQueue.name}")
@@ -63,7 +68,9 @@ public class SwarmSignalListener {
                 String beeName = BeeNameGenerator.generate("swarm-controller", swarmId);
                 lifecycle.startSwarm(swarmId, scenario.template().getImage(), beeName);
                 plans.register(beeName, plan);
-            } catch (Exception ignore) {
+            } catch (Exception e) {
+                log.warn("swarm {} creation failed", swarmId, e);
+                rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, "ev.swarm-create-failed." + swarmId, "");
             }
         } else if (routingKey.startsWith("sig.swarm-stop.")) {
             String swarmId = routingKey.substring("sig.swarm-stop.".length());

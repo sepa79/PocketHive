@@ -7,11 +7,11 @@ import io.pockethive.orchestrator.infra.docker.DockerContainerClient;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.amqp.core.AmqpAdmin;
-import org.springframework.amqp.core.AmqpTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.*;
@@ -33,7 +33,7 @@ class SwarmLifecycleIntegrationTest {
     @MockBean
     DockerContainerClient docker;
     @MockBean
-    AmqpTemplate rabbit;
+    RabbitTemplate rabbit;
     @MockBean
     AmqpAdmin amqpAdmin;
 
@@ -42,7 +42,8 @@ class SwarmLifecycleIntegrationTest {
         ArgumentCaptor<java.util.Map<String,String>> envCaptor = ArgumentCaptor.forClass(java.util.Map.class);
         given(docker.createAndStartContainer(anyString(), anyMap())).willReturn("c1");
 
-        listener.handle("default", "sig.swarm-create.sw1");
+        String body = "{\"template\":{\"image\":\"swarm-controller-service:latest\",\"bees\":[]}}";
+        listener.handle(body, "sig.swarm-create.sw1");
 
         verify(docker).createAndStartContainer(eq("swarm-controller-service:latest"), envCaptor.capture());
         String beeName = envCaptor.getValue().get("JAVA_TOOL_OPTIONS").replace("-Dbee.name=", "");
