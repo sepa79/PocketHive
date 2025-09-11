@@ -57,6 +57,7 @@ sequenceDiagram
 
 SwarmController retrieves SwarmPlans from the `scenario-manager-service` REST API. The service exposes:
 
+- `GET /scenarios/names` – list available scenarios
 - `POST /scenarios` – create scenario definitions
 - `GET /scenarios/{id}` – fetch a scenario
 - `PUT /scenarios/{id}` – update a stored scenario
