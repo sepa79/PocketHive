@@ -26,10 +26,10 @@ describe('error logs', () => {
     const unsubscribe = subscribeLogs('error', (l) => {
       entries = l
     })
-    logError('/exchange/ph.control/sig.swarm-create.error.sw1', 'boom')
+    logError('/exchange/ph.control/ev.swarm-create.error.sw1', 'boom')
     unsubscribe()
     expect(entries).toHaveLength(1)
-    expect(entries[0].destination).toContain('sig.swarm-create.error.sw1')
+    expect(entries[0].destination).toContain('ev.swarm-create.error.sw1')
     expect(entries[0].body).toBe('boom')
   })
 })

@@ -115,7 +115,7 @@ export function setClient(newClient: Client | null, destination = controlDestina
           (msg) => {
             const d = msg.headers.destination || dest
             logIn(d, msg.body)
-            if (/\/exchange\/ph\.control\/sig\..*\.error/.test(d)) {
+            if (/\/exchange\/ph\.control\/(?:ev|sig)\..*\.error/.test(d)) {
               logError(d, msg.body)
               const { setToast } = useUIStore.getState()
               const evt = d.split('/').pop() || ''

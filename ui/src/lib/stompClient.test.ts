@@ -79,8 +79,8 @@ describe('swarm lifecycle', () => {
     subscribeLogs('error', (l) => {
       entries = l
     })
-    cb({ body: 'boom', headers: { destination: '/exchange/ph.control/sig.swarm-create.error.sw1' } })
-    expect(entries[0].destination).toContain('sig.swarm-create.error.sw1')
+    cb({ body: 'boom', headers: { destination: '/exchange/ph.control/ev.swarm-create.error.sw1' } })
+    expect(entries[0].destination).toContain('ev.swarm-create.error.sw1')
     expect(entries[0].body).toBe('boom')
     expect(useUIStore.getState().toast).toBe('Error: swarm-create error sw1: boom')
   })

@@ -72,7 +72,7 @@ public class SwarmSignalListener {
                 String msg = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
                 log.warn("swarm {} creation failed: {}", swarmId, msg, e);
                 rabbit.convertAndSend(Topology.CONTROL_EXCHANGE,
-                        "sig.swarm-create.error." + swarmId,
+                        "ev.swarm-create.error." + swarmId,
                         msg);
             }
         } else if (routingKey.startsWith("sig.swarm-stop.")) {
