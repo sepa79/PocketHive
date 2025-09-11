@@ -8,7 +8,7 @@
 - `DELETE /scenarios/{id}` – remove a scenario.
 
 ## Implementation Plan
-1. Add `listScenarioNames()` method to `ScenarioService` returning `List<String>` or `List<ScenarioSummary>`.
-2. Expose `GET /scenarios/names` in `ScenarioController` delegating to the service method.
-3. Update `SwarmCreateModal` in the UI to query `/scenario-manager/scenarios/names` for dropdown options and keep `/scenario-manager/scenarios/{id}` for fetching details.
-4. Adjust `SwarmCreateModal.test.tsx` to stub the new endpoint and verify it is requested.
+- [x] Add `listScenarioNames()` method to `ScenarioService` returning `List<String>` or `List<ScenarioSummary>`.
+- [x] Expose `GET /scenarios/names` in `ScenarioController` delegating to the service method.
+- [x] Update `SwarmCreateModal` in the UI to query `/scenario-manager/scenarios/names` for dropdown options and keep `/scenario-manager/scenarios/{id}` for fetching details.
+- [x] Adjust `SwarmCreateModal.test.tsx` to stub the new endpoint and verify it is requested.
