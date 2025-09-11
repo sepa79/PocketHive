@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.9.3] - 2025-09-11
+Timestamp: 2025-09-11T08:25:35Z
+
+- Fix: use curl in log-aggregator healthcheck to ensure container starts.
+
 ## [0.9.2] - 2025-09-10
 Timestamp: 2025-09-10T15:30:28Z
 
