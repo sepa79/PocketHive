@@ -12,14 +12,14 @@ interface Props {
 
 export default function ComponentDetail({ component, onClose }: Props) {
   const [toast, setToast] = useState<string | null>(null)
-  const [form, setForm] = useState<Record<string, any>>({})
+  const [form, setForm] = useState<Record<string, string>>({})
 
   useEffect(() => {
     const cfg = component.config || {}
-    const init: Record<string, any> = { ...cfg }
-    if (cfg.headers && typeof cfg.headers === 'object') {
+    const init: Record<string, string> = { ...(cfg as Record<string, string>) }
+    if (cfg && typeof cfg === 'object' && 'headers' in cfg && typeof cfg.headers === 'object') {
       try {
-        init.headers = JSON.stringify(cfg.headers, null, 2)
+        init.headers = JSON.stringify((cfg as { headers: unknown }).headers, null, 2)
       } catch {
         init.headers = ''
       }
@@ -28,7 +28,7 @@ export default function ComponentDetail({ component, onClose }: Props) {
   }, [component.id, component.config])
 
   const handleSubmit = async () => {
-    const cfg: any = {}
+    const cfg: Record<string, unknown> = {}
     switch (component.name) {
       case 'generator':
         if (form.ratePerSec) cfg.ratePerSec = Number(form.ratePerSec)
@@ -38,7 +38,9 @@ export default function ComponentDetail({ component, onClose }: Props) {
         if (form.headers) {
           try {
             cfg.headers = JSON.parse(form.headers)
-          } catch {}
+          } catch {
+            /* ignore invalid JSON */
+          }
         }
         break
       case 'processor':
@@ -54,7 +56,9 @@ export default function ComponentDetail({ component, onClose }: Props) {
         if (form.headers) {
           try {
             cfg.headers = JSON.parse(form.headers)
-          } catch {}
+          } catch {
+            /* ignore invalid JSON */
+          }
         }
         break
       default:
@@ -135,8 +139,8 @@ export default function ComponentDetail({ component, onClose }: Props) {
 
 function renderForm(
   name: string,
-  form: Record<string, any>,
-  setForm: (f: Record<string, any>) => void,
+  form: Record<string, string>,
+  setForm: (f: Record<string, string>) => void,
   single: () => void,
 ) {
   const input = (

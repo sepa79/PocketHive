@@ -46,7 +46,7 @@ export default function SwarmCreateModal({ onClose }: Props) {
   useEffect(() => {
     setScenario(null)
     if (!scenarioId) return
-    fetch(`/scenario-manager/scenarios/${scenarioId}`, {
+    fetch(`/scenario-manager/scenarios/${encodeURIComponent(scenarioId)}`, {
       headers: { Accept: 'application/json' },
     })
       .then(async (res) => {
