@@ -11,7 +11,7 @@ import org.springframework.amqp.rabbit.core.RabbitAdmin;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.boot.test.mock.mockito.MockBean;
 
-import io.pockethive.swarmcontroller.infra.docker.DockerContainerClient;
+import io.pockethive.docker.DockerContainerClient;
 
 import java.io.IOException;
 

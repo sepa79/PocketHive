@@ -1,9 +1,12 @@
-package io.pockethive.orchestrator.infra.docker;
+package io.pockethive.docker;
 
 import com.github.dockerjava.api.DockerClient;
 import com.github.dockerjava.api.command.CreateContainerResponse;
 import com.github.dockerjava.api.command.InspectContainerResponse;
+import com.github.dockerjava.api.command.StartContainerCmd;
 import com.github.dockerjava.api.model.HostConfig;
+
+import java.util.Map;
 
 public class DockerContainerClient {
     private final DockerClient dockerClient;
@@ -12,17 +15,36 @@ public class DockerContainerClient {
         this.dockerClient = dockerClient;
     }
 
-    public String createAndStartContainer(String image, java.util.Map<String, String> env) {
-        String[] envArray = env.entrySet().stream()
-            .map(e -> e.getKey() + "=" + e.getValue())
-            .toArray(String[]::new);
+    public String createAndStartContainer(String image, Map<String, String> env) {
+        String[] envArray = toEnvArray(env);
         CreateContainerResponse response = dockerClient.createContainerCmd(image)
-            .withHostConfig(HostConfig.newHostConfig()
-                .withNetworkMode(resolveControlNetwork()))
+            .withHostConfig(HostConfig.newHostConfig().withNetworkMode(resolveControlNetwork()))
             .withEnv(envArray)
             .exec();
-        dockerClient.startContainerCmd(response.getId()).exec();
+        StartContainerCmd start = dockerClient.startContainerCmd(response.getId());
+        start.exec();
         return response.getId();
+    }
+
+    public String createAndStartContainer(String image) {
+        return createAndStartContainer(image, Map.of());
+    }
+
+    public String createContainer(String image, Map<String, String> env) {
+        String[] envArray = toEnvArray(env);
+        CreateContainerResponse response = dockerClient.createContainerCmd(image)
+            .withHostConfig(HostConfig.newHostConfig().withNetworkMode(resolveControlNetwork()))
+            .withEnv(envArray)
+            .exec();
+        return response.getId();
+    }
+
+    public String createContainer(String image) {
+        return createContainer(image, Map.of());
+    }
+
+    public void startContainer(String containerId) {
+        dockerClient.startContainerCmd(containerId).exec();
     }
 
     public void stopAndRemoveContainer(String containerId) {
@@ -45,5 +67,11 @@ public class DockerContainerClient {
             }
         }
         return net;
+    }
+
+    private String[] toEnvArray(Map<String, String> env) {
+        return env.entrySet().stream()
+            .map(e -> e.getKey() + "=" + e.getValue())
+            .toArray(String[]::new);
     }
 }

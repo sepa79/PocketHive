@@ -5,7 +5,7 @@ import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmRegistry;
 import io.pockethive.orchestrator.domain.SwarmStatus;
 import io.pockethive.orchestrator.domain.SwarmTemplate;
-import io.pockethive.orchestrator.infra.docker.DockerContainerClient;
+import io.pockethive.docker.DockerContainerClient;
 import org.springframework.amqp.core.AmqpAdmin;
 import org.springframework.stereotype.Service;
 
@@ -33,6 +33,7 @@ public class ContainerLifecycleManager {
         env.put("PH_CONTROL_EXCHANGE", Topology.CONTROL_EXCHANGE);
         env.put("RABBITMQ_HOST", java.util.Optional.ofNullable(System.getenv("RABBITMQ_HOST")).orElse("rabbitmq"));
         env.put("PH_LOGS_EXCHANGE", java.util.Optional.ofNullable(System.getenv("PH_LOGS_EXCHANGE")).orElse("ph.logs"));
+        env.put("PH_SWARM_ID", swarmId);
         String net = docker.resolveControlNetwork();
         if (net != null && !net.isBlank()) {
             env.put("CONTROL_NETWORK", net);

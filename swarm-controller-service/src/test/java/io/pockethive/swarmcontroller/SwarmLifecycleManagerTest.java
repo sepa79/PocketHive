@@ -1,7 +1,7 @@
 package io.pockethive.swarmcontroller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.pockethive.swarmcontroller.infra.docker.DockerContainerClient;
+import io.pockethive.docker.DockerContainerClient;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -57,6 +57,7 @@ class SwarmLifecycleManagerTest {
         new SwarmPlan.Bee("gen", "img1", new SwarmPlan.Work("qin", "qout"),
             Map.of("PH_MOD_QUEUE", "${in}", "PH_GEN_QUEUE", "${out}"))));
     when(docker.createContainer(eq("img1"), anyMap())).thenReturn("c1");
+    when(docker.resolveControlNetwork()).thenReturn("ctrl-net");
 
     manager.start(mapper.writeValueAsString(plan));
 
@@ -71,6 +72,7 @@ class SwarmLifecycleManagerTest {
     assertEquals(Topology.CONTROL_EXCHANGE, env.get("PH_CONTROL_EXCHANGE"));
     assertEquals("rabbitmq", env.get("RABBITMQ_HOST"));
     assertEquals("ph.logs", env.get("PH_LOGS_EXCHANGE"));
+    assertEquals("ctrl-net", env.get("CONTROL_NETWORK"));
     assertEquals("ph." + Topology.SWARM_ID + ".qin", env.get("PH_MOD_QUEUE"));
     assertEquals("ph." + Topology.SWARM_ID + ".qout", env.get("PH_GEN_QUEUE"));
     verify(docker).startContainer("c1");
@@ -119,6 +121,7 @@ class SwarmLifecycleManagerTest {
     manager.prepare(mapper.writeValueAsString(plan));
 
     verify(docker).createContainer(eq("img1"), anyMap());
+    verify(docker).resolveControlNetwork();
     verifyNoMoreInteractions(docker);
     verify(amqp).declareExchange(argThat((TopicExchange e) -> e.getName().equals("ph." + Topology.SWARM_ID + ".hive")));
     verify(amqp).declareQueue(argThat((Queue q) -> q.getName().equals("ph." + Topology.SWARM_ID + ".a")));

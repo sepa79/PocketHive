@@ -12,6 +12,7 @@
   <modules>
     <module>observability</module>
     <module>common/topology-core</module>
+    <module>common/docker-client</module>
     <module>generator-service</module>
     <module>log-aggregator-service</module>
     <module>moderator-service</module>

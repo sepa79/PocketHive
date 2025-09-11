@@ -23,7 +23,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
-import io.pockethive.swarmcontroller.infra.docker.DockerContainerClient;
+import io.pockethive.docker.DockerContainerClient;
 
 @Component
 public class SwarmLifecycleManager implements SwarmLifecycle {
@@ -104,6 +104,10 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
             env.put("PH_CONTROL_EXCHANGE", Topology.CONTROL_EXCHANGE);
             env.put("RABBITMQ_HOST", java.util.Optional.ofNullable(System.getenv("RABBITMQ_HOST")).orElse("rabbitmq"));
             env.put("PH_LOGS_EXCHANGE", java.util.Optional.ofNullable(System.getenv("PH_LOGS_EXCHANGE")).orElse("ph.logs"));
+            String net = docker.resolveControlNetwork();
+            if (net != null && !net.isBlank()) {
+              env.put("CONTROL_NETWORK", net);
+            }
             if (bee.env() != null) {
               for (Map.Entry<String, String> e : bee.env().entrySet()) {
                 String value = e.getValue();

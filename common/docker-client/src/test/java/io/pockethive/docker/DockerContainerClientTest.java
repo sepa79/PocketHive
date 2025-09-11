@@ -1,10 +1,10 @@
-package io.pockethive.orchestrator.infra.docker;
+package io.pockethive.docker;
 
 import com.github.dockerjava.api.DockerClient;
 import com.github.dockerjava.api.command.CreateContainerCmd;
+import com.github.dockerjava.api.command.CreateContainerResponse;
 import com.github.dockerjava.api.command.StartContainerCmd;
 import com.github.dockerjava.api.model.HostConfig;
-import com.github.dockerjava.api.command.CreateContainerResponse;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 

@@ -3,6 +3,7 @@ FROM maven:3.9.7-eclipse-temurin-21-alpine AS build
 WORKDIR /app
 COPY pom.xml ./
 COPY common/topology-core/pom.xml common/topology-core/pom.xml
+COPY common/docker-client/pom.xml common/docker-client/pom.xml
 COPY test/pom.xml test/pom.xml
 COPY log-aggregator-service/pom.xml log-aggregator-service/pom.xml
 COPY generator-service/pom.xml generator-service/pom.xml
@@ -15,6 +16,7 @@ COPY orchestrator-service/pom.xml orchestrator-service/pom.xml
 COPY swarm-controller-service/pom.xml swarm-controller-service/pom.xml
 COPY scenario-manager-service/pom.xml scenario-manager-service/pom.xml
 COPY common/topology-core/src common/topology-core/src
+COPY common/docker-client/src common/docker-client/src
 COPY test/src test/src
 COPY log-aggregator-service/src log-aggregator-service/src
 COPY generator-service/src generator-service/src

@@ -3,7 +3,7 @@ package io.pockethive.orchestrator.app;
 import io.pockethive.Topology;
 import io.pockethive.orchestrator.domain.SwarmPlanRegistry;
 import io.pockethive.orchestrator.domain.SwarmRegistry;
-import io.pockethive.orchestrator.infra.docker.DockerContainerClient;
+import io.pockethive.docker.DockerContainerClient;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.amqp.core.AmqpAdmin;
@@ -55,6 +55,7 @@ class SwarmLifecycleIntegrationTest {
                 .containsEntry("PH_CONTROL_EXCHANGE", Topology.CONTROL_EXCHANGE)
                 .containsEntry("RABBITMQ_HOST", "rabbitmq")
                 .containsEntry("PH_LOGS_EXCHANGE", "ph.logs")
+                .containsEntry("PH_SWARM_ID", "sw1")
                 .containsEntry("CONTROL_NETWORK", "ctrl-net");
 
         listener.handle("", "ev.ready.swarm-controller." + beeName);
