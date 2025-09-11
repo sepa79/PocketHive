@@ -116,10 +116,10 @@ sequenceDiagram
   participant UI
   participant QN as "Orchestrator (Queen)"
   participant MSH as "Swarm Controller (Marshal)"
-  UI->>QN: sig.swarm-create.<swarmId>
+  UI->>QN: sig.swarm-create.&lt;swarmId&gt;
   QN-->>MSH: launch Marshal
-  UI->>QN: sig.swarm-start.<swarmId>
-  QN->>MSH: sig.swarm-start.<swarmId>
+  UI->>QN: sig.swarm-start.&lt;swarmId&gt;
+  QN->>MSH: sig.swarm-start.&lt;swarmId&gt;
 ```
 
 ### Handshake
@@ -131,9 +131,9 @@ sequenceDiagram
 sequenceDiagram
   participant MSH as "Swarm Controller (Marshal)"
   participant QN as "Orchestrator (Queen)"
-  Note over MSH: declares ph.control.swarm-controller.<instance>
-  MSH->>QN: ev.ready.swarm-controller.<instance>
-  QN->>MSH: sig.swarm-start.<swarmId> (SwarmPlan)
+  Note over MSH: declares ph.control.swarm-controller.&lt;instance&gt;
+  MSH->>QN: ev.ready.swarm-controller.&lt;instance&gt;
+  QN->>MSH: sig.swarm-start.&lt;swarmId&gt; (SwarmPlan)
 ```
 
 ### Queue provisioning
@@ -143,7 +143,7 @@ sequenceDiagram
 
 ```mermaid
 flowchart TB
-  A[Expand suffixes with swarm id] --> B[Declare ph.<swarmId>.hive]
+  A[Expand suffixes with swarm id] --> B[Declare ph.&lt;swarmId&gt;.hive]
   B --> C[Declare queues]
   C --> D[Bind queues to exchange]
 ```
@@ -157,10 +157,10 @@ sequenceDiagram
   participant QN as "Orchestrator (Queen)"
   participant MSH as "Swarm Controller (Marshal)"
   participant WS as "Worker Service (Bee)"
-  QN->>MSH: sig.swarm-start.<swarmId>
+  QN->>MSH: sig.swarm-start.&lt;swarmId&gt;
   MSH->>WS: launch container
   WS->>MSH: status-full
-  QN->>MSH: sig.swarm-stop.<swarmId>
+  QN->>MSH: sig.swarm-stop.&lt;swarmId&gt;
   MSH->>WS: stop container
 ```
 
