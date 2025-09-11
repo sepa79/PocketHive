@@ -8,7 +8,7 @@ import org.springframework.test.context.DynamicPropertySource;
 
 import java.nio.file.Path;
 
-@SpringBootTest
+@SpringBootTest(properties = "RABBITMQ_LOGGING_ENABLED=false")
 class ScenarioManagerApplicationTest {
 
     @TempDir
@@ -17,6 +17,7 @@ class ScenarioManagerApplicationTest {
     @DynamicPropertySource
     static void properties(DynamicPropertyRegistry registry) {
         registry.add("scenarios.dir", () -> tempDir.toString());
+        registry.add("RABBITMQ_LOGGING_ENABLED", () -> "false");
     }
 
     @Test
