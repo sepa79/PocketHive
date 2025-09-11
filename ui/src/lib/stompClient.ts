@@ -1,7 +1,8 @@
 import { Client, type StompSubscription } from '@stomp/stompjs'
 import type { Component } from '../types/hive'
 import { isControlEvent, type ControlEvent } from '../types/control'
-import { logIn, logOut, logHandshake } from './logs'
+import { logIn, logOut, logHandshake, logError } from './logs'
+import { useUIStore } from '../store'
 
 export type ComponentListener = (components: Component[]) => void
 export interface TopologyNode {
@@ -32,7 +33,6 @@ function isHandshake(dest: string) {
   return (
     dest.startsWith('/exchange/ph.control/ev.ready.swarm-controller.') ||
     dest.startsWith('/exchange/ph.control/ev.swarm-created.') ||
-    dest.startsWith('/exchange/ph.control/sig.swarm-template.') ||
     dest.startsWith('/exchange/ph.control/sig.swarm-start.')
   )
 }
@@ -115,6 +115,14 @@ export function setClient(newClient: Client | null, destination = controlDestina
           (msg) => {
             const d = msg.headers.destination || dest
             logIn(d, msg.body)
+            if (/\/exchange\/ph\.control\/(?:ev|sig)\..*\.error/.test(d)) {
+              logError(d, msg.body)
+              const { setToast } = useUIStore.getState()
+              const evt = d.split('/').pop() || ''
+              const name = evt.replace(/^(?:ev|sig)\./, '').replace(/\./g, ' ')
+              const suffix = msg.body ? `: ${msg.body}` : ''
+              setToast(`Error: ${name}${suffix}`)
+            }
             if (isHandshake(d)) logHandshake(d, msg.body)
             callback(msg)
           },

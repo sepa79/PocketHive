@@ -3,15 +3,15 @@ package io.pockethive.orchestrator.app;
 import io.pockethive.Topology;
 import io.pockethive.orchestrator.domain.SwarmPlanRegistry;
 import io.pockethive.orchestrator.domain.SwarmRegistry;
-import io.pockethive.orchestrator.infra.docker.DockerContainerClient;
+import io.pockethive.docker.DockerContainerClient;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.amqp.core.AmqpAdmin;
-import org.springframework.amqp.core.AmqpTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.*;
@@ -20,6 +20,7 @@ import static org.mockito.Mockito.*;
 
 @SpringBootTest(properties = "spring.rabbitmq.listener.simple.auto-startup=false")
 class SwarmLifecycleIntegrationTest {
+
     @Autowired
     SwarmSignalListener listener;
     @Autowired
@@ -33,7 +34,7 @@ class SwarmLifecycleIntegrationTest {
     @MockBean
     DockerContainerClient docker;
     @MockBean
-    AmqpTemplate rabbit;
+    RabbitTemplate rabbit;
     @MockBean
     AmqpAdmin amqpAdmin;
 
@@ -41,12 +42,21 @@ class SwarmLifecycleIntegrationTest {
     void createStartStopFlow() {
         ArgumentCaptor<java.util.Map<String,String>> envCaptor = ArgumentCaptor.forClass(java.util.Map.class);
         given(docker.createAndStartContainer(anyString(), anyMap())).willReturn("c1");
+        given(docker.resolveControlNetwork()).willReturn("ctrl-net");
 
-        listener.handle("default", "sig.swarm-create.sw1");
+        String body = "{\"id\":\"mock-1\",\"template\":{\"image\":\"pockethive-swarm-controller:latest\",\"bees\":[]}}";
+        listener.handle(body, "sig.swarm-create.sw1");
 
-        verify(docker).createAndStartContainer(eq("swarm-controller-service:latest"), envCaptor.capture());
-        String beeName = envCaptor.getValue().get("JAVA_TOOL_OPTIONS").replace("-Dbee.name=", "");
+        verify(docker).createAndStartContainer(eq("pockethive-swarm-controller:latest"), envCaptor.capture());
+        java.util.Map<String, String> env = envCaptor.getValue();
+        String beeName = env.get("JAVA_TOOL_OPTIONS").replace("-Dbee.name=", "");
         assertThat(planRegistry.find(beeName)).isPresent();
+        assertThat(env)
+                .containsEntry("PH_CONTROL_EXCHANGE", Topology.CONTROL_EXCHANGE)
+                .containsEntry("RABBITMQ_HOST", "rabbitmq")
+                .containsEntry("PH_LOGS_EXCHANGE", "ph.logs")
+                .containsEntry("PH_SWARM_ID", "sw1")
+                .containsEntry("CONTROL_NETWORK", "ctrl-net");
 
         listener.handle("", "ev.ready.swarm-controller." + beeName);
 

@@ -23,28 +23,35 @@ public class ScenarioController {
         this.service = service;
     }
 
-    @PostMapping(consumes = {MediaType.APPLICATION_JSON_VALUE, "application/x-yaml", "application/yaml"})
+    @PostMapping(
+            consumes = {MediaType.APPLICATION_JSON_VALUE, "application/x-yaml", "application/yaml"},
+            produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<Scenario> create(@Valid @RequestBody Scenario scenario,
                                            @RequestHeader(HttpHeaders.CONTENT_TYPE) String contentType) throws IOException {
         log.info("Creating scenario {}", scenario.getId());
         Scenario created = service.create(scenario, ScenarioService.formatFrom(contentType));
-        return ResponseEntity.status(HttpStatus.CREATED).body(created);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(created);
     }
 
-    @GetMapping
+    @GetMapping(produces = MediaType.APPLICATION_JSON_VALUE)
     public List<ScenarioSummary> list() {
         log.info("Listing scenarios");
         return service.list();
     }
 
-    @GetMapping("/{id}")
-    public Scenario one(@PathVariable String id) {
+    @GetMapping(value = "/{id}", produces = MediaType.APPLICATION_JSON_VALUE)
+    public Scenario one(@PathVariable("id") String id) {
         log.info("Fetching scenario {}", id);
         return service.find(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
     }
 
-    @PutMapping(value = "/{id}", consumes = {MediaType.APPLICATION_JSON_VALUE, "application/x-yaml", "application/yaml"})
-    public Scenario update(@PathVariable String id,
+    @PutMapping(
+            value = "/{id}",
+            consumes = {MediaType.APPLICATION_JSON_VALUE, "application/x-yaml", "application/yaml"},
+            produces = MediaType.APPLICATION_JSON_VALUE)
+    public Scenario update(@PathVariable("id") String id,
                            @Valid @RequestBody Scenario scenario,
                            @RequestHeader(HttpHeaders.CONTENT_TYPE) String contentType) throws IOException {
         log.info("Updating scenario {}", id);
@@ -52,7 +59,7 @@ public class ScenarioController {
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> delete(@PathVariable String id) throws IOException {
+    public ResponseEntity<Void> delete(@PathVariable("id") String id) throws IOException {
         log.info("Deleting scenario {}", id);
         service.delete(id);
         return ResponseEntity.noContent().build();

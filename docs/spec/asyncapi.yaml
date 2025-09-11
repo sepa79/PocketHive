@@ -85,20 +85,38 @@ channels:
           durable: true
         routingKey: sig.{type}.{role}.{instance}
 
-  # PocketHive traffic example kept for reference
-  exchange/ph.{swarmId}.hive/generator.request:
+  exchange/ph.control/ev.swarm-create.error.{swarmId}:
+    parameters:
+      swarmId:
+        description: Swarm identifier
+        schema: { type: string }
     publish:
-      summary: Workload generation request published by PocketHive browser generator
+      summary: Swarm creation failed
       message:
-        $ref: '#/components/messages/GenerationRequest'
+        $ref: '#/components/messages/ErrorMessage'
     bindings:
       amqp:
         is: routingKey
         exchange:
-          name: ph.{swarmId}.hive
-          type: direct
+          name: ph.control
+          type: topic
           durable: true
-        routingKey: generator.request
+        routingKey: ev.swarm-create.error.{swarmId}
+
+  # Swarm created event example
+  exchange/ph.control/ev.swarm-created.{swarmId}:
+    publish:
+      summary: Swarm created successfully
+      message:
+        $ref: '#/components/messages/ControlLifecycle'
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: ph.control
+          type: topic
+          durable: true
+        routingKey: ev.swarm-created.{swarmId}
 components:
   messages:
     ControlStatusFull:
@@ -137,12 +155,13 @@ components:
       contentType: application/json
       payload:
         $ref: '#/components/schemas/ControlSignalPayload'
-    GenerationRequest:
-      name: GenerationRequest
-      title: PocketHive browser generator request
-      contentType: application/json
+    ErrorMessage:
+      name: ErrorMessage
+      title: Error description
+      contentType: text/plain
       payload:
-        $ref: '#/components/schemas/GenerationPayload'
+        type: string
+        description: Brief error message
   schemas:
     ControlBase:
       type: object
@@ -253,23 +272,3 @@ components:
         version: { type: string }
         messageId: { type: string, format: uuid }
         timestamp: { type: string, format: date-time }
-    GenerationPayload:
-      type: object
-      required: [type, sessionId, correlationId, timestamp]
-      properties:
-        type:
-          type: string
-          enum: [GENERATION_REQUEST]
-        sessionId:
-          type: string
-        correlationId:
-          type: string
-          format: uuid
-        timestamp:
-          type: string
-          format: date-time
-        prompt:
-          type: string
-        payload:
-          type: string
-          description: Optional blob for size padding

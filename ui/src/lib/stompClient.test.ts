@@ -3,6 +3,7 @@ import type { Client } from '@stomp/stompjs'
 import { setClient, createSwarm, startSwarm, stopSwarm } from './stompClient'
 import { defaultBees } from './defaultBees'
 import { subscribeLogs, type LogEntry, resetLogs } from './logs'
+import { useUIStore } from '../store'
 
 /**
  * @vitest-environment jsdom
@@ -62,17 +63,25 @@ describe('swarm lifecycle', () => {
     expect(entries[entries.length - 1].destination).toContain('ev.ready.swarm-controller.inst')
   })
 
-  it('logs swarm template signal as handshake', () => {
+  it('logs error events and sets toast', () => {
     resetLogs()
+    useUIStore.setState({ toast: null })
     const publish = vi.fn()
-    const subscribe = vi.fn().mockReturnValue({ unsubscribe() {} })
-    const c = { active: true, publish, subscribe } as unknown as Client
-    setClient(c)
+    let cb: (msg: { body: string; headers: Record<string, string> }) => void = () => {}
+    const subscribe = vi
+      .fn()
+      .mockImplementation((_dest: string, fn: (msg: { body: string; headers: Record<string, string> }) => void) => {
+        cb = fn
+        return { unsubscribe() {} }
+      })
+    setClient({ active: true, publish, subscribe } as unknown as Client)
     let entries: LogEntry[] = []
-    subscribeLogs('handshake', (l) => {
+    subscribeLogs('error', (l) => {
       entries = l
     })
-    c.publish({ destination: '/exchange/ph.control/sig.swarm-template.sw1', body: '{}' })
-    expect(entries[entries.length - 1].destination).toContain('sig.swarm-template.sw1')
+    cb({ body: 'boom', headers: { destination: '/exchange/ph.control/ev.swarm-create.error.sw1' } })
+    expect(entries[0].destination).toContain('ev.swarm-create.error.sw1')
+    expect(entries[0].body).toBe('boom')
+    expect(useUIStore.getState().toast).toBe('Error: swarm-create error sw1: boom')
   })
 })

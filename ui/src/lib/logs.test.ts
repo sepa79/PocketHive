@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { logHandshake, subscribeLogs, type LogEntry, resetLogs } from './logs'
+import { logHandshake, logError, subscribeLogs, type LogEntry, resetLogs } from './logs'
 
 /**
  * @vitest-environment jsdom
@@ -16,5 +16,20 @@ describe('handshake logs', () => {
     unsubscribe()
     expect(entries).toHaveLength(1)
     expect(entries[0].destination).toContain('ev.ready.swarm-controller.inst')
+  })
+})
+
+describe('error logs', () => {
+  it('collects error entries', () => {
+    resetLogs()
+    let entries: LogEntry[] = []
+    const unsubscribe = subscribeLogs('error', (l) => {
+      entries = l
+    })
+    logError('/exchange/ph.control/ev.swarm-create.error.sw1', 'boom')
+    unsubscribe()
+    expect(entries).toHaveLength(1)
+    expect(entries[0].destination).toContain('ev.swarm-create.error.sw1')
+    expect(entries[0].body).toBe('boom')
   })
 })

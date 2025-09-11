@@ -61,4 +61,22 @@ class SwarmSignalListenerTest {
 
         verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("ev.status-full.orchestrator.inst1"), any(Object.class));
     }
+
+    @Test
+    void publishesFailureEventWhenSwarmCreationFails() {
+        SwarmPlanRegistry registry = new SwarmPlanRegistry();
+        doThrow(new RuntimeException("boom"))
+            .when(lifecycle).startSwarm(anyString(), anyString(), anyString());
+        SwarmSignalListener listener = new SwarmSignalListener(rabbit, registry, new SwarmRegistry(), lifecycle, new ObjectMapper(), "inst0");
+        reset(rabbit);
+
+        String body = "{" +
+            "\"id\":\"mock-1\"," +
+            "\"template\":{\"image\":\"img\",\"bees\":[{" +
+            "\"role\":\"generator\",\"image\":\"img\",\"work\":{\"in\":\"in\",\"out\":\"out\"}}]}}";
+        listener.handle(body, "sig.swarm-create.sw1");
+
+        verify(rabbit).convertAndSend(Topology.CONTROL_EXCHANGE, "ev.swarm-create.error.sw1", "boom");
+        verifyNoMoreInteractions(rabbit);
+    }
 }

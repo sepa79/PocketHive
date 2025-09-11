@@ -8,7 +8,8 @@ import { useEffect } from 'react'
 import { useConfig } from '../lib/config'
 
 export default function Layout() {
-  const { sidebarOpen, toggleSidebar, closeSidebar, debugMode, toggleDebug } = useUIStore()
+  const { sidebarOpen, toggleSidebar, closeSidebar, debugMode, toggleDebug, toast, clearToast } =
+    useUIStore()
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -17,6 +18,13 @@ export default function Layout() {
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
   }, [closeSidebar])
+
+  useEffect(() => {
+    if (toast) {
+      const t = setTimeout(() => clearToast(), 3000)
+      return () => clearTimeout(t)
+    }
+  }, [toast, clearToast])
 
   const { rabbitmq, prometheus, grafana, wiremock } = useConfig()
   const services = { rabbitmq, prometheus, grafana, wiremock }
@@ -93,6 +101,11 @@ export default function Layout() {
       <main>
         <Outlet />
       </main>
+      {toast && (
+        <div className="fixed bottom-4 right-4 bg-black/80 text-white px-4 py-2 rounded">
+          {toast}
+        </div>
+      )}
     </div>
   )
 }
