@@ -161,6 +161,9 @@ services:
     build:
       context: .
       dockerfile: ui/Dockerfile
+    depends_on:
+      scenario-manager:
+        condition: service_healthy
     ports:
       - "8088:80"
     healthcheck:

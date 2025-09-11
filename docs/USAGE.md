@@ -11,6 +11,18 @@
 
 When the stack starts only the Orchestrator (Queen) is running. New swarms are created and started from the Hive view as needed.
 
+## Scenario Manager API
+- nginx proxies `/scenario-manager/*` to the Scenario Manager service.
+- The service also exposes port `1081` on the host for direct API access.
+- Ensure the `scenario-manager` container is running and healthy before calling it.
+
+Example listings:
+
+```bash
+curl -s http://localhost:1081/scenarios
+curl -s http://localhost:8088/scenario-manager/scenarios
+```
+
 Manual checks:
 - UI health: `curl -s http://localhost:8088/healthz` → `ok`.
 - RabbitMQ management UI: `http://localhost:15672`.

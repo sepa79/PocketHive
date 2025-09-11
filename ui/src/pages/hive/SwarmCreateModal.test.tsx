@@ -15,6 +15,20 @@ afterEach(() => {
   cleanup()
 })
 
+test('loads available scenarios on mount', async () => {
+  const fetchMock = vi
+    .fn()
+    .mockResolvedValue({ ok: true, json: async () => ['basic', 'advanced'] })
+  global.fetch = fetchMock as unknown as typeof fetch
+
+  render(<SwarmCreateModal onClose={() => {}} />)
+
+  await screen.findByText('basic')
+  await screen.findByText('advanced')
+
+  expect(fetchMock).toHaveBeenCalledWith('/scenario-manager/scenarios')
+})
+
 test('submits selected scenario', async () => {
   const detail = { template: { image: 'img:1', bees: [] } }
   const fetchMock = vi

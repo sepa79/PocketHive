@@ -9,9 +9,9 @@ Services communicate over HTTP and AMQP. Each service exposes APIs and consumes 
 ### High-level flow
 ```mermaid
 flowchart LR
-  SM[Scenario Manager] --> QN[Orchestrator (Queen)]
-  QN --> MSH[Swarm Controller (Marshal)]
-  MSH --> BW[(Workers (Bees))] --> SUT[(System Under Test)]
+  SM[Scenario Manager] --> QN["Orchestrator (Queen)"]
+  QN --> MSH["Swarm Controller (Marshal)"]
+  MSH --> BW["Workers (Bees)"] --> SUT["System Under Test"]
   BW --> OBS[Observability]
 ```
 
@@ -27,8 +27,8 @@ flowchart LR
 flowchart LR
   %% Actors
   SC[Scenario]
-  QN[Orchestrator (Queen)]
-  MSH[Swarm Controller (Marshal)]
+  QN["Orchestrator (Queen)"]
+  MSH["Swarm Controller (Marshal)"]
   G[Generator]
   M[Moderator]
   P[Processor]
@@ -84,7 +84,7 @@ flowchart LR
 ### Observability
 ```mermaid
 flowchart LR
-  B[(Workers (Bees))] -->|logs| LA[Log Aggregator] --> LK[Loki]
+  B["Workers (Bees)"] -->|logs| LA[Log Aggregator] --> LK[Loki]
   B -->|metrics| PR[Prometheus]
   LA --> GF[Grafana]
   LK --> GF
@@ -113,13 +113,13 @@ A Marshal governs one swarm. After receiving its plan from the Queen it declares
 
 ```mermaid
 sequenceDiagram
-  participant UI
-  participant QN as "Orchestrator (Queen)"
-  participant MSH as "Swarm Controller (Marshal)"
-  UI->>QN: sig.swarm-create.<swarmId>
-  QN-->>MSH: launch Marshal
-  UI->>QN: sig.swarm-start.<swarmId>
-  QN->>MSH: sig.swarm-start.<swarmId>
+  participant MSH as Swarm Controller (Marshal)
+  participant QN as Orchestrator (Queen)
+
+  Note over MSH: declares ph.control.swarm-controller.<instance>
+  MSH->>QN: ev.ready.swarm-controller.<instance>
+  QN->>MSH: sig.swarm-start.<swarmId> (SwarmPlan)
+
 ```
 
 ### Handshake
@@ -129,11 +129,13 @@ sequenceDiagram
 
 ```mermaid
 sequenceDiagram
-  participant MSH as "Swarm Controller (Marshal)"
-  participant QN as "Orchestrator (Queen)"
+  participant MSH as Swarm Controller (Marshal)
+  participant QN as Orchestrator (Queen)
+
   Note over MSH: declares ph.control.swarm-controller.<instance>
   MSH->>QN: ev.ready.swarm-controller.<instance>
   QN->>MSH: sig.swarm-start.<swarmId> (SwarmPlan)
+
 ```
 
 ### Queue provisioning
@@ -143,7 +145,7 @@ sequenceDiagram
 
 ```mermaid
 flowchart TB
-  A[Expand suffixes with swarm id] --> B[Declare ph.<swarmId>.hive]
+  A[Expand suffixes with swarm id] --> B[Declare ph.&lt;swarmId&gt;.hive]
   B --> C[Declare queues]
   C --> D[Bind queues to exchange]
 ```
@@ -154,12 +156,13 @@ flowchart TB
 
 ```mermaid
 sequenceDiagram
-  participant QN as "Orchestrator (Queen)"
-  participant MSH as "Swarm Controller (Marshal)"
-  participant WS as "Worker Service (Bee)"
+  participant QN as Orchestrator (Queen)
+  participant MSH as Swarm Controller (Marshal)
+  participant WS as Worker Service (Bee)
+
   QN->>MSH: sig.swarm-start.<swarmId>
   MSH->>WS: launch container
-  WS->>MSH: status-full
+  WS-->>MSH: status-full
   QN->>MSH: sig.swarm-stop.<swarmId>
   MSH->>WS: stop container
 ```
