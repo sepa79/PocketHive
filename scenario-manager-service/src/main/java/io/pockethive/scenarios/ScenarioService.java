@@ -38,14 +38,10 @@ public class ScenarioService {
         }
     }
 
-    public List<Scenario> findAll() {
-        return new ArrayList<>(scenarios.values());
-    }
-
-    public List<String> listScenarioNames() {
+    public List<ScenarioSummary> list() {
         return scenarios.values().stream()
-                .map(Scenario::getId)
-                .sorted()
+                .map(s -> new ScenarioSummary(s.getId(), s.getName()))
+                .sorted(Comparator.comparing(ScenarioSummary::name))
                 .toList();
     }
 

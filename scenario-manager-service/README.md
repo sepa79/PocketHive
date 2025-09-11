@@ -5,7 +5,7 @@ REST service for managing simulation scenarios. Stores scenarios in memory and p
 Each request is logged and published to the `PH_LOGS_EXCHANGE` (default `ph.logs`) for collection by Buzz.
 
 ## Endpoints
-- `GET /scenarios/names` – list available scenario identifiers for UI dropdowns.
+- `GET /scenarios` – list available scenarios as `{id, name}` summaries for UI dropdowns.
 - `GET /scenarios/{id}` – retrieve a scenario definition in JSON or YAML.
 - `POST /scenarios` – create a new scenario.
 - `PUT /scenarios/{id}` – update an existing scenario.
