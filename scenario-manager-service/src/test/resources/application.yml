@@ -1,0 +1,4 @@
+management:
+  health:
+    rabbit:
+      enabled: false
