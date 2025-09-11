@@ -31,7 +31,7 @@ public class ScenarioController {
         return ResponseEntity.status(HttpStatus.CREATED).body(created);
     }
 
-    @GetMapping
+    @GetMapping(produces = MediaType.APPLICATION_JSON_VALUE)
     public List<ScenarioSummary> list() {
         log.info("Listing scenarios");
         return service.list();

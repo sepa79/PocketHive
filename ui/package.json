@@ -14,7 +14,6 @@
   "dependencies": {
     "@stomp/stompjs": "^7.1.1",
     "@tanstack/react-query": "^5.85.9",
-    "js-yaml": "^4.1.0",
     "lucide-react": "^0.542.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",

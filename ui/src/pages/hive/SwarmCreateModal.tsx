@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react'
-import yaml from 'js-yaml'
 import { createSwarm } from '../../lib/stompClient'
 
 interface Props {
@@ -22,24 +21,8 @@ export default function SwarmCreateModal({ onClose }: Props) {
     fetch('/scenario-manager/scenarios', {
       headers: { Accept: 'application/json' },
     })
-      .then(async (res) => {
-        const type = res.headers.get('content-type') ?? ''
-        let data: unknown
-        if (type.includes('json')) {
-          data = await res.json()
-        } else {
-          const text = await res.text()
-          try {
-            data = yaml.load(text)
-          } catch {
-            data = []
-          }
-        }
-        const list = Array.isArray(data)
-          ? data
-          : (data as { scenarios?: ScenarioSummary[] }).scenarios
-        setScenarios(Array.isArray(list) ? list : [])
-      })
+      .then((res) => res.json())
+      .then((data) => setScenarios(Array.isArray(data) ? data : []))
       .catch(() => setScenarios([]))
   }, [])
 
@@ -49,17 +32,7 @@ export default function SwarmCreateModal({ onClose }: Props) {
     fetch(`/scenario-manager/scenarios/${encodeURIComponent(scenarioId)}`, {
       headers: { Accept: 'application/json' },
     })
-      .then(async (res) => {
-        const type = res.headers.get('content-type') ?? ''
-        if (type.includes('json')) {
-          return res.json()
-        }
-        try {
-          return yaml.load(await res.text())
-        } catch {
-          return null
-        }
-      })
+      .then((res) => res.json())
       .then((data) => setScenario(data))
       .catch(() => setScenario(null))
   }, [scenarioId])

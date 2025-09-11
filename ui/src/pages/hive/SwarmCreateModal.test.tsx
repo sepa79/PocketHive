@@ -38,45 +38,6 @@ test('loads available scenarios on mount', async () => {
   })
 })
 
-test('loads scenarios from wrapped response', async () => {
-  const fetchMock = vi
-    .fn()
-    .mockResolvedValue({
-      ok: true,
-      headers: { get: () => 'application/json' },
-      json: async () => ({
-        scenarios: [
-          { id: 'basic', name: 'Basic' },
-          { id: 'advanced', name: 'Advanced' },
-        ],
-      }),
-    })
-  global.fetch = fetchMock as unknown as typeof fetch
-
-  render(<SwarmCreateModal onClose={() => {}} />)
-
-  await screen.findByText('Basic')
-  await screen.findByText('Advanced')
-
-  expect(fetchMock).toHaveBeenCalledWith('/scenario-manager/scenarios', {
-    headers: { Accept: 'application/json' },
-  })
-})
-
-test('parses yaml scenario list', async () => {
-  const fetchMock = vi.fn().mockResolvedValue({
-    ok: true,
-    headers: { get: () => 'application/x-yaml' },
-    text: async () => '- id: basic\n  name: Basic\n- id: advanced\n  name: Advanced\n',
-  })
-  global.fetch = fetchMock as unknown as typeof fetch
-
-  render(<SwarmCreateModal onClose={() => {}} />)
-
-  await screen.findByText('Basic')
-  await screen.findByText('Advanced')
-})
-
 test('submits selected scenario', async () => {
   const detail = { template: { image: 'img:1', bees: [] } }
   const fetchMock = vi
