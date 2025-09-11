@@ -23,7 +23,6 @@ services:
     environment:
       RABBITMQ_HOST: rabbitmq
       PH_CONTROL_EXCHANGE: ph.control
-      PH_SWARM_ID: swarm1
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
@@ -112,6 +111,25 @@ services:
       PH_TRAFFIC_EXCHANGE: ph.swarm1.hive
       PH_CONTROL_QUEUE: ph.control
       PH_SWARM_ID: swarm1
+    depends_on:
+      log-aggregator:
+        condition: service_healthy
+
+  scenario-manager:
+    build:
+      context: .
+      dockerfile: scenario-manager-service/Dockerfile
+    environment:
+      RABBITMQ_HOST: rabbitmq
+      PH_LOGS_QUEUE: ph.logs.agg
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/actuator/health | grep -q UP"]
+      interval: 5s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    ports:
+      - "1081:8080"
     depends_on:
       log-aggregator:
         condition: service_healthy

@@ -23,4 +23,10 @@ class BeeNameGeneratorTest {
     String name = BeeNameGenerator.generate("swarm-controller", "sw1");
     assertTrue(name.startsWith("sw1-marshal-bee-"));
   }
+
+  @Test
+  void mapsOrchestratorToQueen() {
+    String name = BeeNameGenerator.generate("orchestrator", "sw1");
+    assertTrue(name.startsWith("sw1-queen-bee-"));
+  }
 }

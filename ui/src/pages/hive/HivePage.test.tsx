@@ -22,7 +22,7 @@ vi.mock('./TopologyView', () => ({
 
 const comps: Component[] = [
   {
-    id: 'sw1-marshal',
+    id: 'sw1-queen',
     name: 'swarm-controller',
     swarmId: 'sw1',
     lastHeartbeat: 0,
@@ -53,16 +53,16 @@ beforeEach(() => {
   ;(requestStatusFull as unknown as Mock).mockResolvedValue(undefined)
 })
 
-test('renders marshal status and start/stop controls', async () => {
+test('renders queen status and start/stop controls', async () => {
   const user = userEvent.setup()
   render(<HivePage />)
-  expect(screen.getByText(/Marshal: stopped/i)).toBeTruthy()
+  expect(screen.getByText(/Queen: stopped/i)).toBeTruthy()
   await user.click(screen.getByRole('button', { name: /start/i }))
   expect(startSwarm).toHaveBeenCalledWith('sw1')
 
   comps[0].config = { swarmStatus: 'RUNNING', enabled: true }
   if (listener) listener([...comps])
-  expect(await screen.findByText(/Marshal: running/i)).toBeTruthy()
+  expect(await screen.findByText(/Queen: running/i)).toBeTruthy()
   await user.click(screen.getAllByRole('button', { name: /stop/i })[1])
   expect(stopSwarm).toHaveBeenCalledWith('sw1')
 })
