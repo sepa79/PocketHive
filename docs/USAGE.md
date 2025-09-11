@@ -44,8 +44,9 @@ Manual checks:
 
 ## Swarm launch
 - Open the Hive view and choose **Create Swarm**.
-- Enter a swarm ID and select a scenario. The modal fetches the list from
-  `/scenario-manager/scenarios` and loads the chosen scenario's JSON.
+- Enter a swarm ID and select a scenario. The modal fetches scenario summaries from
+  `/scenario-manager/scenarios` and loads the chosen scenario's JSON from
+  `/scenario-manager/scenarios/{id}`.
 - Submit to create the swarm, then start it with the play button next to its entry.
 
 ### Scenario and swarm API

@@ -16,10 +16,10 @@ class ScenarioControllerLoggingTest {
     @Test
     void logsListingScenarios(CapturedOutput output) {
         ScenarioService service = Mockito.mock(ScenarioService.class);
-        Mockito.when(service.findAll()).thenReturn(Collections.emptyList());
+        Mockito.when(service.list()).thenReturn(Collections.emptyList());
         ScenarioController controller = new ScenarioController(service);
 
-        controller.all();
+        controller.list();
 
         assertThat(output).contains("Listing scenarios");
     }

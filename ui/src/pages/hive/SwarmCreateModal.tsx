@@ -5,10 +5,15 @@ interface Props {
   onClose: () => void
 }
 
+interface ScenarioSummary {
+  id: string
+  name: string
+}
+
 export default function SwarmCreateModal({ onClose }: Props) {
   const [swarmId, setSwarmId] = useState('')
-  const [scenarios, setScenarios] = useState<string[]>([])
-  const [scenarioName, setScenarioName] = useState('')
+  const [scenarios, setScenarios] = useState<ScenarioSummary[]>([])
+  const [scenarioId, setScenarioId] = useState('')
   const [scenario, setScenario] = useState<unknown>(null)
   const [message, setMessage] = useState<string | null>(null)
 
@@ -21,12 +26,12 @@ export default function SwarmCreateModal({ onClose }: Props) {
 
   useEffect(() => {
     setScenario(null)
-    if (!scenarioName) return
-    fetch(`/scenario-manager/scenarios/${scenarioName}`)
+    if (!scenarioId) return
+    fetch(`/scenario-manager/scenarios/${scenarioId}`)
       .then((res) => res.json())
       .then((data) => setScenario(data))
       .catch(() => setScenario(null))
-  }, [scenarioName])
+  }, [scenarioId])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -42,7 +47,7 @@ export default function SwarmCreateModal({ onClose }: Props) {
       await createSwarm(swarmId.trim(), scenario)
       setMessage('Swarm created')
       setSwarmId('')
-      setScenarioName('')
+      setScenarioId('')
       setScenario(null)
     } catch {
       setMessage('Failed to create swarm')
@@ -71,14 +76,14 @@ export default function SwarmCreateModal({ onClose }: Props) {
             </label>
             <select
               id="scenario"
-              value={scenarioName}
-              onChange={(e) => setScenarioName(e.target.value)}
+              value={scenarioId}
+              onChange={(e) => setScenarioId(e.target.value)}
               className="w-full rounded border border-white/20 bg-white/10 px-2 py-1 text-sm"
             >
               <option value="">Select scenario</option>
               {scenarios.map((s) => (
-                <option key={s} value={s}>
-                  {s}
+                <option key={s.id} value={s.id}>
+                  {s.name}
                 </option>
               ))}
             </select>

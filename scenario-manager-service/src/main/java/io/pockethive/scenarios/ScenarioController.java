@@ -32,9 +32,9 @@ public class ScenarioController {
     }
 
     @GetMapping
-    public List<Scenario> all() {
+    public List<ScenarioSummary> list() {
         log.info("Listing scenarios");
-        return service.findAll();
+        return service.list();
     }
 
     @GetMapping("/{id}")

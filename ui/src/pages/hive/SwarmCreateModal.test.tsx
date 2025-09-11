@@ -18,13 +18,19 @@ afterEach(() => {
 test('loads available scenarios on mount', async () => {
   const fetchMock = vi
     .fn()
-    .mockResolvedValue({ ok: true, json: async () => ['basic', 'advanced'] })
+    .mockResolvedValue({
+      ok: true,
+      json: async () => [
+        { id: 'basic', name: 'Basic' },
+        { id: 'advanced', name: 'Advanced' },
+      ],
+    })
   global.fetch = fetchMock as unknown as typeof fetch
 
   render(<SwarmCreateModal onClose={() => {}} />)
 
-  await screen.findByText('basic')
-  await screen.findByText('advanced')
+  await screen.findByText('Basic')
+  await screen.findByText('Advanced')
 
   expect(fetchMock).toHaveBeenCalledWith('/scenario-manager/scenarios')
 })
@@ -33,13 +39,16 @@ test('submits selected scenario', async () => {
   const detail = { template: { image: 'img:1', bees: [] } }
   const fetchMock = vi
     .fn()
-    .mockResolvedValueOnce({ ok: true, json: async () => ['basic'] })
+    .mockResolvedValueOnce({
+      ok: true,
+      json: async () => [{ id: 'basic', name: 'Basic' }],
+    })
     .mockResolvedValueOnce({ ok: true, json: async () => detail })
   global.fetch = fetchMock as unknown as typeof fetch
 
   render(<SwarmCreateModal onClose={() => {}} />)
 
-  await screen.findByText('basic')
+  await screen.findByText('Basic')
   fireEvent.change(screen.getByLabelText(/swarm id/i), { target: { value: 'sw1' } })
   fireEvent.change(screen.getByLabelText(/scenario/i), { target: { value: 'basic' } })
   await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/scenario-manager/scenarios/basic'))
@@ -54,13 +63,16 @@ test('does not submit when scenario selection is cleared', async () => {
   const detail = { template: { image: 'img:1', bees: [] } }
   const fetchMock = vi
     .fn()
-    .mockResolvedValueOnce({ ok: true, json: async () => ['basic'] })
+    .mockResolvedValueOnce({
+      ok: true,
+      json: async () => [{ id: 'basic', name: 'Basic' }],
+    })
     .mockResolvedValueOnce({ ok: true, json: async () => detail })
   global.fetch = fetchMock as unknown as typeof fetch
 
   render(<SwarmCreateModal onClose={() => {}} />)
 
-  await screen.findByText('basic')
+  await screen.findByText('Basic')
   fireEvent.change(screen.getByLabelText(/swarm id/i), { target: { value: 'sw1' } })
   fireEvent.change(screen.getByLabelText(/scenario/i), { target: { value: 'basic' } })
   await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/scenario-manager/scenarios/basic'))

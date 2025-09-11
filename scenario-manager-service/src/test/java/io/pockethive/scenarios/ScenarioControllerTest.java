@@ -39,7 +39,8 @@ class ScenarioControllerTest {
 
         mvc.perform(get("/scenarios"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].id").value("1"));
+                .andExpect(jsonPath("$[0].id").value("1"))
+                .andExpect(jsonPath("$[0].name").value("Test"));
 
         mvc.perform(get("/scenarios/1"))
                 .andExpect(status().isOk())
