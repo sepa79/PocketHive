@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type JSX } from 'react'
 import type { Component } from '../../types/hive'
 import { sendConfigUpdate, requestStatusFull } from '../../lib/stompClient'
 import QueuesPanel from './QueuesPanel'
