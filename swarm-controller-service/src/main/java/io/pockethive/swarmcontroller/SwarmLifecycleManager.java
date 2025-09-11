@@ -101,6 +101,9 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
           if (bee.image() != null) {
             Map<String, String> env = new HashMap<>();
             env.put("PH_SWARM_ID", Topology.SWARM_ID);
+            env.put("PH_CONTROL_EXCHANGE", Topology.CONTROL_EXCHANGE);
+            env.put("RABBITMQ_HOST", java.util.Optional.ofNullable(System.getenv("RABBITMQ_HOST")).orElse("rabbitmq"));
+            env.put("PH_LOGS_EXCHANGE", java.util.Optional.ofNullable(System.getenv("PH_LOGS_EXCHANGE")).orElse("ph.logs"));
             if (bee.env() != null) {
               for (Map.Entry<String, String> e : bee.env().entrySet()) {
                 String value = e.getValue();

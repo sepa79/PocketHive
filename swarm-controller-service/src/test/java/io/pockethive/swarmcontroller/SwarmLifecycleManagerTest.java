@@ -68,6 +68,9 @@ class SwarmLifecycleManagerTest {
     verify(docker).createContainer(eq("img1"), envCap.capture());
     Map<String,String> env = envCap.getValue();
     assertEquals(Topology.SWARM_ID, env.get("PH_SWARM_ID"));
+    assertEquals(Topology.CONTROL_EXCHANGE, env.get("PH_CONTROL_EXCHANGE"));
+    assertEquals("rabbitmq", env.get("RABBITMQ_HOST"));
+    assertEquals("ph.logs", env.get("PH_LOGS_EXCHANGE"));
     assertEquals("ph." + Topology.SWARM_ID + ".qin", env.get("PH_MOD_QUEUE"));
     assertEquals("ph." + Topology.SWARM_ID + ".qout", env.get("PH_GEN_QUEUE"));
     verify(docker).startContainer("c1");

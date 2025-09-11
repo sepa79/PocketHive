@@ -1,5 +1,6 @@
 package io.pockethive.orchestrator.app;
 
+import io.pockethive.Topology;
 import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmRegistry;
 import io.pockethive.orchestrator.domain.SwarmStatus;
@@ -27,7 +28,15 @@ public class ContainerLifecycleManager {
     }
 
     public Swarm startSwarm(String swarmId, String image, String instanceId) {
-        java.util.Map<String, String> env = java.util.Map.of("JAVA_TOOL_OPTIONS", "-Dbee.name=" + instanceId);
+        java.util.Map<String, String> env = new java.util.HashMap<>();
+        env.put("JAVA_TOOL_OPTIONS", "-Dbee.name=" + instanceId);
+        env.put("PH_CONTROL_EXCHANGE", Topology.CONTROL_EXCHANGE);
+        env.put("RABBITMQ_HOST", java.util.Optional.ofNullable(System.getenv("RABBITMQ_HOST")).orElse("rabbitmq"));
+        env.put("PH_LOGS_EXCHANGE", java.util.Optional.ofNullable(System.getenv("PH_LOGS_EXCHANGE")).orElse("ph.logs"));
+        String net = System.getenv("CONTROL_NETWORK");
+        if (net != null && !net.isBlank()) {
+            env.put("CONTROL_NETWORK", net);
+        }
         String containerId = docker.createAndStartContainer(image, env);
         Swarm swarm = new Swarm(swarmId, instanceId, containerId);
         swarm.setStatus(SwarmStatus.RUNNING);

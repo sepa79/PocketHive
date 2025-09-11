@@ -16,7 +16,8 @@ public class DockerContainerClient {
 
   public String createAndStartContainer(String image, Map<String, String> env) {
     CreateContainerResponse response = dockerClient.createContainerCmd(image)
-        .withHostConfig(HostConfig.newHostConfig())
+        .withHostConfig(HostConfig.newHostConfig()
+            .withNetworkMode(System.getenv("CONTROL_NETWORK")))
         .withEnv(toEnvList(env))
         .exec();
     dockerClient.startContainerCmd(response.getId()).exec();
@@ -29,7 +30,8 @@ public class DockerContainerClient {
 
   public String createContainer(String image, Map<String, String> env) {
     CreateContainerResponse response = dockerClient.createContainerCmd(image)
-        .withHostConfig(HostConfig.newHostConfig())
+        .withHostConfig(HostConfig.newHostConfig()
+            .withNetworkMode(System.getenv("CONTROL_NETWORK")))
         .withEnv(toEnvList(env))
         .exec();
     return response.getId();

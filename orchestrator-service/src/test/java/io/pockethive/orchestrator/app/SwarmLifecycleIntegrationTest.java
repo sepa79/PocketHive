@@ -20,6 +20,7 @@ import static org.mockito.Mockito.*;
 
 @SpringBootTest(properties = "spring.rabbitmq.listener.simple.auto-startup=false")
 class SwarmLifecycleIntegrationTest {
+
     @Autowired
     SwarmSignalListener listener;
     @Autowired
@@ -46,8 +47,17 @@ class SwarmLifecycleIntegrationTest {
         listener.handle(body, "sig.swarm-create.sw1");
 
         verify(docker).createAndStartContainer(eq("pockethive-swarm-controller:latest"), envCaptor.capture());
-        String beeName = envCaptor.getValue().get("JAVA_TOOL_OPTIONS").replace("-Dbee.name=", "");
+        java.util.Map<String, String> env = envCaptor.getValue();
+        String beeName = env.get("JAVA_TOOL_OPTIONS").replace("-Dbee.name=", "");
         assertThat(planRegistry.find(beeName)).isPresent();
+        assertThat(env)
+                .containsEntry("PH_CONTROL_EXCHANGE", Topology.CONTROL_EXCHANGE)
+                .containsEntry("RABBITMQ_HOST", "rabbitmq")
+                .containsEntry("PH_LOGS_EXCHANGE", "ph.logs");
+        String net = System.getenv("CONTROL_NETWORK");
+        if (net != null) {
+            assertThat(env).containsEntry("CONTROL_NETWORK", net);
+        }
 
         listener.handle("", "ev.ready.swarm-controller." + beeName);
 

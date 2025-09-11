@@ -16,7 +16,8 @@ public class DockerContainerClient {
                 .map(e -> e.getKey() + "=" + e.getValue())
                 .toArray(String[]::new);
         CreateContainerResponse response = dockerClient.createContainerCmd(image)
-                .withHostConfig(HostConfig.newHostConfig())
+                .withHostConfig(HostConfig.newHostConfig()
+                        .withNetworkMode(System.getenv("CONTROL_NETWORK")))
                 .withEnv(envArray)
                 .exec();
         dockerClient.startContainerCmd(response.getId()).exec();
