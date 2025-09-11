@@ -6,7 +6,7 @@ export type LogEntry = {
   body: string
 }
 
-type LogType = 'in' | 'out' | 'other' | 'handshake'
+type LogType = 'in' | 'out' | 'other' | 'handshake' | 'error'
 
 type Listener = (logs: LogEntry[]) => void
 
@@ -15,6 +15,7 @@ const logs: Record<LogType, LogEntry[]> = {
   out: [],
   other: [],
   handshake: [],
+  error: [],
 }
 
 const listeners: Record<LogType, Listener[]> = {
@@ -22,6 +23,7 @@ const listeners: Record<LogType, Listener[]> = {
   out: [],
   other: [],
   handshake: [],
+  error: [],
 }
 
 function addLog(type: LogType, entry: LogEntry) {
@@ -48,6 +50,10 @@ export function logOther(message: string) {
 
 export function logHandshake(destination: string, body: string) {
   addLog('handshake', { ts: Date.now(), destination, body })
+}
+
+export function logError(destination: string, body: string) {
+  addLog('error', { ts: Date.now(), destination, body })
 }
 
 export function subscribeLogs(type: LogType, fn: Listener) {

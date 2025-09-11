@@ -40,3 +40,16 @@ describe('useUIStore debugMode', () => {
     expect(useUIStore.getState().debugMode).toBe(true)
   })
 })
+
+describe('useUIStore toast', () => {
+  beforeEach(() => {
+    useUIStore.setState({ toast: null })
+  })
+
+  it('sets and clears toast', () => {
+    useUIStore.getState().setToast('err')
+    expect(useUIStore.getState().toast).toBe('err')
+    useUIStore.getState().clearToast()
+    expect(useUIStore.getState().toast).toBeNull()
+  })
+})

@@ -4,7 +4,7 @@ import { useConfig } from '../lib/config'
 import { useUIStore } from '../store'
 import SwarmDebugPanel from '../components/SwarmDebugPanel'
 
-type LogTab = 'in' | 'out' | 'other' | 'handshake'
+type LogTab = 'in' | 'out' | 'other' | 'handshake' | 'error'
 type Tab = LogTab | 'config'
 
 function LogView({ type }: { type: LogTab }) {
@@ -71,6 +71,12 @@ export default function Buzz() {
           onClick={() => setTab('other')}
         >
           Other
+        </button>
+        <button
+          className={`rounded px-2 py-1 text-sm ${tab === 'error' ? 'bg-white/20' : 'hover:bg-white/10'}`}
+          onClick={() => setTab('error')}
+        >
+          Error
         </button>
         <button
           className={`rounded px-2 py-1 text-sm ${tab === 'handshake' ? 'bg-white/20' : 'hover:bg-white/10'}`}

@@ -3,6 +3,7 @@ import type { Client } from '@stomp/stompjs'
 import { setClient, createSwarm, startSwarm, stopSwarm } from './stompClient'
 import { defaultBees } from './defaultBees'
 import { subscribeLogs, type LogEntry, resetLogs } from './logs'
+import { useUIStore } from '../store'
 
 /**
  * @vitest-environment jsdom
@@ -74,5 +75,26 @@ describe('swarm lifecycle', () => {
     })
     c.publish({ destination: '/exchange/ph.control/sig.swarm-template.sw1', body: '{}' })
     expect(entries[entries.length - 1].destination).toContain('sig.swarm-template.sw1')
+  })
+
+  it('logs error events and sets toast', () => {
+    resetLogs()
+    useUIStore.setState({ toast: null })
+    const publish = vi.fn()
+    let cb: (msg: { body: string; headers: Record<string, string> }) => void = () => {}
+    const subscribe = vi
+      .fn()
+      .mockImplementation((_dest: string, fn: (msg: { body: string; headers: Record<string, string> }) => void) => {
+        cb = fn
+        return { unsubscribe() {} }
+      })
+    setClient({ active: true, publish, subscribe } as unknown as Client)
+    let entries: LogEntry[] = []
+    subscribeLogs('error', (l) => {
+      entries = l
+    })
+    cb({ body: '', headers: { destination: '/exchange/ph.control/ev.swarm-create-failed.sw1' } })
+    expect(entries[0].destination).toContain('ev.swarm-create-failed.sw1')
+    expect(useUIStore.getState().toast).toContain('swarm-create-failed')
   })
 })
