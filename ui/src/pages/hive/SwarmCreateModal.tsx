@@ -20,7 +20,9 @@ export default function SwarmCreateModal({ onClose }: Props) {
   useEffect(() => {
     fetch('/scenario-manager/scenarios')
       .then((res) => res.json())
-      .then((data) => setScenarios(data))
+      .then((data) =>
+        setScenarios(Array.isArray(data) ? data : data.scenarios ?? []),
+      )
       .catch(() => setScenarios([]))
   }, [])
 

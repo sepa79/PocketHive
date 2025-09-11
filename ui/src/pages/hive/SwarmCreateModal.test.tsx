@@ -35,6 +35,28 @@ test('loads available scenarios on mount', async () => {
   expect(fetchMock).toHaveBeenCalledWith('/scenario-manager/scenarios')
 })
 
+test('loads scenarios from wrapped response', async () => {
+  const fetchMock = vi
+    .fn()
+    .mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        scenarios: [
+          { id: 'basic', name: 'Basic' },
+          { id: 'advanced', name: 'Advanced' },
+        ],
+      }),
+    })
+  global.fetch = fetchMock as unknown as typeof fetch
+
+  render(<SwarmCreateModal onClose={() => {}} />)
+
+  await screen.findByText('Basic')
+  await screen.findByText('Advanced')
+
+  expect(fetchMock).toHaveBeenCalledWith('/scenario-manager/scenarios')
+})
+
 test('submits selected scenario', async () => {
   const detail = { template: { image: 'img:1', bees: [] } }
   const fetchMock = vi
