@@ -18,7 +18,9 @@ export default function SwarmCreateModal({ onClose }: Props) {
   const [message, setMessage] = useState<string | null>(null)
 
   useEffect(() => {
-    fetch('/scenario-manager/scenarios')
+    fetch('/scenario-manager/scenarios', {
+      headers: { Accept: 'application/json' },
+    })
       .then((res) => res.json())
       .then((data) =>
         setScenarios(Array.isArray(data) ? data : data.scenarios ?? []),
@@ -29,7 +31,9 @@ export default function SwarmCreateModal({ onClose }: Props) {
   useEffect(() => {
     setScenario(null)
     if (!scenarioId) return
-    fetch(`/scenario-manager/scenarios/${scenarioId}`)
+    fetch(`/scenario-manager/scenarios/${scenarioId}`, {
+      headers: { Accept: 'application/json' },
+    })
       .then((res) => res.json())
       .then((data) => setScenario(data))
       .catch(() => setScenario(null))
