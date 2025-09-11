@@ -5,8 +5,8 @@ interface Bee {
 }
 
 export const defaultBees: Bee[] = [
-  { role: 'generator', image: 'generator-service:latest', work: { out: 'gen' } },
-  { role: 'moderator', image: 'moderator-service:latest', work: { in: 'gen', out: 'mod' } },
-  { role: 'processor', image: 'processor-service:latest', work: { in: 'mod', out: 'final' } },
-  { role: 'postprocessor', image: 'postprocessor-service:latest', work: { in: 'final' } },
+  { role: 'generator', image: 'pockethive-generator:latest', work: { out: 'gen' } },
+  { role: 'moderator', image: 'pockethive-moderator:latest', work: { in: 'gen', out: 'mod' } },
+  { role: 'processor', image: 'pockethive-processor:latest', work: { in: 'mod', out: 'final' } },
+  { role: 'postprocessor', image: 'pockethive-postprocessor:latest', work: { in: 'final' } },
 ]

@@ -1,20 +1,20 @@
-image: swarm-controller-service:latest
+image: pockethive-swarm-controller:latest
 bees:
   - role: generator
-    image: generator-service:latest
+    image: pockethive-generator:latest
     work:
       out: gen
   - role: moderator
-    image: moderator-service:latest
+    image: pockethive-moderator:latest
     work:
       in: gen
       out: mod
   - role: processor
-    image: processor-service:latest
+    image: pockethive-processor:latest
     work:
       in: mod
       out: final
   - role: postprocessor
-    image: postprocessor-service:latest
+    image: pockethive-postprocessor:latest
     work:
       in: final
