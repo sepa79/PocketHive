@@ -121,7 +121,8 @@ export function setClient(newClient: Client | null, destination = controlDestina
               const { setToast } = useUIStore.getState()
               const evt = d.split('/').pop() || ''
               const name = evt.replace(/^ev\./, '').replace(/\./g, ' ')
-              setToast(`Error: ${name}`)
+              const suffix = msg.body ? `: ${msg.body}` : ''
+              setToast(`Error: ${name}${suffix}`)
             }
             if (isHandshake(d)) logHandshake(d, msg.body)
             callback(msg)

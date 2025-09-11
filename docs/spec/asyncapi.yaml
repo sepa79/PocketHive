@@ -103,6 +103,24 @@ channels:
           durable: true
         routingKey: sig.swarm-template.{swarmId}
 
+  exchange/ph.control/ev.swarm-create-failed.{swarmId}:
+    parameters:
+      swarmId:
+        description: Swarm identifier
+        schema: { type: string }
+    publish:
+      summary: Swarm creation failed
+      message:
+        $ref: '#/components/messages/ErrorMessage'
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: ph.control
+          type: topic
+          durable: true
+        routingKey: ev.swarm-create-failed.{swarmId}
+
   # PocketHive traffic example kept for reference
   exchange/ph.{swarmId}.hive/generator.request:
     publish:
@@ -167,6 +185,13 @@ components:
       contentType: application/json
       payload:
         $ref: '#/components/schemas/GenerationPayload'
+    ErrorMessage:
+      name: ErrorMessage
+      title: Error description
+      contentType: text/plain
+      payload:
+        type: string
+        description: Brief error message
   schemas:
     ControlBase:
       type: object

@@ -91,7 +91,7 @@ class SwarmSignalListenerTest {
             "\"role\":\"generator\",\"image\":\"img\",\"work\":{\"in\":\"in\",\"out\":\"out\"}}]}}";
         listener.handle(body, "sig.swarm-create.sw1");
 
-        verify(rabbit).convertAndSend(Topology.CONTROL_EXCHANGE, "ev.swarm-create-failed.sw1", "");
+        verify(rabbit).convertAndSend(Topology.CONTROL_EXCHANGE, "ev.swarm-create-failed.sw1", "boom");
         verifyNoMoreInteractions(rabbit);
     }
 }
