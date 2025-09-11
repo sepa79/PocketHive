@@ -3,10 +3,18 @@ bees:
   - role: generator
     image: generator-service:latest
     work:
-      in: gen
-      out: mod
+      out: gen
   - role: moderator
     image: moderator-service:latest
     work:
+      in: gen
+      out: mod
+  - role: processor
+    image: processor-service:latest
+    work:
       in: mod
       out: final
+  - role: postprocessor
+    image: postprocessor-service:latest
+    work:
+      in: final

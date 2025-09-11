@@ -68,6 +68,9 @@ public class SwarmSignalListener {
                 String beeName = BeeNameGenerator.generate("swarm-controller", swarmId);
                 lifecycle.startSwarm(swarmId, scenario.template().getImage(), beeName);
                 plans.register(beeName, plan);
+                rabbit.convertAndSend(Topology.CONTROL_EXCHANGE,
+                        "sig.swarm-template." + swarmId,
+                        json.writeValueAsString(scenario.template()));
             } catch (Exception e) {
                 log.warn("swarm {} creation failed", swarmId, e);
                 rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, "ev.swarm-create-failed." + swarmId, "");

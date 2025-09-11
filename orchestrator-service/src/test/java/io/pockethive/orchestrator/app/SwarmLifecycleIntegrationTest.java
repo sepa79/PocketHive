@@ -45,6 +45,9 @@ class SwarmLifecycleIntegrationTest {
         String body = "{\"template\":{\"image\":\"swarm-controller-service:latest\",\"bees\":[]}}";
         listener.handle(body, "sig.swarm-create.sw1");
 
+        ArgumentCaptor<String> templateCaptor = ArgumentCaptor.forClass(String.class);
+        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("sig.swarm-template.sw1"), templateCaptor.capture());
+        assertThat(templateCaptor.getValue()).contains("\"image\":\"swarm-controller-service:latest\"");
         verify(docker).createAndStartContainer(eq("swarm-controller-service:latest"), envCaptor.capture());
         String beeName = envCaptor.getValue().get("JAVA_TOOL_OPTIONS").replace("-Dbee.name=", "");
         assertThat(planRegistry.find(beeName)).isPresent();
