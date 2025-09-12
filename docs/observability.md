@@ -8,6 +8,7 @@ The Buzz panel can isolate swarm handshake events to help track controller provi
 2. Connect to the control plane if not already connected.
 3. Select the **Handshake** tab to display `sig.swarm-template.*`,
    `ev.swarm-created.*` and `ev.swarm-ready.*` messages.
+   Filtering expression: `sig.swarm-template.*|ev.swarm-created.*|ev.swarm-ready.*`
 
 Each entry shows the event timestamp, routing key and payload so operators
 can verify when a template is dispatched, a controller launches and when a swarm reports ready.
