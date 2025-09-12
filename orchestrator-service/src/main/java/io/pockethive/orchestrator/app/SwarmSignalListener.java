@@ -64,6 +64,7 @@ public class SwarmSignalListener {
     @RabbitListener(queues = "#{controlQueue.name}")
     public void handle(String body, @Header(AmqpHeaders.RECEIVED_ROUTING_KEY) String routingKey) {
         if (routingKey == null) return;
+        log.debug("received {} : {}", routingKey, body);
         if (routingKey.startsWith("sig.swarm-create.")) {
             String swarmId = routingKey.substring("sig.swarm-create.".length());
             try {
@@ -71,7 +72,9 @@ public class SwarmSignalListener {
                 SwarmTemplate template = scenarios.fetchTemplate(cmd.templateId());
                 SwarmPlan plan = new SwarmPlan(swarmId, template.getBees());
                 String beeName = BeeNameGenerator.generate("swarm-controller", swarmId);
+                log.info("starting swarm-controller {} for swarm {}", beeName, swarmId);
                 lifecycle.startSwarm(swarmId, template.getImage(), beeName);
+                log.info("publishing ev.swarm-created.{}", swarmId);
                 rabbit.convertAndSend(Topology.CONTROL_EXCHANGE,
                         "ev.swarm-created." + swarmId, "");
                 plans.register(beeName, plan);
@@ -84,6 +87,7 @@ public class SwarmSignalListener {
             }
         } else if (routingKey.startsWith("sig.swarm-stop.")) {
             String swarmId = routingKey.substring("sig.swarm-stop.".length());
+            log.info("stopping swarm {}", swarmId);
             lifecycle.stopSwarm(swarmId);
             registry.find(swarmId).ifPresent(s -> plans.remove(s.getInstanceId()));
             registry.remove(swarmId);
@@ -92,6 +96,7 @@ public class SwarmSignalListener {
             plans.remove(inst).ifPresent(plan -> {
                 try {
                     String payload = json.writeValueAsString(plan);
+                    log.info("sending swarm-template for {} via controller {}", plan.id(), inst);
                     rabbit.convertAndSend(Topology.CONTROL_EXCHANGE,
                         "sig.swarm-template." + plan.id(), payload);
                 } catch (Exception e) {
@@ -103,10 +108,12 @@ public class SwarmSignalListener {
             log.info("swarm {} ready", swarmId);
         } else if (routingKey.startsWith("sig.swarm-start.")) {
             String swarmId = routingKey.substring("sig.swarm-start.".length());
+            log.info("forwarding start to swarm {}", swarmId);
             registry.find(swarmId).ifPresent(s ->
                 rabbit.convertAndSend(Topology.CONTROL_EXCHANGE,
                     "sig.swarm-start." + swarmId, body == null ? "" : body));
         } else if (routingKey.startsWith("sig.status-request")) {
+            log.debug("status requested via {}", routingKey);
             sendStatusFull();
         }
     }

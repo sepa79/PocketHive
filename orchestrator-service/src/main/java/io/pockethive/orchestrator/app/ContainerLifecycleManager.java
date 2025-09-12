@@ -6,11 +6,14 @@ import io.pockethive.orchestrator.domain.SwarmRegistry;
 import io.pockethive.orchestrator.domain.SwarmStatus;
 import io.pockethive.orchestrator.domain.SwarmTemplate;
 import io.pockethive.docker.DockerContainerClient;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.amqp.core.AmqpAdmin;
 import org.springframework.stereotype.Service;
 
 @Service
 public class ContainerLifecycleManager {
+    private static final Logger log = LoggerFactory.getLogger(ContainerLifecycleManager.class);
     private final DockerContainerClient docker;
     private final SwarmRegistry registry;
     private final SwarmTemplate template;
@@ -38,7 +41,10 @@ public class ContainerLifecycleManager {
         if (net != null && !net.isBlank()) {
             env.put("CONTROL_NETWORK", net);
         }
+        log.info("launching controller for swarm {} as instance {} using image {}", swarmId, instanceId, image);
+        log.debug("docker env: {}", env);
         String containerId = docker.createAndStartContainer(image, env);
+        log.info("controller container {} started for swarm {}", containerId, swarmId);
         Swarm swarm = new Swarm(swarmId, instanceId, containerId);
         swarm.setStatus(SwarmStatus.RUNNING);
         registry.register(swarm);
@@ -47,6 +53,7 @@ public class ContainerLifecycleManager {
 
     public void stopSwarm(String swarmId) {
         registry.find(swarmId).ifPresent(swarm -> {
+            log.info("stopping controller container {} for swarm {}", swarm.getContainerId(), swarmId);
             docker.stopAndRemoveContainer(swarm.getContainerId());
             amqp.deleteQueue("ph." + swarmId + ".gen");
             amqp.deleteQueue("ph." + swarmId + ".mod");
