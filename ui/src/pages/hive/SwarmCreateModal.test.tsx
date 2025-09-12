@@ -33,8 +33,14 @@ test('loads available scenarios on mount', async () => {
   await screen.findByText('Basic')
   await screen.findByText('Advanced')
 
-  expect(fetchMock).toHaveBeenCalledWith('/scenario-manager/scenarios', {
-    headers: { Accept: 'application/json' },
+  expect(fetchMock).toHaveBeenCalled()
+  const args = fetchMock.mock.calls[0]
+  expect(args[0]).toBe('/scenario-manager/scenarios')
+  expect(args[1]).toMatchObject({
+    headers: expect.objectContaining({
+      Accept: 'application/json',
+      'x-correlation-id': expect.any(String),
+    }),
   })
 })
 

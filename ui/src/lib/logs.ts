@@ -1,72 +1,81 @@
 import { useUIStore } from '../store'
 
-export type LogEntry = {
+export type LogSource = 'hive' | 'ui'
+export type LogChannel = 'stomp' | 'rest' | 'internal'
+export type LogType = 'in' | 'out' | 'other' | 'error'
+
+export interface LogEntry {
   ts: number
   destination: string
   body: string
+  type: LogType
+  source: LogSource
+  channel: LogChannel
+  correlationId?: string
 }
-
-type LogType = 'in' | 'out' | 'other' | 'handshake' | 'error'
 
 type Listener = (logs: LogEntry[]) => void
 
-const logs: Record<LogType, LogEntry[]> = {
-  in: [],
-  out: [],
-  other: [],
-  handshake: [],
-  error: [],
-}
+const logs: LogEntry[] = []
+let listeners: Listener[] = []
 
-const listeners: Record<LogType, Listener[]> = {
-  in: [],
-  out: [],
-  other: [],
-  handshake: [],
-  error: [],
-}
-
-function addLog(type: LogType, entry: LogEntry) {
-  const arr = logs[type]
-  arr.push(entry)
+function addLog(entry: LogEntry) {
+  logs.push(entry)
   const maxLogs = useUIStore.getState().messageLimit
-  if (arr.length > maxLogs) {
-    arr.splice(0, arr.length - maxLogs)
+  if (logs.length > maxLogs) {
+    logs.splice(0, logs.length - maxLogs)
   }
-  listeners[type].forEach((l) => l([...arr]))
+  listeners.forEach((l) => l([...logs]))
 }
 
-export function logIn(destination: string, body: string) {
-  addLog('in', { ts: Date.now(), destination, body })
+export function logIn(
+  destination: string,
+  body: string,
+  source: LogSource,
+  channel: LogChannel,
+  correlationId?: string,
+) {
+  addLog({ ts: Date.now(), destination, body, type: 'in', source, channel, correlationId })
 }
 
-export function logOut(destination: string, body: string) {
-  addLog('out', { ts: Date.now(), destination, body })
+export function logOut(
+  destination: string,
+  body: string,
+  source: LogSource,
+  channel: LogChannel,
+  correlationId?: string,
+) {
+  addLog({ ts: Date.now(), destination, body, type: 'out', source, channel, correlationId })
 }
 
-export function logOther(message: string) {
-  addLog('other', { ts: Date.now(), destination: '', body: message })
+export function logOther(
+  message: string,
+  source: LogSource = 'ui',
+  channel: LogChannel = 'internal',
+  correlationId?: string,
+) {
+  addLog({ ts: Date.now(), destination: '', body: message, type: 'other', source, channel, correlationId })
 }
 
-export function logHandshake(destination: string, body: string) {
-  addLog('handshake', { ts: Date.now(), destination, body })
+export function logError(
+  destination: string,
+  body: string,
+  source: LogSource,
+  channel: LogChannel,
+  correlationId?: string,
+) {
+  addLog({ ts: Date.now(), destination, body, type: 'error', source, channel, correlationId })
 }
 
-export function logError(destination: string, body: string) {
-  addLog('error', { ts: Date.now(), destination, body })
-}
-
-export function subscribeLogs(type: LogType, fn: Listener) {
-  listeners[type].push(fn)
-  fn([...logs[type]])
+export function subscribeLogs(fn: Listener) {
+  listeners.push(fn)
+  fn([...logs])
   return () => {
-    listeners[type] = listeners[type].filter((l) => l !== fn)
+    listeners = listeners.filter((l) => l !== fn)
   }
 }
 
 export function resetLogs() {
-  ;(Object.keys(logs) as LogType[]).forEach((k) => {
-    logs[k] = []
-    listeners[k].forEach((l) => l([]))
-  })
+  logs.splice(0, logs.length)
+  listeners.forEach((l) => l([]))
 }

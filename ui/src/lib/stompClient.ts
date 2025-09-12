@@ -1,7 +1,7 @@
 import { Client, type StompSubscription } from '@stomp/stompjs'
 import type { Component } from '../types/hive'
 import { isControlEvent, type ControlEvent } from '../types/control'
-import { logIn, logOut, logHandshake, logError } from './logs'
+import { logIn, logOut, logError } from './logs'
 import { useUIStore } from '../store'
 
 export type ComponentListener = (components: Component[]) => void
@@ -28,15 +28,6 @@ let topoListeners: TopologyListener[] = []
 let controlDestination = '/exchange/ph.control/ev.#'
 const components: Record<string, Component> = {}
 const nodePositions: Record<string, { x: number; y: number }> = {}
-
-function isHandshake(dest: string) {
-  return (
-    dest.startsWith('/exchange/ph.control/ev.ready.swarm-controller.') ||
-    dest.startsWith('/exchange/ph.control/ev.swarm-created.') ||
-    dest.startsWith('/exchange/ph.control/sig.swarm-template.') ||
-    dest.startsWith('/exchange/ph.control/sig.swarm-start.')
-  )
-}
 
 function buildTopology(): Topology {
   const queues: Record<string, { prod: Set<string>; cons: Set<string> }> = {}
@@ -104,9 +95,10 @@ export function setClient(newClient: Client | null, destination = controlDestina
       const origPublish = client.publish.bind(client)
       client.publish = ((params) => {
         const body = params.body ?? ''
-        logOut(params.destination, body)
-        if (isHandshake(params.destination)) logHandshake(params.destination, body)
-        origPublish(params)
+        const correlationId = crypto.randomUUID()
+        const headers = { ...(params.headers || {}), 'x-correlation-id': correlationId }
+        logOut(params.destination, body, 'ui', 'stomp', correlationId)
+        origPublish({ ...params, headers })
       }) as typeof client.publish
 
       const origSubscribe = client.subscribe.bind(client)
@@ -115,16 +107,16 @@ export function setClient(newClient: Client | null, destination = controlDestina
           dest,
           (msg) => {
             const d = msg.headers.destination || dest
-            logIn(d, msg.body)
+            const correlationId = msg.headers['x-correlation-id']
+            logIn(d, msg.body, 'hive', 'stomp', correlationId)
             if (/\/exchange\/ph\.control\/(?:ev|sig)\..*\.error/.test(d)) {
-              logError(d, msg.body)
+              logError(d, msg.body, 'hive', 'stomp', correlationId)
               const { setToast } = useUIStore.getState()
               const evt = d.split('/').pop() || ''
               const name = evt.replace(/^(?:ev|sig)\./, '').replace(/\./g, ' ')
               const suffix = msg.body ? `: ${msg.body}` : ''
               setToast(`Error: ${name}${suffix}`)
             }
-            if (isHandshake(d)) logHandshake(d, msg.body)
             callback(msg)
           },
           headers,

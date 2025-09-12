@@ -1,32 +1,23 @@
 import { describe, expect, it } from 'vitest'
-import { logHandshake, logError, subscribeLogs, type LogEntry, resetLogs } from './logs'
+import { logError, subscribeLogs, type LogEntry, resetLogs } from './logs'
 
 /**
  * @vitest-environment jsdom
  */
 
-describe('handshake logs', () => {
-  it('collects handshake entries', () => {
-    resetLogs()
-    let entries: LogEntry[] = []
-    const unsubscribe = subscribeLogs('handshake', (l) => {
-      entries = l
-    })
-    logHandshake('/exchange/ph.control/ev.ready.swarm-controller.inst', '{}')
-    unsubscribe()
-    expect(entries).toHaveLength(1)
-    expect(entries[0].destination).toContain('ev.ready.swarm-controller.inst')
-  })
-})
-
-describe('error logs', () => {
+describe('logs', () => {
   it('collects error entries', () => {
     resetLogs()
     let entries: LogEntry[] = []
-    const unsubscribe = subscribeLogs('error', (l) => {
+    const unsubscribe = subscribeLogs((l) => {
       entries = l
     })
-    logError('/exchange/ph.control/ev.swarm-create.error.sw1', 'boom')
+    logError(
+      '/exchange/ph.control/ev.swarm-create.error.sw1',
+      'boom',
+      'hive',
+      'stomp',
+    )
     unsubscribe()
     expect(entries).toHaveLength(1)
     expect(entries[0].destination).toContain('ev.swarm-create.error.sw1')

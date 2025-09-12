@@ -26,21 +26,6 @@ describe('useUIStore messageLimit', () => {
   })
 })
 
-describe('useUIStore debugMode', () => {
-  beforeEach(() => {
-    useUIStore.setState({ debugMode: false })
-  })
-
-  it('has default value of false', () => {
-    expect(useUIStore.getState().debugMode).toBe(false)
-  })
-
-  it('toggles debug mode', () => {
-    useUIStore.getState().toggleDebug()
-    expect(useUIStore.getState().debugMode).toBe(true)
-  })
-})
-
 describe('useUIStore toast', () => {
   beforeEach(() => {
     useUIStore.setState({ toast: null })
@@ -51,5 +36,30 @@ describe('useUIStore toast', () => {
     expect(useUIStore.getState().toast).toBe('err')
     useUIStore.getState().clearToast()
     expect(useUIStore.getState().toast).toBeNull()
+  })
+})
+
+describe('useUIStore buzz panel', () => {
+  beforeEach(() => {
+    useUIStore.setState({ buzzVisible: false, buzzDock: 'right', buzzSize: 30 })
+  })
+
+  it('toggles visibility', () => {
+    useUIStore.getState().toggleBuzz()
+    expect(useUIStore.getState().buzzVisible).toBe(true)
+  })
+
+  it('sets dock position', () => {
+    useUIStore.getState().setBuzzDock('left')
+    expect(useUIStore.getState().buzzDock).toBe('left')
+  })
+
+  it('clamps size between 10 and 90', () => {
+    useUIStore.getState().setBuzzSize(5)
+    expect(useUIStore.getState().buzzSize).toBe(10)
+    useUIStore.getState().setBuzzSize(95)
+    expect(useUIStore.getState().buzzSize).toBe(90)
+    useUIStore.getState().setBuzzSize(40)
+    expect(useUIStore.getState().buzzSize).toBe(40)
   })
 })

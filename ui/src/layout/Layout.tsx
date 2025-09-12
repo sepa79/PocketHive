@@ -6,10 +6,22 @@ import Connectivity from '../components/Connectivity'
 import { useUIStore } from '../store'
 import { useEffect } from 'react'
 import { useConfig } from '../lib/config'
+import BuzzPanel from '../components/BuzzPanel'
+import { PanelGroup, Panel, PanelResizeHandle } from 'react-resizable-panels'
 
 export default function Layout() {
-  const { sidebarOpen, toggleSidebar, closeSidebar, debugMode, toggleDebug, toast, clearToast } =
-    useUIStore()
+  const {
+    sidebarOpen,
+    toggleSidebar,
+    closeSidebar,
+    toast,
+    clearToast,
+    buzzVisible,
+    toggleBuzz,
+    buzzDock,
+    buzzSize,
+    setBuzzSize,
+  } = useUIStore()
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -30,7 +42,7 @@ export default function Layout() {
   const services = { rabbitmq, prometheus, grafana, wiremock }
 
   return (
-    <div className="min-h-screen text-white">
+    <div className="flex h-screen flex-col text-white">
       <header className="flex items-center gap-4 p-4 sticky top-0 z-10 backdrop-blur border-b border-white/10 bg-[#080a0e]/75">
         <img className="logo" src="/logo.svg" alt="PocketHive Logo" />
         <nav className="nav-tabs">
@@ -43,15 +55,13 @@ export default function Layout() {
             <Hexagon strokeWidth={1.5} className="tab-icon text-white/80" />
             Hive
           </NavLink>
-          <NavLink
-            to="/buzz"
-            className={({ isActive }) =>
-              `tab-btn flex items-center${isActive ? ' tab-active' : ''}`
-            }
+          <button
+            className={`tab-btn flex items-center${buzzVisible ? ' tab-active' : ''}`}
+            onClick={toggleBuzz}
           >
             <Radio strokeWidth={1.5} className="tab-icon text-white/80" />
             Buzz
-          </NavLink>
+          </button>
           <NavLink
             to="/nectar"
             className={({ isActive }) =>
@@ -72,13 +82,6 @@ export default function Layout() {
           <Connectivity />
           <Health />
           <div className="h-6 w-px bg-white/20 mx-2" />
-          <button
-            className={`rounded px-2 py-1 text-xs ${debugMode ? 'bg-white/20' : 'hover:bg-white/10'}`}
-            onClick={toggleDebug}
-          >
-            Debug
-          </button>
-          <div className="h-6 w-px bg-white/20 mx-2" />
           <div className="menu relative">
             <button
               className="inline-flex items-center justify-center p-0 bg-transparent border-0 cursor-pointer"
@@ -98,8 +101,58 @@ export default function Layout() {
           </div>
         </div>
       </header>
-      <main>
-        <Outlet />
+      <main className="flex flex-1 overflow-hidden">
+        {buzzVisible ? (
+          buzzDock === 'bottom' ? (
+            <PanelGroup
+              direction="vertical"
+              onLayout={(sizes) => setBuzzSize(sizes[1])}
+              className="flex-1 h-full"
+            >
+              <Panel minSize={10}>
+                <Outlet />
+              </Panel>
+              <PanelResizeHandle className="h-1 bg-white/20" />
+              <Panel minSize={10} defaultSize={buzzSize}>
+                <BuzzPanel />
+              </Panel>
+            </PanelGroup>
+          ) : (
+            <PanelGroup
+              direction="horizontal"
+              onLayout={(sizes) =>
+                setBuzzSize(sizes[buzzDock === 'left' ? 0 : 1])
+              }
+              className="flex-1 h-full"
+            >
+              {buzzDock === 'left' ? (
+                <>
+                  <Panel minSize={10} defaultSize={buzzSize}>
+                    <BuzzPanel />
+                  </Panel>
+                  <PanelResizeHandle className="w-1 bg-white/20" />
+                  <Panel minSize={10}>
+                    <Outlet />
+                  </Panel>
+                </>
+              ) : (
+                <>
+                  <Panel minSize={10}>
+                    <Outlet />
+                  </Panel>
+                  <PanelResizeHandle className="w-1 bg-white/20" />
+                  <Panel minSize={10} defaultSize={buzzSize}>
+                    <BuzzPanel />
+                  </Panel>
+                </>
+              )}
+            </PanelGroup>
+          )
+        ) : (
+          <div className="flex-1 overflow-auto">
+            <Outlet />
+          </div>
+        )}
       </main>
       {toast && (
         <div className="fixed bottom-4 right-4 bg-black/80 text-white px-4 py-2 rounded">
