@@ -1,25 +1,48 @@
-# Control Plane Rules
+# Control Plane Rules (Comprehensive)
 
-**Exchange:** `ph.control`  
-**Audience:** agents and services producing/consuming control messages & status events.
-
----
-
-## 1) Scope and actors
-
-- **Orchestrator** — source of desired state and swarm lifecycle commands. Consumes **swarm-level aggregates** and confirmations.
-- **Swarm Controller** — applies the plan, provisions components, emits **swarm aggregates**, and confirms commands.
-- **Components** — expose HTTP Actuator, emit their own **status** events, apply **config updates**. Components **do not** emit `ev.ready.*`.
-
-The **control plane is always on**. A component with `enabled=false` must still accept config and status requests and publish status.
+**Exchange:** `ph.control` (topic)  
+**Scope:** Normative rules for producing and consuming control-plane messages and status events.  
+**Audience:** Orchestrator, Swarm Controller, Components, UI/observers.
 
 ---
 
-## 2) Routing keys (topics)
+## 1) Purpose & principles
 
-### 2.1 Control (signals) — unified shape
+- **Single control surface**: One unified control-signal shape for all actions.
+- **Command → Confirmation**: Every control action yields **exactly one** `ev.ready.*` (success) or `ev.error.*` (error), correlated by IDs.
+- **Aggregate-first**: Orchestrator consumes **swarm aggregates**; per-component status is for Controller and observability.
+- **Always-on control**: Config & status always handled, even when workload is disabled.
+- **Non-destructive default**: Stop ≠ Remove. Removal is explicit and terminal.
+
+---
+
+## 2) Actors & responsibilities
+
+- **Orchestrator**  
+  - Only publisher of swarm **lifecycle** signals (template/start/stop/remove).  
+  - Launches Controller via runtime. On controller handshake emits **`ev.ready.swarm-create.<swarmId>`**.  
+  - Enforces idempotency, retries, timeouts, and RBAC.  
+  - Tears down Controller after **`ev.ready.swarm-remove.<swarmId>`**.
+
+- **Swarm Controller**  
+  - Applies `SwarmPlan`; provisions components; computes **aggregate** status.  
+  - Emits `ev.status-{full|delta}.swarm-controller.<instance>` and confirmations for template/start/stop/remove/config.  
+  - Treats AMQP status as heartbeat; polls Actuator if stale.
+
+- **Components**  
+  - Emit their own `ev.status-{full|delta}.<role>.<instance>`.  
+  - Apply `sig.config-update.<role>.<instance>` to **workload** only (control-plane stays live).
+
+- **UI/Observers**  
+  - **Read-only** AMQP (STOMP) recommended; all **writes** via Orchestrator REST.  
+  - Subscribe to `ev.ready.*`, `ev.error.*`, and controller aggregates.
+
+---
+
+## 3) Routing keys (topics)
+
+### 3.1 Control (signals) — unified shape
 Publisher → Consumer
-- `sig.swarm-create.<swarmId>` — Orchestrator → Controller
 - `sig.swarm-template.<swarmId>` — Orchestrator → Controller
 - `sig.swarm-start.<swarmId>` — Orchestrator → Controller
 - `sig.swarm-stop.<swarmId>` — Orchestrator → Controller *(non-destructive)*
@@ -27,114 +50,113 @@ Publisher → Consumer
 - `sig.config-update.<role>.<instance>` — Orchestrator → Component
 - `sig.status-request.<role>.<instance>` — Orchestrator/Controller → Component *(emit `status-full` now)*
 
-**Signal payload (excerpt):**
-- `correlationId` *(uuid)* — new **per attempt**
-- `idempotencyKey` *(uuid)* — **stable across retries** of the same action
-- `swarmId` / `role` / `instance` / optional `args` as required
-
-> All control signals MUST carry `correlationId` and `idempotencyKey`.
-
-### 2.2 Command confirmations (events)
+### 3.2 Confirmations (events)
 Emitter → Consumer
 - **Success:**  
-  - `ev.ready.swarm-template.<swarmId>` — Controller → Orchestrator  
-  - `ev.ready.swarm-start.<swarmId>` — Controller → Orchestrator  
-  - `ev.ready.swarm-stop.<swarmId>` — Controller → Orchestrator  
-  - `ev.ready.config-update.<role>.<instance>` — Controller → Orchestrator
+  - `ev.ready.swarm-template.<swarmId>` — Controller → Orchestrator/UI  
+  - `ev.ready.swarm-start.<swarmId>` — Controller → Orchestrator/UI  
+  - `ev.ready.swarm-stop.<swarmId>` — Controller → Orchestrator/UI  
+  - `ev.ready.swarm-remove.<swarmId>` — Controller → Orchestrator/UI  
+  - `ev.ready.config-update.<role>.<instance>` — Controller → Orchestrator/UI
 - **Error:**  
-  - `ev.error.swarm-create.<swarmId>` — Orchestrator → Orchestrator/Observers  
-  - `ev.error.swarm-template.<swarmId>` — Controller → Orchestrator  
-  - `ev.error.swarm-start.<swarmId>` — Controller → Orchestrator  
-  - `ev.error.swarm-stop.<swarmId>` — Controller → Orchestrator  
-  - `ev.error.swarm-remove.<swarmId>` — Controller → Orchestrator  
-  - `ev.error.config-update.<role>.<instance>` — Controller → Orchestrator
+  - `ev.error.swarm-create|swarm-template|swarm-start|swarm-stop|swarm-remove|config-update`
 
-**Confirmation payloads MUST echo:**
-
-**Orchestrator action on remove:** upon receiving `ev.ready.swarm-remove.<swarmId>`, tear down the Swarm Controller (stop/delete pod/container) and finalize the operation. `correlationId`, `idempotencyKey`, `signal`, `scope`, `result` (`success` or `error`).
-
-### 2.3 Lifecycle milestones (events)
-- `ev.swarm-created.<swarmId>` — informational
-- `ev.ready.swarm-remove.<swarmId>` — success confirmation for remove
-
-> Milestones represent state transitions and MAY NOT carry correlation/idempotency. UIs should drive spinners off **confirmations** and display milestones as state changes.
-
-### 2.4 Status streams (events)
-- **Swarm aggregate (from Controller):**  
-  `ev.status-full.swarm-controller.<instance>` and `ev.status-delta.swarm-controller.<instance>`
-- **Per-component status:**  
-  `ev.status-full.<role>.<instance>` and `ev.status-delta.<role>.<instance>`
-- **Controller bootstrap handshake:**  
-  `ev.ready.swarm-controller.<instance>` (control plane up)
+### 3.3 Status streams & bootstrap
+- **Aggregate (Controller):** `ev.status-{full|delta}.swarm-controller.<instance>`
+- **Per-component:** `ev.status-{full|delta}.<role>.<instance>`
+- **Bootstrap:** `ev.ready.swarm-controller.<instance>` (Controller just came up)
 
 ---
 
-## 3) Heartbeats and freshness
+## 4) Message envelopes
 
-- AMQP `status-{delta|full}` events are treated as **heartbeats**.
-- **Controller** emits aggregate `status-delta` on change **and** at least every **10s** (watermark). It may emit `status-full` on demand or at longer cadence.
-- **Components** emit:
-  - `status-full` on startup and upon `sig.status-request`
-  - `status-delta` on state changes
-- If a component’s status is **stale** beyond TTL, the Controller **polls HTTP Actuator** before asserting Ready/Running.
+### 4.1 Control signals (publishers MUST include)
+- `correlationId` *(uuid)* — **new per attempt**
+- `idempotencyKey` *(uuid)* — **stable across retries** of the same action
+- `messageId` *(uuid)* — unique per message
+- `timestamp` *(ISO-8601 UTC)*
+- Scope + args: `swarmId` / `role` / `instance` / optional `args`
 
----
+### 4.2 Confirmations (emitters MUST include)
+- Echo **`correlationId`** and **`idempotencyKey`** from the initiating control signal (or from the runtime op for create).
+- `signal`, `result` (`success`|`error`), `scope` (`swarmId`/`role`/`instance`), `ts`
+- Success MAY include `state` (`Ready|Running|Stopped|Removed`), and `notes`
+- Error MUST include `code`, `message`; MAY include `phase`, `retryable`, `details`
 
-## 4) Ordering & semantics
-
-- Dependency order is derived from the **queue I/O graph**: producers → transformers → consumers. Stop order is the reverse.
-- `sig.swarm-stop` **disables workload** but preserves resources.  
-  `sig.swarm-remove` **deletes** provisioned resources.
-- The Orchestrator **consumes only swarm‑level aggregates** and confirmations, not per‑component updates.
-- Components **do not** emit `ev.ready.*` (status is sufficient).
-
----
-
-## 5) Idempotency & delivery
-
-- Delivery is **at-least-once**. Do not rely on exactly-once semantics.
-- Receivers MUST deduplicate control signals by `(swarmId, signal, idempotencyKey)` within a retention window.
-- On duplicate: do not re-execute; **replay** the prior outcome and re-emit the same confirmation.
-- Logs/metrics SHOULD index attempts by `correlationId` and user actions by `idempotencyKey`.
+### 4.3 Status & bootstrap
+- SHOULD include `messageId` and `timestamp`
+- MAY include `correlationId` when directly answering `sig.status-request`
 
 ---
 
-## 6) Minimal mapping (command → confirmation)
+## 5) Idempotency & retries
 
-| Signal (topic) | Success confirmation | Error confirmation |
+- Delivery is **at-least-once**. Receivers MUST **deduplicate** control signals by `(swarmId, signal, idempotencyKey)` within a retention window.
+- On duplicate, DO NOT re-execute; **re-emit** the prior outcome with the same ids.
+- UI **retries** must reuse **the same `idempotencyKey`**; Orchestrator creates a new `correlationId` per attempt.
+- Suggested retention: ≥ duration of the longest user retry horizon (e.g., 24h).
+
+---
+
+## 6) Heartbeats & freshness
+
+- **Controller aggregates:** `status-delta` on change + at least every **10s** (watermark), optional periodic `status-full`.
+- **Components:** `status-full` on startup and upon `status-request`; `status-delta` on change.
+- If a component is **stale** beyond TTL, Controller **polls Actuator** before asserting Ready/Running.
+
+---
+
+## 7) Ordering & semantics
+
+- **Start order:** producers → transformers → consumers (topological).  
+- **Stop order:** exact reverse.  
+- Cycles → choose a stable order + publish a **warning** with the heuristic used.
+- `sig.swarm-stop` disables workload but **preserves** resources.  
+- `sig.swarm-remove` **deletes** resources; on success, Orchestrator removes the Controller.
+
+---
+
+## 8) Security, RBAC, and AMQP ACLs
+
+- UI **publishing** is disallowed in production. UI should have **read-only** AMQP creds.  
+- Orchestrator is the **only publisher** for swarm lifecycle signals.  
+- Enforce RBAC: who may start/stop/remove/template/config.  
+- Rate-limit commands per user/tenant; protect against floods.  
+- Audit every accepted action with `idempotencyKey`, `correlationId`, identity, and scope.
+
+---
+
+## 9) Mapping (action → confirmation)
+
+| Action | Success confirmation | Error confirmation |
 |---|---|---|
-| `sig.swarm-create.<swarmId>` | `ev.swarm-created.<swarmId>` *(milestone only)* | `ev.error.swarm-create.<swarmId>` |
+| **Create (runtime)** | REST *(Orchestrator)* | REST *(Orchestrator)* |
 | `sig.swarm-template.<swarmId>` | `ev.ready.swarm-template.<swarmId>` | `ev.error.swarm-template.<swarmId>` |
 | `sig.swarm-start.<swarmId>` | `ev.ready.swarm-start.<swarmId>` | `ev.error.swarm-start.<swarmId>` |
 | `sig.swarm-stop.<swarmId>` | `ev.ready.swarm-stop.<swarmId>` | `ev.error.swarm-stop.<swarmId>` |
 | `sig.swarm-remove.<swarmId>` | `ev.ready.swarm-remove.<swarmId>` | `ev.error.swarm-remove.<swarmId>` |
 | `sig.config-update.<role>.<instance>` | `ev.ready.config-update.<role>.<instance>` | `ev.error.config-update.<role>.<instance>` |
 
-> UIs should consider confirmations authoritative for completing user actions; milestones are informative transitions.
+> UIs should use confirmations to complete user actions; `status-*` drives live progress indicators.
 
 ---
 
-## 7) Envelopes (normative fields)
+## 10) Topic patterns (subscription guidance)
 
-### 7.1 Control signals (publishers MUST include)
-- `correlationId` *(uuid)* — new per attempt
-- `idempotencyKey` *(uuid)* — stable across retries
-- `messageId` *(uuid)* — unique per message
-- `timestamp` *(ISO-8601 UTC)*
-- `swarmId` / `role` / `instance` / optional `args`
-
-### 7.2 Confirmations (emitters MUST include)
-- Echo the **`correlationId`** and **`idempotencyKey`** from the signal
-- `signal`, `result` (`success`|`error`), `scope` (`swarmId`/`role`/`instance`), and `ts`
-- For errors, include `code`, `message`, optional `phase`, `retryable`, and `details`
-
-### 7.3 Status & milestones
-- SHOULD include `messageId` and `timestamp`
-- MAY include `correlationId` when directly answering `sig.status-request`
+- Confirmations: `ev.ready.*` and `ev.error.*` (optionally filtered by `{swarmId}` or `{role}.{instance}`).
+- Controller aggregates: `ev.status-{full|delta}.swarm-controller.*`
+- Per-component panels: `ev.status-{full|delta}.*.*` (filter in client)
+- Bootstrap (internal): `ev.ready.swarm-controller.*`
 
 ---
 
-## 8) Examples
+## 11) Backward compatibility (changes)
+
+- **Unified payloads:** all control signals use `ControlSignal`; confirmations echo ids.
+
+---
+
+## 12) Examples
 
 **Control signal (swarm start)**
 ```json
@@ -161,6 +183,18 @@ Emitter → Consumer
 }
 ```
 
+**Create success (Orchestrator-emitted)**
+```json
+{
+  "result": "success",
+  "signal": "swarm-create",
+  "scope": {"swarmId": "swarm-42"},
+  "idempotencyKey": "create-7777-eeee",
+  "correlationId": "attempt-001-cccc",
+  "ts": "2025-09-12T12:01:02Z"
+}
+```
+
 **Controller aggregate (status-delta)**
 ```json
 {
@@ -177,7 +211,7 @@ Emitter → Consumer
 
 ---
 
-## 9) Compliance
+## 13) Compliance & validation
 
-- Tools MUST validate routing keys and envelopes against `docs/spec/asyncapi.yaml`.
-- Services MUST follow these rules to interoperate across operators and runtimes.
+- Validate envelopes and topics against `docs/spec/asyncapi.yaml`.  
+- Automated tests should assert: one confirmation per command; ids echo; dedupe behavior; staleness handling; ordering on start/stop.

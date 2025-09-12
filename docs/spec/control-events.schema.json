@@ -21,6 +21,10 @@
         "metric",
         "alert",
         "link"
+      ],
+      "examples": [
+        "ev.ready.swarm-create.<swarmId>",
+        "ev.ready.swarm-remove.<swarmId>"
       ]
     },
     "kind": {

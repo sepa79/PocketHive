@@ -42,6 +42,8 @@ channels:
           - processor
           - postprocessor
           - trigger
+          - swarm-controller
+          - orchestrator
       instance:
         description: Instance identifier (UUID or unique string)
         schema:
@@ -84,6 +86,8 @@ channels:
           - processor
           - postprocessor
           - trigger
+          - swarm-controller
+          - orchestrator
       instance:
         description: Target instance (optional)
         schema:
@@ -100,16 +104,7 @@ channels:
           type: topic
           durable: true
         routingKey: sig.{type}.{role}.{instance}
-  exchange/ph.control/sig.swarm-create.{swarmId}:
-    parameters:
-      swarmId:
-        description: Swarm identifier
-        schema:
-          type: string
-    publish:
-      summary: Request creation of a swarm from a stored template
-      message:
-        $ref: '#/components/messages/ControlSignal'
+  exchange/ph.control/sig.swarm-template.{swarmId}:
     bindings:
       amqp:
         is: routingKey
@@ -117,35 +112,19 @@ channels:
           name: ph.control
           type: topic
           durable: true
-        routingKey: sig.swarm-create.{swarmId}
-  exchange/ph.control/sig.swarm-template.{swarmId}:
-    parameters:
-      swarmId:
-        description: Swarm identifier
-        schema:
-          type: string
-    publish:
-      summary: Deliver resolved SwarmPlan to controller
-      message:
-        $ref: '#/components/messages/ControlSignal'
-    bindings:
-      amqp:
-        is: routingKey
-        exchange:
-          name: ph.control
-          type: topic
+        queue:
+          name: null
           durable: true
         routingKey: sig.swarm-template.{swarmId}
-  exchange/ph.control/sig.swarm-start.{swarmId}:
     parameters:
       swarmId:
-        description: Swarm identifier
         schema:
           type: string
     publish:
-      summary: Enable previously provisioned swarm
+      summary: Apply swarm template
       message:
         $ref: '#/components/messages/ControlSignal'
+  exchange/ph.control/sig.swarm-start.{swarmId}:
     bindings:
       amqp:
         is: routingKey
@@ -153,7 +132,18 @@ channels:
           name: ph.control
           type: topic
           durable: true
+        queue:
+          name: null
+          durable: true
         routingKey: sig.swarm-start.{swarmId}
+    parameters:
+      swarmId:
+        schema:
+          type: string
+    publish:
+      summary: Start swarm
+      message:
+        $ref: '#/components/messages/ControlSignal'
   exchange/ph.control/ev.swarm-created.{swarmId}:
     parameters:
       swarmId:
@@ -172,167 +162,270 @@ channels:
           type: topic
           durable: true
         routingKey: ev.swarm-created.{swarmId}
-  exchange/ph.control/sig.swarm-stop.{swarmId}:
-    bindings:
-      amqp:
-        is: routingKey
-        exchange: &id001
-          name: ph.control
-          type: topic
-          durable: true
-        queue: &id002
-          name: null
-          durable: true
-        routingKey: sig.swarm-stop.{swarmId}
-    parameters: &id003
+  exchange/ph.control/ev.swarm-create.error.{swarmId}:
+    parameters:
       swarmId:
         description: Swarm identifier
         schema:
           type: string
     publish:
-      summary: Stop swarm non-destructively
+      summary: Swarm creation failed
+      message:
+        $ref: '#/components/messages/ErrorMessage'
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: ph.control
+          type: topic
+          durable: true
+        routingKey: ev.swarm-create.error.{swarmId}
+  exchange/ph.control/sig.swarm-stop.{swarmId}:
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: ph.control
+          type: topic
+          durable: true
+        queue:
+          name: null
+          durable: true
+        routingKey: sig.swarm-stop.{swarmId}
+    parameters:
+      swarmId:
+        schema:
+          type: string
+    publish:
+      summary: Stop swarm
       message:
         $ref: '#/components/messages/ControlSignal'
   exchange/ph.control/sig.swarm-remove.{swarmId}:
     bindings:
       amqp:
         is: routingKey
-        exchange: *id001
-        queue: *id002
+        exchange:
+          name: ph.control
+          type: topic
+          durable: true
+        queue:
+          name: null
+          durable: true
         routingKey: sig.swarm-remove.{swarmId}
-    parameters: *id003
+    parameters:
+      swarmId:
+        schema:
+          type: string
     publish:
-      summary: Remove swarm resources
+      summary: Remove swarm
       message:
         $ref: '#/components/messages/ControlSignal'
-  exchange/ph.control/ev.ready.swarm-template.{swarmId}:
+  exchange/ph.control/sig.config-update.{role}.{instance}:
     bindings:
       amqp:
         is: routingKey
-        exchange: *id001
-        queue: *id002
-        routingKey: ev.ready.swarm-template.{swarmId}
-    parameters: *id003
-    subscribe:
-      message:
-        $ref: '#/components/messages/CommandReady'
-      summary: Event
-  exchange/ph.control/ev.ready.swarm-start.{swarmId}:
-    bindings:
-      amqp:
-        is: routingKey
-        exchange: *id001
-        queue: *id002
-        routingKey: ev.ready.swarm-start.{swarmId}
-    parameters: *id003
-    subscribe:
-      message:
-        $ref: '#/components/messages/CommandReady'
-      summary: Event
-  exchange/ph.control/ev.ready.swarm-stop.{swarmId}:
-    bindings:
-      amqp:
-        is: routingKey
-        exchange: *id001
-        queue: *id002
-        routingKey: ev.ready.swarm-stop.{swarmId}
-    parameters: *id003
-    subscribe:
-      message:
-        $ref: '#/components/messages/CommandReady'
-      summary: Event
-  exchange/ph.control/ev.ready.config-update.{role}.{instance}:
-    bindings:
-      amqp:
-        is: routingKey
-        exchange: *id001
-        queue: *id002
-        routingKey: ev.ready.config-update.{role}.{instance}
-    parameters: &id004
+        exchange:
+          name: ph.control
+          type: topic
+          durable: true
+        queue:
+          name: null
+          durable: true
+        routingKey: sig.config-update.{role}.{instance}
+    parameters:
       role:
-        description: Component role
         schema:
           type: string
       instance:
-        description: Component instance
+        schema:
+          type: string
+    publish:
+      summary: Update component config
+      message:
+        $ref: '#/components/messages/ControlSignal'
+  exchange/ph.control/sig.status-request.{role}.{instance}:
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: ph.control
+          type: topic
+          durable: true
+        queue:
+          name: null
+          durable: true
+        routingKey: sig.status-request.{role}.{instance}
+    parameters:
+      role:
+        schema:
+          type: string
+      instance:
+        schema:
+          type: string
+    publish:
+      summary: Request component status
+      message:
+        $ref: '#/components/messages/ControlSignal'
+  exchange/ph.control/ev.ready.swarm-create.{swarmId}:
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: ph.control
+          type: topic
+          durable: true
+        queue:
+          name: null
+          durable: true
+        routingKey: ev.ready.swarm-create.{swarmId}
+    parameters:
+      swarmId:
         schema:
           type: string
     subscribe:
+      summary: Create success
       message:
         $ref: '#/components/messages/CommandReady'
-      summary: Event
   exchange/ph.control/ev.error.swarm-create.{swarmId}:
     bindings:
       amqp:
         is: routingKey
-        exchange: *id001
-        queue: *id002
+        exchange:
+          name: ph.control
+          type: topic
+          durable: true
+        queue:
+          name: null
+          durable: true
         routingKey: ev.error.swarm-create.{swarmId}
-    parameters: *id003
+    parameters:
+      swarmId:
+        schema:
+          type: string
     subscribe:
+      summary: Create error
       message:
         $ref: '#/components/messages/CommandError'
-      summary: Event
+  exchange/ph.control/ev.ready.swarm-template.{swarmId}:
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: ph.control
+          type: topic
+          durable: true
+        queue:
+          name: null
+          durable: true
+        routingKey: ev.ready.swarm-template.{swarmId}
+    parameters:
+      swarmId:
+        schema:
+          type: string
+    subscribe:
+      summary: Template success
+      message:
+        $ref: '#/components/messages/CommandReady'
   exchange/ph.control/ev.error.swarm-template.{swarmId}:
     bindings:
       amqp:
         is: routingKey
-        exchange: *id001
-        queue: *id002
+        exchange:
+          name: ph.control
+          type: topic
+          durable: true
+        queue:
+          name: null
+          durable: true
         routingKey: ev.error.swarm-template.{swarmId}
-    parameters: *id003
+    parameters:
+      swarmId:
+        schema:
+          type: string
     subscribe:
+      summary: Template error
       message:
         $ref: '#/components/messages/CommandError'
-      summary: Event
+  exchange/ph.control/ev.ready.swarm-start.{swarmId}:
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: ph.control
+          type: topic
+          durable: true
+        queue:
+          name: null
+          durable: true
+        routingKey: ev.ready.swarm-start.{swarmId}
+    parameters:
+      swarmId:
+        schema:
+          type: string
+    subscribe:
+      summary: Start success
+      message:
+        $ref: '#/components/messages/CommandReady'
   exchange/ph.control/ev.error.swarm-start.{swarmId}:
     bindings:
       amqp:
         is: routingKey
-        exchange: *id001
-        queue: *id002
+        exchange:
+          name: ph.control
+          type: topic
+          durable: true
+        queue:
+          name: null
+          durable: true
         routingKey: ev.error.swarm-start.{swarmId}
-    parameters: *id003
+    parameters:
+      swarmId:
+        schema:
+          type: string
     subscribe:
+      summary: Start error
       message:
         $ref: '#/components/messages/CommandError'
-      summary: Event
+  exchange/ph.control/ev.ready.swarm-stop.{swarmId}:
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: ph.control
+          type: topic
+          durable: true
+        queue:
+          name: null
+          durable: true
+        routingKey: ev.ready.swarm-stop.{swarmId}
+    parameters:
+      swarmId:
+        schema:
+          type: string
+    subscribe:
+      summary: Stop success
+      message:
+        $ref: '#/components/messages/CommandReady'
   exchange/ph.control/ev.error.swarm-stop.{swarmId}:
     bindings:
       amqp:
         is: routingKey
-        exchange: *id001
-        queue: *id002
+        exchange:
+          name: ph.control
+          type: topic
+          durable: true
+        queue:
+          name: null
+          durable: true
         routingKey: ev.error.swarm-stop.{swarmId}
-    parameters: *id003
+    parameters:
+      swarmId:
+        schema:
+          type: string
     subscribe:
+      summary: Stop error
       message:
         $ref: '#/components/messages/CommandError'
-      summary: Event
-  exchange/ph.control/ev.error.swarm-remove.{swarmId}:
-    bindings:
-      amqp:
-        is: routingKey
-        exchange: *id001
-        queue: *id002
-        routingKey: ev.error.swarm-remove.{swarmId}
-    parameters: *id003
-    subscribe:
-      message:
-        $ref: '#/components/messages/CommandError'
-      summary: Event
-  exchange/ph.control/ev.error.config-update.{role}.{instance}:
-    bindings:
-      amqp:
-        is: routingKey
-        exchange: *id001
-        queue: *id002
-        routingKey: ev.error.config-update.{role}.{instance}
-    parameters: *id004
-    subscribe:
-      message:
-        $ref: '#/components/messages/CommandError'
-      summary: Event
   exchange/ph.control/ev.ready.swarm-remove.{swarmId}:
     bindings:
       amqp:
@@ -347,13 +440,78 @@ channels:
         routingKey: ev.ready.swarm-remove.{swarmId}
     parameters:
       swarmId:
-        description: Swarm identifier
         schema:
           type: string
     subscribe:
-      summary: Confirmation for sig.swarm-remove
+      summary: Remove success
       message:
         $ref: '#/components/messages/CommandReady'
+  exchange/ph.control/ev.error.swarm-remove.{swarmId}:
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: ph.control
+          type: topic
+          durable: true
+        queue:
+          name: null
+          durable: true
+        routingKey: ev.error.swarm-remove.{swarmId}
+    parameters:
+      swarmId:
+        schema:
+          type: string
+    subscribe:
+      summary: Remove error
+      message:
+        $ref: '#/components/messages/CommandError'
+  exchange/ph.control/ev.ready.config-update.{role}.{instance}:
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: ph.control
+          type: topic
+          durable: true
+        queue:
+          name: null
+          durable: true
+        routingKey: ev.ready.config-update.{role}.{instance}
+    parameters:
+      role:
+        schema:
+          type: string
+      instance:
+        schema:
+          type: string
+    subscribe:
+      summary: Config success
+      message:
+        $ref: '#/components/messages/CommandReady'
+  exchange/ph.control/ev.error.config-update.{role}.{instance}:
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: ph.control
+          type: topic
+          durable: true
+        queue:
+          name: null
+          durable: true
+        routingKey: ev.error.config-update.{role}.{instance}
+    parameters:
+      role:
+        schema:
+          type: string
+      instance:
+        schema:
+          type: string
+    subscribe:
+      summary: Config error
+      message:
+        $ref: '#/components/messages/CommandError'
 components:
   messages:
     ControlStatusFull:
@@ -388,10 +546,16 @@ components:
         $ref: '#/components/schemas/ControlAlertPayload'
     ControlSignal:
       name: ControlSignal
-      title: Unified control signal
       contentType: application/json
       payload:
         $ref: '#/components/schemas/ControlSignalPayload'
+    ErrorMessage:
+      name: ErrorMessage
+      title: Error description
+      contentType: text/plain
+      payload:
+        type: string
+        description: Brief error message
     SwarmCreate:
       name: SwarmCreate
       title: Swarm creation request
@@ -443,28 +607,14 @@ components:
       - payload: {}
     CommandReady:
       name: CommandReady
-      title: "Command confirmation \u2014 success"
       contentType: application/json
       payload:
         $ref: '#/components/schemas/CommandReadyPayload'
     CommandError:
       name: CommandError
-      title: "Command confirmation \u2014 error"
       contentType: application/json
       payload:
         $ref: '#/components/schemas/CommandErrorPayload'
-    SwarmStop:
-      name: SwarmStop
-      title: Swarm stop signal
-      payload:
-        type: object
-        description: Empty object
-    SwarmRemove:
-      name: SwarmRemove
-      title: Swarm remove signal
-      payload:
-        type: object
-        description: Empty object
   schemas:
     ControlBase:
       type: object
@@ -662,12 +812,12 @@ components:
     ControlSignalPayload:
       type: object
       required:
-      - correlationId
-      - idempotencyKey
-      - messageId
-      - timestamp
       - type
       - version
+      - messageId
+      - timestamp
+      - correlationId
+      - idempotencyKey
       properties:
         type:
           type: string
@@ -704,13 +854,6 @@ components:
           format: uuid
         signal:
           type: string
-          enum:
-          - swarm-template
-          - swarm-start
-          - swarm-stop
-          - swarm-remove
-          - config-update
-          - swarm-create
         scope:
           type: object
           properties:
@@ -726,11 +869,6 @@ components:
           - success
         state:
           type: string
-          enum:
-          - Ready
-          - Running
-          - Stopped
-          - Removed
         notes:
           type: string
       required:
@@ -753,13 +891,6 @@ components:
           format: uuid
         signal:
           type: string
-          enum:
-          - swarm-template
-          - swarm-start
-          - swarm-stop
-          - swarm-remove
-          - config-update
-          - swarm-create
         scope:
           type: object
           properties:
@@ -775,13 +906,6 @@ components:
           - error
         phase:
           type: string
-          enum:
-          - create
-          - template
-          - start
-          - stop
-          - remove
-          - runtime
         code:
           type: string
         message:
