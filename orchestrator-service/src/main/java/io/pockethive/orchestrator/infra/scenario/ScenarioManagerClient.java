@@ -37,7 +37,7 @@ public class ScenarioManagerClient implements ScenarioClient {
             .header("Accept", "application/json")
             .build();
         HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
-        log.debug("template response status {} length {}", resp.statusCode(), resp.body() != null ? resp.body().length() : 0);
+        log.info("template response status {} length {}", resp.statusCode(), resp.body() != null ? resp.body().length() : 0);
         if (resp.statusCode() != 200) {
             throw new IllegalStateException("template fetch status " + resp.statusCode());
         }

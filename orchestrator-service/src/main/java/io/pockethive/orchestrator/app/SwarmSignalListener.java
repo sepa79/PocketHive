@@ -64,7 +64,7 @@ public class SwarmSignalListener {
     @RabbitListener(queues = "#{controlQueue.name}")
     public void handle(String body, @Header(AmqpHeaders.RECEIVED_ROUTING_KEY) String routingKey) {
         if (routingKey == null) return;
-        log.debug("received {} : {}", routingKey, body);
+        log.info("received {} : {}", routingKey, body);
         if (routingKey.startsWith("sig.swarm-create.")) {
             String swarmId = routingKey.substring("sig.swarm-create.".length());
             try {
@@ -113,7 +113,7 @@ public class SwarmSignalListener {
                 rabbit.convertAndSend(Topology.CONTROL_EXCHANGE,
                     "sig.swarm-start." + swarmId, body == null ? "" : body));
         } else if (routingKey.startsWith("sig.status-request")) {
-            log.debug("status requested via {}", routingKey);
+            log.info("status requested via {}", routingKey);
             sendStatusFull();
         }
     }

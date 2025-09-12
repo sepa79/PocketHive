@@ -50,7 +50,7 @@ public class SwarmSignalListener {
     MDC.put("swarm_id", Topology.SWARM_ID);
     MDC.put("service", ROLE);
     MDC.put("instance", instanceId);
-    log.debug("received {} : {}", routingKey, body);
+    log.info("received {} : {}", routingKey, body);
     if (routingKey.startsWith("sig.swarm-template.")) {
       String swarmId = routingKey.substring("sig.swarm-template.".length());
       if (Topology.SWARM_ID.equals(swarmId)) {

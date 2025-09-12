@@ -85,7 +85,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
       SwarmPlan plan = mapper.readValue(templateJson, SwarmPlan.class);
       TopicExchange hive = new TopicExchange("ph." + Topology.SWARM_ID + ".hive", true, false);
       amqp.declareExchange(hive);
-      log.debug("declared hive exchange ph.{}.hive", Topology.SWARM_ID);
+      log.info("declared hive exchange ph.{}.hive", Topology.SWARM_ID);
 
       expectedReady.clear();
       instancesByRole.clear();
@@ -122,7 +122,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
               }
             }
             log.info("creating container for role {} using image {}", bee.role(), bee.image());
-            log.debug("container env for {}: {}", bee.role(), env);
+            log.info("container env for {}: {}", bee.role(), env);
             String containerId = docker.createContainer(bee.image(), env);
             log.info("starting container {} for role {}", containerId, bee.role());
             docker.startContainer(containerId);
@@ -137,7 +137,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
           amqp.declareQueue(q);
           Binding b = BindingBuilder.bind(q).to(hive).with(suffix);
           amqp.declareBinding(b);
-          log.debug("declared queue ph.{}.{}", Topology.SWARM_ID, suffix);
+          log.info("declared queue ph.{}.{}", Topology.SWARM_ID, suffix);
           declaredQueues.add(suffix);
         }
       }
@@ -161,7 +161,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
     containers.clear();
 
     for (String suffix : declaredQueues) {
-      log.debug("deleting queue ph.{}.{}", Topology.SWARM_ID, suffix);
+      log.info("deleting queue ph.{}.{}", Topology.SWARM_ID, suffix);
       amqp.deleteQueue("ph." + Topology.SWARM_ID + "." + suffix);
     }
     amqp.deleteExchange("ph." + Topology.SWARM_ID + ".hive");
@@ -203,7 +203,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
     instancesByRole.computeIfAbsent(role, r -> new ArrayList<>());
     if (!instancesByRole.get(role).contains(instance)) {
       instancesByRole.get(role).add(instance);
-      log.debug("bee {} of role {} marked ready", instance, role);
+      log.info("bee {} of role {} marked ready", instance, role);
     }
     boolean ready = isFullyReady();
     if (ready) {
@@ -251,7 +251,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
       for (var entry : instancesByRole.entrySet()) {
         for (String inst : entry.getValue()) {
           String rk = "sig.config-update." + entry.getKey() + "." + inst;
-          log.debug("scenario step config-update {} payload {}", rk, payload);
+          log.info("scenario step config-update {} payload {}", rk, payload);
           rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, payload);
         }
       }
@@ -274,14 +274,14 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
     for (var entry : instancesByRole.entrySet()) {
       for (String inst : entry.getValue()) {
         String rk = "sig.config-update." + entry.getKey() + "." + inst;
-        log.debug("enable config-update {} payload {}", rk, payload);
+        log.info("enable config-update {} payload {}", rk, payload);
         rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, payload);
       }
     }
     status = SwarmStatus.RUNNING;
     for (ScenarioTask t : scheduledTasks) {
       scheduler.schedule(() -> {
-        log.debug("dispatching scheduled {} body {}", t.routingKey, t.body);
+        log.info("dispatching scheduled {} body {}", t.routingKey, t.body);
         rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, t.routingKey, t.body);
       }, t.delayMs, TimeUnit.MILLISECONDS);
     }
