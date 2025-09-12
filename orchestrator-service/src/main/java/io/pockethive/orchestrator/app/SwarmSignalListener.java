@@ -2,10 +2,11 @@ package io.pockethive.orchestrator.app;
 
 import io.pockethive.Topology;
 import io.pockethive.observability.StatusEnvelopeBuilder;
-import io.pockethive.orchestrator.domain.ScenarioPlan;
+import io.pockethive.orchestrator.domain.SwarmCreateRequest;
 import io.pockethive.orchestrator.domain.SwarmPlan;
 import io.pockethive.orchestrator.domain.SwarmPlanRegistry;
 import io.pockethive.orchestrator.domain.SwarmRegistry;
+import io.pockethive.orchestrator.domain.SwarmTemplate;
 import io.pockethive.util.BeeNameGenerator;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
@@ -35,6 +36,7 @@ public class SwarmSignalListener {
     private final SwarmPlanRegistry plans;
     private final SwarmRegistry registry;
     private final ContainerLifecycleManager lifecycle;
+    private final ScenarioClient scenarios;
     private final ObjectMapper json;
     private final String instanceId;
 
@@ -42,12 +44,14 @@ public class SwarmSignalListener {
                                SwarmPlanRegistry plans,
                                SwarmRegistry registry,
                                ContainerLifecycleManager lifecycle,
+                               ScenarioClient scenarios,
                                ObjectMapper json,
                                @Qualifier("instanceId") String instanceId) {
         this.rabbit = rabbit;
         this.plans = plans;
         this.registry = registry;
         this.lifecycle = lifecycle;
+        this.scenarios = scenarios;
         this.json = json;
         this.instanceId = instanceId;
         try {
@@ -63,10 +67,11 @@ public class SwarmSignalListener {
         if (routingKey.startsWith("sig.swarm-create.")) {
             String swarmId = routingKey.substring("sig.swarm-create.".length());
             try {
-                ScenarioPlan scenario = json.readValue(body, ScenarioPlan.class);
-                SwarmPlan plan = scenario.toSwarmPlan(swarmId);
+                SwarmCreateRequest cmd = json.readValue(body, SwarmCreateRequest.class);
+                SwarmTemplate template = scenarios.fetchTemplate(cmd.templateId());
+                SwarmPlan plan = new SwarmPlan(swarmId, template.getBees());
                 String beeName = BeeNameGenerator.generate("swarm-controller", swarmId);
-                lifecycle.startSwarm(swarmId, scenario.template().getImage(), beeName);
+                lifecycle.startSwarm(swarmId, template.getImage(), beeName);
                 rabbit.convertAndSend(Topology.CONTROL_EXCHANGE,
                         "ev.swarm-created." + swarmId, "");
                 plans.register(beeName, plan);
