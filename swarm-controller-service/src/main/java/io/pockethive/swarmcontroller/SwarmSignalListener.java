@@ -104,10 +104,7 @@ public class SwarmSignalListener {
           JsonNode node = mapper.readTree(body);
           boolean enabled = node.path("data").path("enabled").asBoolean(true);
           if (!enabled) {
-            boolean allReady = lifecycle.markReady(parts[0], parts[1]);
-            if (allReady) {
-              rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, "ev.swarm-created." + Topology.SWARM_ID, "");
-            }
+            lifecycle.markReady(parts[0], parts[1]);
           }
         } catch (Exception e) {
           log.warn("ready parse", e);

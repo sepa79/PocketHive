@@ -193,7 +193,11 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
     if (!instancesByRole.get(role).contains(instance)) {
       instancesByRole.get(role).add(instance);
     }
-    return isFullyReady();
+    boolean ready = isFullyReady();
+    if (ready) {
+      rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, "ev.swarm-ready." + Topology.SWARM_ID, "");
+    }
+    return ready;
   }
 
   private boolean isFullyReady() {

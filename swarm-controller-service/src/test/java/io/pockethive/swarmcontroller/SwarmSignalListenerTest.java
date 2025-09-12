@@ -90,7 +90,7 @@ class SwarmSignalListenerTest {
   }
 
   @Test
-  void partialReadinessDoesNotEmitSwarmCreated() throws Exception {
+  void partialReadinessDoesNotEmitSwarmReady() throws Exception {
     AmqpAdmin amqp = mock(AmqpAdmin.class);
     DockerContainerClient docker = mock(DockerContainerClient.class);
     ObjectMapper mapper = new ObjectMapper();
@@ -105,12 +105,12 @@ class SwarmSignalListenerTest {
     listener.handle("{\"data\":{\"enabled\":false}}", "ev.ready.gen.a");
     verify(rabbit, never()).convertAndSend(
         eq(Topology.CONTROL_EXCHANGE),
-        eq("ev.swarm-created." + Topology.SWARM_ID),
+        eq("ev.swarm-ready." + Topology.SWARM_ID),
         anyString());
   }
 
   @Test
-  void fullReadinessEmitsSwarmCreated() throws Exception {
+  void fullReadinessEmitsSwarmReady() throws Exception {
     AmqpAdmin amqp = mock(AmqpAdmin.class);
     DockerContainerClient docker = mock(DockerContainerClient.class);
     ObjectMapper mapper = new ObjectMapper();
@@ -124,7 +124,7 @@ class SwarmSignalListenerTest {
     reset(rabbit);
     listener.handle("{\"data\":{\"enabled\":false}}", "ev.ready.gen.a");
     listener.handle("{\"data\":{\"enabled\":false}}", "ev.ready.mod.b");
-    verify(rabbit).convertAndSend(Topology.CONTROL_EXCHANGE, "ev.swarm-created." + Topology.SWARM_ID, "");
+    verify(rabbit).convertAndSend(Topology.CONTROL_EXCHANGE, "ev.swarm-ready." + Topology.SWARM_ID, "");
   }
 
   @Test
