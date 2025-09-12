@@ -85,7 +85,7 @@ export default function HivePage() {
   }
 
   return (
-    <div className="flex h-[calc(100vh-64px)] overflow-hidden">
+    <div className="flex h-full min-h-0 overflow-hidden">
       <div className="w-full md:w-1/3 xl:w-1/4 border-r border-white/10 p-4 flex flex-col">
         <div className="flex items-center gap-2">
           <input
