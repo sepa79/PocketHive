@@ -15,17 +15,20 @@ interface Node {
   swarmId?: string
 }
 
-interface GraphProps {
-  graphData: { nodes: Node[]; links: unknown[] }
-  onNodeDragEnd: (n: { id: string; x: number; y: number }) => void
-  linkColor?: (l: { queue: string }) => string
-  linkWidth?: (l: { queue: string }) => number
-  nodeCanvasObject: (
-    n: Node,
-    ctx: CanvasRenderingContext2D,
-    globalScale: number,
-  ) => void
-  [key: string]: unknown
+interface RFNode {
+  id: string
+  position: { x: number; y: number }
+  data: { queueCount: number }
+}
+
+interface RFEdge {
+  style: { stroke: string; strokeWidth: number }
+}
+
+interface RFProps {
+  nodes: RFNode[]
+  edges: RFEdge[]
+  onNodeDragStop: (e: unknown, node: RFNode) => void
 }
 
 const data = {
@@ -61,12 +64,13 @@ const components = [
 ]
 const updateNodePosition = vi.fn<(id: string, x: number, y: number) => void>()
 
-vi.mock('react-force-graph-2d', () => ({
+vi.mock('@xyflow/react', () => ({
   __esModule: true,
-  default: (props: GraphProps) => {
-    ;(globalThis as unknown as { __GRAPH_PROPS__: GraphProps }).__GRAPH_PROPS__ = props
+  default: (props: RFProps) => {
+    ;(globalThis as unknown as { __RF_PROPS__: RFProps }).__RF_PROPS__ = props
     return React.createElement('div')
   },
+  MarkerType: { ArrowClosed: 'arrow' },
 }))
 
 vi.mock('../../lib/stompClient', () => {
@@ -91,51 +95,29 @@ vi.mock('../../lib/stompClient', () => {
 
 test('node position updates after drag and edge depth styles', () => {
   render(<TopologyView />)
-  const props = (globalThis as unknown as { __GRAPH_PROPS__: GraphProps }).__GRAPH_PROPS__
-  expect(typeof props.width).toBe('number')
-  expect(typeof props.height).toBe('number')
-  expect(props.graphData.nodes[0].x).toBe(0)
-  expect(props.graphData.nodes[0].y).toBe(0)
+  const props = (globalThis as unknown as { __RF_PROPS__: RFProps }).__RF_PROPS__
+  expect(props.nodes[0].position.x).toBe(0)
+  expect(props.nodes[0].position.y).toBe(0)
   act(() => {
-    props.onNodeDragEnd({ id: 'a', x: 10, y: 20 })
+    props.onNodeDragStop({}, {
+      id: 'a',
+      position: { x: 10, y: 20 },
+      data: props.nodes[0].data,
+    })
   })
   expect(updateNodePosition).toHaveBeenCalledWith('a', 10, 20)
-  const newProps = (globalThis as unknown as { __GRAPH_PROPS__: GraphProps }).__GRAPH_PROPS__
-  expect(newProps.graphData.nodes[0].x).toBe(10)
-  expect(newProps.graphData.nodes[0].y).toBe(20)
-  const color = props.linkColor!({ queue: 'q' })
-  expect(color).toBe('#ff6666')
-  const width = props.linkWidth!({ queue: 'q' })
-  expect(width).toBeGreaterThan(2)
-  const ctx = {
-    beginPath: vi.fn(),
-    arc: vi.fn(),
-    rect: vi.fn(),
-    moveTo: vi.fn(),
-    lineTo: vi.fn(),
-    closePath: vi.fn(),
-    fill: vi.fn(),
-    stroke: vi.fn(),
-    fillText: vi.fn(),
-    measureText: () => ({ width: 10 }),
-    font: '',
-    textAlign: '',
-    textBaseline: '',
-    fillStyle: '',
-    strokeStyle: '',
-    lineWidth: 1,
-  } as unknown as CanvasRenderingContext2D
-  props.nodeCanvasObject(
-    { id: 'a', type: 'generator', x: 0, y: 0 } as Node,
-    ctx,
-    1,
-  )
-  expect(ctx.fillText).toHaveBeenCalledWith('2', expect.any(Number), expect.any(Number))
+  const newProps = (globalThis as unknown as { __RF_PROPS__: RFProps }).__RF_PROPS__
+  expect(newProps.nodes[0].position.x).toBe(10)
+  expect(newProps.nodes[0].position.y).toBe(20)
+  expect(newProps.edges[0].style.stroke).toBe('#ff6666')
+  expect(newProps.edges[0].style.strokeWidth).toBeGreaterThan(2)
+  expect(newProps.nodes[0].data.queueCount).toBe(2)
 })
 
 test('filters nodes for default swarm', () => {
   render(<TopologyView swarmId="default" />)
-  const props = (globalThis as unknown as { __GRAPH_PROPS__: GraphProps }).__GRAPH_PROPS__
-  expect(props.graphData.nodes).toHaveLength(1)
-  expect(props.graphData.nodes[0].id).toBe('c')
+  const props = (globalThis as unknown as { __RF_PROPS__: RFProps }).__RF_PROPS__
+  expect(props.nodes).toHaveLength(1)
+  expect(props.nodes[0].id).toBe('c')
 })
+

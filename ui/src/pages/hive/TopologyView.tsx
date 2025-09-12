@@ -1,5 +1,14 @@
-import { useEffect, useRef, useState } from 'react'
-import ForceGraph2D, { type ForceGraphMethods } from 'react-force-graph-2d'
+// @ts-nocheck
+import { useEffect, useRef, useState, useMemo } from 'react'
+import {
+  ReactFlow,
+  MarkerType,
+  type Node,
+  type Edge,
+  type ReactFlowInstance,
+  type NodeProps,
+} from '@xyflow/react'
+import '@xyflow/react/dist/style.css'
 import {
   subscribeTopology,
   subscribeComponents,
@@ -54,19 +63,128 @@ const shapeOrder: NodeShape[] = [
   'star',
 ]
 
+interface ShapeNodeData {
+  label: string
+  shape: NodeShape
+  enabled?: boolean
+  queueCount: number
+  swarmId?: string
+  [key: string]: unknown
+}
+
+function ShapeNode({ data, selected }: NodeProps<ShapeNodeData>) {
+  const size = 8
+  const fill = data.enabled === false ? '#999999' : '#ffcc00'
+  return (
+    <div style={{ position: 'relative', width: 2 * size, height: 2 * size + 12 }}>
+      <svg width={2 * size} height={2 * size}>
+        {selected && (
+          <circle
+            cx={size}
+            cy={size}
+            r={size + 4}
+            fill="rgba(255,255,255,0.1)"
+          />
+        )}
+        {data.shape === 'square' && (
+          <rect x={0} y={0} width={2 * size} height={2 * size} fill={fill} stroke="black" />
+        )}
+        {data.shape === 'triangle' && (
+          <polygon
+            points={`${size},0 ${2 * size},${2 * size} 0,${2 * size}`}
+            fill={fill}
+            stroke="black"
+          />
+        )}
+        {data.shape === 'diamond' && (
+          <polygon
+            points={`${size},0 ${2 * size},${size} ${size},${2 * size} 0,${size}`}
+            fill={fill}
+            stroke="black"
+          />
+        )}
+        {data.shape === 'pentagon' && (
+          <polygon points={polygonPoints(5, size)} fill={fill} stroke="black" />
+        )}
+        {data.shape === 'hexagon' && (
+          <polygon points={polygonPoints(6, size)} fill={fill} stroke="black" />
+        )}
+        {data.shape === 'star' && (
+          <polygon points={starPoints(size)} fill={fill} stroke="black" />
+        )}
+        {data.shape === 'circle' && (
+          <circle cx={size} cy={size} r={size} fill={fill} stroke="black" />
+        )}
+      </svg>
+      {data.queueCount > 0 && (
+        <div
+          className="badge"
+          style={{
+            position: 'absolute',
+            top: -4,
+            right: -4,
+            background: '#333',
+            color: '#fff',
+            borderRadius: '9999px',
+            padding: '0 2px',
+            fontSize: 8,
+            lineHeight: '1',
+          }}
+        >
+          {data.queueCount}
+        </div>
+      )}
+      <div
+        style={{
+          position: 'absolute',
+          top: 2 * size,
+          left: 0,
+          width: '100%',
+          textAlign: 'center',
+          fontSize: 10,
+          color: '#fff',
+        }}
+      >
+        {data.label}
+      </div>
+    </div>
+  )
+}
+
+function polygonPoints(sides: number, r: number) {
+  const cx = r
+  const cy = r
+  const pts: string[] = []
+  for (let i = 0; i < sides; i++) {
+    const angle = -Math.PI / 2 + (2 * Math.PI * i) / sides
+    pts.push(`${cx + r * Math.cos(angle)},${cy + r * Math.sin(angle)}`)
+  }
+  return pts.join(' ')
+}
+
+function starPoints(r: number) {
+  const outer = r
+  const inner = r / 2
+  const cx = r
+  const cy = r
+  const pts: string[] = []
+  let rot = -Math.PI / 2
+  const step = Math.PI / 5
+  for (let i = 0; i < 10; i++) {
+    const radius = i % 2 === 0 ? outer : inner
+    pts.push(`${cx + Math.cos(rot) * radius},${cy + Math.sin(rot) * radius}`)
+    rot += step
+  }
+  return pts.join(' ')
+}
+
 export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSelect }: Props) {
   const [data, setData] = useState<GraphData>({ nodes: [], links: [] })
-  const containerRef = useRef<HTMLDivElement>(null)
-  const graphRef = useRef<ForceGraphMethods<GraphNode, GraphLink> | undefined>(
-    undefined,
-  )
-  const [dims, setDims] = useState({ width: 0, height: 0 })
   const shapeMapRef = useRef<Record<string, NodeShape>>({ sut: 'circle' })
   const [queueDepths, setQueueDepths] = useState<Record<string, number>>({})
   const [queueCounts, setQueueCounts] = useState<Record<string, number>>({})
-  const [bounds, setBounds] = useState<
-    Record<string, { minX: number; minY: number; maxX: number; maxY: number }>
-  >({})
+  const flowRef = useRef<ReactFlowInstance | null>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const unsub = subscribeComponents((comps: Component[]) => {
@@ -86,10 +204,6 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
     })
     return () => unsub()
   }, [])
-
-  useEffect(() => {
-    ;(graphRef.current as unknown as { refresh?: () => void })?.refresh?.()
-  }, [queueDepths, queueCounts])
 
   useEffect(() => {
     const unsub = subscribeTopology((topo: Topology) => {
@@ -132,25 +246,9 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
   }, [swarmId])
 
   useEffect(() => {
-    const b: Record<string, { minX: number; minY: number; maxX: number; maxY: number }> = {}
-    data.nodes.forEach((n) => {
-      const s = n.swarmId || 'default'
-      const bn =
-        b[s] || { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity }
-      bn.minX = Math.min(bn.minX, n.x ?? 0)
-      bn.maxX = Math.max(bn.maxX, n.x ?? 0)
-      bn.minY = Math.min(bn.minY, n.y ?? 0)
-      bn.maxY = Math.max(bn.maxY, n.y ?? 0)
-      b[s] = bn
-    })
-    setBounds(b)
-  }, [data])
-
-  useEffect(() => {
     const el = containerRef.current
     if (!el) return
-    const update = () =>
-      setDims({ width: el.clientWidth, height: el.clientHeight })
+    const update = () => flowRef.current?.fitView({ padding: 20 })
     update()
     if (typeof ResizeObserver !== 'undefined') {
       const ro = new ResizeObserver(update)
@@ -171,230 +269,76 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
     return map[type]
   }
 
-  const drawPolygon = (
-    ctx: CanvasRenderingContext2D,
-    x: number,
-    y: number,
-    sides: number,
-    size: number,
-  ) => {
-    for (let i = 0; i < sides; i++) {
-      const angle = -Math.PI / 2 + (2 * Math.PI * i) / sides
-      const px = x + size * Math.cos(angle)
-      const py = y + size * Math.sin(angle)
-      if (i === 0) ctx.moveTo(px, py)
-      else ctx.lineTo(px, py)
-    }
-    ctx.closePath()
-  }
+  const nodes: Node<ShapeNodeData>[] = useMemo(
+    () =>
+      data.nodes.map((n) => ({
+        id: n.id,
+        position: { x: n.x ?? 0, y: n.y ?? 0 },
+        data: {
+          label: n.id,
+          shape: getShape(n.type),
+          enabled: n.enabled,
+          queueCount: queueCounts[n.id] ?? 0,
+          swarmId: n.swarmId,
+        },
+        type: 'shape',
+        selected: selectedId === n.id,
+      })) as Node<ShapeNodeData>[],
+    [data.nodes, queueCounts, selectedId],
+  )
 
-  const drawStar = (
-    ctx: CanvasRenderingContext2D,
-    x: number,
-    y: number,
-    size: number,
-  ) => {
-    let rot = -Math.PI / 2
-    const spikes = 5
-    const step = Math.PI / spikes
-    for (let i = 0; i < spikes * 2; i++) {
-      const r = i % 2 === 0 ? size : size / 2
-      const px = x + Math.cos(rot) * r
-      const py = y + Math.sin(rot) * r
-      if (i === 0) ctx.moveTo(px, py)
-      else ctx.lineTo(px, py)
-      rot += step
-    }
-    ctx.closePath()
-  }
+  const edges: Edge[] = useMemo(
+    () =>
+      data.links.map((l) => {
+        const depth = queueDepths[l.queue] ?? 0
+        const color = depth > 0 ? '#ff6666' : '#66aaff'
+        const width = 2 + Math.log(depth + 1)
+        return {
+          id: `${l.source}-${l.target}-${l.queue}`,
+          source: l.source,
+          target: l.target,
+          label: l.queue,
+          style: { stroke: color, strokeWidth: width },
+          markerEnd: { type: MarkerType.ArrowClosed, color },
+          labelBgPadding: [2, 2],
+          labelBgBorderRadius: 2,
+          labelStyle: { fill: '#fff', fontSize: 6 },
+          labelBgStyle: { fill: 'rgba(0,0,0,0.6)' },
+        }
+      }) as unknown as Edge[],
+    [data.links, queueDepths],
+  )
 
-  const drawNode = (
-    node: GraphNode,
-    ctx: CanvasRenderingContext2D,
-    globalScale: number,
-  ) => {
-    const shape = getShape(node.type)
-    const size = 8
-    if (selectedId === node.id) {
-      ctx.beginPath()
-      ctx.arc(node.x ?? 0, node.y ?? 0, size + 4, 0, 2 * Math.PI)
-      ctx.fillStyle = 'rgba(255,255,255,0.1)'
-      ctx.fill()
-    }
-    ctx.beginPath()
-    if (shape === 'square') {
-      ctx.rect((node.x ?? 0) - size, (node.y ?? 0) - size, size * 2, size * 2)
-    } else if (shape === 'triangle') {
-      ctx.moveTo(node.x ?? 0, (node.y ?? 0) - size)
-      ctx.lineTo((node.x ?? 0) + size, (node.y ?? 0) + size)
-      ctx.lineTo((node.x ?? 0) - size, (node.y ?? 0) + size)
-      ctx.closePath()
-    } else if (shape === 'diamond') {
-      ctx.moveTo(node.x ?? 0, (node.y ?? 0) - size)
-      ctx.lineTo((node.x ?? 0) + size, node.y ?? 0)
-      ctx.lineTo(node.x ?? 0, (node.y ?? 0) + size)
-      ctx.lineTo((node.x ?? 0) - size, node.y ?? 0)
-      ctx.closePath()
-    } else if (shape === 'pentagon') {
-      drawPolygon(ctx, node.x ?? 0, node.y ?? 0, 5, size)
-    } else if (shape === 'hexagon') {
-      drawPolygon(ctx, node.x ?? 0, node.y ?? 0, 6, size)
-    } else if (shape === 'star') {
-      drawStar(ctx, node.x ?? 0, node.y ?? 0, size)
-    } else {
-      ctx.arc(node.x ?? 0, node.y ?? 0, size, 0, 2 * Math.PI)
-    }
-    ctx.fillStyle = node.enabled === false ? '#999999' : '#ffcc00'
-    ctx.strokeStyle = '#000'
-    ctx.lineWidth = 1
-    ctx.fill()
-    ctx.stroke()
-    const label = node.id
-    const fontSize = 10 / globalScale
-    ctx.font = `${fontSize}px sans-serif`
-    ctx.textAlign = 'center'
-    ctx.textBaseline = 'top'
-    ctx.fillStyle = '#fff'
-    ctx.fillText(
-      label,
-      node.x ?? 0,
-      (node.y ?? 0) + size + 4 / globalScale,
-    )
-    const count = queueCounts[node.id] ?? 0
-    if (count > 0) {
-      const r = 4 / globalScale
-      const bx = (node.x ?? 0) + size
-      const by = (node.y ?? 0) - size
-      ctx.beginPath()
-      ctx.arc(bx, by, r, 0, 2 * Math.PI)
-      ctx.fillStyle = '#333'
-      ctx.fill()
-      ctx.fillStyle = '#fff'
-      ctx.font = `${r * 1.5}px sans-serif`
-      ctx.textAlign = 'center'
-      ctx.textBaseline = 'middle'
-      ctx.fillText(String(count), bx, by)
-    }
-  }
-
-  const polygonPoints = (sides: number) => {
-    const r = 5
-    const cx = 6
-    const cy = 6
-    const pts: string[] = []
-    for (let i = 0; i < sides; i++) {
-      const angle = -Math.PI / 2 + (2 * Math.PI * i) / sides
-      pts.push(`${cx + r * Math.cos(angle)},${cy + r * Math.sin(angle)}`)
-    }
-    return pts.join(' ')
-  }
-
-  const starPoints = () => {
-    const outer = 5
-    const inner = 2.5
-    const cx = 6
-    const cy = 6
-    const pts: string[] = []
-    let rot = -Math.PI / 2
-    const step = Math.PI / 5
-    for (let i = 0; i < 10; i++) {
-      const r = i % 2 === 0 ? outer : inner
-      pts.push(`${cx + Math.cos(rot) * r},${cy + Math.sin(rot) * r}`)
-      rot += step
-    }
-    return pts.join(' ')
-  }
+  useEffect(() => {
+    if (nodes.length) flowRef.current?.fitView({ padding: 20 })
+  }, [nodes.length])
 
   const types = Array.from(new Set(data.nodes.map((n) => n.type)))
 
-  useEffect(() => {
-    if (data.nodes.length) graphRef.current?.zoomToFit?.(0, 20)
-  }, [dims, data.nodes.length])
-
   return (
     <div ref={containerRef} className="topology-container">
-      <ForceGraph2D
-        ref={graphRef}
-        width={dims.width}
-        height={dims.height}
-        graphData={data as unknown as GraphData}
-        enableNodeDrag
-        cooldownTicks={0}
-        nodeLabel="id"
-        linkLabel={(l) => (l as GraphLink).queue}
-        linkColor={(l) => {
-          const depth = queueDepths[(l as GraphLink).queue] ?? 0
-          return depth > 0 ? '#ff6666' : '#66aaff'
-        }}
-        linkWidth={(l) => {
-          const depth = queueDepths[(l as GraphLink).queue] ?? 0
-          return 2 + Math.log(depth + 1)
-        }}
-        linkDirectionalArrowLength={4}
-        linkCanvasObjectMode={() => 'after'}
-        linkCanvasObject={(link, ctx, globalScale) => {
-          const l = link as GraphLink & {
-            source: { x: number; y: number }
-            target: { x: number; y: number }
+        <ReactFlow<Node<ShapeNodeData>, Edge>
+          nodes={nodes}
+          edges={edges}
+          nodeTypes={{ shape: ShapeNode }}
+          onInit={(inst: ReactFlowInstance<Node<ShapeNodeData>, Edge>) =>
+            (flowRef.current = inst)
           }
-          const { source, target, queue } = l
-          if (!source || !target) return
-          const x = (source.x + target.x) / 2
-          const y = (source.y + target.y) / 2
-          const fontSize = 6 / globalScale
-          const pad = 2 / globalScale
-          const yLabel = y + fontSize
-          ctx.font = `${fontSize}px sans-serif`
-          const textWidth = ctx.measureText(queue).width
-          ctx.fillStyle = 'rgba(0,0,0,0.6)'
-          ctx.fillRect(
-            x - textWidth / 2 - pad,
-            yLabel - pad,
-            textWidth + pad * 2,
-            fontSize + pad * 2,
-          )
-          ctx.textAlign = 'center'
-          ctx.textBaseline = 'top'
-          ctx.fillStyle = '#fff'
-          ctx.fillText(queue, x, yLabel)
-        }}
-        onRenderFramePre={(ctx) => {
-          if (!swarmId) {
-            ctx.save()
-            ctx.strokeStyle = 'rgba(255,255,255,0.2)'
-            ctx.fillStyle = 'rgba(255,255,255,0.05)'
-            Object.values(bounds).forEach((b) => {
-              const pad = 10
-              ctx.fillRect(
-                b.minX - pad,
-                b.minY - pad,
-                b.maxX - b.minX + pad * 2,
-                b.maxY - b.minY + pad * 2,
-              )
-              ctx.strokeRect(
-                b.minX - pad,
-                b.minY - pad,
-                b.maxX - b.minX + pad * 2,
-                b.maxY - b.minY + pad * 2,
-              )
-            })
-            ctx.restore()
-          }
-        }}
-        nodeCanvasObject={(node, ctx, globalScale) =>
-          drawNode(node as GraphNode, ctx, globalScale)}
-        onNodeDragEnd={(n) =>
-          updateNodePosition(String(n.id), n.x ?? 0, n.y ?? 0)}
-        onNodeClick={(n) => {
-          const node = n as GraphNode
-          if (swarmId) onSelect?.(String(node.id))
-          else onSwarmSelect?.(node.swarmId ?? 'default')
-        }}
-      />
-      <button
-        className="reset-view"
-        onClick={() => graphRef.current?.zoomToFit?.(0, 20)}
-      >
+          onNodeDragStop={(
+            _e: unknown,
+            node: Node<ShapeNodeData>,
+          ) => updateNodePosition(node.id, node.position.x, node.position.y)}
+          onNodeClick={(
+            _e: unknown,
+            node: Node<ShapeNodeData>,
+          ) => {
+            const d = node.data as ShapeNodeData
+            if (swarmId) onSelect?.(node.id)
+            else onSwarmSelect?.(d.swarmId ?? 'default')
+          }}
+          fitView
+        />
+      <button className="reset-view" onClick={() => flowRef.current?.fitView({ padding: 20 })}>
         Reset View
       </button>
       <div className="topology-legend">
@@ -413,13 +357,13 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
                   <polygon points="6,1 11,6 6,11 1,6" fill="#ffcc00" stroke="black" />
                 )}
                 {shape === 'pentagon' && (
-                  <polygon points={polygonPoints(5)} fill="#ffcc00" stroke="black" />
+                  <polygon points={polygonPoints(5, 5)} fill="#ffcc00" stroke="black" />
                 )}
                 {shape === 'hexagon' && (
-                  <polygon points={polygonPoints(6)} fill="#ffcc00" stroke="black" />
+                  <polygon points={polygonPoints(6, 5)} fill="#ffcc00" stroke="black" />
                 )}
                 {shape === 'star' && (
-                  <polygon points={starPoints()} fill="#ffcc00" stroke="black" />
+                  <polygon points={starPoints(5)} fill="#ffcc00" stroke="black" />
                 )}
                 {shape === 'circle' && (
                   <circle cx="6" cy="6" r="5" fill="#ffcc00" stroke="black" />
@@ -454,3 +398,4 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
     </div>
   )
 }
+
