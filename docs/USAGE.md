@@ -57,7 +57,8 @@ Manual checks:
   ```
 
   The orchestrator resolves the template from `scenario-manager-service`, converts it to a `SwarmPlan`, launches a Swarm Controller and then publishes `sig.swarm-template.<swarmId>` containing the full plan (all bee containers default to `enabled: false`).
-- Wait for `ev.ready.swarm.<swarmId>` to confirm the swarm is provisioned but idle.
+- The orchestrator emits `ev.swarm-created.<swarmId>` once the controller container starts.
+- Wait for `ev.swarm-ready.<swarmId>` to confirm the swarm is provisioned but idle.
 - When ready to run, STOMP `sig.swarm-start.<swarmId>` with an empty body to enable the bees and begin execution.
 
 ## Troubleshooting

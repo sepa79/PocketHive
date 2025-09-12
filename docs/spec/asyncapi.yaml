@@ -139,15 +139,15 @@ channels:
           durable: true
         routingKey: sig.swarm-start.{swarmId}
 
-  exchange/ph.control/ev.ready.swarm.{swarmId}:
+  exchange/ph.control/ev.swarm-created.{swarmId}:
     parameters:
       swarmId:
         description: Swarm identifier
         schema: { type: string }
     subscribe:
-      summary: Swarm provisioned and ready to start
+      summary: Swarm controller container started
       message:
-        $ref: '#/components/messages/ControlLifecycle'
+        $ref: '#/components/messages/SwarmCreated'
     bindings:
       amqp:
         is: routingKey
@@ -155,7 +155,25 @@ channels:
           name: ph.control
           type: topic
           durable: true
-        routingKey: ev.ready.swarm.{swarmId}
+        routingKey: ev.swarm-created.{swarmId}
+
+  exchange/ph.control/ev.swarm-ready.{swarmId}:
+    parameters:
+      swarmId:
+        description: Swarm identifier
+        schema: { type: string }
+    subscribe:
+      summary: Swarm provisioning finished
+      message:
+        $ref: '#/components/messages/SwarmReady'
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: ph.control
+          type: topic
+          durable: true
+        routingKey: ev.swarm-ready.{swarmId}
 
   exchange/ph.control/ev.swarm-create.error.{swarmId}:
     parameters:
@@ -175,7 +193,6 @@ channels:
           durable: true
         routingKey: ev.swarm-create.error.{swarmId}
 
-  # Removed ev.swarm-created in favour of ev.ready.swarm
 components:
   messages:
     ControlStatusFull:
@@ -250,6 +267,18 @@ components:
     SwarmStart:
       name: SwarmStart
       title: Swarm start signal
+      payload:
+        type: object
+        description: Empty object
+    SwarmCreated:
+      name: SwarmCreated
+      title: Swarm controller launched
+      payload:
+        type: object
+        description: Empty object
+    SwarmReady:
+      name: SwarmReady
+      title: Swarm ready for start
       payload:
         type: object
         description: Empty object

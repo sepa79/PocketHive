@@ -3,8 +3,9 @@
 ## Swarm creation sequence
 1. UI publishes `sig.swarm-create.<swarmId>` with body `{ "templateId": "rest" }`.
 2. Queen resolves the template from `scenario-manager-service`, launches the SwarmController and sends `sig.swarm-template.<swarmId>` containing the full `SwarmPlan` (all bees have `enabled: false`).
-3. SwarmController provisions queues and containers, then emits `ev.ready.swarm.<swarmId>`.
-4. UI starts the swarm later by sending `sig.swarm-start.<swarmId>` (empty body).
+3. Queen announces controller launch with `ev.swarm-created.<swarmId>`.
+4. SwarmController provisions queues and containers, then emits `ev.swarm-ready.<swarmId>`.
+5. UI starts the swarm later by sending `sig.swarm-start.<swarmId>` (empty body).
 
 ```mermaid
 sequenceDiagram
@@ -14,15 +15,16 @@ sequenceDiagram
   UI->>QN: sig.swarm-create.<swarmId>
   QN-->>SC: launch controller & fetch template
   QN->>SC: sig.swarm-template.<swarmId>
-  SC->>QN: ev.ready.swarm.<swarmId>
+  QN->>UI: ev.swarm-created.<swarmId>
+  SC->>UI: ev.swarm-ready.<swarmId>
   UI->>QN: sig.swarm-start.<swarmId>
   QN->>SC: sig.swarm-start.<swarmId>
 ```
 
 ## Phase 1 – Control channel handshake
 - Subscribe to the `ph.control` exchange and declare `ph.control.swarm-controller.<instance>`.
-- Queen sends `sig.swarm-template.<swarmId>` carrying the SwarmPlan.
-- After provisioning, emit `ev.ready.swarm.<swarmId>`.
+- Queen sends `sig.swarm-template.<swarmId>` carrying the SwarmPlan and publishes `ev.swarm-created.<swarmId>`.
+- After provisioning, emit `ev.swarm-ready.<swarmId>`.
 
 ## Phase 2 – Plan expansion and queue provisioning
 - Parse the SwarmPlan to resolve bee roles and queue suffixes.
@@ -48,7 +50,7 @@ Templates are stored in `scenario-manager-service`. The UI lists them via `GET /
 
 ## Orchestrator–swarm-controller ready-start handshake
 
-On startup the swarm-controller declares `ph.control.swarm-controller.<instance>`. The orchestrator sends `sig.swarm-template.<swarmId>` with the SwarmPlan. After provisioning queues and disabled bees it publishes `ev.ready.swarm.<swarmId>`. The swarm remains idle until a later `sig.swarm-start.<swarmId>` enables the bees.
+On startup the swarm-controller declares `ph.control.swarm-controller.<instance>`. The orchestrator sends `sig.swarm-template.<swarmId>` with the SwarmPlan and publishes `ev.swarm-created.<swarmId>`. After provisioning queues and disabled bees the controller publishes `ev.swarm-ready.<swarmId>`. The swarm remains idle until a later `sig.swarm-start.<swarmId>` enables the bees.
 
 ## SwarmPlan parsing, queue provisioning, and bee container lifecycle
 
