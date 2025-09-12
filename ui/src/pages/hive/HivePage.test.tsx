@@ -8,7 +8,7 @@ import { vi, test, expect, beforeEach, type Mock } from 'vitest'
 import HivePage from './HivePage'
 import type { Component } from '../../types/hive'
 import { subscribeComponents, startSwarm, stopSwarm, requestStatusFull } from '../../lib/stompClient'
-import { subscribeLogs } from '../../lib/logs'
+import { subscribeLogs, type LogEntry } from '../../lib/logs'
 
 vi.mock('../../lib/stompClient', () => ({
   subscribeComponents: vi.fn(),
@@ -44,7 +44,7 @@ const comps: Component[] = [
 ]
 
 let listener: ((c: Component[]) => void) | null = null
-let logListener: ((e: { destination: string; body: string; ts: number }[]) => void) | null = null
+let logListener: ((e: LogEntry[]) => void) | null = null
 
 beforeEach(() => {
   ;(subscribeComponents as unknown as Mock).mockImplementation(
@@ -54,13 +54,11 @@ beforeEach(() => {
       return () => {}
     },
   )
-  ;(subscribeLogs as unknown as Mock).mockImplementation(
-    (_type: string, fn: (e: { destination: string; body: string; ts: number }[]) => void) => {
-      logListener = fn
-      fn([])
-      return () => {}
-    },
-  )
+  ;(subscribeLogs as unknown as Mock).mockImplementation((fn: (e: LogEntry[]) => void) => {
+    logListener = fn
+    fn([])
+    return () => {}
+  })
   ;(startSwarm as unknown as Mock).mockReset()
   ;(stopSwarm as unknown as Mock).mockReset()
   ;(requestStatusFull as unknown as Mock).mockResolvedValue(undefined)
@@ -76,6 +74,9 @@ test('renders queen status and start/stop controls', async () => {
       ts: Date.now(),
       destination: '/exchange/ph.control/ev.swarm-created.sw1',
       body: '',
+      type: 'handshake',
+      source: 'hive',
+      channel: 'stomp',
     },
   ])
   expect(await screen.findByText('Swarm controller created')).toBeTruthy()
@@ -85,6 +86,9 @@ test('renders queen status and start/stop controls', async () => {
       ts: Date.now(),
       destination: '/exchange/ph.control/ev.swarm-ready.sw1',
       body: '',
+      type: 'handshake',
+      source: 'hive',
+      channel: 'stomp',
     },
   ])
   expect(await screen.findByText('Swarm ready')).toBeTruthy()

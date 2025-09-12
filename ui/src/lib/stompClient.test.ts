@@ -15,10 +15,13 @@ describe('swarm lifecycle', () => {
     const subscribe = vi.fn().mockReturnValue({ unsubscribe() {} })
     setClient({ active: true, publish, subscribe } as unknown as Client)
     await createSwarm('sw1', 'rest')
-    expect(publish).toHaveBeenCalledWith({
+    expect(publish).toHaveBeenCalled()
+    const params = publish.mock.calls[0][0]
+    expect(params).toMatchObject({
       destination: '/exchange/ph.control/sig.swarm-create.sw1',
       body: JSON.stringify({ templateId: 'rest' }),
     })
+    expect(params.headers['x-correlation-id']).toBeDefined()
   })
 
   it('publishes swarm start signal', async () => {
@@ -26,10 +29,13 @@ describe('swarm lifecycle', () => {
     const subscribe = vi.fn().mockReturnValue({ unsubscribe() {} })
     setClient({ active: true, publish, subscribe } as unknown as Client)
     await startSwarm('sw1')
-    expect(publish).toHaveBeenCalledWith({
+    expect(publish).toHaveBeenCalled()
+    const params = publish.mock.calls[0][0]
+    expect(params).toMatchObject({
       destination: '/exchange/ph.control/sig.swarm-start.sw1',
       body: '',
     })
+    expect(params.headers['x-correlation-id']).toBeDefined()
   })
 
   it('publishes swarm stop signal', async () => {
@@ -37,10 +43,13 @@ describe('swarm lifecycle', () => {
     const subscribe = vi.fn().mockReturnValue({ unsubscribe() {} })
     setClient({ active: true, publish, subscribe } as unknown as Client)
     await stopSwarm('sw1')
-    expect(publish).toHaveBeenCalledWith({
+    expect(publish).toHaveBeenCalled()
+    const params = publish.mock.calls[0][0]
+    expect(params).toMatchObject({
       destination: '/exchange/ph.control/sig.swarm-stop.sw1',
       body: '',
     })
+    expect(params.headers['x-correlation-id']).toBeDefined()
   })
 
   it('logs handshake events', () => {
@@ -55,11 +64,17 @@ describe('swarm lifecycle', () => {
     )
     setClient({ active: true, publish, subscribe } as unknown as Client)
     let entries: LogEntry[] = []
-    subscribeLogs('handshake', (l) => {
-      entries = l
+    subscribeLogs((l) => {
+      entries = l.filter((e) => e.type === 'handshake')
     })
-    cb({ body: '{}', headers: { destination: '/exchange/ph.control/ev.ready.swarm-controller.inst' } })
-    cb({ body: '{}', headers: { destination: '/exchange/ph.control/sig.swarm-template.sw1' } })
+    cb({
+      body: '{}',
+      headers: { destination: '/exchange/ph.control/ev.ready.swarm-controller.inst', 'x-correlation-id': 'c1' },
+    })
+    cb({
+      body: '{}',
+      headers: { destination: '/exchange/ph.control/sig.swarm-template.sw1', 'x-correlation-id': 'c2' },
+    })
     expect(entries.some((e) => e.destination.includes('ev.ready.swarm-controller.inst'))).toBe(true)
     expect(entries[entries.length - 1].destination).toContain('sig.swarm-template.sw1')
   })
@@ -77,10 +92,13 @@ describe('swarm lifecycle', () => {
       })
     setClient({ active: true, publish, subscribe } as unknown as Client)
     let entries: LogEntry[] = []
-    subscribeLogs('error', (l) => {
-      entries = l
+    subscribeLogs((l) => {
+      entries = l.filter((e) => e.type === 'error')
     })
-    cb({ body: 'boom', headers: { destination: '/exchange/ph.control/ev.swarm-create.error.sw1' } })
+    cb({
+      body: 'boom',
+      headers: { destination: '/exchange/ph.control/ev.swarm-create.error.sw1', 'x-correlation-id': 'e1' },
+    })
     expect(entries[0].destination).toContain('ev.swarm-create.error.sw1')
     expect(entries[0].body).toBe('boom')
     expect(useUIStore.getState().toast).toBe('Error: swarm-create error sw1: boom')

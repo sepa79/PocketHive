@@ -10,21 +10,23 @@ export default function SwarmDebugPanel() {
   const [swarms, setSwarms] = useState<Record<string, SwarmState>>({})
 
   useEffect(() => {
-    return subscribeLogs('handshake', (entries: LogEntry[]) => {
+    return subscribeLogs((entries: LogEntry[]) => {
       setSwarms((prev) => {
         const next = { ...prev }
-        entries.forEach((e) => {
-          const ts = e.ts
-          const d = e.destination
-          let m: RegExpMatchArray | null
-          if ((m = d.match(/ev\.swarm-created\.([^/]+)$/))) {
-            const id = m[1]
-            next[id] = { ...(next[id] || {}), created: ts }
-          } else if ((m = d.match(/ev\.swarm-ready\.([^/]+)$/))) {
-            const id = m[1]
-            next[id] = { ...(next[id] || {}), ready: ts }
-          }
-        })
+        entries
+          .filter((e) => e.type === 'handshake')
+          .forEach((e) => {
+            const ts = e.ts
+            const d = e.destination
+            let m: RegExpMatchArray | null
+            if ((m = d.match(/ev\.swarm-created\.([^/]+)$/))) {
+              const id = m[1]
+              next[id] = { ...(next[id] || {}), created: ts }
+            } else if ((m = d.match(/ev\.swarm-ready\.([^/]+)$/))) {
+              const id = m[1]
+              next[id] = { ...(next[id] || {}), ready: ts }
+            }
+          })
         return { ...next }
       })
     })

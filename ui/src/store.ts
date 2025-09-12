@@ -11,6 +11,12 @@ interface UIState {
   toast: string | null
   setToast: (msg: string) => void
   clearToast: () => void
+  buzzVisible: boolean
+  toggleBuzz: () => void
+  buzzDock: 'left' | 'right' | 'bottom'
+  setBuzzDock: (pos: 'left' | 'right' | 'bottom') => void
+  buzzSize: number
+  setBuzzSize: (size: number) => void
 }
 
 export const useUIStore = create<UIState>((set) => ({
@@ -24,4 +30,10 @@ export const useUIStore = create<UIState>((set) => ({
   toast: null,
   setToast: (msg: string) => set({ toast: msg }),
   clearToast: () => set({ toast: null }),
+  buzzVisible: false,
+  toggleBuzz: () => set((s) => ({ buzzVisible: !s.buzzVisible })),
+  buzzDock: 'right',
+  setBuzzDock: (pos) => set({ buzzDock: pos }),
+  buzzSize: 30,
+  setBuzzSize: (size: number) => set({ buzzSize: Math.max(10, Math.min(90, size)) }),
 }))

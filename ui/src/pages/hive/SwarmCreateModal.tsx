@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { createSwarm } from '../../lib/stompClient'
+import { apiFetch } from '../../lib/api'
 
 interface Props {
   onClose: () => void
@@ -17,7 +18,7 @@ export default function SwarmCreateModal({ onClose }: Props) {
   const [message, setMessage] = useState<string | null>(null)
 
   useEffect(() => {
-    fetch('/scenario-manager/scenarios', {
+    apiFetch('/scenario-manager/scenarios', {
       headers: { Accept: 'application/json' },
     })
       .then((res) => res.json())

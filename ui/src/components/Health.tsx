@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { apiFetch } from '../lib/api'
 
 type UiState = 'connecting' | 'healthy' | 'unhealthy' | 'down'
 
@@ -9,7 +10,7 @@ export default function Health() {
     let last: string | null = null
     const ping = async () => {
       try {
-        const res = await fetch('/healthz', { cache: 'no-store' })
+        const res = await apiFetch('/healthz', { cache: 'no-store' })
         const text = await res.text().catch(() => '')
         const ok = res.ok && /ok/i.test(text)
         const status: UiState = ok ? 'healthy' : 'unhealthy'

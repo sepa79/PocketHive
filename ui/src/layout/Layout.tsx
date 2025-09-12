@@ -6,10 +6,24 @@ import Connectivity from '../components/Connectivity'
 import { useUIStore } from '../store'
 import { useEffect } from 'react'
 import { useConfig } from '../lib/config'
+import BuzzPanel from '../components/BuzzPanel'
+import { PanelGroup, Panel, PanelResizeHandle } from 'react-resizable-panels'
 
 export default function Layout() {
-  const { sidebarOpen, toggleSidebar, closeSidebar, debugMode, toggleDebug, toast, clearToast } =
-    useUIStore()
+  const {
+    sidebarOpen,
+    toggleSidebar,
+    closeSidebar,
+    debugMode,
+    toggleDebug,
+    toast,
+    clearToast,
+    buzzVisible,
+    toggleBuzz,
+    buzzDock,
+    buzzSize,
+    setBuzzSize,
+  } = useUIStore()
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -43,15 +57,13 @@ export default function Layout() {
             <Hexagon strokeWidth={1.5} className="tab-icon text-white/80" />
             Hive
           </NavLink>
-          <NavLink
-            to="/buzz"
-            className={({ isActive }) =>
-              `tab-btn flex items-center${isActive ? ' tab-active' : ''}`
-            }
+          <button
+            className={`tab-btn flex items-center${buzzVisible ? ' tab-active' : ''}`}
+            onClick={toggleBuzz}
           >
             <Radio strokeWidth={1.5} className="tab-icon text-white/80" />
             Buzz
-          </NavLink>
+          </button>
           <NavLink
             to="/nectar"
             className={({ isActive }) =>
@@ -98,8 +110,56 @@ export default function Layout() {
           </div>
         </div>
       </header>
-      <main>
-        <Outlet />
+      <main className="flex min-h-[calc(100vh-64px)]">
+        {buzzVisible ? (
+          buzzDock === 'bottom' ? (
+            <PanelGroup
+              direction="vertical"
+              onLayout={(sizes) => setBuzzSize(sizes[1])}
+              className="flex-1"
+            >
+              <Panel minSize={10}>
+                <Outlet />
+              </Panel>
+              <PanelResizeHandle className="h-1 bg-white/20" />
+              <Panel minSize={10} defaultSize={buzzSize}>
+                <BuzzPanel />
+              </Panel>
+            </PanelGroup>
+          ) : (
+            <PanelGroup
+              direction="horizontal"
+              onLayout={(sizes) =>
+                setBuzzSize(sizes[buzzDock === 'left' ? 0 : 1])
+              }
+              className="flex-1"
+            >
+              {buzzDock === 'left' ? (
+                <>
+                  <Panel minSize={10} defaultSize={buzzSize}>
+                    <BuzzPanel />
+                  </Panel>
+                  <PanelResizeHandle className="w-1 bg-white/20" />
+                  <Panel minSize={10}>
+                    <Outlet />
+                  </Panel>
+                </>
+              ) : (
+                <>
+                  <Panel minSize={10}>
+                    <Outlet />
+                  </Panel>
+                  <PanelResizeHandle className="w-1 bg-white/20" />
+                  <Panel minSize={10} defaultSize={buzzSize}>
+                    <BuzzPanel />
+                  </Panel>
+                </>
+              )}
+            </PanelGroup>
+          )
+        ) : (
+          <Outlet />
+        )}
       </main>
       {toast && (
         <div className="fixed bottom-4 right-4 bg-black/80 text-white px-4 py-2 rounded">

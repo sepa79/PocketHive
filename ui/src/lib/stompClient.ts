@@ -104,9 +104,12 @@ export function setClient(newClient: Client | null, destination = controlDestina
       const origPublish = client.publish.bind(client)
       client.publish = ((params) => {
         const body = params.body ?? ''
-        logOut(params.destination, body)
-        if (isHandshake(params.destination)) logHandshake(params.destination, body)
-        origPublish(params)
+        const correlationId = crypto.randomUUID()
+        const headers = { ...(params.headers || {}), 'x-correlation-id': correlationId }
+        logOut(params.destination, body, 'ui', 'stomp', correlationId)
+        if (isHandshake(params.destination))
+          logHandshake(params.destination, body, 'ui', 'stomp', correlationId)
+        origPublish({ ...params, headers })
       }) as typeof client.publish
 
       const origSubscribe = client.subscribe.bind(client)
@@ -115,16 +118,17 @@ export function setClient(newClient: Client | null, destination = controlDestina
           dest,
           (msg) => {
             const d = msg.headers.destination || dest
-            logIn(d, msg.body)
+            const correlationId = msg.headers['x-correlation-id']
+            logIn(d, msg.body, 'hive', 'stomp', correlationId)
             if (/\/exchange\/ph\.control\/(?:ev|sig)\..*\.error/.test(d)) {
-              logError(d, msg.body)
+              logError(d, msg.body, 'hive', 'stomp', correlationId)
               const { setToast } = useUIStore.getState()
               const evt = d.split('/').pop() || ''
               const name = evt.replace(/^(?:ev|sig)\./, '').replace(/\./g, ' ')
               const suffix = msg.body ? `: ${msg.body}` : ''
               setToast(`Error: ${name}${suffix}`)
             }
-            if (isHandshake(d)) logHandshake(d, msg.body)
+            if (isHandshake(d)) logHandshake(d, msg.body, 'hive', 'stomp', correlationId)
             callback(msg)
           },
           headers,
