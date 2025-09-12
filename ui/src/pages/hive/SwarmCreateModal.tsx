@@ -14,7 +14,6 @@ export default function SwarmCreateModal({ onClose }: Props) {
   const [swarmId, setSwarmId] = useState('')
   const [scenarios, setScenarios] = useState<ScenarioSummary[]>([])
   const [scenarioId, setScenarioId] = useState('')
-  const [scenario, setScenario] = useState<unknown>(null)
   const [message, setMessage] = useState<string | null>(null)
 
   useEffect(() => {
@@ -26,20 +25,9 @@ export default function SwarmCreateModal({ onClose }: Props) {
       .catch(() => setScenarios([]))
   }, [])
 
-  useEffect(() => {
-    setScenario(null)
-    if (!scenarioId) return
-    fetch(`/scenario-manager/scenarios/${encodeURIComponent(scenarioId)}`, {
-      headers: { Accept: 'application/json' },
-    })
-      .then((res) => res.json())
-      .then((data) => setScenario(data))
-      .catch(() => setScenario(null))
-  }, [scenarioId])
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!swarmId.trim() || !scenario) {
+    if (!swarmId.trim() || !scenarioId) {
       setMessage('Swarm ID and scenario required')
       return
     }
@@ -48,11 +36,10 @@ export default function SwarmCreateModal({ onClose }: Props) {
       return
     }
     try {
-      await createSwarm(swarmId.trim(), scenario)
+      await createSwarm(swarmId.trim(), scenarioId)
       setMessage('Swarm created')
       setSwarmId('')
       setScenarioId('')
-      setScenario(null)
     } catch {
       setMessage('Failed to create swarm')
     }
