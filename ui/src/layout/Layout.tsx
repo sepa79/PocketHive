@@ -44,7 +44,7 @@ export default function Layout() {
   const services = { rabbitmq, prometheus, grafana, wiremock }
 
   return (
-    <div className="min-h-screen text-white">
+    <div className="flex h-screen flex-col text-white">
       <header className="flex items-center gap-4 p-4 sticky top-0 z-10 backdrop-blur border-b border-white/10 bg-[#080a0e]/75">
         <img className="logo" src="/logo.svg" alt="PocketHive Logo" />
         <nav className="nav-tabs">
@@ -110,13 +110,13 @@ export default function Layout() {
           </div>
         </div>
       </header>
-      <main className="flex min-h-[calc(100vh-64px)]">
+      <main className="flex flex-1 overflow-hidden">
         {buzzVisible ? (
           buzzDock === 'bottom' ? (
             <PanelGroup
               direction="vertical"
               onLayout={(sizes) => setBuzzSize(sizes[1])}
-              className="flex-1"
+              className="flex-1 h-full"
             >
               <Panel minSize={10}>
                 <Outlet />
@@ -132,7 +132,7 @@ export default function Layout() {
               onLayout={(sizes) =>
                 setBuzzSize(sizes[buzzDock === 'left' ? 0 : 1])
               }
-              className="flex-1"
+              className="flex-1 h-full"
             >
               {buzzDock === 'left' ? (
                 <>
@@ -158,7 +158,9 @@ export default function Layout() {
             </PanelGroup>
           )
         ) : (
-          <Outlet />
+          <div className="flex-1 overflow-auto">
+            <Outlet />
+          </div>
         )}
       </main>
       {toast && (
