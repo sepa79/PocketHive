@@ -29,6 +29,7 @@ interface RFProps {
   nodes: RFNode[]
   edges: RFEdge[]
   onNodeDragStop: (e: unknown, node: RFNode) => void
+  onNodesChange: (changes: { id: string; position: { x: number; y: number } }[]) => void
   children?: ReactNode
 }
 
@@ -78,6 +79,14 @@ vi.mock('@xyflow/react', () => {
     Background: () => React.createElement('div'),
     Handle: () => React.createElement('div'),
     Position: { Left: 'left', Right: 'right' },
+    applyNodeChanges: (
+      changes: { id: string; position: { x: number; y: number } }[],
+      nodes: RFNode[],
+    ) =>
+      nodes.map((n) => {
+        const c = changes.find((ch) => ch.id === n.id)
+        return c ? { ...n, position: c.position } : n
+      }),
   }
 })
 
@@ -107,10 +116,16 @@ test('node position updates after drag and edge depth styles', () => {
   expect(props.nodes[0].position.x).toBe(0)
   expect(props.nodes[0].position.y).toBe(0)
   act(() => {
-    props.onNodeDragStop({}, {
+    props.onNodesChange([{ id: 'a', position: { x: 10, y: 20 } }])
+  })
+  const dragged = (globalThis as unknown as { __RF_PROPS__: RFProps }).__RF_PROPS__
+  expect(dragged.nodes[0].position.x).toBe(10)
+  expect(dragged.nodes[0].position.y).toBe(20)
+  act(() => {
+    dragged.onNodeDragStop({}, {
       id: 'a',
       position: { x: 10, y: 20 },
-      data: props.nodes[0].data,
+      data: dragged.nodes[0].data,
     })
   })
   expect(updateNodePosition).toHaveBeenCalledWith('a', 10, 20)

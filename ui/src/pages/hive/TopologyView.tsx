@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/ban-ts-comment */
 // @ts-nocheck
-import { useEffect, useRef, useState, useMemo } from 'react'
+import { useEffect, useRef, useState, useMemo, useCallback } from 'react'
 import {
   ReactFlow,
   MarkerType,
@@ -11,6 +11,8 @@ import {
   type Edge,
   type ReactFlowInstance,
   type NodeProps,
+  type NodeChange,
+  applyNodeChanges,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import {
@@ -150,6 +152,7 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
   const [queueCounts, setQueueCounts] = useState<Record<string, number>>({})
   const flowRef = useRef<ReactFlowInstance | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+  const [rfNodes, setRfNodes] = useState<Node<ShapeNodeData>[]>([])
 
   useEffect(() => {
     const unsub = subscribeComponents((comps: Component[]) => {
@@ -234,23 +237,26 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
     return map[type]
   }
 
-  const nodes: Node<ShapeNodeData>[] = useMemo(
-    () =>
-      data.nodes.map((n) => ({
-        id: n.id,
-        position: { x: n.x ?? 0, y: n.y ?? 0 },
-        data: {
-          label: n.id,
-          shape: getShape(n.type),
-          enabled: n.enabled,
-          queueCount: queueCounts[n.id] ?? 0,
-          swarmId: n.swarmId,
-        },
-        type: 'shape',
-        selected: selectedId === n.id,
-      })) as Node<ShapeNodeData>[],
-    [data.nodes, queueCounts, selectedId],
-  )
+  useEffect(() => {
+    setRfNodes((prev) =>
+      data.nodes.map((n) => {
+        const existing = prev.find((p) => p.id === n.id)
+        return {
+          id: n.id,
+          position: existing?.position ?? { x: n.x ?? 0, y: n.y ?? 0 },
+          data: {
+            label: n.id,
+            shape: getShape(n.type),
+            enabled: n.enabled,
+            queueCount: queueCounts[n.id] ?? 0,
+            swarmId: n.swarmId,
+          },
+          type: 'shape',
+          selected: selectedId === n.id,
+        } as Node<ShapeNodeData>
+      }),
+    )
+  }, [data.nodes, queueCounts, selectedId])
 
   const edges: Edge[] = useMemo(
     () =>
@@ -274,17 +280,23 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
     [data.links, queueDepths],
   )
 
+  const onNodesChange = useCallback(
+    (changes: NodeChange[]) => setRfNodes((nds) => applyNodeChanges(changes, nds)),
+    [],
+  )
+
   useEffect(() => {
-    if (nodes.length) flowRef.current?.fitView({ padding: 20 })
-  }, [nodes.length])
+    if (rfNodes.length) flowRef.current?.fitView({ padding: 20 })
+  }, [rfNodes.length])
 
   const types = Array.from(new Set(data.nodes.map((n) => n.type)))
 
   return (
     <div ref={containerRef} className="topology-container">
         <ReactFlow<Node<ShapeNodeData>, Edge>
-          nodes={nodes}
+          nodes={rfNodes}
           edges={edges}
+          onNodesChange={onNodesChange}
           nodeTypes={{ shape: ShapeNode }}
           onInit={(inst: ReactFlowInstance<Node<ShapeNodeData>, Edge>) =>
             (flowRef.current = inst)
