@@ -85,6 +85,78 @@ channels:
           durable: true
         routingKey: sig.{type}.{role}.{instance}
 
+  exchange/ph.control/sig.swarm-create.{swarmId}:
+    parameters:
+      swarmId:
+        description: Swarm identifier
+        schema: { type: string }
+    publish:
+      summary: Request creation of a swarm from a stored template
+      message:
+        $ref: '#/components/messages/SwarmCreate'
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: ph.control
+          type: topic
+          durable: true
+        routingKey: sig.swarm-create.{swarmId}
+
+  exchange/ph.control/sig.swarm-template.{swarmId}:
+    parameters:
+      swarmId:
+        description: Swarm identifier
+        schema: { type: string }
+    publish:
+      summary: Deliver resolved SwarmPlan to controller
+      message:
+        $ref: '#/components/messages/SwarmPlanMessage'
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: ph.control
+          type: topic
+          durable: true
+        routingKey: sig.swarm-template.{swarmId}
+
+  exchange/ph.control/sig.swarm-start.{swarmId}:
+    parameters:
+      swarmId:
+        description: Swarm identifier
+        schema: { type: string }
+    publish:
+      summary: Enable previously provisioned swarm
+      message:
+        $ref: '#/components/messages/SwarmStart'
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: ph.control
+          type: topic
+          durable: true
+        routingKey: sig.swarm-start.{swarmId}
+
+  exchange/ph.control/ev.ready.swarm.{swarmId}:
+    parameters:
+      swarmId:
+        description: Swarm identifier
+        schema: { type: string }
+    subscribe:
+      summary: Swarm provisioned and ready to start
+      message:
+        $ref: '#/components/messages/ControlLifecycle'
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: ph.control
+          type: topic
+          durable: true
+        routingKey: ev.ready.swarm.{swarmId}
+
   exchange/ph.control/ev.swarm-create.error.{swarmId}:
     parameters:
       swarmId:
@@ -103,20 +175,7 @@ channels:
           durable: true
         routingKey: ev.swarm-create.error.{swarmId}
 
-  # Swarm created event example
-  exchange/ph.control/ev.swarm-created.{swarmId}:
-    publish:
-      summary: Swarm created successfully
-      message:
-        $ref: '#/components/messages/ControlLifecycle'
-    bindings:
-      amqp:
-        is: routingKey
-        exchange:
-          name: ph.control
-          type: topic
-          durable: true
-        routingKey: ev.swarm-created.{swarmId}
+  # Removed ev.swarm-created in favour of ev.ready.swarm
 components:
   messages:
     ControlStatusFull:
@@ -162,6 +221,38 @@ components:
       payload:
         type: string
         description: Brief error message
+    SwarmCreate:
+      name: SwarmCreate
+      title: Swarm creation request
+      payload:
+        type: object
+        required: [templateId]
+        properties:
+          templateId: { type: string }
+    SwarmPlanMessage:
+      name: SwarmPlan
+      title: Resolved swarm plan
+      payload:
+        type: object
+        required: [id, bees]
+        properties:
+          id: { type: string }
+          bees:
+            type: array
+            items:
+              type: object
+              required: [role, image]
+              properties:
+                role: { type: string }
+                image: { type: string }
+                enabled:
+                  type: boolean
+    SwarmStart:
+      name: SwarmStart
+      title: Swarm start signal
+      payload:
+        type: object
+        description: Empty object
   schemas:
     ControlBase:
       type: object
