@@ -8,12 +8,17 @@ import { vi, test, expect, beforeEach, type Mock } from 'vitest'
 import HivePage from './HivePage'
 import type { Component } from '../../types/hive'
 import { subscribeComponents, startSwarm, stopSwarm, requestStatusFull } from '../../lib/stompClient'
+import { subscribeLogs } from '../../lib/logs'
 
 vi.mock('../../lib/stompClient', () => ({
   subscribeComponents: vi.fn(),
   startSwarm: vi.fn(),
   stopSwarm: vi.fn(),
   requestStatusFull: vi.fn(),
+}))
+
+vi.mock('../../lib/logs', () => ({
+  subscribeLogs: vi.fn(),
 }))
 
 vi.mock('./TopologyView', () => ({
@@ -39,12 +44,20 @@ const comps: Component[] = [
 ]
 
 let listener: ((c: Component[]) => void) | null = null
+let logListener: ((e: { destination: string; body: string; ts: number }[]) => void) | null = null
 
 beforeEach(() => {
   ;(subscribeComponents as unknown as Mock).mockImplementation(
     (fn: (c: Component[]) => void) => {
       listener = fn
       fn(comps)
+      return () => {}
+    },
+  )
+  ;(subscribeLogs as unknown as Mock).mockImplementation(
+    (_type: string, fn: (e: { destination: string; body: string; ts: number }[]) => void) => {
+      logListener = fn
+      fn([])
       return () => {}
     },
   )
@@ -57,7 +70,10 @@ test('renders queen status and start/stop controls', async () => {
   const user = userEvent.setup()
   render(<HivePage />)
   expect(screen.getByText(/Queen: stopped/i)).toBeTruthy()
-  await user.click(screen.getByRole('button', { name: /start/i }))
+  expect(screen.queryByRole('button', { name: /start/i })).toBeNull()
+  logListener?.([{ ts: Date.now(), destination: '/exchange/ph.control/ev.swarm-created.sw1', body: '' }])
+  const startBtn = await screen.findByRole('button', { name: /start/i })
+  await user.click(startBtn)
   expect(startSwarm).toHaveBeenCalledWith('sw1')
 
   comps[0].config = { swarmStatus: 'RUNNING', enabled: true }

@@ -60,7 +60,9 @@ describe('swarm lifecycle', () => {
       entries = l
     })
     cb({ body: '{}', headers: { destination: '/exchange/ph.control/ev.ready.swarm-controller.inst' } })
-    expect(entries[entries.length - 1].destination).toContain('ev.ready.swarm-controller.inst')
+    cb({ body: '{}', headers: { destination: '/exchange/ph.control/sig.swarm-template.sw1' } })
+    expect(entries.some((e) => e.destination.includes('ev.ready.swarm-controller.inst'))).toBe(true)
+    expect(entries[entries.length - 1].destination).toContain('sig.swarm-template.sw1')
   })
 
   it('logs error events and sets toast', () => {
