@@ -14,8 +14,6 @@ export default function Layout() {
     sidebarOpen,
     toggleSidebar,
     closeSidebar,
-    debugMode,
-    toggleDebug,
     toast,
     clearToast,
     buzzVisible,
@@ -83,13 +81,6 @@ export default function Layout() {
           </div>
           <Connectivity />
           <Health />
-          <div className="h-6 w-px bg-white/20 mx-2" />
-          <button
-            className={`rounded px-2 py-1 text-xs ${debugMode ? 'bg-white/20' : 'hover:bg-white/10'}`}
-            onClick={toggleDebug}
-          >
-            Debug
-          </button>
           <div className="h-6 w-px bg-white/20 mx-2" />
           <div className="menu relative">
             <button

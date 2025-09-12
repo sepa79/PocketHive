@@ -52,33 +52,6 @@ describe('swarm lifecycle', () => {
     expect(params.headers['x-correlation-id']).toBeDefined()
   })
 
-  it('logs handshake events', () => {
-    resetLogs()
-    const publish = vi.fn()
-    let cb: (msg: { body: string; headers: Record<string, string> }) => void = () => {}
-    const subscribe = vi.fn().mockImplementation(
-      (_dest: string, fn: (msg: { body: string; headers: Record<string, string> }) => void) => {
-        cb = fn
-        return { unsubscribe() {} }
-      },
-    )
-    setClient({ active: true, publish, subscribe } as unknown as Client)
-    let entries: LogEntry[] = []
-    subscribeLogs((l) => {
-      entries = l.filter((e) => e.type === 'handshake')
-    })
-    cb({
-      body: '{}',
-      headers: { destination: '/exchange/ph.control/ev.ready.swarm-controller.inst', 'x-correlation-id': 'c1' },
-    })
-    cb({
-      body: '{}',
-      headers: { destination: '/exchange/ph.control/sig.swarm-template.sw1', 'x-correlation-id': 'c2' },
-    })
-    expect(entries.some((e) => e.destination.includes('ev.ready.swarm-controller.inst'))).toBe(true)
-    expect(entries[entries.length - 1].destination).toContain('sig.swarm-template.sw1')
-  })
-
   it('logs error events and sets toast', () => {
     resetLogs()
     useUIStore.setState({ toast: null })

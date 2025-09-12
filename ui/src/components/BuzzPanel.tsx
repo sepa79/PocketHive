@@ -3,7 +3,6 @@ import { PanelLeft, PanelRight, PanelBottom } from 'lucide-react'
 import { subscribeLogs, type LogEntry, type LogChannel, type LogSource } from '../lib/logs'
 import { useConfig } from '../lib/config'
 import { useUIStore } from '../store'
-import SwarmDebugPanel from './SwarmDebugPanel'
 
 function LogView({
   sourceFilter,
@@ -58,7 +57,7 @@ export default function BuzzPanel() {
   const [tab, setTab] = useState<'logs' | 'config'>('logs')
   const [sourceFilter, setSourceFilter] = useState<'all' | LogSource>('all')
   const [channelFilter, setChannelFilter] = useState<'all' | LogChannel>('all')
-  const { messageLimit, setMessageLimit, debugMode, buzzDock, setBuzzDock } = useUIStore()
+  const { messageLimit, setMessageLimit, buzzDock, setBuzzDock } = useUIStore()
   const [inputValue, setInputValue] = useState(messageLimit.toString())
 
   const handleLimitChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -153,7 +152,6 @@ export default function BuzzPanel() {
           <LogView sourceFilter={sourceFilter} channelFilter={channelFilter} />
         )}
       </div>
-      {debugMode && <SwarmDebugPanel />}
     </div>
   )
 }

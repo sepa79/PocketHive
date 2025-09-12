@@ -26,21 +26,6 @@ describe('useUIStore messageLimit', () => {
   })
 })
 
-describe('useUIStore debugMode', () => {
-  beforeEach(() => {
-    useUIStore.setState({ debugMode: false })
-  })
-
-  it('has default value of false', () => {
-    expect(useUIStore.getState().debugMode).toBe(false)
-  })
-
-  it('toggles debug mode', () => {
-    useUIStore.getState().toggleDebug()
-    expect(useUIStore.getState().debugMode).toBe(true)
-  })
-})
-
 describe('useUIStore toast', () => {
   beforeEach(() => {
     useUIStore.setState({ toast: null })

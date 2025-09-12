@@ -2,7 +2,7 @@ import { useUIStore } from '../store'
 
 export type LogSource = 'hive' | 'ui'
 export type LogChannel = 'stomp' | 'rest' | 'internal'
-export type LogType = 'in' | 'out' | 'other' | 'handshake' | 'error'
+export type LogType = 'in' | 'out' | 'other' | 'error'
 
 export interface LogEntry {
   ts: number
@@ -55,16 +55,6 @@ export function logOther(
   correlationId?: string,
 ) {
   addLog({ ts: Date.now(), destination: '', body: message, type: 'other', source, channel, correlationId })
-}
-
-export function logHandshake(
-  destination: string,
-  body: string,
-  source: LogSource,
-  channel: LogChannel,
-  correlationId?: string,
-) {
-  addLog({ ts: Date.now(), destination, body, type: 'handshake', source, channel, correlationId })
 }
 
 export function logError(

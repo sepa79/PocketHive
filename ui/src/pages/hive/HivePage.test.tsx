@@ -8,17 +8,12 @@ import { vi, test, expect, beforeEach, type Mock } from 'vitest'
 import HivePage from './HivePage'
 import type { Component } from '../../types/hive'
 import { subscribeComponents, startSwarm, stopSwarm, requestStatusFull } from '../../lib/stompClient'
-import { subscribeLogs, type LogEntry } from '../../lib/logs'
 
 vi.mock('../../lib/stompClient', () => ({
   subscribeComponents: vi.fn(),
   startSwarm: vi.fn(),
   stopSwarm: vi.fn(),
   requestStatusFull: vi.fn(),
-}))
-
-vi.mock('../../lib/logs', () => ({
-  subscribeLogs: vi.fn(),
 }))
 
 vi.mock('./TopologyView', () => ({
@@ -44,8 +39,6 @@ const comps: Component[] = [
 ]
 
 let listener: ((c: Component[]) => void) | null = null
-let logListener: ((e: LogEntry[]) => void) | null = null
-
 beforeEach(() => {
   ;(subscribeComponents as unknown as Mock).mockImplementation(
     (fn: (c: Component[]) => void) => {
@@ -54,11 +47,6 @@ beforeEach(() => {
       return () => {}
     },
   )
-  ;(subscribeLogs as unknown as Mock).mockImplementation((fn: (e: LogEntry[]) => void) => {
-    logListener = fn
-    fn([])
-    return () => {}
-  })
   ;(startSwarm as unknown as Mock).mockReset()
   ;(stopSwarm as unknown as Mock).mockReset()
   ;(requestStatusFull as unknown as Mock).mockResolvedValue(undefined)
@@ -68,31 +56,7 @@ test('renders queen status and start/stop controls', async () => {
   const user = userEvent.setup()
   render(<HivePage />)
   expect(screen.getByText(/Queen: stopped/i)).toBeTruthy()
-  expect(screen.queryByRole('button', { name: /start/i })).toBeNull()
-  logListener?.([
-    {
-      ts: Date.now(),
-      destination: '/exchange/ph.control/ev.swarm-created.sw1',
-      body: '',
-      type: 'handshake',
-      source: 'hive',
-      channel: 'stomp',
-    },
-  ])
-  expect(await screen.findByText('Swarm controller created')).toBeTruthy()
-  expect(screen.queryByRole('button', { name: /start/i })).toBeNull()
-  logListener?.([
-    {
-      ts: Date.now(),
-      destination: '/exchange/ph.control/ev.swarm-ready.sw1',
-      body: '',
-      type: 'handshake',
-      source: 'hive',
-      channel: 'stomp',
-    },
-  ])
-  expect(await screen.findByText('Swarm ready')).toBeTruthy()
-  const startBtn = await screen.findByRole('button', { name: /start/i })
+  const startBtn = screen.getByRole('button', { name: /start/i })
   await user.click(startBtn)
   expect(startSwarm).toHaveBeenCalledWith('sw1')
 
