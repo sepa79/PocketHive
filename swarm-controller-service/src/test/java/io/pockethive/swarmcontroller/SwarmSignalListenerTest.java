@@ -96,11 +96,15 @@ class SwarmSignalListenerTest {
     ObjectMapper mapper = new ObjectMapper();
     SwarmLifecycleManager manager = new SwarmLifecycleManager(amqp, mapper, docker, rabbit, "inst");
     SwarmSignalListener listener = new SwarmSignalListener(manager, rabbit, "inst", mapper);
+    when(docker.createContainer(eq("img1"), anyMap())).thenReturn("c1");
+    when(docker.createContainer(eq("img2"), anyMap())).thenReturn("c2");
     reset(rabbit);
     SwarmPlan plan = new SwarmPlan(List.of(
         new SwarmPlan.Bee("gen", "img1", null, null),
         new SwarmPlan.Bee("mod", "img2", null, null)));
     listener.handle(mapper.writeValueAsString(plan), "sig.swarm-template." + Topology.SWARM_ID);
+    verify(docker).startContainer("c1");
+    verify(docker).startContainer("c2");
     reset(rabbit);
     listener.handle("{\"data\":{\"enabled\":false}}", "ev.ready.gen.a");
     verify(rabbit, never()).convertAndSend(
@@ -116,15 +120,49 @@ class SwarmSignalListenerTest {
     ObjectMapper mapper = new ObjectMapper();
     SwarmLifecycleManager manager = new SwarmLifecycleManager(amqp, mapper, docker, rabbit, "inst");
     SwarmSignalListener listener = new SwarmSignalListener(manager, rabbit, "inst", mapper);
+    when(docker.createContainer(eq("img1"), anyMap())).thenReturn("c1");
+    when(docker.createContainer(eq("img2"), anyMap())).thenReturn("c2");
     reset(rabbit);
     SwarmPlan plan = new SwarmPlan(List.of(
         new SwarmPlan.Bee("gen", "img1", null, null),
         new SwarmPlan.Bee("mod", "img2", null, null)));
     listener.handle(mapper.writeValueAsString(plan), "sig.swarm-template." + Topology.SWARM_ID);
+    verify(docker).startContainer("c1");
+    verify(docker).startContainer("c2");
     reset(rabbit);
     listener.handle("{\"data\":{\"enabled\":false}}", "ev.ready.gen.a");
     listener.handle("{\"data\":{\"enabled\":false}}", "ev.ready.mod.b");
     verify(rabbit).convertAndSend(Topology.CONTROL_EXCHANGE, "ev.swarm-ready." + Topology.SWARM_ID, "");
+  }
+
+  @Test
+  void swarmStartSendsConfigUpdates() throws Exception {
+    AmqpAdmin amqp = mock(AmqpAdmin.class);
+    DockerContainerClient docker = mock(DockerContainerClient.class);
+    ObjectMapper mapper = new ObjectMapper();
+    RabbitTemplate rabbit = mock(RabbitTemplate.class);
+    SwarmLifecycleManager manager = new SwarmLifecycleManager(amqp, mapper, docker, rabbit, "inst");
+    SwarmSignalListener listener = new SwarmSignalListener(manager, rabbit, "inst", mapper);
+    when(docker.createContainer(eq("img1"), anyMap())).thenReturn("c1");
+    when(docker.createContainer(eq("img2"), anyMap())).thenReturn("c2");
+
+    SwarmPlan plan = new SwarmPlan(List.of(
+        new SwarmPlan.Bee("gen", "img1", null, null),
+        new SwarmPlan.Bee("mod", "img2", null, null)));
+    listener.handle(mapper.writeValueAsString(plan), "sig.swarm-template." + Topology.SWARM_ID);
+    listener.handle("{\"data\":{\"enabled\":false}}", "ev.ready.gen.a");
+    listener.handle("{\"data\":{\"enabled\":false}}", "ev.ready.mod.b");
+
+    reset(rabbit, docker);
+    listener.handle("", "sig.swarm-start." + Topology.SWARM_ID);
+
+    verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
+        eq("sig.config-update.gen.a"),
+        argThat((String p) -> p.contains("\"enabled\":true")));
+    verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
+        eq("sig.config-update.mod.b"),
+        argThat((String p) -> p.contains("\"enabled\":true")));
+    verifyNoInteractions(docker);
   }
 
   @Test

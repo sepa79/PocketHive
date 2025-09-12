@@ -33,24 +33,6 @@ class SwarmLifecycleManagerTest {
   ObjectMapper mapper = new ObjectMapper();
 
   @Test
-  void startLaunchesContainers() throws Exception {
-    SwarmLifecycleManager manager = new SwarmLifecycleManager(amqp, mapper, docker, rabbit, "inst");
-    SwarmPlan plan = new SwarmPlan(List.of(
-        new SwarmPlan.Bee("gen", "img1", null, null),
-        new SwarmPlan.Bee("mod", "img2", null, null)));
-    when(docker.createContainer(eq("img1"), anyMap())).thenReturn("c1");
-    when(docker.createContainer(eq("img2"), anyMap())).thenReturn("c2");
-
-    manager.start(mapper.writeValueAsString(plan));
-
-    verify(docker).createContainer(eq("img1"), anyMap());
-    verify(docker).createContainer(eq("img2"), anyMap());
-    verify(docker).startContainer("c1");
-    verify(docker).startContainer("c2");
-    assertEquals(SwarmStatus.RUNNING, manager.getStatus());
-  }
-
-  @Test
   void startDeclaresQueuesAndStopCleansUp() throws Exception {
     SwarmLifecycleManager manager = new SwarmLifecycleManager(amqp, mapper, docker, rabbit, "inst");
     SwarmPlan plan = new SwarmPlan(List.of(
@@ -75,6 +57,7 @@ class SwarmLifecycleManagerTest {
     assertEquals("ctrl-net", env.get("CONTROL_NETWORK"));
     assertEquals("ph." + Topology.SWARM_ID + ".qin", env.get("PH_MOD_QUEUE"));
     assertEquals("ph." + Topology.SWARM_ID + ".qout", env.get("PH_GEN_QUEUE"));
+    assertEquals("false", env.get("PH_ENABLED"));
     verify(docker).startContainer("c1");
     assertEquals(SwarmStatus.RUNNING, manager.getStatus());
 
@@ -111,7 +94,7 @@ class SwarmLifecycleManagerTest {
   }
 
   @Test
-  void prepareDeclaresQueuesWithoutStartingContainers() throws Exception {
+  void prepareDeclaresQueuesAndStartsContainersDisabled() throws Exception {
     SwarmLifecycleManager manager = new SwarmLifecycleManager(amqp, mapper, docker, rabbit, "inst");
     SwarmPlan plan = new SwarmPlan(List.of(
         new SwarmPlan.Bee("gen", "img1", new SwarmPlan.Work("a", "b"),
@@ -120,13 +103,35 @@ class SwarmLifecycleManagerTest {
 
     manager.prepare(mapper.writeValueAsString(plan));
 
-    verify(docker).createContainer(eq("img1"), anyMap());
+    ArgumentCaptor<Map<String,String>> envCap = ArgumentCaptor.forClass(Map.class);
+    verify(docker).createContainer(eq("img1"), envCap.capture());
+    Map<String,String> env = envCap.getValue();
+    assertEquals("false", env.get("PH_ENABLED"));
     verify(docker).resolveControlNetwork();
-    verifyNoMoreInteractions(docker);
+    verify(docker).startContainer("c1");
     verify(amqp).declareExchange(argThat((TopicExchange e) -> e.getName().equals("ph." + Topology.SWARM_ID + ".hive")));
     verify(amqp).declareQueue(argThat((Queue q) -> q.getName().equals("ph." + Topology.SWARM_ID + ".a")));
     verify(amqp).declareQueue(argThat((Queue q) -> q.getName().equals("ph." + Topology.SWARM_ID + ".b")));
     verify(amqp, times(2)).declareBinding(any(Binding.class));
+  }
+
+  @Test
+  void startSendsConfigUpdatesWithoutRestartingContainers() throws Exception {
+    SwarmLifecycleManager manager = new SwarmLifecycleManager(amqp, mapper, docker, rabbit, "inst");
+    SwarmPlan plan = new SwarmPlan(List.of(new SwarmPlan.Bee("gen", "img1", null, null)));
+    when(docker.createContainer(eq("img1"), anyMap())).thenReturn("c1");
+
+    manager.prepare(mapper.writeValueAsString(plan));
+    manager.markReady("gen", "g1");
+
+    reset(rabbit, docker);
+    manager.start("{}");
+
+    verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
+        eq("sig.config-update.gen.g1"),
+        argThat((String p) -> p.contains("\"enabled\":true")));
+    verifyNoMoreInteractions(docker);
+    assertEquals(SwarmStatus.RUNNING, manager.getStatus());
   }
 
   @Test
