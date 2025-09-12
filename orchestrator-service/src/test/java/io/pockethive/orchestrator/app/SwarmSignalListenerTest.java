@@ -26,6 +26,17 @@ class SwarmSignalListenerTest {
     ContainerLifecycleManager lifecycle;
 
     @Test
+    void publishesCreatedEventAfterSwarmLaunch() {
+        SwarmSignalListener listener = new SwarmSignalListener(rabbit, new SwarmPlanRegistry(), new SwarmRegistry(), lifecycle, new ObjectMapper(), "inst0");
+        reset(rabbit);
+
+        String body = "{\"id\":\"mock-1\",\"template\":{\"image\":\"img\",\"bees\":[]}}";
+        listener.handle(body, "sig.swarm-create.sw1");
+
+        verify(rabbit).convertAndSend(Topology.CONTROL_EXCHANGE, "ev.swarm-created.sw1", "");
+    }
+
+    @Test
     void dispatchesTemplateWhenControllerReady() {
         SwarmPlanRegistry registry = new SwarmPlanRegistry();
         SwarmPlan plan = new SwarmPlan("sw1", java.util.List.of(
@@ -55,7 +66,17 @@ class SwarmSignalListenerTest {
     }
 
     @Test
-    void ignoresNonReadyEvents() {
+    void logsSwarmReadyWithoutForwarding() {
+        SwarmSignalListener listener = new SwarmSignalListener(rabbit, new SwarmPlanRegistry(), new SwarmRegistry(), lifecycle, new ObjectMapper(), "inst0");
+        reset(rabbit);
+
+        listener.handle("", "ev.swarm-ready.sw1");
+
+        verifyNoInteractions(rabbit);
+    }
+
+    @Test
+    void ignoresNonControllerReadyEvents() {
         SwarmPlanRegistry registry = new SwarmPlanRegistry();
         SwarmSignalListener listener = new SwarmSignalListener(rabbit, registry, new SwarmRegistry(), lifecycle, new ObjectMapper(), "inst0");
         reset(rabbit);

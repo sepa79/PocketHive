@@ -67,6 +67,8 @@ public class SwarmSignalListener {
                 SwarmPlan plan = scenario.toSwarmPlan(swarmId);
                 String beeName = BeeNameGenerator.generate("swarm-controller", swarmId);
                 lifecycle.startSwarm(swarmId, scenario.template().getImage(), beeName);
+                rabbit.convertAndSend(Topology.CONTROL_EXCHANGE,
+                        "ev.swarm-created." + swarmId, "");
                 plans.register(beeName, plan);
             } catch (Exception e) {
                 String msg = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
@@ -91,6 +93,9 @@ public class SwarmSignalListener {
                     log.warn("template send", e);
                 }
             });
+        } else if (routingKey.startsWith("ev.swarm-ready.")) {
+            String swarmId = routingKey.substring("ev.swarm-ready.".length());
+            log.info("swarm {} ready", swarmId);
         } else if (routingKey.startsWith("sig.swarm-start.")) {
             String swarmId = routingKey.substring("sig.swarm-start.".length());
             registry.find(swarmId).ifPresent(s ->
@@ -125,7 +130,8 @@ public class SwarmSignalListener {
                 "sig.status-request." + ROLE + "." + instanceId,
                 "sig.swarm-create.*",
                 "sig.swarm-stop.*",
-                "ev.ready.swarm-controller.*")
+                "ev.ready.swarm-controller.*",
+                "ev.swarm-ready.*")
             .controlOut(rk)
             .data("swarmCount", registry.count())
             .toJson();
@@ -151,7 +157,8 @@ public class SwarmSignalListener {
                 "sig.status-request." + ROLE + "." + instanceId,
                 "sig.swarm-create.*",
                 "sig.swarm-stop.*",
-                "ev.ready.swarm-controller.*")
+                "ev.ready.swarm-controller.*",
+                "ev.swarm-ready.*")
             .controlOut(rk)
             .data("swarmCount", registry.count())
             .toJson();

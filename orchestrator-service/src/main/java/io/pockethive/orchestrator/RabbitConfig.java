@@ -88,4 +88,10 @@ public class RabbitConfig {
                                 @Qualifier("controlExchange") TopicExchange controlExchange){
         return BindingBuilder.bind(controlQueue).to(controlExchange).with("ev.ready.swarm-controller.*");
     }
+
+    @Bean
+    Binding bindSwarmReady(@Qualifier("controlQueue") Queue controlQueue,
+                           @Qualifier("controlExchange") TopicExchange controlExchange){
+        return BindingBuilder.bind(controlQueue).to(controlExchange).with("ev.swarm-ready.*");
+    }
 }

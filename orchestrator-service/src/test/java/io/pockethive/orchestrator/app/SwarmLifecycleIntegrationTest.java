@@ -47,6 +47,8 @@ class SwarmLifecycleIntegrationTest {
         String body = "{\"id\":\"mock-1\",\"template\":{\"image\":\"pockethive-swarm-controller:latest\",\"bees\":[]}}";
         listener.handle(body, "sig.swarm-create.sw1");
 
+        verify(rabbit).convertAndSend(Topology.CONTROL_EXCHANGE, "ev.swarm-created.sw1", "");
+
         verify(docker).createAndStartContainer(eq("pockethive-swarm-controller:latest"), envCaptor.capture());
         java.util.Map<String, String> env = envCaptor.getValue();
         String beeName = env.get("JAVA_TOOL_OPTIONS").replace("-Dbee.name=", "");
