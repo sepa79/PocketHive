@@ -3,7 +3,7 @@
  */
 import { render, act } from '@testing-library/react'
 import TopologyView from './TopologyView'
-import React from 'react'
+import React, { type ReactNode } from 'react'
 import { vi, test, expect } from 'vitest'
 
 interface Node {
@@ -29,6 +29,7 @@ interface RFProps {
   nodes: RFNode[]
   edges: RFEdge[]
   onNodeDragStop: (e: unknown, node: RFNode) => void
+  children?: ReactNode
 }
 
 const data = {
@@ -65,8 +66,6 @@ const components = [
 const updateNodePosition = vi.fn<(id: string, x: number, y: number) => void>()
 
 vi.mock('@xyflow/react', () => {
-  // require inside factory to avoid hoisting issues
-  const React = require('react') as typeof import('react')
   const rf = (props: RFProps) => {
     ;(globalThis as unknown as { __RF_PROPS__: RFProps }).__RF_PROPS__ = props
     return React.createElement('div', null, props.children)
