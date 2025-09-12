@@ -9,11 +9,11 @@ import java.util.Map;
 @Component
 @ConfigurationProperties(prefix = "ph.trigger")
 public class TriggerConfig {
-  private long intervalMs = 60000L;
-  private String actionType = "shell"; // shell or rest
-  private String command = "echo hello";
-  private String url = "http://localhost";
-  private String method = "GET";
+  private long intervalMs = 0L;
+  private String actionType = ""; // shell or rest
+  private String command = "";
+  private String url = "";
+  private String method = "";
   private String body = "";
   private Map<String,String> headers = new HashMap<>();
 

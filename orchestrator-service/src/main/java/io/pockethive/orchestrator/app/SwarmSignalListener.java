@@ -82,9 +82,20 @@ public class SwarmSignalListener {
             registry.remove(swarmId);
         } else if (routingKey.startsWith("ev.ready.swarm-controller.")) {
             String inst = routingKey.substring("ev.ready.swarm-controller.".length());
-            plans.remove(inst).ifPresent(plan ->
+            plans.remove(inst).ifPresent(plan -> {
+                try {
+                    String payload = json.writeValueAsString(plan);
+                    rabbit.convertAndSend(Topology.CONTROL_EXCHANGE,
+                        "sig.swarm-template." + plan.id(), payload);
+                } catch (Exception e) {
+                    log.warn("template send", e);
+                }
+            });
+        } else if (routingKey.startsWith("sig.swarm-start.")) {
+            String swarmId = routingKey.substring("sig.swarm-start.".length());
+            registry.find(swarmId).ifPresent(s ->
                 rabbit.convertAndSend(Topology.CONTROL_EXCHANGE,
-                    "sig.swarm-start." + plan.id(), java.util.Map.of("bees", plan.bees())));
+                    "sig.swarm-start." + swarmId, body == null ? "" : body));
         } else if (routingKey.startsWith("sig.status-request")) {
             sendStatusFull();
         }

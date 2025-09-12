@@ -60,10 +60,13 @@ class SwarmLifecycleIntegrationTest {
 
         listener.handle("", "ev.ready.swarm-controller." + beeName);
 
-        ArgumentCaptor<java.util.Map<String, Object>> planCaptor = ArgumentCaptor.forClass(java.util.Map.class);
-        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("sig.swarm-start.sw1"), planCaptor.capture());
-        assertThat(planCaptor.getValue().get("bees")).isNotNull();
+        ArgumentCaptor<String> planCaptor = ArgumentCaptor.forClass(String.class);
+        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("sig.swarm-template.sw1"), planCaptor.capture());
+        assertThat(planCaptor.getValue()).contains("\"bees\"");
         assertThat(planRegistry.find(beeName)).isEmpty();
+
+        listener.handle("", "sig.swarm-start.sw1");
+        verify(rabbit).convertAndSend(Topology.CONTROL_EXCHANGE, "sig.swarm-start.sw1", "");
 
         listener.handle("", "sig.swarm-stop.sw1");
 

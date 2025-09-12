@@ -65,6 +65,7 @@ Manual checks:
     }
   }
   ```
+- The orchestrator will hand the template to the Swarm Controller and await an explicit start signal.
 - STOMP `sig.swarm-start.<swarmId>` with an empty body to begin execution.
 
 ## Troubleshooting

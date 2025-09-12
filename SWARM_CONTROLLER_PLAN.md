@@ -16,8 +16,8 @@
      }
    }
    ```
-2. Queen launches the SwarmController and responds with `sig.swarm-template.<swarmId>`.
-3. UI starts the swarm by sending `sig.swarm-start.<swarmId>`.
+2. Queen launches the SwarmController. After it reports `ev.ready.swarm-controller.<instance>`, the Queen sends `sig.swarm-template.<swarmId>` with the full SwarmPlan.
+3. UI starts the swarm by sending `sig.swarm-start.<swarmId>` (empty body).
 
 ```mermaid
 sequenceDiagram
@@ -26,6 +26,8 @@ sequenceDiagram
   participant SC as "SwarmController"
   UI->>QN: sig.swarm-create.<swarmId>
   QN-->>SC: launch controller
+  SC->>QN: ev.ready.swarm-controller.<instance>
+  QN->>SC: sig.swarm-template.<swarmId>
   UI->>QN: sig.swarm-start.<swarmId>
   QN->>SC: sig.swarm-start.<swarmId>
 ```
@@ -33,7 +35,7 @@ sequenceDiagram
 ## Phase 1 – Control channel handshake
 - Subscribe to the `ph.control` exchange and declare `ph.control.swarm-controller.<instance>`.
 - Emit `ev.ready.swarm-controller.<instance>` on startup.
-- Queen responds with `sig.swarm-start.<swarmId>` carrying the SwarmPlan.
+- Queen responds with `sig.swarm-template.<swarmId>` carrying the SwarmPlan.
 
 ## Phase 2 – Plan expansion and queue provisioning
 - Parse the SwarmPlan to resolve bee roles and queue suffixes.
@@ -67,11 +69,11 @@ Refer to the [MVP Roadmap](MVP_ROADMAP.md#scenario-manager-service) for delivery
 
 ## Orchestrator–swarm-controller ready-start handshake
 
-On startup the swarm-controller declares `ph.control.swarm-controller.<instance>` and publishes `ev.ready.swarm-controller.<instance>`. The orchestrator responds with `sig.swarm-start.<swarmId>` containing the target SwarmPlan.
+On startup the swarm-controller declares `ph.control.swarm-controller.<instance>` and publishes `ev.ready.swarm-controller.<instance>`. The orchestrator replies with `sig.swarm-template.<swarmId>` carrying the SwarmPlan. The swarm remains idle until a later `sig.swarm-start.<swarmId>` enables the bees.
 
 ## SwarmPlan parsing, queue provisioning, and bee container lifecycle
 
-After receiving `sig.swarm-start`, the controller expands the SwarmPlan, declares the `ph.<swarmId>.hive` exchange, provisions all `work.in/out` queues, and launches bee containers for each role. Bees receive `sig.config-update` and `sig.status-request` messages to manage their lifecycle.
+After receiving `sig.swarm-template`, the controller expands the SwarmPlan, declares the `ph.<swarmId>.hive` exchange, provisions all `work.in/out` queues, and creates bee containers in a disabled state. When `sig.swarm-start` arrives, it starts those containers.
 
 ## Swarm shutdown cleanup and observability/UI hooks
 

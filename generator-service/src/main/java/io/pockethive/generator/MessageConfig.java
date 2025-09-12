@@ -9,9 +9,9 @@ import java.util.Map;
 @Component
 @ConfigurationProperties(prefix = "ph.gen.message")
 public class MessageConfig {
-  private String path = "/api/test";
-  private String method = "POST";
-  private String body = "hello-world";
+  private String path;
+  private String method;
+  private String body;
   private Map<String, String> headers = new HashMap<>();
 
   public String getPath() { return path; }

@@ -44,7 +44,7 @@ public class Processor {
   private double lastCount = 0;
   private final String instanceId;
   private volatile String baseUrl;
-  private volatile boolean enabled = true;
+  private volatile boolean enabled = false;
   private final RabbitListenerEndpointRegistry registry;
   private final DistributionSummary sutLatency;
   private static final long STATUS_INTERVAL_MS = 5000L;

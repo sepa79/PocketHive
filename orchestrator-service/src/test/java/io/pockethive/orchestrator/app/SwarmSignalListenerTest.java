@@ -4,6 +4,7 @@ import io.pockethive.Topology;
 import io.pockethive.orchestrator.domain.SwarmPlan;
 import io.pockethive.orchestrator.domain.SwarmPlanRegistry;
 import io.pockethive.orchestrator.domain.SwarmRegistry;
+import io.pockethive.orchestrator.domain.Swarm;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -25,7 +26,7 @@ class SwarmSignalListenerTest {
     ContainerLifecycleManager lifecycle;
 
     @Test
-    void dispatchesPlanWhenControllerReady() {
+    void dispatchesTemplateWhenControllerReady() {
         SwarmPlanRegistry registry = new SwarmPlanRegistry();
         SwarmPlan plan = new SwarmPlan("sw1", java.util.List.of(
             new SwarmPlan.Bee("generator", "img", new SwarmPlan.Work("in", "out"))));
@@ -35,10 +36,22 @@ class SwarmSignalListenerTest {
 
         listener.handle("", "ev.ready.swarm-controller.inst1");
 
-        ArgumentCaptor<java.util.Map<String, Object>> captor = ArgumentCaptor.forClass(java.util.Map.class);
-        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("sig.swarm-start.sw1"), captor.capture());
-        assertThat(captor.getValue().get("bees")).isEqualTo(plan.bees());
+        ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
+        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("sig.swarm-template.sw1"), captor.capture());
+        assertThat(captor.getValue()).contains("\"id\":\"sw1\"");
         assertThat(registry.find("inst1")).isEmpty();
+    }
+
+    @Test
+    void forwardsStartSignal() {
+        SwarmRegistry swarmRegistry = new SwarmRegistry();
+        swarmRegistry.register(new io.pockethive.orchestrator.domain.Swarm("sw1", "inst1", "c1"));
+        SwarmSignalListener listener = new SwarmSignalListener(rabbit, new SwarmPlanRegistry(), swarmRegistry, lifecycle, new ObjectMapper(), "inst0");
+        reset(rabbit);
+
+        listener.handle("", "sig.swarm-start.sw1");
+
+        verify(rabbit).convertAndSend(Topology.CONTROL_EXCHANGE, "sig.swarm-start.sw1", "");
     }
 
     @Test

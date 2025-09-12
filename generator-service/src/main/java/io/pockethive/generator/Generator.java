@@ -37,7 +37,7 @@ public class Generator {
   private final AtomicLong counter = new AtomicLong();
   private final String instanceId;
   private final MessageConfig messageConfig;
-  private volatile boolean enabled = true;
+  private volatile boolean enabled = false;
   private static final long STATUS_INTERVAL_MS = 5000L;
   private volatile long lastStatusTs = System.currentTimeMillis();
 
@@ -51,7 +51,7 @@ public class Generator {
     try{ sendStatusFull(0); } catch(Exception ignore){}
   }
 
-  @Value("${ph.gen.ratePerSec:5}")
+  @Value("${ph.gen.ratePerSec:0}")
   private volatile double ratePerSec;
 
   private double carryOver = 0;

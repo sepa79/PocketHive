@@ -31,7 +31,7 @@ public class Moderator {
   private final AtomicLong counter = new AtomicLong();
   private final String instanceId;
   private final RabbitListenerEndpointRegistry registry;
-  private volatile boolean enabled = true;
+  private volatile boolean enabled = false;
   private static final long STATUS_INTERVAL_MS = 5000L;
   private volatile long lastStatusTs = System.currentTimeMillis();
 
