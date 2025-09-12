@@ -6,7 +6,7 @@ import org.springframework.context.annotation.Configuration;
 
 @Configuration
 public class ProcessorConfig {
-  @Value("${ph.processor.baseUrl:http://wiremock:8080}")
+  @Value("${ph.processor.baseUrl:}")
   private String baseUrl;
 
   @Bean

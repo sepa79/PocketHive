@@ -3,6 +3,7 @@ package io.pockethive.orchestrator.app;
 import io.pockethive.Topology;
 import io.pockethive.orchestrator.domain.SwarmPlanRegistry;
 import io.pockethive.orchestrator.domain.SwarmRegistry;
+import io.pockethive.orchestrator.domain.SwarmTemplate;
 import io.pockethive.docker.DockerContainerClient;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -37,6 +38,8 @@ class SwarmLifecycleIntegrationTest {
     RabbitTemplate rabbit;
     @MockBean
     AmqpAdmin amqpAdmin;
+    @MockBean
+    ScenarioClient scenarios;
 
     @Test
     void createStartStopFlow() {
@@ -44,8 +47,17 @@ class SwarmLifecycleIntegrationTest {
         given(docker.createAndStartContainer(anyString(), anyMap())).willReturn("c1");
         given(docker.resolveControlNetwork()).willReturn("ctrl-net");
 
-        String body = "{\"id\":\"mock-1\",\"template\":{\"image\":\"pockethive-swarm-controller:latest\",\"bees\":[]}}";
+        SwarmTemplate template = new SwarmTemplate();
+        template.setImage("pockethive-swarm-controller:latest");
+        template.setBees(java.util.List.of());
+        try {
+            given(scenarios.fetchTemplate("mock-1")).willReturn(template);
+        } catch (Exception ignored) {}
+
+        String body = "{\"templateId\":\"mock-1\"}";
         listener.handle(body, "sig.swarm-create.sw1");
+
+        verify(rabbit).convertAndSend(Topology.CONTROL_EXCHANGE, "ev.swarm-created.sw1", "");
 
         verify(docker).createAndStartContainer(eq("pockethive-swarm-controller:latest"), envCaptor.capture());
         java.util.Map<String, String> env = envCaptor.getValue();
@@ -60,10 +72,13 @@ class SwarmLifecycleIntegrationTest {
 
         listener.handle("", "ev.ready.swarm-controller." + beeName);
 
-        ArgumentCaptor<java.util.Map<String, Object>> planCaptor = ArgumentCaptor.forClass(java.util.Map.class);
-        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("sig.swarm-start.sw1"), planCaptor.capture());
-        assertThat(planCaptor.getValue().get("bees")).isNotNull();
+        ArgumentCaptor<String> planCaptor = ArgumentCaptor.forClass(String.class);
+        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("sig.swarm-template.sw1"), planCaptor.capture());
+        assertThat(planCaptor.getValue()).contains("\"bees\"");
         assertThat(planRegistry.find(beeName)).isEmpty();
+
+        listener.handle("", "sig.swarm-start.sw1");
+        verify(rabbit).convertAndSend(Topology.CONTROL_EXCHANGE, "sig.swarm-start.sw1", "");
 
         listener.handle("", "sig.swarm-stop.sw1");
 

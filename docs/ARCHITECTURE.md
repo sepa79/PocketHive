@@ -107,9 +107,11 @@ A Marshal governs one swarm. After receiving its plan from the Queen it declares
 ## Swarm coordination
 
 ### Swarm startup
-1. UI fetches a scenario from the Scenario Manager and creates a swarm via STOMP `sig.swarm-create.<swarmId>` containing that plan.
-2. Queen launches a Marshal for the swarm.
-3. The swarm starts when the UI sends `sig.swarm-start.<swarmId>`.
+1. UI retrieves available templates from the Scenario Manager and publishes `sig.swarm-create.<swarmId>` with `{ "templateId": "<id>" }`.
+2. Queen resolves the template from the Scenario Manager, converts it into a `SwarmPlan`, launches a Marshal and sends `sig.swarm-template.<swarmId>` with the full plan (all bees default to `enabled: false`).
+3. Queen announces controller launch with `ev.swarm-created.<swarmId>`.
+4. Marshal provisions queues and disabled bee containers, then emits `ev.swarm-ready.<swarmId>`.
+5. Queen relays the ready event to the UI. The swarm only starts when the UI later sends `sig.swarm-start.<swarmId>`.
 
 ```mermaid
 sequenceDiagram
@@ -117,15 +119,19 @@ sequenceDiagram
   participant QN as Orchestrator (Queen)
 
   Note over MSH: declares ph.control.swarm-controller.<instance>
-  MSH->>QN: ev.ready.swarm-controller.<instance>
-  QN->>MSH: sig.swarm-start.<swarmId> (SwarmPlan)
+  QN->>MSH: sig.swarm-template.<swarmId> (SwarmPlan)
+  QN->>UI: ev.swarm-created.<swarmId>
+  MSH->>UI: ev.swarm-ready.<swarmId>
+  UI->>QN: sig.swarm-start.<swarmId>
+  QN->>MSH: sig.swarm-start.<swarmId>
 
 ```
 
 ### Handshake
 1. Marshal declares its control queue `ph.control.swarm-controller.<instance>` bound to `ph.control` for `sig.*` and `ev.*` topics.
-2. Marshal emits `ev.ready.swarm-controller.<instance>` to signal readiness.
-3. Queen waits for the ready event and publishes `sig.swarm-start.<swarmId>` to the Marshal queue with the resolved **SwarmPlan**.
+2. Queen sends `sig.swarm-template.<swarmId>` once the controller is reachable and publishes `ev.swarm-created.<swarmId>`.
+3. Marshal provisions queues and disabled bees, then emits `ev.swarm-ready.<swarmId>` to signal readiness.
+4. Queen forwards the ready event to the UI. The Marshal remains idle until `sig.swarm-start.<swarmId>`.
 
 ```mermaid
 sequenceDiagram
@@ -133,8 +139,11 @@ sequenceDiagram
   participant QN as Orchestrator (Queen)
 
   Note over MSH: declares ph.control.swarm-controller.<instance>
-  MSH->>QN: ev.ready.swarm-controller.<instance>
-  QN->>MSH: sig.swarm-start.<swarmId> (SwarmPlan)
+  QN->>MSH: sig.swarm-template.<swarmId> (SwarmPlan)
+  QN->>UI: ev.swarm-created.<swarmId>
+  MSH->>UI: ev.swarm-ready.<swarmId>
+  UI->>QN: sig.swarm-start.<swarmId>
+  QN->>MSH: sig.swarm-start.<swarmId>
 
 ```
 
@@ -201,11 +210,13 @@ Communication between the Queen and Marshal uses these topics on `ph.control`:
 
 | Direction | Routing key | Body | Purpose |
 |-----------|-------------|------|---------|
-| Queen → Marshal | `sig.swarm-start.<swarmId>` | `SwarmPlan` | Start swarm |
+| Queen → Marshal | `sig.swarm-template.<swarmId>` | `SwarmPlan` | Provide plan |
+| Queen → Marshal | `sig.swarm-start.<swarmId>` | _(empty)_ | Start swarm |
 | Queen → Marshal | `sig.swarm-stop.<swarmId>` | _(empty)_ | Stop swarm |
 | Queen → Marshal (optional) | `sig.config-update...` | Partial plan | Adjust running swarm |
 | Queen → Marshal (optional) | `sig.status-request...` | _(empty)_ | Request status |
-| Marshal → Queen | `ev.ready.swarm-controller.<instance>` | _(empty)_ | Marshal is listening |
+| Queen → ph.control | `ev.swarm-created.<swarmId>` | _(empty)_ | Controller launched |
+| Marshal → ph.control | `ev.swarm-ready.<swarmId>` | _(empty)_ | Swarm provisioned |
 | Marshal → Queen | `ev.status-full.swarm-controller.<instance>` | Status snapshot | Report state |
 
 ## Multi-Region & Queue Adapters

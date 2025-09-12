@@ -10,6 +10,7 @@ import {
   stopSwarm,
 } from '../../lib/stompClient'
 import type { Component } from '../../types/hive'
+import { subscribeLogs, type LogEntry } from '../../lib/logs'
 
 export default function HivePage() {
   const [components, setComponents] = useState<Component[]>([])
@@ -18,10 +19,28 @@ export default function HivePage() {
   const [showCreate, setShowCreate] = useState(false)
   const [swarmMsg, setSwarmMsg] = useState<Record<string, string>>({})
   const [activeSwarm, setActiveSwarm] = useState<string | null>(null)
+  const [ready, setReady] = useState<Record<string, boolean>>({})
 
   useEffect(() => {
     const unsub = subscribeComponents(setComponents)
     return () => unsub()
+  }, [])
+
+  useEffect(() => {
+    return subscribeLogs('handshake', (entries: LogEntry[]) => {
+      entries.forEach((e) => {
+        const dest = e.destination
+        let m: RegExpMatchArray | null
+        if ((m = dest.match(/ev\.swarm-created\.([^/]+)$/))) {
+          const id = m[1]
+          setSwarmMsg((msg) => ({ ...msg, [id]: 'Swarm controller created' }))
+        } else if ((m = dest.match(/ev\.swarm-ready\.([^/]+)$/))) {
+          const id = m[1]
+          setReady((r) => ({ ...r, [id]: true }))
+          setSwarmMsg((msg) => ({ ...msg, [id]: 'Swarm ready' }))
+        }
+      })
+    })
   }, [])
 
   useEffect(() => {
@@ -132,7 +151,7 @@ export default function HivePage() {
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="text-xs text-white/60">Queen: {status}</span>
-                      {status !== 'running' && (
+                      {status !== 'running' && ready[id] && (
                         <button
                           className="p-1 rounded bg-white/10 hover:bg-white/20 text-xs"
                           onClick={() => handleStart(id)}

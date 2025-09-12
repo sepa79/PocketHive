@@ -50,22 +50,16 @@ Manual checks:
 - Submit to create the swarm, then start it with the play button next to its entry.
 
 ### Scenario and swarm API
-- STOMP `sig.swarm-create.<swarmId>` to `/exchange/ph.control/sig.swarm-create.<swarmId>` with body containing the scenario JSON, for example:
+- STOMP `sig.swarm-create.<swarmId>` to `/exchange/ph.control/sig.swarm-create.<swarmId>` with body:
 
   ```json
-  {
-    "template": {
-      "image": "<image>",
-      "bees": [
-        { "role": "generator", "image": "generator-service:latest", "work": { "out": "gen" } },
-        { "role": "moderator", "image": "moderator-service:latest", "work": { "in": "gen", "out": "mod" } },
-        { "role": "processor", "image": "processor-service:latest", "work": { "in": "mod", "out": "final" } },
-        { "role": "postprocessor", "image": "postprocessor-service:latest", "work": { "in": "final" } }
-      ]
-    }
-  }
+  { "templateId": "rest" }
   ```
-- STOMP `sig.swarm-start.<swarmId>` with an empty body to begin execution.
+
+  The orchestrator resolves the template from `scenario-manager-service`, converts it to a `SwarmPlan`, launches a Swarm Controller and then publishes `sig.swarm-template.<swarmId>` containing the full plan (all bee containers default to `enabled: false`).
+- The orchestrator emits `ev.swarm-created.<swarmId>` once the controller container starts.
+- Wait for `ev.swarm-ready.<swarmId>` to confirm the swarm is provisioned but idle.
+- When ready to run, STOMP `sig.swarm-start.<swarmId>` with an empty body to enable the bees and begin execution.
 
 ## Troubleshooting
 - **WebSocket errors**: ensure UI health is `ok`, RabbitMQ is running and Web-STOMP is enabled; check browser network logs for `/ws`.

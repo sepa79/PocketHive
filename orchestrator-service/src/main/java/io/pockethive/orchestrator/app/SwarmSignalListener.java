@@ -2,10 +2,11 @@ package io.pockethive.orchestrator.app;
 
 import io.pockethive.Topology;
 import io.pockethive.observability.StatusEnvelopeBuilder;
-import io.pockethive.orchestrator.domain.ScenarioPlan;
+import io.pockethive.orchestrator.domain.SwarmCreateRequest;
 import io.pockethive.orchestrator.domain.SwarmPlan;
 import io.pockethive.orchestrator.domain.SwarmPlanRegistry;
 import io.pockethive.orchestrator.domain.SwarmRegistry;
+import io.pockethive.orchestrator.domain.SwarmTemplate;
 import io.pockethive.util.BeeNameGenerator;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
@@ -35,6 +36,7 @@ public class SwarmSignalListener {
     private final SwarmPlanRegistry plans;
     private final SwarmRegistry registry;
     private final ContainerLifecycleManager lifecycle;
+    private final ScenarioClient scenarios;
     private final ObjectMapper json;
     private final String instanceId;
 
@@ -42,12 +44,14 @@ public class SwarmSignalListener {
                                SwarmPlanRegistry plans,
                                SwarmRegistry registry,
                                ContainerLifecycleManager lifecycle,
+                               ScenarioClient scenarios,
                                ObjectMapper json,
                                @Qualifier("instanceId") String instanceId) {
         this.rabbit = rabbit;
         this.plans = plans;
         this.registry = registry;
         this.lifecycle = lifecycle;
+        this.scenarios = scenarios;
         this.json = json;
         this.instanceId = instanceId;
         try {
@@ -60,13 +64,19 @@ public class SwarmSignalListener {
     @RabbitListener(queues = "#{controlQueue.name}")
     public void handle(String body, @Header(AmqpHeaders.RECEIVED_ROUTING_KEY) String routingKey) {
         if (routingKey == null) return;
+        log.info("received {} : {}", routingKey, body);
         if (routingKey.startsWith("sig.swarm-create.")) {
             String swarmId = routingKey.substring("sig.swarm-create.".length());
             try {
-                ScenarioPlan scenario = json.readValue(body, ScenarioPlan.class);
-                SwarmPlan plan = scenario.toSwarmPlan(swarmId);
+                SwarmCreateRequest cmd = json.readValue(body, SwarmCreateRequest.class);
+                SwarmTemplate template = scenarios.fetchTemplate(cmd.templateId());
+                SwarmPlan plan = new SwarmPlan(swarmId, template.getBees());
                 String beeName = BeeNameGenerator.generate("swarm-controller", swarmId);
-                lifecycle.startSwarm(swarmId, scenario.template().getImage(), beeName);
+                log.info("starting swarm-controller {} for swarm {}", beeName, swarmId);
+                lifecycle.startSwarm(swarmId, template.getImage(), beeName);
+                log.info("publishing ev.swarm-created.{}", swarmId);
+                rabbit.convertAndSend(Topology.CONTROL_EXCHANGE,
+                        "ev.swarm-created." + swarmId, "");
                 plans.register(beeName, plan);
             } catch (Exception e) {
                 String msg = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
@@ -77,15 +87,33 @@ public class SwarmSignalListener {
             }
         } else if (routingKey.startsWith("sig.swarm-stop.")) {
             String swarmId = routingKey.substring("sig.swarm-stop.".length());
+            log.info("stopping swarm {}", swarmId);
             lifecycle.stopSwarm(swarmId);
             registry.find(swarmId).ifPresent(s -> plans.remove(s.getInstanceId()));
             registry.remove(swarmId);
         } else if (routingKey.startsWith("ev.ready.swarm-controller.")) {
             String inst = routingKey.substring("ev.ready.swarm-controller.".length());
-            plans.remove(inst).ifPresent(plan ->
+            plans.remove(inst).ifPresent(plan -> {
+                try {
+                    String payload = json.writeValueAsString(plan);
+                    log.info("sending swarm-template for {} via controller {}", plan.id(), inst);
+                    rabbit.convertAndSend(Topology.CONTROL_EXCHANGE,
+                        "sig.swarm-template." + plan.id(), payload);
+                } catch (Exception e) {
+                    log.warn("template send", e);
+                }
+            });
+        } else if (routingKey.startsWith("ev.swarm-ready.")) {
+            String swarmId = routingKey.substring("ev.swarm-ready.".length());
+            log.info("swarm {} ready", swarmId);
+        } else if (routingKey.startsWith("sig.swarm-start.")) {
+            String swarmId = routingKey.substring("sig.swarm-start.".length());
+            log.info("forwarding start to swarm {}", swarmId);
+            registry.find(swarmId).ifPresent(s ->
                 rabbit.convertAndSend(Topology.CONTROL_EXCHANGE,
-                    "sig.swarm-start." + plan.id(), java.util.Map.of("bees", plan.bees())));
+                    "sig.swarm-start." + swarmId, body == null ? "" : body));
         } else if (routingKey.startsWith("sig.status-request")) {
+            log.info("status requested via {}", routingKey);
             sendStatusFull();
         }
     }
@@ -114,7 +142,8 @@ public class SwarmSignalListener {
                 "sig.status-request." + ROLE + "." + instanceId,
                 "sig.swarm-create.*",
                 "sig.swarm-stop.*",
-                "ev.ready.swarm-controller.*")
+                "ev.ready.swarm-controller.*",
+                "ev.swarm-ready.*")
             .controlOut(rk)
             .data("swarmCount", registry.count())
             .toJson();
@@ -140,7 +169,8 @@ public class SwarmSignalListener {
                 "sig.status-request." + ROLE + "." + instanceId,
                 "sig.swarm-create.*",
                 "sig.swarm-stop.*",
-                "ev.ready.swarm-controller.*")
+                "ev.ready.swarm-controller.*",
+                "ev.swarm-ready.*")
             .controlOut(rk)
             .data("swarmCount", registry.count())
             .toJson();

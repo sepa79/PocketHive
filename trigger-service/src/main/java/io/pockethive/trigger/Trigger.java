@@ -34,7 +34,7 @@ public class Trigger {
   private final RabbitTemplate rabbit;
   private final String instanceId;
   private final TriggerConfig config;
-  private volatile boolean enabled = true;
+  private volatile boolean enabled = false;
   private volatile long lastRun = 0L;
   private static final long STATUS_INTERVAL_MS = 5000L;
   private final AtomicLong counter = new AtomicLong();

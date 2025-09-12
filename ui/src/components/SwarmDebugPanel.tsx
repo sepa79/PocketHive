@@ -3,7 +3,7 @@ import { subscribeLogs, type LogEntry } from '../lib/logs'
 
 interface SwarmState {
   created?: number
-  started?: number
+  ready?: number
 }
 
 export default function SwarmDebugPanel() {
@@ -20,9 +20,9 @@ export default function SwarmDebugPanel() {
           if ((m = d.match(/ev\.swarm-created\.([^/]+)$/))) {
             const id = m[1]
             next[id] = { ...(next[id] || {}), created: ts }
-          } else if ((m = d.match(/sig\.swarm-start\.([^/]+)$/))) {
+          } else if ((m = d.match(/ev\.swarm-ready\.([^/]+)$/))) {
             const id = m[1]
-            next[id] = { ...(next[id] || {}), started: ts }
+            next[id] = { ...(next[id] || {}), ready: ts }
           }
         })
         return { ...next }
@@ -39,7 +39,7 @@ export default function SwarmDebugPanel() {
             <ul className="space-y-0.5">
               <li>created: {s.created ? new Date(s.created).toLocaleTimeString() : 'pending'}</li>
               {s.created && (
-                <li>started: {s.started ? new Date(s.started).toLocaleTimeString() : 'pending'}</li>
+                <li>ready: {s.ready ? new Date(s.ready).toLocaleTimeString() : 'pending'}</li>
               )}
             </ul>
           </div>

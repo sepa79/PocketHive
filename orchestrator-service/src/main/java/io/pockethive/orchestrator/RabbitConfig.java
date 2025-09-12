@@ -34,6 +34,12 @@ public class RabbitConfig {
     }
 
     @Bean
+    Binding bindSwarmStart(@Qualifier("controlQueue") Queue controlQueue,
+                           @Qualifier("controlExchange") TopicExchange controlExchange){
+        return BindingBuilder.bind(controlQueue).to(controlExchange).with("sig.swarm-start.*");
+    }
+
+    @Bean
     Binding bindSwarmStop(@Qualifier("controlQueue") Queue controlQueue,
                            @Qualifier("controlExchange") TopicExchange controlExchange){
         return BindingBuilder.bind(controlQueue).to(controlExchange).with("sig.swarm-stop.*");
@@ -81,5 +87,11 @@ public class RabbitConfig {
     Binding bindControllerReady(@Qualifier("controlQueue") Queue controlQueue,
                                 @Qualifier("controlExchange") TopicExchange controlExchange){
         return BindingBuilder.bind(controlQueue).to(controlExchange).with("ev.ready.swarm-controller.*");
+    }
+
+    @Bean
+    Binding bindSwarmReady(@Qualifier("controlQueue") Queue controlQueue,
+                           @Qualifier("controlExchange") TopicExchange controlExchange){
+        return BindingBuilder.bind(controlQueue).to(controlExchange).with("ev.swarm-ready.*");
     }
 }

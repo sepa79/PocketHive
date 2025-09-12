@@ -9,12 +9,17 @@ import { logHandshake, resetLogs } from '../lib/logs'
  */
 
 describe('SwarmDebugPanel', () => {
-  it('renders handshake timeline for swarms', async () => {
+  it('renders creation and readiness timeline for swarms', async () => {
     resetLogs()
     render(<SwarmDebugPanel />)
     logHandshake('/exchange/ph.control/ev.swarm-created.sw1', '{}')
     await waitFor(() => screen.getByText('Swarm sw1'))
     expect(screen.getByText(/created:/).textContent).not.toContain('pending')
-    expect(screen.getByText(/started: pending/)).toBeTruthy()
+    expect(screen.getByText(/ready: pending/)).toBeTruthy()
+
+    logHandshake('/exchange/ph.control/ev.swarm-ready.sw1', '{}')
+    await waitFor(() =>
+      expect(screen.getByText(/ready:/).textContent).not.toContain('pending'),
+    )
   })
 })

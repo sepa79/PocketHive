@@ -36,7 +36,7 @@ public class PostProcessor {
   private final DistributionSummary hopCount;
   private final Counter errorCounter;
   private final String instanceId;
-  private volatile boolean enabled = true;
+  private volatile boolean enabled = false;
   private final RabbitListenerEndpointRegistry registry;
   private final AtomicLong counter = new AtomicLong();
   private static final long STATUS_INTERVAL_MS = 5000L;

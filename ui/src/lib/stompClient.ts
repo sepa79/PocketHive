@@ -33,6 +33,7 @@ function isHandshake(dest: string) {
   return (
     dest.startsWith('/exchange/ph.control/ev.ready.swarm-controller.') ||
     dest.startsWith('/exchange/ph.control/ev.swarm-created.') ||
+    dest.startsWith('/exchange/ph.control/sig.swarm-template.') ||
     dest.startsWith('/exchange/ph.control/sig.swarm-start.')
   )
 }
@@ -231,7 +232,7 @@ export async function requestStatusFull(component: Component) {
   })
 }
 
-export async function createSwarm(id: string, scenario: unknown) {
+export async function createSwarm(id: string, templateId: string) {
   return new Promise<void>((resolve, reject) => {
     if (!client || !client.active) {
       reject(new Error('STOMP client not connected'))
@@ -239,7 +240,7 @@ export async function createSwarm(id: string, scenario: unknown) {
     }
     client.publish({
       destination: `/exchange/ph.control/sig.swarm-create.${id}`,
-      body: JSON.stringify(scenario),
+      body: JSON.stringify({ templateId }),
     })
     resolve()
   })
