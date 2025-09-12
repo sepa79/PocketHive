@@ -1,6 +1,6 @@
 # PocketHive UI
 
-PocketHive's UI is a web console for monitoring and controlling swarms in the PocketHive ecosystem. It connects to the control plane over STOMP and lets you view topology, inspect components and stream logs in real time.
+PocketHive's UI is a web console for monitoring and controlling swarms in the PocketHive ecosystem. It connects to the control plane over STOMP and renders the Hive topology with React Flow, letting you inspect components and stream logs in real time.
 
 ## Getting Started
 
