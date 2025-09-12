@@ -2,11 +2,11 @@ asyncapi: 2.6.0
 info:
   title: PocketHive Control & Traffic API
   version: 0.4.0
-  description: |
-    AsyncAPI specification documenting PocketHive messaging contracts.
-    - ph.control — control-plane events, lifecycle, metrics, alerts, and signals
-    - Services consume control signals from queues `ph.control.<role>.<instance>` bound to the `ph.control` exchange
-    - ph.{swarmId}.hive — traffic exchange for workload messages (generator → moderator → processor)
+  description: "AsyncAPI specification documenting PocketHive messaging contracts.\n\
+    - ph.control \u2014 control-plane events, lifecycle, metrics, alerts, and signals\n\
+    - Services consume control signals from queues `ph.control.<role>.<instance>`\
+    \ bound to the `ph.control` exchange\n- ph.{swarmId}.hive \u2014 traffic exchange\
+    \ for workload messages (generator \u2192 moderator \u2192 processor)\n"
 servers:
   control-ws:
     url: ws://{host}/ws
@@ -25,18 +25,23 @@ servers:
         default: '5672'
 defaultContentType: application/json
 channels:
-  # Control-plane events (emitted by services)
   exchange/ph.control/ev.{kind}.{role}.{instance}:
     parameters:
       kind:
-        description: Event kind, including subtype (e.g., status-delta, status-full, lifecycle.running)
+        description: Event kind, including subtype (e.g., status-delta, status-full,
+          lifecycle.running)
         schema:
           type: string
       role:
         description: Service role
         schema:
           type: string
-          enum: [generator, moderator, processor, postprocessor, trigger]
+          enum:
+          - generator
+          - moderator
+          - processor
+          - postprocessor
+          - trigger
       instance:
         description: Instance identifier (UUID or unique string)
         schema:
@@ -45,11 +50,11 @@ channels:
       summary: PocketHive control-plane events from all services
       message:
         oneOf:
-          - $ref: '#/components/messages/ControlStatusFull'
-          - $ref: '#/components/messages/ControlStatusDelta'
-          - $ref: '#/components/messages/ControlLifecycle'
-          - $ref: '#/components/messages/ControlMetric'
-          - $ref: '#/components/messages/ControlAlert'
+        - $ref: '#/components/messages/ControlStatusFull'
+        - $ref: '#/components/messages/ControlStatusDelta'
+        - $ref: '#/components/messages/ControlLifecycle'
+        - $ref: '#/components/messages/ControlMetric'
+        - $ref: '#/components/messages/ControlAlert'
     bindings:
       amqp:
         is: routingKey
@@ -58,20 +63,31 @@ channels:
           type: topic
           durable: true
         routingKey: ev.{kind}.{role}.{instance}
-
-  # Control-plane signals (sent to services)
-  # Pattern: sig.<type>[.<role>[.<instance>]]
   exchange/ph.control/sig.{type}.{role}.{instance}:
     parameters:
       type:
         description: Signal type (single segment, kebab-case)
-        schema: { type: string, enum: [status-request, config-update, ping, link-request] }
+        schema:
+          type: string
+          enum:
+          - status-request
+          - config-update
+          - ping
+          - link-request
       role:
         description: Target role (optional)
-        schema: { type: string, enum: [generator, moderator, processor, postprocessor, trigger] }
+        schema:
+          type: string
+          enum:
+          - generator
+          - moderator
+          - processor
+          - postprocessor
+          - trigger
       instance:
         description: Target instance (optional)
-        schema: { type: string }
+        schema:
+          type: string
     publish:
       summary: PocketHive control-plane signals to services
       message:
@@ -84,16 +100,16 @@ channels:
           type: topic
           durable: true
         routingKey: sig.{type}.{role}.{instance}
-
   exchange/ph.control/sig.swarm-create.{swarmId}:
     parameters:
       swarmId:
         description: Swarm identifier
-        schema: { type: string }
+        schema:
+          type: string
     publish:
       summary: Request creation of a swarm from a stored template
       message:
-        $ref: '#/components/messages/SwarmCreate'
+        $ref: '#/components/messages/ControlSignal'
     bindings:
       amqp:
         is: routingKey
@@ -102,16 +118,16 @@ channels:
           type: topic
           durable: true
         routingKey: sig.swarm-create.{swarmId}
-
   exchange/ph.control/sig.swarm-template.{swarmId}:
     parameters:
       swarmId:
         description: Swarm identifier
-        schema: { type: string }
+        schema:
+          type: string
     publish:
       summary: Deliver resolved SwarmPlan to controller
       message:
-        $ref: '#/components/messages/SwarmPlanMessage'
+        $ref: '#/components/messages/ControlSignal'
     bindings:
       amqp:
         is: routingKey
@@ -120,16 +136,16 @@ channels:
           type: topic
           durable: true
         routingKey: sig.swarm-template.{swarmId}
-
   exchange/ph.control/sig.swarm-start.{swarmId}:
     parameters:
       swarmId:
         description: Swarm identifier
-        schema: { type: string }
+        schema:
+          type: string
     publish:
       summary: Enable previously provisioned swarm
       message:
-        $ref: '#/components/messages/SwarmStart'
+        $ref: '#/components/messages/ControlSignal'
     bindings:
       amqp:
         is: routingKey
@@ -138,12 +154,12 @@ channels:
           type: topic
           durable: true
         routingKey: sig.swarm-start.{swarmId}
-
   exchange/ph.control/ev.swarm-created.{swarmId}:
     parameters:
       swarmId:
         description: Swarm identifier
-        schema: { type: string }
+        schema:
+          type: string
     subscribe:
       summary: Swarm controller container started
       message:
@@ -156,34 +172,168 @@ channels:
           type: topic
           durable: true
         routingKey: ev.swarm-created.{swarmId}
-
-  exchange/ph.control/ev.swarm-ready.{swarmId}:
-    parameters:
-      swarmId:
-        description: Swarm identifier
-        schema: { type: string }
-    subscribe:
-      summary: Swarm provisioning finished
-      message:
-        $ref: '#/components/messages/SwarmReady'
+  exchange/ph.control/sig.swarm-stop.{swarmId}:
     bindings:
       amqp:
         is: routingKey
-        exchange:
+        exchange: &id001
           name: ph.control
           type: topic
           durable: true
-        routingKey: ev.swarm-ready.{swarmId}
-
-  exchange/ph.control/ev.swarm-create.error.{swarmId}:
-    parameters:
+        queue: &id002
+          name: null
+          durable: true
+        routingKey: sig.swarm-stop.{swarmId}
+    parameters: &id003
       swarmId:
         description: Swarm identifier
-        schema: { type: string }
+        schema:
+          type: string
     publish:
-      summary: Swarm creation failed
+      summary: Stop swarm non-destructively
       message:
-        $ref: '#/components/messages/ErrorMessage'
+        $ref: '#/components/messages/ControlSignal'
+  exchange/ph.control/sig.swarm-remove.{swarmId}:
+    bindings:
+      amqp:
+        is: routingKey
+        exchange: *id001
+        queue: *id002
+        routingKey: sig.swarm-remove.{swarmId}
+    parameters: *id003
+    publish:
+      summary: Remove swarm resources
+      message:
+        $ref: '#/components/messages/ControlSignal'
+  exchange/ph.control/ev.ready.swarm-template.{swarmId}:
+    bindings:
+      amqp:
+        is: routingKey
+        exchange: *id001
+        queue: *id002
+        routingKey: ev.ready.swarm-template.{swarmId}
+    parameters: *id003
+    subscribe:
+      message:
+        $ref: '#/components/messages/CommandReady'
+      summary: Event
+  exchange/ph.control/ev.ready.swarm-start.{swarmId}:
+    bindings:
+      amqp:
+        is: routingKey
+        exchange: *id001
+        queue: *id002
+        routingKey: ev.ready.swarm-start.{swarmId}
+    parameters: *id003
+    subscribe:
+      message:
+        $ref: '#/components/messages/CommandReady'
+      summary: Event
+  exchange/ph.control/ev.ready.swarm-stop.{swarmId}:
+    bindings:
+      amqp:
+        is: routingKey
+        exchange: *id001
+        queue: *id002
+        routingKey: ev.ready.swarm-stop.{swarmId}
+    parameters: *id003
+    subscribe:
+      message:
+        $ref: '#/components/messages/CommandReady'
+      summary: Event
+  exchange/ph.control/ev.ready.config-update.{role}.{instance}:
+    bindings:
+      amqp:
+        is: routingKey
+        exchange: *id001
+        queue: *id002
+        routingKey: ev.ready.config-update.{role}.{instance}
+    parameters: &id004
+      role:
+        description: Component role
+        schema:
+          type: string
+      instance:
+        description: Component instance
+        schema:
+          type: string
+    subscribe:
+      message:
+        $ref: '#/components/messages/CommandReady'
+      summary: Event
+  exchange/ph.control/ev.error.swarm-create.{swarmId}:
+    bindings:
+      amqp:
+        is: routingKey
+        exchange: *id001
+        queue: *id002
+        routingKey: ev.error.swarm-create.{swarmId}
+    parameters: *id003
+    subscribe:
+      message:
+        $ref: '#/components/messages/CommandError'
+      summary: Event
+  exchange/ph.control/ev.error.swarm-template.{swarmId}:
+    bindings:
+      amqp:
+        is: routingKey
+        exchange: *id001
+        queue: *id002
+        routingKey: ev.error.swarm-template.{swarmId}
+    parameters: *id003
+    subscribe:
+      message:
+        $ref: '#/components/messages/CommandError'
+      summary: Event
+  exchange/ph.control/ev.error.swarm-start.{swarmId}:
+    bindings:
+      amqp:
+        is: routingKey
+        exchange: *id001
+        queue: *id002
+        routingKey: ev.error.swarm-start.{swarmId}
+    parameters: *id003
+    subscribe:
+      message:
+        $ref: '#/components/messages/CommandError'
+      summary: Event
+  exchange/ph.control/ev.error.swarm-stop.{swarmId}:
+    bindings:
+      amqp:
+        is: routingKey
+        exchange: *id001
+        queue: *id002
+        routingKey: ev.error.swarm-stop.{swarmId}
+    parameters: *id003
+    subscribe:
+      message:
+        $ref: '#/components/messages/CommandError'
+      summary: Event
+  exchange/ph.control/ev.error.swarm-remove.{swarmId}:
+    bindings:
+      amqp:
+        is: routingKey
+        exchange: *id001
+        queue: *id002
+        routingKey: ev.error.swarm-remove.{swarmId}
+    parameters: *id003
+    subscribe:
+      message:
+        $ref: '#/components/messages/CommandError'
+      summary: Event
+  exchange/ph.control/ev.error.config-update.{role}.{instance}:
+    bindings:
+      amqp:
+        is: routingKey
+        exchange: *id001
+        queue: *id002
+        routingKey: ev.error.config-update.{role}.{instance}
+    parameters: *id004
+    subscribe:
+      message:
+        $ref: '#/components/messages/CommandError'
+      summary: Event
+  exchange/ph.control/ev.ready.swarm-remove.{swarmId}:
     bindings:
       amqp:
         is: routingKey
@@ -191,77 +341,90 @@ channels:
           name: ph.control
           type: topic
           durable: true
-        routingKey: ev.swarm-create.error.{swarmId}
-
+        queue:
+          name: null
+          durable: true
+        routingKey: ev.ready.swarm-remove.{swarmId}
+    parameters:
+      swarmId:
+        description: Swarm identifier
+        schema:
+          type: string
+    subscribe:
+      summary: Confirmation for sig.swarm-remove
+      message:
+        $ref: '#/components/messages/CommandReady'
 components:
   messages:
     ControlStatusFull:
       name: ControlStatusFull
-      title: Control — Status (full snapshot)
+      title: "Control \u2014 Status (full snapshot)"
       contentType: application/json
       payload:
         $ref: '#/components/schemas/ControlStatusFullPayload'
     ControlStatusDelta:
       name: ControlStatusDelta
-      title: Control — Status (delta)
+      title: "Control \u2014 Status (delta)"
       contentType: application/json
       payload:
         $ref: '#/components/schemas/ControlStatusDeltaPayload'
     ControlLifecycle:
       name: ControlLifecycle
-      title: Control — Lifecycle
+      title: "Control \u2014 Lifecycle"
       contentType: application/json
       payload:
         $ref: '#/components/schemas/ControlLifecyclePayload'
     ControlMetric:
       name: ControlMetric
-      title: Control — Metric
+      title: "Control \u2014 Metric"
       contentType: application/json
       payload:
         $ref: '#/components/schemas/ControlMetricPayload'
     ControlAlert:
       name: ControlAlert
-      title: Control — Alert
+      title: "Control \u2014 Alert"
       contentType: application/json
       payload:
         $ref: '#/components/schemas/ControlAlertPayload'
     ControlSignal:
       name: ControlSignal
-      title: Control — Signal to services
+      title: Unified control signal
       contentType: application/json
       payload:
         $ref: '#/components/schemas/ControlSignalPayload'
-    ErrorMessage:
-      name: ErrorMessage
-      title: Error description
-      contentType: text/plain
-      payload:
-        type: string
-        description: Brief error message
     SwarmCreate:
       name: SwarmCreate
       title: Swarm creation request
       payload:
         type: object
-        required: [templateId]
+        required:
+        - templateId
         properties:
-          templateId: { type: string }
+          templateId:
+            type: string
     SwarmPlanMessage:
       name: SwarmPlan
       title: Resolved swarm plan
       payload:
         type: object
-        required: [id, bees]
+        required:
+        - id
+        - bees
         properties:
-          id: { type: string }
+          id:
+            type: string
           bees:
             type: array
             items:
               type: object
-              required: [role, image]
+              required:
+              - role
+              - image
               properties:
-                role: { type: string }
-                image: { type: string }
+                role:
+                  type: string
+                image:
+                  type: string
                 enabled:
                   type: boolean
     SwarmStart:
@@ -277,122 +440,362 @@ components:
         type: object
         description: Empty object
       examples:
-        - payload: {}
-    SwarmReady:
-      name: SwarmReady
-      title: Swarm ready for start
+      - payload: {}
+    CommandReady:
+      name: CommandReady
+      title: "Command confirmation \u2014 success"
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/CommandReadyPayload'
+    CommandError:
+      name: CommandError
+      title: "Command confirmation \u2014 error"
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/CommandErrorPayload'
+    SwarmStop:
+      name: SwarmStop
+      title: Swarm stop signal
       payload:
         type: object
         description: Empty object
-      examples:
-        - payload: {}
+    SwarmRemove:
+      name: SwarmRemove
+      title: Swarm remove signal
+      payload:
+        type: object
+        description: Empty object
   schemas:
     ControlBase:
       type: object
-      required: [event, kind, version, role, instance, messageId, timestamp]
+      required:
+      - event
+      - kind
+      - version
+      - role
+      - instance
+      - messageId
+      - timestamp
       properties:
-        event: { type: string, enum: [status, lifecycle, metric, alert, link] }
-        kind: { type: string, description: Subtype (e.g., status-full, status-delta, lifecycle.running) }
-        version: { type: string, description: Semver of event schema }
-        role: { type: string, enum: [generator, moderator, processor, postprocessor, trigger] }
-        instance: { type: string }
-        location: { type: string }
-        messageId: { type: string, format: uuid }
-        timestamp: { type: string, format: date-time }
-        enabled: { type: boolean }
-        traffic: { type: string }
+        event:
+          type: string
+          enum:
+          - status
+          - lifecycle
+          - metric
+          - alert
+          - link
+        kind:
+          type: string
+          description: Subtype (e.g.
+          status-full: null
+          status-delta: null
+          lifecycle.running): null
+        version:
+          type: string
+          description: Semver of event schema
+        role:
+          type: string
+          enum:
+          - generator
+          - moderator
+          - processor
+          - postprocessor
+          - trigger
+          - swarm-controller
+          - orchestrator
+        instance:
+          type: string
+        location:
+          type: string
+        messageId:
+          type: string
+          format: uuid
+        timestamp:
+          type: string
+          format: date-time
+        enabled:
+          type: boolean
+        traffic:
+          type: string
         inQueue:
           type: object
           properties:
-            name: { type: string }
-            routingKeys: { type: array, items: { type: string } }
-        publishes: { type: array, items: { type: string } }
+            name:
+              type: string
+            routingKeys:
+              type: array
+              items:
+                type: string
+        publishes:
+          type: array
+          items:
+            type: string
         queues:
           type: object
           properties:
             work:
               type: object
               properties:
-                in: { type: array, items: { type: string } }
-                out: { type: array, items: { type: string } }
-                routes: { type: array, items: { type: string } }
+                in:
+                  type: array
+                  items:
+                    type: string
+                out:
+                  type: array
+                  items:
+                    type: string
+                routes:
+                  type: array
+                  items:
+                    type: string
             control:
               type: object
               properties:
-                in: { type: array, items: { type: string } }
-                out: { type: array, items: { type: string } }
-                routes: { type: array, items: { type: string } }
-        data: { type: object, additionalProperties: true }
-
+                in:
+                  type: array
+                  items:
+                    type: string
+                out:
+                  type: array
+                  items:
+                    type: string
+                routes:
+                  type: array
+                  items:
+                    type: string
+        data:
+          type: object
+          additionalProperties: true
     ControlStatusFullPayload:
       allOf:
-        - $ref: '#/components/schemas/ControlBase'
-        - type: object
-          properties:
-            event: { const: status }
-            kind: { const: status-full }
-            data:
-              type: object
-              required: [tps]
-              properties:
-                tps: { type: integer, minimum: 0 }
-
+      - $ref: '#/components/schemas/ControlBase'
+      - type: object
+        properties:
+          event:
+            const: status
+          kind:
+            const: status-full
+          data:
+            type: object
+            required:
+            - tps
+            properties:
+              tps:
+                type: integer
+                minimum: 0
     ControlStatusDeltaPayload:
       allOf:
-        - $ref: '#/components/schemas/ControlBase'
-        - type: object
-          properties:
-            event: { const: status }
-            kind: { const: status-delta }
-            data:
-              type: object
-              required: [tps]
-              properties:
-                tps: { type: integer, minimum: 0 }
-
+      - $ref: '#/components/schemas/ControlBase'
+      - type: object
+        properties:
+          event:
+            const: status
+          kind:
+            const: status-delta
+          data:
+            type: object
+            required:
+            - tps
+            properties:
+              tps:
+                type: integer
+                minimum: 0
     ControlLifecyclePayload:
       allOf:
-        - $ref: '#/components/schemas/ControlBase'
-        - type: object
-          properties:
-            event: { const: lifecycle }
-            data:
-              type: object
-              required: [state]
-              properties:
-                state: { type: string, enum: [starting, running, degraded, stopping, stopped, error] }
-                reason: { type: string }
-
+      - $ref: '#/components/schemas/ControlBase'
+      - type: object
+        properties:
+          event:
+            const: lifecycle
+          data:
+            type: object
+            required:
+            - state
+            properties:
+              state:
+                type: string
+                enum:
+                - starting
+                - running
+                - degraded
+                - stopping
+                - stopped
+                - error
+              reason:
+                type: string
     ControlMetricPayload:
       allOf:
-        - $ref: '#/components/schemas/ControlBase'
-        - type: object
-          properties:
-            event: { const: metric }
-            data:
-              type: object
-              additionalProperties:
-                type: number
-
+      - $ref: '#/components/schemas/ControlBase'
+      - type: object
+        properties:
+          event:
+            const: metric
+          data:
+            type: object
+            additionalProperties:
+              type: number
     ControlAlertPayload:
       allOf:
-        - $ref: '#/components/schemas/ControlBase'
-        - type: object
-          properties:
-            event: { const: alert }
-            data:
-              type: object
-              required: [level, code, message]
-              properties:
-                level: { type: string, enum: [info, warn, error] }
-                code: { type: string }
-                message: { type: string }
-
+      - $ref: '#/components/schemas/ControlBase'
+      - type: object
+        properties:
+          event:
+            const: alert
+          data:
+            type: object
+            required:
+            - level
+            - code
+            - message
+            properties:
+              level:
+                type: string
+                enum:
+                - info
+                - warn
+                - error
+              code:
+                type: string
+              message:
+                type: string
     ControlSignalPayload:
       type: object
-      required: [type, version, messageId, timestamp]
+      required:
+      - correlationId
+      - idempotencyKey
+      - messageId
+      - timestamp
+      - type
+      - version
       properties:
-        type: { type: string, enum: [status-request, config-update, ping, link-request] }
-        version: { type: string }
-        messageId: { type: string, format: uuid }
-        timestamp: { type: string, format: date-time }
+        type:
+          type: string
+          enum:
+          - status-request
+          - config-update
+          - ping
+          - link-request
+        version:
+          type: string
+        messageId:
+          type: string
+          format: uuid
+        timestamp:
+          type: string
+          format: date-time
+        correlationId:
+          type: string
+          format: uuid
+        idempotencyKey:
+          type: string
+          format: uuid
+    CommandReadyPayload:
+      type: object
+      properties:
+        ts:
+          type: string
+          format: date-time
+        correlationId:
+          type: string
+          format: uuid
+        idempotencyKey:
+          type: string
+          format: uuid
+        signal:
+          type: string
+          enum:
+          - swarm-template
+          - swarm-start
+          - swarm-stop
+          - swarm-remove
+          - config-update
+          - swarm-create
+        scope:
+          type: object
+          properties:
+            swarmId:
+              type: string
+            role:
+              type: string
+            instance:
+              type: string
+        result:
+          type: string
+          enum:
+          - success
+        state:
+          type: string
+          enum:
+          - Ready
+          - Running
+          - Stopped
+          - Removed
+        notes:
+          type: string
+      required:
+      - ts
+      - correlationId
+      - idempotencyKey
+      - signal
+      - result
+    CommandErrorPayload:
+      type: object
+      properties:
+        ts:
+          type: string
+          format: date-time
+        correlationId:
+          type: string
+          format: uuid
+        idempotencyKey:
+          type: string
+          format: uuid
+        signal:
+          type: string
+          enum:
+          - swarm-template
+          - swarm-start
+          - swarm-stop
+          - swarm-remove
+          - config-update
+          - swarm-create
+        scope:
+          type: object
+          properties:
+            swarmId:
+              type: string
+            role:
+              type: string
+            instance:
+              type: string
+        result:
+          type: string
+          enum:
+          - error
+        phase:
+          type: string
+          enum:
+          - create
+          - template
+          - start
+          - stop
+          - remove
+          - runtime
+        code:
+          type: string
+        message:
+          type: string
+        retryable:
+          type: boolean
+        details:
+          type: object
+          additionalProperties: true
+      required:
+      - ts
+      - correlationId
+      - idempotencyKey
+      - signal
+      - result
+      - code
+      - message

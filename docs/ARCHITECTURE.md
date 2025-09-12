@@ -1,251 +1,309 @@
-# Architecture
+# PocketHive — ARCHITECTURE
 
-## Goal
-PocketHive delivers modular Java microservices and a React UI that together handle event processing and moderation.
+> **Status:** Authoritative architecture specification (reference for agents).  
+> **Scope:** Universal runtime (Docker Compose or Kubernetes).  
+> **Compatibility:** Control‑plane names remain as in the repo.
 
-## System context
-Services communicate over HTTP and AMQP. Each service exposes APIs and consumes messages while remaining independent. The Scenario Manager provides REST endpoints that the UI queries to load swarm plans.
+---
 
-### High-level flow
-```mermaid
-flowchart LR
-  SM[Scenario Manager] --> QN["Orchestrator (Queen)"]
-  QN --> MSH["Swarm Controller (Marshal)"]
-  MSH --> BW["Workers (Bees)"] --> SUT["System Under Test"]
-  BW --> OBS[Observability]
+## 1. Overview
+
+PocketHive orchestrates message-driven swarms of components (generators, processors, workers, post‑processors, etc.) coordinated by an **Orchestrator** and a per‑swarm **Swarm Controller**. Communication is over **AMQP** (RabbitMQ). **Health** and **readiness** are validated via per‑component **Actuator** HTTP endpoints, with **AMQP status** events treated as equivalent heartbeats.
+
+**Design principles**
+
+- **Single source of truth** for desired state: **Orchestrator**.
+- **Aggregate state** per swarm: **Swarm Controller**.
+- **Per‑component state**: emitted by **components themselves**, consumed by the **Controller**, **not** by the Orchestrator in steady state.
+- **Control plane always on**: status and config are accepted even when workloads are disabled.
+- **Non‑destructive defaults**: failures never auto‑delete resources; Stop ≠ Remove.
+- **Deterministic ordering** derived from queue I/O topology, not hard‑coded by role.
+- **Command → Confirmation pattern**: Every control signal results in **exactly one**
+  **success** confirmation or **error** confirmation, correlated via `correlationId` and `idempotencyKey`.
+
+---
+
+## 2. Core roles
+
+### 2.1 Orchestrator (Queen)
+- Owns the **desired state** and lifecycle intents per swarm (`SwarmPlan`).
+- Launches a **Swarm Controller** for a new swarm, sends the plan with **`enabled=false`** for all components.
+- Issues **start / stop / remove** at swarm scope, and **config updates** at swarm or component scope.
+- **Monitors** to **Ready / Running**, marks **Failed** on timeout/error, **never auto‑deletes**.
+- Consumes **only swarm‑level aggregates** and lifecycle events from the Swarm Controller (low fan‑in).
+
+### 2.2 Swarm Controller (Marshal)
+- Applies the plan locally; **provisions** components; maintains an **aggregate** swarm view.
+- Derives **start/stop** order from **queue I/O** (producers → transformers → consumers).
+- Emits **swarm‑level** status and lifecycle events; publishes periodic **heartbeats**.
+- Treats AMQP `status-{delta|full}` as **equivalent to Actuator heartbeats**; polls **Actuator** on staleness.
+- Control plane is always enabled; honors start/stop/remove/status/config even when workload is disabled.
+
+### 2.3 Components
+- Expose **Actuator** readiness via HTTP.
+- Emit **their own** `ev.status-{full|delta}` events.
+- Apply `sig.config-update…` (`enabled: true|false`) to control **workload** only; keep control plane responsive.
+
+---
+
+## 3. Exchanges & naming (wire contract summary)
+
+> The AsyncAPI defines a **single control signal shape** and unified confirmations.
+
+### 3.1 Control (signals) — **unified `ControlSignal` payload**
+- `sig.swarm-create.<swarmId>`  
+- `sig.swarm-template.<swarmId>` — send/replace `SwarmPlan` (all components initially `enabled=false`)
+- `sig.swarm-start.<swarmId>`  
+- `sig.swarm-stop.<swarmId>` — **non‑destructive stop** (workloads disabled; resources kept)
+- `sig.swarm-remove.<swarmId>` — explicit deprovision/delete
+- `sig.status-request.<role>.<instance>`
+- `sig.config-update[.<role>.<instance>]` — update config (incl. `enabled`)
+
+**`ControlSignal` fields (excerpt):**
+- `correlationId` *(uuid)* — **new per attempt**  
+- `idempotencyKey` *(uuid)* — **stable across retries** of the same action  
+- `swarmId` / `role` / `instance` / optional `args` as required by each signal
+
+### 3.2 Confirmations & milestones (events)
+
+**Orchestrator behavior:** upon receiving `ev.ready.swarm-remove.<swarmId>`, the Orchestrator MUST tear down the Swarm Controller (stop/delete its runtime unit) and finalize the operation.
+- **Success confirmations:**  
+  - `ev.ready.swarm-template.<swarmId>`  
+  - `ev.ready.swarm-start.<swarmId>`  
+  - `ev.ready.swarm-stop.<swarmId>`  
+  - `ev.ready.config-update.<role>.<instance>`  
+  - `ev.ready.swarm-remove.<swarmId>`
+  *(payload: `CommandReady`, echoes `correlationId` and `idempotencyKey`)*
+- **Error confirmations:**  
+  - `ev.error.swarm-create.<swarmId>`  
+  - `ev.error.swarm-template.<swarmId>`  
+  - `ev.error.swarm-start.<swarmId>`  
+  - `ev.error.swarm-stop.<swarmId>`  
+  - `ev.error.swarm-remove.<swarmId>`  
+  - `ev.error.config-update.<role>.<instance>`  
+  *(payload: `CommandError`, echoes `correlationId` and `idempotencyKey`)*
+- **Lifecycle milestones (payload-light):**  
+  - `ev.swarm-created.<swarmId>` *(informational)*  
+  
+
+> Note: milestone events may not echo `correlationId` / `idempotencyKey`. UIs should drive spinners off **confirmations** (`ev.ready.*` / `ev.error.*`) and display milestones as state transitions.
+
+### 3.3 Status streams
+- **Swarm aggregates (Controller):**  
+  `ev.status-{full|delta}.swarm-controller.<instance>` *(aggregate watermark, totals, state)*
+- **Per‑component status:**  
+  `ev.status-{full|delta}.<role>.<instance>`
+
+---
+
+## 4. Health & heartbeat model
+
+- **Actuator** (HTTP) is the **readiness authority** for components.
+- **AMQP `status-{delta|full}` events are treated as equivalent to heartbeats.**
+- If **no AMQP status** arrives within a **TTL** for a component included in the aggregate, the Controller **polls the component’s Actuator** before asserting Ready/Running.
+- Every **swarm aggregate** carries a **watermark timestamp** and **max-staleness**; if stale or incomplete, the Controller emits **Degraded/Unknown**.
+
+---
+
+## 5. Lifecycle & states
+
+### 5.1 Swarm lifecycle (Orchestrator view)
 ```
-
-### Queue pipeline
-```mermaid
-flowchart LR
-  G[Generator] --> Qgen[(queue gen)] --> M[Moderator] --> Qmod[(queue mod)] --> P[Processor] --> Qfinal[(queue final)] --> PP[Postprocessor]
-  P --> S[SUT]
+New → Creating → Ready → Starting → Running
+                     ↘ Failed ↙        → Stopping → Stopped
+Ready/Running/Stopped → Removing → Removed
 ```
+- **Ready:** all desired components Healthy (`Actuator=UP`) with `enabled=false`.
+- **Failed:** an error or timeout occurred; **resources are preserved** for debugging.
 
-### Topology with exchanges
-```mermaid
-flowchart LR
-  %% Actors
-  SC[Scenario]
-  QN["Orchestrator (Queen)"]
-  MSH["Swarm Controller (Marshal)"]
-  G[Generator]
-  M[Moderator]
-  P[Processor]
-  PP[Postprocessor]
-  T[Trigger]
-  S[SUT]
-
-  %% Exchanges
-  Xhive((exchange ph.swarm.hive))
-  Xctrl((exchange ph.control))
-
-  %% Queues
-  Qgen[(queue ph.swarm.gen)]
-  Qmod[(queue ph.swarm.mod)]
-  Qfinal[(queue ph.swarm.final)]
-  Qctrl[(queue ph.control)]
-
-  %% Scenario and control flow
-  SC --> QN --> MSH
-  MSH -->|sig.swarm-start| Xctrl
-  QN -->|publish sig.*| Xctrl
-  Xctrl -->|bind| Qctrl
-  Qctrl -.->|consume| G
-  Qctrl -.->|consume| M
-  Qctrl -.->|consume| P
-  Qctrl -.->|consume| PP
-  Qctrl -.->|consume| T
-  T  -.->|publish sig.*| Xctrl
-
-  %% Workload flow via ph.swarm.hive
-  G -->|publish ph.swarm.gen| Xhive
-  Xhive -->|bind ph.swarm.gen| Qgen -->|consume| M
-  M -->|publish ph.swarm.mod| Xhive
-  Xhive -->|bind ph.swarm.mod| Qmod -->|consume| P
-  P -->|publish ph.swarm.final| Xhive
-  Xhive -->|bind ph.swarm.final| Qfinal -->|consume| PP
-
-  %% Direct call to SUT
-  P -->|HTTP| S
-
-  %% Styling
-  classDef app fill:#0f1116,stroke:#9aa0a6,color:#ffffff,stroke-width:1;
-  classDef svc fill:#0f1116,stroke:#66bb6a,color:#ffffff,stroke-width:1;
-  classDef ex  fill:#1f2430,stroke:#ffc107,color:#ffc107,stroke-width:1.5;
-  classDef q   fill:#11161e,stroke:#4fc3f7,color:#4fc3f7,stroke-width:1.5;
-
-  class G,M,P,PP,T app;
-  class QN,MSH,S svc;
-  class Xhive,Xctrl ex;
-  class Qgen,Qmod,Qfinal,Qctrl q;
+### 5.2 Component lifecycle (aggregate perspective)
 ```
-
-### Observability
-```mermaid
-flowchart LR
-  B["Workers (Bees)"] -->|logs| LA[Log Aggregator] --> LK[Loki]
-  B -->|metrics| PR[Prometheus]
-  LA --> GF[Grafana]
-  LK --> GF
-  PR --> GF
+New → Provisioning → Healthy(enabled=false) → Starting → Running(enabled=true)
+                                               ↘ Failed ↙               → Stopping → Stopped
 ```
+> Per‑component transitions are **emitted by components**; the Controller **aggregates** only.
 
-## Orchestration hierarchy
-PocketHive coordinates work through a layered control plane:
+---
 
-- **Queen** – global scheduler that creates and stops swarms.
-- **Marshal** – per-swarm controller started by the Queen; it provisions message queues and launches worker containers.
-- **Bees** – the worker services inside each swarm.
+## 6. Dependency ordering (queue I/O graph)
 
-### Queen (Orchestrator)
-The Queen coordinates the entire hive. It loads scenario plans, spins up or tears down swarms, and hands each Marshal the fragment of the plan it should execute.
+Construct a directed graph where **A → B** if **A produces** to a queue that **B consumes**.
 
-### Marshal (Swarm Controller)
-A Marshal governs one swarm. After receiving its plan from the Queen it declares the swarm's exchanges and queues, launches the bee containers described in the template and fans out config signals to individual bees.
+- **Create/Start order:** producers → transformers → consumers (topological order).
+- **Stop order:** reverse of start order.
+- Cycles/ambiguity → choose a stable order and emit a **warning** event with the heuristic used.
 
-## Swarm coordination
+---
 
-### Swarm startup
-1. UI retrieves available templates from the Scenario Manager and publishes `sig.swarm-create.<swarmId>` with `{ "templateId": "<id>" }`.
-2. Queen resolves the template from the Scenario Manager, converts it into a `SwarmPlan`, launches a Marshal and sends `sig.swarm-template.<swarmId>` with the full plan (all bees default to `enabled: false`).
-3. Queen announces controller launch with `ev.swarm-created.<swarmId>`.
-4. Marshal provisions queues and disabled bee containers, then emits `ev.swarm-ready.<swarmId>`.
-5. Queen relays the ready event to the UI. The swarm only starts when the UI later sends `sig.swarm-start.<swarmId>`.
+## 7. Sequences
 
+> Rendering note: Mermaid messages avoid semicolons to prevent parser hiccups.
+
+### 7.1 Create → Ready (no auto‑start)
 ```mermaid
 sequenceDiagram
-  participant MSH as Swarm Controller (Marshal)
-  participant QN as Orchestrator (Queen)
+  participant QN as Orchestrator
+  participant MSH as Swarm Controller
+  participant CMP as Components (various)
+  participant RT as Runtime (Docker/K8s)
 
-  Note over MSH: declares ph.control.swarm-controller.<instance>
-  QN->>MSH: sig.swarm-template.<swarmId> (SwarmPlan)
-  QN->>UI: ev.swarm-created.<swarmId>
-  MSH->>UI: ev.swarm-ready.<swarmId>
-  UI->>QN: sig.swarm-start.<swarmId>
-  QN->>MSH: sig.swarm-start.<swarmId>
+  QN->>RT: Launch Controller for <swarmId>
+  RT-->>QN: Controller container up
+  MSH-->>QN: ev.ready.swarm-controller.<instance>
 
+  QN->>MSH: sig.swarm-template.<swarmId> (SwarmPlan, all enabled=false)
+  MSH->>RT: Provision component containers and processes
+  CMP-->>MSH: ev.status-full.<role>.<instance> (Actuator=UP)
+  MSH-->>QN: ev.ready.swarm-template.<swarmId>
 ```
 
-### Handshake
-1. Marshal declares its control queue `ph.control.swarm-controller.<instance>` bound to `ph.control` for `sig.*` and `ev.*` topics.
-2. Queen sends `sig.swarm-template.<swarmId>` once the controller is reachable and publishes `ev.swarm-created.<swarmId>`.
-3. Marshal provisions queues and disabled bees, then emits `ev.swarm-ready.<swarmId>` to signal readiness.
-4. Queen forwards the ready event to the UI. The Marshal remains idle until `sig.swarm-start.<swarmId>`.
-
+### 7.2 Start whole swarm
 ```mermaid
 sequenceDiagram
-  participant MSH as Swarm Controller (Marshal)
-  participant QN as Orchestrator (Queen)
+  participant QN as Orchestrator
+  participant MSH as Swarm Controller
+  participant CMP as Components
 
-  Note over MSH: declares ph.control.swarm-controller.<instance>
-  QN->>MSH: sig.swarm-template.<swarmId> (SwarmPlan)
-  QN->>UI: ev.swarm-created.<swarmId>
-  MSH->>UI: ev.swarm-ready.<swarmId>
-  UI->>QN: sig.swarm-start.<swarmId>
   QN->>MSH: sig.swarm-start.<swarmId>
-
+  MSH->>MSH: Enable components in derived dependency order
+  CMP-->>MSH: ev.status-delta.<role>.<instance> (enabled=true)
+  MSH-->>QN: ev.status-delta.swarm-controller.<instance> (aggregate Running)
+  MSH-->>QN: ev.ready.swarm-start.<swarmId>
 ```
 
-### Queue provisioning
-- Marshal expands queue suffixes with the swarm id.
-- Declares `ph.<swarmId>.hive` and all required queues.
-- Binds each queue to the exchange using its suffix as the routing key.
-
-```mermaid
-flowchart TB
-  A[Expand suffixes with swarm id] --> B[Declare ph.&lt;swarmId&gt;.hive]
-  B --> C[Declare queues]
-  C --> D[Bind queues to exchange]
-```
-
-### Container lifecycle
-- Marshal launches the bee containers defined in the plan.
-- Runtime adjustments or shutdowns use signals such as `sig.swarm-stop.<swarmId>` on `ph.control`.
-
+### 7.3 Per‑component enable/disable (via config‑update)
 ```mermaid
 sequenceDiagram
-  participant QN as Orchestrator (Queen)
-  participant MSH as Swarm Controller (Marshal)
-  participant WS as Worker Service (Bee)
+  participant QN as Orchestrator
+  participant MSH as Swarm Controller
+  participant CMP as Component
 
-  QN->>MSH: sig.swarm-start.<swarmId>
-  MSH->>WS: launch container
-  WS-->>MSH: status-full
+  QN->>MSH: sig.config-update.<role>.<instance> ({ enabled: true|false, ... })
+  MSH->>CMP: Apply config (control plane always on)
+  CMP-->>MSH: ev.status-delta.<role>.<instance> (enabled reflected)
+  MSH-->>QN: ev.ready.config-update.<role>.<instance>
+```
+
+### 7.4 Stop whole swarm (non‑destructive)
+```mermaid
+sequenceDiagram
+  participant QN as Orchestrator
+  participant MSH as Swarm Controller
+  participant CMP as Components
+
   QN->>MSH: sig.swarm-stop.<swarmId>
-  MSH->>WS: stop container
+  MSH->>MSH: Disable workload in reverse dependency order
+  CMP-->>MSH: ev.status-delta.<role>.<instance> (enabled=false)
+  MSH-->>QN: ev.status-delta.swarm-controller.<instance> (aggregate Stopped)
+  MSH-->>QN: ev.ready.swarm-stop.<swarmId>
 ```
 
-### Swarm Plan Template
-Queens hand Marshals a resolved plan describing the swarm composition:
+### 7.5 Remove swarm (explicit delete)
+```mermaid
+sequenceDiagram
+  participant QN as Orchestrator
+  participant MSH as Swarm Controller
+  participant RT as Runtime
 
-```yaml
-id: rest
-exchange: hive
-bees:
-  - role: generator
-    image: generator-service:latest
-    work:
-      out: gen
-  - role: moderator
-    image: moderator-service:latest
-    work:
-      in: gen
-      out: mod
-  - role: processor
-    image: processor-service:latest
-    work:
-      in: mod
-      out: final
-  - role: postprocessor
-    image: postprocessor-service:latest
-    work:
-      in: final
+  QN->>MSH: sig.swarm-remove.<swarmId>
+  MSH->>MSH: Ensure Stopped and deprovision components
+  MSH->>RT: Delete component resources
+  MSH-->>QN: ev.ready.swarm-remove.<swarmId>
+  QN->>RT: Remove Controller for <swarmId>
 ```
 
-Marshal prefixes each `work.in/out` with the swarm id to form queues like `ph.<swarmId>.gen` and binds them to the `ph.<swarmId>.hive` exchange using the same suffix as routing key.
+### 7.6 Failure during create/start (no deletion)
+```mermaid
+sequenceDiagram
+  participant QN as Orchestrator
+  participant MSH as Swarm Controller
+  participant CMP as Components
+  participant RT as Runtime
 
-### Control-plane signals
-Communication between the Queen and Marshal uses these topics on `ph.control`:
+  QN->>MSH: sig.swarm-template.<swarmId> (enabled=false)
+  MSH->>RT: Provision components
+  CMP-->>MSH: ev.status-delta.<role>.<instance> (health=DOWN) or no status within TTL
+  MSH->>CMP: Poll Actuator (HTTP) to confirm
+  MSH-->>QN: ev.status-delta.swarm-controller.<instance> (aggregate Failed)
+  QN-->>QN: ev.error.swarm-create.<swarmId> when initial creation fails
+  MSH-->>QN: ev.error.swarm-template.<swarmId> when template or provisioning fails
+```
 
-| Direction | Routing key | Body | Purpose |
-|-----------|-------------|------|---------|
-| Queen → Marshal | `sig.swarm-template.<swarmId>` | `SwarmPlan` | Provide plan |
-| Queen → Marshal | `sig.swarm-start.<swarmId>` | _(empty)_ | Start swarm |
-| Queen → Marshal | `sig.swarm-stop.<swarmId>` | _(empty)_ | Stop swarm |
-| Queen → Marshal (optional) | `sig.config-update...` | Partial plan | Adjust running swarm |
-| Queen → Marshal (optional) | `sig.status-request...` | _(empty)_ | Request status |
-| Queen → ph.control | `ev.swarm-created.<swarmId>` | _(empty)_ | Controller launched |
-| Marshal → ph.control | `ev.swarm-ready.<swarmId>` | _(empty)_ | Swarm provisioned |
-| Marshal → Queen | `ev.status-full.swarm-controller.<instance>` | Status snapshot | Report state |
+---
 
-## Multi-Region & Queue Adapters
-PocketHive will support swarms running in multiple geolocations. Each swarm connects to a region-local broker while the Queen coordinates them through the control plane. Regions remain isolated from each other’s traffic yet share common naming and signalling conventions.
+## 8. Timeouts & cadence (defaults)
 
-To enable broker diversity, messaging will flow through pluggable queue adapters. The core interface will expose publish and consume operations and minimal lifecycle hooks. Implementations for AMQP, Kafka, SQS and others can plug in without altering domain code.
+> Applied unless stricter values exist in code or plan.
 
-### Adding a new driver
-1. Implement the adapter interface for the target broker.
-2. Provide configuration mapping and wiring inside the swarm controller.
-3. Register the driver with the Queen so swarms may select it at launch time.
+- **Provisioning timeout (per component):** 120s  
+- **Ready timeout (swarm total):** 5m  
+- **Start timeout (per component):** 60s  
+- **Start timeout (swarm total):** 3m  
+- **Graceful stop timeout (per component):** 30s, then force‑stop (report degraded)  
+- **Controller heartbeats:** `ev.status-{delta|full}.swarm-controller.<instance>` on **state change** + **every 10s** (aggregate watermark).
 
-## Layers
-Every service follows a hexagonal layout:
-- **api** – inbound ports and DTOs.
-- **app** – use cases and orchestration.
-- **domain** – business rules, framework-free.
-- **infra** – adapters for persistence, messaging and external systems.
+---
 
-## Boundaries
-Cross-service calls go through API or message contracts only. Shared libraries live outside the domain to keep it pure.
+## 9. Idempotency & delivery
 
-## Testing strategy
-- JUnit 5 for unit and integration tests.
-- Cucumber for behaviour specs when features require it.
-- ArchUnit guards package boundaries.
+- Control messages carry an **idempotency key** (UUID) and `correlationId`; delivery is **at‑least‑once**.
+- Swarm Controller **deduplicates** within a rolling window per `{swarmId, signal[, component]}`.
+- On duplicate, emit a “duplicate ignored” event referencing the original `correlationId` when known.
 
-## Security
-Principle of least privilege, encrypted transport, no secrets in code or logs.
+---
 
-## Versioning
-Semantic Versioning with per-service change logs.
+## 10. Observability & metrics
+
+**Controller aggregates** include:
+- `ts` (watermark), `swarmId`, and `{total, healthy, running, enabled}` counts.
+- **Max staleness** and, when applicable, **Degraded/Unknown** reason.
+- Recent **error summaries** (role/instance, reason, correlationId) for operator drill‑down.
+
+**Orchestrator** surfaces:
+- Provision/ready/start durations, failure counts by reason, current running/enabled counts, queue connection summaries.
+
+---
+
+## 11. Security & audit
+
+- Only the **Orchestrator** issues swarm lifecycle signals; UI proxies via Orchestrator.
+- All actions/events are stamped with `correlationId`; per‑swarm audit logs are retained.
+- Controller subscribes/publishes strictly within its `{swarmId}` namespace.
+
+---
+
+## 12. Command confirmation envelopes
+
+### Success (`ev.ready.*`)
+```json
+{
+  "ts": "2025-09-12T12:34:56Z",
+  "correlationId": "uuid-from-signal",
+  "idempotencyKey": "uuid-from-signal",
+  "signal": "swarm-start|swarm-stop|swarm-template|config-update",
+  "scope": {"swarmId":"...", "role":null, "instance":null},
+  "result": "success",
+  "state": "Running|Stopped|Ready",
+  "notes": "optional text"
+}
+```
+
+### Error (`ev.error.*`)
+```json
+{
+  "ts": "2025-09-12T12:34:56Z",
+  "correlationId": "uuid-from-signal",
+  "idempotencyKey": "uuid-from-signal",
+  "signal": "swarm-start|swarm-stop|swarm-template|swarm-remove|config-update|swarm-create",
+  "scope": {"swarmId":"...", "role":null, "instance":null},
+  "result": "error",
+  "phase": "create|template|start|stop|remove|runtime",
+  "code": "SHORT_CODE",
+  "message": "Human-readable summary",
+  "retryable": true,
+  "details": {"context": "last logs, probe, etc."}
+}
+```
+
+> For **remove**, the success confirmation is `ev.ready.swarm-remove.<swarmId>`. For **create**, you may publish `ev.swarm-created.<swarmId>` as an informational milestone.
+
