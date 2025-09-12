@@ -29,10 +29,15 @@ export default function HivePage() {
   useEffect(() => {
     return subscribeLogs('handshake', (entries: LogEntry[]) => {
       entries.forEach((e) => {
-        const m = e.destination.match(/ev\.swarm-created\.([^/]+)$/)
-        if (m) {
+        const dest = e.destination
+        let m: RegExpMatchArray | null
+        if ((m = dest.match(/ev\.swarm-created\.([^/]+)$/))) {
+          const id = m[1]
+          setSwarmMsg((msg) => ({ ...msg, [id]: 'Swarm controller created' }))
+        } else if ((m = dest.match(/ev\.swarm-ready\.([^/]+)$/))) {
           const id = m[1]
           setReady((r) => ({ ...r, [id]: true }))
+          setSwarmMsg((msg) => ({ ...msg, [id]: 'Swarm ready' }))
         }
       })
     })

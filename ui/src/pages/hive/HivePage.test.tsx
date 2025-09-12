@@ -71,7 +71,23 @@ test('renders queen status and start/stop controls', async () => {
   render(<HivePage />)
   expect(screen.getByText(/Queen: stopped/i)).toBeTruthy()
   expect(screen.queryByRole('button', { name: /start/i })).toBeNull()
-  logListener?.([{ ts: Date.now(), destination: '/exchange/ph.control/ev.swarm-created.sw1', body: '' }])
+  logListener?.([
+    {
+      ts: Date.now(),
+      destination: '/exchange/ph.control/ev.swarm-created.sw1',
+      body: '',
+    },
+  ])
+  expect(await screen.findByText('Swarm controller created')).toBeTruthy()
+  expect(screen.queryByRole('button', { name: /start/i })).toBeNull()
+  logListener?.([
+    {
+      ts: Date.now(),
+      destination: '/exchange/ph.control/ev.swarm-ready.sw1',
+      body: '',
+    },
+  ])
+  expect(await screen.findByText('Swarm ready')).toBeTruthy()
   const startBtn = await screen.findByRole('button', { name: /start/i })
   await user.click(startBtn)
   expect(startSwarm).toHaveBeenCalledWith('sw1')
