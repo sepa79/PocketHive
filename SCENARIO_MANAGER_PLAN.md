@@ -2,7 +2,7 @@
 
 ## API behaviour
 - `GET /scenarios` – return lightweight list of `{id, name}` summaries for UI selection.
-- `GET /scenarios/{id}` – return full scenario definition; honour `Accept: application/yaml` for YAML.
+- `GET /scenarios/{id}` – return full scenario definition as JSON only.
 - `POST /scenarios` – create a new scenario definition.
 - `PUT /scenarios/{id}` – replace an existing scenario.
 - `DELETE /scenarios/{id}` – remove a scenario.

@@ -6,7 +6,7 @@ Each request is logged and published to the `PH_LOGS_EXCHANGE` (default `ph.logs
 
 ## Endpoints
 - `GET /scenarios` – list available scenarios as `{id, name}` summaries for UI dropdowns.
-- `GET /scenarios/{id}` – retrieve a scenario definition in JSON or YAML.
+- `GET /scenarios/{id}` – retrieve a scenario definition in JSON format.
 - `POST /scenarios` – create a new scenario.
 - `PUT /scenarios/{id}` – update an existing scenario.
 - `DELETE /scenarios/{id}` – remove a scenario.

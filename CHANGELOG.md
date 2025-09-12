@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.9.4] - 2025-09-11
+Timestamp: 2025-09-11T23:42:19Z
+
+- SwarmController: attach containers to control network, derive network automatically, and propagate swarm ID via shared Docker client.
+- Orchestrator/UI: surface swarm creation errors with detailed events.
+- ScenarioManager/UI: return JSON for scenario endpoints and load scenario details by ID in swarm modal.
+- Tests: fix swarm-controller topology and RabbitMQ expectations.
+
 ## [0.9.3] - 2025-09-11
 Timestamp: 2025-09-11T08:25:35Z
 
