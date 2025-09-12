@@ -64,14 +64,23 @@ const components = [
 ]
 const updateNodePosition = vi.fn<(id: string, x: number, y: number) => void>()
 
-vi.mock('@xyflow/react', () => ({
-  __esModule: true,
-  default: (props: RFProps) => {
+vi.mock('@xyflow/react', () => {
+  // require inside factory to avoid hoisting issues
+  const React = require('react') as typeof import('react')
+  const rf = (props: RFProps) => {
     ;(globalThis as unknown as { __RF_PROPS__: RFProps }).__RF_PROPS__ = props
-    return React.createElement('div')
-  },
-  MarkerType: { ArrowClosed: 'arrow' },
-}))
+    return React.createElement('div', null, props.children)
+  }
+  return {
+    __esModule: true,
+    ReactFlow: rf,
+    default: rf,
+    MarkerType: { ArrowClosed: 'arrow' },
+    Background: () => React.createElement('div'),
+    Handle: () => React.createElement('div'),
+    Position: { Left: 'left', Right: 'right' },
+  }
+})
 
 vi.mock('../../lib/stompClient', () => {
   return {

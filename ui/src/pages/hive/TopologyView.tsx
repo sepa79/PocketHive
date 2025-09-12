@@ -1,8 +1,12 @@
+/* eslint-disable @typescript-eslint/ban-ts-comment */
 // @ts-nocheck
 import { useEffect, useRef, useState, useMemo } from 'react'
 import {
   ReactFlow,
   MarkerType,
+  Background,
+  Handle,
+  Position,
   type Node,
   type Edge,
   type ReactFlowInstance,
@@ -73,19 +77,12 @@ interface ShapeNodeData {
 }
 
 function ShapeNode({ data, selected }: NodeProps<ShapeNodeData>) {
-  const size = 8
+  const size = 10
   const fill = data.enabled === false ? '#999999' : '#ffcc00'
   return (
-    <div style={{ position: 'relative', width: 2 * size, height: 2 * size + 12 }}>
-      <svg width={2 * size} height={2 * size}>
-        {selected && (
-          <circle
-            cx={size}
-            cy={size}
-            r={size + 4}
-            fill="rgba(255,255,255,0.1)"
-          />
-        )}
+    <div className={`shape-node${selected ? ' selected' : ''}`}>
+      <Handle type="target" position={Position.Left} />
+      <svg className="shape-icon" width={2 * size} height={2 * size}>
         {data.shape === 'square' && (
           <rect x={0} y={0} width={2 * size} height={2 * size} fill={fill} stroke="black" />
         )}
@@ -109,44 +106,12 @@ function ShapeNode({ data, selected }: NodeProps<ShapeNodeData>) {
         {data.shape === 'hexagon' && (
           <polygon points={polygonPoints(6, size)} fill={fill} stroke="black" />
         )}
-        {data.shape === 'star' && (
-          <polygon points={starPoints(size)} fill={fill} stroke="black" />
-        )}
-        {data.shape === 'circle' && (
-          <circle cx={size} cy={size} r={size} fill={fill} stroke="black" />
-        )}
+        {data.shape === 'star' && <polygon points={starPoints(size)} fill={fill} stroke="black" />}
+        {data.shape === 'circle' && <circle cx={size} cy={size} r={size} fill={fill} stroke="black" />}
       </svg>
-      {data.queueCount > 0 && (
-        <div
-          className="badge"
-          style={{
-            position: 'absolute',
-            top: -4,
-            right: -4,
-            background: '#333',
-            color: '#fff',
-            borderRadius: '9999px',
-            padding: '0 2px',
-            fontSize: 8,
-            lineHeight: '1',
-          }}
-        >
-          {data.queueCount}
-        </div>
-      )}
-      <div
-        style={{
-          position: 'absolute',
-          top: 2 * size,
-          left: 0,
-          width: '100%',
-          textAlign: 'center',
-          fontSize: 10,
-          color: '#fff',
-        }}
-      >
-        {data.label}
-      </div>
+      <span className="label">{data.label}</span>
+      {data.queueCount > 0 && <span className="badge">{data.queueCount}</span>}
+      <Handle type="source" position={Position.Right} />
     </div>
   )
 }
@@ -337,7 +302,9 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
             else onSwarmSelect?.(d.swarmId ?? 'default')
           }}
           fitView
-        />
+        >
+          <Background />
+        </ReactFlow>
       <button className="reset-view" onClick={() => flowRef.current?.fitView({ padding: 20 })}>
         Reset View
       </button>

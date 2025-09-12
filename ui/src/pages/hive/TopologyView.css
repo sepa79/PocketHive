@@ -2,13 +2,8 @@
   width: 100%;
   height: 100%;
   flex: 1 1 auto;
-  background: radial-gradient(circle at center, #1e1e1e, #0d0d0d);
-  transition: background 0.3s ease;
+  background: linear-gradient(135deg, #f0f4ff 0%, #ffe6f9 100%);
   position: relative;
-}
-
-.topology-container:hover {
-  background: radial-gradient(circle at center, #272727, #0f0f0f);
 }
 
 .topology-legend {
@@ -61,4 +56,53 @@
   padding: 0 2px;
   font-size: 0.5rem;
   line-height: 1;
+}
+
+.shape-node {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: #fff;
+  border: 1px solid #d4d4d8;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  padding: 6px 10px;
+  position: relative;
+  font-size: 0.75rem;
+}
+
+.shape-node.selected {
+  border-color: #3b82f6;
+}
+
+.shape-node .shape-icon {
+  flex-shrink: 0;
+}
+
+.shape-node .label {
+  pointer-events: none;
+}
+
+.shape-node .badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  background: #333;
+  color: #fff;
+  border-radius: 9999px;
+  padding: 0 4px;
+  font-size: 0.5rem;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.shape-node .react-flow__handle {
+  width: 8px;
+  height: 8px;
+  background: #b1b1b7;
+  border: none;
+}
+
+.react-flow__node.dragging {
+  z-index: 1000 !important;
 }
