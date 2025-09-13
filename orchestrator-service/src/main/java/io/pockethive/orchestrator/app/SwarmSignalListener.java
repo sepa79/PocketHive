@@ -2,6 +2,8 @@ package io.pockethive.orchestrator.app;
 
 import io.pockethive.Topology;
 import io.pockethive.observability.StatusEnvelopeBuilder;
+import io.pockethive.orchestrator.domain.ReadyConfirmation;
+import io.pockethive.orchestrator.domain.ErrorConfirmation;
 import io.pockethive.orchestrator.domain.SwarmPlan;
 import io.pockethive.orchestrator.domain.SwarmPlanRegistry;
 import io.pockethive.orchestrator.domain.SwarmRegistry;
@@ -51,7 +53,7 @@ public class SwarmSignalListener {
         this.creates = creates;
         this.registry = registry;
         this.lifecycle = lifecycle;
-        this.json = json;
+        this.json = json.findAndRegisterModules();
         this.instanceId = instanceId;
         try {
             sendStatusFull();
@@ -92,15 +94,10 @@ public class SwarmSignalListener {
     private void emitCreateReady(Pending info) {
         try {
             String rk = "ev.ready.swarm-create." + info.swarmId();
-            String payload = json.writeValueAsString(java.util.Map.of(
-                "result", "success",
-                "signal", "swarm-create",
-                "scope", java.util.Map.of("swarmId", info.swarmId()),
-                "correlationId", info.correlationId(),
-                "idempotencyKey", info.idempotencyKey(),
-                "ts", java.time.Instant.now().toString()
-            ));
-            rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, payload);
+            ReadyConfirmation conf = new ReadyConfirmation(
+                "success", "swarm-create", info.swarmId(), null, null,
+                info.correlationId(), info.idempotencyKey(), java.time.Instant.now(), null, null);
+            rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, json.writeValueAsString(conf));
         } catch (Exception e) {
             log.warn("create ready send", e);
         }
@@ -109,17 +106,11 @@ public class SwarmSignalListener {
     private void emitCreateError(Pending info) {
         try {
             String rk = "ev.error.swarm-create." + info.swarmId();
-            String payload = json.writeValueAsString(java.util.Map.of(
-                "result", "error",
-                "signal", "swarm-create",
-                "scope", java.util.Map.of("swarmId", info.swarmId()),
-                "correlationId", info.correlationId(),
-                "idempotencyKey", info.idempotencyKey(),
-                "code", "controller-error",
-                "message", "controller failed",
-                "ts", java.time.Instant.now().toString()
-            ));
-            rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, payload);
+            ErrorConfirmation conf = new ErrorConfirmation(
+                "error", "swarm-create", info.swarmId(), null, null,
+                info.correlationId(), info.idempotencyKey(), java.time.Instant.now(),
+                "controller-error", "controller failed");
+            rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, json.writeValueAsString(conf));
         } catch (Exception e) {
             log.warn("create error send", e);
         }

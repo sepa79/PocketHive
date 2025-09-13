@@ -4,6 +4,7 @@ import io.pockethive.Topology;
 import io.pockethive.orchestrator.domain.ControlSignal;
 import io.pockethive.orchestrator.domain.SwarmCreateTracker;
 import io.pockethive.orchestrator.domain.Swarm;
+import io.pockethive.orchestrator.infra.InMemoryIdempotencyStore;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -25,7 +26,7 @@ class SwarmControllerTest {
 
     @Test
     void startPublishesControlSignal() {
-        SwarmController ctrl = new SwarmController(rabbit, lifecycle, new SwarmCreateTracker());
+        SwarmController ctrl = new SwarmController(rabbit, lifecycle, new SwarmCreateTracker(), new InMemoryIdempotencyStore());
         SwarmController.ControlRequest req = new SwarmController.ControlRequest("idem", null);
 
         ResponseEntity<SwarmController.ControlResponse> resp = ctrl.start("sw1", req);
@@ -43,11 +44,24 @@ class SwarmControllerTest {
     void createRegistersPending() {
         SwarmCreateTracker tracker = new SwarmCreateTracker();
         when(lifecycle.startSwarm(eq("sw1"), anyString())).thenReturn(new Swarm("sw1", "instA", "c1"));
-        SwarmController ctrl = new SwarmController(rabbit, lifecycle, tracker);
+        SwarmController ctrl = new SwarmController(rabbit, lifecycle, tracker, new InMemoryIdempotencyStore());
         SwarmController.ControlRequest req = new SwarmController.ControlRequest("idem", null);
 
         ctrl.create("sw1", req);
 
         assertThat(tracker.remove("instA")).isPresent();
+    }
+
+    @Test
+    void startIsIdempotent() {
+        SwarmController ctrl = new SwarmController(rabbit, lifecycle, new SwarmCreateTracker(), new InMemoryIdempotencyStore());
+        SwarmController.ControlRequest req = new SwarmController.ControlRequest("idem", null);
+
+        ResponseEntity<SwarmController.ControlResponse> r1 = ctrl.start("sw1", req);
+        ResponseEntity<SwarmController.ControlResponse> r2 = ctrl.start("sw1", req);
+
+        ArgumentCaptor<ControlSignal> captor = ArgumentCaptor.forClass(ControlSignal.class);
+        verify(rabbit, times(1)).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("sig.swarm-start.sw1"), captor.capture());
+        assertThat(r1.getBody().correlationId()).isEqualTo(r2.getBody().correlationId());
     }
 }
