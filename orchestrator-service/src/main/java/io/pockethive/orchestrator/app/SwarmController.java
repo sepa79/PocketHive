@@ -35,10 +35,10 @@ public class SwarmController {
 
     @PostMapping("/{swarmId}/create")
     public ResponseEntity<ControlResponse> create(@PathVariable String swarmId, @RequestBody ControlRequest req) {
-        return idempotentSend("swarm-create", swarmId, req.idempotencyKey(), 120_000L, () -> {
+        return idempotentSend("swarm-create", swarmId, req.idempotencyKey(), 120_000L, corr -> {
             String instanceId = UUID.randomUUID().toString();
             Swarm swarm = lifecycle.startSwarm(swarmId, instanceId);
-            creates.register(swarm.getInstanceId(), new Pending(swarmId, currentCorrelation, req.idempotencyKey()));
+            creates.register(swarm.getInstanceId(), new Pending(swarmId, corr, req.idempotencyKey()));
         });
     }
 
@@ -58,16 +58,14 @@ public class SwarmController {
     }
 
     private ResponseEntity<ControlResponse> sendSignal(String signal, String swarmId, String idempotencyKey, long timeoutMs) {
-        return idempotentSend(signal, swarmId, idempotencyKey, timeoutMs, () -> {
-            ControlSignal payload = ControlSignal.forSwarm(signal, swarmId, currentCorrelation, idempotencyKey);
+        return idempotentSend(signal, swarmId, idempotencyKey, timeoutMs, corr -> {
+            ControlSignal payload = ControlSignal.forSwarm(signal, swarmId, corr, idempotencyKey);
             rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, "sig." + signal + "." + swarmId, payload);
         });
     }
 
-    private String currentCorrelation;
-
     private ResponseEntity<ControlResponse> idempotentSend(String signal, String swarmId, String idempotencyKey,
-                                                           long timeoutMs, Runnable action) {
+                                                           long timeoutMs, java.util.function.Consumer<String> action) {
         return idempotency.findCorrelation(swarmId, signal, idempotencyKey)
             .map(corr -> {
                 ControlResponse resp = new ControlResponse(corr, idempotencyKey,
@@ -75,10 +73,10 @@ public class SwarmController {
                 return ResponseEntity.accepted().body(resp);
             })
             .orElseGet(() -> {
-                currentCorrelation = UUID.randomUUID().toString();
-                action.run();
-                idempotency.record(swarmId, signal, idempotencyKey, currentCorrelation);
-                ControlResponse resp = new ControlResponse(currentCorrelation, idempotencyKey,
+                String corr = UUID.randomUUID().toString();
+                action.accept(corr);
+                idempotency.record(swarmId, signal, idempotencyKey, corr);
+                ControlResponse resp = new ControlResponse(corr, idempotencyKey,
                     new Watch("ev.ready." + signal + "." + swarmId, "ev.error." + signal + "." + swarmId), timeoutMs);
                 return ResponseEntity.accepted().body(resp);
             });
