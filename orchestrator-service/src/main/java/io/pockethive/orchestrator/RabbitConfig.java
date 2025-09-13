@@ -28,70 +28,26 @@ public class RabbitConfig {
     }
 
     @Bean
-    Binding bindSwarmCreate(@Qualifier("controlQueue") Queue controlQueue,
-                             @Qualifier("controlExchange") TopicExchange controlExchange){
-        return BindingBuilder.bind(controlQueue).to(controlExchange).with("sig.swarm-create.*");
+    Binding bindReady(@Qualifier("controlQueue") Queue controlQueue,
+                      @Qualifier("controlExchange") TopicExchange controlExchange){
+        return BindingBuilder.bind(controlQueue).to(controlExchange).with("ev.ready.*");
     }
 
     @Bean
-    Binding bindSwarmStart(@Qualifier("controlQueue") Queue controlQueue,
-                           @Qualifier("controlExchange") TopicExchange controlExchange){
-        return BindingBuilder.bind(controlQueue).to(controlExchange).with("sig.swarm-start.*");
+    Binding bindError(@Qualifier("controlQueue") Queue controlQueue,
+                      @Qualifier("controlExchange") TopicExchange controlExchange){
+        return BindingBuilder.bind(controlQueue).to(controlExchange).with("ev.error.*");
     }
 
     @Bean
-    Binding bindSwarmStop(@Qualifier("controlQueue") Queue controlQueue,
-                           @Qualifier("controlExchange") TopicExchange controlExchange){
-        return BindingBuilder.bind(controlQueue).to(controlExchange).with("sig.swarm-stop.*");
+    Binding bindControllerStatusFull(@Qualifier("controlQueue") Queue controlQueue,
+                                     @Qualifier("controlExchange") TopicExchange controlExchange){
+        return BindingBuilder.bind(controlQueue).to(controlExchange).with("ev.status-full.swarm-controller.*");
     }
 
     @Bean
-    Binding bindConfigGlobal(@Qualifier("controlQueue") Queue controlQueue,
-                             @Qualifier("controlExchange") TopicExchange controlExchange){
-        return BindingBuilder.bind(controlQueue).to(controlExchange).with("sig.config-update");
-    }
-
-    @Bean
-    Binding bindConfigRole(@Qualifier("controlQueue") Queue controlQueue,
-                           @Qualifier("controlExchange") TopicExchange controlExchange){
-        return BindingBuilder.bind(controlQueue).to(controlExchange).with("sig.config-update." + ROLE);
-    }
-
-    @Bean
-    Binding bindConfigInstance(@Qualifier("controlQueue") Queue controlQueue,
-                               @Qualifier("controlExchange") TopicExchange controlExchange,
-                               String instanceId){
-        return BindingBuilder.bind(controlQueue).to(controlExchange).with("sig.config-update." + ROLE + "." + instanceId);
-    }
-
-    @Bean
-    Binding bindStatusGlobal(@Qualifier("controlQueue") Queue controlQueue,
-                             @Qualifier("controlExchange") TopicExchange controlExchange){
-        return BindingBuilder.bind(controlQueue).to(controlExchange).with("sig.status-request");
-    }
-
-    @Bean
-    Binding bindStatusRole(@Qualifier("controlQueue") Queue controlQueue,
-                           @Qualifier("controlExchange") TopicExchange controlExchange){
-        return BindingBuilder.bind(controlQueue).to(controlExchange).with("sig.status-request." + ROLE);
-    }
-
-    @Bean
-    Binding bindStatusInstance(@Qualifier("controlQueue") Queue controlQueue,
-                               @Qualifier("controlExchange") TopicExchange controlExchange,
-                               String instanceId){
-        return BindingBuilder.bind(controlQueue).to(controlExchange).with("sig.status-request." + ROLE + "." + instanceId);
-    }
-
-    @Bean
-    Binding bindControllerReady(@Qualifier("controlQueue") Queue controlQueue,
-                                @Qualifier("controlExchange") TopicExchange controlExchange){
-        return BindingBuilder.bind(controlQueue).to(controlExchange).with("ev.ready.swarm-controller.*");
-    }
-
-    @Bean
-    Binding bindSwarmReady(@Qualifier("controlQueue") Queue controlQueue,
-                           @Qualifier("controlExchange") TopicExchange controlExchange){
-        return BindingBuilder.bind(controlQueue).to(controlExchange).with("ev.swarm-ready.*");
+    Binding bindControllerStatusDelta(@Qualifier("controlQueue") Queue controlQueue,
+                                      @Qualifier("controlExchange") TopicExchange controlExchange){
+        return BindingBuilder.bind(controlQueue).to(controlExchange).with("ev.status-delta.swarm-controller.*");
     }
 }
