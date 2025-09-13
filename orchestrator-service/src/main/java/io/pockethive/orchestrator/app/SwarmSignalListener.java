@@ -35,6 +35,7 @@ public class SwarmSignalListener {
     private final SwarmPlanRegistry plans;
     private final SwarmRegistry registry;
     private final SwarmCreateTracker creates;
+    private final ContainerLifecycleManager lifecycle;
     private final ObjectMapper json;
     private final String instanceId;
 
@@ -42,12 +43,14 @@ public class SwarmSignalListener {
                                SwarmPlanRegistry plans,
                                SwarmCreateTracker creates,
                                SwarmRegistry registry,
+                               ContainerLifecycleManager lifecycle,
                                ObjectMapper json,
                                @Qualifier("instanceId") String instanceId) {
         this.rabbit = rabbit;
         this.plans = plans;
         this.creates = creates;
         this.registry = registry;
+        this.lifecycle = lifecycle;
         this.json = json;
         this.instanceId = instanceId;
         try {
@@ -74,6 +77,12 @@ public class SwarmSignalListener {
                 }
             });
             creates.remove(inst).ifPresent(info -> emitCreateReady(info));
+        } else if (routingKey.startsWith("ev.ready.swarm-stop.")) {
+            String swarmId = routingKey.substring("ev.ready.swarm-stop.".length());
+            lifecycle.stopSwarm(swarmId);
+        } else if (routingKey.startsWith("ev.ready.swarm-remove.")) {
+            String swarmId = routingKey.substring("ev.ready.swarm-remove.".length());
+            lifecycle.removeSwarm(swarmId);
         } else if (routingKey.startsWith("ev.error.swarm-controller.")) {
             String inst = routingKey.substring("ev.error.swarm-controller.".length());
             creates.remove(inst).ifPresent(info -> emitCreateError(info));

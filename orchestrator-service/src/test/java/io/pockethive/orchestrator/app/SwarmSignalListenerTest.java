@@ -21,6 +21,8 @@ import static org.mockito.Mockito.*;
 class SwarmSignalListenerTest {
     @Mock
     AmqpTemplate rabbit;
+    @Mock
+    ContainerLifecycleManager lifecycle;
 
     @Test
     void dispatchesTemplateWhenControllerReady() {
@@ -30,7 +32,7 @@ class SwarmSignalListenerTest {
         registry.register("inst1", plan);
         SwarmCreateTracker tracker = new SwarmCreateTracker();
         tracker.register("inst1", new SwarmCreateTracker.Pending("sw1", "c1", "i1"));
-        SwarmSignalListener listener = new SwarmSignalListener(rabbit, registry, tracker, new SwarmRegistry(), new ObjectMapper(), "inst0");
+        SwarmSignalListener listener = new SwarmSignalListener(rabbit, registry, tracker, new SwarmRegistry(), lifecycle, new ObjectMapper(), "inst0");
         reset(rabbit);
 
         listener.handle("", "ev.ready.swarm-controller.inst1");
@@ -47,11 +49,22 @@ class SwarmSignalListenerTest {
     void ignoresNonControllerReadyEvents() {
         SwarmPlanRegistry registry = new SwarmPlanRegistry();
         SwarmCreateTracker tracker = new SwarmCreateTracker();
-        SwarmSignalListener listener = new SwarmSignalListener(rabbit, registry, tracker, new SwarmRegistry(), new ObjectMapper(), "inst0");
+        SwarmSignalListener listener = new SwarmSignalListener(rabbit, registry, tracker, new SwarmRegistry(), lifecycle, new ObjectMapper(), "inst0");
         reset(rabbit);
 
         listener.handle("", "ev.ready.other-controller.inst1");
 
         verifyNoInteractions(rabbit);
+    }
+
+    @Test
+    void removesSwarmWhenRemoveConfirmationArrives() {
+        SwarmPlanRegistry registry = new SwarmPlanRegistry();
+        SwarmCreateTracker tracker = new SwarmCreateTracker();
+        SwarmSignalListener listener = new SwarmSignalListener(rabbit, registry, tracker, new SwarmRegistry(), lifecycle, new ObjectMapper(), "inst0");
+
+        listener.handle("", "ev.ready.swarm-remove.sw1");
+
+        verify(lifecycle).removeSwarm("sw1");
     }
 }

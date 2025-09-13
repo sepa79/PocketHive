@@ -40,7 +40,7 @@ class ContainerLifecycleManagerTest {
     }
 
     @Test
-    void stopSwarmStopsContainer() {
+    void stopSwarmMarksStoppedWithoutRemovingResources() {
         SwarmRegistry registry = new SwarmRegistry();
         Swarm swarm = new Swarm("sw1", "inst1", "cid");
         registry.register(swarm);
@@ -49,15 +49,29 @@ class ContainerLifecycleManagerTest {
 
         manager.stopSwarm(swarm.getId());
 
-        verify(docker).stopAndRemoveContainer("cid");
-        verify(amqp).deleteQueue("ph." + swarm.getId() + ".gen");
-        verify(amqp).deleteQueue("ph." + swarm.getId() + ".mod");
-        verify(amqp).deleteQueue("ph." + swarm.getId() + ".final");
+        verifyNoInteractions(docker, amqp);
         assertEquals(SwarmStatus.STOPPED, swarm.getStatus());
     }
 
     @Test
-    void stopSwarmIsolatesQueuesPerSwarmId() {
+    void removeSwarmTearsDownContainerAndQueues() {
+        SwarmRegistry registry = new SwarmRegistry();
+        Swarm swarm = new Swarm("sw1", "inst1", "cid");
+        registry.register(swarm);
+        SwarmTemplate template = new SwarmTemplate();
+        ContainerLifecycleManager manager = new ContainerLifecycleManager(docker, registry, template, amqp);
+
+        manager.removeSwarm(swarm.getId());
+
+        verify(docker).stopAndRemoveContainer("cid");
+        verify(amqp).deleteQueue("ph." + swarm.getId() + ".gen");
+        verify(amqp).deleteQueue("ph." + swarm.getId() + ".mod");
+        verify(amqp).deleteQueue("ph." + swarm.getId() + ".final");
+        assertTrue(registry.find(swarm.getId()).isEmpty());
+    }
+
+    @Test
+    void removeSwarmIsolatesQueuesPerSwarmId() {
         SwarmRegistry registry = new SwarmRegistry();
         Swarm sw1 = new Swarm("sw1", "inst1", "c1");
         Swarm sw2 = new Swarm("sw2", "inst2", "c2");
@@ -66,8 +80,8 @@ class ContainerLifecycleManagerTest {
         SwarmTemplate template = new SwarmTemplate();
         ContainerLifecycleManager manager = new ContainerLifecycleManager(docker, registry, template, amqp);
 
-        manager.stopSwarm(sw1.getId());
-        manager.stopSwarm(sw2.getId());
+        manager.removeSwarm(sw1.getId());
+        manager.removeSwarm(sw2.getId());
 
         verify(docker).stopAndRemoveContainer("c1");
         verify(docker).stopAndRemoveContainer("c2");
