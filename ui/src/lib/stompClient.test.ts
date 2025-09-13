@@ -70,10 +70,10 @@ describe('swarm lifecycle', () => {
     })
     cb({
       body: 'boom',
-      headers: { destination: '/exchange/ph.control/ev.swarm-create.error.sw1', 'x-correlation-id': 'e1' },
+      headers: { destination: '/exchange/ph.control/ev.error.swarm-create.sw1', 'x-correlation-id': 'e1' },
     })
-    expect(entries[0].destination).toContain('ev.swarm-create.error.sw1')
+    expect(entries[0].destination).toContain('ev.error.swarm-create.sw1')
     expect(entries[0].body).toBe('boom')
-    expect(useUIStore.getState().toast).toBe('Error: swarm-create error sw1: boom')
+    expect(useUIStore.getState().toast).toBe('Error: error swarm-create sw1: boom')
   })
 })

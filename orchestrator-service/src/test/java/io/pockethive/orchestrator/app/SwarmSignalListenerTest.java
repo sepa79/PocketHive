@@ -4,6 +4,7 @@ import io.pockethive.Topology;
 import io.pockethive.orchestrator.domain.SwarmPlan;
 import io.pockethive.orchestrator.domain.SwarmPlanRegistry;
 import io.pockethive.orchestrator.domain.SwarmRegistry;
+import io.pockethive.orchestrator.domain.SwarmCreateTracker;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -27,7 +28,9 @@ class SwarmSignalListenerTest {
         SwarmPlan plan = new SwarmPlan("sw1", java.util.List.of(
             new SwarmPlan.Bee("generator", "img", new SwarmPlan.Work("in", "out"))));
         registry.register("inst1", plan);
-        SwarmSignalListener listener = new SwarmSignalListener(rabbit, registry, new SwarmRegistry(), new ObjectMapper(), "inst0");
+        SwarmCreateTracker tracker = new SwarmCreateTracker();
+        tracker.register("inst1", new SwarmCreateTracker.Pending("sw1", "c1", "i1"));
+        SwarmSignalListener listener = new SwarmSignalListener(rabbit, registry, tracker, new SwarmRegistry(), new ObjectMapper(), "inst0");
         reset(rabbit);
 
         listener.handle("", "ev.ready.swarm-controller.inst1");
@@ -35,13 +38,16 @@ class SwarmSignalListenerTest {
         ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
         verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("sig.swarm-template.sw1"), captor.capture());
         assertThat(captor.getValue()).contains("\"id\":\"sw1\"");
+        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("ev.ready.swarm-create.sw1"), captor.capture());
+        assertThat(captor.getValue()).contains("\"correlationId\":\"c1\"");
         assertThat(registry.find("inst1")).isEmpty();
     }
 
     @Test
     void ignoresNonControllerReadyEvents() {
         SwarmPlanRegistry registry = new SwarmPlanRegistry();
-        SwarmSignalListener listener = new SwarmSignalListener(rabbit, registry, new SwarmRegistry(), new ObjectMapper(), "inst0");
+        SwarmCreateTracker tracker = new SwarmCreateTracker();
+        SwarmSignalListener listener = new SwarmSignalListener(rabbit, registry, tracker, new SwarmRegistry(), new ObjectMapper(), "inst0");
         reset(rabbit);
 
         listener.handle("", "ev.ready.other-controller.inst1");

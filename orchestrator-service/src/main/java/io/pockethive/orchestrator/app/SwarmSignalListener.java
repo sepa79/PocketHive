@@ -5,6 +5,8 @@ import io.pockethive.observability.StatusEnvelopeBuilder;
 import io.pockethive.orchestrator.domain.SwarmPlan;
 import io.pockethive.orchestrator.domain.SwarmPlanRegistry;
 import io.pockethive.orchestrator.domain.SwarmRegistry;
+import io.pockethive.orchestrator.domain.SwarmCreateTracker;
+import io.pockethive.orchestrator.domain.SwarmCreateTracker.Pending;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -32,16 +34,19 @@ public class SwarmSignalListener {
     private final AmqpTemplate rabbit;
     private final SwarmPlanRegistry plans;
     private final SwarmRegistry registry;
+    private final SwarmCreateTracker creates;
     private final ObjectMapper json;
     private final String instanceId;
 
     public SwarmSignalListener(AmqpTemplate rabbit,
                                SwarmPlanRegistry plans,
+                               SwarmCreateTracker creates,
                                SwarmRegistry registry,
                                ObjectMapper json,
                                @Qualifier("instanceId") String instanceId) {
         this.rabbit = rabbit;
         this.plans = plans;
+        this.creates = creates;
         this.registry = registry;
         this.json = json;
         this.instanceId = instanceId;
@@ -54,7 +59,7 @@ public class SwarmSignalListener {
 
     @RabbitListener(queues = "#{controlQueue.name}")
     public void handle(String body, @Header(AmqpHeaders.RECEIVED_ROUTING_KEY) String routingKey) {
-        if (routingKey == null) return;
+        if (routingKey == null || !routingKey.startsWith("ev.")) return;
         log.info("received {} : {}", routingKey, body);
         if (routingKey.startsWith("ev.ready.swarm-controller.")) {
             String inst = routingKey.substring("ev.ready.swarm-controller.".length());
@@ -68,6 +73,46 @@ public class SwarmSignalListener {
                     log.warn("template send", e);
                 }
             });
+            creates.remove(inst).ifPresent(info -> emitCreateReady(info));
+        } else if (routingKey.startsWith("ev.error.swarm-controller.")) {
+            String inst = routingKey.substring("ev.error.swarm-controller.".length());
+            creates.remove(inst).ifPresent(info -> emitCreateError(info));
+        }
+    }
+
+    private void emitCreateReady(Pending info) {
+        try {
+            String rk = "ev.ready.swarm-create." + info.swarmId();
+            String payload = json.writeValueAsString(java.util.Map.of(
+                "result", "success",
+                "signal", "swarm-create",
+                "scope", java.util.Map.of("swarmId", info.swarmId()),
+                "correlationId", info.correlationId(),
+                "idempotencyKey", info.idempotencyKey(),
+                "ts", java.time.Instant.now().toString()
+            ));
+            rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, payload);
+        } catch (Exception e) {
+            log.warn("create ready send", e);
+        }
+    }
+
+    private void emitCreateError(Pending info) {
+        try {
+            String rk = "ev.error.swarm-create." + info.swarmId();
+            String payload = json.writeValueAsString(java.util.Map.of(
+                "result", "error",
+                "signal", "swarm-create",
+                "scope", java.util.Map.of("swarmId", info.swarmId()),
+                "correlationId", info.correlationId(),
+                "idempotencyKey", info.idempotencyKey(),
+                "code", "controller-error",
+                "message", "controller failed",
+                "ts", java.time.Instant.now().toString()
+            ));
+            rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, payload);
+        } catch (Exception e) {
+            log.warn("create error send", e);
         }
     }
 
