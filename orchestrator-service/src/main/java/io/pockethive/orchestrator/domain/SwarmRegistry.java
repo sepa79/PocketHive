@@ -23,7 +23,7 @@ public class SwarmRegistry {
     public void updateStatus(String id, SwarmStatus status) {
         Swarm swarm = swarms.get(id);
         if (swarm != null) {
-            swarm.setStatus(status);
+            swarm.transitionTo(status);
         }
     }
 

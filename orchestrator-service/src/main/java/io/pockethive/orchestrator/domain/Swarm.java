@@ -13,7 +13,7 @@ public class Swarm {
         this.id = id;
         this.instanceId = instanceId;
         this.containerId = containerId;
-        this.status = SwarmStatus.CREATED;
+        this.status = SwarmStatus.NEW;
         this.createdAt = Instant.now();
     }
 
@@ -33,8 +33,11 @@ public class Swarm {
         return status;
     }
 
-    public void setStatus(SwarmStatus status) {
-        this.status = status;
+    public void transitionTo(SwarmStatus next) {
+        if (!status.canTransitionTo(next)) {
+            throw new IllegalStateException("Cannot transition from " + status + " to " + next);
+        }
+        this.status = next;
     }
 
     public Instant getCreatedAt() {

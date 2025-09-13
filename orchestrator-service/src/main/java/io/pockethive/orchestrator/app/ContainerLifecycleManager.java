@@ -46,25 +46,31 @@ public class ContainerLifecycleManager {
         String containerId = docker.createAndStartContainer(image, env);
         log.info("controller container {} started for swarm {}", containerId, swarmId);
         Swarm swarm = new Swarm(swarmId, instanceId, containerId);
-        swarm.setStatus(SwarmStatus.RUNNING);
         registry.register(swarm);
+        registry.updateStatus(swarmId, SwarmStatus.CREATING);
+        registry.updateStatus(swarmId, SwarmStatus.READY);
+        registry.updateStatus(swarmId, SwarmStatus.STARTING);
+        registry.updateStatus(swarmId, SwarmStatus.RUNNING);
         return swarm;
     }
 
     public void stopSwarm(String swarmId) {
         registry.find(swarmId).ifPresent(swarm -> {
             log.info("marking swarm {} as stopped", swarmId);
-            swarm.setStatus(SwarmStatus.STOPPED);
+            registry.updateStatus(swarmId, SwarmStatus.STOPPING);
+            registry.updateStatus(swarmId, SwarmStatus.STOPPED);
         });
     }
 
     public void removeSwarm(String swarmId) {
         registry.find(swarmId).ifPresent(swarm -> {
             log.info("tearing down controller container {} for swarm {}", swarm.getContainerId(), swarmId);
+            registry.updateStatus(swarmId, SwarmStatus.REMOVING);
             docker.stopAndRemoveContainer(swarm.getContainerId());
             amqp.deleteQueue("ph." + swarmId + ".gen");
             amqp.deleteQueue("ph." + swarmId + ".mod");
             amqp.deleteQueue("ph." + swarmId + ".final");
+            registry.updateStatus(swarmId, SwarmStatus.REMOVED);
             registry.remove(swarmId);
         });
     }
