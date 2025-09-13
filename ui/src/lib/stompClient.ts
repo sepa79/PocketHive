@@ -109,7 +109,7 @@ export function setClient(newClient: Client | null, destination = controlDestina
             const d = msg.headers.destination || dest
             const correlationId = msg.headers['x-correlation-id']
             logIn(d, msg.body, 'hive', 'stomp', correlationId)
-            if (/\/exchange\/ph\.control\/(?:ev|sig)\..*\.error/.test(d)) {
+            if (/\/exchange\/ph\.control\/(?:ev|sig)\.(?:error\..*|.*\.error)/.test(d)) {
               logError(d, msg.body, 'hive', 'stomp', correlationId)
               const { setToast } = useUIStore.getState()
               const evt = d.split('/').pop() || ''

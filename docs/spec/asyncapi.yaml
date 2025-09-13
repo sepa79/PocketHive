@@ -144,16 +144,16 @@ channels:
       summary: Start swarm
       message:
         $ref: '#/components/messages/ControlSignal'
-  exchange/ph.control/ev.swarm-created.{swarmId}:
+  exchange/ph.control/ev.ready.swarm-create.{swarmId}:
     parameters:
       swarmId:
         description: Swarm identifier
         schema:
           type: string
     subscribe:
-      summary: Swarm controller container started
+      summary: Swarm creation ready
       message:
-        $ref: '#/components/messages/SwarmCreated'
+        $ref: '#/components/messages/CommandReady'
     bindings:
       amqp:
         is: routingKey
@@ -161,8 +161,8 @@ channels:
           name: ph.control
           type: topic
           durable: true
-        routingKey: ev.swarm-created.{swarmId}
-  exchange/ph.control/ev.swarm-create.error.{swarmId}:
+        routingKey: ev.ready.swarm-create.{swarmId}
+  exchange/ph.control/ev.error.swarm-create.{swarmId}:
     parameters:
       swarmId:
         description: Swarm identifier
@@ -171,7 +171,7 @@ channels:
     publish:
       summary: Swarm creation failed
       message:
-        $ref: '#/components/messages/ErrorMessage'
+        $ref: '#/components/messages/CommandError'
     bindings:
       amqp:
         is: routingKey
@@ -179,7 +179,7 @@ channels:
           name: ph.control
           type: topic
           durable: true
-        routingKey: ev.swarm-create.error.{swarmId}
+        routingKey: ev.error.swarm-create.{swarmId}
   exchange/ph.control/sig.swarm-stop.{swarmId}:
     bindings:
       amqp:
@@ -597,14 +597,6 @@ components:
       payload:
         type: object
         description: Empty object
-    SwarmCreated:
-      name: SwarmCreated
-      title: Swarm controller launched
-      payload:
-        type: object
-        description: Empty object
-      examples:
-      - payload: {}
     CommandReady:
       name: CommandReady
       contentType: application/json
