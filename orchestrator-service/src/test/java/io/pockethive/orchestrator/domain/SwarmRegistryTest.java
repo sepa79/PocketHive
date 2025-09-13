@@ -20,6 +20,10 @@ class SwarmRegistryTest {
         Swarm swarm = new Swarm("s1", "inst1", "container");
         registry.register(swarm);
 
+        assertEquals(SwarmStatus.NEW, swarm.getStatus());
+        registry.updateStatus(swarm.getId(), SwarmStatus.CREATING);
+        registry.updateStatus(swarm.getId(), SwarmStatus.READY);
+        registry.updateStatus(swarm.getId(), SwarmStatus.STARTING);
         registry.updateStatus(swarm.getId(), SwarmStatus.RUNNING);
         assertEquals(SwarmStatus.RUNNING, swarm.getStatus());
     }

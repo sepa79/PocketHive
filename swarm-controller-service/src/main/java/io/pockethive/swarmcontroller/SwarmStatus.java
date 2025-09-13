@@ -1,6 +1,14 @@
 package io.pockethive.swarmcontroller;
 
 public enum SwarmStatus {
+  NEW,
+  CREATING,
+  READY,
+  STARTING,
+  RUNNING,
+  STOPPING,
   STOPPED,
-  RUNNING
+  REMOVING,
+  REMOVED,
+  FAILED
 }
