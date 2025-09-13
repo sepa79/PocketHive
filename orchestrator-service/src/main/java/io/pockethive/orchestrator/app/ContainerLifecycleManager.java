@@ -53,12 +53,19 @@ public class ContainerLifecycleManager {
 
     public void stopSwarm(String swarmId) {
         registry.find(swarmId).ifPresent(swarm -> {
-            log.info("stopping controller container {} for swarm {}", swarm.getContainerId(), swarmId);
+            log.info("marking swarm {} as stopped", swarmId);
+            swarm.setStatus(SwarmStatus.STOPPED);
+        });
+    }
+
+    public void removeSwarm(String swarmId) {
+        registry.find(swarmId).ifPresent(swarm -> {
+            log.info("tearing down controller container {} for swarm {}", swarm.getContainerId(), swarmId);
             docker.stopAndRemoveContainer(swarm.getContainerId());
             amqp.deleteQueue("ph." + swarmId + ".gen");
             amqp.deleteQueue("ph." + swarmId + ".mod");
             amqp.deleteQueue("ph." + swarmId + ".final");
-            swarm.setStatus(SwarmStatus.STOPPED);
+            registry.remove(swarmId);
         });
     }
 }
