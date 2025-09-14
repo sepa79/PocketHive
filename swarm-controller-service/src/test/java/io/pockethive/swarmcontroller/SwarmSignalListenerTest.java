@@ -114,14 +114,24 @@ class SwarmSignalListenerTest {
 
   @Test
   void emitsPeriodicStatusDelta() {
+      when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
+      SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", mapper);
+      reset(lifecycle, rabbit);
+      when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
+      listener.status();
+      verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
+          startsWith("ev.status-delta.swarm-controller.inst"),
+          argThat((String p) -> p.contains("\"swarmStatus\":\"RUNNING\"") && p.contains("\"enabled\":true")));
+      verify(lifecycle).getStatus();
+  }
+
+  @Test
+  void ignoresScenarioSignals() {
     when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
     SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", mapper);
     reset(lifecycle, rabbit);
-    when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
-    listener.status();
-    verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
-        startsWith("ev.status-delta.swarm-controller.inst"),
-        argThat((String p) -> p.contains("\"swarmStatus\":\"RUNNING\"") && p.contains("\"enabled\":true")));
-    verify(lifecycle).getStatus();
+    listener.handle("{}", "sig.scenario-part." + Topology.SWARM_ID);
+    listener.handle("{}", "sig.scenario-start." + Topology.SWARM_ID);
+    verifyNoInteractions(lifecycle, rabbit);
   }
 }
