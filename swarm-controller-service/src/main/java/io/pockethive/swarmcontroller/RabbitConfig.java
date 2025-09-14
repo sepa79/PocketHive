@@ -99,9 +99,15 @@ public class RabbitConfig {
   }
 
   @Bean
-  Binding bindReadyEvents(@Qualifier("controlQueue") Queue controlQueue,
-                          @Qualifier("controlExchange") TopicExchange controlExchange) {
-    return BindingBuilder.bind(controlQueue).to(controlExchange).with("ev.ready.*");
+  Binding bindStatusFullEvents(@Qualifier("controlQueue") Queue controlQueue,
+                               @Qualifier("controlExchange") TopicExchange controlExchange) {
+    return BindingBuilder.bind(controlQueue).to(controlExchange).with("ev.status-full.*.*");
+  }
+
+  @Bean
+  Binding bindStatusDeltaEvents(@Qualifier("controlQueue") Queue controlQueue,
+                                @Qualifier("controlExchange") TopicExchange controlExchange) {
+    return BindingBuilder.bind(controlQueue).to(controlExchange).with("ev.status-delta.*.*");
   }
 
   @Bean
