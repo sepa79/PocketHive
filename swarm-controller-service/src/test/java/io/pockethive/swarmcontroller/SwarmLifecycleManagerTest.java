@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.InOrder;
 import org.springframework.amqp.core.AmqpAdmin;
 import org.springframework.amqp.core.Binding;
 import org.springframework.amqp.core.Queue;
@@ -16,8 +17,13 @@ import io.pockethive.Topology;
 import java.util.List;
 import java.util.Map;
 import org.mockito.ArgumentCaptor;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.*;
 import static org.mockito.ArgumentMatchers.*;
 
@@ -150,6 +156,8 @@ class SwarmLifecycleManagerTest {
   @Test
   void enableAllSchedulesScenarioMessages() throws Exception {
     SwarmLifecycleManager manager = new SwarmLifecycleManager(amqp, mapper, docker, rabbit, "inst");
+    SwarmPlan plan = new SwarmPlan(List.of(new SwarmPlan.Bee("gen", null, null, null)));
+    manager.prepare(mapper.writeValueAsString(plan));
     manager.markReady("gen", "g1");
 
     String step = """
@@ -177,5 +185,81 @@ class SwarmLifecycleManagerTest {
         eq("rk"),
         argThat((String p) -> p.contains("\"msg\":\"hi\"")));
     assertEquals(SwarmStatus.RUNNING, manager.getStatus());
+  }
+
+  @Test
+  void linearTopologyEnablesAndStopsInOrder() throws Exception {
+    SwarmLifecycleManager manager = new SwarmLifecycleManager(amqp, mapper, docker, rabbit, "inst");
+    SwarmPlan plan = new SwarmPlan(List.of(
+        new SwarmPlan.Bee("gen", "img1", new SwarmPlan.Work(null, "a"), null),
+        new SwarmPlan.Bee("proc", "img2", new SwarmPlan.Work("a", "b"), null),
+        new SwarmPlan.Bee("sink", "img3", new SwarmPlan.Work("b", null), null)));
+    when(docker.createContainer(eq("img1"), anyMap())).thenReturn("c1");
+    when(docker.createContainer(eq("img2"), anyMap())).thenReturn("c2");
+    when(docker.createContainer(eq("img3"), anyMap())).thenReturn("c3");
+
+    manager.prepare(mapper.writeValueAsString(plan));
+    manager.markReady("gen", "g1");
+    manager.markReady("proc", "p1");
+    manager.markReady("sink", "s1");
+
+    reset(rabbit, docker);
+
+    manager.enableAll();
+    InOrder inStart = inOrder(rabbit);
+    inStart.verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("sig.config-update.gen.g1"), anyString());
+    inStart.verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("sig.config-update.proc.p1"), anyString());
+    inStart.verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("sig.config-update.sink.s1"), anyString());
+
+    reset(rabbit);
+    manager.stop();
+    InOrder inStop = inOrder(rabbit);
+    inStop.verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("sig.config-update.sink.s1"), anyString());
+    inStop.verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("sig.config-update.proc.p1"), anyString());
+    inStop.verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("sig.config-update.gen.g1"), anyString());
+    inStop.verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), startsWith("ev.status-delta.swarm-controller.inst"), anyString());
+
+    reset(docker);
+    manager.remove();
+    InOrder inRemove = inOrder(docker);
+    inRemove.verify(docker).stopAndRemoveContainer("c3");
+    inRemove.verify(docker).stopAndRemoveContainer("c2");
+    inRemove.verify(docker).stopAndRemoveContainer("c1");
+  }
+
+  @Test
+  void cyclicTopologyWarnsAndUsesStableOrder() throws Exception {
+    SwarmLifecycleManager manager = new SwarmLifecycleManager(amqp, mapper, docker, rabbit, "inst");
+    SwarmPlan plan = new SwarmPlan(List.of(
+        new SwarmPlan.Bee("a", "ia", new SwarmPlan.Work("q3", "q1"), null),
+        new SwarmPlan.Bee("b", "ib", new SwarmPlan.Work("q1", "q2"), null),
+        new SwarmPlan.Bee("c", "ic", new SwarmPlan.Work("q2", "q3"), null)));
+
+    Logger logger = (Logger) org.slf4j.LoggerFactory.getLogger(SwarmLifecycleManager.class);
+    ListAppender<ILoggingEvent> appender = new ListAppender<>();
+    appender.start();
+    logger.addAppender(appender);
+
+    manager.prepare(mapper.writeValueAsString(plan));
+    assertTrue(appender.list.stream().anyMatch(e -> e.getLevel() == Level.WARN && e.getFormattedMessage().contains("cycle")));
+
+    manager.markReady("a", "a1");
+    manager.markReady("b", "b1");
+    manager.markReady("c", "c1");
+
+    reset(rabbit);
+    manager.enableAll();
+    InOrder inStart = inOrder(rabbit);
+    inStart.verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("sig.config-update.a.a1"), anyString());
+    inStart.verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("sig.config-update.b.b1"), anyString());
+    inStart.verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("sig.config-update.c.c1"), anyString());
+
+    reset(rabbit);
+    manager.stop();
+    InOrder inStop = inOrder(rabbit);
+    inStop.verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("sig.config-update.c.c1"), anyString());
+    inStop.verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("sig.config-update.b.b1"), anyString());
+    inStop.verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("sig.config-update.a.a1"), anyString());
+    inStop.verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), startsWith("ev.status-delta.swarm-controller.inst"), anyString());
   }
 }
