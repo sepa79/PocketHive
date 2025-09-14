@@ -24,12 +24,13 @@ class SwarmSignalListenerTest {
 
   private String signal(String sig, String id, String corr) {
     return """
-        {"correlationId":"%s","idempotencyKey":"%s","signal":"%s","scope":{"swarmId":"%s"},"args":{}}
+        {"correlationId":"%s","idempotencyKey":"%s","signal":"%s","swarmId":"%s","args":{}}
         """.formatted(corr, id, sig, Topology.SWARM_ID);
   }
 
   @Test
   void templateEmitsConfirmation() {
+    when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
     SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", mapper);
     listener.handle(signal("swarm-template", "i0", "c0"), "sig.swarm-template." + Topology.SWARM_ID);
     verify(lifecycle).prepare("{}");
@@ -53,6 +54,7 @@ class SwarmSignalListenerTest {
 
   @Test
   void stopEmitsConfirmation() {
+    when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
     SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", mapper);
     listener.handle(signal("swarm-stop", "i2", "c2"), "sig.swarm-stop." + Topology.SWARM_ID);
     verify(lifecycle).stop();
@@ -63,6 +65,7 @@ class SwarmSignalListenerTest {
 
   @Test
   void removeEmitsErrorOnFailure() {
+    when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
     SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", mapper);
     doThrow(new RuntimeException("boom")).when(lifecycle).remove();
     listener.handle(signal("swarm-remove", "i3", "c3"), "sig.swarm-remove." + Topology.SWARM_ID);
@@ -74,6 +77,7 @@ class SwarmSignalListenerTest {
 
   @Test
   void configUpdateEmitsConfirmation() {
+    when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
     SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", mapper);
     String body = """
         {"correlationId":"c4","idempotencyKey":"i4","signal":"config-update",

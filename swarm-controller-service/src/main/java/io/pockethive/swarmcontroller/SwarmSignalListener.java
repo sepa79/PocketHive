@@ -61,13 +61,13 @@ public class SwarmSignalListener {
           ControlSignal cs = parseControlSignal(node);
           log.info("Template signal for swarm {}", swarmId);
           lifecycle.prepare(node.path("args").toString());
-          emitSuccess(cs);
+          emitSuccess(cs, swarmId);
         } catch (Exception e) {
           log.warn("template", e);
           try {
             var node = mapper.readTree(body);
             ControlSignal cs = parseControlSignal(node);
-            emitError(cs, e);
+            emitError(cs, e, swarmId);
           } catch (Exception ex) {
             log.warn("error emit", ex);
           }
@@ -82,13 +82,13 @@ public class SwarmSignalListener {
           log.info("Start signal for swarm {}", swarmId);
           lifecycle.start(node.path("args").toString());
           sendStatusFull();
-          emitSuccess(cs);
+          emitSuccess(cs, swarmId);
         } catch (Exception e) {
           log.warn("start", e);
           try {
             var node = mapper.readTree(body);
             ControlSignal cs = parseControlSignal(node);
-            emitError(cs, e);
+            emitError(cs, e, swarmId);
           } catch (Exception ex) {
             log.warn("error emit", ex);
           }
@@ -115,13 +115,13 @@ public class SwarmSignalListener {
           ControlSignal cs = parseControlSignal(node);
           log.info("Stop signal for swarm {}", swarmId);
           lifecycle.stop();
-          emitSuccess(cs);
+          emitSuccess(cs, swarmId);
         } catch (Exception e) {
           log.warn("stop", e);
           try {
             var node = mapper.readTree(body);
             ControlSignal cs = parseControlSignal(node);
-            emitError(cs, e);
+            emitError(cs, e, swarmId);
           } catch (Exception ex) {
             log.warn("error emit", ex);
           }
@@ -135,13 +135,13 @@ public class SwarmSignalListener {
           ControlSignal cs = parseControlSignal(node);
           log.info("Remove signal for swarm {}", swarmId);
           lifecycle.remove();
-          emitSuccess(cs);
+          emitSuccess(cs, swarmId);
         } catch (Exception e) {
           log.warn("remove", e);
           try {
             var node = mapper.readTree(body);
             ControlSignal cs = parseControlSignal(node);
-            emitError(cs, e);
+            emitError(cs, e, swarmId);
           } catch (Exception ex) {
             log.warn("error emit", ex);
           }
@@ -159,13 +159,13 @@ public class SwarmSignalListener {
         if (enabledNode.isBoolean() && !enabledNode.asBoolean()) {
           log.warn("Ignoring attempt to disable swarm-controller");
         }
-        emitSuccess(cs);
+        emitSuccess(cs, null);
       } catch (Exception e) {
         log.warn("config parse", e);
         try {
           var node = mapper.readTree(body);
           ControlSignal cs = parseControlSignal(node);
-          emitError(cs, e);
+          emitError(cs, e, null);
         } catch (Exception ex) {
           log.warn("error emit", ex);
         }
@@ -199,6 +199,9 @@ public class SwarmSignalListener {
     if (s.isObject()) {
       s.fields().forEachRemaining(e -> scope.put(e.getKey(), e.getValue().asText()));
     }
+    if (!scope.containsKey("swarmId") && node.hasNonNull("swarmId")) {
+      scope.put("swarmId", node.path("swarmId").asText());
+    }
     return new ControlSignal(
         node.path("correlationId").asText(null),
         node.path("idempotencyKey").asText(null),
@@ -206,10 +209,12 @@ public class SwarmSignalListener {
         scope);
   }
 
-  private void emitSuccess(ControlSignal cs) {
+  private void emitSuccess(ControlSignal cs, String swarmIdFallback) {
     String rk;
     if (cs.signal().startsWith("swarm-")) {
-      rk = "ev.ready." + cs.signal() + "." + cs.scope().get("swarmId");
+      String swarmId = cs.scope().get("swarmId");
+      if (swarmId == null) swarmId = swarmIdFallback;
+      rk = "ev.ready." + cs.signal() + "." + swarmId;
     } else if ("config-update".equals(cs.signal())) {
       rk = "ev.ready.config-update." + cs.scope().get("role") + "." + cs.scope().get("instance");
     } else {
@@ -224,10 +229,12 @@ public class SwarmSignalListener {
     rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, payload.toString());
   }
 
-  private void emitError(ControlSignal cs, Exception e) {
+  private void emitError(ControlSignal cs, Exception e, String swarmIdFallback) {
     String rk = "ev.error." + cs.signal();
     if (cs.scope().containsKey("swarmId")) {
       rk += "." + cs.scope().get("swarmId");
+    } else if (swarmIdFallback != null) {
+      rk += "." + swarmIdFallback;
     } else if (cs.scope().containsKey("role") && cs.scope().containsKey("instance")) {
       rk += "." + cs.scope().get("role") + "." + cs.scope().get("instance");
     }
