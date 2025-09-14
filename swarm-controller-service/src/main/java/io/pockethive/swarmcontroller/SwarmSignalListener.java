@@ -16,9 +16,12 @@ import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
-import java.util.regex.Pattern;
-import java.util.HashMap;
+
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.HashMap;
+import java.util.regex.Pattern;
 
 @Component
 @EnableScheduling
@@ -29,16 +32,31 @@ public class SwarmSignalListener {
   private final RabbitTemplate rabbit;
   private final String instanceId;
   private final ObjectMapper mapper;
+  private final Map<CacheKey, CachedOutcome> outcomes;
   private static final long STATUS_INTERVAL_MS = 5000L;
 
   public SwarmSignalListener(SwarmLifecycle lifecycle,
                              RabbitTemplate rabbit,
                              @Qualifier("instanceId") String instanceId,
                              ObjectMapper mapper) {
+    this(lifecycle, rabbit, instanceId, mapper, 100);
+  }
+
+  SwarmSignalListener(SwarmLifecycle lifecycle,
+                      RabbitTemplate rabbit,
+                      String instanceId,
+                      ObjectMapper mapper,
+                      int cacheSize) {
     this.lifecycle = lifecycle;
     this.rabbit = rabbit;
     this.instanceId = instanceId;
     this.mapper = mapper;
+    this.outcomes = Collections.synchronizedMap(new LinkedHashMap<>(16, 0.75f, true) {
+      @Override
+      protected boolean removeEldestEntry(Map.Entry<CacheKey, CachedOutcome> eldest) {
+        return size() > cacheSize;
+      }
+    });
     try {
       sendStatusFull();
     } catch (Exception e) {
@@ -53,127 +71,133 @@ public class SwarmSignalListener {
     MDC.put("service", ROLE);
     MDC.put("instance", instanceId);
     log.info("received {} : {}", routingKey, body);
-    if (routingKey.startsWith("sig.swarm-template.")) {
-      String swarmId = routingKey.substring("sig.swarm-template.".length());
-      if (Topology.SWARM_ID.equals(swarmId)) {
-        try {
-          var node = mapper.readTree(body);
-          ControlSignal cs = parseControlSignal(node);
-          log.info("Template signal for swarm {}", swarmId);
-          lifecycle.prepare(node.path("args").toString());
-          emitSuccess(cs, swarmId);
-        } catch (Exception e) {
-          log.warn("template", e);
+    try {
+      if (routingKey.startsWith("sig.swarm-template.")) {
+        String swarmId = routingKey.substring("sig.swarm-template.".length());
+        if (Topology.SWARM_ID.equals(swarmId)) {
+          processSwarmSignal(body, swarmId, node -> lifecycle.prepare(node.path("args").toString()), "template");
+        }
+      } else if (routingKey.startsWith("sig.swarm-start.")) {
+        String swarmId = routingKey.substring("sig.swarm-start.".length());
+        if (Topology.SWARM_ID.equals(swarmId)) {
+          processSwarmSignal(body, swarmId, node -> {
+            lifecycle.start(node.path("args").toString());
+            sendStatusFull();
+          }, "start");
+        }
+      } else if (routingKey.startsWith("sig.swarm-stop.")) {
+        String swarmId = routingKey.substring("sig.swarm-stop.".length());
+        if (Topology.SWARM_ID.equals(swarmId)) {
+          processSwarmSignal(body, swarmId, node -> lifecycle.stop(), "stop");
+        }
+      } else if (routingKey.startsWith("sig.swarm-remove.")) {
+        String swarmId = routingKey.substring("sig.swarm-remove.".length());
+        if (Topology.SWARM_ID.equals(swarmId)) {
+          processSwarmSignal(body, swarmId, node -> lifecycle.remove(), "remove");
+        }
+      } else if (routingKey.startsWith("sig.status-request")) {
+        log.info("Status request received: {}", routingKey);
+        sendStatusFull();
+      } else if (routingKey.startsWith("sig.config-update")) {
+        log.info("Config update received: {} payload={} ", routingKey, body);
+        processConfigUpdate(body);
+      } else if (routingKey.startsWith("ev.ready.")) {
+        String rest = routingKey.substring("ev.ready.".length());
+        String[] parts = rest.split(Pattern.quote("."), 2);
+        if (parts.length == 2) {
           try {
-            var node = mapper.readTree(body);
-            ControlSignal cs = parseControlSignal(node);
-            emitError(cs, e, swarmId);
-          } catch (Exception ex) {
-            log.warn("error emit", ex);
+            JsonNode node = mapper.readTree(body);
+            boolean enabled = node.path("data").path("enabled").asBoolean(true);
+            if (!enabled) {
+              lifecycle.markReady(parts[0], parts[1]);
+            }
+          } catch (Exception e) {
+            log.warn("ready parse", e);
           }
         }
       }
-    } else if (routingKey.startsWith("sig.swarm-start.")) {
-      String swarmId = routingKey.substring("sig.swarm-start.".length());
-      if (Topology.SWARM_ID.equals(swarmId)) {
-        try {
-          var node = mapper.readTree(body);
-          ControlSignal cs = parseControlSignal(node);
-          log.info("Start signal for swarm {}", swarmId);
-          lifecycle.start(node.path("args").toString());
-          sendStatusFull();
-          emitSuccess(cs, swarmId);
-        } catch (Exception e) {
-          log.warn("start", e);
-          try {
-            var node = mapper.readTree(body);
-            ControlSignal cs = parseControlSignal(node);
-            emitError(cs, e, swarmId);
-          } catch (Exception ex) {
-            log.warn("error emit", ex);
-          }
-        }
-      }
-    } else if (routingKey.startsWith("sig.swarm-stop.")) {
-      String swarmId = routingKey.substring("sig.swarm-stop.".length());
-      if (Topology.SWARM_ID.equals(swarmId)) {
-        try {
-          var node = mapper.readTree(body);
-          ControlSignal cs = parseControlSignal(node);
-          log.info("Stop signal for swarm {}", swarmId);
-          lifecycle.stop();
-          emitSuccess(cs, swarmId);
-        } catch (Exception e) {
-          log.warn("stop", e);
-          try {
-            var node = mapper.readTree(body);
-            ControlSignal cs = parseControlSignal(node);
-            emitError(cs, e, swarmId);
-          } catch (Exception ex) {
-            log.warn("error emit", ex);
-          }
-        }
-      }
-    } else if (routingKey.startsWith("sig.swarm-remove.")) {
-      String swarmId = routingKey.substring("sig.swarm-remove.".length());
-      if (Topology.SWARM_ID.equals(swarmId)) {
-        try {
-          var node = mapper.readTree(body);
-          ControlSignal cs = parseControlSignal(node);
-          log.info("Remove signal for swarm {}", swarmId);
-          lifecycle.remove();
-          emitSuccess(cs, swarmId);
-        } catch (Exception e) {
-          log.warn("remove", e);
-          try {
-            var node = mapper.readTree(body);
-            ControlSignal cs = parseControlSignal(node);
-            emitError(cs, e, swarmId);
-          } catch (Exception ex) {
-            log.warn("error emit", ex);
-          }
-        }
-      }
-    } else if (routingKey.startsWith("sig.status-request")) {
-      log.info("Status request received: {}", routingKey);
-      sendStatusFull();
-    } else if (routingKey.startsWith("sig.config-update")) {
-      log.info("Config update received: {} payload={} ", routingKey, body);
-      try {
-        JsonNode node = mapper.readTree(body);
-        ControlSignal cs = parseControlSignal(node);
-        JsonNode enabledNode = node.path("args").path("data").path("enabled");
-        if (enabledNode.isBoolean() && !enabledNode.asBoolean()) {
-          log.warn("Ignoring attempt to disable swarm-controller");
-        }
-        emitSuccess(cs, null);
-      } catch (Exception e) {
-        log.warn("config parse", e);
-        try {
-          var node = mapper.readTree(body);
-          ControlSignal cs = parseControlSignal(node);
-          emitError(cs, e, null);
-        } catch (Exception ex) {
-          log.warn("error emit", ex);
-        }
-      }
-    } else if (routingKey.startsWith("ev.ready.")) {
-      String rest = routingKey.substring("ev.ready.".length());
-      String[] parts = rest.split(Pattern.quote("."), 2);
-      if (parts.length == 2) {
-        try {
-          JsonNode node = mapper.readTree(body);
-          boolean enabled = node.path("data").path("enabled").asBoolean(true);
-          if (!enabled) {
-            lifecycle.markReady(parts[0], parts[1]);
-          }
-        } catch (Exception e) {
-          log.warn("ready parse", e);
-        }
-      }
+    } finally {
+      MDC.clear();
     }
-    MDC.clear();
   }
+
+  private void processSwarmSignal(String body, String swarmId, SignalAction action, String label) {
+    JsonNode node;
+    ControlSignal cs;
+    try {
+      node = mapper.readTree(body);
+      cs = parseControlSignal(node);
+      MDC.put("correlation_id", cs.correlationId());
+      MDC.put("idempotency_key", cs.idempotencyKey());
+    } catch (Exception e) {
+      log.warn(label + " parse", e);
+      return;
+    }
+    CacheKey key = cacheKey(cs);
+    CachedOutcome cached = outcomes.get(key);
+    if (cached != null) {
+      rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, cached.routingKey(), cached.payload());
+      return;
+    }
+    try {
+      log.info("{} signal for swarm {}", label.substring(0, 1).toUpperCase() + label.substring(1), swarmId);
+      action.apply(node);
+      CachedOutcome outcome = emitSuccess(cs, swarmId);
+      if (outcome != null) outcomes.put(key, outcome);
+    } catch (Exception e) {
+      log.warn(label, e);
+      CachedOutcome outcome = emitError(cs, e, swarmId);
+      if (outcome != null) outcomes.put(key, outcome);
+    }
+  }
+
+  private void processConfigUpdate(String body) {
+    JsonNode node;
+    ControlSignal cs;
+    try {
+      node = mapper.readTree(body);
+      cs = parseControlSignal(node);
+      MDC.put("correlation_id", cs.correlationId());
+      MDC.put("idempotency_key", cs.idempotencyKey());
+    } catch (Exception e) {
+      log.warn("config parse", e);
+      return;
+    }
+    CacheKey key = cacheKey(cs);
+    CachedOutcome cached = outcomes.get(key);
+    if (cached != null) {
+      rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, cached.routingKey(), cached.payload());
+      return;
+    }
+    try {
+      JsonNode enabledNode = node.path("args").path("data").path("enabled");
+      if (enabledNode.isBoolean() && !enabledNode.asBoolean()) {
+        log.warn("Ignoring attempt to disable swarm-controller");
+      }
+      CachedOutcome outcome = emitSuccess(cs, null);
+      if (outcome != null) outcomes.put(key, outcome);
+    } catch (Exception e) {
+      log.warn("config update", e);
+      CachedOutcome outcome = emitError(cs, e, null);
+      if (outcome != null) outcomes.put(key, outcome);
+    }
+  }
+
+  private CacheKey cacheKey(ControlSignal cs) {
+    String swarmId = cs.scope().getOrDefault("swarmId", Topology.SWARM_ID);
+    String role = cs.scope().get("role");
+    String instance = cs.scope().get("instance");
+    return new CacheKey(swarmId, cs.signal(), role, instance, cs.idempotencyKey());
+  }
+
+  @FunctionalInterface
+  private interface SignalAction {
+    void apply(JsonNode node) throws Exception;
+  }
+
+  private record CacheKey(String swarmId, String signal, String role, String instance, String idempotencyKey) {}
+
+  private record CachedOutcome(String routingKey, String payload) {}
 
   @Scheduled(fixedRate = STATUS_INTERVAL_MS)
   public void status() {
@@ -196,7 +220,7 @@ public class SwarmSignalListener {
         scope);
   }
 
-  private void emitSuccess(ControlSignal cs, String swarmIdFallback) {
+  private CachedOutcome emitSuccess(ControlSignal cs, String swarmIdFallback) {
     String rk;
     if (cs.signal().startsWith("swarm-")) {
       String swarmId = cs.scope().get("swarmId");
@@ -205,7 +229,7 @@ public class SwarmSignalListener {
     } else if ("config-update".equals(cs.signal())) {
       rk = "ev.ready.config-update." + cs.scope().get("role") + "." + cs.scope().get("instance");
     } else {
-      return;
+      return null;
     }
     var payload = mapper.createObjectNode();
     payload.put("signal", cs.signal());
@@ -213,10 +237,12 @@ public class SwarmSignalListener {
     payload.set("scope", mapper.valueToTree(cs.scope()));
     payload.put("idempotencyKey", cs.idempotencyKey());
     payload.put("correlationId", cs.correlationId());
-    rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, payload.toString());
+    String json = payload.toString();
+    rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, json);
+    return new CachedOutcome(rk, json);
   }
 
-  private void emitError(ControlSignal cs, Exception e, String swarmIdFallback) {
+  private CachedOutcome emitError(ControlSignal cs, Exception e, String swarmIdFallback) {
     String rk = "ev.error." + cs.signal();
     if (cs.scope().containsKey("swarmId")) {
       rk += "." + cs.scope().get("swarmId");
@@ -233,7 +259,9 @@ public class SwarmSignalListener {
     payload.put("correlationId", cs.correlationId());
     payload.put("code", e.getClass().getSimpleName());
     payload.put("message", e.getMessage());
-    rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, payload.toString());
+    String json = payload.toString();
+    rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, json);
+    return new CachedOutcome(rk, json);
   }
 
   private void sendStatusFull() {

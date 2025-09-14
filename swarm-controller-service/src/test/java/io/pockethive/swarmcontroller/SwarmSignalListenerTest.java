@@ -29,6 +29,34 @@ class SwarmSignalListenerTest {
   }
 
   @Test
+  void replaysConfirmationOnDuplicate() {
+    when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
+    SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", mapper, 10);
+    String rk = "sig.swarm-start." + Topology.SWARM_ID;
+    listener.handle(signal("swarm-start", "i5", "c5"), rk);
+    listener.handle(signal("swarm-start", "i5", "c6"), rk);
+    verify(lifecycle, times(1)).start("{}");
+    verify(rabbit, times(2)).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
+        eq("ev.ready.swarm-start." + Topology.SWARM_ID),
+        argThat((String p) -> p.contains("\"correlationId\":\"c5\"") && p.contains("\"idempotencyKey\":\"i5\"")));
+  }
+
+  @Test
+  void evictsOldEntriesFromCache() {
+    when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
+    SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", mapper, 2);
+    String rk = "sig.swarm-start." + Topology.SWARM_ID;
+    listener.handle(signal("swarm-start", "i6", "c6"), rk);
+    listener.handle(signal("swarm-start", "i7", "c7"), rk);
+    listener.handle(signal("swarm-start", "i8", "c8"), rk); // evicts i6
+    listener.handle(signal("swarm-start", "i6", "c9"), rk); // treated as new
+    verify(lifecycle, times(4)).start("{}");
+    verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
+        eq("ev.ready.swarm-start." + Topology.SWARM_ID),
+        argThat((String p) -> p.contains("\"correlationId\":\"c9\"") && p.contains("\"idempotencyKey\":\"i6\"")));
+  }
+
+  @Test
   void templateEmitsConfirmation() {
     when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
     SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", mapper);
