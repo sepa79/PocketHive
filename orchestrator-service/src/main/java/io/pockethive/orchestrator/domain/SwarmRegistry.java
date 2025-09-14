@@ -27,6 +27,21 @@ public class SwarmRegistry {
         }
     }
 
+    public void refresh(String id, SwarmHealth health) {
+        Swarm swarm = swarms.get(id);
+        if (swarm != null) {
+            swarm.refresh(health);
+        }
+    }
+
+    public void expire(java.time.Duration degradedAfter, java.time.Duration failedAfter) {
+        expire(degradedAfter, failedAfter, java.time.Instant.now());
+    }
+
+    void expire(java.time.Duration degradedAfter, java.time.Duration failedAfter, java.time.Instant now) {
+        swarms.values().forEach(s -> s.expire(now, degradedAfter, failedAfter));
+    }
+
     public int count() {
         return swarms.size();
     }
