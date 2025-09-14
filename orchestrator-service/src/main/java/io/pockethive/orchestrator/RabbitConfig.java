@@ -40,14 +40,20 @@ public class RabbitConfig {
     }
 
     @Bean
-    Binding bindControllerStatusFull(@Qualifier("controlQueue") Queue controlQueue,
-                                     @Qualifier("controlExchange") TopicExchange controlExchange){
-        return BindingBuilder.bind(controlQueue).to(controlExchange).with("ev.status-full.swarm-controller.*");
+    Queue controllerStatusQueue(String instanceId){
+        String name = Topology.CONTROL_QUEUE + ".orchestrator-status." + instanceId;
+        return QueueBuilder.durable(name).build();
     }
 
     @Bean
-    Binding bindControllerStatusDelta(@Qualifier("controlQueue") Queue controlQueue,
+    Binding bindControllerStatusFull(@Qualifier("controllerStatusQueue") Queue statusQueue,
+                                     @Qualifier("controlExchange") TopicExchange controlExchange){
+        return BindingBuilder.bind(statusQueue).to(controlExchange).with("ev.status-full.swarm-controller.*");
+    }
+
+    @Bean
+    Binding bindControllerStatusDelta(@Qualifier("controllerStatusQueue") Queue statusQueue,
                                       @Qualifier("controlExchange") TopicExchange controlExchange){
-        return BindingBuilder.bind(controlQueue).to(controlExchange).with("ev.status-delta.swarm-controller.*");
+        return BindingBuilder.bind(statusQueue).to(controlExchange).with("ev.status-delta.swarm-controller.*");
     }
 }

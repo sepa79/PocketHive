@@ -3,9 +3,12 @@ package io.pockethive.orchestrator.app;
 import io.pockethive.Topology;
 import io.pockethive.orchestrator.domain.ControlSignal;
 import io.pockethive.orchestrator.domain.Swarm;
+import io.pockethive.orchestrator.domain.SwarmHealth;
 import io.pockethive.orchestrator.domain.SwarmCreateTracker;
 import io.pockethive.orchestrator.domain.SwarmCreateTracker.Pending;
 import io.pockethive.orchestrator.domain.IdempotencyStore;
+import io.pockethive.orchestrator.domain.SwarmRegistry;
+import io.pockethive.orchestrator.domain.SwarmStatus;
 import org.springframework.amqp.core.AmqpTemplate;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -22,15 +25,18 @@ public class SwarmController {
     private final ContainerLifecycleManager lifecycle;
     private final SwarmCreateTracker creates;
     private final IdempotencyStore idempotency;
+    private final SwarmRegistry registry;
 
     public SwarmController(AmqpTemplate rabbit,
                            ContainerLifecycleManager lifecycle,
                            SwarmCreateTracker creates,
-                           IdempotencyStore idempotency) {
+                           IdempotencyStore idempotency,
+                           SwarmRegistry registry) {
         this.rabbit = rabbit;
         this.lifecycle = lifecycle;
         this.creates = creates;
         this.idempotency = idempotency;
+        this.registry = registry;
     }
 
     @PostMapping("/{swarmId}/create")
@@ -85,4 +91,13 @@ public class SwarmController {
     public record ControlRequest(String idempotencyKey, String notes) {}
     public record Watch(String successTopic, String errorTopic) {}
     public record ControlResponse(String correlationId, String idempotencyKey, Watch watch, long timeoutMs) {}
+
+    @GetMapping("/{swarmId}")
+    public ResponseEntity<SwarmView> view(@PathVariable String swarmId) {
+        return registry.find(swarmId)
+            .map(s -> ResponseEntity.ok(new SwarmView(s.getId(), s.getStatus(), s.getHealth(), s.getHeartbeat())))
+            .orElse(ResponseEntity.notFound().build());
+    }
+
+    public record SwarmView(String id, SwarmStatus status, SwarmHealth health, java.time.Instant heartbeat) {}
 }
