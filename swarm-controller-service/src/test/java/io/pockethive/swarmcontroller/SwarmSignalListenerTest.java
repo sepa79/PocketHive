@@ -2,6 +2,7 @@ package io.pockethive.swarmcontroller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.Topology;
+import io.pockethive.swarmcontroller.SwarmStatus;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -151,6 +152,28 @@ class SwarmSignalListenerTest {
           startsWith("ev.status-delta.swarm-controller.inst"),
           argThat((String p) -> p.contains("\"swarmStatus\":\"RUNNING\"") && p.contains("\"enabled\":true")));
       verify(lifecycle).getStatus();
+  }
+
+  @Test
+  void statusEventMarksReady() throws Exception {
+    when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
+    SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", mapper);
+    reset(lifecycle, rabbit);
+    String body = "{\"data\":{\"enabled\":false}}";
+    listener.handle(body, "ev.status-full.gen.g1");
+    verify(lifecycle).updateHeartbeat("gen", "g1");
+    verify(lifecycle).markReady("gen", "g1");
+  }
+
+  @Test
+  void statusEnabledDoesNotMarkReady() throws Exception {
+    when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
+    SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", mapper);
+    reset(lifecycle, rabbit);
+    String body = "{\"data\":{\"enabled\":true}}";
+    listener.handle(body, "ev.status-delta.gen.g1");
+    verify(lifecycle).updateHeartbeat("gen", "g1");
+    verify(lifecycle, never()).markReady(anyString(), anyString());
   }
 
   @Test

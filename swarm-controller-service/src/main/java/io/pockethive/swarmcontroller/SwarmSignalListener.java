@@ -101,10 +101,13 @@ public class SwarmSignalListener {
       } else if (routingKey.startsWith("sig.config-update")) {
         log.info("Config update received: {} payload={} ", routingKey, body);
         processConfigUpdate(body);
-      } else if (routingKey.startsWith("ev.ready.")) {
-        String rest = routingKey.substring("ev.ready.".length());
+      } else if (routingKey.startsWith("ev.status-full.") || routingKey.startsWith("ev.status-delta.")) {
+        String rest = routingKey.startsWith("ev.status-full.")
+            ? routingKey.substring("ev.status-full.".length())
+            : routingKey.substring("ev.status-delta.".length());
         String[] parts = rest.split(Pattern.quote("."), 2);
         if (parts.length == 2) {
+          lifecycle.updateHeartbeat(parts[0], parts[1]);
           try {
             JsonNode node = mapper.readTree(body);
             boolean enabled = node.path("data").path("enabled").asBoolean(true);
@@ -112,7 +115,7 @@ public class SwarmSignalListener {
               lifecycle.markReady(parts[0], parts[1]);
             }
           } catch (Exception e) {
-            log.warn("ready parse", e);
+            log.warn("status parse", e);
           }
         }
       }

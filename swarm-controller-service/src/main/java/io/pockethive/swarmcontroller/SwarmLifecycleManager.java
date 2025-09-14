@@ -38,11 +38,14 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
   private final Set<String> declaredQueues = new HashSet<>();
   private final Map<String, Integer> expectedReady = new HashMap<>();
   private final Map<String, List<String>> instancesByRole = new HashMap<>();
+  private final Map<String, Long> lastSeen = new HashMap<>();
   private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
   private final List<ScenarioTask> scheduledTasks = new ArrayList<>();
   private List<String> startOrder = List.of();
   private SwarmStatus status = SwarmStatus.STOPPED;
   private String template;
+
+  private static final long STATUS_TTL_MS = 15_000L;
 
   private record ScenarioTask(long delayMs, String routingKey, String body) {}
 
@@ -224,6 +227,15 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
   }
 
   @Override
+  public void updateHeartbeat(String role, String instance) {
+    updateHeartbeat(role, instance, System.currentTimeMillis());
+  }
+
+  void updateHeartbeat(String role, String instance, long timestamp) {
+    lastSeen.put(role + "." + instance, timestamp);
+  }
+
+  @Override
   public synchronized boolean markReady(String role, String instance) {
     instancesByRole.computeIfAbsent(role, r -> new ArrayList<>());
     if (!instancesByRole.get(role).contains(instance)) {
@@ -234,13 +246,26 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
   }
 
   private boolean isFullyReady() {
+    long now = System.currentTimeMillis();
     for (Map.Entry<String, Integer> e : expectedReady.entrySet()) {
-      int count = instancesByRole.getOrDefault(e.getKey(), List.of()).size();
-      if (count < e.getValue()) {
+      List<String> ready = instancesByRole.getOrDefault(e.getKey(), List.of());
+      if (ready.size() < e.getValue()) {
         return false;
+      }
+      for (String inst : ready) {
+        Long ts = lastSeen.get(e.getKey() + "." + inst);
+        if (ts == null || now - ts > STATUS_TTL_MS) {
+          requestStatus(e.getKey(), inst);
+          return false;
+        }
       }
     }
     return !expectedReady.isEmpty();
+  }
+
+  private void requestStatus(String role, String instance) {
+    String rk = "sig.status-request." + role + "." + instance;
+    rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, "{}");
   }
 
   private List<String> computeStartOrder(SwarmPlan plan) {

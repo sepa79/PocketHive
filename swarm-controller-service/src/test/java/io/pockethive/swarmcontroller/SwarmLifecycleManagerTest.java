@@ -24,6 +24,7 @@ import ch.qos.logback.core.read.ListAppender;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.mockito.Mockito.*;
 import static org.mockito.ArgumentMatchers.*;
 
@@ -48,6 +49,7 @@ class SwarmLifecycleManagerTest {
     when(docker.resolveControlNetwork()).thenReturn("ctrl-net");
 
     manager.start(mapper.writeValueAsString(plan));
+    manager.updateHeartbeat("gen", "g1");
     manager.markReady("gen", "g1");
 
     verify(amqp).declareExchange(argThat((TopicExchange e) -> e.getName().equals("ph." + Topology.SWARM_ID + ".hive")));
@@ -101,6 +103,7 @@ class SwarmLifecycleManagerTest {
     when(docker.createContainer(eq("img2"), anyMap())).thenReturn("c2");
 
     manager.start(mapper.writeValueAsString(plan));
+    manager.updateHeartbeat("gen", "a");
     manager.markReady("gen", "a");
 
     reset(docker);
@@ -141,6 +144,7 @@ class SwarmLifecycleManagerTest {
     when(docker.createContainer(eq("img1"), anyMap())).thenReturn("c1");
 
     manager.prepare(mapper.writeValueAsString(plan));
+    manager.updateHeartbeat("gen", "g1");
     manager.markReady("gen", "g1");
 
     reset(rabbit, docker);
@@ -158,6 +162,7 @@ class SwarmLifecycleManagerTest {
     SwarmLifecycleManager manager = new SwarmLifecycleManager(amqp, mapper, docker, rabbit, "inst");
     SwarmPlan plan = new SwarmPlan(List.of(new SwarmPlan.Bee("gen", null, null, null)));
     manager.prepare(mapper.writeValueAsString(plan));
+    manager.updateHeartbeat("gen", "g1");
     manager.markReady("gen", "g1");
 
     String step = """
@@ -199,8 +204,11 @@ class SwarmLifecycleManagerTest {
     when(docker.createContainer(eq("img3"), anyMap())).thenReturn("c3");
 
     manager.prepare(mapper.writeValueAsString(plan));
+    manager.updateHeartbeat("gen", "g1");
     manager.markReady("gen", "g1");
+    manager.updateHeartbeat("proc", "p1");
     manager.markReady("proc", "p1");
+    manager.updateHeartbeat("sink", "s1");
     manager.markReady("sink", "s1");
 
     reset(rabbit, docker);
@@ -243,8 +251,11 @@ class SwarmLifecycleManagerTest {
     manager.prepare(mapper.writeValueAsString(plan));
     assertTrue(appender.list.stream().anyMatch(e -> e.getLevel() == Level.WARN && e.getFormattedMessage().contains("cycle")));
 
+    manager.updateHeartbeat("a", "a1");
     manager.markReady("a", "a1");
+    manager.updateHeartbeat("b", "b1");
     manager.markReady("b", "b1");
+    manager.updateHeartbeat("c", "c1");
     manager.markReady("c", "c1");
 
     reset(rabbit);
@@ -261,5 +272,22 @@ class SwarmLifecycleManagerTest {
     inStop.verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("sig.config-update.b.b1"), anyString());
     inStop.verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("sig.config-update.a.a1"), anyString());
     inStop.verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), startsWith("ev.status-delta.swarm-controller.inst"), anyString());
+  }
+
+  @Test
+  void staleHeartbeatRequestsStatus() throws Exception {
+    SwarmLifecycleManager manager = new SwarmLifecycleManager(amqp, mapper, docker, rabbit, "inst");
+    SwarmPlan plan = new SwarmPlan(List.of(new SwarmPlan.Bee("gen", "img", null, null)));
+    manager.prepare(mapper.writeValueAsString(plan));
+    manager.updateHeartbeat("gen", "g1");
+    manager.markReady("gen", "g1");
+
+    reset(rabbit);
+    manager.updateHeartbeat("gen", "g1", System.currentTimeMillis() - 20_000);
+    assertFalse(manager.markReady("gen", "g1"));
+    verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("sig.status-request.gen.g1"), anyString());
+
+    manager.updateHeartbeat("gen", "g1");
+    assertTrue(manager.markReady("gen", "g1"));
   }
 }
