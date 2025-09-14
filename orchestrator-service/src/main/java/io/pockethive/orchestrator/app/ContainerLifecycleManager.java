@@ -56,6 +56,11 @@ public class ContainerLifecycleManager {
 
     public void stopSwarm(String swarmId) {
         registry.find(swarmId).ifPresent(swarm -> {
+            SwarmStatus current = swarm.getStatus();
+            if (current == SwarmStatus.STOPPING || current == SwarmStatus.STOPPED) {
+                log.info("swarm {} already {}", swarmId, current);
+                return;
+            }
             log.info("marking swarm {} as stopped", swarmId);
             registry.updateStatus(swarmId, SwarmStatus.STOPPING);
             registry.updateStatus(swarmId, SwarmStatus.STOPPED);
