@@ -1,7 +1,7 @@
 package io.pockethive.orchestrator.app;
 
 import io.pockethive.Topology;
-import io.pockethive.orchestrator.domain.ControlSignal;
+import io.pockethive.controlplane.ControlSignal;
 import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmHealth;
 import io.pockethive.orchestrator.domain.SwarmCreateTracker;

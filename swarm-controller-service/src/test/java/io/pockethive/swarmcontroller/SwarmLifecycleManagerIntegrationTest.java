@@ -56,7 +56,7 @@ class SwarmLifecycleManagerIntegrationTest {
           {"role":"postprocessor","work":{"in":"final"}}
         ]}
         """;
-    manager.start(plan);
+    manager.start(plan, "c", "i");
     assertNotNull(amqp.getQueueProperties("ph." + Topology.SWARM_ID + ".gen"));
     assertNotNull(amqp.getQueueProperties("ph." + Topology.SWARM_ID + ".mod"));
     assertNotNull(amqp.getQueueProperties("ph." + Topology.SWARM_ID + ".final"));
@@ -84,10 +84,10 @@ class SwarmLifecycleManagerIntegrationTest {
         .with("ev.status-delta.swarm-controller." + instanceId);
     amqp.declareBinding(b);
 
-    manager.start(plan);
+    manager.start(plan, "c", "i");
     assertNotNull(amqp.getQueueProperties("ph." + Topology.SWARM_ID + ".gen"));
 
-    manager.stop();
+    manager.stop("c", "i");
 
     assertNull(amqp.getQueueProperties("ph." + Topology.SWARM_ID + ".gen"));
     assertNull(amqp.getQueueProperties("ph." + Topology.SWARM_ID + ".mod"));

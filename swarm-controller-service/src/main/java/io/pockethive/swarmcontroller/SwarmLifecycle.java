@@ -1,9 +1,10 @@
 package io.pockethive.swarmcontroller;
 
 public interface SwarmLifecycle {
-  void prepare(String templateJson);
-  void start(String planJson);
-  void stop();
+  void prepare(String templateJson, String correlationId, String idempotencyKey);
+  void start(String planJson, String correlationId, String idempotencyKey);
+  void stop(String correlationId, String idempotencyKey);
+  void remove(String correlationId, String idempotencyKey);
   SwarmStatus getStatus();
   /**
    * Record readiness of a component identified by role and instance.

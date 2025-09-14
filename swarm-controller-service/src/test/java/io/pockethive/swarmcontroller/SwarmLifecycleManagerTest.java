@@ -41,7 +41,7 @@ class SwarmLifecycleManagerTest {
     when(docker.createContainer(eq("img1"), anyMap())).thenReturn("c1");
     when(docker.resolveControlNetwork()).thenReturn("ctrl-net");
 
-    manager.start(mapper.writeValueAsString(plan));
+    manager.start(mapper.writeValueAsString(plan), "c", "i");
 
     verify(amqp).declareExchange(argThat((TopicExchange e) -> e.getName().equals("ph." + Topology.SWARM_ID + ".hive")));
     verify(amqp).declareQueue(argThat((Queue q) -> q.getName().equals("ph." + Topology.SWARM_ID + ".qin")));
@@ -61,7 +61,7 @@ class SwarmLifecycleManagerTest {
     verify(docker).startContainer("c1");
     assertEquals(SwarmStatus.RUNNING, manager.getStatus());
 
-    manager.stop();
+    manager.stop("c", "i");
 
     verify(docker).stopAndRemoveContainer("c1");
     verify(amqp).deleteQueue("ph." + Topology.SWARM_ID + ".qin");
@@ -82,8 +82,8 @@ class SwarmLifecycleManagerTest {
     when(docker.createContainer(eq("img1"), anyMap())).thenReturn("c1");
     when(docker.createContainer(eq("img2"), anyMap())).thenReturn("c2");
 
-    manager.start(mapper.writeValueAsString(plan));
-    manager.stop();
+    manager.start(mapper.writeValueAsString(plan), "c", "i");
+    manager.stop("c", "i");
 
     verify(docker).createContainer(eq("img1"), anyMap());
     verify(docker).createContainer(eq("img2"), anyMap());
@@ -101,7 +101,7 @@ class SwarmLifecycleManagerTest {
             Map.of("PH_IN_QUEUE", "${in}", "PH_OUT_QUEUE", "${out}"))));
     when(docker.createContainer(eq("img1"), anyMap())).thenReturn("c1");
 
-    manager.prepare(mapper.writeValueAsString(plan));
+    manager.prepare(mapper.writeValueAsString(plan), "c", "i");
 
     ArgumentCaptor<Map<String,String>> envCap = ArgumentCaptor.forClass(Map.class);
     verify(docker).createContainer(eq("img1"), envCap.capture());
@@ -121,37 +121,17 @@ class SwarmLifecycleManagerTest {
     SwarmPlan plan = new SwarmPlan(List.of(new SwarmPlan.Bee("gen", "img1", null, null)));
     when(docker.createContainer(eq("img1"), anyMap())).thenReturn("c1");
 
-    manager.prepare(mapper.writeValueAsString(plan));
+    manager.prepare(mapper.writeValueAsString(plan), "c", "i");
     manager.markReady("gen", "g1");
 
     reset(rabbit, docker);
-    manager.start("{}");
+    manager.start("{}", "c", "i");
 
     verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
         eq("sig.config-update.gen.g1"),
         argThat((String p) -> p.contains("\"enabled\":true")));
     verifyNoMoreInteractions(docker);
     assertEquals(SwarmStatus.RUNNING, manager.getStatus());
-  }
-
-  @Test
-  void emitsSwarmReadyAfterAllBeesReportReady() throws Exception {
-    SwarmLifecycleManager manager = new SwarmLifecycleManager(amqp, mapper, docker, rabbit, "inst");
-    SwarmPlan plan = new SwarmPlan(List.of(
-        new SwarmPlan.Bee("gen", "img1", null, null),
-        new SwarmPlan.Bee("mod", "img2", null, null)));
-    when(docker.createContainer(eq("img1"), anyMap())).thenReturn("c1");
-    when(docker.createContainer(eq("img2"), anyMap())).thenReturn("c2");
-
-    manager.prepare(mapper.writeValueAsString(plan));
-    reset(rabbit);
-
-    manager.markReady("gen", "a");
-    verify(rabbit, never()).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
-        eq("ev.swarm-ready." + Topology.SWARM_ID), anyString());
-    manager.markReady("mod", "b");
-    verify(rabbit).convertAndSend(Topology.CONTROL_EXCHANGE,
-        "ev.swarm-ready." + Topology.SWARM_ID, "");
   }
 
   @Test
@@ -172,8 +152,6 @@ class SwarmLifecycleManagerTest {
     verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
         eq("sig.config-update.gen.g1"),
         argThat((String p) -> p.contains("\"enabled\":false") && p.contains("\"foo\":\"bar\"")));
-    verify(rabbit).convertAndSend(Topology.CONTROL_EXCHANGE,
-        "ev.swarm-ready." + Topology.SWARM_ID, "");
 
     reset(rabbit);
 

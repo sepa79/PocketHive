@@ -40,7 +40,9 @@ class SwarmSignalListenerTest {
 
         ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
         verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("sig.swarm-template.sw1"), captor.capture());
-        assertThat(captor.getValue()).contains("\"id\":\"sw1\"");
+        String sigJson = captor.getValue();
+        assertThat(sigJson).contains("\"signal\":\"swarm-template\"");
+        assertThat(sigJson).contains("\"swarmId\":\"sw1\"");
         verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("ev.ready.swarm-create.sw1"), captor.capture());
         String confirmation = captor.getValue();
         assertThat(confirmation).contains("\"correlationId\":\"corr\"");

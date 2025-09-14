@@ -57,14 +57,14 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
   }
 
   @Override
-  public void start(String planJson) {
+  public void start(String planJson, String correlationId, String idempotencyKey) {
     MDC.put("swarm_id", Topology.SWARM_ID);
     MDC.put("service", "swarm-controller");
     MDC.put("instance", instanceId);
     log.info("Starting swarm {}", Topology.SWARM_ID);
     try {
       if (containers.isEmpty()) {
-        prepare(planJson);
+        prepare(planJson, correlationId, idempotencyKey);
       } else if (template == null) {
         template = planJson;
       }
@@ -75,7 +75,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
   }
 
   @Override
-  public void prepare(String templateJson) {
+  public void prepare(String templateJson, String correlationId, String idempotencyKey) {
     MDC.put("swarm_id", Topology.SWARM_ID);
     MDC.put("service", "swarm-controller");
     MDC.put("instance", instanceId);
@@ -149,7 +149,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
   }
 
   @Override
-  public void stop() {
+  public void stop(String correlationId, String idempotencyKey) {
     MDC.put("swarm_id", Topology.SWARM_ID);
     MDC.put("service", "swarm-controller");
     MDC.put("instance", instanceId);
@@ -194,6 +194,12 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
   }
 
   @Override
+  public void remove(String correlationId, String idempotencyKey) {
+    stop(correlationId, idempotencyKey);
+    status = SwarmStatus.REMOVED;
+  }
+
+  @Override
   public SwarmStatus getStatus() {
     return status;
   }
@@ -208,7 +214,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
     boolean ready = isFullyReady();
     if (ready) {
       log.info("swarm {} fully ready", Topology.SWARM_ID);
-      rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, "ev.swarm-ready." + Topology.SWARM_ID, "");
+    // confirmation emitted by listener
     }
     return ready;
   }
@@ -257,7 +263,6 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
       }
 
       log.info("scenario step applied for swarm {}", Topology.SWARM_ID);
-      rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, "ev.swarm-ready." + Topology.SWARM_ID, "");
     } catch (Exception e) {
       log.warn("scenario step", e);
     }
