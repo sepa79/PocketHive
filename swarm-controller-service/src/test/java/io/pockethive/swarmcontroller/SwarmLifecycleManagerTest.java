@@ -148,26 +148,6 @@ class SwarmLifecycleManagerTest {
   }
 
   @Test
-  void emitsSwarmReadyAfterAllBeesReportReady() throws Exception {
-    SwarmLifecycleManager manager = new SwarmLifecycleManager(amqp, mapper, docker, rabbit, "inst");
-    SwarmPlan plan = new SwarmPlan(List.of(
-        new SwarmPlan.Bee("gen", "img1", null, null),
-        new SwarmPlan.Bee("mod", "img2", null, null)));
-    when(docker.createContainer(eq("img1"), anyMap())).thenReturn("c1");
-    when(docker.createContainer(eq("img2"), anyMap())).thenReturn("c2");
-
-    manager.prepare(mapper.writeValueAsString(plan));
-    reset(rabbit);
-
-    manager.markReady("gen", "a");
-    verify(rabbit, never()).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
-        eq("ev.swarm-ready." + Topology.SWARM_ID), anyString());
-    manager.markReady("mod", "b");
-    verify(rabbit).convertAndSend(Topology.CONTROL_EXCHANGE,
-        "ev.swarm-ready." + Topology.SWARM_ID, "");
-  }
-
-  @Test
   void enableAllSchedulesScenarioMessages() throws Exception {
     SwarmLifecycleManager manager = new SwarmLifecycleManager(amqp, mapper, docker, rabbit, "inst");
     manager.markReady("gen", "g1");
@@ -185,9 +165,6 @@ class SwarmLifecycleManagerTest {
     verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
         eq("sig.config-update.gen.g1"),
         argThat((String p) -> p.contains("\"enabled\":false") && p.contains("\"foo\":\"bar\"")));
-    verify(rabbit).convertAndSend(Topology.CONTROL_EXCHANGE,
-        "ev.swarm-ready." + Topology.SWARM_ID, "");
-
     reset(rabbit);
 
     manager.enableAll();

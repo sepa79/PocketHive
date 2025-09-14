@@ -219,12 +219,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
       instancesByRole.get(role).add(instance);
       log.info("bee {} of role {} marked ready", instance, role);
     }
-    boolean ready = isFullyReady();
-    if (ready) {
-      log.info("swarm {} fully ready", Topology.SWARM_ID);
-      rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, "ev.swarm-ready." + Topology.SWARM_ID, "");
-    }
-    return ready;
+    return isFullyReady();
   }
 
   private boolean isFullyReady() {
@@ -271,7 +266,6 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
       }
 
       log.info("scenario step applied for swarm {}", Topology.SWARM_ID);
-      rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, "ev.swarm-ready." + Topology.SWARM_ID, "");
     } catch (Exception e) {
       log.warn("scenario step", e);
     }
