@@ -83,6 +83,18 @@ public class SwarmSignalListener {
         log.info("Stop signal for swarm {}", swarmId);
         lifecycle.stop();
       }
+    } else if (routingKey.startsWith("sig.swarm-remove.")) {
+      String swarmId = routingKey.substring("sig.swarm-remove.".length());
+      if (Topology.SWARM_ID.equals(swarmId)) {
+        log.info("Remove signal for swarm {}", swarmId);
+        try {
+          lifecycle.remove();
+          rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, "ev.ready.swarm-remove." + swarmId, "");
+        } catch (Exception e) {
+          log.warn("remove", e);
+          rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, "ev.error.swarm-remove." + swarmId, e.getMessage());
+        }
+      }
     } else if (routingKey.startsWith("sig.status-request")) {
       log.info("Status request received: {}", routingKey);
       sendStatusFull();
@@ -142,7 +154,8 @@ public class SwarmSignalListener {
             "sig.swarm-start.*",
             "sig.scenario-part.*",
             "sig.scenario-start.*",
-            "sig.swarm-stop.*")
+            "sig.swarm-stop.*",
+            "sig.swarm-remove.*")
         .controlOut(rk)
         .toJson();
     rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, payload);
@@ -170,7 +183,8 @@ public class SwarmSignalListener {
             "sig.swarm-start.*",
             "sig.scenario-part.*",
             "sig.scenario-start.*",
-            "sig.swarm-stop.*")
+            "sig.swarm-stop.*",
+            "sig.swarm-remove.*")
         .controlOut(rk)
         .toJson();
     rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, payload);

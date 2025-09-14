@@ -33,7 +33,7 @@ class SwarmLifecycleManagerTest {
   ObjectMapper mapper = new ObjectMapper();
 
   @Test
-  void startDeclaresQueuesAndStopCleansUp() throws Exception {
+  void startDeclaresQueuesStopLeavesResourcesRemoveCleansUp() throws Exception {
     SwarmLifecycleManager manager = new SwarmLifecycleManager(amqp, mapper, docker, rabbit, "inst");
     SwarmPlan plan = new SwarmPlan(List.of(
         new SwarmPlan.Bee("gen", "img1", new SwarmPlan.Work("qin", "qout"),
@@ -42,6 +42,7 @@ class SwarmLifecycleManagerTest {
     when(docker.resolveControlNetwork()).thenReturn("ctrl-net");
 
     manager.start(mapper.writeValueAsString(plan));
+    manager.markReady("gen", "g1");
 
     verify(amqp).declareExchange(argThat((TopicExchange e) -> e.getName().equals("ph." + Topology.SWARM_ID + ".hive")));
     verify(amqp).declareQueue(argThat((Queue q) -> q.getName().equals("ph." + Topology.SWARM_ID + ".qin")));
@@ -61,16 +62,27 @@ class SwarmLifecycleManagerTest {
     verify(docker).startContainer("c1");
     assertEquals(SwarmStatus.RUNNING, manager.getStatus());
 
+    reset(amqp, docker, rabbit);
+
     manager.stop();
+
+    verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
+        eq("sig.config-update.gen.g1"),
+        argThat((String p) -> p.contains("\"enabled\":false")));
+    verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
+        startsWith("ev.status-delta.swarm-controller.inst"),
+        argThat((String p) -> p.contains("STOPPED")));
+    verifyNoInteractions(docker);
+    verifyNoInteractions(amqp);
+    assertEquals(SwarmStatus.STOPPED, manager.getStatus());
+
+    manager.remove();
 
     verify(docker).stopAndRemoveContainer("c1");
     verify(amqp).deleteQueue("ph." + Topology.SWARM_ID + ".qin");
     verify(amqp).deleteQueue("ph." + Topology.SWARM_ID + ".qout");
     verify(amqp).deleteExchange("ph." + Topology.SWARM_ID + ".hive");
-    verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
-        startsWith("ev.status-delta.swarm-controller.inst"),
-        anyString());
-    assertEquals(SwarmStatus.STOPPED, manager.getStatus());
+    assertEquals(SwarmStatus.REMOVED, manager.getStatus());
   }
 
   @Test
@@ -83,12 +95,13 @@ class SwarmLifecycleManagerTest {
     when(docker.createContainer(eq("img2"), anyMap())).thenReturn("c2");
 
     manager.start(mapper.writeValueAsString(plan));
-    manager.stop();
+    manager.markReady("gen", "a");
 
-    verify(docker).createContainer(eq("img1"), anyMap());
-    verify(docker).createContainer(eq("img2"), anyMap());
-    verify(docker).startContainer("c1");
-    verify(docker).startContainer("c2");
+    reset(docker);
+    manager.stop();
+    verifyNoInteractions(docker);
+
+    manager.remove();
     verify(docker).stopAndRemoveContainer("c1");
     verify(docker).stopAndRemoveContainer("c2");
   }

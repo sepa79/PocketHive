@@ -4,6 +4,7 @@ public interface SwarmLifecycle {
   void prepare(String templateJson);
   void start(String planJson);
   void stop();
+  void remove();
   SwarmStatus getStatus();
   /**
    * Record readiness of a component identified by role and instance.

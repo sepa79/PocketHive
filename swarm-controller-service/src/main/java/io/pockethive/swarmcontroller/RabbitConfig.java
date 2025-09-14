@@ -53,6 +53,12 @@ public class RabbitConfig {
   }
 
   @Bean
+  Binding bindSwarmRemove(@Qualifier("controlQueue") Queue controlQueue,
+                          @Qualifier("controlExchange") TopicExchange controlExchange) {
+    return BindingBuilder.bind(controlQueue).to(controlExchange).with("sig.swarm-remove.*");
+  }
+
+  @Bean
   Binding bindScenarioPart(@Qualifier("controlQueue") Queue controlQueue,
                            @Qualifier("controlExchange") TopicExchange controlExchange) {
     return BindingBuilder.bind(controlQueue).to(controlExchange).with("sig.scenario-part.*");
