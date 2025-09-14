@@ -1,0 +1,61 @@
+package io.pockethive.orchestrator.app;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import io.pockethive.Topology;
+import io.pockethive.orchestrator.domain.Swarm;
+import io.pockethive.orchestrator.domain.SwarmPlan;
+import io.pockethive.orchestrator.domain.SwarmPlanRegistry;
+import io.pockethive.orchestrator.domain.SwarmRegistry;
+import io.pockethive.orchestrator.domain.SwarmCreateTracker;
+import io.pockethive.orchestrator.domain.SwarmCreateTracker.Pending;
+import io.pockethive.orchestrator.domain.SwarmHealth;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.amqp.core.AmqpTemplate;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.*;
+
+@ExtendWith(MockitoExtension.class)
+class SwarmEventFlowIntegrationTest {
+
+    @Mock
+    AmqpTemplate rabbit;
+    @Mock
+    ContainerLifecycleManager lifecycle;
+
+    @Test
+    void processesStatusAndConfirmations() {
+        SwarmPlanRegistry plans = new SwarmPlanRegistry();
+        SwarmPlan plan = new SwarmPlan("sw1", java.util.List.of());
+        plans.register("inst1", plan);
+        SwarmCreateTracker tracker = new SwarmCreateTracker();
+        tracker.register("inst1", new Pending("sw1", "corr", "idem"));
+        SwarmRegistry registry = new SwarmRegistry();
+        registry.register(new Swarm("sw1", "inst1", "cid"));
+        SwarmSignalListener signal = new SwarmSignalListener(rabbit, plans, tracker, registry, lifecycle, new ObjectMapper(), "inst0");
+        ControllerStatusListener statusListener = new ControllerStatusListener(registry, new ObjectMapper());
+
+        signal.handle("", "ev.ready.swarm-controller.inst1");
+        ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
+        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("sig.swarm-template.sw1"), anyString());
+        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("ev.ready.swarm-create.sw1"), captor.capture());
+        String conf = captor.getValue();
+        assertThat(conf).contains("\"correlationId\":\"corr\"");
+        assertThat(conf).contains("\"idempotencyKey\":\"idem\"");
+
+        statusListener.handle("{\"swarmId\":\"sw1\",\"data\":{\"swarmStatus\":\"RUNNING\"}}", "ev.status-delta.swarm-controller.inst1");
+        assertEquals(SwarmHealth.RUNNING, registry.find("sw1").get().getHealth());
+
+        signal.handle("", "ev.ready.swarm-stop.sw1");
+        verify(lifecycle).stopSwarm("sw1");
+        signal.handle("", "ev.ready.swarm-remove.sw1");
+        verify(lifecycle).removeSwarm("sw1");
+    }
+}

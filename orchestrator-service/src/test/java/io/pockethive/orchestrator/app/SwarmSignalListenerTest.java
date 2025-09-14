@@ -5,6 +5,7 @@ import io.pockethive.orchestrator.domain.SwarmPlan;
 import io.pockethive.orchestrator.domain.SwarmPlanRegistry;
 import io.pockethive.orchestrator.domain.SwarmRegistry;
 import io.pockethive.orchestrator.domain.SwarmCreateTracker;
+import io.pockethive.orchestrator.domain.SwarmCreateTracker.Pending;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -25,14 +26,14 @@ class SwarmSignalListenerTest {
     ContainerLifecycleManager lifecycle;
 
     @Test
-    void dispatchesTemplateWhenControllerReady() {
-        SwarmPlanRegistry registry = new SwarmPlanRegistry();
+    void dispatchesTemplateAndEmitsCreateConfirmation() {
+        SwarmPlanRegistry plans = new SwarmPlanRegistry();
         SwarmPlan plan = new SwarmPlan("sw1", java.util.List.of(
             new SwarmPlan.Bee("generator", "img", new SwarmPlan.Work("in", "out"))));
-        registry.register("inst1", plan);
+        plans.register("inst1", plan);
         SwarmCreateTracker tracker = new SwarmCreateTracker();
-        tracker.register("inst1", new SwarmCreateTracker.Pending("sw1", "c1", "i1"));
-        SwarmSignalListener listener = new SwarmSignalListener(rabbit, registry, tracker, new SwarmRegistry(), lifecycle, new ObjectMapper(), "inst0");
+        tracker.register("inst1", new Pending("sw1", "corr", "idem"));
+        SwarmSignalListener listener = new SwarmSignalListener(rabbit, plans, tracker, new SwarmRegistry(), lifecycle, new ObjectMapper(), "inst0");
         reset(rabbit);
 
         listener.handle("", "ev.ready.swarm-controller.inst1");
@@ -41,30 +42,55 @@ class SwarmSignalListenerTest {
         verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("sig.swarm-template.sw1"), captor.capture());
         assertThat(captor.getValue()).contains("\"id\":\"sw1\"");
         verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("ev.ready.swarm-create.sw1"), captor.capture());
-        assertThat(captor.getValue()).contains("\"correlationId\":\"c1\"");
-        assertThat(registry.find("inst1")).isEmpty();
+        String confirmation = captor.getValue();
+        assertThat(confirmation).contains("\"correlationId\":\"corr\"");
+        assertThat(confirmation).contains("\"idempotencyKey\":\"idem\"");
+        assertThat(plans.find("inst1")).isEmpty();
     }
 
     @Test
-    void ignoresNonControllerReadyEvents() {
-        SwarmPlanRegistry registry = new SwarmPlanRegistry();
+    void emitsErrorConfirmationWhenControllerErrors() {
+        SwarmPlanRegistry plans = new SwarmPlanRegistry();
         SwarmCreateTracker tracker = new SwarmCreateTracker();
-        SwarmSignalListener listener = new SwarmSignalListener(rabbit, registry, tracker, new SwarmRegistry(), lifecycle, new ObjectMapper(), "inst0");
+        tracker.register("inst1", new Pending("sw1", "corr", "idem"));
+        SwarmSignalListener listener = new SwarmSignalListener(rabbit, plans, tracker, new SwarmRegistry(), lifecycle, new ObjectMapper(), "inst0");
         reset(rabbit);
 
-        listener.handle("", "ev.ready.other-controller.inst1");
+        listener.handle("", "ev.error.swarm-controller.inst1");
 
-        verifyNoInteractions(rabbit);
+        ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
+        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("ev.error.swarm-create.sw1"), captor.capture());
+        String confirmation = captor.getValue();
+        assertThat(confirmation).contains("\"correlationId\":\"corr\"");
+        assertThat(confirmation).contains("\"idempotencyKey\":\"idem\"");
     }
 
     @Test
-    void removesSwarmWhenRemoveConfirmationArrives() {
-        SwarmPlanRegistry registry = new SwarmPlanRegistry();
-        SwarmCreateTracker tracker = new SwarmCreateTracker();
-        SwarmSignalListener listener = new SwarmSignalListener(rabbit, registry, tracker, new SwarmRegistry(), lifecycle, new ObjectMapper(), "inst0");
+    void stopsAndRemovesSwarmSeparately() {
+        SwarmSignalListener listener = new SwarmSignalListener(rabbit, new SwarmPlanRegistry(), new SwarmCreateTracker(), new SwarmRegistry(), lifecycle, new ObjectMapper(), "inst0");
 
+        listener.handle("", "ev.ready.swarm-stop.sw1");
         listener.handle("", "ev.ready.swarm-remove.sw1");
 
+        verify(lifecycle).stopSwarm("sw1");
         verify(lifecycle).removeSwarm("sw1");
+    }
+
+    @Test
+    void ignoresDuplicateControllerReadyEvents() {
+        SwarmPlanRegistry plans = new SwarmPlanRegistry();
+        SwarmPlan plan = new SwarmPlan("sw1", java.util.List.of());
+        plans.register("inst1", plan);
+        SwarmCreateTracker tracker = new SwarmCreateTracker();
+        tracker.register("inst1", new Pending("sw1", "corr", "idem"));
+        SwarmSignalListener listener = new SwarmSignalListener(rabbit, plans, tracker, new SwarmRegistry(), lifecycle, new ObjectMapper(), "inst0");
+
+        listener.handle("", "ev.ready.swarm-controller.inst1");
+        reset(rabbit);
+
+        // duplicate ready event should be ignored
+        listener.handle("", "ev.ready.swarm-controller.inst1");
+
+        verifyNoInteractions(rabbit);
     }
 }
