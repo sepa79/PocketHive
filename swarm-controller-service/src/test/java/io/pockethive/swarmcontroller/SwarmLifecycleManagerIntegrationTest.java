@@ -67,7 +67,7 @@ class SwarmLifecycleManagerIntegrationTest {
   }
 
   @Test
-  void stopCleansUpResourcesAndEmitsStoppedEvent() {
+  void stopLeavesResourcesAndRemoveCleansUp() {
     String plan = """
         {"bees":[
           {"role":"generator","work":{"out":"gen"}},
@@ -89,6 +89,16 @@ class SwarmLifecycleManagerIntegrationTest {
 
     manager.stop();
 
+    assertNotNull(amqp.getQueueProperties("ph." + Topology.SWARM_ID + ".gen"));
+    assertNotNull(amqp.getQueueProperties("ph." + Topology.SWARM_ID + ".mod"));
+    assertNotNull(amqp.getQueueProperties("ph." + Topology.SWARM_ID + ".final"));
+    Message msg = rabbit.receive(q.getName(), 5000);
+    assertNotNull(msg);
+    String body = new String(msg.getBody());
+    assertTrue(body.contains("STOPPED"));
+
+    manager.remove();
+
     assertNull(amqp.getQueueProperties("ph." + Topology.SWARM_ID + ".gen"));
     assertNull(amqp.getQueueProperties("ph." + Topology.SWARM_ID + ".mod"));
     assertNull(amqp.getQueueProperties("ph." + Topology.SWARM_ID + ".final"));
@@ -96,11 +106,6 @@ class SwarmLifecycleManagerIntegrationTest {
       ch.exchangeDeclarePassive("ph." + Topology.SWARM_ID + ".hive");
       return null;
     }));
-
-    Message msg = rabbit.receive(q.getName(), 5000);
-    assertNotNull(msg);
-    String body = new String(msg.getBody());
-    assertTrue(body.contains("\"enabled\":false"));
 
     amqp.deleteQueue(q.getName());
   }

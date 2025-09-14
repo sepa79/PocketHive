@@ -154,18 +154,8 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
     MDC.put("service", "swarm-controller");
     MDC.put("instance", instanceId);
     log.info("Stopping swarm {}", Topology.SWARM_ID);
-    containers.values().forEach(ids -> ids.forEach(id -> {
-      log.info("stopping container {}", id);
-      docker.stopAndRemoveContainer(id);
-    }));
-    containers.clear();
-
-    for (String suffix : declaredQueues) {
-      log.info("deleting queue ph.{}.{}", Topology.SWARM_ID, suffix);
-      amqp.deleteQueue("ph." + Topology.SWARM_ID + "." + suffix);
-    }
-    amqp.deleteExchange("ph." + Topology.SWARM_ID + ".hive");
-    declaredQueues.clear();
+    disableAll();
+    status = SwarmStatus.STOPPED;
 
     String controlQueue = Topology.CONTROL_QUEUE + ".swarm-controller." + instanceId;
     String rk = "ev.status-delta.swarm-controller." + instanceId;
@@ -183,13 +173,37 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
             "sig.status-request.swarm-controller",
             "sig.status-request.swarm-controller." + instanceId,
             "sig.swarm-start.*",
-            "sig.swarm-stop.*")
+            "sig.swarm-stop.*",
+            "sig.swarm-remove.*")
         .controlOut(rk)
         .enabled(true)
+        .data("swarmStatus", status.name())
         .toJson();
     log.info("sent stop status-delta for swarm {}", Topology.SWARM_ID);
     rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, payload);
-    status = SwarmStatus.STOPPED;
+    MDC.clear();
+  }
+
+  @Override
+  public void remove() {
+    MDC.put("swarm_id", Topology.SWARM_ID);
+    MDC.put("service", "swarm-controller");
+    MDC.put("instance", instanceId);
+    log.info("Removing swarm {}", Topology.SWARM_ID);
+    containers.values().forEach(ids -> ids.forEach(id -> {
+      log.info("stopping container {}", id);
+      docker.stopAndRemoveContainer(id);
+    }));
+    containers.clear();
+
+    for (String suffix : declaredQueues) {
+      log.info("deleting queue ph.{}.{}", Topology.SWARM_ID, suffix);
+      amqp.deleteQueue("ph." + Topology.SWARM_ID + "." + suffix);
+    }
+    amqp.deleteExchange("ph." + Topology.SWARM_ID + ".hive");
+    declaredQueues.clear();
+
+    status = SwarmStatus.REMOVED;
     MDC.clear();
   }
 
@@ -284,6 +298,22 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
         log.info("dispatching scheduled {} body {}", t.routingKey, t.body);
         rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, t.routingKey, t.body);
       }, t.delayMs, TimeUnit.MILLISECONDS);
+    }
+  }
+
+  private synchronized void disableAll() {
+    var data = mapper.createObjectNode();
+    data.put("enabled", false);
+    var wrapper = mapper.createObjectNode();
+    wrapper.set("data", data);
+    String payload = wrapper.toString();
+
+    for (var entry : instancesByRole.entrySet()) {
+      for (String inst : entry.getValue()) {
+        String rk = "sig.config-update." + entry.getKey() + "." + inst;
+        log.info("disable config-update {} payload {}", rk, payload);
+        rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, payload);
+      }
     }
   }
 }

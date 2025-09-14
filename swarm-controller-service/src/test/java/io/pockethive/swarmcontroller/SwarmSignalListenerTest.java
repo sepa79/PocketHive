@@ -90,6 +90,27 @@ class SwarmSignalListenerTest {
   }
 
   @Test
+  void removesSwarmWhenIdMatches() {
+    when(lifecycle.getStatus()).thenReturn(SwarmStatus.STOPPED);
+    SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", new ObjectMapper());
+    reset(lifecycle, rabbit);
+    listener.handle("", "sig.swarm-remove." + Topology.SWARM_ID);
+    verify(lifecycle).remove();
+    verify(rabbit).convertAndSend(Topology.CONTROL_EXCHANGE, "ev.ready.swarm-remove." + Topology.SWARM_ID, "");
+  }
+
+  @Test
+  void emitsErrorOnRemoveFailure() {
+    when(lifecycle.getStatus()).thenReturn(SwarmStatus.STOPPED);
+    SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", new ObjectMapper());
+    reset(lifecycle, rabbit);
+    doThrow(new RuntimeException("boom")).when(lifecycle).remove();
+    listener.handle("", "sig.swarm-remove." + Topology.SWARM_ID);
+    verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
+        eq("ev.error.swarm-remove." + Topology.SWARM_ID), anyString());
+  }
+
+  @Test
   void partialReadinessDoesNotEmitSwarmReady() throws Exception {
     AmqpAdmin amqp = mock(AmqpAdmin.class);
     DockerContainerClient docker = mock(DockerContainerClient.class);
