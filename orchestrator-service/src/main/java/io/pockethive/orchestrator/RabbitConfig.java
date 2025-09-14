@@ -30,13 +30,13 @@ public class RabbitConfig {
     @Bean
     Binding bindReady(@Qualifier("controlQueue") Queue controlQueue,
                       @Qualifier("controlExchange") TopicExchange controlExchange){
-        return BindingBuilder.bind(controlQueue).to(controlExchange).with("ev.ready.*");
+        return BindingBuilder.bind(controlQueue).to(controlExchange).with("ev.ready.#");
     }
 
     @Bean
     Binding bindError(@Qualifier("controlQueue") Queue controlQueue,
                       @Qualifier("controlExchange") TopicExchange controlExchange){
-        return BindingBuilder.bind(controlQueue).to(controlExchange).with("ev.error.*");
+        return BindingBuilder.bind(controlQueue).to(controlExchange).with("ev.error.#");
     }
 
     @Bean

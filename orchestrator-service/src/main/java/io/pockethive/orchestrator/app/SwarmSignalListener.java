@@ -132,8 +132,8 @@ public class SwarmSignalListener {
             .enabled(true)
             .controlIn(controlQueue)
             .controlRoutes(
-                "ev.ready.*",
-                "ev.error.*",
+                "ev.ready.#",
+                "ev.error.#",
                 "ev.status-full.swarm-controller.*",
                 "ev.status-delta.swarm-controller.*")
             .controlOut(rk)
@@ -153,8 +153,8 @@ public class SwarmSignalListener {
             .enabled(true)
             .controlIn(controlQueue)
             .controlRoutes(
-                "ev.ready.*",
-                "ev.error.*",
+                "ev.ready.#",
+                "ev.error.#",
                 "ev.status-full.swarm-controller.*",
                 "ev.status-delta.swarm-controller.*")
             .controlOut(rk)
