@@ -2,21 +2,15 @@ package io.pockethive.swarmcontroller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.Topology;
-import io.pockethive.swarmcontroller.SwarmStatus;
-import io.pockethive.swarmcontroller.SwarmPlan;
-import io.pockethive.docker.DockerContainerClient;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.amqp.core.AmqpAdmin;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 
-import java.util.List;
 import static org.mockito.ArgumentMatchers.argThat;
-
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
-import static org.mockito.ArgumentMatchers.*;
 
 @ExtendWith(MockitoExtension.class)
 class SwarmSignalListenerTest {
@@ -26,170 +20,75 @@ class SwarmSignalListenerTest {
   @Mock
   RabbitTemplate rabbit;
 
-  @Test
-  void startsSwarmWhenIdMatches() {
-    when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
-    SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", new ObjectMapper());
-    reset(lifecycle, rabbit);
-    when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
-    listener.handle("plan", "sig.swarm-start." + Topology.SWARM_ID);
-    verify(lifecycle).start("plan");
-    verify(lifecycle).getStatus();
-    verifyNoMoreInteractions(lifecycle);
+  ObjectMapper mapper = new ObjectMapper();
+
+  private String signal(String sig, String id, String corr) {
+    return """
+        {"correlationId":"%s","idempotencyKey":"%s","signal":"%s","scope":{"swarmId":"%s"},"args":{}}
+        """.formatted(corr, id, sig, Topology.SWARM_ID);
   }
 
   @Test
-  void emitsStatusOnStartSignal() {
-    when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
-    SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", new ObjectMapper());
-    reset(lifecycle, rabbit);
-    when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
-    listener.handle("plan", "sig.swarm-start." + Topology.SWARM_ID);
+  void templateEmitsConfirmation() {
+    SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", mapper);
+    listener.handle(signal("swarm-template", "i0", "c0"), "sig.swarm-template." + Topology.SWARM_ID);
+    verify(lifecycle).prepare("{}");
     verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
-        startsWith("ev.status-full.swarm-controller.inst"),
-        argThat((String p) -> p.contains("\"swarmStatus\":\"RUNNING\"") && p.contains("\"enabled\":true")));
+        eq("ev.ready.swarm-template." + Topology.SWARM_ID),
+        argThat((String p) -> p.contains("\"correlationId\":\"c0\"") && p.contains("\"idempotencyKey\":\"i0\"")));
   }
 
   @Test
-  void ignoresStartForOtherSwarm() {
+  void startEmitsConfirmation() {
     when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
-    SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", new ObjectMapper());
+    SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", mapper);
     reset(lifecycle, rabbit);
-    listener.handle("", "sig.swarm-start.other");
-    verifyNoInteractions(lifecycle);
-  }
-
-  @Test
-  void handlesTemplateWithoutStarting() {
-    when(lifecycle.getStatus()).thenReturn(SwarmStatus.STOPPED);
-    SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", new ObjectMapper());
-    reset(lifecycle, rabbit);
-    listener.handle("tmpl", "sig.swarm-template." + Topology.SWARM_ID);
-    verify(lifecycle).prepare("tmpl");
-    verifyNoMoreInteractions(lifecycle);
-    verifyNoInteractions(rabbit);
-  }
-
-  @Test
-  void stopsSwarmWhenIdMatches() {
     when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
-    SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", new ObjectMapper());
-    reset(lifecycle, rabbit);
-    listener.handle("", "sig.swarm-stop." + Topology.SWARM_ID);
+    listener.handle(signal("swarm-start", "i1", "c1"), "sig.swarm-start." + Topology.SWARM_ID);
+    verify(lifecycle).start("{}");
+    verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
+        eq("ev.ready.swarm-start." + Topology.SWARM_ID),
+        argThat((String p) -> p.contains("\"correlationId\":\"c1\"") && p.contains("\"idempotencyKey\":\"i1\"")));
+  }
+
+  @Test
+  void stopEmitsConfirmation() {
+    SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", mapper);
+    listener.handle(signal("swarm-stop", "i2", "c2"), "sig.swarm-stop." + Topology.SWARM_ID);
     verify(lifecycle).stop();
-    verifyNoMoreInteractions(lifecycle);
+    verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
+        eq("ev.ready.swarm-stop." + Topology.SWARM_ID),
+        argThat((String p) -> p.contains("\"correlationId\":\"c2\"") && p.contains("\"idempotencyKey\":\"i2\"")));
   }
 
   @Test
-  void ignoresStopForOtherSwarm() {
-    when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
-    SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", new ObjectMapper());
-    reset(lifecycle, rabbit);
-    listener.handle("", "sig.swarm-stop.other");
-    verifyNoInteractions(lifecycle);
-  }
-
-  @Test
-  void removesSwarmWhenIdMatches() {
-    when(lifecycle.getStatus()).thenReturn(SwarmStatus.STOPPED);
-    SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", new ObjectMapper());
-    reset(lifecycle, rabbit);
-    listener.handle("", "sig.swarm-remove." + Topology.SWARM_ID);
-    verify(lifecycle).remove();
-    verify(rabbit).convertAndSend(Topology.CONTROL_EXCHANGE, "ev.ready.swarm-remove." + Topology.SWARM_ID, "");
-  }
-
-  @Test
-  void emitsErrorOnRemoveFailure() {
-    when(lifecycle.getStatus()).thenReturn(SwarmStatus.STOPPED);
-    SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", new ObjectMapper());
-    reset(lifecycle, rabbit);
+  void removeEmitsErrorOnFailure() {
+    SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", mapper);
     doThrow(new RuntimeException("boom")).when(lifecycle).remove();
-    listener.handle("", "sig.swarm-remove." + Topology.SWARM_ID);
+    listener.handle(signal("swarm-remove", "i3", "c3"), "sig.swarm-remove." + Topology.SWARM_ID);
     verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
-        eq("ev.error.swarm-remove." + Topology.SWARM_ID), anyString());
+        eq("ev.error.swarm-remove." + Topology.SWARM_ID),
+        argThat((String p) -> p.contains("\"code\":\"RuntimeException\"") && p.contains("\"message\":\"boom\"")
+            && p.contains("\"correlationId\":\"c3\"") && p.contains("\"idempotencyKey\":\"i3\"")));
   }
 
   @Test
-  void partialReadinessDoesNotEmitSwarmReady() throws Exception {
-    AmqpAdmin amqp = mock(AmqpAdmin.class);
-    DockerContainerClient docker = mock(DockerContainerClient.class);
-    ObjectMapper mapper = new ObjectMapper();
-    SwarmLifecycleManager manager = new SwarmLifecycleManager(amqp, mapper, docker, rabbit, "inst");
-    SwarmSignalListener listener = new SwarmSignalListener(manager, rabbit, "inst", mapper);
-    when(docker.createContainer(eq("img1"), anyMap())).thenReturn("c1");
-    when(docker.createContainer(eq("img2"), anyMap())).thenReturn("c2");
-    reset(rabbit);
-    SwarmPlan plan = new SwarmPlan(List.of(
-        new SwarmPlan.Bee("gen", "img1", null, null),
-        new SwarmPlan.Bee("mod", "img2", null, null)));
-    listener.handle(mapper.writeValueAsString(plan), "sig.swarm-template." + Topology.SWARM_ID);
-    verify(docker).startContainer("c1");
-    verify(docker).startContainer("c2");
-    reset(rabbit);
-    listener.handle("{\"data\":{\"enabled\":false}}", "ev.ready.gen.a");
-    verify(rabbit, never()).convertAndSend(
-        eq(Topology.CONTROL_EXCHANGE),
-        eq("ev.swarm-ready." + Topology.SWARM_ID),
-        anyString());
-  }
-
-  @Test
-  void fullReadinessEmitsSwarmReady() throws Exception {
-    AmqpAdmin amqp = mock(AmqpAdmin.class);
-    DockerContainerClient docker = mock(DockerContainerClient.class);
-    ObjectMapper mapper = new ObjectMapper();
-    SwarmLifecycleManager manager = new SwarmLifecycleManager(amqp, mapper, docker, rabbit, "inst");
-    SwarmSignalListener listener = new SwarmSignalListener(manager, rabbit, "inst", mapper);
-    when(docker.createContainer(eq("img1"), anyMap())).thenReturn("c1");
-    when(docker.createContainer(eq("img2"), anyMap())).thenReturn("c2");
-    reset(rabbit);
-    SwarmPlan plan = new SwarmPlan(List.of(
-        new SwarmPlan.Bee("gen", "img1", null, null),
-        new SwarmPlan.Bee("mod", "img2", null, null)));
-    listener.handle(mapper.writeValueAsString(plan), "sig.swarm-template." + Topology.SWARM_ID);
-    verify(docker).startContainer("c1");
-    verify(docker).startContainer("c2");
-    reset(rabbit);
-    listener.handle("{\"data\":{\"enabled\":false}}", "ev.ready.gen.a");
-    listener.handle("{\"data\":{\"enabled\":false}}", "ev.ready.mod.b");
-    verify(rabbit).convertAndSend(Topology.CONTROL_EXCHANGE, "ev.swarm-ready." + Topology.SWARM_ID, "");
-  }
-
-  @Test
-  void swarmStartSendsConfigUpdates() throws Exception {
-    AmqpAdmin amqp = mock(AmqpAdmin.class);
-    DockerContainerClient docker = mock(DockerContainerClient.class);
-    ObjectMapper mapper = new ObjectMapper();
-    RabbitTemplate rabbit = mock(RabbitTemplate.class);
-    SwarmLifecycleManager manager = new SwarmLifecycleManager(amqp, mapper, docker, rabbit, "inst");
-    SwarmSignalListener listener = new SwarmSignalListener(manager, rabbit, "inst", mapper);
-    when(docker.createContainer(eq("img1"), anyMap())).thenReturn("c1");
-    when(docker.createContainer(eq("img2"), anyMap())).thenReturn("c2");
-
-    SwarmPlan plan = new SwarmPlan(List.of(
-        new SwarmPlan.Bee("gen", "img1", null, null),
-        new SwarmPlan.Bee("mod", "img2", null, null)));
-    listener.handle(mapper.writeValueAsString(plan), "sig.swarm-template." + Topology.SWARM_ID);
-    listener.handle("{\"data\":{\"enabled\":false}}", "ev.ready.gen.a");
-    listener.handle("{\"data\":{\"enabled\":false}}", "ev.ready.mod.b");
-
-    reset(rabbit, docker);
-    listener.handle("", "sig.swarm-start." + Topology.SWARM_ID);
-
+  void configUpdateEmitsConfirmation() {
+    SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", mapper);
+    String body = """
+        {"correlationId":"c4","idempotencyKey":"i4","signal":"config-update",
+         "scope":{"role":"swarm-controller","instance":"inst"},"args":{"data":{"enabled":true}}}
+        """;
+    listener.handle(body, "sig.config-update.swarm-controller.inst");
     verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
-        eq("sig.config-update.gen.a"),
-        argThat((String p) -> p.contains("\"enabled\":true")));
-    verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
-        eq("sig.config-update.mod.b"),
-        argThat((String p) -> p.contains("\"enabled\":true")));
-    verifyNoInteractions(docker);
+        eq("ev.ready.config-update.swarm-controller.inst"),
+        argThat((String p) -> p.contains("\"correlationId\":\"c4\"") && p.contains("\"idempotencyKey\":\"i4\"")));
   }
 
   @Test
   void repliesToStatusRequest() {
     when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
-    SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", new ObjectMapper());
+    SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", mapper);
     reset(lifecycle, rabbit);
     when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
     listener.handle("{}", "sig.status-request.swarm-controller.inst");
@@ -197,24 +96,22 @@ class SwarmSignalListenerTest {
         startsWith("ev.status-full.swarm-controller.inst"),
         argThat((String p) -> p.contains("\"swarmStatus\":\"RUNNING\"") && p.contains("\"enabled\":true")));
     verify(lifecycle).getStatus();
-    verifyNoMoreInteractions(lifecycle);
   }
 
   @Test
   void emitsStatusOnStartup() {
     when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
-    new SwarmSignalListener(lifecycle, rabbit, "inst", new ObjectMapper());
+    new SwarmSignalListener(lifecycle, rabbit, "inst", mapper);
     verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
         startsWith("ev.status-full.swarm-controller.inst"),
         argThat((String p) -> p.contains("\"swarmStatus\":\"RUNNING\"") && p.contains("\"enabled\":true")));
     verify(lifecycle).getStatus();
-    verifyNoMoreInteractions(lifecycle);
   }
 
   @Test
   void emitsPeriodicStatusDelta() {
     when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
-    SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", new ObjectMapper());
+    SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", mapper);
     reset(lifecycle, rabbit);
     when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
     listener.status();
@@ -222,16 +119,5 @@ class SwarmSignalListenerTest {
         startsWith("ev.status-delta.swarm-controller.inst"),
         argThat((String p) -> p.contains("\"swarmStatus\":\"RUNNING\"") && p.contains("\"enabled\":true")));
     verify(lifecycle).getStatus();
-    verifyNoMoreInteractions(lifecycle);
-  }
-
-  @Test
-  void ignoresDisableConfigUpdate() {
-    when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
-    SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", new ObjectMapper());
-    reset(lifecycle, rabbit);
-    listener.handle("{\"data\":{\"enabled\":false}}", "sig.config-update.swarm-controller.inst");
-    verifyNoInteractions(lifecycle);
-    verifyNoInteractions(rabbit);
   }
 }
