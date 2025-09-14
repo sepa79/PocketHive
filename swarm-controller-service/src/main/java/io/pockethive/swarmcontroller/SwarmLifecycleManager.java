@@ -13,10 +13,11 @@ import org.springframework.stereotype.Component;
 
 import io.pockethive.observability.StatusEnvelopeBuilder;
 
+import java.time.Instant;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.ArrayDeque;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -39,6 +40,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
   private final Map<String, Integer> expectedReady = new HashMap<>();
   private final Map<String, List<String>> instancesByRole = new HashMap<>();
   private final Map<String, Long> lastSeen = new HashMap<>();
+  private final Map<String, Boolean> enabled = new HashMap<>();
   private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
   private final List<ScenarioTask> scheduledTasks = new ArrayList<>();
   private List<String> startOrder = List.of();
@@ -233,6 +235,34 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
 
   void updateHeartbeat(String role, String instance, long timestamp) {
     lastSeen.put(role + "." + instance, timestamp);
+  }
+
+  @Override
+  public void updateEnabled(String role, String instance, boolean flag) {
+    enabled.put(role + "." + instance, flag);
+  }
+
+  @Override
+  public SwarmMetrics getMetrics() {
+    int desired = expectedReady.values().stream().mapToInt(Integer::intValue).sum();
+    long now = System.currentTimeMillis();
+    int healthy = 0;
+    int running = 0;
+    int enabledCount = 0;
+    long watermark = Long.MAX_VALUE;
+    for (Map.Entry<String, Long> e : lastSeen.entrySet()) {
+      long ts = e.getValue();
+      if (ts < watermark) watermark = ts;
+      boolean isHealthy = now - ts <= STATUS_TTL_MS;
+      if (isHealthy) healthy++;
+      boolean en = enabled.getOrDefault(e.getKey(), false);
+      if (en) {
+        enabledCount++;
+        if (isHealthy) running++;
+      }
+    }
+    if (watermark == Long.MAX_VALUE) watermark = now;
+    return new SwarmMetrics(desired, healthy, running, enabledCount, Instant.ofEpochMilli(watermark));
   }
 
   @Override

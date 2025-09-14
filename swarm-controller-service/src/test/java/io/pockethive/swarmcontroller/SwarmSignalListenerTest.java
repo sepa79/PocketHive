@@ -3,7 +3,9 @@ package io.pockethive.swarmcontroller;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.Topology;
 import io.pockethive.swarmcontroller.SwarmStatus;
+import io.pockethive.swarmcontroller.SwarmMetrics;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -22,6 +24,12 @@ class SwarmSignalListenerTest {
   RabbitTemplate rabbit;
 
   ObjectMapper mapper = new ObjectMapper();
+
+  @BeforeEach
+  void setup() {
+    when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
+    when(lifecycle.getMetrics()).thenReturn(new SwarmMetrics(0,0,0,0, java.time.Instant.now()));
+  }
 
   private String signal(String sig, String id, String corr) {
     return """
@@ -74,6 +82,7 @@ class SwarmSignalListenerTest {
     SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", mapper);
     reset(lifecycle, rabbit);
     when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
+    when(lifecycle.getMetrics()).thenReturn(new SwarmMetrics(0,0,0,0, java.time.Instant.now()));
     listener.handle(signal("swarm-start", "i1", "c1"), "sig.swarm-start." + Topology.SWARM_ID);
     verify(lifecycle).start("{}");
     verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
@@ -124,11 +133,12 @@ class SwarmSignalListenerTest {
     SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", mapper);
     reset(lifecycle, rabbit);
     when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
+    when(lifecycle.getMetrics()).thenReturn(new SwarmMetrics(0,0,0,0, java.time.Instant.now()));
     listener.handle("{}", "sig.status-request.swarm-controller.inst");
     verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
         startsWith("ev.status-full.swarm-controller.inst"),
         argThat((String p) -> p.contains("\"swarmStatus\":\"RUNNING\"") && p.contains("\"enabled\":true")));
-    verify(lifecycle).getStatus();
+    verify(lifecycle, atLeastOnce()).getStatus();
   }
 
   @Test
@@ -138,7 +148,7 @@ class SwarmSignalListenerTest {
     verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
         startsWith("ev.status-full.swarm-controller.inst"),
         argThat((String p) -> p.contains("\"swarmStatus\":\"RUNNING\"") && p.contains("\"enabled\":true")));
-    verify(lifecycle).getStatus();
+    verify(lifecycle, atLeastOnce()).getStatus();
   }
 
   @Test
@@ -147,11 +157,12 @@ class SwarmSignalListenerTest {
       SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", mapper);
       reset(lifecycle, rabbit);
       when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
+      when(lifecycle.getMetrics()).thenReturn(new SwarmMetrics(0,0,0,0, java.time.Instant.now()));
       listener.status();
       verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
           startsWith("ev.status-delta.swarm-controller.inst"),
           argThat((String p) -> p.contains("\"swarmStatus\":\"RUNNING\"") && p.contains("\"enabled\":true")));
-      verify(lifecycle).getStatus();
+      verify(lifecycle, atLeastOnce()).getStatus();
   }
 
   @Test
@@ -159,6 +170,7 @@ class SwarmSignalListenerTest {
     when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
     SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", mapper);
     reset(lifecycle, rabbit);
+    lenient().when(lifecycle.getMetrics()).thenReturn(new SwarmMetrics(0,0,0,0, java.time.Instant.now()));
     String body = "{\"data\":{\"enabled\":false}}";
     listener.handle(body, "ev.status-full.gen.g1");
     verify(lifecycle).updateHeartbeat("gen", "g1");
@@ -170,6 +182,7 @@ class SwarmSignalListenerTest {
     when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
     SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", mapper);
     reset(lifecycle, rabbit);
+    lenient().when(lifecycle.getMetrics()).thenReturn(new SwarmMetrics(0,0,0,0, java.time.Instant.now()));
     String body = "{\"data\":{\"enabled\":true}}";
     listener.handle(body, "ev.status-delta.gen.g1");
     verify(lifecycle).updateHeartbeat("gen", "g1");
@@ -181,8 +194,43 @@ class SwarmSignalListenerTest {
     when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
     SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", mapper);
     reset(lifecycle, rabbit);
+    lenient().when(lifecycle.getMetrics()).thenReturn(new SwarmMetrics(0,0,0,0, java.time.Instant.now()));
     listener.handle("{}", "sig.scenario-part." + Topology.SWARM_ID);
     listener.handle("{}", "sig.scenario-start." + Topology.SWARM_ID);
     verifyNoInteractions(lifecycle, rabbit);
+  }
+
+  @Test
+  void statusIncludesMetrics() {
+    SwarmMetrics metrics = new SwarmMetrics(2,2,2,2, java.time.Instant.parse("2025-09-12T12:34:55Z"));
+    when(lifecycle.getMetrics()).thenReturn(metrics);
+    SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", mapper);
+    reset(rabbit);
+    listener.status();
+    verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
+        startsWith("ev.status-delta.swarm-controller.inst"),
+        argThat((String p) -> p.contains("\"totals\":{\"desired\":2,\"healthy\":2,\"running\":2,\"enabled\":2}")
+            && p.contains("\"watermark\":\"2025-09-12T12:34:55Z\"")
+            && p.contains("\"maxStalenessSec\":15")));
+  }
+
+  @Test
+  void degradedAndUnknownStates() {
+    SwarmMetrics degraded = new SwarmMetrics(3,2,2,2, java.time.Instant.now());
+    when(lifecycle.getMetrics()).thenReturn(degraded);
+    SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", mapper);
+    reset(rabbit);
+    listener.status();
+    verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
+        startsWith("ev.status-delta.swarm-controller.inst"),
+        argThat((String p) -> p.contains("\"state\":\"Degraded\"")));
+
+    reset(rabbit);
+    SwarmMetrics unknown = new SwarmMetrics(3,0,0,0, java.time.Instant.now());
+    when(lifecycle.getMetrics()).thenReturn(unknown);
+    listener.status();
+    verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
+        startsWith("ev.status-delta.swarm-controller.inst"),
+        argThat((String p) -> p.contains("\"state\":\"Unknown\"")));
   }
 }

@@ -20,6 +20,16 @@ public interface SwarmLifecycle {
   void updateHeartbeat(String role, String instance);
 
   /**
+   * Track the enabled flag for a component.
+   */
+  void updateEnabled(String role, String instance, boolean enabled);
+
+  /**
+   * Aggregate component metrics.
+   */
+  SwarmMetrics getMetrics();
+
+  /**
    * Apply the first scenario step configuration while keeping components disabled.
    */
   void applyScenarioStep(String stepJson);

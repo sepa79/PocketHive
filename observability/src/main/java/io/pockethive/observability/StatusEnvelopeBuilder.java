@@ -25,6 +25,7 @@ public class StatusEnvelopeBuilder {
     private final Map<String, Object> queues = new LinkedHashMap<>();
     private final Map<String, Object> work = new LinkedHashMap<>();
     private final Map<String, Object> control = new LinkedHashMap<>();
+    private final Map<String, Object> totals = new LinkedHashMap<>();
 
     public StatusEnvelopeBuilder() {
         root.put("event", "status");
@@ -61,6 +62,33 @@ public class StatusEnvelopeBuilder {
      */
     public StatusEnvelopeBuilder enabled(boolean enabled) {
         root.put("enabled", enabled);
+        return this;
+    }
+
+    public StatusEnvelopeBuilder state(String state) {
+        if (state != null && !state.isBlank()) {
+            root.put("state", state);
+        }
+        return this;
+    }
+
+    public StatusEnvelopeBuilder watermark(Instant ts) {
+        if (ts != null) {
+            root.put("watermark", ts.toString());
+        }
+        return this;
+    }
+
+    public StatusEnvelopeBuilder maxStalenessSec(long sec) {
+        root.put("maxStalenessSec", sec);
+        return this;
+    }
+
+    public StatusEnvelopeBuilder totals(int desired, int healthy, int running, int enabled) {
+        totals.put("desired", desired);
+        totals.put("healthy", healthy);
+        totals.put("running", running);
+        totals.put("enabled", enabled);
         return this;
     }
 
@@ -161,6 +189,7 @@ public class StatusEnvelopeBuilder {
         if (!work.isEmpty()) queues.put("work", work);
         if (!control.isEmpty()) queues.put("control", control);
         if (!queues.isEmpty()) root.put("queues", queues);
+        if (!totals.isEmpty()) root.put("totals", totals);
         root.put("data", data.isEmpty() ? Collections.emptyMap() : data);
         try {
             return MAPPER.writeValueAsString(root);

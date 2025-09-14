@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.Topology;
 import io.pockethive.observability.StatusEnvelopeBuilder;
 import io.pockethive.swarmcontroller.SwarmStatus;
+import io.pockethive.swarmcontroller.SwarmMetrics;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
@@ -34,6 +35,7 @@ public class SwarmSignalListener {
   private final ObjectMapper mapper;
   private final Map<CacheKey, CachedOutcome> outcomes;
   private static final long STATUS_INTERVAL_MS = 5000L;
+  private static final long MAX_STALENESS_MS = 15_000L;
 
   public SwarmSignalListener(SwarmLifecycle lifecycle,
                              RabbitTemplate rabbit,
@@ -111,6 +113,7 @@ public class SwarmSignalListener {
           try {
             JsonNode node = mapper.readTree(body);
             boolean enabled = node.path("data").path("enabled").asBoolean(true);
+            lifecycle.updateEnabled(parts[0], parts[1], enabled);
             if (!enabled) {
               lifecycle.markReady(parts[0], parts[1]);
             }
@@ -268,6 +271,8 @@ public class SwarmSignalListener {
   }
 
   private void sendStatusFull() {
+    SwarmMetrics m = lifecycle.getMetrics();
+    String state = determineState(m);
     String controlQueue = Topology.CONTROL_QUEUE + "." + ROLE + "." + instanceId;
     String rk = "ev.status-full." + ROLE + "." + instanceId;
     String payload = new StatusEnvelopeBuilder()
@@ -276,6 +281,10 @@ public class SwarmSignalListener {
         .instance(instanceId)
         .swarmId(Topology.SWARM_ID)
         .enabled(true)
+        .state(state)
+        .watermark(m.watermark())
+        .maxStalenessSec(MAX_STALENESS_MS / 1000)
+        .totals(m.desired(), m.healthy(), m.running(), m.enabled())
         .data("swarmStatus", lifecycle.getStatus().name())
         .controlIn(controlQueue)
         .controlRoutes(
@@ -295,6 +304,8 @@ public class SwarmSignalListener {
   }
 
   private void sendStatusDelta() {
+    SwarmMetrics m = lifecycle.getMetrics();
+    String state = determineState(m);
     String controlQueue = Topology.CONTROL_QUEUE + "." + ROLE + "." + instanceId;
     String rk = "ev.status-delta." + ROLE + "." + instanceId;
     String payload = new StatusEnvelopeBuilder()
@@ -303,6 +314,10 @@ public class SwarmSignalListener {
         .instance(instanceId)
         .swarmId(Topology.SWARM_ID)
         .enabled(true)
+        .state(state)
+        .watermark(m.watermark())
+        .maxStalenessSec(MAX_STALENESS_MS / 1000)
+        .totals(m.desired(), m.healthy(), m.running(), m.enabled())
         .data("swarmStatus", lifecycle.getStatus().name())
         .controlIn(controlQueue)
         .controlRoutes(
@@ -319,5 +334,15 @@ public class SwarmSignalListener {
         .controlOut(rk)
         .toJson();
     rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, payload);
+  }
+
+  private String determineState(SwarmMetrics m) {
+    if (m.desired() > 0 && m.healthy() == 0) {
+      return "Unknown";
+    }
+    if (m.healthy() < m.desired()) {
+      return "Degraded";
+    }
+    return lifecycle.getStatus().name();
   }
 }
