@@ -16,6 +16,7 @@ import io.pockethive.observability.StatusEnvelopeBuilder;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.ArrayDeque;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -39,6 +40,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
   private final Map<String, List<String>> instancesByRole = new HashMap<>();
   private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
   private final List<ScenarioTask> scheduledTasks = new ArrayList<>();
+  private List<String> startOrder = List.of();
   private SwarmStatus status = SwarmStatus.STOPPED;
   private String template;
 
@@ -89,6 +91,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
 
       expectedReady.clear();
       instancesByRole.clear();
+      startOrder = computeStartOrder(plan);
 
       Set<String> suffixes = new HashSet<>();
       if (plan.bees() != null) {
@@ -154,7 +157,9 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
     MDC.put("service", "swarm-controller");
     MDC.put("instance", instanceId);
     log.info("Stopping swarm {}", Topology.SWARM_ID);
-    disableAll();
+    List<String> order = new ArrayList<>(startOrder);
+    java.util.Collections.reverse(order);
+    disableAll(order);
     status = SwarmStatus.STOPPED;
 
     String controlQueue = Topology.CONTROL_QUEUE + ".swarm-controller." + instanceId;
@@ -190,10 +195,15 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
     MDC.put("service", "swarm-controller");
     MDC.put("instance", instanceId);
     log.info("Removing swarm {}", Topology.SWARM_ID);
-    containers.values().forEach(ids -> ids.forEach(id -> {
-      log.info("stopping container {}", id);
-      docker.stopAndRemoveContainer(id);
-    }));
+    List<String> order = new ArrayList<>(startOrder);
+    java.util.Collections.reverse(order);
+    disableAll(order);
+    for (String role : order) {
+      for (String id : containers.getOrDefault(role, List.of())) {
+        log.info("stopping container {}", id);
+        docker.stopAndRemoveContainer(id);
+      }
+    }
     containers.clear();
 
     for (String suffix : declaredQueues) {
@@ -230,6 +240,73 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
       }
     }
     return !expectedReady.isEmpty();
+  }
+
+  private List<String> computeStartOrder(SwarmPlan plan) {
+    List<String> roles = new ArrayList<>();
+    if (plan.bees() == null) {
+      return roles;
+    }
+
+    Map<String, Set<String>> producersByQueue = new HashMap<>();
+    for (SwarmPlan.Bee bee : plan.bees()) {
+      if (!roles.contains(bee.role())) {
+        roles.add(bee.role());
+      }
+      if (bee.work() != null && bee.work().out() != null) {
+        producersByQueue.computeIfAbsent(bee.work().out(), q -> new HashSet<>()).add(bee.role());
+      }
+    }
+
+    Map<String, Set<String>> deps = new HashMap<>();
+    Map<String, Set<String>> adj = new HashMap<>();
+    for (String role : roles) {
+      deps.put(role, new HashSet<>());
+    }
+
+    for (SwarmPlan.Bee bee : plan.bees()) {
+      if (bee.work() != null && bee.work().in() != null) {
+        Set<String> producers = producersByQueue.getOrDefault(bee.work().in(), Set.of());
+        if (!producers.isEmpty()) {
+          deps.get(bee.role()).addAll(producers);
+          for (String p : producers) {
+            adj.computeIfAbsent(p, k -> new HashSet<>()).add(bee.role());
+          }
+        }
+      }
+    }
+
+    Map<String, Integer> indegree = new HashMap<>();
+    for (String role : roles) {
+      indegree.put(role, deps.get(role).size());
+    }
+
+    List<String> order = new ArrayList<>();
+    ArrayDeque<String> q = new ArrayDeque<>();
+    for (String role : roles) {
+      if (indegree.get(role) == 0) {
+        q.add(role);
+      }
+    }
+    while (!q.isEmpty()) {
+      String r = q.remove();
+      order.add(r);
+      for (String nxt : adj.getOrDefault(r, Set.of())) {
+        int d = indegree.merge(nxt, -1, Integer::sum);
+        if (d == 0) {
+          q.add(nxt);
+        }
+      }
+    }
+    if (order.size() < roles.size()) {
+      log.warn("dependency cycle detected among bees");
+      for (String r : roles) {
+        if (!order.contains(r)) {
+          order.add(r);
+        }
+      }
+    }
+    return order;
   }
 
   @Override
@@ -279,9 +356,9 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
     wrapper.set("data", data);
     String payload = wrapper.toString();
 
-    for (var entry : instancesByRole.entrySet()) {
-      for (String inst : entry.getValue()) {
-        String rk = "sig.config-update." + entry.getKey() + "." + inst;
+    for (String role : startOrder) {
+      for (String inst : instancesByRole.getOrDefault(role, List.of())) {
+        String rk = "sig.config-update." + role + "." + inst;
         log.info("enable config-update {} payload {}", rk, payload);
         rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, payload);
       }
@@ -295,16 +372,16 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
     }
   }
 
-  private synchronized void disableAll() {
+  private synchronized void disableAll(List<String> order) {
     var data = mapper.createObjectNode();
     data.put("enabled", false);
     var wrapper = mapper.createObjectNode();
     wrapper.set("data", data);
     String payload = wrapper.toString();
 
-    for (var entry : instancesByRole.entrySet()) {
-      for (String inst : entry.getValue()) {
-        String rk = "sig.config-update." + entry.getKey() + "." + inst;
+    for (String role : order) {
+      for (String inst : instancesByRole.getOrDefault(role, List.of())) {
+        String rk = "sig.config-update." + role + "." + inst;
         log.info("disable config-update {} payload {}", rk, payload);
         rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, payload);
       }
