@@ -58,6 +58,26 @@ class ContainerLifecycleManagerTest {
     }
 
     @Test
+    void stopSwarmIsIdempotent() {
+        SwarmRegistry registry = new SwarmRegistry();
+        Swarm swarm = new Swarm("sw1", "inst1", "cid");
+        registry.register(swarm);
+        registry.updateStatus(swarm.getId(), SwarmStatus.CREATING);
+        registry.updateStatus(swarm.getId(), SwarmStatus.READY);
+        registry.updateStatus(swarm.getId(), SwarmStatus.STARTING);
+        registry.updateStatus(swarm.getId(), SwarmStatus.RUNNING);
+        SwarmTemplate template = new SwarmTemplate();
+        ContainerLifecycleManager manager = new ContainerLifecycleManager(docker, registry, template, amqp);
+
+        assertDoesNotThrow(() -> {
+            manager.stopSwarm(swarm.getId());
+            manager.stopSwarm(swarm.getId());
+        });
+        assertEquals(SwarmStatus.STOPPED, swarm.getStatus());
+        verifyNoInteractions(docker, amqp);
+    }
+
+    @Test
     void removeSwarmTearsDownContainerAndQueues() {
         SwarmRegistry registry = new SwarmRegistry();
         Swarm swarm = new Swarm("sw1", "inst1", "cid");
