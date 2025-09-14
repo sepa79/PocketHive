@@ -94,19 +94,6 @@ public class SwarmSignalListener {
           }
         }
       }
-    } else if (routingKey.startsWith("sig.scenario-part.")) {
-      String swarmId = routingKey.substring("sig.scenario-part.".length());
-      if (Topology.SWARM_ID.equals(swarmId)) {
-        log.info("Scenario part for swarm {}", swarmId);
-        lifecycle.applyScenarioStep(body);
-      }
-    } else if (routingKey.startsWith("sig.scenario-start.")) {
-      String swarmId = routingKey.substring("sig.scenario-start.".length());
-      if (Topology.SWARM_ID.equals(swarmId)) {
-        log.info("Scenario start for swarm {}", swarmId);
-        lifecycle.enableAll();
-        sendStatusFull();
-      }
     } else if (routingKey.startsWith("sig.swarm-stop.")) {
       String swarmId = routingKey.substring("sig.swarm-stop.".length());
       if (Topology.SWARM_ID.equals(swarmId)) {
@@ -269,8 +256,6 @@ public class SwarmSignalListener {
             "sig.status-request." + ROLE + "." + instanceId,
             "sig.swarm-template.*",
             "sig.swarm-start.*",
-            "sig.scenario-part.*",
-            "sig.scenario-start.*",
             "sig.swarm-stop.*",
             "sig.swarm-remove.*")
         .controlOut(rk)
@@ -298,8 +283,6 @@ public class SwarmSignalListener {
             "sig.status-request." + ROLE + "." + instanceId,
             "sig.swarm-template.*",
             "sig.swarm-start.*",
-            "sig.scenario-part.*",
-            "sig.scenario-start.*",
             "sig.swarm-stop.*",
             "sig.swarm-remove.*")
         .controlOut(rk)

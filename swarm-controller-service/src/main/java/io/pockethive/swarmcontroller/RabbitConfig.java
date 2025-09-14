@@ -59,18 +59,6 @@ public class RabbitConfig {
   }
 
   @Bean
-  Binding bindScenarioPart(@Qualifier("controlQueue") Queue controlQueue,
-                           @Qualifier("controlExchange") TopicExchange controlExchange) {
-    return BindingBuilder.bind(controlQueue).to(controlExchange).with("sig.scenario-part.*");
-  }
-
-  @Bean
-  Binding bindScenarioStart(@Qualifier("controlQueue") Queue controlQueue,
-                            @Qualifier("controlExchange") TopicExchange controlExchange) {
-    return BindingBuilder.bind(controlQueue).to(controlExchange).with("sig.scenario-start.*");
-  }
-
-  @Bean
   Binding bindConfigGlobal(@Qualifier("controlQueue") Queue controlQueue,
                            @Qualifier("controlExchange") TopicExchange controlExchange) {
     return BindingBuilder.bind(controlQueue).to(controlExchange).with("sig.config-update");

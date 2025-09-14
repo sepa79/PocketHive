@@ -177,6 +177,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
             "sig.status-request",
             "sig.status-request.swarm-controller",
             "sig.status-request.swarm-controller." + instanceId,
+            "sig.swarm-template.*",
             "sig.swarm-start.*",
             "sig.swarm-stop.*",
             "sig.swarm-remove.*")
