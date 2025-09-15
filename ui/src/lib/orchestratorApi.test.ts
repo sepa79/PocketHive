@@ -21,14 +21,14 @@ describe('orchestratorApi', () => {
 
   it('posts swarm start', async () => {
     await startSwarm('sw1')
-    const call = (apiFetch as unknown as Mock).mock.calls.pop()
+    const call = (apiFetch as unknown as Mock).mock.calls.pop()!
     expect(call[0]).toBe('/orchestrator/swarms/sw1/start')
     expect(call[1]?.method).toBe('POST')
   })
 
   it('posts swarm stop', async () => {
     await stopSwarm('sw1')
-    const call = (apiFetch as unknown as Mock).mock.calls.pop()
+    const call = (apiFetch as unknown as Mock).mock.calls.pop()!
     expect(call[0]).toBe('/orchestrator/swarms/sw1/stop')
     expect(call[1]?.method).toBe('POST')
   })
@@ -42,7 +42,7 @@ describe('orchestratorApi', () => {
       config: {},
     }
     await sendConfigUpdate(comp, { enabled: true })
-    const call = (apiFetch as unknown as Mock).mock.calls.pop()
+    const call = (apiFetch as unknown as Mock).mock.calls.pop()!
     expect(call[0]).toBe('/orchestrator/components/generator/c1/config')
     expect(call[1]?.method).toBe('POST')
     expect(call[1]?.body).toBe(JSON.stringify({ enabled: true }))
