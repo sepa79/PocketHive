@@ -12,6 +12,7 @@ import org.slf4j.MDC;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.amqp.support.AmqpHeaders;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.scheduling.annotation.EnableScheduling;
@@ -37,6 +38,7 @@ public class SwarmSignalListener {
   private static final long STATUS_INTERVAL_MS = 5000L;
   private static final long MAX_STALENESS_MS = 15_000L;
 
+  @Autowired
   public SwarmSignalListener(SwarmLifecycle lifecycle,
                              RabbitTemplate rabbit,
                              @Qualifier("instanceId") String instanceId,

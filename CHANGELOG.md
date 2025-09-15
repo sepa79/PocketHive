@@ -3,13 +3,16 @@
 All notable changes to this project will be documented in this file.
 
 ## [0.9.5] - 2025-09-15
-Timestamp: 2025-09-15T09:19:48Z
-
+Timestamp: 2025-09-15T10:01:39Z
+=======
 - SwarmController: emit control signal confirmations, dedupe signals, sort lifecycle by dependency, request status on staleness, and record metrics.
 - Orchestrator: publish swarm created/ready events, listen for control events, track controller health, and guard duplicate stops.
 - UI: render swarm topology with React Flow, gate swarm start on readiness, and log API fetches.
 - Docs: simplify component READMEs and document swarm lifecycle events and startup.
 - Tests: verify status bindings, confirmation flow, and ready/error binding patterns.
+- UI: migrate swarm actions to REST
+- Orchestrator: retain REST argument names by compiling with `-parameters`
+=======
 
 ## [0.9.4] - 2025-09-11
 Timestamp: 2025-09-11T23:42:19Z

@@ -4,9 +4,9 @@
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react'
 import SwarmCreateModal from './SwarmCreateModal'
 import { vi, test, expect, afterEach } from 'vitest'
-import { createSwarm } from '../../lib/stompClient'
+import { createSwarm } from '../../lib/orchestratorApi'
 
-vi.mock('../../lib/stompClient', () => ({
+vi.mock('../../lib/orchestratorApi', () => ({
   createSwarm: vi.fn(),
 }))
 

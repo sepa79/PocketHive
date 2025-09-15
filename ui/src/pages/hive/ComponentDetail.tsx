@@ -1,9 +1,8 @@
 import { useEffect, useState, type JSX } from 'react'
 import type { Component } from '../../types/hive'
-import { sendConfigUpdate, requestStatusFull } from '../../lib/stompClient'
+import { sendConfigUpdate } from '../../lib/orchestratorApi'
 import QueuesPanel from './QueuesPanel'
 import { heartbeatHealth, colorForHealth } from '../../lib/health'
-import { RefreshCcw } from 'lucide-react'
 
 interface Props {
   component: Component
@@ -66,7 +65,6 @@ export default function ComponentDetail({ component, onClose }: Props) {
     }
     try {
       await sendConfigUpdate(component, cfg)
-      await requestStatusFull(component)
       setToast('Config update sent')
     } catch {
       setToast('Config update failed')
@@ -77,7 +75,6 @@ export default function ComponentDetail({ component, onClose }: Props) {
   const single = async () => {
     try {
       await sendConfigUpdate(component, { singleRequest: true })
-      await requestStatusFull(component)
       setToast('Config update sent')
     } catch {
       setToast('Config update failed')
@@ -95,13 +92,7 @@ export default function ComponentDetail({ component, onClose }: Props) {
       <h2 className="text-xl mb-2 flex items-center gap-2">
         {component.name}
         <span className={`h-3 w-3 rounded-full ${colorForHealth(health)}`} />
-        <button
-          className="p-1 rounded hover:bg-white/10"
-          onClick={() => requestStatusFull(component)}
-          title="Refresh status"
-        >
-          <RefreshCcw className="h-4 w-4" />
-        </button>
+        {/* status refresh no longer supported */}
       </h2>
       <div className="space-y-1 text-sm mb-4">
         <div>Version: {component.version ?? '—'}</div>

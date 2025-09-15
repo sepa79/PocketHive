@@ -1,6 +1,6 @@
 import type { Component, HealthStatus } from '../../types/hive'
 import { componentHealth } from '../../lib/health'
-import { sendConfigUpdate, requestStatusFull } from '../../lib/stompClient'
+import { sendConfigUpdate } from '../../lib/orchestratorApi'
 import type { MouseEvent } from 'react'
 import { Play, Square } from 'lucide-react'
 
@@ -16,7 +16,6 @@ export default function ComponentList({ components, selectedId, onSelect }: Prop
     const enabled = comp.config?.enabled !== false
     try {
       await sendConfigUpdate(comp, { enabled: !enabled })
-      await requestStatusFull(comp)
     } catch (error) {
       console.error('Failed to update component config:', error)
     }
@@ -31,9 +30,7 @@ export default function ComponentList({ components, selectedId, onSelect }: Prop
           }`}
           onClick={() => {
             onSelect(c)
-            requestStatusFull(c).catch((error) => {
-              console.error('Failed to request status:', error)
-            })
+            // status refresh no longer supported
           }}
         >
           <div className="flex items-center justify-between gap-2">
