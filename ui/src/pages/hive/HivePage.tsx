@@ -3,12 +3,8 @@ import ComponentList from './ComponentList'
 import ComponentDetail from './ComponentDetail'
 import TopologyView from './TopologyView'
 import SwarmCreateModal from './SwarmCreateModal'
-import {
-  subscribeComponents,
-  requestStatusFull,
-  startSwarm,
-  stopSwarm,
-} from '../../lib/stompClient'
+import { subscribeComponents } from '../../lib/stompClient'
+import { startSwarm, stopSwarm } from '../../lib/orchestratorApi'
 import type { Component } from '../../types/hive'
 
 export default function HivePage() {
@@ -65,8 +61,6 @@ export default function HivePage() {
   const handleStart = async (id: string) => {
     try {
       await startSwarm(id)
-      const comps = components.filter((c) => c.swarmId === id)
-      await Promise.all(comps.map((c) => requestStatusFull(c)))
       setSwarmMsg((m) => ({ ...m, [id]: 'Swarm started' }))
     } catch {
       setSwarmMsg((m) => ({ ...m, [id]: 'Failed to start swarm' }))
@@ -76,8 +70,6 @@ export default function HivePage() {
   const handleStop = async (id: string) => {
     try {
       await stopSwarm(id)
-      const comps = components.filter((c) => c.swarmId === id)
-      await Promise.all(comps.map((c) => requestStatusFull(c)))
       setSwarmMsg((m) => ({ ...m, [id]: 'Swarm stopped' }))
     } catch {
       setSwarmMsg((m) => ({ ...m, [id]: 'Failed to stop swarm' }))

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { createSwarm } from '../../lib/stompClient'
+import { createSwarm } from '../../lib/orchestratorApi'
 import { apiFetch } from '../../lib/api'
 
 interface Props {

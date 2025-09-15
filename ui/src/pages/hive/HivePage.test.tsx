@@ -7,13 +7,16 @@ import '@testing-library/jest-dom/vitest'
 import { vi, test, expect, beforeEach, type Mock } from 'vitest'
 import HivePage from './HivePage'
 import type { Component } from '../../types/hive'
-import { subscribeComponents, startSwarm, stopSwarm, requestStatusFull } from '../../lib/stompClient'
+import { subscribeComponents } from '../../lib/stompClient'
+import { startSwarm, stopSwarm } from '../../lib/orchestratorApi'
 
 vi.mock('../../lib/stompClient', () => ({
   subscribeComponents: vi.fn(),
+}))
+
+vi.mock('../../lib/orchestratorApi', () => ({
   startSwarm: vi.fn(),
   stopSwarm: vi.fn(),
-  requestStatusFull: vi.fn(),
 }))
 
 vi.mock('./TopologyView', () => ({
@@ -49,7 +52,6 @@ beforeEach(() => {
   )
   ;(startSwarm as unknown as Mock).mockReset()
   ;(stopSwarm as unknown as Mock).mockReset()
-  ;(requestStatusFull as unknown as Mock).mockResolvedValue(undefined)
 })
 
 test('renders queen status and start/stop controls', async () => {
