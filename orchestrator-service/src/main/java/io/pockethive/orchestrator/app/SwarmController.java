@@ -75,7 +75,8 @@ public class SwarmController {
         return idempotency.findCorrelation(swarmId, signal, idempotencyKey)
             .map(corr -> {
                 ControlResponse resp = new ControlResponse(corr, idempotencyKey,
-                    new Watch("ev.ready." + signal + "." + swarmId, "ev.error." + signal + "." + swarmId), timeoutMs);
+                    new ControlResponse.Watch("ev.ready." + signal + "." + swarmId,
+                        "ev.error." + signal + "." + swarmId), timeoutMs);
                 return ResponseEntity.accepted().body(resp);
             })
             .orElseGet(() -> {
@@ -83,14 +84,13 @@ public class SwarmController {
                 action.accept(corr);
                 idempotency.record(swarmId, signal, idempotencyKey, corr);
                 ControlResponse resp = new ControlResponse(corr, idempotencyKey,
-                    new Watch("ev.ready." + signal + "." + swarmId, "ev.error." + signal + "." + swarmId), timeoutMs);
+                    new ControlResponse.Watch("ev.ready." + signal + "." + swarmId,
+                        "ev.error." + signal + "." + swarmId), timeoutMs);
                 return ResponseEntity.accepted().body(resp);
             });
     }
 
     public record ControlRequest(String idempotencyKey, String notes) {}
-    public record Watch(String successTopic, String errorTopic) {}
-    public record ControlResponse(String correlationId, String idempotencyKey, Watch watch, long timeoutMs) {}
 
     @GetMapping("/{swarmId}")
     public ResponseEntity<SwarmView> view(@PathVariable String swarmId) {

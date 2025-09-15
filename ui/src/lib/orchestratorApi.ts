@@ -29,9 +29,16 @@ export async function stopSwarm(id: string) {
 }
 
 export async function sendConfigUpdate(component: Component, config: unknown) {
+  const payload: Record<string, unknown> = {
+    idempotencyKey: crypto.randomUUID(),
+    patch: config,
+  }
+  if (component.swarmId) {
+    payload.swarmId = component.swarmId
+  }
   await apiFetch(`/orchestrator/components/${component.name}/${component.id}/config`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(config),
+    body: JSON.stringify(payload),
   })
 }
