@@ -37,6 +37,7 @@ describe('orchestratorApi', () => {
     const comp: Component = {
       id: 'c1',
       name: 'generator',
+      swarmId: 'sw1',
       lastHeartbeat: 0,
       queues: [],
       config: {},
@@ -45,6 +46,9 @@ describe('orchestratorApi', () => {
     const call = (apiFetch as unknown as Mock).mock.calls.pop()!
     expect(call[0]).toBe('/orchestrator/components/generator/c1/config')
     expect(call[1]?.method).toBe('POST')
-    expect(call[1]?.body).toBe(JSON.stringify({ enabled: true }))
+    const body = JSON.parse(call[1]?.body as string)
+    expect(body.idempotencyKey).toBeDefined()
+    expect(body.patch).toEqual({ enabled: true })
+    expect(body.swarmId).toBe('sw1')
   })
 })

@@ -30,7 +30,7 @@ class SwarmControllerTest {
         SwarmController ctrl = new SwarmController(rabbit, lifecycle, new SwarmCreateTracker(), new InMemoryIdempotencyStore(), new SwarmRegistry());
         SwarmController.ControlRequest req = new SwarmController.ControlRequest("idem", null);
 
-        ResponseEntity<SwarmController.ControlResponse> resp = ctrl.start("sw1", req);
+        ResponseEntity<ControlResponse> resp = ctrl.start("sw1", req);
 
         ArgumentCaptor<ControlSignal> captor = ArgumentCaptor.forClass(ControlSignal.class);
         verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("sig.swarm-start.sw1"), captor.capture());
@@ -58,8 +58,8 @@ class SwarmControllerTest {
         SwarmController ctrl = new SwarmController(rabbit, lifecycle, new SwarmCreateTracker(), new InMemoryIdempotencyStore(), new SwarmRegistry());
         SwarmController.ControlRequest req = new SwarmController.ControlRequest("idem", null);
 
-        ResponseEntity<SwarmController.ControlResponse> r1 = ctrl.start("sw1", req);
-        ResponseEntity<SwarmController.ControlResponse> r2 = ctrl.start("sw1", req);
+        ResponseEntity<ControlResponse> r1 = ctrl.start("sw1", req);
+        ResponseEntity<ControlResponse> r2 = ctrl.start("sw1", req);
 
         ArgumentCaptor<ControlSignal> captor = ArgumentCaptor.forClass(ControlSignal.class);
         verify(rabbit, times(1)).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("sig.swarm-start.sw1"), captor.capture());
