@@ -11,6 +11,7 @@ Timestamp: 2025-09-15T10:01:39Z
 - Docs: simplify component READMEs and document swarm lifecycle events and startup.
 - Tests: verify status bindings, confirmation flow, and ready/error binding patterns.
 - UI: migrate swarm actions to REST
+- Orchestrator: retain REST argument names by compiling with `-parameters`
 
 ## [0.9.4] - 2025-09-11
 Timestamp: 2025-09-11T23:42:19Z
