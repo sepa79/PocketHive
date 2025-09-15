@@ -11,11 +11,11 @@ const { apiFetch } = await import('./api')
 describe('orchestratorApi', () => {
   it('posts swarm creation', async () => {
     await createSwarm('sw1', 'tpl')
-    expect((apiFetch as unknown as Mock).mock.calls[0][0]).toBe('/orchestrator/swarms')
+    expect((apiFetch as unknown as Mock).mock.calls[0][0]).toBe('/orchestrator/swarms/sw1/create')
     const init = (apiFetch as unknown as Mock).mock.calls[0][1]
     expect(init?.method).toBe('POST')
     const body = JSON.parse(init?.body)
-    expect(body).toMatchObject({ id: 'sw1', templateId: 'tpl' })
+    expect(body).toMatchObject({ notes: 'tpl' })
     expect(body.idempotencyKey).toBeDefined()
   })
 
