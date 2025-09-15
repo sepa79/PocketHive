@@ -29,4 +29,16 @@ class BeeNameGeneratorTest {
     String name = BeeNameGenerator.generate("orchestrator", "sw1");
     assertTrue(name.startsWith("sw1-queen-bee-"));
   }
+
+  @Test
+  void stripsUnsupportedCharactersFromSwarmId() {
+    String name = BeeNameGenerator.generate("swarm-controller", "client/alpha:beta");
+    assertTrue(name.startsWith("clientalphabeta-marshal-bee-"));
+  }
+
+  @Test
+  void fallsBackToDefaultWhenSanitizedSwarmIdIsEmpty() {
+    String name = BeeNameGenerator.generate("generator", "!!!");
+    assertTrue(name.startsWith("default-seeder-bee-"));
+  }
 }

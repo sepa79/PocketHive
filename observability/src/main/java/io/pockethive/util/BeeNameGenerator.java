@@ -62,18 +62,24 @@ public final class BeeNameGenerator {
     String first = randomFrom(FIRST_PARTS);
     String second = randomFrom(SECOND_PARTS);
     String id = UUID.randomUUID().toString().substring(0, 4);
-    String swarm = swarmId == null || swarmId.isBlank() ? "default" : sanitize(swarmId);
+    String swarm =
+        sanitize(swarmId == null || swarmId.isBlank() ? "default" : swarmId, "default");
     return String.format(
         "%s-%s-bee-%s-%s-%s",
-        swarm, sanitize(mappedRole), sanitize(first), sanitize(second), id);
+        swarm,
+        sanitize(mappedRole, "bee"),
+        sanitize(first, "bee"),
+        sanitize(second, "bee"),
+        id);
   }
 
   private static String randomFrom(List<String> options) {
     return options.get(ThreadLocalRandom.current().nextInt(options.size()));
   }
 
-  private static String sanitize(String value) {
-    return value.replaceAll("[ .#*]", "");
+  private static String sanitize(String value, String fallback) {
+    String sanitized = value.replaceAll("[^a-zA-Z0-9_.-]", "");
+    return sanitized.isBlank() ? fallback : sanitized;
   }
 }
 
