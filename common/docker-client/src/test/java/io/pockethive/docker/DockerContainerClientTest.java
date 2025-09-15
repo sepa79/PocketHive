@@ -25,6 +25,7 @@ class DockerContainerClientTest {
         when(docker.createContainerCmd("img")).thenReturn(create);
         when(create.withHostConfig(any())).thenReturn(create);
         when(create.withEnv(any(String[].class))).thenReturn(create);
+        when(create.withName(anyString())).thenReturn(create);
         when(create.exec()).thenReturn(resp);
         when(docker.startContainerCmd("cid")).thenReturn(start);
 
@@ -34,10 +35,11 @@ class DockerContainerClientTest {
                 return "net1";
             }
         };
-        client.createAndStartContainer("img", Map.of());
+        client.createAndStartContainer("img", Map.of(), "bee-one");
 
         ArgumentCaptor<HostConfig> hostCaptor = ArgumentCaptor.forClass(HostConfig.class);
         verify(create).withHostConfig(hostCaptor.capture());
         assertThat(hostCaptor.getValue().getNetworkMode()).isEqualTo("net1");
+        verify(create).withName("bee-one");
     }
 }

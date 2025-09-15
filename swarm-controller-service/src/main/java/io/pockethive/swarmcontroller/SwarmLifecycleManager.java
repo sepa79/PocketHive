@@ -12,6 +12,7 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 import io.pockethive.observability.StatusEnvelopeBuilder;
+import io.pockethive.util.BeeNameGenerator;
 
 import java.time.Instant;
 import java.util.ArrayDeque;
@@ -129,10 +130,18 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
                 env.put(e.getKey(), value);
               }
             }
-            log.info("creating container for role {} using image {}", bee.role(), bee.image());
-            log.info("container env for {}: {}", bee.role(), env);
-            String containerId = docker.createContainer(bee.image(), env);
-            log.info("starting container {} for role {}", containerId, bee.role());
+            String beeName = BeeNameGenerator.generate(bee.role(), Topology.SWARM_ID);
+            String javaOpts = env.get("JAVA_TOOL_OPTIONS");
+            if (javaOpts == null || javaOpts.isBlank()) {
+              javaOpts = "";
+            } else if (!javaOpts.endsWith(" ")) {
+              javaOpts = javaOpts + " ";
+            }
+            env.put("JAVA_TOOL_OPTIONS", javaOpts + "-Dbee.name=" + beeName);
+            log.info("creating container {} for role {} using image {}", beeName, bee.role(), bee.image());
+            log.info("container env for {}: {}", beeName, env);
+            String containerId = docker.createContainer(bee.image(), env, beeName);
+            log.info("starting container {} ({}) for role {}", containerId, beeName, bee.role());
             docker.startContainer(containerId);
             containers.computeIfAbsent(bee.role(), r -> new ArrayList<>()).add(containerId);
           }

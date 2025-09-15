@@ -43,8 +43,8 @@ public class ContainerLifecycleManager {
         }
         log.info("launching controller for swarm {} as instance {} using image {}", swarmId, instanceId, image);
         log.info("docker env: {}", env);
-        String containerId = docker.createAndStartContainer(image, env);
-        log.info("controller container {} started for swarm {}", containerId, swarmId);
+        String containerId = docker.createAndStartContainer(image, env, instanceId);
+        log.info("controller container {} ({}) started for swarm {}", containerId, instanceId, swarmId);
         Swarm swarm = new Swarm(swarmId, instanceId, containerId);
         registry.register(swarm);
         registry.updateStatus(swarmId, SwarmStatus.CREATING);

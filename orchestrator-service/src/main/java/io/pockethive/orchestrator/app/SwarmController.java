@@ -15,6 +15,8 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.UUID;
 
+import io.pockethive.util.BeeNameGenerator;
+
 /**
  * REST endpoints for swarm lifecycle operations.
  */
@@ -42,7 +44,7 @@ public class SwarmController {
     @PostMapping("/{swarmId}/create")
     public ResponseEntity<ControlResponse> create(@PathVariable String swarmId, @RequestBody ControlRequest req) {
         return idempotentSend("swarm-create", swarmId, req.idempotencyKey(), 120_000L, corr -> {
-            String instanceId = UUID.randomUUID().toString();
+            String instanceId = BeeNameGenerator.generate("swarm-controller", swarmId);
             Swarm swarm = lifecycle.startSwarm(swarmId, instanceId);
             creates.register(swarm.getInstanceId(), new Pending(swarmId, corr, req.idempotencyKey()));
         });
