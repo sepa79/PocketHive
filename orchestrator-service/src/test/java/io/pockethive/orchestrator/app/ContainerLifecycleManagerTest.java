@@ -7,6 +7,7 @@ import io.pockethive.orchestrator.domain.SwarmTemplate;
 import io.pockethive.docker.DockerContainerClient;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.amqp.core.AmqpAdmin;
@@ -26,7 +27,7 @@ class ContainerLifecycleManagerTest {
         SwarmRegistry registry = new SwarmRegistry();
         SwarmTemplate template = new SwarmTemplate();
         template.setImage("img");
-        when(docker.createAndStartContainer(eq("img"), anyMap())).thenReturn("cid");
+        when(docker.createAndStartContainer(eq("img"), anyMap(), anyString())).thenReturn("cid");
         ContainerLifecycleManager manager = new ContainerLifecycleManager(docker, registry, template, amqp);
 
         Swarm swarm = manager.startSwarm("sw1", "inst1");
@@ -36,7 +37,11 @@ class ContainerLifecycleManagerTest {
         assertEquals("cid", swarm.getContainerId());
         assertEquals(SwarmStatus.RUNNING, swarm.getStatus());
         assertTrue(registry.find("sw1").isPresent());
-        verify(docker).createAndStartContainer(eq("img"), anyMap());
+        ArgumentCaptor<java.util.Map<String, String>> envCaptor = ArgumentCaptor.forClass(java.util.Map.class);
+        ArgumentCaptor<String> nameCaptor = ArgumentCaptor.forClass(String.class);
+        verify(docker).createAndStartContainer(eq("img"), envCaptor.capture(), nameCaptor.capture());
+        assertEquals("inst1", nameCaptor.getValue());
+        assertEquals("-Dbee.name=inst1", envCaptor.getValue().get("JAVA_TOOL_OPTIONS"));
     }
 
     @Test

@@ -17,7 +17,10 @@ public class Application {
   private static final Logger log = LoggerFactory.getLogger(Application.class);
 
   public static void main(String[] args) {
-    String beeName = BeeNameGenerator.generate("swarm-controller", Topology.SWARM_ID);
+    String existing = System.getProperty("bee.name");
+    String beeName = (existing == null || existing.isBlank())
+        ? BeeNameGenerator.generate("swarm-controller", Topology.SWARM_ID)
+        : existing;
     System.setProperty("bee.name", beeName);
     log.info("Bee name: {}", beeName);
     SpringApplication.run(Application.class, args);

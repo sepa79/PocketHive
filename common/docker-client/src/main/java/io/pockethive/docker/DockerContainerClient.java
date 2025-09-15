@@ -1,6 +1,7 @@
 package io.pockethive.docker;
 
 import com.github.dockerjava.api.DockerClient;
+import com.github.dockerjava.api.command.CreateContainerCmd;
 import com.github.dockerjava.api.command.CreateContainerResponse;
 import com.github.dockerjava.api.command.InspectContainerResponse;
 import com.github.dockerjava.api.command.StartContainerCmd;
@@ -16,31 +17,53 @@ public class DockerContainerClient {
     }
 
     public String createAndStartContainer(String image, Map<String, String> env) {
+        return createAndStartContainer(image, env, null);
+    }
+
+    public String createAndStartContainer(String image, Map<String, String> env, String containerName) {
         String[] envArray = toEnvArray(env);
-        CreateContainerResponse response = dockerClient.createContainerCmd(image)
+        CreateContainerCmd createCmd = dockerClient.createContainerCmd(image)
             .withHostConfig(HostConfig.newHostConfig().withNetworkMode(resolveControlNetwork()))
-            .withEnv(envArray)
-            .exec();
+            .withEnv(envArray);
+        if (containerName != null && !containerName.isBlank()) {
+            createCmd = createCmd.withName(containerName);
+        }
+        CreateContainerResponse response = createCmd.exec();
         StartContainerCmd start = dockerClient.startContainerCmd(response.getId());
         start.exec();
         return response.getId();
     }
 
     public String createAndStartContainer(String image) {
-        return createAndStartContainer(image, Map.of());
+        return createAndStartContainer(image, Map.of(), null);
+    }
+
+    public String createAndStartContainer(String image, String containerName) {
+        return createAndStartContainer(image, Map.of(), containerName);
     }
 
     public String createContainer(String image, Map<String, String> env) {
+        return createContainer(image, env, null);
+    }
+
+    public String createContainer(String image, Map<String, String> env, String containerName) {
         String[] envArray = toEnvArray(env);
-        CreateContainerResponse response = dockerClient.createContainerCmd(image)
+        CreateContainerCmd createCmd = dockerClient.createContainerCmd(image)
             .withHostConfig(HostConfig.newHostConfig().withNetworkMode(resolveControlNetwork()))
-            .withEnv(envArray)
-            .exec();
+            .withEnv(envArray);
+        if (containerName != null && !containerName.isBlank()) {
+            createCmd = createCmd.withName(containerName);
+        }
+        CreateContainerResponse response = createCmd.exec();
         return response.getId();
     }
 
     public String createContainer(String image) {
-        return createContainer(image, Map.of());
+        return createContainer(image, Map.of(), null);
+    }
+
+    public String createContainer(String image, String containerName) {
+        return createContainer(image, Map.of(), containerName);
     }
 
     public void startContainer(String containerId) {
