@@ -1,11 +1,14 @@
 package io.pockethive.swarmcontroller;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.pockethive.Topology;
+import io.pockethive.control.ControlSignal;
 import io.pockethive.observability.StatusEnvelopeBuilder;
-import io.pockethive.swarmcontroller.SwarmStatus;
 import io.pockethive.swarmcontroller.SwarmMetrics;
+import io.pockethive.swarmcontroller.SwarmStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
@@ -22,7 +25,6 @@ import org.springframework.stereotype.Component;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.HashMap;
 import java.util.regex.Pattern;
 
 @Component
@@ -192,10 +194,8 @@ public class SwarmSignalListener {
   }
 
   private CacheKey cacheKey(ControlSignal cs) {
-    String swarmId = cs.scope().getOrDefault("swarmId", Topology.SWARM_ID);
-    String role = cs.scope().get("role");
-    String instance = cs.scope().get("instance");
-    return new CacheKey(swarmId, cs.signal(), role, instance, cs.idempotencyKey());
+    String swarmId = cs.swarmId() != null ? cs.swarmId() : Topology.SWARM_ID;
+    return new CacheKey(swarmId, cs.signal(), cs.role(), cs.instance(), cs.idempotencyKey());
   }
 
   @FunctionalInterface
@@ -213,36 +213,53 @@ public class SwarmSignalListener {
   }
 
   private ControlSignal parseControlSignal(JsonNode node) {
-    Map<String, String> scope = new HashMap<>();
-    JsonNode s = node.path("scope");
-    if (s.isObject()) {
-      s.fields().forEachRemaining(e -> scope.put(e.getKey(), e.getValue().asText()));
+    String signal = node.path("signal").asText(null);
+    String correlationId = node.path("correlationId").asText(null);
+    String idempotencyKey = node.path("idempotencyKey").asText(null);
+    String swarmId = node.path("swarmId").asText(null);
+    String role = node.path("role").asText(null);
+    String instance = node.path("instance").asText(null);
+
+    JsonNode scope = node.path("scope");
+    if (scope.isObject()) {
+      if (swarmId == null && scope.hasNonNull("swarmId")) {
+        swarmId = scope.path("swarmId").asText();
+      }
+      if (role == null && scope.hasNonNull("role")) {
+        role = scope.path("role").asText();
+      }
+      if (instance == null && scope.hasNonNull("instance")) {
+        instance = scope.path("instance").asText();
+      }
     }
-    if (!scope.containsKey("swarmId") && node.hasNonNull("swarmId")) {
-      scope.put("swarmId", node.path("swarmId").asText());
+
+    Map<String, Object> args = null;
+    JsonNode argsNode = node.get("args");
+    if (argsNode != null && argsNode.isObject()) {
+      args = mapper.convertValue(argsNode, new TypeReference<Map<String, Object>>() {});
     }
-    return new ControlSignal(
-        node.path("correlationId").asText(null),
-        node.path("idempotencyKey").asText(null),
-        node.path("signal").asText(null),
-        scope);
+
+    return new ControlSignal(signal, correlationId, idempotencyKey, swarmId, role, instance, args);
   }
 
   private CachedOutcome emitSuccess(ControlSignal cs, String swarmIdFallback) {
     String rk;
     if (cs.signal().startsWith("swarm-")) {
-      String swarmId = cs.scope().get("swarmId");
+      String swarmId = cs.swarmId();
       if (swarmId == null) swarmId = swarmIdFallback;
       rk = "ev.ready." + cs.signal() + "." + swarmId;
-    } else if ("config-update".equals(cs.signal())) {
-      rk = "ev.ready.config-update." + cs.scope().get("role") + "." + cs.scope().get("instance");
+    } else if ("config-update".equals(cs.signal()) && cs.role() != null && cs.instance() != null) {
+      rk = "ev.ready.config-update." + cs.role() + "." + cs.instance();
     } else {
       return null;
     }
     var payload = mapper.createObjectNode();
     payload.put("signal", cs.signal());
     payload.put("result", "success");
-    payload.set("scope", mapper.valueToTree(cs.scope()));
+    payload.set("scope", scopeNode(cs));
+    if (cs.args() != null) {
+      payload.set("args", mapper.valueToTree(cs.args()));
+    }
     payload.put("idempotencyKey", cs.idempotencyKey());
     payload.put("correlationId", cs.correlationId());
     String json = payload.toString();
@@ -252,17 +269,20 @@ public class SwarmSignalListener {
 
   private CachedOutcome emitError(ControlSignal cs, Exception e, String swarmIdFallback) {
     String rk = "ev.error." + cs.signal();
-    if (cs.scope().containsKey("swarmId")) {
-      rk += "." + cs.scope().get("swarmId");
+    if (cs.swarmId() != null) {
+      rk += "." + cs.swarmId();
     } else if (swarmIdFallback != null) {
       rk += "." + swarmIdFallback;
-    } else if (cs.scope().containsKey("role") && cs.scope().containsKey("instance")) {
-      rk += "." + cs.scope().get("role") + "." + cs.scope().get("instance");
+    } else if (cs.role() != null && cs.instance() != null) {
+      rk += "." + cs.role() + "." + cs.instance();
     }
     var payload = mapper.createObjectNode();
     payload.put("signal", cs.signal());
     payload.put("result", "error");
-    payload.set("scope", mapper.valueToTree(cs.scope()));
+    payload.set("scope", scopeNode(cs));
+    if (cs.args() != null) {
+      payload.set("args", mapper.valueToTree(cs.args()));
+    }
     payload.put("idempotencyKey", cs.idempotencyKey());
     payload.put("correlationId", cs.correlationId());
     payload.put("code", e.getClass().getSimpleName());
@@ -270,6 +290,20 @@ public class SwarmSignalListener {
     String json = payload.toString();
     rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, json);
     return new CachedOutcome(rk, json);
+  }
+
+  private ObjectNode scopeNode(ControlSignal cs) {
+    ObjectNode scope = mapper.createObjectNode();
+    if (cs.swarmId() != null) {
+      scope.put("swarmId", cs.swarmId());
+    }
+    if (cs.role() != null) {
+      scope.put("role", cs.role());
+    }
+    if (cs.instance() != null) {
+      scope.put("instance", cs.instance());
+    }
+    return scope;
   }
 
   private void sendStatusFull() {
