@@ -1,5 +1,11 @@
 # Build the React app
 FROM node:20-alpine AS build
+
+ARG VITE_STOMP_READONLY_USER=ph-observer
+ARG VITE_STOMP_READONLY_PASSCODE=ph-observer
+ENV VITE_STOMP_READONLY_USER=${VITE_STOMP_READONLY_USER}
+ENV VITE_STOMP_READONLY_PASSCODE=${VITE_STOMP_READONLY_PASSCODE}
+
 WORKDIR /app
 # Install dependencies
 COPY ui/package.json ui/package-lock.json ./

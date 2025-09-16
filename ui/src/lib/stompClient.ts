@@ -1,7 +1,7 @@
 import { Client, type StompSubscription } from '@stomp/stompjs'
 import type { Component } from '../types/hive'
 import { isControlEvent, type ControlEvent } from '../types/control'
-import { logIn, logOut, logError } from './logs'
+import { logIn, logError } from './logs'
 import { useUIStore } from '../store'
 
 export type ComponentListener = (components: Component[]) => void
@@ -92,15 +92,6 @@ export function setClient(newClient: Client | null, destination = controlDestina
   if (client) {
     const wrapped = client._phWrapped
     if (!wrapped) {
-      const origPublish = client.publish.bind(client)
-      client.publish = ((params) => {
-        const body = params.body ?? ''
-        const correlationId = crypto.randomUUID()
-        const headers = { ...(params.headers || {}), 'x-correlation-id': correlationId }
-        logOut(params.destination, body, 'ui', 'stomp', correlationId)
-        origPublish({ ...params, headers })
-      }) as typeof client.publish
-
       const origSubscribe = client.subscribe.bind(client)
       client.subscribe = ((dest, callback, headers) => {
         return origSubscribe(

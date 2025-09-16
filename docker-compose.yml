@@ -161,6 +161,9 @@ services:
     build:
       context: .
       dockerfile: ui/Dockerfile
+      args:
+        VITE_STOMP_READONLY_USER: ${VITE_STOMP_READONLY_USER:-ph-observer}
+        VITE_STOMP_READONLY_PASSCODE: ${VITE_STOMP_READONLY_PASSCODE:-ph-observer}
     depends_on:
       scenario-manager:
         condition: service_healthy

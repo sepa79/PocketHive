@@ -13,14 +13,19 @@ export type UIConfig = {
 
 const host = typeof window !== 'undefined' ? window.location.hostname : 'localhost'
 
+const readOnlyUser =
+  import.meta.env.VITE_STOMP_READONLY_USER || import.meta.env.VITE_STOMP_USER || 'ph-observer'
+const readOnlyPasscode =
+  import.meta.env.VITE_STOMP_READONLY_PASSCODE || import.meta.env.VITE_STOMP_PASSCODE || 'ph-observer'
+
 const config: UIConfig = {
   rabbitmq: `http://${host}:15672/`,
   prometheus: `http://${host}:9090/`,
   grafana: `http://${host}:3000/`,
   wiremock: `http://${host}:8080/__admin/`,
   stompUrl: `/ws`,
-  stompUser: 'guest',
-  stompPasscode: 'guest',
+  stompUser: readOnlyUser,
+  stompPasscode: readOnlyPasscode,
   stompSubscription: '/exchange/ph.control/ev.#',
 }
 
