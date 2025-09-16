@@ -41,7 +41,7 @@ class SwarmSignalListenerTest {
   }
 
   @Test
-  void replaysConfirmationOnDuplicate() {
+  void duplicateReplaysConfirmationAndEmitsNotice() {
     when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
     SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", mapper, 10);
     String rk = "sig.swarm-start." + Topology.SWARM_ID;
@@ -51,6 +51,31 @@ class SwarmSignalListenerTest {
     verify(rabbit, times(2)).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
         eq("ev.ready.swarm-start." + Topology.SWARM_ID),
         argThat((String p) -> p.contains("\"correlationId\":\"c5\"") && p.contains("\"idempotencyKey\":\"i5\"")));
+    verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
+        eq("ev.duplicate.swarm-start"),
+        argThat((String p) -> p.contains("\"correlationId\":\"c6\"")
+            && p.contains("\"originalCorrelationId\":\"c5\"")
+            && p.contains("\"idempotencyKey\":\"i5\"")));
+  }
+
+  @Test
+  void duplicateErrorReplaysFailureAndEmitsNotice() {
+    when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
+    SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", mapper, 10);
+    String rk = "sig.swarm-start." + Topology.SWARM_ID;
+    doThrow(new RuntimeException("boom")).when(lifecycle).start("{}");
+    listener.handle(signal("swarm-start", "i5", "c5"), rk);
+    reset(rabbit);
+    listener.handle(signal("swarm-start", "i5", "c7"), rk);
+    verify(lifecycle, times(1)).start("{}");
+    verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
+        eq("ev.error.swarm-start." + Topology.SWARM_ID),
+        argThat((String p) -> p.contains("\"correlationId\":\"c5\"")
+            && p.contains("\"idempotencyKey\":\"i5\"")));
+    verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
+        eq("ev.duplicate.swarm-start"),
+        argThat((String p) -> p.contains("\"correlationId\":\"c7\"")
+            && p.contains("\"originalCorrelationId\":\"c5\"")));
   }
 
   @Test
