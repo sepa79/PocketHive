@@ -90,7 +90,7 @@ class ProcessorTest {
         assertThat(node.path("scope").path("role").asText()).isEqualTo("processor");
         assertThat(node.path("scope").path("instance").asText()).isEqualTo("inst");
         assertThat(node.path("scope").path("swarmId").asText()).isEqualTo("sw1");
-        assertThat(node.path("args").path("data").path("enabled").asBoolean()).isTrue();
+        assertThat(node.has("args")).isFalse();
         verify(rabbit, never()).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("ev.error.config-update.processor.inst"), anyString());
     }
 

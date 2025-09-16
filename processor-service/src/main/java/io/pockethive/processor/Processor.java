@@ -274,9 +274,6 @@ public class Processor {
     payload.put("signal", cs.signal());
     payload.put("result", result);
     payload.set("scope", scopeNode(cs, role, instance));
-    if (cs.args() != null) {
-      payload.set("args", MAPPER.valueToTree(cs.args()));
-    }
     if (cs.correlationId() != null) {
       payload.put("correlationId", cs.correlationId());
     }
