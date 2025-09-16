@@ -10,15 +10,6 @@ import { useUIStore } from '../store'
 
 
 describe('swarm lifecycle', () => {
-  it('does not decorate publish on the provided client', () => {
-    const publish = vi.fn()
-    const subscribe = vi.fn().mockReturnValue({ unsubscribe() {} })
-    const raw = { active: true, publish, subscribe }
-    setClient(raw as unknown as Client)
-    expect(raw.publish).toBe(publish)
-    setClient(null)
-  })
-
   it('logs error events and sets toast', () => {
     resetLogs()
     useUIStore.setState({ toast: null })

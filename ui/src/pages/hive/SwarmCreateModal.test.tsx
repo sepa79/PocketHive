@@ -3,76 +3,68 @@
  */
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react'
 import SwarmCreateModal from './SwarmCreateModal'
-import { vi, test, expect, afterEach } from 'vitest'
-import { createSwarm } from '../../lib/orchestratorApi'
+import { vi, test, expect, afterEach, beforeEach, type SpyInstance } from 'vitest'
+import * as apiModule from '../../lib/api'
 
-vi.mock('../../lib/orchestratorApi', () => ({
-  createSwarm: vi.fn(),
-}))
+let apiFetchSpy: SpyInstance
+
+beforeEach(() => {
+  apiFetchSpy = vi.spyOn(apiModule, 'apiFetch')
+})
 
 afterEach(() => {
+  apiFetchSpy.mockRestore()
   vi.clearAllMocks()
   cleanup()
 })
 
 test('loads available scenarios on mount', async () => {
-  const fetchMock = vi
-    .fn()
-    .mockResolvedValue({
-      ok: true,
-      headers: { get: () => 'application/json' },
-      json: async () => [
-        { id: 'basic', name: 'Basic' },
-        { id: 'advanced', name: 'Advanced' },
-      ],
-    })
-  global.fetch = fetchMock as unknown as typeof fetch
-
+  apiFetchSpy.mockResolvedValueOnce({
+    json: async () => [
+      { id: 'basic', name: 'Basic' },
+      { id: 'advanced', name: 'Advanced' },
+    ],
+  } as unknown as Response)
   render(<SwarmCreateModal onClose={() => {}} />)
 
   await screen.findByText('Basic')
   await screen.findByText('Advanced')
 
-  expect(fetchMock).toHaveBeenCalled()
-  const args = fetchMock.mock.calls[0]
-  expect(args[0]).toBe('/scenario-manager/scenarios')
-  expect(args[1]).toMatchObject({
-    headers: expect.objectContaining({
-      Accept: 'application/json',
-      'x-correlation-id': expect.any(String),
+  expect(apiFetchSpy).toHaveBeenCalledWith(
+    '/scenario-manager/scenarios',
+    expect.objectContaining({
+      headers: expect.objectContaining({ Accept: 'application/json' }),
     }),
-  })
+  )
 })
 
 test('submits selected scenario', async () => {
-  const fetchMock = vi
-    .fn()
-    .mockResolvedValue({
-      ok: true,
-      headers: { get: () => 'application/json' },
+  apiFetchSpy
+    .mockResolvedValueOnce({
       json: async () => [{ id: 'basic', name: 'Basic' }],
-    })
-  global.fetch = fetchMock as unknown as typeof fetch
-
+    } as unknown as Response)
+    .mockResolvedValueOnce({} as Response)
   render(<SwarmCreateModal onClose={() => {}} />)
 
   await screen.findByText('Basic')
   fireEvent.change(screen.getByLabelText(/swarm id/i), { target: { value: 'sw1' } })
   fireEvent.change(screen.getByLabelText(/scenario/i), { target: { value: 'basic' } })
   fireEvent.click(screen.getByText('Create'))
-  await waitFor(() => expect(createSwarm).toHaveBeenCalledWith('sw1', 'basic'))
+  await waitFor(() => expect(apiFetchSpy.mock.calls.length).toBeGreaterThanOrEqual(2))
+  const createCall = apiFetchSpy.mock.calls[1]
+  expect(createCall?.[0]).toBe('/orchestrator/swarms/sw1/create')
+  expect(createCall?.[1]).toMatchObject({ method: 'POST' })
+  const body = createCall?.[1]?.body
+  expect(typeof body).toBe('string')
+  const parsed = JSON.parse(body as string)
+  expect(parsed).toMatchObject({ notes: 'basic' })
+  expect(await screen.findByText('Swarm created')).toBeTruthy()
 })
 
 test('does not submit when scenario selection is cleared', async () => {
-  const fetchMock = vi
-    .fn()
-    .mockResolvedValue({
-      ok: true,
-      headers: { get: () => 'application/json' },
-      json: async () => [{ id: 'basic', name: 'Basic' }],
-    })
-  global.fetch = fetchMock as unknown as typeof fetch
-
+  apiFetchSpy.mockResolvedValueOnce({
+    json: async () => [{ id: 'basic', name: 'Basic' }],
+  } as unknown as Response)
   render(<SwarmCreateModal onClose={() => {}} />)
 
   await screen.findByText('Basic')
@@ -81,6 +73,6 @@ test('does not submit when scenario selection is cleared', async () => {
   fireEvent.change(screen.getByLabelText(/scenario/i), { target: { value: '' } })
   fireEvent.click(screen.getByText('Create'))
 
-  await waitFor(() => expect(createSwarm).not.toHaveBeenCalled())
+  await waitFor(() => expect(apiFetchSpy.mock.calls.length).toBe(1))
   await screen.findByText(/swarm id and scenario required/i)
 })

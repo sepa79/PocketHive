@@ -1,29 +1,24 @@
 /**
  * @vitest-environment jsdom
  */
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import '@testing-library/jest-dom/vitest'
-import { vi, test, expect, beforeEach, type Mock } from 'vitest'
+import { vi, test, expect, beforeEach, afterEach, type Mock, type SpyInstance } from 'vitest'
 import HivePage from './HivePage'
 import type { Component } from '../../types/hive'
 import { subscribeComponents } from '../../lib/stompClient'
-import { startSwarm, stopSwarm } from '../../lib/orchestratorApi'
+import * as apiModule from '../../lib/api'
 
 vi.mock('../../lib/stompClient', () => ({
   subscribeComponents: vi.fn(),
-}))
-
-vi.mock('../../lib/orchestratorApi', () => ({
-  startSwarm: vi.fn(),
-  stopSwarm: vi.fn(),
 }))
 
 vi.mock('./TopologyView', () => ({
   default: () => null,
 }))
 
-const comps: Component[] = [
+const baseComponents: Component[] = [
   {
     id: 'sw1-queen',
     name: 'swarm-controller',
@@ -42,7 +37,15 @@ const comps: Component[] = [
 ]
 
 let listener: ((c: Component[]) => void) | null = null
+let comps: Component[] = []
+let apiFetchSpy: SpyInstance
 beforeEach(() => {
+  listener = null
+  comps = baseComponents.map((c) => ({
+    ...c,
+    config: c.config ? { ...c.config } : undefined,
+    queues: [...c.queues],
+  }))
   ;(subscribeComponents as unknown as Mock).mockImplementation(
     (fn: (c: Component[]) => void) => {
       listener = fn
@@ -50,8 +53,12 @@ beforeEach(() => {
       return () => {}
     },
   )
-  ;(startSwarm as unknown as Mock).mockReset()
-  ;(stopSwarm as unknown as Mock).mockReset()
+  apiFetchSpy = vi.spyOn(apiModule, 'apiFetch').mockResolvedValue({} as Response)
+})
+
+afterEach(() => {
+  apiFetchSpy.mockRestore()
+  vi.clearAllMocks()
 })
 
 test('renders queen status and start/stop controls', async () => {
@@ -60,13 +67,25 @@ test('renders queen status and start/stop controls', async () => {
   expect(screen.getByText(/Queen: stopped/i)).toBeTruthy()
   const startBtn = screen.getByRole('button', { name: /start/i })
   await user.click(startBtn)
-  expect(startSwarm).toHaveBeenCalledWith('sw1')
+  await waitFor(() =>
+    expect(apiFetchSpy).toHaveBeenCalledWith(
+      '/orchestrator/swarms/sw1/start',
+      expect.objectContaining({ method: 'POST' }),
+    ),
+  )
+  expect(await screen.findByText('Swarm started')).toBeTruthy()
 
   comps[0].config = { swarmStatus: 'RUNNING', enabled: true }
   if (listener) listener([...comps])
   expect(await screen.findByText(/Queen: running/i)).toBeTruthy()
   await user.click(screen.getAllByRole('button', { name: /stop/i })[1])
-  expect(stopSwarm).toHaveBeenCalledWith('sw1')
+  await waitFor(() =>
+    expect(apiFetchSpy).toHaveBeenCalledWith(
+      '/orchestrator/swarms/sw1/stop',
+      expect.objectContaining({ method: 'POST' }),
+    ),
+  )
+  expect(await screen.findByText('Swarm stopped')).toBeTruthy()
 })
 
 test('shows unassigned components when selecting default swarm', async () => {
