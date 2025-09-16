@@ -81,7 +81,7 @@ class PostProcessorTest {
         assertThat(node.path("scope").path("role").asText()).isEqualTo("postprocessor");
         assertThat(node.path("scope").path("instance").asText()).isEqualTo("inst");
         assertThat(node.path("scope").path("swarmId").asText()).isEqualTo("sw1");
-        assertThat(node.path("args").path("data").path("enabled").asBoolean()).isTrue();
+        assertThat(node.has("args")).isFalse();
     }
 
     @Test
@@ -102,7 +102,7 @@ class PostProcessorTest {
         JsonNode node = mapper.readTree(payload.getValue());
         assertThat(node.path("correlationId").asText()).isEqualTo("corr2");
         assertThat(node.path("idempotencyKey").asText()).isEqualTo("idem2");
-        assertThat(node.path("args").path("data").path("enabled").asBoolean()).isFalse();
+        assertThat(node.has("args")).isFalse();
     }
 
     @Test

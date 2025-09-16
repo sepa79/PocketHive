@@ -96,7 +96,7 @@ class TriggerTest {
         assertThat(node.path("scope").path("role").asText()).isEqualTo("trigger");
         assertThat(node.path("scope").path("instance").asText()).isEqualTo("inst");
         assertThat(node.path("scope").path("swarmId").asText()).isEqualTo("sw1");
-        assertThat(node.path("args").path("data").path("enabled").asBoolean()).isTrue();
+        assertThat(node.has("args")).isFalse();
 
         verify(rabbit, never()).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("ev.error.config-update.trigger.inst"), anyString());
     }
@@ -141,6 +141,6 @@ class TriggerTest {
         ArgumentCaptor<String> payload = ArgumentCaptor.forClass(String.class);
         verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("ev.ready.config-update.trigger.inst"), payload.capture());
         JsonNode node = mapper.readTree(payload.getValue());
-        assertThat(node.path("args").path("singleRequest").asBoolean()).isTrue();
+        assertThat(node.has("args")).isFalse();
     }
 }

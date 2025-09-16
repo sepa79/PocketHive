@@ -257,9 +257,6 @@ public class SwarmSignalListener {
     payload.put("signal", cs.signal());
     payload.put("result", "success");
     payload.set("scope", scopeNode(cs));
-    if (cs.args() != null) {
-      payload.set("args", mapper.valueToTree(cs.args()));
-    }
     payload.put("idempotencyKey", cs.idempotencyKey());
     payload.put("correlationId", cs.correlationId());
     String json = payload.toString();
@@ -280,9 +277,6 @@ public class SwarmSignalListener {
     payload.put("signal", cs.signal());
     payload.put("result", "error");
     payload.set("scope", scopeNode(cs));
-    if (cs.args() != null) {
-      payload.set("args", mapper.valueToTree(cs.args()));
-    }
     payload.put("idempotencyKey", cs.idempotencyKey());
     payload.put("correlationId", cs.correlationId());
     payload.put("code", e.getClass().getSimpleName());
