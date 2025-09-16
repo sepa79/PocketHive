@@ -3,6 +3,9 @@ package io.pockethive.swarmcontroller;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.Topology;
+import io.pockethive.swarm.model.Bee;
+import io.pockethive.swarm.model.SwarmPlan;
+import io.pockethive.swarm.model.Work;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
@@ -101,7 +104,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
 
       Set<String> suffixes = new HashSet<>();
       if (plan.bees() != null) {
-        for (SwarmPlan.Bee bee : plan.bees()) {
+        for (Bee bee : plan.bees()) {
           expectedReady.merge(bee.role(), 1, Integer::sum);
           if (bee.work() != null) {
             if (bee.work().in() != null) suffixes.add(bee.work().in());
@@ -315,7 +318,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
     }
 
     Map<String, Set<String>> producersByQueue = new HashMap<>();
-    for (SwarmPlan.Bee bee : plan.bees()) {
+    for (Bee bee : plan.bees()) {
       if (!roles.contains(bee.role())) {
         roles.add(bee.role());
       }
@@ -330,7 +333,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
       deps.put(role, new HashSet<>());
     }
 
-    for (SwarmPlan.Bee bee : plan.bees()) {
+    for (Bee bee : plan.bees()) {
       if (bee.work() != null && bee.work().in() != null) {
         Set<String> producers = producersByQueue.getOrDefault(bee.work().in(), Set.of());
         if (!producers.isEmpty()) {

@@ -4,7 +4,6 @@ import io.pockethive.Topology;
 import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmRegistry;
 import io.pockethive.orchestrator.domain.SwarmStatus;
-import io.pockethive.orchestrator.domain.SwarmTemplate;
 import io.pockethive.docker.DockerContainerClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -16,18 +15,12 @@ public class ContainerLifecycleManager {
     private static final Logger log = LoggerFactory.getLogger(ContainerLifecycleManager.class);
     private final DockerContainerClient docker;
     private final SwarmRegistry registry;
-    private final SwarmTemplate template;
     private final AmqpAdmin amqp;
 
-    public ContainerLifecycleManager(DockerContainerClient docker, SwarmRegistry registry, SwarmTemplate template, AmqpAdmin amqp) {
+    public ContainerLifecycleManager(DockerContainerClient docker, SwarmRegistry registry, AmqpAdmin amqp) {
         this.docker = docker;
         this.registry = registry;
-        this.template = template;
         this.amqp = amqp;
-    }
-
-    public Swarm startSwarm(String swarmId, String instanceId) {
-        return startSwarm(swarmId, template.getImage(), instanceId);
     }
 
     public Swarm startSwarm(String swarmId, String image, String instanceId) {
