@@ -3,10 +3,10 @@
  */
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react'
 import SwarmCreateModal from './SwarmCreateModal'
-import { vi, test, expect, afterEach, beforeEach, type SpyInstance } from 'vitest'
+import { vi, test, expect, afterEach, beforeEach, type MockInstance } from 'vitest'
 import * as apiModule from '../../lib/api'
 
-let apiFetchSpy: SpyInstance
+let apiFetchSpy: MockInstance<typeof apiModule.apiFetch>
 
 beforeEach(() => {
   apiFetchSpy = vi.spyOn(apiModule, 'apiFetch')
