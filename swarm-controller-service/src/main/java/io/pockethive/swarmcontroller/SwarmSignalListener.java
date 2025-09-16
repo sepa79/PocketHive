@@ -3,7 +3,9 @@ package io.pockethive.swarmcontroller;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
+import io.pockethive.control.ConfirmationScope;
+import io.pockethive.control.ErrorConfirmation;
+import io.pockethive.control.ReadyConfirmation;
 import io.pockethive.Topology;
 import io.pockethive.control.ControlSignal;
 import io.pockethive.observability.StatusEnvelopeBuilder;
@@ -22,6 +24,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+import java.time.Instant;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -56,7 +59,7 @@ public class SwarmSignalListener {
     this.lifecycle = lifecycle;
     this.rabbit = rabbit;
     this.instanceId = instanceId;
-    this.mapper = mapper;
+    this.mapper = mapper.findAndRegisterModules();
     this.outcomes = Collections.synchronizedMap(new LinkedHashMap<>(16, 0.75f, true) {
       @Override
       protected boolean removeEldestEntry(Map.Entry<CacheKey, CachedOutcome> eldest) {
@@ -253,13 +256,17 @@ public class SwarmSignalListener {
     } else {
       return null;
     }
-    var payload = mapper.createObjectNode();
-    payload.put("signal", cs.signal());
-    payload.put("result", "success");
-    payload.set("scope", scopeNode(cs));
-    payload.put("idempotencyKey", cs.idempotencyKey());
-    payload.put("correlationId", cs.correlationId());
-    String json = payload.toString();
+    ConfirmationScope scope = scopeFor(cs, swarmIdFallback);
+    String state = stateForSuccess(cs);
+    ReadyConfirmation confirmation = new ReadyConfirmation(
+        Instant.now(),
+        cs.correlationId(),
+        cs.idempotencyKey(),
+        cs.signal(),
+        scope,
+        state
+    );
+    String json = toJson(confirmation);
     rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, json);
     return new CachedOutcome(rk, json);
   }
@@ -273,31 +280,102 @@ public class SwarmSignalListener {
     } else if (cs.role() != null && cs.instance() != null) {
       rk += "." + cs.role() + "." + cs.instance();
     }
-    var payload = mapper.createObjectNode();
-    payload.put("signal", cs.signal());
-    payload.put("result", "error");
-    payload.set("scope", scopeNode(cs));
-    payload.put("idempotencyKey", cs.idempotencyKey());
-    payload.put("correlationId", cs.correlationId());
-    payload.put("code", e.getClass().getSimpleName());
-    payload.put("message", e.getMessage());
-    String json = payload.toString();
+    ConfirmationScope scope = scopeFor(cs, swarmIdFallback);
+    String state = stateForError(cs);
+    ErrorConfirmation confirmation = new ErrorConfirmation(
+        Instant.now(),
+        cs.correlationId(),
+        cs.idempotencyKey(),
+        cs.signal(),
+        scope,
+        state,
+        phaseForSignal(cs.signal()),
+        e.getClass().getSimpleName(),
+        e.getMessage(),
+        Boolean.FALSE,
+        null
+    );
+    String json = toJson(confirmation);
     rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, json);
     return new CachedOutcome(rk, json);
   }
 
-  private ObjectNode scopeNode(ControlSignal cs) {
-    ObjectNode scope = mapper.createObjectNode();
-    if (cs.swarmId() != null) {
-      scope.put("swarmId", cs.swarmId());
+  private ConfirmationScope scopeFor(ControlSignal cs, String swarmIdFallback) {
+    String swarmId = cs.swarmId();
+    if (swarmId == null) {
+      swarmId = swarmIdFallback;
     }
-    if (cs.role() != null) {
-      scope.put("role", cs.role());
+    if (swarmId == null || swarmId.isBlank()) {
+      swarmId = Topology.SWARM_ID;
     }
-    if (cs.instance() != null) {
-      scope.put("instance", cs.instance());
+    String role = cs.role();
+    String instance = cs.instance();
+    if ("config-update".equals(cs.signal())) {
+      if (role == null || role.isBlank()) {
+        role = ROLE;
+      }
+      if (instance == null || instance.isBlank()) {
+        instance = this.instanceId;
+      }
     }
-    return scope;
+    return new ConfirmationScope(swarmId, role, instance);
+  }
+
+  private String stateForSuccess(ControlSignal cs) {
+    return switch (cs.signal()) {
+      case "swarm-template" -> "Ready";
+      case "swarm-start" -> "Running";
+      case "swarm-stop" -> "Stopped";
+      case "swarm-remove" -> "Removed";
+      case "config-update" -> stateFromLifecycle();
+      default -> stateFromLifecycle();
+    };
+  }
+
+  private String stateForError(ControlSignal cs) {
+    String state = stateFromLifecycle();
+    if (state != null) {
+      return state;
+    }
+    return switch (cs.signal()) {
+      case "swarm-start" -> "Stopped";
+      case "swarm-stop" -> "Running";
+      case "swarm-remove" -> "Stopped";
+      case "swarm-template" -> "Stopped";
+      default -> null;
+    };
+  }
+
+  private String stateFromLifecycle() {
+    SwarmStatus status = lifecycle.getStatus();
+    if (status == null) {
+      return null;
+    }
+    return switch (status) {
+      case READY -> "Ready";
+      case RUNNING, STARTING -> "Running";
+      case STOPPED, STOPPING, FAILED, NEW, CREATING -> "Stopped";
+      case REMOVED, REMOVING -> "Removed";
+    };
+  }
+
+  private String phaseForSignal(String signal) {
+    return switch (signal) {
+      case "swarm-template" -> "template";
+      case "swarm-start" -> "start";
+      case "swarm-stop" -> "stop";
+      case "swarm-remove" -> "remove";
+      case "config-update" -> "config-update";
+      default -> signal;
+    };
+  }
+
+  private String toJson(Object value) {
+    try {
+      return mapper.writeValueAsString(value);
+    } catch (Exception ex) {
+      throw new IllegalStateException("Unable to serialize confirmation", ex);
+    }
   }
 
   private void sendStatusFull() {

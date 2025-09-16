@@ -1,5 +1,6 @@
 package io.pockethive.swarmcontroller;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.Topology;
 import io.pockethive.swarmcontroller.SwarmStatus;
@@ -7,10 +8,12 @@ import io.pockethive.swarmcontroller.SwarmMetrics;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
@@ -23,7 +26,7 @@ class SwarmSignalListenerTest {
   @Mock
   RabbitTemplate rabbit;
 
-  ObjectMapper mapper = new ObjectMapper();
+  ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
 
   @BeforeEach
   void setup() {
@@ -66,18 +69,24 @@ class SwarmSignalListenerTest {
   }
 
   @Test
-  void templateEmitsConfirmation() {
+  void templateEmitsConfirmation() throws Exception {
     when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
     SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", mapper);
     listener.handle(signal("swarm-template", "i0", "c0"), "sig.swarm-template." + Topology.SWARM_ID);
     verify(lifecycle).prepare("{}");
+    ArgumentCaptor<String> payload = ArgumentCaptor.forClass(String.class);
     verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
         eq("ev.ready.swarm-template." + Topology.SWARM_ID),
-        argThat((String p) -> p.contains("\"correlationId\":\"c0\"") && p.contains("\"idempotencyKey\":\"i0\"")));
+        payload.capture());
+    JsonNode node = mapper.readTree(payload.getValue());
+    assertThat(node.path("correlationId").asText()).isEqualTo("c0");
+    assertThat(node.path("idempotencyKey").asText()).isEqualTo("i0");
+    assertThat(node.path("state").asText()).isEqualTo("Ready");
+    assertThat(node.path("scope").path("swarmId").asText()).isEqualTo(Topology.SWARM_ID);
   }
 
   @Test
-  void startEmitsConfirmation() {
+  void startEmitsConfirmation() throws Exception {
     when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
     SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", mapper);
     reset(lifecycle, rabbit);
@@ -85,36 +94,56 @@ class SwarmSignalListenerTest {
     when(lifecycle.getMetrics()).thenReturn(new SwarmMetrics(0,0,0,0, java.time.Instant.now()));
     listener.handle(signal("swarm-start", "i1", "c1"), "sig.swarm-start." + Topology.SWARM_ID);
     verify(lifecycle).start("{}");
+    ArgumentCaptor<String> startPayload = ArgumentCaptor.forClass(String.class);
     verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
         eq("ev.ready.swarm-start." + Topology.SWARM_ID),
-        argThat((String p) -> p.contains("\"correlationId\":\"c1\"") && p.contains("\"idempotencyKey\":\"i1\"")));
+        startPayload.capture());
+    JsonNode startNode = mapper.readTree(startPayload.getValue());
+    assertThat(startNode.path("correlationId").asText()).isEqualTo("c1");
+    assertThat(startNode.path("idempotencyKey").asText()).isEqualTo("i1");
+    assertThat(startNode.path("state").asText()).isEqualTo("Running");
+    assertThat(startNode.path("scope").path("swarmId").asText()).isEqualTo(Topology.SWARM_ID);
   }
 
   @Test
-  void stopEmitsConfirmation() {
+  void stopEmitsConfirmation() throws Exception {
     when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
     SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", mapper);
     listener.handle(signal("swarm-stop", "i2", "c2"), "sig.swarm-stop." + Topology.SWARM_ID);
     verify(lifecycle).stop();
+    ArgumentCaptor<String> stopPayload = ArgumentCaptor.forClass(String.class);
     verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
         eq("ev.ready.swarm-stop." + Topology.SWARM_ID),
-        argThat((String p) -> p.contains("\"correlationId\":\"c2\"") && p.contains("\"idempotencyKey\":\"i2\"")));
+        stopPayload.capture());
+    JsonNode stopNode = mapper.readTree(stopPayload.getValue());
+    assertThat(stopNode.path("correlationId").asText()).isEqualTo("c2");
+    assertThat(stopNode.path("idempotencyKey").asText()).isEqualTo("i2");
+    assertThat(stopNode.path("state").asText()).isEqualTo("Stopped");
+    assertThat(stopNode.path("scope").path("swarmId").asText()).isEqualTo(Topology.SWARM_ID);
   }
 
   @Test
-  void removeEmitsErrorOnFailure() {
+  void removeEmitsErrorOnFailure() throws Exception {
     when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
     SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", mapper);
     doThrow(new RuntimeException("boom")).when(lifecycle).remove();
     listener.handle(signal("swarm-remove", "i3", "c3"), "sig.swarm-remove." + Topology.SWARM_ID);
+    ArgumentCaptor<String> errorPayload = ArgumentCaptor.forClass(String.class);
     verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
         eq("ev.error.swarm-remove." + Topology.SWARM_ID),
-        argThat((String p) -> p.contains("\"code\":\"RuntimeException\"") && p.contains("\"message\":\"boom\"")
-            && p.contains("\"correlationId\":\"c3\"") && p.contains("\"idempotencyKey\":\"i3\"")));
+        errorPayload.capture());
+    JsonNode errNode = mapper.readTree(errorPayload.getValue());
+    assertThat(errNode.path("code").asText()).isEqualTo("RuntimeException");
+    assertThat(errNode.path("message").asText()).isEqualTo("boom");
+    assertThat(errNode.path("correlationId").asText()).isEqualTo("c3");
+    assertThat(errNode.path("idempotencyKey").asText()).isEqualTo("i3");
+    assertThat(errNode.path("phase").asText()).isEqualTo("remove");
+    assertThat(errNode.path("state").asText()).isEqualTo("Running");
+    assertThat(errNode.path("retryable").asBoolean()).isFalse();
   }
 
   @Test
-  void configUpdateEmitsConfirmation() {
+  void configUpdateEmitsConfirmation() throws Exception {
     when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
     SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", mapper);
     String body = """
@@ -122,9 +151,16 @@ class SwarmSignalListenerTest {
          "role":"swarm-controller","instance":"inst","args":{"data":{"enabled":true}}}
         """;
     listener.handle(body, "sig.config-update.swarm-controller.inst");
+    ArgumentCaptor<String> configPayload = ArgumentCaptor.forClass(String.class);
     verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
         eq("ev.ready.config-update.swarm-controller.inst"),
-        argThat((String p) -> p.contains("\"correlationId\":\"c4\"") && p.contains("\"idempotencyKey\":\"i4\"")));
+        configPayload.capture());
+    JsonNode configNode = mapper.readTree(configPayload.getValue());
+    assertThat(configNode.path("correlationId").asText()).isEqualTo("c4");
+    assertThat(configNode.path("idempotencyKey").asText()).isEqualTo("i4");
+    assertThat(configNode.path("scope").path("role").asText()).isEqualTo("swarm-controller");
+    assertThat(configNode.path("scope").path("instance").asText()).isEqualTo("inst");
+    assertThat(configNode.path("state").asText()).isEqualTo("Running");
   }
 
   @Test

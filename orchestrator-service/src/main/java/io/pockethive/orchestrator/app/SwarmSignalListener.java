@@ -2,8 +2,9 @@ package io.pockethive.orchestrator.app;
 
 import io.pockethive.Topology;
 import io.pockethive.observability.StatusEnvelopeBuilder;
-import io.pockethive.orchestrator.domain.ReadyConfirmation;
-import io.pockethive.orchestrator.domain.ErrorConfirmation;
+import io.pockethive.control.ConfirmationScope;
+import io.pockethive.control.ReadyConfirmation;
+import io.pockethive.control.ErrorConfirmation;
 import io.pockethive.orchestrator.domain.SwarmPlan;
 import io.pockethive.orchestrator.domain.SwarmPlanRegistry;
 import io.pockethive.orchestrator.domain.SwarmRegistry;
@@ -95,8 +96,12 @@ public class SwarmSignalListener {
         try {
             String rk = "ev.ready.swarm-create." + info.swarmId();
             ReadyConfirmation conf = new ReadyConfirmation(
-                "success", "swarm-create", info.swarmId(), null, null,
-                info.correlationId(), info.idempotencyKey(), java.time.Instant.now(), null, null);
+                java.time.Instant.now(),
+                info.correlationId(),
+                info.idempotencyKey(),
+                "swarm-create",
+                ConfirmationScope.forSwarm(info.swarmId()),
+                "Ready");
             rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, json.writeValueAsString(conf));
         } catch (Exception e) {
             log.warn("create ready send", e);
@@ -107,9 +112,17 @@ public class SwarmSignalListener {
         try {
             String rk = "ev.error.swarm-create." + info.swarmId();
             ErrorConfirmation conf = new ErrorConfirmation(
-                "error", "swarm-create", info.swarmId(), null, null,
-                info.correlationId(), info.idempotencyKey(), java.time.Instant.now(),
-                "controller-error", "controller failed");
+                java.time.Instant.now(),
+                info.correlationId(),
+                info.idempotencyKey(),
+                "swarm-create",
+                ConfirmationScope.forSwarm(info.swarmId()),
+                "Removed",
+                "controller-bootstrap",
+                "controller-error",
+                "controller failed",
+                Boolean.TRUE,
+                null);
             rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, json.writeValueAsString(conf));
         } catch (Exception e) {
             log.warn("create error send", e);
