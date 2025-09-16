@@ -150,6 +150,7 @@ public class SwarmSignalListener {
     CachedOutcome cached = outcomes.get(key);
     if (cached != null) {
       rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, cached.routingKey(), cached.payload());
+      emitDuplicate(cs, cached, swarmId);
       return;
     }
     try {
@@ -180,6 +181,7 @@ public class SwarmSignalListener {
     CachedOutcome cached = outcomes.get(key);
     if (cached != null) {
       rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, cached.routingKey(), cached.payload());
+      emitDuplicate(cs, cached, null);
       return;
     }
     try {
@@ -208,7 +210,14 @@ public class SwarmSignalListener {
 
   private record CacheKey(String swarmId, String signal, String role, String instance, String idempotencyKey) {}
 
-  private record CachedOutcome(String routingKey, String payload) {}
+  private record CachedOutcome(String routingKey, String payload, String correlationId) {}
+
+  private record DuplicateNotice(Instant ts,
+                                 String correlationId,
+                                 String originalCorrelationId,
+                                 String idempotencyKey,
+                                 String signal,
+                                 ConfirmationScope scope) {}
 
   @Scheduled(fixedRate = STATUS_INTERVAL_MS)
   public void status() {
@@ -268,7 +277,7 @@ public class SwarmSignalListener {
     );
     String json = toJson(confirmation);
     rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, json);
-    return new CachedOutcome(rk, json);
+    return new CachedOutcome(rk, json, cs.correlationId());
   }
 
   private CachedOutcome emitError(ControlSignal cs, Exception e, String swarmIdFallback) {
@@ -297,7 +306,22 @@ public class SwarmSignalListener {
     );
     String json = toJson(confirmation);
     rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, json);
-    return new CachedOutcome(rk, json);
+    return new CachedOutcome(rk, json, cs.correlationId());
+  }
+
+  private void emitDuplicate(ControlSignal cs, CachedOutcome cached, String swarmIdFallback) {
+    ConfirmationScope scope = scopeFor(cs, swarmIdFallback);
+    DuplicateNotice notice = new DuplicateNotice(
+        Instant.now(),
+        cs.correlationId(),
+        cached.correlationId(),
+        cs.idempotencyKey(),
+        cs.signal(),
+        scope
+    );
+    String rk = "ev.duplicate." + cs.signal();
+    String json = toJson(notice);
+    rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, json);
   }
 
   private ConfirmationScope scopeFor(ControlSignal cs, String swarmIdFallback) {
