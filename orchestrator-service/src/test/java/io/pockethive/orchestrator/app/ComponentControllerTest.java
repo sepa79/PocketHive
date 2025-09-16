@@ -1,5 +1,6 @@
 package io.pockethive.orchestrator.app;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.Topology;
 import io.pockethive.orchestrator.domain.ControlSignal;
 import io.pockethive.orchestrator.infra.InMemoryIdempotencyStore;
@@ -14,6 +15,7 @@ import org.springframework.http.ResponseEntity;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -24,17 +26,19 @@ class ComponentControllerTest {
     @Mock
     AmqpTemplate rabbit;
 
+    private final ObjectMapper mapper = new JacksonConfiguration().objectMapper();
+
     @Test
-    void updateConfigPublishesControlSignal() {
-        ComponentController controller = new ComponentController(rabbit, new InMemoryIdempotencyStore());
+    void updateConfigPublishesControlSignal() throws Exception {
+        ComponentController controller = new ComponentController(rabbit, new InMemoryIdempotencyStore(), mapper);
         ComponentController.ConfigUpdateRequest request =
             new ComponentController.ConfigUpdateRequest("idem", Map.of("enabled", true), null, "sw1");
 
         ResponseEntity<ControlResponse> response = controller.updateConfig("generator", "c1", request);
 
-        ArgumentCaptor<ControlSignal> captor = ArgumentCaptor.forClass(ControlSignal.class);
+        ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
         verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("sig.config-update.generator.c1"), captor.capture());
-        ControlSignal signal = captor.getValue();
+        ControlSignal signal = mapper.readValue(captor.getValue(), ControlSignal.class);
         assertThat(signal.signal()).isEqualTo("config-update");
         assertThat(signal.role()).isEqualTo("generator");
         assertThat(signal.instance()).isEqualTo("c1");
@@ -46,7 +50,7 @@ class ComponentControllerTest {
 
     @Test
     void configUpdateIsIdempotent() {
-        ComponentController controller = new ComponentController(rabbit, new InMemoryIdempotencyStore());
+        ComponentController controller = new ComponentController(rabbit, new InMemoryIdempotencyStore(), mapper);
         ComponentController.ConfigUpdateRequest request =
             new ComponentController.ConfigUpdateRequest("idem", Map.of(), null, null);
 
@@ -54,7 +58,7 @@ class ComponentControllerTest {
         ResponseEntity<ControlResponse> second = controller.updateConfig("processor", "p1", request);
 
         verify(rabbit, times(1)).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("sig.config-update.processor.p1"),
-            org.mockito.ArgumentMatchers.any(ControlSignal.class));
+            anyString());
         assertThat(first.getBody()).isNotNull();
         assertThat(second.getBody()).isNotNull();
         assertThat(first.getBody().correlationId()).isEqualTo(second.getBody().correlationId());

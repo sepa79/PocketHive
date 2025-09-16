@@ -1,5 +1,7 @@
 package io.pockethive.orchestrator.app;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.Topology;
 import io.pockethive.orchestrator.domain.ControlSignal;
 import io.pockethive.orchestrator.domain.Swarm;
@@ -28,17 +30,20 @@ public class SwarmController {
     private final SwarmCreateTracker creates;
     private final IdempotencyStore idempotency;
     private final SwarmRegistry registry;
+    private final ObjectMapper json;
 
     public SwarmController(AmqpTemplate rabbit,
                            ContainerLifecycleManager lifecycle,
                            SwarmCreateTracker creates,
                            IdempotencyStore idempotency,
-                           SwarmRegistry registry) {
+                           SwarmRegistry registry,
+                           ObjectMapper json) {
         this.rabbit = rabbit;
         this.lifecycle = lifecycle;
         this.creates = creates;
         this.idempotency = idempotency;
         this.registry = registry;
+        this.json = json;
     }
 
     @PostMapping("/{swarmId}/create")
@@ -68,7 +73,7 @@ public class SwarmController {
     private ResponseEntity<ControlResponse> sendSignal(String signal, String swarmId, String idempotencyKey, long timeoutMs) {
         return idempotentSend(signal, swarmId, idempotencyKey, timeoutMs, corr -> {
             ControlSignal payload = ControlSignal.forSwarm(signal, swarmId, corr, idempotencyKey);
-            rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, "sig." + signal + "." + swarmId, payload);
+            rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, "sig." + signal + "." + swarmId, toJson(payload));
         });
     }
 
@@ -102,4 +107,13 @@ public class SwarmController {
     }
 
     public record SwarmView(String id, SwarmStatus status, SwarmHealth health, java.time.Instant heartbeat) {}
+
+    private String toJson(ControlSignal signal) {
+        try {
+            return json.writeValueAsString(signal);
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("Failed to serialize control signal %s for swarm %s".formatted(
+                signal.signal(), signal.swarmId()), e);
+        }
+    }
 }

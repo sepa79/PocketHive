@@ -11,4 +11,11 @@ class JacksonConfigurationTest {
         ObjectMapper mapper = new JacksonConfiguration().objectMapper();
         assertThat(mapper).isNotNull();
     }
+
+    @Test
+    void serializesInstantsAsIsoStrings() throws Exception {
+        ObjectMapper mapper = new JacksonConfiguration().objectMapper();
+        String json = mapper.writeValueAsString(java.time.Instant.parse("2025-09-16T09:07:45.834Z"));
+        assertThat(json).isEqualTo("\"2025-09-16T09:07:45.834Z\"");
+    }
 }
