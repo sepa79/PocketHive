@@ -168,6 +168,30 @@ class SwarmSignalListenerTest {
   }
 
   @Test
+  void removeEmitsSuccessConfirmation() throws Exception {
+    when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
+    when(lifecycle.getMetrics()).thenReturn(new SwarmMetrics(0,0,0,0, java.time.Instant.now()));
+    SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", mapper);
+    reset(lifecycle, rabbit);
+
+    listener.handle(signal("swarm-remove", "i3", "c3"), "sig.swarm-remove." + Topology.SWARM_ID);
+
+    verify(lifecycle).remove();
+    ArgumentCaptor<String> payload = ArgumentCaptor.forClass(String.class);
+    verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
+        eq("ev.ready.swarm-remove." + Topology.SWARM_ID),
+        payload.capture());
+
+    JsonNode node = mapper.readTree(payload.getValue());
+    assertThat(node.path("result").asText()).isEqualTo("success");
+    assertThat(node.path("signal").asText()).isEqualTo("swarm-remove");
+    assertThat(node.path("state").asText()).isEqualTo("Removed");
+    assertThat(node.path("correlationId").asText()).isEqualTo("c3");
+    assertThat(node.path("idempotencyKey").asText()).isEqualTo("i3");
+    assertThat(node.path("scope").path("swarmId").asText()).isEqualTo(Topology.SWARM_ID);
+  }
+
+  @Test
   void configUpdateEmitsConfirmation() throws Exception {
     when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
     SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", mapper);

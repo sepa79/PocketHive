@@ -18,6 +18,9 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.amqp.core.AmqpTemplate;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -160,6 +163,53 @@ class SwarmSignalListenerTest {
         listener.checkTimeouts();
         assertThat(registry.find("sw1").get().getStatus()).isEqualTo(SwarmStatus.FAILED);
         verify(rabbit, atLeastOnce()).convertAndSend(eq(Topology.CONTROL_EXCHANGE), startsWith("ev.error.swarm-create.sw1"), anyString());
+    }
+
+    @Test
+    void publishesHeartbeatStatusEventsForControlPlaneVisibility() throws Exception {
+        SwarmRegistry registry = new SwarmRegistry();
+        registry.register(new Swarm("sw1", "inst1", "container1"));
+        SwarmSignalListener listener = new SwarmSignalListener(
+            rabbit,
+            new SwarmPlanRegistry(),
+            new SwarmCreateTracker(),
+            registry,
+            lifecycle,
+            new ObjectMapper(),
+            "orch1");
+
+        ArgumentCaptor<String> fullPayload = ArgumentCaptor.forClass(String.class);
+        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("ev.status-full.orchestrator.orch1"), fullPayload.capture());
+
+        JsonNode full = mapper.readTree(fullPayload.getValue());
+        assertThat(full.path("kind").asText()).isEqualTo("status-full");
+        assertThat(full.path("role").asText()).isEqualTo("orchestrator");
+        assertThat(full.path("instance").asText()).isEqualTo("orch1");
+        assertThat(full.path("enabled").asBoolean()).isTrue();
+        assertThat(full.path("data").path("swarmCount").asInt()).isEqualTo(1);
+
+        JsonNode control = full.path("queues").path("control");
+        assertThat(control.path("in").get(0).asText()).isEqualTo(Topology.CONTROL_QUEUE + ".orchestrator.orch1");
+        assertThat(control.path("out").get(0).asText()).isEqualTo("ev.status-full.orchestrator.orch1");
+        List<String> routes = new ArrayList<>();
+        control.path("routes").forEach(node -> routes.add(node.asText()));
+        assertThat(routes).contains(
+            "ev.ready.#",
+            "ev.error.#",
+            "ev.status-full.swarm-controller.*",
+            "ev.status-delta.swarm-controller.*");
+
+        reset(rabbit);
+        listener.status();
+
+        ArgumentCaptor<String> deltaPayload = ArgumentCaptor.forClass(String.class);
+        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("ev.status-delta.orchestrator.orch1"), deltaPayload.capture());
+
+        JsonNode delta = mapper.readTree(deltaPayload.getValue());
+        assertThat(delta.path("kind").asText()).isEqualTo("status-delta");
+        assertThat(delta.path("data").path("swarmCount").asInt()).isEqualTo(1);
+        assertThat(delta.path("queues").path("control").path("out").get(0).asText())
+            .isEqualTo("ev.status-delta.orchestrator.orch1");
     }
 
     private static void registerCreating(SwarmRegistry registry, String swarmId, String instanceId, String containerId) {
