@@ -40,6 +40,12 @@ class SwarmSignalListenerTest {
         """.formatted(corr, id, sig, Topology.SWARM_ID);
   }
 
+  private String status(String swarmId, boolean enabled) {
+    return """
+        {"swarmId":"%s","data":{"enabled":%s}}
+        """.formatted(swarmId, enabled);
+  }
+
   @Test
   void duplicateReplaysConfirmationAndEmitsNotice() {
     when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
@@ -256,8 +262,7 @@ class SwarmSignalListenerTest {
     SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", mapper);
     reset(lifecycle, rabbit);
     lenient().when(lifecycle.getMetrics()).thenReturn(new SwarmMetrics(0,0,0,0, java.time.Instant.now()));
-    String body = "{\"data\":{\"enabled\":false}}";
-    listener.handle(body, "ev.status-full.gen.g1");
+    listener.handle(status(Topology.SWARM_ID, false), "ev.status-full.gen.g1");
     verify(lifecycle).updateHeartbeat("gen", "g1");
     verify(lifecycle).markReady("gen", "g1");
   }
@@ -268,9 +273,20 @@ class SwarmSignalListenerTest {
     SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", mapper);
     reset(lifecycle, rabbit);
     lenient().when(lifecycle.getMetrics()).thenReturn(new SwarmMetrics(0,0,0,0, java.time.Instant.now()));
-    String body = "{\"data\":{\"enabled\":true}}";
-    listener.handle(body, "ev.status-delta.gen.g1");
+    listener.handle(status(Topology.SWARM_ID, true), "ev.status-delta.gen.g1");
     verify(lifecycle).updateHeartbeat("gen", "g1");
+    verify(lifecycle, never()).markReady(anyString(), anyString());
+  }
+
+  @Test
+  void ignoresStatusEventsFromOtherSwarms() throws Exception {
+    when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
+    SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", mapper);
+    reset(lifecycle, rabbit);
+    lenient().when(lifecycle.getMetrics()).thenReturn(new SwarmMetrics(0,0,0,0, java.time.Instant.now()));
+    listener.handle(status("swarm-other", true), "ev.status-full.gen.g1");
+    verify(lifecycle, never()).updateHeartbeat(anyString(), anyString());
+    verify(lifecycle, never()).updateEnabled(anyString(), anyString(), anyBoolean());
     verify(lifecycle, never()).markReady(anyString(), anyString());
   }
 

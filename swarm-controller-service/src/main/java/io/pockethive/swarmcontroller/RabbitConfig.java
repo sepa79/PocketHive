@@ -37,25 +37,29 @@ public class RabbitConfig {
   @Bean
   Binding bindSwarmStart(@Qualifier("controlQueue") Queue controlQueue,
                          @Qualifier("controlExchange") TopicExchange controlExchange) {
-    return BindingBuilder.bind(controlQueue).to(controlExchange).with("sig.swarm-start.*");
+    return BindingBuilder.bind(controlQueue).to(controlExchange)
+        .with("sig.swarm-start." + Topology.SWARM_ID);
   }
 
   @Bean
   Binding bindSwarmTemplate(@Qualifier("controlQueue") Queue controlQueue,
                             @Qualifier("controlExchange") TopicExchange controlExchange) {
-    return BindingBuilder.bind(controlQueue).to(controlExchange).with("sig.swarm-template.*");
+    return BindingBuilder.bind(controlQueue).to(controlExchange)
+        .with("sig.swarm-template." + Topology.SWARM_ID);
   }
 
   @Bean
   Binding bindSwarmStop(@Qualifier("controlQueue") Queue controlQueue,
                         @Qualifier("controlExchange") TopicExchange controlExchange) {
-    return BindingBuilder.bind(controlQueue).to(controlExchange).with("sig.swarm-stop.*");
+    return BindingBuilder.bind(controlQueue).to(controlExchange)
+        .with("sig.swarm-stop." + Topology.SWARM_ID);
   }
 
   @Bean
   Binding bindSwarmRemove(@Qualifier("controlQueue") Queue controlQueue,
                           @Qualifier("controlExchange") TopicExchange controlExchange) {
-    return BindingBuilder.bind(controlQueue).to(controlExchange).with("sig.swarm-remove.*");
+    return BindingBuilder.bind(controlQueue).to(controlExchange)
+        .with("sig.swarm-remove." + Topology.SWARM_ID);
   }
 
   @Bean
