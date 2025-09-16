@@ -16,6 +16,8 @@ export default function HivePage() {
   const [activeSwarm, setActiveSwarm] = useState<string | null>(null)
 
   useEffect(() => {
+    // We rely on the control-plane event stream (`ev.status-*`) to keep the
+    // component list current, so no manual `requestStatusFull` calls remain.
     const unsub = subscribeComponents(setComponents)
     return () => unsub()
   }, [])
@@ -61,6 +63,8 @@ export default function HivePage() {
   const handleStart = async (id: string) => {
     try {
       await startSwarm(id)
+      // Success toasts are immediate, but topology updates wait for the next
+      // `ev.status-*` event emitted by the swarm-controller.
       setSwarmMsg((m) => ({ ...m, [id]: 'Swarm started' }))
     } catch {
       setSwarmMsg((m) => ({ ...m, [id]: 'Failed to start swarm' }))
@@ -70,6 +74,8 @@ export default function HivePage() {
   const handleStop = async (id: string) => {
     try {
       await stopSwarm(id)
+      // Refresh still relies on incoming status events instead of ad-hoc
+      // `status-request` calls.
       setSwarmMsg((m) => ({ ...m, [id]: 'Swarm stopped' }))
     } catch {
       setSwarmMsg((m) => ({ ...m, [id]: 'Failed to stop swarm' }))
