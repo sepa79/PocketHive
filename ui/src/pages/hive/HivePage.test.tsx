@@ -39,6 +39,19 @@ const baseComponents: Component[] = [
 let listener: ((c: Component[]) => void) | null = null
 let comps: Component[] = []
 let apiFetchSpy: SpyInstance
+
+const extractUrl = (target: unknown) => {
+  if (typeof target === 'string') return target
+  if (target instanceof URL) return target.toString()
+  if (target && typeof target === 'object' && 'url' in target) {
+    const maybeUrl = (target as { url?: unknown }).url
+    if (typeof maybeUrl === 'string') return maybeUrl
+  }
+  return ''
+}
+
+const hasStatusRequestCall = () =>
+  apiFetchSpy.mock.calls.some((call) => extractUrl(call[0]).includes('status-request'))
 beforeEach(() => {
   listener = null
   comps = baseComponents.map((c) => ({
@@ -74,8 +87,10 @@ test('renders queen status and start/stop controls', async () => {
     ),
   )
   expect(await screen.findByText('Swarm started')).toBeTruthy()
+  expect(hasStatusRequestCall()).toBe(false)
 
   comps[0].config = { swarmStatus: 'RUNNING', enabled: true }
+  // Push-style refresh: mimic an incoming `ev.status-*` notification from the control plane.
   if (listener) listener([...comps])
   expect(await screen.findByText(/Queen: running/i)).toBeTruthy()
   await user.click(screen.getAllByRole('button', { name: /stop/i })[1])
@@ -86,6 +101,7 @@ test('renders queen status and start/stop controls', async () => {
     ),
   )
   expect(await screen.findByText('Swarm stopped')).toBeTruthy()
+  expect(hasStatusRequestCall()).toBe(false)
 })
 
 test('shows unassigned components when selecting default swarm', async () => {
