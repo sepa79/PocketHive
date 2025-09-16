@@ -1,5 +1,7 @@
 package io.pockethive.orchestrator.app;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.Topology;
 import io.pockethive.orchestrator.domain.ControlSignal;
 import io.pockethive.orchestrator.domain.IdempotencyStore;
@@ -24,10 +26,12 @@ public class ComponentController {
 
     private final AmqpTemplate rabbit;
     private final IdempotencyStore idempotency;
+    private final ObjectMapper json;
 
-    public ComponentController(AmqpTemplate rabbit, IdempotencyStore idempotency) {
+    public ComponentController(AmqpTemplate rabbit, IdempotencyStore idempotency, ObjectMapper json) {
         this.rabbit = rabbit;
         this.idempotency = idempotency;
+        this.json = json;
     }
 
     @PostMapping("/{role}/{instance}/config")
@@ -41,7 +45,7 @@ public class ComponentController {
                 String correlation = UUID.randomUUID().toString();
                 ControlSignal payload = ControlSignal.forInstance("config-update", request.swarmId(), role, instance,
                     correlation, request.idempotencyKey());
-                rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, routingKey(role, instance), payload);
+                rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, routingKey(role, instance), toJson(payload));
                 idempotency.record(scope, "config-update", request.idempotencyKey(), correlation);
                 return accepted(correlation, request.idempotencyKey(), role, instance);
             });
@@ -72,5 +76,14 @@ public class ComponentController {
                                       Map<String, Object> patch,
                                       String notes,
                                       String swarmId) { }
+
+    private String toJson(ControlSignal signal) {
+        try {
+            return json.writeValueAsString(signal);
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("Failed to serialize control signal %s for role %s".formatted(
+                signal.signal(), signal.role()), e);
+        }
+    }
 }
 
