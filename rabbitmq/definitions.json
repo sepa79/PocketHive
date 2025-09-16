@@ -8,6 +8,12 @@
       "password": "guest",
       "hashing_algorithm": "rabbit_password_hashing_sha256",
       "tags": ["administrator"]
+    },
+    {
+      "name": "ph-observer",
+      "password": "ph-observer",
+      "hashing_algorithm": "rabbit_password_hashing_sha256",
+      "tags": []
     }
   ],
   "permissions": [
@@ -16,6 +22,13 @@
       "vhost": "/",
       "configure": ".*",
       "write": ".*",
+      "read": ".*"
+    },
+    {
+      "user": "ph-observer",
+      "vhost": "/",
+      "configure": "",
+      "write": "",
       "read": ".*"
     }
   ],
