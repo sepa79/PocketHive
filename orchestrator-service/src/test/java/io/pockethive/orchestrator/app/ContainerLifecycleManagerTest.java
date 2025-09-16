@@ -35,7 +35,7 @@ class ContainerLifecycleManagerTest {
         assertEquals("sw1", swarm.getId());
         assertEquals("inst1", swarm.getInstanceId());
         assertEquals("cid", swarm.getContainerId());
-        assertEquals(SwarmStatus.RUNNING, swarm.getStatus());
+        assertEquals(SwarmStatus.CREATING, swarm.getStatus());
         assertTrue(registry.find("sw1").isPresent());
         ArgumentCaptor<java.util.Map<String, String>> envCaptor = ArgumentCaptor.forClass(java.util.Map.class);
         ArgumentCaptor<String> nameCaptor = ArgumentCaptor.forClass(String.class);
@@ -80,6 +80,23 @@ class ContainerLifecycleManagerTest {
         });
         assertEquals(SwarmStatus.STOPPED, swarm.getStatus());
         verifyNoInteractions(docker, amqp);
+    }
+
+    @Test
+    void stopSwarmRecoversAfterFailure() {
+        SwarmRegistry registry = new SwarmRegistry();
+        Swarm swarm = new Swarm("sw1", "inst1", "cid");
+        registry.register(swarm);
+        registry.updateStatus(swarm.getId(), SwarmStatus.CREATING);
+        registry.updateStatus(swarm.getId(), SwarmStatus.READY);
+        registry.updateStatus(swarm.getId(), SwarmStatus.STARTING);
+        registry.updateStatus(swarm.getId(), SwarmStatus.RUNNING);
+        registry.updateStatus(swarm.getId(), SwarmStatus.FAILED);
+        SwarmTemplate template = new SwarmTemplate();
+        ContainerLifecycleManager manager = new ContainerLifecycleManager(docker, registry, template, amqp);
+
+        assertDoesNotThrow(() -> manager.stopSwarm(swarm.getId()));
+        assertEquals(SwarmStatus.STOPPED, swarm.getStatus());
     }
 
     @Test

@@ -10,6 +10,8 @@ import io.pockethive.orchestrator.domain.SwarmPlanRegistry;
 import io.pockethive.orchestrator.domain.SwarmRegistry;
 import io.pockethive.orchestrator.domain.SwarmCreateTracker;
 import io.pockethive.orchestrator.domain.SwarmCreateTracker.Pending;
+import io.pockethive.orchestrator.domain.SwarmCreateTracker.Phase;
+import io.pockethive.orchestrator.domain.SwarmStatus;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,6 +24,9 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+import java.time.Duration;
+import java.time.Instant;
+
 /**
  * Handles control-plane signals for orchestrator and dispatches swarm plans when
  * controllers become ready.
@@ -32,6 +37,7 @@ public class SwarmSignalListener {
     private static final String ROLE = "orchestrator";
     private static final String SCOPE = "hive";
     private static final long STATUS_INTERVAL_MS = 5000L;
+    private static final Duration TEMPLATE_TIMEOUT = Duration.ofMillis(120_000L);
     private static final Logger log = LoggerFactory.getLogger(SwarmSignalListener.class);
 
     private final AmqpTemplate rabbit;
@@ -79,16 +85,43 @@ public class SwarmSignalListener {
                     log.warn("template send", e);
                 }
             });
-            creates.remove(inst).ifPresent(info -> emitCreateReady(info));
+            creates.remove(inst).ifPresent(info -> {
+                emitCreateReady(info);
+                creates.expectTemplate(info, TEMPLATE_TIMEOUT);
+            });
         } else if (routingKey.startsWith("ev.ready.swarm-stop.")) {
             String swarmId = routingKey.substring("ev.ready.swarm-stop.".length());
+            creates.complete(swarmId, Phase.STOP);
             lifecycle.stopSwarm(swarmId);
         } else if (routingKey.startsWith("ev.ready.swarm-remove.")) {
             String swarmId = routingKey.substring("ev.ready.swarm-remove.".length());
             lifecycle.removeSwarm(swarmId);
+        } else if (routingKey.startsWith("ev.ready.swarm-template.")) {
+            String swarmId = routingKey.substring("ev.ready.swarm-template.".length());
+            creates.complete(swarmId, Phase.TEMPLATE);
+            registry.markTemplateApplied(swarmId);
+        } else if (routingKey.startsWith("ev.ready.swarm-start.")) {
+            String swarmId = routingKey.substring("ev.ready.swarm-start.".length());
+            creates.complete(swarmId, Phase.START);
+            registry.markStartConfirmed(swarmId);
         } else if (routingKey.startsWith("ev.error.swarm-controller.")) {
             String inst = routingKey.substring("ev.error.swarm-controller.".length());
-            creates.remove(inst).ifPresent(info -> emitCreateError(info));
+            creates.remove(inst).ifPresent(info -> {
+                registry.updateStatus(info.swarmId(), SwarmStatus.FAILED);
+                emitCreateError(info);
+            });
+        } else if (routingKey.startsWith("ev.error.swarm-template.")) {
+            String swarmId = routingKey.substring("ev.error.swarm-template.".length());
+            creates.complete(swarmId, Phase.TEMPLATE);
+            registry.updateStatus(swarmId, SwarmStatus.FAILED);
+        } else if (routingKey.startsWith("ev.error.swarm-start.")) {
+            String swarmId = routingKey.substring("ev.error.swarm-start.".length());
+            creates.complete(swarmId, Phase.START);
+            registry.updateStatus(swarmId, SwarmStatus.FAILED);
+        } else if (routingKey.startsWith("ev.error.swarm-stop.")) {
+            String swarmId = routingKey.substring("ev.error.swarm-stop.".length());
+            creates.complete(swarmId, Phase.STOP);
+            registry.updateStatus(swarmId, SwarmStatus.FAILED);
         }
     }
 
@@ -129,9 +162,86 @@ public class SwarmSignalListener {
         }
     }
 
+    private void emitCreateTimeout(Pending info) {
+        if (info == null) {
+            return;
+        }
+        try {
+            String rk = "ev.error.swarm-create." + info.swarmId();
+            ErrorConfirmation conf = new ErrorConfirmation(
+                java.time.Instant.now(),
+                info.correlationId(),
+                info.idempotencyKey(),
+                "swarm-create",
+                ConfirmationScope.forSwarm(info.swarmId()),
+                "Failed",
+                "controller-bootstrap",
+                "timeout",
+                "controller did not become ready in time",
+                Boolean.TRUE,
+                null);
+            rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, json.writeValueAsString(conf));
+        } catch (Exception e) {
+            log.warn("create timeout send", e);
+        }
+    }
+
+    private void emitPhaseTimeout(String signal, Pending info, String phase, String message) {
+        if (info == null) {
+            return;
+        }
+        try {
+            String rk = "ev.error." + signal + "." + info.swarmId();
+            ErrorConfirmation conf = new ErrorConfirmation(
+                java.time.Instant.now(),
+                info.correlationId(),
+                info.idempotencyKey(),
+                signal,
+                ConfirmationScope.forSwarm(info.swarmId()),
+                "Failed",
+                phase,
+                "timeout",
+                message,
+                Boolean.TRUE,
+                null);
+            rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, json.writeValueAsString(conf));
+        } catch (Exception e) {
+            log.warn("phase timeout send {}", signal, e);
+        }
+    }
+
     @Scheduled(fixedRate = STATUS_INTERVAL_MS)
     public void status() {
         sendStatusDelta();
+    }
+
+    @Scheduled(fixedRate = 2000L)
+    public void checkTimeouts() {
+        Instant now = Instant.now();
+        creates.expire(now).forEach(this::handleTimeout);
+    }
+
+    private void handleTimeout(Pending pending) {
+        if (pending == null) {
+            return;
+        }
+        Phase phase = pending.phase();
+        String swarmId = pending.swarmId();
+        if (swarmId == null) {
+            return;
+        }
+        registry.updateStatus(swarmId, SwarmStatus.FAILED);
+        switch (phase) {
+            case CONTROLLER -> {
+                if (pending.instanceId() != null) {
+                    plans.remove(pending.instanceId());
+                }
+                emitCreateTimeout(pending);
+            }
+            case TEMPLATE -> emitPhaseTimeout("swarm-template", pending, "template", "template confirmation timed out");
+            case START -> emitPhaseTimeout("swarm-start", pending, "start", "start confirmation timed out");
+            case STOP -> emitPhaseTimeout("swarm-stop", pending, "stop", "stop confirmation timed out");
+        }
     }
 
     private void sendStatusFull() {

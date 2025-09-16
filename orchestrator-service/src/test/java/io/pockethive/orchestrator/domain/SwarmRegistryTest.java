@@ -22,9 +22,9 @@ class SwarmRegistryTest {
 
         assertEquals(SwarmStatus.NEW, swarm.getStatus());
         registry.updateStatus(swarm.getId(), SwarmStatus.CREATING);
-        registry.updateStatus(swarm.getId(), SwarmStatus.READY);
-        registry.updateStatus(swarm.getId(), SwarmStatus.STARTING);
-        registry.updateStatus(swarm.getId(), SwarmStatus.RUNNING);
+        registry.markTemplateApplied(swarm.getId());
+        registry.markStartIssued(swarm.getId());
+        registry.markStartConfirmed(swarm.getId());
         registry.refresh(swarm.getId(), SwarmHealth.RUNNING);
         assertEquals(SwarmStatus.RUNNING, swarm.getStatus());
         assertEquals(SwarmHealth.RUNNING, swarm.getHealth());
@@ -46,6 +46,23 @@ class SwarmRegistryTest {
         registry.updateStatus(swarm.getId(), SwarmStatus.REMOVED);
 
         assertEquals(SwarmStatus.REMOVED, swarm.getStatus());
+    }
+
+    @Test
+    void allowsStopAndRemovalAfterFailure() {
+        SwarmRegistry registry = new SwarmRegistry();
+        Swarm swarm = new Swarm("s1", "inst1", "container");
+        registry.register(swarm);
+
+        registry.updateStatus(swarm.getId(), SwarmStatus.CREATING);
+        registry.updateStatus(swarm.getId(), SwarmStatus.READY);
+        registry.updateStatus(swarm.getId(), SwarmStatus.STARTING);
+        registry.updateStatus(swarm.getId(), SwarmStatus.RUNNING);
+        registry.updateStatus(swarm.getId(), SwarmStatus.FAILED);
+
+        assertDoesNotThrow(() -> registry.updateStatus(swarm.getId(), SwarmStatus.STOPPING));
+        assertDoesNotThrow(() -> registry.updateStatus(swarm.getId(), SwarmStatus.STOPPED));
+        assertDoesNotThrow(() -> registry.updateStatus(swarm.getId(), SwarmStatus.REMOVING));
     }
 
     @Test

@@ -48,9 +48,6 @@ public class ContainerLifecycleManager {
         Swarm swarm = new Swarm(swarmId, instanceId, containerId);
         registry.register(swarm);
         registry.updateStatus(swarmId, SwarmStatus.CREATING);
-        registry.updateStatus(swarmId, SwarmStatus.READY);
-        registry.updateStatus(swarmId, SwarmStatus.STARTING);
-        registry.updateStatus(swarmId, SwarmStatus.RUNNING);
         return swarm;
     }
 
