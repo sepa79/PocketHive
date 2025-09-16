@@ -3,7 +3,7 @@ package io.pockethive.orchestrator.app;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.Topology;
-import io.pockethive.orchestrator.domain.ControlSignal;
+import io.pockethive.control.ControlSignal;
 import io.pockethive.orchestrator.domain.IdempotencyStore;
 import org.springframework.amqp.core.AmqpTemplate;
 import org.springframework.http.ResponseEntity;
@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
 
@@ -44,7 +45,7 @@ public class ComponentController {
             .orElseGet(() -> {
                 String correlation = UUID.randomUUID().toString();
                 ControlSignal payload = ControlSignal.forInstance("config-update", request.swarmId(), role, instance,
-                    correlation, request.idempotencyKey());
+                    correlation, request.idempotencyKey(), argsFrom(request.patch()));
                 rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, routingKey(role, instance), toJson(payload));
                 idempotency.record(scope, "config-update", request.idempotencyKey(), correlation);
                 return accepted(correlation, request.idempotencyKey(), role, instance);
@@ -70,6 +71,15 @@ public class ComponentController {
         );
         ControlResponse response = new ControlResponse(correlationId, idempotencyKey, watch, CONFIG_UPDATE_TIMEOUT_MS);
         return ResponseEntity.accepted().body(response);
+    }
+
+    private Map<String, Object> argsFrom(Map<String, Object> patch) {
+        if (patch == null) {
+            return null;
+        }
+        Map<String, Object> args = new LinkedHashMap<>();
+        args.put("data", patch);
+        return args;
     }
 
     public record ConfigUpdateRequest(String idempotencyKey,
