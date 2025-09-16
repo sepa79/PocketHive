@@ -1,6 +1,6 @@
 package io.pockethive.orchestrator.app;
 
-import io.pockethive.orchestrator.domain.SwarmTemplate;
+import io.pockethive.swarm.model.SwarmTemplate;
 
 /**
  * Client for retrieving swarm templates.

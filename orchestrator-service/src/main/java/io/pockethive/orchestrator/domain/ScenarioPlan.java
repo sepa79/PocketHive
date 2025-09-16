@@ -1,7 +1,8 @@
 package io.pockethive.orchestrator.domain;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import java.util.List;
+import io.pockethive.swarm.model.SwarmPlan;
+import io.pockethive.swarm.model.SwarmTemplate;
 
 /**
  * Scenario description that can be expanded into a SwarmPlan.
@@ -9,8 +10,7 @@ import java.util.List;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record ScenarioPlan(SwarmTemplate template) {
     public SwarmPlan toSwarmPlan(String id) {
-        List<SwarmPlan.Bee> bees = template.getBees();
-        return new SwarmPlan(id, bees);
+        return new SwarmPlan(id, template.bees());
     }
 }
 

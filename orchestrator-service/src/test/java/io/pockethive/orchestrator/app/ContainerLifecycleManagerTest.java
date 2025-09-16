@@ -3,7 +3,6 @@ package io.pockethive.orchestrator.app;
 import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmRegistry;
 import io.pockethive.orchestrator.domain.SwarmStatus;
-import io.pockethive.orchestrator.domain.SwarmTemplate;
 import io.pockethive.docker.DockerContainerClient;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -25,12 +24,10 @@ class ContainerLifecycleManagerTest {
     @Test
     void startSwarmCreatesAndRegisters() {
         SwarmRegistry registry = new SwarmRegistry();
-        SwarmTemplate template = new SwarmTemplate();
-        template.setImage("img");
         when(docker.createAndStartContainer(eq("img"), anyMap(), anyString())).thenReturn("cid");
-        ContainerLifecycleManager manager = new ContainerLifecycleManager(docker, registry, template, amqp);
+        ContainerLifecycleManager manager = new ContainerLifecycleManager(docker, registry, amqp);
 
-        Swarm swarm = manager.startSwarm("sw1", "inst1");
+        Swarm swarm = manager.startSwarm("sw1", "img", "inst1");
 
         assertEquals("sw1", swarm.getId());
         assertEquals("inst1", swarm.getInstanceId());
@@ -53,8 +50,7 @@ class ContainerLifecycleManagerTest {
         registry.updateStatus(swarm.getId(), SwarmStatus.READY);
         registry.updateStatus(swarm.getId(), SwarmStatus.STARTING);
         registry.updateStatus(swarm.getId(), SwarmStatus.RUNNING);
-        SwarmTemplate template = new SwarmTemplate();
-        ContainerLifecycleManager manager = new ContainerLifecycleManager(docker, registry, template, amqp);
+        ContainerLifecycleManager manager = new ContainerLifecycleManager(docker, registry, amqp);
 
         manager.stopSwarm(swarm.getId());
 
@@ -71,8 +67,7 @@ class ContainerLifecycleManagerTest {
         registry.updateStatus(swarm.getId(), SwarmStatus.READY);
         registry.updateStatus(swarm.getId(), SwarmStatus.STARTING);
         registry.updateStatus(swarm.getId(), SwarmStatus.RUNNING);
-        SwarmTemplate template = new SwarmTemplate();
-        ContainerLifecycleManager manager = new ContainerLifecycleManager(docker, registry, template, amqp);
+        ContainerLifecycleManager manager = new ContainerLifecycleManager(docker, registry, amqp);
 
         assertDoesNotThrow(() -> {
             manager.stopSwarm(swarm.getId());
@@ -92,8 +87,7 @@ class ContainerLifecycleManagerTest {
         registry.updateStatus(swarm.getId(), SwarmStatus.STARTING);
         registry.updateStatus(swarm.getId(), SwarmStatus.RUNNING);
         registry.updateStatus(swarm.getId(), SwarmStatus.FAILED);
-        SwarmTemplate template = new SwarmTemplate();
-        ContainerLifecycleManager manager = new ContainerLifecycleManager(docker, registry, template, amqp);
+        ContainerLifecycleManager manager = new ContainerLifecycleManager(docker, registry, amqp);
 
         assertDoesNotThrow(() -> manager.stopSwarm(swarm.getId()));
         assertEquals(SwarmStatus.STOPPED, swarm.getStatus());
@@ -104,8 +98,7 @@ class ContainerLifecycleManagerTest {
         SwarmRegistry registry = new SwarmRegistry();
         Swarm swarm = new Swarm("sw1", "inst1", "cid");
         registry.register(swarm);
-        SwarmTemplate template = new SwarmTemplate();
-        ContainerLifecycleManager manager = new ContainerLifecycleManager(docker, registry, template, amqp);
+        ContainerLifecycleManager manager = new ContainerLifecycleManager(docker, registry, amqp);
 
         manager.removeSwarm(swarm.getId());
 
@@ -123,8 +116,7 @@ class ContainerLifecycleManagerTest {
         Swarm sw2 = new Swarm("sw2", "inst2", "c2");
         registry.register(sw1);
         registry.register(sw2);
-        SwarmTemplate template = new SwarmTemplate();
-        ContainerLifecycleManager manager = new ContainerLifecycleManager(docker, registry, template, amqp);
+        ContainerLifecycleManager manager = new ContainerLifecycleManager(docker, registry, amqp);
 
         manager.removeSwarm(sw1.getId());
         manager.removeSwarm(sw2.getId());

@@ -4,13 +4,15 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.Topology;
 import io.pockethive.orchestrator.domain.Swarm;
-import io.pockethive.orchestrator.domain.SwarmPlan;
 import io.pockethive.orchestrator.domain.SwarmPlanRegistry;
 import io.pockethive.orchestrator.domain.SwarmRegistry;
 import io.pockethive.orchestrator.domain.SwarmStatus;
 import io.pockethive.orchestrator.domain.SwarmCreateTracker;
 import io.pockethive.orchestrator.domain.SwarmCreateTracker.Pending;
 import io.pockethive.orchestrator.domain.SwarmCreateTracker.Phase;
+import io.pockethive.swarm.model.Bee;
+import io.pockethive.swarm.model.SwarmPlan;
+import io.pockethive.swarm.model.Work;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -40,7 +42,7 @@ class SwarmSignalListenerTest {
     void dispatchesTemplateAndEmitsCreateConfirmation() throws Exception {
         SwarmPlanRegistry plans = new SwarmPlanRegistry();
         SwarmPlan plan = new SwarmPlan("sw1", java.util.List.of(
-            new SwarmPlan.Bee("generator", "img", new SwarmPlan.Work("in", "out"))));
+            new Bee("generator", "img", new Work("in", "out"), java.util.Map.of())));
         plans.register("inst1", plan);
         SwarmCreateTracker tracker = new SwarmCreateTracker();
         tracker.register("inst1", new Pending("sw1", "inst1", "corr", "idem", Phase.CONTROLLER, java.time.Instant.now().plusSeconds(60)));

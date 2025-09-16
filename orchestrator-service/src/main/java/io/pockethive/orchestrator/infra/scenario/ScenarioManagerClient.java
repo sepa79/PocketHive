@@ -3,9 +3,10 @@ package io.pockethive.orchestrator.infra.scenario;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.orchestrator.app.ScenarioClient;
 import io.pockethive.orchestrator.domain.ScenarioPlan;
-import io.pockethive.orchestrator.domain.SwarmTemplate;
+import io.pockethive.swarm.model.SwarmTemplate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.net.URI;
@@ -23,9 +24,16 @@ public class ScenarioManagerClient implements ScenarioClient {
     private final ObjectMapper json;
     private final String baseUrl;
 
-    public ScenarioManagerClient(ObjectMapper json) {
+    public ScenarioManagerClient(ObjectMapper json, @Value("${scenario-manager.url:}") String configuredBaseUrl) {
         this.json = json;
-        this.baseUrl = System.getenv().getOrDefault("SCENARIO_MANAGER_URL", "http://scenario-manager:8080");
+        String envUrl = System.getenv("SCENARIO_MANAGER_URL");
+        if (configuredBaseUrl != null && !configuredBaseUrl.isBlank()) {
+            this.baseUrl = configuredBaseUrl;
+        } else if (envUrl != null && !envUrl.isBlank()) {
+            this.baseUrl = envUrl;
+        } else {
+            this.baseUrl = "http://scenario-manager:8080";
+        }
     }
 
     @Override

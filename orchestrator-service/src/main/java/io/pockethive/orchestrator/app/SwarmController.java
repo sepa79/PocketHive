@@ -5,13 +5,18 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.Topology;
 import io.pockethive.control.ControlSignal;
 import io.pockethive.orchestrator.domain.Swarm;
-import io.pockethive.orchestrator.domain.SwarmHealth;
+import io.pockethive.orchestrator.domain.SwarmCreateRequest;
 import io.pockethive.orchestrator.domain.SwarmCreateTracker;
 import io.pockethive.orchestrator.domain.SwarmCreateTracker.Pending;
 import io.pockethive.orchestrator.domain.SwarmCreateTracker.Phase;
 import io.pockethive.orchestrator.domain.IdempotencyStore;
+import io.pockethive.orchestrator.domain.SwarmHealth;
+import io.pockethive.orchestrator.domain.SwarmPlanRegistry;
 import io.pockethive.orchestrator.domain.SwarmRegistry;
 import io.pockethive.orchestrator.domain.SwarmStatus;
+import io.pockethive.swarm.model.Bee;
+import io.pockethive.swarm.model.SwarmPlan;
+import io.pockethive.swarm.model.SwarmTemplate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.core.AmqpTemplate;
@@ -20,6 +25,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 import io.pockethive.util.BeeNameGenerator;
@@ -36,6 +42,8 @@ public class SwarmController {
     private final SwarmCreateTracker creates;
     private final IdempotencyStore idempotency;
     private final SwarmRegistry registry;
+    private final SwarmPlanRegistry plans;
+    private final ScenarioClient scenarios;
     private final ObjectMapper json;
 
     public SwarmController(AmqpTemplate rabbit,
@@ -43,23 +51,32 @@ public class SwarmController {
                            SwarmCreateTracker creates,
                            IdempotencyStore idempotency,
                            SwarmRegistry registry,
-                           ObjectMapper json) {
+                           ObjectMapper json,
+                           ScenarioClient scenarios,
+                           SwarmPlanRegistry plans) {
         this.rabbit = rabbit;
         this.lifecycle = lifecycle;
         this.creates = creates;
         this.idempotency = idempotency;
         this.registry = registry;
         this.json = json;
+        this.scenarios = scenarios;
+        this.plans = plans;
     }
 
     @PostMapping("/{swarmId}/create")
-    public ResponseEntity<ControlResponse> create(@PathVariable String swarmId, @RequestBody ControlRequest req) {
+    public ResponseEntity<ControlResponse> create(@PathVariable String swarmId, @RequestBody SwarmCreateRequest req) {
         String path = "/api/swarms/" + swarmId + "/create";
         logRestRequest("POST", path, req);
         Duration timeout = Duration.ofMillis(120_000L);
         ResponseEntity<ControlResponse> response = idempotentSend("swarm-create", swarmId, req.idempotencyKey(), timeout.toMillis(), corr -> {
+            String templateId = req.templateId();
+            SwarmTemplate template = fetchTemplate(templateId);
+            String image = requireImage(template, templateId);
+            List<Bee> bees = template.bees();
             String instanceId = BeeNameGenerator.generate("swarm-controller", swarmId);
-            Swarm swarm = lifecycle.startSwarm(swarmId, instanceId);
+            plans.register(instanceId, new SwarmPlan(swarmId, bees));
+            Swarm swarm = lifecycle.startSwarm(swarmId, image, instanceId);
             creates.register(swarm.getInstanceId(), new Pending(
                 swarmId,
                 swarm.getInstanceId(),
@@ -136,6 +153,27 @@ public class SwarmController {
                     signal, swarmId, corr, idempotencyKey, timeoutMs);
                 return ResponseEntity.accepted().body(resp);
             });
+    }
+
+    private SwarmTemplate fetchTemplate(String templateId) {
+        try {
+            SwarmTemplate template = scenarios.fetchTemplate(templateId);
+            if (template == null) {
+                throw new IllegalStateException("Template %s was not found".formatted(templateId));
+            }
+            return template;
+        } catch (Exception e) {
+            log.warn("failed to fetch template {}", templateId, e);
+            throw new IllegalStateException("Failed to fetch template %s".formatted(templateId), e);
+        }
+    }
+
+    private static String requireImage(SwarmTemplate template, String templateId) {
+        String image = template.image();
+        if (image == null || image.isBlank()) {
+            throw new IllegalStateException("Template %s missing swarm-controller image".formatted(templateId));
+        }
+        return image;
     }
 
     public record ControlRequest(String idempotencyKey, String notes) {}

@@ -3,6 +3,8 @@ package io.pockethive.orchestrator.app;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -10,19 +12,18 @@ import io.pockethive.Topology;
 import io.pockethive.control.ReadyConfirmation;
 import io.pockethive.docker.DockerContainerClient;
 import io.pockethive.orchestrator.domain.Swarm;
-import io.pockethive.orchestrator.domain.SwarmPlan;
 import io.pockethive.orchestrator.domain.SwarmPlanRegistry;
 import io.pockethive.orchestrator.domain.SwarmRegistry;
 import io.pockethive.orchestrator.domain.SwarmStatus;
-import io.pockethive.orchestrator.domain.SwarmTemplate;
-import io.pockethive.orchestrator.infra.scenario.ScenarioManagerClient;
 import io.pockethive.scenarios.ScenarioManagerApplication;
+import io.pockethive.swarm.model.Bee;
+import io.pockethive.swarm.model.SwarmPlan;
+import io.pockethive.swarm.model.Work;
 import java.net.ServerSocket;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterAll;
@@ -53,7 +54,6 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
-import org.springframework.test.util.ReflectionTestUtils;
 import org.testcontainers.containers.RabbitMQContainer;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.springframework.boot.test.mock.mockito.MockBean;
@@ -82,9 +82,6 @@ class SwarmCreationMock1E2ETest {
 
     @Autowired
     SwarmPlanRegistry swarmPlanRegistry;
-
-    @Autowired
-    ScenarioManagerClient scenarioManagerClient;
 
     @Autowired
     RabbitTemplate rabbitTemplate;
@@ -141,6 +138,7 @@ class SwarmCreationMock1E2ETest {
         registry.add("spring.rabbitmq.port", RABBIT::getAmqpPort);
         registry.add("spring.rabbitmq.listener.simple.missingQueuesFatal", () -> "false");
         ensureScenarioManagerRunning();
+        registry.add("scenario-manager.url", () -> "http://127.0.0.1:" + scenarioManagerPort);
     }
 
     @AfterAll
@@ -168,7 +166,7 @@ class SwarmCreationMock1E2ETest {
         String swarmId = "mock-swarm";
         String idempotencyKey = UUID.randomUUID().toString();
         HttpEntity<Map<String, String>> request = jsonRequest(
-            Map.of("idempotencyKey", idempotencyKey, "notes", "mock-1"));
+            Map.of("idempotencyKey", idempotencyKey, "templateId", "mock-1", "notes", "mock-1"));
 
         ResponseEntity<ControlResponse> response = rest.exchange(
             "/api/swarms/{swarmId}/create",
@@ -189,14 +187,9 @@ class SwarmCreationMock1E2ETest {
         String instanceId = swarm.getInstanceId();
         assertThat(instanceId).isNotBlank();
 
-        ReflectionTestUtils.setField(
-            scenarioManagerClient,
-            "baseUrl",
-            "http://127.0.0.1:" + scenarioManagerPort);
+        assertThat(swarmPlanRegistry.find(instanceId)).isPresent();
 
-        SwarmTemplate template = scenarioManagerClient.fetchTemplate("mock-1");
-        SwarmPlan plan = new SwarmPlan(swarmId, List.copyOf(template.getBees()));
-        swarmPlanRegistry.register(instanceId, plan);
+        verify(docker).createAndStartContainer(eq("pockethive-swarm-controller:latest"), anyMap(), eq(instanceId));
 
         AnonymousQueue captureQueue = new AnonymousQueue();
         String captureName = admin.declareQueue(captureQueue);
@@ -221,10 +214,10 @@ class SwarmCreationMock1E2ETest {
         SwarmPlan publishedPlan = objectMapper.readValue(templateMessage.getBody(), SwarmPlan.class);
         assertThat(publishedPlan.id()).isEqualTo(swarmId);
         assertThat(publishedPlan.bees()).containsExactly(
-            new SwarmPlan.Bee("generator", "pockethive-generator:latest", new SwarmPlan.Work(null, "gen")),
-            new SwarmPlan.Bee("moderator", "pockethive-moderator:latest", new SwarmPlan.Work("gen", "mod")),
-            new SwarmPlan.Bee("processor", "pockethive-processor:latest", new SwarmPlan.Work("mod", "final")),
-            new SwarmPlan.Bee("postprocessor", "pockethive-postprocessor:latest", new SwarmPlan.Work("final", null))
+            new Bee("generator", "pockethive-generator:latest", new Work(null, "gen"), java.util.Map.of()),
+            new Bee("moderator", "pockethive-moderator:latest", new Work("gen", "mod"), java.util.Map.of()),
+            new Bee("processor", "pockethive-processor:latest", new Work("mod", "final"), java.util.Map.of()),
+            new Bee("postprocessor", "pockethive-postprocessor:latest", new Work("final", null), java.util.Map.of())
         );
 
         Message readyMessage = awaitMessage(captureName, Duration.ofSeconds(5));
