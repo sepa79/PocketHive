@@ -377,6 +377,7 @@ public class Trigger {
         .kind("status-delta")
         .role(ROLE)
         .instance(instanceId)
+        .swarmId(Topology.SWARM_ID)
         .traffic(Topology.EXCHANGE)
         .controlIn(controlQueue)
         .controlRoutes(
@@ -409,6 +410,7 @@ public class Trigger {
         .kind("status-full")
         .role(ROLE)
         .instance(instanceId)
+        .swarmId(Topology.SWARM_ID)
         .traffic(Topology.EXCHANGE)
         .controlIn(controlQueue)
         .controlRoutes(

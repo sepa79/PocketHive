@@ -116,9 +116,14 @@ public class SwarmSignalListener {
             : routingKey.substring("ev.status-delta.".length());
         String[] parts = rest.split(Pattern.quote("."), 2);
         if (parts.length == 2) {
-          lifecycle.updateHeartbeat(parts[0], parts[1]);
           try {
             JsonNode node = mapper.readTree(body);
+            String swarmId = node.path("swarmId").asText(null);
+            if (swarmId != null && !swarmId.isBlank() && !Topology.SWARM_ID.equals(swarmId)) {
+              log.debug("Ignoring status for swarm {} on routing key {}", swarmId, routingKey);
+              return;
+            }
+            lifecycle.updateHeartbeat(parts[0], parts[1]);
             boolean enabled = node.path("data").path("enabled").asBoolean(true);
             lifecycle.updateEnabled(parts[0], parts[1], enabled);
             if (!enabled) {
