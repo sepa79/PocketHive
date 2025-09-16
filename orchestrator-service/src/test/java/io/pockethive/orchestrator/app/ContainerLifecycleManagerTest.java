@@ -83,6 +83,23 @@ class ContainerLifecycleManagerTest {
     }
 
     @Test
+    void stopSwarmRecoversAfterFailure() {
+        SwarmRegistry registry = new SwarmRegistry();
+        Swarm swarm = new Swarm("sw1", "inst1", "cid");
+        registry.register(swarm);
+        registry.updateStatus(swarm.getId(), SwarmStatus.CREATING);
+        registry.updateStatus(swarm.getId(), SwarmStatus.READY);
+        registry.updateStatus(swarm.getId(), SwarmStatus.STARTING);
+        registry.updateStatus(swarm.getId(), SwarmStatus.RUNNING);
+        registry.updateStatus(swarm.getId(), SwarmStatus.FAILED);
+        SwarmTemplate template = new SwarmTemplate();
+        ContainerLifecycleManager manager = new ContainerLifecycleManager(docker, registry, template, amqp);
+
+        assertDoesNotThrow(() -> manager.stopSwarm(swarm.getId()));
+        assertEquals(SwarmStatus.STOPPED, swarm.getStatus());
+    }
+
+    @Test
     void removeSwarmTearsDownContainerAndQueues() {
         SwarmRegistry registry = new SwarmRegistry();
         Swarm swarm = new Swarm("sw1", "inst1", "cid");

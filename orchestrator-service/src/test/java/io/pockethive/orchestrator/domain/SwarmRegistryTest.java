@@ -49,6 +49,23 @@ class SwarmRegistryTest {
     }
 
     @Test
+    void allowsStopAndRemovalAfterFailure() {
+        SwarmRegistry registry = new SwarmRegistry();
+        Swarm swarm = new Swarm("s1", "inst1", "container");
+        registry.register(swarm);
+
+        registry.updateStatus(swarm.getId(), SwarmStatus.CREATING);
+        registry.updateStatus(swarm.getId(), SwarmStatus.READY);
+        registry.updateStatus(swarm.getId(), SwarmStatus.STARTING);
+        registry.updateStatus(swarm.getId(), SwarmStatus.RUNNING);
+        registry.updateStatus(swarm.getId(), SwarmStatus.FAILED);
+
+        assertDoesNotThrow(() -> registry.updateStatus(swarm.getId(), SwarmStatus.STOPPING));
+        assertDoesNotThrow(() -> registry.updateStatus(swarm.getId(), SwarmStatus.STOPPED));
+        assertDoesNotThrow(() -> registry.updateStatus(swarm.getId(), SwarmStatus.REMOVING));
+    }
+
+    @Test
     void countSwarms() {
         SwarmRegistry registry = new SwarmRegistry();
         registry.register(new Swarm("s1", "i1", "c1"));

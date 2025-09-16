@@ -16,6 +16,9 @@ public enum SwarmStatus {
         if (next == FAILED) {
             return true;
         }
+        if (this == FAILED) {
+            return next == STOPPING || next == STOPPED || next == REMOVING;
+        }
         if (next == REMOVING) {
             return this != REMOVED && this != REMOVING;
         }
