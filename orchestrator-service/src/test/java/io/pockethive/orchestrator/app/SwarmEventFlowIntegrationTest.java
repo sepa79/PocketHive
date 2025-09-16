@@ -31,7 +31,7 @@ class SwarmEventFlowIntegrationTest {
     ContainerLifecycleManager lifecycle;
 
     @Test
-    void processesStatusAndConfirmations() {
+    void processesStatusAndConfirmations() throws Exception {
         SwarmPlanRegistry plans = new SwarmPlanRegistry();
         SwarmPlan plan = new SwarmPlan("sw1", java.util.List.of());
         plans.register("inst1", plan);
@@ -39,7 +39,8 @@ class SwarmEventFlowIntegrationTest {
         tracker.register("inst1", new Pending("sw1", "corr", "idem"));
         SwarmRegistry registry = new SwarmRegistry();
         registry.register(new Swarm("sw1", "inst1", "cid"));
-        SwarmSignalListener signal = new SwarmSignalListener(rabbit, plans, tracker, registry, lifecycle, new ObjectMapper(), "inst0");
+        ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
+        SwarmSignalListener signal = new SwarmSignalListener(rabbit, plans, tracker, registry, lifecycle, mapper, "inst0");
         ControllerStatusListener statusListener = new ControllerStatusListener(registry, new ObjectMapper());
 
         signal.handle("", "ev.ready.swarm-controller.inst1");
@@ -47,8 +48,10 @@ class SwarmEventFlowIntegrationTest {
         verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("sig.swarm-template.sw1"), anyString());
         verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("ev.ready.swarm-create.sw1"), captor.capture());
         String conf = captor.getValue();
-        assertThat(conf).contains("\"correlationId\":\"corr\"");
-        assertThat(conf).contains("\"idempotencyKey\":\"idem\"");
+        var ready = mapper.readTree(conf);
+        assertThat(ready.path("correlationId").asText()).isEqualTo("corr");
+        assertThat(ready.path("idempotencyKey").asText()).isEqualTo("idem");
+        assertThat(ready.path("state").asText()).isEqualTo("Ready");
 
         statusListener.handle("{\"swarmId\":\"sw1\",\"data\":{\"swarmStatus\":\"RUNNING\"}}", "ev.status-delta.swarm-controller.inst1");
         assertEquals(SwarmHealth.RUNNING, registry.find("sw1").get().getHealth());
