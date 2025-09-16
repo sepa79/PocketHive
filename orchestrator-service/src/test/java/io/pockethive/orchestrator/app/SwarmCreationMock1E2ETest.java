@@ -18,6 +18,7 @@ import io.pockethive.orchestrator.domain.SwarmTemplate;
 import io.pockethive.orchestrator.infra.scenario.ScenarioManagerClient;
 import io.pockethive.scenarios.ScenarioManagerApplication;
 import java.net.ServerSocket;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
@@ -301,7 +302,7 @@ class SwarmCreationMock1E2ETest {
             return;
         }
         int port = findFreePort();
-        Path scenariosDir = Path.of("scenario-manager-service", "scenarios").toAbsolutePath();
+        Path scenariosDir = locateScenariosDirectory();
         scenarioManagerContext = new SpringApplicationBuilder(ScenarioManagerApplication.class)
             .properties(Map.of(
                 "server.port", port,
@@ -311,6 +312,18 @@ class SwarmCreationMock1E2ETest {
             ))
             .run();
         scenarioManagerPort = port;
+    }
+
+    private static Path locateScenariosDirectory() {
+        Path current = Path.of("").toAbsolutePath().normalize();
+        while (current != null) {
+            Path candidate = current.resolve("scenario-manager-service").resolve("scenarios");
+            if (Files.isDirectory(candidate)) {
+                return candidate;
+            }
+            current = current.getParent();
+        }
+        throw new IllegalStateException("Unable to locate scenario-manager-service/scenarios directory");
     }
 
     private static int findFreePort() {
