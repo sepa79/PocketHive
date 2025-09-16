@@ -199,7 +199,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
         .enabled(true)
         .data("swarmStatus", status.name())
         .toJson();
-    log.info("sent stop status-delta for swarm {}", Topology.SWARM_ID);
+    log.info("[CTRL] SEND rk={} inst={} payload={}", rk, instanceId, snippet(payload));
     rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, payload);
     MDC.clear();
   }
@@ -304,6 +304,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
 
   private void requestStatus(String role, String instance) {
     String rk = "sig.status-request." + role + "." + instance;
+    log.info("[CTRL] SEND rk={} inst={} payload={}", rk, instanceId, "{}");
     rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, "{}");
   }
 
@@ -451,5 +452,16 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
         rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, payload);
       }
     }
+  }
+
+  private static String snippet(String payload) {
+    if (payload == null) {
+      return "";
+    }
+    String trimmed = payload.strip();
+    if (trimmed.length() > 300) {
+      return trimmed.substring(0, 300) + "…";
+    }
+    return trimmed;
   }
 }

@@ -249,7 +249,9 @@ public class Trigger {
     String instance = resolveInstance(cs);
     String rk = "ev.ready.config-update." + role + "." + instance;
     ObjectNode payload = confirmationPayload(cs, "success", role, instance);
-    rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, payload.toString());
+    String json = payload.toString();
+    logControlSend(rk, json);
+    rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, json);
   }
 
   private void emitConfigError(ControlSignal cs, Exception e) {
@@ -261,7 +263,9 @@ public class Trigger {
     if (e.getMessage() != null) {
       payload.put("message", e.getMessage());
     }
-    rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, payload.toString());
+    String json = payload.toString();
+    logControlSend(rk, json);
+    rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, json);
   }
 
   private ObjectNode confirmationPayload(ControlSignal cs, String result, String role, String instance) {
@@ -345,6 +349,7 @@ public class Trigger {
     try {
       HttpRequest.Builder b = HttpRequest.newBuilder().uri(URI.create(config.getUrl()));
       String m = config.getMethod() == null ? "GET" : config.getMethod().toUpperCase();
+      log.info("[REST] REQ {} {} headers={} body={}", m, config.getUrl(), config.getHeaders(), snippet(config.getBody()));
       if (config.getBody() != null && !config.getBody().isEmpty()) {
         b.method(m, HttpRequest.BodyPublishers.ofString(config.getBody()));
       } else {
@@ -353,8 +358,13 @@ public class Trigger {
       for (Map.Entry<String, String> e : config.getHeaders().entrySet()) {
         b.header(e.getKey(), e.getValue());
       }
-      HttpClient.newHttpClient().send(b.build(), HttpResponse.BodyHandlers.discarding());
-      log.info("[REST] {} {}", m, config.getUrl());
+      HttpResponse<String> response = HttpClient.newHttpClient().send(b.build(), HttpResponse.BodyHandlers.ofString());
+      log.info("[REST] RESP {} {} status={} headers={} body={}",
+          m,
+          config.getUrl(),
+          response.statusCode(),
+          response.headers().map(),
+          snippet(response.body()));
     } catch (Exception e) {
       log.warn("rest call", e);
     }
@@ -388,6 +398,7 @@ public class Trigger {
         .data("body", config.getBody())
         .data("headers", config.getHeaders())
         .toJson();
+    logControlSend(routingKey, json);
     rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, routingKey, json);
   }
 
@@ -419,6 +430,22 @@ public class Trigger {
         .data("body", config.getBody())
         .data("headers", config.getHeaders())
         .toJson();
+    logControlSend(routingKey, json);
     rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, routingKey, json);
+  }
+
+  private void logControlSend(String routingKey, String payload) {
+    log.info("[CTRL] SEND rk={} inst={} payload={}", routingKey, instanceId, snippet(payload));
+  }
+
+  private static String snippet(String payload) {
+    if (payload == null) {
+      return "";
+    }
+    String trimmed = payload.strip();
+    if (trimmed.length() > 300) {
+      return trimmed.substring(0, 300) + "…";
+    }
+    return trimmed;
   }
 }

@@ -79,7 +79,7 @@ public class SwarmSignalListener {
     MDC.put("swarm_id", Topology.SWARM_ID);
     MDC.put("service", ROLE);
     MDC.put("instance", instanceId);
-    log.info("received {} : {}", routingKey, body);
+    log.info("[CTRL] RECV rk={} inst={} payload={}", routingKey, instanceId, snippet(body));
     try {
       if (routingKey.startsWith("sig.swarm-template.")) {
         String swarmId = routingKey.substring("sig.swarm-template.".length());
@@ -149,7 +149,7 @@ public class SwarmSignalListener {
     CacheKey key = cacheKey(cs);
     CachedOutcome cached = outcomes.get(key);
     if (cached != null) {
-      rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, cached.routingKey(), cached.payload());
+      sendControl(cached.routingKey(), cached.payload(), "cached");
       emitDuplicate(cs, cached, swarmId);
       return;
     }
@@ -180,7 +180,7 @@ public class SwarmSignalListener {
     CacheKey key = cacheKey(cs);
     CachedOutcome cached = outcomes.get(key);
     if (cached != null) {
-      rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, cached.routingKey(), cached.payload());
+      sendControl(cached.routingKey(), cached.payload(), "cached");
       emitDuplicate(cs, cached, null);
       return;
     }
@@ -276,7 +276,7 @@ public class SwarmSignalListener {
         state
     );
     String json = toJson(confirmation);
-    rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, json);
+    sendControl(rk, json, "ev.ready");
     return new CachedOutcome(rk, json, cs.correlationId());
   }
 
@@ -305,7 +305,7 @@ public class SwarmSignalListener {
         null
     );
     String json = toJson(confirmation);
-    rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, json);
+    sendControl(rk, json, "ev.error");
     return new CachedOutcome(rk, json, cs.correlationId());
   }
 
@@ -321,7 +321,7 @@ public class SwarmSignalListener {
     );
     String rk = "ev.duplicate." + cs.signal();
     String json = toJson(notice);
-    rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, json);
+    sendControl(rk, json, "duplicate");
   }
 
   private ConfirmationScope scopeFor(ControlSignal cs, String swarmIdFallback) {
@@ -432,7 +432,7 @@ public class SwarmSignalListener {
             "sig.swarm-remove.*")
         .controlOut(rk)
         .toJson();
-    rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, payload);
+    sendControl(rk, payload, "status");
   }
 
   private void sendStatusDelta() {
@@ -465,7 +465,7 @@ public class SwarmSignalListener {
             "sig.swarm-remove.*")
         .controlOut(rk)
         .toJson();
-    rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, payload);
+    sendControl(rk, payload, "status");
   }
 
   private String determineState(SwarmMetrics m) {
@@ -476,5 +476,26 @@ public class SwarmSignalListener {
       return "Degraded";
     }
     return lifecycle.getStatus().name();
+  }
+
+  private void sendControl(String routingKey, String payload, String context) {
+    String label = (context == null || context.isBlank()) ? "SEND" : "SEND " + context;
+    log.info("[CTRL] {} rk={} inst={} payload={}", label, routingKey, instanceId, snippet(payload));
+    rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, routingKey, payload);
+  }
+
+  private void sendControl(String routingKey, String payload) {
+    sendControl(routingKey, payload, null);
+  }
+
+  private static String snippet(String payload) {
+    if (payload == null) {
+      return "";
+    }
+    String trimmed = payload.strip();
+    if (trimmed.length() > 300) {
+      return trimmed.substring(0, 300) + "…";
+    }
+    return trimmed;
   }
 }

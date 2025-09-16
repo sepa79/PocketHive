@@ -244,7 +244,9 @@ public class Generator {
     String instance = resolveInstance(cs);
     String routingKey = "ev.ready.config-update." + role + "." + instance;
     ObjectNode payload = confirmationPayload(cs, "success", role, instance);
-    rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, routingKey, payload.toString());
+    String json = payload.toString();
+    logControlSend(routingKey, json);
+    rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, routingKey, json);
   }
 
   private void emitConfigError(ControlSignal cs, Exception e) {
@@ -256,7 +258,9 @@ public class Generator {
     if (e.getMessage() != null) {
       payload.put("message", e.getMessage());
     }
-    rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, routingKey, payload.toString());
+    String json = payload.toString();
+    logControlSend(routingKey, json);
+    rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, routingKey, json);
   }
 
   private ObjectNode confirmationPayload(ControlSignal cs, String result, String role, String instance) {
@@ -368,6 +372,7 @@ public class Generator {
         .data("body", messageConfig.getBody())
         .data("headers", messageConfig.getHeaders())
         .toJson();
+    logControlSend(routingKey, json);
     rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, routingKey, json);
   }
 
@@ -398,6 +403,22 @@ public class Generator {
         .data("body", messageConfig.getBody())
         .data("headers", messageConfig.getHeaders())
         .toJson();
+    logControlSend(routingKey, json);
     rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, routingKey, json);
+  }
+
+  private void logControlSend(String routingKey, String payload) {
+    log.info("[CTRL] SEND rk={} inst={} payload={}", routingKey, instanceId, snippet(payload));
+  }
+
+  private static String snippet(String payload) {
+    if (payload == null) {
+      return "";
+    }
+    String trimmed = payload.strip();
+    if (trimmed.length() > 300) {
+      return trimmed.substring(0, 300) + "…";
+    }
+    return trimmed;
   }
 }

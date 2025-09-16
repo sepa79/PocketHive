@@ -36,6 +36,7 @@ public class ControllerStatusListener {
     @RabbitListener(queues = "#{controllerStatusQueue.name}")
     public void handle(String body, @Header(AmqpHeaders.RECEIVED_ROUTING_KEY) String routingKey) {
         if (routingKey == null) return;
+        log.info("[CTRL] RECV rk={} payload={}", routingKey, snippet(body));
         try {
             JsonNode node = mapper.readTree(body);
             String swarmId = node.path("swarmId").asText(null);
@@ -60,5 +61,16 @@ public class ControllerStatusListener {
     @Scheduled(fixedRate = 5000L)
     public void expire() {
         registry.expire(DEGRADED_AFTER, FAILED_AFTER);
+    }
+
+    private static String snippet(String payload) {
+        if (payload == null) {
+            return "";
+        }
+        String trimmed = payload.strip();
+        if (trimmed.length() > 300) {
+            return trimmed.substring(0, 300) + "…";
+        }
+        return trimmed;
     }
 }
