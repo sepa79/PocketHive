@@ -1,5 +1,6 @@
 package io.pockethive.control;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import java.util.Objects;
 
 /**
@@ -31,6 +32,7 @@ public record ConfirmationScope(String swarmId, String role, String instance) {
         return new ConfirmationScope(swarmId, role, instance);
     }
 
+    @JsonIgnore
     public boolean isEmpty() {
         return Objects.isNull(swarmId) && Objects.isNull(role) && Objects.isNull(instance);
     }
