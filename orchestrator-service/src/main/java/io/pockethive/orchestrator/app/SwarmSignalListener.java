@@ -72,15 +72,15 @@ public class SwarmSignalListener {
     @RabbitListener(queues = "#{controlQueue.name}")
     public void handle(String body, @Header(AmqpHeaders.RECEIVED_ROUTING_KEY) String routingKey) {
         if (routingKey == null || !routingKey.startsWith("ev.")) return;
-        log.info("received {} : {}", routingKey, body);
+        log.info("[CTRL] RECV rk={} inst={} payload={}", routingKey, instanceId, snippet(body));
         if (routingKey.startsWith("ev.ready.swarm-controller.")) {
             String inst = routingKey.substring("ev.ready.swarm-controller.".length());
             plans.remove(inst).ifPresent(plan -> {
                 try {
                     String payload = json.writeValueAsString(plan);
+                    String rk = "sig.swarm-template." + plan.id();
                     log.info("sending swarm-template for {} via controller {}", plan.id(), inst);
-                    rabbit.convertAndSend(Topology.CONTROL_EXCHANGE,
-                        "sig.swarm-template." + plan.id(), payload);
+                    sendControl(rk, payload, "sig.swarm-template");
                 } catch (Exception e) {
                     log.warn("template send", e);
                 }
@@ -135,7 +135,8 @@ public class SwarmSignalListener {
                 "swarm-create",
                 ConfirmationScope.forSwarm(info.swarmId()),
                 "Ready");
-            rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, json.writeValueAsString(conf));
+            String payload = json.writeValueAsString(conf);
+            sendControl(rk, payload, "ev.ready");
         } catch (Exception e) {
             log.warn("create ready send", e);
         }
@@ -156,7 +157,8 @@ public class SwarmSignalListener {
                 "controller failed",
                 Boolean.TRUE,
                 null);
-            rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, json.writeValueAsString(conf));
+            String payload = json.writeValueAsString(conf);
+            sendControl(rk, payload, "ev.error");
         } catch (Exception e) {
             log.warn("create error send", e);
         }
@@ -180,7 +182,8 @@ public class SwarmSignalListener {
                 "controller did not become ready in time",
                 Boolean.TRUE,
                 null);
-            rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, json.writeValueAsString(conf));
+            String payload = json.writeValueAsString(conf);
+            sendControl(rk, payload, "ev.error");
         } catch (Exception e) {
             log.warn("create timeout send", e);
         }
@@ -204,7 +207,8 @@ public class SwarmSignalListener {
                 message,
                 Boolean.TRUE,
                 null);
-            rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, json.writeValueAsString(conf));
+            String payload = json.writeValueAsString(conf);
+            sendControl(rk, payload, "ev.error");
         } catch (Exception e) {
             log.warn("phase timeout send {}", signal, e);
         }
@@ -262,7 +266,7 @@ public class SwarmSignalListener {
             .controlOut(rk)
             .data("swarmCount", registry.count())
             .toJson();
-        rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, json);
+        sendControl(rk, json, "status");
     }
 
     private void sendStatusDelta() {
@@ -283,7 +287,28 @@ public class SwarmSignalListener {
             .controlOut(rk)
             .data("swarmCount", registry.count())
             .toJson();
-        rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, json);
+        sendControl(rk, json, "status");
+    }
+
+    private void sendControl(String routingKey, String payload, String context) {
+        String label = (context == null || context.isBlank()) ? "SEND" : "SEND " + context;
+        log.info("[CTRL] {} rk={} inst={} payload={}", label, routingKey, instanceId, snippet(payload));
+        rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, routingKey, payload);
+    }
+
+    private void sendControl(String routingKey, String payload) {
+        sendControl(routingKey, payload, null);
+    }
+
+    private static String snippet(String payload) {
+        if (payload == null) {
+            return "";
+        }
+        String trimmed = payload.strip();
+        if (trimmed.length() > 300) {
+            return trimmed.substring(0, 300) + "…";
+        }
+        return trimmed;
     }
 }
 

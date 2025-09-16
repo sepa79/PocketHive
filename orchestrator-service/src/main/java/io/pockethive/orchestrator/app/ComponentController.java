@@ -5,6 +5,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.Topology;
 import io.pockethive.control.ControlSignal;
 import io.pockethive.orchestrator.domain.IdempotencyStore;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.amqp.core.AmqpTemplate;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -24,6 +26,7 @@ import java.util.UUID;
 @RequestMapping("/api/components")
 public class ComponentController {
     private static final long CONFIG_UPDATE_TIMEOUT_MS = 60_000L;
+    private static final Logger log = LoggerFactory.getLogger(ComponentController.class);
 
     private final AmqpTemplate rabbit;
     private final IdempotencyStore idempotency;
@@ -39,17 +42,28 @@ public class ComponentController {
     public ResponseEntity<ControlResponse> updateConfig(@PathVariable String role,
                                                         @PathVariable String instance,
                                                         @RequestBody ConfigUpdateRequest request) {
+        String path = "/api/components/" + role + "/" + instance + "/config";
+        logRestRequest("POST", path, request);
         String scope = scope(role, instance, request.swarmId());
-        return idempotency.findCorrelation(scope, "config-update", request.idempotencyKey())
-            .map(correlation -> accepted(correlation, request.idempotencyKey(), role, instance))
+        ResponseEntity<ControlResponse> response = idempotency.findCorrelation(scope, "config-update", request.idempotencyKey())
+            .map(correlation -> {
+                log.info("[CTRL] reuse config-update role={} instance={} correlation={} idempotencyKey={} scope={}",
+                    role, instance, correlation, request.idempotencyKey(), scope);
+                return accepted(correlation, request.idempotencyKey(), role, instance);
+            })
             .orElseGet(() -> {
                 String correlation = UUID.randomUUID().toString();
                 ControlSignal payload = ControlSignal.forInstance("config-update", request.swarmId(), role, instance,
                     correlation, request.idempotencyKey(), argsFrom(request.patch()));
-                rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, routingKey(role, instance), toJson(payload));
+                String jsonPayload = toJson(payload);
+                sendControl(routingKey(role, instance), jsonPayload, "config-update");
                 idempotency.record(scope, "config-update", request.idempotencyKey(), correlation);
+                log.info("[CTRL] issue config-update role={} instance={} correlation={} idempotencyKey={} scope={}",
+                    role, instance, correlation, request.idempotencyKey(), scope);
                 return accepted(correlation, request.idempotencyKey(), role, instance);
             });
+        logRestResponse("POST", path, response);
+        return response;
     }
 
     private static String routingKey(String role, String instance) {
@@ -94,6 +108,45 @@ public class ComponentController {
             throw new IllegalStateException("Failed to serialize control signal %s for role %s".formatted(
                 signal.signal(), signal.role()), e);
         }
+    }
+
+    private void sendControl(String routingKey, String payload, String context) {
+        String label = (context == null || context.isBlank()) ? "SEND" : "SEND " + context;
+        log.info("[CTRL] {} rk={} payload={}", label, routingKey, snippet(payload));
+        rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, routingKey, payload);
+    }
+
+    private void logRestRequest(String method, String path, Object body) {
+        log.info("[REST] {} {} request={}", method, path, toSafeString(body));
+    }
+
+    private void logRestResponse(String method, String path, ResponseEntity<?> response) {
+        if (response == null) {
+            return;
+        }
+        log.info("[REST] {} {} -> status={} body={}", method, path, response.getStatusCode(), toSafeString(response.getBody()));
+    }
+
+    private static String toSafeString(Object value) {
+        if (value == null) {
+            return "";
+        }
+        String text = value.toString();
+        if (text.length() > 300) {
+            return text.substring(0, 300) + "…";
+        }
+        return text;
+    }
+
+    private static String snippet(String payload) {
+        if (payload == null) {
+            return "";
+        }
+        String trimmed = payload.strip();
+        if (trimmed.length() > 300) {
+            return trimmed.substring(0, 300) + "…";
+        }
+        return trimmed;
     }
 }
 

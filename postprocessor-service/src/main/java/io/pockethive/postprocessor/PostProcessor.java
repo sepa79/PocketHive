@@ -238,7 +238,9 @@ public class PostProcessor {
     String instance = resolveInstance(cs);
     String rk = "ev.ready.config-update."+role+"."+instance;
     ObjectNode payload = confirmationPayload(cs, "success", role, instance);
-    rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, payload.toString());
+    String json = payload.toString();
+    logControlSend(rk, json);
+    rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, json);
   }
 
   private void emitConfigError(ControlSignal cs, Exception e){
@@ -250,7 +252,9 @@ public class PostProcessor {
     if(e.getMessage()!=null){
       payload.put("message", e.getMessage());
     }
-    rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, payload.toString());
+    String json = payload.toString();
+    logControlSend(rk, json);
+    rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, json);
   }
 
   private ObjectNode confirmationPayload(ControlSignal cs, String result, String role, String instance){
@@ -326,6 +330,7 @@ public class PostProcessor {
         .tps(tps)
         .enabled(enabled)
         .toJson();
+    logControlSend(rk, payload);
     rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, payload);
   }
 
@@ -353,6 +358,22 @@ public class PostProcessor {
         .tps(tps)
         .enabled(enabled)
         .toJson();
+    logControlSend(rk, payload);
     rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, payload);
+  }
+
+  private void logControlSend(String routingKey, String payload) {
+    log.info("[CTRL] SEND rk={} inst={} payload={}", routingKey, instanceId, snippet(payload));
+  }
+
+  private static String snippet(String payload) {
+    if (payload == null) {
+      return "";
+    }
+    String trimmed = payload.strip();
+    if (trimmed.length() > 300) {
+      return trimmed.substring(0, 300) + "…";
+    }
+    return trimmed;
   }
 }

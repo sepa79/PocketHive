@@ -21,6 +21,6 @@ class ScenarioControllerLoggingTest {
 
         controller.list();
 
-        assertThat(output).contains("Listing scenarios");
+        assertThat(output).contains("[REST] GET /scenarios ->");
     }
 }
