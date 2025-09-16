@@ -27,8 +27,8 @@
     {
       "user": "ph-observer",
       "vhost": "/",
-      "configure": "",
-      "write": "",
+      "configure": "^stomp-subscription-.*",
+      "write": "^stomp-subscription-.*",
       "read": ".*"
     }
   ],

@@ -4,7 +4,7 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import '@testing-library/jest-dom/vitest'
-import { vi, test, expect, beforeEach, afterEach, type Mock, type SpyInstance } from 'vitest'
+import { vi, test, expect, beforeEach, afterEach, type MockInstance } from 'vitest'
 import HivePage from './HivePage'
 import type { Component } from '../../types/hive'
 import { subscribeComponents } from '../../lib/stompClient'
@@ -38,7 +38,7 @@ const baseComponents: Component[] = [
 
 let listener: ((c: Component[]) => void) | null = null
 let comps: Component[] = []
-let apiFetchSpy: SpyInstance
+let apiFetchSpy: MockInstance<typeof apiModule.apiFetch>
 
 const extractUrl = (target: unknown) => {
   if (typeof target === 'string') return target
@@ -59,7 +59,7 @@ beforeEach(() => {
     config: c.config ? { ...c.config } : undefined,
     queues: [...c.queues],
   }))
-  ;(subscribeComponents as unknown as Mock).mockImplementation(
+  vi.mocked(subscribeComponents).mockImplementation(
     (fn: (c: Component[]) => void) => {
       listener = fn
       fn(comps)
