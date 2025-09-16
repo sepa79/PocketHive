@@ -8,6 +8,7 @@ import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmHealth;
 import io.pockethive.orchestrator.domain.SwarmCreateTracker;
 import io.pockethive.orchestrator.domain.SwarmCreateTracker.Pending;
+import io.pockethive.orchestrator.domain.SwarmCreateTracker.Phase;
 import io.pockethive.orchestrator.domain.IdempotencyStore;
 import io.pockethive.orchestrator.domain.SwarmRegistry;
 import io.pockethive.orchestrator.domain.SwarmStatus;
@@ -15,6 +16,8 @@ import org.springframework.amqp.core.AmqpTemplate;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.UUID;
 
 import io.pockethive.util.BeeNameGenerator;
@@ -48,10 +51,17 @@ public class SwarmController {
 
     @PostMapping("/{swarmId}/create")
     public ResponseEntity<ControlResponse> create(@PathVariable String swarmId, @RequestBody ControlRequest req) {
-        return idempotentSend("swarm-create", swarmId, req.idempotencyKey(), 120_000L, corr -> {
+        Duration timeout = Duration.ofMillis(120_000L);
+        return idempotentSend("swarm-create", swarmId, req.idempotencyKey(), timeout.toMillis(), corr -> {
             String instanceId = BeeNameGenerator.generate("swarm-controller", swarmId);
             Swarm swarm = lifecycle.startSwarm(swarmId, instanceId);
-            creates.register(swarm.getInstanceId(), new Pending(swarmId, corr, req.idempotencyKey()));
+            creates.register(swarm.getInstanceId(), new Pending(
+                swarmId,
+                swarm.getInstanceId(),
+                corr,
+                req.idempotencyKey(),
+                Phase.CONTROLLER,
+                Instant.now().plus(timeout)));
         });
     }
 
@@ -71,9 +81,16 @@ public class SwarmController {
     }
 
     private ResponseEntity<ControlResponse> sendSignal(String signal, String swarmId, String idempotencyKey, long timeoutMs) {
+        Duration timeout = Duration.ofMillis(timeoutMs);
         return idempotentSend(signal, swarmId, idempotencyKey, timeoutMs, corr -> {
             ControlSignal payload = ControlSignal.forSwarm(signal, swarmId, corr, idempotencyKey);
             rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, "sig." + signal + "." + swarmId, toJson(payload));
+            if ("swarm-start".equals(signal)) {
+                registry.markStartIssued(swarmId);
+                creates.expectStart(swarmId, corr, idempotencyKey, timeout);
+            } else if ("swarm-stop".equals(signal)) {
+                creates.expectStop(swarmId, corr, idempotencyKey, timeout);
+            }
         });
     }
 

@@ -34,6 +34,47 @@ public class SwarmRegistry {
         }
     }
 
+    public void markTemplateApplied(String id) {
+        Swarm swarm = swarms.get(id);
+        if (swarm == null) {
+            return;
+        }
+        if (swarm.getStatus() == SwarmStatus.CREATING) {
+            swarm.transitionTo(SwarmStatus.READY);
+        }
+    }
+
+    public void markStartIssued(String id) {
+        Swarm swarm = swarms.get(id);
+        if (swarm == null) {
+            return;
+        }
+        SwarmStatus status = swarm.getStatus();
+        if (status == SwarmStatus.STARTING || status == SwarmStatus.RUNNING) {
+            return;
+        }
+        if (status == SwarmStatus.READY || status == SwarmStatus.STOPPED) {
+            swarm.transitionTo(SwarmStatus.STARTING);
+        }
+    }
+
+    public void markStartConfirmed(String id) {
+        Swarm swarm = swarms.get(id);
+        if (swarm == null) {
+            return;
+        }
+        SwarmStatus status = swarm.getStatus();
+        if (status == SwarmStatus.RUNNING) {
+            return;
+        }
+        if (status == SwarmStatus.READY || status == SwarmStatus.STOPPED) {
+            swarm.transitionTo(SwarmStatus.STARTING);
+        }
+        if (swarm.getStatus() == SwarmStatus.STARTING) {
+            swarm.transitionTo(SwarmStatus.RUNNING);
+        }
+    }
+
     public void expire(java.time.Duration degradedAfter, java.time.Duration failedAfter) {
         expire(degradedAfter, failedAfter, java.time.Instant.now());
     }

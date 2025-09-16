@@ -3,11 +3,14 @@ package io.pockethive.orchestrator.app;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.Topology;
+import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmPlan;
 import io.pockethive.orchestrator.domain.SwarmPlanRegistry;
 import io.pockethive.orchestrator.domain.SwarmRegistry;
+import io.pockethive.orchestrator.domain.SwarmStatus;
 import io.pockethive.orchestrator.domain.SwarmCreateTracker;
 import io.pockethive.orchestrator.domain.SwarmCreateTracker.Pending;
+import io.pockethive.orchestrator.domain.SwarmCreateTracker.Phase;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -16,7 +19,9 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.amqp.core.AmqpTemplate;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.startsWith;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -35,7 +40,7 @@ class SwarmSignalListenerTest {
             new SwarmPlan.Bee("generator", "img", new SwarmPlan.Work("in", "out"))));
         plans.register("inst1", plan);
         SwarmCreateTracker tracker = new SwarmCreateTracker();
-        tracker.register("inst1", new Pending("sw1", "corr", "idem"));
+        tracker.register("inst1", new Pending("sw1", "inst1", "corr", "idem", Phase.CONTROLLER, java.time.Instant.now().plusSeconds(60)));
         SwarmSignalListener listener = new SwarmSignalListener(rabbit, plans, tracker, new SwarmRegistry(), lifecycle, new ObjectMapper(), "inst0");
         reset(rabbit);
 
@@ -55,14 +60,17 @@ class SwarmSignalListenerTest {
         assertThat(ready.path("state").asText()).isEqualTo("Ready");
         assertThat(ready.path("ts").asText()).isNotBlank();
         assertThat(plans.find("inst1")).isEmpty();
+        assertThat(tracker.complete("sw1", Phase.TEMPLATE)).isPresent();
     }
 
     @Test
     void emitsErrorConfirmationWhenControllerErrors() throws Exception {
         SwarmPlanRegistry plans = new SwarmPlanRegistry();
         SwarmCreateTracker tracker = new SwarmCreateTracker();
-        tracker.register("inst1", new Pending("sw1", "corr", "idem"));
-        SwarmSignalListener listener = new SwarmSignalListener(rabbit, plans, tracker, new SwarmRegistry(), lifecycle, new ObjectMapper(), "inst0");
+        tracker.register("inst1", new Pending("sw1", "inst1", "corr", "idem", Phase.CONTROLLER, java.time.Instant.now().plusSeconds(60)));
+        SwarmRegistry registry = new SwarmRegistry();
+        registry.register(new Swarm("sw1", "inst1", "c1"));
+        SwarmSignalListener listener = new SwarmSignalListener(rabbit, plans, tracker, registry, lifecycle, new ObjectMapper(), "inst0");
         reset(rabbit);
 
         listener.handle("", "ev.error.swarm-controller.inst1");
@@ -81,6 +89,7 @@ class SwarmSignalListenerTest {
         assertThat(error.path("message").asText()).isEqualTo("controller failed");
         assertThat(error.path("retryable").asBoolean()).isTrue();
         assertThat(error.path("ts").asText()).isNotBlank();
+        assertThat(registry.find("sw1").get().getStatus()).isEqualTo(SwarmStatus.FAILED);
     }
 
     @Test
@@ -100,7 +109,7 @@ class SwarmSignalListenerTest {
         SwarmPlan plan = new SwarmPlan("sw1", java.util.List.of());
         plans.register("inst1", plan);
         SwarmCreateTracker tracker = new SwarmCreateTracker();
-        tracker.register("inst1", new Pending("sw1", "corr", "idem"));
+        tracker.register("inst1", new Pending("sw1", "inst1", "corr", "idem", Phase.CONTROLLER, java.time.Instant.now().plusSeconds(60)));
         SwarmSignalListener listener = new SwarmSignalListener(rabbit, plans, tracker, new SwarmRegistry(), lifecycle, new ObjectMapper(), "inst0");
 
         listener.handle("", "ev.ready.swarm-controller.inst1");
@@ -110,5 +119,52 @@ class SwarmSignalListenerTest {
         listener.handle("", "ev.ready.swarm-controller.inst1");
 
         verifyNoInteractions(rabbit);
+    }
+
+    @Test
+    void updatesRegistryOnTemplateAndStartEvents() {
+        SwarmRegistry registry = new SwarmRegistry();
+        Swarm swarm = new Swarm("sw1", "inst1", "c1");
+        registry.register(swarm);
+        registry.updateStatus("sw1", SwarmStatus.CREATING);
+        SwarmSignalListener listener = new SwarmSignalListener(rabbit, new SwarmPlanRegistry(), new SwarmCreateTracker(), registry, lifecycle, new ObjectMapper(), "inst0");
+
+        listener.handle("", "ev.ready.swarm-template.sw1");
+        assertThat(registry.find("sw1").get().getStatus()).isEqualTo(SwarmStatus.READY);
+
+        listener.handle("", "ev.ready.swarm-start.sw1");
+        assertThat(registry.find("sw1").get().getStatus()).isEqualTo(SwarmStatus.RUNNING);
+    }
+
+    @Test
+    void marksFailedOnErrorEventsAndTimeouts() {
+        SwarmRegistry registry = new SwarmRegistry();
+        registerCreating(registry, "sw1", "inst1", "c1");
+        SwarmCreateTracker tracker = new SwarmCreateTracker();
+        tracker.expectStart("sw1", "corr", "idem", java.time.Duration.ofMillis(10));
+        SwarmSignalListener listener = new SwarmSignalListener(rabbit, new SwarmPlanRegistry(), tracker, registry, lifecycle, new ObjectMapper(), "inst0");
+
+        listener.handle("", "ev.error.swarm-start.sw1");
+        assertThat(registry.find("sw1").get().getStatus()).isEqualTo(SwarmStatus.FAILED);
+
+        registerCreating(registry, "sw1", "inst1", "c2");
+        listener.handle("", "ev.error.swarm-template.sw1");
+        assertThat(registry.find("sw1").get().getStatus()).isEqualTo(SwarmStatus.FAILED);
+
+        registerCreating(registry, "sw1", "inst1", "c3");
+        listener.handle("", "ev.error.swarm-stop.sw1");
+        assertThat(registry.find("sw1").get().getStatus()).isEqualTo(SwarmStatus.FAILED);
+
+        registerCreating(registry, "sw1", "inst1", "c4");
+        tracker.register("inst2", new Pending("sw1", "inst2", "corr2", "idem2", Phase.CONTROLLER, java.time.Instant.now().minusSeconds(1)));
+        listener.checkTimeouts();
+        assertThat(registry.find("sw1").get().getStatus()).isEqualTo(SwarmStatus.FAILED);
+        verify(rabbit, atLeastOnce()).convertAndSend(eq(Topology.CONTROL_EXCHANGE), startsWith("ev.error.swarm-create.sw1"), anyString());
+    }
+
+    private static void registerCreating(SwarmRegistry registry, String swarmId, String instanceId, String containerId) {
+        Swarm swarm = new Swarm(swarmId, instanceId, containerId);
+        registry.register(swarm);
+        registry.updateStatus(swarmId, SwarmStatus.CREATING);
     }
 }

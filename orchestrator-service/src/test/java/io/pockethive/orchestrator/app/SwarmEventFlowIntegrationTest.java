@@ -6,8 +6,10 @@ import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmPlan;
 import io.pockethive.orchestrator.domain.SwarmPlanRegistry;
 import io.pockethive.orchestrator.domain.SwarmRegistry;
+import io.pockethive.orchestrator.domain.SwarmStatus;
 import io.pockethive.orchestrator.domain.SwarmCreateTracker;
 import io.pockethive.orchestrator.domain.SwarmCreateTracker.Pending;
+import io.pockethive.orchestrator.domain.SwarmCreateTracker.Phase;
 import io.pockethive.orchestrator.domain.SwarmHealth;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -36,9 +38,10 @@ class SwarmEventFlowIntegrationTest {
         SwarmPlan plan = new SwarmPlan("sw1", java.util.List.of());
         plans.register("inst1", plan);
         SwarmCreateTracker tracker = new SwarmCreateTracker();
-        tracker.register("inst1", new Pending("sw1", "corr", "idem"));
+        tracker.register("inst1", new Pending("sw1", "inst1", "corr", "idem", Phase.CONTROLLER, java.time.Instant.now().plusSeconds(60)));
         SwarmRegistry registry = new SwarmRegistry();
         registry.register(new Swarm("sw1", "inst1", "cid"));
+        registry.updateStatus("sw1", SwarmStatus.CREATING);
         ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
         SwarmSignalListener signal = new SwarmSignalListener(rabbit, plans, tracker, registry, lifecycle, mapper, "inst0");
         ControllerStatusListener statusListener = new ControllerStatusListener(registry, new ObjectMapper());
@@ -52,6 +55,12 @@ class SwarmEventFlowIntegrationTest {
         assertThat(ready.path("correlationId").asText()).isEqualTo("corr");
         assertThat(ready.path("idempotencyKey").asText()).isEqualTo("idem");
         assertThat(ready.path("state").asText()).isEqualTo("Ready");
+
+        signal.handle("", "ev.ready.swarm-template.sw1");
+        assertThat(registry.find("sw1").get().getStatus()).isEqualTo(SwarmStatus.READY);
+
+        signal.handle("", "ev.ready.swarm-start.sw1");
+        assertThat(registry.find("sw1").get().getStatus()).isEqualTo(SwarmStatus.RUNNING);
 
         statusListener.handle("{\"swarmId\":\"sw1\",\"data\":{\"swarmStatus\":\"RUNNING\"}}", "ev.status-delta.swarm-controller.inst1");
         assertEquals(SwarmHealth.RUNNING, registry.find("sw1").get().getHealth());

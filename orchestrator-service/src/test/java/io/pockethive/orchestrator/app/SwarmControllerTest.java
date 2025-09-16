@@ -4,8 +4,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.Topology;
 import io.pockethive.control.ControlSignal;
 import io.pockethive.orchestrator.domain.SwarmCreateTracker;
+import io.pockethive.orchestrator.domain.SwarmCreateTracker.Phase;
 import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmRegistry;
+import io.pockethive.orchestrator.domain.SwarmStatus;
 import io.pockethive.orchestrator.infra.InMemoryIdempotencyStore;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -31,7 +33,12 @@ class SwarmControllerTest {
 
     @Test
     void startPublishesControlSignal() throws Exception {
-        SwarmController ctrl = new SwarmController(rabbit, lifecycle, new SwarmCreateTracker(), new InMemoryIdempotencyStore(), new SwarmRegistry(), mapper);
+        SwarmCreateTracker tracker = new SwarmCreateTracker();
+        SwarmRegistry registry = new SwarmRegistry();
+        registry.register(new Swarm("sw1", "inst", "c"));
+        registry.updateStatus("sw1", SwarmStatus.CREATING);
+        registry.updateStatus("sw1", SwarmStatus.READY);
+        SwarmController ctrl = new SwarmController(rabbit, lifecycle, tracker, new InMemoryIdempotencyStore(), registry, mapper);
         SwarmController.ControlRequest req = new SwarmController.ControlRequest("idem", null);
 
         ResponseEntity<ControlResponse> resp = ctrl.start("sw1", req);
@@ -43,6 +50,8 @@ class SwarmControllerTest {
         assertThat(sig.swarmId()).isEqualTo("sw1");
         assertThat(sig.idempotencyKey()).isEqualTo("idem");
         assertThat(resp.getBody().watch().successTopic()).isEqualTo("ev.ready.swarm-start.sw1");
+        assertThat(tracker.complete("sw1", Phase.START)).isPresent();
+        assertThat(registry.find("sw1").get().getStatus()).isEqualTo(SwarmStatus.STARTING);
     }
 
     @Test
@@ -54,7 +63,9 @@ class SwarmControllerTest {
 
         ctrl.create("sw1", req);
 
-        assertThat(tracker.remove("instA")).isPresent();
+        SwarmCreateTracker.Pending pending = tracker.remove("instA").orElseThrow();
+        assertThat(pending.phase()).isEqualTo(Phase.CONTROLLER);
+        assertThat(pending.correlationId()).isNotBlank();
     }
 
     @Test

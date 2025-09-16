@@ -35,7 +35,7 @@ class ContainerLifecycleManagerTest {
         assertEquals("sw1", swarm.getId());
         assertEquals("inst1", swarm.getInstanceId());
         assertEquals("cid", swarm.getContainerId());
-        assertEquals(SwarmStatus.RUNNING, swarm.getStatus());
+        assertEquals(SwarmStatus.CREATING, swarm.getStatus());
         assertTrue(registry.find("sw1").isPresent());
         ArgumentCaptor<java.util.Map<String, String>> envCaptor = ArgumentCaptor.forClass(java.util.Map.class);
         ArgumentCaptor<String> nameCaptor = ArgumentCaptor.forClass(String.class);

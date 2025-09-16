@@ -22,9 +22,9 @@ class SwarmRegistryTest {
 
         assertEquals(SwarmStatus.NEW, swarm.getStatus());
         registry.updateStatus(swarm.getId(), SwarmStatus.CREATING);
-        registry.updateStatus(swarm.getId(), SwarmStatus.READY);
-        registry.updateStatus(swarm.getId(), SwarmStatus.STARTING);
-        registry.updateStatus(swarm.getId(), SwarmStatus.RUNNING);
+        registry.markTemplateApplied(swarm.getId());
+        registry.markStartIssued(swarm.getId());
+        registry.markStartConfirmed(swarm.getId());
         registry.refresh(swarm.getId(), SwarmHealth.RUNNING);
         assertEquals(SwarmStatus.RUNNING, swarm.getStatus());
         assertEquals(SwarmHealth.RUNNING, swarm.getHealth());
