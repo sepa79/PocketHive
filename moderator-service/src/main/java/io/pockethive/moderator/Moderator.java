@@ -1,46 +1,55 @@
 package io.pockethive.moderator;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.pockethive.Topology;
+import io.pockethive.control.ControlSignal;
+import io.pockethive.observability.ObservabilityContext;
+import io.pockethive.observability.ObservabilityContextUtil;
+import io.pockethive.observability.StatusEnvelopeBuilder;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.core.MessageBuilder;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
-import org.springframework.amqp.rabbit.listener.RabbitListenerEndpointRegistry;
 import org.springframework.amqp.rabbit.listener.MessageListenerContainer;
+import org.springframework.amqp.rabbit.listener.RabbitListenerEndpointRegistry;
+import org.springframework.amqp.support.AmqpHeaders;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
-import org.slf4j.Logger; import org.slf4j.LoggerFactory;
-import org.springframework.messaging.handler.annotation.Header;
-import org.springframework.amqp.support.AmqpHeaders;
-import io.pockethive.observability.ObservabilityContext;
-import io.pockethive.observability.ObservabilityContextUtil;
-import io.pockethive.observability.StatusEnvelopeBuilder;
-import org.slf4j.MDC;
-import org.springframework.beans.factory.annotation.Qualifier;
 
-import java.util.concurrent.atomic.AtomicLong;
 import java.time.Instant;
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicLong;
 
 @Component
 @EnableScheduling
 public class Moderator {
 
   private static final Logger log = LoggerFactory.getLogger(Moderator.class);
+  private static final String ROLE = "moderator";
   private final RabbitTemplate rabbit;
   private final AtomicLong counter = new AtomicLong();
   private final String instanceId;
   private final RabbitListenerEndpointRegistry registry;
+  private final ObjectMapper objectMapper;
   private volatile boolean enabled = false;
   private static final long STATUS_INTERVAL_MS = 5000L;
   private volatile long lastStatusTs = System.currentTimeMillis();
 
   public Moderator(RabbitTemplate rabbit,
                    @Qualifier("instanceId") String instanceId,
-                   RabbitListenerEndpointRegistry registry) {
+                   RabbitListenerEndpointRegistry registry,
+                   ObjectMapper objectMapper) {
     this.rabbit = rabbit;
     this.instanceId = instanceId;
     this.registry = registry;
+    this.objectMapper = objectMapper;
     try{ sendStatusFull(0); } catch(Exception ignore){}
   }
 
@@ -90,27 +99,31 @@ public class Moderator {
     try {
       String p = payload==null?"" : (payload.length()>300? payload.substring(0,300)+"…" : payload);
       log.info("[CTRL] RECV rk={} inst={} payload={}", rk, instanceId, p);
-      if(payload!=null){
-        try{
-          com.fasterxml.jackson.databind.JsonNode node = new com.fasterxml.jackson.databind.ObjectMapper().readTree(payload);
-          String type = node.path("type").asText();
-          if("status-request".equals(type)){
-            sendStatusFull(0);
-          }
-          if("config-update".equals(type)){
-            com.fasterxml.jackson.databind.JsonNode data = node.path("data");
-            if(data.has("enabled")){
-              boolean newEnabled = data.get("enabled").asBoolean(enabled);
-              if(newEnabled != enabled){
-                enabled = newEnabled;
-                MessageListenerContainer c = registry.getListenerContainer("workListener");
-                if(c != null){
-                  if(enabled) c.start(); else c.stop();
-                }
-              }
-            }
-          }
-        }catch(Exception e){ log.warn("control parse", e); }
+      if(payload==null || payload.isBlank()){
+        return;
+      }
+      ControlSignal cs;
+      try {
+        cs = objectMapper.readValue(payload, ControlSignal.class);
+      } catch (Exception e) {
+        log.warn("control parse", e);
+        return;
+      }
+      if (cs.correlationId() != null) {
+        MDC.put("correlation_id", cs.correlationId());
+      }
+      if (cs.idempotencyKey() != null) {
+        MDC.put("idempotency_key", cs.idempotencyKey());
+      }
+      String signal = cs.signal();
+      if (signal == null || signal.isBlank()) {
+        log.warn("control missing signal");
+        return;
+      }
+      switch (signal) {
+        case "status-request" -> sendStatusFull(0);
+        case "config-update" -> handleConfigUpdate(cs);
+        default -> log.debug("Ignoring unsupported control signal {}", signal);
       }
     } finally {
       MDC.clear();
@@ -118,9 +131,146 @@ public class Moderator {
   }
 
 
+  private void handleConfigUpdate(ControlSignal cs) {
+    try {
+      Boolean desired = extractEnabled(cs.args());
+      applyEnabled(desired);
+      emitConfigSuccess(cs);
+    } catch (Exception e) {
+      log.warn("config update", e);
+      emitConfigError(cs, e);
+    }
+  }
+
+  private Boolean extractEnabled(Map<String, Object> args) {
+    if (args == null || args.isEmpty()) {
+      return null;
+    }
+    if (args.containsKey("enabled")) {
+      return parseEnabled(args.get("enabled"));
+    }
+    Object data = args.get("data");
+    if (data instanceof Map<?, ?> map && map.containsKey("enabled")) {
+      return parseEnabled(map.get("enabled"));
+    }
+    return null;
+  }
+
+  private Boolean parseEnabled(Object value) {
+    if (value == null) {
+      return null;
+    }
+    if (value instanceof Boolean b) {
+      return b;
+    }
+    if (value instanceof String s) {
+      if (s.isBlank()) {
+        return null;
+      }
+      if ("true".equalsIgnoreCase(s) || "false".equalsIgnoreCase(s)) {
+        return Boolean.parseBoolean(s);
+      }
+      throw new IllegalArgumentException("Invalid enabled value: " + s);
+    }
+    throw new IllegalArgumentException("Invalid enabled value type: " + value.getClass().getSimpleName());
+  }
+
+  private void applyEnabled(Boolean desired) {
+    if (desired == null) {
+      return;
+    }
+    boolean changed = desired != enabled;
+    enabled = desired;
+    if (!changed) {
+      return;
+    }
+    MessageListenerContainer c = registry.getListenerContainer("workListener");
+    if (c != null) {
+      if (desired) {
+        c.start();
+      } else {
+        c.stop();
+      }
+    }
+  }
+
+  private void emitConfigSuccess(ControlSignal cs) {
+    String role = resolveRole(cs);
+    String instance = resolveInstance(cs);
+    String routingKey = "ev.ready.config-update." + role + "." + instance;
+    ObjectNode payload = confirmationPayload(cs, "success", role, instance);
+    rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, routingKey, payload.toString());
+  }
+
+  private void emitConfigError(ControlSignal cs, Exception e) {
+    String role = resolveRole(cs);
+    String instance = resolveInstance(cs);
+    String routingKey = "ev.error.config-update." + role + "." + instance;
+    ObjectNode payload = confirmationPayload(cs, "error", role, instance);
+    payload.put("code", e.getClass().getSimpleName());
+    if (e.getMessage() != null) {
+      payload.put("message", e.getMessage());
+    }
+    rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, routingKey, payload.toString());
+  }
+
+  private ObjectNode confirmationPayload(ControlSignal cs, String result, String role, String instance) {
+    ObjectNode payload = objectMapper.createObjectNode();
+    payload.put("signal", cs.signal());
+    payload.put("result", result);
+    payload.set("scope", scopeNode(cs, role, instance));
+    if (cs.args() != null) {
+      payload.set("args", objectMapper.valueToTree(cs.args()));
+    }
+    if (cs.correlationId() != null) {
+      payload.put("correlationId", cs.correlationId());
+    }
+    if (cs.idempotencyKey() != null) {
+      payload.put("idempotencyKey", cs.idempotencyKey());
+    }
+    return payload;
+  }
+
+  private ObjectNode scopeNode(ControlSignal cs, String role, String instance) {
+    ObjectNode scope = objectMapper.createObjectNode();
+    String swarm = resolveSwarm(cs);
+    if (swarm != null && !swarm.isBlank()) {
+      scope.put("swarmId", swarm);
+    }
+    if (role != null && !role.isBlank()) {
+      scope.put("role", role);
+    }
+    if (instance != null && !instance.isBlank()) {
+      scope.put("instance", instance);
+    }
+    return scope;
+  }
+
+  private String resolveSwarm(ControlSignal cs) {
+    if (cs.swarmId() != null && !cs.swarmId().isBlank()) {
+      return cs.swarmId();
+    }
+    return Topology.SWARM_ID;
+  }
+
+  private String resolveRole(ControlSignal cs) {
+    if (cs.role() != null && !cs.role().isBlank()) {
+      return cs.role();
+    }
+    return ROLE;
+  }
+
+  private String resolveInstance(ControlSignal cs) {
+    if (cs.instance() != null && !cs.instance().isBlank()) {
+      return cs.instance();
+    }
+    return instanceId;
+  }
+
+
 
   private void sendStatusDelta(long tps){
-    String role = "moderator";
+    String role = ROLE;
     String controlQueue = Topology.CONTROL_QUEUE + "." + role + "." + instanceId;
     String rk = "ev.status-delta."+role+"."+instanceId;
     String payload = new StatusEnvelopeBuilder()
@@ -147,7 +297,7 @@ public class Moderator {
     rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, payload);
   }
   private void sendStatusFull(long tps){
-    String role = "moderator";
+    String role = ROLE;
     String controlQueue = Topology.CONTROL_QUEUE + "." + role + "." + instanceId;
     String rk = "ev.status-full."+role+"."+instanceId;
     String payload = new StatusEnvelopeBuilder()

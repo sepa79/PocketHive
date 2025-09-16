@@ -1,35 +1,42 @@
 package io.pockethive.postprocessor;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.DistributionSummary;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.pockethive.Topology;
+import io.pockethive.control.ControlSignal;
 import io.pockethive.observability.Hop;
 import io.pockethive.observability.ObservabilityContext;
 import io.pockethive.observability.ObservabilityContextUtil;
 import io.pockethive.observability.StatusEnvelopeBuilder;
-import org.slf4j.MDC;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
-import org.springframework.amqp.rabbit.listener.RabbitListenerEndpointRegistry;
 import org.springframework.amqp.rabbit.listener.MessageListenerContainer;
-import org.springframework.messaging.handler.annotation.Header;
+import org.springframework.amqp.rabbit.listener.RabbitListenerEndpointRegistry;
 import org.springframework.amqp.support.AmqpHeaders;
-import org.springframework.stereotype.Component;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Component;
 
 import java.time.Duration;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 
 @Component
 @EnableScheduling
 public class PostProcessor {
   private static final Logger log = LoggerFactory.getLogger(PostProcessor.class);
+  private static final String ROLE = "postprocessor";
+  private static final ObjectMapper MAPPER = new ObjectMapper();
   private final RabbitTemplate rabbit;
   private final DistributionSummary hopLatency;
   private final DistributionSummary totalLatency;
@@ -125,33 +132,182 @@ public class PostProcessor {
     try{
       String p = payload==null?"" : (payload.length()>300? payload.substring(0,300)+"…" : payload);
       log.info("[CTRL] RECV rk={} inst={} payload={}", rk, instanceId, p);
-      if(payload!=null){
-        try{
-          com.fasterxml.jackson.databind.JsonNode node = new com.fasterxml.jackson.databind.ObjectMapper().readTree(payload);
-          String type = node.path("type").asText();
-          if("status-request".equals(type)) sendStatusFull(0);
-          if("config-update".equals(type)){
-            com.fasterxml.jackson.databind.JsonNode dataNode = node.path("data");
-            if(dataNode.has("enabled")){
-              boolean newEnabled = dataNode.get("enabled").asBoolean(enabled);
-              if(newEnabled != enabled){
-                enabled = newEnabled;
-                MessageListenerContainer c = registry.getListenerContainer("workListener");
-                if(c != null){
-                  if(enabled) c.start(); else c.stop();
-                }
-              }
-            }
-          }
-        }catch(Exception e){ log.warn("control parse", e); }
+      if(payload==null || payload.isBlank()){
+        return;
+      }
+      ControlSignal cs;
+      try{
+        cs = MAPPER.readValue(payload, ControlSignal.class);
+      }catch(Exception e){
+        log.warn("control parse", e);
+        return;
+      }
+      if(cs.correlationId()!=null){
+        MDC.put("correlation_id", cs.correlationId());
+      }
+      if(cs.idempotencyKey()!=null){
+        MDC.put("idempotency_key", cs.idempotencyKey());
+      }
+      String signal = cs.signal();
+      if(signal==null || signal.isBlank()){
+        log.warn("control missing signal");
+        return;
+      }
+      switch(signal){
+        case "status-request" -> sendStatusFull(0);
+        case "config-update" -> handleConfigUpdate(cs);
+        default -> log.debug("Ignoring unsupported control signal {}", signal);
       }
     } finally {
       MDC.clear();
     }
   }
 
+  private void handleConfigUpdate(ControlSignal cs){
+    try{
+      Map<String, Object> data = extractConfigData(cs);
+      applyConfig(data);
+      emitConfigSuccess(cs);
+    }catch(Exception e){
+      log.warn("config update", e);
+      emitConfigError(cs, e);
+    }
+  }
+
+  private Map<String, Object> extractConfigData(ControlSignal cs){
+    Map<String, Object> args = cs.args();
+    if(args==null || args.isEmpty()){
+      return Map.of();
+    }
+    Object data = args.containsKey("data") ? args.get("data") : args;
+    if(data==null){
+      return Map.of();
+    }
+    if(data instanceof Map<?,?> map){
+      Map<String, Object> copy = new LinkedHashMap<>();
+      map.forEach((k,v) -> {
+        if(k!=null){
+          copy.put(k.toString(), v);
+        }
+      });
+      return copy;
+    }
+    throw new IllegalArgumentException("Invalid config payload");
+  }
+
+  private void applyConfig(Map<String, Object> data){
+    if(data==null || data.isEmpty()){
+      return;
+    }
+    if(data.containsKey("enabled")){
+      boolean newEnabled = parseBoolean(data.get("enabled"), enabled);
+      if(newEnabled != enabled){
+        enabled = newEnabled;
+        MessageListenerContainer c = registry.getListenerContainer("workListener");
+        if(c != null){
+          if(enabled){
+            c.start();
+          }else{
+            c.stop();
+          }
+        }
+      }
+    }
+  }
+
+  private boolean parseBoolean(Object value, boolean current){
+    if(value==null){
+      return current;
+    }
+    if(value instanceof Boolean b){
+      return b;
+    }
+    if(value instanceof String s){
+      if(s.isBlank()){
+        return current;
+      }
+      if("true".equalsIgnoreCase(s) || "false".equalsIgnoreCase(s)){
+        return Boolean.parseBoolean(s);
+      }
+    }
+    throw new IllegalArgumentException("Invalid enabled value");
+  }
+
+  private void emitConfigSuccess(ControlSignal cs){
+    String role = resolveRole(cs);
+    String instance = resolveInstance(cs);
+    String rk = "ev.ready.config-update."+role+"."+instance;
+    ObjectNode payload = confirmationPayload(cs, "success", role, instance);
+    rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, payload.toString());
+  }
+
+  private void emitConfigError(ControlSignal cs, Exception e){
+    String role = resolveRole(cs);
+    String instance = resolveInstance(cs);
+    String rk = "ev.error.config-update."+role+"."+instance;
+    ObjectNode payload = confirmationPayload(cs, "error", role, instance);
+    payload.put("code", e.getClass().getSimpleName());
+    if(e.getMessage()!=null){
+      payload.put("message", e.getMessage());
+    }
+    rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, payload.toString());
+  }
+
+  private ObjectNode confirmationPayload(ControlSignal cs, String result, String role, String instance){
+    ObjectNode payload = MAPPER.createObjectNode();
+    payload.put("signal", cs.signal());
+    payload.put("result", result);
+    payload.set("scope", scopeNode(cs, role, instance));
+    if(cs.args()!=null){
+      payload.set("args", MAPPER.valueToTree(cs.args()));
+    }
+    if(cs.correlationId()!=null){
+      payload.put("correlationId", cs.correlationId());
+    }
+    if(cs.idempotencyKey()!=null){
+      payload.put("idempotencyKey", cs.idempotencyKey());
+    }
+    return payload;
+  }
+
+  private ObjectNode scopeNode(ControlSignal cs, String role, String instance){
+    ObjectNode scope = MAPPER.createObjectNode();
+    String swarm = resolveSwarm(cs);
+    if(swarm!=null && !swarm.isBlank()){
+      scope.put("swarmId", swarm);
+    }
+    if(role!=null && !role.isBlank()){
+      scope.put("role", role);
+    }
+    if(instance!=null && !instance.isBlank()){
+      scope.put("instance", instance);
+    }
+    return scope;
+  }
+
+  private String resolveSwarm(ControlSignal cs){
+    if(cs.swarmId()!=null && !cs.swarmId().isBlank()){
+      return cs.swarmId();
+    }
+    return Topology.SWARM_ID;
+  }
+
+  private String resolveRole(ControlSignal cs){
+    if(cs.role()!=null && !cs.role().isBlank()){
+      return cs.role();
+    }
+    return ROLE;
+  }
+
+  private String resolveInstance(ControlSignal cs){
+    if(cs.instance()!=null && !cs.instance().isBlank()){
+      return cs.instance();
+    }
+    return instanceId;
+  }
+
   private void sendStatusDelta(long tps){
-    String role = "postprocessor";
+    String role = ROLE;
     String controlQueue = Topology.CONTROL_QUEUE + "." + role + "." + instanceId;
     String rk = "ev.status-delta."+role+"."+instanceId;
     String payload = new StatusEnvelopeBuilder()
@@ -177,7 +333,7 @@ public class PostProcessor {
   }
 
   private void sendStatusFull(long tps){
-    String role = "postprocessor";
+    String role = ROLE;
     String controlQueue = Topology.CONTROL_QUEUE + "." + role + "." + instanceId;
     String rk = "ev.status-full."+role+"."+instanceId;
     String payload = new StatusEnvelopeBuilder()

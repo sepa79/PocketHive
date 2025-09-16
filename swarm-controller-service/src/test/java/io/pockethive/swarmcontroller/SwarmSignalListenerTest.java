@@ -119,7 +119,7 @@ class SwarmSignalListenerTest {
     SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", mapper);
     String body = """
         {"correlationId":"c4","idempotencyKey":"i4","signal":"config-update",
-         "scope":{"role":"swarm-controller","instance":"inst"},"args":{"data":{"enabled":true}}}
+         "role":"swarm-controller","instance":"inst","args":{"data":{"enabled":true}}}
         """;
     listener.handle(body, "sig.config-update.swarm-controller.inst");
     verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),

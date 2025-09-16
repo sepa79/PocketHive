@@ -2,7 +2,7 @@ package io.pockethive.orchestrator.app;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.Topology;
-import io.pockethive.orchestrator.domain.ControlSignal;
+import io.pockethive.control.ControlSignal;
 import io.pockethive.orchestrator.infra.InMemoryIdempotencyStore;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -44,6 +44,11 @@ class ComponentControllerTest {
         assertThat(signal.instance()).isEqualTo("c1");
         assertThat(signal.swarmId()).isEqualTo("sw1");
         assertThat(signal.idempotencyKey()).isEqualTo("idem");
+        assertThat(signal.args()).isNotNull();
+        assertThat(signal.args()).containsKey("data");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> data = (Map<String, Object>) signal.args().get("data");
+        assertThat(data).containsEntry("enabled", true);
         assertThat(response.getBody()).isNotNull();
         assertThat(response.getBody().watch().successTopic()).isEqualTo("ev.ready.config-update.generator.c1");
     }

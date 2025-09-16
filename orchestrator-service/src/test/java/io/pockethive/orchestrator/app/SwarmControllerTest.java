@@ -2,7 +2,7 @@ package io.pockethive.orchestrator.app;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.Topology;
-import io.pockethive.orchestrator.domain.ControlSignal;
+import io.pockethive.control.ControlSignal;
 import io.pockethive.orchestrator.domain.SwarmCreateTracker;
 import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmRegistry;
