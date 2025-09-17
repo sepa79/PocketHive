@@ -20,10 +20,15 @@ Client sends **`idempotencyKey`** (UUID v4) per new action (reuse on retry). Ser
 - Launch Controller runtime for `{swarmId}` (no AMQP signal).
 - On controller handshake `ev.ready.swarm-controller.<instance>`, emit **`ev.ready.swarm-create.<swarmId>`** (echo ids).
 - On failure, emit **`ev.error.swarm-create.<swarmId>`**.
+- Requires a `templateId` referencing the scenario template to instantiate.
 
 **Request**
 ```json
-{ "idempotencyKey": "uuid-v4", "notes": "optional" }
+{
+  "templateId": "scenario-id",
+  "idempotencyKey": "uuid-v4",
+  "notes": "optional"
+}
 ```
 
 **Response (202)**

@@ -2,7 +2,16 @@ import { apiFetch } from './api'
 import type { Component } from '../types/hive'
 
 export async function createSwarm(id: string, templateId: string) {
-  const body = JSON.stringify({ idempotencyKey: crypto.randomUUID(), notes: templateId })
+  const payload: Record<string, unknown> = {
+    templateId,
+    idempotencyKey: crypto.randomUUID(),
+  }
+
+  if (templateId?.trim()) {
+    payload.notes = templateId
+  }
+
+  const body = JSON.stringify(payload)
   await apiFetch(`/orchestrator/swarms/${id}/create`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
