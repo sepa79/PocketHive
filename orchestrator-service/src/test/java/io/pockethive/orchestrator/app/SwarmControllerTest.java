@@ -21,7 +21,11 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.amqp.core.AmqpTemplate;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
@@ -31,6 +35,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @ExtendWith(MockitoExtension.class)
 class SwarmControllerTest {
@@ -171,5 +177,57 @@ class SwarmControllerTest {
 
         verifyNoInteractions(lifecycle);
         assertThat(tracker.remove("anything")).isEmpty();
+    }
+
+    @Test
+    void createRejectsRequestWhenTemplateIdMissing() throws Exception {
+        SwarmController ctrl = new SwarmController(
+            rabbit,
+            lifecycle,
+            new SwarmCreateTracker(),
+            new InMemoryIdempotencyStore(),
+            new SwarmRegistry(),
+            mapper,
+            scenarioClient,
+            new SwarmPlanRegistry());
+
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(ctrl)
+            .setMessageConverters(new MappingJackson2HttpMessageConverter(mapper))
+            .build();
+
+        mvc.perform(post("/api/swarms/sw1/create")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"idempotencyKey\":\"idem\"}"))
+            .andExpect(status().isBadRequest())
+            .andExpect(result -> assertThat(result.getResolvedException())
+                .hasRootCauseInstanceOf(IllegalArgumentException.class));
+
+        verifyNoInteractions(lifecycle);
+    }
+
+    @Test
+    void createRejectsRequestWhenTemplateIdBlank() throws Exception {
+        SwarmController ctrl = new SwarmController(
+            rabbit,
+            lifecycle,
+            new SwarmCreateTracker(),
+            new InMemoryIdempotencyStore(),
+            new SwarmRegistry(),
+            mapper,
+            scenarioClient,
+            new SwarmPlanRegistry());
+
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(ctrl)
+            .setMessageConverters(new MappingJackson2HttpMessageConverter(mapper))
+            .build();
+
+        mvc.perform(post("/api/swarms/sw1/create")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"templateId\":\"\",\"idempotencyKey\":\"idem\"}"))
+            .andExpect(status().isBadRequest())
+            .andExpect(result -> assertThat(result.getResolvedException())
+                .hasRootCauseInstanceOf(IllegalArgumentException.class));
+
+        verifyNoInteractions(lifecycle);
     }
 }
