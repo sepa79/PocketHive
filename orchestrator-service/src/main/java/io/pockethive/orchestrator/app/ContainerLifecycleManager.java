@@ -37,11 +37,11 @@ public class ContainerLifecycleManager {
         if (net != null && !net.isBlank()) {
             env.put("CONTROL_NETWORK", net);
         }
+        String dockerSocket = resolveDockerSocketPath();
+        env.put("DOCKER_SOCKET_PATH", dockerSocket);
+        env.put("DOCKER_HOST", "unix://" + dockerSocket);
         log.info("launching controller for swarm {} as instance {} using image {}", swarmId, instanceId, image);
         log.info("docker env: {}", env);
-        String dockerSocket = java.util.Optional.ofNullable(System.getenv("DOCKER_SOCKET_PATH"))
-            .filter(path -> !path.isBlank())
-            .orElse(DEFAULT_DOCKER_SOCKET);
         String containerId = docker.createAndStartContainer(
             image,
             env,
@@ -78,5 +78,13 @@ public class ContainerLifecycleManager {
             registry.updateStatus(swarmId, SwarmStatus.REMOVED);
             registry.remove(swarmId);
         });
+    }
+
+    private static String resolveDockerSocketPath() {
+        return java.util.Optional.ofNullable(System.getenv("DOCKER_SOCKET_PATH"))
+            .filter(path -> !path.isBlank())
+            .or(() -> java.util.Optional.ofNullable(System.getProperty("DOCKER_SOCKET_PATH")))
+            .filter(path -> !path.isBlank())
+            .orElse(DEFAULT_DOCKER_SOCKET);
     }
 }

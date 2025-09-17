@@ -43,6 +43,8 @@ class ContainerLifecycleManagerTest {
         verify(docker).createAndStartContainer(eq("img"), envCaptor.capture(), nameCaptor.capture(), hostCaptor.capture());
         assertEquals("inst1", nameCaptor.getValue());
         assertEquals("-Dbee.name=inst1", envCaptor.getValue().get("JAVA_TOOL_OPTIONS"));
+        assertEquals("/var/run/docker.sock", envCaptor.getValue().get("DOCKER_SOCKET_PATH"));
+        assertEquals("unix:///var/run/docker.sock", envCaptor.getValue().get("DOCKER_HOST"));
         HostConfig hostConfig = HostConfig.newHostConfig();
         HostConfig customized = hostCaptor.getValue().apply(hostConfig);
         Bind[] binds = customized.getBinds();
@@ -50,6 +52,38 @@ class ContainerLifecycleManagerTest {
         assertEquals(1, binds.length);
         assertEquals("/var/run/docker.sock", binds[0].getPath());
         assertEquals("/var/run/docker.sock", binds[0].getVolume().getPath());
+    }
+
+    @Test
+    void startSwarmPropagatesCustomDockerSocketPath() {
+        String previous = System.getProperty("DOCKER_SOCKET_PATH");
+        System.setProperty("DOCKER_SOCKET_PATH", "/custom/docker.sock");
+        try {
+            SwarmRegistry registry = new SwarmRegistry();
+            when(docker.createAndStartContainer(eq("img"), anyMap(), anyString(), any())).thenReturn("cid");
+            ContainerLifecycleManager manager = new ContainerLifecycleManager(docker, registry, amqp);
+
+            manager.startSwarm("sw1", "img", "inst1");
+
+            ArgumentCaptor<java.util.Map<String, String>> envCaptor = ArgumentCaptor.forClass(java.util.Map.class);
+            ArgumentCaptor<java.util.function.UnaryOperator<HostConfig>> hostCaptor = ArgumentCaptor.forClass(java.util.function.UnaryOperator.class);
+            verify(docker).createAndStartContainer(eq("img"), envCaptor.capture(), eq("inst1"), hostCaptor.capture());
+            java.util.Map<String, String> env = envCaptor.getValue();
+            assertEquals("/custom/docker.sock", env.get("DOCKER_SOCKET_PATH"));
+            assertEquals("unix:///custom/docker.sock", env.get("DOCKER_HOST"));
+            HostConfig customized = hostCaptor.getValue().apply(HostConfig.newHostConfig());
+            Bind[] binds = customized.getBinds();
+            assertNotNull(binds);
+            assertEquals(1, binds.length);
+            assertEquals("/custom/docker.sock", binds[0].getPath());
+            assertEquals("/custom/docker.sock", binds[0].getVolume().getPath());
+        } finally {
+            if (previous == null) {
+                System.clearProperty("DOCKER_SOCKET_PATH");
+            } else {
+                System.setProperty("DOCKER_SOCKET_PATH", previous);
+            }
+        }
     }
 
     @Test
