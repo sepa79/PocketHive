@@ -1,5 +1,7 @@
 package io.pockethive.orchestrator.app;
 
+import com.github.dockerjava.api.model.Bind;
+import com.github.dockerjava.api.model.HostConfig;
 import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmRegistry;
 import io.pockethive.orchestrator.domain.SwarmStatus;
@@ -12,6 +14,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.amqp.core.AmqpAdmin;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -24,7 +27,7 @@ class ContainerLifecycleManagerTest {
     @Test
     void startSwarmCreatesAndRegisters() {
         SwarmRegistry registry = new SwarmRegistry();
-        when(docker.createAndStartContainer(eq("img"), anyMap(), anyString())).thenReturn("cid");
+        when(docker.createAndStartContainer(eq("img"), anyMap(), anyString(), any())).thenReturn("cid");
         ContainerLifecycleManager manager = new ContainerLifecycleManager(docker, registry, amqp);
 
         Swarm swarm = manager.startSwarm("sw1", "img", "inst1");
@@ -36,9 +39,17 @@ class ContainerLifecycleManagerTest {
         assertTrue(registry.find("sw1").isPresent());
         ArgumentCaptor<java.util.Map<String, String>> envCaptor = ArgumentCaptor.forClass(java.util.Map.class);
         ArgumentCaptor<String> nameCaptor = ArgumentCaptor.forClass(String.class);
-        verify(docker).createAndStartContainer(eq("img"), envCaptor.capture(), nameCaptor.capture());
+        ArgumentCaptor<java.util.function.UnaryOperator<HostConfig>> hostCaptor = ArgumentCaptor.forClass(java.util.function.UnaryOperator.class);
+        verify(docker).createAndStartContainer(eq("img"), envCaptor.capture(), nameCaptor.capture(), hostCaptor.capture());
         assertEquals("inst1", nameCaptor.getValue());
         assertEquals("-Dbee.name=inst1", envCaptor.getValue().get("JAVA_TOOL_OPTIONS"));
+        HostConfig hostConfig = HostConfig.newHostConfig();
+        HostConfig customized = hostCaptor.getValue().apply(hostConfig);
+        Bind[] binds = customized.getBinds();
+        assertNotNull(binds);
+        assertEquals(1, binds.length);
+        assertEquals("/var/run/docker.sock", binds[0].getPath());
+        assertEquals("/var/run/docker.sock", binds[0].getVolume().getPath());
     }
 
     @Test

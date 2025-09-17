@@ -1,6 +1,7 @@
 package io.pockethive.orchestrator.app;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -158,7 +159,7 @@ class SwarmCreationMock1E2ETest {
         Assumptions.assumeTrue(dockerAvailable, "Docker is required to run this test");
 
         when(docker.resolveControlNetwork()).thenReturn("ph-test-net");
-        when(docker.createAndStartContainer(anyString(), anyMap(), anyString()))
+        when(docker.createAndStartContainer(anyString(), anyMap(), anyString(), any()))
             .thenReturn("container-123");
 
         RabbitAdmin admin = new RabbitAdmin(connectionFactory);
@@ -190,7 +191,7 @@ class SwarmCreationMock1E2ETest {
 
         assertThat(swarmPlanRegistry.find(instanceId)).isPresent();
 
-        verify(docker).createAndStartContainer(eq("pockethive-swarm-controller:latest"), anyMap(), eq(instanceId));
+        verify(docker).createAndStartContainer(eq("pockethive-swarm-controller:latest"), anyMap(), eq(instanceId), any());
 
         AnonymousQueue captureQueue = new AnonymousQueue();
         String captureName = admin.declareQueue(captureQueue);
