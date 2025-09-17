@@ -7,9 +7,11 @@ import { useUIStore } from '../store'
 function LogView({
   sourceFilter,
   channelFilter,
+  typeFilter,
 }: {
   sourceFilter: 'all' | LogSource
   channelFilter: 'all' | LogChannel
+  typeFilter: 'all' | 'error'
 }) {
   const [logs, setLogs] = useState<LogEntry[]>([])
   useEffect(() => subscribeLogs(setLogs), [])
@@ -23,7 +25,10 @@ function LogView({
     return colors.current[id]
   }
   const filtered = logs.filter(
-    (l) => (sourceFilter === 'all' || l.source === sourceFilter) && (channelFilter === 'all' || l.channel === channelFilter),
+    (l) =>
+      (sourceFilter === 'all' || l.source === sourceFilter) &&
+      (channelFilter === 'all' || l.channel === channelFilter) &&
+      (typeFilter === 'all' || l.type === typeFilter),
   )
   return (
     <div className="space-y-1 text-xs font-mono break-all">
@@ -57,6 +62,7 @@ export default function BuzzPanel() {
   const [tab, setTab] = useState<'logs' | 'config'>('logs')
   const [sourceFilter, setSourceFilter] = useState<'all' | LogSource>('all')
   const [channelFilter, setChannelFilter] = useState<'all' | LogChannel>('all')
+  const [typeFilter, setTypeFilter] = useState<'all' | 'error'>('all')
   const { messageLimit, setMessageLimit, buzzDock, setBuzzDock } = useUIStore()
   const [inputValue, setInputValue] = useState(messageLimit.toString())
 
@@ -132,6 +138,14 @@ export default function BuzzPanel() {
                 <option value="rest">REST</option>
                 <option value="internal">Internal</option>
               </select>
+              <select
+                value={typeFilter}
+                onChange={(e) => setTypeFilter(e.target.value as 'all' | 'error')}
+                className="rounded border border-white/20 bg-white/10 px-1 py-0.5"
+              >
+                <option value="all">All logs</option>
+                <option value="error">Errors only</option>
+              </select>
             </>
           )}
           <span className="text-white/60">Limit:</span>
@@ -149,7 +163,7 @@ export default function BuzzPanel() {
         {tab === 'config' ? (
           <ConfigView />
         ) : (
-          <LogView sourceFilter={sourceFilter} channelFilter={channelFilter} />
+          <LogView sourceFilter={sourceFilter} channelFilter={channelFilter} typeFilter={typeFilter} />
         )}
       </div>
     </div>
