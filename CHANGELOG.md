@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.0] - 2025-09-17
+Timestamp: 2025-09-17T00:00:00Z
+
+- Orchestrator: mount the controller's Docker socket bind mount, wrap swarm-template control signals, and propagate the socket path/`DOCKER_HOST` so controllers can talk to whatever daemon the runtime exposes.
+- Docker client: surface Docker daemon availability failures with a dedicated exception and allow callers to customise the `HostConfig` while keeping automatic control-network discovery, enabling bind mounts without losing networking defaults.
+- SwarmController: redeclare queues when they go missing and honour `DOCKER_HOST` overrides from the environment or JVM properties to reuse the orchestrator's socket configuration.
+- Control-plane services: project the AsyncAPI control payload schemas into runtime validation so generator, moderator, processor, postprocessor, and trigger services enforce the documented signal shape.
+- UI (Buzz): add an error filter to the log stream to spotlight failing events quickly.
+- Tests: cover Docker socket propagation, host bind wiring, AsyncAPI schema validation, and controller Docker host overrides.
+
 ## [0.9.6] - 2025-09-16
 Timestamp: 2025-09-16T00:00:00Z
 
