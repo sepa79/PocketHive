@@ -33,6 +33,15 @@ export async function stopSwarm(id: string) {
   })
 }
 
+export async function removeSwarm(id: string) {
+  const body = JSON.stringify({ idempotencyKey: crypto.randomUUID() })
+  await apiFetch(`/orchestrator/swarms/${id}/remove`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body,
+  })
+}
+
 export async function sendConfigUpdate(component: Component, config: unknown) {
   const payload: Record<string, unknown> = {
     idempotencyKey: crypto.randomUUID(),

@@ -48,6 +48,24 @@ export function colorForHealth(h: HealthStatus) {
   }
 }
 
+export interface SwarmHealthRollup {
+  overall: HealthStatus
+  counts: Record<HealthStatus, number>
+}
+
+export function aggregateSwarmHealth(components: Component[]): SwarmHealthRollup {
+  const counts: Record<HealthStatus, number> = { OK: 0, WARN: 0, ALERT: 0 }
+  let overall: HealthStatus = 'OK'
+
+  for (const component of components) {
+    const health = componentHealth(component)
+    counts[health] += 1
+    overall = combine(overall, health)
+  }
+
+  return { overall, counts }
+}
+
 function combine(a: HealthStatus, b: HealthStatus): HealthStatus {
   if (a === 'ALERT' || b === 'ALERT') return 'ALERT'
   if (a === 'WARN' || b === 'WARN') return 'WARN'

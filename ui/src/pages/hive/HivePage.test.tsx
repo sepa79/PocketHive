@@ -18,23 +18,39 @@ vi.mock('./TopologyView', () => ({
   default: () => null,
 }))
 
-const baseComponents: Component[] = [
-  {
-    id: 'sw1-queen',
-    name: 'swarm-controller',
-    swarmId: 'sw1',
-    lastHeartbeat: 0,
-    queues: [],
-    config: { swarmStatus: 'STOPPED', enabled: true },
-  },
-  {
-    id: 'orphan',
-    name: 'generator',
-    lastHeartbeat: 0,
-    queues: [],
-    config: { enabled: true },
-  },
-]
+const createComponents = (): Component[] => {
+  const now = Date.now()
+  return [
+    {
+      id: 'sw1-queen',
+      name: 'swarm-controller',
+      swarmId: 'sw1',
+      lastHeartbeat: now - 1000,
+      queues: [],
+      config: { swarmStatus: 'STOPPED', enabled: true },
+    },
+    {
+      id: 'sw1-worker',
+      name: 'processor',
+      swarmId: 'sw1',
+      lastHeartbeat: now - 40000,
+      queues: [
+        {
+          name: 'processor-in',
+          role: 'consumer',
+        },
+      ],
+      config: { enabled: true },
+    },
+    {
+      id: 'orphan',
+      name: 'generator',
+      lastHeartbeat: now - 40000,
+      queues: [],
+      config: { enabled: true },
+    },
+  ]
+}
 
 let listener: ((c: Component[]) => void) | null = null
 let comps: Component[] = []
@@ -54,11 +70,7 @@ const hasStatusRequestCall = () =>
   apiFetchSpy.mock.calls.some((call) => extractUrl(call[0]).includes('status-request'))
 beforeEach(() => {
   listener = null
-  comps = baseComponents.map((c) => ({
-    ...c,
-    config: c.config ? { ...c.config } : undefined,
-    queues: [...c.queues],
-  }))
+  comps = createComponents()
   vi.mocked(subscribeComponents).mockImplementation(
     (fn: (c: Component[]) => void) => {
       listener = fn
@@ -112,4 +124,31 @@ test('shows unassigned components when selecting default swarm', async () => {
   await user.click(def)
   const gens = await screen.findAllByText('generator')
   expect(gens.length).toBeGreaterThan(0)
+})
+
+test('shows aggregate health rollups per swarm', () => {
+  render(<HivePage />)
+  expect(screen.getAllByText('Health: 1 alert • 1 healthy').length).toBeGreaterThan(0)
+  expect(screen.getAllByText('Health: 1 alert').length).toBeGreaterThan(0)
+})
+
+test('confirms before removing swarm and calls orchestrator API', async () => {
+  const user = userEvent.setup()
+  render(<HivePage />)
+
+  const removeButtons = screen.getAllByRole('button', { name: /^Remove$/i })
+  expect(removeButtons.length).toBeGreaterThan(0)
+
+  await user.click(removeButtons[0])
+  const confirm = await screen.findByRole('button', { name: /confirm remove/i })
+  await user.click(confirm)
+
+  await waitFor(() =>
+    expect(apiFetchSpy).toHaveBeenCalledWith(
+      '/orchestrator/swarms/sw1/remove',
+      expect.objectContaining({ method: 'POST' }),
+    ),
+  )
+
+  expect(await screen.findByText('Swarm removal requested')).toBeTruthy()
 })
