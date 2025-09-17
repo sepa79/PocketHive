@@ -3,6 +3,8 @@ package io.pockethive.swarmcontroller;
 import io.pockethive.Topology;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.amqp.AmqpException;
+import org.springframework.amqp.AmqpIOException;
 import org.springframework.amqp.core.*;
 import org.springframework.amqp.rabbit.junit.RabbitAvailable;
 import org.springframework.amqp.rabbit.junit.RabbitAvailableCondition;
@@ -111,10 +113,11 @@ class SwarmLifecycleManagerIntegrationTest {
     assertNull(amqp.getQueueProperties("ph." + Topology.SWARM_ID + ".gen"));
     assertNull(amqp.getQueueProperties("ph." + Topology.SWARM_ID + ".mod"));
     assertNull(amqp.getQueueProperties("ph." + Topology.SWARM_ID + ".final"));
-    assertThrows(IOException.class, () -> ((RabbitAdmin) amqp).getRabbitTemplate().execute(ch -> {
+    AmqpException exception = assertThrows(AmqpException.class, () -> ((RabbitAdmin) amqp).getRabbitTemplate().execute(ch -> {
       ch.exchangeDeclarePassive("ph." + Topology.SWARM_ID + ".hive");
       return null;
     }));
+    assertTrue(exception instanceof AmqpIOException || exception.getCause() instanceof IOException);
 
     amqp.deleteQueue(q.getName());
   }
