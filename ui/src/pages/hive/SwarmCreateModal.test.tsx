@@ -57,7 +57,8 @@ test('submits selected scenario', async () => {
   const body = createCall?.[1]?.body
   expect(typeof body).toBe('string')
   const parsed = JSON.parse(body as string)
-  expect(parsed).toMatchObject({ notes: 'basic' })
+  expect(parsed).toMatchObject({ templateId: 'basic' })
+  expect(parsed.notes).toBeUndefined()
   expect(await screen.findByText('Swarm created')).toBeTruthy()
 })
 
