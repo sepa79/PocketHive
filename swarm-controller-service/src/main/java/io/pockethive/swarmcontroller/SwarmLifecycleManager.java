@@ -152,8 +152,13 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
       }
 
       for (String suffix : suffixes) {
-        if (!declaredQueues.contains(suffix)) {
-          Queue q = QueueBuilder.durable("ph." + Topology.SWARM_ID + "." + suffix).build();
+        String queueName = "ph." + Topology.SWARM_ID + "." + suffix;
+        boolean queueMissing = amqp.getQueueProperties(queueName) == null;
+        if (queueMissing) {
+          declaredQueues.remove(suffix);
+        }
+        if (queueMissing || !declaredQueues.contains(suffix)) {
+          Queue q = QueueBuilder.durable(queueName).build();
           amqp.declareQueue(q);
           Binding b = BindingBuilder.bind(q).to(hive).with(suffix);
           amqp.declareBinding(b);
