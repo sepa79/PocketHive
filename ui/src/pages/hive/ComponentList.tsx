@@ -86,7 +86,8 @@ function color(h: HealthStatus) {
 function shortComponentName(name: string) {
   const trimmed = name.trim().toLowerCase()
   if (!trimmed) return name
-  if (trimmed === 'swarm-controller') return 'Queen'
+  if (trimmed === 'orchestrator') return 'Queen'
+  if (trimmed === 'swarm-controller') return 'Marshall'
   const withoutService = trimmed.endsWith('-service')
     ? trimmed.slice(0, -'-service'.length)
     : trimmed

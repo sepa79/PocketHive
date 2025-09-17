@@ -86,10 +86,10 @@ afterEach(() => {
   vi.clearAllMocks()
 })
 
-test('renders queen status and start/stop controls', async () => {
+test('renders marshall status and start/stop controls', async () => {
   const user = userEvent.setup()
   render(<HivePage />)
-  expect(screen.getByText(/Queen: stopped/i)).toBeTruthy()
+  expect(screen.getByText(/Marshall: stopped/i)).toBeTruthy()
   const startBtn = screen.getByRole('button', { name: /start/i })
   await user.click(startBtn)
   await waitFor(() =>
@@ -104,7 +104,7 @@ test('renders queen status and start/stop controls', async () => {
   comps[0].config = { swarmStatus: 'RUNNING', enabled: true }
   // Push-style refresh: mimic an incoming `ev.status-*` notification from the control plane.
   if (listener) listener([...comps])
-  expect(await screen.findByText(/Queen: running/i)).toBeTruthy()
+  expect(await screen.findByText(/Marshall: running/i)).toBeTruthy()
   await user.click(screen.getAllByRole('button', { name: /stop/i })[1])
   await waitFor(() =>
     expect(apiFetchSpy).toHaveBeenCalledWith(

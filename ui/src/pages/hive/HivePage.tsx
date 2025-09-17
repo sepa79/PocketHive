@@ -62,8 +62,8 @@ export default function HivePage() {
 
   const swarmStatus = (comps: Component[]) => {
     if (comps.length === 0) return 'removed'
-    const queen = comps.find((c) => c.name === 'swarm-controller')
-    const status = (queen?.config?.swarmStatus as string | undefined)?.toLowerCase()
+    const controller = comps.find((c) => c.name === 'swarm-controller')
+    const status = (controller?.config?.swarmStatus as string | undefined)?.toLowerCase()
     if (status) {
       if (status.includes('remov')) return status
       return status
@@ -166,7 +166,7 @@ export default function HivePage() {
                         {id}
                       </div>
                       <div className="flex items-center gap-2">
-                        <span className="text-xs text-white/60">Queen: {status}</span>
+                        <span className="text-xs text-white/60">Marshall: {status}</span>
                         {canStart && (
                           <button
                             className="p-1 rounded bg-white/10 hover:bg-white/20 text-xs"
