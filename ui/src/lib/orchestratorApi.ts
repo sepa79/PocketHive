@@ -7,10 +7,6 @@ export async function createSwarm(id: string, templateId: string) {
     idempotencyKey: crypto.randomUUID(),
   }
 
-  if (templateId?.trim()) {
-    payload.notes = templateId
-  }
-
   const body = JSON.stringify(payload)
   await apiFetch(`/orchestrator/swarms/${id}/create`, {
     method: 'POST',

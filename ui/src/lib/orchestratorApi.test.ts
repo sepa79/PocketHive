@@ -15,9 +15,12 @@ describe('orchestratorApi', () => {
     const init = (apiFetch as unknown as Mock).mock.calls[0][1]
     expect(init?.method).toBe('POST')
     const body = JSON.parse(init?.body)
-    expect(body).toMatchObject({ notes: 'tpl' })
+    expect(body.templateId).toBe('tpl')
+    expect(body.notes).toBeUndefined()
     expect(body.idempotencyKey).toBeDefined()
   })
+
+  it.todo('posts swarm creation with explicit notes once supported')
 
   it('posts swarm start', async () => {
     await startSwarm('sw1')
