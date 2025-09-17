@@ -8,9 +8,11 @@ import com.github.dockerjava.api.model.HostConfig;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
+import java.net.ConnectException;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.*;
 
 class DockerContainerClientTest {
@@ -41,5 +43,36 @@ class DockerContainerClientTest {
         verify(create).withHostConfig(hostCaptor.capture());
         assertThat(hostCaptor.getValue().getNetworkMode()).isEqualTo("net1");
         verify(create).withName("bee-one");
+    }
+
+    @Test
+    void wrapsMissingDockerSocketWithHelpfulMessage() {
+        DockerClient docker = mock(DockerClient.class);
+        CreateContainerCmd create = mock(CreateContainerCmd.class);
+        when(docker.createContainerCmd("img")).thenReturn(create);
+        when(create.withHostConfig(any())).thenReturn(create);
+        when(create.withEnv(any(String[].class))).thenReturn(create);
+        when(create.withName(anyString())).thenReturn(create);
+        when(create.exec()).thenThrow(new RuntimeException(new java.io.IOException("No such file or directory")));
+
+        DockerContainerClient client = new DockerContainerClient(docker);
+
+        assertThatThrownBy(() -> client.createContainer("img", Map.of(), "bee-one"))
+            .isInstanceOf(DockerDaemonUnavailableException.class)
+            .hasMessageContaining("Docker daemon is unavailable");
+    }
+
+    @Test
+    void wrapsConnectionRefusedOnStart() throws Exception {
+        DockerClient docker = mock(DockerClient.class);
+        StartContainerCmd start = mock(StartContainerCmd.class);
+        when(docker.startContainerCmd("cid")).thenReturn(start);
+        doThrow(new RuntimeException(new ConnectException("Connection refused"))).when(start).exec();
+
+        DockerContainerClient client = new DockerContainerClient(docker);
+
+        assertThatThrownBy(() -> client.startContainer("cid"))
+            .isInstanceOf(DockerDaemonUnavailableException.class)
+            .hasMessageContaining("Docker daemon is unavailable");
     }
 }

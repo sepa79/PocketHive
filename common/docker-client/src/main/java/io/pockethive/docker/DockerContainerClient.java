@@ -7,9 +7,22 @@ import com.github.dockerjava.api.command.InspectContainerResponse;
 import com.github.dockerjava.api.command.StartContainerCmd;
 import com.github.dockerjava.api.model.HostConfig;
 
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.net.ConnectException;
+import java.net.NoRouteToHostException;
+import java.net.SocketTimeoutException;
+import java.net.UnknownHostException;
+import java.nio.file.NoSuchFileException;
+import java.util.Locale;
 import java.util.Map;
+import java.util.function.Supplier;
 
 public class DockerContainerClient {
+    private static final String DOCKER_HINT =
+        "Ensure Docker is installed, running, and that the process can access the Docker socket "
+            + "(for example /var/run/docker.sock) or an explicit DOCKER_HOST.";
+
     private final DockerClient dockerClient;
 
     public DockerContainerClient(DockerClient dockerClient) {
@@ -21,17 +34,9 @@ public class DockerContainerClient {
     }
 
     public String createAndStartContainer(String image, Map<String, String> env, String containerName) {
-        String[] envArray = toEnvArray(env);
-        CreateContainerCmd createCmd = dockerClient.createContainerCmd(image)
-            .withHostConfig(HostConfig.newHostConfig().withNetworkMode(resolveControlNetwork()))
-            .withEnv(envArray);
-        if (containerName != null && !containerName.isBlank()) {
-            createCmd = createCmd.withName(containerName);
-        }
-        CreateContainerResponse response = createCmd.exec();
-        StartContainerCmd start = dockerClient.startContainerCmd(response.getId());
-        start.exec();
-        return response.getId();
+        String id = createContainer(image, env, containerName);
+        startContainer(id);
+        return id;
     }
 
     public String createAndStartContainer(String image) {
@@ -47,15 +52,17 @@ public class DockerContainerClient {
     }
 
     public String createContainer(String image, Map<String, String> env, String containerName) {
-        String[] envArray = toEnvArray(env);
-        CreateContainerCmd createCmd = dockerClient.createContainerCmd(image)
-            .withHostConfig(HostConfig.newHostConfig().withNetworkMode(resolveControlNetwork()))
-            .withEnv(envArray);
-        if (containerName != null && !containerName.isBlank()) {
-            createCmd = createCmd.withName(containerName);
-        }
-        CreateContainerResponse response = createCmd.exec();
-        return response.getId();
+        return callDocker("create container", () -> {
+            String[] envArray = toEnvArray(env);
+            CreateContainerCmd createCmd = dockerClient.createContainerCmd(image)
+                .withHostConfig(HostConfig.newHostConfig().withNetworkMode(resolveControlNetwork()))
+                .withEnv(envArray);
+            if (containerName != null && !containerName.isBlank()) {
+                createCmd = createCmd.withName(containerName);
+            }
+            CreateContainerResponse response = createCmd.exec();
+            return response.getId();
+        });
     }
 
     public String createContainer(String image) {
@@ -67,12 +74,12 @@ public class DockerContainerClient {
     }
 
     public void startContainer(String containerId) {
-        dockerClient.startContainerCmd(containerId).exec();
+        callDocker("start container", () -> dockerClient.startContainerCmd(containerId).exec());
     }
 
     public void stopAndRemoveContainer(String containerId) {
-        dockerClient.stopContainerCmd(containerId).exec();
-        dockerClient.removeContainerCmd(containerId).exec();
+        callDocker("stop container", () -> dockerClient.stopContainerCmd(containerId).exec());
+        callDocker("remove container", () -> dockerClient.removeContainerCmd(containerId).exec());
     }
 
     public String resolveControlNetwork() {
@@ -96,5 +103,69 @@ public class DockerContainerClient {
         return env.entrySet().stream()
             .map(e -> e.getKey() + "=" + e.getValue())
             .toArray(String[]::new);
+    }
+
+    private <T> T callDocker(String action, Supplier<T> supplier) {
+        try {
+            return supplier.get();
+        } catch (RuntimeException e) {
+            throw translate(action, e);
+        }
+    }
+
+    private void callDocker(String action, Runnable runnable) {
+        try {
+            runnable.run();
+        } catch (RuntimeException e) {
+            throw translate(action, e);
+        }
+    }
+
+    private RuntimeException translate(String action, RuntimeException e) {
+        if (e instanceof DockerDaemonUnavailableException) {
+            return e;
+        }
+        if (isDockerUnavailable(e)) {
+            return new DockerDaemonUnavailableException(
+                "Unable to " + action + " because the Docker daemon is unavailable. " + DOCKER_HINT,
+                e);
+        }
+        return e;
+    }
+
+    private boolean isDockerUnavailable(Throwable throwable) {
+        for (Throwable t = throwable; t != null; t = t.getCause()) {
+            if (t instanceof DockerDaemonUnavailableException
+                || t instanceof ConnectException
+                || t instanceof NoRouteToHostException
+                || t instanceof SocketTimeoutException
+                || t instanceof UnknownHostException
+                || t instanceof FileNotFoundException
+                || t instanceof NoSuchFileException
+                || (t instanceof IOException && messageContains(t, "No such file or directory"))) {
+                return true;
+            }
+            String className = t.getClass().getName();
+            if ("com.sun.jna.LastErrorException".equals(className)
+                && messageContains(t, "No such file or directory")) {
+                return true;
+            }
+            if (messageContains(t, "Could not find a valid Docker environment")) {
+                return true;
+            }
+            if (messageContains(t, "permission denied") && messageContains(t, "docker")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean messageContains(Throwable t, String needle) {
+        if (needle == null || needle.isBlank()) {
+            return false;
+        }
+        String message = t.getMessage();
+        return message != null && message.toLowerCase(Locale.ROOT)
+            .contains(needle.toLowerCase(Locale.ROOT));
     }
 }
