@@ -1,5 +1,6 @@
 package io.pockethive.orchestrator.app;
 
+import com.github.dockerjava.api.model.Bind;
 import io.pockethive.Topology;
 import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmRegistry;
@@ -16,6 +17,8 @@ public class ContainerLifecycleManager {
     private final DockerContainerClient docker;
     private final SwarmRegistry registry;
     private final AmqpAdmin amqp;
+
+    private static final String DEFAULT_DOCKER_SOCKET = "/var/run/docker.sock";
 
     public ContainerLifecycleManager(DockerContainerClient docker, SwarmRegistry registry, AmqpAdmin amqp) {
         this.docker = docker;
@@ -34,9 +37,16 @@ public class ContainerLifecycleManager {
         if (net != null && !net.isBlank()) {
             env.put("CONTROL_NETWORK", net);
         }
+        String dockerSocket = resolveDockerSocketPath();
+        env.put("DOCKER_SOCKET_PATH", dockerSocket);
+        env.put("DOCKER_HOST", "unix://" + dockerSocket);
         log.info("launching controller for swarm {} as instance {} using image {}", swarmId, instanceId, image);
         log.info("docker env: {}", env);
-        String containerId = docker.createAndStartContainer(image, env, instanceId);
+        String containerId = docker.createAndStartContainer(
+            image,
+            env,
+            instanceId,
+            hostConfig -> hostConfig.withBinds(Bind.parse(dockerSocket + ":" + dockerSocket)));
         log.info("controller container {} ({}) started for swarm {}", containerId, instanceId, swarmId);
         Swarm swarm = new Swarm(swarmId, instanceId, containerId);
         registry.register(swarm);
@@ -68,5 +78,13 @@ public class ContainerLifecycleManager {
             registry.updateStatus(swarmId, SwarmStatus.REMOVED);
             registry.remove(swarmId);
         });
+    }
+
+    private static String resolveDockerSocketPath() {
+        return java.util.Optional.ofNullable(System.getenv("DOCKER_SOCKET_PATH"))
+            .filter(path -> !path.isBlank())
+            .or(() -> java.util.Optional.ofNullable(System.getProperty("DOCKER_SOCKET_PATH")))
+            .filter(path -> !path.isBlank())
+            .orElse(DEFAULT_DOCKER_SOCKET);
     }
 }

@@ -17,6 +17,7 @@ import java.nio.file.NoSuchFileException;
 import java.util.Locale;
 import java.util.Map;
 import java.util.function.Supplier;
+import java.util.function.UnaryOperator;
 
 public class DockerContainerClient {
     private static final String DOCKER_HINT =
@@ -30,32 +31,47 @@ public class DockerContainerClient {
     }
 
     public String createAndStartContainer(String image, Map<String, String> env) {
-        return createAndStartContainer(image, env, null);
+        return createAndStartContainer(image, env, null, null);
     }
 
     public String createAndStartContainer(String image, Map<String, String> env, String containerName) {
-        String id = createContainer(image, env, containerName);
+        return createAndStartContainer(image, env, containerName, null);
+    }
+
+    public String createAndStartContainer(String image,
+                                          Map<String, String> env,
+                                          String containerName,
+                                          UnaryOperator<HostConfig> hostConfigCustomizer) {
+        String id = createContainer(image, env, containerName, hostConfigCustomizer);
         startContainer(id);
         return id;
     }
 
     public String createAndStartContainer(String image) {
-        return createAndStartContainer(image, Map.of(), null);
+        return createAndStartContainer(image, Map.of(), null, null);
     }
 
     public String createAndStartContainer(String image, String containerName) {
-        return createAndStartContainer(image, Map.of(), containerName);
+        return createAndStartContainer(image, Map.of(), containerName, null);
     }
 
     public String createContainer(String image, Map<String, String> env) {
-        return createContainer(image, env, null);
+        return createContainer(image, env, null, null);
     }
 
     public String createContainer(String image, Map<String, String> env, String containerName) {
+        return createContainer(image, env, containerName, null);
+    }
+
+    public String createContainer(String image,
+                                  Map<String, String> env,
+                                  String containerName,
+                                  UnaryOperator<HostConfig> hostConfigCustomizer) {
         return callDocker("create container", () -> {
             String[] envArray = toEnvArray(env);
+            HostConfig hostConfig = buildHostConfig(hostConfigCustomizer);
             CreateContainerCmd createCmd = dockerClient.createContainerCmd(image)
-                .withHostConfig(HostConfig.newHostConfig().withNetworkMode(resolveControlNetwork()))
+                .withHostConfig(hostConfig)
                 .withEnv(envArray);
             if (containerName != null && !containerName.isBlank()) {
                 createCmd = createCmd.withName(containerName);
@@ -66,11 +82,11 @@ public class DockerContainerClient {
     }
 
     public String createContainer(String image) {
-        return createContainer(image, Map.of(), null);
+        return createContainer(image, Map.of(), null, null);
     }
 
     public String createContainer(String image, String containerName) {
-        return createContainer(image, Map.of(), containerName);
+        return createContainer(image, Map.of(), containerName, null);
     }
 
     public void startContainer(String containerId) {
@@ -103,6 +119,22 @@ public class DockerContainerClient {
         return env.entrySet().stream()
             .map(e -> e.getKey() + "=" + e.getValue())
             .toArray(String[]::new);
+    }
+
+    private HostConfig buildHostConfig(UnaryOperator<HostConfig> hostConfigCustomizer) {
+        HostConfig hostConfig = HostConfig.newHostConfig();
+        String network = resolveControlNetwork();
+        if (network != null && !network.isBlank()) {
+            hostConfig.withNetworkMode(network);
+        }
+        if (hostConfigCustomizer != null) {
+            HostConfig customized = hostConfigCustomizer.apply(hostConfig);
+            if (customized == null) {
+                throw new IllegalArgumentException("HostConfig customizer must not return null");
+            }
+            hostConfig = customized;
+        }
+        return hostConfig;
     }
 
     private <T> T callDocker(String action, Supplier<T> supplier) {

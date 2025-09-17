@@ -4,6 +4,7 @@ import com.github.dockerjava.api.DockerClient;
 import com.github.dockerjava.api.command.CreateContainerCmd;
 import com.github.dockerjava.api.command.CreateContainerResponse;
 import com.github.dockerjava.api.command.StartContainerCmd;
+import com.github.dockerjava.api.model.Bind;
 import com.github.dockerjava.api.model.HostConfig;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -74,5 +75,29 @@ class DockerContainerClientTest {
         assertThatThrownBy(() -> client.startContainer("cid"))
             .isInstanceOf(DockerDaemonUnavailableException.class)
             .hasMessageContaining("Docker daemon is unavailable");
+    }
+
+    @Test
+    void appliesHostConfigCustomizer() {
+        DockerClient docker = mock(DockerClient.class);
+        CreateContainerCmd create = mock(CreateContainerCmd.class);
+        StartContainerCmd start = mock(StartContainerCmd.class);
+        CreateContainerResponse resp = new CreateContainerResponse();
+        resp.setId("cid");
+        when(docker.createContainerCmd("img")).thenReturn(create);
+        when(create.withHostConfig(any())).thenReturn(create);
+        when(create.withEnv(any(String[].class))).thenReturn(create);
+        when(create.withName(anyString())).thenReturn(create);
+        when(create.exec()).thenReturn(resp);
+        when(docker.startContainerCmd("cid")).thenReturn(start);
+
+        DockerContainerClient client = new DockerContainerClient(docker);
+
+        client.createAndStartContainer("img", Map.of(), "bee-one",
+            hostConfig -> hostConfig.withBinds(Bind.parse("/host:/container")));
+
+        ArgumentCaptor<HostConfig> hostCaptor = ArgumentCaptor.forClass(HostConfig.class);
+        verify(create).withHostConfig(hostCaptor.capture());
+        assertThat(hostCaptor.getValue().getBinds()).containsExactly(Bind.parse("/host:/container"));
     }
 }
