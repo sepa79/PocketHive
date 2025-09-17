@@ -123,6 +123,9 @@ public class SwarmSignalListener {
               log.debug("Ignoring status for swarm {} on routing key {}", swarmId, routingKey);
               return;
             }
+            // We purposely count the controller's own status messages here. Keeping our heartbeat in the
+            // lifecycle cache ensures the aggregate metrics still show a "degraded" swarm instead of
+            // falling back to "unknown" when other roles go quiet.
             lifecycle.updateHeartbeat(parts[0], parts[1]);
             boolean enabled = node.path("data").path("enabled").asBoolean(true);
             lifecycle.updateEnabled(parts[0], parts[1], enabled);
