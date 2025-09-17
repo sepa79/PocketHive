@@ -5,11 +5,14 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.amqp.core.*;
 import org.springframework.amqp.rabbit.junit.RabbitAvailable;
+import org.springframework.amqp.rabbit.junit.RabbitAvailableCondition;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.amqp.rabbit.core.RabbitAdmin;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 
 import io.pockethive.docker.DockerContainerClient;
 
@@ -20,6 +23,12 @@ import static org.junit.jupiter.api.Assertions.*;
 @SpringBootTest
 @RabbitAvailable
 class SwarmLifecycleManagerIntegrationTest {
+  @DynamicPropertySource
+  static void rabbitProperties(DynamicPropertyRegistry registry) {
+    registry.add("spring.rabbitmq.host", () -> RabbitAvailableCondition.getBrokerRunning().getHostName());
+    registry.add("spring.rabbitmq.port", () -> RabbitAvailableCondition.getBrokerRunning().getPort());
+  }
+
   @Autowired
   SwarmLifecycleManager manager;
 
