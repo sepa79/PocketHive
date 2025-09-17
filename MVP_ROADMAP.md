@@ -1,11 +1,11 @@
 # PocketHive MVP Roadmap
 ## From Current State to JMeter-like Load Testing Framework
 
-### Current State (v0.8.2)
-- Single swarm with basic REST support
-- Manual configuration via UI
-- WireMock integration for testing
-- Basic metrics and observability
+### Current State (v0.10.0)
+- Orchestrator drives swarm lifecycle over REST with idempotent start/stop and remove guards
+- Multi-swarm queue isolation with swarm-aware metrics and bee naming
+- React UI renders grouped swarms, topology, live component controls, and Buzz log streaming
+- Scenario manager service skeleton and REST client ready for external templates
 
 ### MVP Target
 - Multiple dynamic swarms (REST + SOAP)
@@ -16,6 +16,11 @@
 ---
 
 ## Architecture Overview
+
+### Development Stage (September 2025)
+- Phase 1 and Phase 2 deliverables are complete in code and tests (dynamic swarms, isolation, UI controls).
+- Phase 3 has kicked off: scenario-manager-service module exists, orchestrator fetches templates, UI surfaces scenario lists.
+- Remaining MVP work shifts to full scenario CRUD, data backends (Redis), SOAP support, and rich visualization tooling.
 
 ### Current Architecture
 ```
@@ -107,7 +112,7 @@
 **Goal**: Load test scenarios from external sources
 
 #### 3.1 Scenario Manager Service
-- [ ] Create `scenario-manager-service` module
+- [x] Create `scenario-manager-service` module
 - [ ] Implement REST API for scenario CRUD operations
 - [ ] Add scenario validation and templating
 
@@ -333,13 +338,13 @@ These endpoints supply the orchestrator and SwarmController with plans at runtim
 
 ### Phase 1 Success
 - [x] Orchestrator can create/destroy single REST swarm
-- [ ] Swarm appears in UI with unique identifier
+- [x] Swarm appears in UI with unique identifier
 - [x] Basic swarm lifecycle management working
 
 ### Phase 2 Success
 - [ ] 3+ REST swarms running simultaneously
-- [ ] Each swarm isolated (separate queues/metrics)
-- [ ] UI shows all swarms with individual controls
+- [x] Each swarm isolated (separate queues/metrics)
+- [x] UI shows all swarms with individual controls
 
 ### Phase 3 Success
 - [ ] Scenarios loaded from external JSON/YAML files
@@ -394,23 +399,23 @@ These endpoints supply the orchestrator and SwarmController with plans at runtim
 ## Next Steps
 
 1. **Immediate (This Week)**
-   - [x] Create orchestrator service skeleton
-   - [x] Set up development environment for new services
-   - [x] Begin Phase 1 implementation
+   - [ ] Implement scenario-manager-service CRUD endpoints and validation (Phase 3.1)
+   - [ ] Extend orchestrator integration tests to cover remote template fetch failures
+   - [ ] Harden UI swarm creation modal with scenario metadata and error states
 
 2. **Short Term (Next 2 Weeks)**
-   - [x] Complete orchestrator basic functionality
-   - [x] Test dynamic swarm creation
-   - Begin multi-swarm support
+   - [ ] Finish scenario schema design and publish OpenAPI/AsyncAPI updates (Phase 3.2)
+   - [ ] Add swarm removal controls and health rollups to the Hive UI
+   - [ ] Validate multi-swarm scale (3+ concurrent swarms) under load
 
 3. **Medium Term (Next Month)**
-   - External scenario configuration
-   - Redis integration
-   - SOAP support foundation
+   - External scenario configuration fully wired into UI (Nectar workspace)
+   - Redis integration for test data hydration (Phase 4)
+   - SOAP support foundation across services and UI (Phase 5)
 
 4. **Long Term (Next 2 Months)**
-   - Complete scenario editor
-   - Production testing
+   - Complete scenario editor and execution dashboards (Phase 6)
+   - Production-scale testing and hardening
    - MVP delivery
 
 The roadmap transforms PocketHive from a single-swarm testing tool into a comprehensive, JMeter-like load testing framework capable of handling complex, multi-protocol production scenarios.
