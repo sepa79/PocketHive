@@ -1,10 +1,12 @@
 package io.pockethive.orchestrator.app;
 
 import io.pockethive.Topology;
+import com.fasterxml.jackson.core.type.TypeReference;
 import io.pockethive.observability.StatusEnvelopeBuilder;
 import io.pockethive.control.ConfirmationScope;
 import io.pockethive.control.ReadyConfirmation;
 import io.pockethive.control.ErrorConfirmation;
+import io.pockethive.control.ControlSignal;
 import io.pockethive.orchestrator.domain.SwarmPlanRegistry;
 import io.pockethive.orchestrator.domain.SwarmRegistry;
 import io.pockethive.orchestrator.domain.SwarmCreateTracker;
@@ -26,6 +28,7 @@ import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Map;
 
 /**
  * Handles control-plane signals for orchestrator and dispatches swarm plans when
@@ -75,20 +78,27 @@ public class SwarmSignalListener {
         log.info("[CTRL] RECV rk={} inst={} payload={}", routingKey, instanceId, snippet(body));
         if (routingKey.startsWith("ev.ready.swarm-controller.")) {
             String inst = routingKey.substring("ev.ready.swarm-controller.".length());
-            plans.remove(inst).ifPresent(plan -> {
+            SwarmPlan plan = plans.remove(inst).orElse(null);
+            Pending info = creates.remove(inst).orElse(null);
+            if (plan != null) {
                 try {
-                    String payload = json.writeValueAsString(plan);
+                    ControlSignal payload = templateSignal(plan, info);
+                    String jsonPayload = json.writeValueAsString(payload);
                     String rk = "sig.swarm-template." + plan.id();
                     log.info("sending swarm-template for {} via controller {}", plan.id(), inst);
-                    sendControl(rk, payload, "sig.swarm-template");
+                    sendControl(rk, jsonPayload, "sig.swarm-template");
                 } catch (Exception e) {
                     log.warn("template send", e);
                 }
-            });
-            creates.remove(inst).ifPresent(info -> {
+            } else {
+                log.warn("no swarm plan registered for controller {}", inst);
+            }
+            if (info != null) {
                 emitCreateReady(info);
                 creates.expectTemplate(info, TEMPLATE_TIMEOUT);
-            });
+            } else {
+                log.warn("no pending create tracked for controller {}", inst);
+            }
         } else if (routingKey.startsWith("ev.ready.swarm-stop.")) {
             String swarmId = routingKey.substring("ev.ready.swarm-stop.".length());
             creates.complete(swarmId, Phase.STOP);
@@ -123,6 +133,13 @@ public class SwarmSignalListener {
             creates.complete(swarmId, Phase.STOP);
             registry.updateStatus(swarmId, SwarmStatus.FAILED);
         }
+    }
+
+    private ControlSignal templateSignal(SwarmPlan plan, Pending info) {
+        Map<String, Object> args = json.convertValue(plan, new TypeReference<Map<String, Object>>() {});
+        String correlationId = info != null ? info.correlationId() : null;
+        String idempotencyKey = info != null ? info.idempotencyKey() : null;
+        return new ControlSignal("swarm-template", correlationId, idempotencyKey, plan.id(), null, null, args);
     }
 
     private void emitCreateReady(Pending info) {
