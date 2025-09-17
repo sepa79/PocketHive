@@ -122,7 +122,7 @@ test('shows unassigned components when selecting default swarm', async () => {
   const [def] = screen.getAllByText('default')
   expect(def).toBeTruthy()
   await user.click(def)
-  const gens = await screen.findAllByText('generator')
+  const gens = await screen.findAllByText('Generator')
   expect(gens.length).toBeGreaterThan(0)
 })
 
