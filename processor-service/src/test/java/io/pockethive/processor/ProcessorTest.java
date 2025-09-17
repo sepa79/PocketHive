@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.pockethive.Topology;
+import io.pockethive.asyncapi.AsyncApiSchemaValidator;
 import io.pockethive.control.ControlSignal;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -17,7 +18,9 @@ import org.springframework.amqp.rabbit.listener.RabbitListenerEndpointRegistry;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -40,6 +43,7 @@ class ProcessorTest {
     @Mock
     MessageListenerContainer workContainer;
 
+    private static final AsyncApiSchemaValidator ASYNC_API = AsyncApiSchemaValidator.loadDefault();
     private final ObjectMapper mapper = new ObjectMapper();
     private SimpleMeterRegistry meterRegistry;
     private Processor processor;
@@ -53,12 +57,18 @@ class ProcessorTest {
 
     @Test
     void statusRequestEmitsFullStatus() throws Exception {
+        String correlationId = UUID.randomUUID().toString();
+        String idempotencyKey = UUID.randomUUID().toString();
         ControlSignal signal = ControlSignal.forInstance(
-            "status-request", "sw1", "processor", "inst", "corr", "idem");
+            "status-request", "sw1", "processor", "inst", correlationId, idempotencyKey);
 
         processor.onControl(mapper.writeValueAsString(signal), "sig.status-request.processor.inst", null);
 
-        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("ev.status-full.processor.inst"), anyString());
+        ArgumentCaptor<String> payload = ArgumentCaptor.forClass(String.class);
+        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("ev.status-full.processor.inst"), payload.capture());
+        JsonNode node = mapper.readTree(payload.getValue());
+        List<String> errors = ASYNC_API.validate("#/components/schemas/ControlStatusFullPayload", node);
+        assertThat(errors).isEmpty();
         verifyNoMoreInteractions(rabbit);
     }
 
@@ -68,8 +78,10 @@ class ProcessorTest {
         data.put("enabled", true);
         data.put("baseUrl", "http://next");
         Map<String, Object> args = Map.of("data", data);
+        String correlationId = UUID.randomUUID().toString();
+        String idempotencyKey = UUID.randomUUID().toString();
         ControlSignal signal = ControlSignal.forInstance(
-            "config-update", "sw1", "processor", "inst", "corr", "idem", args);
+            "config-update", "sw1", "processor", "inst", correlationId, idempotencyKey, args);
 
         when(listenerRegistry.getListenerContainer("workListener")).thenReturn(workContainer);
         processor.onControl(mapper.writeValueAsString(signal), "sig.config-update.processor.inst", null);
@@ -85,20 +97,24 @@ class ProcessorTest {
         JsonNode node = mapper.readTree(payload.getValue());
         assertThat(node.path("result").asText()).isEqualTo("success");
         assertThat(node.path("signal").asText()).isEqualTo("config-update");
-        assertThat(node.path("correlationId").asText()).isEqualTo("corr");
-        assertThat(node.path("idempotencyKey").asText()).isEqualTo("idem");
+        assertThat(node.path("correlationId").asText()).isEqualTo(correlationId);
+        assertThat(node.path("idempotencyKey").asText()).isEqualTo(idempotencyKey);
         assertThat(node.path("scope").path("role").asText()).isEqualTo("processor");
         assertThat(node.path("scope").path("instance").asText()).isEqualTo("inst");
         assertThat(node.path("scope").path("swarmId").asText()).isEqualTo("sw1");
         assertThat(node.has("args")).isFalse();
         verify(rabbit, never()).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("ev.error.config-update.processor.inst"), anyString());
+        List<String> readyErrors = ASYNC_API.validate("#/components/schemas/CommandReadyPayload", node);
+        assertThat(readyErrors).isEmpty();
     }
 
     @Test
     void configUpdateErrorEmitsErrorConfirmation() throws Exception {
         Map<String, Object> args = Map.of("data", Map.of("enabled", "oops"));
+        String correlationId = UUID.randomUUID().toString();
+        String idempotencyKey = UUID.randomUUID().toString();
         ControlSignal signal = ControlSignal.forInstance(
-            "config-update", "sw1", "processor", "inst", "corr", "idem", args);
+            "config-update", "sw1", "processor", "inst", correlationId, idempotencyKey, args);
 
         processor.onControl(mapper.writeValueAsString(signal), "sig.config-update.processor.inst", null);
 
@@ -107,10 +123,13 @@ class ProcessorTest {
         JsonNode node = mapper.readTree(payload.getValue());
         assertThat(node.path("result").asText()).isEqualTo("error");
         assertThat(node.path("signal").asText()).isEqualTo("config-update");
-        assertThat(node.path("correlationId").asText()).isEqualTo("corr");
-        assertThat(node.path("idempotencyKey").asText()).isEqualTo("idem");
+        assertThat(node.path("correlationId").asText()).isEqualTo(correlationId);
+        assertThat(node.path("idempotencyKey").asText()).isEqualTo(idempotencyKey);
         assertThat(node.path("scope").path("role").asText()).isEqualTo("processor");
         assertThat(node.path("code").asText()).isEqualTo("IllegalArgumentException");
+        assertThat(node.path("message").asText()).isNotBlank();
+        List<String> errorPayload = ASYNC_API.validate("#/components/schemas/CommandErrorPayload", node);
+        assertThat(errorPayload).isEmpty();
 
         Boolean enabled = (Boolean) ReflectionTestUtils.getField(processor, "enabled");
         assertThat(enabled).isFalse();

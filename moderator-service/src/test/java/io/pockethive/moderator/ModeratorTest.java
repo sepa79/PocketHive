@@ -3,6 +3,7 @@ package io.pockethive.moderator;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.Topology;
+import io.pockethive.asyncapi.AsyncApiSchemaValidator;
 import io.pockethive.control.ControlSignal;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -15,10 +16,11 @@ import org.springframework.amqp.rabbit.listener.MessageListenerContainer;
 import org.springframework.amqp.rabbit.listener.RabbitListenerEndpointRegistry;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.never;
@@ -37,6 +39,7 @@ class ModeratorTest {
     @Mock
     MessageListenerContainer container;
 
+    private static final AsyncApiSchemaValidator ASYNC_API = AsyncApiSchemaValidator.loadDefault();
     private final ObjectMapper mapper = new ObjectMapper();
 
     private Moderator moderator;
@@ -49,19 +52,27 @@ class ModeratorTest {
 
     @Test
     void statusRequestEmitsFullStatus() throws Exception {
+        String correlationId = UUID.randomUUID().toString();
+        String idempotencyKey = UUID.randomUUID().toString();
         ControlSignal signal = ControlSignal.forInstance(
-            "status-request", "sw1", "moderator", "inst", "corr", "idem");
+            "status-request", "sw1", "moderator", "inst", correlationId, idempotencyKey);
 
         moderator.onControl(mapper.writeValueAsString(signal), "sig.status-request.moderator.inst", null);
 
-        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("ev.status-full.moderator.inst"), anyString());
+        ArgumentCaptor<String> payload = ArgumentCaptor.forClass(String.class);
+        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("ev.status-full.moderator.inst"), payload.capture());
+        JsonNode node = mapper.readTree(payload.getValue());
+        List<String> errors = ASYNC_API.validate("#/components/schemas/ControlStatusFullPayload", node);
+        assertThat(errors).isEmpty();
     }
 
     @Test
     void configUpdateAppliesEnabledAndEmitsConfirmation() throws Exception {
         Map<String, Object> args = Map.of("data", Map.of("enabled", true));
+        String correlationId = UUID.randomUUID().toString();
+        String idempotencyKey = UUID.randomUUID().toString();
         ControlSignal signal = ControlSignal.forInstance(
-            "config-update", "sw1", "moderator", "inst", "corr", "idem", args);
+            "config-update", "sw1", "moderator", "inst", correlationId, idempotencyKey, args);
 
         when(registry.getListenerContainer("workListener")).thenReturn(container);
 
@@ -77,19 +88,23 @@ class ModeratorTest {
         JsonNode node = mapper.readTree(payload.getValue());
         assertThat(node.path("result").asText()).isEqualTo("success");
         assertThat(node.path("signal").asText()).isEqualTo("config-update");
-        assertThat(node.path("correlationId").asText()).isEqualTo("corr");
-        assertThat(node.path("idempotencyKey").asText()).isEqualTo("idem");
+        assertThat(node.path("correlationId").asText()).isEqualTo(correlationId);
+        assertThat(node.path("idempotencyKey").asText()).isEqualTo(idempotencyKey);
         assertThat(node.path("scope").path("role").asText()).isEqualTo("moderator");
         assertThat(node.path("scope").path("instance").asText()).isEqualTo("inst");
         assertThat(node.path("scope").path("swarmId").asText()).isEqualTo("sw1");
         assertThat(node.has("args")).isFalse();
+        List<String> readyErrors = ASYNC_API.validate("#/components/schemas/CommandReadyPayload", node);
+        assertThat(readyErrors).isEmpty();
     }
 
     @Test
     void configUpdateWithInvalidEnabledEmitsError() throws Exception {
         Map<String, Object> args = Map.of("enabled", 1);
+        String correlationId = UUID.randomUUID().toString();
+        String idempotencyKey = UUID.randomUUID().toString();
         ControlSignal signal = ControlSignal.forInstance(
-            "config-update", "sw1", "moderator", "inst", "corr", "idem", args);
+            "config-update", "sw1", "moderator", "inst", correlationId, idempotencyKey, args);
 
         moderator.onControl(mapper.writeValueAsString(signal), "sig.config-update.moderator.inst", null);
 
@@ -98,11 +113,14 @@ class ModeratorTest {
         JsonNode node = mapper.readTree(payload.getValue());
         assertThat(node.path("result").asText()).isEqualTo("error");
         assertThat(node.path("signal").asText()).isEqualTo("config-update");
-        assertThat(node.path("correlationId").asText()).isEqualTo("corr");
-        assertThat(node.path("idempotencyKey").asText()).isEqualTo("idem");
+        assertThat(node.path("correlationId").asText()).isEqualTo(correlationId);
+        assertThat(node.path("idempotencyKey").asText()).isEqualTo(idempotencyKey);
         assertThat(node.path("scope").path("role").asText()).isEqualTo("moderator");
         assertThat(node.path("scope").path("instance").asText()).isEqualTo("inst");
         assertThat(node.path("code").asText()).isEqualTo("IllegalArgumentException");
+        assertThat(node.path("message").asText()).isNotBlank();
+        List<String> errorPayload = ASYNC_API.validate("#/components/schemas/CommandErrorPayload", node);
+        assertThat(errorPayload).isEmpty();
 
         verify(container, never()).start();
         verify(container, never()).stop();

@@ -265,9 +265,11 @@ public class Processor {
     String rk = "ev.error.config-update." + role + "." + instance;
     ObjectNode payload = confirmationPayload(cs, "error", role, instance);
     payload.put("code", e.getClass().getSimpleName());
-    if (e.getMessage() != null) {
-      payload.put("message", e.getMessage());
+    String message = e.getMessage();
+    if (message == null || message.isBlank()) {
+      message = e.getClass().getSimpleName();
     }
+    payload.put("message", message);
     String json = payload.toString();
     logControlSend(rk, json);
     rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, json);
@@ -275,6 +277,7 @@ public class Processor {
 
   private ObjectNode confirmationPayload(ControlSignal cs, String result, String role, String instance) {
     ObjectNode payload = MAPPER.createObjectNode();
+    payload.put("ts", Instant.now().toString());
     payload.put("signal", cs.signal());
     payload.put("result", result);
     payload.set("scope", scopeNode(cs, role, instance));
