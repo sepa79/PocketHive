@@ -309,5 +309,6 @@ sequenceDiagram
 
 - **Create flow:** no `sig.swarm-create`; success is **`ev.ready.swarm-create.<swarmId>`** emitted by the Orchestrator after controller handshake.  
 - **Removed milestones:** `ev.ready.swarm-template.<swarmId>` and `ev.ready.swarm-remove.<swarmId>` are replaced by **`ev.ready.swarm-template`** and **`ev.ready.swarm-remove`** confirmations respectively.  
-- **Remove flow:** upon **`ev.ready.swarm-remove.<swarmId>`**, the Orchestrator **removes the Swarm Controller** runtime unit.  
+- **Remove flow:** upon **`ev.ready.swarm-remove.<swarmId>`**, the Orchestrator **removes the Swarm Controller** runtime unit.
 - **Unified envelopes:** all commands use `ControlSignal`; confirmations echo `correlationId` and `idempotencyKey`.
+- **Signals updated:** drop legacy `type`/`version`/`messageId`/`timestamp` fields; payload is `signal` + scope (`swarmId`/`role`/`instance`) with optional `args`.

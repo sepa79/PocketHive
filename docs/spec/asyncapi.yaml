@@ -1,7 +1,7 @@
 asyncapi: 2.6.0
 info:
   title: PocketHive Control & Traffic API
-  version: 0.4.0
+  version: 0.5.0
   description: "AsyncAPI specification documenting PocketHive messaging contracts.\n\
     - ph.control \u2014 control-plane events, lifecycle, metrics, alerts, and signals\n\
     - Services consume control signals from queues `ph.control.<role>.<instance>`\
@@ -65,10 +65,10 @@ channels:
           type: topic
           durable: true
         routingKey: ev.{kind}.{role}.{instance}
-  exchange/ph.control/sig.{type}.{role}.{instance}:
+  exchange/ph.control/sig.{signal}.{role}.{instance}:
     parameters:
-      type:
-        description: Signal type (single segment, kebab-case)
+      signal:
+        description: Signal name (single segment, kebab-case)
         schema:
           type: string
           enum:
@@ -103,7 +103,7 @@ channels:
           name: ph.control
           type: topic
           durable: true
-        routingKey: sig.{type}.{role}.{instance}
+        routingKey: sig.{signal}.{role}.{instance}
   exchange/ph.control/sig.swarm-template.{swarmId}:
     bindings:
       amqp:
@@ -804,34 +804,32 @@ components:
     ControlSignalPayload:
       type: object
       required:
-      - type
-      - version
-      - messageId
-      - timestamp
+      - signal
       - correlationId
       - idempotencyKey
       properties:
-        type:
+        signal:
           type: string
-          enum:
-          - status-request
-          - config-update
-          - ping
-          - link-request
-        version:
-          type: string
-        messageId:
-          type: string
-          format: uuid
-        timestamp:
-          type: string
-          format: date-time
+          description: Command identifier (e.g., swarm-start, config-update)
         correlationId:
           type: string
-          format: uuid
+          description: Correlates confirmations with the initiating attempt
         idempotencyKey:
           type: string
-          format: uuid
+          description: Stable identifier reused across retries of the same action
+        swarmId:
+          type: string
+          description: Target swarm identifier (when applicable)
+        role:
+          type: string
+          description: Target service role (when applicable)
+        instance:
+          type: string
+          description: Target instance identifier (when applicable)
+        args:
+          type: object
+          description: Additional arguments specific to the signal
+          additionalProperties: true
     CommandReadyPayload:
       type: object
       properties:

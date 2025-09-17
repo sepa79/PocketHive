@@ -71,11 +71,11 @@ Emitter → Consumer
 ## 4) Message envelopes
 
 ### 4.1 Control signals (publishers MUST include)
+- `signal` *(string)* — command identifier (`swarm-start`, `config-update`, ...)
 - `correlationId` *(uuid)* — **new per attempt**
 - `idempotencyKey` *(uuid)* — **stable across retries** of the same action
-- `messageId` *(uuid)* — unique per message
-- `timestamp` *(ISO-8601 UTC)*
-- Scope + args: `swarmId` / `role` / `instance` / optional `args`
+- Scope: include whichever of `swarmId`, `role`, `instance` apply
+- Optional `args` object with command-specific parameters
 
 ### 4.2 Confirmations (emitters MUST include)
 - Echo **`correlationId`** and **`idempotencyKey`** from the initiating control signal (or from the runtime op for create).
@@ -163,10 +163,8 @@ Emitter → Consumer
 {
   "signal": "swarm-start",
   "swarmId": "swarm-42",
-  "idempotencyKey": "a1c3-1111-2222-9f",
   "correlationId": "attempt-001-aaaa-bbbb",
-  "messageId": "msg-123",
-  "timestamp": "2025-09-12T12:30:00Z"
+  "idempotencyKey": "a1c3-1111-2222-9f"
 }
 ```
 

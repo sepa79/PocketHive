@@ -48,9 +48,8 @@ Use **both** on every control signal.
 {
   "signal": "swarm-start",
   "swarmId": "swarm-42",
-  "idempotencyKey": "a1c3-1111-2222-9f",
   "correlationId": "attempt-001-aaaa-bbbb",
-  "ts": "2025-09-12T12:30:00Z"
+  "idempotencyKey": "a1c3-1111-2222-9f"
 }
 ```
 
@@ -73,8 +72,7 @@ Use **both** on every control signal.
   "signal": "swarm-start",
   "swarmId": "swarm-42",
   "idempotencyKey": "a1c3-1111-2222-9f",   // same
-  "correlationId": "attempt-002-cccc-dddd", // new
-  "ts": "2025-09-12T12:31:10Z"
+  "correlationId": "attempt-002-cccc-dddd"  // new
 }
 ```
 

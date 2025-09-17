@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.9.6] - 2025-09-16
+Timestamp: 2025-09-16T00:00:00Z
+
+- Docs: align `ControlSignal` payload documentation with runtime shape, including `signal`/scope/`args`, and bump AsyncAPI spec to 0.5.0.
+
 ## [0.9.5] - 2025-09-15
 Timestamp: 2025-09-15T10:01:39Z
 
