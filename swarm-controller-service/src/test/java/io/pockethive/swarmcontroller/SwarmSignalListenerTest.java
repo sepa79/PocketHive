@@ -3,6 +3,7 @@ package io.pockethive.swarmcontroller;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.Topology;
+import io.pockethive.docker.DockerDaemonUnavailableException;
 import io.pockethive.swarmcontroller.SwarmStatus;
 import io.pockethive.swarmcontroller.SwarmMetrics;
 import org.junit.jupiter.api.Test;
@@ -114,6 +115,27 @@ class SwarmSignalListenerTest {
     assertThat(node.path("idempotencyKey").asText()).isEqualTo("i0");
     assertThat(node.path("state").asText()).isEqualTo("Ready");
     assertThat(node.path("scope").path("swarmId").asText()).isEqualTo(Topology.SWARM_ID);
+  }
+
+  @Test
+  void templateFailureIncludesDockerAvailabilityMessage() throws Exception {
+    when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
+    SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", mapper);
+    doThrow(new DockerDaemonUnavailableException("Unable to create container because the Docker daemon is unavailable. hint",
+        new RuntimeException("boom")))
+        .when(lifecycle).prepare("{}");
+
+    listener.handle(signal("swarm-template", "i9", "c9"), "sig.swarm-template." + Topology.SWARM_ID);
+
+    ArgumentCaptor<String> payload = ArgumentCaptor.forClass(String.class);
+    verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
+        eq("ev.error.swarm-template." + Topology.SWARM_ID),
+        payload.capture());
+
+    JsonNode node = mapper.readTree(payload.getValue());
+    assertThat(node.path("message").asText()).contains("Docker daemon is unavailable");
+    assertThat(node.path("correlationId").asText()).isEqualTo("c9");
+    assertThat(node.path("idempotencyKey").asText()).isEqualTo("i9");
   }
 
   @Test
