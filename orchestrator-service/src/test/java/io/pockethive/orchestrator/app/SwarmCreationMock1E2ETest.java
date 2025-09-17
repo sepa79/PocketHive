@@ -9,6 +9,7 @@ import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.Topology;
+import io.pockethive.control.ControlSignal;
 import io.pockethive.control.ReadyConfirmation;
 import io.pockethive.docker.DockerContainerClient;
 import io.pockethive.orchestrator.domain.Swarm;
@@ -211,7 +212,14 @@ class SwarmCreationMock1E2ETest {
         assertThat(templateMessage).isNotNull();
         assertThat(templateMessage.getMessageProperties().getReceivedRoutingKey())
             .isEqualTo("sig.swarm-template." + swarmId);
-        SwarmPlan publishedPlan = objectMapper.readValue(templateMessage.getBody(), SwarmPlan.class);
+        ControlSignal controlSignal = objectMapper.readValue(templateMessage.getBody(), ControlSignal.class);
+        assertThat(controlSignal.signal()).isEqualTo("swarm-template");
+        assertThat(controlSignal.swarmId()).isEqualTo(swarmId);
+        assertThat(controlSignal.correlationId()).isEqualTo(correlationId);
+        assertThat(controlSignal.idempotencyKey()).isEqualTo(idempotencyKey);
+        assertThat(controlSignal.args()).isNotNull();
+
+        SwarmPlan publishedPlan = objectMapper.convertValue(controlSignal.args(), SwarmPlan.class);
         assertThat(publishedPlan.id()).isEqualTo(swarmId);
         assertThat(publishedPlan.bees()).containsExactly(
             new Bee("generator", "pockethive-generator:latest", new Work(null, "gen"), java.util.Map.of()),

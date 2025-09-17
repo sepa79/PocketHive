@@ -51,9 +51,16 @@ class SwarmSignalListenerTest {
 
         listener.handle("", "ev.ready.swarm-controller.inst1");
 
+        ArgumentCaptor<String> templatePayload = ArgumentCaptor.forClass(String.class);
+        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("sig.swarm-template.sw1"), templatePayload.capture());
+        JsonNode templateSignal = mapper.readTree(templatePayload.getValue());
+        assertThat(templateSignal.path("signal").asText()).isEqualTo("swarm-template");
+        assertThat(templateSignal.path("swarmId").asText()).isEqualTo("sw1");
+        assertThat(templateSignal.path("correlationId").asText()).isEqualTo("corr");
+        assertThat(templateSignal.path("idempotencyKey").asText()).isEqualTo("idem");
+        assertThat(templateSignal.path("args").path("id").asText()).isEqualTo("sw1");
+
         ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
-        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("sig.swarm-template.sw1"), captor.capture());
-        assertThat(captor.getValue()).contains("\"id\":\"sw1\"");
         verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("ev.ready.swarm-create.sw1"), captor.capture());
         String confirmation = captor.getValue();
         JsonNode ready = mapper.readTree(confirmation);
