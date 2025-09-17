@@ -5,6 +5,7 @@ WORKDIR /app
 COPY pom.xml ./
 COPY common/topology-core/pom.xml common/topology-core/pom.xml
 COPY common/docker-client/pom.xml common/docker-client/pom.xml
+COPY common/swarm-model/pom.xml common/swarm-model/pom.xml
 COPY test/pom.xml test/pom.xml
 COPY trigger-service/pom.xml trigger-service/pom.xml
 COPY moderator-service/pom.xml moderator-service/pom.xml
@@ -18,6 +19,7 @@ COPY swarm-controller-service/pom.xml swarm-controller-service/pom.xml
 COPY scenario-manager-service/pom.xml scenario-manager-service/pom.xml
 COPY common/topology-core/src common/topology-core/src
 COPY common/docker-client/src common/docker-client/src
+COPY common/swarm-model/src common/swarm-model/src
 COPY test/src test/src
 COPY trigger-service/src trigger-service/src
 COPY moderator-service/src moderator-service/src
