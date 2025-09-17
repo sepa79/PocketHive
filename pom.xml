@@ -6,7 +6,7 @@
   <version>${revision}</version>
   <packaging>pom</packaging>
   <properties>
-    <revision>0.9.6</revision>
+    <revision>0.10.0</revision>
     <logstash.logback.version>8.1</logstash.logback.version>
   </properties>
   <modules>
