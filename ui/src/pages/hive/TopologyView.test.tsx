@@ -4,7 +4,7 @@
 import { render, act } from '@testing-library/react'
 import TopologyView from './TopologyView'
 import React, { type ReactNode } from 'react'
-import { vi, test, expect } from 'vitest'
+import { vi, test, expect, beforeEach } from 'vitest'
 
 interface Node {
   id: string
@@ -89,6 +89,13 @@ const components = [
   },
 ]
 const updateNodePosition = vi.fn<(id: string, x: number, y: number) => void>()
+
+beforeEach(() => {
+  const orchestrator = components.find((component) => component.id === 'hive-orchestrator')
+  if (orchestrator) {
+    orchestrator.name = 'orchestrator'
+  }
+})
 
 vi.mock('@xyflow/react', () => {
   const rf = (props: RFProps) => {
@@ -194,5 +201,14 @@ test('filters nodes for default swarm', () => {
   const props = (globalThis as unknown as { __RF_PROPS__: RFProps }).__RF_PROPS__
   expect(props.nodes).toHaveLength(1)
   expect(props.nodes[0].id).toBe('c')
+})
+
+test('orchestrator falls back to instance id when name is empty', () => {
+  const orchestrator = components.find((component) => component.id === 'hive-orchestrator')!
+  orchestrator.name = ''
+  render(<TopologyView />)
+  const props = (globalThis as unknown as { __RF_PROPS__: RFProps }).__RF_PROPS__
+  const orchestratorNode = props.nodes.find((node) => node.id === 'hive-orchestrator')
+  expect(orchestratorNode?.data.label).toBe('hive-orchestrator')
 })
 

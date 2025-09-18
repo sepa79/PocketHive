@@ -101,20 +101,34 @@ function ShapeNode({ data, selected }: NodeProps<ShapeNodeData>) {
   const size = 10
   const fill = data.enabled === false ? '#999999' : '#ffcc00'
   const isOrchestrator = data.componentType === 'orchestrator'
-  const metaEntries = isOrchestrator
-    ? (() => {
-        if (!data.meta || typeof data.meta !== 'object') {
-          return []
-        }
-        const swarmCount = formatMetaValue(
-          (data.meta as { swarmCount?: unknown }).swarmCount,
-        )
-        if (!swarmCount) {
-          return []
-        }
-        return [{ key: 'Active swarms', value: swarmCount }]
-      })()
-    : []
+  const metaEntries = useMemo(() => {
+    if (!isOrchestrator) {
+      return []
+    }
+    const entries: { key: string; value: string }[] = []
+    const instanceValue = formatMetaValue(data.componentId)
+    if (instanceValue) {
+      entries.push({ key: 'Instance', value: instanceValue })
+    }
+    const statusValue = formatMetaValue(data.status)
+    if (statusValue) {
+      entries.push({ key: 'Status', value: formatMetaKey(statusValue) })
+    }
+    if (data.meta && typeof data.meta === 'object') {
+      Object.entries(data.meta as Record<string, unknown>).forEach(
+        ([key, value]) => {
+          const formattedValue = formatMetaValue(value)
+          if (!formattedValue) {
+            return
+          }
+          const formattedKey =
+            key === 'swarmCount' ? 'Active swarms' : formatMetaKey(key)
+          entries.push({ key: formattedKey, value: formattedValue })
+        },
+      )
+    }
+    return entries
+  }, [data.componentId, data.meta, data.status, isOrchestrator])
   return (
     <div
       className={`shape-node${selected ? ' selected' : ''}${
@@ -564,9 +578,10 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
             y: node.y ?? previous?.y ?? 0,
           }
           const component = componentsById[node.id]
+          const orchestratorLabel = component?.name?.trim()
           const label =
             node.type === 'orchestrator'
-              ? component?.name ?? 'Orchestrator'
+              ? orchestratorLabel || component?.id || node.id
               : node.id
           nodes.push({
             id: node.id,
@@ -634,9 +649,10 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
           y: node.y ?? previous?.y ?? 0,
         }
         const component = componentsById[node.id]
+        const orchestratorLabel = component?.name?.trim()
         const label =
           node.type === 'orchestrator'
-            ? component?.name ?? 'Orchestrator'
+            ? orchestratorLabel || component?.id || node.id
             : node.id
         return {
           id: node.id,
