@@ -13,6 +13,8 @@ export interface TopologyNode {
   enabled?: boolean
   swarmId?: string
   beeName?: string
+  status?: string
+  version?: string
 }
 export interface TopologyEdge { from: string; to: string; queue: string }
 export interface Topology { nodes: TopologyNode[]; edges: TopologyEdge[] }
@@ -66,6 +68,8 @@ function buildTopology(): Topology {
     enabled: c.config?.enabled !== false,
     swarmId: c.swarmId,
     beeName: c.beeName ?? c.id,
+    status: c.status,
+    version: c.version,
   }))
   if (components['processor']) {
     nodes.push({
@@ -140,7 +144,12 @@ export function setClient(newClient: Client | null, destination = controlDestina
         comp.status = evt.kind
         const cfg = { ...(comp.config || {}) }
         if (evt.data) Object.assign(cfg, evt.data)
-        comp.beeName = evt.instance
+        const rawBeeName = evt.data?.beeName
+        const dataBeeName =
+          typeof rawBeeName === 'string' && rawBeeName.trim().length > 0
+            ? rawBeeName
+            : undefined
+        comp.beeName = dataBeeName ?? evt.instance
         if (typeof evt.enabled === 'boolean') cfg.enabled = evt.enabled
         if (Object.keys(cfg).length > 0) comp.config = cfg
         if (evt.queues || evt.inQueue) {

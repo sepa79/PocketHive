@@ -32,6 +32,8 @@ interface GraphNode {
   enabled?: boolean
   swarmId?: string
   beeName?: string
+  status?: string
+  version?: string
 }
 
 interface GraphLink {
@@ -76,12 +78,43 @@ interface ShapeNodeData {
   enabled?: boolean
   queueCount: number
   swarmId?: string
-  [key: string]: unknown
+  beeName?: string
+  role?: string
+  instanceId?: string
+  status?: string
+  version?: string
 }
+ 
+type StatusTone = 'active' | 'warn' | 'error' | 'muted'
 
 function ShapeNode({ data, selected }: NodeProps<ShapeNodeData>) {
   const size = 10
   const fill = data.enabled === false ? '#999999' : '#ffcc00'
+  const beeName = data.beeName ?? data.label ?? data.instanceId ?? ''
+  const roleLabel = humanize(data.role ?? '')
+  const statusTone = deriveStatusTone(data.status, data.enabled)
+  const statusLabel =
+    data.enabled === false
+      ? 'Disabled'
+      : data.status
+      ? humanize(data.status)
+      : 'Enabled'
+  const swarmLabel =
+    data.swarmId && data.swarmId !== 'default'
+      ? `Swarm ${data.swarmId}`
+      : 'Default swarm'
+  const versionLabel = data.version ? `v${data.version}` : null
+  const showInstanceId =
+    data.instanceId && data.instanceId !== beeName ? data.instanceId : null
+  const metaDetails: { text: string; className?: string }[] = [
+    { text: swarmLabel },
+  ]
+  if (showInstanceId) {
+    metaDetails.push({ text: showInstanceId, className: 'shape-node__detail--mono' })
+  }
+  if (versionLabel) {
+    metaDetails.push({ text: versionLabel })
+  }
   return (
     <div className={`shape-node${selected ? ' selected' : ''}`}>
       <Handle type="target" position={Position.Left} />
@@ -112,11 +145,60 @@ function ShapeNode({ data, selected }: NodeProps<ShapeNodeData>) {
         {data.shape === 'star' && <polygon points={starPoints(size)} fill={fill} stroke="black" />}
         {data.shape === 'circle' && <circle cx={size} cy={size} r={size} fill={fill} stroke="black" />}
       </svg>
-      <span className="label">{data.label}</span>
-      {data.queueCount > 0 && <span className="badge">{data.queueCount}</span>}
+      <div className="shape-node__content">
+        <div className="shape-node__header">
+          <span className="shape-node__name" title={beeName}>
+            {beeName}
+          </span>
+          {data.queueCount > 0 && (
+            <span className="shape-node__badge">{data.queueCount}</span>
+          )}
+        </div>
+        <div className="shape-node__meta">
+          {roleLabel && <span className="shape-node__role">{roleLabel}</span>}
+          <span className={`shape-node__status shape-node__status--${statusTone}`}>
+            {statusLabel}
+          </span>
+        </div>
+        <div className="shape-node__meta shape-node__meta--secondary">
+          {metaDetails.map(({ text, className }, idx) => (
+            <span
+              key={`${text}-${idx}`}
+              className={`shape-node__detail${className ? ` ${className}` : ''}`}
+            >
+              {text}
+            </span>
+          ))}
+        </div>
+      </div>
       <Handle type="source" position={Position.Right} />
     </div>
   )
+}
+
+function humanize(value?: string) {
+  if (!value) return ''
+  return value
+    .split(/[-_.\s]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ')
+}
+
+function deriveStatusTone(status?: string, enabled?: boolean): StatusTone {
+  if (enabled === false) return 'muted'
+  if (!status) return 'active'
+  const normalised = status.toLowerCase()
+  if (normalised.includes('error') || normalised.includes('fail') || normalised.includes('alert')) {
+    return 'error'
+  }
+  if (normalised.includes('warn')) {
+    return 'warn'
+  }
+  if (normalised.includes('disable')) {
+    return 'muted'
+  }
+  return 'active'
 }
 
 function polygonPoints(sides: number, r: number) {
@@ -247,10 +329,15 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
           position: existing?.position ?? { x: n.x ?? 0, y: n.y ?? 0 },
           data: {
             label: n.beeName ?? n.id,
+            beeName: n.beeName ?? n.id,
+            instanceId: n.id,
+            role: n.type,
             shape: getShape(n.type),
             enabled: n.enabled,
             queueCount: queueCounts[n.id] ?? 0,
             swarmId: n.swarmId,
+            status: n.status,
+            version: n.version,
           },
           type: 'shape',
           selected: selectedId === n.id,

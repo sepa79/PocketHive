@@ -18,7 +18,13 @@ interface Node {
 interface RFNode {
   id: string
   position: { x: number; y: number }
-  data: { queueCount: number }
+  data: {
+    queueCount: number
+    beeName?: string
+    instanceId?: string
+    role?: string
+    swarmId?: string
+  }
 }
 
 interface RFEdge {
@@ -115,6 +121,10 @@ test('node position updates after drag and edge depth styles', () => {
   const props = (globalThis as unknown as { __RF_PROPS__: RFProps }).__RF_PROPS__
   expect(props.nodes[0].position.x).toBe(0)
   expect(props.nodes[0].position.y).toBe(0)
+  expect(props.nodes[0].data.beeName).toBe('a')
+  expect(props.nodes[0].data.instanceId).toBe('a')
+  expect(props.nodes[0].data.role).toBe('generator')
+  expect(props.nodes[0].data.swarmId).toBe('sw1')
   act(() => {
     props.onNodesChange([{ id: 'a', position: { x: 10, y: 20 } }])
   })
