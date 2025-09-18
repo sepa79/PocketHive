@@ -85,6 +85,12 @@ const isOutsideSwarm = (swarmId?: string) => {
 const toSwarmKey = (swarmId?: string): string =>
   isOutsideSwarm(swarmId) ? DEFAULT_SWARM_KEY : (swarmId as string)
 
+const isOrchestratorNode = (node: Pick<GraphNode, 'id' | 'type'>) => {
+  const type = node.type?.toLowerCase?.() ?? ''
+  const id = node.id?.toLowerCase?.() ?? ''
+  return type.includes('orchestrator') || id.includes('orchestrator')
+}
+
 interface ShapeNodeData {
   label: string
   shape: NodeShape
@@ -365,7 +371,7 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
       if (swarmId) {
         nodes = nodes.filter((n) => {
           const outside = isOutsideSwarm(n.swarmId)
-          const isOrchestrator = n.type === 'orchestrator'
+          const isOrchestrator = isOrchestratorNode(n)
           if (swarmId === DEFAULT_SWARM_KEY) return outside || isOrchestrator
           if (isOrchestrator) return false
           return !outside && n.swarmId === swarmId
@@ -414,8 +420,10 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
         const absY = n.y ?? existing?.positionAbsolute?.y ?? existing?.position?.y ?? 0
         const absolute = { x: absX, y: absY }
         const isController = n.type === 'swarm-controller'
-        const nodeType = detailView || isController ? 'shape' : 'beeIcon'
-        const dimensions: EntryDimensions = detailView || isController
+        const isOrchestrator = isOrchestratorNode(n)
+        const showFullCard = detailView || isOrchestrator
+        const nodeType = showFullCard ? 'shape' : 'beeIcon'
+        const dimensions: EntryDimensions = showFullCard
           ? { width: FULL_CARD_WIDTH, height: FULL_CARD_HEIGHT }
           : { width: ICON_CARD_SIZE, height: ICON_CARD_SIZE }
         const node: Node<ShapeNodeData> = {
@@ -442,7 +450,7 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
       const outsideEntries: GraphEntry[] = []
       baseEntries.forEach((entry) => {
         const key = toSwarmKey(entry.graph.swarmId)
-        const isOrchestrator = entry.graph.type === 'orchestrator'
+        const isOrchestrator = isOrchestratorNode(entry.graph)
         if (key === DEFAULT_SWARM_KEY || isOrchestrator) {
           outsideEntries.push(entry)
           return

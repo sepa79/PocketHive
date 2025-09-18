@@ -175,7 +175,7 @@ test('node position updates after drag and edge depth styles', () => {
   expect(swarmCard?.id).toBe('swarm:sw1')
   expect(swarmCard?.style?.width).toBeGreaterThan(0)
   const controllerNode = props.nodes.find((n) => n.id === 'queen') as RFNode
-  expect(controllerNode.type).toBe('shape')
+  expect(controllerNode.type).toBe('beeIcon')
   expect(controllerNode.parentNode).toBe('swarm:sw1')
   const nodeA = props.nodes.find((n) => n.id === 'a') as RFNode
   expect(nodeA.type).toBe('beeIcon')
@@ -190,7 +190,7 @@ test('node position updates after drag and edge depth styles', () => {
   expect(nodeA.position.x).toBe(nodeA.positionAbsolute!.x - (swarmCard?.position.x ?? 0))
   expect(nodeA.position.y).toBe(nodeA.positionAbsolute!.y - (swarmCard?.position.y ?? 0))
   const orchestratorNode = props.nodes.find((n) => n.id === 'orc') as RFNode
-  expect(orchestratorNode.type).toBe('beeIcon')
+  expect(orchestratorNode.type).toBe('shape')
   expect(orchestratorNode.parentNode).toBeUndefined()
   act(() => {
     props.onNodesChange([{ id: 'a', position: { x: 10, y: 20 } }])
