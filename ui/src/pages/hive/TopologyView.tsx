@@ -106,29 +106,22 @@ function ShapeNode({ data, selected }: NodeProps<ShapeNodeData>) {
       return []
     }
     const entries: { key: string; value: string }[] = []
-    const instanceValue = formatMetaValue(data.componentId)
-    if (instanceValue) {
-      entries.push({ key: 'Instance', value: instanceValue })
-    }
-    const statusValue = formatMetaValue(data.status)
-    if (statusValue) {
-      entries.push({ key: 'Status', value: formatMetaKey(statusValue) })
-    }
-    if (data.meta && typeof data.meta === 'object') {
-      Object.entries(data.meta as Record<string, unknown>).forEach(
-        ([key, value]) => {
-          const formattedValue = formatMetaValue(value)
-          if (!formattedValue) {
-            return
-          }
-          const formattedKey =
-            key === 'swarmCount' ? 'Active swarms' : formatMetaKey(key)
-          entries.push({ key: formattedKey, value: formattedValue })
-        },
-      )
+    const meta =
+      data.meta && typeof data.meta === 'object'
+        ? (data.meta as Record<string, unknown>)
+        : undefined
+    const swarmCountValue =
+      meta?.swarmCount ??
+      meta?.activeSwarmCount ??
+      meta?.activeSwarms ??
+      meta?.['swarm-count'] ??
+      meta?.['active-swarms']
+    const formattedSwarmCount = formatMetaValue(swarmCountValue)
+    if (formattedSwarmCount !== null) {
+      entries.push({ key: 'Active swarms', value: formattedSwarmCount })
     }
     return entries
-  }, [data.componentId, data.meta, data.status, isOrchestrator])
+  }, [data.meta, isOrchestrator])
   return (
     <div
       className={`shape-node${selected ? ' selected' : ''}${

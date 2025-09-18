@@ -1,7 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
-import { render, act } from '@testing-library/react'
+import { render, act, within } from '@testing-library/react'
 import TopologyView from './TopologyView'
 import React, { type ReactNode } from 'react'
 import { vi, test, expect, beforeEach } from 'vitest'
@@ -20,6 +20,7 @@ interface RFNode {
   type?: string
   position: { x: number; y: number }
   data: Record<string, unknown>
+  selected?: boolean
 }
 
 interface RFEdge {
@@ -36,6 +37,7 @@ interface RFProps {
   onNodeDragStop: (e: unknown, node: RFNode) => void
   onNodesChange: (changes: { id: string; position: { x: number; y: number } }[]) => void
   children?: ReactNode
+  nodeTypes?: Record<string, React.ComponentType<any>>
 }
 
 const data = {
@@ -100,7 +102,33 @@ beforeEach(() => {
 vi.mock('@xyflow/react', () => {
   const rf = (props: RFProps) => {
     ;(globalThis as unknown as { __RF_PROPS__: RFProps }).__RF_PROPS__ = props
-    return React.createElement('div', null, props.children)
+    const nodes = props.nodes ?? []
+    return (
+      <div data-testid="react-flow">
+        {nodes.map((node) => {
+          const NodeComponent = props.nodeTypes?.[node.type ?? ''] as
+            | React.ComponentType<any>
+            | undefined
+          if (!NodeComponent) {
+            return null
+          }
+          return (
+            <div key={node.id} data-node-id={node.id}>
+              <NodeComponent
+                id={node.id}
+                data={node.data}
+                selected={Boolean(node.selected)}
+                dragging={false}
+                isConnectable={false}
+                xPos={node.position?.x ?? 0}
+                yPos={node.position?.y ?? 0}
+              />
+            </div>
+          )
+        })}
+        {props.children}
+      </div>
+    )
   }
   return {
     __esModule: true,
@@ -194,6 +222,21 @@ test('grouped swarm node renders and edges aggregate by swarm', () => {
   expect(orchestratorData?.componentType).toBe('orchestrator')
   expect(orchestratorData?.status).toBe('status-full')
   expect(orchestratorData?.meta?.swarmCount).toBe(4)
+})
+
+test('orchestrator card only renders active swarm count metadata', () => {
+  render(<TopologyView />)
+  const card = document.querySelector(
+    '[data-node-id="hive-orchestrator"] .shape-node',
+  ) as HTMLElement | null
+  expect(card).not.toBeNull()
+  const scope = within(card as HTMLElement)
+  scope.getByText('orchestrator')
+  scope.getByText('Active swarms')
+  scope.getByText('4')
+  expect(scope.queryByText('Instance')).toBeNull()
+  expect(scope.queryByText('Status')).toBeNull()
+  expect(scope.queryByText('Enabled')).toBeNull()
 })
 
 test('filters nodes for default swarm', () => {
