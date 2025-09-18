@@ -30,6 +30,16 @@ let controlDestination = '/exchange/ph.control/ev.#'
 const components: Record<string, Component> = {}
 const nodePositions: Record<string, { x: number; y: number }> = {}
 
+const normalizeSwarmId = (value?: string) => {
+  if (!value) return undefined
+  return value.toLowerCase() === 'hive' ? undefined : value
+}
+
+const deriveSwarmId = (instance: string) => {
+  const token = instance.split('-')[0]
+  return normalizeSwarmId(token)
+}
+
 function buildTopology(): Topology {
   const queues: Record<string, { prod: Set<string>; cons: Set<string> }> = {}
   Object.values(components).forEach((comp) => {
@@ -64,7 +74,7 @@ function buildTopology(): Topology {
     x: nodePositions[c.id]?.x,
     y: nodePositions[c.id]?.y,
     enabled: c.config?.enabled !== false,
-    swarmId: c.swarmId,
+    swarmId: normalizeSwarmId(c.swarmId),
     beeName: c.beeName ?? c.id,
   }))
   if (components['processor']) {
@@ -125,7 +135,7 @@ export function setClient(newClient: Client | null, destination = controlDestina
         if (!isControlEvent(raw)) return
         const evt = raw as ControlEvent
         const id = evt.instance
-        const swarmId = id.split('-')[0]
+        const swarmId = deriveSwarmId(id)
         const comp: Component = components[id] || {
           id,
           name: evt.role,

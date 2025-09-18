@@ -30,6 +30,7 @@ const baseComponents: Component[] = [
   {
     id: 'orphan',
     name: 'generator',
+    swarmId: 'hive',
     lastHeartbeat: 0,
     queues: [],
     config: { enabled: true },
@@ -107,7 +108,7 @@ test('renders queen status and start/stop controls', async () => {
 test('shows unassigned components when selecting default swarm', async () => {
   const user = userEvent.setup()
   render(<HivePage />)
-  const [def] = screen.getAllByText('default')
+  const [def] = screen.getAllByText('Outside swarms')
   expect(def).toBeTruthy()
   await user.click(def)
   const gens = await screen.findAllByText('generator')

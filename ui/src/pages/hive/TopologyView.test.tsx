@@ -36,6 +36,7 @@ interface RFProps {
   edges: RFEdge[]
   onNodeDragStop: (e: unknown, node: RFNode) => void
   onNodesChange: (changes: { id: string; position: { x: number; y: number } }[]) => void
+  onNodeClick?: (e: unknown, node: RFNode) => void
   children?: ReactNode
 }
 
@@ -43,7 +44,7 @@ const data = {
   nodes: [
     { id: 'a', type: 'generator', swarmId: 'sw1' } as Node,
     { id: 'b', type: 'processor', swarmId: 'sw1' } as Node,
-    { id: 'c', type: 'generator' } as Node,
+    { id: 'c', type: 'generator', swarmId: 'hive' } as Node,
   ],
   edges: [{ from: 'a', to: 'b', queue: 'q' }] as unknown[],
 }
@@ -67,6 +68,7 @@ const components = [
   {
     id: 'c',
     name: 'generator',
+    swarmId: 'hive',
     queues: [],
   },
 ]
@@ -152,5 +154,15 @@ test('filters nodes for default swarm', () => {
   const props = (globalThis as unknown as { __RF_PROPS__: RFProps }).__RF_PROPS__
   expect(props.nodes).toHaveLength(1)
   expect(props.nodes[0].id).toBe('c')
+})
+
+test('clicking hive-scoped node selects default swarm bucket', () => {
+  const onSwarmSelect = vi.fn<(id: string) => void>()
+  render(<TopologyView onSwarmSelect={onSwarmSelect} />)
+  const props = (globalThis as unknown as { __RF_PROPS__: RFProps }).__RF_PROPS__
+  const hiveNode = props.nodes.find((n) => n.id === 'c')
+  expect(hiveNode).toBeTruthy()
+  props.onNodeClick?.({}, hiveNode as RFNode)
+  expect(onSwarmSelect).toHaveBeenCalledWith('default')
 })
 

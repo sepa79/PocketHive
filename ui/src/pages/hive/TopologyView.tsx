@@ -70,6 +70,16 @@ const shapeOrder: NodeShape[] = [
   'star',
 ]
 
+const DEFAULT_SWARM_KEY = 'default'
+
+const isOutsideSwarm = (swarmId?: string) => {
+  if (!swarmId) return true
+  return swarmId.toLowerCase() === 'hive'
+}
+
+const toSwarmKey = (swarmId?: string): string =>
+  isOutsideSwarm(swarmId) ? DEFAULT_SWARM_KEY : (swarmId as string)
+
 interface ShapeNodeData {
   label: string
   shape: NodeShape
@@ -86,10 +96,9 @@ function ShapeNode({ data, selected }: NodeProps<ShapeNodeData>) {
   const fill = data.enabled === false ? '#999999' : '#ffcc00'
   const beeName = data.beeName ?? data.label ?? data.instanceId ?? ''
   const roleLabel = humanize(data.role ?? '')
-  const swarmLabel =
-    data.swarmId && data.swarmId !== 'default'
-      ? `Swarm ${data.swarmId}`
-      : 'Default swarm'
+  const swarmLabel = isOutsideSwarm(data.swarmId)
+    ? 'Outside swarms'
+    : `Swarm ${data.swarmId}`
   const showInstanceId =
     data.instanceId && data.instanceId !== beeName ? data.instanceId : null
   const primaryDetails: { text: string; className?: string }[] = []
@@ -263,9 +272,10 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
         .map((n, idx) => ({ ...n, x: n.x ?? idx * 80, y: n.y ?? 80 }))
       let nodes = [...connectedNodes, ...unconnectedNodes]
       if (swarmId) {
-        nodes = nodes.filter((n) =>
-          swarmId === 'default' ? !n.swarmId : n.swarmId === swarmId,
-        )
+        nodes = nodes.filter((n) => {
+          const outside = isOutsideSwarm(n.swarmId)
+          return swarmId === DEFAULT_SWARM_KEY ? outside : !outside && n.swarmId === swarmId
+        })
       }
       const ids = new Set(nodes.map((n) => n.id))
       const links = topo.edges
@@ -377,7 +387,7 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
           ) => {
             const d = node.data as ShapeNodeData
             if (swarmId) onSelect?.(node.id)
-            else onSwarmSelect?.(d.swarmId ?? 'default')
+            else onSwarmSelect?.(toSwarmKey(d.swarmId))
           }}
           fitView
         >

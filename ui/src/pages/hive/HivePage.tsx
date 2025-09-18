@@ -7,6 +7,19 @@ import { subscribeComponents } from '../../lib/stompClient'
 import { startSwarm, stopSwarm } from '../../lib/orchestratorApi'
 import type { Component } from '../../types/hive'
 
+const DEFAULT_SWARM_KEY = 'default'
+
+const isOutsideSwarm = (swarmId?: string | null) => {
+  if (!swarmId) return true
+  return swarmId.toLowerCase() === 'hive'
+}
+
+const getSwarmKey = (swarmId?: string | null): string =>
+  isOutsideSwarm(swarmId) ? DEFAULT_SWARM_KEY : (swarmId as string)
+
+const getSwarmLabel = (swarmKey: string) =>
+  swarmKey === DEFAULT_SWARM_KEY ? 'Outside swarms' : swarmKey
+
 export default function HivePage() {
   const [components, setComponents] = useState<Component[]>([])
   const [selected, setSelected] = useState<Component | null>(null)
@@ -33,18 +46,17 @@ export default function HivePage() {
     setSelected(null)
   }, [activeSwarm])
 
-  const filtered = components.filter(
-    (c) =>
-      (c.name.toLowerCase().includes(search.toLowerCase()) ||
-        c.id.toLowerCase().includes(search.toLowerCase())) &&
-      (!activeSwarm ||
-        (activeSwarm === 'default'
-          ? !c.swarmId
-          : c.swarmId === activeSwarm)),
-  )
+  const filtered = components.filter((c) => {
+    const matchesSearch =
+      c.name.toLowerCase().includes(search.toLowerCase()) ||
+      c.id.toLowerCase().includes(search.toLowerCase())
+    if (!matchesSearch) return false
+    if (!activeSwarm) return true
+    return getSwarmKey(c.swarmId) === activeSwarm
+  })
 
   const grouped = filtered.reduce<Record<string, Component[]>>((acc, c) => {
-    const swarm = c.swarmId || 'default'
+    const swarm = getSwarmKey(c.swarmId)
     acc[swarm] = acc[swarm] || []
     acc[swarm].push(c)
     return acc
@@ -123,10 +135,10 @@ export default function HivePage() {
                       className="font-medium cursor-pointer"
                       onClick={() =>
                         !activeSwarm &&
-                        setActiveSwarm(id === 'default' ? 'default' : id)
+                        setActiveSwarm(id)
                       }
                     >
-                      {id}
+                      {getSwarmLabel(id)}
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="text-xs text-white/60">Queen: {status}</span>
@@ -169,8 +181,7 @@ export default function HivePage() {
             if (comp) setSelected(comp)
           }}
           swarmId={activeSwarm ?? undefined}
-          onSwarmSelect={(id) =>
-            setActiveSwarm(id === 'default' ? 'default' : id)}
+          onSwarmSelect={(id) => setActiveSwarm(id)}
         />
       </div>
       <div className="hidden lg:flex w-1/3 xl:w-1/4 border-l border-white/10 overflow-hidden">
