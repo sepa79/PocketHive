@@ -71,6 +71,11 @@ const shapeOrder: NodeShape[] = [
 ]
 
 const DEFAULT_SWARM_KEY = 'default'
+const FULL_CARD_WIDTH = 220
+const FULL_CARD_HEIGHT = 120
+const ICON_CARD_SIZE = 64
+const HEADER_OFFSET = 48
+const PADDING = 24
 
 const isOutsideSwarm = (swarmId?: string) => {
   if (!swarmId) return true
@@ -99,6 +104,62 @@ interface SwarmCardData {
   controllerId?: string
 }
 
+interface EntryDimensions {
+  width: number
+  height: number
+}
+
+interface GraphEntry {
+  node: Node<ShapeNodeData>
+  graph: GraphNode
+  absolute: { x: number; y: number }
+  dimensions: EntryDimensions
+  isController: boolean
+}
+
+function ShapeSvg({
+  shape,
+  size,
+  fill,
+  className,
+}: {
+  shape: NodeShape
+  size: number
+  fill: string
+  className?: string
+}) {
+  const dimension = 2 * size
+  return (
+    <svg className={className} width={dimension} height={dimension}>
+      {shape === 'square' && (
+        <rect x={0} y={0} width={dimension} height={dimension} fill={fill} stroke="black" />
+      )}
+      {shape === 'triangle' && (
+        <polygon
+          points={`${size},0 ${dimension},${dimension} 0,${dimension}`}
+          fill={fill}
+          stroke="black"
+        />
+      )}
+      {shape === 'diamond' && (
+        <polygon
+          points={`${size},0 ${dimension},${size} ${size},${dimension} 0,${size}`}
+          fill={fill}
+          stroke="black"
+        />
+      )}
+      {shape === 'pentagon' && (
+        <polygon points={polygonPoints(5, size)} fill={fill} stroke="black" />
+      )}
+      {shape === 'hexagon' && (
+        <polygon points={polygonPoints(6, size)} fill={fill} stroke="black" />
+      )}
+      {shape === 'star' && <polygon points={starPoints(size)} fill={fill} stroke="black" />}
+      {shape === 'circle' && <circle cx={size} cy={size} r={size} fill={fill} stroke="black" />}
+    </svg>
+  )
+}
+
 function ShapeNode({ data, selected }: NodeProps<ShapeNodeData>) {
   const size = 10
   const fill = data.enabled === false ? '#999999' : '#ffcc00'
@@ -125,33 +186,7 @@ function ShapeNode({ data, selected }: NodeProps<ShapeNodeData>) {
   return (
     <div className={`shape-node${selected ? ' selected' : ''}`}>
       <Handle type="target" position={Position.Left} />
-      <svg className="shape-icon" width={2 * size} height={2 * size}>
-        {data.shape === 'square' && (
-          <rect x={0} y={0} width={2 * size} height={2 * size} fill={fill} stroke="black" />
-        )}
-        {data.shape === 'triangle' && (
-          <polygon
-            points={`${size},0 ${2 * size},${2 * size} 0,${2 * size}`}
-            fill={fill}
-            stroke="black"
-          />
-        )}
-        {data.shape === 'diamond' && (
-          <polygon
-            points={`${size},0 ${2 * size},${size} ${size},${2 * size} 0,${size}`}
-            fill={fill}
-            stroke="black"
-          />
-        )}
-        {data.shape === 'pentagon' && (
-          <polygon points={polygonPoints(5, size)} fill={fill} stroke="black" />
-        )}
-        {data.shape === 'hexagon' && (
-          <polygon points={polygonPoints(6, size)} fill={fill} stroke="black" />
-        )}
-        {data.shape === 'star' && <polygon points={starPoints(size)} fill={fill} stroke="black" />}
-        {data.shape === 'circle' && <circle cx={size} cy={size} r={size} fill={fill} stroke="black" />}
-      </svg>
+      <ShapeSvg shape={data.shape} size={size} fill={fill} className="shape-icon" />
       <div className="shape-node__content">
         <div className="shape-node__header">
           <span className="shape-node__name" title={beeName}>
@@ -184,6 +219,26 @@ function ShapeNode({ data, selected }: NodeProps<ShapeNodeData>) {
           ))}
         </div>
       </div>
+      <Handle type="source" position={Position.Right} />
+    </div>
+  )
+}
+
+function BeeIconNode({ data, selected }: NodeProps<ShapeNodeData>) {
+  const size = 12
+  const fill = data.enabled === false ? '#cbd5f5' : '#ffcc00'
+  const titleParts = [data.beeName ?? data.label ?? data.instanceId]
+  if (data.role) titleParts.push(humanize(data.role))
+  const swarmLabel = isOutsideSwarm(data.swarmId)
+    ? 'Outside swarms'
+    : `Swarm ${data.swarmId}`
+  titleParts.push(swarmLabel)
+  const title = titleParts.filter(Boolean).join(' • ')
+  return (
+    <div className={`bee-icon-node${selected ? ' selected' : ''}`} title={title}>
+      <Handle type="target" position={Position.Left} />
+      <ShapeSvg shape={data.shape} size={size} fill={fill} className="bee-icon-node__shape" />
+      {data.queueCount > 0 && <span className="bee-icon-node__badge">{data.queueCount}</span>}
       <Handle type="source" position={Position.Right} />
     </div>
   )
@@ -310,7 +365,10 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
       if (swarmId) {
         nodes = nodes.filter((n) => {
           const outside = isOutsideSwarm(n.swarmId)
-          return swarmId === DEFAULT_SWARM_KEY ? outside : !outside && n.swarmId === swarmId
+          const isOrchestrator = n.type === 'orchestrator'
+          if (swarmId === DEFAULT_SWARM_KEY) return outside || isOrchestrator
+          if (isOrchestrator) return false
+          return !outside && n.swarmId === swarmId
         })
       }
       const ids = new Set(nodes.map((n) => n.id))
@@ -349,11 +407,17 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
   useEffect(() => {
     setRfNodes((prev) => {
       const prevMap = new Map(prev.map((p) => [p.id, p]))
-      const baseEntries = data.nodes.map((n) => {
+      const detailView = Boolean(swarmId)
+      const baseEntries: GraphEntry[] = data.nodes.map((n) => {
         const existing = prevMap.get(n.id)
         const absX = n.x ?? existing?.positionAbsolute?.x ?? existing?.position?.x ?? 0
         const absY = n.y ?? existing?.positionAbsolute?.y ?? existing?.position?.y ?? 0
         const absolute = { x: absX, y: absY }
+        const isController = n.type === 'swarm-controller'
+        const nodeType = detailView || isController ? 'shape' : 'beeIcon'
+        const dimensions: EntryDimensions = detailView || isController
+          ? { width: FULL_CARD_WIDTH, height: FULL_CARD_HEIGHT }
+          : { width: ICON_CARD_SIZE, height: ICON_CARD_SIZE }
         const node: Node<ShapeNodeData> = {
           id: n.id,
           position: { ...absolute },
@@ -368,18 +432,19 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
             queueCount: queueCounts[n.id] ?? 0,
             swarmId: n.swarmId,
           },
-          type: 'shape',
+          type: nodeType,
           selected: selectedId === n.id,
         }
-        return { node, graph: n, absolute }
+        return { node, graph: n, absolute, dimensions, isController }
       })
 
-      const groups = new Map<string, typeof baseEntries>()
-      const outsideNodes: Node<ShapeNodeData>[] = []
+      const groups = new Map<string, GraphEntry[]>()
+      const outsideEntries: GraphEntry[] = []
       baseEntries.forEach((entry) => {
         const key = toSwarmKey(entry.graph.swarmId)
-        if (key === DEFAULT_SWARM_KEY) {
-          outsideNodes.push(entry.node)
+        const isOrchestrator = entry.graph.type === 'orchestrator'
+        if (key === DEFAULT_SWARM_KEY || isOrchestrator) {
+          outsideEntries.push(entry)
           return
         }
         const list = groups.get(key) ?? []
@@ -389,27 +454,32 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
 
       const containers: Node<SwarmCardData>[] = []
       const childNodes: Node<ShapeNodeData>[] = []
-      const HEADER_OFFSET = 48
-      const PADDING = 24
-      const NODE_WIDTH = 220
-      const NODE_HEIGHT = 120
 
       groups.forEach((entries, key) => {
-        const minX = Math.min(...entries.map((e) => e.absolute.x))
-        const maxX = Math.max(...entries.map((e) => e.absolute.x))
-        const minY = Math.min(...entries.map((e) => e.absolute.y))
-        const maxY = Math.max(...entries.map((e) => e.absolute.y))
+        if (!entries.length) return
+        let minX = Infinity
+        let minY = Infinity
+        let maxX = -Infinity
+        let maxY = -Infinity
+        entries.forEach((entry) => {
+          minX = Math.min(minX, entry.absolute.x)
+          minY = Math.min(minY, entry.absolute.y)
+          maxX = Math.max(maxX, entry.absolute.x + entry.dimensions.width)
+          maxY = Math.max(maxY, entry.absolute.y + entry.dimensions.height)
+        })
         const containerX = minX - PADDING
         const containerY = minY - PADDING - HEADER_OFFSET
+        const innerWidth = maxX - minX
+        const innerHeight = maxY - minY
         const containerWidth = Math.max(
-          NODE_WIDTH + PADDING * 2,
-          maxX - minX + NODE_WIDTH + PADDING * 2,
+          FULL_CARD_WIDTH + PADDING * 2,
+          innerWidth + PADDING * 2,
         )
         const containerHeight = Math.max(
-          HEADER_OFFSET + NODE_HEIGHT + PADDING * 2,
-          HEADER_OFFSET + (maxY - minY + NODE_HEIGHT + PADDING * 2),
+          HEADER_OFFSET + FULL_CARD_HEIGHT + PADDING * 2,
+          HEADER_OFFSET + innerHeight + PADDING * 2,
         )
-        const controller = entries.find((e) => e.graph.type === 'swarm-controller')
+        const controller = entries.find((e) => e.isController)
         const containerId = `swarm:${key}`
         containers.push({
           id: containerId,
@@ -442,13 +512,17 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
         })
       })
 
-      outsideNodes.forEach((node) => {
-        node.position = { ...node.positionAbsolute }
+      const outsideNodes = outsideEntries.map((entry) => {
+        entry.node.parentNode = undefined
+        entry.node.extent = undefined
+        entry.node.position = { ...entry.absolute }
+        entry.node.positionAbsolute = { ...entry.absolute }
+        return entry.node
       })
 
       return [...containers, ...childNodes, ...outsideNodes]
     })
-  }, [data.nodes, queueCounts, selectedId])
+  }, [data.nodes, queueCounts, selectedId, swarmId])
 
   const edges: Edge[] = useMemo(
     () =>
@@ -489,7 +563,7 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
           nodes={rfNodes}
           edges={edges}
           onNodesChange={onNodesChange}
-          nodeTypes={{ shape: ShapeNode, swarmCard: SwarmCardNode }}
+          nodeTypes={{ shape: ShapeNode, beeIcon: BeeIconNode, swarmCard: SwarmCardNode }}
           onInit={(
             inst: ReactFlowInstance<Node<ShapeNodeData | SwarmCardData>, Edge>,
           ) => (flowRef.current = inst)}

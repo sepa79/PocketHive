@@ -63,14 +63,25 @@ interface RFProps {
 
 const data = {
   nodes: [
+    { id: 'queen', type: 'swarm-controller', swarmId: 'sw1' } as Node,
     { id: 'a', type: 'generator', swarmId: 'sw1' } as Node,
     { id: 'b', type: 'processor', swarmId: 'sw1' } as Node,
+    { id: 'orc', type: 'orchestrator', swarmId: 'sw1' } as Node,
     { id: 'c', type: 'generator', swarmId: 'hive' } as Node,
   ],
-  edges: [{ from: 'a', to: 'b', queue: 'q' }] as unknown[],
+  edges: [
+    { from: 'queen', to: 'a', queue: 'q-ctrl' },
+    { from: 'a', to: 'b', queue: 'q' },
+  ] as unknown[],
 }
 let listener: (t: { nodes: Node[]; edges: unknown[] }) => void
 const components = [
+  {
+    id: 'queen',
+    name: 'swarm-controller',
+    swarmId: 'sw1',
+    queues: [{ name: 'q-ctrl', role: 'producer' }],
+  },
   {
     id: 'a',
     name: 'generator',
@@ -85,6 +96,12 @@ const components = [
     name: 'processor',
     swarmId: 'sw1',
     queues: [{ name: 'q', role: 'consumer' }],
+  },
+  {
+    id: 'orc',
+    name: 'orchestrator',
+    swarmId: 'sw1',
+    queues: [],
   },
   {
     id: 'c',
@@ -157,7 +174,11 @@ test('node position updates after drag and edge depth styles', () => {
   const swarmCard = props.nodes.find((n) => n.type === 'swarmCard')
   expect(swarmCard?.id).toBe('swarm:sw1')
   expect(swarmCard?.style?.width).toBeGreaterThan(0)
+  const controllerNode = props.nodes.find((n) => n.id === 'queen') as RFNode
+  expect(controllerNode.type).toBe('shape')
+  expect(controllerNode.parentNode).toBe('swarm:sw1')
   const nodeA = props.nodes.find((n) => n.id === 'a') as RFNode
+  expect(nodeA.type).toBe('beeIcon')
   expect(nodeA.parentNode).toBe('swarm:sw1')
   const nodeAData = nodeA.data as RFShapeData
   expect(nodeAData.beeName).toBe('a')
@@ -168,6 +189,9 @@ test('node position updates after drag and edge depth styles', () => {
   expect(nodeA.positionAbsolute).toEqual({ x: 0, y: 0 })
   expect(nodeA.position.x).toBe(nodeA.positionAbsolute!.x - (swarmCard?.position.x ?? 0))
   expect(nodeA.position.y).toBe(nodeA.positionAbsolute!.y - (swarmCard?.position.y ?? 0))
+  const orchestratorNode = props.nodes.find((n) => n.id === 'orc') as RFNode
+  expect(orchestratorNode.type).toBe('beeIcon')
+  expect(orchestratorNode.parentNode).toBeUndefined()
   act(() => {
     props.onNodesChange([{ id: 'a', position: { x: 10, y: 20 } }])
   })
@@ -192,16 +216,30 @@ test('node position updates after drag and edge depth styles', () => {
   expect(updatedNode.position.y).toBeCloseTo(
     updatedNode.positionAbsolute!.y - updatedSwarm.position.y,
   )
-  expect(newProps.edges[0].style.stroke).toBe('#ff6666')
-  expect(newProps.edges[0].style.strokeWidth).toBeGreaterThan(2)
+  const deepEdge = newProps.edges.find(
+    (edge) => (edge as unknown as { label?: string }).label === 'q',
+  )
+  expect(deepEdge).toBeTruthy()
+  const styledEdge = deepEdge as RFEdge
+  expect(styledEdge.style.stroke).toBe('#ff6666')
+  expect(styledEdge.style.strokeWidth).toBeGreaterThan(2)
 })
 
 test('filters nodes for default swarm', () => {
   render(<TopologyView swarmId="default" />)
   const props = (globalThis as unknown as { __RF_PROPS__: RFProps }).__RF_PROPS__
   const visibleNodes = props.nodes.filter((n) => n.type !== 'swarmCard')
-  expect(visibleNodes).toHaveLength(1)
-  expect(visibleNodes[0].id).toBe('c')
+  expect(visibleNodes.map((n) => n.id).sort()).toEqual(['c', 'orc'])
+  visibleNodes.forEach((n) => expect(n.type).toBe('shape'))
+})
+
+test('swarm detail view renders full cards for members only', () => {
+  render(<TopologyView swarmId="sw1" />)
+  const props = (globalThis as unknown as { __RF_PROPS__: RFProps }).__RF_PROPS__
+  const nodes = props.nodes.filter((n) => n.type !== 'swarmCard')
+  expect(nodes.map((n) => n.id).sort()).toEqual(['a', 'b', 'queen'])
+  nodes.forEach((n) => expect(n.type).toBe('shape'))
+  expect(props.nodes.find((n) => n.id === 'orc')).toBeUndefined()
 })
 
 test('clicking hive-scoped node selects default swarm bucket', () => {
