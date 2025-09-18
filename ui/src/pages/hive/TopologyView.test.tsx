@@ -17,11 +17,16 @@ interface Node {
 
 interface RFNode {
   id: string
+  type?: string
   position: { x: number; y: number }
-  data: { queueCount: number }
+  data: Record<string, unknown>
 }
 
 interface RFEdge {
+  id: string
+  source: string
+  target: string
+  label?: string
   style: { stroke: string; strokeWidth: number }
 }
 
@@ -35,32 +40,49 @@ interface RFProps {
 
 const data = {
   nodes: [
-    { id: 'a', type: 'generator', swarmId: 'sw1' } as Node,
-    { id: 'b', type: 'processor', swarmId: 'sw1' } as Node,
+    { id: 'sw1-swarm-controller', type: 'swarm-controller', swarmId: 'sw1' } as Node,
+    { id: 'sw1-generator', type: 'generator', swarmId: 'sw1' } as Node,
+    { id: 'sw1-processor', type: 'processor', swarmId: 'sw1' } as Node,
     { id: 'c', type: 'generator' } as Node,
+    { id: 'hive-orchestrator', type: 'orchestrator', swarmId: 'hive' } as Node,
   ],
-  edges: [{ from: 'a', to: 'b', queue: 'q' }] as unknown[],
+  edges: [
+    { from: 'sw1-generator', to: 'sw1-processor', queue: 'internal-q' },
+    { from: 'sw1-generator', to: 'c', queue: 'external-q' },
+  ] as unknown[],
 }
 let listener: (t: { nodes: Node[]; edges: unknown[] }) => void
 const components = [
   {
-    id: 'a',
+    id: 'sw1-generator',
     name: 'generator',
     swarmId: 'sw1',
     queues: [
-      { name: 'q', role: 'producer', depth: 5 },
-      { name: 'q2', role: 'producer' },
+      { name: 'internal-q', role: 'producer', depth: 0 },
+      { name: 'external-q', role: 'producer', depth: 5 },
     ],
   },
   {
-    id: 'b',
+    id: 'sw1-processor',
     name: 'processor',
     swarmId: 'sw1',
-    queues: [{ name: 'q', role: 'consumer' }],
+    queues: [{ name: 'internal-q', role: 'consumer' }],
   },
   {
     id: 'c',
     name: 'generator',
+    queues: [],
+  },
+  {
+    id: 'sw1-swarm-controller',
+    name: 'swarm-controller',
+    swarmId: 'sw1',
+    queues: [],
+  },
+  {
+    id: 'hive-orchestrator',
+    name: 'orchestrator',
+    swarmId: 'hive',
     queues: [],
   },
 ]
@@ -103,38 +125,54 @@ vi.mock('../../lib/stompClient', () => {
     },
     updateNodePosition: (id: string, x: number, y: number) => {
       updateNodePosition(id, x, y)
-      data.nodes[0].x = x
-      data.nodes[0].y = y
+      const target = data.nodes.find((node) => node.id === id)
+      if (target) {
+        target.x = x
+        target.y = y
+      }
       listener({ nodes: data.nodes, edges: data.edges })
     },
   }
 })
 
-test('node position updates after drag and edge depth styles', () => {
+test('grouped swarm node renders and edges aggregate by swarm', () => {
   render(<TopologyView />)
   const props = (globalThis as unknown as { __RF_PROPS__: RFProps }).__RF_PROPS__
-  expect(props.nodes[0].position.x).toBe(0)
-  expect(props.nodes[0].position.y).toBe(0)
+  const groupNode = props.nodes.find((n) => n.id === 'sw1-swarm-controller')!
+  expect(groupNode.type).toBe('swarmGroup')
+  expect(groupNode.position.x).toEqual(expect.any(Number))
+  expect(groupNode.position.y).toEqual(expect.any(Number))
   act(() => {
-    props.onNodesChange([{ id: 'a', position: { x: 10, y: 20 } }])
+    props.onNodesChange([{ id: 'sw1-swarm-controller', position: { x: 10, y: 20 } }])
   })
   const dragged = (globalThis as unknown as { __RF_PROPS__: RFProps }).__RF_PROPS__
-  expect(dragged.nodes[0].position.x).toBe(10)
-  expect(dragged.nodes[0].position.y).toBe(20)
+  const movedGroup = dragged.nodes.find((n) => n.id === 'sw1-swarm-controller')!
+  expect(movedGroup.position.x).toBe(10)
+  expect(movedGroup.position.y).toBe(20)
   act(() => {
-    dragged.onNodeDragStop({}, {
-      id: 'a',
-      position: { x: 10, y: 20 },
-      data: dragged.nodes[0].data,
-    })
+    dragged.onNodeDragStop({}, movedGroup)
   })
-  expect(updateNodePosition).toHaveBeenCalledWith('a', 10, 20)
+  expect(updateNodePosition).toHaveBeenCalledWith('sw1-swarm-controller', 10, 20)
   const newProps = (globalThis as unknown as { __RF_PROPS__: RFProps }).__RF_PROPS__
-  expect(newProps.nodes[0].position.x).toBe(10)
-  expect(newProps.nodes[0].position.y).toBe(20)
-  expect(newProps.edges[0].style.stroke).toBe('#ff6666')
-  expect(newProps.edges[0].style.strokeWidth).toBeGreaterThan(2)
-  expect(newProps.nodes[0].data.queueCount).toBe(2)
+  const updatedGroup = newProps.nodes.find((n) => n.id === 'sw1-swarm-controller')!
+  expect(updatedGroup.position.x).toBe(10)
+  expect(updatedGroup.position.y).toBe(20)
+  const externalEdge = newProps.edges.find((e) => e.id.includes('external-q'))!
+  expect(externalEdge.source).toBe('sw1-swarm-controller')
+  expect(externalEdge.target).toBe('c')
+  expect(externalEdge.style.stroke).toBe('#ff6666')
+  expect(externalEdge.style.strokeWidth).toBeGreaterThan(2)
+  const groupData = updatedGroup.data as {
+    components?: { id: string; queueCount: number }[]
+    edges?: { queue: string }[]
+  }
+  expect(groupData.components).toBeDefined()
+  expect(groupData.components).toHaveLength(3)
+  const generator = groupData.components?.find((c) => c.id === 'sw1-generator')
+  expect(generator?.queueCount).toBe(2)
+  expect(groupData.edges?.some((edge) => edge.queue === 'internal-q')).toBe(true)
+  const orchestrator = newProps.nodes.find((n) => n.id === 'hive-orchestrator')
+  expect(orchestrator?.type).toBe('shape')
 })
 
 test('filters nodes for default swarm', () => {
