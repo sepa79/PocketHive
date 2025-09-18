@@ -43,15 +43,6 @@
       "arguments": {}
     },
     {
-      "name": "ph.swarm1.hive",
-      "vhost": "/",
-      "type": "topic",
-      "durable": true,
-      "auto_delete": false,
-      "internal": false,
-      "arguments": {}
-    },
-    {
       "name": "ph.logs",
       "vhost": "/",
       "type": "topic",
