@@ -159,3 +159,76 @@
 .react-flow__node-dragging {
   z-index: 1000 !important;
 }
+
+.swarm-card {
+  width: 100%;
+  height: 100%;
+  border: 1px dashed #a1a1aa;
+  border-radius: 16px;
+  background: rgba(148, 163, 184, 0.08);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.6);
+  padding: 72px 24px 24px;
+  position: relative;
+  color: #0f172a;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.swarm-card__header {
+  position: absolute;
+  top: 20px;
+  left: 24px;
+  right: 24px;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.swarm-card__title {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.75rem;
+  color: #475569;
+}
+
+.swarm-card__count {
+  margin-left: auto;
+  background: #1f2937;
+  color: #fff;
+  border-radius: 9999px;
+  padding: 2px 8px;
+  font-size: 0.65rem;
+  line-height: 1.2;
+}
+
+.swarm-card__meta {
+  font-size: 0.7rem;
+  color: #1f2937;
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+}
+
+.swarm-card__meta--secondary {
+  color: #475569;
+}
+
+.swarm-card__meta-label {
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.55rem;
+}
+
+.swarm-card__meta-value {
+  font-weight: 500;
+}
+
+.swarm-card__meta-value--mono {
+  font-family: 'JetBrains Mono', 'Fira Mono', 'Source Code Pro', monospace;
+  font-size: 0.65rem;
+}

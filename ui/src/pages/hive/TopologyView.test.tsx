@@ -15,16 +15,31 @@ interface Node {
   swarmId?: string
 }
 
+interface RFShapeData {
+  queueCount: number
+  beeName?: string
+  instanceId?: string
+  role?: string
+  swarmId?: string
+}
+
+interface RFSwarmData {
+  swarmId: string
+  label: string
+  beeCount: number
+  controllerName?: string
+  controllerId?: string
+}
+
 interface RFNode {
   id: string
+  type: string
   position: { x: number; y: number }
-  data: {
-    queueCount: number
-    beeName?: string
-    instanceId?: string
-    role?: string
-    swarmId?: string
-  }
+  positionAbsolute?: { x: number; y: number }
+  parentNode?: string
+  extent?: string
+  data: RFShapeData | RFSwarmData
+  style?: { width?: number; height?: number }
 }
 
 interface RFEdge {
@@ -35,7 +50,13 @@ interface RFProps {
   nodes: RFNode[]
   edges: RFEdge[]
   onNodeDragStop: (e: unknown, node: RFNode) => void
-  onNodesChange: (changes: { id: string; position: { x: number; y: number } }[]) => void
+  onNodesChange: (
+    changes: {
+      id: string
+      position: { x: number; y: number }
+      positionAbsolute?: { x: number; y: number }
+    }[],
+  ) => void
   onNodeClick?: (e: unknown, node: RFNode) => void
   children?: ReactNode
 }
@@ -88,12 +109,21 @@ vi.mock('@xyflow/react', () => {
     Handle: () => React.createElement('div'),
     Position: { Left: 'left', Right: 'right' },
     applyNodeChanges: (
-      changes: { id: string; position: { x: number; y: number } }[],
+      changes: {
+        id: string
+        position: { x: number; y: number }
+        positionAbsolute?: { x: number; y: number }
+      }[],
       nodes: RFNode[],
     ) =>
       nodes.map((n) => {
         const c = changes.find((ch) => ch.id === n.id)
-        return c ? { ...n, position: c.position } : n
+        if (!c) return n
+        const next = { ...n, position: c.position }
+        if (n.type !== 'swarmCard') {
+          next.positionAbsolute = c.positionAbsolute ?? n.positionAbsolute
+        }
+        return next
       }),
   }
 })
@@ -111,8 +141,11 @@ vi.mock('../../lib/stompClient', () => {
     },
     updateNodePosition: (id: string, x: number, y: number) => {
       updateNodePosition(id, x, y)
-      data.nodes[0].x = x
-      data.nodes[0].y = y
+      const target = data.nodes.find((node) => node.id === id)
+      if (target) {
+        target.x = x
+        target.y = y
+      }
       listener({ nodes: data.nodes, edges: data.edges })
     },
   }
@@ -121,39 +154,54 @@ vi.mock('../../lib/stompClient', () => {
 test('node position updates after drag and edge depth styles', () => {
   render(<TopologyView />)
   const props = (globalThis as unknown as { __RF_PROPS__: RFProps }).__RF_PROPS__
-  expect(props.nodes[0].position.x).toBe(0)
-  expect(props.nodes[0].position.y).toBe(0)
-  expect(props.nodes[0].data.beeName).toBe('a')
-  expect(props.nodes[0].data.instanceId).toBe('a')
-  expect(props.nodes[0].data.role).toBe('generator')
-  expect(props.nodes[0].data.swarmId).toBe('sw1')
+  const swarmCard = props.nodes.find((n) => n.type === 'swarmCard')
+  expect(swarmCard?.id).toBe('swarm:sw1')
+  expect(swarmCard?.style?.width).toBeGreaterThan(0)
+  const nodeA = props.nodes.find((n) => n.id === 'a') as RFNode
+  expect(nodeA.parentNode).toBe('swarm:sw1')
+  const nodeAData = nodeA.data as RFShapeData
+  expect(nodeAData.beeName).toBe('a')
+  expect(nodeAData.instanceId).toBe('a')
+  expect(nodeAData.role).toBe('generator')
+  expect(nodeAData.swarmId).toBe('sw1')
+  expect(nodeAData.queueCount).toBe(2)
+  expect(nodeA.positionAbsolute).toEqual({ x: 0, y: 0 })
+  expect(nodeA.position.x).toBe(nodeA.positionAbsolute!.x - (swarmCard?.position.x ?? 0))
+  expect(nodeA.position.y).toBe(nodeA.positionAbsolute!.y - (swarmCard?.position.y ?? 0))
   act(() => {
     props.onNodesChange([{ id: 'a', position: { x: 10, y: 20 } }])
   })
   const dragged = (globalThis as unknown as { __RF_PROPS__: RFProps }).__RF_PROPS__
-  expect(dragged.nodes[0].position.x).toBe(10)
-  expect(dragged.nodes[0].position.y).toBe(20)
+  const draggedNode = dragged.nodes.find((n) => n.id === 'a') as RFNode
+  expect(draggedNode.position.x).toBe(10)
+  expect(draggedNode.position.y).toBe(20)
   act(() => {
     dragged.onNodeDragStop({}, {
-      id: 'a',
-      position: { x: 10, y: 20 },
-      data: dragged.nodes[0].data,
+      ...draggedNode,
+      positionAbsolute: { x: 42, y: 64 },
     })
   })
-  expect(updateNodePosition).toHaveBeenCalledWith('a', 10, 20)
+  expect(updateNodePosition).toHaveBeenCalledWith('a', 42, 64)
   const newProps = (globalThis as unknown as { __RF_PROPS__: RFProps }).__RF_PROPS__
-  expect(newProps.nodes[0].position.x).toBe(10)
-  expect(newProps.nodes[0].position.y).toBe(20)
+  const updatedNode = newProps.nodes.find((n) => n.id === 'a') as RFNode
+  const updatedSwarm = newProps.nodes.find((n) => n.id === 'swarm:sw1') as RFNode
+  expect(updatedNode.positionAbsolute).toEqual({ x: 42, y: 64 })
+  expect(updatedNode.position.x).toBeCloseTo(
+    updatedNode.positionAbsolute!.x - updatedSwarm.position.x,
+  )
+  expect(updatedNode.position.y).toBeCloseTo(
+    updatedNode.positionAbsolute!.y - updatedSwarm.position.y,
+  )
   expect(newProps.edges[0].style.stroke).toBe('#ff6666')
   expect(newProps.edges[0].style.strokeWidth).toBeGreaterThan(2)
-  expect(newProps.nodes[0].data.queueCount).toBe(2)
 })
 
 test('filters nodes for default swarm', () => {
   render(<TopologyView swarmId="default" />)
   const props = (globalThis as unknown as { __RF_PROPS__: RFProps }).__RF_PROPS__
-  expect(props.nodes).toHaveLength(1)
-  expect(props.nodes[0].id).toBe('c')
+  const visibleNodes = props.nodes.filter((n) => n.type !== 'swarmCard')
+  expect(visibleNodes).toHaveLength(1)
+  expect(visibleNodes[0].id).toBe('c')
 })
 
 test('clicking hive-scoped node selects default swarm bucket', () => {
@@ -164,5 +212,15 @@ test('clicking hive-scoped node selects default swarm bucket', () => {
   expect(hiveNode).toBeTruthy()
   props.onNodeClick?.({}, hiveNode as RFNode)
   expect(onSwarmSelect).toHaveBeenCalledWith('default')
+})
+
+test('clicking swarm card selects the swarm', () => {
+  const onSwarmSelect = vi.fn<(id: string) => void>()
+  render(<TopologyView onSwarmSelect={onSwarmSelect} />)
+  const props = (globalThis as unknown as { __RF_PROPS__: RFProps }).__RF_PROPS__
+  const swarmCard = props.nodes.find((n) => n.type === 'swarmCard')
+  expect(swarmCard).toBeTruthy()
+  props.onNodeClick?.({}, swarmCard as RFNode)
+  expect(onSwarmSelect).toHaveBeenCalledWith('sw1')
 })
 
