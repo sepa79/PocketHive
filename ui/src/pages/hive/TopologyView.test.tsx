@@ -4,7 +4,7 @@
 import { render, act } from '@testing-library/react'
 import TopologyView from './TopologyView'
 import React, { type ReactNode } from 'react'
-import { vi, test, expect } from 'vitest'
+import { vi, test, expect, beforeEach } from 'vitest'
 
 interface Node {
   id: string
@@ -29,6 +29,7 @@ interface RFSwarmData {
   beeCount: number
   controllerName?: string
   controllerId?: string
+  childIds: string[]
 }
 
 interface RFNode {
@@ -61,21 +62,18 @@ interface RFProps {
   children?: ReactNode
 }
 
-const data = {
-  nodes: [
-    { id: 'queen', type: 'swarm-controller', swarmId: 'sw1' } as Node,
-    { id: 'a', type: 'generator', swarmId: 'sw1' } as Node,
-    { id: 'b', type: 'processor', swarmId: 'sw1' } as Node,
-    { id: 'orc', type: 'orchestrator', swarmId: 'sw1' } as Node,
-    { id: 'c', type: 'generator', swarmId: 'hive' } as Node,
-  ],
-  edges: [
-    { from: 'queen', to: 'a', queue: 'q-ctrl' },
-    { from: 'a', to: 'b', queue: 'q' },
-  ] as unknown[],
-}
-let listener: (t: { nodes: Node[]; edges: unknown[] }) => void
-const components = [
+const baseNodes: Node[] = [
+  { id: 'queen', type: 'swarm-controller', swarmId: 'sw1' } as Node,
+  { id: 'a', type: 'generator', swarmId: 'sw1' } as Node,
+  { id: 'b', type: 'processor', swarmId: 'sw1' } as Node,
+  { id: 'orc', type: 'orchestrator', swarmId: 'sw1' } as Node,
+  { id: 'c', type: 'generator', swarmId: 'hive' } as Node,
+]
+const baseEdges = [
+  { from: 'queen', to: 'a', queue: 'q-ctrl' },
+  { from: 'a', to: 'b', queue: 'q' },
+] as unknown[]
+const baseComponents = [
   {
     id: 'queen',
     name: 'swarm-controller',
@@ -110,7 +108,20 @@ const components = [
     queues: [],
   },
 ]
+
+const data = {
+  nodes: baseNodes.map((n) => ({ ...n })),
+  edges: baseEdges,
+}
+let listener: (t: { nodes: Node[]; edges: unknown[] }) => void
+let components = baseComponents.map((c) => ({ ...c }))
 const updateNodePosition = vi.fn<(id: string, x: number, y: number) => void>()
+
+beforeEach(() => {
+  data.nodes = baseNodes.map((n) => ({ ...n }))
+  components = baseComponents.map((c) => ({ ...c }))
+  updateNodePosition.mockClear()
+})
 
 vi.mock('@xyflow/react', () => {
   const rf = (props: RFProps) => {
@@ -137,9 +148,7 @@ vi.mock('@xyflow/react', () => {
         const c = changes.find((ch) => ch.id === n.id)
         if (!c) return n
         const next = { ...n, position: c.position }
-        if (n.type !== 'swarmCard') {
-          next.positionAbsolute = c.positionAbsolute ?? n.positionAbsolute
-        }
+        next.positionAbsolute = c.positionAbsolute ?? c.position ?? n.positionAbsolute
         return next
       }),
   }
@@ -174,6 +183,8 @@ test('node position updates after drag and edge depth styles', () => {
   const swarmCard = props.nodes.find((n) => n.type === 'swarmCard')
   expect(swarmCard?.id).toBe('swarm:sw1')
   expect(swarmCard?.style?.width).toBeGreaterThan(0)
+  const swarmData = swarmCard?.data as RFSwarmData
+  expect(swarmData.childIds.sort()).toEqual(['a', 'b', 'queen'])
   const controllerNode = props.nodes.find((n) => n.id === 'queen') as RFNode
   expect(controllerNode.type).toBe('beeIcon')
   expect(controllerNode.parentNode).toBe('swarm:sw1')
@@ -223,6 +234,49 @@ test('node position updates after drag and edge depth styles', () => {
   const styledEdge = deepEdge as RFEdge
   expect(styledEdge.style.stroke).toBe('#ff6666')
   expect(styledEdge.style.strokeWidth).toBeGreaterThan(2)
+})
+
+test('dragging swarm card repositions contained bees', () => {
+  render(<TopologyView />)
+  const props = (globalThis as unknown as { __RF_PROPS__: RFProps }).__RF_PROPS__
+  const swarmNode = props.nodes.find((n) => n.type === 'swarmCard') as RFNode
+  expect(swarmNode).toBeTruthy()
+  const swarmData = swarmNode.data as RFSwarmData
+  const start = swarmNode.positionAbsolute ?? swarmNode.position
+  const delta = { x: 80, y: 60 }
+  const target = { x: start.x + delta.x, y: start.y + delta.y }
+  const initialPositions: Record<string, { x: number; y: number }> = {}
+  swarmData.childIds.forEach((id) => {
+    const child = props.nodes.find((n) => n.id === id) as RFNode
+    expect(child).toBeTruthy()
+    initialPositions[id] = { ...(child.positionAbsolute ?? child.position) }
+  })
+
+  act(() => {
+    props.onNodesChange?.([
+      {
+        id: swarmNode.id,
+        position: target,
+        positionAbsolute: target,
+      },
+    ] as unknown as Parameters<RFProps['onNodesChange']>[0])
+  })
+
+  act(() => {
+    props.onNodeDragStop?.({}, {
+      ...swarmNode,
+      position: target,
+      positionAbsolute: target,
+      data: swarmNode.data,
+    })
+  })
+
+  swarmData.childIds.forEach((id) => {
+    const call = updateNodePosition.mock.calls.find(([called]) => called === id)
+    expect(call).toBeTruthy()
+    expect(call?.[1]).toBeCloseTo(initialPositions[id].x + delta.x)
+    expect(call?.[2]).toBeCloseTo(initialPositions[id].y + delta.y)
+  })
 })
 
 test('filters nodes for default swarm', () => {

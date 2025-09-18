@@ -108,6 +108,7 @@ interface SwarmCardData {
   beeCount: number
   controllerName?: string
   controllerId?: string
+  childIds: string[]
 }
 
 interface EntryDimensions {
@@ -322,6 +323,8 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
   const flowRef = useRef<ReactFlowInstance | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const [rfNodes, setRfNodes] = useState<Node<ShapeNodeData | SwarmCardData>[]>([])
+  const containerPositionsRef = useRef<Record<string, { x: number; y: number }>>({})
+  const absolutePositionsRef = useRef<Record<string, { x: number; y: number }>>({})
 
   useEffect(() => {
     const unsub = subscribeComponents((comps: Component[]) => {
@@ -419,6 +422,7 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
         const absX = n.x ?? existing?.positionAbsolute?.x ?? existing?.position?.x ?? 0
         const absY = n.y ?? existing?.positionAbsolute?.y ?? existing?.position?.y ?? 0
         const absolute = { x: absX, y: absY }
+        absolutePositionsRef.current[n.id] = absolute
         const isController = n.type === 'swarm-controller'
         const isOrchestrator = isOrchestratorNode(n)
         const showFullCard = detailView || isOrchestrator
@@ -463,7 +467,7 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
       const containers: Node<SwarmCardData>[] = []
       const childNodes: Node<ShapeNodeData>[] = []
 
-      groups.forEach((entries, key) => {
+      Array.from(groups.entries()).forEach(([key, entries]) => {
         if (!entries.length) return
         let minX = Infinity
         let minY = Infinity
@@ -489,6 +493,7 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
         )
         const controller = entries.find((e) => e.isController)
         const containerId = `swarm:${key}`
+        const childIds = entries.map((entry) => entry.node.id)
         containers.push({
           id: containerId,
           type: 'swarmCard',
@@ -500,14 +505,16 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
             beeCount: entries.length,
             controllerName: controller?.graph.beeName ?? controller?.graph.id,
             controllerId: controller?.graph.id,
+            childIds,
           },
           style: {
             width: containerWidth,
             height: containerHeight,
           },
-          draggable: false,
+          draggable: true,
           selectable: true,
         })
+        containerPositionsRef.current[containerId] = { x: containerX, y: containerY }
         entries.forEach((entry) => {
           entry.node.parentNode = containerId
           entry.node.extent = 'parent'
@@ -579,8 +586,27 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
             _e: unknown,
             node: Node<ShapeNodeData | SwarmCardData>,
           ) => {
-            if (node.type === 'swarmCard') return
+            if (node.type === 'swarmCard') {
+              const current = node.positionAbsolute ?? node.position
+              const prev = containerPositionsRef.current[node.id]
+              containerPositionsRef.current[node.id] = { ...current }
+              if (!prev) return
+              const deltaX = current.x - prev.x
+              const deltaY = current.y - prev.y
+              if (Math.abs(deltaX) < 0.5 && Math.abs(deltaY) < 0.5) return
+              const swarmData = node.data as SwarmCardData
+              swarmData.childIds.forEach((childId) => {
+                const prevChild = absolutePositionsRef.current[childId]
+                if (!prevChild) return
+                const nextX = prevChild.x + deltaX
+                const nextY = prevChild.y + deltaY
+                absolutePositionsRef.current[childId] = { x: nextX, y: nextY }
+                updateNodePosition(childId, nextX, nextY)
+              })
+              return
+            }
             const abs = node.positionAbsolute ?? node.position
+            absolutePositionsRef.current[node.id] = { ...abs }
             updateNodePosition(node.id, abs.x, abs.y)
           }}
           onNodeClick={(
