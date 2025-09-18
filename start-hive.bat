@@ -91,18 +91,8 @@ exit /b 0
 
 :run
 for %%S in (%STAGES%) do (
-  if /I "%%S"=="clean" (
-    call :stage_clean || goto :error
-  ) else if /I "%%S"=="build-core" (
-    call :stage_build_core || goto :error
-  ) else if /I "%%S"=="build-bees" (
-    call :stage_build_bees || goto :error
-  ) else if /I "%%S"=="start" (
-    call :stage_start || goto :error
-  ) else (
-    echo Unknown stage "%%S"
-    goto :error
-  )
+  call :execute_stage %%S
+  if errorlevel 1 goto :error
 )
 
 echo.
@@ -148,6 +138,26 @@ exit /b %ERRORLEVEL%
 call :stage_header "Starting PocketHive stack"
 docker compose up -d
 exit /b %ERRORLEVEL%
+
+:execute_stage
+if /I "%~1"=="clean" (
+  call :stage_clean
+  exit /b
+)
+if /I "%~1"=="build-core" (
+  call :stage_build_core
+  exit /b
+)
+if /I "%~1"=="build-bees" (
+  call :stage_build_bees
+  exit /b
+)
+if /I "%~1"=="start" (
+  call :stage_start
+  exit /b
+)
+echo Unknown stage "%~1"
+exit /b 1
 
 :error
 echo.
