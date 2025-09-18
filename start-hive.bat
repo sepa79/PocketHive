@@ -67,13 +67,13 @@ if "%~1"=="" (
   set "ERR=%~1"
 )
 echo Usage: %~nx0 [stage ...]
-echo.
+echo(
 echo Stages:
 echo   clean        Stop the compose stack and remove stray swarm containers.
 echo   build-core   Build core PocketHive service images ^(RabbitMQ, UI, etc.^).
 echo   build-bees   Build swarm controller and bee images.
 echo   start        Launch the PocketHive stack via docker compose up -d.
-echo.
+echo(
 echo Examples:
 echo   %~nx0            Run all stages in order.
 echo   %~nx0 clean start  Only clean the stack and start it ^(skip builds^).
@@ -95,14 +95,14 @@ for %%S in (%STAGES%) do (
   if errorlevel 1 goto :error
 )
 
-echo.
+echo(
 echo PocketHive stack setup complete.
 popd >nul
 exit /b 0
 
 :stage_header
 set "LABEL=%~1"
-echo.
+echo(
 echo === %LABEL% ===
 exit /b 0
 
@@ -160,7 +160,7 @@ echo Unknown stage "%~1"
 exit /b 1
 
 :error
-echo.
+echo(
 echo Failed to complete requested stages.
 popd >nul
 exit /b 1
