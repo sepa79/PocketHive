@@ -95,7 +95,7 @@ export default function ComponentDetail({ component, onClose }: Props) {
         <span className={`h-3 w-3 rounded-full ${colorForHealth(health)}`} />
         {/* status refresh no longer supported */}
       </h2>
-      <div className="text-sm text-white/60 mb-3">Role: {role}</div>
+      <div className="text-sm text-white/60 mb-3">{role}</div>
       <div className="space-y-1 text-sm mb-4">
         <div>Version: {component.version ?? '—'}</div>
         <div>Uptime: {formatSeconds(component.uptimeSec)}</div>

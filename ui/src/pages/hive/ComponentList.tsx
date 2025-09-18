@@ -38,7 +38,7 @@ export default function ComponentList({ components, selectedId, onSelect }: Prop
             <div className="flex items-center justify-between gap-2">
               <div>
                 <div className="font-medium">{c.id}</div>
-                <div className="text-xs text-white/60">Role: {role}</div>
+                <div className="text-xs text-white/60">{role}</div>
                 {c.queues[0] && (
                   <div className="text-xs text-white/60">
                     {c.queues[0].name} • depth:{' '}

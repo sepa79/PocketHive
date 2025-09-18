@@ -156,9 +156,7 @@ function ShapeNode({ data, selected }: NodeProps<ShapeNodeData>) {
       </svg>
       <div className="shape-node__content">
         <span className="label">{displayLabel}</span>
-        {role && (
-          <span className="shape-node__role">{isOrchestrator ? role : `Role: ${role}`}</span>
-        )}
+        {role && <span className="shape-node__role">{role}</span>}
         {isOrchestrator && metaEntries.length > 0 && (
           <dl className="shape-node__meta">
             {metaEntries.map((entry) => (
