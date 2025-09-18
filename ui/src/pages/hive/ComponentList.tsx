@@ -23,7 +23,7 @@ export default function ComponentList({ components, selectedId, onSelect }: Prop
   return (
     <ul className="space-y-2 overflow-y-auto h-full">
       {components.map((c) => {
-        const role = c.name.trim() || '—'
+        const role = c.role.trim() || '—'
         return (
           <li
             key={c.id}

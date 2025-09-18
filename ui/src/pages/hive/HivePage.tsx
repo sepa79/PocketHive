@@ -33,15 +33,17 @@ export default function HivePage() {
     setSelected(null)
   }, [activeSwarm])
 
-  const filtered = components.filter(
-    (c) =>
-      (c.name.toLowerCase().includes(search.toLowerCase()) ||
-        c.id.toLowerCase().includes(search.toLowerCase())) &&
-      (!activeSwarm ||
-        (activeSwarm === 'default'
-          ? !c.swarmId
-          : c.swarmId === activeSwarm)),
-  )
+  const filtered = components.filter((c) => {
+    const haystack = search.toLowerCase()
+    const matchesSearch =
+      c.name.toLowerCase().includes(haystack) ||
+      c.id.toLowerCase().includes(haystack) ||
+      c.role.toLowerCase().includes(haystack)
+    const matchesSwarm =
+      !activeSwarm ||
+      (activeSwarm === 'default' ? !c.swarmId : c.swarmId === activeSwarm)
+    return matchesSearch && matchesSwarm
+  })
 
   const grouped = filtered.reduce<Record<string, Component[]>>((acc, c) => {
     const swarm = c.swarmId || 'default'
@@ -51,7 +53,7 @@ export default function HivePage() {
   }, {})
 
   const swarmStatus = (comps: Component[]) => {
-    const queen = comps.find((c) => c.name === 'swarm-controller')
+    const queen = comps.find((c) => c.role === 'swarm-controller')
     const status = (queen?.config?.swarmStatus as string | undefined)?.toLowerCase()
     if (status) return status
     const enabled = comps.map((c) => c.config?.enabled !== false)

@@ -21,7 +21,8 @@ vi.mock('./TopologyView', () => ({
 const baseComponents: Component[] = [
   {
     id: 'sw1-queen',
-    name: 'swarm-controller',
+    name: 'sw1-queen',
+    role: 'swarm-controller',
     swarmId: 'sw1',
     lastHeartbeat: 0,
     queues: [],
@@ -29,7 +30,8 @@ const baseComponents: Component[] = [
   },
   {
     id: 'orphan',
-    name: 'generator',
+    name: 'orphan',
+    role: 'generator',
     lastHeartbeat: 0,
     queues: [],
     config: { enabled: true },

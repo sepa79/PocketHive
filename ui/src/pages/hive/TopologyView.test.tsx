@@ -57,7 +57,8 @@ let listener: (t: { nodes: Node[]; edges: unknown[] }) => void
 const components = [
   {
     id: 'sw1-generator',
-    name: 'generator',
+    name: 'sw1-generator',
+    role: 'generator',
     swarmId: 'sw1',
     queues: [
       { name: 'internal-q', role: 'producer', depth: 0 },
@@ -66,24 +67,28 @@ const components = [
   },
   {
     id: 'sw1-processor',
-    name: 'processor',
+    name: 'sw1-processor',
+    role: 'processor',
     swarmId: 'sw1',
     queues: [{ name: 'internal-q', role: 'consumer' }],
   },
   {
     id: 'c',
-    name: 'generator',
+    name: 'c',
+    role: 'generator',
     queues: [],
   },
   {
     id: 'sw1-swarm-controller',
-    name: 'swarm-controller',
+    name: 'sw1-swarm-controller',
+    role: 'swarm-controller',
     swarmId: 'sw1',
     queues: [],
   },
   {
     id: 'hive-orchestrator',
-    name: 'orchestrator',
+    name: 'hive-orchestrator',
+    role: 'orchestrator',
     swarmId: 'hive',
     queues: [],
     config: { swarmCount: 4, enabled: true },
@@ -95,7 +100,8 @@ const updateNodePosition = vi.fn<(id: string, x: number, y: number) => void>()
 beforeEach(() => {
   const orchestrator = components.find((component) => component.id === 'hive-orchestrator')
   if (orchestrator) {
-    orchestrator.name = 'orchestrator'
+    orchestrator.name = 'hive-orchestrator'
+    orchestrator.role = 'orchestrator'
   }
 })
 

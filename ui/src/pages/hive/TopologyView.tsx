@@ -574,8 +574,8 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
             y: node.y ?? previous?.y ?? 0,
           }
           const component = componentsById[node.id]
-          const role = component?.name?.trim() || node.type
-          const label = component?.id?.trim() || node.id
+          const role = component?.role?.trim() || node.type
+          const label = component?.name?.trim() || component?.id?.trim() || node.id
           nodes.push({
             id: node.id,
             position,
@@ -643,8 +643,8 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
           y: node.y ?? previous?.y ?? 0,
         }
         const component = componentsById[node.id]
-        const role = component?.name?.trim() || node.type
-        const label = component?.id?.trim() || node.id
+        const role = component?.role?.trim() || node.type
+        const label = component?.name?.trim() || component?.id?.trim() || node.id
         return {
           id: node.id,
           position,

@@ -41,7 +41,7 @@ export async function sendConfigUpdate(component: Component, config: unknown) {
   if (component.swarmId) {
     payload.swarmId = component.swarmId
   }
-  await apiFetch(`/orchestrator/components/${component.name}/${component.id}/config`, {
+  await apiFetch(`/orchestrator/components/${component.role}/${component.id}/config`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
