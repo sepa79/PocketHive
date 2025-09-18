@@ -83,13 +83,6 @@ interface ShapeNodeData {
   [key: string]: unknown
 }
 
-function formatMetaKey(key: string) {
-  return key
-    .replace(/[_-]+/g, ' ')
-    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
-    .replace(/\b\w/g, (c) => c.toUpperCase())
-}
-
 function formatMetaValue(value: unknown): string | null {
   if (value === undefined || value === null) return null
   if (typeof value === 'boolean') return value ? 'Yes' : 'No'
@@ -111,16 +104,10 @@ function ShapeNode({ data, selected }: NodeProps<ShapeNodeData>) {
     if (!isOrchestrator) {
       return []
     }
-    const entries: { key: string; value: string }[] = []
     const meta =
       data.meta && typeof data.meta === 'object'
         ? (data.meta as Record<string, unknown>)
         : undefined
-    const statusValue = formatMetaValue(data.status)
-    if (statusValue !== null) {
-      entries.push({ key: 'Status', value: statusValue })
-    }
-    const handledKeys = new Set<string>()
     const swarmCountValue =
       meta?.swarmCount ??
       meta?.activeSwarmCount ??
@@ -128,27 +115,11 @@ function ShapeNode({ data, selected }: NodeProps<ShapeNodeData>) {
       meta?.['swarm-count'] ??
       meta?.['active-swarms']
     const formattedSwarmCount = formatMetaValue(swarmCountValue)
-    if (formattedSwarmCount !== null) {
-      entries.push({ key: 'Active swarms', value: formattedSwarmCount })
-      handledKeys.add('swarmCount')
-      handledKeys.add('activeSwarmCount')
-      handledKeys.add('activeSwarms')
-      handledKeys.add('swarm-count')
-      handledKeys.add('active-swarms')
+    if (formattedSwarmCount === null) {
+      return []
     }
-    if (meta) {
-      Object.entries(meta).forEach(([key, value]) => {
-        if (handledKeys.has(key) || key === 'name') return
-        if (value === undefined || value === null) return
-        if (typeof value === 'object') return
-        const formatted = formatMetaValue(value)
-        if (formatted !== null) {
-          entries.push({ key: formatMetaKey(key), value: formatted })
-        }
-      })
-    }
-    return entries
-  }, [data.meta, data.status, isOrchestrator])
+    return [{ key: 'Active swarms', value: formattedSwarmCount }]
+  }, [data.meta, isOrchestrator])
   return (
     <div
       className={`shape-node${selected ? ' selected' : ''}${
@@ -185,7 +156,9 @@ function ShapeNode({ data, selected }: NodeProps<ShapeNodeData>) {
       </svg>
       <div className="shape-node__content">
         <span className="label">{displayLabel}</span>
-        {role && <span className="shape-node__role">Role: {role}</span>}
+        {role && (
+          <span className="shape-node__role">{isOrchestrator ? role : `Role: ${role}`}</span>
+        )}
         {isOrchestrator && metaEntries.length > 0 && (
           <dl className="shape-node__meta">
             {metaEntries.map((entry) => (
