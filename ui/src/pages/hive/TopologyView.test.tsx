@@ -216,9 +216,11 @@ test('grouped swarm node renders and edges aggregate by swarm', () => {
         componentType?: string
         status?: string
         meta?: { swarmCount?: number }
+        role?: string
       }
     | undefined
-  expect(orchestratorData?.label).toBe('orchestrator')
+  expect(orchestratorData?.label).toBe('hive-orchestrator')
+  expect(orchestratorData?.role).toBe('orchestrator')
   expect(orchestratorData?.componentType).toBe('orchestrator')
   expect(orchestratorData?.status).toBe('status-full')
   expect(orchestratorData?.meta?.swarmCount).toBe(4)
@@ -231,7 +233,8 @@ test('orchestrator card only renders active swarm count metadata', () => {
   ) as HTMLElement | null
   expect(card).not.toBeNull()
   const scope = within(card as HTMLElement)
-  scope.getByText('orchestrator')
+  scope.getByText('hive-orchestrator')
+  scope.getByText('Role: orchestrator')
   scope.getByText('Active swarms')
   scope.getByText('4')
   expect(scope.queryByText('Instance')).toBeNull()

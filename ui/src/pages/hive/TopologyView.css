@@ -96,6 +96,11 @@
   gap: 2px;
 }
 
+.shape-node__role {
+  font-size: 0.65rem;
+  color: #4b5563;
+}
+
 .shape-node__meta {
   margin: 2px 0 0;
   display: grid;
