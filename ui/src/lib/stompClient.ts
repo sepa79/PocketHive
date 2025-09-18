@@ -140,9 +140,7 @@ export function setClient(newClient: Client | null, destination = controlDestina
         comp.status = evt.kind
         const cfg = { ...(comp.config || {}) }
         if (evt.data) Object.assign(cfg, evt.data)
-        const beeName = extractBeeName(evt.data)
-        if (beeName) comp.beeName = beeName
-        if (!comp.beeName) comp.beeName = evt.instance
+        comp.beeName = evt.instance
         if (typeof evt.enabled === 'boolean') cfg.enabled = evt.enabled
         if (Object.keys(cfg).length > 0) comp.config = cfg
         if (evt.queues || evt.inQueue) {
@@ -166,14 +164,6 @@ export function setClient(newClient: Client | null, destination = controlDestina
       }
     })
   }
-}
-
-function extractBeeName(data?: Record<string, unknown>) {
-  if (!data) return undefined
-  const candidate = (data as { beeName?: unknown }).beeName
-  if (typeof candidate !== 'string') return undefined
-  const trimmed = candidate.trim()
-  return trimmed.length > 0 ? trimmed : undefined
 }
 
 export function subscribeComponents(fn: ComponentListener) {
