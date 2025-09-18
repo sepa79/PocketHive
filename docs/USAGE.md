@@ -50,16 +50,21 @@ Manual checks:
 - Submit to create the swarm, then start it with the play button next to its entry.
 
 ### Scenario and swarm API
-- STOMP `sig.swarm-create.<swarmId>` to `/exchange/ph.control/sig.swarm-create.<swarmId>` with body:
+- Create swarms via the Orchestrator REST API: `POST /api/swarms/{swarmId}/create` with JSON such as:
 
   ```json
-  { "templateId": "rest" }
+  {
+    "templateId": "rest",
+    "idempotencyKey": "create-rest-001"
+  }
   ```
 
-  The orchestrator resolves the template from `scenario-manager-service`, converts it to a `SwarmPlan`, launches a Swarm Controller and then publishes `sig.swarm-template.<swarmId>` containing the full plan (all bee containers default to `enabled: false`).
-- The orchestrator emits `ev.ready.swarm-create.<swarmId>` once the controller container starts.
-- Wait for `ev.swarm-ready.<swarmId>` to confirm the swarm is provisioned but idle.
-- When ready to run, STOMP `sig.swarm-start.<swarmId>` with an empty body to enable the bees and begin execution.
+  The Orchestrator fetches the requested template from `scenario-manager-service`, expands it into a `SwarmPlan`, boots a Swarm Controller runtime, and tracks progress internally—no `sig.swarm-create` message is published by clients.
+- Subscribe to the control-plane confirmations to follow the lifecycle:
+  - `ev.ready.swarm-create.<swarmId>` — emitted by the Orchestrator after the controller handshake completes.
+  - `ev.ready.swarm-template.<swarmId>` — emitted by the Swarm Controller once the plan is applied and bees are provisioned (idle by default).
+  - `ev.ready.swarm-start.<swarmId>` — emitted after issuing a start; indicates workloads are enabled and running.
+- Start execution with `POST /api/swarms/{swarmId}/start` (body: `{ "idempotencyKey": "start-rest-001" }`). The Orchestrator sends `sig.swarm-start.<swarmId>` on your behalf and you can reuse the same event subscriptions above to detect readiness or handle the matching `ev.error.*` topics if something fails.
 
 ## Troubleshooting
 - **WebSocket errors**: ensure UI health is `ok`, RabbitMQ is running and Web-STOMP is enabled; check browser network logs for `/ws`.
