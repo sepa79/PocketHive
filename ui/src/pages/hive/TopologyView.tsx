@@ -103,23 +103,16 @@ function ShapeNode({ data, selected }: NodeProps<ShapeNodeData>) {
   const isOrchestrator = data.componentType === 'orchestrator'
   const metaEntries = isOrchestrator
     ? (() => {
-        const list: { key: string; value: string }[] = []
-        if (typeof data.componentId === 'string') {
-          list.push({ key: 'Instance', value: data.componentId })
+        if (!data.meta || typeof data.meta !== 'object') {
+          return []
         }
-        if (typeof data.status === 'string') {
-          const statusValue = formatMetaValue(data.status)
-          if (statusValue) list.push({ key: 'Status', value: statusValue })
+        const swarmCount = formatMetaValue(
+          (data.meta as { swarmCount?: unknown }).swarmCount,
+        )
+        if (!swarmCount) {
+          return []
         }
-        if (data.meta && typeof data.meta === 'object') {
-          Object.entries(data.meta as Record<string, unknown>).forEach(([key, value]) => {
-            const formatted = formatMetaValue(value)
-            if (!formatted) return
-            const label = key === 'swarmCount' ? 'Active swarms' : formatMetaKey(key)
-            list.push({ key: label, value: formatted })
-          })
-        }
-        return list
+        return [{ key: 'Active swarms', value: swarmCount }]
       })()
     : []
   return (
