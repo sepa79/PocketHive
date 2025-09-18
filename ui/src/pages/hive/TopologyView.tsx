@@ -504,7 +504,11 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
             grouped.set(normalized, list)
             return
           }
-          const position = prevPositions.get(node.id) ?? { x: node.x ?? 0, y: node.y ?? 0 }
+          const previous = prevPositions.get(node.id)
+          const position = {
+            x: node.x ?? previous?.x ?? 0,
+            y: node.y ?? previous?.y ?? 0,
+          }
           nodes.push({
             id: node.id,
             position,
@@ -531,11 +535,11 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
               queue: link.queue,
               depth: queueDepths[link.queue] ?? 0,
             }))
-          const position =
-            prevPositions.get(controller.id) ?? {
-              x: controller.x ?? 0,
-              y: controller.y ?? 0,
-            }
+          const previous = prevPositions.get(controller.id)
+          const position = {
+            x: controller.x ?? previous?.x ?? 0,
+            y: controller.y ?? previous?.y ?? 0,
+          }
           nodes.push({
             id: controller.id,
             position,
@@ -561,7 +565,11 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
         return nodes
       }
       return data.nodes.map((node) => {
-        const position = prevPositions.get(node.id) ?? { x: node.x ?? 0, y: node.y ?? 0 }
+        const previous = prevPositions.get(node.id)
+        const position = {
+          x: node.x ?? previous?.x ?? 0,
+          y: node.y ?? previous?.y ?? 0,
+        }
         return {
           id: node.id,
           position,
