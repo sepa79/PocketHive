@@ -416,11 +416,23 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
   useEffect(() => {
     setRfNodes((prev) => {
       const prevMap = new Map(prev.map((p) => [p.id, p]))
+      const seenContainerIds = new Set<string>()
       const detailView = Boolean(swarmId)
       const baseEntries: GraphEntry[] = data.nodes.map((n) => {
         const existing = prevMap.get(n.id)
-        const absX = n.x ?? existing?.positionAbsolute?.x ?? existing?.position?.x ?? 0
-        const absY = n.y ?? existing?.positionAbsolute?.y ?? existing?.position?.y ?? 0
+        const storedAbsolute = absolutePositionsRef.current[n.id]
+        const absX =
+          n.x ??
+          storedAbsolute?.x ??
+          existing?.positionAbsolute?.x ??
+          existing?.position?.x ??
+          0
+        const absY =
+          n.y ??
+          storedAbsolute?.y ??
+          existing?.positionAbsolute?.y ??
+          existing?.position?.y ??
+          0
         const absolute = { x: absX, y: absY }
         absolutePositionsRef.current[n.id] = absolute
         const isController = n.type === 'swarm-controller'
@@ -479,8 +491,8 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
           maxX = Math.max(maxX, entry.absolute.x + entry.dimensions.width)
           maxY = Math.max(maxY, entry.absolute.y + entry.dimensions.height)
         })
-        const containerX = minX - PADDING
-        const containerY = minY - PADDING - HEADER_OFFSET
+        const containerDefaultX = minX - PADDING
+        const containerDefaultY = minY - PADDING - HEADER_OFFSET
         const innerWidth = maxX - minX
         const innerHeight = maxY - minY
         const containerWidth = Math.max(
@@ -494,11 +506,17 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
         const controller = entries.find((e) => e.isController)
         const containerId = `swarm:${key}`
         const childIds = entries.map((entry) => entry.node.id)
+        const storedPosition = containerPositionsRef.current[containerId]
+        const position = storedPosition
+          ? { x: storedPosition.x, y: storedPosition.y }
+          : { x: containerDefaultX, y: containerDefaultY }
+        containerPositionsRef.current[containerId] = { ...position }
+        seenContainerIds.add(containerId)
         containers.push({
           id: containerId,
           type: 'swarmCard',
-          position: { x: containerX, y: containerY },
-          positionAbsolute: { x: containerX, y: containerY },
+          position,
+          positionAbsolute: { ...position },
           data: {
             swarmId: key,
             label: `Swarm ${key}`,
@@ -514,18 +532,25 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
           draggable: true,
           selectable: true,
         })
-        containerPositionsRef.current[containerId] = { x: containerX, y: containerY }
         entries.forEach((entry) => {
           entry.node.parentNode = containerId
           entry.node.extent = 'parent'
           entry.node.position = {
-            x: entry.absolute.x - containerX,
-            y: entry.absolute.y - containerY,
+            x: entry.absolute.x - position.x,
+            y: entry.absolute.y - position.y,
           }
           entry.node.positionAbsolute = { ...entry.absolute }
           childNodes.push(entry.node)
         })
       })
+
+      if (!swarmId) {
+        Object.keys(containerPositionsRef.current).forEach((id) => {
+          if (!seenContainerIds.has(id)) {
+            delete containerPositionsRef.current[id]
+          }
+        })
+      }
 
       const outsideNodes = outsideEntries.map((entry) => {
         entry.node.parentNode = undefined

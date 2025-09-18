@@ -217,7 +217,7 @@ test('node position updates after drag and edge depth styles', () => {
     })
   })
   expect(updateNodePosition).toHaveBeenCalledWith('a', 42, 64)
-  const newProps = (globalThis as unknown as { __RF_PROPS__: RFProps }).__RF_PROPS__
+  let newProps = (globalThis as unknown as { __RF_PROPS__: RFProps }).__RF_PROPS__
   const updatedNode = newProps.nodes.find((n) => n.id === 'a') as RFNode
   const updatedSwarm = newProps.nodes.find((n) => n.id === 'swarm:sw1') as RFNode
   expect(updatedNode.positionAbsolute).toEqual({ x: 42, y: 64 })
@@ -227,6 +227,19 @@ test('node position updates after drag and edge depth styles', () => {
   expect(updatedNode.position.y).toBeCloseTo(
     updatedNode.positionAbsolute!.y - updatedSwarm.position.y,
   )
+  const orchestratorNodeAfter = newProps.nodes.find((n) => n.id === 'orc') as RFNode
+  const orchestratorTarget = { x: 120, y: 96 }
+  act(() => {
+    newProps.onNodeDragStop?.({}, {
+      ...orchestratorNodeAfter,
+      positionAbsolute: orchestratorTarget,
+    })
+  })
+  expect(updateNodePosition).toHaveBeenCalledWith('orc', 120, 96)
+  newProps = (globalThis as unknown as { __RF_PROPS__: RFProps }).__RF_PROPS__
+  const updatedOrchestrator = newProps.nodes.find((n) => n.id === 'orc') as RFNode
+  expect(updatedOrchestrator.positionAbsolute).toEqual(orchestratorTarget)
+  expect(updatedOrchestrator.position).toEqual(orchestratorTarget)
   const deepEdge = newProps.edges.find(
     (edge) => (edge as unknown as { label?: string }).label === 'q',
   )
@@ -277,6 +290,10 @@ test('dragging swarm card repositions contained bees', () => {
     expect(call?.[1]).toBeCloseTo(initialPositions[id].x + delta.x)
     expect(call?.[2]).toBeCloseTo(initialPositions[id].y + delta.y)
   })
+  const refreshed = (globalThis as unknown as { __RF_PROPS__: RFProps }).__RF_PROPS__
+  const updatedSwarm = refreshed.nodes.find((n) => n.id === swarmNode.id) as RFNode
+  expect(updatedSwarm.positionAbsolute).toEqual(target)
+  expect(updatedSwarm.position).toEqual(target)
 })
 
 test('filters nodes for default swarm', () => {
