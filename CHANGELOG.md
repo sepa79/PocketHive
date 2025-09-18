@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.1] - 2025-09-18
+Timestamp: 2025-09-18T00:00:00Z
+
+- UI: render swarm controllers as grouped topology cards that embed their swarm component icons and preview internal queues while leaving hive-level services outside swarm navigation.
+- UI: open swarm details from the controller's Details action to show full component cards and keep hive-level selections from toggling swarm filters.
+- UI: display instance identifiers and role metadata on topology cards, including active swarm totals for orchestrators, while preserving node positions after drag updates.
+
 ## [0.10.0] - 2025-09-17
 Timestamp: 2025-09-17T00:00:00Z
 
