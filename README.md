@@ -19,7 +19,8 @@ flowchart LR
 
 ## Quick start
 1. Install Docker.
-2. Run `docker compose up -d` to launch RabbitMQ, services and the UI.
+2. Run `./start-hive.sh` (Linux/macOS) or `start-hive.bat` (Windows) to clean previous runs, build the images and launch RabbitMQ, services and the UI. Use `--help` to run individual stages (clean, build, start) when needed.
+   - Alternatively run `docker compose up -d` directly to start the stack with your existing images.
 3. Open <http://localhost:8088>. Only the Orchestrator (Queen) runs initially. Create and start swarms from the Hive view by selecting a scenario.
 
 ## Documentation
