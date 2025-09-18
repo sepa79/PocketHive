@@ -59,7 +59,7 @@ function buildTopology(): Topology {
   })
   const nodes: TopologyNode[] = Object.values(components).map((c) => ({
     id: c.id,
-    type: c.name,
+    type: c.role || c.name,
     x: nodePositions[c.id]?.x,
     y: nodePositions[c.id]?.y,
     enabled: c.config?.enabled !== false,
@@ -125,12 +125,14 @@ export function setClient(newClient: Client | null, destination = controlDestina
         const swarmId = id.split('-')[0]
         const comp: Component = components[id] || {
           id,
-          name: evt.role,
+          name: id,
+          role: evt.role,
           swarmId,
           lastHeartbeat: 0,
           queues: [],
         }
-        comp.name = evt.role
+        comp.name = id
+        comp.role = evt.role
         comp.swarmId = swarmId
         comp.version = evt.version
         comp.lastHeartbeat = new Date(evt.timestamp).getTime()

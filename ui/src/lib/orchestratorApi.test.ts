@@ -39,7 +39,8 @@ describe('orchestratorApi', () => {
   it('posts component config update', async () => {
     const comp: Component = {
       id: 'c1',
-      name: 'generator',
+      name: 'c1',
+      role: 'generator',
       swarmId: 'sw1',
       lastHeartbeat: 0,
       queues: [],

@@ -28,7 +28,7 @@ export default function ComponentDetail({ component, onClose }: Props) {
 
   const handleSubmit = async () => {
     const cfg: Record<string, unknown> = {}
-    switch (component.name) {
+    switch (component.role) {
       case 'generator':
         if (form.ratePerSec) cfg.ratePerSec = Number(form.ratePerSec)
         if (form.path) cfg.path = form.path
@@ -83,17 +83,19 @@ export default function ComponentDetail({ component, onClose }: Props) {
   }
 
   const health = heartbeatHealth(component.lastHeartbeat)
+  const role = component.role.trim() || '—'
 
   return (
     <div className="flex-1 p-4 overflow-y-auto relative">
       <button className="absolute top-2 right-2" onClick={onClose}>
         ×
       </button>
-      <h2 className="text-xl mb-2 flex items-center gap-2">
-        {component.name}
+      <h2 className="text-xl mb-1 flex items-center gap-2">
+        {component.id}
         <span className={`h-3 w-3 rounded-full ${colorForHealth(health)}`} />
         {/* status refresh no longer supported */}
       </h2>
+      <div className="text-sm text-white/60 mb-3">{role}</div>
       <div className="space-y-1 text-sm mb-4">
         <div>Version: {component.version ?? '—'}</div>
         <div>Uptime: {formatSeconds(component.uptimeSec)}</div>
@@ -109,7 +111,7 @@ export default function ComponentDetail({ component, onClose }: Props) {
         </div>
       </div>
       <div className="p-4 border border-white/10 rounded mb-4 text-sm text-white/60 space-y-2">
-        {renderForm(component.name, form, setForm, single)}
+        {renderForm(component.role, form, setForm, single)}
       </div>
       <button
         className="mb-4 rounded bg-blue-600 px-3 py-1 text-sm"
@@ -129,7 +131,7 @@ export default function ComponentDetail({ component, onClose }: Props) {
 }
 
 function renderForm(
-  name: string,
+  role: string | undefined,
   form: Record<string, string>,
   setForm: (f: Record<string, string>) => void,
   single: () => void,
@@ -147,7 +149,7 @@ function renderForm(
       onChange={(e) => setForm({ ...form, [key]: e.target.value })}
     />
   )
-  switch (name) {
+  switch (role) {
     case 'generator':
       return (
         <div className="space-y-2">

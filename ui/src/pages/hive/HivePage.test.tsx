@@ -21,7 +21,8 @@ vi.mock('./TopologyView', () => ({
 const baseComponents: Component[] = [
   {
     id: 'sw1-queen',
-    name: 'swarm-controller',
+    name: 'sw1-queen',
+    role: 'swarm-controller',
     swarmId: 'sw1',
     lastHeartbeat: 0,
     queues: [],
@@ -29,7 +30,8 @@ const baseComponents: Component[] = [
   },
   {
     id: 'orphan',
-    name: 'generator',
+    name: 'orphan',
+    role: 'generator',
     lastHeartbeat: 0,
     queues: [],
     config: { enabled: true },
@@ -110,6 +112,8 @@ test('shows unassigned components when selecting default swarm', async () => {
   const [def] = screen.getAllByText('default')
   expect(def).toBeTruthy()
   await user.click(def)
-  const gens = await screen.findAllByText('generator')
+  const gens = await screen.findAllByText(
+    (_content, element) => element?.textContent?.trim() === 'generator',
+  )
   expect(gens.length).toBeGreaterThan(0)
 })
