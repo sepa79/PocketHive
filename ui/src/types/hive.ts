@@ -11,6 +11,7 @@ export interface QueueInfo {
 export interface Component {
   id: string
   name: string
+  beeName?: string
   swarmId?: string
   version?: string
   uptimeSec?: number

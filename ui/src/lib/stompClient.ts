@@ -12,6 +12,7 @@ export interface TopologyNode {
   y?: number
   enabled?: boolean
   swarmId?: string
+  beeName?: string
 }
 export interface TopologyEdge { from: string; to: string; queue: string }
 export interface Topology { nodes: TopologyNode[]; edges: TopologyEdge[] }
@@ -64,6 +65,7 @@ function buildTopology(): Topology {
     y: nodePositions[c.id]?.y,
     enabled: c.config?.enabled !== false,
     swarmId: c.swarmId,
+    beeName: c.beeName ?? c.id,
   }))
   if (components['processor']) {
     nodes.push({
@@ -72,6 +74,7 @@ function buildTopology(): Topology {
       x: nodePositions['sut']?.x,
       y: nodePositions['sut']?.y,
       enabled: true,
+      beeName: 'sut',
     })
   }
   return { nodes, edges: uniq }
@@ -137,6 +140,9 @@ export function setClient(newClient: Client | null, destination = controlDestina
         comp.status = evt.kind
         const cfg = { ...(comp.config || {}) }
         if (evt.data) Object.assign(cfg, evt.data)
+        const beeName = extractBeeName(evt.data)
+        if (beeName) comp.beeName = beeName
+        if (!comp.beeName) comp.beeName = evt.instance
         if (typeof evt.enabled === 'boolean') cfg.enabled = evt.enabled
         if (Object.keys(cfg).length > 0) comp.config = cfg
         if (evt.queues || evt.inQueue) {
@@ -160,6 +166,14 @@ export function setClient(newClient: Client | null, destination = controlDestina
       }
     })
   }
+}
+
+function extractBeeName(data?: Record<string, unknown>) {
+  if (!data) return undefined
+  const candidate = (data as { beeName?: unknown }).beeName
+  if (typeof candidate !== 'string') return undefined
+  const trimmed = candidate.trim()
+  return trimmed.length > 0 ? trimmed : undefined
 }
 
 export function subscribeComponents(fn: ComponentListener) {

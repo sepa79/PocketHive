@@ -31,6 +31,7 @@ interface GraphNode {
   y?: number
   enabled?: boolean
   swarmId?: string
+  beeName?: string
 }
 
 interface GraphLink {
@@ -245,7 +246,7 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
           id: n.id,
           position: existing?.position ?? { x: n.x ?? 0, y: n.y ?? 0 },
           data: {
-            label: n.id,
+            label: n.beeName ?? n.id,
             shape: getShape(n.type),
             enabled: n.enabled,
             queueCount: queueCounts[n.id] ?? 0,
