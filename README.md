@@ -4,61 +4,59 @@ PocketHive is a portable transaction swarm. It orchestrates containerised compon
 
 ## Architecture
 
-### Swarm at a glance
+### Swarm data flow
 
 ```mermaid
 flowchart LR
-  SM[Scenario Manager] --> UI[UI]
-  UI <--> O["Orchestrator (Queen)"]
-  O -. REST .-> OAPI[/POST /api/swarms/{swarmId}/create/]
-  O --> SW[Swarm]
-  subgraph SW
-    direction TB
-    M["Swarm Controller (Marshal)"] --> W["Workers (Bees)"]
+  subgraph Control["Control plane"]
+    O["Orchestrator (Queen)"]
+    SC["Swarm Controller (Marshal)"]
   end
-  M -. AMQP .-> W
-  W --> SUT[(System Under Test)]
-  W --> OBS[Observability]
+
+  subgraph Traffic["RabbitMQ — ph.<swarmId>.hive"]
+    EX[(Topic exchange)]
+    QGEN[[Queue ph.<swarmId>.gen]]
+    QMOD[[Queue ph.<swarmId>.mod]]
+    QFINAL[[Queue ph.<swarmId>.final]]
+  end
+
+  subgraph Workers["Swarm workers (Bees)"]
+    G[Generator]
+    M[Moderator]
+    P[Processor]
+    PP[Post-Processor]
+  end
+
+  R[(Redis dataset fragments)]
+  SUT[(System Under Test)]
+  OBS[Observability & analytics]
+
+  O -. REST / AMQP .- SC
+  SC -->|sig.* control| G
+  SC -->|sig.* control| M
+  SC -->|sig.* control| P
+  SC -->|sig.* control| PP
+
+  G -->|publish ph.<swarmId>.gen| EX
+  EX -->|route to| QGEN
+  QGEN -->|consume| M
+  M -->|forward ph.<swarmId>.mod| EX
+  EX -->|route to| QMOD
+  QMOD -->|consume| P
+  P -->|publish ph.<swarmId>.final| EX
+  EX -->|route to| QFINAL
+  QFINAL -->|consume| PP
+
+  G <-->|lookup dataset| R
+  P -->|HTTP request/response| SUT
+  PP -->|metrics & logs| OBS
 ```
 
-### How a swarm comes to life
-
-```mermaid
-sequenceDiagram
-  participant UI as UI
-  participant OR as Orchestrator
-  participant RT as Runtime (Docker/K8s)
-  participant SC as Swarm Controller
-
-  UI->>OR: POST /api/swarms/{swarmId}/create
-  OR->>RT: Launch swarm controller workload
-  RT-->>OR: Container ready
-  SC-->>OR: ev.ready.swarm-controller.<instance>
-  OR-->>UI: ev.ready.swarm-create.<swarmId>
-  OR->>SC: sig.swarm-template.<swarmId>
-  SC-->>OR: ev.ready.swarm-template.<swarmId>
-  OR->>SC: sig.swarm-start.<swarmId>
-  SC-->>OR: ev.ready.swarm-start.<swarmId>
-```
-
-### Swarm lifecycle states
-
-```mermaid
-stateDiagram-v2
-  [*] --> New
-  New --> Creating: POST /api/swarms/{swarmId}/create
-  Creating --> Ready: ev.ready.swarm-create
-  Ready --> Starting: sig.swarm-start
-  Starting --> Running: ev.ready.swarm-start
-  Running --> Stopping: sig.swarm-stop
-  Stopping --> Stopped: ev.ready.swarm-stop
-  Stopped --> Starting: sig.swarm-start
-  Ready --> Removing: sig.swarm-remove
-  Stopped --> Removing: sig.swarm-remove
-  Running --> Removing: sig.swarm-remove
-  Removing --> Removed: ev.ready.swarm-remove
-  Removed --> [*]
-```
+The Orchestrator drives each swarm through the Swarm Controller, which applies the plan, enables roles in dependency order, an
+d relays `sig.*` control signals. Transaction messages move left to right through RabbitMQ queues: the Generator produces into
+`ph.<swarmId>.gen`, the Moderator conditions and forwards to `ph.<swarmId>.mod`, the Processor relays each call to the System 
+Under Test (SUT) and publishes responses into `ph.<swarmId>.final`, where the Post-Processor captures metrics and observability
+streams. Generators can hydrate payload templates from Redis-backed dataset fragments to diversify traffic.
 
 ## Quick start
 1. Install Docker.
