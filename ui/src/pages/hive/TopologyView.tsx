@@ -103,6 +103,10 @@ function ShapeNode({ data, selected }: NodeProps<ShapeNodeData>) {
   const fill = data.enabled === false ? '#999999' : '#ffcc00'
   const isOrchestrator = data.componentType === 'orchestrator'
   const role = data.role || data.componentType
+  const componentId =
+    typeof data.componentId === 'string' ? data.componentId.trim() : ''
+  const fallbackLabel = typeof data.label === 'string' ? data.label : ''
+  const displayLabel = componentId || fallbackLabel
   const metaEntries = useMemo(() => {
     if (!isOrchestrator) {
       return []
@@ -112,6 +116,11 @@ function ShapeNode({ data, selected }: NodeProps<ShapeNodeData>) {
       data.meta && typeof data.meta === 'object'
         ? (data.meta as Record<string, unknown>)
         : undefined
+    const statusValue = formatMetaValue(data.status)
+    if (statusValue !== null) {
+      entries.push({ key: 'Status', value: statusValue })
+    }
+    const handledKeys = new Set<string>()
     const swarmCountValue =
       meta?.swarmCount ??
       meta?.activeSwarmCount ??
@@ -121,9 +130,25 @@ function ShapeNode({ data, selected }: NodeProps<ShapeNodeData>) {
     const formattedSwarmCount = formatMetaValue(swarmCountValue)
     if (formattedSwarmCount !== null) {
       entries.push({ key: 'Active swarms', value: formattedSwarmCount })
+      handledKeys.add('swarmCount')
+      handledKeys.add('activeSwarmCount')
+      handledKeys.add('activeSwarms')
+      handledKeys.add('swarm-count')
+      handledKeys.add('active-swarms')
+    }
+    if (meta) {
+      Object.entries(meta).forEach(([key, value]) => {
+        if (handledKeys.has(key) || key === 'name') return
+        if (value === undefined || value === null) return
+        if (typeof value === 'object') return
+        const formatted = formatMetaValue(value)
+        if (formatted !== null) {
+          entries.push({ key: formatMetaKey(key), value: formatted })
+        }
+      })
     }
     return entries
-  }, [data.meta, isOrchestrator])
+  }, [data.meta, data.status, isOrchestrator])
   return (
     <div
       className={`shape-node${selected ? ' selected' : ''}${
@@ -159,7 +184,7 @@ function ShapeNode({ data, selected }: NodeProps<ShapeNodeData>) {
         {data.shape === 'circle' && <circle cx={size} cy={size} r={size} fill={fill} stroke="black" />}
       </svg>
       <div className="shape-node__content">
-        <span className="label">{data.label}</span>
+        <span className="label">{displayLabel}</span>
         {role && <span className="shape-node__role">Role: {role}</span>}
         {isOrchestrator && metaEntries.length > 0 && (
           <dl className="shape-node__meta">

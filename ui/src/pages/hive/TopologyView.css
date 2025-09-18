@@ -69,6 +69,7 @@
   padding: 6px 10px;
   position: relative;
   font-size: 0.75rem;
+  color: #111827;
 }
 
 .shape-node--orchestrator {
@@ -88,6 +89,7 @@
 
 .shape-node .label {
   pointer-events: none;
+  font-weight: 600;
 }
 
 .shape-node__content {

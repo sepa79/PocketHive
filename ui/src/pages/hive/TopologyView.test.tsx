@@ -232,7 +232,7 @@ test('grouped swarm node renders and edges aggregate by swarm', () => {
   expect(orchestratorData?.meta?.swarmCount).toBe(4)
 })
 
-test('orchestrator card only renders active swarm count metadata', () => {
+test('orchestrator card renders instance name and status metadata', () => {
   render(<TopologyView />)
   const card = document.querySelector(
     '[data-node-id="hive-orchestrator"] .shape-node',
@@ -241,11 +241,12 @@ test('orchestrator card only renders active swarm count metadata', () => {
   const scope = within(card as HTMLElement)
   scope.getByText('hive-orchestrator')
   scope.getByText('Role: orchestrator')
+  scope.getByText('Status')
+  scope.getByText('status-full')
   scope.getByText('Active swarms')
   scope.getByText('4')
-  expect(scope.queryByText('Instance')).toBeNull()
-  expect(scope.queryByText('Status')).toBeNull()
-  expect(scope.queryByText('Enabled')).toBeNull()
+  scope.getByText('Enabled')
+  scope.getByText('Yes')
 })
 
 test('filters nodes for default swarm', () => {
