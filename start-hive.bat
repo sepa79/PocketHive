@@ -142,19 +142,19 @@ exit /b %ERRORLEVEL%
 :execute_stage
 if /I "%~1"=="clean" (
   call :stage_clean
-  exit /b %ERRORLEVEL%
+  exit /b
 )
 if /I "%~1"=="build-core" (
   call :stage_build_core
-  exit /b %ERRORLEVEL%
+  exit /b
 )
 if /I "%~1"=="build-bees" (
   call :stage_build_bees
-  exit /b %ERRORLEVEL%
+  exit /b
 )
 if /I "%~1"=="start" (
   call :stage_start
-  exit /b %ERRORLEVEL%
+  exit /b
 )
 echo Unknown stage "%~1"
 exit /b 1
