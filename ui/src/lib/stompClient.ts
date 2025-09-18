@@ -13,8 +13,6 @@ export interface TopologyNode {
   enabled?: boolean
   swarmId?: string
   beeName?: string
-  status?: string
-  version?: string
 }
 export interface TopologyEdge { from: string; to: string; queue: string }
 export interface Topology { nodes: TopologyNode[]; edges: TopologyEdge[] }
@@ -68,8 +66,6 @@ function buildTopology(): Topology {
     enabled: c.config?.enabled !== false,
     swarmId: c.swarmId,
     beeName: c.beeName ?? c.id,
-    status: c.status,
-    version: c.version,
   }))
   if (components['processor']) {
     nodes.push({

@@ -32,8 +32,6 @@ interface GraphNode {
   enabled?: boolean
   swarmId?: string
   beeName?: string
-  status?: string
-  version?: string
 }
 
 interface GraphLink {
@@ -81,39 +79,31 @@ interface ShapeNodeData {
   beeName?: string
   role?: string
   instanceId?: string
-  status?: string
-  version?: string
 }
- 
-type StatusTone = 'active' | 'warn' | 'error' | 'muted'
 
 function ShapeNode({ data, selected }: NodeProps<ShapeNodeData>) {
   const size = 10
   const fill = data.enabled === false ? '#999999' : '#ffcc00'
   const beeName = data.beeName ?? data.label ?? data.instanceId ?? ''
   const roleLabel = humanize(data.role ?? '')
-  const statusTone = deriveStatusTone(data.status, data.enabled)
-  const statusLabel =
-    data.enabled === false
-      ? 'Disabled'
-      : data.status
-      ? humanize(data.status)
-      : 'Enabled'
   const swarmLabel =
     data.swarmId && data.swarmId !== 'default'
       ? `Swarm ${data.swarmId}`
       : 'Default swarm'
-  const versionLabel = data.version ? `v${data.version}` : null
   const showInstanceId =
     data.instanceId && data.instanceId !== beeName ? data.instanceId : null
-  const metaDetails: { text: string; className?: string }[] = [
+  const primaryDetails: { text: string; className?: string }[] = []
+  if (roleLabel) {
+    primaryDetails.push({ text: roleLabel, className: 'shape-node__role' })
+  }
+  if (data.enabled === false) {
+    primaryDetails.push({ text: 'Disabled', className: 'shape-node__detail--disabled' })
+  }
+  const secondaryDetails: { text: string; className?: string }[] = [
     { text: swarmLabel },
   ]
   if (showInstanceId) {
-    metaDetails.push({ text: showInstanceId, className: 'shape-node__detail--mono' })
-  }
-  if (versionLabel) {
-    metaDetails.push({ text: versionLabel })
+    secondaryDetails.push({ text: showInstanceId, className: 'shape-node__detail--mono' })
   }
   return (
     <div className={`shape-node${selected ? ' selected' : ''}`}>
@@ -154,14 +144,20 @@ function ShapeNode({ data, selected }: NodeProps<ShapeNodeData>) {
             <span className="shape-node__badge">{data.queueCount}</span>
           )}
         </div>
-        <div className="shape-node__meta">
-          {roleLabel && <span className="shape-node__role">{roleLabel}</span>}
-          <span className={`shape-node__status shape-node__status--${statusTone}`}>
-            {statusLabel}
-          </span>
-        </div>
+        {primaryDetails.length > 0 && (
+          <div className="shape-node__meta">
+            {primaryDetails.map(({ text, className }, idx) => (
+              <span
+                key={`${text}-${idx}`}
+                className={`shape-node__detail${className ? ` ${className}` : ''}`}
+              >
+                {text}
+              </span>
+            ))}
+          </div>
+        )}
         <div className="shape-node__meta shape-node__meta--secondary">
-          {metaDetails.map(({ text, className }, idx) => (
+          {secondaryDetails.map(({ text, className }, idx) => (
             <span
               key={`${text}-${idx}`}
               className={`shape-node__detail${className ? ` ${className}` : ''}`}
@@ -183,22 +179,6 @@ function humanize(value?: string) {
     .filter(Boolean)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(' ')
-}
-
-function deriveStatusTone(status?: string, enabled?: boolean): StatusTone {
-  if (enabled === false) return 'muted'
-  if (!status) return 'active'
-  const normalised = status.toLowerCase()
-  if (normalised.includes('error') || normalised.includes('fail') || normalised.includes('alert')) {
-    return 'error'
-  }
-  if (normalised.includes('warn')) {
-    return 'warn'
-  }
-  if (normalised.includes('disable')) {
-    return 'muted'
-  }
-  return 'active'
 }
 
 function polygonPoints(sides: number, r: number) {
@@ -336,8 +316,6 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
             enabled: n.enabled,
             queueCount: queueCounts[n.id] ?? 0,
             swarmId: n.swarmId,
-            status: n.status,
-            version: n.version,
           },
           type: 'shape',
           selected: selectedId === n.id,
