@@ -287,6 +287,31 @@ function starPoints(r: number) {
   return pts.join(' ')
 }
 
+function resolveAbsolutePosition(
+  node: Node<ShapeNodeData | SwarmCardData>,
+  nodes: Node<ShapeNodeData | SwarmCardData>[],
+  cache: Map<string, { x: number; y: number }>,
+) {
+  const cached = cache.get(node.id)
+  if (cached) return cached
+  if (node.positionAbsolute) {
+    const absolute = { ...node.positionAbsolute }
+    cache.set(node.id, absolute)
+    return absolute
+  }
+  const local = { ...(node.position ?? { x: 0, y: 0 }) }
+  if (node.parentNode) {
+    const parent = nodes.find((candidate) => candidate.id === node.parentNode)
+    if (parent) {
+      const parentAbsolute = resolveAbsolutePosition(parent, nodes, cache)
+      local.x += parentAbsolute.x
+      local.y += parentAbsolute.y
+    }
+  }
+  cache.set(node.id, local)
+  return local
+}
+
 function SwarmCardNode({ data }: NodeProps<SwarmCardData>) {
   const beeLabel = data.beeCount === 1 ? 'bee' : 'bees'
   return (
@@ -586,10 +611,25 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
     [data.links, queueDepths],
   )
 
-  const onNodesChange = useCallback(
-    (changes: NodeChange[]) => setRfNodes((nds) => applyNodeChanges(changes, nds)),
-    [],
-  )
+  const onNodesChange = useCallback((changes: NodeChange[]) => {
+    setRfNodes((nds) => {
+      const next = applyNodeChanges(changes, nds)
+      const cache = new Map<string, { x: number; y: number }>()
+      changes.forEach((change) => {
+        if (change.type !== 'position' && change.type !== 'dimensions') return
+        const node = next.find((candidate) => candidate.id === change.id)
+        if (!node) return
+        const absolute = change.positionAbsolute
+          ? { ...change.positionAbsolute }
+          : resolveAbsolutePosition(node, next, cache)
+        if (node.type === 'swarmCard') {
+          containerPositionsRef.current[node.id] = { ...absolute }
+        }
+        absolutePositionsRef.current[node.id] = { ...absolute }
+      })
+      return next
+    })
+  }, [])
 
   useEffect(() => {
     if (rfNodes.length) flowRef.current?.fitView({ padding: 20 })
