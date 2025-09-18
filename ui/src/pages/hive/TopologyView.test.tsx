@@ -84,6 +84,8 @@ const components = [
     name: 'orchestrator',
     swarmId: 'hive',
     queues: [],
+    config: { swarmCount: 4, enabled: true },
+    status: 'status-full',
   },
 ]
 const updateNodePosition = vi.fn<(id: string, x: number, y: number) => void>()
@@ -173,6 +175,18 @@ test('grouped swarm node renders and edges aggregate by swarm', () => {
   expect(groupData.edges?.some((edge) => edge.queue === 'internal-q')).toBe(true)
   const orchestrator = newProps.nodes.find((n) => n.id === 'hive-orchestrator')
   expect(orchestrator?.type).toBe('shape')
+  const orchestratorData = orchestrator?.data as
+    | {
+        label?: string
+        componentType?: string
+        status?: string
+        meta?: { swarmCount?: number }
+      }
+    | undefined
+  expect(orchestratorData?.label).toBe('orchestrator')
+  expect(orchestratorData?.componentType).toBe('orchestrator')
+  expect(orchestratorData?.status).toBe('status-full')
+  expect(orchestratorData?.meta?.swarmCount).toBe(4)
 })
 
 test('filters nodes for default swarm', () => {

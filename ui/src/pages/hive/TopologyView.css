@@ -71,6 +71,13 @@
   font-size: 0.75rem;
 }
 
+.shape-node--orchestrator {
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 12px;
+  min-width: 200px;
+}
+
 .shape-node.selected {
   border-color: #3b82f6;
 }
@@ -81,6 +88,33 @@
 
 .shape-node .label {
   pointer-events: none;
+}
+
+.shape-node__content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.shape-node__meta {
+  margin: 2px 0 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 8px;
+  row-gap: 2px;
+  font-size: 0.65rem;
+  color: #374151;
+}
+
+.shape-node__meta-term {
+  font-weight: 500;
+  margin: 0;
+}
+
+.shape-node__meta-value {
+  font-weight: 600;
+  margin: 0;
+  text-align: right;
 }
 
 .shape-node .badge {

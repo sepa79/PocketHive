@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/ban-ts-comment */
 // @ts-nocheck
-import { useEffect, useRef, useState, useMemo, useCallback } from 'react'
+import { useEffect, useRef, useState, useMemo, useCallback, Fragment } from 'react'
 import {
   ReactFlow,
   MarkerType,
@@ -75,14 +75,59 @@ interface ShapeNodeData {
   enabled?: boolean
   queueCount: number
   swarmId?: string
+  componentType?: string
+  componentId?: string
+  status?: string
+  meta?: Record<string, unknown>
   [key: string]: unknown
+}
+
+function formatMetaKey(key: string) {
+  return key
+    .replace(/[_-]+/g, ' ')
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/\b\w/g, (c) => c.toUpperCase())
+}
+
+function formatMetaValue(value: unknown): string | null {
+  if (value === undefined || value === null) return null
+  if (typeof value === 'boolean') return value ? 'Yes' : 'No'
+  if (typeof value === 'number') return value.toString()
+  if (typeof value === 'string') return value
+  return null
 }
 
 function ShapeNode({ data, selected }: NodeProps<ShapeNodeData>) {
   const size = 10
   const fill = data.enabled === false ? '#999999' : '#ffcc00'
+  const isOrchestrator = data.componentType === 'orchestrator'
+  const metaEntries = isOrchestrator
+    ? (() => {
+        const list: { key: string; value: string }[] = []
+        if (typeof data.componentId === 'string') {
+          list.push({ key: 'Instance', value: data.componentId })
+        }
+        if (typeof data.status === 'string') {
+          const statusValue = formatMetaValue(data.status)
+          if (statusValue) list.push({ key: 'Status', value: statusValue })
+        }
+        if (data.meta && typeof data.meta === 'object') {
+          Object.entries(data.meta as Record<string, unknown>).forEach(([key, value]) => {
+            const formatted = formatMetaValue(value)
+            if (!formatted) return
+            const label = key === 'swarmCount' ? 'Active swarms' : formatMetaKey(key)
+            list.push({ key: label, value: formatted })
+          })
+        }
+        return list
+      })()
+    : []
   return (
-    <div className={`shape-node${selected ? ' selected' : ''}`}>
+    <div
+      className={`shape-node${selected ? ' selected' : ''}${
+        isOrchestrator ? ' shape-node--orchestrator' : ''
+      }`}
+    >
       <Handle type="target" position={Position.Left} />
       <svg className="shape-icon" width={2 * size} height={2 * size}>
         {data.shape === 'square' && (
@@ -111,7 +156,19 @@ function ShapeNode({ data, selected }: NodeProps<ShapeNodeData>) {
         {data.shape === 'star' && <polygon points={starPoints(size)} fill={fill} stroke="black" />}
         {data.shape === 'circle' && <circle cx={size} cy={size} r={size} fill={fill} stroke="black" />}
       </svg>
-      <span className="label">{data.label}</span>
+      <div className="shape-node__content">
+        <span className="label">{data.label}</span>
+        {isOrchestrator && metaEntries.length > 0 && (
+          <dl className="shape-node__meta">
+            {metaEntries.map((entry) => (
+              <Fragment key={`${entry.key}:${entry.value}`}>
+                <dt className="shape-node__meta-term">{entry.key}</dt>
+                <dd className="shape-node__meta-value">{entry.value}</dd>
+              </Fragment>
+            ))}
+          </dl>
+        )}
+      </div>
       {data.queueCount > 0 && <span className="badge">{data.queueCount}</span>}
       <Handle type="source" position={Position.Right} />
     </div>
@@ -389,6 +446,7 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
   const shapeMapRef = useRef<Record<string, NodeShape>>({ sut: 'circle' })
   const [queueDepths, setQueueDepths] = useState<Record<string, number>>({})
   const [queueCounts, setQueueCounts] = useState<Record<string, number>>({})
+  const [componentsById, setComponentsById] = useState<Record<string, Component>>({})
   const flowRef = useRef<ReactFlowInstance<FlowNode, Edge> | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const [rfNodes, setRfNodes] = useState<FlowNode[]>([])
@@ -397,7 +455,9 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
     const unsub = subscribeComponents((comps: Component[]) => {
       const depths: Record<string, number> = {}
       const counts: Record<string, number> = {}
+      const map: Record<string, Component> = {}
       comps.forEach((c) => {
+        map[c.id] = c
         counts[c.id] = c.queues.length
         c.queues.forEach((q) => {
           if (typeof q.depth === 'number') {
@@ -408,6 +468,7 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
       })
       setQueueDepths(depths)
       setQueueCounts(counts)
+      setComponentsById(map)
     })
     return () => unsub()
   }, [])
@@ -509,15 +570,24 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
             x: node.x ?? previous?.x ?? 0,
             y: node.y ?? previous?.y ?? 0,
           }
+          const component = componentsById[node.id]
+          const label =
+            node.type === 'orchestrator'
+              ? component?.name ?? 'Orchestrator'
+              : node.id
           nodes.push({
             id: node.id,
             position,
             data: {
-              label: node.id,
+              label,
               shape: getShape(node.type),
               enabled: node.enabled,
               queueCount: queueCounts[node.id] ?? 0,
               swarmId: node.swarmId,
+              componentType: node.type,
+              componentId: node.id,
+              status: component?.status,
+              meta: component?.config,
             },
             type: 'shape',
             selected: selectedId === node.id,
@@ -570,22 +640,31 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
           x: node.x ?? previous?.x ?? 0,
           y: node.y ?? previous?.y ?? 0,
         }
+        const component = componentsById[node.id]
+        const label =
+          node.type === 'orchestrator'
+            ? component?.name ?? 'Orchestrator'
+            : node.id
         return {
           id: node.id,
           position,
           data: {
-            label: node.id,
+            label,
             shape: getShape(node.type),
             enabled: node.enabled,
             queueCount: queueCounts[node.id] ?? 0,
             swarmId: node.swarmId,
+            componentType: node.type,
+            componentId: node.id,
+            status: component?.status,
+            meta: component?.config,
           },
           type: 'shape',
           selected: selectedId === node.id,
         }
       }) as FlowNode[]
     })
-  }, [data.links, data.nodes, queueCounts, queueDepths, handleDetails, selectedId, swarmId])
+  }, [componentsById, data.links, data.nodes, queueCounts, queueDepths, handleDetails, selectedId, swarmId])
 
   const nodeById = useMemo(() => {
     const map = new Map<string, GraphNode>()
