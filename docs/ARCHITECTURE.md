@@ -16,7 +16,7 @@ PocketHive orchestrates message-driven swarms of components (generators, process
 - **Aggregate state** per swarm: **Swarm Controller**.
 - **Per‑component state**: emitted by **components themselves**, consumed by the **Controller**, **not** by the Orchestrator in steady state.
 - **Control plane always on**: status and config are accepted even when workloads are disabled.
-- **Bulk controller toggles**: Operators can pause/resume whole controllers by flipping `enabled` while the control plane stays up.
+- **Scoped controller toggles**: Operators choose `scope=swarm` to pause/resume all workloads managed by a controller, or `scope=controller` to pause/resume only the controller runtime; in both cases `enabled` affects work processing while the control plane stays reachable.
 - **Non‑destructive defaults**: failures never auto‑delete resources; Stop ≠ Remove.
 - **Deterministic ordering** derived from queue I/O topology, not hard‑coded by role.
 - **Command → Confirmation pattern**: Every control signal results in **exactly one**
@@ -30,7 +30,7 @@ PocketHive orchestrates message-driven swarms of components (generators, process
 - Owns the **desired state** and lifecycle intents per swarm (`SwarmPlan`).
 - Launches a **Swarm Controller** for a new swarm (runtime), and upon controller handshake emits **`ev.ready.swarm-create.<swarmId>`** (success for create).
 - Issues **template / start / stop / remove** at swarm scope, and **config updates** at component scope.
-- Fans out **controller-level enable/disable** (`sig.config-update.swarm-controller.{instance}`) so operators can pause/resume workloads en masse while controllers stay online.
+- Fans out **controller-level enable/disable** (`sig.config-update.swarm-controller.{instance}`) with `args.scope` so operators can pause/resume **workloads** (`scope=swarm`, fan-out to bees) or only the **controller runtime** (`scope=controller`, reconcilers pause) while keeping control-plane sessions online.
 - **Monitors** to **Ready / Running**, marks **Failed** on timeout/error, **never auto‑deletes**.
 - Consumes **only swarm‑level aggregates** and lifecycle events from the Swarm Controller (low fan‑in).
 
@@ -39,7 +39,7 @@ PocketHive orchestrates message-driven swarms of components (generators, process
 - Derives **start/stop** order from **queue I/O** (producers → transformers → consumers).
 - Emits **swarm‑level** status and lifecycle confirmations; publishes periodic **heartbeats**.
 - Treats AMQP `status-{delta|full}` as **equivalent to Actuator heartbeats**; polls **Actuator** on staleness.
-- When receiving `sig.config-update.swarm-controller.{instance}` with `enabled` toggles, keeps the control plane session alive and **fans the new state out to all bees** it manages.
+- When receiving `sig.config-update.swarm-controller.{instance}` with `enabled` toggles, inspects `args.scope`: `scope=swarm` → keep control plane alive and **fan the new state out to all bees**; `scope=controller` → pause/resume its own reconciliation loops only. In both cases it emits `ev.status-delta.swarm-controller.{instance}` with `state.workloads.enabled` or `state.controller.enabled` for observers.
 - Control plane is always enabled; honors start/stop/remove/status/config even when workload is disabled.
 
 ### 2.3 Components
@@ -60,7 +60,7 @@ PocketHive orchestrates message-driven swarms of components (generators, process
 - `sig.swarm-remove.<swarmId>` — explicit deprovision/delete
 - `sig.status-request.<role>.<instance>`
 - `sig.config-update.<role>.<instance>` — update config (incl. `enabled`)
-  - `role=swarm-controller` pauses/resumes workloads by toggling `enabled` while the controller stays online
+  - `role=swarm-controller` uses `args.scope` to differentiate `scope=swarm` (pause/resume workloads, fan-out to bees) vs `scope=controller` (pause/resume controller reconciliation runtime). `enabled` always governs work processing, not control-plane reachability.
 
 **`ControlSignal` fields (excerpt):**
 - `correlationId` *(uuid)* — **new per attempt**  
@@ -68,7 +68,7 @@ PocketHive orchestrates message-driven swarms of components (generators, process
 - `swarmId` / `role` / `instance` / optional `args` as required by each signal
 
 ### 3.2 Confirmations (events)
-- **Success:**  
+- **Success:**
   - `ev.ready.swarm-create.<swarmId>` — **emitted by Orchestrator** once it observes `ev.ready.swarm-controller.<instance>`
   - `ev.ready.swarm-template.<swarmId>` — Controller
   - `ev.ready.swarm-start.<swarmId>` — Controller
@@ -82,6 +82,8 @@ PocketHive orchestrates message-driven swarms of components (generators, process
   - `ev.error.swarm-stop.<swarmId>` — Controller
   - `ev.error.swarm-remove.<swarmId>` — Controller
   - `ev.error.config-update.<role>.<instance>` — Controller
+
+> **Controller config confirmations** echo `state.scope` (`swarm|controller`) and `state.enabled`. When `scope=swarm`, include `state.workloads.enabled`; when `scope=controller`, include `state.controller.enabled` so observers can distinguish the two flows.
 
 > **Removed:** `ev.ready.swarm-template.<swarmId>` and `ev.ready.swarm-remove.<swarmId>` milestones. Success is always a **`ev.ready.*`** confirmation.
 
@@ -181,18 +183,30 @@ sequenceDiagram
   MSH-->>QN: ev.ready.config-update.<role>.<instance>
 ```
 
-### 7.3b Bulk controller suspend/resume
+### 7.3b Bulk controller suspend/resume (scope = swarm)
 ```mermaid
 sequenceDiagram
   participant QN as Orchestrator
   participant MSH as Swarm Controllers
   participant CMP as Bees
 
-  QN->>MSH: sig.config-update.swarm-controller.* ({ enabled: true|false })
+  QN->>MSH: sig.config-update.swarm-controller.* ({ args.scope: "swarm", patch.enabled: true|false })
   note right of QN: Fan-out per controller instance (shared correlationId)
   MSH->>CMP: Propagate enabled flag to managed bees (control plane stays up)
-  CMP-->>MSH: ev.status-delta.<role>.<instance> (enabled reflected)
-  MSH-->>QN: ev.ready.config-update.swarm-controller.*
+  CMP-->>MSH: ev.status-delta.<role>.<instance> (workloads.enabled reflected)
+  MSH-->>QN: ev.ready.config-update.swarm-controller.* (state.scope=swarm)
+```
+
+### 7.3c Controller runtime pause/resume (scope = controller)
+```mermaid
+sequenceDiagram
+  participant QN as Orchestrator
+  participant MSH as Swarm Controller
+
+  QN->>MSH: sig.config-update.swarm-controller.* ({ args.scope: "controller", patch.enabled: true|false })
+  note right of QN: Runtime loops pause/resume; bees untouched
+  MSH-->>QN: ev.ready.config-update.swarm-controller.* (state.scope=controller)
+  MSH-->>QN: ev.status-delta.swarm-controller.* (controller.enabled reflected)
 ```
 
 ### 7.4 Stop whole swarm (non‑destructive)
