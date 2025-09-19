@@ -126,7 +126,7 @@ test('enables orchestrator controls when orchestrator component is present', asy
   expect(eye).toHaveAttribute('data-state', 'ok')
   const title = eye.getAttribute('title') ?? ''
   expect(title).toMatch(/Last status OK received \d+s ago/)
-  expect(title).toContain(new Date(lastHeartbeat).toISOString())
+  expect(title).not.toMatch(/\d{4}-\d{2}-\d{2}T/)
   await user.click(startButton)
   const dialog = await screen.findByRole('dialog', {
     name: /confirm start command/i,
@@ -182,7 +182,7 @@ test('shows disabled state when orchestrator config disables it', async () => {
   expect(eye).toHaveAttribute('data-state', 'disabled')
   const title = eye.getAttribute('title') ?? ''
   expect(title).toMatch(/Last status WARN received \d+s ago/)
-  expect(title).toContain(new Date(lastHeartbeat).toISOString())
+  expect(title).not.toMatch(/\d{4}-\d{2}-\d{2}T/)
 })
 
 test('shows unassigned components when selecting default swarm', async () => {

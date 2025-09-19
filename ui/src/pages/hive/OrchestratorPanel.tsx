@@ -341,9 +341,8 @@ function formatLastStatusTooltip(
 
   if (typeof orchestrator.lastHeartbeat === 'number' && Number.isFinite(orchestrator.lastHeartbeat)) {
     const diffSeconds = Math.max(0, Math.floor((now - orchestrator.lastHeartbeat) / 1000))
-    const iso = new Date(orchestrator.lastHeartbeat).toISOString()
-    return `Last status ${statusText} received ${diffSeconds}s ago (${iso})`
+    return `Last status ${statusText} received ${diffSeconds}s ago`
   }
 
-  return `Last status ${statusText} timestamp unavailable`
+  return `Last status ${statusText} timing unavailable`
 }
