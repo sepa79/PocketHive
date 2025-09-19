@@ -8,9 +8,14 @@ import { vi, test, expect, beforeEach, afterEach } from 'vitest'
 import HivePage from './HivePage'
 import type { Component } from '../../types/hive'
 import { subscribeComponents } from '../../lib/stompClient'
+import { sendConfigUpdate } from '../../lib/orchestratorApi'
 
 vi.mock('../../lib/stompClient', () => ({
   subscribeComponents: vi.fn(),
+}))
+
+vi.mock('../../lib/orchestratorApi', () => ({
+  sendConfigUpdate: vi.fn(),
 }))
 
 vi.mock('./TopologyView', () => ({
@@ -50,6 +55,7 @@ beforeEach(() => {
       return () => {}
     },
   )
+  vi.mocked(sendConfigUpdate).mockResolvedValue(undefined)
 })
 
 afterEach(() => {
@@ -63,12 +69,18 @@ test('renders orchestrator panel inactive when orchestrator is missing', () => {
   const panel = panels[panels.length - 1]!
   const scope = within(panel)
   expect(scope.getAllByText('Orchestrator').length).toBeGreaterThan(0)
-  expect(scope.getByText('Not detected')).toBeInTheDocument()
   expect(scope.getByRole('button', { name: 'Start all' })).toBeDisabled()
   expect(scope.getByRole('button', { name: 'Stop all' })).toBeDisabled()
   const badge = scope.getByTestId('orchestrator-enabled')
   expect(badge).toHaveTextContent('Unknown')
   expect(badge).toHaveAttribute('data-enabled', 'unknown')
+  expect(badge).toBeDisabled()
+  const swarmsRow = scope.getByText('Active swarms').parentElement
+  expect(swarmsRow).not.toBeNull()
+  if (swarmsRow) {
+    expect(swarmsRow).toHaveTextContent('Active swarms')
+    expect(swarmsRow).toHaveTextContent('—')
+  }
   const eye = scope.getByTestId('orchestrator-health')
   expect(eye).toHaveAttribute('data-state', 'missing')
 })
@@ -80,7 +92,8 @@ test('enables orchestrator controls when orchestrator component is present', asy
     role: 'orchestrator',
     lastHeartbeat: Date.now(),
     queues: [],
-    config: { enabled: true },
+    status: 'OK',
+    config: { enabled: true, swarmCount: 5 },
   })
   const user = userEvent.setup()
   render(<HivePage />)
@@ -95,6 +108,18 @@ test('enables orchestrator controls when orchestrator component is present', asy
   const badge = within(panel).getByTestId('orchestrator-enabled')
   expect(badge).toHaveTextContent('Enabled')
   expect(badge).toHaveAttribute('data-enabled', 'true')
+  expect(badge).toBeEnabled()
+  const swarmsRow = within(panel).getByText('Active swarms').parentElement
+  expect(swarmsRow).not.toBeNull()
+  if (swarmsRow) {
+    expect(swarmsRow).toHaveTextContent('Active swarms')
+    expect(swarmsRow).toHaveTextContent('5')
+  }
+  await user.click(badge)
+  expect(sendConfigUpdate).toHaveBeenCalledWith(
+    expect.objectContaining({ id: 'hive-orchestrator' }),
+    { enabled: false },
+  )
   const eye = within(panel).getByTestId('orchestrator-health')
   expect(eye).toHaveAttribute('data-state', 'ok')
   await user.click(startButton)
@@ -121,8 +146,10 @@ test('shows disabled state when orchestrator config disables it', async () => {
     role: 'orchestrator',
     lastHeartbeat: Date.now(),
     queues: [],
-    config: { enabled: false },
+    status: 'WARN',
+    config: { enabled: false, swarmCount: 1 },
   })
+  const user = userEvent.setup()
   render(<HivePage />)
   const panels = screen.getAllByTestId('orchestrator-panel')
   const panel = panels[panels.length - 1]!
@@ -131,6 +158,17 @@ test('shows disabled state when orchestrator config disables it', async () => {
   const badge = scope.getByTestId('orchestrator-enabled')
   expect(badge).toHaveTextContent('Disabled')
   expect(badge).toHaveAttribute('data-enabled', 'false')
+  expect(badge).toBeEnabled()
+  const swarmsRow = scope.getByText('Active swarms').parentElement
+  expect(swarmsRow).not.toBeNull()
+  if (swarmsRow) {
+    expect(swarmsRow).toHaveTextContent('1')
+  }
+  await user.click(badge)
+  expect(sendConfigUpdate).toHaveBeenCalledWith(
+    expect.objectContaining({ id: 'hive-orchestrator' }),
+    { enabled: true },
+  )
   const eye = scope.getByTestId('orchestrator-health')
   expect(eye).toHaveAttribute('data-state', 'disabled')
 })
