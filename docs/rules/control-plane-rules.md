@@ -12,7 +12,7 @@
 - **Command → Confirmation**: Every control action yields **exactly one** `ev.ready.*` (success) or `ev.error.*` (error), correlated by IDs.
 - **Aggregate-first**: Orchestrator consumes **swarm aggregates**; per-component status is for Controller and observability.
 - **Always-on control**: Config & status always handled, even when workload is disabled.
-- **Controller-level toggles**: Downstream services must honor `sig.config-update.swarm-controller.*` by pausing/resuming workloads yet leaving the controller path responsive.
+- **Controller-level toggles**: Downstream services must inspect `args.scope` on `sig.config-update.swarm-controller.*`: `scope=swarm` pauses/resumes all workloads managed by that controller, while `scope=controller` pauses/resumes only the controller runtime. In both cases the control plane stays responsive.
 - **Non-destructive default**: Stop ≠ Remove. Removal is explicit and terminal.
 
 ---
@@ -23,14 +23,14 @@
   - Only publisher of swarm **lifecycle** signals (template/start/stop/remove).
   - Launches Controller via runtime. On controller handshake emits **`ev.ready.swarm-create.<swarmId>`**.
   - Enforces idempotency, retries, timeouts, and RBAC.
-  - Issues controller-level `sig.config-update.swarm-controller.{instance}` to pause/resume workloads while keeping controllers' control planes alive.
+  - Issues controller-level `sig.config-update.swarm-controller.{instance}` with `args.scope` to pause/resume **workloads** (`scope=swarm`, fan-out to bees) or only the **controller runtime** (`scope=controller`, reconciliation paused) while keeping controllers' control planes alive.
   - Tears down Controller after **`ev.ready.swarm-remove.<swarmId>`**.
 
 - **Swarm Controller**
   - Applies `SwarmPlan`; provisions components; computes **aggregate** status.
   - Emits `ev.status-{full|delta}.swarm-controller.<instance>` and confirmations for template/start/stop/remove/config.
   - Treats AMQP status as heartbeat; polls Actuator if stale.
-  - On controller-level `config-update` toggles, keeps itself reachable and **fans the `enabled` flag out to every managed bee**.
+  - On controller-level `config-update` toggles, inspects `args.scope`: `scope=swarm` → stay reachable and **fan the `enabled` flag out to every managed bee**; `scope=controller` → pause/resume its own reconciliation/runtime only. Emits `ev.status-delta.swarm-controller.{instance}` showing `state.workloads.enabled` or `state.controller.enabled` accordingly.
 
 - **Components**  
   - Emit their own `ev.status-{full|delta}.<role>.<instance>`.  
@@ -50,7 +50,7 @@ Publisher → Consumer
 - `sig.swarm-start.<swarmId>` — Orchestrator → Controller
 - `sig.swarm-stop.<swarmId>` — Orchestrator → Controller *(non-destructive)*
 - `sig.swarm-remove.<swarmId>` — Orchestrator → Controller *(delete resources)*
-- `sig.config-update.<role>.<instance>` — Orchestrator → Component *(or Swarm Controller when `role=swarm-controller` to toggle workloads)*
+- `sig.config-update.<role>.<instance>` — Orchestrator → Component *(or Swarm Controller when `role=swarm-controller`)* — **MUST include `args.scope` (`swarm|controller`)** so consumers know whether to fan-out workloads or pause the controller runtime
 - `sig.status-request.<role>.<instance>` — Orchestrator/Controller → Component *(emit `status-full` now)*
 
 ### 3.2 Confirmations (events)
@@ -69,6 +69,8 @@ Emitter → Consumer
 - **Per-component:** `ev.status-{full|delta}.<role>.<instance>`
 - **Bootstrap:** `ev.ready.swarm-controller.<instance>` (Controller just came up)
 
+> Controller status events MUST surface both `state.workloads.enabled` and `state.controller.enabled` whenever they change so observers can correlate with the corresponding `scope` flow.
+
 ---
 
 ## 4) Message envelopes
@@ -79,11 +81,12 @@ Emitter → Consumer
 - `idempotencyKey` *(uuid)* — **stable across retries** of the same action
 - Scope: include whichever of `swarmId`, `role`, `instance` apply
 - Optional `args` object with command-specific parameters
+  - `args.scope` is **required** when `role=swarm-controller` (`swarm|controller`) so consumers know which runtime to pause/resume
 
 ### 4.2 Confirmations (emitters MUST include)
 - Echo **`correlationId`** and **`idempotencyKey`** from the initiating control signal (or from the runtime op for create).
 - `signal`, `result` (`success`|`error`), `scope` (`swarmId`/`role`/`instance`), `ts`
-- Success MAY include `state` (`Ready|Running|Stopped|Removed`), and `notes`
+- Success MAY include `state` (`Ready|Running|Stopped|Removed`), and `notes`. When confirming `sig.config-update.swarm-controller.{instance}`, emit `state.scope` (`swarm|controller`), `state.enabled`, and either `state.workloads.enabled` or `state.controller.enabled` so observers can rely on the semantics.
 - Error MUST include `code`, `message`; MAY include `phase`, `retryable`, `details`
 
 ### 4.3 Status & bootstrap
@@ -193,6 +196,32 @@ Emitter → Consumer
   "idempotencyKey": "create-7777-eeee",
   "correlationId": "attempt-001-cccc",
   "ts": "2025-09-12T12:01:02Z"
+}
+```
+
+**Controller config success (`scope=swarm`)**
+```json
+{
+  "result": "success",
+  "signal": "config-update",
+  "scope": {"role": "swarm-controller", "instance": "swarm-controller.alpha"},
+  "state": {"scope": "swarm", "enabled": false, "workloads": {"enabled": false}},
+  "idempotencyKey": "bulk-toggle-1234",
+  "correlationId": "attempt-009-zzzz",
+  "ts": "2025-09-12T12:05:00Z"
+}
+```
+
+**Controller config success (`scope=controller`)**
+```json
+{
+  "result": "success",
+  "signal": "config-update",
+  "scope": {"role": "swarm-controller", "instance": "swarm-controller.alpha"},
+  "state": {"scope": "controller", "enabled": false, "controller": {"enabled": false}},
+  "idempotencyKey": "ctrl-toggle-5678",
+  "correlationId": "attempt-010-yyyy",
+  "ts": "2025-09-12T12:06:00Z"
 }
 ```
 

@@ -169,13 +169,22 @@ Client sends **`idempotencyKey`** (UUID v4) per new action (reuse on retry). Ser
 
 **Behavior**
 - Publishes **`sig.config-update.swarm-controller.{instance}`** per targeted controller with `patch: { "enabled": true|false }`.
+- Includes **`args.scope`** (`"swarm"` or `"controller"`) so downstream services can distinguish whether workloads or the controller runtime should react.
 - If **`targets` omitted or empty**, apply to **all registered controllers** (fan-out driven by the Orchestrator's live registry).
-- Controllers must keep their control plane session alive and **fan out** the `enabled` change to every managed bee.
+- Controllers always keep their control plane session alive to acknowledge config updates even when `enabled=false`.
+
+#### 4.3.1 Scope `swarm` — pause/resume workloads
+
+**Effect**
+- Controller **fans out** the `enabled` change to every managed bee in the targeted swarm.
+- Confirms with **`ev.ready.config-update.swarm-controller.{instance}`** (`state.scope="swarm"`, `state.enabled=<bool>`).
+- Publishes **`ev.status-delta.swarm-controller.{instance}`** reflecting `state.workloads.enabled=<bool>` for dashboards.
 
 **Request**
 ```json
 {
   "idempotencyKey": "uuid-v4",
+  "scope": "swarm",
   "enabled": false,
   "targets": ["swarm-controller.alpha", "swarm-controller.bravo"],
   "notes": "optional"
@@ -187,22 +196,85 @@ Client sends **`idempotencyKey`** (UUID v4) per new action (reuse on retry). Ser
 {
   "correlationId": "…",
   "idempotencyKey": "…",
+  "scope": "swarm",
   "targets": [
     {
       "instance": "swarm-controller.alpha",
       "successTopic": "ev.ready.config-update.swarm-controller.alpha",
-      "errorTopic": "ev.error.config-update.swarm-controller.alpha"
+      "errorTopic": "ev.error.config-update.swarm-controller.alpha",
+      "statusTopic": "ev.status-delta.swarm-controller.alpha"
     },
     {
       "instance": "swarm-controller.bravo",
       "successTopic": "ev.ready.config-update.swarm-controller.bravo",
-      "errorTopic": "ev.error.config-update.swarm-controller.bravo"
+      "errorTopic": "ev.error.config-update.swarm-controller.bravo",
+      "statusTopic": "ev.status-delta.swarm-controller.bravo"
     }
   ],
   "timeoutMs": 60000
 }
 ```
 
+**Success event payload (example)**
+```json
+{
+  "result": "success",
+  "signal": "config-update",
+  "scope": { "role": "swarm-controller", "instance": "swarm-controller.alpha" },
+  "state": { "scope": "swarm", "enabled": false, "workloads": { "enabled": false } },
+  "idempotencyKey": "uuid-v4",
+  "correlationId": "…"
+}
+```
+
+#### 4.3.2 Scope `controller` — pause/resume controller runtime
+
+**Effect**
+- Controller stops/starts its **reconciliation loops** only; existing bees keep their current `enabled` state.
+- Confirms with **`ev.ready.config-update.swarm-controller.{instance}`** (`state.scope="controller"`, `state.enabled=<bool>`).
+- Publishes **`ev.status-delta.swarm-controller.{instance}`** reflecting `state.controller.enabled=<bool>` so observers know the runtime is paused.
+
+**Request**
+```json
+{
+  "idempotencyKey": "uuid-v4",
+  "scope": "controller",
+  "enabled": false,
+  "targets": ["swarm-controller.charlie"],
+  "notes": "optional"
+}
+```
+
+**Response (202)**
+```json
+{
+  "correlationId": "…",
+  "idempotencyKey": "…",
+  "scope": "controller",
+  "targets": [
+    {
+      "instance": "swarm-controller.charlie",
+      "successTopic": "ev.ready.config-update.swarm-controller.charlie",
+      "errorTopic": "ev.error.config-update.swarm-controller.charlie",
+      "statusTopic": "ev.status-delta.swarm-controller.charlie"
+    }
+  ],
+  "timeoutMs": 60000
+}
+```
+
+**Success event payload (example)**
+```json
+{
+  "result": "success",
+  "signal": "config-update",
+  "scope": { "role": "swarm-controller", "instance": "swarm-controller.charlie" },
+  "state": { "scope": "controller", "enabled": false, "controller": { "enabled": false } },
+  "idempotencyKey": "uuid-v4",
+  "correlationId": "…"
+}
+```
+
 **Notes**
 - The Orchestrator reuses the same `correlationId` for every fan-out signal so confirmations map cleanly to the bulk action.
-- Controllers acknowledge even when already at the requested `enabled` state (idempotent success).
+- Controllers acknowledge even when already at the requested `enabled` state (idempotent success) and continue servicing control-plane requests while paused.
