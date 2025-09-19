@@ -4,7 +4,6 @@ import ComponentDetail from './ComponentDetail'
 import TopologyView from './TopologyView'
 import SwarmCreateModal from './SwarmCreateModal'
 import { subscribeComponents } from '../../lib/stompClient'
-import { startSwarm, stopSwarm } from '../../lib/orchestratorApi'
 import type { Component } from '../../types/hive'
 
 export default function HivePage() {
@@ -12,7 +11,6 @@ export default function HivePage() {
   const [selected, setSelected] = useState<Component | null>(null)
   const [search, setSearch] = useState('')
   const [showCreate, setShowCreate] = useState(false)
-  const [swarmMsg, setSwarmMsg] = useState<Record<string, string>>({})
   const [activeSwarm, setActiveSwarm] = useState<string | null>(null)
 
   useEffect(() => {
@@ -52,38 +50,6 @@ export default function HivePage() {
     return acc
   }, {})
 
-  const swarmStatus = (comps: Component[]) => {
-    const queen = comps.find((c) => c.role === 'swarm-controller')
-    const status = (queen?.config?.swarmStatus as string | undefined)?.toLowerCase()
-    if (status) return status
-    const enabled = comps.map((c) => c.config?.enabled !== false)
-    if (enabled.every(Boolean)) return 'running'
-    if (enabled.every((e) => !e)) return 'stopped'
-    return 'partial'
-  }
-
-  const handleStart = async (id: string) => {
-    try {
-      await startSwarm(id)
-      // Success toasts are immediate, but topology updates wait for the next
-      // `ev.status-*` event emitted by the swarm-controller.
-      setSwarmMsg((m) => ({ ...m, [id]: 'Swarm started' }))
-    } catch {
-      setSwarmMsg((m) => ({ ...m, [id]: 'Failed to start swarm' }))
-    }
-  }
-
-  const handleStop = async (id: string) => {
-    try {
-      await stopSwarm(id)
-      // Refresh still relies on incoming status events instead of ad-hoc
-      // `status-request` calls.
-      setSwarmMsg((m) => ({ ...m, [id]: 'Swarm stopped' }))
-    } catch {
-      setSwarmMsg((m) => ({ ...m, [id]: 'Failed to stop swarm' }))
-    }
-  }
-
   return (
     <div className="flex h-full min-h-0 overflow-hidden">
       <div className="w-full md:w-1/3 xl:w-1/4 border-r border-white/10 p-4 flex flex-col">
@@ -114,13 +80,12 @@ export default function HivePage() {
             .sort(([a], [b]) => a.localeCompare(b))
             .filter(([id]) => !activeSwarm || id === activeSwarm)
             .map(([id, comps]) => {
-              const status = swarmStatus(comps)
               return (
                 <div
                   key={id}
                   className="mb-4 border border-white/20 rounded p-2"
                 >
-                  <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center mb-1">
                     <div
                       className="font-medium cursor-pointer"
                       onClick={() =>
@@ -130,29 +95,7 @@ export default function HivePage() {
                     >
                       {id}
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-white/60">Queen: {status}</span>
-                      {status !== 'running' && (
-                        <button
-                          className="p-1 rounded bg-white/10 hover:bg-white/20 text-xs"
-                          onClick={() => handleStart(id)}
-                        >
-                          Start
-                        </button>
-                      )}
-                      {status !== 'stopped' && (
-                        <button
-                          className="p-1 rounded bg-white/10 hover:bg-white/20 text-xs"
-                          onClick={() => handleStop(id)}
-                        >
-                          Stop
-                        </button>
-                      )}
-                    </div>
                   </div>
-                  {swarmMsg[id] && (
-                    <div className="text-xs text-white/70 mb-1">{swarmMsg[id]}</div>
-                  )}
                   <ComponentList
                     components={comps}
                     onSelect={(c) => setSelected(c)}
