@@ -1,7 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import '@testing-library/jest-dom/vitest'
 import { vi, test, expect, beforeEach, afterEach } from 'vitest'
@@ -56,11 +56,52 @@ afterEach(() => {
   vi.clearAllMocks()
 })
 
-test('does not render queen status or start/stop controls', async () => {
+test('renders orchestrator panel inactive when orchestrator is missing', () => {
   render(<HivePage />)
-  expect(screen.queryByText(/Queen:/i)).not.toBeInTheDocument()
-  expect(screen.queryByRole('button', { name: /start/i })).not.toBeInTheDocument()
-  expect(screen.queryByRole('button', { name: /stop/i })).not.toBeInTheDocument()
+  const panels = screen.getAllByTestId('orchestrator-panel')
+  expect(panels.length).toBeGreaterThan(0)
+  const panel = panels[panels.length - 1]!
+  const scope = within(panel)
+  expect(scope.getAllByText('Orchestrator').length).toBeGreaterThan(0)
+  expect(scope.getByText('Not detected')).toBeInTheDocument()
+  expect(scope.getByRole('button', { name: 'Start all' })).toBeDisabled()
+  expect(scope.getByRole('button', { name: 'Stop all' })).toBeDisabled()
+})
+
+test('enables orchestrator controls when orchestrator component is present', async () => {
+  comps.push({
+    id: 'hive-orchestrator',
+    name: 'HAL',
+    role: 'orchestrator',
+    lastHeartbeat: Date.now(),
+    queues: [],
+    config: { enabled: true },
+  })
+  const user = userEvent.setup()
+  render(<HivePage />)
+  const panels = screen.getAllByTestId('orchestrator-panel')
+  expect(panels.length).toBeGreaterThan(0)
+  const panel = panels[panels.length - 1]!
+  await within(panel).findByText('HAL')
+  const startButton = within(panel).getByRole('button', { name: 'Start all' })
+  const stopButton = within(panel).getByRole('button', { name: 'Stop all' })
+  expect(startButton).toBeEnabled()
+  expect(stopButton).toBeEnabled()
+  await user.click(startButton)
+  const dialog = await screen.findByRole('dialog', {
+    name: /confirm start command/i,
+  })
+  expect(dialog).toBeInTheDocument()
+  await user.click(screen.getByRole('button', { name: 'Cancel' }))
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  await user.click(stopButton)
+  expect(
+    await screen.findByRole('dialog', {
+      name: /confirm stop command/i,
+    }),
+  ).toBeInTheDocument()
+  await user.click(screen.getByRole('button', { name: 'Send Stop all' }))
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
 })
 
 test('shows unassigned components when selecting default swarm', async () => {

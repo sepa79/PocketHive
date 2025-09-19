@@ -5,6 +5,7 @@ import TopologyView from './TopologyView'
 import SwarmCreateModal from './SwarmCreateModal'
 import { subscribeComponents } from '../../lib/stompClient'
 import type { Component } from '../../types/hive'
+import OrchestratorPanel from './OrchestratorPanel'
 
 export default function HivePage() {
   const [components, setComponents] = useState<Component[]>([])
@@ -31,7 +32,13 @@ export default function HivePage() {
     setSelected(null)
   }, [activeSwarm])
 
+  const isOrchestrator = (comp: Component) =>
+    comp.role.trim().toLowerCase() === 'orchestrator'
+
+  const orchestrator = components.find((c) => isOrchestrator(c)) ?? null
+
   const filtered = components.filter((c) => {
+    if (isOrchestrator(c)) return false
     const haystack = search.toLowerCase()
     const matchesSearch =
       c.name.toLowerCase().includes(haystack) ||
@@ -68,42 +75,45 @@ export default function HivePage() {
           </button>
         </div>
         <div className="mt-4 flex-1 overflow-y-auto">
-          {activeSwarm && (
-            <button
-              className="mb-2 text-xs underline"
-              onClick={() => setActiveSwarm(null)}
-            >
-              Back to all swarms
-            </button>
-          )}
-          {Object.entries(grouped)
-            .sort(([a], [b]) => a.localeCompare(b))
-            .filter(([id]) => !activeSwarm || id === activeSwarm)
-            .map(([id, comps]) => {
-              return (
-                <div
-                  key={id}
-                  className="mb-4 border border-white/20 rounded p-2"
-                >
-                  <div className="flex items-center mb-1">
-                    <div
-                      className="font-medium cursor-pointer"
-                      onClick={() =>
-                        !activeSwarm &&
-                        setActiveSwarm(id === 'default' ? 'default' : id)
-                      }
-                    >
-                      {id}
+          <div className="space-y-4">
+            <OrchestratorPanel orchestrator={orchestrator} />
+            {activeSwarm && (
+              <button
+                className="text-xs underline"
+                onClick={() => setActiveSwarm(null)}
+              >
+                Back to all swarms
+              </button>
+            )}
+            {Object.entries(grouped)
+              .sort(([a], [b]) => a.localeCompare(b))
+              .filter(([id]) => !activeSwarm || id === activeSwarm)
+              .map(([id, comps]) => {
+                return (
+                  <div
+                    key={id}
+                    className="border border-white/20 rounded p-2"
+                  >
+                    <div className="flex items-center mb-1">
+                      <div
+                        className="font-medium cursor-pointer"
+                        onClick={() =>
+                          !activeSwarm &&
+                          setActiveSwarm(id === 'default' ? 'default' : id)
+                        }
+                      >
+                        {id}
+                      </div>
                     </div>
+                    <ComponentList
+                      components={comps}
+                      onSelect={(c) => setSelected(c)}
+                      selectedId={selected?.id}
+                    />
                   </div>
-                  <ComponentList
-                    components={comps}
-                    onSelect={(c) => setSelected(c)}
-                    selectedId={selected?.id}
-                  />
-                </div>
-              )
-            })}
+                )
+              })}
+          </div>
         </div>
       </div>
       <div className="hidden md:flex flex-1 overflow-auto">
