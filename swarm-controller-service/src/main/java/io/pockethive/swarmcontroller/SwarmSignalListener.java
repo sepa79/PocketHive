@@ -42,6 +42,7 @@ public class SwarmSignalListener {
   private final Map<CacheKey, CachedOutcome> outcomes;
   private static final long STATUS_INTERVAL_MS = 5000L;
   private static final long MAX_STALENESS_MS = 15_000L;
+  private volatile boolean controllerEnabled = true;
 
   @Autowired
   public SwarmSignalListener(SwarmLifecycle lifecycle,
@@ -193,9 +194,17 @@ public class SwarmSignalListener {
       return;
     }
     try {
-      JsonNode enabledNode = node.path("args").path("data").path("enabled");
-      if (enabledNode.isBoolean() && !enabledNode.asBoolean()) {
-        log.warn("Ignoring attempt to disable swarm-controller");
+      JsonNode dataNode = node.path("args").path("data");
+      boolean enabled = dataNode.path("enabled").asBoolean(true);
+      String target = dataNode.path("target").asText("controller");
+      if ("swarm".equalsIgnoreCase(target)) {
+        lifecycle.setSwarmEnabled(enabled);
+        sendStatusDelta();
+      } else if ("controller".equalsIgnoreCase(target)) {
+        controllerEnabled = enabled;
+        sendStatusDelta();
+      } else {
+        log.warn("Unknown config-update target: {}", target);
       }
       CachedOutcome outcome = emitSuccess(cs, null);
       if (outcome != null) outcomes.put(key, outcome);
@@ -413,6 +422,8 @@ public class SwarmSignalListener {
   private void sendStatusFull() {
     SwarmMetrics m = lifecycle.getMetrics();
     String state = determineState(m);
+    SwarmStatus status = lifecycle.getStatus();
+    boolean workloadsEnabled = workloadsEnabled(status);
     String controlQueue = Topology.CONTROL_QUEUE + "." + ROLE + "." + instanceId;
     String rk = "ev.status-full." + ROLE + "." + instanceId;
     String payload = new StatusEnvelopeBuilder()
@@ -420,12 +431,14 @@ public class SwarmSignalListener {
         .role(ROLE)
         .instance(instanceId)
         .swarmId(Topology.SWARM_ID)
-        .enabled(true)
+        .enabled(controllerEnabled)
         .state(state)
         .watermark(m.watermark())
         .maxStalenessSec(MAX_STALENESS_MS / 1000)
         .totals(m.desired(), m.healthy(), m.running(), m.enabled())
-        .data("swarmStatus", lifecycle.getStatus().name())
+        .data("swarmStatus", status.name())
+        .data("controllerEnabled", controllerEnabled)
+        .data("workloadsEnabled", workloadsEnabled)
         .controlIn(controlQueue)
         .controlRoutes(
             "sig.config-update",
@@ -446,6 +459,8 @@ public class SwarmSignalListener {
   private void sendStatusDelta() {
     SwarmMetrics m = lifecycle.getMetrics();
     String state = determineState(m);
+    SwarmStatus status = lifecycle.getStatus();
+    boolean workloadsEnabled = workloadsEnabled(status);
     String controlQueue = Topology.CONTROL_QUEUE + "." + ROLE + "." + instanceId;
     String rk = "ev.status-delta." + ROLE + "." + instanceId;
     String payload = new StatusEnvelopeBuilder()
@@ -453,12 +468,14 @@ public class SwarmSignalListener {
         .role(ROLE)
         .instance(instanceId)
         .swarmId(Topology.SWARM_ID)
-        .enabled(true)
+        .enabled(controllerEnabled)
         .state(state)
         .watermark(m.watermark())
         .maxStalenessSec(MAX_STALENESS_MS / 1000)
         .totals(m.desired(), m.healthy(), m.running(), m.enabled())
-        .data("swarmStatus", lifecycle.getStatus().name())
+        .data("swarmStatus", status.name())
+        .data("controllerEnabled", controllerEnabled)
+        .data("workloadsEnabled", workloadsEnabled)
         .controlIn(controlQueue)
         .controlRoutes(
             "sig.config-update",
@@ -484,6 +501,10 @@ public class SwarmSignalListener {
       return "Degraded";
     }
     return lifecycle.getStatus().name();
+  }
+
+  private boolean workloadsEnabled(SwarmStatus status) {
+    return status == SwarmStatus.RUNNING || status == SwarmStatus.STARTING;
   }
 
   private void sendControl(String routingKey, String payload, String context) {

@@ -38,4 +38,10 @@ public interface SwarmLifecycle {
    * Enable all components and begin scenario execution.
    */
   void enableAll();
+
+  /**
+   * Toggle swarm workloads on or off without affecting the controller runtime.
+   * @param enabled whether workloads should process messages
+   */
+  void setSwarmEnabled(boolean enabled);
 }

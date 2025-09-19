@@ -79,7 +79,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
       } else if (template == null) {
         template = planJson;
       }
-      enableAll();
+      setSwarmEnabled(true);
     } finally {
       MDC.clear();
     }
@@ -179,10 +179,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
     MDC.put("service", "swarm-controller");
     MDC.put("instance", instanceId);
     log.info("Stopping swarm {}", Topology.SWARM_ID);
-    List<String> order = new ArrayList<>(startOrder);
-    java.util.Collections.reverse(order);
-    disableAll(order);
-    status = SwarmStatus.STOPPED;
+    setSwarmEnabled(false);
 
     String controlQueue = Topology.CONTROL_QUEUE + ".swarm-controller." + instanceId;
     String rk = "ev.status-delta.swarm-controller." + instanceId;
@@ -218,9 +215,9 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
     MDC.put("service", "swarm-controller");
     MDC.put("instance", instanceId);
     log.info("Removing swarm {}", Topology.SWARM_ID);
+    setSwarmEnabled(false);
     List<String> order = new ArrayList<>(startOrder);
     java.util.Collections.reverse(order);
-    disableAll(order);
     for (String role : order) {
       for (String id : containers.getOrDefault(role, List.of())) {
         log.info("stopping container {}", id);
@@ -443,6 +440,18 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
         log.info("dispatching scheduled {} body {}", t.routingKey, t.body);
         rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, t.routingKey, t.body);
       }, t.delayMs, TimeUnit.MILLISECONDS);
+    }
+  }
+
+  @Override
+  public synchronized void setSwarmEnabled(boolean enabledFlag) {
+    if (enabledFlag) {
+      enableAll();
+    } else {
+      List<String> order = new ArrayList<>(startOrder);
+      java.util.Collections.reverse(order);
+      disableAll(order);
+      status = SwarmStatus.STOPPED;
     }
   }
 
