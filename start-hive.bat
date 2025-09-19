@@ -28,14 +28,18 @@ if errorlevel 1 exit /b 1
 
 for %%S in (%SELECTED_STAGES%) do (
   call :run_stage %%S
-  if errorlevel 1 (
-    echo(
-    echo Failed to complete requested stages.
-    exit /b 1
-  )
+  if errorlevel 1 goto stages_failed
 )
 
-echo(
+goto stages_complete
+
+:stages_failed
+call :print_blank_line
+echo Failed to complete requested stages.
+exit /b 1
+
+:stages_complete
+call :print_blank_line
 echo PocketHive stack setup complete.
 exit /b 0
 
@@ -57,13 +61,13 @@ exit /b 0
 set "ERR=%~1"
 if "%ERR%"=="" set "ERR=0"
 echo Usage: %~nx0 [stage ...]
-echo(
+call :print_blank_line
 echo Stages:
 echo   clean        Stop the compose stack and remove stray swarm containers.
 echo   build-core   Build core PocketHive service images (RabbitMQ, UI, etc.).
 echo   build-bees   Build swarm controller and bee images.
 echo   start        Launch the PocketHive stack via docker compose up -d.
-echo(
+call :print_blank_line
 echo Examples:
 echo   %~nx0            Run all stages in order.
 echo   %~nx0 clean start  Only clean the stack and start it (skip builds).
@@ -167,8 +171,12 @@ exit /b %ERRORLEVEL%
 
 :stage_header
 set "LABEL=%~1"
-echo(
+call :print_blank_line
 echo === %LABEL% ===
+exit /b 0
+
+:print_blank_line
+cmd /d /c echo.
 exit /b 0
 
 :run_clean
@@ -181,17 +189,7 @@ echo Removing stray swarm containers (bees)...
 set "FOUND=0"
 for /f "delims=" %%A in ('docker ps -aq --filter "name=-bee-"') do (
   if "!FOUND!"=="0" set "FOUND=1"
-  set "CONTAINER_NAME="
-  for /f "delims=" %%B in ('docker inspect --format "{{.Name}}" %%A 2^>nul') do (
-    set "CONTAINER_NAME=%%~B"
-  )
-  if defined CONTAINER_NAME (
-    set "CONTAINER_NAME=!CONTAINER_NAME:/=!"
-    if "!CONTAINER_NAME!"=="" set "CONTAINER_NAME=%%A"
-  ) else (
-    set "CONTAINER_NAME=%%A"
-  )
-  echo  - Removing !CONTAINER_NAME! (%%A)
+  echo  - Removing container %%A
   docker rm -f %%A >nul
 )
 if "!FOUND!"=="0" echo No stray swarm containers found.
