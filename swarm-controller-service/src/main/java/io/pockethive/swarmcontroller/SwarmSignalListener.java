@@ -434,10 +434,10 @@ public class SwarmSignalListener {
             "sig.status-request",
             "sig.status-request." + ROLE,
             "sig.status-request." + ROLE + "." + instanceId,
-            "sig.swarm-template.*",
-            "sig.swarm-start.*",
-            "sig.swarm-stop.*",
-            "sig.swarm-remove.*")
+            "sig.swarm-template." + Topology.SWARM_ID,
+            "sig.swarm-start." + Topology.SWARM_ID,
+            "sig.swarm-stop." + Topology.SWARM_ID,
+            "sig.swarm-remove." + Topology.SWARM_ID)
         .controlOut(rk)
         .toJson();
     sendControl(rk, payload, "status");
@@ -467,10 +467,10 @@ public class SwarmSignalListener {
             "sig.status-request",
             "sig.status-request." + ROLE,
             "sig.status-request." + ROLE + "." + instanceId,
-            "sig.swarm-template.*",
-            "sig.swarm-start.*",
-            "sig.swarm-stop.*",
-            "sig.swarm-remove.*")
+            "sig.swarm-template." + Topology.SWARM_ID,
+            "sig.swarm-start." + Topology.SWARM_ID,
+            "sig.swarm-stop." + Topology.SWARM_ID,
+            "sig.swarm-remove." + Topology.SWARM_ID)
         .controlOut(rk)
         .toJson();
     sendControl(rk, payload, "status");

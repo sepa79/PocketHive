@@ -14,6 +14,9 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
@@ -355,5 +358,52 @@ class SwarmSignalListenerTest {
     verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
         startsWith("ev.status-delta.swarm-controller.inst"),
         argThat((String p) -> p.contains("\"state\":\"Unknown\"")));
+  }
+
+  @Test
+  void statusMessagesAdvertiseConcreteSwarmControlRoutes() throws Exception {
+    SwarmMetrics metrics = new SwarmMetrics(1,1,1,1, java.time.Instant.now());
+    when(lifecycle.getMetrics()).thenReturn(metrics);
+    when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
+
+    SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", mapper);
+
+    ArgumentCaptor<String> fullPayload = ArgumentCaptor.forClass(String.class);
+    verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
+        eq("ev.status-full.swarm-controller.inst"),
+        fullPayload.capture());
+    assertConcreteSwarmControlRoutes(fullPayload.getValue());
+
+    reset(rabbit);
+    listener.status();
+
+    ArgumentCaptor<String> deltaPayload = ArgumentCaptor.forClass(String.class);
+    verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
+        eq("ev.status-delta.swarm-controller.inst"),
+        deltaPayload.capture());
+    assertConcreteSwarmControlRoutes(deltaPayload.getValue());
+  }
+
+  private void assertConcreteSwarmControlRoutes(String payload) throws Exception {
+    JsonNode node = mapper.readTree(payload);
+    JsonNode routesNode = node.path("queues").path("control").path("routes");
+    assertThat(routesNode.isArray()).isTrue();
+
+    List<String> routes = new ArrayList<>();
+    routesNode.forEach(route -> routes.add(route.asText()));
+
+    assertThat(routes).contains(
+        "sig.swarm-template." + Topology.SWARM_ID,
+        "sig.swarm-start." + Topology.SWARM_ID,
+        "sig.swarm-stop." + Topology.SWARM_ID,
+        "sig.swarm-remove." + Topology.SWARM_ID
+    );
+
+    assertThat(routes).doesNotContain(
+        "sig.swarm-template.*",
+        "sig.swarm-start.*",
+        "sig.swarm-stop.*",
+        "sig.swarm-remove.*"
+    );
   }
 }
