@@ -12,6 +12,20 @@ class SwarmRegistryTest {
         registry.register(swarm);
 
         assertTrue(registry.find("s1").isPresent());
+        assertTrue(registry.all().contains(swarm));
+    }
+
+    @Test
+    void updatesEnableFlags() {
+        SwarmRegistry registry = new SwarmRegistry();
+        Swarm swarm = new Swarm("s1", "inst1", "container");
+        registry.register(swarm);
+
+        registry.updateWorkEnabled("s1", false);
+        registry.updateControllerEnabled("s1", false);
+
+        assertFalse(swarm.isWorkEnabled());
+        assertFalse(swarm.isControllerEnabled());
     }
 
     @Test

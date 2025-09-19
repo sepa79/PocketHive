@@ -10,6 +10,8 @@ public class Swarm {
     private SwarmHealth health;
     private Instant heartbeat;
     private final Instant createdAt;
+    private boolean workEnabled;
+    private boolean controllerEnabled;
 
     public Swarm(String id, String instanceId, String containerId) {
         this.id = id;
@@ -19,6 +21,8 @@ public class Swarm {
         this.health = SwarmHealth.UNKNOWN;
         this.heartbeat = Instant.now();
         this.createdAt = Instant.now();
+        this.workEnabled = true;
+        this.controllerEnabled = true;
     }
 
     public String getId() {
@@ -55,6 +59,22 @@ public class Swarm {
     public void refresh(SwarmHealth health) {
         this.health = health;
         this.heartbeat = Instant.now();
+    }
+
+    public boolean isWorkEnabled() {
+        return workEnabled;
+    }
+
+    public void setWorkEnabled(boolean workEnabled) {
+        this.workEnabled = workEnabled;
+    }
+
+    public boolean isControllerEnabled() {
+        return controllerEnabled;
+    }
+
+    public void setControllerEnabled(boolean controllerEnabled) {
+        this.controllerEnabled = controllerEnabled;
     }
 
     void expire(Instant now, java.time.Duration degradedAfter, java.time.Duration failedAfter) {

@@ -54,7 +54,7 @@ public class ComponentController {
             .orElseGet(() -> {
                 String correlation = UUID.randomUUID().toString();
                 ControlSignal payload = ControlSignal.forInstance("config-update", request.swarmId(), role, instance,
-                    correlation, request.idempotencyKey(), argsFrom(request.patch()));
+                    correlation, request.idempotencyKey(), argsFrom(request));
                 String jsonPayload = toJson(payload);
                 sendControl(routingKey(role, instance), jsonPayload, "config-update");
                 idempotency.record(scope, "config-update", request.idempotencyKey(), correlation);
@@ -87,19 +87,27 @@ public class ComponentController {
         return ResponseEntity.accepted().body(response);
     }
 
-    private Map<String, Object> argsFrom(Map<String, Object> patch) {
-        if (patch == null) {
-            return null;
-        }
+    private Map<String, Object> argsFrom(ConfigUpdateRequest request) {
+        Map<String, Object> patch = request.patch();
         Map<String, Object> args = new LinkedHashMap<>();
-        args.put("data", patch);
-        return args;
+        if (patch != null && !patch.isEmpty()) {
+            args.put("data", patch);
+        }
+        if (request.target() != null && !request.target().isBlank()) {
+            args.put("target", request.target());
+        }
+        if (request.scope() != null && !request.scope().isBlank()) {
+            args.put("scope", request.scope());
+        }
+        return args.isEmpty() ? null : args;
     }
 
     public record ConfigUpdateRequest(String idempotencyKey,
                                       Map<String, Object> patch,
                                       String notes,
-                                      String swarmId) { }
+                                      String swarmId,
+                                      String target,
+                                      String scope) { }
 
     private String toJson(ControlSignal signal) {
         try {

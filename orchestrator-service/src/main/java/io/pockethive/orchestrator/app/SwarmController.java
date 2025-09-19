@@ -183,13 +183,24 @@ public class SwarmController {
         String path = "/api/swarms/" + swarmId;
         logRestRequest("GET", path, null);
         ResponseEntity<SwarmView> response = registry.find(swarmId)
-            .map(s -> ResponseEntity.ok(new SwarmView(s.getId(), s.getStatus(), s.getHealth(), s.getHeartbeat())))
+            .map(s -> ResponseEntity.ok(new SwarmView(
+                s.getId(),
+                s.getStatus(),
+                s.getHealth(),
+                s.getHeartbeat(),
+                s.isWorkEnabled(),
+                s.isControllerEnabled())))
             .orElse(ResponseEntity.notFound().build());
         logRestResponse("GET", path, response);
         return response;
     }
 
-    public record SwarmView(String id, SwarmStatus status, SwarmHealth health, java.time.Instant heartbeat) {}
+    public record SwarmView(String id,
+                             SwarmStatus status,
+                             SwarmHealth health,
+                             java.time.Instant heartbeat,
+                             boolean workEnabled,
+                             boolean controllerEnabled) {}
 
     private String toJson(ControlSignal signal) {
         try {

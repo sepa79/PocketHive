@@ -18,8 +18,10 @@ class ControllerStatusListenerTest {
     @Test
     void updatesRegistry() {
         ControllerStatusListener listener = new ControllerStatusListener(registry, new ObjectMapper());
-        String json = "{\"swarmId\":\"sw1\",\"data\":{\"swarmStatus\":\"RUNNING\"}}";
+        String json = "{\"swarmId\":\"sw1\",\"data\":{\"swarmStatus\":\"RUNNING\",\"state\":{\"workloads\":{\"enabled\":true},\"controller\":{\"enabled\":false}}}}";
         listener.handle(json, "ev.status-delta.swarm-controller.inst1");
         verify(registry).refresh("sw1", SwarmHealth.RUNNING);
+        verify(registry).updateWorkEnabled("sw1", true);
+        verify(registry).updateControllerEnabled("sw1", false);
     }
 }

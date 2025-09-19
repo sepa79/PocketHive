@@ -62,8 +62,11 @@ class SwarmEventFlowIntegrationTest {
         signal.handle("", "ev.ready.swarm-start.sw1");
         assertThat(registry.find("sw1").get().getStatus()).isEqualTo(SwarmStatus.RUNNING);
 
-        statusListener.handle("{\"swarmId\":\"sw1\",\"data\":{\"swarmStatus\":\"RUNNING\"}}", "ev.status-delta.swarm-controller.inst1");
+        statusListener.handle("{\"swarmId\":\"sw1\",\"data\":{\"swarmStatus\":\"RUNNING\",\"state\":{\"workloads\":{\"enabled\":false},\"controller\":{\"enabled\":true}}}}",
+            "ev.status-delta.swarm-controller.inst1");
         assertEquals(SwarmHealth.RUNNING, registry.find("sw1").get().getHealth());
+        assertThat(registry.find("sw1").get().isWorkEnabled()).isFalse();
+        assertThat(registry.find("sw1").get().isControllerEnabled()).isTrue();
 
         signal.handle("", "ev.ready.swarm-stop.sw1");
         verify(lifecycle).stopSwarm("sw1");
