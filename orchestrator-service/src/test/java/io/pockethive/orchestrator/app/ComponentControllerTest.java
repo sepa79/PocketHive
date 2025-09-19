@@ -32,7 +32,7 @@ class ComponentControllerTest {
     void updateConfigPublishesControlSignal() throws Exception {
         ComponentController controller = new ComponentController(rabbit, new InMemoryIdempotencyStore(), mapper);
         ComponentController.ConfigUpdateRequest request =
-            new ComponentController.ConfigUpdateRequest("idem", Map.of("enabled", true), null, "sw1");
+            new ComponentController.ConfigUpdateRequest("idem", Map.of("enabled", true), null, "sw1", "swarm", "swarm");
 
         ResponseEntity<ControlResponse> response = controller.updateConfig("generator", "c1", request);
 
@@ -46,6 +46,8 @@ class ComponentControllerTest {
         assertThat(signal.idempotencyKey()).isEqualTo("idem");
         assertThat(signal.args()).isNotNull();
         assertThat(signal.args()).containsKey("data");
+        assertThat(signal.args()).containsEntry("scope", "swarm");
+        assertThat(signal.args()).containsEntry("target", "swarm");
         @SuppressWarnings("unchecked")
         Map<String, Object> data = (Map<String, Object>) signal.args().get("data");
         assertThat(data).containsEntry("enabled", true);
@@ -57,7 +59,7 @@ class ComponentControllerTest {
     void configUpdateIsIdempotent() {
         ComponentController controller = new ComponentController(rabbit, new InMemoryIdempotencyStore(), mapper);
         ComponentController.ConfigUpdateRequest request =
-            new ComponentController.ConfigUpdateRequest("idem", Map.of(), null, null);
+            new ComponentController.ConfigUpdateRequest("idem", Map.of(), null, null, null, null);
 
         ResponseEntity<ControlResponse> first = controller.updateConfig("processor", "p1", request);
         ResponseEntity<ControlResponse> second = controller.updateConfig("processor", "p1", request);

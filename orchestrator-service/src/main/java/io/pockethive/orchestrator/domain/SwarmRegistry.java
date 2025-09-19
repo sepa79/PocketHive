@@ -1,5 +1,7 @@
 package io.pockethive.orchestrator.domain;
 
+import java.util.Collection;
+import java.util.Collections;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
@@ -16,6 +18,10 @@ public class SwarmRegistry {
         return Optional.ofNullable(swarms.get(id));
     }
 
+    public Collection<Swarm> all() {
+        return Collections.unmodifiableCollection(swarms.values());
+    }
+
     public void remove(String id) {
         swarms.remove(id);
     }
@@ -24,6 +30,20 @@ public class SwarmRegistry {
         Swarm swarm = swarms.get(id);
         if (swarm != null) {
             swarm.transitionTo(status);
+        }
+    }
+
+    public void updateWorkEnabled(String id, boolean enabled) {
+        Swarm swarm = swarms.get(id);
+        if (swarm != null) {
+            swarm.setWorkEnabled(enabled);
+        }
+    }
+
+    public void updateControllerEnabled(String id, boolean enabled) {
+        Swarm swarm = swarms.get(id);
+        if (swarm != null) {
+            swarm.setControllerEnabled(enabled);
         }
     }
 

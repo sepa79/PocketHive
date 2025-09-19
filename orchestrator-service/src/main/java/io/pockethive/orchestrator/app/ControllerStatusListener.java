@@ -40,10 +40,22 @@ public class ControllerStatusListener {
         try {
             JsonNode node = mapper.readTree(body);
             String swarmId = node.path("swarmId").asText(null);
-            String status = node.path("data").path("swarmStatus").asText(null);
+            JsonNode data = node.path("data");
+            String status = data.path("swarmStatus").asText(null);
             if (swarmId != null && status != null) {
                 SwarmHealth health = map(status);
                 registry.refresh(swarmId, health);
+            }
+            if (swarmId != null) {
+                JsonNode state = data.path("state");
+                JsonNode workloads = state.path("workloads");
+                if (!workloads.isMissingNode() && workloads.has("enabled")) {
+                    registry.updateWorkEnabled(swarmId, workloads.path("enabled").asBoolean());
+                }
+                JsonNode controller = state.path("controller");
+                if (!controller.isMissingNode() && controller.has("enabled")) {
+                    registry.updateControllerEnabled(swarmId, controller.path("enabled").asBoolean());
+                }
             }
         } catch (Exception e) {
             log.warn("status parse", e);
