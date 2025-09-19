@@ -1,5 +1,7 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { Play, Square } from 'lucide-react'
 import type { Component } from '../../types/hive'
+import { heartbeatHealth } from '../../lib/health'
 
 interface Props {
   orchestrator?: Component | null
@@ -7,16 +9,13 @@ interface Props {
 
 type OrchestratorAction = 'start' | 'stop'
 
+type HealthVisualState = 'missing' | 'disabled' | 'ok' | 'warn' | 'alert'
+
 function displayNameFor(orchestrator?: Component | null) {
   if (!orchestrator) return 'Orchestrator'
   const trimmed = typeof orchestrator.name === 'string' ? orchestrator.name.trim() : ''
   if (trimmed) return trimmed
   return orchestrator.id
-}
-
-function halState(isDetected: boolean, isEnabled: boolean) {
-  if (!isDetected) return 'down'
-  return isEnabled ? 'healthy' : 'unhealthy'
 }
 
 function buttonClasses(isDetected: boolean, variant: OrchestratorAction) {
@@ -43,16 +42,52 @@ function buttonClasses(isDetected: boolean, variant: OrchestratorAction) {
 }
 
 export default function OrchestratorPanel({ orchestrator }: Props) {
+  const [heartbeatKey, setHeartbeatKey] = useState(0)
+  const [now, setNow] = useState(() => Date.now())
   const [pendingAction, setPendingAction] = useState<OrchestratorAction | null>(null)
   const isDetected = Boolean(orchestrator)
-  const isEnabled =
-    orchestrator?.config &&
-    typeof (orchestrator.config as { enabled?: unknown }).enabled === 'boolean'
-      ? (orchestrator.config as { enabled?: boolean }).enabled !== false
-      : true
+  const rawEnabled = orchestrator?.config
+    ? (orchestrator.config as { enabled?: unknown }).enabled
+    : undefined
+  const enabledState: 'true' | 'false' | 'unknown' = !isDetected
+    ? 'unknown'
+    : typeof rawEnabled === 'boolean'
+    ? (rawEnabled ? 'true' : 'false')
+    : 'unknown'
 
   const name = useMemo(() => displayNameFor(orchestrator), [orchestrator])
-  const statusLabel = isDetected ? (isEnabled ? 'Active' : 'Disabled') : 'Not detected'
+  const healthState: HealthVisualState = useMemo(() => {
+    if (!isDetected || !orchestrator) return 'missing'
+    if (enabledState === 'false') return 'disabled'
+    const health = heartbeatHealth(orchestrator.lastHeartbeat, now)
+    switch (health) {
+      case 'WARN':
+        return 'warn'
+      case 'ALERT':
+        return 'alert'
+      default:
+        return 'ok'
+    }
+  }, [enabledState, isDetected, orchestrator, now])
+
+  const secondsSince = useMemo(() => {
+    if (!isDetected || !orchestrator) return null
+    if (orchestrator.lastHeartbeat <= 0) return null
+    const age = Math.floor((now - orchestrator.lastHeartbeat) / 1000)
+    return age < 0 ? 0 : age
+  }, [isDetected, orchestrator, now])
+
+  const statusLabel = useMemo(() => {
+    if (!isDetected) return 'Not detected'
+    if (!orchestrator || orchestrator.lastHeartbeat <= 0) return 'Awaiting status'
+    if (secondsSince === null) return 'Status received just now'
+    if (secondsSince <= 1) return 'Status received just now'
+    const suffix = healthState === 'warn' ? ' (late)' : healthState === 'alert' ? ' (stale)' : ''
+    return `Status received ${secondsSince}s ago${suffix}`
+  }, [healthState, isDetected, orchestrator, secondsSince])
+
+  const enabledLabel =
+    enabledState === 'true' ? 'Enabled' : enabledState === 'false' ? 'Disabled' : 'Unknown'
   const cardClasses = [
     'rounded',
     'border',
@@ -69,17 +104,48 @@ export default function OrchestratorPanel({ orchestrator }: Props) {
       }
     : null
 
+  useEffect(() => {
+    if (!isDetected) return
+    const id = window.setInterval(() => setNow(Date.now()), 1000)
+    return () => window.clearInterval(id)
+  }, [isDetected])
+
+  useEffect(() => {
+    if (!orchestrator) {
+      setHeartbeatKey(0)
+      return
+    }
+    setHeartbeatKey((key) => key + 1)
+    setNow(Date.now())
+  }, [orchestrator, orchestrator?.lastHeartbeat])
+
   return (
     <div data-testid="orchestrator-panel" className={cardClasses}>
       <div className="flex items-center justify-between gap-3">
-        <div>
+        <div className="min-w-0">
           <div className="text-xs uppercase tracking-wide text-white/50">Orchestrator</div>
-          <div className={`text-lg font-semibold ${isDetected ? '' : 'text-white/70'}`}>{name}</div>
-          <div className="text-xs text-white/60">{statusLabel}</div>
+          <div className="mt-1 flex flex-wrap items-center gap-2">
+            <div className={`text-lg font-semibold ${isDetected ? '' : 'text-white/70'}`}>{name}</div>
+            <span
+              data-enabled={enabledState}
+              data-testid="orchestrator-enabled"
+              className="shrink-0"
+            >
+              {enabledState === 'true' ? (
+                <Square className="h-3.5 w-3.5" aria-hidden="true" />
+              ) : (
+                <Play className="h-3.5 w-3.5" aria-hidden="true" />
+              )}
+              <span>{enabledLabel}</span>
+            </span>
+          </div>
+          <div className="mt-1 text-xs text-white/60">{statusLabel}</div>
         </div>
         <span
+          key={heartbeatKey}
           className="hal-eye shrink-0"
-          data-state={halState(isDetected, isEnabled)}
+          data-state={healthState}
+          data-testid="orchestrator-health"
           title={`Orchestrator status: ${statusLabel}`}
           aria-hidden="true"
         />

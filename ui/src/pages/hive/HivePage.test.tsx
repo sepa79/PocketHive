@@ -66,6 +66,11 @@ test('renders orchestrator panel inactive when orchestrator is missing', () => {
   expect(scope.getByText('Not detected')).toBeInTheDocument()
   expect(scope.getByRole('button', { name: 'Start all' })).toBeDisabled()
   expect(scope.getByRole('button', { name: 'Stop all' })).toBeDisabled()
+  const badge = scope.getByTestId('orchestrator-enabled')
+  expect(badge).toHaveTextContent('Unknown')
+  expect(badge).toHaveAttribute('data-enabled', 'unknown')
+  const eye = scope.getByTestId('orchestrator-health')
+  expect(eye).toHaveAttribute('data-state', 'missing')
 })
 
 test('enables orchestrator controls when orchestrator component is present', async () => {
@@ -87,6 +92,11 @@ test('enables orchestrator controls when orchestrator component is present', asy
   const stopButton = within(panel).getByRole('button', { name: 'Stop all' })
   expect(startButton).toBeEnabled()
   expect(stopButton).toBeEnabled()
+  const badge = within(panel).getByTestId('orchestrator-enabled')
+  expect(badge).toHaveTextContent('Enabled')
+  expect(badge).toHaveAttribute('data-enabled', 'true')
+  const eye = within(panel).getByTestId('orchestrator-health')
+  expect(eye).toHaveAttribute('data-state', 'ok')
   await user.click(startButton)
   const dialog = await screen.findByRole('dialog', {
     name: /confirm start command/i,
@@ -102,6 +112,27 @@ test('enables orchestrator controls when orchestrator component is present', asy
   ).toBeInTheDocument()
   await user.click(screen.getByRole('button', { name: 'Send Stop all' }))
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+})
+
+test('shows disabled state when orchestrator config disables it', async () => {
+  comps.push({
+    id: 'hive-orchestrator',
+    name: 'HAL disabled',
+    role: 'orchestrator',
+    lastHeartbeat: Date.now(),
+    queues: [],
+    config: { enabled: false },
+  })
+  render(<HivePage />)
+  const panels = screen.getAllByTestId('orchestrator-panel')
+  const panel = panels[panels.length - 1]!
+  const scope = within(panel)
+  await scope.findByText('HAL disabled')
+  const badge = scope.getByTestId('orchestrator-enabled')
+  expect(badge).toHaveTextContent('Disabled')
+  expect(badge).toHaveAttribute('data-enabled', 'false')
+  const eye = scope.getByTestId('orchestrator-health')
+  expect(eye).toHaveAttribute('data-state', 'disabled')
 })
 
 test('shows unassigned components when selecting default swarm', async () => {
