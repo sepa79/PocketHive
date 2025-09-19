@@ -201,6 +201,35 @@ class SwarmLifecycleManagerTest {
   }
 
   @Test
+  void setSwarmEnabledDisablesWorkloadsAndUpdatesStatus() throws Exception {
+    SwarmLifecycleManager manager = new SwarmLifecycleManager(amqp, mapper, docker, rabbit, "inst");
+    SwarmPlan plan = new SwarmPlan("swarm", List.of(
+        new Bee("gen", "img1", null, null),
+        new Bee("proc", "img2", null, null)));
+    when(docker.createContainer(eq("img1"), anyMap(), anyString())).thenReturn("c1");
+    when(docker.createContainer(eq("img2"), anyMap(), anyString())).thenReturn("c2");
+
+    manager.prepare(mapper.writeValueAsString(plan));
+    manager.markReady("gen", "g1");
+    manager.markReady("proc", "p1");
+
+    manager.enableAll();
+    assertEquals(SwarmStatus.RUNNING, manager.getStatus());
+
+    reset(rabbit);
+
+    manager.setSwarmEnabled(false);
+
+    verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
+        eq("sig.config-update.proc.p1"),
+        argThat((String p) -> p.contains("\"enabled\":false")));
+    verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
+        eq("sig.config-update.gen.g1"),
+        argThat((String p) -> p.contains("\"enabled\":false")));
+    assertEquals(SwarmStatus.STOPPED, manager.getStatus());
+  }
+
+  @Test
   void linearTopologyEnablesAndStopsInOrder() throws Exception {
     SwarmLifecycleManager manager = new SwarmLifecycleManager(amqp, mapper, docker, rabbit, "inst");
     SwarmPlan plan = new SwarmPlan("swarm", List.of(
