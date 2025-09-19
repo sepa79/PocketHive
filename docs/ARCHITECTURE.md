@@ -16,6 +16,7 @@ PocketHive orchestrates message-driven swarms of components (generators, process
 - **Aggregate state** per swarm: **Swarm Controller**.
 - **Per‑component state**: emitted by **components themselves**, consumed by the **Controller**, **not** by the Orchestrator in steady state.
 - **Control plane always on**: status and config are accepted even when workloads are disabled.
+- **Bulk controller toggles**: Operators can pause/resume whole controllers by flipping `enabled` while the control plane stays up.
 - **Non‑destructive defaults**: failures never auto‑delete resources; Stop ≠ Remove.
 - **Deterministic ordering** derived from queue I/O topology, not hard‑coded by role.
 - **Command → Confirmation pattern**: Every control signal results in **exactly one**
@@ -29,6 +30,7 @@ PocketHive orchestrates message-driven swarms of components (generators, process
 - Owns the **desired state** and lifecycle intents per swarm (`SwarmPlan`).
 - Launches a **Swarm Controller** for a new swarm (runtime), and upon controller handshake emits **`ev.ready.swarm-create.<swarmId>`** (success for create).
 - Issues **template / start / stop / remove** at swarm scope, and **config updates** at component scope.
+- Fans out **controller-level enable/disable** (`sig.config-update.swarm-controller.{instance}`) so operators can pause/resume workloads en masse while controllers stay online.
 - **Monitors** to **Ready / Running**, marks **Failed** on timeout/error, **never auto‑deletes**.
 - Consumes **only swarm‑level aggregates** and lifecycle events from the Swarm Controller (low fan‑in).
 
@@ -37,6 +39,7 @@ PocketHive orchestrates message-driven swarms of components (generators, process
 - Derives **start/stop** order from **queue I/O** (producers → transformers → consumers).
 - Emits **swarm‑level** status and lifecycle confirmations; publishes periodic **heartbeats**.
 - Treats AMQP `status-{delta|full}` as **equivalent to Actuator heartbeats**; polls **Actuator** on staleness.
+- When receiving `sig.config-update.swarm-controller.{instance}` with `enabled` toggles, keeps the control plane session alive and **fans the new state out to all bees** it manages.
 - Control plane is always enabled; honors start/stop/remove/status/config even when workload is disabled.
 
 ### 2.3 Components
@@ -57,6 +60,7 @@ PocketHive orchestrates message-driven swarms of components (generators, process
 - `sig.swarm-remove.<swarmId>` — explicit deprovision/delete
 - `sig.status-request.<role>.<instance>`
 - `sig.config-update.<role>.<instance>` — update config (incl. `enabled`)
+  - `role=swarm-controller` pauses/resumes workloads by toggling `enabled` while the controller stays online
 
 **`ControlSignal` fields (excerpt):**
 - `correlationId` *(uuid)* — **new per attempt**  
@@ -175,6 +179,20 @@ sequenceDiagram
   MSH->>CMP: Apply config (control plane always on)
   CMP-->>MSH: ev.status-delta.<role>.<instance> (enabled reflected)
   MSH-->>QN: ev.ready.config-update.<role>.<instance>
+```
+
+### 7.3b Bulk controller suspend/resume
+```mermaid
+sequenceDiagram
+  participant QN as Orchestrator
+  participant MSH as Swarm Controllers
+  participant CMP as Bees
+
+  QN->>MSH: sig.config-update.swarm-controller.* ({ enabled: true|false })
+  note right of QN: Fan-out per controller instance (shared correlationId)
+  MSH->>CMP: Propagate enabled flag to managed bees (control plane stays up)
+  CMP-->>MSH: ev.status-delta.<role>.<instance> (enabled reflected)
+  MSH-->>QN: ev.ready.config-update.swarm-controller.*
 ```
 
 ### 7.4 Stop whole swarm (non‑destructive)

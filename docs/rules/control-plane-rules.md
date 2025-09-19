@@ -12,22 +12,25 @@
 - **Command → Confirmation**: Every control action yields **exactly one** `ev.ready.*` (success) or `ev.error.*` (error), correlated by IDs.
 - **Aggregate-first**: Orchestrator consumes **swarm aggregates**; per-component status is for Controller and observability.
 - **Always-on control**: Config & status always handled, even when workload is disabled.
+- **Controller-level toggles**: Downstream services must honor `sig.config-update.swarm-controller.*` by pausing/resuming workloads yet leaving the controller path responsive.
 - **Non-destructive default**: Stop ≠ Remove. Removal is explicit and terminal.
 
 ---
 
 ## 2) Actors & responsibilities
 
-- **Orchestrator**  
-  - Only publisher of swarm **lifecycle** signals (template/start/stop/remove).  
-  - Launches Controller via runtime. On controller handshake emits **`ev.ready.swarm-create.<swarmId>`**.  
-  - Enforces idempotency, retries, timeouts, and RBAC.  
+- **Orchestrator**
+  - Only publisher of swarm **lifecycle** signals (template/start/stop/remove).
+  - Launches Controller via runtime. On controller handshake emits **`ev.ready.swarm-create.<swarmId>`**.
+  - Enforces idempotency, retries, timeouts, and RBAC.
+  - Issues controller-level `sig.config-update.swarm-controller.{instance}` to pause/resume workloads while keeping controllers' control planes alive.
   - Tears down Controller after **`ev.ready.swarm-remove.<swarmId>`**.
 
-- **Swarm Controller**  
-  - Applies `SwarmPlan`; provisions components; computes **aggregate** status.  
-  - Emits `ev.status-{full|delta}.swarm-controller.<instance>` and confirmations for template/start/stop/remove/config.  
+- **Swarm Controller**
+  - Applies `SwarmPlan`; provisions components; computes **aggregate** status.
+  - Emits `ev.status-{full|delta}.swarm-controller.<instance>` and confirmations for template/start/stop/remove/config.
   - Treats AMQP status as heartbeat; polls Actuator if stale.
+  - On controller-level `config-update` toggles, keeps itself reachable and **fans the `enabled` flag out to every managed bee**.
 
 - **Components**  
   - Emit their own `ev.status-{full|delta}.<role>.<instance>`.  
@@ -47,7 +50,7 @@ Publisher → Consumer
 - `sig.swarm-start.<swarmId>` — Orchestrator → Controller
 - `sig.swarm-stop.<swarmId>` — Orchestrator → Controller *(non-destructive)*
 - `sig.swarm-remove.<swarmId>` — Orchestrator → Controller *(delete resources)*
-- `sig.config-update.<role>.<instance>` — Orchestrator → Component
+- `sig.config-update.<role>.<instance>` — Orchestrator → Component *(or Swarm Controller when `role=swarm-controller` to toggle workloads)*
 - `sig.status-request.<role>.<instance>` — Orchestrator/Controller → Component *(emit `status-full` now)*
 
 ### 3.2 Confirmations (events)
