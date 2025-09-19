@@ -76,7 +76,11 @@ export default function HivePage() {
         </div>
         <div className="mt-4 flex-1 overflow-y-auto">
           <div className="space-y-4">
-            <OrchestratorPanel orchestrator={orchestrator} />
+            <OrchestratorPanel
+              orchestrator={orchestrator}
+              onSelect={(component) => setSelected(component)}
+              selectedId={selected?.id}
+            />
             {activeSwarm && (
               <button
                 className="text-xs underline"

@@ -1,4 +1,10 @@
-import { useEffect, useMemo, useState } from 'react'
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type KeyboardEvent,
+  type MouseEvent,
+} from 'react'
 import { Play, Square } from 'lucide-react'
 import type { Component } from '../../types/hive'
 import { heartbeatHealth } from '../../lib/health'
@@ -6,6 +12,8 @@ import { sendConfigUpdate } from '../../lib/orchestratorApi'
 
 interface Props {
   orchestrator?: Component | null
+  onSelect?: (component: Component) => void
+  selectedId?: string
 }
 
 type OrchestratorAction = 'start' | 'stop'
@@ -42,12 +50,13 @@ function buttonClasses(isDetected: boolean, variant: OrchestratorAction) {
   return base.join(' ')
 }
 
-export default function OrchestratorPanel({ orchestrator }: Props) {
+export default function OrchestratorPanel({ orchestrator, onSelect, selectedId }: Props) {
   const [heartbeatKey, setHeartbeatKey] = useState(0)
   const [now, setNow] = useState(() => Date.now())
   const [pendingAction, setPendingAction] = useState<OrchestratorAction | null>(null)
   const [updatingEnabled, setUpdatingEnabled] = useState(false)
   const isDetected = Boolean(orchestrator)
+  const isSelected = Boolean(orchestrator && selectedId === orchestrator.id)
   const rawConfig = orchestrator?.config as Record<string, unknown> | undefined
   const rawEnabled = rawConfig ? (rawConfig as { enabled?: unknown }).enabled : undefined
   const enabledState: 'true' | 'false' | 'unknown' = !isDetected
@@ -82,6 +91,7 @@ export default function OrchestratorPanel({ orchestrator }: Props) {
 
   const enabledLabel =
     enabledState === 'true' ? 'Enabled' : enabledState === 'false' ? 'Disabled' : 'Unknown'
+  const interactive = Boolean(isDetected && orchestrator && onSelect)
   const cardClasses = [
     'rounded',
     'border',
@@ -89,7 +99,23 @@ export default function OrchestratorPanel({ orchestrator }: Props) {
     'text-white',
     'transition-colors',
     isDetected ? 'border-white/20 bg-white/10' : 'border-white/10 bg-white/5 opacity-60',
-  ].join(' ')
+    interactive ? 'cursor-pointer hover:border-emerald-300/40 focus:outline-none focus:ring-2 focus:ring-emerald-300/60' : '',
+    isSelected ? 'ring-2 ring-emerald-300/60' : '',
+  ]
+
+  const handleSelect = () => {
+    if (interactive && orchestrator) {
+      onSelect?.(orchestrator)
+    }
+  }
+
+  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (!interactive) return
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault()
+      handleSelect()
+    }
+  }
 
   const actionCopy = pendingAction
     ? {
@@ -126,14 +152,21 @@ export default function OrchestratorPanel({ orchestrator }: Props) {
     }
   }
 
-  const halTitle = !isDetected
-    ? 'Orchestrator missing'
-    : orchestrator?.status
-    ? `Orchestrator status: ${orchestrator.status}`
-    : 'Orchestrator status unavailable'
+  const halTitle = useMemo(
+    () => formatLastStatusTooltip(orchestrator, isDetected, now),
+    [isDetected, now, orchestrator],
+  )
 
   return (
-    <div data-testid="orchestrator-panel" className={cardClasses}>
+    <div
+      data-testid="orchestrator-panel"
+      className={cardClasses.join(' ')}
+      data-selected={isSelected ? 'true' : 'false'}
+      role={interactive ? 'button' : undefined}
+      tabIndex={interactive ? 0 : -1}
+      onClick={handleSelect}
+      onKeyDown={handleKeyDown}
+    >
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
           <div className="text-xs uppercase tracking-wide text-white/50">Orchestrator</div>
@@ -161,7 +194,10 @@ export default function OrchestratorPanel({ orchestrator }: Props) {
           data-testid="orchestrator-enabled"
           className="shrink-0"
           disabled={!isDetected || updatingEnabled}
-          onClick={toggleEnabled}
+          onClick={(event: MouseEvent<HTMLButtonElement>) => {
+            event.stopPropagation()
+            toggleEnabled()
+          }}
           aria-pressed={isEnabled}
           aria-busy={updatingEnabled}
         >
@@ -176,7 +212,10 @@ export default function OrchestratorPanel({ orchestrator }: Props) {
           type="button"
           className={buttonClasses(isDetected, 'start')}
           disabled={!isDetected}
-          onClick={() => setPendingAction('start')}
+          onClick={(event: MouseEvent<HTMLButtonElement>) => {
+            event.stopPropagation()
+            setPendingAction('start')
+          }}
         >
           Start all
         </button>
@@ -184,18 +223,25 @@ export default function OrchestratorPanel({ orchestrator }: Props) {
           type="button"
           className={buttonClasses(isDetected, 'stop')}
           disabled={!isDetected}
-          onClick={() => setPendingAction('stop')}
+          onClick={(event: MouseEvent<HTMLButtonElement>) => {
+            event.stopPropagation()
+            setPendingAction('stop')
+          }}
         >
           Stop all
         </button>
       </div>
       {actionCopy && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+          onClick={(event) => event.stopPropagation()}
+        >
           <div
             role="dialog"
             aria-modal="true"
             aria-labelledby="orchestrator-confirm-title"
             className="w-80 rounded border border-white/10 bg-[#1a1d24] p-4 shadow-lg"
+            onClick={(event) => event.stopPropagation()}
           >
             <h3 id="orchestrator-confirm-title" className="text-lg font-semibold">
               Confirm {actionCopy.verb} command
@@ -206,14 +252,20 @@ export default function OrchestratorPanel({ orchestrator }: Props) {
             <div className="mt-4 flex justify-end gap-2">
               <button
                 type="button"
-                onClick={() => setPendingAction(null)}
+                onClick={(event) => {
+                  event.stopPropagation()
+                  setPendingAction(null)
+                }}
                 className="rounded bg-white/10 px-3 py-1 text-sm hover:bg-white/20"
               >
                 Cancel
               </button>
               <button
                 type="button"
-                onClick={() => setPendingAction(null)}
+                onClick={(event) => {
+                  event.stopPropagation()
+                  setPendingAction(null)
+                }}
                 className="rounded bg-white/20 px-3 py-1 text-sm font-medium hover:bg-white/30"
               >
                 Send {actionCopy.label}
@@ -271,4 +323,27 @@ function formatSwarmCountValue(value: unknown): string | null {
     }
   }
   return null
+}
+
+function formatLastStatusTooltip(
+  orchestrator: Component | null | undefined,
+  isDetected: boolean,
+  now: number,
+): string {
+  if (!isDetected || !orchestrator) {
+    return 'Orchestrator missing'
+  }
+
+  const statusText =
+    typeof orchestrator.status === 'string' && orchestrator.status.trim()
+      ? orchestrator.status.trim()
+      : 'unknown'
+
+  if (typeof orchestrator.lastHeartbeat === 'number' && Number.isFinite(orchestrator.lastHeartbeat)) {
+    const diffSeconds = Math.max(0, Math.floor((now - orchestrator.lastHeartbeat) / 1000))
+    const iso = new Date(orchestrator.lastHeartbeat).toISOString()
+    return `Last status ${statusText} received ${diffSeconds}s ago (${iso})`
+  }
+
+  return `Last status ${statusText} timestamp unavailable`
 }
