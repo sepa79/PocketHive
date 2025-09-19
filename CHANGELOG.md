@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.2] - 2025-09-19
+Timestamp: 2025-09-19T00:00:00Z
+
+- UI: replace the queen-specific swarm controls with a dedicated orchestrator panel that surfaces health via HAL indicators, shows active swarm counts, toggles the orchestrator enablement badge, and confirms start/stop commands before dispatching them.
+- Swarm controller: advertise the concrete `sig.swarm-*` control routes for the active swarm in status events and emit config-update confirmations on the precise `ev.ready.config-update.<role>.<instance>` routing key so orchestrator clients can correlate responses.
+- Tooling: rewrite the Windows `start-hive.bat` bootstrapper into a staged workflow that validates Docker prerequisites, allows selecting clean/build/start phases, and removes duplicated echo syntax.
+
 ## [0.10.1] - 2025-09-18
 Timestamp: 2025-09-18T00:00:00Z
 
