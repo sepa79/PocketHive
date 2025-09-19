@@ -166,7 +166,7 @@ exit /b 1
 exit /b %ERRORLEVEL%
 
 :print_blank_line
-cmd /d /c echo.
+echo(
 exit /b 0
 
 :stage_header
