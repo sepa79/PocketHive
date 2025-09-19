@@ -163,3 +163,46 @@ Client sends **`idempotencyKey`** (UUID v4) per new action (reuse on retry). Ser
   "timeoutMs": 10000
 }
 ```
+
+### 4.3 Swarm controller enable/disable (bulk)
+`POST /api/controllers/config`
+
+**Behavior**
+- Publishes **`sig.config-update.swarm-controller.{instance}`** per targeted controller with `patch: { "enabled": true|false }`.
+- If **`targets` omitted or empty**, apply to **all registered controllers** (fan-out driven by the Orchestrator's live registry).
+- Controllers must keep their control plane session alive and **fan out** the `enabled` change to every managed bee.
+
+**Request**
+```json
+{
+  "idempotencyKey": "uuid-v4",
+  "enabled": false,
+  "targets": ["swarm-controller.alpha", "swarm-controller.bravo"],
+  "notes": "optional"
+}
+```
+
+**Response (202)**
+```json
+{
+  "correlationId": "…",
+  "idempotencyKey": "…",
+  "targets": [
+    {
+      "instance": "swarm-controller.alpha",
+      "successTopic": "ev.ready.config-update.swarm-controller.alpha",
+      "errorTopic": "ev.error.config-update.swarm-controller.alpha"
+    },
+    {
+      "instance": "swarm-controller.bravo",
+      "successTopic": "ev.ready.config-update.swarm-controller.bravo",
+      "errorTopic": "ev.error.config-update.swarm-controller.bravo"
+    }
+  ],
+  "timeoutMs": 60000
+}
+```
+
+**Notes**
+- The Orchestrator reuses the same `correlationId` for every fan-out signal so confirmations map cleanly to the bulk action.
+- Controllers acknowledge even when already at the requested `enabled` state (idempotent success).
