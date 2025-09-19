@@ -166,7 +166,10 @@ exit /b 1
 exit /b %ERRORLEVEL%
 
 :print_blank_line
-echo(
+rem Using echo "" here because it reliably emits a blank line without
+rem triggering the ". was unexpected at this time." parser error in grouped
+rem commands on Windows.
+echo ""
 exit /b 0
 
 :stage_header
