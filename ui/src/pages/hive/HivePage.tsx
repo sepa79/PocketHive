@@ -50,16 +50,6 @@ export default function HivePage() {
     return acc
   }, {})
 
-  const swarmStatus = (comps: Component[]) => {
-    const queen = comps.find((c) => c.role === 'swarm-controller')
-    const status = (queen?.config?.swarmStatus as string | undefined)?.toLowerCase()
-    if (status) return status
-    const enabled = comps.map((c) => c.config?.enabled !== false)
-    if (enabled.every(Boolean)) return 'running'
-    if (enabled.every((e) => !e)) return 'stopped'
-    return 'partial'
-  }
-
   return (
     <div className="flex h-full min-h-0 overflow-hidden">
       <div className="w-full md:w-1/3 xl:w-1/4 border-r border-white/10 p-4 flex flex-col">
@@ -90,13 +80,12 @@ export default function HivePage() {
             .sort(([a], [b]) => a.localeCompare(b))
             .filter(([id]) => !activeSwarm || id === activeSwarm)
             .map(([id, comps]) => {
-              const status = swarmStatus(comps)
               return (
                 <div
                   key={id}
                   className="mb-4 border border-white/20 rounded p-2"
                 >
-                  <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center mb-1">
                     <div
                       className="font-medium cursor-pointer"
                       onClick={() =>
@@ -106,7 +95,6 @@ export default function HivePage() {
                     >
                       {id}
                     </div>
-                    <span className="text-xs text-white/60">Queen: {status}</span>
                   </div>
                   <ComponentList
                     components={comps}

@@ -37,10 +37,8 @@ const baseComponents: Component[] = [
   },
 ]
 
-let listener: ((c: Component[]) => void) | null = null
 let comps: Component[] = []
 beforeEach(() => {
-  listener = null
   comps = baseComponents.map((c) => ({
     ...c,
     config: c.config ? { ...c.config } : undefined,
@@ -48,7 +46,6 @@ beforeEach(() => {
   }))
   vi.mocked(subscribeComponents).mockImplementation(
     (fn: (c: Component[]) => void) => {
-      listener = fn
       fn(comps)
       return () => {}
     },
@@ -59,16 +56,11 @@ afterEach(() => {
   vi.clearAllMocks()
 })
 
-test('renders queen status without start/stop controls', async () => {
+test('does not render queen status or start/stop controls', async () => {
   render(<HivePage />)
-  expect(await screen.findByText(/Queen: stopped/i)).toBeInTheDocument()
+  expect(screen.queryByText(/Queen:/i)).not.toBeInTheDocument()
   expect(screen.queryByRole('button', { name: /start/i })).not.toBeInTheDocument()
   expect(screen.queryByRole('button', { name: /stop/i })).not.toBeInTheDocument()
-
-  comps[0].config = { swarmStatus: 'RUNNING', enabled: true }
-  // Push-style refresh: mimic an incoming `ev.status-*` notification from the control plane.
-  if (listener) listener([...comps])
-  expect(await screen.findByText(/Queen: running/i)).toBeInTheDocument()
 })
 
 test('shows unassigned components when selecting default swarm', async () => {
