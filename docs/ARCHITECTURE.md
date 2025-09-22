@@ -204,7 +204,7 @@ sequenceDiagram
   participant MSH as Swarm Controller
 
   QN->>MSH: sig.config-update.swarm-controller.* ({ args.scope: "controller", patch.enabled: true|false })
-  note right of QN: Runtime loops pause/resume; bees untouched
+  note right of QN: Runtime loops pause/resume, bees untouched
   MSH-->>QN: ev.ready.config-update.swarm-controller.* (state.scope=controller)
   MSH-->>QN: ev.status-delta.swarm-controller.* (controller.enabled reflected)
 ```
