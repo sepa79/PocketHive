@@ -1,6 +1,12 @@
 import { apiFetch } from './api'
 import type { Component } from '../types/hive'
 
+interface SwarmManagersTogglePayload {
+  idempotencyKey: string
+  target: 'swarm'
+  enabled: boolean
+}
+
 export async function createSwarm(id: string, templateId: string) {
   const payload: Record<string, unknown> = {
     templateId,
@@ -31,6 +37,27 @@ export async function stopSwarm(id: string) {
     headers: { 'Content-Type': 'application/json' },
     body,
   })
+}
+
+async function setSwarmManagersEnabled(enabled: boolean) {
+  const payload: SwarmManagersTogglePayload = {
+    idempotencyKey: crypto.randomUUID(),
+    target: 'swarm',
+    enabled,
+  }
+  await apiFetch('/orchestrator/swarm-managers/enabled', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function enableSwarmManagers() {
+  await setSwarmManagersEnabled(true)
+}
+
+export async function disableSwarmManagers() {
+  await setSwarmManagersEnabled(false)
 }
 
 export async function sendConfigUpdate(component: Component, config: unknown) {

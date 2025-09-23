@@ -8,7 +8,11 @@ import {
 import { Play, Square } from 'lucide-react'
 import type { Component } from '../../types/hive'
 import { heartbeatHealth } from '../../lib/health'
-import { sendConfigUpdate } from '../../lib/orchestratorApi'
+import {
+  disableSwarmManagers,
+  enableSwarmManagers,
+  sendConfigUpdate,
+} from '../../lib/orchestratorApi'
 
 interface Props {
   orchestrator?: Component | null
@@ -55,6 +59,7 @@ export default function OrchestratorPanel({ orchestrator, onSelect, selectedId }
   const [now, setNow] = useState(() => Date.now())
   const [pendingAction, setPendingAction] = useState<OrchestratorAction | null>(null)
   const [updatingEnabled, setUpdatingEnabled] = useState(false)
+  const [confirmingAction, setConfirmingAction] = useState(false)
   const isDetected = Boolean(orchestrator)
   const isSelected = Boolean(orchestrator && selectedId === orchestrator.id)
   const rawConfig = orchestrator?.config as Record<string, unknown> | undefined
@@ -214,6 +219,7 @@ export default function OrchestratorPanel({ orchestrator, onSelect, selectedId }
           disabled={!isDetected}
           onClick={(event: MouseEvent<HTMLButtonElement>) => {
             event.stopPropagation()
+            setConfirmingAction(false)
             setPendingAction('start')
           }}
         >
@@ -225,6 +231,7 @@ export default function OrchestratorPanel({ orchestrator, onSelect, selectedId }
           disabled={!isDetected}
           onClick={(event: MouseEvent<HTMLButtonElement>) => {
             event.stopPropagation()
+            setConfirmingAction(false)
             setPendingAction('stop')
           }}
         >
@@ -255,20 +262,37 @@ export default function OrchestratorPanel({ orchestrator, onSelect, selectedId }
                 onClick={(event) => {
                   event.stopPropagation()
                   setPendingAction(null)
+                  setConfirmingAction(false)
                 }}
                 className="rounded bg-white/10 px-3 py-1 text-sm hover:bg-white/20"
+                disabled={confirmingAction}
               >
                 Cancel
               </button>
               <button
                 type="button"
-                onClick={(event) => {
+                onClick={async (event) => {
                   event.stopPropagation()
-                  setPendingAction(null)
+                  if (confirmingAction) return
+                  setConfirmingAction(true)
+                  try {
+                    if (pendingAction === 'start') {
+                      await enableSwarmManagers()
+                    } else {
+                      await disableSwarmManagers()
+                    }
+                  } catch (error) {
+                    console.error('Failed to update swarm managers enabled state:', error)
+                  } finally {
+                    setConfirmingAction(false)
+                    setPendingAction(null)
+                  }
                 }}
-                className="rounded bg-white/20 px-3 py-1 text-sm font-medium hover:bg-white/30"
+                className="rounded bg-white/20 px-3 py-1 text-sm font-medium hover:bg-white/30 disabled:opacity-60"
+                aria-busy={confirmingAction}
+                disabled={confirmingAction}
               >
-                Send {actionCopy.label}
+                {confirmingAction ? 'Sending…' : `Send ${actionCopy.label}`}
               </button>
             </div>
           </div>
