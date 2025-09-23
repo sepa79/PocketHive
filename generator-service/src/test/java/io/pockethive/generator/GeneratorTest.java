@@ -78,13 +78,16 @@ class GeneratorTest {
         data.put("method", "POST");
         data.put("body", "{\"msg\":\"hi\"}");
         data.put("headers", headers);
-        Map<String, Object> args = Map.of("data", data);
+        data.put("target", "swarm");
+        Map<String, Object> args = new LinkedHashMap<>();
+        args.put("target", "swarm");
+        args.put("data", data);
         String correlationId = UUID.randomUUID().toString();
         String idempotencyKey = UUID.randomUUID().toString();
         ControlSignal signal = ControlSignal.forInstance(
             "config-update", "sw1", "generator", "inst", correlationId, idempotencyKey, args);
 
-        generator.onControl(mapper.writeValueAsString(signal), "sig.config-update.generator.inst", null);
+        generator.onControl(mapper.writeValueAsString(signal), "sig.config-update", null);
 
         Boolean enabled = (Boolean) ReflectionTestUtils.getField(generator, "enabled");
         assertThat(enabled).isTrue();
@@ -114,14 +117,14 @@ class GeneratorTest {
 
     @Test
     void configUpdateEmitsErrorWhenRateIsInvalid() throws Exception {
-        Map<String, Object> data = Map.of("ratePerSec", "oops");
-        Map<String, Object> args = Map.of("data", data);
+        Map<String, Object> data = Map.of("ratePerSec", "oops", "target", "swarm");
+        Map<String, Object> args = Map.of("target", "swarm", "data", data);
         String correlationId = UUID.randomUUID().toString();
         String idempotencyKey = UUID.randomUUID().toString();
         ControlSignal signal = ControlSignal.forInstance(
             "config-update", "sw1", "generator", "inst", correlationId, idempotencyKey, args);
 
-        generator.onControl(mapper.writeValueAsString(signal), "sig.config-update.generator.inst", null);
+        generator.onControl(mapper.writeValueAsString(signal), "sig.config-update", null);
 
         ArgumentCaptor<String> payload = ArgumentCaptor.forClass(String.class);
         verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("ev.error.config-update.generator.inst"), payload.capture());

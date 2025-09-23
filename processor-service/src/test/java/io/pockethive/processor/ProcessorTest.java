@@ -77,14 +77,17 @@ class ProcessorTest {
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("enabled", true);
         data.put("baseUrl", "http://next");
-        Map<String, Object> args = Map.of("data", data);
+        data.put("target", "swarm");
+        Map<String, Object> args = new LinkedHashMap<>();
+        args.put("target", "swarm");
+        args.put("data", data);
         String correlationId = UUID.randomUUID().toString();
         String idempotencyKey = UUID.randomUUID().toString();
         ControlSignal signal = ControlSignal.forInstance(
             "config-update", "sw1", "processor", "inst", correlationId, idempotencyKey, args);
 
         when(listenerRegistry.getListenerContainer("workListener")).thenReturn(workContainer);
-        processor.onControl(mapper.writeValueAsString(signal), "sig.config-update.processor.inst", null);
+        processor.onControl(mapper.writeValueAsString(signal), "sig.config-update", null);
 
         Boolean enabled = (Boolean) ReflectionTestUtils.getField(processor, "enabled");
         assertThat(enabled).isTrue();
@@ -110,13 +113,16 @@ class ProcessorTest {
 
     @Test
     void configUpdateErrorEmitsErrorConfirmation() throws Exception {
-        Map<String, Object> args = Map.of("data", Map.of("enabled", "oops"));
+        Map<String, Object> args = Map.of(
+            "target", "swarm",
+            "data", Map.of("enabled", "oops")
+        );
         String correlationId = UUID.randomUUID().toString();
         String idempotencyKey = UUID.randomUUID().toString();
         ControlSignal signal = ControlSignal.forInstance(
             "config-update", "sw1", "processor", "inst", correlationId, idempotencyKey, args);
 
-        processor.onControl(mapper.writeValueAsString(signal), "sig.config-update.processor.inst", null);
+        processor.onControl(mapper.writeValueAsString(signal), "sig.config-update", null);
 
         ArgumentCaptor<String> payload = ArgumentCaptor.forClass(String.class);
         verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("ev.error.config-update.processor.inst"), payload.capture());

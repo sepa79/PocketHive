@@ -1,8 +1,10 @@
 package io.pockethive.swarmcontroller;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.Topology;
+import io.pockethive.control.ControlSignal;
 import io.pockethive.swarm.model.Bee;
 import io.pockethive.swarm.model.SwarmPlan;
 import io.pockethive.swarm.model.Work;
@@ -22,9 +24,11 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -401,18 +405,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
         data.setAll((com.fasterxml.jackson.databind.node.ObjectNode) config);
       }
       data.put("enabled", false);
-      var wrapper = mapper.createObjectNode();
-      wrapper.set("data", data);
-      String payload = wrapper.toString();
-
-      for (var entry : instancesByRole.entrySet()) {
-        for (String inst : entry.getValue()) {
-          String rk = "sig.config-update." + entry.getKey() + "." + inst;
-          log.info("scenario step config-update {} payload {}", rk, payload);
-          rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, payload);
-        }
-      }
-
+      publishConfigUpdate(data, "scenario step");
       log.info("scenario step applied for swarm {}", Topology.SWARM_ID);
     } catch (Exception e) {
       log.warn("scenario step", e);
@@ -423,17 +416,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
   public synchronized void enableAll() {
     var data = mapper.createObjectNode();
     data.put("enabled", true);
-    var wrapper = mapper.createObjectNode();
-    wrapper.set("data", data);
-    String payload = wrapper.toString();
-
-    for (String role : startOrder) {
-      for (String inst : instancesByRole.getOrDefault(role, List.of())) {
-        String rk = "sig.config-update." + role + "." + inst;
-        log.info("enable config-update {} payload {}", rk, payload);
-        rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, payload);
-      }
-    }
+    publishConfigUpdate(data, "enable");
     status = SwarmStatus.RUNNING;
     for (ScenarioTask t : scheduledTasks) {
       scheduler.schedule(() -> {
@@ -448,26 +431,41 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
     if (enabledFlag) {
       enableAll();
     } else {
-      List<String> order = new ArrayList<>(startOrder);
-      java.util.Collections.reverse(order);
-      disableAll(order);
+      disableAll();
       status = SwarmStatus.STOPPED;
     }
   }
 
-  private synchronized void disableAll(List<String> order) {
+  private synchronized void disableAll() {
     var data = mapper.createObjectNode();
     data.put("enabled", false);
-    var wrapper = mapper.createObjectNode();
-    wrapper.set("data", data);
-    String payload = wrapper.toString();
+    publishConfigUpdate(data, "disable");
+  }
 
-    for (String role : order) {
-      for (String inst : instancesByRole.getOrDefault(role, List.of())) {
-        String rk = "sig.config-update." + role + "." + inst;
-        log.info("disable config-update {} payload {}", rk, payload);
-        rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, payload);
-      }
+  private void publishConfigUpdate(com.fasterxml.jackson.databind.node.ObjectNode data, String context) {
+    Map<String, Object> dataMap = mapper.convertValue(data, new TypeReference<Map<String, Object>>() {});
+    Map<String, Object> args = new LinkedHashMap<>();
+    Object target = dataMap.get("target");
+    if (target != null) {
+      args.put("target", target);
+    }
+    args.put("data", dataMap);
+    String correlationId = UUID.randomUUID().toString();
+    String idempotencyKey = UUID.randomUUID().toString();
+    ControlSignal signal = new ControlSignal(
+        "config-update",
+        correlationId,
+        idempotencyKey,
+        Topology.SWARM_ID,
+        null,
+        null,
+        args);
+    try {
+      String payload = mapper.writeValueAsString(signal);
+      log.info("{} config-update rk=sig.config-update correlation={} payload {}", context, correlationId, snippet(payload));
+      rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, "sig.config-update", payload);
+    } catch (JsonProcessingException e) {
+      throw new IllegalStateException("Failed to serialize config-update signal", e);
     }
   }
 

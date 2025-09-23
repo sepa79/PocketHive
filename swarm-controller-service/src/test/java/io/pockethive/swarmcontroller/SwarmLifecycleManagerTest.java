@@ -1,5 +1,6 @@
 package io.pockethive.swarmcontroller;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.docker.DockerContainerClient;
 import io.pockethive.swarm.model.Bee;
@@ -83,9 +84,15 @@ class SwarmLifecycleManagerTest {
 
     manager.stop();
 
+    ArgumentCaptor<String> stopPayload = ArgumentCaptor.forClass(String.class);
     verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
-        eq("sig.config-update.gen.g1"),
-        argThat((String p) -> p.contains("\"enabled\":false")));
+        eq("sig.config-update"),
+        stopPayload.capture());
+    JsonNode stopNode = mapper.readTree(stopPayload.getValue());
+    assertThat(stopNode.path("signal").asText()).isEqualTo("config-update");
+    assertThat(stopNode.path("correlationId").asText()).isNotBlank();
+    assertThat(stopNode.path("idempotencyKey").asText()).isNotBlank();
+    assertThat(stopNode.path("args").path("data").path("enabled").asBoolean(true)).isFalse();
     verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
         startsWith("ev.status-delta.swarm-controller.inst"),
         argThat((String p) -> p.contains("STOPPED")));
@@ -161,9 +168,13 @@ class SwarmLifecycleManagerTest {
     reset(rabbit, docker);
     manager.start("{}");
 
+    ArgumentCaptor<String> enablePayload = ArgumentCaptor.forClass(String.class);
     verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
-        eq("sig.config-update.gen.g1"),
-        argThat((String p) -> p.contains("\"enabled\":true")));
+        eq("sig.config-update"),
+        enablePayload.capture());
+    JsonNode enableNode = mapper.readTree(enablePayload.getValue());
+    assertThat(enableNode.path("signal").asText()).isEqualTo("config-update");
+    assertThat(enableNode.path("args").path("data").path("enabled").asBoolean(false)).isTrue();
     verifyNoMoreInteractions(docker);
     assertEquals(SwarmStatus.RUNNING, manager.getStatus());
   }
@@ -178,7 +189,7 @@ class SwarmLifecycleManagerTest {
 
     String step = """
         {
-          "config": {"foo":"bar"},
+          "config": {"foo":"bar","target":"swarm"},
           "schedule": [
             {"delayMs":0,"routingKey":"rk","body":{"msg":"hi"}}
           ]
@@ -186,17 +197,28 @@ class SwarmLifecycleManagerTest {
         """;
     manager.applyScenarioStep(step);
 
+    ArgumentCaptor<String> scenarioPayload = ArgumentCaptor.forClass(String.class);
     verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
-        eq("sig.config-update.gen.g1"),
-        argThat((String p) -> p.contains("\"enabled\":false") && p.contains("\"foo\":\"bar\"")));
+        eq("sig.config-update"),
+        scenarioPayload.capture());
+    JsonNode scenarioNode = mapper.readTree(scenarioPayload.getValue());
+    assertThat(scenarioNode.path("signal").asText()).isEqualTo("config-update");
+    assertThat(scenarioNode.path("args").path("data").path("enabled").asBoolean(true)).isFalse();
+    assertThat(scenarioNode.path("args").path("data").path("foo").asText()).isEqualTo("bar");
+    assertThat(scenarioNode.path("args").path("data").path("target").asText()).isEqualTo("swarm");
+    assertThat(scenarioNode.path("args").path("target").asText()).isEqualTo("swarm");
     reset(rabbit);
 
     manager.enableAll();
     Thread.sleep(50);
 
+    ArgumentCaptor<String> resumePayload = ArgumentCaptor.forClass(String.class);
     verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
-        eq("sig.config-update.gen.g1"),
-        argThat((String p) -> p.contains("\"enabled\":true")));
+        eq("sig.config-update"),
+        resumePayload.capture());
+    JsonNode resumeNode = mapper.readTree(resumePayload.getValue());
+    assertThat(resumeNode.path("signal").asText()).isEqualTo("config-update");
+    assertThat(resumeNode.path("args").path("data").path("enabled").asBoolean(false)).isTrue();
     verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
         eq("rk"),
         argThat((String p) -> p.contains("\"msg\":\"hi\"")));
@@ -223,12 +245,13 @@ class SwarmLifecycleManagerTest {
 
     manager.setSwarmEnabled(false);
 
+    ArgumentCaptor<String> disablePayload = ArgumentCaptor.forClass(String.class);
     verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
-        eq("sig.config-update.proc.p1"),
-        argThat((String p) -> p.contains("\"enabled\":false")));
-    verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
-        eq("sig.config-update.gen.g1"),
-        argThat((String p) -> p.contains("\"enabled\":false")));
+        eq("sig.config-update"),
+        disablePayload.capture());
+    JsonNode disableNode = mapper.readTree(disablePayload.getValue());
+    assertThat(disableNode.path("signal").asText()).isEqualTo("config-update");
+    assertThat(disableNode.path("args").path("data").path("enabled").asBoolean(true)).isFalse();
     assertEquals(SwarmStatus.STOPPED, manager.getStatus());
   }
 
@@ -254,18 +277,21 @@ class SwarmLifecycleManagerTest {
     reset(rabbit, docker);
 
     manager.enableAll();
-    InOrder inStart = inOrder(rabbit);
-    inStart.verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("sig.config-update.gen.g1"), anyString());
-    inStart.verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("sig.config-update.proc.p1"), anyString());
-    inStart.verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("sig.config-update.sink.s1"), anyString());
+    ArgumentCaptor<String> fanoutEnable = ArgumentCaptor.forClass(String.class);
+    verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("sig.config-update"), fanoutEnable.capture());
+    JsonNode fanoutEnableNode = mapper.readTree(fanoutEnable.getValue());
+    assertThat(fanoutEnableNode.path("signal").asText()).isEqualTo("config-update");
+    assertThat(fanoutEnableNode.path("args").path("data").path("enabled").asBoolean(false)).isTrue();
 
     reset(rabbit);
     manager.stop();
+    ArgumentCaptor<String> fanoutDisable = ArgumentCaptor.forClass(String.class);
     InOrder inStop = inOrder(rabbit);
-    inStop.verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("sig.config-update.sink.s1"), anyString());
-    inStop.verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("sig.config-update.proc.p1"), anyString());
-    inStop.verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("sig.config-update.gen.g1"), anyString());
+    inStop.verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("sig.config-update"), fanoutDisable.capture());
     inStop.verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), startsWith("ev.status-delta.swarm-controller.inst"), anyString());
+    JsonNode fanoutDisableNode = mapper.readTree(fanoutDisable.getValue());
+    assertThat(fanoutDisableNode.path("signal").asText()).isEqualTo("config-update");
+    assertThat(fanoutDisableNode.path("args").path("data").path("enabled").asBoolean(true)).isFalse();
 
     reset(docker);
     manager.remove();
@@ -300,18 +326,21 @@ class SwarmLifecycleManagerTest {
 
     reset(rabbit);
     manager.enableAll();
-    InOrder inStart = inOrder(rabbit);
-    inStart.verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("sig.config-update.a.a1"), anyString());
-    inStart.verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("sig.config-update.b.b1"), anyString());
-    inStart.verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("sig.config-update.c.c1"), anyString());
+    ArgumentCaptor<String> broadcastEnable = ArgumentCaptor.forClass(String.class);
+    verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("sig.config-update"), broadcastEnable.capture());
+    JsonNode broadcastEnableNode = mapper.readTree(broadcastEnable.getValue());
+    assertThat(broadcastEnableNode.path("signal").asText()).isEqualTo("config-update");
+    assertThat(broadcastEnableNode.path("args").path("data").path("enabled").asBoolean(false)).isTrue();
 
     reset(rabbit);
     manager.stop();
+    ArgumentCaptor<String> broadcastDisable = ArgumentCaptor.forClass(String.class);
     InOrder inStop = inOrder(rabbit);
-    inStop.verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("sig.config-update.c.c1"), anyString());
-    inStop.verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("sig.config-update.b.b1"), anyString());
-    inStop.verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("sig.config-update.a.a1"), anyString());
+    inStop.verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("sig.config-update"), broadcastDisable.capture());
     inStop.verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), startsWith("ev.status-delta.swarm-controller.inst"), anyString());
+    JsonNode broadcastDisableNode = mapper.readTree(broadcastDisable.getValue());
+    assertThat(broadcastDisableNode.path("signal").asText()).isEqualTo("config-update");
+    assertThat(broadcastDisableNode.path("args").path("data").path("enabled").asBoolean(true)).isFalse();
   }
 
   @Test
