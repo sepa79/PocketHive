@@ -108,6 +108,7 @@ public class SwarmManagerController {
         args.put("target", request.target());
         args.put("scope", request.target());
         Map<String, Object> data = new LinkedHashMap<>();
+        data.put("target", request.target());
         data.put("enabled", request.enabled());
         args.put("data", data);
         return args;
