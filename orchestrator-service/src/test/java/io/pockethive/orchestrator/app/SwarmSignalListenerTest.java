@@ -19,6 +19,8 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.amqp.core.AmqpTemplate;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -29,7 +31,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.startsWith;
 import static org.mockito.Mockito.*;
 
-@ExtendWith(MockitoExtension.class)
+@ExtendWith({MockitoExtension.class, OutputCaptureExtension.class})
 class SwarmSignalListenerTest {
     @Mock
     AmqpTemplate rabbit;
@@ -219,6 +221,25 @@ class SwarmSignalListenerTest {
         assertThat(delta.path("data").path("swarmCount").asInt()).isEqualTo(1);
         assertThat(delta.path("queues").path("control").path("out").get(0).asText())
             .isEqualTo("ev.status-delta.orchestrator.orch1");
+    }
+
+    @Test
+    void statusEventsLogAtDebug(CapturedOutput output) {
+        SwarmSignalListener listener = new SwarmSignalListener(
+            rabbit,
+            new SwarmPlanRegistry(),
+            new SwarmCreateTracker(),
+            new SwarmRegistry(),
+            lifecycle,
+            new ObjectMapper(),
+            "orch-log"
+        );
+
+        reset(rabbit);
+
+        listener.handle("{}", "ev.status-delta.swarm-controller.ctrl-log");
+
+        assertThat(output).doesNotContain("[CTRL] RECV rk=ev.status-delta.swarm-controller.ctrl-log");
     }
 
     private static void registerCreating(SwarmRegistry registry, String swarmId, String instanceId, String containerId) {
