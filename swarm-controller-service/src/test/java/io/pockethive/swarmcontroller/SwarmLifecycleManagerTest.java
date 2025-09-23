@@ -15,6 +15,8 @@ import org.springframework.amqp.core.Binding;
 import org.springframework.amqp.core.Queue;
 import org.springframework.amqp.core.TopicExchange;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import io.pockethive.Topology;
 
 import java.util.List;
@@ -25,13 +27,14 @@ import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.mockito.Mockito.*;
 import static org.mockito.ArgumentMatchers.*;
 
-@ExtendWith(MockitoExtension.class)
+@ExtendWith({MockitoExtension.class, OutputCaptureExtension.class})
 class SwarmLifecycleManagerTest {
   @Mock
   AmqpAdmin amqp;
@@ -326,5 +329,25 @@ class SwarmLifecycleManagerTest {
 
     manager.updateHeartbeat("gen", "g1");
     assertTrue(manager.markReady("gen", "g1"));
+  }
+
+  @Test
+  void statusEmissionsLogAtDebug(CapturedOutput output) throws Exception {
+    SwarmLifecycleManager manager = new SwarmLifecycleManager(amqp, mapper, docker, rabbit, "inst");
+    SwarmPlan plan = new SwarmPlan("swarm", List.of(new Bee("gen", "img", null, null)));
+    when(docker.createContainer(eq("img"), anyMap(), anyString())).thenReturn("c1");
+
+    manager.prepare(mapper.writeValueAsString(plan));
+    manager.updateHeartbeat("gen", "g1");
+    manager.markReady("gen", "g1");
+
+    manager.stop();
+
+    manager.updateHeartbeat("gen", "g1", System.currentTimeMillis() - 20_000);
+    manager.markReady("gen", "g1");
+
+    assertThat(output)
+        .doesNotContain("[CTRL] SEND rk=ev.status-delta.swarm-controller.inst")
+        .doesNotContain("[CTRL] SEND rk=sig.status-request.gen.g1");
   }
 }

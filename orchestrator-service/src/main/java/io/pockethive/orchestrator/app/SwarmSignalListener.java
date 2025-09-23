@@ -75,7 +75,12 @@ public class SwarmSignalListener {
     @RabbitListener(queues = "#{controlQueue.name}")
     public void handle(String body, @Header(AmqpHeaders.RECEIVED_ROUTING_KEY) String routingKey) {
         if (routingKey == null || !routingKey.startsWith("ev.")) return;
-        log.info("[CTRL] RECV rk={} inst={} payload={}", routingKey, instanceId, snippet(body));
+        String snippet = snippet(body);
+        if (routingKey.startsWith("ev.status-")) {
+            log.debug("[CTRL] RECV rk={} inst={} payload={}", routingKey, instanceId, snippet);
+        } else {
+            log.info("[CTRL] RECV rk={} inst={} payload={}", routingKey, instanceId, snippet);
+        }
         if (routingKey.startsWith("ev.ready.swarm-controller.")) {
             String inst = routingKey.substring("ev.ready.swarm-controller.".length());
             SwarmPlan plan = plans.remove(inst).orElse(null);
@@ -309,7 +314,14 @@ public class SwarmSignalListener {
 
     private void sendControl(String routingKey, String payload, String context) {
         String label = (context == null || context.isBlank()) ? "SEND" : "SEND " + context;
-        log.info("[CTRL] {} rk={} inst={} payload={}", label, routingKey, instanceId, snippet(payload));
+        String snippet = snippet(payload);
+        boolean statusContext = "status".equals(context);
+        boolean statusRoutingKey = routingKey != null && routingKey.contains(".status-");
+        if (statusContext || statusRoutingKey) {
+            log.debug("[CTRL] {} rk={} inst={} payload={}", label, routingKey, instanceId, snippet);
+        } else {
+            log.info("[CTRL] {} rk={} inst={} payload={}", label, routingKey, instanceId, snippet);
+        }
         rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, routingKey, payload);
     }
 

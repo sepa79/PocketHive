@@ -13,6 +13,8 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -22,7 +24,7 @@ import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
-@ExtendWith(MockitoExtension.class)
+@ExtendWith({MockitoExtension.class, OutputCaptureExtension.class})
 class SwarmSignalListenerTest {
   @Mock
   SwarmLifecycle lifecycle;
@@ -48,6 +50,21 @@ class SwarmSignalListenerTest {
     return """
         {"swarmId":"%s","data":{"enabled":%s}}
         """.formatted(swarmId, enabled);
+  }
+
+  @Test
+  void statusSignalsLogAtDebug(CapturedOutput output) {
+    SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst-log", mapper, 10);
+
+    reset(rabbit);
+
+    listener.handle(status(Topology.SWARM_ID, true), "ev.status-delta.swarm-controller.inst-log");
+    listener.handle(signal("status-request", "idem-log", "corr-log"), "sig.status-request.swarm-controller.inst-log");
+
+    assertThat(output)
+        .doesNotContain("[CTRL] RECV rk=ev.status-delta.swarm-controller.inst-log")
+        .doesNotContain("[CTRL] RECV rk=sig.status-request.swarm-controller.inst-log")
+        .doesNotContain("Status request received");
   }
 
   @Test
@@ -241,6 +258,22 @@ class SwarmSignalListenerTest {
     assertThat(configNode.path("scope").path("role").asText()).isEqualTo("swarm-controller");
     assertThat(configNode.path("scope").path("instance").asText()).isEqualTo("inst");
     assertThat(configNode.path("state").asText()).isEqualTo("Running");
+  }
+
+  @Test
+  void configUpdateDoesNotDuplicateInfoLogs(CapturedOutput output) {
+    when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
+    SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", mapper, 10);
+    String body = """
+        {"correlationId":"c4","idempotencyKey":"i4","signal":"config-update",
+         "role":"swarm-controller","instance":"inst","args":{"data":{"enabled":true}}}
+        """;
+
+    listener.handle(body, "sig.config-update.swarm-controller.inst");
+
+    assertThat(output)
+        .contains("[CTRL] RECV rk=sig.config-update.swarm-controller.inst")
+        .doesNotContain("Config update received");
   }
 
   @Test

@@ -80,7 +80,12 @@ public class SwarmSignalListener {
     MDC.put("swarm_id", Topology.SWARM_ID);
     MDC.put("service", ROLE);
     MDC.put("instance", instanceId);
-    log.info("[CTRL] RECV rk={} inst={} payload={}", routingKey, instanceId, snippet(body));
+    String snippet = snippet(body);
+    if (routingKey.startsWith("ev.status-") || routingKey.startsWith("sig.status-request")) {
+      log.debug("[CTRL] RECV rk={} inst={} payload={}", routingKey, instanceId, snippet);
+    } else {
+      log.info("[CTRL] RECV rk={} inst={} payload={}", routingKey, instanceId, snippet);
+    }
     try {
       if (routingKey.startsWith("sig.swarm-template.")) {
         String swarmId = routingKey.substring("sig.swarm-template.".length());
@@ -106,10 +111,9 @@ public class SwarmSignalListener {
           processSwarmSignal(body, swarmId, node -> lifecycle.remove(), "remove");
         }
       } else if (routingKey.startsWith("sig.status-request")) {
-        log.info("Status request received: {}", routingKey);
+        log.debug("Status request received: {}", routingKey);
         sendStatusFull();
       } else if (routingKey.startsWith("sig.config-update")) {
-        log.info("Config update received: {} payload={} ", routingKey, body);
         processConfigUpdate(body);
       } else if (routingKey.startsWith("ev.status-full.") || routingKey.startsWith("ev.status-delta.")) {
         String rest = routingKey.startsWith("ev.status-full.")
@@ -509,7 +513,13 @@ public class SwarmSignalListener {
 
   private void sendControl(String routingKey, String payload, String context) {
     String label = (context == null || context.isBlank()) ? "SEND" : "SEND " + context;
-    log.info("[CTRL] {} rk={} inst={} payload={}", label, routingKey, instanceId, snippet(payload));
+    boolean statusLog = "status".equals(context) || (routingKey != null && routingKey.contains(".status-"));
+    String snippet = snippet(payload);
+    if (statusLog) {
+      log.debug("[CTRL] {} rk={} inst={} payload={}", label, routingKey, instanceId, snippet);
+    } else {
+      log.info("[CTRL] {} rk={} inst={} payload={}", label, routingKey, instanceId, snippet);
+    }
     rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, routingKey, payload);
   }
 

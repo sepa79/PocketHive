@@ -204,7 +204,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
         .enabled(true)
         .data("swarmStatus", status.name())
         .toJson();
-    log.info("[CTRL] SEND rk={} inst={} payload={}", rk, instanceId, snippet(payload));
+    log.debug("[CTRL] SEND rk={} inst={} payload={}", rk, instanceId, snippet(payload));
     rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, payload);
     MDC.clear();
   }
@@ -309,7 +309,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
 
   private void requestStatus(String role, String instance) {
     String rk = "sig.status-request." + role + "." + instance;
-    log.info("[CTRL] SEND rk={} inst={} payload={}", rk, instanceId, "{}");
+    log.debug("[CTRL] SEND rk={} inst={} payload={}", rk, instanceId, "{}");
     rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, "{}");
   }
 

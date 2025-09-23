@@ -36,7 +36,12 @@ public class ControllerStatusListener {
     @RabbitListener(queues = "#{controllerStatusQueue.name}")
     public void handle(String body, @Header(AmqpHeaders.RECEIVED_ROUTING_KEY) String routingKey) {
         if (routingKey == null) return;
-        log.info("[CTRL] RECV rk={} payload={}", routingKey, snippet(body));
+        String payloadSnippet = snippet(body);
+        if (routingKey.startsWith("ev.status-")) {
+            log.debug("[CTRL] RECV rk={} payload={}", routingKey, payloadSnippet);
+        } else {
+            log.info("[CTRL] RECV rk={} payload={}", routingKey, payloadSnippet);
+        }
         try {
             JsonNode node = mapper.readTree(body);
             String swarmId = node.path("swarmId").asText(null);
