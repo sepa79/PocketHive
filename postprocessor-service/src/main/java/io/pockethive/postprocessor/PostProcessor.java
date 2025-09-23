@@ -131,8 +131,6 @@ public class PostProcessor {
     ObservabilityContext ctx = ObservabilityContextUtil.fromHeader(trace);
     ObservabilityContextUtil.populateMdc(ctx);
     try{
-      String p = payload==null?"" : (payload.length()>300? payload.substring(0,300)+"…" : payload);
-      log.info("[CTRL] RECV rk={} inst={} payload={}", rk, instanceId, p);
       if(payload==null || payload.isBlank()){
         return;
       }
@@ -154,6 +152,7 @@ public class PostProcessor {
         log.warn("control missing signal");
         return;
       }
+      logControlReceive(rk, signal, payload);
       switch(signal){
         case "status-request" -> sendStatusFull(0);
         case "config-update" -> handleConfigUpdate(cs);
@@ -368,8 +367,26 @@ public class PostProcessor {
     rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, payload);
   }
 
+  private void logControlReceive(String routingKey, String signal, String payload) {
+    String snippet = snippet(payload);
+    if (signal != null && signal.startsWith("status")) {
+      log.debug("[CTRL] RECV rk={} inst={} payload={}", routingKey, instanceId, snippet);
+    } else if ("config-update".equals(signal)) {
+      log.info("[CTRL] RECV rk={} inst={} payload={}", routingKey, instanceId, snippet);
+    } else {
+      log.info("[CTRL] RECV rk={} inst={} payload={}", routingKey, instanceId, snippet);
+    }
+  }
+
   private void logControlSend(String routingKey, String payload) {
-    log.info("[CTRL] SEND rk={} inst={} payload={}", routingKey, instanceId, snippet(payload));
+    String snippet = snippet(payload);
+    if (routingKey.contains(".status-")) {
+      log.debug("[CTRL] SEND rk={} inst={} payload={}", routingKey, instanceId, snippet);
+    } else if (routingKey.contains(".config-update.")) {
+      log.info("[CTRL] SEND rk={} inst={} payload={}", routingKey, instanceId, snippet);
+    } else {
+      log.info("[CTRL] SEND rk={} inst={} payload={}", routingKey, instanceId, snippet);
+    }
   }
 
   private static String snippet(String payload) {

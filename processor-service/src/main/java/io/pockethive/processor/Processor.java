@@ -93,7 +93,7 @@ public class Processor {
     try {
       if(enabled){
         String raw = new String(message.getBody(), StandardCharsets.UTF_8);
-        log.info("Forwarding to SUT: {}", raw);
+        log.debug("Forwarding to SUT: {}", raw);
         byte[] resp = sendToSut(message.getBody());
         Instant processed = Instant.now();
         ObservabilityContextUtil.appendHop(ctx, "processor", instanceId, received, processed);
@@ -133,8 +133,6 @@ public class Processor {
     ObservabilityContext ctx = ObservabilityContextUtil.fromHeader(trace);
     ObservabilityContextUtil.populateMdc(ctx);
     try {
-      String p = payload==null?"" : (payload.length()>300? payload.substring(0,300)+"…" : payload);
-      log.info("[CTRL] RECV rk={} inst={} payload={}", rk, instanceId, p);
       if(payload==null || payload.isBlank()){
         return;
       }
@@ -156,6 +154,7 @@ public class Processor {
         log.warn("control missing signal");
         return;
       }
+      logControlReceive(rk, signal, payload);
       switch (signal) {
         case "status-request" -> sendStatusFull(0);
         case "config-update" -> handleConfigUpdate(cs);
@@ -369,12 +368,12 @@ public class Processor {
 
       String headersStr = headers.isObject()? headers.toString() : "";
       String bodySnippet = bodyStr==null?"": (bodyStr.length()>300? bodyStr.substring(0,300)+"…": bodyStr);
-      log.info("HTTP {} {} headers={} body={}", method, target, headersStr, bodySnippet);
+      log.debug("HTTP {} {} headers={} body={}", method, target, headersStr, bodySnippet);
 
       HttpResponse<String> resp = http.send(req.build(), HttpResponse.BodyHandlers.ofString());
       long dur = System.currentTimeMillis() - start;
       sutLatency.record(dur);
-      log.info("HTTP {} {} -> {} body={} headers={} ({} ms)", method, target, resp.statusCode(),
+      log.debug("HTTP {} {} -> {} body={} headers={} ({} ms)", method, target, resp.statusCode(),
           snippet(resp.body()), resp.headers().map(), dur);
 
       var result = MAPPER.createObjectNode();
@@ -470,7 +469,25 @@ public class Processor {
     rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, payload);
   }
 
+  private void logControlReceive(String routingKey, String signal, String payload) {
+    String snippet = snippet(payload);
+    if (signal != null && signal.startsWith("status")) {
+      log.debug("[CTRL] RECV rk={} inst={} payload={}", routingKey, instanceId, snippet);
+    } else if ("config-update".equals(signal)) {
+      log.info("[CTRL] RECV rk={} inst={} payload={}", routingKey, instanceId, snippet);
+    } else {
+      log.info("[CTRL] RECV rk={} inst={} payload={}", routingKey, instanceId, snippet);
+    }
+  }
+
   private void logControlSend(String routingKey, String payload) {
-    log.info("[CTRL] SEND rk={} inst={} payload={}", routingKey, instanceId, snippet(payload));
+    String snippet = snippet(payload);
+    if (routingKey.contains(".status-")) {
+      log.debug("[CTRL] SEND rk={} inst={} payload={}", routingKey, instanceId, snippet);
+    } else if (routingKey.contains(".config-update.")) {
+      log.info("[CTRL] SEND rk={} inst={} payload={}", routingKey, instanceId, snippet);
+    } else {
+      log.info("[CTRL] SEND rk={} inst={} payload={}", routingKey, instanceId, snippet);
+    }
   }
 }
