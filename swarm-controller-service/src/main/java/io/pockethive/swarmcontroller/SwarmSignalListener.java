@@ -114,7 +114,6 @@ public class SwarmSignalListener {
         log.debug("Status request received: {}", routingKey);
         sendStatusFull();
       } else if (routingKey.startsWith("sig.config-update")) {
-        log.info("Config update received: {} payload={} ", routingKey, body);
         processConfigUpdate(body);
       } else if (routingKey.startsWith("ev.status-full.") || routingKey.startsWith("ev.status-delta.")) {
         String rest = routingKey.startsWith("ev.status-full.")
