@@ -87,8 +87,6 @@ public class Trigger {
     ObservabilityContext ctx = ObservabilityContextUtil.fromHeader(trace);
     ObservabilityContextUtil.populateMdc(ctx);
     try {
-      String p = payload == null ? "" : (payload.length() > 300 ? payload.substring(0, 300) + "…" : payload);
-      log.info("[CTRL] RECV rk={} inst={} payload={}", rk, instanceId, p);
       if (payload == null || payload.isBlank()) {
         return;
       }
@@ -106,10 +104,11 @@ public class Trigger {
         MDC.put("idempotency_key", cs.idempotencyKey());
       }
       String signal = cs.signal();
-      if (signal == null) {
+      if (signal == null || signal.isBlank()) {
         log.warn("control missing signal");
         return;
       }
+      logControlReceive(rk, signal, payload);
       switch (signal) {
         case "status-request" -> sendStatusFull(0);
         case "config-update" -> handleConfigUpdate(cs);
@@ -339,11 +338,11 @@ public class Trigger {
       try (BufferedReader r = new BufferedReader(new InputStreamReader(p.getInputStream()))) {
         String line;
         while ((line = r.readLine()) != null) {
-          log.info("[SHELL] {}", line);
+          log.debug("[SHELL] {}", line);
         }
       }
       int exit = p.waitFor();
-      log.info("[SHELL] exit={} cmd={}", exit, config.getCommand());
+      log.debug("[SHELL] exit={} cmd={}", exit, config.getCommand());
     } catch (Exception e) {
       log.warn("shell exec", e);
     }
@@ -353,7 +352,7 @@ public class Trigger {
     try {
       HttpRequest.Builder b = HttpRequest.newBuilder().uri(URI.create(config.getUrl()));
       String m = config.getMethod() == null ? "GET" : config.getMethod().toUpperCase();
-      log.info("[REST] REQ {} {} headers={} body={}", m, config.getUrl(), config.getHeaders(), snippet(config.getBody()));
+      log.debug("[REST] REQ {} {} headers={} body={}", m, config.getUrl(), config.getHeaders(), snippet(config.getBody()));
       if (config.getBody() != null && !config.getBody().isEmpty()) {
         b.method(m, HttpRequest.BodyPublishers.ofString(config.getBody()));
       } else {
@@ -363,7 +362,7 @@ public class Trigger {
         b.header(e.getKey(), e.getValue());
       }
       HttpResponse<String> response = HttpClient.newHttpClient().send(b.build(), HttpResponse.BodyHandlers.ofString());
-      log.info("[REST] RESP {} {} status={} headers={} body={}",
+      log.debug("[REST] RESP {} {} status={} headers={} body={}",
           m,
           config.getUrl(),
           response.statusCode(),
@@ -440,8 +439,26 @@ public class Trigger {
     rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, routingKey, json);
   }
 
+  private void logControlReceive(String routingKey, String signal, String payload) {
+    String snippet = snippet(payload);
+    if (signal != null && signal.startsWith("status")) {
+      log.debug("[CTRL] RECV rk={} inst={} payload={}", routingKey, instanceId, snippet);
+    } else if ("config-update".equals(signal)) {
+      log.info("[CTRL] RECV rk={} inst={} payload={}", routingKey, instanceId, snippet);
+    } else {
+      log.info("[CTRL] RECV rk={} inst={} payload={}", routingKey, instanceId, snippet);
+    }
+  }
+
   private void logControlSend(String routingKey, String payload) {
-    log.info("[CTRL] SEND rk={} inst={} payload={}", routingKey, instanceId, snippet(payload));
+    String snippet = snippet(payload);
+    if (routingKey.contains(".status-")) {
+      log.debug("[CTRL] SEND rk={} inst={} payload={}", routingKey, instanceId, snippet);
+    } else if (routingKey.contains(".config-update.")) {
+      log.info("[CTRL] SEND rk={} inst={} payload={}", routingKey, instanceId, snippet);
+    } else {
+      log.info("[CTRL] SEND rk={} inst={} payload={}", routingKey, instanceId, snippet);
+    }
   }
 
   private static String snippet(String payload) {
