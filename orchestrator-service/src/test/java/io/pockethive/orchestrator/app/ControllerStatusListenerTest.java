@@ -7,10 +7,13 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.verify;
 
-@ExtendWith(MockitoExtension.class)
+@ExtendWith({MockitoExtension.class, OutputCaptureExtension.class})
 class ControllerStatusListenerTest {
     @Mock
     SwarmRegistry registry;
@@ -23,5 +26,14 @@ class ControllerStatusListenerTest {
         verify(registry).refresh("sw1", SwarmHealth.RUNNING);
         verify(registry).updateWorkEnabled("sw1", true);
         verify(registry).updateControllerEnabled("sw1", false);
+    }
+
+    @Test
+    void statusLogsEmitAtDebug(CapturedOutput output) {
+        ControllerStatusListener listener = new ControllerStatusListener(registry, new ObjectMapper());
+
+        listener.handle("{}", "ev.status-delta.swarm-controller.inst1");
+
+        assertThat(output).doesNotContain("[CTRL] RECV rk=ev.status-delta.swarm-controller.inst1");
     }
 }
