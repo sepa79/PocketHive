@@ -13,6 +13,7 @@ public final class EnvironmentConfig {
   public static final String SCENARIO_MANAGER_BASE_URL = "SCENARIO_MANAGER_BASE_URL";
   public static final String RABBITMQ_URI = "RABBITMQ_URI";
   public static final String UI_WEBSOCKET_URI = "UI_WEBSOCKET_URI";
+  public static final String UI_BASE_URL = "UI_BASE_URL";
   public static final String SWARM_ID = "SWARM_ID";
   public static final String IDEMPOTENCY_KEY_PREFIX = "IDEMPOTENCY_KEY_PREFIX";
 
@@ -60,6 +61,7 @@ public final class EnvironmentConfig {
         requiredUri(SCENARIO_MANAGER_BASE_URL),
         required(RABBITMQ_URI),
         env(UI_WEBSOCKET_URI).map(EnvironmentConfig::toUri),
+        resolveUiBaseUrl(),
         env(SWARM_ID).orElse("pockethive-e2e"),
         env(IDEMPOTENCY_KEY_PREFIX).orElse("ph-e2e")
     );
@@ -87,6 +89,7 @@ public final class EnvironmentConfig {
       URI scenarioManagerBaseUrl,
       String rabbitMqUri,
       Optional<URI> uiWebsocketUri,
+      Optional<URI> uiBaseUrl,
       String defaultSwarmId,
       String idempotencyKeyPrefix
   ) {
@@ -101,9 +104,39 @@ public final class EnvironmentConfig {
           "scenarioManagerBaseUrl", scenarioManagerBaseUrl.toString(),
           "rabbitMqUri", rabbitMqUri,
           "uiWebsocketUri", uiWebsocketUri.map(URI::toString).orElse("<not-configured>"),
+          "uiBaseUrl", uiBaseUrl.map(URI::toString).orElse("<not-configured>"),
           "defaultSwarmId", defaultSwarmId,
           "idempotencyKeyPrefix", idempotencyKeyPrefix
       );
+    }
+  }
+
+  private static Optional<URI> resolveUiBaseUrl() {
+    Optional<URI> explicit = env(UI_BASE_URL).map(EnvironmentConfig::toUri);
+    if (explicit.isPresent()) {
+      return explicit;
+    }
+
+    return env(UI_WEBSOCKET_URI)
+        .map(EnvironmentConfig::toUri)
+        .map(EnvironmentConfig::deriveHttpBaseFromWebsocket);
+  }
+
+  private static URI deriveHttpBaseFromWebsocket(URI websocketUri) {
+    String scheme = websocketUri.getScheme();
+    String httpScheme;
+    if ("ws".equalsIgnoreCase(scheme)) {
+      httpScheme = "http";
+    } else if ("wss".equalsIgnoreCase(scheme)) {
+      httpScheme = "https";
+    } else {
+      throw new IllegalStateException("Unsupported WebSocket scheme for UI proxy: " + scheme);
+    }
+
+    try {
+      return new URI(httpScheme, websocketUri.getUserInfo(), websocketUri.getHost(), websocketUri.getPort(), null, null, null);
+    } catch (Exception ex) {
+      throw new IllegalStateException("Failed to derive HTTP base URL from WebSocket URI: " + websocketUri, ex);
     }
   }
 }

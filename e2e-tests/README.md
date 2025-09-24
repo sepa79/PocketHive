@@ -17,7 +17,8 @@ src/
     hooks/               # Before/After hooks for environment lifecycle management
     steps/               # Step definitions used by the feature files
   test/resources/features/
-    harness-skeleton.feature # Placeholder scenario tagged as @wip so no tests run yet
+    deployment-smoke.feature # Phase 1 deployment smoke checks
+    harness-skeleton.feature # Placeholder scenario tagged as @wip so it does not execute
 ```
 
 ## Execution
@@ -33,8 +34,9 @@ start-e2e-tests.bat           # Windows
 Both wrappers accept additional Maven arguments, which are forwarded to the underlying `./mvnw verify -pl e2e-tests -am`
 command.
 
-At this stage the module compiles and executes with zero active scenarios. Remove the `@wip` tag on the placeholder
-feature as new steps are implemented in later tasks.
+The deployment smoke feature runs automatically once the required environment variables are present; otherwise the
+scenario is skipped via JUnit assumptions so local builds without a running stack still succeed. Remove the `@wip` tag
+on the placeholder feature as new steps are implemented in later tasks.
 
 ## Environment configuration
 
@@ -46,6 +48,7 @@ Environment variables will be referenced by the harness once the step implementa
 | `SCENARIO_MANAGER_BASE_URL` | Base URL for querying available templates via the Scenario Manager. |
 | `RABBITMQ_URI` | AMQP URI with credentials for control-plane and data-plane queues. |
 | `UI_WEBSOCKET_URI` | WebSocket endpoint exposed by the nginx proxy for UI-equivalent subscriptions. |
+| `UI_BASE_URL` | Base HTTP URL for the nginx UI proxy. When omitted the harness derives it from `UI_WEBSOCKET_URI`. |
 | `SWARM_ID` | Default swarm identifier used by shared steps (override per scenario when required). |
 | `IDEMPOTENCY_KEY_PREFIX` | Prefix applied to generated idempotency keys to simplify log correlation. |
 
