@@ -23,6 +23,7 @@
     <module>swarm-controller-service</module>
     <module>trigger-service</module>
     <module>scenario-manager-service</module>
+    <module>e2e-tests</module>
     <module>test</module>
   </modules>
   <build>
