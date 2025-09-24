@@ -70,7 +70,7 @@ export default function SwarmCreateModal({ onClose }: Props) {
               id="scenario"
               value={scenarioId}
               onChange={(e) => setScenarioId(e.target.value)}
-              className="w-full rounded border border-white/20 bg-white/10 px-2 py-1 text-sm"
+              className="themed-select w-full text-sm"
             >
               <option value="">Select scenario</option>
               {scenarios.map((s) => (

@@ -122,7 +122,7 @@ export default function BuzzPanel() {
               <select
                 value={sourceFilter}
                 onChange={(e) => setSourceFilter(e.target.value as 'all' | LogSource)}
-                className="rounded border border-white/20 bg-white/10 px-1 py-0.5"
+                className="themed-select themed-select--compact text-xs"
               >
                 <option value="all">All sources</option>
                 <option value="ui">UI</option>
@@ -131,7 +131,7 @@ export default function BuzzPanel() {
               <select
                 value={channelFilter}
                 onChange={(e) => setChannelFilter(e.target.value as 'all' | LogChannel)}
-                className="rounded border border-white/20 bg-white/10 px-1 py-0.5"
+                className="themed-select themed-select--compact text-xs"
               >
                 <option value="all">All channels</option>
                 <option value="stomp">STOMP</option>
@@ -141,7 +141,7 @@ export default function BuzzPanel() {
               <select
                 value={typeFilter}
                 onChange={(e) => setTypeFilter(e.target.value as 'all' | 'error')}
-                className="rounded border border-white/20 bg-white/10 px-1 py-0.5"
+                className="themed-select themed-select--compact text-xs"
               >
                 <option value="all">All logs</option>
                 <option value="error">Errors only</option>
