@@ -22,11 +22,16 @@ src/
 
 ## Execution
 
-Run the suite once the PocketHive stack is deployed and the required environment variables are available:
+Run the suite once the PocketHive stack is deployed and the required environment variables are available. Helper
+scripts are available at the repository root for Unix-like and Windows environments:
 
 ```bash
-./mvnw verify -pl e2e-tests -am
+./start-e2e-tests.sh          # macOS/Linux
+start-e2e-tests.bat           # Windows
 ```
+
+Both wrappers accept additional Maven arguments, which are forwarded to the underlying `./mvnw verify -pl e2e-tests -am`
+command.
 
 At this stage the module compiles and executes with zero active scenarios. Remove the `@wip` tag on the placeholder
 feature as new steps are implemented in later tasks.
