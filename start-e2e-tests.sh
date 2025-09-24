@@ -9,4 +9,10 @@ if [[ ! -x ./mvnw ]]; then
   exit 1
 fi
 
+export ORCHESTRATOR_BASE_URL="${ORCHESTRATOR_BASE_URL:-http://localhost:8088/orchestrator}"
+export SCENARIO_MANAGER_BASE_URL="${SCENARIO_MANAGER_BASE_URL:-http://localhost:8088/scenario-manager}"
+export RABBITMQ_URI="${RABBITMQ_URI:-amqp://ph-observer:ph-observer@localhost:5672/}"
+export UI_BASE_URL="${UI_BASE_URL:-http://localhost:8088}"
+export UI_WEBSOCKET_URI="${UI_WEBSOCKET_URI:-ws://localhost:8088/ws}"
+
 ./mvnw verify -pl e2e-tests -am "$@"

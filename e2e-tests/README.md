@@ -32,7 +32,10 @@ start-e2e-tests.bat           # Windows
 ```
 
 Both wrappers accept additional Maven arguments, which are forwarded to the underlying `./mvnw verify -pl e2e-tests -am`
-command.
+command. When invoked without extra configuration, the scripts seed the environment with localhost defaults that match
+the standard `docker compose` deployment (e.g. `http://localhost:8088/orchestrator`,
+`http://localhost:8088/scenario-manager`, `amqp://ph-observer:ph-observer@localhost:5672/`, and `ws://localhost:8088/ws`).
+Override any of these values by exporting the environment variables before launching the helper.
 
 The deployment smoke feature runs automatically once the required environment variables are present; otherwise the
 scenario is skipped via JUnit assumptions so local builds without a running stack still succeed. Remove the `@wip` tag
