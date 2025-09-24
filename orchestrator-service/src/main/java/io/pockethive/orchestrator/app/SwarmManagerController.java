@@ -3,6 +3,7 @@ package io.pockethive.orchestrator.app;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.Topology;
+import io.pockethive.control.CommandTarget;
 import io.pockethive.control.ControlSignal;
 import io.pockethive.orchestrator.domain.IdempotencyStore;
 import io.pockethive.orchestrator.domain.Swarm;
@@ -89,6 +90,8 @@ public class SwarmManagerController {
                             swarm.getInstanceId(),
                             correlation,
                             request.idempotencyKey(),
+                            request.commandTarget(),
+                            request.target(),
                             argsFor(request));
                         sendControl(routingKey(swarm.getInstanceId()), toJson(payload), request.target());
                         idempotency.record(scope, "config-update", request.idempotencyKey(), correlation);
@@ -105,10 +108,7 @@ public class SwarmManagerController {
 
     private Map<String, Object> argsFor(ToggleRequest request) {
         Map<String, Object> args = new LinkedHashMap<>();
-        args.put("target", request.target());
-        args.put("scope", request.target());
         Map<String, Object> data = new LinkedHashMap<>();
-        data.put("target", request.target());
         data.put("enabled", request.enabled());
         args.put("data", data);
         return args;
@@ -173,7 +173,8 @@ public class SwarmManagerController {
     public record ToggleRequest(String idempotencyKey,
                                  Boolean enabled,
                                  String target,
-                                 String notes) {
+                                 String notes,
+                                 CommandTarget commandTarget) {
         public ToggleRequest {
             if (idempotencyKey == null || idempotencyKey.isBlank()) {
                 throw new IllegalArgumentException("idempotencyKey is required");
@@ -186,6 +187,15 @@ public class SwarmManagerController {
             }
             if (!"swarm".equals(target) && !"controller".equals(target)) {
                 throw new IllegalArgumentException("target must be swarm or controller");
+            }
+            if (commandTarget == null) {
+                commandTarget = "swarm".equals(target) ? CommandTarget.SWARM : CommandTarget.INSTANCE;
+            }
+            if ("swarm".equals(target) && commandTarget != CommandTarget.SWARM) {
+                throw new IllegalArgumentException("commandTarget must be swarm when target=swarm");
+            }
+            if ("controller".equals(target) && commandTarget != CommandTarget.INSTANCE) {
+                throw new IllegalArgumentException("commandTarget must be instance when target=controller");
             }
         }
     }

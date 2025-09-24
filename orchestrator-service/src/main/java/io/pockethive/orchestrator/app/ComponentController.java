@@ -3,6 +3,7 @@ package io.pockethive.orchestrator.app;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.Topology;
+import io.pockethive.control.CommandTarget;
 import io.pockethive.control.ControlSignal;
 import io.pockethive.orchestrator.domain.IdempotencyStore;
 import org.slf4j.Logger;
@@ -54,7 +55,8 @@ public class ComponentController {
             .orElseGet(() -> {
                 String correlation = UUID.randomUUID().toString();
                 ControlSignal payload = ControlSignal.forInstance("config-update", request.swarmId(), role, instance,
-                    correlation, request.idempotencyKey(), argsFrom(request));
+                    correlation, request.idempotencyKey(),
+                    commandTargetFrom(request), request.target(), argsFrom(request));
                 String jsonPayload = toJson(payload);
                 sendControl(routingKey(role, instance), jsonPayload, "config-update");
                 idempotency.record(scope, "config-update", request.idempotencyKey(), correlation);
@@ -93,13 +95,11 @@ public class ComponentController {
         if (patch != null && !patch.isEmpty()) {
             args.put("data", patch);
         }
-        if (request.target() != null && !request.target().isBlank()) {
-            args.put("target", request.target());
-        }
-        if (request.scope() != null && !request.scope().isBlank()) {
-            args.put("scope", request.scope());
-        }
         return args.isEmpty() ? null : args;
+    }
+
+    private CommandTarget commandTargetFrom(ConfigUpdateRequest request) {
+        return request.commandTarget();
     }
 
     public record ConfigUpdateRequest(String idempotencyKey,
@@ -107,7 +107,31 @@ public class ComponentController {
                                       String notes,
                                       String swarmId,
                                       String target,
-                                      String scope) { }
+                                      String scope,
+                                      CommandTarget commandTarget) {
+
+        public ConfigUpdateRequest {
+            if (commandTarget == null && scope != null && !scope.isBlank()) {
+                commandTarget = commandTargetFromLegacy(scope);
+            }
+            if (commandTarget == null && target != null && !target.isBlank()) {
+                commandTarget = commandTargetFromLegacy(target);
+            }
+            if (commandTarget == null) {
+                throw new IllegalArgumentException("commandTarget is required");
+            }
+        }
+
+        private static CommandTarget commandTargetFromLegacy(String scope) {
+            return switch (scope.toLowerCase()) {
+                case "swarm" -> CommandTarget.SWARM;
+                case "role" -> CommandTarget.ROLE;
+                case "instance", "controller" -> CommandTarget.INSTANCE;
+                case "all" -> CommandTarget.ALL;
+                default -> null;
+            };
+        }
+    }
 
     private String toJson(ControlSignal signal) {
         try {

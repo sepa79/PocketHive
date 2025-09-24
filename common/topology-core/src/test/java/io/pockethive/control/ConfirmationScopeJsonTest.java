@@ -19,7 +19,7 @@ class ConfirmationScopeJsonTest {
             "idem",
             "swarm-create",
             ConfirmationScope.forSwarm("swarm-42"),
-            "Ready"
+            CommandState.status("Ready")
         );
 
         String json = mapper.writeValueAsString(confirmation);
@@ -27,6 +27,6 @@ class ConfirmationScopeJsonTest {
 
         ReadyConfirmation roundTrip = mapper.readValue(json, ReadyConfirmation.class);
         assertEquals("swarm-42", roundTrip.scope().swarmId());
-        assertEquals("Ready", roundTrip.state());
+        assertEquals("Ready", roundTrip.state().status());
     }
 }

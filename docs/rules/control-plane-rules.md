@@ -12,7 +12,7 @@
 - **Command → Confirmation**: Every control action yields **exactly one** `ev.ready.*` (success) or `ev.error.*` (error), correlated by IDs.
 - **Aggregate-first**: Orchestrator consumes **swarm aggregates**; per-component status is for Controller and observability.
 - **Always-on control**: Config & status always handled, even when workload is disabled.
-- **Controller-level toggles**: Downstream services must inspect `args.scope` on `sig.config-update.swarm-controller.*`: `scope=swarm` pauses/resumes all workloads managed by that controller, while `scope=controller` pauses/resumes only the controller runtime. In both cases the control plane stays responsive.
+- **Controller-level toggles**: Downstream services MUST inspect top-level `commandTarget`/`target` on `sig.config-update.swarm-controller.*`: `commandTarget=swarm` + `target=swarm` pauses/resumes all workloads managed by that controller, while `commandTarget=instance` + `target=controller` pauses/resumes only the controller runtime. In both cases the control plane stays responsive.
 - **Non-destructive default**: Stop ≠ Remove. Removal is explicit and terminal.
 
 ---
@@ -23,14 +23,14 @@
   - Only publisher of swarm **lifecycle** signals (template/start/stop/remove).
   - Launches Controller via runtime. On controller handshake emits **`ev.ready.swarm-create.<swarmId>`**.
   - Enforces idempotency, retries, timeouts, and RBAC.
-  - Issues controller-level `sig.config-update.swarm-controller.{instance}` with `args.scope` to pause/resume **workloads** (`scope=swarm`, fan-out to bees) or only the **controller runtime** (`scope=controller`, reconciliation paused) while keeping controllers' control planes alive.
+  - Issues controller-level `sig.config-update.swarm-controller.{instance}` with top-level `commandTarget`/`target` metadata to pause/resume **workloads** (`commandTarget=swarm`, `target=swarm`, fan-out to bees) or only the **controller runtime** (`commandTarget=instance`, `target=controller`, reconciliation paused) while keeping controllers' control planes alive.
   - Tears down Controller after **`ev.ready.swarm-remove.<swarmId>`**.
 
 - **Swarm Controller**
   - Applies `SwarmPlan`; provisions components; computes **aggregate** status.
   - Emits `ev.status-{full|delta}.swarm-controller.<instance>` and confirmations for template/start/stop/remove/config.
   - Treats AMQP status as heartbeat; polls Actuator if stale.
-  - On controller-level `config-update` toggles, inspects `args.scope`: `scope=swarm` → stay reachable and **fan the `enabled` flag out to every managed bee**; `scope=controller` → pause/resume its own reconciliation/runtime only. Emits `ev.status-delta.swarm-controller.{instance}` showing `state.workloads.enabled` or `state.controller.enabled` accordingly.
+  - On controller-level `config-update` toggles, inspects top-level `commandTarget`/`target`: `commandTarget=swarm`/`target=swarm` → stay reachable and **fan the `enabled` flag out to every managed bee**; `commandTarget=instance`/`target=controller` → pause/resume its own reconciliation/runtime only. Emits `ev.status-delta.swarm-controller.{instance}` showing `state.workloads.enabled` or `state.controller.enabled` accordingly.
 
 - **Components**  
   - Emit their own `ev.status-{full|delta}.<role>.<instance>`.  
@@ -50,7 +50,7 @@ Publisher → Consumer
 - `sig.swarm-start.<swarmId>` — Orchestrator → Controller
 - `sig.swarm-stop.<swarmId>` — Orchestrator → Controller *(non-destructive)*
 - `sig.swarm-remove.<swarmId>` — Orchestrator → Controller *(delete resources)*
-- `sig.config-update.<role>.<instance>` — Orchestrator → Component *(or Swarm Controller when `role=swarm-controller`)* — **MUST include `args.scope` (`swarm|controller`)** so consumers know whether to fan-out workloads or pause the controller runtime
+- `sig.config-update.<role>.<instance>` — Orchestrator → Component *(or Swarm Controller when `role=swarm-controller`)* — **MUST include top-level `commandTarget`/`target` metadata (`commandTarget=swarm`/`target=swarm` vs `commandTarget=instance`/`target=controller`)** so consumers know whether to fan-out workloads or pause the controller runtime
 - `sig.status-request.<role>.<instance>` — Orchestrator/Controller → Component *(emit `status-full` now)*
 
 ### 3.2 Confirmations (events)
@@ -80,13 +80,13 @@ Emitter → Consumer
 - `correlationId` *(uuid)* — **new per attempt**
 - `idempotencyKey` *(uuid)* — **stable across retries** of the same action
 - Scope: include whichever of `swarmId`, `role`, `instance` apply
-- Optional `args` object with command-specific parameters
-  - `args.scope` is **required** when `role=swarm-controller` (`swarm|controller`) so consumers know which runtime to pause/resume
+- Optional `args` object with command-specific parameters (workload-specific patches stay in `args`/`patch`)
+- Top-level `commandTarget` *(required)* and optional `target` (contextual hint) guide routing. `commandTarget=swarm`/`target=swarm` signals workload fan-out; `commandTarget=instance`/`target=controller` pauses/resumes the controller runtime. Other workloads typically use `commandTarget=instance` with no `target`.
 
 ### 4.2 Confirmations (emitters MUST include)
 - Echo **`correlationId`** and **`idempotencyKey`** from the initiating control signal (or from the runtime op for create).
 - `signal`, `result` (`success`|`error`), `scope` (`swarmId`/`role`/`instance`), `ts`
-- Success MAY include `state` (`Ready|Running|Stopped|Removed`), and `notes`. When confirming `sig.config-update.swarm-controller.{instance}`, emit `state.scope` (`swarm|controller`), `state.enabled`, and either `state.workloads.enabled` or `state.controller.enabled` so observers can rely on the semantics.
+- Success MAY include `state` (`Ready|Running|Stopped|Removed`), structured command metadata, and `notes`. Config confirmations MUST mirror `commandTarget`/`target` at the top level and include `state.scope`, `state.target`, and `state.enabled`. When the controller fans out workload toggles, include `state.workloads.enabled`; when pausing the controller runtime, include `state.controller.enabled` so observers can rely on the semantics.
 - Error MUST include `code`, `message`; MAY include `phase`, `retryable`, `details`
 
 ### 4.3 Status & bootstrap

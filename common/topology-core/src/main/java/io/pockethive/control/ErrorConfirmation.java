@@ -15,7 +15,7 @@ public record ErrorConfirmation(
     String signal,
     ConfirmationScope scope,
     String result,
-    String state,
+    CommandState state,
     String phase,
     String code,
     String message,
@@ -31,6 +31,9 @@ public record ErrorConfirmation(
             details = null;
         }
         scope = scope == null ? ConfirmationScope.EMPTY : scope;
+        if (state != null && state.scope() == null && !scope.isEmpty()) {
+            state = new CommandState(state.status(), scope, state.target(), state.enabled(), state.details());
+        }
     }
 
     public ErrorConfirmation(Instant ts,
@@ -38,7 +41,7 @@ public record ErrorConfirmation(
                              String idempotencyKey,
                              String signal,
                              ConfirmationScope scope,
-                             String state,
+                             CommandState state,
                              String phase,
                              String code,
                              String message) {
@@ -50,7 +53,7 @@ public record ErrorConfirmation(
                              String idempotencyKey,
                              String signal,
                              ConfirmationScope scope,
-                             String state,
+                             CommandState state,
                              String phase,
                              String code,
                              String message,

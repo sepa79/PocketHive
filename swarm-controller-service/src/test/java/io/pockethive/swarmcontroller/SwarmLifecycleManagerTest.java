@@ -203,10 +203,11 @@ class SwarmLifecycleManagerTest {
         scenarioPayload.capture());
     JsonNode scenarioNode = mapper.readTree(scenarioPayload.getValue());
     assertThat(scenarioNode.path("signal").asText()).isEqualTo("config-update");
+    assertThat(scenarioNode.path("commandTarget").asText()).isEqualTo("swarm");
     assertThat(scenarioNode.path("args").path("data").path("enabled").asBoolean(true)).isFalse();
     assertThat(scenarioNode.path("args").path("data").path("foo").asText()).isEqualTo("bar");
-    assertThat(scenarioNode.path("args").path("data").path("target").asText()).isEqualTo("swarm");
-    assertThat(scenarioNode.path("args").path("target").asText()).isEqualTo("swarm");
+    assertThat(scenarioNode.path("args").path("data").has("target")).isFalse();
+    assertThat(scenarioNode.path("target").asText()).isEqualTo("swarm");
     reset(rabbit);
 
     manager.enableAll();
@@ -218,6 +219,8 @@ class SwarmLifecycleManagerTest {
         resumePayload.capture());
     JsonNode resumeNode = mapper.readTree(resumePayload.getValue());
     assertThat(resumeNode.path("signal").asText()).isEqualTo("config-update");
+    assertThat(resumeNode.path("commandTarget").asText()).isEqualTo("all");
+    assertThat(resumeNode.path("target").asText()).isEqualTo("all");
     assertThat(resumeNode.path("args").path("data").path("enabled").asBoolean(false)).isTrue();
     verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
         eq("rk"),

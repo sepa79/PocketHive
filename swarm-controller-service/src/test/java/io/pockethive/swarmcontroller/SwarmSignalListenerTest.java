@@ -68,7 +68,7 @@ class SwarmSignalListenerTest {
   }
 
   @Test
-  void duplicateReplaysConfirmationAndEmitsNotice() {
+  void duplicateReplaysConfirmationAndEmitsNotice() throws Exception {
     when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
     SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", mapper, 10);
     String rk = "sig.swarm-start." + Topology.SWARM_ID;
@@ -78,15 +78,20 @@ class SwarmSignalListenerTest {
     verify(rabbit, times(2)).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
         eq("ev.ready.swarm-start." + Topology.SWARM_ID),
         argThat((String p) -> p.contains("\"correlationId\":\"c5\"") && p.contains("\"idempotencyKey\":\"i5\"")));
+    ArgumentCaptor<String> duplicatePayload = ArgumentCaptor.forClass(String.class);
     verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
         eq("ev.duplicate.swarm-start"),
-        argThat((String p) -> p.contains("\"correlationId\":\"c6\"")
-            && p.contains("\"originalCorrelationId\":\"c5\"")
-            && p.contains("\"idempotencyKey\":\"i5\"")));
+        duplicatePayload.capture());
+    JsonNode duplicateNode = mapper.readTree(duplicatePayload.getValue());
+    assertThat(duplicateNode.path("correlationId").asText()).isEqualTo("c6");
+    assertThat(duplicateNode.path("originalCorrelationId").asText()).isEqualTo("c5");
+    assertThat(duplicateNode.path("idempotencyKey").asText()).isEqualTo("i5");
+    assertThat(duplicateNode.path("state").path("scope").path("swarmId").asText()).isEqualTo(Topology.SWARM_ID);
+    assertThat(duplicateNode.path("state").path("target").asText()).isEqualTo(Topology.SWARM_ID);
   }
 
   @Test
-  void duplicateErrorReplaysFailureAndEmitsNotice() {
+  void duplicateErrorReplaysFailureAndEmitsNotice() throws Exception {
     when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
     SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", mapper, 10);
     String rk = "sig.swarm-start." + Topology.SWARM_ID;
@@ -99,10 +104,15 @@ class SwarmSignalListenerTest {
         eq("ev.error.swarm-start." + Topology.SWARM_ID),
         argThat((String p) -> p.contains("\"correlationId\":\"c5\"")
             && p.contains("\"idempotencyKey\":\"i5\"")));
+    ArgumentCaptor<String> duplicatePayload = ArgumentCaptor.forClass(String.class);
     verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
         eq("ev.duplicate.swarm-start"),
-        argThat((String p) -> p.contains("\"correlationId\":\"c7\"")
-            && p.contains("\"originalCorrelationId\":\"c5\"")));
+        duplicatePayload.capture());
+    JsonNode duplicateNode = mapper.readTree(duplicatePayload.getValue());
+    assertThat(duplicateNode.path("correlationId").asText()).isEqualTo("c7");
+    assertThat(duplicateNode.path("originalCorrelationId").asText()).isEqualTo("c5");
+    assertThat(duplicateNode.path("state").path("scope").path("swarmId").asText()).isEqualTo(Topology.SWARM_ID);
+    assertThat(duplicateNode.path("state").path("target").asText()).isEqualTo(Topology.SWARM_ID);
   }
 
   @Test
@@ -133,7 +143,9 @@ class SwarmSignalListenerTest {
     JsonNode node = mapper.readTree(payload.getValue());
     assertThat(node.path("correlationId").asText()).isEqualTo("c0");
     assertThat(node.path("idempotencyKey").asText()).isEqualTo("i0");
-    assertThat(node.path("state").asText()).isEqualTo("Ready");
+    assertThat(node.path("state").path("status").asText()).isEqualTo("Ready");
+    assertThat(node.path("state").path("scope").path("swarmId").asText()).isEqualTo(Topology.SWARM_ID);
+    assertThat(node.path("state").path("target").asText()).isEqualTo(Topology.SWARM_ID);
     assertThat(node.path("scope").path("swarmId").asText()).isEqualTo(Topology.SWARM_ID);
   }
 
@@ -174,7 +186,8 @@ class SwarmSignalListenerTest {
     JsonNode startNode = mapper.readTree(startPayload.getValue());
     assertThat(startNode.path("correlationId").asText()).isEqualTo("c1");
     assertThat(startNode.path("idempotencyKey").asText()).isEqualTo("i1");
-    assertThat(startNode.path("state").asText()).isEqualTo("Running");
+    assertThat(startNode.path("state").path("status").asText()).isEqualTo("Running");
+    assertThat(startNode.path("state").path("target").asText()).isEqualTo(Topology.SWARM_ID);
     assertThat(startNode.path("scope").path("swarmId").asText()).isEqualTo(Topology.SWARM_ID);
   }
 
@@ -191,7 +204,8 @@ class SwarmSignalListenerTest {
     JsonNode stopNode = mapper.readTree(stopPayload.getValue());
     assertThat(stopNode.path("correlationId").asText()).isEqualTo("c2");
     assertThat(stopNode.path("idempotencyKey").asText()).isEqualTo("i2");
-    assertThat(stopNode.path("state").asText()).isEqualTo("Stopped");
+    assertThat(stopNode.path("state").path("status").asText()).isEqualTo("Stopped");
+    assertThat(stopNode.path("state").path("target").asText()).isEqualTo(Topology.SWARM_ID);
     assertThat(stopNode.path("scope").path("swarmId").asText()).isEqualTo(Topology.SWARM_ID);
   }
 
@@ -211,7 +225,9 @@ class SwarmSignalListenerTest {
     assertThat(errNode.path("correlationId").asText()).isEqualTo("c3");
     assertThat(errNode.path("idempotencyKey").asText()).isEqualTo("i3");
     assertThat(errNode.path("phase").asText()).isEqualTo("remove");
-    assertThat(errNode.path("state").asText()).isEqualTo("Running");
+    assertThat(errNode.path("state").path("status").asText()).isEqualTo("Running");
+    assertThat(errNode.path("state").path("scope").path("swarmId").asText()).isEqualTo(Topology.SWARM_ID);
+    assertThat(errNode.path("state").path("target").asText()).isEqualTo(Topology.SWARM_ID);
     assertThat(errNode.path("retryable").asBoolean()).isFalse();
   }
 
@@ -233,7 +249,9 @@ class SwarmSignalListenerTest {
     JsonNode node = mapper.readTree(payload.getValue());
     assertThat(node.path("result").asText()).isEqualTo("success");
     assertThat(node.path("signal").asText()).isEqualTo("swarm-remove");
-    assertThat(node.path("state").asText()).isEqualTo("Removed");
+    assertThat(node.path("state").path("status").asText()).isEqualTo("Removed");
+    assertThat(node.path("state").path("target").asText()).isEqualTo(Topology.SWARM_ID);
+    assertThat(node.path("state").path("scope").path("swarmId").asText()).isEqualTo(Topology.SWARM_ID);
     assertThat(node.path("correlationId").asText()).isEqualTo("c3");
     assertThat(node.path("idempotencyKey").asText()).isEqualTo("i3");
     assertThat(node.path("scope").path("swarmId").asText()).isEqualTo(Topology.SWARM_ID);
@@ -245,7 +263,9 @@ class SwarmSignalListenerTest {
     SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", mapper);
     String body = """
         {"correlationId":"c4","idempotencyKey":"i4","signal":"config-update",
-         "role":"swarm-controller","instance":"inst","args":{"data":{"enabled":true}}}
+         "role":"swarm-controller","instance":"inst",
+         "commandTarget":"instance","target":"controller",
+         "args":{"data":{"enabled":true}}}
         """;
     listener.handle(body, "sig.config-update.swarm-controller.inst");
     ArgumentCaptor<String> configPayload = ArgumentCaptor.forClass(String.class);
@@ -257,7 +277,11 @@ class SwarmSignalListenerTest {
     assertThat(configNode.path("idempotencyKey").asText()).isEqualTo("i4");
     assertThat(configNode.path("scope").path("role").asText()).isEqualTo("swarm-controller");
     assertThat(configNode.path("scope").path("instance").asText()).isEqualTo("inst");
-    assertThat(configNode.path("state").asText()).isEqualTo("Running");
+    assertThat(configNode.path("state").path("status").asText()).isEqualTo("Running");
+    assertThat(configNode.path("state").path("scope").path("role").asText()).isEqualTo("swarm-controller");
+    assertThat(configNode.path("state").path("scope").path("instance").asText()).isEqualTo("inst");
+    assertThat(configNode.path("state").path("target").asText()).isEqualTo("controller");
+    assertThat(configNode.path("state").path("details").path("controller").path("enabled").asBoolean()).isTrue();
   }
 
   @Test
@@ -266,7 +290,9 @@ class SwarmSignalListenerTest {
     SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", mapper, 10);
     String body = """
         {"correlationId":"c4","idempotencyKey":"i4","signal":"config-update",
-         "role":"swarm-controller","instance":"inst","args":{"data":{"enabled":true}}}
+         "role":"swarm-controller","instance":"inst",
+         "commandTarget":"instance","target":"controller",
+         "args":{"data":{"enabled":true}}}
         """;
 
     listener.handle(body, "sig.config-update.swarm-controller.inst");
@@ -288,14 +314,21 @@ class SwarmSignalListenerTest {
     String body = """
         {"correlationId":"c10","idempotencyKey":"i10","signal":"config-update",
          "role":"swarm-controller","instance":"inst",
-         "args":{"data":{"target":"swarm","enabled":false}}}
+         "commandTarget":"swarm","target":"swarm",
+         "args":{"data":{"enabled":false}}}
         """;
 
     listener.handle(body, "sig.config-update.swarm-controller.inst");
 
     verify(lifecycle).setSwarmEnabled(false);
+    ArgumentCaptor<String> readyPayload = ArgumentCaptor.forClass(String.class);
     verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
-        eq("ev.ready.config-update.swarm-controller.inst"), anyString());
+        eq("ev.ready.config-update.swarm-controller.inst"), readyPayload.capture());
+    JsonNode readyNode = mapper.readTree(readyPayload.getValue());
+    assertThat(readyNode.path("state").path("status").asText()).isEqualTo("Stopped");
+    assertThat(readyNode.path("state").path("target").asText()).isEqualTo("swarm");
+    assertThat(readyNode.path("state").path("scope").path("swarmId").asText()).isEqualTo(Topology.SWARM_ID);
+    assertThat(readyNode.path("state").path("details").path("workloads").path("enabled").asBoolean()).isFalse();
 
     ArgumentCaptor<String> statusPayload = ArgumentCaptor.forClass(String.class);
     verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
@@ -319,14 +352,21 @@ class SwarmSignalListenerTest {
     String body = """
         {"correlationId":"c11","idempotencyKey":"i11","signal":"config-update",
          "role":"swarm-controller","instance":"inst",
-         "args":{"data":{"target":"controller","enabled":false}}}
+         "commandTarget":"instance","target":"controller",
+         "args":{"data":{"enabled":false}}}
         """;
 
     listener.handle(body, "sig.config-update.swarm-controller.inst");
 
     verify(lifecycle, never()).setSwarmEnabled(anyBoolean());
+    ArgumentCaptor<String> controllerReady = ArgumentCaptor.forClass(String.class);
     verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
-        eq("ev.ready.config-update.swarm-controller.inst"), anyString());
+        eq("ev.ready.config-update.swarm-controller.inst"), controllerReady.capture());
+    JsonNode controllerNode = mapper.readTree(controllerReady.getValue());
+    assertThat(controllerNode.path("state").path("target").asText()).isEqualTo("controller");
+    assertThat(controllerNode.path("state").path("scope").path("role").asText()).isEqualTo("swarm-controller");
+    assertThat(controllerNode.path("state").path("scope").path("instance").asText()).isEqualTo("inst");
+    assertThat(controllerNode.path("state").path("details").path("controller").path("enabled").asBoolean()).isFalse();
 
     ArgumentCaptor<String> statusPayload = ArgumentCaptor.forClass(String.class);
     verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
@@ -336,6 +376,88 @@ class SwarmSignalListenerTest {
     assertThat(node.path("data").path("controllerEnabled").asBoolean()).isFalse();
     assertThat(node.path("data").path("workloadsEnabled").asBoolean()).isTrue();
     assertThat(node.path("data").path("swarmStatus").asText()).isEqualTo("RUNNING");
+  }
+
+  @Test
+  void roleTargetFanOutsToRoleQueue() throws Exception {
+    when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
+    when(lifecycle.getMetrics()).thenReturn(new SwarmMetrics(0,0,0,0, java.time.Instant.now()));
+    SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", mapper);
+    reset(lifecycle, rabbit);
+
+    String body = """
+        {"correlationId":"c12","idempotencyKey":"i12","signal":"config-update",
+         "role":"swarm-controller","instance":"inst",
+         "commandTarget":"role","target":"processor",
+         "args":{"data":{"enabled":true}}}
+        """;
+
+    listener.handle(body, "sig.config-update.swarm-controller.inst");
+
+    verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("sig.config-update.processor"), eq(body));
+    verify(lifecycle, never()).setSwarmEnabled(anyBoolean());
+    ArgumentCaptor<String> readyPayload = ArgumentCaptor.forClass(String.class);
+    verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
+        eq("ev.ready.config-update.swarm-controller.inst"), readyPayload.capture());
+    JsonNode readyNode = mapper.readTree(readyPayload.getValue());
+    assertThat(readyNode.path("state").path("scope").path("role").asText()).isEqualTo("processor");
+    assertThat(readyNode.path("state").path("scope").path("swarmId").asText()).isEqualTo(Topology.SWARM_ID);
+    assertThat(readyNode.path("state").path("target").asText()).isEqualTo("processor");
+  }
+
+  @Test
+  void instanceTargetFanOutsToSpecificBee() throws Exception {
+    when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
+    when(lifecycle.getMetrics()).thenReturn(new SwarmMetrics(0,0,0,0, java.time.Instant.now()));
+    SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", mapper);
+    reset(lifecycle, rabbit);
+
+    String body = """
+        {"correlationId":"c13","idempotencyKey":"i13","signal":"config-update",
+         "role":"swarm-controller","instance":"inst",
+         "commandTarget":"instance","target":"processor.alpha",
+         "args":{"data":{"threshold":5}}}
+        """;
+
+    listener.handle(body, "sig.config-update.swarm-controller.inst");
+
+    verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("sig.config-update.processor.alpha"), eq(body));
+    verify(lifecycle, never()).setSwarmEnabled(anyBoolean());
+    ArgumentCaptor<String> readyPayload = ArgumentCaptor.forClass(String.class);
+    verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
+        eq("ev.ready.config-update.swarm-controller.inst"), readyPayload.capture());
+    JsonNode readyNode = mapper.readTree(readyPayload.getValue());
+    assertThat(readyNode.path("state").path("scope").path("role").asText()).isEqualTo("processor");
+    assertThat(readyNode.path("state").path("scope").path("instance").asText()).isEqualTo("alpha");
+    assertThat(readyNode.path("state").path("target").asText()).isEqualTo("processor.alpha");
+  }
+
+  @Test
+  void allTargetFanOutsGlobally() throws Exception {
+    when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
+    when(lifecycle.getMetrics()).thenReturn(new SwarmMetrics(0,0,0,0, java.time.Instant.now()));
+    SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", mapper);
+    reset(lifecycle, rabbit);
+
+    String body = """
+        {"correlationId":"c14","idempotencyKey":"i14","signal":"config-update",
+         "role":"swarm-controller","instance":"inst",
+         "commandTarget":"all","target":"all",
+         "args":{"data":{"mode":"maintenance"}}}
+        """;
+
+    listener.handle(body, "sig.config-update.swarm-controller.inst");
+
+    verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("sig.config-update"), eq(body));
+    verify(lifecycle, never()).setSwarmEnabled(anyBoolean());
+    ArgumentCaptor<String> readyPayload = ArgumentCaptor.forClass(String.class);
+    verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
+        eq("ev.ready.config-update.swarm-controller.inst"), readyPayload.capture());
+    JsonNode readyNode = mapper.readTree(readyPayload.getValue());
+    assertThat(readyNode.path("state").path("scope").path("swarmId").asText()).isEqualTo(Topology.SWARM_ID);
+    JsonNode globalRole = readyNode.path("state").path("scope").path("role");
+    assertThat(globalRole.isMissingNode() || globalRole.isNull()).isTrue();
+    assertThat(readyNode.path("state").path("target").asText()).isEqualTo("all");
   }
 
   @Test

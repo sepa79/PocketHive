@@ -60,6 +60,7 @@ class SwarmSignalListenerTest {
         assertThat(templateSignal.path("swarmId").asText()).isEqualTo("sw1");
         assertThat(templateSignal.path("correlationId").asText()).isEqualTo("corr");
         assertThat(templateSignal.path("idempotencyKey").asText()).isEqualTo("idem");
+        assertThat(templateSignal.path("commandTarget").asText()).isEqualTo("swarm");
         assertThat(templateSignal.path("args").path("id").asText()).isEqualTo("sw1");
 
         ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
@@ -71,7 +72,8 @@ class SwarmSignalListenerTest {
         assertThat(ready.path("result").asText()).isEqualTo("success");
         assertThat(ready.path("signal").asText()).isEqualTo("swarm-create");
         assertThat(ready.path("scope").path("swarmId").asText()).isEqualTo("sw1");
-        assertThat(ready.path("state").asText()).isEqualTo("Ready");
+        assertThat(ready.path("state").path("status").asText()).isEqualTo("Ready");
+        assertThat(ready.path("state").path("scope").path("swarmId").asText()).isEqualTo("sw1");
         assertThat(ready.path("ts").asText()).isNotBlank();
         assertThat(plans.find("inst1")).isEmpty();
         assertThat(tracker.complete("sw1", Phase.TEMPLATE)).isPresent();
@@ -97,7 +99,8 @@ class SwarmSignalListenerTest {
         assertThat(error.path("idempotencyKey").asText()).isEqualTo("idem");
         assertThat(error.path("result").asText()).isEqualTo("error");
         assertThat(error.path("scope").path("swarmId").asText()).isEqualTo("sw1");
-        assertThat(error.path("state").asText()).isEqualTo("Removed");
+        assertThat(error.path("state").path("status").asText()).isEqualTo("Removed");
+        assertThat(error.path("state").path("scope").path("swarmId").asText()).isEqualTo("sw1");
         assertThat(error.path("phase").asText()).isEqualTo("controller-bootstrap");
         assertThat(error.path("code").asText()).isEqualTo("controller-error");
         assertThat(error.path("message").asText()).isEqualTo("controller failed");

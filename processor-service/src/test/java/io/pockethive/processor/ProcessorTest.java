@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.pockethive.Topology;
 import io.pockethive.asyncapi.AsyncApiSchemaValidator;
+import io.pockethive.control.CommandTarget;
 import io.pockethive.control.ControlSignal;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -77,14 +78,13 @@ class ProcessorTest {
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("enabled", true);
         data.put("baseUrl", "http://next");
-        data.put("target", "swarm");
         Map<String, Object> args = new LinkedHashMap<>();
-        args.put("target", "swarm");
         args.put("data", data);
         String correlationId = UUID.randomUUID().toString();
         String idempotencyKey = UUID.randomUUID().toString();
         ControlSignal signal = ControlSignal.forInstance(
-            "config-update", "sw1", "processor", "inst", correlationId, idempotencyKey, args);
+            "config-update", "sw1", "processor", "inst", correlationId, idempotencyKey,
+            CommandTarget.INSTANCE, "processor.inst", args);
 
         when(listenerRegistry.getListenerContainer("workListener")).thenReturn(workContainer);
         processor.onControl(mapper.writeValueAsString(signal), "sig.config-update", null);
@@ -105,6 +105,11 @@ class ProcessorTest {
         assertThat(node.path("scope").path("role").asText()).isEqualTo("processor");
         assertThat(node.path("scope").path("instance").asText()).isEqualTo("inst");
         assertThat(node.path("scope").path("swarmId").asText()).isEqualTo("sw1");
+        assertThat(node.path("state").path("scope").path("role").asText()).isEqualTo("processor");
+        assertThat(node.path("state").path("scope").path("instance").asText()).isEqualTo("inst");
+        assertThat(node.path("state").path("scope").path("swarmId").asText()).isEqualTo("sw1");
+        assertThat(node.path("state").path("target").asText()).isEqualTo("processor.inst");
+        assertThat(node.path("state").path("enabled").asBoolean()).isTrue();
         assertThat(node.has("args")).isFalse();
         verify(rabbit, never()).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("ev.error.config-update.processor.inst"), anyString());
         List<String> readyErrors = ASYNC_API.validate("#/components/schemas/CommandReadyPayload", node);
@@ -114,13 +119,13 @@ class ProcessorTest {
     @Test
     void configUpdateErrorEmitsErrorConfirmation() throws Exception {
         Map<String, Object> args = Map.of(
-            "target", "swarm",
             "data", Map.of("enabled", "oops")
         );
         String correlationId = UUID.randomUUID().toString();
         String idempotencyKey = UUID.randomUUID().toString();
         ControlSignal signal = ControlSignal.forInstance(
-            "config-update", "sw1", "processor", "inst", correlationId, idempotencyKey, args);
+            "config-update", "sw1", "processor", "inst", correlationId, idempotencyKey,
+            CommandTarget.INSTANCE, "processor.inst", args);
 
         processor.onControl(mapper.writeValueAsString(signal), "sig.config-update", null);
 
@@ -134,6 +139,10 @@ class ProcessorTest {
         assertThat(node.path("scope").path("role").asText()).isEqualTo("processor");
         assertThat(node.path("code").asText()).isEqualTo("IllegalArgumentException");
         assertThat(node.path("message").asText()).isNotBlank();
+        assertThat(node.path("state").path("scope").path("role").asText()).isEqualTo("processor");
+        assertThat(node.path("state").path("scope").path("instance").asText()).isEqualTo("inst");
+        assertThat(node.path("state").path("target").asText()).isEqualTo("processor.inst");
+        assertThat(node.path("state").path("enabled").asBoolean()).isFalse();
         List<String> errorPayload = ASYNC_API.validate("#/components/schemas/CommandErrorPayload", node);
         assertThat(errorPayload).isEmpty();
 

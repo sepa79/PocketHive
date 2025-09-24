@@ -2,6 +2,7 @@ package io.pockethive.orchestrator.app;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.Topology;
+import io.pockethive.control.CommandTarget;
 import io.pockethive.control.ControlSignal;
 import io.pockethive.orchestrator.infra.InMemoryIdempotencyStore;
 import org.junit.jupiter.api.Test;
@@ -32,7 +33,7 @@ class ComponentControllerTest {
     void updateConfigPublishesControlSignal() throws Exception {
         ComponentController controller = new ComponentController(rabbit, new InMemoryIdempotencyStore(), mapper);
         ComponentController.ConfigUpdateRequest request =
-            new ComponentController.ConfigUpdateRequest("idem", Map.of("enabled", true), null, "sw1", "swarm", "swarm");
+            new ComponentController.ConfigUpdateRequest("idem", Map.of("enabled", true), null, "sw1", "swarm", null, CommandTarget.SWARM);
 
         ResponseEntity<ControlResponse> response = controller.updateConfig("generator", "c1", request);
 
@@ -46,8 +47,8 @@ class ComponentControllerTest {
         assertThat(signal.idempotencyKey()).isEqualTo("idem");
         assertThat(signal.args()).isNotNull();
         assertThat(signal.args()).containsKey("data");
-        assertThat(signal.args()).containsEntry("scope", "swarm");
-        assertThat(signal.args()).containsEntry("target", "swarm");
+        assertThat(signal.commandTarget()).isEqualTo(CommandTarget.SWARM);
+        assertThat(signal.target()).isEqualTo("swarm");
         @SuppressWarnings("unchecked")
         Map<String, Object> data = (Map<String, Object>) signal.args().get("data");
         assertThat(data).containsEntry("enabled", true);
@@ -59,7 +60,7 @@ class ComponentControllerTest {
     void configUpdateIsIdempotent() {
         ComponentController controller = new ComponentController(rabbit, new InMemoryIdempotencyStore(), mapper);
         ComponentController.ConfigUpdateRequest request =
-            new ComponentController.ConfigUpdateRequest("idem", Map.of(), null, null, null, null);
+            new ComponentController.ConfigUpdateRequest("idem", Map.of(), null, null, null, null, CommandTarget.INSTANCE);
 
         ResponseEntity<ControlResponse> first = controller.updateConfig("processor", "p1", request);
         ResponseEntity<ControlResponse> second = controller.updateConfig("processor", "p1", request);

@@ -6,6 +6,8 @@ import io.pockethive.observability.StatusEnvelopeBuilder;
 import io.pockethive.control.ConfirmationScope;
 import io.pockethive.control.ReadyConfirmation;
 import io.pockethive.control.ErrorConfirmation;
+import io.pockethive.control.CommandState;
+import io.pockethive.control.CommandTarget;
 import io.pockethive.control.ControlSignal;
 import io.pockethive.orchestrator.domain.SwarmPlanRegistry;
 import io.pockethive.orchestrator.domain.SwarmRegistry;
@@ -144,7 +146,8 @@ public class SwarmSignalListener {
         Map<String, Object> args = json.convertValue(plan, new TypeReference<Map<String, Object>>() {});
         String correlationId = info != null ? info.correlationId() : null;
         String idempotencyKey = info != null ? info.idempotencyKey() : null;
-        return new ControlSignal("swarm-template", correlationId, idempotencyKey, plan.id(), null, null, args);
+        return new ControlSignal("swarm-template", correlationId, idempotencyKey, plan.id(), null, null,
+            CommandTarget.SWARM, null, args);
     }
 
     private void emitCreateReady(Pending info) {
@@ -156,7 +159,7 @@ public class SwarmSignalListener {
                 info.idempotencyKey(),
                 "swarm-create",
                 ConfirmationScope.forSwarm(info.swarmId()),
-                "Ready");
+                CommandState.status("Ready"));
             String payload = json.writeValueAsString(conf);
             sendControl(rk, payload, "ev.ready");
         } catch (Exception e) {
@@ -173,7 +176,7 @@ public class SwarmSignalListener {
                 info.idempotencyKey(),
                 "swarm-create",
                 ConfirmationScope.forSwarm(info.swarmId()),
-                "Removed",
+                CommandState.status("Removed"),
                 "controller-bootstrap",
                 "controller-error",
                 "controller failed",
@@ -198,7 +201,7 @@ public class SwarmSignalListener {
                 info.idempotencyKey(),
                 "swarm-create",
                 ConfirmationScope.forSwarm(info.swarmId()),
-                "Failed",
+                CommandState.status("Failed"),
                 "controller-bootstrap",
                 "timeout",
                 "controller did not become ready in time",
@@ -223,7 +226,7 @@ public class SwarmSignalListener {
                 info.idempotencyKey(),
                 signal,
                 ConfirmationScope.forSwarm(info.swarmId()),
-                "Failed",
+                CommandState.status("Failed"),
                 phase,
                 "timeout",
                 message,

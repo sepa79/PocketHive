@@ -807,6 +807,7 @@ components:
       - signal
       - correlationId
       - idempotencyKey
+      - commandTarget
       properties:
         signal:
           type: string
@@ -817,6 +818,17 @@ components:
         idempotencyKey:
           type: string
           description: Stable identifier reused across retries of the same action
+        commandTarget:
+          type: string
+          description: High-level target classification that guides routing decisions
+          enum:
+          - all
+          - swarm
+          - role
+          - instance
+        target:
+          type: string
+          description: Optional sub-target label (e.g., swarm or controller) for the command effect
         swarmId:
           type: string
           description: Target swarm identifier (when applicable)
@@ -858,7 +870,7 @@ components:
           enum:
           - success
         state:
-          type: string
+          $ref: '#/components/schemas/CommandState'
         notes:
           type: string
       required:
@@ -900,6 +912,8 @@ components:
           type: string
         message:
           type: string
+        state:
+          $ref: '#/components/schemas/CommandState'
         retryable:
           type: boolean
         details:
@@ -913,3 +927,42 @@ components:
       - result
       - code
       - message
+    CommandState:
+      type: object
+      additionalProperties: false
+      properties:
+        status:
+          type: string
+          description: Primary lifecycle status after processing the command
+        scope:
+          type: object
+          description: Scope affected by the resulting state
+          additionalProperties: false
+          properties:
+            swarmId:
+              type: string
+            role:
+              type: string
+            instance:
+              type: string
+        target:
+          type: string
+          description: Optional target label corresponding to the command effect
+        enabled:
+          type: boolean
+          description: Primary enablement flag for the target
+        workloads:
+          type: object
+          additionalProperties: false
+          properties:
+            enabled:
+              type: boolean
+        controller:
+          type: object
+          additionalProperties: false
+          properties:
+            enabled:
+              type: boolean
+        details:
+          type: object
+          additionalProperties: true

@@ -3,6 +3,7 @@ package io.pockethive.moderator;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.pockethive.Topology;
+import io.pockethive.control.CommandTarget;
 import io.pockethive.control.ControlSignal;
 import io.pockethive.observability.ObservabilityContext;
 import io.pockethive.observability.ObservabilityContextUtil;
@@ -225,6 +226,7 @@ public class Moderator {
     payload.put("signal", cs.signal());
     payload.put("result", result);
     payload.set("scope", scopeNode(cs, role, instance));
+    payload.set("state", stateNode(cs, role, instance));
     if (cs.correlationId() != null) {
       payload.put("correlationId", cs.correlationId());
     }
@@ -249,11 +251,38 @@ public class Moderator {
     return scope;
   }
 
+  private ObjectNode stateNode(ControlSignal cs, String role, String instance) {
+    ObjectNode state = objectMapper.createObjectNode();
+    state.set("scope", scopeNode(cs, role, instance));
+    String target = resolveTarget(cs, role, instance);
+    if (target != null && !target.isBlank()) {
+      state.put("target", target);
+    }
+    state.put("enabled", enabled);
+    return state;
+  }
+
   private String resolveSwarm(ControlSignal cs) {
     if (cs.swarmId() != null && !cs.swarmId().isBlank()) {
       return cs.swarmId();
     }
     return Topology.SWARM_ID;
+  }
+
+  private String resolveTarget(ControlSignal cs, String role, String instance) {
+    String target = cs.target();
+    if (target != null && !target.isBlank()) {
+      return target;
+    }
+    CommandTarget commandTarget = cs.commandTarget();
+    if (commandTarget == null) {
+      commandTarget = CommandTarget.INSTANCE;
+    }
+    return switch (commandTarget) {
+      case ALL, SWARM -> resolveSwarm(cs);
+      case ROLE -> role;
+      case INSTANCE -> role + "." + instance;
+    };
   }
 
   private String resolveRole(ControlSignal cs) {
