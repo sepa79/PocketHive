@@ -7,6 +7,7 @@ COPY common/topology-core/pom.xml common/topology-core/pom.xml
 COPY common/docker-client/pom.xml common/docker-client/pom.xml
 COPY common/swarm-model/pom.xml common/swarm-model/pom.xml
 COPY test/pom.xml test/pom.xml
+COPY e2e-tests/pom.xml e2e-tests/pom.xml
 COPY orchestrator-service/pom.xml orchestrator-service/pom.xml
 COPY generator-service/pom.xml generator-service/pom.xml
 COPY moderator-service/pom.xml moderator-service/pom.xml
@@ -21,6 +22,7 @@ COPY common/topology-core/src common/topology-core/src
 COPY common/docker-client/src common/docker-client/src
 COPY common/swarm-model/src common/swarm-model/src
 COPY test/src test/src
+COPY e2e-tests/src e2e-tests/src
 COPY orchestrator-service/src orchestrator-service/src
 COPY generator-service/src generator-service/src
 COPY moderator-service/src moderator-service/src
