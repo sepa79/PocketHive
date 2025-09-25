@@ -93,7 +93,7 @@ This backlog tracks the work needed to deliver the end-to-end acceptance suite t
 - Validate message traversal through the swarm queues and ensure observability streams remain fresh.
 
 **Scope**
-- Produce workload messages (e.g., publish into `ph.<swarmId>.gen`) and assert they pass through `gen → mod → final` queues with expected transformations.
+- Produce workload messages (e.g., publish into `ph.work.<swarmId>.generator`) and assert they pass through `gen → mod → final` queues with expected transformations.
 - Monitor `ev.status-{full|delta}` streams for controllers and bees, enforcing freshness guarantees and heartbeat cadence.
 
 **Constraints**

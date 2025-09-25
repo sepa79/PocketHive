@@ -9,6 +9,7 @@
 ## 1) Purpose & principles
 
 - **Single control surface**: One unified control-signal shape for all actions.
+- **Deterministic queue naming**: Control queues MUST follow `ph.control.<swarmId>.<role>.<instance>`; workload queues hang off the swarm work exchange as `ph.work.<swarmId>.<queueName>`.
 - **Command → Confirmation**: Every control action yields **exactly one** `ev.ready.*` (success) or `ev.error.*` (error), correlated by IDs.
 - **Aggregate-first**: Orchestrator consumes **swarm aggregates**; per-component status is for Controller and observability.
 - **Always-on control**: Config & status always handled, even when workload is disabled.

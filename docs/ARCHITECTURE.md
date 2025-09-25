@@ -40,14 +40,15 @@ PocketHive splits the control plane into **managers** (orchestrator + swarm cont
 
 #### Swarm Controller (Marshal)
 - Applies the plan locally; **provisions** components; maintains the **aggregate** swarm view.
-- Binds its control queue to `sig.*.<swarmId>.swarm-controller.<instance>`, `sig.*.<swarmId>.swarm-controller.ALL`, and `sig.*.ALL.swarm-controller.ALL` so it receives per-instance, per-swarm, and global manager broadcasts.
+- Declares the control queue `ph.control.<swarmId>.swarm-controller.<instance>` and binds it to `sig.*.<swarmId>.swarm-controller.<instance>`, `sig.*.<swarmId>.swarm-controller.ALL`, and `sig.*.ALL.swarm-controller.ALL` so it receives per-instance, per-swarm, and global manager broadcasts.
 - Emits **swarm-level** lifecycle confirmations (`ev.ready.swarm-start.<swarmId>.swarm-controller.<instance>`, etc.) and periodic status events.
 - Treats AMQP `ev.status-{delta|full}` as the **sole heartbeat source**; if a component goes silent it issues `sig.status-request` and marks the component stale if no response arrives.
 - When targeted by `sig.config-update.<swarmId>.swarm-controller.<instance>` it inspects the top-level `commandTarget`/`target`: `commandTarget=swarm`/`target=swarm` → keep the control plane alive and **fan the new workload state out to every bee** via `sig.config-update.<swarmId>.ALL.ALL`; `commandTarget=instance`/`target=controller` → pause/resume only its reconciliation loops while emitting controller-specific state (`state.controller.enabled`).
 - Control plane stays enabled even when workloads are paused; start/stop/remove/status/config are always honored.
 
 ### 2.2 Workers (Bees)
-- Declare their own control queues on startup (e.g., `ph.control.generator.<instance>`) and bind only to their swarm: `sig.*.<swarmId>.<role>.<instance>`, `sig.*.<swarmId>.<role>.ALL`, and `sig.*.<swarmId>.ALL.ALL`.
+- Declare their own control queues on startup using the `ph.control.<swarmId>.<role>.<instance>` naming pattern and bind only to their swarm: `sig.*.<swarmId>.<role>.<instance>`, `sig.*.<swarmId>.<role>.ALL`, and `sig.*.<swarmId>.ALL.ALL`.
+- Consume workloads from queues named `ph.work.<swarmId>.<queueName>` that hang off the swarm's shared work exchange.
 - **Do not bind** to `sig.*.ALL...` routes so that only their controller can command them; orchestrator broadcasts always transit through the controller first.
 - Emit **their own** status streams (`ev.status-{full|delta}.<swarmId>.<role>.<instance>`) and respond to manager `sig.status-request` heartbeats.
 - Apply `sig.config-update.<swarmId>.<role>.<instance>` (`enabled: true|false`) to control **workload** only while keeping control listeners responsive.
@@ -70,8 +71,8 @@ PocketHive splits the control plane into **managers** (orchestrator + swarm cont
 
 | Actor | Declared control queue | Required bindings |
 |---|---|---|
-| **Swarm controller** | `ph.control.swarm-controller.<instance>` | `sig.*.<swarmId>.swarm-controller.<instance>`, `sig.*.<swarmId>.swarm-controller.ALL`, `sig.*.ALL.swarm-controller.ALL` |
-| **Generator / Moderator / Processor / Post-processor / Trigger** | `ph.control.<role>.<instance>` | `sig.*.<swarmId>.<role>.<instance>`, `sig.*.<swarmId>.<role>.ALL`, `sig.*.<swarmId>.ALL.ALL` |
+| **Swarm controller** | `ph.control.<swarmId>.swarm-controller.<instance>` | `sig.*.<swarmId>.swarm-controller.<instance>`, `sig.*.<swarmId>.swarm-controller.ALL`, `sig.*.ALL.swarm-controller.ALL` |
+| **Generator / Moderator / Processor / Post-processor / Trigger** | `ph.control.<swarmId>.<role>.<instance>` | `sig.*.<swarmId>.<role>.<instance>`, `sig.*.<swarmId>.<role>.ALL`, `sig.*.<swarmId>.ALL.ALL` |
 | **Observers (read-only)** | n/a | Subscribe to `ev.ready.*`, `ev.error.*`, `ev.status-*.*` as needed |
 
 > Workers intentionally **do not** bind to `sig.*.ALL...` routes; the controller remains their single command authority. Managers MAY bind to the global pattern to receive orchestrator broadcasts.
