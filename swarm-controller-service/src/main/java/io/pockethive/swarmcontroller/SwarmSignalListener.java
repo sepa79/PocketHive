@@ -33,6 +33,8 @@ import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
 import java.util.List;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 
 @Component
@@ -45,6 +47,7 @@ public class SwarmSignalListener {
   private final String instanceId;
   private final ObjectMapper mapper;
   private final Map<CacheKey, CachedOutcome> outcomes;
+  private final Set<CacheKey> inflight;
   private static final long STATUS_INTERVAL_MS = 5000L;
   private static final long MAX_STALENESS_MS = 15_000L;
   private volatile boolean controllerEnabled = false;
@@ -72,6 +75,7 @@ public class SwarmSignalListener {
         return size() > cacheSize;
       }
     });
+    this.inflight = Collections.newSetFromMap(new ConcurrentHashMap<CacheKey, Boolean>());
     try {
       sendStatusFull();
     } catch (Exception e) {
@@ -208,6 +212,10 @@ public class SwarmSignalListener {
       emitDuplicate(cs, cached, null);
       return;
     }
+    if (!inflight.add(key)) {
+      log.debug("Config update already in-flight for correlation {}", cs.correlationId());
+      return;
+    }
     try {
       JsonNode dataNode = node.path("args").path("data");
       Boolean enabledFlag = dataNode.has("enabled") ? dataNode.path("enabled").asBoolean() : null;
@@ -262,16 +270,17 @@ public class SwarmSignalListener {
 
       CommandState state = configCommandState(cs, originalTarget != null ? originalTarget : normalizedTarget,
           stateEnabled, details);
-      CachedOutcome outcome = emitSuccess(cs, null, state);
-      if (outcome != null) outcomes.put(key, outcome);
-
       for (Runnable fanout : fanouts) {
         fanout.run();
       }
+      CachedOutcome outcome = emitSuccess(cs, null, state);
+      if (outcome != null) outcomes.put(key, outcome);
     } catch (Exception e) {
       log.warn("config update", e);
       CachedOutcome outcome = emitError(cs, e, null);
       if (outcome != null) outcomes.put(key, outcome);
+    } finally {
+      inflight.remove(key);
     }
   }
 
