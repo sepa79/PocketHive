@@ -42,7 +42,7 @@ class SwarmManagerControllerTest {
         when(idempotency.findCorrelation(eq("sw2"), eq("config-update"), eq("idem-1"))).thenReturn(Optional.empty());
         SwarmManagerController controller = new SwarmManagerController(registry, rabbit, idempotency, mapper);
         SwarmManagerController.ToggleRequest request =
-            new SwarmManagerController.ToggleRequest("idem-1", true, null, CommandTarget.SWARM);
+            new SwarmManagerController.ToggleRequest("idem-1", true, null, null);
 
         ResponseEntity<SwarmManagerController.FanoutControlResponse> response = controller.updateAll(request);
 
@@ -93,4 +93,19 @@ class SwarmManagerControllerTest {
         SwarmManagerController.Dispatch dispatch = response.getBody().dispatches().getFirst();
         assertThat(dispatch.response().watch().successTopic()).isEqualTo("ev.ready.config-update.swarm-controller.ctrl-z");
     }
+
+    @Test
+    void deserializesLegacyToggleWithoutCommandTarget() throws Exception {
+        String json = """
+            {
+                "idempotencyKey": "idem-legacy",
+                "enabled": true
+            }
+            """;
+        SwarmManagerController.ToggleRequest request =
+            mapper.readValue(json, SwarmManagerController.ToggleRequest.class);
+
+        assertThat(request.commandTarget()).isEqualTo(CommandTarget.SWARM);
+    }
+
 }

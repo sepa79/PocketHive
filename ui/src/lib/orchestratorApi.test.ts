@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, type Mock } from 'vitest'
 import type { Component } from '../types/hive'
-import { createSwarm, startSwarm, stopSwarm, sendConfigUpdate } from './orchestratorApi'
+import { createSwarm, startSwarm, stopSwarm, sendConfigUpdate, enableSwarmManagers, disableSwarmManagers } from './orchestratorApi'
 
 vi.mock('./api', () => ({
   apiFetch: vi.fn().mockResolvedValue({}),
@@ -34,6 +34,28 @@ describe('orchestratorApi', () => {
     const call = (apiFetch as unknown as Mock).mock.calls.pop()!
     expect(call[0]).toBe('/orchestrator/swarms/sw1/stop')
     expect(call[1]?.method).toBe('POST')
+  })
+
+  it('posts swarm manager toggles with command target', async () => {
+    await enableSwarmManagers()
+    let call = (apiFetch as unknown as Mock).mock.calls.pop()!
+    expect(call[0]).toBe('/orchestrator/swarm-managers/enabled')
+    expect(call[1]?.method).toBe('POST')
+    const enableBody = JSON.parse(call[1]?.body as string)
+    expect(enableBody.commandTarget).toBe('swarm')
+    expect(enableBody.enabled).toBe(true)
+    expect(typeof enableBody.idempotencyKey).toBe('string')
+    expect(enableBody.target).toBeUndefined()
+
+    await disableSwarmManagers()
+    call = (apiFetch as unknown as Mock).mock.calls.pop()!
+    expect(call[0]).toBe('/orchestrator/swarm-managers/enabled')
+    expect(call[1]?.method).toBe('POST')
+    const disableBody = JSON.parse(call[1]?.body as string)
+    expect(disableBody.commandTarget).toBe('swarm')
+    expect(disableBody.enabled).toBe(false)
+    expect(typeof disableBody.idempotencyKey).toBe('string')
+    expect(disableBody.target).toBeUndefined()
   })
 
   it('posts component config update', async () => {

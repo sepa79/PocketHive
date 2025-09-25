@@ -1,7 +1,7 @@
 # PocketHive MVP Roadmap
 ## From Current State to JMeter-like Load Testing Framework
 
-### Current State (v0.10.0)
+### Current State (v0.11.0)
 - Orchestrator drives swarm lifecycle over REST with idempotent start/stop and remove guards
 - Multi-swarm queue isolation with swarm-aware metrics and bee naming
 - React UI renders grouped swarms, topology, live component controls, and Buzz log streaming

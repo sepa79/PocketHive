@@ -153,7 +153,7 @@ public class SwarmManagerController {
         }
         String text = value.toString();
         if (text.length() > 300) {
-            return text.substring(0, 300) + "…";
+            return text.substring(0, 300) + "...";
         }
         return text;
     }
@@ -164,7 +164,7 @@ public class SwarmManagerController {
         }
         String trimmed = payload.strip();
         if (trimmed.length() > 300) {
-            return trimmed.substring(0, 300) + "…";
+            return trimmed.substring(0, 300) + "...";
         }
         return trimmed;
     }
@@ -181,7 +181,7 @@ public class SwarmManagerController {
                 throw new IllegalArgumentException("enabled flag is required");
             }
             if (commandTarget == null) {
-                throw new IllegalArgumentException("commandTarget is required");
+                commandTarget = CommandTarget.SWARM;
             }
             if (commandTarget != CommandTarget.SWARM && commandTarget != CommandTarget.INSTANCE) {
                 throw new IllegalArgumentException("commandTarget must be swarm or instance");
