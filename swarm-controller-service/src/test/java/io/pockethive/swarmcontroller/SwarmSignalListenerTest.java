@@ -10,7 +10,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.ArgumentMatchers;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
@@ -21,6 +20,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
@@ -49,6 +49,12 @@ class SwarmSignalListenerTest {
     return """
         {"correlationId":"%s","idempotencyKey":"%s","signal":"%s","swarmId":"%s","args":{}}
         """.formatted(corr, id, sig, Topology.SWARM_ID);
+  }
+
+  private String configAllSignal(boolean enabled) {
+    return """
+        {"correlationId":"c-all","idempotencyKey":"i-all","signal":"config-update","swarmId":"%s","role":"swarm-controller","instance":"inst","commandTarget":"all","args":{"data":{"enabled":%s}}}
+        """.formatted(Topology.SWARM_ID, enabled);
   }
 
   private String status(String swarmId, boolean enabled) {
@@ -218,6 +224,21 @@ class SwarmSignalListenerTest {
     assertThat(configNode.path("state").path("status").asText()).isEqualTo("Running");
     assertThat(configNode.path("state").path("scope").isMissingNode()).isTrue();
     assertThat(configNode.path("state").path("details").path("controller").path("enabled").asBoolean()).isTrue();
+  }
+
+  @Test
+  void configUpdateAllProcessedOnce() throws Exception {
+    when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
+    SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", mapper);
+
+    String payload = configAllSignal(true);
+
+    listener.handle(payload, "sig.config-update.swarm-controller.inst");
+    listener.handle(payload, "sig.config-update.swarm-controller.inst");
+
+    verify(lifecycle, never()).setSwarmEnabled(true);
+    verify(rabbit, times(1)).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
+        eq("ev.ready.config-update.swarm-controller.inst"), anyString());
   }
 
   @Test
@@ -397,7 +418,7 @@ class SwarmSignalListenerTest {
   }
 
   @Test
-  void repeatedAllFanOutsAreNotSuppressed() throws Exception {
+  void repeatedAllFanOutsAreSuppressed() throws Exception {
     when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
     when(lifecycle.getMetrics()).thenReturn(new SwarmMetrics(0,0,0,0, java.time.Instant.now()));
     SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", mapper);
@@ -414,7 +435,7 @@ class SwarmSignalListenerTest {
     listener.handle(body, "sig.config-update.swarm-controller.inst");
     listener.handle(body, "sig.config-update.swarm-controller.inst");
 
-    verify(rabbit, times(2)).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("sig.config-update"), eq(body));
+    verify(rabbit, times(1)).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("sig.config-update"), eq(body));
   }
 
   @Test
@@ -443,7 +464,7 @@ class SwarmSignalListenerTest {
     SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", mapper);
     reset(lifecycle, rabbit);
     stubLifecycleDefaults();
-    listener.handle("{}", "sig.status-request.swarm-controller.inst");
+    listener.handle(signal("status-request", "id-status", "corr-status"), "sig.status-request.swarm-controller.inst");
     verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
         startsWith("ev.status-full.swarm-controller.inst"),
         argThat((String p) -> p.contains("\"swarmStatus\":\"RUNNING\"")

@@ -32,6 +32,12 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
 
+import io.pockethive.controlplane.ControlPlaneIdentity;
+import io.pockethive.controlplane.manager.ManagerControlPlane;
+import io.pockethive.controlplane.messaging.AmqpControlPlanePublisher;
+import io.pockethive.controlplane.messaging.EventMessage;
+import io.pockethive.controlplane.messaging.SignalMessage;
+
 /**
  * Handles control-plane signals for orchestrator and dispatches swarm plans when
  * controllers become ready.
@@ -45,13 +51,13 @@ public class SwarmSignalListener {
     private static final Duration TEMPLATE_TIMEOUT = Duration.ofMillis(120_000L);
     private static final Logger log = LoggerFactory.getLogger(SwarmSignalListener.class);
 
-    private final AmqpTemplate rabbit;
     private final SwarmPlanRegistry plans;
     private final SwarmRegistry registry;
     private final SwarmCreateTracker creates;
     private final ContainerLifecycleManager lifecycle;
     private final ObjectMapper json;
     private final String instanceId;
+    private final ManagerControlPlane controlPlane;
 
     public SwarmSignalListener(AmqpTemplate rabbit,
                                SwarmPlanRegistry plans,
@@ -60,13 +66,17 @@ public class SwarmSignalListener {
                                ContainerLifecycleManager lifecycle,
                                ObjectMapper json,
                                @Qualifier("instanceId") String instanceId) {
-        this.rabbit = rabbit;
         this.plans = plans;
         this.creates = creates;
         this.registry = registry;
         this.lifecycle = lifecycle;
         this.json = json.findAndRegisterModules();
         this.instanceId = instanceId;
+        this.controlPlane = ManagerControlPlane.builder(
+            new AmqpControlPlanePublisher(rabbit, Topology.CONTROL_EXCHANGE),
+            this.json)
+            .identity(new ControlPlaneIdentity(SCOPE, ROLE, instanceId))
+            .build();
         try {
             sendStatusFull();
         } catch (Exception e) {
@@ -325,7 +335,11 @@ public class SwarmSignalListener {
         } else {
             log.info("[CTRL] {} rk={} inst={} payload={}", label, routingKey, instanceId, snippet);
         }
-        rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, routingKey, payload);
+        if (routingKey != null && routingKey.startsWith("sig.")) {
+            controlPlane.publishSignal(new SignalMessage(routingKey, payload));
+        } else {
+            controlPlane.publishEvent(new EventMessage(routingKey, payload));
+        }
     }
 
     private void sendControl(String routingKey, String payload) {

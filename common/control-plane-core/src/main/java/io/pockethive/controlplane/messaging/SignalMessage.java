@@ -1,12 +1,11 @@
 package io.pockethive.controlplane.messaging;
 
-import io.pockethive.control.ControlSignal;
 import java.util.Objects;
 
 /**
- * Describes a control signal and the routing key used to publish it.
+ * Describes a control signal payload and the routing key used to publish it.
  */
-public record SignalMessage(String routingKey, ControlSignal payload) {
+public record SignalMessage(String routingKey, Object payload) {
 
     public SignalMessage {
         Objects.requireNonNull(routingKey, "routingKey");
