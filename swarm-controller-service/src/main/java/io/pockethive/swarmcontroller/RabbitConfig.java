@@ -63,12 +63,6 @@ public class RabbitConfig {
   }
 
   @Bean
-  Binding bindConfigGlobal(@Qualifier("controlQueue") Queue controlQueue,
-                           @Qualifier("controlExchange") TopicExchange controlExchange) {
-    return BindingBuilder.bind(controlQueue).to(controlExchange).with("sig.config-update");
-  }
-
-  @Bean
   Binding bindConfigRole(@Qualifier("controlQueue") Queue controlQueue,
                          @Qualifier("controlExchange") TopicExchange controlExchange) {
     return BindingBuilder.bind(controlQueue).to(controlExchange).with("sig.config-update." + ROLE);

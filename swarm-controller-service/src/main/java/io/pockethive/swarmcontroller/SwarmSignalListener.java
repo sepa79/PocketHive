@@ -28,13 +28,10 @@ import org.springframework.stereotype.Component;
 
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.List;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 
 @Component
@@ -46,8 +43,6 @@ public class SwarmSignalListener {
   private final RabbitTemplate rabbit;
   private final String instanceId;
   private final ObjectMapper mapper;
-  private final Map<CacheKey, CachedOutcome> outcomes;
-  private final Set<CacheKey> inflight;
   private static final long STATUS_INTERVAL_MS = 5000L;
   private static final long MAX_STALENESS_MS = 15_000L;
   private volatile boolean controllerEnabled = false;
@@ -57,25 +52,10 @@ public class SwarmSignalListener {
                              RabbitTemplate rabbit,
                              @Qualifier("instanceId") String instanceId,
                              ObjectMapper mapper) {
-    this(lifecycle, rabbit, instanceId, mapper, 100);
-  }
-
-  SwarmSignalListener(SwarmLifecycle lifecycle,
-                      RabbitTemplate rabbit,
-                      String instanceId,
-                      ObjectMapper mapper,
-                      int cacheSize) {
     this.lifecycle = lifecycle;
     this.rabbit = rabbit;
     this.instanceId = instanceId;
     this.mapper = mapper.findAndRegisterModules();
-    this.outcomes = Collections.synchronizedMap(new LinkedHashMap<>(16, 0.75f, true) {
-      @Override
-      protected boolean removeEldestEntry(Map.Entry<CacheKey, CachedOutcome> eldest) {
-        return size() > cacheSize;
-      }
-    });
-    this.inflight = Collections.newSetFromMap(new ConcurrentHashMap<CacheKey, Boolean>());
     try {
       sendStatusFull();
     } catch (Exception e) {
@@ -168,22 +148,13 @@ public class SwarmSignalListener {
       log.warn(label + " parse", e);
       return;
     }
-    CacheKey key = cacheKey(cs);
-    CachedOutcome cached = outcomes.get(key);
-    if (cached != null) {
-      sendControl(cached.routingKey(), cached.payload(), "cached");
-      emitDuplicate(cs, cached, swarmId);
-      return;
-    }
     try {
       log.info("{} signal for swarm {}", label.substring(0, 1).toUpperCase() + label.substring(1), swarmId);
       action.apply(node);
-      CachedOutcome outcome = emitSuccess(cs, swarmId);
-      if (outcome != null) outcomes.put(key, outcome);
+      emitSuccess(cs, swarmId);
     } catch (Exception e) {
       log.warn(label, e);
-      CachedOutcome outcome = emitError(cs, e, swarmId);
-      if (outcome != null) outcomes.put(key, outcome);
+      emitError(cs, e, swarmId);
     }
   }
 
@@ -200,20 +171,8 @@ public class SwarmSignalListener {
       return;
     }
 
-    if (!routingKey.equals("sig.config-update")
-        && !routingKey.startsWith("sig.config-update." + ROLE)) {
+    if (!routingKey.startsWith("sig.config-update." + ROLE)) {
       log.debug("Ignoring config-update on routing key {}", routingKey);
-      return;
-    }
-    CacheKey key = cacheKey(cs);
-    CachedOutcome cached = outcomes.get(key);
-    if (cached != null) {
-      sendControl(cached.routingKey(), cached.payload(), "cached");
-      emitDuplicate(cs, cached, null);
-      return;
-    }
-    if (!inflight.add(key)) {
-      log.debug("Config update already in-flight for correlation {}", cs.correlationId());
       return;
     }
     try {
@@ -273,41 +232,17 @@ public class SwarmSignalListener {
       for (Runnable fanout : fanouts) {
         fanout.run();
       }
-      CachedOutcome outcome = emitSuccess(cs, null, state);
-      if (outcome != null) outcomes.put(key, outcome);
+      emitSuccess(cs, null, state);
     } catch (Exception e) {
       log.warn("config update", e);
-      CachedOutcome outcome = emitError(cs, e, null);
-      if (outcome != null) outcomes.put(key, outcome);
-    } finally {
-      inflight.remove(key);
+      emitError(cs, e, null);
     }
-  }
-
-  private CacheKey cacheKey(ControlSignal cs) {
-    String swarmId = cs.swarmId() != null ? cs.swarmId() : Topology.SWARM_ID;
-    return new CacheKey(swarmId, cs.signal(), cs.role(), cs.instance(), cs.idempotencyKey());
   }
 
   @FunctionalInterface
   private interface SignalAction {
     void apply(JsonNode node) throws Exception;
   }
-
-  private record CacheKey(String swarmId, String signal, String role, String instance, String idempotencyKey) {}
-
-  private record CachedOutcome(String routingKey,
-                               String payload,
-                               String correlationId,
-                               CommandState state) {}
-
-  private record DuplicateNotice(Instant ts,
-                                 String correlationId,
-                                 String originalCorrelationId,
-                                 String idempotencyKey,
-                                 String signal,
-                                 ConfirmationScope scope,
-                                 CommandState state) {}
 
   @Scheduled(fixedRate = STATUS_INTERVAL_MS)
   public void status() {
@@ -355,11 +290,11 @@ public class SwarmSignalListener {
     return new ControlSignal(signal, correlationId, idempotencyKey, swarmId, role, instance, commandTarget, target, args);
   }
 
-  private CachedOutcome emitSuccess(ControlSignal cs, String swarmIdFallback) {
-    return emitSuccess(cs, swarmIdFallback, null);
+  private void emitSuccess(ControlSignal cs, String swarmIdFallback) {
+    emitSuccess(cs, swarmIdFallback, null);
   }
 
-  private CachedOutcome emitSuccess(ControlSignal cs, String swarmIdFallback, CommandState overrideState) {
+  private void emitSuccess(ControlSignal cs, String swarmIdFallback, CommandState overrideState) {
     String rk;
     if (cs.signal().startsWith("swarm-")) {
       String swarmId = cs.swarmId();
@@ -368,7 +303,7 @@ public class SwarmSignalListener {
     } else if ("config-update".equals(cs.signal()) && cs.role() != null && cs.instance() != null) {
       rk = "ev.ready.config-update." + cs.role() + "." + cs.instance();
     } else {
-      return null;
+      return;
     }
     ConfirmationScope scope = scopeFor(cs, swarmIdFallback);
     CommandState baseState = overrideState != null ? overrideState : stateForSuccess(cs);
@@ -383,10 +318,9 @@ public class SwarmSignalListener {
     );
     String json = toJson(confirmation);
     sendControl(rk, json, "ev.ready");
-    return new CachedOutcome(rk, json, cs.correlationId(), state);
   }
 
-  private CachedOutcome emitError(ControlSignal cs, Exception e, String swarmIdFallback) {
+  private void emitError(ControlSignal cs, Exception e, String swarmIdFallback) {
     String rk = "ev.error." + cs.signal();
     if (cs.swarmId() != null) {
       rk += "." + cs.swarmId();
@@ -412,26 +346,6 @@ public class SwarmSignalListener {
     );
     String json = toJson(confirmation);
     sendControl(rk, json, "ev.error");
-    return new CachedOutcome(rk, json, cs.correlationId(), state);
-  }
-
-  private void emitDuplicate(ControlSignal cs, CachedOutcome cached, String swarmIdFallback) {
-    ConfirmationScope scope = scopeFor(cs, swarmIdFallback);
-    CommandState state = cached != null && cached.state() != null
-        ? cached.state()
-        : enrichState(cs, swarmIdFallback, null);
-    DuplicateNotice notice = new DuplicateNotice(
-        Instant.now(),
-        cs.correlationId(),
-        cached.correlationId(),
-        cs.idempotencyKey(),
-        cs.signal(),
-        scope,
-        state
-    );
-    String rk = "ev.duplicate." + cs.signal();
-    String json = toJson(notice);
-    sendControl(rk, json, "duplicate");
   }
 
   private ConfirmationScope scopeFor(ControlSignal cs, String swarmIdFallback) {
@@ -719,7 +633,6 @@ public class SwarmSignalListener {
         .data("workloadsEnabled", workloadsEnabled)
         .controlIn(controlQueue)
         .controlRoutes(
-            "sig.config-update",
             "sig.config-update." + ROLE,
             "sig.config-update." + ROLE + "." + instanceId,
             "sig.status-request",
@@ -756,7 +669,6 @@ public class SwarmSignalListener {
         .data("workloadsEnabled", workloadsEnabled)
         .controlIn(controlQueue)
         .controlRoutes(
-            "sig.config-update",
             "sig.config-update." + ROLE,
             "sig.config-update." + ROLE + "." + instanceId,
             "sig.status-request",

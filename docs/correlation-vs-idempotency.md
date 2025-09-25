@@ -77,23 +77,23 @@ Use **both** on every control signal.
 ```
 
 **Duplicate handling (server)**
-- Lookup by `(swarmId, "swarm-start", "a1c3-1111-2222-9f")`.
-- If found, **do not** re‑execute. Re‑emit the stored confirmation payload.
+- The Swarm Controller no longer caches outcomes; it executes every attempt and emits a fresh confirmation.
+- Use `idempotencyKey` to detect unintended retries in upstream services if replay would be harmful.
 
 ---
 
 ## Implementation notes
 
-- **Key scope:** include the **signal name** in the dedup key. Starting and stopping with the same idempotency key are **different** commands.
-- **Retention:** store idempotency entries for at least the maximum user retry window plus network jitter.
-- **UI pattern:** send both fields, subscribe to `ev.ready.*` and `ev.error.*`, and reconcile confirmations by `correlationId`. Use `idempotencyKey` to resolve late or duplicated confirmations safely.
-- **If you insist on one field:** you can collapse to `requestId` **only if** clients reuse it on retries and the server dedups on it. You will lose clean per‑attempt tracing unless you add a separate `attemptId` or tracing span IDs.
+- **Key scope:** if you implement caller-side deduplication, include the **signal name** in the key. Starting and stopping with the same idempotency key are **different** commands.
+- **Retention:** caller-side caches should live for at least the maximum user retry window plus network jitter.
+- **UI pattern:** send both fields, subscribe to `ev.ready.*` and `ev.error.*`, and reconcile confirmations by `correlationId`. Use `idempotencyKey` to notice accidental double-submits even though the controller will apply them.
+- **If you collapse to one field:** only do so if clients truly reuse it on retries; otherwise you lose per-attempt tracing.
 
 ---
 
 ## Quick checklist
 
 - [ ] Every control signal carries **both** fields.  
-- [ ] Controller dedups on `(swarmId, signal, idempotencyKey)`.  
+- [ ] Controller emits a confirmation for **every attempt** (no dedup cache).
 - [ ] Confirmations echo **both** fields.  
 - [ ] Logs and metrics index by **correlationId** for attempts and by **idempotencyKey** for user actions.  

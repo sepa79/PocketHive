@@ -97,8 +97,10 @@ Emitter → Consumer
 
 ## 5) Idempotency & retries
 
-- Delivery is **at-least-once**. Receivers MUST **deduplicate** control signals by `(swarmId, signal, idempotencyKey)` within a retention window.
-- On duplicate, DO NOT re-execute; **re-emit** the prior outcome with the same ids.
+- Delivery is **at-least-once**. Receivers MUST tolerate replays; the swarm controller no longer performs automatic
+  deduplication.
+- Consumers MAY use `idempotencyKey` to guard side-effects locally, but the shared controller simply processes each attempt and
+  emits a fresh confirmation.
 - UI **retries** must reuse **the same `idempotencyKey`**; Orchestrator creates a new `correlationId` per attempt.
 - Suggested retention: ≥ duration of the longest user retry horizon (e.g., 24h).
 
@@ -244,4 +246,5 @@ Emitter → Consumer
 ## 13) Compliance & validation
 
 - Validate envelopes and topics against `docs/spec/asyncapi.yaml`.  
-- Automated tests should assert: one confirmation per command; ids echo; dedupe behavior; staleness handling; ordering on start/stop.
+- Automated tests should assert: one confirmation per command attempt; ids echo; replayed attempts emit fresh confirmations;
+  staleness handling; ordering on start/stop.

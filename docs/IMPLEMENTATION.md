@@ -7,13 +7,14 @@
 - [ ] Handle `sig.swarm-start/stop/remove.<swarmId>` and `sig.config-update…`; await corresponding `ev.ready.*` or `ev.error.*`.
 - [ ] Track timeouts; mark Failed; do **not** auto-delete.
 - [ ] On `ev.ready.swarm-remove.<swarmId>`, remove the Swarm Controller runtime unit and clear orchestration state.
-- [ ] Idempotency: dedup `(swarmId, signal, idempotencyKey)`; correlation new per attempt.
+- [ ] Idempotency: ensure orchestrator avoids reusing `(swarmId, signal, idempotencyKey)` unless a replay is desired; generate a
+      new `correlationId` per attempt.
 
 ## Swarm Controller
 - [ ] Apply plan; provision components; maintain aggregate.
 - [ ] Derive order from queue I/O; enable/disable per signal.
 - [ ] Emit swarm-level aggregates and heartbeats; poll Actuator if status stale.
-- [ ] Control plane always on; deduplicate commands.
+- [ ] Control plane always on; process every command attempt and emit a confirmation for each.
 
 ## Components
 - [ ] Expose Actuator; emit `ev.status-{full|delta}`.

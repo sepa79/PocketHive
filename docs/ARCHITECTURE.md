@@ -279,8 +279,10 @@ sequenceDiagram
 ## 9. Idempotency & delivery
 
 - Control messages carry an **idempotency key** (UUID) and `correlationId`; delivery is **at‑least‑once**.
-- Swarm Controller **deduplicates** within a rolling window per `{swarmId, action[, component]}`.
-- On duplicate, emit a “duplicate ignored” event referencing the original `correlationId` when known.
+- The Swarm Controller now executes **every attempt**. It no longer caches outcomes, so callers must avoid reusing `idempotencyKey`
+  values unless they intentionally want the command re-applied.
+- Upstream components may still perform their own idempotency checks, but the controller simply emits a fresh confirmation for
+  each attempt.
 
 ---
 
