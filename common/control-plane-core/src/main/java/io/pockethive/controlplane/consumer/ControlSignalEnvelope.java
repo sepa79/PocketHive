@@ -10,11 +10,12 @@ import java.util.Objects;
 /**
  * Parsed control signal plus metadata supplied by the consumer infrastructure.
  */
-public record ControlSignalEnvelope(ControlSignal signal, String routingKey, Instant receivedAt) {
+public record ControlSignalEnvelope(ControlSignal signal, String routingKey, String payload, Instant receivedAt) {
 
     public ControlSignalEnvelope {
         Objects.requireNonNull(signal, "signal");
         Objects.requireNonNull(routingKey, "routingKey");
+        Objects.requireNonNull(payload, "payload");
         Objects.requireNonNull(receivedAt, "receivedAt");
     }
 

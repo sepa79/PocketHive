@@ -36,7 +36,7 @@ public final class ControlPlaneConsumer {
             return false;
         }
         ControlSignal signal = parse(payload);
-        ControlSignalEnvelope envelope = new ControlSignalEnvelope(signal, routingKey, clock.instant());
+        ControlSignalEnvelope envelope = new ControlSignalEnvelope(signal, routingKey, payload, clock.instant());
         if (!selfFilter.shouldProcess(identity, envelope)) {
             return false;
         }

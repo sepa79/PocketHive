@@ -7,6 +7,12 @@ import io.micrometer.core.instrument.DistributionSummary;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.pockethive.Topology;
 import io.pockethive.control.ControlSignal;
+import io.pockethive.controlplane.ControlPlaneIdentity;
+import io.pockethive.controlplane.worker.WorkerConfigCommand;
+import io.pockethive.controlplane.worker.WorkerControlPlane;
+import io.pockethive.controlplane.worker.WorkerSignalListener;
+import io.pockethive.controlplane.worker.WorkerSignalListener.WorkerSignalContext;
+import io.pockethive.controlplane.worker.WorkerStatusRequest;
 import io.pockethive.observability.Hop;
 import io.pockethive.observability.ObservabilityContext;
 import io.pockethive.observability.ObservabilityContextUtil;
@@ -27,7 +33,6 @@ import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
@@ -49,6 +54,8 @@ public class PostProcessor {
   private final AtomicLong counter = new AtomicLong();
   private static final long STATUS_INTERVAL_MS = 5000L;
   private volatile long lastStatusTs = System.currentTimeMillis();
+  private final WorkerControlPlane controlPlane;
+  private final WorkerSignalListener controlListener;
 
   public PostProcessor(RabbitTemplate rabbit,
                        MeterRegistry registry,
@@ -77,6 +84,41 @@ public class PostProcessor {
         .tag("instance", instanceId)
         .tag("swarm", Topology.SWARM_ID)
         .register(registry);
+    this.controlPlane = WorkerControlPlane.builder(MAPPER)
+        .identity(new ControlPlaneIdentity(Topology.SWARM_ID, ROLE, instanceId))
+        .build();
+    this.controlListener = new WorkerSignalListener() {
+      @Override
+      public void onStatusRequest(WorkerStatusRequest request) {
+        ControlSignal signal = request.signal();
+        if (signal.correlationId() != null) {
+          MDC.put("correlation_id", signal.correlationId());
+        }
+        if (signal.idempotencyKey() != null) {
+          MDC.put("idempotency_key", signal.idempotencyKey());
+        }
+        logControlReceive(request.envelope().routingKey(), signal.signal(), request.payload());
+        sendStatusFull(0);
+      }
+
+      @Override
+      public void onConfigUpdate(WorkerConfigCommand command) {
+        ControlSignal signal = command.signal();
+        if (signal.correlationId() != null) {
+          MDC.put("correlation_id", signal.correlationId());
+        }
+        if (signal.idempotencyKey() != null) {
+          MDC.put("idempotency_key", signal.idempotencyKey());
+        }
+        logControlReceive(command.envelope().routingKey(), signal.signal(), command.payload());
+        handleConfigUpdate(command);
+      }
+
+      @Override
+      public void onUnsupported(WorkerSignalContext context) {
+        log.debug("Ignoring unsupported control signal {}", context.envelope().signal().signal());
+      }
+    };
     try{ sendStatusFull(0); } catch(Exception ignore){}
   }
 
@@ -134,65 +176,24 @@ public class PostProcessor {
       if(payload==null || payload.isBlank()){
         return;
       }
-      ControlSignal cs;
-      try{
-        cs = MAPPER.readValue(payload, ControlSignal.class);
-      }catch(Exception e){
-        log.warn("control parse", e);
-        return;
-      }
-      if(cs.correlationId()!=null){
-        MDC.put("correlation_id", cs.correlationId());
-      }
-      if(cs.idempotencyKey()!=null){
-        MDC.put("idempotency_key", cs.idempotencyKey());
-      }
-      String signal = cs.signal();
-      if(signal==null || signal.isBlank()){
-        log.warn("control missing signal");
-        return;
-      }
-      logControlReceive(rk, signal, payload);
-      switch(signal){
-        case "status-request" -> sendStatusFull(0);
-        case "config-update" -> handleConfigUpdate(cs);
-        default -> log.debug("Ignoring unsupported control signal {}", signal);
+      boolean handled = controlPlane.consume(payload, rk, controlListener);
+      if (!handled) {
+        log.debug("Ignoring control payload on routing key {}", rk);
       }
     } finally {
       MDC.clear();
     }
   }
 
-  private void handleConfigUpdate(ControlSignal cs){
+  private void handleConfigUpdate(WorkerConfigCommand command){
+    ControlSignal cs = command.signal();
     try{
-      Map<String, Object> data = extractConfigData(cs);
-      applyConfig(data);
+      applyConfig(command.data());
       emitConfigSuccess(cs);
     }catch(Exception e){
       log.warn("config update", e);
       emitConfigError(cs, e);
     }
-  }
-
-  private Map<String, Object> extractConfigData(ControlSignal cs){
-    Map<String, Object> args = cs.args();
-    if(args==null || args.isEmpty()){
-      return Map.of();
-    }
-    Object data = args.containsKey("data") ? args.get("data") : args;
-    if(data==null){
-      return Map.of();
-    }
-    if(data instanceof Map<?,?> map){
-      Map<String, Object> copy = new LinkedHashMap<>();
-      map.forEach((k,v) -> {
-        if(k!=null){
-          copy.put(k.toString(), v);
-        }
-      });
-      return copy;
-    }
-    throw new IllegalArgumentException("Invalid config payload");
   }
 
   private void applyConfig(Map<String, Object> data){
