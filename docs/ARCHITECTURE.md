@@ -8,7 +8,7 @@
 
 ## 1. Overview
 
-PocketHive orchestrates message-driven swarms of components (generators, processors, post‑processors, triggers, etc.) coordinated by an **Orchestrator** and a per‑swarm **Swarm Controller**. Communication is over **AMQP** (RabbitMQ). **Health** and **readiness** are validated via per‑component **Actuator** HTTP endpoints, with **AMQP status** events treated as equivalent heartbeats.
+PocketHive orchestrates message-driven swarms of components (generators, processors, post‑processors, triggers, etc.) coordinated by an **Orchestrator** and a per‑swarm **Swarm Controller**. Communication is over **AMQP** (RabbitMQ). **Health** and **readiness** are inferred from **AMQP status** events; controllers and the orchestrator cannot reach component Actuator endpoints and rely exclusively on control-plane heartbeats.
 
 **Design principles**
 
@@ -42,14 +42,14 @@ PocketHive splits the control plane into **managers** (orchestrator + swarm cont
 - Applies the plan locally; **provisions** components; maintains the **aggregate** swarm view.
 - Binds its control queue to `sig.*.<swarmId>.swarm-controller.<instance>`, `sig.*.<swarmId>.swarm-controller.ALL`, and `sig.*.ALL.swarm-controller.ALL` so it receives per-instance, per-swarm, and global manager broadcasts.
 - Emits **swarm-level** lifecycle confirmations (`ev.ready.swarm-start.<swarmId>.swarm-controller.<instance>`, etc.) and periodic status events.
-- Treats AMQP `ev.status-{delta|full}` as **equivalent to Actuator heartbeats**; polls **Actuator** on staleness.
+- Treats AMQP `ev.status-{delta|full}` as the **sole heartbeat source**; if a component goes silent it issues `sig.status-request` and marks the component stale if no response arrives.
 - When targeted by `sig.config-update.<swarmId>.swarm-controller.<instance>` it inspects the top-level `commandTarget`/`target`: `commandTarget=swarm`/`target=swarm` → keep the control plane alive and **fan the new workload state out to every bee** via `sig.config-update.<swarmId>.ALL.ALL`; `commandTarget=instance`/`target=controller` → pause/resume only its reconciliation loops while emitting controller-specific state (`state.controller.enabled`).
 - Control plane stays enabled even when workloads are paused; start/stop/remove/status/config are always honored.
 
 ### 2.2 Workers (Bees)
 - Declare their own control queues on startup (e.g., `ph.control.generator.<instance>`) and bind only to their swarm: `sig.*.<swarmId>.<role>.<instance>`, `sig.*.<swarmId>.<role>.ALL`, and `sig.*.<swarmId>.ALL.ALL`.
 - **Do not bind** to `sig.*.ALL...` routes so that only their controller can command them; orchestrator broadcasts always transit through the controller first.
-- Expose **Actuator** readiness via HTTP and emit **their own** status streams (`ev.status-{full|delta}.<swarmId>.<role>.<instance>`).
+- Emit **their own** status streams (`ev.status-{full|delta}.<swarmId>.<role>.<instance>`) and respond to manager `sig.status-request` heartbeats.
 - Apply `sig.config-update.<swarmId>.<role>.<instance>` (`enabled: true|false`) to control **workload** only while keeping control listeners responsive.
 
 ---
@@ -111,9 +111,8 @@ PocketHive splits the control plane into **managers** (orchestrator + swarm cont
 
 ## 4. Health & heartbeat model
 
-- **Actuator** (HTTP) is the **readiness authority** for components.
-- **AMQP `status-{delta|full}` events are treated as equivalent to heartbeats.**
-- If **no AMQP status** arrives within a **TTL** for a component included in the aggregate, the Controller **polls the component’s Actuator** before asserting Ready/Running.
+- **AMQP `status-{delta|full}` events are the only heartbeat source.**
+- If **no AMQP status** arrives within a **TTL** for a component included in the aggregate, the Controller **issues `sig.status-request`** and marks the component **Degraded/Unknown** if no response arrives in time.
 - Every **swarm aggregate** carries a **watermark timestamp** and **max-staleness**; if stale or incomplete, the Controller emits **Degraded/Unknown**.
 
 ---
@@ -126,7 +125,7 @@ New → Creating → Ready → Starting → Running
                      ↘ Failed ↙        → Stopping → Stopped → Removing → Removed
 ```
 - **Creating:** Controller launched; success signalled by **`ev.ready.swarm-create`**.
-- **Ready:** plan applied; all desired components Healthy (`Actuator=UP`) with `enabled=false`.
+- **Ready:** plan applied; all desired components reporting Healthy via AMQP status events with `enabled=false`.
 - **Failed:** an error or timeout occurred; **resources are preserved** for debugging.
 
 ### 5.2 Component lifecycle (aggregate perspective)
@@ -265,7 +264,7 @@ sequenceDiagram
     QN->>MSH: sig.swarm-template.<swarmId>.swarm-controller.ALL
     MSH->>RT: Provision components
     CMP-->>MSH: ev.status-delta.<role>.<instance> (health=DOWN) or no status within TTL
-    MSH->>CMP: Poll Actuator (HTTP) to confirm
+    MSH->>CMP: sig.status-request.<swarmId>.<role>.<instance>
     MSH-->>QN: ev.error.swarm-template.<swarmId>.swarm-controller.<instance> (aggregate Failed)
   end
 ```
