@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.ArgumentMatchers;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
@@ -34,10 +35,14 @@ class SwarmSignalListenerTest {
 
   ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
 
+  private void stubLifecycleDefaults() {
+    lenient().when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
+    lenient().when(lifecycle.getMetrics()).thenReturn(new SwarmMetrics(0,0,0,0, java.time.Instant.now()));
+  }
+
   @BeforeEach
   void setup() {
-    when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
-    when(lifecycle.getMetrics()).thenReturn(new SwarmMetrics(0,0,0,0, java.time.Instant.now()));
+    stubLifecycleDefaults();
   }
 
   private String signal(String sig, String id, String corr) {
@@ -175,8 +180,7 @@ class SwarmSignalListenerTest {
     when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
     SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", mapper);
     reset(lifecycle, rabbit);
-    when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
-    when(lifecycle.getMetrics()).thenReturn(new SwarmMetrics(0,0,0,0, java.time.Instant.now()));
+    stubLifecycleDefaults();
     listener.handle(signal("swarm-start", "i1", "c1"), "sig.swarm-start." + Topology.SWARM_ID);
     verify(lifecycle).start("{}");
     ArgumentCaptor<String> startPayload = ArgumentCaptor.forClass(String.class);
@@ -237,6 +241,7 @@ class SwarmSignalListenerTest {
     when(lifecycle.getMetrics()).thenReturn(new SwarmMetrics(0,0,0,0, java.time.Instant.now()));
     SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", mapper);
     reset(lifecycle, rabbit);
+    stubLifecycleDefaults();
 
     listener.handle(signal("swarm-remove", "i3", "c3"), "sig.swarm-remove." + Topology.SWARM_ID);
 
@@ -308,6 +313,7 @@ class SwarmSignalListenerTest {
     when(lifecycle.getMetrics()).thenReturn(new SwarmMetrics(0,0,0,0, java.time.Instant.now()));
     SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", mapper);
     reset(lifecycle, rabbit);
+    stubLifecycleDefaults();
     when(lifecycle.getStatus()).thenReturn(SwarmStatus.STOPPED);
     when(lifecycle.getMetrics()).thenReturn(new SwarmMetrics(1,1,0,0, java.time.Instant.now()));
 
@@ -346,6 +352,7 @@ class SwarmSignalListenerTest {
     when(lifecycle.getMetrics()).thenReturn(new SwarmMetrics(0,0,0,0, java.time.Instant.now()));
     SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", mapper);
     reset(lifecycle, rabbit);
+    stubLifecycleDefaults();
     when(lifecycle.getStatus()).thenReturn(SwarmStatus.STOPPED);
     when(lifecycle.getMetrics()).thenReturn(new SwarmMetrics(1,1,0,0, java.time.Instant.now()));
 
@@ -369,6 +376,7 @@ class SwarmSignalListenerTest {
     when(lifecycle.getMetrics()).thenReturn(new SwarmMetrics(0,0,0,0, java.time.Instant.now()));
     SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", mapper);
     reset(lifecycle, rabbit);
+    stubLifecycleDefaults();
     when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
     when(lifecycle.getMetrics()).thenReturn(new SwarmMetrics(2,2,2,2, java.time.Instant.now()));
 
@@ -407,6 +415,7 @@ class SwarmSignalListenerTest {
     when(lifecycle.getMetrics()).thenReturn(new SwarmMetrics(0,0,0,0, java.time.Instant.now()));
     SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", mapper);
     reset(lifecycle, rabbit);
+    stubLifecycleDefaults();
 
     String body = """
         {"correlationId":"c12","idempotencyKey":"i12","signal":"config-update",
@@ -434,6 +443,7 @@ class SwarmSignalListenerTest {
     when(lifecycle.getMetrics()).thenReturn(new SwarmMetrics(0,0,0,0, java.time.Instant.now()));
     SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", mapper);
     reset(lifecycle, rabbit);
+    stubLifecycleDefaults();
 
     String body = """
         {"correlationId":"c13","idempotencyKey":"i13","signal":"config-update",
@@ -461,6 +471,7 @@ class SwarmSignalListenerTest {
     when(lifecycle.getMetrics()).thenReturn(new SwarmMetrics(0,0,0,0, java.time.Instant.now()));
     SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", mapper);
     reset(lifecycle, rabbit);
+    stubLifecycleDefaults();
 
     String body = """
         {"correlationId":"c14","idempotencyKey":"i14","signal":"config-update",
@@ -484,12 +495,43 @@ class SwarmSignalListenerTest {
   }
 
   @Test
+  void globalFanOutCachesBeforeReplay() throws Exception {
+    when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
+    when(lifecycle.getMetrics()).thenReturn(new SwarmMetrics(0,0,0,0, java.time.Instant.now()));
+    SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", mapper);
+    reset(lifecycle, rabbit);
+    stubLifecycleDefaults();
+
+    String body = """
+        {"correlationId":"c15","idempotencyKey":"i15","signal":"config-update",
+         "role":"swarm-controller","instance":"inst",
+         "commandTarget":"all","target":"all",
+         "args":{"data":{"mode":"maintenance"}}}
+        """;
+
+    listener.handle(body, "sig.config-update.swarm-controller.inst");
+
+    verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("sig.config-update"), eq(body));
+    ArgumentCaptor<String> readyPayload = ArgumentCaptor.forClass(String.class);
+    verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
+        eq("ev.ready.config-update.swarm-controller.inst"), readyPayload.capture());
+    reset(rabbit);
+
+    listener.handle(body, "sig.config-update");
+
+    verify(rabbit, never()).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("sig.config-update"), ArgumentMatchers.<Object>any());
+    verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
+        eq("ev.ready.config-update.swarm-controller.inst"), anyString());
+    verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
+        eq("ev.duplicate.config-update"), anyString());
+  }
+
+  @Test
   void repliesToStatusRequest() {
     when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
     SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", mapper);
     reset(lifecycle, rabbit);
-    when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
-    when(lifecycle.getMetrics()).thenReturn(new SwarmMetrics(0,0,0,0, java.time.Instant.now()));
+    stubLifecycleDefaults();
     listener.handle("{}", "sig.status-request.swarm-controller.inst");
     verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
         startsWith("ev.status-full.swarm-controller.inst"),
@@ -518,6 +560,7 @@ class SwarmSignalListenerTest {
       when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
       SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", mapper);
       reset(lifecycle, rabbit);
+    stubLifecycleDefaults();
       when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
       when(lifecycle.getMetrics()).thenReturn(new SwarmMetrics(0,0,0,0, java.time.Instant.now()));
       listener.status();
@@ -535,6 +578,7 @@ class SwarmSignalListenerTest {
     when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
     SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", mapper);
     reset(lifecycle, rabbit);
+    stubLifecycleDefaults();
     lenient().when(lifecycle.getMetrics()).thenReturn(new SwarmMetrics(0,0,0,0, java.time.Instant.now()));
     listener.handle(status(Topology.SWARM_ID, false), "ev.status-full.gen.g1");
     verify(lifecycle).updateHeartbeat("gen", "g1");
@@ -546,6 +590,7 @@ class SwarmSignalListenerTest {
     when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
     SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", mapper);
     reset(lifecycle, rabbit);
+    stubLifecycleDefaults();
     lenient().when(lifecycle.getMetrics()).thenReturn(new SwarmMetrics(0,0,0,0, java.time.Instant.now()));
     listener.handle(status(Topology.SWARM_ID, true), "ev.status-delta.gen.g1");
     verify(lifecycle).updateHeartbeat("gen", "g1");
@@ -557,6 +602,7 @@ class SwarmSignalListenerTest {
     when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
     SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", mapper);
     reset(lifecycle, rabbit);
+    stubLifecycleDefaults();
     lenient().when(lifecycle.getMetrics()).thenReturn(new SwarmMetrics(0,0,0,0, java.time.Instant.now()));
     listener.handle(status("swarm-other", true), "ev.status-full.gen.g1");
     verify(lifecycle, never()).updateHeartbeat(anyString(), anyString());
@@ -569,6 +615,7 @@ class SwarmSignalListenerTest {
     when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
     SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", mapper);
     reset(lifecycle, rabbit);
+    stubLifecycleDefaults();
     lenient().when(lifecycle.getMetrics()).thenReturn(new SwarmMetrics(0,0,0,0, java.time.Instant.now()));
     listener.handle("{}", "sig.scenario-part." + Topology.SWARM_ID);
     listener.handle("{}", "sig.scenario-start." + Topology.SWARM_ID);

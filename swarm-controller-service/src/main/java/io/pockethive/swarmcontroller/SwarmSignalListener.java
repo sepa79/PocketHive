@@ -27,10 +27,12 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
+import java.util.List;
 import java.util.regex.Pattern;
 
 @Component
@@ -219,6 +221,8 @@ public class SwarmSignalListener {
       Boolean stateEnabled = null;
       Map<String, Object> details = new LinkedHashMap<>();
 
+      List<Runnable> fanouts = new ArrayList<>();
+
       switch (commandTarget) {
         case SWARM -> {
           if (isSwarmToggle(normalizedTarget) && enabledFlag != null) {
@@ -227,7 +231,7 @@ public class SwarmSignalListener {
             stateEnabled = enabledFlag;
             details.put("workloads", Map.of("enabled", enabledFlag));
           } else {
-            forwardToAll(body);
+            fanouts.add(() -> forwardToAll(body));
           }
         }
         case INSTANCE -> {
@@ -243,22 +247,27 @@ public class SwarmSignalListener {
             if (spec == null) {
               throw new IllegalArgumentException("commandTarget=instance requires role.instance target");
             }
-            forwardToInstance(body, spec);
+            fanouts.add(() -> forwardToInstance(body, spec));
           }
         }
         case ROLE -> {
           if (normalizedTarget == null) {
             throw new IllegalArgumentException("commandTarget=role requires a role target");
           }
-          forwardToRole(body, normalizedTarget);
+          String roleTarget = normalizedTarget;
+          fanouts.add(() -> forwardToRole(body, roleTarget));
         }
-        case ALL -> forwardToAll(body);
+        case ALL -> fanouts.add(() -> forwardToAll(body));
       }
 
       CommandState state = configCommandState(cs, originalTarget != null ? originalTarget : normalizedTarget,
           stateEnabled, details);
       CachedOutcome outcome = emitSuccess(cs, null, state);
       if (outcome != null) outcomes.put(key, outcome);
+
+      for (Runnable fanout : fanouts) {
+        fanout.run();
+      }
     } catch (Exception e) {
       log.warn("config update", e);
       CachedOutcome outcome = emitError(cs, e, null);
