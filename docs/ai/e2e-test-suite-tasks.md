@@ -72,7 +72,7 @@ This backlog tracks the work needed to deliver the end-to-end acceptance suite t
 - Exercise controller-scope and component-level configuration updates, verifying scope semantics and emitted confirmations.
 
 **Scope**
-- Extend messaging helpers to publish `sig.config-update.*` signals with varying scopes.
+- Extend messaging helpers to publish `sig.config-update.<swarm>.<role>.<instance>` signals with varying scopes.
 - Assert controller aggregates (`state.workloads.enabled`, `state.controller.enabled`) and component status deltas reflect the changes.
 - Parameterise scenarios to adapt to evolving component inventories.
 
