@@ -73,7 +73,7 @@ class SwarmSignalListenerTest {
         assertThat(ready.path("signal").asText()).isEqualTo("swarm-create");
         assertThat(ready.path("scope").path("swarmId").asText()).isEqualTo("sw1");
         assertThat(ready.path("state").path("status").asText()).isEqualTo("Ready");
-        assertThat(ready.path("state").path("scope").path("swarmId").asText()).isEqualTo("sw1");
+        assertThat(ready.path("state").path("scope").isMissingNode()).isTrue();
         assertThat(ready.path("ts").asText()).isNotBlank();
         assertThat(plans.find("inst1")).isEmpty();
         assertThat(tracker.complete("sw1", Phase.TEMPLATE)).isPresent();
@@ -100,7 +100,7 @@ class SwarmSignalListenerTest {
         assertThat(error.path("result").asText()).isEqualTo("error");
         assertThat(error.path("scope").path("swarmId").asText()).isEqualTo("sw1");
         assertThat(error.path("state").path("status").asText()).isEqualTo("Removed");
-        assertThat(error.path("state").path("scope").path("swarmId").asText()).isEqualTo("sw1");
+        assertThat(error.path("state").path("scope").isMissingNode()).isTrue();
         assertThat(error.path("phase").asText()).isEqualTo("controller-bootstrap");
         assertThat(error.path("code").asText()).isEqualTo("controller-error");
         assertThat(error.path("message").asText()).isEqualTo("controller failed");

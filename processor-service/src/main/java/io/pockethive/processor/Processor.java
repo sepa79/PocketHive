@@ -307,7 +307,6 @@ public class Processor {
 
   private ObjectNode stateNode(ControlSignal cs, String role, String instance) {
     ObjectNode state = MAPPER.createObjectNode();
-    state.set("scope", scopeNode(cs, role, instance));
     state.put("enabled", enabled);
     return state;
   }

@@ -9,7 +9,6 @@ import java.util.Map;
  */
 public record CommandState(
     String status,
-    ConfirmationScope scope,
     Boolean enabled,
     Map<String, Object> details
 ) {
@@ -26,11 +25,10 @@ public record CommandState(
         } else {
             details = null;
         }
-        scope = scope == null ? null : new ConfirmationScope(scope.swarmId(), scope.role(), scope.instance());
     }
 
     public static CommandState status(String status) {
-        return new CommandState(status, null, null, null);
+        return new CommandState(status, null, null);
     }
 }
 

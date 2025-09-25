@@ -105,9 +105,7 @@ class ProcessorTest {
         assertThat(node.path("scope").path("role").asText()).isEqualTo("processor");
         assertThat(node.path("scope").path("instance").asText()).isEqualTo("inst");
         assertThat(node.path("scope").path("swarmId").asText()).isEqualTo("sw1");
-        assertThat(node.path("state").path("scope").path("role").asText()).isEqualTo("processor");
-        assertThat(node.path("state").path("scope").path("instance").asText()).isEqualTo("inst");
-        assertThat(node.path("state").path("scope").path("swarmId").asText()).isEqualTo("sw1");
+        assertThat(node.path("state").path("scope").isMissingNode()).isTrue();
         assertThat(node.path("state").path("enabled").asBoolean()).isTrue();
         assertThat(node.has("args")).isFalse();
         verify(rabbit, never()).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("ev.error.config-update.processor.inst"), anyString());
@@ -138,8 +136,7 @@ class ProcessorTest {
         assertThat(node.path("scope").path("role").asText()).isEqualTo("processor");
         assertThat(node.path("code").asText()).isEqualTo("IllegalArgumentException");
         assertThat(node.path("message").asText()).isNotBlank();
-        assertThat(node.path("state").path("scope").path("role").asText()).isEqualTo("processor");
-        assertThat(node.path("state").path("scope").path("instance").asText()).isEqualTo("inst");
+        assertThat(node.path("state").path("scope").isMissingNode()).isTrue();
         assertThat(node.path("state").path("enabled").asBoolean()).isFalse();
         List<String> errorPayload = ASYNC_API.validate("#/components/schemas/CommandErrorPayload", node);
         assertThat(errorPayload).isEmpty();

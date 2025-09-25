@@ -297,8 +297,6 @@ public class Generator {
 
   private ObjectNode stateNode(ControlSignal cs, String role, String instance) {
     ObjectNode state = objectMapper.createObjectNode();
-    ObjectNode scope = scopeNode(cs, role, instance);
-    state.set("scope", scope);
     state.put("enabled", enabled);
     return state;
   }

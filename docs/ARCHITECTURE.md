@@ -99,7 +99,7 @@ PocketHive splits the control plane into **managers** (orchestrator + swarm cont
   - `ev.ready.config-update.<swarmId>.<role>.<instance>` — Controller, echoing the final target scope.
 - **Error (`ev.error.*`):** mirror the success topics with `error` in place of `ready`.
 
-> Controller config confirmations mirror the top-level `commandTarget` and echo `state.scope` plus `state.enabled`. When `scope=swarm`, include `state.details.workloads.enabled`; when `scope=controller`, include `state.details.controller.enabled` so observers can distinguish the two flows.
+> Controller config confirmations mirror the top-level `commandTarget`, keep the authoritative scope in the confirmation envelope, and surface enablement data via `state.enabled` plus `state.details.workloads.enabled` or `state.details.controller.enabled` so observers can distinguish workload and controller toggles without duplicated scope fields.
 
 ### 3.5 Status & telemetry streams
 - **Swarm aggregates (Controller):** `ev.status-full.<swarmId>.swarm-controller.<instance>` and `ev.status-delta.<swarmId>.swarm-controller.<instance>`.
@@ -206,7 +206,7 @@ sequenceDiagram
   note right of QN: Fan-out per controller instance (shared correlationId)
   MSH->>CMP: Propagate enabled flag via sig.config-update.<swarmId>.ALL.ALL (control plane stays up)
   CMP-->>MSH: ev.status-delta.<swarmId>.<role>.<instance> (workloads.enabled reflected)
-  MSH-->>QN: ev.ready.config-update.<swarmId>.ALL.ALL (state.scope.swarmId=<swarmId>)
+  MSH-->>QN: ev.ready.config-update.<swarmId>.ALL.ALL (scope.swarmId=<swarmId>, state.details.workloads.enabled reflected)
 ```
 
 ### 7.3c Controller runtime pause/resume (`commandTarget=instance`)
@@ -217,7 +217,7 @@ sequenceDiagram
 
   QN->>MSH: sig.config-update.<swarmId>.swarm-controller.<instance> ({ commandTarget: "instance", role: "swarm-controller", instance: "<instance>", args: { data: { enabled: true|false } } })
   note right of QN: Runtime loops pause/resume, bees untouched
-  MSH-->>QN: ev.ready.config-update.<swarmId>.swarm-controller.<instance> (state.scope.role=swarm-controller, state.scope.instance=<instance>)
+  MSH-->>QN: ev.ready.config-update.<swarmId>.swarm-controller.<instance> (scope.role=swarm-controller, scope.instance=<instance>, state.details.controller.enabled reflected)
   MSH-->>QN: ev.status-delta.<swarmId>.swarm-controller.<instance> (controller.enabled reflected)
 ```
 

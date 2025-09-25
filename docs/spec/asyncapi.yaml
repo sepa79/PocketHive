@@ -728,8 +728,6 @@ components:
         status:
           type: string
           description: Primary lifecycle status after processing the command
-        scope:
-          $ref: '#/components/schemas/ConfirmationScope'
         enabled:
           type: boolean
           description: Primary enablement flag for the target

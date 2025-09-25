@@ -110,9 +110,7 @@ class TriggerTest {
         assertThat(node.path("scope").path("role").asText()).isEqualTo("trigger");
         assertThat(node.path("scope").path("instance").asText()).isEqualTo("inst");
         assertThat(node.path("scope").path("swarmId").asText()).isEqualTo("sw1");
-        assertThat(node.path("state").path("scope").path("role").asText()).isEqualTo("trigger");
-        assertThat(node.path("state").path("scope").path("instance").asText()).isEqualTo("inst");
-        assertThat(node.path("state").path("scope").path("swarmId").asText()).isEqualTo("sw1");
+        assertThat(node.path("state").path("scope").isMissingNode()).isTrue();
         assertThat(node.path("state").path("enabled").asBoolean()).isTrue();
         assertThat(node.has("args")).isFalse();
 
@@ -142,8 +140,7 @@ class TriggerTest {
         assertThat(node.path("idempotencyKey").asText()).isEqualTo(idempotencyKey);
         assertThat(node.path("code").asText()).isEqualTo("IllegalArgumentException");
         assertThat(node.path("message").asText()).isNotBlank();
-        assertThat(node.path("state").path("scope").path("role").asText()).isEqualTo("trigger");
-        assertThat(node.path("state").path("scope").path("instance").asText()).isEqualTo("inst");
+        assertThat(node.path("state").path("scope").isMissingNode()).isTrue();
         assertThat(node.path("state").path("enabled").asBoolean()).isFalse();
         List<String> errorPayload = ASYNC_API.validate("#/components/schemas/CommandErrorPayload", node);
         assertThat(errorPayload).isEmpty();
@@ -174,7 +171,7 @@ class TriggerTest {
         verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("ev.ready.config-update.trigger.inst"), payload.capture());
         JsonNode node = mapper.readTree(payload.getValue());
         assertThat(node.has("args")).isFalse();
-        assertThat(node.path("state").path("scope").path("role").asText()).isEqualTo("trigger");
+        assertThat(node.path("state").path("scope").isMissingNode()).isTrue();
         List<String> readyErrors = ASYNC_API.validate("#/components/schemas/CommandReadyPayload", node);
         assertThat(readyErrors).isEmpty();
     }

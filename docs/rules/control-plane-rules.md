@@ -95,7 +95,7 @@
 ### 4.2 Confirmations (emitters MUST include)
 - Echo **`correlationId`** and **`idempotencyKey`** from the initiating control signal (or from the runtime op for create).
 - `signal`, `result` (`success`|`error`), `scope` (`swarmId`/`role`/`instance`), `ts`
-- Success MAY include `state` (`Ready|Running|Stopped|Removed`), structured command metadata, and `notes`. Config confirmations MUST mirror `commandTarget` at the top level and include `state.scope` and `state.enabled`. When the controller fans out workload toggles, include `state.workloads.enabled`; when pausing the controller runtime, include `state.controller.enabled` so observers can rely on the semantics.
+- Success MAY include `state` (`Ready|Running|Stopped|Removed`), structured command metadata, and `notes`. Config confirmations MUST mirror `commandTarget` at the top level, rely on the envelope `scope`, and include `state.enabled` plus the relevant enablement details (`state.details.workloads.enabled` for swarm fan-outs, `state.details.controller.enabled` for controller runtime toggles) so observers can rely on the semantics without duplicated identifiers.
 - Error MUST include `code`, `message`; MAY include `phase`, `retryable`, `details`
 
 ### 4.3 Status & bootstrap
@@ -226,7 +226,7 @@
   "result": "success",
   "signal": "config-update",
   "scope": {"role": "swarm-controller", "instance": "swarm-controller.alpha"},
-  "state": {"scope": "swarm", "enabled": false, "workloads": {"enabled": false}},
+  "state": {"enabled": false, "details": {"workloads": {"enabled": false}}},
   "idempotencyKey": "bulk-toggle-1234",
   "correlationId": "attempt-009-zzzz",
   "ts": "2025-09-12T12:05:00Z"
@@ -239,7 +239,7 @@
   "result": "success",
   "signal": "config-update",
   "scope": {"role": "swarm-controller", "instance": "swarm-controller.alpha"},
-  "state": {"scope": "controller", "enabled": false, "controller": {"enabled": false}},
+  "state": {"enabled": false, "details": {"controller": {"enabled": false}}},
   "idempotencyKey": "ctrl-toggle-5678",
   "correlationId": "attempt-010-yyyy",
   "ts": "2025-09-12T12:06:00Z"

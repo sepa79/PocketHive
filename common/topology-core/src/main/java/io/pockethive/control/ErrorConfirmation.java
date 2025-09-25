@@ -31,9 +31,6 @@ public record ErrorConfirmation(
             details = null;
         }
         scope = scope == null ? ConfirmationScope.EMPTY : scope;
-        if (state != null && state.scope() == null && !scope.isEmpty()) {
-            state = new CommandState(state.status(), scope, state.enabled(), state.details());
-        }
     }
 
     public ErrorConfirmation(Instant ts,

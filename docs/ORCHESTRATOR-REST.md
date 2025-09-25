@@ -184,7 +184,7 @@ Client sends **`idempotencyKey`** (UUID v4) per new action (reuse on retry). Ser
 
 **Effect**
 - Controller **fans out** the `enabled` change to every managed bee in the targeted swarm via `sig.config-update.<swarmId>.ALL.ALL`.
-- Confirms with **`ev.ready.config-update.<swarmId>.swarm-controller.{instance}`** (mirrors `commandTarget="swarm"` and reports `state.scope.swarmId=<swarmId>`, `state.enabled=<bool>`).
+- Confirms with **`ev.ready.config-update.<swarmId>.swarm-controller.{instance}`** (mirrors `commandTarget="swarm"`, keeps the swarm identifier in the envelope `scope`, and reports `state.enabled=<bool>` plus `state.details.workloads.enabled=<bool>`).
 - Publishes **`ev.status-delta.<swarmId>.swarm-controller.{instance}`** reflecting `state.workloads.enabled=<bool>` for dashboards.
 
 **Request**
@@ -230,7 +230,6 @@ Client sends **`idempotencyKey`** (UUID v4) per new action (reuse on retry). Ser
   "scope": { "swarmId": "swarm-42", "role": "swarm-controller", "instance": "swarm-controller.alpha" },
   "commandTarget": "swarm",
   "state": {
-    "scope": { "swarmId": "swarm-42" },
     "enabled": false,
     "details": { "workloads": { "enabled": false } }
   },
@@ -243,7 +242,7 @@ Client sends **`idempotencyKey`** (UUID v4) per new action (reuse on retry). Ser
 
 **Effect**
 - Controller stops/starts its **reconciliation loops** only; existing bees keep their current `enabled` state (no `sig.config-update.<swarmId>.ALL.ALL` broadcast).
-- Confirms with **`ev.ready.config-update.<swarmId>.swarm-controller.{instance}`** (mirrors `commandTarget="instance"` and reports `state.scope.role=swarm-controller`, `state.scope.instance={instance}`, `state.enabled=<bool>`).
+- Confirms with **`ev.ready.config-update.<swarmId>.swarm-controller.{instance}`** (mirrors `commandTarget="instance"`, keeps the controller coordinates in the envelope `scope`, and reports `state.enabled=<bool>` plus `state.details.controller.enabled=<bool>`).
 - Publishes **`ev.status-delta.<swarmId>.swarm-controller.{instance}`** reflecting `state.controller.enabled=<bool>` so observers know the runtime is paused.
 
 **Request**
@@ -283,7 +282,6 @@ Client sends **`idempotencyKey`** (UUID v4) per new action (reuse on retry). Ser
   "scope": { "swarmId": "swarm-42", "role": "swarm-controller", "instance": "swarm-controller.charlie" },
   "commandTarget": "instance",
   "state": {
-    "scope": { "swarmId": "swarm-42", "role": "swarm-controller", "instance": "swarm-controller.charlie" },
     "enabled": false,
     "details": { "controller": { "enabled": false } }
   },
