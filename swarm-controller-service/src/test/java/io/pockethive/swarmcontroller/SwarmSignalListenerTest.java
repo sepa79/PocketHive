@@ -334,8 +334,8 @@ class SwarmSignalListenerTest {
     verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
         eq("ev.status-delta.swarm-controller.inst"), statusPayload.capture());
     JsonNode node = mapper.readTree(statusPayload.getValue());
-    assertThat(node.path("enabled").asBoolean()).isTrue();
-    assertThat(node.path("data").path("controllerEnabled").asBoolean()).isTrue();
+    assertThat(node.path("enabled").asBoolean()).isFalse();
+    assertThat(node.path("data").path("controllerEnabled").asBoolean()).isFalse();
     assertThat(node.path("data").path("workloadsEnabled").asBoolean()).isFalse();
     assertThat(node.path("data").path("swarmStatus").asText()).isEqualTo("STOPPED");
   }
@@ -494,8 +494,8 @@ class SwarmSignalListenerTest {
     verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
         startsWith("ev.status-full.swarm-controller.inst"),
         argThat((String p) -> p.contains("\"swarmStatus\":\"RUNNING\"")
-            && p.contains("\"enabled\":true")
-            && p.contains("\"controllerEnabled\":true")
+            && p.contains("\"enabled\":false")
+            && p.contains("\"controllerEnabled\":false")
             && p.contains("\"workloadsEnabled\":true")));
     verify(lifecycle, atLeastOnce()).getStatus();
   }
@@ -507,8 +507,8 @@ class SwarmSignalListenerTest {
     verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
         startsWith("ev.status-full.swarm-controller.inst"),
         argThat((String p) -> p.contains("\"swarmStatus\":\"RUNNING\"")
-            && p.contains("\"enabled\":true")
-            && p.contains("\"controllerEnabled\":true")
+            && p.contains("\"enabled\":false")
+            && p.contains("\"controllerEnabled\":false")
             && p.contains("\"workloadsEnabled\":true")));
     verify(lifecycle, atLeastOnce()).getStatus();
   }
@@ -524,8 +524,8 @@ class SwarmSignalListenerTest {
       verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
           startsWith("ev.status-delta.swarm-controller.inst"),
           argThat((String p) -> p.contains("\"swarmStatus\":\"RUNNING\"")
-              && p.contains("\"enabled\":true")
-              && p.contains("\"controllerEnabled\":true")
+              && p.contains("\"enabled\":false")
+              && p.contains("\"controllerEnabled\":false")
               && p.contains("\"workloadsEnabled\":true")));
       verify(lifecycle, atLeastOnce()).getStatus();
   }

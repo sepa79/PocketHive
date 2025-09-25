@@ -45,7 +45,7 @@ public class SwarmSignalListener {
   private final Map<CacheKey, CachedOutcome> outcomes;
   private static final long STATUS_INTERVAL_MS = 5000L;
   private static final long MAX_STALENESS_MS = 15_000L;
-  private volatile boolean controllerEnabled = true;
+  private volatile boolean controllerEnabled = false;
 
   @Autowired
   public SwarmSignalListener(SwarmLifecycle lifecycle,

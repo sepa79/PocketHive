@@ -154,7 +154,7 @@ class SwarmControllerTest {
         ResponseEntity<SwarmController.SwarmView> resp = ctrl.view("sw1");
         assertThat(resp.getBody().id()).isEqualTo("sw1");
         assertThat(resp.getBody().workEnabled()).isTrue();
-        assertThat(resp.getBody().controllerEnabled()).isTrue();
+        assertThat(resp.getBody().controllerEnabled()).isFalse();
     }
 
     @Test
