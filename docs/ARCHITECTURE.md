@@ -316,7 +316,27 @@ sequenceDiagram
 
 ---
 
-## 12. Command confirmation envelopes
+## 12. Command envelopes
+
+### Control signal (`sig.*`)
+```json
+{
+  "signal": "config-update",
+  "correlationId": "uuid-from-orchestrator",
+  "idempotencyKey": "uuid-reused-for-retries",
+  "swarmId": "alpha",
+  "role": "generator",
+  "instance": "ALL",
+  "commandTarget": "role",
+  "target": "generator",
+  "args": {
+    "enabled": true,
+    "workloads": {
+      "enabled": true
+    }
+  }
+}
+```
 
 ### Success (`ev.ready.*`)
 ```json
