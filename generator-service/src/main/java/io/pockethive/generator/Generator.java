@@ -1,7 +1,6 @@
 package io.pockethive.generator;
 
 import io.pockethive.Topology;
-import io.pockethive.control.CommandTarget;
 import io.pockethive.control.ControlSignal;
 import io.pockethive.observability.ObservabilityContext;
 import io.pockethive.observability.ObservabilityContextUtil;
@@ -300,10 +299,6 @@ public class Generator {
     ObjectNode state = objectMapper.createObjectNode();
     ObjectNode scope = scopeNode(cs, role, instance);
     state.set("scope", scope);
-    String target = resolveTarget(cs, role, instance);
-    if (target != null && !target.isBlank()) {
-      state.put("target", target);
-    }
     state.put("enabled", enabled);
     return state;
   }
@@ -313,22 +308,6 @@ public class Generator {
       return cs.swarmId();
     }
     return Topology.SWARM_ID;
-  }
-
-  private String resolveTarget(ControlSignal cs, String role, String instance) {
-    String target = cs.target();
-    if (target != null && !target.isBlank()) {
-      return target;
-    }
-    CommandTarget commandTarget = cs.commandTarget();
-    if (commandTarget == null) {
-      commandTarget = CommandTarget.INSTANCE;
-    }
-    return switch (commandTarget) {
-      case ALL, SWARM -> resolveSwarm(cs);
-      case ROLE -> role;
-      case INSTANCE -> role + "." + instance;
-    };
   }
 
   private String resolveRole(ControlSignal cs) {

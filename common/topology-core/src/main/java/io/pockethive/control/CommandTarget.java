@@ -38,7 +38,6 @@ public enum CommandTarget {
     public static CommandTarget infer(String swarmId,
                                       String role,
                                       String instance,
-                                      String explicitTarget,
                                       Map<String, Object> args) {
         if (instance != null && !instance.isBlank()) {
             return INSTANCE;
@@ -49,8 +48,8 @@ public enum CommandTarget {
         if (swarmId != null && !swarmId.isBlank()) {
             return SWARM;
         }
-        String hint = explicitTarget;
-        if ((hint == null || hint.isBlank()) && args != null) {
+        String hint = null;
+        if (args != null) {
             Object scope = args.get("scope");
             if (scope instanceof String scopeText && !scopeText.isBlank()) {
                 hint = scopeText;

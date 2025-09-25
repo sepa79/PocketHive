@@ -16,7 +16,7 @@ PocketHive orchestrates message-driven swarms of components (generators, process
 - **Aggregate state** per swarm: **Swarm Controller**.
 - **Per‑component state**: emitted by **components themselves**, consumed by the **Controller**, **not** by the Orchestrator in steady state.
 - **Control plane always on**: status and config are accepted even when workloads are disabled.
-- **Scoped controller toggles**: Operators choose top-level `commandTarget` metadata on controller config updates: `commandTarget=swarm` + `target=swarm` pauses/resumes all workloads managed by a controller, while `commandTarget=instance` + `target=controller` pauses/resumes only the controller runtime. In both cases `enabled` governs work processing while the control plane stays reachable.
+- **Scoped controller toggles**: Operators set top-level `commandTarget` metadata together with explicit `swarmId`/`role`/`instance` fields on controller config updates. `commandTarget=swarm` with the swarm identifier toggles every workload the controller manages, while `commandTarget=instance` with `role=swarm-controller` and the controller's instance ID pauses/resumes only the controller runtime. In both cases `enabled` governs work processing while the control plane stays reachable.
 - **Non‑destructive defaults**: failures never auto‑delete resources; Stop ≠ Remove.
 - **Deterministic ordering** derived from queue I/O topology, not hard‑coded by role.
 - **Command → Confirmation pattern**: Every control signal results in **exactly one**
@@ -43,7 +43,7 @@ PocketHive splits the control plane into **managers** (orchestrator + swarm cont
 - Declares the control queue `ph.control.<swarmId>.swarm-controller.<instance>` and binds it to `sig.*.<swarmId>.swarm-controller.<instance>`, `sig.*.<swarmId>.swarm-controller.ALL`, and `sig.*.ALL.swarm-controller.ALL` so it receives per-instance, per-swarm, and global manager broadcasts.
 - Emits **swarm-level** lifecycle confirmations (`ev.ready.swarm-start.<swarmId>.swarm-controller.<instance>`, etc.) and periodic status events.
 - Treats AMQP `ev.status-{delta|full}` as the **sole heartbeat source**; if a component goes silent it issues `sig.status-request` and marks the component stale if no response arrives.
-- When targeted by `sig.config-update.<swarmId>.swarm-controller.<instance>` it inspects the top-level `commandTarget`/`target`: `commandTarget=swarm`/`target=swarm` → keep the control plane alive and **fan the new workload state out to every bee** via `sig.config-update.<swarmId>.ALL.ALL`; `commandTarget=instance`/`target=controller` → pause/resume only its reconciliation loops while emitting controller-specific state (`state.controller.enabled`).
+- When targeted by `sig.config-update.<swarmId>.swarm-controller.<instance>` it inspects the top-level `commandTarget` together with the `swarmId`/`role`/`instance` tuple: `commandTarget=swarm` with the controller's swarm ID → keep the control plane alive and **fan the new workload state out to every bee** via `sig.config-update.<swarmId>.ALL.ALL`; `commandTarget=instance` with `role=swarm-controller` and the local instance ID → pause/resume only its reconciliation loops while emitting controller-specific state (`state.controller.enabled`).
 - Control plane stays enabled even when workloads are paused; start/stop/remove/status/config are always honored.
 
 ### 2.2 Workers (Bees)
@@ -87,7 +87,7 @@ PocketHive splits the control plane into **managers** (orchestrator + swarm cont
 - `sig.config-update.ALL.swarm-controller.ALL` — orchestrator broadcast to every controller (`commandTarget=all`).
 - `sig.status-request.<swarmId>.<role>.<instance>` — request an immediate `status-full` from a worker.
 
-**`ControlSignal` essentials:** `correlationId` *(uuid, new per attempt)*, `idempotencyKey` *(uuid, stable across retries)*, `swarmId`/`role`/`instance` segments mirroring the routing key, `commandTarget` (`all|swarm|role|instance`), optional semantic `target`, and an `args` object for command-specific data (patch payloads remain unchanged).
+**`ControlSignal` essentials:** `correlationId` *(uuid, new per attempt)*, `idempotencyKey` *(uuid, stable across retries)*, `swarmId`/`role`/`instance` segments mirroring the routing key, `commandTarget` (`all|swarm|role|instance`), and an `args` object for command-specific data (patch payloads remain unchanged).
 
 ### 3.4 Confirmations (events)
 - **Success (`ev.ready.*`):**
@@ -99,7 +99,7 @@ PocketHive splits the control plane into **managers** (orchestrator + swarm cont
   - `ev.ready.config-update.<swarmId>.<role>.<instance>` — Controller, echoing the final target scope.
 - **Error (`ev.error.*`):** mirror the success topics with `error` in place of `ready`.
 
-> Controller config confirmations mirror `commandTarget`/`target` at the top level and echo `state.scope`, `state.target`, and `state.enabled`. When `scope=swarm`, include `state.details.workloads.enabled`; when `scope=controller`, include `state.details.controller.enabled` so observers can distinguish the two flows.
+> Controller config confirmations mirror the top-level `commandTarget` and echo `state.scope` plus `state.enabled`. When `scope=swarm`, include `state.details.workloads.enabled`; when `scope=controller`, include `state.details.controller.enabled` so observers can distinguish the two flows.
 
 ### 3.5 Status & telemetry streams
 - **Swarm aggregates (Controller):** `ev.status-full.<swarmId>.swarm-controller.<instance>` and `ev.status-delta.<swarmId>.swarm-controller.<instance>`.
@@ -202,22 +202,22 @@ sequenceDiagram
   participant MSH as Swarm Controllers
   participant CMP as Bees
 
-  QN->>MSH: sig.config-update.ALL.swarm-controller.ALL ({ commandTarget: "swarm", target: "swarm", patch.enabled: true|false })
+  QN->>MSH: sig.config-update.ALL.swarm-controller.ALL ({ commandTarget: "swarm", swarmId: "<swarmId>", args: { data: { enabled: true|false } } })
   note right of QN: Fan-out per controller instance (shared correlationId)
   MSH->>CMP: Propagate enabled flag via sig.config-update.<swarmId>.ALL.ALL (control plane stays up)
   CMP-->>MSH: ev.status-delta.<swarmId>.<role>.<instance> (workloads.enabled reflected)
-  MSH-->>QN: ev.ready.config-update.<swarmId>.ALL.ALL (state.scope=swarm, state.target=swarm)
+  MSH-->>QN: ev.ready.config-update.<swarmId>.ALL.ALL (state.scope.swarmId=<swarmId>)
 ```
 
-### 7.3c Controller runtime pause/resume (`commandTarget=instance`, `target=controller`)
+### 7.3c Controller runtime pause/resume (`commandTarget=instance`)
 ```mermaid
 sequenceDiagram
   participant QN as Orchestrator
   participant MSH as Swarm Controller
 
-  QN->>MSH: sig.config-update.<swarmId>.swarm-controller.<instance> ({ commandTarget: "instance", target: "controller", patch.enabled: true|false })
+  QN->>MSH: sig.config-update.<swarmId>.swarm-controller.<instance> ({ commandTarget: "instance", role: "swarm-controller", instance: "<instance>", args: { data: { enabled: true|false } } })
   note right of QN: Runtime loops pause/resume, bees untouched
-  MSH-->>QN: ev.ready.config-update.<swarmId>.swarm-controller.<instance> (state.scope=controller, state.target=controller)
+  MSH-->>QN: ev.ready.config-update.<swarmId>.swarm-controller.<instance> (state.scope.role=swarm-controller, state.scope.instance=<instance>)
   MSH-->>QN: ev.status-delta.<swarmId>.swarm-controller.<instance> (controller.enabled reflected)
 ```
 
@@ -328,7 +328,6 @@ sequenceDiagram
   "role": "generator",
   "instance": "ALL",
   "commandTarget": "role",
-  "target": "generator",
   "args": {
     "enabled": true,
     "workloads": {
@@ -347,11 +346,9 @@ sequenceDiagram
   "signal": "swarm-create|swarm-start|swarm-stop|swarm-template|swarm-remove|config-update",
   "scope": {"swarmId":"...", "role":null, "instance":null},
   "commandTarget": "swarm|instance|role|all",
-  "target": "swarm|controller|<role>|<instance>|null",
   "result": "success",
   "state": {
-    "scope": "swarm|controller|role|instance",
-    "target": "swarm|controller|<role>|<instance>|null",
+    "scope": {"swarmId":"...", "role":null, "instance":null},
     "enabled": true,
     "workloads": { "enabled": true },
     "controller": { "enabled": true }
@@ -369,7 +366,6 @@ sequenceDiagram
   "signal": "swarm-create|swarm-start|swarm-stop|swarm-template|swarm-remove|config-update",
   "scope": {"swarmId":"...", "role":null, "instance":null},
   "commandTarget": "swarm|instance|role|all",
-  "target": "swarm|controller|<role>|<instance>|null",
   "result": "error",
   "phase": "create|template|start|stop|remove|runtime",
   "code": "SHORT_CODE",
@@ -387,4 +383,4 @@ sequenceDiagram
 - **Removed milestones:** `ev.ready.swarm-template.<swarmId>` and `ev.ready.swarm-remove.<swarmId>` are replaced by **`ev.ready.swarm-template`** and **`ev.ready.swarm-remove`** confirmations respectively.  
 - **Remove flow:** upon **`ev.ready.swarm-remove.<swarmId>`**, the Orchestrator **removes the Swarm Controller** runtime unit.
 - **Unified envelopes:** all commands use `ControlSignal`; confirmations echo `correlationId` and `idempotencyKey`.
-- **Signals updated:** drop legacy `type`/`version`/`messageId`/`timestamp` fields; payload is unified `ControlSignal` metadata (`signal`, scope fields, `commandTarget`, optional `target`, and optional `args`).
+- **Signals updated:** drop legacy `type`/`version`/`messageId`/`timestamp` fields; payload is unified `ControlSignal` metadata (`signal`, scope fields, `commandTarget`, and optional `args`).

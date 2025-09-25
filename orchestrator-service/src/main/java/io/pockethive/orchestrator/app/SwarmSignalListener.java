@@ -147,7 +147,7 @@ public class SwarmSignalListener {
         String correlationId = info != null ? info.correlationId() : null;
         String idempotencyKey = info != null ? info.idempotencyKey() : null;
         return new ControlSignal("swarm-template", correlationId, idempotencyKey, plan.id(), null, null,
-            CommandTarget.SWARM, null, args);
+            CommandTarget.SWARM, args);
     }
 
     private void emitCreateReady(Pending info) {

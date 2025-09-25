@@ -42,7 +42,7 @@ class SwarmManagerControllerTest {
         when(idempotency.findCorrelation(eq("sw2"), eq("config-update"), eq("idem-1"))).thenReturn(Optional.empty());
         SwarmManagerController controller = new SwarmManagerController(registry, rabbit, idempotency, mapper);
         SwarmManagerController.ToggleRequest request =
-            new SwarmManagerController.ToggleRequest("idem-1", true, "swarm", null, CommandTarget.SWARM);
+            new SwarmManagerController.ToggleRequest("idem-1", true, null, CommandTarget.SWARM);
 
         ResponseEntity<SwarmManagerController.FanoutControlResponse> response = controller.updateAll(request);
 
@@ -57,7 +57,6 @@ class SwarmManagerControllerTest {
             swarmIds.add(signal.swarmId());
             assertThat(signal.signal()).isEqualTo("config-update");
             assertThat(signal.commandTarget()).isEqualTo(CommandTarget.SWARM);
-            assertThat(signal.target()).isEqualTo("swarm");
             @SuppressWarnings("unchecked")
             var data = (java.util.Map<String, Object>) signal.args().get("data");
             assertThat(data).containsEntry("enabled", true);
@@ -76,7 +75,7 @@ class SwarmManagerControllerTest {
         when(idempotency.findCorrelation(eq("sw9"), eq("config-update"), eq("idem-2"))).thenReturn(Optional.empty());
         SwarmManagerController controller = new SwarmManagerController(registry, rabbit, idempotency, mapper);
         SwarmManagerController.ToggleRequest request =
-            new SwarmManagerController.ToggleRequest("idem-2", false, "controller", null, CommandTarget.INSTANCE);
+            new SwarmManagerController.ToggleRequest("idem-2", false, null, CommandTarget.INSTANCE);
 
         ResponseEntity<SwarmManagerController.FanoutControlResponse> response = controller.updateOne("sw9", request);
 
@@ -84,7 +83,6 @@ class SwarmManagerControllerTest {
         verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("sig.config-update.swarm-controller.ctrl-z"), payload.capture());
         ControlSignal signal = mapper.readValue(payload.getValue(), ControlSignal.class);
         assertThat(signal.commandTarget()).isEqualTo(CommandTarget.INSTANCE);
-        assertThat(signal.target()).isEqualTo("controller");
         @SuppressWarnings("unchecked")
         var data = (java.util.Map<String, Object>) signal.args().get("data");
         assertThat(data).containsEntry("enabled", false);

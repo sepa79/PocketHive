@@ -85,7 +85,7 @@ class GeneratorTest {
         String idempotencyKey = UUID.randomUUID().toString();
         ControlSignal signal = ControlSignal.forInstance(
             "config-update", "sw1", "generator", "inst", correlationId, idempotencyKey,
-            CommandTarget.INSTANCE, "generator.inst", args);
+            CommandTarget.INSTANCE, args);
 
         generator.onControl(mapper.writeValueAsString(signal), "sig.config-update", null);
 
@@ -113,7 +113,6 @@ class GeneratorTest {
         assertThat(node.path("state").path("scope").path("role").asText()).isEqualTo("generator");
         assertThat(node.path("state").path("scope").path("instance").asText()).isEqualTo("inst");
         assertThat(node.path("state").path("scope").path("swarmId").asText()).isEqualTo("sw1");
-        assertThat(node.path("state").path("target").asText()).isEqualTo("generator.inst");
         assertThat(node.path("state").path("enabled").asBoolean()).isTrue();
         assertThat(node.has("args")).isFalse();
         List<String> readyErrors = ASYNC_API.validate("#/components/schemas/CommandReadyPayload", node);
@@ -128,7 +127,7 @@ class GeneratorTest {
         String idempotencyKey = UUID.randomUUID().toString();
         ControlSignal signal = ControlSignal.forInstance(
             "config-update", "sw1", "generator", "inst", correlationId, idempotencyKey,
-            CommandTarget.INSTANCE, "generator.inst", args);
+            CommandTarget.INSTANCE, args);
 
         generator.onControl(mapper.writeValueAsString(signal), "sig.config-update", null);
 
@@ -145,7 +144,6 @@ class GeneratorTest {
         assertThat(node.path("message").asText()).isNotBlank();
         assertThat(node.path("state").path("scope").path("role").asText()).isEqualTo("generator");
         assertThat(node.path("state").path("scope").path("instance").asText()).isEqualTo("inst");
-        assertThat(node.path("state").path("target").asText()).isEqualTo("generator.inst");
         assertThat(node.path("state").path("enabled").asBoolean()).isFalse();
         List<String> errorPayload = ASYNC_API.validate("#/components/schemas/CommandErrorPayload", node);
         assertThat(errorPayload).isEmpty();

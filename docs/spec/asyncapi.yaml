@@ -635,9 +635,6 @@ components:
           - swarm
           - role
           - instance
-        target:
-          type: string
-          description: Optional semantic label for the resolved target (e.g., swarm, controller, generator)
         args:
           type: object
           description: Additional arguments specific to the signal
@@ -733,9 +730,6 @@ components:
           description: Primary lifecycle status after processing the command
         scope:
           $ref: '#/components/schemas/ConfirmationScope'
-        target:
-          type: string
-          description: Optional target label corresponding to the command effect
         enabled:
           type: boolean
           description: Primary enablement flag for the target

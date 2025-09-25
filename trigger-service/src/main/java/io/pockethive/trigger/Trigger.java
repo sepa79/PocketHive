@@ -1,7 +1,6 @@
 package io.pockethive.trigger;
 
 import io.pockethive.Topology;
-import io.pockethive.control.CommandTarget;
 import io.pockethive.control.ControlSignal;
 import io.pockethive.observability.ObservabilityContext;
 import io.pockethive.observability.ObservabilityContextUtil;
@@ -305,10 +304,6 @@ public class Trigger {
   private ObjectNode stateNode(ControlSignal cs, String role, String instance) {
     ObjectNode state = objectMapper.createObjectNode();
     state.set("scope", scopeNode(cs, role, instance));
-    String target = resolveTarget(cs, role, instance);
-    if (target != null && !target.isBlank()) {
-      state.put("target", target);
-    }
     state.put("enabled", enabled);
     return state;
   }
@@ -332,22 +327,6 @@ public class Trigger {
       return cs.instance();
     }
     return instanceId;
-  }
-
-  private String resolveTarget(ControlSignal cs, String role, String instance) {
-    String target = cs.target();
-    if (target != null && !target.isBlank()) {
-      return target;
-    }
-    CommandTarget commandTarget = cs.commandTarget();
-    if (commandTarget == null) {
-      commandTarget = CommandTarget.INSTANCE;
-    }
-    return switch (commandTarget) {
-      case ALL, SWARM -> resolveSwarm(cs);
-      case ROLE -> role;
-      case INSTANCE -> role + "." + instance;
-    };
   }
 
   private void triggerOnce() {

@@ -86,7 +86,7 @@ class TriggerTest {
         String idempotencyKey = UUID.randomUUID().toString();
         ControlSignal signal = ControlSignal.forInstance(
             "config-update", "sw1", "trigger", "inst", correlationId, idempotencyKey,
-            CommandTarget.INSTANCE, "trigger.inst", args);
+            CommandTarget.INSTANCE, args);
 
         trigger.onControl(mapper.writeValueAsString(signal), "sig.config-update.trigger.inst", null);
 
@@ -113,7 +113,6 @@ class TriggerTest {
         assertThat(node.path("state").path("scope").path("role").asText()).isEqualTo("trigger");
         assertThat(node.path("state").path("scope").path("instance").asText()).isEqualTo("inst");
         assertThat(node.path("state").path("scope").path("swarmId").asText()).isEqualTo("sw1");
-        assertThat(node.path("state").path("target").asText()).isEqualTo("trigger.inst");
         assertThat(node.path("state").path("enabled").asBoolean()).isTrue();
         assertThat(node.has("args")).isFalse();
 
@@ -130,7 +129,7 @@ class TriggerTest {
         String idempotencyKey = UUID.randomUUID().toString();
         ControlSignal signal = ControlSignal.forInstance(
             "config-update", "sw1", "trigger", "inst", correlationId, idempotencyKey,
-            CommandTarget.INSTANCE, "trigger.inst", args);
+            CommandTarget.INSTANCE, args);
 
         trigger.onControl(mapper.writeValueAsString(signal), "sig.config-update.trigger.inst", null);
 
@@ -145,7 +144,6 @@ class TriggerTest {
         assertThat(node.path("message").asText()).isNotBlank();
         assertThat(node.path("state").path("scope").path("role").asText()).isEqualTo("trigger");
         assertThat(node.path("state").path("scope").path("instance").asText()).isEqualTo("inst");
-        assertThat(node.path("state").path("target").asText()).isEqualTo("trigger.inst");
         assertThat(node.path("state").path("enabled").asBoolean()).isFalse();
         List<String> errorPayload = ASYNC_API.validate("#/components/schemas/CommandErrorPayload", node);
         assertThat(errorPayload).isEmpty();
@@ -164,7 +162,7 @@ class TriggerTest {
         String idempotencyKey = UUID.randomUUID().toString();
         ControlSignal signal = ControlSignal.forInstance(
             "config-update", "sw1", "trigger", "inst", correlationId, idempotencyKey,
-            CommandTarget.INSTANCE, "trigger.inst", args);
+            CommandTarget.INSTANCE, args);
 
         trigger.onControl(mapper.writeValueAsString(signal), "sig.config-update.trigger.inst", null);
 
@@ -177,7 +175,6 @@ class TriggerTest {
         JsonNode node = mapper.readTree(payload.getValue());
         assertThat(node.has("args")).isFalse();
         assertThat(node.path("state").path("scope").path("role").asText()).isEqualTo("trigger");
-        assertThat(node.path("state").path("target").asText()).isEqualTo("trigger.inst");
         List<String> readyErrors = ASYNC_API.validate("#/components/schemas/CommandReadyPayload", node);
         assertThat(readyErrors).isEmpty();
     }

@@ -30,7 +30,6 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.regex.Pattern;
 
@@ -178,12 +177,7 @@ public class SwarmSignalListener {
     try {
       JsonNode dataNode = node.path("args").path("data");
       Boolean enabledFlag = dataNode.has("enabled") ? dataNode.path("enabled").asBoolean() : null;
-      String originalTarget = cs.target();
-      String normalizedTarget = normalizeTarget(originalTarget);
-      CommandTarget commandTarget = cs.commandTarget();
-      if (commandTarget == null) {
-        commandTarget = CommandTarget.ALL;
-      }
+      CommandTarget commandTarget = effectiveCommandTarget(cs);
 
       Boolean stateEnabled = null;
       Map<String, Object> details = new LinkedHashMap<>();
@@ -192,7 +186,7 @@ public class SwarmSignalListener {
 
       switch (commandTarget) {
         case SWARM -> {
-          if (isSwarmToggle(normalizedTarget) && enabledFlag != null) {
+          if (enabledFlag != null && appliesToLocalSwarm(cs)) {
             lifecycle.setSwarmEnabled(enabledFlag);
             sendStatusDelta();
             stateEnabled = enabledFlag;
@@ -202,7 +196,7 @@ public class SwarmSignalListener {
           }
         }
         case INSTANCE -> {
-          if (isControllerTarget(normalizedTarget, cs)) {
+          if (isControllerCommand(cs)) {
             if (enabledFlag != null) {
               controllerEnabled = enabledFlag;
               sendStatusDelta();
@@ -210,25 +204,24 @@ public class SwarmSignalListener {
               details.put("controller", Map.of("enabled", enabledFlag));
             }
           } else {
-            TargetSpec spec = resolveInstanceTarget(originalTarget);
+            TargetSpec spec = resolveInstanceTarget(cs);
             if (spec == null) {
-              throw new IllegalArgumentException("commandTarget=instance requires role.instance target");
+              throw new IllegalArgumentException("commandTarget=instance requires role and instance fields");
             }
             fanouts.add(() -> forwardToInstance(body, spec));
           }
         }
         case ROLE -> {
-          if (normalizedTarget == null) {
-            throw new IllegalArgumentException("commandTarget=role requires a role target");
+          String roleTarget = resolveRoleTarget(cs);
+          if (roleTarget == null) {
+            throw new IllegalArgumentException("commandTarget=role requires a role field");
           }
-          String roleTarget = normalizedTarget;
           fanouts.add(() -> forwardToRole(body, roleTarget));
         }
         case ALL -> fanouts.add(() -> forwardToAll(body));
       }
 
-      CommandState state = configCommandState(cs, originalTarget != null ? originalTarget : normalizedTarget,
-          stateEnabled, details);
+      CommandState state = configCommandState(cs, stateEnabled, details);
       for (Runnable fanout : fanouts) {
         fanout.run();
       }
@@ -285,9 +278,7 @@ public class SwarmSignalListener {
         log.warn("Unknown commandTarget {}", commandTargetValue);
       }
     }
-    String target = node.path("target").asText(null);
-
-    return new ControlSignal(signal, correlationId, idempotencyKey, swarmId, role, instance, commandTarget, target, args);
+    return new ControlSignal(signal, correlationId, idempotencyKey, swarmId, role, instance, commandTarget, args);
   }
 
   private void emitSuccess(ControlSignal cs, String swarmIdFallback) {
@@ -300,8 +291,8 @@ public class SwarmSignalListener {
       String swarmId = cs.swarmId();
       if (swarmId == null) swarmId = swarmIdFallback;
       rk = "ev.ready." + cs.signal() + "." + swarmId;
-    } else if ("config-update".equals(cs.signal()) && cs.role() != null && cs.instance() != null) {
-      rk = "ev.ready.config-update." + cs.role() + "." + cs.instance();
+    } else if ("config-update".equals(cs.signal())) {
+      rk = "ev.ready.config-update." + ROLE + "." + instanceId;
     } else {
       return;
     }
@@ -321,13 +312,24 @@ public class SwarmSignalListener {
   }
 
   private void emitError(ControlSignal cs, Exception e, String swarmIdFallback) {
-    String rk = "ev.error." + cs.signal();
-    if (cs.swarmId() != null) {
-      rk += "." + cs.swarmId();
-    } else if (swarmIdFallback != null) {
-      rk += "." + swarmIdFallback;
-    } else if (cs.role() != null && cs.instance() != null) {
-      rk += "." + cs.role() + "." + cs.instance();
+    String rk;
+    if (cs.signal().startsWith("swarm-")) {
+      rk = "ev.error." + cs.signal();
+      if (cs.swarmId() != null) {
+        rk += "." + cs.swarmId();
+      } else if (swarmIdFallback != null) {
+        rk += "." + swarmIdFallback;
+      }
+    } else if ("config-update".equals(cs.signal())) {
+      rk = "ev.error.config-update." + ROLE + "." + instanceId;
+    } else {
+      rk = "ev.error." + cs.signal();
+      if (cs.role() != null) {
+        rk += "." + cs.role();
+        if (cs.instance() != null) {
+          rk += "." + cs.instance();
+        }
+      }
     }
     ConfirmationScope scope = scopeFor(cs, swarmIdFallback);
     CommandState state = enrichState(cs, swarmIdFallback, stateForError(cs));
@@ -378,101 +380,51 @@ public class SwarmSignalListener {
       case "config-update" -> stateFromLifecycle();
       default -> stateFromLifecycle();
     };
-    return new CommandState(status, null, cs.target(), null, null);
+    return new CommandState(status, null, null, null);
   }
 
   private CommandState configCommandState(ControlSignal cs,
-                                          String target,
                                           Boolean enabled,
                                           Map<String, Object> details) {
     CommandState base = stateForSuccess(cs);
     Map<String, Object> detailCopy = (details == null || details.isEmpty()) ? null : new LinkedHashMap<>(details);
-    return new CommandState(base != null ? base.status() : null, null, target, enabled, detailCopy);
+    return new CommandState(base != null ? base.status() : null, null, enabled, detailCopy);
   }
 
   private CommandState enrichState(ControlSignal cs, String swarmIdFallback, CommandState baseState) {
-    CommandTarget commandTarget = cs.commandTarget();
-    if (commandTarget == null) {
-      commandTarget = CommandTarget.ALL;
-    }
-    String normalizedTarget = normalizeTarget(cs.target());
-    ConfirmationScope stateScope = stateScopeForTarget(cs, swarmIdFallback, commandTarget, normalizedTarget);
-    String resolvedTarget = resolveTargetValue(cs, baseState, stateScope);
+    CommandTarget commandTarget = effectiveCommandTarget(cs);
+    ConfirmationScope stateScope = stateScopeForTarget(cs, swarmIdFallback, commandTarget);
     String status = baseState != null ? baseState.status() : null;
     Boolean enabled = baseState != null ? baseState.enabled() : null;
     Map<String, Object> details = baseState != null ? baseState.details() : null;
     Map<String, Object> mirroredDetails = mirrorEnablement(details, enabled, commandTarget, stateScope);
-    return new CommandState(status, stateScope, resolvedTarget, enabled, mirroredDetails);
+    return new CommandState(status, stateScope, enabled, mirroredDetails);
   }
 
   private ConfirmationScope stateScopeForTarget(ControlSignal cs,
                                                 String swarmIdFallback,
-                                                CommandTarget commandTarget,
-                                                String normalizedTarget) {
-    String swarmId = cs.swarmId();
-    if (swarmId == null || swarmId.isBlank()) {
-      swarmId = swarmIdFallback;
-    }
-    if (swarmId == null || swarmId.isBlank()) {
-      swarmId = Topology.SWARM_ID;
-    }
+                                                CommandTarget commandTarget) {
+    String swarmId = effectiveSwarmId(cs, swarmIdFallback);
     return switch (commandTarget) {
       case ALL, SWARM -> new ConfirmationScope(swarmId, null, null);
-      case ROLE -> new ConfirmationScope(swarmId, roleForState(cs, commandTarget, normalizedTarget), null);
+      case ROLE -> new ConfirmationScope(swarmId, roleForState(cs), null);
       case INSTANCE -> {
-        TargetSpec spec = resolveInstanceTarget(cs.target());
+        TargetSpec spec = resolveInstanceTarget(cs);
         if (spec != null) {
           yield new ConfirmationScope(swarmId, spec.role(), spec.instance());
         }
-        if (isControllerTarget(normalizedTarget, cs)) {
+        if (isControllerCommand(cs)) {
           yield new ConfirmationScope(swarmId, ROLE, instanceId);
         }
-        yield new ConfirmationScope(swarmId, roleForState(cs, commandTarget, normalizedTarget), null);
+        yield new ConfirmationScope(swarmId, roleForState(cs), null);
       }
     };
   }
 
-  private String roleForState(ControlSignal cs, CommandTarget commandTarget, String normalizedTarget) {
-    if (commandTarget == CommandTarget.INSTANCE) {
-      TargetSpec spec = resolveInstanceTarget(cs.target());
-      if (spec != null) {
-        return spec.role();
-      }
-      if (isControllerTarget(normalizedTarget, cs)) {
-        return ROLE;
-      }
-    }
-    if (commandTarget == CommandTarget.ROLE) {
-      String target = cs.target();
-      if (target != null && !target.isBlank()) {
-        return target.trim();
-      }
-    }
+  private String roleForState(ControlSignal cs) {
     String role = cs.role();
     if (role != null && !role.isBlank()) {
       return role;
-    }
-    return null;
-  }
-
-  private String resolveTargetValue(ControlSignal cs, CommandState baseState, ConfirmationScope stateScope) {
-    if (baseState != null && baseState.target() != null) {
-      return baseState.target();
-    }
-    String target = cs.target();
-    if (target != null && !target.isBlank()) {
-      return target;
-    }
-    if (stateScope != null) {
-      if (stateScope.instance() != null) {
-        return stateScope.instance();
-      }
-      if (stateScope.role() != null) {
-        return stateScope.role();
-      }
-      if (stateScope.swarmId() != null) {
-        return stateScope.swarmId();
-      }
     }
     return null;
   }
@@ -488,17 +440,31 @@ public class SwarmSignalListener {
       if ((commandTarget == CommandTarget.INSTANCE && details.containsKey("controller"))
           || ((commandTarget == CommandTarget.SWARM || commandTarget == CommandTarget.ALL)
           && details.containsKey("workloads"))
-          || details.containsKey("target")) {
+          || details.containsKey("scope")) {
         return details;
       }
     }
     Map<String, Object> copy = details == null ? new LinkedHashMap<>() : new LinkedHashMap<>(details);
     if (commandTarget == CommandTarget.INSTANCE && stateScope != null && ROLE.equals(stateScope.role())) {
-      copy.put("controller", Map.of("enabled", enabled));
+      if (!copy.containsKey("controller")) {
+        copy.put("controller", Map.of("enabled", enabled));
+      }
     } else if (commandTarget == CommandTarget.SWARM || commandTarget == CommandTarget.ALL) {
-      copy.put("workloads", Map.of("enabled", enabled));
+      if (!copy.containsKey("workloads")) {
+        copy.put("workloads", Map.of("enabled", enabled));
+      }
     } else {
-      copy.put("target", Map.of("enabled", enabled));
+      Map<String, Object> scopeDetails = new LinkedHashMap<>();
+      if (stateScope != null) {
+        if (stateScope.role() != null) {
+          scopeDetails.put("role", stateScope.role());
+        }
+        if (stateScope.instance() != null) {
+          scopeDetails.put("instance", stateScope.instance());
+        }
+      }
+      scopeDetails.put("enabled", enabled);
+      copy.put("scope", scopeDetails);
     }
     return copy.isEmpty() ? null : copy;
   }
@@ -515,52 +481,60 @@ public class SwarmSignalListener {
     sendControl("sig.config-update." + spec.role() + "." + spec.instance(), payload, "forward");
   }
 
-  private boolean isSwarmToggle(String normalizedTarget) {
-    return normalizedTarget == null || normalizedTarget.equals("swarm") || normalizedTarget.equals(Topology.SWARM_ID.toLowerCase(Locale.ROOT));
+  private CommandTarget effectiveCommandTarget(ControlSignal cs) {
+    CommandTarget commandTarget = cs.commandTarget();
+    if (commandTarget != null) {
+      return commandTarget;
+    }
+    return CommandTarget.infer(cs.swarmId(), cs.role(), cs.instance(), cs.args());
   }
 
-  private boolean isControllerTarget(String normalizedTarget, ControlSignal cs) {
-    if (normalizedTarget == null || normalizedTarget.isBlank()) {
+  private boolean appliesToLocalSwarm(ControlSignal cs) {
+    String targetSwarm = cs.swarmId();
+    if (targetSwarm == null || targetSwarm.isBlank()) {
       return true;
     }
-    if ("controller".equals(normalizedTarget)) {
-      return true;
-    }
-    if (instanceId.equalsIgnoreCase(normalizedTarget)) {
-      return true;
-    }
-    String csInstance = cs.instance();
-    return csInstance != null && csInstance.equalsIgnoreCase(normalizedTarget);
+    return Topology.SWARM_ID.equalsIgnoreCase(targetSwarm);
   }
 
-  private String normalizeTarget(String target) {
-    if (target == null) {
-      return null;
+  private boolean isControllerCommand(ControlSignal cs) {
+    String role = cs.role();
+    if (role == null || role.isBlank()) {
+      return false;
     }
-    String trimmed = target.trim();
-    if (trimmed.isEmpty()) {
-      return null;
+    if (!ROLE.equals(role)) {
+      return false;
     }
-    return trimmed.toLowerCase(Locale.ROOT);
+    String targetInstance = cs.instance();
+    return targetInstance == null || targetInstance.isBlank() || instanceId.equals(targetInstance);
   }
 
-  private TargetSpec resolveInstanceTarget(String target) {
-    if (target == null || target.isBlank()) {
+  private TargetSpec resolveInstanceTarget(ControlSignal cs) {
+    String role = cs.role();
+    String instance = cs.instance();
+    if (role == null || role.isBlank() || instance == null || instance.isBlank()) {
       return null;
     }
-    String trimmed = target.trim();
-    String[] parts;
-    if (trimmed.contains(".")) {
-      parts = trimmed.split("\\.", 2);
-    } else if (trimmed.contains(":")) {
-      parts = trimmed.split(":", 2);
-    } else {
+    return new TargetSpec(role, instance);
+  }
+
+  private String resolveRoleTarget(ControlSignal cs) {
+    String role = cs.role();
+    if (role == null || role.isBlank()) {
       return null;
     }
-    if (parts.length != 2 || parts[0].isBlank() || parts[1].isBlank()) {
-      return null;
+    return role;
+  }
+
+  private String effectiveSwarmId(ControlSignal cs, String swarmIdFallback) {
+    String swarmId = cs.swarmId();
+    if (swarmId == null || swarmId.isBlank()) {
+      swarmId = swarmIdFallback;
     }
-    return new TargetSpec(parts[0], parts[1]);
+    if (swarmId == null || swarmId.isBlank()) {
+      swarmId = Topology.SWARM_ID;
+    }
+    return swarmId;
   }
 
   private record TargetSpec(String role, String instance) {}
@@ -568,13 +542,13 @@ public class SwarmSignalListener {
   private CommandState stateForError(ControlSignal cs) {
     String state = stateFromLifecycle();
     if (state != null) {
-      return new CommandState(state, null, cs.target(), null, null);
+      return new CommandState(state, null, null, null);
     }
     return switch (cs.signal()) {
-      case "swarm-start" -> new CommandState("Stopped", null, cs.target(), null, null);
-      case "swarm-stop" -> new CommandState("Running", null, cs.target(), null, null);
-      case "swarm-remove" -> new CommandState("Stopped", null, cs.target(), null, null);
-      case "swarm-template" -> new CommandState("Stopped", null, cs.target(), null, null);
+      case "swarm-start" -> new CommandState("Stopped", null, null, null);
+      case "swarm-stop" -> new CommandState("Running", null, null, null);
+      case "swarm-remove" -> new CommandState("Stopped", null, null, null);
+      case "swarm-template" -> new CommandState("Stopped", null, null, null);
       default -> null;
     };
   }

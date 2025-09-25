@@ -56,7 +56,7 @@ public class ComponentController {
                 String correlation = UUID.randomUUID().toString();
                 ControlSignal payload = ControlSignal.forInstance("config-update", request.swarmId(), role, instance,
                     correlation, request.idempotencyKey(),
-                    commandTargetFrom(request), request.target(), argsFrom(request));
+                    commandTargetFrom(request), argsFrom(request));
                 String jsonPayload = toJson(payload);
                 sendControl(routingKey(role, instance), jsonPayload, "config-update");
                 idempotency.record(scope, "config-update", request.idempotencyKey(), correlation);
@@ -106,30 +106,12 @@ public class ComponentController {
                                       Map<String, Object> patch,
                                       String notes,
                                       String swarmId,
-                                      String target,
-                                      String scope,
                                       CommandTarget commandTarget) {
 
         public ConfigUpdateRequest {
-            if (commandTarget == null && scope != null && !scope.isBlank()) {
-                commandTarget = commandTargetFromLegacy(scope);
-            }
-            if (commandTarget == null && target != null && !target.isBlank()) {
-                commandTarget = commandTargetFromLegacy(target);
-            }
             if (commandTarget == null) {
-                throw new IllegalArgumentException("commandTarget is required");
+                commandTarget = CommandTarget.INSTANCE;
             }
-        }
-
-        private static CommandTarget commandTargetFromLegacy(String scope) {
-            return switch (scope.toLowerCase()) {
-                case "swarm" -> CommandTarget.SWARM;
-                case "role" -> CommandTarget.ROLE;
-                case "instance", "controller" -> CommandTarget.INSTANCE;
-                case "all" -> CommandTarget.ALL;
-                default -> null;
-            };
         }
     }
 

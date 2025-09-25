@@ -454,6 +454,9 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
     String rawCommandTarget = asTextValue(dataMap.remove("commandTarget"));
     String targetHint = asTextValue(dataMap.remove("target"));
     String scopeHint = asTextValue(dataMap.remove("scope"));
+    String swarmHint = asTextValue(dataMap.remove("swarmId"));
+    String roleHint = asTextValue(dataMap.remove("role"));
+    String instanceHint = asTextValue(dataMap.remove("instance"));
 
     CommandTarget commandTarget = parseCommandTarget(rawCommandTarget, context);
     if (commandTarget == null) {
@@ -466,20 +469,45 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
       commandTarget = CommandTarget.ALL;
     }
 
-    String target = normalizeTargetValue(targetHint);
-    if (target == null) {
-      target = defaultTargetFor(commandTarget);
+    String swarmId = (swarmHint == null || swarmHint.isBlank()) ? Topology.SWARM_ID : swarmHint;
+    String role = roleHint;
+    String instance = instanceHint;
+
+    TargetSpec legacySpec = parseTargetSpec(targetHint);
+    if (commandTarget == CommandTarget.INSTANCE) {
+      if ((role == null || role.isBlank()) && legacySpec != null) {
+        role = legacySpec.role();
+      }
+      if ((instance == null || instance.isBlank()) && legacySpec != null) {
+        instance = legacySpec.instance();
+      }
+      if (role == null || role.isBlank()) {
+        role = "swarm-controller";
+      }
+      if (instance == null || instance.isBlank()) {
+        instance = instanceId;
+      }
+    } else if (commandTarget == CommandTarget.ROLE) {
+      if ((role == null || role.isBlank()) && legacySpec != null) {
+        role = legacySpec.role();
+      }
+      if (role == null || role.isBlank()) {
+        throw new IllegalArgumentException("commandTarget=role requires role field");
+      }
+      instance = null;
+    } else if (commandTarget == CommandTarget.SWARM || commandTarget == CommandTarget.ALL) {
+      role = null;
+      instance = null;
     }
 
     ControlSignal signal = new ControlSignal(
         "config-update",
         correlationId,
         idempotencyKey,
-        Topology.SWARM_ID,
-        null,
-        null,
+        swarmId,
+        role,
+        instance,
         commandTarget,
-        target,
         args);
     try {
       String payload = mapper.writeValueAsString(signal);
@@ -524,33 +552,35 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
     if (lower.contains(".") || lower.contains(":")) {
       return CommandTarget.INSTANCE;
     }
-    if (Topology.SWARM_ID != null && Topology.SWARM_ID.equalsIgnoreCase(trimmed)) {
-      return CommandTarget.SWARM;
-    }
     return switch (lower) {
       case "all" -> CommandTarget.ALL;
       case "swarm" -> CommandTarget.SWARM;
       case "controller", "instance" -> CommandTarget.INSTANCE;
       case "role" -> CommandTarget.ROLE;
-      default -> CommandTarget.ROLE;
-    };
-  }
-
-  private String defaultTargetFor(CommandTarget commandTarget) {
-    return switch (commandTarget) {
-      case ALL -> "all";
-      case SWARM -> "swarm";
       default -> null;
     };
   }
 
-  private String normalizeTargetValue(String target) {
-    if (target == null) {
+  private TargetSpec parseTargetSpec(String target) {
+    if (target == null || target.isBlank()) {
       return null;
     }
     String trimmed = target.trim();
-    return trimmed.isEmpty() ? null : trimmed;
+    String[] parts;
+    if (trimmed.contains(".")) {
+      parts = trimmed.split("\\.", 2);
+    } else if (trimmed.contains(":")) {
+      parts = trimmed.split(":", 2);
+    } else {
+      return null;
+    }
+    if (parts.length != 2 || parts[0].isBlank() || parts[1].isBlank()) {
+      return null;
+    }
+    return new TargetSpec(parts[0], parts[1]);
   }
+
+  private record TargetSpec(String role, String instance) {}
 
   private String asTextValue(Object value) {
     if (value instanceof String s) {

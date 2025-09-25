@@ -91,9 +91,8 @@ public class SwarmManagerController {
                             correlation,
                             request.idempotencyKey(),
                             request.commandTarget(),
-                            request.target(),
                             argsFor(request));
-                        sendControl(routingKey(swarm.getInstanceId()), toJson(payload), request.target());
+                        sendControl(routingKey(swarm.getInstanceId()), toJson(payload), request.commandTarget());
                         idempotency.record(scope, "config-update", request.idempotencyKey(), correlation);
                         dispatches.add(new Dispatch(swarmId, swarm.getInstanceId(),
                             accepted(correlation, request.idempotencyKey(), swarm.getInstanceId()), false));
@@ -122,8 +121,8 @@ public class SwarmManagerController {
         return new ControlResponse(correlationId, idempotencyKey, watch, CONFIG_UPDATE_TIMEOUT_MS);
     }
 
-    private void sendControl(String routingKey, String payload, String context) {
-        String label = (context == null || context.isBlank()) ? "SEND" : "SEND " + context;
+    private void sendControl(String routingKey, String payload, CommandTarget context) {
+        String label = context == null ? "SEND" : "SEND " + context.json();
         log.info("[CTRL] {} rk={} payload={}", label, routingKey, snippet(payload));
         rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, routingKey, payload);
     }
@@ -172,7 +171,6 @@ public class SwarmManagerController {
 
     public record ToggleRequest(String idempotencyKey,
                                  Boolean enabled,
-                                 String target,
                                  String notes,
                                  CommandTarget commandTarget) {
         public ToggleRequest {
@@ -182,20 +180,11 @@ public class SwarmManagerController {
             if (enabled == null) {
                 throw new IllegalArgumentException("enabled flag is required");
             }
-            if (target == null || target.isBlank()) {
-                throw new IllegalArgumentException("target is required");
-            }
-            if (!"swarm".equals(target) && !"controller".equals(target)) {
-                throw new IllegalArgumentException("target must be swarm or controller");
-            }
             if (commandTarget == null) {
-                commandTarget = "swarm".equals(target) ? CommandTarget.SWARM : CommandTarget.INSTANCE;
+                throw new IllegalArgumentException("commandTarget is required");
             }
-            if ("swarm".equals(target) && commandTarget != CommandTarget.SWARM) {
-                throw new IllegalArgumentException("commandTarget must be swarm when target=swarm");
-            }
-            if ("controller".equals(target) && commandTarget != CommandTarget.INSTANCE) {
-                throw new IllegalArgumentException("commandTarget must be instance when target=controller");
+            if (commandTarget != CommandTarget.SWARM && commandTarget != CommandTarget.INSTANCE) {
+                throw new IllegalArgumentException("commandTarget must be swarm or instance");
             }
         }
     }

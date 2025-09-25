@@ -10,7 +10,6 @@ import java.util.Map;
 public record CommandState(
     String status,
     ConfirmationScope scope,
-    String target,
     Boolean enabled,
     Map<String, Object> details
 ) {
@@ -22,12 +21,6 @@ public record CommandState(
                 status = null;
             }
         }
-        if (target != null) {
-            target = target.trim();
-            if (target.isEmpty()) {
-                target = null;
-            }
-        }
         if (details != null && !details.isEmpty()) {
             details = Collections.unmodifiableMap(new LinkedHashMap<>(details));
         } else {
@@ -37,7 +30,7 @@ public record CommandState(
     }
 
     public static CommandState status(String status) {
-        return new CommandState(status, null, null, null, null);
+        return new CommandState(status, null, null, null);
     }
 }
 

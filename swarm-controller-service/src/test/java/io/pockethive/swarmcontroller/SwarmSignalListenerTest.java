@@ -87,7 +87,6 @@ class SwarmSignalListenerTest {
     assertThat(node.path("idempotencyKey").asText()).isEqualTo("i0");
     assertThat(node.path("state").path("status").asText()).isEqualTo("Ready");
     assertThat(node.path("state").path("scope").path("swarmId").asText()).isEqualTo(Topology.SWARM_ID);
-    assertThat(node.path("state").path("target").asText()).isEqualTo(Topology.SWARM_ID);
     assertThat(node.path("scope").path("swarmId").asText()).isEqualTo(Topology.SWARM_ID);
   }
 
@@ -128,7 +127,6 @@ class SwarmSignalListenerTest {
     assertThat(startNode.path("correlationId").asText()).isEqualTo("c1");
     assertThat(startNode.path("idempotencyKey").asText()).isEqualTo("i1");
     assertThat(startNode.path("state").path("status").asText()).isEqualTo("Running");
-    assertThat(startNode.path("state").path("target").asText()).isEqualTo(Topology.SWARM_ID);
     assertThat(startNode.path("scope").path("swarmId").asText()).isEqualTo(Topology.SWARM_ID);
   }
 
@@ -146,7 +144,6 @@ class SwarmSignalListenerTest {
     assertThat(stopNode.path("correlationId").asText()).isEqualTo("c2");
     assertThat(stopNode.path("idempotencyKey").asText()).isEqualTo("i2");
     assertThat(stopNode.path("state").path("status").asText()).isEqualTo("Stopped");
-    assertThat(stopNode.path("state").path("target").asText()).isEqualTo(Topology.SWARM_ID);
     assertThat(stopNode.path("scope").path("swarmId").asText()).isEqualTo(Topology.SWARM_ID);
   }
 
@@ -168,7 +165,6 @@ class SwarmSignalListenerTest {
     assertThat(errNode.path("phase").asText()).isEqualTo("remove");
     assertThat(errNode.path("state").path("status").asText()).isEqualTo("Running");
     assertThat(errNode.path("state").path("scope").path("swarmId").asText()).isEqualTo(Topology.SWARM_ID);
-    assertThat(errNode.path("state").path("target").asText()).isEqualTo(Topology.SWARM_ID);
     assertThat(errNode.path("retryable").asBoolean()).isFalse();
   }
 
@@ -192,7 +188,6 @@ class SwarmSignalListenerTest {
     assertThat(node.path("result").asText()).isEqualTo("success");
     assertThat(node.path("signal").asText()).isEqualTo("swarm-remove");
     assertThat(node.path("state").path("status").asText()).isEqualTo("Removed");
-    assertThat(node.path("state").path("target").asText()).isEqualTo(Topology.SWARM_ID);
     assertThat(node.path("state").path("scope").path("swarmId").asText()).isEqualTo(Topology.SWARM_ID);
     assertThat(node.path("correlationId").asText()).isEqualTo("c3");
     assertThat(node.path("idempotencyKey").asText()).isEqualTo("i3");
@@ -205,10 +200,11 @@ class SwarmSignalListenerTest {
     SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", mapper);
     String body = """
         {"correlationId":"c4","idempotencyKey":"i4","signal":"config-update",
+         "swarmId":"%s",
          "role":"swarm-controller","instance":"inst",
-         "commandTarget":"instance","target":"controller",
+         "commandTarget":"instance",
          "args":{"data":{"enabled":true}}}
-        """;
+        """.formatted(Topology.SWARM_ID);
     listener.handle(body, "sig.config-update.swarm-controller.inst");
     ArgumentCaptor<String> configPayload = ArgumentCaptor.forClass(String.class);
     verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
@@ -222,7 +218,6 @@ class SwarmSignalListenerTest {
     assertThat(configNode.path("state").path("status").asText()).isEqualTo("Running");
     assertThat(configNode.path("state").path("scope").path("role").asText()).isEqualTo("swarm-controller");
     assertThat(configNode.path("state").path("scope").path("instance").asText()).isEqualTo("inst");
-    assertThat(configNode.path("state").path("target").asText()).isEqualTo("controller");
     assertThat(configNode.path("state").path("details").path("controller").path("enabled").asBoolean()).isTrue();
   }
 
@@ -232,10 +227,11 @@ class SwarmSignalListenerTest {
     SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", mapper);
     String body = """
         {"correlationId":"c4","idempotencyKey":"i4","signal":"config-update",
+         "swarmId":"%s",
          "role":"swarm-controller","instance":"inst",
-         "commandTarget":"instance","target":"controller",
+         "commandTarget":"instance",
          "args":{"data":{"enabled":true}}}
-        """;
+        """.formatted(Topology.SWARM_ID);
 
     listener.handle(body, "sig.config-update.swarm-controller.inst");
 
@@ -256,10 +252,11 @@ class SwarmSignalListenerTest {
 
     String body = """
         {"correlationId":"c10","idempotencyKey":"i10","signal":"config-update",
+         "swarmId":"%s",
          "role":"swarm-controller","instance":"inst",
-         "commandTarget":"swarm","target":"swarm",
+         "commandTarget":"swarm",
          "args":{"data":{"enabled":false}}}
-        """;
+        """.formatted(Topology.SWARM_ID);
 
     listener.handle(body, "sig.config-update.swarm-controller.inst");
 
@@ -269,7 +266,6 @@ class SwarmSignalListenerTest {
         eq("ev.ready.config-update.swarm-controller.inst"), readyPayload.capture());
     JsonNode readyNode = mapper.readTree(readyPayload.getValue());
     assertThat(readyNode.path("state").path("status").asText()).isEqualTo("Stopped");
-    assertThat(readyNode.path("state").path("target").asText()).isEqualTo("swarm");
     assertThat(readyNode.path("state").path("scope").path("swarmId").asText()).isEqualTo(Topology.SWARM_ID);
     assertThat(readyNode.path("state").path("details").path("workloads").path("enabled").asBoolean()).isFalse();
 
@@ -295,10 +291,11 @@ class SwarmSignalListenerTest {
 
     String body = """
         {"correlationId":"c11","idempotencyKey":"i11","signal":"config-update",
+         "swarmId":"%s",
          "role":"swarm-controller","instance":"inst",
-         "commandTarget":"instance","target":"controller",
+         "commandTarget":"instance",
          "args":{"data":{"enabled":false}}}
-        """;
+        """.formatted(Topology.SWARM_ID);
 
     listener.handle(body, "sig.config-update.swarm-controller.inst");
 
@@ -307,7 +304,6 @@ class SwarmSignalListenerTest {
     verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
         eq("ev.ready.config-update.swarm-controller.inst"), controllerReady.capture());
     JsonNode controllerNode = mapper.readTree(controllerReady.getValue());
-    assertThat(controllerNode.path("state").path("target").asText()).isEqualTo("controller");
     assertThat(controllerNode.path("state").path("scope").path("role").asText()).isEqualTo("swarm-controller");
     assertThat(controllerNode.path("state").path("scope").path("instance").asText()).isEqualTo("inst");
     assertThat(controllerNode.path("state").path("details").path("controller").path("enabled").asBoolean()).isFalse();
@@ -332,10 +328,11 @@ class SwarmSignalListenerTest {
 
     String body = """
         {"correlationId":"c12","idempotencyKey":"i12","signal":"config-update",
-         "role":"swarm-controller","instance":"inst",
-         "commandTarget":"role","target":"processor",
+         "swarmId":"%s",
+         "role":"processor",
+         "commandTarget":"role",
          "args":{"data":{"enabled":true}}}
-        """;
+        """.formatted(Topology.SWARM_ID);
 
     listener.handle(body, "sig.config-update.swarm-controller.inst");
 
@@ -347,7 +344,6 @@ class SwarmSignalListenerTest {
     JsonNode readyNode = mapper.readTree(readyPayload.getValue());
     assertThat(readyNode.path("state").path("scope").path("role").asText()).isEqualTo("processor");
     assertThat(readyNode.path("state").path("scope").path("swarmId").asText()).isEqualTo(Topology.SWARM_ID);
-    assertThat(readyNode.path("state").path("target").asText()).isEqualTo("processor");
   }
 
   @Test
@@ -360,10 +356,11 @@ class SwarmSignalListenerTest {
 
     String body = """
         {"correlationId":"c13","idempotencyKey":"i13","signal":"config-update",
-         "role":"swarm-controller","instance":"inst",
-         "commandTarget":"instance","target":"processor.alpha",
+         "swarmId":"%s",
+         "role":"processor","instance":"alpha",
+         "commandTarget":"instance",
          "args":{"data":{"threshold":5}}}
-        """;
+        """.formatted(Topology.SWARM_ID);
 
     listener.handle(body, "sig.config-update.swarm-controller.inst");
 
@@ -375,7 +372,6 @@ class SwarmSignalListenerTest {
     JsonNode readyNode = mapper.readTree(readyPayload.getValue());
     assertThat(readyNode.path("state").path("scope").path("role").asText()).isEqualTo("processor");
     assertThat(readyNode.path("state").path("scope").path("instance").asText()).isEqualTo("alpha");
-    assertThat(readyNode.path("state").path("target").asText()).isEqualTo("processor.alpha");
   }
 
   @Test
@@ -388,10 +384,10 @@ class SwarmSignalListenerTest {
 
     String body = """
         {"correlationId":"c14","idempotencyKey":"i14","signal":"config-update",
-         "role":"swarm-controller","instance":"inst",
-         "commandTarget":"all","target":"all",
+         "swarmId":"%s",
+         "commandTarget":"all",
          "args":{"data":{"mode":"maintenance"}}}
-        """;
+        """.formatted(Topology.SWARM_ID);
 
     listener.handle(body, "sig.config-update.swarm-controller.inst");
 
@@ -404,7 +400,6 @@ class SwarmSignalListenerTest {
     assertThat(readyNode.path("state").path("scope").path("swarmId").asText()).isEqualTo(Topology.SWARM_ID);
     JsonNode globalRole = readyNode.path("state").path("scope").path("role");
     assertThat(globalRole.isMissingNode() || globalRole.isNull()).isTrue();
-    assertThat(readyNode.path("state").path("target").asText()).isEqualTo("all");
   }
 
   @Test
@@ -417,10 +412,10 @@ class SwarmSignalListenerTest {
 
     String body = """
         {"correlationId":"c15","idempotencyKey":"i15","signal":"config-update",
-         "role":"swarm-controller","instance":"inst",
-         "commandTarget":"all","target":"all",
+         "swarmId":"%s",
+         "commandTarget":"all",
          "args":{"data":{"mode":"maintenance"}}}
-        """;
+        """.formatted(Topology.SWARM_ID);
 
     listener.handle(body, "sig.config-update.swarm-controller.inst");
     listener.handle(body, "sig.config-update.swarm-controller.inst");
@@ -437,10 +432,11 @@ class SwarmSignalListenerTest {
 
     String body = """
         {"correlationId":"c16","idempotencyKey":"i16","signal":"config-update",
+         "swarmId":"%s",
          "role":"swarm-controller","instance":"inst",
-         "commandTarget":"swarm","target":"swarm",
+         "commandTarget":"swarm",
          "args":{"data":{"enabled":false}}}
-        """;
+        """.formatted(Topology.SWARM_ID);
 
     listener.handle(body, "sig.config-update");
 

@@ -50,7 +50,6 @@ class ControlSignalSchemaTest {
             UUID.randomUUID().toString(),
             UUID.randomUUID().toString(),
             CommandTarget.INSTANCE,
-            "swarm",
             Map.of("data", Map.of("enabled", true))
         );
         JsonNode json = MAPPER.readTree(MAPPER.writeValueAsString(sample));

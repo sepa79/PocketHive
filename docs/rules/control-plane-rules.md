@@ -13,7 +13,7 @@
 - **Command → Confirmation**: Every control action yields **exactly one** `ev.ready.*` (success) or `ev.error.*` (error), correlated by IDs.
 - **Aggregate-first**: Orchestrator consumes **swarm aggregates**; per-component status is for Controller and observability.
 - **Always-on control**: Config & status always handled, even when workload is disabled.
-- **Controller-level toggles**: Downstream services MUST inspect top-level `commandTarget`/`target` on `sig.config-update.<swarm>.swarm-controller.<instance|ALL>`: `commandTarget=swarm` + `target=swarm` pauses/resumes all workloads managed by that controller, while `commandTarget=instance` + `target=controller` pauses/resumes only the controller runtime. In both cases the control plane stays responsive.
+- **Controller-level toggles**: Downstream services MUST inspect top-level `commandTarget` plus the `swarmId`/`role`/`instance` tuple on `sig.config-update.<swarm>.swarm-controller.<instance|ALL>`. `commandTarget=swarm` with the controller's swarm ID pauses/resumes all workloads it manages, while `commandTarget=instance` with `role=swarm-controller` and the controller instance ID pauses/resumes only the controller runtime. In both cases the control plane stays responsive.
 - **Non-destructive default**: Stop ≠ Remove. Removal is explicit and terminal.
 
 ---
@@ -24,14 +24,14 @@
   - Only publisher of swarm **lifecycle** signals (template/start/stop/remove).
   - Launches Controller via runtime. On controller handshake emits **`ev.ready.swarm-create.<swarmId>.orchestrator.ALL`**.
   - Enforces idempotency, retries, timeouts, and RBAC.
-  - Issues controller-level `sig.config-update.<swarmId>.swarm-controller.<instance>` with top-level `commandTarget`/`target` metadata to pause/resume **workloads** (`commandTarget=swarm`, `target=swarm`, controller fans out to bees) or only the **controller runtime** (`commandTarget=instance`, `target=controller`, reconciliation paused). For fleet-wide bulk actions use `sig.config-update.ALL.swarm-controller.ALL` (`commandTarget=all`).
+  - Issues controller-level `sig.config-update.<swarmId>.swarm-controller.<instance>` with top-level `commandTarget` metadata to pause/resume **workloads** (`commandTarget=swarm`, controller fans out to bees) or only the **controller runtime** (`commandTarget=instance`, reconciliation paused). For fleet-wide bulk actions use `sig.config-update.ALL.swarm-controller.ALL` (`commandTarget=all`).
   - Tears down Controller after **`ev.ready.swarm-remove.<swarmId>.swarm-controller.<instance>`**.
 
 - **Swarm Controller**
   - Applies `SwarmPlan`; provisions components; computes **aggregate** status.
   - Emits `ev.status-{full|delta}.<swarmId>.swarm-controller.<instance>` and confirmations for template/start/stop/remove/config.
   - Treats AMQP status as heartbeat; polls Actuator if stale.
-  - On controller-level `config-update` toggles, inspects top-level `commandTarget`/`target`: `commandTarget=swarm`/`target=swarm` → stay reachable and **fan the `enabled` flag out to every managed bee** via `sig.config-update.<swarmId>.ALL.ALL`; `commandTarget=instance`/`target=controller` → pause/resume its own reconciliation/runtime only. Emits `ev.status-delta.<swarmId>.swarm-controller.<instance>` showing `state.details.workloads.enabled` or `state.details.controller.enabled` accordingly.
+  - On controller-level `config-update` toggles, inspects top-level `commandTarget` plus the scope tuple: `commandTarget=swarm` with the local swarm ID → stay reachable and **fan the `enabled` flag out to every managed bee** via `sig.config-update.<swarmId>.ALL.ALL`; `commandTarget=instance` with `role=swarm-controller`/local instance → pause/resume its own reconciliation/runtime only. Emits `ev.status-delta.<swarmId>.swarm-controller.<instance>` showing `state.details.workloads.enabled` or `state.details.controller.enabled` accordingly.
 
 - **Components**
   - Emit their own `ev.status-{full|delta}.<swarmId>.<role>.<instance>`.
@@ -90,12 +90,12 @@
 - `idempotencyKey` *(uuid)* — **stable across retries** of the same action
 - Scope: include whichever of `swarmId`, `role`, `instance` apply
 - Optional `args` object with command-specific parameters (workload-specific patches stay in `args`/`patch`)
-- Top-level `commandTarget` *(required)* and optional `target` (contextual hint) guide routing. `commandTarget=swarm`/`target=swarm` signals workload fan-out; `commandTarget=instance`/`target=controller` pauses/resumes the controller runtime. Other workloads typically use `commandTarget=instance` with no `target`.
+- Top-level `commandTarget` *(required)* guides routing in concert with the explicit `swarmId`/`role`/`instance` fields. `commandTarget=swarm` with a swarm identifier signals workload fan-out; `commandTarget=instance` with `role=swarm-controller` and the controller instance pauses/resumes the controller runtime. Other workloads typically use `commandTarget=instance` with their own role/instance values.
 
 ### 4.2 Confirmations (emitters MUST include)
 - Echo **`correlationId`** and **`idempotencyKey`** from the initiating control signal (or from the runtime op for create).
 - `signal`, `result` (`success`|`error`), `scope` (`swarmId`/`role`/`instance`), `ts`
-- Success MAY include `state` (`Ready|Running|Stopped|Removed`), structured command metadata, and `notes`. Config confirmations MUST mirror `commandTarget`/`target` at the top level and include `state.scope`, `state.target`, and `state.enabled`. When the controller fans out workload toggles, include `state.workloads.enabled`; when pausing the controller runtime, include `state.controller.enabled` so observers can rely on the semantics.
+- Success MAY include `state` (`Ready|Running|Stopped|Removed`), structured command metadata, and `notes`. Config confirmations MUST mirror `commandTarget` at the top level and include `state.scope` and `state.enabled`. When the controller fans out workload toggles, include `state.workloads.enabled`; when pausing the controller runtime, include `state.controller.enabled` so observers can rely on the semantics.
 - Error MUST include `code`, `message`; MAY include `phase`, `retryable`, `details`
 
 ### 4.3 Status & bootstrap
@@ -184,8 +184,7 @@
   "instance": "ALL",
   "correlationId": "attempt-001-aaaa-bbbb",
   "idempotencyKey": "a1c3-1111-2222-9f",
-  "commandTarget": "swarm",
-  "target": "swarm"
+  "commandTarget": "swarm"
 }
 ```
 
@@ -198,7 +197,6 @@
   "state": {
     "status": "Running",
     "scope": {"swarmId": "swarm-42"},
-    "target": "swarm",
     "enabled": true,
     "details": {
       "workloads": {"enabled": true}

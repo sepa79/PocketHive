@@ -189,7 +189,7 @@ class SwarmLifecycleManagerTest {
 
     String step = """
         {
-          "config": {"foo":"bar","target":"swarm"},
+          "config": {"foo":"bar","commandTarget":"swarm"},
           "schedule": [
             {"delayMs":0,"routingKey":"rk","body":{"msg":"hi"}}
           ]
@@ -207,7 +207,6 @@ class SwarmLifecycleManagerTest {
     assertThat(scenarioNode.path("args").path("data").path("enabled").asBoolean(true)).isFalse();
     assertThat(scenarioNode.path("args").path("data").path("foo").asText()).isEqualTo("bar");
     assertThat(scenarioNode.path("args").path("data").has("target")).isFalse();
-    assertThat(scenarioNode.path("target").asText()).isEqualTo("swarm");
     reset(rabbit);
 
     manager.enableAll();
@@ -220,7 +219,6 @@ class SwarmLifecycleManagerTest {
     JsonNode resumeNode = mapper.readTree(resumePayload.getValue());
     assertThat(resumeNode.path("signal").asText()).isEqualTo("config-update");
     assertThat(resumeNode.path("commandTarget").asText()).isEqualTo("all");
-    assertThat(resumeNode.path("target").asText()).isEqualTo("all");
     assertThat(resumeNode.path("args").path("data").path("enabled").asBoolean(false)).isTrue();
     verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
         eq("rk"),
