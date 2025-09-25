@@ -37,7 +37,6 @@ channels:
           - swarm-remove
           - config-update
           - status-request
-          - ping
       swarm:
         description: Target swarm identifier or ALL for global broadcasts
         schema:
