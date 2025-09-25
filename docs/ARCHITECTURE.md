@@ -33,25 +33,25 @@ PocketHive splits the control plane into **managers** (orchestrator + swarm cont
 #### Orchestrator (Queen)
 - Owns the **desired state** and lifecycle intents per swarm (`SwarmPlan`).
 - Launches a **Swarm Controller** for a new swarm (runtime) and, after the controller handshake, emits **`ev.ready.swarm-create.<swarmId>.orchestrator.ALL`**.
-- Publishes swarm-scoped lifecycle commands with routing keys such as `sig.swarm-template.<swarmId>.swarm-controller.ALL` and `sig.swarm-start.<swarmId>.swarm-controller.ALL`.
-- Issues **controller config updates** with top-level `commandTarget` metadata: `sig.config-update.<swarmId>.swarm-controller.<instance>` toggles a single controller, while `sig.config-update.ALL.swarm-controller.ALL` broadcasts a fleet-wide enable/disable intent (`commandTarget=all`).
+- Publishes swarm-scoped lifecycle commands with routing keys such as `sig.swarm-template.<swarmId>` and `sig.swarm-start.<swarmId>`.
+- Issues **controller config updates** with top-level `commandTarget` metadata by sending `sig.config-update.swarm-controller.<instance>` to each controller instance (iterating across the fleet when broadcasting a suspend/resume intent).
 - **Monitors** swarms to **Ready / Running**, marks **Failed** on timeout/error, and **never auto‑deletes** resources.
 - Consumes **only swarm-level aggregates** and lifecycle confirmations, keeping fan-in small.
 
 #### Swarm Controller (Marshal)
 - Applies the plan locally; **provisions** components; maintains the **aggregate** swarm view.
-- Declares the control queue `ph.control.<swarmId>.swarm-controller.<instance>` and binds it to `sig.*.<swarmId>.swarm-controller.<instance>`, `sig.*.<swarmId>.swarm-controller.ALL`, and `sig.*.ALL.swarm-controller.ALL` so it receives per-instance, per-swarm, and global manager broadcasts.
-- Emits **swarm-level** lifecycle confirmations (`ev.ready.swarm-start.<swarmId>.swarm-controller.<instance>`, etc.) and periodic status events.
+- Declares the control queue `ph.control.swarm-controller.<instance>` (the instance id already embeds the swarm name) and binds it to `sig.swarm-template.<swarmId>`, `sig.swarm-start.<swarmId>`, `sig.swarm-stop.<swarmId>`, `sig.swarm-remove.<swarmId>`, `sig.config-update.swarm-controller`, `sig.config-update.swarm-controller.<instance>`, `sig.status-request`, `sig.status-request.swarm-controller`, and `sig.status-request.swarm-controller.<instance>` so it hears lifecycle, configuration, and heartbeat traffic addressed to its swarm.
+- Emits **swarm-level** lifecycle confirmations (`ev.ready.swarm-template.<swarmId>`, `ev.ready.swarm-start.<swarmId>`, `ev.ready.swarm-stop.<swarmId>`, `ev.ready.swarm-remove.<swarmId>`) plus controller config acknowledgements (`ev.ready.config-update.swarm-controller.<instance>`) and periodic status events.
 - Treats AMQP `ev.status-{delta|full}` as the **sole heartbeat source**; if a component goes silent it issues `sig.status-request` and marks the component stale if no response arrives.
-- When targeted by `sig.config-update.<swarmId>.swarm-controller.<instance>` it inspects the top-level `commandTarget` together with the `swarmId`/`role`/`instance` tuple: `commandTarget=swarm` with the controller's swarm ID → keep the control plane alive and **fan the new workload state out to every bee** via `sig.config-update.<swarmId>.ALL.ALL`; `commandTarget=instance` with `role=swarm-controller` and the local instance ID → pause/resume only its reconciliation loops while emitting controller-specific state (`state.controller.enabled`).
+- When targeted by `sig.config-update.swarm-controller.<instance>` it inspects the top-level `commandTarget` together with the `swarmId`/`role`/`instance` tuple: `commandTarget=swarm` with the controller's swarm ID → keep the control plane alive and **fan the new workload state out to every bee** via the shared `sig.config-update` broadcast; `commandTarget=instance` with `role=swarm-controller` and the local instance ID → pause/resume only its reconciliation loops while emitting controller-specific state (`state.details.controller.enabled`).
 - Control plane stays enabled even when workloads are paused; start/stop/remove/status/config are always honored.
 
 ### 2.2 Workers (Bees)
-- Declare their own control queues on startup using the `ph.control.<swarmId>.<role>.<instance>` naming pattern and bind only to their swarm: `sig.*.<swarmId>.<role>.<instance>`, `sig.*.<swarmId>.<role>.ALL`, and `sig.*.<swarmId>.ALL.ALL`.
+- Declare their own control queues on startup using the `ph.control.<role>.<instance>` naming pattern (again, the instance id carries the swarm prefix) and bind to the shared control subjects `sig.config-update`, `sig.config-update.<role>`, `sig.config-update.<role>.<instance>`, `sig.status-request`, `sig.status-request.<role>`, and `sig.status-request.<role>.<instance>`.
 - Consume workloads from queues named `ph.work.<swarmId>.<queueName>` that hang off the swarm's shared work exchange.
-- **Do not bind** to `sig.*.ALL...` routes so that only their controller can command them; orchestrator broadcasts always transit through the controller first.
+- Accept config updates from both the orchestrator (role/instance routing keys) and their controller (`sig.config-update` broadcast); no additional `sig.*.ALL...` bindings are required.
 - Emit **their own** status streams (`ev.status-{full|delta}.<swarmId>.<role>.<instance>`) and respond to manager `sig.status-request` heartbeats.
-- Apply `sig.config-update.<swarmId>.<role>.<instance>` (`enabled: true|false`) to control **workload** only while keeping control listeners responsive.
+- Apply `sig.config-update.<role>.<instance>` (`enabled: true|false`) to control **workload** only while keeping control listeners responsive.
 
 ---
 
@@ -60,43 +60,44 @@ PocketHive splits the control plane into **managers** (orchestrator + swarm cont
 > The AsyncAPI defines a **single swarm-aware control signal shape** and unified confirmations/events.
 
 ### 3.1 Routing key patterns
-- **Signals:** `sig.<signal>.<swarm>.<role>.<instance>`
-  - `signal` — command verb (`swarm-template`, `swarm-start`, `config-update`, `status-request`, ...)
-  - `swarm` — concrete swarm identifier; use `ALL` for orchestrator broadcasts.
-  - `role` — target role (`swarm-controller`, `generator`, ...); use `ALL` when fanning out to every role in the swarm.
-  - `instance` — specific instance id or `ALL` for role-wide commands.
-- **Confirmations & events:** `ev.<event>.<swarm>.<role>.<instance>` with the same swarm/role/instance semantics. Event names include `ready.<command>`, `error.<command>`, `status-delta`, `status-full`, `lifecycle`, `metric`, and `alert`.
+- **Swarm lifecycle signals:** `sig.swarm-template.<swarmId>`, `sig.swarm-start.<swarmId>`, `sig.swarm-stop.<swarmId>`, `sig.swarm-remove.<swarmId>`.
+- **Controller config updates:** `sig.config-update.swarm-controller.<instanceId>` (orchestrator → controller). Controllers also declare the role-wide binding `sig.config-update.swarm-controller` to receive generic toggles.
+- **Worker config updates:** `sig.config-update.<role>.<instanceId>` (orchestrator → component) and the shared broadcast `sig.config-update` (controller → swarm workloads).
+- **Status requests:** `sig.status-request`, `sig.status-request.<role>`, `sig.status-request.<role>.<instanceId>`.
+- **Confirmations & events:** `ev.ready.<command>.<suffix>` / `ev.error.<command>.<suffix>` follow the signal suffix (`<swarmId>` for swarm lifecycle, `<role>.<instanceId>` for config updates). Telemetry streams continue to use `ev.status-{full|delta}.<role>.<instanceId>`, `ev.lifecycle.<role>.<instanceId>`, `ev.metric.<role>.<instanceId>`, and `ev.alert.<role>.<instanceId>`.
+- **Payload metadata:** Every `ControlSignal` carries `swarmId`, `role`, `instance`, and `commandTarget` fields regardless of routing key so consumers can resolve scope without parsing the topic string.
 
 ### 3.2 Required bindings
 
 | Actor | Declared control queue | Required bindings |
 |---|---|---|
-| **Swarm controller** | `ph.control.<swarmId>.swarm-controller.<instance>` | `sig.*.<swarmId>.swarm-controller.<instance>`, `sig.*.<swarmId>.swarm-controller.ALL`, `sig.*.ALL.swarm-controller.ALL` |
-| **Generator / Moderator / Processor / Post-processor / Trigger** | `ph.control.<swarmId>.<role>.<instance>` | `sig.*.<swarmId>.<role>.<instance>`, `sig.*.<swarmId>.<role>.ALL`, `sig.*.<swarmId>.ALL.ALL` |
+| **Swarm controller** | `ph.control.swarm-controller.<instance>` | `sig.swarm-template.<swarmId>`, `sig.swarm-start.<swarmId>`, `sig.swarm-stop.<swarmId>`, `sig.swarm-remove.<swarmId>`, `sig.config-update.swarm-controller`, `sig.config-update.swarm-controller.<instance>`, `sig.status-request`, `sig.status-request.swarm-controller`, `sig.status-request.swarm-controller.<instance>`, `ev.status-full.*.*`, `ev.status-delta.*.*` |
+| **Generator / Moderator / Processor / Post-processor / Trigger** | `ph.control.<role>.<instance>` | `sig.config-update`, `sig.config-update.<role>`, `sig.config-update.<role>.<instance>`, `sig.status-request`, `sig.status-request.<role>`, `sig.status-request.<role>.<instance>` |
 | **Observers (read-only)** | n/a | Subscribe to `ev.ready.*`, `ev.error.*`, `ev.status-*.*` as needed |
 
-> Workers intentionally **do not** bind to `sig.*.ALL...` routes; the controller remains their single command authority. Managers MAY bind to the global pattern to receive orchestrator broadcasts.
+> Workers receive controller fan-outs via `sig.config-update` and role/instance-specific commands via `sig.config-update.<role>[.<instance>]`; managers MAY bind to the same subjects when they need read/write visibility.
 
 ### 3.3 Control signals (managers publish)
-- `sig.swarm-template.<swarmId>.swarm-controller.ALL` — send/replace `SwarmPlan` (components start `enabled=false`).
-- `sig.swarm-start.<swarmId>.swarm-controller.ALL` — start workloads in dependency order.
-- `sig.swarm-stop.<swarmId>.swarm-controller.ALL` — **non-destructive stop** (disable workloads, keep resources).
-- `sig.swarm-remove.<swarmId>.swarm-controller.ALL` — explicit deprovision/delete.
-- `sig.config-update.<swarmId>.swarm-controller.<instance>` — toggle a specific controller (`commandTarget=instance`).
-- `sig.config-update.<swarmId>.ALL.ALL` — controller-to-bee broadcast within a swarm (`commandTarget=swarm`).
-- `sig.config-update.ALL.swarm-controller.ALL` — orchestrator broadcast to every controller (`commandTarget=all`).
-- `sig.status-request.<swarmId>.<role>.<instance>` — request an immediate `status-full` from a worker.
+- `sig.swarm-template.<swarmId>` — send/replace the `SwarmPlan` (components start `enabled=false`).
+- `sig.swarm-start.<swarmId>` — start workloads in dependency order.
+- `sig.swarm-stop.<swarmId>` — **non-destructive stop** (disable workloads, keep resources).
+- `sig.swarm-remove.<swarmId>` — explicit deprovision/delete.
+- `sig.config-update.swarm-controller.<instance>` — toggle a specific controller (`commandTarget=instance` for runtime enablement, `commandTarget=swarm` when broadcasting workload state).
+- `sig.config-update.<role>.<instance>` — orchestrator-issued worker config update (`commandTarget=role|instance`).
+- `sig.config-update` — controller-to-bee broadcast within a swarm (`commandTarget=swarm`).
+- `sig.status-request`, `sig.status-request.<role>`, `sig.status-request.<role>.<instance>` — request an immediate `status-full` from managers or workers.
 
-**`ControlSignal` essentials:** `correlationId` *(uuid, new per attempt)*, `idempotencyKey` *(uuid, stable across retries)*, `swarmId`/`role`/`instance` segments mirroring the routing key, `commandTarget` (`all|swarm|role|instance`), and an `args` object for command-specific data (patch payloads remain unchanged).
+**`ControlSignal` essentials:** `correlationId` *(uuid, new per attempt)*, `idempotencyKey` *(uuid, stable across retries)*, explicit `swarmId`/`role`/`instance` fields (even when the routing key omits them), `commandTarget` (`all|swarm|role|instance`), and an `args` object for command-specific data (patch payloads remain unchanged).
 
 ### 3.4 Confirmations (events)
 - **Success (`ev.ready.*`):**
   - `ev.ready.swarm-create.<swarmId>.orchestrator.ALL` — emitted by the Orchestrator after controller handshake.
-  - `ev.ready.swarm-template.<swarmId>.swarm-controller.<instance>` — Controller.
-  - `ev.ready.swarm-start.<swarmId>.swarm-controller.<instance>` — Controller.
-  - `ev.ready.swarm-stop.<swarmId>.swarm-controller.<instance>` — Controller.
-  - `ev.ready.swarm-remove.<swarmId>.swarm-controller.<instance>` — Controller.
-  - `ev.ready.config-update.<swarmId>.<role>.<instance>` — Controller, echoing the final target scope.
+  - `ev.ready.swarm-template.<swarmId>` — Controller.
+  - `ev.ready.swarm-start.<swarmId>` — Controller.
+  - `ev.ready.swarm-stop.<swarmId>` — Controller.
+  - `ev.ready.swarm-remove.<swarmId>` — Controller.
+  - `ev.ready.config-update.swarm-controller.<instance>` — Controller toggles (`commandTarget=swarm|instance`).
+  - `ev.ready.config-update.<role>.<instance>` — Worker confirmations (`commandTarget=role|instance`).
 - **Error (`ev.error.*`):** mirror the success topics with `error` in place of `ready`.
 
 > Controller config confirmations mirror the top-level `commandTarget`, keep the authoritative scope in the confirmation envelope, and surface enablement data via `state.enabled` plus `state.details.workloads.enabled` or `state.details.controller.enabled` so observers can distinguish workload and controller toggles without duplicated scope fields.
@@ -104,7 +105,7 @@ PocketHive splits the control plane into **managers** (orchestrator + swarm cont
 ### 3.5 Status & telemetry streams
 - **Swarm aggregates (Controller):** `ev.status-full.<swarmId>.swarm-controller.<instance>` and `ev.status-delta.<swarmId>.swarm-controller.<instance>`.
 - **Per-component status:** `ev.status-full.<swarmId>.<role>.<instance>` and `ev.status-delta.<swarmId>.<role>.<instance>`.
-- **Controller bootstrap handshake:** `ev.ready.swarm-controller.<swarmId>.swarm-controller.<instance>`.
+- **Controller bootstrap handshake:** `ev.ready.swarm-controller.<instance>`.
 - **Lifecycle milestones:** `ev.lifecycle.<swarmId>.<role>.<instance>`.
 - **Metrics & alerts:** `ev.metric.<swarmId>.<role>.<instance>` / `ev.alert.<swarmId>.<role>.<instance>`.
 
@@ -161,12 +162,12 @@ sequenceDiagram
 
   QN->>RT: Launch Controller for <swarmId>
   RT-->>QN: Controller container up
-  MSH-->>QN: ev.ready.swarm-controller.<swarmId>.swarm-controller.<instance>
+  MSH-->>QN: ev.ready.swarm-controller.<instance>
   QN-->>QN: ev.ready.swarm-create.<swarmId>.orchestrator.ALL
 
-  QN->>MSH: sig.swarm-template.<swarmId>.swarm-controller.ALL (SwarmPlan, all enabled=false)
+  QN->>MSH: sig.swarm-template.<swarmId> (SwarmPlan, all enabled=false)
   MSH->>MSH: Provision component containers and processes
-  MSH-->>QN: ev.ready.swarm-template.<swarmId>.swarm-controller.<instance>
+  MSH-->>QN: ev.ready.swarm-template.<swarmId>
 ```
 
 ### 7.2 Start whole swarm
@@ -176,10 +177,10 @@ sequenceDiagram
   participant MSH as Swarm Controller
   participant CMP as Components
 
-  QN->>MSH: sig.swarm-start.<swarmId>.swarm-controller.ALL
+  QN->>MSH: sig.swarm-start.<swarmId>
   MSH->>MSH: Enable components in derived dependency order
   CMP-->>MSH: ev.status-delta.<swarmId>.<role>.<instance> (enabled=true)
-  MSH-->>QN: ev.ready.swarm-start.<swarmId>.swarm-controller.<instance>
+  MSH-->>QN: ev.ready.swarm-start.<swarmId>
 ```
 
 ### 7.3 Per‑component enable/disable (via config‑update)
@@ -189,10 +190,10 @@ sequenceDiagram
   participant MSH as Swarm Controller
   participant CMP as Component
 
-  QN->>MSH: sig.config-update.<swarmId>.<role>.<instance> ({ enabled: true|false, ... })
+  QN->>MSH: sig.config-update.<role>.<instance> ({ enabled: true|false, ... })
   MSH->>CMP: Apply config (control plane always on)
   CMP-->>MSH: ev.status-delta.<swarmId>.<role>.<instance> (enabled reflected)
-  MSH-->>QN: ev.ready.config-update.<swarmId>.<role>.<instance>
+  MSH-->>QN: ev.ready.config-update.<role>.<instance>
 ```
 
 ### 7.3b Bulk controller suspend/resume (`commandTarget=swarm`)
@@ -202,11 +203,11 @@ sequenceDiagram
   participant MSH as Swarm Controllers
   participant CMP as Bees
 
-  QN->>MSH: sig.config-update.ALL.swarm-controller.ALL ({ commandTarget: "swarm", swarmId: "<swarmId>", args: { data: { enabled: true|false } } })
-  note right of QN: Fan-out per controller instance (shared correlationId)
-  MSH->>CMP: Propagate enabled flag via sig.config-update.<swarmId>.ALL.ALL (control plane stays up)
+  QN->>MSH: sig.config-update.swarm-controller.<instance> ({ commandTarget: "swarm", swarmId: "<swarmId>", args: { data: { enabled: true|false } } })
+  note right of QN: Issued once per controller instance (shared correlationId)
+  MSH->>CMP: Propagate enabled flag via sig.config-update (control plane stays up)
   CMP-->>MSH: ev.status-delta.<swarmId>.<role>.<instance> (workloads.enabled reflected)
-  MSH-->>QN: ev.ready.config-update.<swarmId>.ALL.ALL (scope.swarmId=<swarmId>, state.details.workloads.enabled reflected)
+  MSH-->>QN: ev.ready.config-update.swarm-controller.<instance> (state.details.workloads.enabled reflected)
 ```
 
 ### 7.3c Controller runtime pause/resume (`commandTarget=instance`)
@@ -215,9 +216,9 @@ sequenceDiagram
   participant QN as Orchestrator
   participant MSH as Swarm Controller
 
-  QN->>MSH: sig.config-update.<swarmId>.swarm-controller.<instance> ({ commandTarget: "instance", role: "swarm-controller", instance: "<instance>", args: { data: { enabled: true|false } } })
+  QN->>MSH: sig.config-update.swarm-controller.<instance> ({ commandTarget: "instance", role: "swarm-controller", instance: "<instance>", args: { data: { enabled: true|false } } })
   note right of QN: Runtime loops pause/resume, bees untouched
-  MSH-->>QN: ev.ready.config-update.<swarmId>.swarm-controller.<instance> (scope.role=swarm-controller, scope.instance=<instance>, state.details.controller.enabled reflected)
+  MSH-->>QN: ev.ready.config-update.swarm-controller.<instance> (scope.role=swarm-controller, scope.instance=<instance>, state.details.controller.enabled reflected)
   MSH-->>QN: ev.status-delta.<swarmId>.swarm-controller.<instance> (controller.enabled reflected)
 ```
 
@@ -228,10 +229,10 @@ sequenceDiagram
   participant MSH as Swarm Controller
   participant CMP as Components
 
-  QN->>MSH: sig.swarm-stop.<swarmId>.swarm-controller.ALL
+  QN->>MSH: sig.swarm-stop.<swarmId>
   MSH->>MSH: Disable workload in reverse dependency order
   CMP-->>MSH: ev.status-delta.<swarmId>.<role>.<instance> (enabled=false)
-  MSH-->>QN: ev.ready.swarm-stop.<swarmId>.swarm-controller.<instance>
+  MSH-->>QN: ev.ready.swarm-stop.<swarmId>
 ```
 
 ### 7.5 Remove swarm (explicit delete)
@@ -241,10 +242,10 @@ sequenceDiagram
   participant MSH as Swarm Controller
   participant RT as Runtime
 
-  QN->>MSH: sig.swarm-remove.<swarmId>.swarm-controller.ALL
+  QN->>MSH: sig.swarm-remove.<swarmId>
   MSH->>MSH: Ensure Stopped and deprovision components
   MSH->>RT: Delete component resources
-  MSH-->>QN: ev.ready.swarm-remove.<swarmId>.swarm-controller.<instance>
+  MSH-->>QN: ev.ready.swarm-remove.<swarmId>
   QN->>RT: Remove Controller for <swarmId>
 ```
 
@@ -260,13 +261,13 @@ sequenceDiagram
   alt Launch fails
     QN-->>QN: ev.error.swarm-create.<swarmId>.orchestrator.ALL (reason)
   else Controller up
-    MSH-->>QN: ev.ready.swarm-controller.<swarmId>.swarm-controller.<instance>
+    MSH-->>QN: ev.ready.swarm-controller.<instance>
     QN-->>QN: ev.ready.swarm-create.<swarmId>.orchestrator.ALL
-    QN->>MSH: sig.swarm-template.<swarmId>.swarm-controller.ALL
+    QN->>MSH: sig.swarm-template.<swarmId>
     MSH->>RT: Provision components
     CMP-->>MSH: ev.status-delta.<role>.<instance> (health=DOWN) or no status within TTL
-    MSH->>CMP: sig.status-request.<swarmId>.<role>.<instance>
-    MSH-->>QN: ev.error.swarm-template.<swarmId>.swarm-controller.<instance> (aggregate Failed)
+    MSH->>CMP: sig.status-request.<role>.<instance>
+    MSH-->>QN: ev.error.swarm-template.<swarmId> (aggregate Failed)
   end
 ```
 
@@ -326,11 +327,10 @@ sequenceDiagram
   "idempotencyKey": "uuid-reused-for-retries",
   "swarmId": "alpha",
   "role": "generator",
-  "instance": "ALL",
+  "instance": "alpha-generator-bee-1",
   "commandTarget": "role",
   "args": {
-    "enabled": true,
-    "workloads": {
+    "data": {
       "enabled": true
     }
   }
@@ -344,16 +344,15 @@ sequenceDiagram
   "correlationId": "uuid-from-signal-or-runtime-op",
   "idempotencyKey": "uuid-from-signal",
   "signal": "swarm-create|swarm-start|swarm-stop|swarm-template|swarm-remove|config-update",
-  "scope": {"swarmId":"...", "role":null, "instance":null},
-  "commandTarget": "swarm|instance|role|all",
+  "scope": {"swarmId":"alpha", "role":"generator", "instance":"alpha-generator-bee-1"},
   "result": "success",
   "state": {
-    "scope": {"swarmId":"...", "role":null, "instance":null},
+    "status": "Running",
     "enabled": true,
-    "workloads": { "enabled": true },
-    "controller": { "enabled": true }
-  },
-  "notes": "optional text"
+    "details": {
+      "workloads": { "enabled": true }
+    }
+  }
 }
 ```
 
@@ -364,9 +363,15 @@ sequenceDiagram
   "correlationId": "uuid-from-signal-or-runtime-op",
   "idempotencyKey": "uuid-from-signal",
   "signal": "swarm-create|swarm-start|swarm-stop|swarm-template|swarm-remove|config-update",
-  "scope": {"swarmId":"...", "role":null, "instance":null},
-  "commandTarget": "swarm|instance|role|all",
+  "scope": {"swarmId":"alpha", "role":"generator", "instance":"alpha-generator-bee-1"},
   "result": "error",
+  "state": {
+    "status": "Stopped",
+    "enabled": false,
+    "details": {
+      "workloads": { "enabled": false }
+    }
+  },
   "phase": "create|template|start|stop|remove|runtime",
   "code": "SHORT_CODE",
   "message": "Human-readable summary",
