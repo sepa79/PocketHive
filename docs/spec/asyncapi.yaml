@@ -38,7 +38,6 @@ channels:
           - config-update
           - status-request
           - ping
-          - link-request
       swarm:
         description: Target swarm identifier or ALL for global broadcasts
         schema:
