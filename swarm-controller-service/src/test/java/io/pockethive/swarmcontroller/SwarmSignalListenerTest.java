@@ -341,6 +341,29 @@ class SwarmSignalListenerTest {
   }
 
   @Test
+  void swarmTargetToggleOnBroadcastRoutingKeyStillProcessesUpdate() throws Exception {
+    when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
+    when(lifecycle.getMetrics()).thenReturn(new SwarmMetrics(0,0,0,0, java.time.Instant.now()));
+    SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", mapper);
+    reset(lifecycle, rabbit);
+    when(lifecycle.getStatus()).thenReturn(SwarmStatus.STOPPED);
+    when(lifecycle.getMetrics()).thenReturn(new SwarmMetrics(1,1,0,0, java.time.Instant.now()));
+
+    String body = """
+        {"correlationId":"c10","idempotencyKey":"i10","signal":"config-update",
+         "role":"swarm-controller","instance":"inst",
+         "commandTarget":"swarm","target":"swarm",
+         "args":{"data":{"enabled":false}}}
+        """;
+
+    listener.handle(body, "sig.config-update");
+
+    verify(lifecycle).setSwarmEnabled(false);
+    verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
+        eq("ev.ready.config-update.swarm-controller.inst"), any(Object.class));
+  }
+
+  @Test
   void controllerTargetToggleUpdatesControllerEnabledOnly() throws Exception {
     when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
     when(lifecycle.getMetrics()).thenReturn(new SwarmMetrics(0,0,0,0, java.time.Instant.now()));

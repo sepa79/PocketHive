@@ -194,7 +194,8 @@ public class SwarmSignalListener {
       return;
     }
 
-    if (!routingKey.startsWith("sig.config-update." + ROLE)) {
+    if (!routingKey.equals("sig.config-update")
+        && !routingKey.startsWith("sig.config-update." + ROLE)) {
       log.debug("Ignoring config-update on routing key {}", routingKey);
       return;
     }
