@@ -12,6 +12,7 @@
   <modules>
     <module>observability</module>
     <module>common/topology-core</module>
+    <module>common/control-plane-core</module>
     <module>common/docker-client</module>
     <module>common/swarm-model</module>
     <module>generator-service</module>
