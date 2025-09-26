@@ -142,8 +142,10 @@ class SwarmSignalListenerTest {
     void stopsAndRemovesSwarmSeparately() {
         SwarmSignalListener listener = new SwarmSignalListener(rabbit, new SwarmPlanRegistry(), new SwarmCreateTracker(), new SwarmRegistry(), lifecycle, new ObjectMapper(), "inst0");
 
-        listener.handle("", "ev.ready.swarm-stop.sw1");
-        listener.handle("", "ev.ready.swarm-remove.sw1");
+        listener.handle("",
+            swarmReadyEvent("swarm-stop", "sw1", "inst1"));
+        listener.handle("",
+            swarmReadyEvent("swarm-remove", "sw1", "inst1"));
 
         verify(lifecycle).stopSwarm("sw1");
         verify(lifecycle).removeSwarm("sw1");
@@ -175,7 +177,7 @@ class SwarmSignalListenerTest {
         registry.updateStatus("sw1", SwarmStatus.CREATING);
         SwarmSignalListener listener = new SwarmSignalListener(rabbit, new SwarmPlanRegistry(), new SwarmCreateTracker(), registry, lifecycle, new ObjectMapper(), "inst0");
 
-        listener.handle("", "ev.ready.swarm-template.sw1");
+        listener.handle("", swarmReadyEvent("swarm-template", "sw1", "inst1"));
         assertThat(registry.find("sw1").get().getStatus()).isEqualTo(SwarmStatus.READY);
 
         listener.handle("", swarmReadyEvent("swarm-start", "sw1", "inst1"));

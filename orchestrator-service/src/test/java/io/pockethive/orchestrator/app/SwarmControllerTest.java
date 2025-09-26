@@ -3,6 +3,8 @@ package io.pockethive.orchestrator.app;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.Topology;
 import io.pockethive.control.ControlSignal;
+import io.pockethive.control.ConfirmationScope;
+import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.orchestrator.domain.SwarmCreateRequest;
 import io.pockethive.orchestrator.domain.SwarmCreateTracker;
 import io.pockethive.orchestrator.domain.SwarmCreateTracker.Phase;
@@ -70,12 +72,15 @@ class SwarmControllerTest {
         ResponseEntity<ControlResponse> resp = ctrl.start("sw1", req);
 
         ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
-        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("sig.swarm-start.sw1"), captor.capture());
+        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
+            eq(ControlPlaneRouting.signal("swarm-start", "sw1", "swarm-controller", "ALL")), captor.capture());
         ControlSignal sig = mapper.readValue(captor.getValue(), ControlSignal.class);
         assertThat(sig.signal()).isEqualTo("swarm-start");
         assertThat(sig.swarmId()).isEqualTo("sw1");
         assertThat(sig.idempotencyKey()).isEqualTo("idem");
-        assertThat(resp.getBody().watch().successTopic()).isEqualTo("ev.ready.swarm-start.sw1");
+        assertThat(resp.getBody().watch().successTopic()).isEqualTo(
+            ControlPlaneRouting.event("ready.swarm-start",
+                new ConfirmationScope("sw1", "swarm-controller", "inst")));
         assertThat(tracker.complete("sw1", Phase.START)).isPresent();
         assertThat(registry.find("sw1").get().getStatus()).isEqualTo(SwarmStatus.STARTING);
     }
@@ -133,7 +138,8 @@ class SwarmControllerTest {
         ResponseEntity<ControlResponse> r2 = ctrl.start("sw1", req);
 
         ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
-        verify(rabbit, times(1)).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("sig.swarm-start.sw1"), captor.capture());
+        verify(rabbit, times(1)).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
+            eq(ControlPlaneRouting.signal("swarm-start", "sw1", "swarm-controller", "ALL")), captor.capture());
         assertThat(r1.getBody().correlationId()).isEqualTo(r2.getBody().correlationId());
     }
 
