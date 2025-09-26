@@ -468,7 +468,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
       commandTarget = commandTargetFromTarget(targetHint);
     }
     if (commandTarget == null) {
-      commandTarget = CommandTarget.ALL;
+      commandTarget = CommandTarget.SWARM;
     }
 
     String swarmId = (swarmHint == null || swarmHint.isBlank()) ? Topology.SWARM_ID : swarmHint;

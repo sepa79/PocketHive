@@ -221,7 +221,7 @@ class SwarmLifecycleManagerTest {
         resumePayload.capture());
     JsonNode resumeNode = mapper.readTree(resumePayload.getValue());
     assertThat(resumeNode.path("signal").asText()).isEqualTo("config-update");
-    assertThat(resumeNode.path("commandTarget").asText()).isEqualTo("all");
+    assertThat(resumeNode.path("commandTarget").asText()).isEqualTo("swarm");
     assertThat(resumeNode.path("args").path("data").path("enabled").asBoolean(false)).isTrue();
     verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
         eq("rk"),
