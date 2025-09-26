@@ -455,6 +455,27 @@ class SwarmSignalListenerTest {
   }
 
   @Test
+  void allTargetFanOutNormalisesAllSwarmHint() throws Exception {
+    when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
+    when(lifecycle.getMetrics()).thenReturn(new SwarmMetrics(0,0,0,0, java.time.Instant.now()));
+    SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", mapper);
+    reset(lifecycle, rabbit);
+    stubLifecycleDefaults();
+
+    String body = """
+        {"correlationId":"c14a","idempotencyKey":"i14a","signal":"config-update",
+         "swarmId":"ALL",
+         "commandTarget":"all",
+         "args":{"data":{"mode":"maintenance"}}}
+        """;
+
+    listener.handle(body, controllerInstanceSignal("config-update", "inst"));
+
+    verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
+        eq(ControlPlaneRouting.signal("config-update", Topology.SWARM_ID, "ALL", "ALL")), eq(body));
+  }
+
+  @Test
   void repeatedAllFanOutsAreSuppressed() throws Exception {
     when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
     when(lifecycle.getMetrics()).thenReturn(new SwarmMetrics(0,0,0,0, java.time.Instant.now()));
