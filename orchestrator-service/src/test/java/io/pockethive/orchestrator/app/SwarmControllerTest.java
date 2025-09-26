@@ -123,12 +123,14 @@ class SwarmControllerTest {
 
     @Test
     void startIsIdempotent() {
+        SwarmRegistry registry = new SwarmRegistry();
+        registry.register(new Swarm("sw1", "controller-inst", "ctrl"));
         SwarmController ctrl = new SwarmController(
             rabbit,
             lifecycle,
             new SwarmCreateTracker(),
             new InMemoryIdempotencyStore(),
-            new SwarmRegistry(),
+            registry,
             mapper,
             scenarioClient,
             new SwarmPlanRegistry());
