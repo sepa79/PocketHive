@@ -277,6 +277,34 @@ class SwarmLifecycleManagerTest {
   }
 
   @Test
+  void startAllNormalisesAllSwarmHint() throws Exception {
+    SwarmLifecycleManager manager = new SwarmLifecycleManager(amqp, mapper, docker, rabbit, "inst");
+
+    String startAllStep = """
+        {
+          "config": {
+            "commandTarget": "all",
+            "swarmId": "ALL",
+            "enabled": true
+          }
+        }
+        """;
+
+    manager.applyScenarioStep(startAllStep);
+
+    ArgumentCaptor<String> routingCaptor = ArgumentCaptor.forClass(String.class);
+    ArgumentCaptor<String> payloadCaptor = ArgumentCaptor.forClass(String.class);
+    verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), routingCaptor.capture(), payloadCaptor.capture());
+
+    assertThat(routingCaptor.getValue())
+        .isEqualTo(ControlPlaneRouting.signal("config-update", Topology.SWARM_ID, "ALL", "ALL"));
+
+    JsonNode payload = mapper.readTree(payloadCaptor.getValue());
+    assertThat(payload.path("swarmId").asText()).isEqualTo(Topology.SWARM_ID);
+    assertThat(payload.path("commandTarget").asText()).isEqualTo("all");
+  }
+
+  @Test
   void setSwarmEnabledDisablesWorkloadsAndUpdatesStatus() throws Exception {
     SwarmLifecycleManager manager = new SwarmLifecycleManager(amqp, mapper, docker, rabbit, "inst");
     SwarmPlan plan = new SwarmPlan("swarm", List.of(

@@ -471,7 +471,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
       commandTarget = CommandTarget.SWARM;
     }
 
-    String swarmId = (swarmHint == null || swarmHint.isBlank()) ? Topology.SWARM_ID : swarmHint;
+    String swarmId = normaliseSwarmHint(swarmHint);
     String role = roleHint;
     String instance = instanceHint;
 
@@ -500,6 +500,10 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
     } else if (commandTarget == CommandTarget.SWARM || commandTarget == CommandTarget.ALL) {
       role = null;
       instance = null;
+    }
+
+    if (swarmId == null) {
+      swarmId = Topology.SWARM_ID;
     }
 
     ControlSignal signal = new ControlSignal(
@@ -591,6 +595,17 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
       return trimmed.isEmpty() ? null : trimmed;
     }
     return null;
+  }
+
+  private String normaliseSwarmHint(String swarmHint) {
+    if (swarmHint == null) {
+      return null;
+    }
+    String trimmed = swarmHint.trim();
+    if (trimmed.isEmpty()) {
+      return null;
+    }
+    return "ALL".equalsIgnoreCase(trimmed) ? null : trimmed;
   }
 
   private static String snippet(String payload) {
