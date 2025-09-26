@@ -38,7 +38,8 @@ import static org.mockito.ArgumentMatchers.*;
 
 @ExtendWith({MockitoExtension.class, OutputCaptureExtension.class})
 class SwarmLifecycleManagerTest {
-  private static final String BROADCAST_ROUTE = ControlPlaneRouting.signal("config-update", Topology.SWARM_ID, null, null);
+  private static final String BROADCAST_ROUTE =
+      ControlPlaneRouting.signal("config-update", Topology.SWARM_ID, "ALL", "ALL");
 
   @Mock
   AmqpAdmin amqp;
