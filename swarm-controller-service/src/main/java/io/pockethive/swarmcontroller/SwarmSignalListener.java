@@ -182,9 +182,7 @@ public class SwarmSignalListener {
         case SWARM -> {
           if (enabledFlag != null && appliesToLocalSwarm(cs)) {
             lifecycle.setSwarmEnabled(enabledFlag);
-            if (enabledFlag) {
-              controllerEnabled = true;
-            }
+            controllerEnabled = enabledFlag;
             sendStatusDelta();
             stateEnabled = enabledFlag;
             details.put("workloads", Map.of("enabled", enabledFlag));
