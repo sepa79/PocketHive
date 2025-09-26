@@ -9,6 +9,7 @@ import io.pockethive.control.ControlSignal;
 import io.pockethive.swarm.model.Bee;
 import io.pockethive.swarm.model.SwarmPlan;
 import io.pockethive.swarm.model.Work;
+import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
@@ -196,9 +197,10 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
         .swarmId(Topology.SWARM_ID)
         .controlIn(controlQueue)
         .controlRoutes(
-            "sig.config-update",
-            "sig.config-update.swarm-controller",
-            "sig.config-update.swarm-controller." + instanceId,
+            ControlPlaneRouting.signal("config-update", Topology.SWARM_ID, null, null),
+            ControlPlaneRouting.signal("config-update", Topology.SWARM_ID, "swarm-controller", null),
+            ControlPlaneRouting.signal("config-update", Topology.SWARM_ID, "swarm-controller", instanceId),
+            ControlPlaneRouting.signal("config-update", "ALL", "swarm-controller", null),
             "sig.status-request",
             "sig.status-request.swarm-controller",
             "sig.status-request.swarm-controller." + instanceId,
@@ -511,8 +513,9 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
         args);
     try {
       String payload = mapper.writeValueAsString(signal);
-      log.info("{} config-update rk=sig.config-update correlation={} payload {}", context, correlationId, snippet(payload));
-      rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, "sig.config-update", payload);
+      String routingKey = ControlPlaneRouting.signal("config-update", swarmId, role, instance);
+      log.info("{} config-update rk={} correlation={} payload {}", context, routingKey, correlationId, snippet(payload));
+      rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, routingKey, payload);
     } catch (JsonProcessingException e) {
       throw new IllegalStateException("Failed to serialize config-update signal", e);
     }
