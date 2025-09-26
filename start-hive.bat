@@ -166,14 +166,6 @@ exit /b 0
 
 :run_clean
 call :stage_header "Cleaning previous PocketHive stack"
-echo Stopping docker compose services...
-if defined USE_DOCKER_COMPOSE_LEGACY (
-  docker-compose down --remove-orphans
-) else (
-  docker compose down --remove-orphans
-)
-if errorlevel 1 exit /b 1
-
 echo Removing stray swarm containers (bees)...
 set "FOUND=0"
 
@@ -185,6 +177,14 @@ for /f "delims=" %%A in ('docker ps -aq --filter "name=-bee-"') do (
 endlocal
 
 if "%FOUND%"=="0" echo No stray swarm containers found.
+
+echo Stopping docker compose services...
+if defined USE_DOCKER_COMPOSE_LEGACY (
+  docker-compose down --remove-orphans
+) else (
+  docker compose down --remove-orphans
+)
+if errorlevel 1 exit /b 1
 exit /b 0
 
 :run_build_core

@@ -5,6 +5,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.Topology;
 import io.pockethive.control.CommandTarget;
 import io.pockethive.control.ControlSignal;
+import io.pockethive.control.ConfirmationScope;
+import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.orchestrator.domain.IdempotencyStore;
 import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmRegistry;
@@ -77,10 +79,11 @@ public class SwarmManagerController {
                 continue;
             }
             String swarmId = swarm.getId();
+            String swarmSegment = segmentOrAll(swarmId);
             String scope = swarmId;
             idempotency.findCorrelation(scope, "config-update", request.idempotencyKey())
-                .ifPresentOrElse(correlation -> dispatches.add(new Dispatch(swarmId, swarm.getInstanceId(),
-                        accepted(correlation, request.idempotencyKey(), swarm.getInstanceId()), true)),
+                .ifPresentOrElse(correlation -> dispatches.add(new Dispatch(swarmSegment, swarm.getInstanceId(),
+                        accepted(correlation, request.idempotencyKey(), swarmSegment, swarm.getInstanceId()), true)),
                     () -> {
                         String correlation = UUID.randomUUID().toString();
                         ControlSignal payload = ControlSignal.forInstance(
@@ -92,17 +95,17 @@ public class SwarmManagerController {
                             request.idempotencyKey(),
                             request.commandTarget(),
                             argsFor(request));
-                        sendControl(routingKey(swarm.getInstanceId()), toJson(payload), request.commandTarget());
+                        sendControl(routingKey(swarmSegment, swarm.getInstanceId()), toJson(payload), request.commandTarget());
                         idempotency.record(scope, "config-update", request.idempotencyKey(), correlation);
-                        dispatches.add(new Dispatch(swarmId, swarm.getInstanceId(),
-                            accepted(correlation, request.idempotencyKey(), swarm.getInstanceId()), false));
+                        dispatches.add(new Dispatch(swarmSegment, swarm.getInstanceId(),
+                            accepted(correlation, request.idempotencyKey(), swarmSegment, swarm.getInstanceId()), false));
                     });
         }
         return new FanoutControlResponse(dispatches);
     }
 
-    private static String routingKey(String instanceId) {
-        return "sig.config-update.swarm-controller." + instanceId;
+    private static String routingKey(String swarmSegment, String instanceId) {
+        return ControlPlaneRouting.signal("config-update", swarmSegment, "swarm-controller", instanceId);
     }
 
     private Map<String, Object> argsFor(ToggleRequest request) {
@@ -113,10 +116,14 @@ public class SwarmManagerController {
         return args;
     }
 
-    private ControlResponse accepted(String correlationId, String idempotencyKey, String instanceId) {
+    private ControlResponse accepted(String correlationId,
+                                     String idempotencyKey,
+                                     String swarmSegment,
+                                     String instanceId) {
+        ConfirmationScope scope = new ConfirmationScope(swarmSegment, "swarm-controller", instanceId);
         ControlResponse.Watch watch = new ControlResponse.Watch(
-            "ev.ready.config-update.swarm-controller." + instanceId,
-            "ev.error.config-update.swarm-controller." + instanceId
+            ControlPlaneRouting.event("ready.config-update", scope),
+            ControlPlaneRouting.event("error.config-update", scope)
         );
         return new ControlResponse(correlationId, idempotencyKey, watch, CONFIG_UPDATE_TIMEOUT_MS);
     }
@@ -191,5 +198,9 @@ public class SwarmManagerController {
 
     public record FanoutControlResponse(List<Dispatch> dispatches) {}
 
-    public record Dispatch(String swarmId, String instanceId, ControlResponse response, boolean reused) {}
+    public record Dispatch(String swarm, String instanceId, ControlResponse response, boolean reused) {}
+
+    private static String segmentOrAll(String value) {
+        return (value == null || value.isBlank()) ? "ALL" : value;
+    }
 }

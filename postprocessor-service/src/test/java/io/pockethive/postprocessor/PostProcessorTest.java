@@ -6,7 +6,9 @@ import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.pockethive.Topology;
 import io.pockethive.asyncapi.AsyncApiSchemaValidator;
 import io.pockethive.control.CommandTarget;
+import io.pockethive.control.ConfirmationScope;
 import io.pockethive.control.ControlSignal;
+import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -60,10 +62,13 @@ class PostProcessorTest {
         ControlSignal signal = ControlSignal.forInstance(
             "status-request", "sw1", "postprocessor", "inst", correlationId, idempotencyKey);
 
-        postProcessor.onControl(mapper.writeValueAsString(signal), "sig.status-request.postprocessor.inst", null);
+        postProcessor.onControl(mapper.writeValueAsString(signal),
+            ControlPlaneRouting.signal("status-request", "sw1", "postprocessor", "inst"), null);
 
         ArgumentCaptor<String> payload = ArgumentCaptor.forClass(String.class);
-        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("ev.status-full.postprocessor.inst"), payload.capture());
+        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
+            eq(ControlPlaneRouting.event("status-full", new ConfirmationScope("sw1", "postprocessor", "inst"))),
+            payload.capture());
         JsonNode node = mapper.readTree(payload.getValue());
         List<String> errors = ASYNC_API.validate("#/components/schemas/ControlStatusFullPayload", node);
         assertThat(errors).isEmpty();
@@ -78,14 +83,17 @@ class PostProcessorTest {
             "config-update", "sw1", "postprocessor", "inst", correlationId, idempotencyKey,
             CommandTarget.INSTANCE, args);
 
-        postProcessor.onControl(mapper.writeValueAsString(signal), "sig.config-update.postprocessor.inst", null);
+        postProcessor.onControl(mapper.writeValueAsString(signal),
+            ControlPlaneRouting.signal("config-update", "sw1", "postprocessor", "inst"), null);
 
         verify(listenerContainer).start();
         Boolean enabled = (Boolean) ReflectionTestUtils.getField(postProcessor, "enabled");
         assertThat(enabled).isTrue();
 
         ArgumentCaptor<String> payload = ArgumentCaptor.forClass(String.class);
-        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("ev.ready.config-update.postprocessor.inst"), payload.capture());
+        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
+            eq(ControlPlaneRouting.event("ready.config-update", new ConfirmationScope("sw1", "postprocessor", "inst"))),
+            payload.capture());
         JsonNode node = mapper.readTree(payload.getValue());
         assertThat(node.path("result").asText()).isEqualTo("success");
         assertThat(node.path("signal").asText()).isEqualTo("config-update");
@@ -111,14 +119,17 @@ class PostProcessorTest {
             "config-update", "sw1", "postprocessor", "inst", correlationId, idempotencyKey,
             CommandTarget.INSTANCE, args);
 
-        postProcessor.onControl(mapper.writeValueAsString(signal), "sig.config-update.postprocessor.inst", null);
+        postProcessor.onControl(mapper.writeValueAsString(signal),
+            ControlPlaneRouting.signal("config-update", "sw1", "postprocessor", "inst"), null);
 
         verify(listenerContainer).stop();
         Boolean enabled = (Boolean) ReflectionTestUtils.getField(postProcessor, "enabled");
         assertThat(enabled).isFalse();
 
         ArgumentCaptor<String> payload = ArgumentCaptor.forClass(String.class);
-        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("ev.ready.config-update.postprocessor.inst"), payload.capture());
+        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
+            eq(ControlPlaneRouting.event("ready.config-update", new ConfirmationScope("sw1", "postprocessor", "inst"))),
+            payload.capture());
         JsonNode node = mapper.readTree(payload.getValue());
         assertThat(node.path("correlationId").asText()).isEqualTo(correlationId);
         assertThat(node.path("idempotencyKey").asText()).isEqualTo(idempotencyKey);
@@ -136,7 +147,8 @@ class PostProcessorTest {
             "config-update", "sw1", "postprocessor", "inst", correlationId, idempotencyKey,
             CommandTarget.INSTANCE, args);
 
-        postProcessor.onControl(mapper.writeValueAsString(signal), "sig.config-update.postprocessor.inst", null);
+        postProcessor.onControl(mapper.writeValueAsString(signal),
+            ControlPlaneRouting.signal("config-update", "sw1", "postprocessor", "inst"), null);
 
         verify(listenerContainer, never()).start();
         verify(listenerContainer, never()).stop();
@@ -144,7 +156,9 @@ class PostProcessorTest {
         assertThat(enabled).isFalse();
 
         ArgumentCaptor<String> payload = ArgumentCaptor.forClass(String.class);
-        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("ev.error.config-update.postprocessor.inst"), payload.capture());
+        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
+            eq(ControlPlaneRouting.event("error.config-update", new ConfirmationScope("sw1", "postprocessor", "inst"))),
+            payload.capture());
         JsonNode node = mapper.readTree(payload.getValue());
         assertThat(node.path("result").asText()).isEqualTo("error");
         assertThat(node.path("signal").asText()).isEqualTo("config-update");

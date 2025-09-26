@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.pockethive.Topology;
 import io.pockethive.control.ControlSignal;
+import io.pockethive.control.ConfirmationScope;
 import io.pockethive.observability.ObservabilityContext;
 import io.pockethive.observability.ObservabilityContextUtil;
 import io.pockethive.observability.StatusEnvelopeBuilder;
@@ -13,6 +14,7 @@ import io.pockethive.controlplane.worker.WorkerControlPlane;
 import io.pockethive.controlplane.worker.WorkerSignalListener;
 import io.pockethive.controlplane.worker.WorkerSignalListener.WorkerSignalContext;
 import io.pockethive.controlplane.worker.WorkerStatusRequest;
+import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
@@ -182,9 +184,11 @@ public class Moderator {
   }
 
   private void emitConfigSuccess(ControlSignal cs) {
+    String swarm = resolveSwarm(cs);
     String role = resolveRole(cs);
     String instance = resolveInstance(cs);
-    String routingKey = "ev.ready.config-update." + role + "." + instance;
+    String routingKey = ControlPlaneRouting.event("ready.config-update",
+        new ConfirmationScope(swarm, role, instance));
     ObjectNode payload = confirmationPayload(cs, "success", role, instance);
     String json = payload.toString();
     logControlSend(routingKey, json);
@@ -192,9 +196,11 @@ public class Moderator {
   }
 
   private void emitConfigError(ControlSignal cs, Exception e) {
+    String swarm = resolveSwarm(cs);
     String role = resolveRole(cs);
     String instance = resolveInstance(cs);
-    String routingKey = "ev.error.config-update." + role + "." + instance;
+    String routingKey = ControlPlaneRouting.event("error.config-update",
+        new ConfirmationScope(swarm, role, instance));
     ObjectNode payload = confirmationPayload(cs, "error", role, instance);
     payload.put("code", e.getClass().getSimpleName());
     String message = e.getMessage();
@@ -269,8 +275,9 @@ public class Moderator {
 
   private void sendStatusDelta(long tps){
     String role = ROLE;
-    String controlQueue = Topology.CONTROL_QUEUE + "." + role + "." + instanceId;
-    String rk = "ev.status-delta."+role+"."+instanceId;
+    String controlQueue = controlQueueName(role);
+    String rk = ControlPlaneRouting.event("status-delta",
+        new ConfirmationScope(Topology.SWARM_ID, role, instanceId));
     String payload = new StatusEnvelopeBuilder()
         .kind("status-delta")
         .role(role)
@@ -281,14 +288,7 @@ public class Moderator {
         .workRoutes(Topology.GEN_QUEUE)
         .workOut(Topology.MOD_QUEUE)
         .controlIn(controlQueue)
-        .controlRoutes(
-            "sig.config-update",
-            "sig.config-update."+role,
-            "sig.config-update."+role+"."+instanceId,
-            "sig.status-request",
-            "sig.status-request."+role,
-            "sig.status-request."+role+"."+instanceId
-        )
+        .controlRoutes(controlRoutes(role))
         .controlOut(rk)
         .tps(tps)
         .enabled(enabled)
@@ -298,8 +298,9 @@ public class Moderator {
   }
   private void sendStatusFull(long tps){
     String role = ROLE;
-    String controlQueue = Topology.CONTROL_QUEUE + "." + role + "." + instanceId;
-    String rk = "ev.status-full."+role+"."+instanceId;
+    String controlQueue = controlQueueName(role);
+    String rk = ControlPlaneRouting.event("status-full",
+        new ConfirmationScope(Topology.SWARM_ID, role, instanceId));
     String payload = new StatusEnvelopeBuilder()
         .kind("status-full")
         .role(role)
@@ -310,14 +311,7 @@ public class Moderator {
         .workRoutes(Topology.GEN_QUEUE)
         .workOut(Topology.MOD_QUEUE)
         .controlIn(controlQueue)
-        .controlRoutes(
-            "sig.config-update",
-            "sig.config-update."+role,
-            "sig.config-update."+role+"."+instanceId,
-            "sig.status-request",
-            "sig.status-request."+role,
-            "sig.status-request."+role+"."+instanceId
-        )
+        .controlRoutes(controlRoutes(role))
         .controlOut(rk)
         .tps(tps)
         .enabled(enabled)
@@ -335,6 +329,22 @@ public class Moderator {
     } else {
       log.info("[CTRL] RECV rk={} inst={} payload={}", routingKey, instanceId, snippet);
     }
+  }
+
+  private String controlQueueName(String role) {
+    return Topology.CONTROL_QUEUE + "." + Topology.SWARM_ID + "." + role + "." + instanceId;
+  }
+
+  private String[] controlRoutes(String role) {
+    return new String[] {
+        ControlPlaneRouting.signal("config-update", "ALL", role, "ALL"),
+        ControlPlaneRouting.signal("config-update", Topology.SWARM_ID, role, "ALL"),
+        ControlPlaneRouting.signal("config-update", Topology.SWARM_ID, role, instanceId),
+        ControlPlaneRouting.signal("config-update", Topology.SWARM_ID, "ALL", "ALL"),
+        ControlPlaneRouting.signal("status-request", "ALL", role, "ALL"),
+        ControlPlaneRouting.signal("status-request", Topology.SWARM_ID, role, "ALL"),
+        ControlPlaneRouting.signal("status-request", Topology.SWARM_ID, role, instanceId)
+    };
   }
 
   private void logControlSend(String routingKey, String payload) {

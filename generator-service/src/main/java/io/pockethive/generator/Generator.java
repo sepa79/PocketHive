@@ -2,6 +2,7 @@ package io.pockethive.generator;
 
 import io.pockethive.Topology;
 import io.pockethive.control.ControlSignal;
+import io.pockethive.control.ConfirmationScope;
 import io.pockethive.observability.ObservabilityContext;
 import io.pockethive.observability.ObservabilityContextUtil;
 import io.pockethive.observability.StatusEnvelopeBuilder;
@@ -11,6 +12,7 @@ import io.pockethive.controlplane.worker.WorkerControlPlane;
 import io.pockethive.controlplane.worker.WorkerSignalListener;
 import io.pockethive.controlplane.worker.WorkerSignalListener.WorkerSignalContext;
 import io.pockethive.controlplane.worker.WorkerStatusRequest;
+import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
@@ -249,9 +251,11 @@ public class Generator {
   }
 
   private void emitConfigSuccess(ControlSignal cs) {
+    String swarm = resolveSwarm(cs);
     String role = resolveRole(cs);
     String instance = resolveInstance(cs);
-    String routingKey = "ev.ready.config-update." + role + "." + instance;
+    String routingKey = ControlPlaneRouting.event("ready.config-update",
+        new ConfirmationScope(swarm, role, instance));
     ObjectNode payload = confirmationPayload(cs, "success", role, instance);
     String json = payload.toString();
     logControlSend(routingKey, json);
@@ -259,9 +263,11 @@ public class Generator {
   }
 
   private void emitConfigError(ControlSignal cs, Exception e) {
+    String swarm = resolveSwarm(cs);
     String role = resolveRole(cs);
     String instance = resolveInstance(cs);
-    String routingKey = "ev.error.config-update." + role + "." + instance;
+    String routingKey = ControlPlaneRouting.event("error.config-update",
+        new ConfirmationScope(swarm, role, instance));
     ObjectNode payload = confirmationPayload(cs, "error", role, instance);
     payload.put("code", e.getClass().getSimpleName());
     String message = e.getMessage();
@@ -365,8 +371,9 @@ public class Generator {
 
 
   private void sendStatusDelta(long tps){
-    String controlQueue = Topology.CONTROL_QUEUE + "." + ROLE + "." + instanceId;
-    String routingKey = "ev.status-delta." + ROLE + "." + instanceId;
+    String controlQueue = controlQueueName();
+    String routingKey = ControlPlaneRouting.event("status-delta",
+        new ConfirmationScope(Topology.SWARM_ID, ROLE, instanceId));
     String json = new StatusEnvelopeBuilder()
         .kind("status-delta")
         .role(ROLE)
@@ -374,14 +381,7 @@ public class Generator {
         .swarmId(Topology.SWARM_ID)
         .traffic(Topology.EXCHANGE)
         .controlIn(controlQueue)
-        .controlRoutes(
-            "sig.config-update",
-            "sig.config-update."+ROLE,
-            "sig.config-update."+ROLE+"."+instanceId,
-            "sig.status-request",
-            "sig.status-request."+ROLE,
-            "sig.status-request."+ROLE+"."+instanceId
-        )
+        .controlRoutes(controlRoutes())
         .controlOut(routingKey)
         .workOut(Topology.GEN_QUEUE)
         .tps(tps)
@@ -397,8 +397,9 @@ public class Generator {
   }
 
   private void sendStatusFull(long tps){
-    String controlQueue = Topology.CONTROL_QUEUE + "." + ROLE + "." + instanceId;
-    String routingKey = "ev.status-full." + ROLE + "." + instanceId;
+    String controlQueue = controlQueueName();
+    String routingKey = ControlPlaneRouting.event("status-full",
+        new ConfirmationScope(Topology.SWARM_ID, ROLE, instanceId));
     String json = new StatusEnvelopeBuilder()
         .kind("status-full")
         .role(ROLE)
@@ -406,14 +407,7 @@ public class Generator {
         .swarmId(Topology.SWARM_ID)
         .traffic(Topology.EXCHANGE)
         .controlIn(controlQueue)
-        .controlRoutes(
-            "sig.config-update",
-            "sig.config-update."+ROLE,
-            "sig.config-update."+ROLE+"."+instanceId,
-            "sig.status-request",
-            "sig.status-request."+ROLE,
-            "sig.status-request."+ROLE+"."+instanceId
-        )
+        .controlRoutes(controlRoutes())
         .controlOut(routingKey)
         .workOut(Topology.GEN_QUEUE)
         .tps(tps)
@@ -437,6 +431,22 @@ public class Generator {
     } else {
       log.info("[CTRL] RECV rk={} inst={} payload={}", routingKey, instanceId, snippet);
     }
+  }
+
+  private String controlQueueName() {
+    return Topology.CONTROL_QUEUE + "." + Topology.SWARM_ID + "." + ROLE + "." + instanceId;
+  }
+
+  private String[] controlRoutes() {
+    return new String[] {
+        ControlPlaneRouting.signal("config-update", "ALL", ROLE, "ALL"),
+        ControlPlaneRouting.signal("config-update", Topology.SWARM_ID, ROLE, "ALL"),
+        ControlPlaneRouting.signal("config-update", Topology.SWARM_ID, ROLE, instanceId),
+        ControlPlaneRouting.signal("config-update", Topology.SWARM_ID, "ALL", "ALL"),
+        ControlPlaneRouting.signal("status-request", "ALL", ROLE, "ALL"),
+        ControlPlaneRouting.signal("status-request", Topology.SWARM_ID, ROLE, "ALL"),
+        ControlPlaneRouting.signal("status-request", Topology.SWARM_ID, ROLE, instanceId)
+    };
   }
 
   private void logControlSend(String routingKey, String payload) {

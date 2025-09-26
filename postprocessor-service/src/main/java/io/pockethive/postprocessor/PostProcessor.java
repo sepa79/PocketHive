@@ -7,12 +7,14 @@ import io.micrometer.core.instrument.DistributionSummary;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.pockethive.Topology;
 import io.pockethive.control.ControlSignal;
+import io.pockethive.control.ConfirmationScope;
 import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.controlplane.worker.WorkerConfigCommand;
 import io.pockethive.controlplane.worker.WorkerControlPlane;
 import io.pockethive.controlplane.worker.WorkerSignalListener;
 import io.pockethive.controlplane.worker.WorkerSignalListener.WorkerSignalContext;
 import io.pockethive.controlplane.worker.WorkerStatusRequest;
+import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.observability.Hop;
 import io.pockethive.observability.ObservabilityContext;
 import io.pockethive.observability.ObservabilityContextUtil;
@@ -235,9 +237,11 @@ public class PostProcessor {
   }
 
   private void emitConfigSuccess(ControlSignal cs){
+    String swarm = resolveSwarm(cs);
     String role = resolveRole(cs);
     String instance = resolveInstance(cs);
-    String rk = "ev.ready.config-update."+role+"."+instance;
+    String rk = ControlPlaneRouting.event("ready.config-update",
+        new ConfirmationScope(swarm, role, instance));
     ObjectNode payload = confirmationPayload(cs, "success", role, instance);
     String json = payload.toString();
     logControlSend(rk, json);
@@ -245,9 +249,11 @@ public class PostProcessor {
   }
 
   private void emitConfigError(ControlSignal cs, Exception e){
+    String swarm = resolveSwarm(cs);
     String role = resolveRole(cs);
     String instance = resolveInstance(cs);
-    String rk = "ev.error.config-update."+role+"."+instance;
+    String rk = ControlPlaneRouting.event("error.config-update",
+        new ConfirmationScope(swarm, role, instance));
     ObjectNode payload = confirmationPayload(cs, "error", role, instance);
     payload.put("code", e.getClass().getSimpleName());
     String message = e.getMessage();
@@ -320,8 +326,9 @@ public class PostProcessor {
 
   private void sendStatusDelta(long tps){
     String role = ROLE;
-    String controlQueue = Topology.CONTROL_QUEUE + "." + role + "." + instanceId;
-    String rk = "ev.status-delta."+role+"."+instanceId;
+    String controlQueue = controlQueueName(role);
+    String rk = ControlPlaneRouting.event("status-delta",
+        new ConfirmationScope(Topology.SWARM_ID, role, instanceId));
     String payload = new StatusEnvelopeBuilder()
         .kind("status-delta")
         .role(role)
@@ -330,14 +337,7 @@ public class PostProcessor {
         .traffic(Topology.EXCHANGE)
         .workIn(Topology.FINAL_QUEUE)
         .controlIn(controlQueue)
-        .controlRoutes(
-            "sig.config-update",
-            "sig.config-update."+role,
-            "sig.config-update."+role+"."+instanceId,
-            "sig.status-request",
-            "sig.status-request."+role,
-            "sig.status-request."+role+"."+instanceId
-        )
+        .controlRoutes(controlRoutes(role))
         .controlOut(rk)
         .tps(tps)
         .enabled(enabled)
@@ -348,8 +348,9 @@ public class PostProcessor {
 
   private void sendStatusFull(long tps){
     String role = ROLE;
-    String controlQueue = Topology.CONTROL_QUEUE + "." + role + "." + instanceId;
-    String rk = "ev.status-full."+role+"."+instanceId;
+    String controlQueue = controlQueueName(role);
+    String rk = ControlPlaneRouting.event("status-full",
+        new ConfirmationScope(Topology.SWARM_ID, role, instanceId));
     String payload = new StatusEnvelopeBuilder()
         .kind("status-full")
         .role(role)
@@ -359,14 +360,7 @@ public class PostProcessor {
         .workIn(Topology.FINAL_QUEUE)
         .workRoutes(Topology.FINAL_QUEUE)
         .controlIn(controlQueue)
-        .controlRoutes(
-            "sig.config-update",
-            "sig.config-update."+role,
-            "sig.config-update."+role+"."+instanceId,
-            "sig.status-request",
-            "sig.status-request."+role,
-            "sig.status-request."+role+"."+instanceId
-        )
+        .controlRoutes(controlRoutes(role))
         .controlOut(rk)
         .tps(tps)
         .enabled(enabled)
@@ -406,5 +400,21 @@ public class PostProcessor {
       return trimmed.substring(0, 300) + "…";
     }
     return trimmed;
+  }
+
+  private String controlQueueName(String role) {
+    return Topology.CONTROL_QUEUE + "." + Topology.SWARM_ID + "." + role + "." + instanceId;
+  }
+
+  private String[] controlRoutes(String role) {
+    return new String[] {
+        ControlPlaneRouting.signal("config-update", "ALL", role, "ALL"),
+        ControlPlaneRouting.signal("config-update", Topology.SWARM_ID, role, "ALL"),
+        ControlPlaneRouting.signal("config-update", Topology.SWARM_ID, role, instanceId),
+        ControlPlaneRouting.signal("config-update", Topology.SWARM_ID, "ALL", "ALL"),
+        ControlPlaneRouting.signal("status-request", "ALL", role, "ALL"),
+        ControlPlaneRouting.signal("status-request", Topology.SWARM_ID, role, "ALL"),
+        ControlPlaneRouting.signal("status-request", Topology.SWARM_ID, role, instanceId)
+    };
   }
 }
