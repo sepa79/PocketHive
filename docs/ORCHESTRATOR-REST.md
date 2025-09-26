@@ -18,8 +18,8 @@ Client sends **`idempotencyKey`** (UUID v4) per new action (reuse on retry). Ser
 
 **Behavior**
 - Launch Controller runtime for `{swarmId}` (no AMQP signal).
-- On controller handshake `ev.ready.swarm-controller.<instance>`, emit **`ev.ready.swarm-create.<swarmId>`** (echo ids).
-- On failure, emit **`ev.error.swarm-create.<swarmId>`**.
+- On controller handshake `ev.ready.swarm-controller.<swarmId>.swarm-controller.<controllerInstance>`, emit **`ev.ready.swarm-create.<swarmId>.orchestrator.ALL`** (echo ids).
+- On failure, emit **`ev.error.swarm-create.<swarmId>.orchestrator.ALL`**.
 - Requires a `templateId` referencing the scenario template to instantiate.
 
 **Request**
@@ -37,8 +37,8 @@ Client sends **`idempotencyKey`** (UUID v4) per new action (reuse on retry). Ser
   "correlationId": "…",
   "idempotencyKey": "…",
   "watch": {
-    "successTopic": "ev.ready.swarm-create.<swarmId>",
-    "errorTopic":   "ev.error.swarm-create.<swarmId>"
+    "successTopic": "ev.ready.swarm-create.<swarmId>.orchestrator.ALL",
+    "errorTopic":   "ev.error.swarm-create.<swarmId>.orchestrator.ALL"
   },
   "timeoutMs": 120000
 }
@@ -52,7 +52,7 @@ Client sends **`idempotencyKey`** (UUID v4) per new action (reuse on retry). Ser
 { "idempotencyKey": "uuid-v4", "notes": "optional" }
 ```
 
-**Signal:** `sig.swarm-start.<swarmId>` → **Success:** `ev.ready.swarm-start.<swarmId>` → **Error:** `ev.error.swarm-start.<swarmId>`
+**Signal:** `sig.swarm-start.<swarmId>.swarm-controller.ALL` → **Success:** `ev.ready.swarm-start.<swarmId>.swarm-controller.<controllerInstance>` → **Error:** `ev.error.swarm-start.<swarmId>.swarm-controller.<controllerInstance>`
 
 **Response (202)**
 ```json
@@ -60,8 +60,8 @@ Client sends **`idempotencyKey`** (UUID v4) per new action (reuse on retry). Ser
   "correlationId": "…",
   "idempotencyKey": "…",
   "watch": {
-    "successTopic": "ev.ready.swarm-start.<swarmId>",
-    "errorTopic":   "ev.error.swarm-start.<swarmId>"
+    "successTopic": "ev.ready.swarm-start.<swarmId>.swarm-controller.<controllerInstance>",
+    "errorTopic":   "ev.error.swarm-start.<swarmId>.swarm-controller.<controllerInstance>"
   },
   "timeoutMs": 180000
 }
@@ -75,7 +75,7 @@ Client sends **`idempotencyKey`** (UUID v4) per new action (reuse on retry). Ser
 { "idempotencyKey": "uuid-v4", "notes": "optional" }
 ```
 
-**Signal:** `sig.swarm-stop.<swarmId>` → **Success:** `ev.ready.swarm-stop.<swarmId>` → **Error:** `ev.error.swarm-stop.<swarmId>`
+**Signal:** `sig.swarm-stop.<swarmId>.swarm-controller.ALL` → **Success:** `ev.ready.swarm-stop.<swarmId>.swarm-controller.<controllerInstance>` → **Error:** `ev.error.swarm-stop.<swarmId>.swarm-controller.<controllerInstance>`
 
 **Response (202)**
 ```json
@@ -83,8 +83,8 @@ Client sends **`idempotencyKey`** (UUID v4) per new action (reuse on retry). Ser
   "correlationId": "…",
   "idempotencyKey": "…",
   "watch": {
-    "successTopic": "ev.ready.swarm-stop.<swarmId>",
-    "errorTopic":   "ev.error.swarm-stop.<swarmId>"
+    "successTopic": "ev.ready.swarm-stop.<swarmId>.swarm-controller.<controllerInstance>",
+    "errorTopic":   "ev.error.swarm-stop.<swarmId>.swarm-controller.<controllerInstance>"
   },
   "timeoutMs": 90000
 }
@@ -98,7 +98,7 @@ Client sends **`idempotencyKey`** (UUID v4) per new action (reuse on retry). Ser
 { "idempotencyKey": "uuid-v4", "notes": "optional" }
 ```
 
-**Signal:** `sig.swarm-remove.<swarmId>` → **Success:** `ev.ready.swarm-remove.<swarmId>` → **Error:** `ev.error.swarm-remove.<swarmId>`  
+**Signal:** `sig.swarm-remove.<swarmId>.swarm-controller.ALL` → **Success:** `ev.ready.swarm-remove.<swarmId>.swarm-controller.<controllerInstance>` → **Error:** `ev.error.swarm-remove.<swarmId>.swarm-controller.<controllerInstance>`  
 **Post‑success:** tear down the Controller runtime for this swarm.
 
 **Response (202)**
@@ -107,8 +107,8 @@ Client sends **`idempotencyKey`** (UUID v4) per new action (reuse on retry). Ser
   "correlationId": "…",
   "idempotencyKey": "…",
   "watch": {
-    "successTopic": "ev.ready.swarm-remove.<swarmId>",
-    "errorTopic":   "ev.error.swarm-remove.<swarmId>"
+    "successTopic": "ev.ready.swarm-remove.<swarmId>.swarm-controller.<controllerInstance>",
+    "errorTopic":   "ev.error.swarm-remove.<swarmId>.swarm-controller.<controllerInstance>"
   },
   "timeoutMs": 180000
 }
@@ -126,7 +126,7 @@ Client sends **`idempotencyKey`** (UUID v4) per new action (reuse on retry). Ser
 }
 ```
 
-**Signal:** `sig.swarm-template.<swarmId>` → **Success:** `ev.ready.swarm-template.<swarmId>` → **Error:** `ev.error.swarm-template.<swarmId>`
+**Signal:** `sig.swarm-template.<swarmId>.swarm-controller.ALL` → **Success:** `ev.ready.swarm-template.<swarmId>.swarm-controller.<controllerInstance>` → **Error:** `ev.error.swarm-template.<swarmId>.swarm-controller.<controllerInstance>`
 
 **Response (202)** — same envelope.
 
@@ -137,10 +137,17 @@ Client sends **`idempotencyKey`** (UUID v4) per new action (reuse on retry). Ser
 
 **Request**
 ```json
-{ "idempotencyKey": "uuid-v4", "patch": { "enabled": true }, "notes": "optional" }
+{
+  "idempotencyKey": "uuid-v4",
+  "commandTarget": "instance",
+  "patch": { "enabled": true },
+  "notes": "optional"
+}
 ```
 
-**Signal:** `sig.config-update.<role>.<instance>` → **Success:** `ev.ready.config-update.<role>.<instance>` → **Error:** `ev.error.config-update.<role>.<instance>`
+> The routing path already carries the role and instance; set `commandTarget` to describe the intended scope (`instance`, `role`, `swarm`, or `all`).
+
+**Signal:** `sig.config-update.<swarmId>.<role>.<instance>` → **Success:** `ev.ready.config-update.<swarmId>.<role>.<instance>` → **Error:** `ev.error.config-update.<swarmId>.<role>.<instance>`
 
 **Response (202)** — same envelope.
 
@@ -152,14 +159,14 @@ Client sends **`idempotencyKey`** (UUID v4) per new action (reuse on retry). Ser
 { "idempotencyKey": "uuid-v4" }
 ```
 
-**Signal:** `sig.status-request.<role>.<instance>` → component emits `ev.status-full.<role>.<instance>` (no `ev.ready.*`).
+**Signal:** `sig.status-request.<swarmId>.<role>.<instance>` → component emits `ev.status-full.<swarmId>.<role>.<instance>` (no `ev.ready.*`).
 
 **Response (202)**
 ```json
 {
   "correlationId": "…",
   "idempotencyKey": "…",
-  "watch": { "infoTopic": "ev.status-full.<role>.<instance>" },
+  "watch": { "infoTopic": "ev.status-full.<swarmId>.<role>.<instance>" },
   "timeoutMs": 10000
 }
 ```
@@ -168,23 +175,23 @@ Client sends **`idempotencyKey`** (UUID v4) per new action (reuse on retry). Ser
 `POST /api/controllers/config`
 
 **Behavior**
-- Publishes **`sig.config-update.swarm-controller.{instance}`** per targeted controller with `patch: { "enabled": true|false }`.
-- Includes **`args.scope`** (`"swarm"` or `"controller"`) so downstream services can distinguish whether workloads or the controller runtime should react.
+- Publishes **`sig.config-update.<swarmId>.swarm-controller.{instance}`** per targeted controller with explicit `commandTarget` metadata and `patch: { "enabled": true|false }`.
+- Sets top-level **`commandTarget`** to `"swarm"` when fan-out should toggle workloads and `"instance"` when only the controller runtime should pause/resume.
 - If **`targets` omitted or empty**, apply to **all registered controllers** (fan-out driven by the Orchestrator's live registry).
 - Controllers always keep their control plane session alive to acknowledge config updates even when `enabled=false`.
 
 #### 4.3.1 Scope `swarm` — pause/resume workloads
 
 **Effect**
-- Controller **fans out** the `enabled` change to every managed bee in the targeted swarm.
-- Confirms with **`ev.ready.config-update.swarm-controller.{instance}`** (`state.scope="swarm"`, `state.enabled=<bool>`).
-- Publishes **`ev.status-delta.swarm-controller.{instance}`** reflecting `state.workloads.enabled=<bool>` for dashboards.
+- Controller **fans out** the `enabled` change to every managed bee in the targeted swarm via `sig.config-update.<swarmId>.ALL.ALL`.
+- Confirms with **`ev.ready.config-update.<swarmId>.swarm-controller.{instance}`** (mirrors `commandTarget="swarm"`, keeps the swarm identifier in the envelope `scope`, and reports `state.enabled=<bool>` plus `state.details.workloads.enabled=<bool>`).
+- Publishes **`ev.status-delta.<swarmId>.swarm-controller.{instance}`** reflecting `state.workloads.enabled=<bool>` for dashboards.
 
 **Request**
 ```json
 {
   "idempotencyKey": "uuid-v4",
-  "scope": "swarm",
+  "commandTarget": "swarm",
   "enabled": false,
   "targets": ["swarm-controller.alpha", "swarm-controller.bravo"],
   "notes": "optional"
@@ -196,19 +203,19 @@ Client sends **`idempotencyKey`** (UUID v4) per new action (reuse on retry). Ser
 {
   "correlationId": "…",
   "idempotencyKey": "…",
-  "scope": "swarm",
+  "commandTarget": "swarm",
   "targets": [
     {
       "instance": "swarm-controller.alpha",
-      "successTopic": "ev.ready.config-update.swarm-controller.alpha",
-      "errorTopic": "ev.error.config-update.swarm-controller.alpha",
-      "statusTopic": "ev.status-delta.swarm-controller.alpha"
+      "successTopic": "ev.ready.config-update.<swarmId>.swarm-controller.alpha",
+      "errorTopic": "ev.error.config-update.<swarmId>.swarm-controller.alpha",
+      "statusTopic": "ev.status-delta.<swarmId>.swarm-controller.alpha"
     },
     {
       "instance": "swarm-controller.bravo",
-      "successTopic": "ev.ready.config-update.swarm-controller.bravo",
-      "errorTopic": "ev.error.config-update.swarm-controller.bravo",
-      "statusTopic": "ev.status-delta.swarm-controller.bravo"
+      "successTopic": "ev.ready.config-update.<swarmId>.swarm-controller.bravo",
+      "errorTopic": "ev.error.config-update.<swarmId>.swarm-controller.bravo",
+      "statusTopic": "ev.status-delta.<swarmId>.swarm-controller.bravo"
     }
   ],
   "timeoutMs": 60000
@@ -220,8 +227,12 @@ Client sends **`idempotencyKey`** (UUID v4) per new action (reuse on retry). Ser
 {
   "result": "success",
   "signal": "config-update",
-  "scope": { "role": "swarm-controller", "instance": "swarm-controller.alpha" },
-  "state": { "scope": "swarm", "enabled": false, "workloads": { "enabled": false } },
+  "scope": { "swarmId": "swarm-42", "role": "swarm-controller", "instance": "swarm-controller.alpha" },
+  "commandTarget": "swarm",
+  "state": {
+    "enabled": false,
+    "details": { "workloads": { "enabled": false } }
+  },
   "idempotencyKey": "uuid-v4",
   "correlationId": "…"
 }
@@ -230,15 +241,15 @@ Client sends **`idempotencyKey`** (UUID v4) per new action (reuse on retry). Ser
 #### 4.3.2 Scope `controller` — pause/resume controller runtime
 
 **Effect**
-- Controller stops/starts its **reconciliation loops** only; existing bees keep their current `enabled` state.
-- Confirms with **`ev.ready.config-update.swarm-controller.{instance}`** (`state.scope="controller"`, `state.enabled=<bool>`).
-- Publishes **`ev.status-delta.swarm-controller.{instance}`** reflecting `state.controller.enabled=<bool>` so observers know the runtime is paused.
+- Controller stops/starts its **reconciliation loops** only; existing bees keep their current `enabled` state (no `sig.config-update.<swarmId>.ALL.ALL` broadcast).
+- Confirms with **`ev.ready.config-update.<swarmId>.swarm-controller.{instance}`** (mirrors `commandTarget="instance"`, keeps the controller coordinates in the envelope `scope`, and reports `state.enabled=<bool>` plus `state.details.controller.enabled=<bool>`).
+- Publishes **`ev.status-delta.<swarmId>.swarm-controller.{instance}`** reflecting `state.controller.enabled=<bool>` so observers know the runtime is paused.
 
 **Request**
 ```json
 {
   "idempotencyKey": "uuid-v4",
-  "scope": "controller",
+  "commandTarget": "instance",
   "enabled": false,
   "targets": ["swarm-controller.charlie"],
   "notes": "optional"
@@ -250,13 +261,13 @@ Client sends **`idempotencyKey`** (UUID v4) per new action (reuse on retry). Ser
 {
   "correlationId": "…",
   "idempotencyKey": "…",
-  "scope": "controller",
+  "commandTarget": "instance",
   "targets": [
     {
       "instance": "swarm-controller.charlie",
-      "successTopic": "ev.ready.config-update.swarm-controller.charlie",
-      "errorTopic": "ev.error.config-update.swarm-controller.charlie",
-      "statusTopic": "ev.status-delta.swarm-controller.charlie"
+      "successTopic": "ev.ready.config-update.<swarmId>.swarm-controller.charlie",
+      "errorTopic": "ev.error.config-update.<swarmId>.swarm-controller.charlie",
+      "statusTopic": "ev.status-delta.<swarmId>.swarm-controller.charlie"
     }
   ],
   "timeoutMs": 60000
@@ -268,8 +279,12 @@ Client sends **`idempotencyKey`** (UUID v4) per new action (reuse on retry). Ser
 {
   "result": "success",
   "signal": "config-update",
-  "scope": { "role": "swarm-controller", "instance": "swarm-controller.charlie" },
-  "state": { "scope": "controller", "enabled": false, "controller": { "enabled": false } },
+  "scope": { "swarmId": "swarm-42", "role": "swarm-controller", "instance": "swarm-controller.charlie" },
+  "commandTarget": "instance",
+  "state": {
+    "enabled": false,
+    "details": { "controller": { "enabled": false } }
+  },
   "idempotencyKey": "uuid-v4",
   "correlationId": "…"
 }

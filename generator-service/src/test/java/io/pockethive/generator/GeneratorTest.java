@@ -4,7 +4,10 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.Topology;
 import io.pockethive.asyncapi.AsyncApiSchemaValidator;
+import io.pockethive.control.CommandTarget;
+import io.pockethive.control.ConfirmationScope;
 import io.pockethive.control.ControlSignal;
+import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -57,10 +60,13 @@ class GeneratorTest {
         ControlSignal signal = ControlSignal.forInstance(
             "status-request", "sw1", "generator", "inst", correlationId, idempotencyKey);
 
-        generator.onControl(mapper.writeValueAsString(signal), "sig.status-request.generator.inst", null);
+        generator.onControl(mapper.writeValueAsString(signal),
+            ControlPlaneRouting.signal("status-request", "sw1", "generator", "inst"), null);
 
         ArgumentCaptor<String> payload = ArgumentCaptor.forClass(String.class);
-        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("ev.status-full.generator.inst"), payload.capture());
+        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
+            eq(ControlPlaneRouting.event("status-full", new ConfirmationScope("sw1", "generator", "inst"))),
+            payload.capture());
         JsonNode node = mapper.readTree(payload.getValue());
         List<String> errors = ASYNC_API.validate("#/components/schemas/ControlStatusFullPayload", node);
         assertThat(errors).isEmpty();
@@ -78,16 +84,16 @@ class GeneratorTest {
         data.put("method", "POST");
         data.put("body", "{\"msg\":\"hi\"}");
         data.put("headers", headers);
-        data.put("target", "swarm");
         Map<String, Object> args = new LinkedHashMap<>();
-        args.put("target", "swarm");
         args.put("data", data);
         String correlationId = UUID.randomUUID().toString();
         String idempotencyKey = UUID.randomUUID().toString();
         ControlSignal signal = ControlSignal.forInstance(
-            "config-update", "sw1", "generator", "inst", correlationId, idempotencyKey, args);
+            "config-update", "sw1", "generator", "inst", correlationId, idempotencyKey,
+            CommandTarget.INSTANCE, args);
 
-        generator.onControl(mapper.writeValueAsString(signal), "sig.config-update", null);
+        generator.onControl(mapper.writeValueAsString(signal),
+            ControlPlaneRouting.signal("config-update", "sw1", "generator", "inst"), null);
 
         Boolean enabled = (Boolean) ReflectionTestUtils.getField(generator, "enabled");
         assertThat(enabled).isTrue();
@@ -101,7 +107,9 @@ class GeneratorTest {
         verify(rabbit).convertAndSend(eq(Topology.EXCHANGE), eq(Topology.GEN_QUEUE), isA(Message.class));
 
         ArgumentCaptor<String> payload = ArgumentCaptor.forClass(String.class);
-        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("ev.ready.config-update.generator.inst"), payload.capture());
+        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
+            eq(ControlPlaneRouting.event("ready.config-update", new ConfirmationScope("sw1", "generator", "inst"))),
+            payload.capture());
         JsonNode node = mapper.readTree(payload.getValue());
         assertThat(node.path("result").asText()).isEqualTo("success");
         assertThat(node.path("signal").asText()).isEqualTo("config-update");
@@ -110,6 +118,8 @@ class GeneratorTest {
         assertThat(node.path("scope").path("role").asText()).isEqualTo("generator");
         assertThat(node.path("scope").path("instance").asText()).isEqualTo("inst");
         assertThat(node.path("scope").path("swarmId").asText()).isEqualTo("sw1");
+        assertThat(node.path("state").path("scope").isMissingNode()).isTrue();
+        assertThat(node.path("state").path("enabled").asBoolean()).isTrue();
         assertThat(node.has("args")).isFalse();
         List<String> readyErrors = ASYNC_API.validate("#/components/schemas/CommandReadyPayload", node);
         assertThat(readyErrors).isEmpty();
@@ -117,17 +127,21 @@ class GeneratorTest {
 
     @Test
     void configUpdateEmitsErrorWhenRateIsInvalid() throws Exception {
-        Map<String, Object> data = Map.of("ratePerSec", "oops", "target", "swarm");
-        Map<String, Object> args = Map.of("target", "swarm", "data", data);
+        Map<String, Object> data = Map.of("ratePerSec", "oops");
+        Map<String, Object> args = Map.of("data", data);
         String correlationId = UUID.randomUUID().toString();
         String idempotencyKey = UUID.randomUUID().toString();
         ControlSignal signal = ControlSignal.forInstance(
-            "config-update", "sw1", "generator", "inst", correlationId, idempotencyKey, args);
+            "config-update", "sw1", "generator", "inst", correlationId, idempotencyKey,
+            CommandTarget.INSTANCE, args);
 
-        generator.onControl(mapper.writeValueAsString(signal), "sig.config-update", null);
+        generator.onControl(mapper.writeValueAsString(signal),
+            ControlPlaneRouting.signal("config-update", "sw1", "generator", "inst"), null);
 
         ArgumentCaptor<String> payload = ArgumentCaptor.forClass(String.class);
-        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("ev.error.config-update.generator.inst"), payload.capture());
+        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
+            eq(ControlPlaneRouting.event("error.config-update", new ConfirmationScope("sw1", "generator", "inst"))),
+            payload.capture());
         JsonNode node = mapper.readTree(payload.getValue());
         assertThat(node.path("result").asText()).isEqualTo("error");
         assertThat(node.path("signal").asText()).isEqualTo("config-update");
@@ -137,14 +151,17 @@ class GeneratorTest {
         assertThat(node.path("scope").path("instance").asText()).isEqualTo("inst");
         assertThat(node.path("code").asText()).isEqualTo("IllegalArgumentException");
         assertThat(node.path("message").asText()).isNotBlank();
+        assertThat(node.path("state").path("scope").isMissingNode()).isTrue();
+        assertThat(node.path("state").path("enabled").asBoolean()).isFalse();
         List<String> errorPayload = ASYNC_API.validate("#/components/schemas/CommandErrorPayload", node);
         assertThat(errorPayload).isEmpty();
 
         verify(rabbit, never()).convertAndSend(eq(Topology.EXCHANGE), eq(Topology.GEN_QUEUE), isA(Message.class));
-        verify(rabbit, never()).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("ev.ready.config-update.generator.inst"), anyString());
+        verify(rabbit, never()).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
+            eq(ControlPlaneRouting.event("ready.config-update", new ConfirmationScope("sw1", "generator", "inst"))),
+            anyString());
 
         Double ratePerSec = (Double) ReflectionTestUtils.getField(generator, "ratePerSec");
         assertThat(ratePerSec).isEqualTo(0.0);
     }
 }
-

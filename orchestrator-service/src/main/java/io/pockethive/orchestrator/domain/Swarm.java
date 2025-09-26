@@ -22,7 +22,7 @@ public class Swarm {
         this.heartbeat = Instant.now();
         this.createdAt = Instant.now();
         this.workEnabled = true;
-        this.controllerEnabled = true;
+        this.controllerEnabled = false;
     }
 
     public String getId() {

@@ -4,9 +4,17 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.pockethive.Topology;
 import io.pockethive.control.ControlSignal;
+import io.pockethive.control.ConfirmationScope;
 import io.pockethive.observability.ObservabilityContext;
 import io.pockethive.observability.ObservabilityContextUtil;
 import io.pockethive.observability.StatusEnvelopeBuilder;
+import io.pockethive.controlplane.ControlPlaneIdentity;
+import io.pockethive.controlplane.worker.WorkerConfigCommand;
+import io.pockethive.controlplane.worker.WorkerControlPlane;
+import io.pockethive.controlplane.worker.WorkerSignalListener;
+import io.pockethive.controlplane.worker.WorkerSignalListener.WorkerSignalContext;
+import io.pockethive.controlplane.worker.WorkerStatusRequest;
+import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
@@ -24,7 +32,6 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
-import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 
 @Component
@@ -41,6 +48,8 @@ public class Moderator {
   private volatile boolean enabled = false;
   private static final long STATUS_INTERVAL_MS = 5000L;
   private volatile long lastStatusTs = System.currentTimeMillis();
+  private final WorkerControlPlane controlPlane;
+  private final WorkerSignalListener controlListener;
 
   public Moderator(RabbitTemplate rabbit,
                    @Qualifier("instanceId") String instanceId,
@@ -50,6 +59,41 @@ public class Moderator {
     this.instanceId = instanceId;
     this.registry = registry;
     this.objectMapper = objectMapper;
+    this.controlPlane = WorkerControlPlane.builder(objectMapper)
+        .identity(new ControlPlaneIdentity(Topology.SWARM_ID, ROLE, instanceId))
+        .build();
+    this.controlListener = new WorkerSignalListener() {
+      @Override
+      public void onStatusRequest(WorkerStatusRequest request) {
+        ControlSignal signal = request.signal();
+        if (signal.correlationId() != null) {
+          MDC.put("correlation_id", signal.correlationId());
+        }
+        if (signal.idempotencyKey() != null) {
+          MDC.put("idempotency_key", signal.idempotencyKey());
+        }
+        logControlReceive(request.envelope().routingKey(), signal.signal(), request.payload());
+        sendStatusFull(0);
+      }
+
+      @Override
+      public void onConfigUpdate(WorkerConfigCommand command) {
+        ControlSignal signal = command.signal();
+        if (signal.correlationId() != null) {
+          MDC.put("correlation_id", signal.correlationId());
+        }
+        if (signal.idempotencyKey() != null) {
+          MDC.put("idempotency_key", signal.idempotencyKey());
+        }
+        logControlReceive(command.envelope().routingKey(), signal.signal(), command.payload());
+        handleConfigUpdate(command);
+      }
+
+      @Override
+      public void onUnsupported(WorkerSignalContext context) {
+        log.debug("Ignoring unsupported control signal {}", context.envelope().signal().signal());
+      }
+    };
     try{ sendStatusFull(0); } catch(Exception ignore){}
   }
 
@@ -100,78 +144,24 @@ public class Moderator {
       if(payload==null || payload.isBlank()){
         return;
       }
-      ControlSignal cs;
-      try {
-        cs = objectMapper.readValue(payload, ControlSignal.class);
-      } catch (Exception e) {
-        log.warn("control parse", e);
-        return;
-      }
-      if (cs.correlationId() != null) {
-        MDC.put("correlation_id", cs.correlationId());
-      }
-      if (cs.idempotencyKey() != null) {
-        MDC.put("idempotency_key", cs.idempotencyKey());
-      }
-      String signal = cs.signal();
-      if (signal == null || signal.isBlank()) {
-        log.warn("control missing signal");
-        return;
-      }
-      logControlReceive(rk, signal, payload);
-      switch (signal) {
-        case "status-request" -> sendStatusFull(0);
-        case "config-update" -> handleConfigUpdate(cs);
-        default -> log.debug("Ignoring unsupported control signal {}", signal);
+      boolean handled = controlPlane.consume(payload, rk, controlListener);
+      if (!handled) {
+        log.debug("Ignoring control payload on routing key {}", rk);
       }
     } finally {
       MDC.clear();
     }
   }
 
-
-  private void handleConfigUpdate(ControlSignal cs) {
+  private void handleConfigUpdate(WorkerConfigCommand command) {
+    ControlSignal cs = command.signal();
     try {
-      Boolean desired = extractEnabled(cs.args());
-      applyEnabled(desired);
+      applyEnabled(command.enabled());
       emitConfigSuccess(cs);
     } catch (Exception e) {
       log.warn("config update", e);
       emitConfigError(cs, e);
     }
-  }
-
-  private Boolean extractEnabled(Map<String, Object> args) {
-    if (args == null || args.isEmpty()) {
-      return null;
-    }
-    if (args.containsKey("enabled")) {
-      return parseEnabled(args.get("enabled"));
-    }
-    Object data = args.get("data");
-    if (data instanceof Map<?, ?> map && map.containsKey("enabled")) {
-      return parseEnabled(map.get("enabled"));
-    }
-    return null;
-  }
-
-  private Boolean parseEnabled(Object value) {
-    if (value == null) {
-      return null;
-    }
-    if (value instanceof Boolean b) {
-      return b;
-    }
-    if (value instanceof String s) {
-      if (s.isBlank()) {
-        return null;
-      }
-      if ("true".equalsIgnoreCase(s) || "false".equalsIgnoreCase(s)) {
-        return Boolean.parseBoolean(s);
-      }
-      throw new IllegalArgumentException("Invalid enabled value: " + s);
-    }
-    throw new IllegalArgumentException("Invalid enabled value type: " + value.getClass().getSimpleName());
   }
 
   private void applyEnabled(Boolean desired) {
@@ -194,9 +184,11 @@ public class Moderator {
   }
 
   private void emitConfigSuccess(ControlSignal cs) {
+    String swarm = resolveSwarm(cs);
     String role = resolveRole(cs);
     String instance = resolveInstance(cs);
-    String routingKey = "ev.ready.config-update." + role + "." + instance;
+    String routingKey = ControlPlaneRouting.event("ready.config-update",
+        new ConfirmationScope(swarm, role, instance));
     ObjectNode payload = confirmationPayload(cs, "success", role, instance);
     String json = payload.toString();
     logControlSend(routingKey, json);
@@ -204,9 +196,11 @@ public class Moderator {
   }
 
   private void emitConfigError(ControlSignal cs, Exception e) {
+    String swarm = resolveSwarm(cs);
     String role = resolveRole(cs);
     String instance = resolveInstance(cs);
-    String routingKey = "ev.error.config-update." + role + "." + instance;
+    String routingKey = ControlPlaneRouting.event("error.config-update",
+        new ConfirmationScope(swarm, role, instance));
     ObjectNode payload = confirmationPayload(cs, "error", role, instance);
     payload.put("code", e.getClass().getSimpleName());
     String message = e.getMessage();
@@ -225,6 +219,7 @@ public class Moderator {
     payload.put("signal", cs.signal());
     payload.put("result", result);
     payload.set("scope", scopeNode(cs, role, instance));
+    payload.set("state", stateNode(cs, role, instance));
     if (cs.correlationId() != null) {
       payload.put("correlationId", cs.correlationId());
     }
@@ -247,6 +242,12 @@ public class Moderator {
       scope.put("instance", instance);
     }
     return scope;
+  }
+
+  private ObjectNode stateNode(ControlSignal cs, String role, String instance) {
+    ObjectNode state = objectMapper.createObjectNode();
+    state.put("enabled", enabled);
+    return state;
   }
 
   private String resolveSwarm(ControlSignal cs) {
@@ -274,8 +275,9 @@ public class Moderator {
 
   private void sendStatusDelta(long tps){
     String role = ROLE;
-    String controlQueue = Topology.CONTROL_QUEUE + "." + role + "." + instanceId;
-    String rk = "ev.status-delta."+role+"."+instanceId;
+    String controlQueue = controlQueueName(role);
+    String rk = ControlPlaneRouting.event("status-delta",
+        new ConfirmationScope(Topology.SWARM_ID, role, instanceId));
     String payload = new StatusEnvelopeBuilder()
         .kind("status-delta")
         .role(role)
@@ -286,14 +288,7 @@ public class Moderator {
         .workRoutes(Topology.GEN_QUEUE)
         .workOut(Topology.MOD_QUEUE)
         .controlIn(controlQueue)
-        .controlRoutes(
-            "sig.config-update",
-            "sig.config-update."+role,
-            "sig.config-update."+role+"."+instanceId,
-            "sig.status-request",
-            "sig.status-request."+role,
-            "sig.status-request."+role+"."+instanceId
-        )
+        .controlRoutes(controlRoutes(role))
         .controlOut(rk)
         .tps(tps)
         .enabled(enabled)
@@ -303,8 +298,9 @@ public class Moderator {
   }
   private void sendStatusFull(long tps){
     String role = ROLE;
-    String controlQueue = Topology.CONTROL_QUEUE + "." + role + "." + instanceId;
-    String rk = "ev.status-full."+role+"."+instanceId;
+    String controlQueue = controlQueueName(role);
+    String rk = ControlPlaneRouting.event("status-full",
+        new ConfirmationScope(Topology.SWARM_ID, role, instanceId));
     String payload = new StatusEnvelopeBuilder()
         .kind("status-full")
         .role(role)
@@ -315,14 +311,7 @@ public class Moderator {
         .workRoutes(Topology.GEN_QUEUE)
         .workOut(Topology.MOD_QUEUE)
         .controlIn(controlQueue)
-        .controlRoutes(
-            "sig.config-update",
-            "sig.config-update."+role,
-            "sig.config-update."+role+"."+instanceId,
-            "sig.status-request",
-            "sig.status-request."+role,
-            "sig.status-request."+role+"."+instanceId
-        )
+        .controlRoutes(controlRoutes(role))
         .controlOut(rk)
         .tps(tps)
         .enabled(enabled)
@@ -340,6 +329,22 @@ public class Moderator {
     } else {
       log.info("[CTRL] RECV rk={} inst={} payload={}", routingKey, instanceId, snippet);
     }
+  }
+
+  private String controlQueueName(String role) {
+    return Topology.CONTROL_QUEUE + "." + Topology.SWARM_ID + "." + role + "." + instanceId;
+  }
+
+  private String[] controlRoutes(String role) {
+    return new String[] {
+        ControlPlaneRouting.signal("config-update", "ALL", role, "ALL"),
+        ControlPlaneRouting.signal("config-update", Topology.SWARM_ID, role, "ALL"),
+        ControlPlaneRouting.signal("config-update", Topology.SWARM_ID, role, instanceId),
+        ControlPlaneRouting.signal("config-update", Topology.SWARM_ID, "ALL", "ALL"),
+        ControlPlaneRouting.signal("status-request", "ALL", role, "ALL"),
+        ControlPlaneRouting.signal("status-request", Topology.SWARM_ID, role, "ALL"),
+        ControlPlaneRouting.signal("status-request", Topology.SWARM_ID, role, instanceId)
+    };
   }
 
   private void logControlSend(String routingKey, String payload) {

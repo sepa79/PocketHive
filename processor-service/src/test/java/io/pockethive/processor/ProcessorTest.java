@@ -5,7 +5,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.pockethive.Topology;
 import io.pockethive.asyncapi.AsyncApiSchemaValidator;
+import io.pockethive.control.CommandTarget;
+import io.pockethive.control.ConfirmationScope;
 import io.pockethive.control.ControlSignal;
+import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -62,10 +65,13 @@ class ProcessorTest {
         ControlSignal signal = ControlSignal.forInstance(
             "status-request", "sw1", "processor", "inst", correlationId, idempotencyKey);
 
-        processor.onControl(mapper.writeValueAsString(signal), "sig.status-request.processor.inst", null);
+        processor.onControl(mapper.writeValueAsString(signal),
+            ControlPlaneRouting.signal("status-request", "sw1", "processor", "inst"), null);
 
         ArgumentCaptor<String> payload = ArgumentCaptor.forClass(String.class);
-        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("ev.status-full.processor.inst"), payload.capture());
+        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
+            eq(ControlPlaneRouting.event("status-full", new ConfirmationScope("sw1", "processor", "inst"))),
+            payload.capture());
         JsonNode node = mapper.readTree(payload.getValue());
         List<String> errors = ASYNC_API.validate("#/components/schemas/ControlStatusFullPayload", node);
         assertThat(errors).isEmpty();
@@ -77,17 +83,17 @@ class ProcessorTest {
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("enabled", true);
         data.put("baseUrl", "http://next");
-        data.put("target", "swarm");
         Map<String, Object> args = new LinkedHashMap<>();
-        args.put("target", "swarm");
         args.put("data", data);
         String correlationId = UUID.randomUUID().toString();
         String idempotencyKey = UUID.randomUUID().toString();
         ControlSignal signal = ControlSignal.forInstance(
-            "config-update", "sw1", "processor", "inst", correlationId, idempotencyKey, args);
+            "config-update", "sw1", "processor", "inst", correlationId, idempotencyKey,
+            CommandTarget.INSTANCE, args);
 
         when(listenerRegistry.getListenerContainer("workListener")).thenReturn(workContainer);
-        processor.onControl(mapper.writeValueAsString(signal), "sig.config-update", null);
+        processor.onControl(mapper.writeValueAsString(signal),
+            ControlPlaneRouting.signal("config-update", "sw1", "processor", "inst"), null);
 
         Boolean enabled = (Boolean) ReflectionTestUtils.getField(processor, "enabled");
         assertThat(enabled).isTrue();
@@ -96,7 +102,9 @@ class ProcessorTest {
         verify(workContainer).start();
 
         ArgumentCaptor<String> payload = ArgumentCaptor.forClass(String.class);
-        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("ev.ready.config-update.processor.inst"), payload.capture());
+        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
+            eq(ControlPlaneRouting.event("ready.config-update", new ConfirmationScope("sw1", "processor", "inst"))),
+            payload.capture());
         JsonNode node = mapper.readTree(payload.getValue());
         assertThat(node.path("result").asText()).isEqualTo("success");
         assertThat(node.path("signal").asText()).isEqualTo("config-update");
@@ -105,8 +113,12 @@ class ProcessorTest {
         assertThat(node.path("scope").path("role").asText()).isEqualTo("processor");
         assertThat(node.path("scope").path("instance").asText()).isEqualTo("inst");
         assertThat(node.path("scope").path("swarmId").asText()).isEqualTo("sw1");
+        assertThat(node.path("state").path("scope").isMissingNode()).isTrue();
+        assertThat(node.path("state").path("enabled").asBoolean()).isTrue();
         assertThat(node.has("args")).isFalse();
-        verify(rabbit, never()).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("ev.error.config-update.processor.inst"), anyString());
+        verify(rabbit, never()).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
+            eq(ControlPlaneRouting.event("error.config-update", new ConfirmationScope("sw1", "processor", "inst"))),
+            anyString());
         List<String> readyErrors = ASYNC_API.validate("#/components/schemas/CommandReadyPayload", node);
         assertThat(readyErrors).isEmpty();
     }
@@ -114,18 +126,21 @@ class ProcessorTest {
     @Test
     void configUpdateErrorEmitsErrorConfirmation() throws Exception {
         Map<String, Object> args = Map.of(
-            "target", "swarm",
             "data", Map.of("enabled", "oops")
         );
         String correlationId = UUID.randomUUID().toString();
         String idempotencyKey = UUID.randomUUID().toString();
         ControlSignal signal = ControlSignal.forInstance(
-            "config-update", "sw1", "processor", "inst", correlationId, idempotencyKey, args);
+            "config-update", "sw1", "processor", "inst", correlationId, idempotencyKey,
+            CommandTarget.INSTANCE, args);
 
-        processor.onControl(mapper.writeValueAsString(signal), "sig.config-update", null);
+        processor.onControl(mapper.writeValueAsString(signal),
+            ControlPlaneRouting.signal("config-update", "sw1", "processor", "inst"), null);
 
         ArgumentCaptor<String> payload = ArgumentCaptor.forClass(String.class);
-        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("ev.error.config-update.processor.inst"), payload.capture());
+        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
+            eq(ControlPlaneRouting.event("error.config-update", new ConfirmationScope("sw1", "processor", "inst"))),
+            payload.capture());
         JsonNode node = mapper.readTree(payload.getValue());
         assertThat(node.path("result").asText()).isEqualTo("error");
         assertThat(node.path("signal").asText()).isEqualTo("config-update");
@@ -134,12 +149,16 @@ class ProcessorTest {
         assertThat(node.path("scope").path("role").asText()).isEqualTo("processor");
         assertThat(node.path("code").asText()).isEqualTo("IllegalArgumentException");
         assertThat(node.path("message").asText()).isNotBlank();
+        assertThat(node.path("state").path("scope").isMissingNode()).isTrue();
+        assertThat(node.path("state").path("enabled").asBoolean()).isFalse();
         List<String> errorPayload = ASYNC_API.validate("#/components/schemas/CommandErrorPayload", node);
         assertThat(errorPayload).isEmpty();
 
         Boolean enabled = (Boolean) ReflectionTestUtils.getField(processor, "enabled");
         assertThat(enabled).isFalse();
         verify(workContainer, never()).start();
-        verify(rabbit, never()).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("ev.ready.config-update.processor.inst"), anyString());
+        verify(rabbit, never()).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
+            eq(ControlPlaneRouting.event("ready.config-update", new ConfirmationScope("sw1", "processor", "inst"))),
+            anyString());
     }
 }

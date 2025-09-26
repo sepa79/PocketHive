@@ -7,6 +7,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import io.pockethive.util.BeeNameGenerator;
+import io.pockethive.controlplane.routing.ControlPlaneRouting;
 
 @Configuration
 public class RabbitConfig {
@@ -31,45 +32,58 @@ public class RabbitConfig {
 
   @Bean
   Queue controlQueue(String instanceId){
-    String name = Topology.CONTROL_QUEUE + "." + ROLE + "." + instanceId;
+    String name = Topology.CONTROL_QUEUE + "." + Topology.SWARM_ID + "." + ROLE + "." + instanceId;
     return QueueBuilder.durable(name).build();
   }
 
   @Bean
-  Binding bindConfigGlobal(@Qualifier("controlQueue") Queue controlQueue,
-                           @Qualifier("controlExchange") TopicExchange controlExchange){
-    return BindingBuilder.bind(controlQueue).to(controlExchange).with("sig.config-update");
+  Binding bindConfigFleet(@Qualifier("controlQueue") Queue controlQueue,
+                          @Qualifier("controlExchange") TopicExchange controlExchange){
+    return BindingBuilder.bind(controlQueue).to(controlExchange)
+        .with(ControlPlaneRouting.signal("config-update", "ALL", ROLE, "ALL"));
   }
 
   @Bean
   Binding bindConfigRole(@Qualifier("controlQueue") Queue controlQueue,
                          @Qualifier("controlExchange") TopicExchange controlExchange){
-    return BindingBuilder.bind(controlQueue).to(controlExchange).with("sig.config-update." + ROLE);
+    return BindingBuilder.bind(controlQueue).to(controlExchange)
+        .with(ControlPlaneRouting.signal("config-update", Topology.SWARM_ID, ROLE, "ALL"));
   }
 
   @Bean
   Binding bindConfigInstance(@Qualifier("controlQueue") Queue controlQueue,
                              @Qualifier("controlExchange") TopicExchange controlExchange,
                              String instanceId){
-    return BindingBuilder.bind(controlQueue).to(controlExchange).with("sig.config-update." + ROLE + "." + instanceId);
+    return BindingBuilder.bind(controlQueue).to(controlExchange)
+        .with(ControlPlaneRouting.signal("config-update", Topology.SWARM_ID, ROLE, instanceId));
   }
 
   @Bean
-  Binding bindStatusGlobal(@Qualifier("controlQueue") Queue controlQueue,
-                           @Qualifier("controlExchange") TopicExchange controlExchange){
-    return BindingBuilder.bind(controlQueue).to(controlExchange).with("sig.status-request");
+  Binding bindConfigSwarmBroadcast(@Qualifier("controlQueue") Queue controlQueue,
+                                   @Qualifier("controlExchange") TopicExchange controlExchange){
+    return BindingBuilder.bind(controlQueue).to(controlExchange)
+        .with(ControlPlaneRouting.signal("config-update", Topology.SWARM_ID, "ALL", "ALL"));
+  }
+
+  @Bean
+  Binding bindStatusFleet(@Qualifier("controlQueue") Queue controlQueue,
+                          @Qualifier("controlExchange") TopicExchange controlExchange){
+    return BindingBuilder.bind(controlQueue).to(controlExchange)
+        .with(ControlPlaneRouting.signal("status-request", "ALL", ROLE, "ALL"));
   }
 
   @Bean
   Binding bindStatusRole(@Qualifier("controlQueue") Queue controlQueue,
                          @Qualifier("controlExchange") TopicExchange controlExchange){
-    return BindingBuilder.bind(controlQueue).to(controlExchange).with("sig.status-request." + ROLE);
+    return BindingBuilder.bind(controlQueue).to(controlExchange)
+        .with(ControlPlaneRouting.signal("status-request", Topology.SWARM_ID, ROLE, "ALL"));
   }
 
   @Bean
   Binding bindStatusInstance(@Qualifier("controlQueue") Queue controlQueue,
                              @Qualifier("controlExchange") TopicExchange controlExchange,
                              String instanceId){
-    return BindingBuilder.bind(controlQueue).to(controlExchange).with("sig.status-request." + ROLE + "." + instanceId);
+    return BindingBuilder.bind(controlQueue).to(controlExchange)
+        .with(ControlPlaneRouting.signal("status-request", Topology.SWARM_ID, ROLE, instanceId));
   }
 }

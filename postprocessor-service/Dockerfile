@@ -5,6 +5,7 @@ COPY pom.xml ./
 COPY common/topology-core/pom.xml common/topology-core/pom.xml
 COPY common/docker-client/pom.xml common/docker-client/pom.xml
 COPY common/swarm-model/pom.xml common/swarm-model/pom.xml
+COPY common/control-plane-core/pom.xml common/control-plane-core/pom.xml
 COPY test/pom.xml test/pom.xml
 COPY e2e-tests/pom.xml e2e-tests/pom.xml
 COPY observability/pom.xml observability/pom.xml
@@ -20,6 +21,7 @@ COPY scenario-manager-service/pom.xml scenario-manager-service/pom.xml
 COPY common/topology-core/src common/topology-core/src
 COPY common/docker-client/src common/docker-client/src
 COPY common/swarm-model/src common/swarm-model/src
+COPY common/control-plane-core/src common/control-plane-core/src
 COPY test/src test/src
 COPY e2e-tests/src e2e-tests/src
 COPY observability/src observability/src

@@ -29,6 +29,8 @@ import java.util.List;
 import java.util.UUID;
 
 import io.pockethive.util.BeeNameGenerator;
+import io.pockethive.controlplane.routing.ControlPlaneRouting;
+import io.pockethive.control.ConfirmationScope;
 
 /**
  * REST endpoints for swarm lifecycle operations.
@@ -121,7 +123,7 @@ public class SwarmController {
         return idempotentSend(signal, swarmId, idempotencyKey, timeoutMs, corr -> {
             ControlSignal payload = ControlSignal.forSwarm(signal, swarmId, corr, idempotencyKey);
             String jsonPayload = toJson(payload);
-            String routingKey = "sig." + signal + "." + swarmId;
+            String routingKey = ControlPlaneRouting.signal(signal, swarmId, "swarm-controller", "ALL");
             sendControl(routingKey, jsonPayload, signal);
             if ("swarm-start".equals(signal)) {
                 registry.markStartIssued(swarmId);
@@ -137,8 +139,7 @@ public class SwarmController {
         return idempotency.findCorrelation(swarmId, signal, idempotencyKey)
             .map(corr -> {
                 ControlResponse resp = new ControlResponse(corr, idempotencyKey,
-                    new ControlResponse.Watch("ev.ready." + signal + "." + swarmId,
-                        "ev.error." + signal + "." + swarmId), timeoutMs);
+                    watchFor(signal, swarmId), timeoutMs);
                 log.info("[CTRL] reuse signal={} swarm={} correlation={} idempotencyKey={}", signal, swarmId, corr, idempotencyKey);
                 return ResponseEntity.accepted().body(resp);
             })
@@ -147,12 +148,30 @@ public class SwarmController {
                 action.accept(corr);
                 idempotency.record(swarmId, signal, idempotencyKey, corr);
                 ControlResponse resp = new ControlResponse(corr, idempotencyKey,
-                    new ControlResponse.Watch("ev.ready." + signal + "." + swarmId,
-                        "ev.error." + signal + "." + swarmId), timeoutMs);
+                    watchFor(signal, swarmId), timeoutMs);
                 log.info("[CTRL] issue signal={} swarm={} correlation={} idempotencyKey={} timeoutMs={}",
                     signal, swarmId, corr, idempotencyKey, timeoutMs);
                 return ResponseEntity.accepted().body(resp);
             });
+    }
+
+    private ControlResponse.Watch watchFor(String signal, String swarmId) {
+        if ("swarm-create".equals(signal)) {
+            ConfirmationScope scope = new ConfirmationScope(swarmId, "orchestrator", "ALL");
+            return new ControlResponse.Watch(
+                ControlPlaneRouting.event("ready.swarm-create", scope),
+                ControlPlaneRouting.event("error.swarm-create", scope));
+        }
+        String controllerInstance = registry.find(swarmId)
+            .map(Swarm::getInstanceId)
+            .orElse(null);
+        if (controllerInstance == null || controllerInstance.isBlank()) {
+            throw new IllegalStateException("Swarm " + swarmId + " is not registered with a controller instance");
+        }
+        ConfirmationScope scope = new ConfirmationScope(swarmId, "swarm-controller", controllerInstance);
+        return new ControlResponse.Watch(
+            ControlPlaneRouting.event("ready." + signal, scope),
+            ControlPlaneRouting.event("error." + signal, scope));
     }
 
     private SwarmTemplate fetchTemplate(String templateId) {

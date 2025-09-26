@@ -38,40 +38,35 @@ public class RabbitConfig {
   Binding bindSwarmStart(@Qualifier("controlQueue") Queue controlQueue,
                          @Qualifier("controlExchange") TopicExchange controlExchange) {
     return BindingBuilder.bind(controlQueue).to(controlExchange)
-        .with("sig.swarm-start." + Topology.SWARM_ID);
+        .with("sig.swarm-start." + Topology.SWARM_ID + ".swarm-controller.ALL");
   }
 
   @Bean
   Binding bindSwarmTemplate(@Qualifier("controlQueue") Queue controlQueue,
                             @Qualifier("controlExchange") TopicExchange controlExchange) {
     return BindingBuilder.bind(controlQueue).to(controlExchange)
-        .with("sig.swarm-template." + Topology.SWARM_ID);
+        .with("sig.swarm-template." + Topology.SWARM_ID + ".swarm-controller.ALL");
   }
 
   @Bean
   Binding bindSwarmStop(@Qualifier("controlQueue") Queue controlQueue,
                         @Qualifier("controlExchange") TopicExchange controlExchange) {
     return BindingBuilder.bind(controlQueue).to(controlExchange)
-        .with("sig.swarm-stop." + Topology.SWARM_ID);
+        .with("sig.swarm-stop." + Topology.SWARM_ID + ".swarm-controller.ALL");
   }
 
   @Bean
   Binding bindSwarmRemove(@Qualifier("controlQueue") Queue controlQueue,
                           @Qualifier("controlExchange") TopicExchange controlExchange) {
     return BindingBuilder.bind(controlQueue).to(controlExchange)
-        .with("sig.swarm-remove." + Topology.SWARM_ID);
-  }
-
-  @Bean
-  Binding bindConfigGlobal(@Qualifier("controlQueue") Queue controlQueue,
-                           @Qualifier("controlExchange") TopicExchange controlExchange) {
-    return BindingBuilder.bind(controlQueue).to(controlExchange).with("sig.config-update");
+        .with("sig.swarm-remove." + Topology.SWARM_ID + ".swarm-controller.ALL");
   }
 
   @Bean
   Binding bindConfigRole(@Qualifier("controlQueue") Queue controlQueue,
                          @Qualifier("controlExchange") TopicExchange controlExchange) {
-    return BindingBuilder.bind(controlQueue).to(controlExchange).with("sig.config-update." + ROLE);
+    return BindingBuilder.bind(controlQueue).to(controlExchange)
+        .with("sig.config-update." + Topology.SWARM_ID + ".swarm-controller.ALL");
   }
 
   @Bean
@@ -79,19 +74,35 @@ public class RabbitConfig {
                              @Qualifier("controlExchange") TopicExchange controlExchange,
                              String instanceId) {
     return BindingBuilder.bind(controlQueue).to(controlExchange)
-        .with("sig.config-update." + ROLE + "." + instanceId);
+        .with("sig.config-update." + Topology.SWARM_ID + ".swarm-controller." + instanceId);
+  }
+
+  @Bean
+  Binding bindConfigSwarmBroadcast(@Qualifier("controlQueue") Queue controlQueue,
+                                   @Qualifier("controlExchange") TopicExchange controlExchange) {
+    return BindingBuilder.bind(controlQueue).to(controlExchange)
+        .with("sig.config-update." + Topology.SWARM_ID + ".ALL.ALL");
+  }
+
+  @Bean
+  Binding bindConfigGlobal(@Qualifier("controlQueue") Queue controlQueue,
+                           @Qualifier("controlExchange") TopicExchange controlExchange) {
+    return BindingBuilder.bind(controlQueue).to(controlExchange)
+        .with("sig.config-update.ALL.swarm-controller.ALL");
   }
 
   @Bean
   Binding bindStatusGlobal(@Qualifier("controlQueue") Queue controlQueue,
                            @Qualifier("controlExchange") TopicExchange controlExchange) {
-    return BindingBuilder.bind(controlQueue).to(controlExchange).with("sig.status-request");
+    return BindingBuilder.bind(controlQueue).to(controlExchange)
+        .with("sig.status-request." + Topology.SWARM_ID + ".swarm-controller.ALL");
   }
 
   @Bean
   Binding bindStatusRole(@Qualifier("controlQueue") Queue controlQueue,
                          @Qualifier("controlExchange") TopicExchange controlExchange) {
-    return BindingBuilder.bind(controlQueue).to(controlExchange).with("sig.status-request." + ROLE);
+    return BindingBuilder.bind(controlQueue).to(controlExchange)
+        .with("sig.status-request." + Topology.SWARM_ID + ".ALL.ALL");
   }
 
   @Bean
@@ -99,19 +110,28 @@ public class RabbitConfig {
                              @Qualifier("controlExchange") TopicExchange controlExchange,
                              String instanceId) {
     return BindingBuilder.bind(controlQueue).to(controlExchange)
-        .with("sig.status-request." + ROLE + "." + instanceId);
+        .with("sig.status-request." + Topology.SWARM_ID + ".swarm-controller." + instanceId);
+  }
+
+  @Bean
+  Binding bindStatusGlobalControllers(@Qualifier("controlQueue") Queue controlQueue,
+                                      @Qualifier("controlExchange") TopicExchange controlExchange) {
+    return BindingBuilder.bind(controlQueue).to(controlExchange)
+        .with("sig.status-request.ALL.swarm-controller.ALL");
   }
 
   @Bean
   Binding bindStatusFullEvents(@Qualifier("controlQueue") Queue controlQueue,
                                @Qualifier("controlExchange") TopicExchange controlExchange) {
-    return BindingBuilder.bind(controlQueue).to(controlExchange).with("ev.status-full.*.*");
+    return BindingBuilder.bind(controlQueue).to(controlExchange)
+        .with("ev.status-full." + Topology.SWARM_ID + ".#");
   }
 
   @Bean
   Binding bindStatusDeltaEvents(@Qualifier("controlQueue") Queue controlQueue,
                                 @Qualifier("controlExchange") TopicExchange controlExchange) {
-    return BindingBuilder.bind(controlQueue).to(controlExchange).with("ev.status-delta.*.*");
+    return BindingBuilder.bind(controlQueue).to(controlExchange)
+        .with("ev.status-delta." + Topology.SWARM_ID + ".#");
   }
 
   @Bean

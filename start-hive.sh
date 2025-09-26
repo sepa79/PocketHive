@@ -44,9 +44,6 @@ stage_header() {
 
 run_clean() {
   stage_header "Cleaning previous PocketHive stack"
-  echo "Stopping docker compose services..."
-  docker compose down --remove-orphans
-
   echo "Removing stray swarm containers (bees)..."
   mapfile -t bee_containers < <(docker ps -a --format '{{.ID}}\t{{.Names}}' | awk -F '\t' '$2 ~ /-bee-/')
   if [[ ${#bee_containers[@]} -eq 0 ]]; then
@@ -60,6 +57,9 @@ run_clean() {
       fi
     done
   fi
+
+  echo "Stopping docker compose services..."
+  docker compose down --remove-orphans
 }
 
 run_build_core() {

@@ -5,9 +5,9 @@ PocketHive is a portable transaction swarm: a set of small, composable services 
 
 ## Overall System Requirements
 - Provide a Docker Compose environment orchestrating RabbitMQ, UI, and services.
-- Components communicate via swarm-scoped `ph.<swarmId>.hive` exchanges and durable queues.
+- Components communicate via swarm-scoped workload exchanges with queues named `ph.work.<swarmId>.<queueName>`.
 - Services read a `PH_SWARM_ID` env (default `default`) to derive these names.
-- Control-plane messaging flows through the `ph.control` exchange using `sig.*` routing keys for commands and `ev.*` for status or metrics.
+- Control-plane messaging flows through the `ph.control` exchange using swarm-aware routing keys: `sig.<signal>.<swarm>.<role>.<instance>` for commands and `ev.<event>.<swarm>.<role>.<instance>` for confirmations, status, metrics, and alerts.
 - Each service exposes its presence and health through periodic `status-delta` events and responds to `status-request` signals.
 - The UI connects to RabbitMQ over same-origin Web-STOMP at `/ws`.
 - Services propagate an `x-ph-trace` header to carry trace IDs and hop timing between components.
@@ -25,7 +25,7 @@ PocketHive is a portable transaction swarm: a set of small, composable services 
 
 ### Generator Service
 - Produces HTTP-like transaction messages at a configurable rate per second.
-- Publishes generated messages to the `ph.<swarmId>.hive` exchange routed to the `ph.<swarmId>.gen` queue.
+- Publishes generated messages to the `ph.work.<swarmId>` exchange routed to the `ph.work.<swarmId>.generator` queue.
 - Processes control messages to enable/disable generation, adjust rate, issue single requests, and respond to `status-request`.
 - Control messages can also update request method, path, headers, and body at runtime.
 - Emits `status-delta` every 5 s and `status-full` on startup or when requested.

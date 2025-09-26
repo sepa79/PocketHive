@@ -15,7 +15,7 @@ public record ReadyConfirmation(
     String signal,
     ConfirmationScope scope,
     String result,
-    String state,
+    CommandState state,
     Map<String, Object> details
 ) implements Confirmation {
 
@@ -34,7 +34,7 @@ public record ReadyConfirmation(
                              String idempotencyKey,
                              String signal,
                              ConfirmationScope scope,
-                             String state) {
+                             CommandState state) {
         this(ts, correlationId, idempotencyKey, signal, scope, "success", state, null);
     }
 }

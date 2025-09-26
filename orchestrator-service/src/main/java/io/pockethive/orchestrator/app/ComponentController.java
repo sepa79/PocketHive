@@ -3,7 +3,10 @@ package io.pockethive.orchestrator.app;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.Topology;
+import io.pockethive.control.CommandTarget;
 import io.pockethive.control.ControlSignal;
+import io.pockethive.control.ConfirmationScope;
+import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.orchestrator.domain.IdempotencyStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -44,30 +47,33 @@ public class ComponentController {
                                                         @RequestBody ConfigUpdateRequest request) {
         String path = "/api/components/" + role + "/" + instance + "/config";
         logRestRequest("POST", path, request);
-        String scope = scope(role, instance, request.swarmId());
+        String swarmId = request.swarmId();
+        String scope = scope(role, instance, swarmId);
+        String swarmSegment = segmentOrAll(swarmId);
         ResponseEntity<ControlResponse> response = idempotency.findCorrelation(scope, "config-update", request.idempotencyKey())
             .map(correlation -> {
                 log.info("[CTRL] reuse config-update role={} instance={} correlation={} idempotencyKey={} scope={}",
                     role, instance, correlation, request.idempotencyKey(), scope);
-                return accepted(correlation, request.idempotencyKey(), role, instance);
+                return accepted(correlation, request.idempotencyKey(), swarmSegment, role, instance);
             })
             .orElseGet(() -> {
                 String correlation = UUID.randomUUID().toString();
-                ControlSignal payload = ControlSignal.forInstance("config-update", request.swarmId(), role, instance,
-                    correlation, request.idempotencyKey(), argsFrom(request));
+                ControlSignal payload = ControlSignal.forInstance("config-update", swarmId, role, instance,
+                    correlation, request.idempotencyKey(),
+                    commandTargetFrom(request), argsFrom(request));
                 String jsonPayload = toJson(payload);
-                sendControl(routingKey(role, instance), jsonPayload, "config-update");
+                sendControl(routingKey(swarmSegment, role, instance), jsonPayload, "config-update");
                 idempotency.record(scope, "config-update", request.idempotencyKey(), correlation);
                 log.info("[CTRL] issue config-update role={} instance={} correlation={} idempotencyKey={} scope={}",
                     role, instance, correlation, request.idempotencyKey(), scope);
-                return accepted(correlation, request.idempotencyKey(), role, instance);
+                return accepted(correlation, request.idempotencyKey(), swarmSegment, role, instance);
             });
         logRestResponse("POST", path, response);
         return response;
     }
 
-    private static String routingKey(String role, String instance) {
-        return "sig.config-update." + role + "." + instance;
+    private static String routingKey(String swarmId, String role, String instance) {
+        return ControlPlaneRouting.signal("config-update", swarmId, role, instance);
     }
 
     private static String scope(String role, String instance, String swarmId) {
@@ -77,14 +83,22 @@ public class ComponentController {
         return role + ":" + instance;
     }
 
-    private ResponseEntity<ControlResponse> accepted(String correlationId, String idempotencyKey,
-                                                      String role, String instance) {
+    private ResponseEntity<ControlResponse> accepted(String correlationId,
+                                                      String idempotencyKey,
+                                                      String swarmSegment,
+                                                      String role,
+                                                      String instance) {
+        ConfirmationScope scope = new ConfirmationScope(swarmSegment, role, instance);
         ControlResponse.Watch watch = new ControlResponse.Watch(
-            "ev.ready.config-update." + role + "." + instance,
-            "ev.error.config-update." + role + "." + instance
+            ControlPlaneRouting.event("ready.config-update", scope),
+            ControlPlaneRouting.event("error.config-update", scope)
         );
         ControlResponse response = new ControlResponse(correlationId, idempotencyKey, watch, CONFIG_UPDATE_TIMEOUT_MS);
         return ResponseEntity.accepted().body(response);
+    }
+
+    private static String segmentOrAll(String swarmId) {
+        return (swarmId == null || swarmId.isBlank()) ? "ALL" : swarmId;
     }
 
     private Map<String, Object> argsFrom(ConfigUpdateRequest request) {
@@ -93,21 +107,25 @@ public class ComponentController {
         if (patch != null && !patch.isEmpty()) {
             args.put("data", patch);
         }
-        if (request.target() != null && !request.target().isBlank()) {
-            args.put("target", request.target());
-        }
-        if (request.scope() != null && !request.scope().isBlank()) {
-            args.put("scope", request.scope());
-        }
         return args.isEmpty() ? null : args;
+    }
+
+    private CommandTarget commandTargetFrom(ConfigUpdateRequest request) {
+        return request.commandTarget();
     }
 
     public record ConfigUpdateRequest(String idempotencyKey,
                                       Map<String, Object> patch,
                                       String notes,
                                       String swarmId,
-                                      String target,
-                                      String scope) { }
+                                      CommandTarget commandTarget) {
+
+        public ConfigUpdateRequest {
+            if (commandTarget == null) {
+                commandTarget = CommandTarget.INSTANCE;
+            }
+        }
+    }
 
     private String toJson(ControlSignal signal) {
         try {
@@ -157,4 +175,3 @@ public class ComponentController {
         return trimmed;
     }
 }
-

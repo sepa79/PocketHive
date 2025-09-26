@@ -6,12 +6,13 @@
   <version>${revision}</version>
   <packaging>pom</packaging>
   <properties>
-    <revision>0.10.0</revision>
+    <revision>0.11.0</revision>
     <logstash.logback.version>8.1</logstash.logback.version>
   </properties>
   <modules>
     <module>observability</module>
     <module>common/topology-core</module>
+    <module>common/control-plane-core</module>
     <module>common/docker-client</module>
     <module>common/swarm-model</module>
     <module>generator-service</module>

@@ -1,6 +1,8 @@
 package io.pockethive.swarmcontroller;
 
 import io.pockethive.Topology;
+import io.pockethive.control.ConfirmationScope;
+import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.AmqpException;
@@ -28,7 +30,8 @@ public class ReadyEmitter {
 
     @EventListener(ApplicationReadyEvent.class)
     public void emit() {
-        String rk = "ev.ready.swarm-controller." + instanceId;
+        ConfirmationScope scope = ConfirmationScope.forInstance(Topology.SWARM_ID, "swarm-controller", instanceId);
+        String rk = ControlPlaneRouting.event("ready.swarm-controller", scope);
         log.info("[CTRL] SEND rk={} inst={} payload={}", rk, instanceId, "");
         try {
             rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, "");

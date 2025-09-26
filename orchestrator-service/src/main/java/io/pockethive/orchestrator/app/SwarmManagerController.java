@@ -3,7 +3,10 @@ package io.pockethive.orchestrator.app;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.Topology;
+import io.pockethive.control.CommandTarget;
 import io.pockethive.control.ControlSignal;
+import io.pockethive.control.ConfirmationScope;
+import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.orchestrator.domain.IdempotencyStore;
 import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmRegistry;
@@ -76,10 +79,11 @@ public class SwarmManagerController {
                 continue;
             }
             String swarmId = swarm.getId();
+            String swarmSegment = segmentOrAll(swarmId);
             String scope = swarmId;
             idempotency.findCorrelation(scope, "config-update", request.idempotencyKey())
-                .ifPresentOrElse(correlation -> dispatches.add(new Dispatch(swarmId, swarm.getInstanceId(),
-                        accepted(correlation, request.idempotencyKey(), swarm.getInstanceId()), true)),
+                .ifPresentOrElse(correlation -> dispatches.add(new Dispatch(swarmSegment, swarm.getInstanceId(),
+                        accepted(correlation, request.idempotencyKey(), swarmSegment, swarm.getInstanceId()), true)),
                     () -> {
                         String correlation = UUID.randomUUID().toString();
                         ControlSignal payload = ControlSignal.forInstance(
@@ -89,41 +93,43 @@ public class SwarmManagerController {
                             swarm.getInstanceId(),
                             correlation,
                             request.idempotencyKey(),
+                            request.commandTarget(),
                             argsFor(request));
-                        sendControl(routingKey(swarm.getInstanceId()), toJson(payload), request.target());
+                        sendControl(routingKey(swarmSegment, swarm.getInstanceId()), toJson(payload), request.commandTarget());
                         idempotency.record(scope, "config-update", request.idempotencyKey(), correlation);
-                        dispatches.add(new Dispatch(swarmId, swarm.getInstanceId(),
-                            accepted(correlation, request.idempotencyKey(), swarm.getInstanceId()), false));
+                        dispatches.add(new Dispatch(swarmSegment, swarm.getInstanceId(),
+                            accepted(correlation, request.idempotencyKey(), swarmSegment, swarm.getInstanceId()), false));
                     });
         }
         return new FanoutControlResponse(dispatches);
     }
 
-    private static String routingKey(String instanceId) {
-        return "sig.config-update.swarm-controller." + instanceId;
+    private static String routingKey(String swarmSegment, String instanceId) {
+        return ControlPlaneRouting.signal("config-update", swarmSegment, "swarm-controller", instanceId);
     }
 
     private Map<String, Object> argsFor(ToggleRequest request) {
         Map<String, Object> args = new LinkedHashMap<>();
-        args.put("target", request.target());
-        args.put("scope", request.target());
         Map<String, Object> data = new LinkedHashMap<>();
-        data.put("target", request.target());
         data.put("enabled", request.enabled());
         args.put("data", data);
         return args;
     }
 
-    private ControlResponse accepted(String correlationId, String idempotencyKey, String instanceId) {
+    private ControlResponse accepted(String correlationId,
+                                     String idempotencyKey,
+                                     String swarmSegment,
+                                     String instanceId) {
+        ConfirmationScope scope = new ConfirmationScope(swarmSegment, "swarm-controller", instanceId);
         ControlResponse.Watch watch = new ControlResponse.Watch(
-            "ev.ready.config-update.swarm-controller." + instanceId,
-            "ev.error.config-update.swarm-controller." + instanceId
+            ControlPlaneRouting.event("ready.config-update", scope),
+            ControlPlaneRouting.event("error.config-update", scope)
         );
         return new ControlResponse(correlationId, idempotencyKey, watch, CONFIG_UPDATE_TIMEOUT_MS);
     }
 
-    private void sendControl(String routingKey, String payload, String context) {
-        String label = (context == null || context.isBlank()) ? "SEND" : "SEND " + context;
+    private void sendControl(String routingKey, String payload, CommandTarget context) {
+        String label = context == null ? "SEND" : "SEND " + context.json();
         log.info("[CTRL] {} rk={} payload={}", label, routingKey, snippet(payload));
         rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, routingKey, payload);
     }
@@ -154,7 +160,7 @@ public class SwarmManagerController {
         }
         String text = value.toString();
         if (text.length() > 300) {
-            return text.substring(0, 300) + "…";
+            return text.substring(0, 300) + "...";
         }
         return text;
     }
@@ -165,15 +171,15 @@ public class SwarmManagerController {
         }
         String trimmed = payload.strip();
         if (trimmed.length() > 300) {
-            return trimmed.substring(0, 300) + "…";
+            return trimmed.substring(0, 300) + "...";
         }
         return trimmed;
     }
 
     public record ToggleRequest(String idempotencyKey,
                                  Boolean enabled,
-                                 String target,
-                                 String notes) {
+                                 String notes,
+                                 CommandTarget commandTarget) {
         public ToggleRequest {
             if (idempotencyKey == null || idempotencyKey.isBlank()) {
                 throw new IllegalArgumentException("idempotencyKey is required");
@@ -181,16 +187,20 @@ public class SwarmManagerController {
             if (enabled == null) {
                 throw new IllegalArgumentException("enabled flag is required");
             }
-            if (target == null || target.isBlank()) {
-                throw new IllegalArgumentException("target is required");
+            if (commandTarget == null) {
+                commandTarget = CommandTarget.SWARM;
             }
-            if (!"swarm".equals(target) && !"controller".equals(target)) {
-                throw new IllegalArgumentException("target must be swarm or controller");
+            if (commandTarget != CommandTarget.SWARM && commandTarget != CommandTarget.INSTANCE) {
+                throw new IllegalArgumentException("commandTarget must be swarm or instance");
             }
         }
     }
 
     public record FanoutControlResponse(List<Dispatch> dispatches) {}
 
-    public record Dispatch(String swarmId, String instanceId, ControlResponse response, boolean reused) {}
+    public record Dispatch(String swarm, String instanceId, ControlResponse response, boolean reused) {}
+
+    private static String segmentOrAll(String value) {
+        return (value == null || value.isBlank()) ? "ALL" : value;
+    }
 }

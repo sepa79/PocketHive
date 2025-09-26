@@ -239,7 +239,8 @@ class SwarmCreationMock1E2ETest {
         assertThat(confirmation.idempotencyKey()).isEqualTo(idempotencyKey);
         assertThat(confirmation.signal()).isEqualTo("swarm-create");
         assertThat(confirmation.scope().swarmId()).isEqualTo(swarmId);
-        assertThat(confirmation.state()).isEqualTo("Ready");
+        assertThat(confirmation.state()).isNotNull();
+        assertThat(confirmation.state().status()).isEqualTo("Ready");
 
         assertThat(swarmPlanRegistry.find(instanceId)).isEmpty();
 

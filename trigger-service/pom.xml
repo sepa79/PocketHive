@@ -50,6 +50,11 @@
       <version>${project.version}</version>
     </dependency>
     <dependency>
+      <groupId>io.pockethive</groupId>
+      <artifactId>control-plane-core</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
       <groupId>net.logstash.logback</groupId>
       <artifactId>logstash-logback-encoder</artifactId>
       <version>${logstash.logback.version}</version>

@@ -1,14 +1,23 @@
 package io.pockethive.swarmcontroller;
 
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.pockethive.control.CommandState;
+import io.pockethive.control.CommandTarget;
 import io.pockethive.control.ConfirmationScope;
 import io.pockethive.control.ErrorConfirmation;
 import io.pockethive.control.ReadyConfirmation;
 import io.pockethive.Topology;
 import io.pockethive.control.ControlSignal;
 import io.pockethive.observability.StatusEnvelopeBuilder;
+import io.pockethive.controlplane.ControlPlaneIdentity;
+import io.pockethive.controlplane.consumer.ControlSignalEnvelope;
+import io.pockethive.controlplane.manager.ManagerControlPlane;
+import io.pockethive.controlplane.messaging.AmqpControlPlanePublisher;
+import io.pockethive.controlplane.messaging.EventMessage;
+import io.pockethive.controlplane.messaging.SignalMessage;
+import io.pockethive.controlplane.routing.ControlPlaneRouting;
+import io.pockethive.controlplane.routing.ControlPlaneRouting.RoutingKey;
 import io.pockethive.swarmcontroller.SwarmMetrics;
 import io.pockethive.swarmcontroller.SwarmStatus;
 import org.slf4j.Logger;
@@ -25,10 +34,10 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
-import java.util.Collections;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
-import java.util.regex.Pattern;
 
 @Component
 @EnableScheduling
@@ -39,34 +48,26 @@ public class SwarmSignalListener {
   private final RabbitTemplate rabbit;
   private final String instanceId;
   private final ObjectMapper mapper;
-  private final Map<CacheKey, CachedOutcome> outcomes;
+  private final ManagerControlPlane controlPlane;
   private static final long STATUS_INTERVAL_MS = 5000L;
   private static final long MAX_STALENESS_MS = 15_000L;
-  private volatile boolean controllerEnabled = true;
+  private volatile boolean controllerEnabled = false;
 
   @Autowired
   public SwarmSignalListener(SwarmLifecycle lifecycle,
                              RabbitTemplate rabbit,
                              @Qualifier("instanceId") String instanceId,
                              ObjectMapper mapper) {
-    this(lifecycle, rabbit, instanceId, mapper, 100);
-  }
-
-  SwarmSignalListener(SwarmLifecycle lifecycle,
-                      RabbitTemplate rabbit,
-                      String instanceId,
-                      ObjectMapper mapper,
-                      int cacheSize) {
     this.lifecycle = lifecycle;
     this.rabbit = rabbit;
     this.instanceId = instanceId;
     this.mapper = mapper.findAndRegisterModules();
-    this.outcomes = Collections.synchronizedMap(new LinkedHashMap<>(16, 0.75f, true) {
-      @Override
-      protected boolean removeEldestEntry(Map.Entry<CacheKey, CachedOutcome> eldest) {
-        return size() > cacheSize;
-      }
-    });
+    this.controlPlane = ManagerControlPlane.builder(
+        new AmqpControlPlanePublisher(rabbit, Topology.CONTROL_EXCHANGE),
+        this.mapper)
+        .identity(new ControlPlaneIdentity(Topology.SWARM_ID, ROLE, instanceId))
+        .duplicateCache(java.time.Duration.ofMinutes(1), 256)
+        .build();
     try {
       sendStatusFull();
     } catch (Exception e) {
@@ -87,207 +88,242 @@ public class SwarmSignalListener {
       log.info("[CTRL] RECV rk={} inst={} payload={}", routingKey, instanceId, snippet);
     }
     try {
-      if (routingKey.startsWith("sig.swarm-template.")) {
-        String swarmId = routingKey.substring("sig.swarm-template.".length());
-        if (Topology.SWARM_ID.equals(swarmId)) {
-          processSwarmSignal(body, swarmId, node -> lifecycle.prepare(node.path("args").toString()), "template");
+      if (routingKey.startsWith("sig.")) {
+        RoutingKey key = ControlPlaneRouting.parseSignal(routingKey);
+        if (!shouldAcceptSignal(key)) {
+          log.debug("Ignoring control signal on routing key {}", routingKey);
+          return;
         }
-      } else if (routingKey.startsWith("sig.swarm-start.")) {
-        String swarmId = routingKey.substring("sig.swarm-start.".length());
-        if (Topology.SWARM_ID.equals(swarmId)) {
-          processSwarmSignal(body, swarmId, node -> {
-            lifecycle.start(node.path("args").toString());
-            sendStatusFull();
-          }, "start");
+        boolean processed = controlPlane.consume(body, routingKey, envelope -> handleSignal(envelope, body));
+        if (!processed) {
+          log.debug("Ignoring control signal on routing key {}", routingKey);
         }
-      } else if (routingKey.startsWith("sig.swarm-stop.")) {
-        String swarmId = routingKey.substring("sig.swarm-stop.".length());
-        if (Topology.SWARM_ID.equals(swarmId)) {
-          processSwarmSignal(body, swarmId, node -> lifecycle.stop(), "stop");
-        }
-      } else if (routingKey.startsWith("sig.swarm-remove.")) {
-        String swarmId = routingKey.substring("sig.swarm-remove.".length());
-        if (Topology.SWARM_ID.equals(swarmId)) {
-          processSwarmSignal(body, swarmId, node -> lifecycle.remove(), "remove");
-        }
-      } else if (routingKey.startsWith("sig.status-request")) {
-        log.debug("Status request received: {}", routingKey);
-        sendStatusFull();
-      } else if (routingKey.startsWith("sig.config-update")) {
-        processConfigUpdate(body);
-      } else if (routingKey.startsWith("ev.status-full.") || routingKey.startsWith("ev.status-delta.")) {
-        String rest = routingKey.startsWith("ev.status-full.")
-            ? routingKey.substring("ev.status-full.".length())
-            : routingKey.substring("ev.status-delta.".length());
-        String[] parts = rest.split(Pattern.quote("."), 2);
-        if (parts.length == 2) {
-          try {
-            JsonNode node = mapper.readTree(body);
-            String swarmId = node.path("swarmId").asText(null);
-            if (swarmId != null && !swarmId.isBlank() && !Topology.SWARM_ID.equals(swarmId)) {
-              log.debug("Ignoring status for swarm {} on routing key {}", swarmId, routingKey);
-              return;
-            }
-            // We purposely count the controller's own status messages here. Keeping our heartbeat in the
-            // lifecycle cache ensures the aggregate metrics still show a "degraded" swarm instead of
-            // falling back to "unknown" when other roles go quiet.
-            lifecycle.updateHeartbeat(parts[0], parts[1]);
-            boolean enabled = node.path("data").path("enabled").asBoolean(true);
-            lifecycle.updateEnabled(parts[0], parts[1], enabled);
-            if (!enabled) {
-              lifecycle.markReady(parts[0], parts[1]);
-            }
-          } catch (Exception e) {
-            log.warn("status parse", e);
-          }
-        }
+        return;
+      } else if (routingKey.startsWith("ev.status-")) {
+        handleStatusEvent(routingKey, body);
       }
     } finally {
       MDC.clear();
     }
   }
 
-  private void processSwarmSignal(String body, String swarmId, SignalAction action, String label) {
-    JsonNode node;
-    ControlSignal cs;
+  private void handleStatusEvent(String routingKey, String body) {
+    RoutingKey eventKey = ControlPlaneRouting.parseEvent(routingKey);
+    if (eventKey == null) {
+      return;
+    }
+    if (!isLocalSwarm(eventKey.swarmId())) {
+      log.debug("Ignoring status for swarm {} on routing key {}", eventKey.swarmId(), routingKey);
+      return;
+    }
+    String role = eventKey.role();
+    String instance = eventKey.instance();
+    if (role == null || instance == null) {
+      return;
+    }
     try {
-      node = mapper.readTree(body);
-      cs = parseControlSignal(node);
-      MDC.put("correlation_id", cs.correlationId());
-      MDC.put("idempotency_key", cs.idempotencyKey());
+      JsonNode node = mapper.readTree(body);
+      String payloadSwarm = node.path("swarmId").asText(null);
+      if (payloadSwarm != null && !payloadSwarm.isBlank() && !Topology.SWARM_ID.equals(payloadSwarm)) {
+        log.debug("Ignoring status payload for swarm {} on routing key {}", payloadSwarm, routingKey);
+        return;
+      }
+      lifecycle.updateHeartbeat(role, instance);
+      boolean enabled = node.path("data").path("enabled").asBoolean(true);
+      lifecycle.updateEnabled(role, instance, enabled);
+      if (!enabled) {
+        lifecycle.markReady(role, instance);
+      }
     } catch (Exception e) {
-      log.warn(label + " parse", e);
-      return;
+      log.warn("status parse", e);
     }
-    CacheKey key = cacheKey(cs);
-    CachedOutcome cached = outcomes.get(key);
-    if (cached != null) {
-      sendControl(cached.routingKey(), cached.payload(), "cached");
-      emitDuplicate(cs, cached, swarmId);
-      return;
-    }
+  }
+
+  private void processSwarmSignal(ControlSignal cs, String swarmId, SignalAction action, String label) {
+    MDC.put("correlation_id", cs.correlationId());
+    MDC.put("idempotency_key", cs.idempotencyKey());
     try {
       log.info("{} signal for swarm {}", label.substring(0, 1).toUpperCase() + label.substring(1), swarmId);
-      action.apply(node);
-      CachedOutcome outcome = emitSuccess(cs, swarmId);
-      if (outcome != null) outcomes.put(key, outcome);
+      action.apply(serializeArgs(cs));
+      emitSuccess(cs, swarmId);
     } catch (Exception e) {
       log.warn(label, e);
-      CachedOutcome outcome = emitError(cs, e, swarmId);
-      if (outcome != null) outcomes.put(key, outcome);
+      emitError(cs, e, swarmId);
     }
   }
 
-  private void processConfigUpdate(String body) {
-    JsonNode node;
-    ControlSignal cs;
-    try {
-      node = mapper.readTree(body);
-      cs = parseControlSignal(node);
-      MDC.put("correlation_id", cs.correlationId());
-      MDC.put("idempotency_key", cs.idempotencyKey());
-    } catch (Exception e) {
-      log.warn("config parse", e);
+  private void processConfigUpdate(ControlSignalEnvelope envelope, String rawPayload) {
+    ControlSignal cs = envelope.signal();
+    MDC.put("correlation_id", cs.correlationId());
+    MDC.put("idempotency_key", cs.idempotencyKey());
+
+    CommandTarget commandTarget = effectiveCommandTarget(cs);
+    RoutingKey key = ControlPlaneRouting.parseSignal(envelope.routingKey());
+    if (!shouldProcessConfigUpdate(key, commandTarget, cs)) {
+      log.debug("Ignoring config-update on routing key {}", envelope.routingKey());
       return;
     }
-    CacheKey key = cacheKey(cs);
-    CachedOutcome cached = outcomes.get(key);
-    if (cached != null) {
-      sendControl(cached.routingKey(), cached.payload(), "cached");
-      emitDuplicate(cs, cached, null);
-      return;
+
+    JsonNode node = mapper.createObjectNode();
+    if (cs.args() != null) {
+      node = mapper.valueToTree(cs.args());
     }
+
     try {
-      JsonNode dataNode = node.path("args").path("data");
-      boolean enabled = dataNode.path("enabled").asBoolean(true);
-      String target = dataNode.path("target").asText("controller");
-      if ("swarm".equalsIgnoreCase(target)) {
-        lifecycle.setSwarmEnabled(enabled);
-        sendStatusDelta();
-      } else if ("controller".equalsIgnoreCase(target)) {
-        controllerEnabled = enabled;
-        sendStatusDelta();
-      } else {
-        log.warn("Unknown config-update target: {}", target);
+      JsonNode dataNode = node.path("data");
+      Boolean enabledFlag = dataNode.has("enabled") ? dataNode.path("enabled").asBoolean() : null;
+
+      Boolean stateEnabled = null;
+      Map<String, Object> details = new LinkedHashMap<>();
+
+      List<Runnable> fanouts = new ArrayList<>();
+
+      switch (commandTarget) {
+        case SWARM -> {
+          if (enabledFlag != null && appliesToLocalSwarm(cs)) {
+            lifecycle.setSwarmEnabled(enabledFlag);
+            sendStatusDelta();
+            stateEnabled = enabledFlag;
+            details.put("workloads", Map.of("enabled", enabledFlag));
+          } else {
+            fanouts.add(() -> forwardToAll(cs, rawPayload));
+          }
+        }
+        case INSTANCE -> {
+          if (isControllerCommand(cs)) {
+            if (enabledFlag != null) {
+              controllerEnabled = enabledFlag;
+              sendStatusDelta();
+              stateEnabled = enabledFlag;
+              details.put("controller", Map.of("enabled", enabledFlag));
+            }
+          } else {
+            TargetSpec spec = resolveInstanceTarget(cs);
+            if (spec == null) {
+              throw new IllegalArgumentException("commandTarget=instance requires role and instance fields");
+            }
+            fanouts.add(() -> forwardToInstance(cs, rawPayload, spec));
+          }
+        }
+        case ROLE -> {
+          String roleTarget = resolveRoleTarget(cs);
+          if (roleTarget == null) {
+            throw new IllegalArgumentException("commandTarget=role requires a role field");
+          }
+          fanouts.add(() -> forwardToRole(cs, rawPayload, roleTarget));
+        }
+        case ALL -> fanouts.add(() -> forwardToAll(cs, rawPayload));
       }
-      CachedOutcome outcome = emitSuccess(cs, null);
-      if (outcome != null) outcomes.put(key, outcome);
+
+      CommandState state = configCommandState(cs, stateEnabled, details);
+      fanouts.forEach(Runnable::run);
+      emitSuccess(cs, null, state);
     } catch (Exception e) {
       log.warn("config update", e);
-      CachedOutcome outcome = emitError(cs, e, null);
-      if (outcome != null) outcomes.put(key, outcome);
+      emitError(cs, e, null);
     }
   }
 
-  private CacheKey cacheKey(ControlSignal cs) {
-    String swarmId = cs.swarmId() != null ? cs.swarmId() : Topology.SWARM_ID;
-    return new CacheKey(swarmId, cs.signal(), cs.role(), cs.instance(), cs.idempotencyKey());
+  private void handleSignal(ControlSignalEnvelope envelope, String rawPayload) {
+    ControlSignal cs = envelope.signal();
+    if (cs == null) {
+      return;
+    }
+    String signal = resolveSignal(envelope);
+    switch (signal) {
+      case "swarm-template" -> {
+        if (isForLocalSwarm(cs)) {
+          processSwarmSignal(cs, swarmIdOrDefault(cs), args -> lifecycle.prepare(args), "template");
+        }
+      }
+      case "swarm-start" -> {
+        if (isForLocalSwarm(cs)) {
+          processSwarmSignal(cs, swarmIdOrDefault(cs), args -> {
+            lifecycle.start(args);
+            sendStatusFull();
+          }, "start");
+        }
+      }
+      case "swarm-stop" -> {
+        if (isForLocalSwarm(cs)) {
+          processSwarmSignal(cs, swarmIdOrDefault(cs), args -> lifecycle.stop(), "stop");
+        }
+      }
+      case "swarm-remove" -> {
+        if (isForLocalSwarm(cs)) {
+          processSwarmSignal(cs, swarmIdOrDefault(cs), args -> lifecycle.remove(), "remove");
+        }
+      }
+      case "status-request" -> {
+        log.debug("Status request received: {}", envelope.routingKey());
+        sendStatusFull();
+      }
+      case "config-update" -> processConfigUpdate(envelope, rawPayload);
+      default -> {
+        // ignore other signals
+      }
+    }
+  }
+
+  private boolean shouldAcceptSignal(RoutingKey key) {
+    if (key == null) {
+      return false;
+    }
+    if (!isLocalSwarm(key.swarmId())) {
+      return false;
+    }
+    if (!ROLE.equalsIgnoreCase(defaultSegment(key.role(), ROLE))) {
+      return false;
+    }
+    String instanceSegment = key.instance();
+    if (isAllSegment(instanceSegment)) {
+      return true;
+    }
+    return instanceId.equalsIgnoreCase(instanceSegment);
+  }
+
+  private boolean shouldProcessConfigUpdate(RoutingKey key, CommandTarget commandTarget, ControlSignal cs) {
+    if (key == null) {
+      return false;
+    }
+    if (!isLocalSwarm(key.swarmId())) {
+      return false;
+    }
+    if (!ROLE.equalsIgnoreCase(defaultSegment(key.role(), ROLE))) {
+      return false;
+    }
+    String targetInstance = key.instance();
+    if (isAllSegment(targetInstance)) {
+      return commandTarget == CommandTarget.SWARM || commandTarget == CommandTarget.ALL;
+    }
+    if (instanceId.equalsIgnoreCase(targetInstance)) {
+      return true;
+    }
+    return false;
   }
 
   @FunctionalInterface
   private interface SignalAction {
-    void apply(JsonNode node) throws Exception;
+    void apply(String argsJson) throws Exception;
   }
-
-  private record CacheKey(String swarmId, String signal, String role, String instance, String idempotencyKey) {}
-
-  private record CachedOutcome(String routingKey, String payload, String correlationId) {}
-
-  private record DuplicateNotice(Instant ts,
-                                 String correlationId,
-                                 String originalCorrelationId,
-                                 String idempotencyKey,
-                                 String signal,
-                                 ConfirmationScope scope) {}
 
   @Scheduled(fixedRate = STATUS_INTERVAL_MS)
   public void status() {
     sendStatusDelta();
   }
 
-  private ControlSignal parseControlSignal(JsonNode node) {
-    String signal = node.path("signal").asText(null);
-    String correlationId = node.path("correlationId").asText(null);
-    String idempotencyKey = node.path("idempotencyKey").asText(null);
-    String swarmId = node.path("swarmId").asText(null);
-    String role = node.path("role").asText(null);
-    String instance = node.path("instance").asText(null);
-
-    JsonNode scope = node.path("scope");
-    if (scope.isObject()) {
-      if (swarmId == null && scope.hasNonNull("swarmId")) {
-        swarmId = scope.path("swarmId").asText();
-      }
-      if (role == null && scope.hasNonNull("role")) {
-        role = scope.path("role").asText();
-      }
-      if (instance == null && scope.hasNonNull("instance")) {
-        instance = scope.path("instance").asText();
-      }
-    }
-
-    Map<String, Object> args = null;
-    JsonNode argsNode = node.get("args");
-    if (argsNode != null && argsNode.isObject()) {
-      args = mapper.convertValue(argsNode, new TypeReference<Map<String, Object>>() {});
-    }
-
-    return new ControlSignal(signal, correlationId, idempotencyKey, swarmId, role, instance, args);
+  private void emitSuccess(ControlSignal cs, String swarmIdFallback) {
+    emitSuccess(cs, swarmIdFallback, null);
   }
 
-  private CachedOutcome emitSuccess(ControlSignal cs, String swarmIdFallback) {
-    String rk;
-    if (cs.signal().startsWith("swarm-")) {
-      String swarmId = cs.swarmId();
-      if (swarmId == null) swarmId = swarmIdFallback;
-      rk = "ev.ready." + cs.signal() + "." + swarmId;
-    } else if ("config-update".equals(cs.signal()) && cs.role() != null && cs.instance() != null) {
-      rk = "ev.ready.config-update." + cs.role() + "." + cs.instance();
-    } else {
-      return null;
-    }
+  private void emitSuccess(ControlSignal cs, String swarmIdFallback, CommandState overrideState) {
     ConfirmationScope scope = scopeFor(cs, swarmIdFallback);
-    String state = stateForSuccess(cs);
+    CommandState baseState = overrideState != null ? overrideState : stateForSuccess(cs);
+    CommandState state = enrichState(cs, baseState);
+    String type = successEventType(cs.signal());
+    if (type == null) {
+      return;
+    }
     ReadyConfirmation confirmation = new ReadyConfirmation(
         Instant.now(),
         cs.correlationId(),
@@ -297,21 +333,13 @@ public class SwarmSignalListener {
         state
     );
     String json = toJson(confirmation);
-    sendControl(rk, json, "ev.ready");
-    return new CachedOutcome(rk, json, cs.correlationId());
+    sendControl(ControlPlaneRouting.event(type, scope), json, "ev.ready");
   }
 
-  private CachedOutcome emitError(ControlSignal cs, Exception e, String swarmIdFallback) {
-    String rk = "ev.error." + cs.signal();
-    if (cs.swarmId() != null) {
-      rk += "." + cs.swarmId();
-    } else if (swarmIdFallback != null) {
-      rk += "." + swarmIdFallback;
-    } else if (cs.role() != null && cs.instance() != null) {
-      rk += "." + cs.role() + "." + cs.instance();
-    }
+  private void emitError(ControlSignal cs, Exception e, String swarmIdFallback) {
     ConfirmationScope scope = scopeFor(cs, swarmIdFallback);
-    String state = stateForError(cs);
+    CommandState state = enrichState(cs, stateForError(cs));
+    String type = errorEventType(cs.signal());
     ErrorConfirmation confirmation = new ErrorConfirmation(
         Instant.now(),
         cs.correlationId(),
@@ -326,48 +354,19 @@ public class SwarmSignalListener {
         null
     );
     String json = toJson(confirmation);
-    sendControl(rk, json, "ev.error");
-    return new CachedOutcome(rk, json, cs.correlationId());
-  }
-
-  private void emitDuplicate(ControlSignal cs, CachedOutcome cached, String swarmIdFallback) {
-    ConfirmationScope scope = scopeFor(cs, swarmIdFallback);
-    DuplicateNotice notice = new DuplicateNotice(
-        Instant.now(),
-        cs.correlationId(),
-        cached.correlationId(),
-        cs.idempotencyKey(),
-        cs.signal(),
-        scope
-    );
-    String rk = "ev.duplicate." + cs.signal();
-    String json = toJson(notice);
-    sendControl(rk, json, "duplicate");
+    sendControl(ControlPlaneRouting.event(type, scope), json, "ev.error");
   }
 
   private ConfirmationScope scopeFor(ControlSignal cs, String swarmIdFallback) {
-    String swarmId = cs.swarmId();
-    if (swarmId == null) {
-      swarmId = swarmIdFallback;
-    }
-    if (swarmId == null || swarmId.isBlank()) {
-      swarmId = Topology.SWARM_ID;
-    }
-    String role = cs.role();
-    String instance = cs.instance();
-    if ("config-update".equals(cs.signal())) {
-      if (role == null || role.isBlank()) {
-        role = ROLE;
-      }
-      if (instance == null || instance.isBlank()) {
-        instance = this.instanceId;
-      }
-    }
+    String swarmId = defaultSegment(cs.swarmId(), swarmIdFallback);
+    swarmId = defaultSegment(swarmId, Topology.SWARM_ID);
+    String role = defaultSegment(cs.role(), ROLE);
+    String instance = defaultSegment(cs.instance(), instanceId);
     return new ConfirmationScope(swarmId, role, instance);
   }
 
-  private String stateForSuccess(ControlSignal cs) {
-    return switch (cs.signal()) {
+  private CommandState stateForSuccess(ControlSignal cs) {
+    String status = switch (cs.signal()) {
       case "swarm-template" -> "Ready";
       case "swarm-start" -> "Running";
       case "swarm-stop" -> "Stopped";
@@ -375,18 +374,184 @@ public class SwarmSignalListener {
       case "config-update" -> stateFromLifecycle();
       default -> stateFromLifecycle();
     };
+    return new CommandState(status, null, null);
   }
 
-  private String stateForError(ControlSignal cs) {
+  private String successEventType(String signal) {
+    if (signal == null || signal.isBlank()) {
+      return null;
+    }
+    if (signal.startsWith("swarm-")) {
+      return "ready." + signal;
+    }
+    if ("config-update".equals(signal)) {
+      return "ready.config-update";
+    }
+    return "ready." + signal;
+  }
+
+  private String errorEventType(String signal) {
+    if (signal == null || signal.isBlank()) {
+      return "error";
+    }
+    if (signal.startsWith("swarm-")) {
+      return "error." + signal;
+    }
+    if ("config-update".equals(signal)) {
+      return "error.config-update";
+    }
+    return "error." + signal;
+  }
+
+  private CommandState configCommandState(ControlSignal cs,
+                                          Boolean enabled,
+                                          Map<String, Object> details) {
+    CommandState base = stateForSuccess(cs);
+    Map<String, Object> detailCopy = (details == null || details.isEmpty()) ? null : new LinkedHashMap<>(details);
+    return new CommandState(base != null ? base.status() : null, enabled, detailCopy);
+  }
+
+  private CommandState enrichState(ControlSignal cs, CommandState baseState) {
+    CommandTarget commandTarget = effectiveCommandTarget(cs);
+    String status = baseState != null ? baseState.status() : null;
+    Boolean enabled = baseState != null ? baseState.enabled() : null;
+    Map<String, Object> details = baseState != null ? baseState.details() : null;
+    Map<String, Object> mirroredDetails = mirrorEnablement(details, enabled, commandTarget, cs);
+    return new CommandState(status, enabled, mirroredDetails);
+  }
+
+  private Map<String, Object> mirrorEnablement(Map<String, Object> details,
+                                               Boolean enabled,
+                                               CommandTarget commandTarget,
+                                               ControlSignal cs) {
+    if (enabled == null) {
+      return details;
+    }
+    if (details != null) {
+      if ((commandTarget == CommandTarget.INSTANCE && details.containsKey("controller"))
+          || ((commandTarget == CommandTarget.SWARM || commandTarget == CommandTarget.ALL)
+          && details.containsKey("workloads"))) {
+        return details;
+      }
+    }
+    Map<String, Object> copy = details == null ? new LinkedHashMap<>() : new LinkedHashMap<>(details);
+    if (commandTarget == CommandTarget.INSTANCE && isControllerCommand(cs)) {
+      if (!copy.containsKey("controller")) {
+        copy.put("controller", Map.of("enabled", enabled));
+      }
+    } else if (commandTarget == CommandTarget.SWARM || commandTarget == CommandTarget.ALL) {
+      if (!copy.containsKey("workloads")) {
+        copy.put("workloads", Map.of("enabled", enabled));
+      }
+    }
+    return copy.isEmpty() ? null : copy;
+  }
+
+  private void forwardToAll(ControlSignal cs, String payload) {
+    String swarm = defaultSegment(cs.swarmId(), Topology.SWARM_ID);
+    sendControl(ControlPlaneRouting.signal("config-update", swarm, "ALL", "ALL"), payload, "forward");
+  }
+
+  private void forwardToRole(ControlSignal cs, String payload, String role) {
+    String swarm = defaultSegment(cs.swarmId(), Topology.SWARM_ID);
+    sendControl(ControlPlaneRouting.signal("config-update", swarm, role, "ALL"), payload, "forward");
+  }
+
+  private void forwardToInstance(ControlSignal cs, String payload, TargetSpec spec) {
+    String swarm = defaultSegment(cs.swarmId(), Topology.SWARM_ID);
+    sendControl(ControlPlaneRouting.signal("config-update", swarm, spec.role(), spec.instance()), payload, "forward");
+  }
+
+  private CommandTarget effectiveCommandTarget(ControlSignal cs) {
+    CommandTarget commandTarget = cs.commandTarget();
+    if (commandTarget != null) {
+      return commandTarget;
+    }
+    return CommandTarget.infer(cs.swarmId(), cs.role(), cs.instance(), cs.args());
+  }
+
+  private boolean isForLocalSwarm(ControlSignal cs) {
+    return appliesToLocalSwarm(cs);
+  }
+
+  private String swarmIdOrDefault(ControlSignal cs) {
+    String swarmId = cs.swarmId();
+    if (swarmId == null || swarmId.isBlank()) {
+      return Topology.SWARM_ID;
+    }
+    return swarmId;
+  }
+
+  private String serializeArgs(ControlSignal cs) {
+    Map<String, Object> args = cs.args();
+    if (args == null || args.isEmpty()) {
+      return "{}";
+    }
+    try {
+      return mapper.writeValueAsString(args);
+    } catch (Exception ex) {
+      throw new IllegalStateException("Unable to serialize control signal args", ex);
+    }
+  }
+
+  private boolean appliesToLocalSwarm(ControlSignal cs) {
+    String targetSwarm = cs.swarmId();
+    if (targetSwarm == null || targetSwarm.isBlank()) {
+      return true;
+    }
+    return Topology.SWARM_ID.equalsIgnoreCase(targetSwarm);
+  }
+
+  private String resolveSignal(ControlSignalEnvelope envelope) {
+    ControlSignal signal = envelope.signal();
+    if (signal != null && signal.signal() != null && !signal.signal().isBlank()) {
+      return signal.signal();
+    }
+    RoutingKey key = ControlPlaneRouting.parseSignal(envelope.routingKey());
+    return key != null ? defaultSegment(key.type(), null) : null;
+  }
+
+  private boolean isControllerCommand(ControlSignal cs) {
+    String role = cs.role();
+    if (role == null || role.isBlank()) {
+      return false;
+    }
+    if (!ROLE.equalsIgnoreCase(role)) {
+      return false;
+    }
+    String targetInstance = cs.instance();
+    return targetInstance == null || targetInstance.isBlank() || instanceId.equals(targetInstance);
+  }
+
+  private TargetSpec resolveInstanceTarget(ControlSignal cs) {
+    String role = cs.role();
+    String instance = cs.instance();
+    if (role == null || role.isBlank() || instance == null || instance.isBlank()) {
+      return null;
+    }
+    return new TargetSpec(role, instance);
+  }
+
+  private String resolveRoleTarget(ControlSignal cs) {
+    String role = cs.role();
+    if (role == null || role.isBlank()) {
+      return null;
+    }
+    return role;
+  }
+
+  private record TargetSpec(String role, String instance) {}
+
+  private CommandState stateForError(ControlSignal cs) {
     String state = stateFromLifecycle();
     if (state != null) {
-      return state;
+      return new CommandState(state, null, null);
     }
     return switch (cs.signal()) {
-      case "swarm-start" -> "Stopped";
-      case "swarm-stop" -> "Running";
-      case "swarm-remove" -> "Stopped";
-      case "swarm-template" -> "Stopped";
+      case "swarm-start" -> new CommandState("Stopped", null, null);
+      case "swarm-stop" -> new CommandState("Running", null, null);
+      case "swarm-remove" -> new CommandState("Stopped", null, null);
+      case "swarm-template" -> new CommandState("Stopped", null, null);
       default -> null;
     };
   }
@@ -429,7 +594,8 @@ public class SwarmSignalListener {
     SwarmStatus status = lifecycle.getStatus();
     boolean workloadsEnabled = workloadsEnabled(status);
     String controlQueue = Topology.CONTROL_QUEUE + "." + ROLE + "." + instanceId;
-    String rk = "ev.status-full." + ROLE + "." + instanceId;
+    ConfirmationScope scope = ConfirmationScope.forInstance(Topology.SWARM_ID, ROLE, instanceId);
+    String rk = ControlPlaneRouting.event("status-full", scope);
     String payload = new StatusEnvelopeBuilder()
         .kind("status-full")
         .role(ROLE)
@@ -444,17 +610,7 @@ public class SwarmSignalListener {
         .data("controllerEnabled", controllerEnabled)
         .data("workloadsEnabled", workloadsEnabled)
         .controlIn(controlQueue)
-        .controlRoutes(
-            "sig.config-update",
-            "sig.config-update." + ROLE,
-            "sig.config-update." + ROLE + "." + instanceId,
-            "sig.status-request",
-            "sig.status-request." + ROLE,
-            "sig.status-request." + ROLE + "." + instanceId,
-            "sig.swarm-template." + Topology.SWARM_ID,
-            "sig.swarm-start." + Topology.SWARM_ID,
-            "sig.swarm-stop." + Topology.SWARM_ID,
-            "sig.swarm-remove." + Topology.SWARM_ID)
+        .controlRoutes(controllerControlRoutes())
         .controlOut(rk)
         .toJson();
     sendControl(rk, payload, "status");
@@ -466,7 +622,8 @@ public class SwarmSignalListener {
     SwarmStatus status = lifecycle.getStatus();
     boolean workloadsEnabled = workloadsEnabled(status);
     String controlQueue = Topology.CONTROL_QUEUE + "." + ROLE + "." + instanceId;
-    String rk = "ev.status-delta." + ROLE + "." + instanceId;
+    ConfirmationScope scope = ConfirmationScope.forInstance(Topology.SWARM_ID, ROLE, instanceId);
+    String rk = ControlPlaneRouting.event("status-delta", scope);
     String payload = new StatusEnvelopeBuilder()
         .kind("status-delta")
         .role(ROLE)
@@ -481,17 +638,7 @@ public class SwarmSignalListener {
         .data("controllerEnabled", controllerEnabled)
         .data("workloadsEnabled", workloadsEnabled)
         .controlIn(controlQueue)
-        .controlRoutes(
-            "sig.config-update",
-            "sig.config-update." + ROLE,
-            "sig.config-update." + ROLE + "." + instanceId,
-            "sig.status-request",
-            "sig.status-request." + ROLE,
-            "sig.status-request." + ROLE + "." + instanceId,
-            "sig.swarm-template." + Topology.SWARM_ID,
-            "sig.swarm-start." + Topology.SWARM_ID,
-            "sig.swarm-stop." + Topology.SWARM_ID,
-            "sig.swarm-remove." + Topology.SWARM_ID)
+        .controlRoutes(controllerControlRoutes())
         .controlOut(rk)
         .toJson();
     sendControl(rk, payload, "status");
@@ -511,6 +658,23 @@ public class SwarmSignalListener {
     return status == SwarmStatus.RUNNING || status == SwarmStatus.STARTING;
   }
 
+  private String[] controllerControlRoutes() {
+    String swarm = Topology.SWARM_ID;
+    return new String[] {
+        ControlPlaneRouting.signal("config-update", "ALL", ROLE, "ALL"),
+        ControlPlaneRouting.signal("config-update", swarm, ROLE, "ALL"),
+        ControlPlaneRouting.signal("config-update", swarm, ROLE, instanceId),
+        ControlPlaneRouting.signal("config-update", swarm, "ALL", "ALL"),
+        ControlPlaneRouting.signal("status-request", "ALL", ROLE, "ALL"),
+        ControlPlaneRouting.signal("status-request", swarm, ROLE, "ALL"),
+        ControlPlaneRouting.signal("status-request", swarm, ROLE, instanceId),
+        ControlPlaneRouting.signal("swarm-template", swarm, ROLE, "ALL"),
+        ControlPlaneRouting.signal("swarm-start", swarm, ROLE, "ALL"),
+        ControlPlaneRouting.signal("swarm-stop", swarm, ROLE, "ALL"),
+        ControlPlaneRouting.signal("swarm-remove", swarm, ROLE, "ALL")
+    };
+  }
+
   private void sendControl(String routingKey, String payload, String context) {
     String label = (context == null || context.isBlank()) ? "SEND" : "SEND " + context;
     boolean statusLog = "status".equals(context) || (routingKey != null && routingKey.contains(".status-"));
@@ -520,7 +684,11 @@ public class SwarmSignalListener {
     } else {
       log.info("[CTRL] {} rk={} inst={} payload={}", label, routingKey, instanceId, snippet);
     }
-    rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, routingKey, payload);
+    if (routingKey != null && routingKey.startsWith("sig.")) {
+      controlPlane.publishSignal(new SignalMessage(routingKey, payload));
+    } else {
+      controlPlane.publishEvent(new EventMessage(routingKey, payload));
+    }
   }
 
   private void sendControl(String routingKey, String payload) {
@@ -536,5 +704,23 @@ public class SwarmSignalListener {
       return trimmed.substring(0, 300) + "…";
     }
     return trimmed;
+  }
+
+  private String defaultSegment(String value, String fallback) {
+    if (value == null || value.isBlank()) {
+      return fallback;
+    }
+    return value.trim();
+  }
+
+  private boolean isAllSegment(String value) {
+    return value != null && value.equalsIgnoreCase("ALL");
+  }
+
+  private boolean isLocalSwarm(String value) {
+    if (value == null || value.isBlank()) {
+      return true;
+    }
+    return isAllSegment(value) || Topology.SWARM_ID.equalsIgnoreCase(value);
   }
 }

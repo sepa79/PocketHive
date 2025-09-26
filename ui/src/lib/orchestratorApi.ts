@@ -3,7 +3,7 @@ import type { Component } from '../types/hive'
 
 interface SwarmManagersTogglePayload {
   idempotencyKey: string
-  target: 'swarm'
+  commandTarget: 'swarm'
   enabled: boolean
 }
 
@@ -42,7 +42,7 @@ export async function stopSwarm(id: string) {
 async function setSwarmManagersEnabled(enabled: boolean) {
   const payload: SwarmManagersTogglePayload = {
     idempotencyKey: crypto.randomUUID(),
-    target: 'swarm',
+    commandTarget: 'swarm',
     enabled,
   }
   await apiFetch('/orchestrator/swarm-managers/enabled', {

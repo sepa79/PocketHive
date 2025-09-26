@@ -3,6 +3,7 @@ package io.pockethive.control;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.asyncapi.AsyncApiSchemaValidator;
+import io.pockethive.control.CommandTarget;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.RecordComponent;
@@ -48,7 +49,8 @@ class ControlSignalSchemaTest {
             "inst-1",
             UUID.randomUUID().toString(),
             UUID.randomUUID().toString(),
-            Map.of("enabled", true)
+            CommandTarget.INSTANCE,
+            Map.of("data", Map.of("enabled", true))
         );
         JsonNode json = MAPPER.readTree(MAPPER.writeValueAsString(sample));
         Set<String> jsonProperties = new LinkedHashSet<>();

@@ -4,7 +4,10 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.Topology;
 import io.pockethive.asyncapi.AsyncApiSchemaValidator;
+import io.pockethive.control.CommandTarget;
+import io.pockethive.control.ConfirmationScope;
 import io.pockethive.control.ControlSignal;
+import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -57,10 +60,13 @@ class ModeratorTest {
         ControlSignal signal = ControlSignal.forInstance(
             "status-request", "sw1", "moderator", "inst", correlationId, idempotencyKey);
 
-        moderator.onControl(mapper.writeValueAsString(signal), "sig.status-request.moderator.inst", null);
+        moderator.onControl(mapper.writeValueAsString(signal),
+            ControlPlaneRouting.signal("status-request", "sw1", "moderator", "inst"), null);
 
         ArgumentCaptor<String> payload = ArgumentCaptor.forClass(String.class);
-        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("ev.status-full.moderator.inst"), payload.capture());
+        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
+            eq(ControlPlaneRouting.event("status-full", new ConfirmationScope("sw1", "moderator", "inst"))),
+            payload.capture());
         JsonNode node = mapper.readTree(payload.getValue());
         List<String> errors = ASYNC_API.validate("#/components/schemas/ControlStatusFullPayload", node);
         assertThat(errors).isEmpty();
@@ -72,18 +78,22 @@ class ModeratorTest {
         String correlationId = UUID.randomUUID().toString();
         String idempotencyKey = UUID.randomUUID().toString();
         ControlSignal signal = ControlSignal.forInstance(
-            "config-update", "sw1", "moderator", "inst", correlationId, idempotencyKey, args);
+            "config-update", "sw1", "moderator", "inst", correlationId, idempotencyKey,
+            CommandTarget.INSTANCE, args);
 
         when(registry.getListenerContainer("workListener")).thenReturn(container);
 
-        moderator.onControl(mapper.writeValueAsString(signal), "sig.config-update.moderator.inst", null);
+        moderator.onControl(mapper.writeValueAsString(signal),
+            ControlPlaneRouting.signal("config-update", "sw1", "moderator", "inst"), null);
 
         Boolean enabled = (Boolean) ReflectionTestUtils.getField(moderator, "enabled");
         assertThat(enabled).isTrue();
         verify(container).start();
 
         ArgumentCaptor<String> payload = ArgumentCaptor.forClass(String.class);
-        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("ev.ready.config-update.moderator.inst"), payload.capture());
+        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
+            eq(ControlPlaneRouting.event("ready.config-update", new ConfirmationScope("sw1", "moderator", "inst"))),
+            payload.capture());
 
         JsonNode node = mapper.readTree(payload.getValue());
         assertThat(node.path("result").asText()).isEqualTo("success");
@@ -93,6 +103,8 @@ class ModeratorTest {
         assertThat(node.path("scope").path("role").asText()).isEqualTo("moderator");
         assertThat(node.path("scope").path("instance").asText()).isEqualTo("inst");
         assertThat(node.path("scope").path("swarmId").asText()).isEqualTo("sw1");
+        assertThat(node.path("state").path("scope").isMissingNode()).isTrue();
+        assertThat(node.path("state").path("enabled").asBoolean()).isTrue();
         assertThat(node.has("args")).isFalse();
         List<String> readyErrors = ASYNC_API.validate("#/components/schemas/CommandReadyPayload", node);
         assertThat(readyErrors).isEmpty();
@@ -104,12 +116,16 @@ class ModeratorTest {
         String correlationId = UUID.randomUUID().toString();
         String idempotencyKey = UUID.randomUUID().toString();
         ControlSignal signal = ControlSignal.forInstance(
-            "config-update", "sw1", "moderator", "inst", correlationId, idempotencyKey, args);
+            "config-update", "sw1", "moderator", "inst", correlationId, idempotencyKey,
+            CommandTarget.INSTANCE, args);
 
-        moderator.onControl(mapper.writeValueAsString(signal), "sig.config-update.moderator.inst", null);
+        moderator.onControl(mapper.writeValueAsString(signal),
+            ControlPlaneRouting.signal("config-update", "sw1", "moderator", "inst"), null);
 
         ArgumentCaptor<String> payload = ArgumentCaptor.forClass(String.class);
-        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("ev.error.config-update.moderator.inst"), payload.capture());
+        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
+            eq(ControlPlaneRouting.event("error.config-update", new ConfirmationScope("sw1", "moderator", "inst"))),
+            payload.capture());
         JsonNode node = mapper.readTree(payload.getValue());
         assertThat(node.path("result").asText()).isEqualTo("error");
         assertThat(node.path("signal").asText()).isEqualTo("config-update");
@@ -119,6 +135,8 @@ class ModeratorTest {
         assertThat(node.path("scope").path("instance").asText()).isEqualTo("inst");
         assertThat(node.path("code").asText()).isEqualTo("IllegalArgumentException");
         assertThat(node.path("message").asText()).isNotBlank();
+        assertThat(node.path("state").path("scope").isMissingNode()).isTrue();
+        assertThat(node.path("state").path("enabled").asBoolean()).isFalse();
         List<String> errorPayload = ASYNC_API.validate("#/components/schemas/CommandErrorPayload", node);
         assertThat(errorPayload).isEmpty();
 

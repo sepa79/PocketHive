@@ -13,6 +13,8 @@ import io.pockethive.orchestrator.domain.SwarmCreateTracker.Phase;
 import io.pockethive.swarm.model.Bee;
 import io.pockethive.swarm.model.SwarmPlan;
 import io.pockethive.swarm.model.Work;
+import io.pockethive.controlplane.routing.ControlPlaneRouting;
+import io.pockethive.control.ConfirmationScope;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -40,6 +42,30 @@ class SwarmSignalListenerTest {
 
     private final ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
 
+    private static String controllerReadyEvent(String swarmId, String instanceId) {
+        return ControlPlaneRouting.event("ready.swarm-controller",
+            new ConfirmationScope(swarmId, "swarm-controller", instanceId));
+    }
+
+    private static String controllerErrorEvent(String swarmId, String instanceId) {
+        return ControlPlaneRouting.event("error.swarm-controller",
+            new ConfirmationScope(swarmId, "swarm-controller", instanceId));
+    }
+
+    private static String swarmReadyEvent(String signal, String swarmId, String instanceId) {
+        return ControlPlaneRouting.event("ready." + signal,
+            new ConfirmationScope(swarmId, "swarm-controller", instanceId));
+    }
+
+    private static String swarmErrorEvent(String signal, String swarmId, String instanceId) {
+        return ControlPlaneRouting.event("error." + signal,
+            new ConfirmationScope(swarmId, "swarm-controller", instanceId));
+    }
+
+    private static String swarmSignal(String signal, String swarmId) {
+        return ControlPlaneRouting.signal(signal, swarmId, "swarm-controller", "ALL");
+    }
+
     @Test
     void dispatchesTemplateAndEmitsCreateConfirmation() throws Exception {
         SwarmPlanRegistry plans = new SwarmPlanRegistry();
@@ -51,19 +77,22 @@ class SwarmSignalListenerTest {
         SwarmSignalListener listener = new SwarmSignalListener(rabbit, plans, tracker, new SwarmRegistry(), lifecycle, new ObjectMapper(), "inst0");
         reset(rabbit);
 
-        listener.handle("", "ev.ready.swarm-controller.inst1");
+        listener.handle("", controllerReadyEvent("sw1", "inst1"));
 
         ArgumentCaptor<String> templatePayload = ArgumentCaptor.forClass(String.class);
-        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("sig.swarm-template.sw1"), templatePayload.capture());
+        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
+            eq(swarmSignal("swarm-template", "sw1")), templatePayload.capture());
         JsonNode templateSignal = mapper.readTree(templatePayload.getValue());
         assertThat(templateSignal.path("signal").asText()).isEqualTo("swarm-template");
         assertThat(templateSignal.path("swarmId").asText()).isEqualTo("sw1");
         assertThat(templateSignal.path("correlationId").asText()).isEqualTo("corr");
         assertThat(templateSignal.path("idempotencyKey").asText()).isEqualTo("idem");
+        assertThat(templateSignal.path("commandTarget").asText()).isEqualTo("swarm");
         assertThat(templateSignal.path("args").path("id").asText()).isEqualTo("sw1");
 
         ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
-        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("ev.ready.swarm-create.sw1"), captor.capture());
+        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
+            eq(ControlPlaneRouting.event("ready.swarm-create", new ConfirmationScope("sw1", "orchestrator", "ALL"))), captor.capture());
         String confirmation = captor.getValue();
         JsonNode ready = mapper.readTree(confirmation);
         assertThat(ready.path("correlationId").asText()).isEqualTo("corr");
@@ -71,7 +100,8 @@ class SwarmSignalListenerTest {
         assertThat(ready.path("result").asText()).isEqualTo("success");
         assertThat(ready.path("signal").asText()).isEqualTo("swarm-create");
         assertThat(ready.path("scope").path("swarmId").asText()).isEqualTo("sw1");
-        assertThat(ready.path("state").asText()).isEqualTo("Ready");
+        assertThat(ready.path("state").path("status").asText()).isEqualTo("Ready");
+        assertThat(ready.path("state").path("scope").isMissingNode()).isTrue();
         assertThat(ready.path("ts").asText()).isNotBlank();
         assertThat(plans.find("inst1")).isEmpty();
         assertThat(tracker.complete("sw1", Phase.TEMPLATE)).isPresent();
@@ -87,17 +117,19 @@ class SwarmSignalListenerTest {
         SwarmSignalListener listener = new SwarmSignalListener(rabbit, plans, tracker, registry, lifecycle, new ObjectMapper(), "inst0");
         reset(rabbit);
 
-        listener.handle("", "ev.error.swarm-controller.inst1");
+        listener.handle("", controllerErrorEvent("sw1", "inst1"));
 
         ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
-        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("ev.error.swarm-create.sw1"), captor.capture());
+        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
+            eq(ControlPlaneRouting.event("error.swarm-create", new ConfirmationScope("sw1", "orchestrator", "ALL"))), captor.capture());
         String confirmation = captor.getValue();
         JsonNode error = mapper.readTree(confirmation);
         assertThat(error.path("correlationId").asText()).isEqualTo("corr");
         assertThat(error.path("idempotencyKey").asText()).isEqualTo("idem");
         assertThat(error.path("result").asText()).isEqualTo("error");
         assertThat(error.path("scope").path("swarmId").asText()).isEqualTo("sw1");
-        assertThat(error.path("state").asText()).isEqualTo("Removed");
+        assertThat(error.path("state").path("status").asText()).isEqualTo("Removed");
+        assertThat(error.path("state").path("scope").isMissingNode()).isTrue();
         assertThat(error.path("phase").asText()).isEqualTo("controller-bootstrap");
         assertThat(error.path("code").asText()).isEqualTo("controller-error");
         assertThat(error.path("message").asText()).isEqualTo("controller failed");
@@ -126,11 +158,11 @@ class SwarmSignalListenerTest {
         tracker.register("inst1", new Pending("sw1", "inst1", "corr", "idem", Phase.CONTROLLER, java.time.Instant.now().plusSeconds(60)));
         SwarmSignalListener listener = new SwarmSignalListener(rabbit, plans, tracker, new SwarmRegistry(), lifecycle, new ObjectMapper(), "inst0");
 
-        listener.handle("", "ev.ready.swarm-controller.inst1");
+        listener.handle("", controllerReadyEvent("sw1", "inst1"));
         reset(rabbit);
 
         // duplicate ready event should be ignored
-        listener.handle("", "ev.ready.swarm-controller.inst1");
+        listener.handle("", controllerReadyEvent("sw1", "inst1"));
 
         verifyNoInteractions(rabbit);
     }
@@ -146,7 +178,7 @@ class SwarmSignalListenerTest {
         listener.handle("", "ev.ready.swarm-template.sw1");
         assertThat(registry.find("sw1").get().getStatus()).isEqualTo(SwarmStatus.READY);
 
-        listener.handle("", "ev.ready.swarm-start.sw1");
+        listener.handle("", swarmReadyEvent("swarm-start", "sw1", "inst1"));
         assertThat(registry.find("sw1").get().getStatus()).isEqualTo(SwarmStatus.RUNNING);
     }
 
@@ -158,15 +190,15 @@ class SwarmSignalListenerTest {
         tracker.expectStart("sw1", "corr", "idem", java.time.Duration.ofMillis(10));
         SwarmSignalListener listener = new SwarmSignalListener(rabbit, new SwarmPlanRegistry(), tracker, registry, lifecycle, new ObjectMapper(), "inst0");
 
-        listener.handle("", "ev.error.swarm-start.sw1");
+        listener.handle("", swarmErrorEvent("swarm-start", "sw1", "inst1"));
         assertThat(registry.find("sw1").get().getStatus()).isEqualTo(SwarmStatus.FAILED);
 
         registerCreating(registry, "sw1", "inst1", "c2");
-        listener.handle("", "ev.error.swarm-template.sw1");
+        listener.handle("", swarmErrorEvent("swarm-template", "sw1", "inst1"));
         assertThat(registry.find("sw1").get().getStatus()).isEqualTo(SwarmStatus.FAILED);
 
         registerCreating(registry, "sw1", "inst1", "c3");
-        listener.handle("", "ev.error.swarm-stop.sw1");
+        listener.handle("", swarmErrorEvent("swarm-stop", "sw1", "inst1"));
         assertThat(registry.find("sw1").get().getStatus()).isEqualTo(SwarmStatus.FAILED);
 
         registerCreating(registry, "sw1", "inst1", "c4");

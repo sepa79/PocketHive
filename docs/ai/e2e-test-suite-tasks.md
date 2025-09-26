@@ -72,7 +72,7 @@ This backlog tracks the work needed to deliver the end-to-end acceptance suite t
 - Exercise controller-scope and component-level configuration updates, verifying scope semantics and emitted confirmations.
 
 **Scope**
-- Extend messaging helpers to publish `sig.config-update.*` signals with varying scopes.
+- Extend messaging helpers to publish `sig.config-update.<swarm>.<role>.<instance>` signals with varying scopes.
 - Assert controller aggregates (`state.workloads.enabled`, `state.controller.enabled`) and component status deltas reflect the changes.
 - Parameterise scenarios to adapt to evolving component inventories.
 
@@ -93,7 +93,7 @@ This backlog tracks the work needed to deliver the end-to-end acceptance suite t
 - Validate message traversal through the swarm queues and ensure observability streams remain fresh.
 
 **Scope**
-- Produce workload messages (e.g., publish into `ph.<swarmId>.gen`) and assert they pass through `gen → mod → final` queues with expected transformations.
+- Produce workload messages (e.g., publish into `ph.work.<swarmId>.generator`) and assert they pass through `gen → mod → final` queues with expected transformations.
 - Monitor `ev.status-{full|delta}` streams for controllers and bees, enforcing freshness guarantees and heartbeat cadence.
 
 **Constraints**
@@ -110,10 +110,11 @@ This backlog tracks the work needed to deliver the end-to-end acceptance suite t
 
 ## Task 6 – Phase 5 Resilience, Error Handling & Idempotency
 **Goal**
-- Model retries, deduplication, and failure scenarios to ensure robust operator experience.
+- Model retries, replay tolerance, and failure scenarios to ensure robust operator experience.
 
 **Scope**
-- Retry lifecycle actions with stable `idempotencyKey` and fresh `correlationId` to confirm single confirmation replay.
+- Retry lifecycle actions with stable `idempotencyKey` and fresh `correlationId` to confirm each attempt produces its own
+  confirmation without crashing downstream services.
 - Trigger invalid operations (e.g., non-existent template) to surface `ev.error.*` events and verify state preservation.
 - Simulate component failures (container stop or Actuator outage) and assert recovery handling.
 
@@ -121,7 +122,8 @@ This backlog tracks the work needed to deliver the end-to-end acceptance suite t
 - Tests should clean up any mutated state to keep the environment reusable.
 
 **Acceptance Criteria**
-- Failure scenarios produce the documented error events; retries prove idempotent behaviour.
+- Failure scenarios produce the documented error events; retries remain safe (commands are idempotent) even though confirmations
+  are re-emitted for every attempt.
 
 **Deliverables**
 - Resilience-focused features, utilities for fault injection, and documentation on required environment hooks.

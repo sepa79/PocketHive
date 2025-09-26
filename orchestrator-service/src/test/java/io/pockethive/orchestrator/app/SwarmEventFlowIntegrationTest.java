@@ -54,7 +54,7 @@ class SwarmEventFlowIntegrationTest {
         var ready = mapper.readTree(conf);
         assertThat(ready.path("correlationId").asText()).isEqualTo("corr");
         assertThat(ready.path("idempotencyKey").asText()).isEqualTo("idem");
-        assertThat(ready.path("state").asText()).isEqualTo("Ready");
+        assertThat(ready.path("state").path("status").asText()).isEqualTo("Ready");
 
         signal.handle("", "ev.ready.swarm-template.sw1");
         assertThat(registry.find("sw1").get().getStatus()).isEqualTo(SwarmStatus.READY);

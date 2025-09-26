@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.Topology;
+import io.pockethive.control.CommandTarget;
 import io.pockethive.control.ControlSignal;
 import io.pockethive.swarm.model.Bee;
 import io.pockethive.swarm.model.SwarmPlan;
@@ -26,6 +27,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -445,20 +447,67 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
   private void publishConfigUpdate(com.fasterxml.jackson.databind.node.ObjectNode data, String context) {
     Map<String, Object> dataMap = mapper.convertValue(data, new TypeReference<Map<String, Object>>() {});
     Map<String, Object> args = new LinkedHashMap<>();
-    Object target = dataMap.get("target");
-    if (target != null) {
-      args.put("target", target);
-    }
     args.put("data", dataMap);
     String correlationId = UUID.randomUUID().toString();
     String idempotencyKey = UUID.randomUUID().toString();
+
+    String rawCommandTarget = asTextValue(dataMap.remove("commandTarget"));
+    String targetHint = asTextValue(dataMap.remove("target"));
+    String scopeHint = asTextValue(dataMap.remove("scope"));
+    String swarmHint = asTextValue(dataMap.remove("swarmId"));
+    String roleHint = asTextValue(dataMap.remove("role"));
+    String instanceHint = asTextValue(dataMap.remove("instance"));
+
+    CommandTarget commandTarget = parseCommandTarget(rawCommandTarget, context);
+    if (commandTarget == null) {
+      commandTarget = commandTargetFromScope(scopeHint);
+    }
+    if (commandTarget == null) {
+      commandTarget = commandTargetFromTarget(targetHint);
+    }
+    if (commandTarget == null) {
+      commandTarget = CommandTarget.ALL;
+    }
+
+    String swarmId = (swarmHint == null || swarmHint.isBlank()) ? Topology.SWARM_ID : swarmHint;
+    String role = roleHint;
+    String instance = instanceHint;
+
+    TargetSpec legacySpec = parseTargetSpec(targetHint);
+    if (commandTarget == CommandTarget.INSTANCE) {
+      if ((role == null || role.isBlank()) && legacySpec != null) {
+        role = legacySpec.role();
+      }
+      if ((instance == null || instance.isBlank()) && legacySpec != null) {
+        instance = legacySpec.instance();
+      }
+      if (role == null || role.isBlank()) {
+        role = "swarm-controller";
+      }
+      if (instance == null || instance.isBlank()) {
+        instance = instanceId;
+      }
+    } else if (commandTarget == CommandTarget.ROLE) {
+      if ((role == null || role.isBlank()) && legacySpec != null) {
+        role = legacySpec.role();
+      }
+      if (role == null || role.isBlank()) {
+        throw new IllegalArgumentException("commandTarget=role requires role field");
+      }
+      instance = null;
+    } else if (commandTarget == CommandTarget.SWARM || commandTarget == CommandTarget.ALL) {
+      role = null;
+      instance = null;
+    }
+
     ControlSignal signal = new ControlSignal(
         "config-update",
         correlationId,
         idempotencyKey,
-        Topology.SWARM_ID,
-        null,
-        null,
+        swarmId,
+        role,
+        instance,
+        commandTarget,
         args);
     try {
       String payload = mapper.writeValueAsString(signal);
@@ -467,6 +516,78 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
     } catch (JsonProcessingException e) {
       throw new IllegalStateException("Failed to serialize config-update signal", e);
     }
+  }
+
+  private CommandTarget parseCommandTarget(String value, String context) {
+    if (value == null || value.isBlank()) {
+      return null;
+    }
+    try {
+      return CommandTarget.from(value);
+    } catch (IllegalArgumentException ex) {
+      log.warn("Ignoring unknown commandTarget {} on {} config-update", value, context);
+      return null;
+    }
+  }
+
+  private CommandTarget commandTargetFromScope(String scope) {
+    if (scope == null || scope.isBlank()) {
+      return null;
+    }
+    return switch (scope.trim().toLowerCase(Locale.ROOT)) {
+      case "swarm" -> CommandTarget.SWARM;
+      case "role" -> CommandTarget.ROLE;
+      case "controller", "instance" -> CommandTarget.INSTANCE;
+      case "all" -> CommandTarget.ALL;
+      default -> null;
+    };
+  }
+
+  private CommandTarget commandTargetFromTarget(String target) {
+    if (target == null || target.isBlank()) {
+      return null;
+    }
+    String trimmed = target.trim();
+    String lower = trimmed.toLowerCase(Locale.ROOT);
+    if (lower.contains(".") || lower.contains(":")) {
+      return CommandTarget.INSTANCE;
+    }
+    return switch (lower) {
+      case "all" -> CommandTarget.ALL;
+      case "swarm" -> CommandTarget.SWARM;
+      case "controller", "instance" -> CommandTarget.INSTANCE;
+      case "role" -> CommandTarget.ROLE;
+      default -> null;
+    };
+  }
+
+  private TargetSpec parseTargetSpec(String target) {
+    if (target == null || target.isBlank()) {
+      return null;
+    }
+    String trimmed = target.trim();
+    String[] parts;
+    if (trimmed.contains(".")) {
+      parts = trimmed.split("\\.", 2);
+    } else if (trimmed.contains(":")) {
+      parts = trimmed.split(":", 2);
+    } else {
+      return null;
+    }
+    if (parts.length != 2 || parts[0].isBlank() || parts[1].isBlank()) {
+      return null;
+    }
+    return new TargetSpec(parts[0], parts[1]);
+  }
+
+  private record TargetSpec(String role, String instance) {}
+
+  private String asTextValue(Object value) {
+    if (value instanceof String s) {
+      String trimmed = s.trim();
+      return trimmed.isEmpty() ? null : trimmed;
+    }
+    return null;
   }
 
   private static String snippet(String payload) {

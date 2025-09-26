@@ -66,6 +66,11 @@
     </dependency>
     <dependency>
       <groupId>io.pockethive</groupId>
+      <artifactId>control-plane-core</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>io.pockethive</groupId>
       <artifactId>docker-client</artifactId>
       <version>${project.version}</version>
     </dependency>

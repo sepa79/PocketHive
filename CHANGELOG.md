@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.11.0] - 2025-09-25
+Timestamp: 2025-09-25T00:00:00Z
+
+- Build: Copy common/control-plane-core module into every service Docker build context so Docker builds resolve worker control-plane helpers.
+- Orchestrator: Default controller toggle requests to CommandTarget.SWARM when omitted and backfill tests covering legacy payloads.
+- UI: Send commandTarget with swarm manager enable/disable calls and expand Vitest coverage to guard the new payload contract.
+
 ## [0.10.2] - 2025-09-19
 Timestamp: 2025-09-19T00:00:00Z
 
@@ -401,3 +408,4 @@ Timestamp: 2025-08-28T23:51:09Z
 Timestamp: 2025-08-28T23:07:54Z
 
 - Initial repository setup.
+

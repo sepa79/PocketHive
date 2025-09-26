@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.Topology;
 import io.pockethive.asyncapi.AsyncApiSchemaValidator;
+import io.pockethive.control.CommandTarget;
 import io.pockethive.control.ControlSignal;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -84,7 +85,8 @@ class TriggerTest {
         String correlationId = UUID.randomUUID().toString();
         String idempotencyKey = UUID.randomUUID().toString();
         ControlSignal signal = ControlSignal.forInstance(
-            "config-update", "sw1", "trigger", "inst", correlationId, idempotencyKey, args);
+            "config-update", "sw1", "trigger", "inst", correlationId, idempotencyKey,
+            CommandTarget.INSTANCE, args);
 
         trigger.onControl(mapper.writeValueAsString(signal), "sig.config-update.trigger.inst", null);
 
@@ -108,6 +110,8 @@ class TriggerTest {
         assertThat(node.path("scope").path("role").asText()).isEqualTo("trigger");
         assertThat(node.path("scope").path("instance").asText()).isEqualTo("inst");
         assertThat(node.path("scope").path("swarmId").asText()).isEqualTo("sw1");
+        assertThat(node.path("state").path("scope").isMissingNode()).isTrue();
+        assertThat(node.path("state").path("enabled").asBoolean()).isTrue();
         assertThat(node.has("args")).isFalse();
 
         verify(rabbit, never()).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("ev.error.config-update.trigger.inst"), anyString());
@@ -122,7 +126,8 @@ class TriggerTest {
         String correlationId = UUID.randomUUID().toString();
         String idempotencyKey = UUID.randomUUID().toString();
         ControlSignal signal = ControlSignal.forInstance(
-            "config-update", "sw1", "trigger", "inst", correlationId, idempotencyKey, args);
+            "config-update", "sw1", "trigger", "inst", correlationId, idempotencyKey,
+            CommandTarget.INSTANCE, args);
 
         trigger.onControl(mapper.writeValueAsString(signal), "sig.config-update.trigger.inst", null);
 
@@ -135,6 +140,8 @@ class TriggerTest {
         assertThat(node.path("idempotencyKey").asText()).isEqualTo(idempotencyKey);
         assertThat(node.path("code").asText()).isEqualTo("IllegalArgumentException");
         assertThat(node.path("message").asText()).isNotBlank();
+        assertThat(node.path("state").path("scope").isMissingNode()).isTrue();
+        assertThat(node.path("state").path("enabled").asBoolean()).isFalse();
         List<String> errorPayload = ASYNC_API.validate("#/components/schemas/CommandErrorPayload", node);
         assertThat(errorPayload).isEmpty();
 
@@ -151,7 +158,8 @@ class TriggerTest {
         String correlationId = UUID.randomUUID().toString();
         String idempotencyKey = UUID.randomUUID().toString();
         ControlSignal signal = ControlSignal.forInstance(
-            "config-update", "sw1", "trigger", "inst", correlationId, idempotencyKey, args);
+            "config-update", "sw1", "trigger", "inst", correlationId, idempotencyKey,
+            CommandTarget.INSTANCE, args);
 
         trigger.onControl(mapper.writeValueAsString(signal), "sig.config-update.trigger.inst", null);
 
@@ -163,6 +171,7 @@ class TriggerTest {
         verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("ev.ready.config-update.trigger.inst"), payload.capture());
         JsonNode node = mapper.readTree(payload.getValue());
         assertThat(node.has("args")).isFalse();
+        assertThat(node.path("state").path("scope").isMissingNode()).isTrue();
         List<String> readyErrors = ASYNC_API.validate("#/components/schemas/CommandReadyPayload", node);
         assertThat(readyErrors).isEmpty();
     }
