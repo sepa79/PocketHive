@@ -334,6 +334,43 @@ class SwarmSignalListenerTest {
   }
 
   @Test
+  void swarmTargetEnableResumesControllerAndWorkloads() throws Exception {
+    when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
+    when(lifecycle.getMetrics()).thenReturn(new SwarmMetrics(1,1,1,1, java.time.Instant.now()));
+    SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", mapper);
+    reset(lifecycle, rabbit);
+    stubLifecycleDefaults();
+    when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
+    when(lifecycle.getMetrics()).thenReturn(new SwarmMetrics(1,1,1,1, java.time.Instant.now()));
+
+    String body = """
+        {"correlationId":"c10a","idempotencyKey":"i10a","signal":"config-update",
+         "swarmId":"%s",
+         "role":"swarm-controller","instance":"inst",
+         "commandTarget":"swarm",
+         "args":{"data":{"enabled":true}}}
+        """.formatted(Topology.SWARM_ID);
+
+    listener.handle(body, controllerInstanceSignal("config-update", "inst"));
+
+    verify(lifecycle).setSwarmEnabled(true);
+    ArgumentCaptor<String> readyPayload = ArgumentCaptor.forClass(String.class);
+    verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
+        eq(controllerReadyEvent("config-update", "inst")), readyPayload.capture());
+    JsonNode readyNode = mapper.readTree(readyPayload.getValue());
+    assertThat(readyNode.path("state").path("details").path("workloads").path("enabled").asBoolean()).isTrue();
+
+    ArgumentCaptor<String> statusPayload = ArgumentCaptor.forClass(String.class);
+    verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
+        eq(statusEvent("status-delta", "swarm-controller", "inst")), statusPayload.capture());
+    JsonNode statusNode = mapper.readTree(statusPayload.getValue());
+    assertThat(statusNode.path("enabled").asBoolean()).isTrue();
+    assertThat(statusNode.path("data").path("controllerEnabled").asBoolean()).isTrue();
+    assertThat(statusNode.path("data").path("workloadsEnabled").asBoolean()).isTrue();
+    assertThat(statusNode.path("data").path("swarmStatus").asText()).isEqualTo("RUNNING");
+  }
+
+  @Test
   void controllerTargetToggleUpdatesControllerEnabledOnly() throws Exception {
     when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
     when(lifecycle.getMetrics()).thenReturn(new SwarmMetrics(0,0,0,0, java.time.Instant.now()));
