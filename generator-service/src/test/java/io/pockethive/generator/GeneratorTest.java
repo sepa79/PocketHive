@@ -58,14 +58,14 @@ class GeneratorTest {
         String correlationId = UUID.randomUUID().toString();
         String idempotencyKey = UUID.randomUUID().toString();
         ControlSignal signal = ControlSignal.forInstance(
-            "status-request", "sw1", "generator", "inst", correlationId, idempotencyKey);
+            "status-request", Topology.SWARM_ID, "generator", "inst", correlationId, idempotencyKey);
 
         generator.onControl(mapper.writeValueAsString(signal),
-            ControlPlaneRouting.signal("status-request", "sw1", "generator", "inst"), null);
+            ControlPlaneRouting.signal("status-request", Topology.SWARM_ID, "generator", "inst"), null);
 
         ArgumentCaptor<String> payload = ArgumentCaptor.forClass(String.class);
         verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
-            eq(ControlPlaneRouting.event("status-full", new ConfirmationScope("sw1", "generator", "inst"))),
+            eq(ControlPlaneRouting.event("status-full", new ConfirmationScope(Topology.SWARM_ID, "generator", "inst"))),
             payload.capture());
         JsonNode node = mapper.readTree(payload.getValue());
         List<String> errors = ASYNC_API.validate("#/components/schemas/ControlStatusFullPayload", node);
@@ -89,11 +89,11 @@ class GeneratorTest {
         String correlationId = UUID.randomUUID().toString();
         String idempotencyKey = UUID.randomUUID().toString();
         ControlSignal signal = ControlSignal.forInstance(
-            "config-update", "sw1", "generator", "inst", correlationId, idempotencyKey,
+            "config-update", Topology.SWARM_ID, "generator", "inst", correlationId, idempotencyKey,
             CommandTarget.INSTANCE, args);
 
         generator.onControl(mapper.writeValueAsString(signal),
-            ControlPlaneRouting.signal("config-update", "sw1", "generator", "inst"), null);
+            ControlPlaneRouting.signal("config-update", Topology.SWARM_ID, "generator", "inst"), null);
 
         Boolean enabled = (Boolean) ReflectionTestUtils.getField(generator, "enabled");
         assertThat(enabled).isTrue();
@@ -108,7 +108,7 @@ class GeneratorTest {
 
         ArgumentCaptor<String> payload = ArgumentCaptor.forClass(String.class);
         verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
-            eq(ControlPlaneRouting.event("ready.config-update", new ConfirmationScope("sw1", "generator", "inst"))),
+            eq(ControlPlaneRouting.event("ready.config-update", new ConfirmationScope(Topology.SWARM_ID, "generator", "inst"))),
             payload.capture());
         JsonNode node = mapper.readTree(payload.getValue());
         assertThat(node.path("result").asText()).isEqualTo("success");
@@ -117,7 +117,7 @@ class GeneratorTest {
         assertThat(node.path("idempotencyKey").asText()).isEqualTo(idempotencyKey);
         assertThat(node.path("scope").path("role").asText()).isEqualTo("generator");
         assertThat(node.path("scope").path("instance").asText()).isEqualTo("inst");
-        assertThat(node.path("scope").path("swarmId").asText()).isEqualTo("sw1");
+        assertThat(node.path("scope").path("swarmId").asText()).isEqualTo(Topology.SWARM_ID);
         assertThat(node.path("state").path("scope").isMissingNode()).isTrue();
         assertThat(node.path("state").path("enabled").asBoolean()).isTrue();
         assertThat(node.has("args")).isFalse();
@@ -132,15 +132,15 @@ class GeneratorTest {
         String correlationId = UUID.randomUUID().toString();
         String idempotencyKey = UUID.randomUUID().toString();
         ControlSignal signal = ControlSignal.forInstance(
-            "config-update", "sw1", "generator", "inst", correlationId, idempotencyKey,
+            "config-update", Topology.SWARM_ID, "generator", "inst", correlationId, idempotencyKey,
             CommandTarget.INSTANCE, args);
 
         generator.onControl(mapper.writeValueAsString(signal),
-            ControlPlaneRouting.signal("config-update", "sw1", "generator", "inst"), null);
+            ControlPlaneRouting.signal("config-update", Topology.SWARM_ID, "generator", "inst"), null);
 
         ArgumentCaptor<String> payload = ArgumentCaptor.forClass(String.class);
         verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
-            eq(ControlPlaneRouting.event("error.config-update", new ConfirmationScope("sw1", "generator", "inst"))),
+            eq(ControlPlaneRouting.event("error.config-update", new ConfirmationScope(Topology.SWARM_ID, "generator", "inst"))),
             payload.capture());
         JsonNode node = mapper.readTree(payload.getValue());
         assertThat(node.path("result").asText()).isEqualTo("error");
@@ -158,7 +158,7 @@ class GeneratorTest {
 
         verify(rabbit, never()).convertAndSend(eq(Topology.EXCHANGE), eq(Topology.GEN_QUEUE), isA(Message.class));
         verify(rabbit, never()).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
-            eq(ControlPlaneRouting.event("ready.config-update", new ConfirmationScope("sw1", "generator", "inst"))),
+            eq(ControlPlaneRouting.event("ready.config-update", new ConfirmationScope(Topology.SWARM_ID, "generator", "inst"))),
             anyString());
 
         Double ratePerSec = (Double) ReflectionTestUtils.getField(generator, "ratePerSec");

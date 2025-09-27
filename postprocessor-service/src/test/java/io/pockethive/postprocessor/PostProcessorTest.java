@@ -60,14 +60,15 @@ class PostProcessorTest {
         String correlationId = UUID.randomUUID().toString();
         String idempotencyKey = UUID.randomUUID().toString();
         ControlSignal signal = ControlSignal.forInstance(
-            "status-request", "sw1", "postprocessor", "inst", correlationId, idempotencyKey);
+            "status-request", Topology.SWARM_ID, "postprocessor", "inst", correlationId, idempotencyKey);
 
         postProcessor.onControl(mapper.writeValueAsString(signal),
-            ControlPlaneRouting.signal("status-request", "sw1", "postprocessor", "inst"), null);
+            ControlPlaneRouting.signal("status-request", Topology.SWARM_ID, "postprocessor", "inst"), null);
 
         ArgumentCaptor<String> payload = ArgumentCaptor.forClass(String.class);
         verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
-            eq(ControlPlaneRouting.event("status-full", new ConfirmationScope("sw1", "postprocessor", "inst"))),
+            eq(ControlPlaneRouting.event("status-full",
+                new ConfirmationScope(Topology.SWARM_ID, "postprocessor", "inst"))),
             payload.capture());
         JsonNode node = mapper.readTree(payload.getValue());
         List<String> errors = ASYNC_API.validate("#/components/schemas/ControlStatusFullPayload", node);
@@ -80,11 +81,11 @@ class PostProcessorTest {
         String correlationId = UUID.randomUUID().toString();
         String idempotencyKey = UUID.randomUUID().toString();
         ControlSignal signal = ControlSignal.forInstance(
-            "config-update", "sw1", "postprocessor", "inst", correlationId, idempotencyKey,
+            "config-update", Topology.SWARM_ID, "postprocessor", "inst", correlationId, idempotencyKey,
             CommandTarget.INSTANCE, args);
 
         postProcessor.onControl(mapper.writeValueAsString(signal),
-            ControlPlaneRouting.signal("config-update", "sw1", "postprocessor", "inst"), null);
+            ControlPlaneRouting.signal("config-update", Topology.SWARM_ID, "postprocessor", "inst"), null);
 
         verify(listenerContainer).start();
         Boolean enabled = (Boolean) ReflectionTestUtils.getField(postProcessor, "enabled");
@@ -92,7 +93,8 @@ class PostProcessorTest {
 
         ArgumentCaptor<String> payload = ArgumentCaptor.forClass(String.class);
         verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
-            eq(ControlPlaneRouting.event("ready.config-update", new ConfirmationScope("sw1", "postprocessor", "inst"))),
+            eq(ControlPlaneRouting.event("ready.config-update",
+                new ConfirmationScope(Topology.SWARM_ID, "postprocessor", "inst"))),
             payload.capture());
         JsonNode node = mapper.readTree(payload.getValue());
         assertThat(node.path("result").asText()).isEqualTo("success");
@@ -101,7 +103,7 @@ class PostProcessorTest {
         assertThat(node.path("idempotencyKey").asText()).isEqualTo(idempotencyKey);
         assertThat(node.path("scope").path("role").asText()).isEqualTo("postprocessor");
         assertThat(node.path("scope").path("instance").asText()).isEqualTo("inst");
-        assertThat(node.path("scope").path("swarmId").asText()).isEqualTo("sw1");
+        assertThat(node.path("scope").path("swarmId").asText()).isEqualTo(Topology.SWARM_ID);
         assertThat(node.path("state").path("scope").isMissingNode()).isTrue();
         assertThat(node.path("state").path("enabled").asBoolean()).isTrue();
         assertThat(node.has("args")).isFalse();
@@ -116,11 +118,11 @@ class PostProcessorTest {
         String correlationId = UUID.randomUUID().toString();
         String idempotencyKey = UUID.randomUUID().toString();
         ControlSignal signal = ControlSignal.forInstance(
-            "config-update", "sw1", "postprocessor", "inst", correlationId, idempotencyKey,
+            "config-update", Topology.SWARM_ID, "postprocessor", "inst", correlationId, idempotencyKey,
             CommandTarget.INSTANCE, args);
 
         postProcessor.onControl(mapper.writeValueAsString(signal),
-            ControlPlaneRouting.signal("config-update", "sw1", "postprocessor", "inst"), null);
+            ControlPlaneRouting.signal("config-update", Topology.SWARM_ID, "postprocessor", "inst"), null);
 
         verify(listenerContainer).stop();
         Boolean enabled = (Boolean) ReflectionTestUtils.getField(postProcessor, "enabled");
@@ -128,7 +130,8 @@ class PostProcessorTest {
 
         ArgumentCaptor<String> payload = ArgumentCaptor.forClass(String.class);
         verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
-            eq(ControlPlaneRouting.event("ready.config-update", new ConfirmationScope("sw1", "postprocessor", "inst"))),
+            eq(ControlPlaneRouting.event("ready.config-update",
+                new ConfirmationScope(Topology.SWARM_ID, "postprocessor", "inst"))),
             payload.capture());
         JsonNode node = mapper.readTree(payload.getValue());
         assertThat(node.path("correlationId").asText()).isEqualTo(correlationId);
@@ -144,11 +147,11 @@ class PostProcessorTest {
         String correlationId = UUID.randomUUID().toString();
         String idempotencyKey = UUID.randomUUID().toString();
         ControlSignal signal = ControlSignal.forInstance(
-            "config-update", "sw1", "postprocessor", "inst", correlationId, idempotencyKey,
+            "config-update", Topology.SWARM_ID, "postprocessor", "inst", correlationId, idempotencyKey,
             CommandTarget.INSTANCE, args);
 
         postProcessor.onControl(mapper.writeValueAsString(signal),
-            ControlPlaneRouting.signal("config-update", "sw1", "postprocessor", "inst"), null);
+            ControlPlaneRouting.signal("config-update", Topology.SWARM_ID, "postprocessor", "inst"), null);
 
         verify(listenerContainer, never()).start();
         verify(listenerContainer, never()).stop();
@@ -157,7 +160,8 @@ class PostProcessorTest {
 
         ArgumentCaptor<String> payload = ArgumentCaptor.forClass(String.class);
         verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
-            eq(ControlPlaneRouting.event("error.config-update", new ConfirmationScope("sw1", "postprocessor", "inst"))),
+            eq(ControlPlaneRouting.event("error.config-update",
+                new ConfirmationScope(Topology.SWARM_ID, "postprocessor", "inst"))),
             payload.capture());
         JsonNode node = mapper.readTree(payload.getValue());
         assertThat(node.path("result").asText()).isEqualTo("error");

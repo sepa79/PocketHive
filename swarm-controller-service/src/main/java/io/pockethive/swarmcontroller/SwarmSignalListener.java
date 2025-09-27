@@ -182,6 +182,7 @@ public class SwarmSignalListener {
         case SWARM -> {
           if (enabledFlag != null && appliesToLocalSwarm(cs)) {
             lifecycle.setSwarmEnabled(enabledFlag);
+            controllerEnabled = enabledFlag;
             sendStatusDelta();
             stateEnabled = enabledFlag;
             details.put("workloads", Map.of("enabled", enabledFlag));
@@ -272,7 +273,8 @@ public class SwarmSignalListener {
     if (!isLocalSwarm(key.swarmId())) {
       return false;
     }
-    if (!ROLE.equalsIgnoreCase(defaultSegment(key.role(), ROLE))) {
+    String roleSegment = defaultSegment(key.role(), ROLE);
+    if (!ROLE.equalsIgnoreCase(roleSegment) && !isAllSegment(roleSegment)) {
       return false;
     }
     String instanceSegment = key.instance();
@@ -289,7 +291,8 @@ public class SwarmSignalListener {
     if (!isLocalSwarm(key.swarmId())) {
       return false;
     }
-    if (!ROLE.equalsIgnoreCase(defaultSegment(key.role(), ROLE))) {
+    String roleSegment = defaultSegment(key.role(), ROLE);
+    if (!ROLE.equalsIgnoreCase(roleSegment) && !isAllSegment(roleSegment)) {
       return false;
     }
     String targetInstance = key.instance();
@@ -448,17 +451,17 @@ public class SwarmSignalListener {
   }
 
   private void forwardToAll(ControlSignal cs, String payload) {
-    String swarm = defaultSegment(cs.swarmId(), Topology.SWARM_ID);
+    String swarm = normaliseSwarmSegment(cs.swarmId());
     sendControl(ControlPlaneRouting.signal("config-update", swarm, "ALL", "ALL"), payload, "forward");
   }
 
   private void forwardToRole(ControlSignal cs, String payload, String role) {
-    String swarm = defaultSegment(cs.swarmId(), Topology.SWARM_ID);
+    String swarm = normaliseSwarmSegment(cs.swarmId());
     sendControl(ControlPlaneRouting.signal("config-update", swarm, role, "ALL"), payload, "forward");
   }
 
   private void forwardToInstance(ControlSignal cs, String payload, TargetSpec spec) {
-    String swarm = defaultSegment(cs.swarmId(), Topology.SWARM_ID);
+    String swarm = normaliseSwarmSegment(cs.swarmId());
     sendControl(ControlPlaneRouting.signal("config-update", swarm, spec.role(), spec.instance()), payload, "forward");
   }
 
@@ -715,6 +718,14 @@ public class SwarmSignalListener {
 
   private boolean isAllSegment(String value) {
     return value != null && value.equalsIgnoreCase("ALL");
+  }
+
+  private String normaliseSwarmSegment(String value) {
+    String resolved = defaultSegment(value, Topology.SWARM_ID);
+    if (isAllSegment(resolved)) {
+      return Topology.SWARM_ID;
+    }
+    return resolved;
   }
 
   private boolean isLocalSwarm(String value) {

@@ -11,6 +11,8 @@ import io.pockethive.orchestrator.domain.SwarmCreateTracker.Pending;
 import io.pockethive.orchestrator.domain.SwarmCreateTracker.Phase;
 import io.pockethive.orchestrator.domain.SwarmHealth;
 import io.pockethive.swarm.model.SwarmPlan;
+import io.pockethive.controlplane.routing.ControlPlaneRouting;
+import io.pockethive.control.ConfirmationScope;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -46,20 +48,29 @@ class SwarmEventFlowIntegrationTest {
         SwarmSignalListener signal = new SwarmSignalListener(rabbit, plans, tracker, registry, lifecycle, mapper, "inst0");
         ControllerStatusListener statusListener = new ControllerStatusListener(registry, new ObjectMapper());
 
-        signal.handle("", "ev.ready.swarm-controller.inst1");
+        signal.handle("",
+            ControlPlaneRouting.event("ready.swarm-controller",
+                new ConfirmationScope("sw1", "swarm-controller", "inst1")));
         ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
-        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("sig.swarm-template.sw1"), anyString());
-        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("ev.ready.swarm-create.sw1"), captor.capture());
+        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
+            eq(ControlPlaneRouting.signal("swarm-template", "sw1", "swarm-controller", "ALL")), anyString());
+        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
+            eq(ControlPlaneRouting.event("ready.swarm-create", new ConfirmationScope("sw1", "orchestrator", "ALL"))),
+            captor.capture());
         String conf = captor.getValue();
         var ready = mapper.readTree(conf);
         assertThat(ready.path("correlationId").asText()).isEqualTo("corr");
         assertThat(ready.path("idempotencyKey").asText()).isEqualTo("idem");
         assertThat(ready.path("state").path("status").asText()).isEqualTo("Ready");
 
-        signal.handle("", "ev.ready.swarm-template.sw1");
+        signal.handle("",
+            ControlPlaneRouting.event("ready.swarm-template",
+                new ConfirmationScope("sw1", "swarm-controller", "inst1")));
         assertThat(registry.find("sw1").get().getStatus()).isEqualTo(SwarmStatus.READY);
 
-        signal.handle("", "ev.ready.swarm-start.sw1");
+        signal.handle("",
+            ControlPlaneRouting.event("ready.swarm-start",
+                new ConfirmationScope("sw1", "swarm-controller", "inst1")));
         assertThat(registry.find("sw1").get().getStatus()).isEqualTo(SwarmStatus.RUNNING);
 
         statusListener.handle("{\"swarmId\":\"sw1\",\"data\":{\"swarmStatus\":\"RUNNING\",\"state\":{\"workloads\":{\"enabled\":false},\"controller\":{\"enabled\":true}}}}",
@@ -68,9 +79,13 @@ class SwarmEventFlowIntegrationTest {
         assertThat(registry.find("sw1").get().isWorkEnabled()).isFalse();
         assertThat(registry.find("sw1").get().isControllerEnabled()).isTrue();
 
-        signal.handle("", "ev.ready.swarm-stop.sw1");
+        signal.handle("",
+            ControlPlaneRouting.event("ready.swarm-stop",
+                new ConfirmationScope("sw1", "swarm-controller", "inst1")));
         verify(lifecycle).stopSwarm("sw1");
-        signal.handle("", "ev.ready.swarm-remove.sw1");
+        signal.handle("",
+            ControlPlaneRouting.event("ready.swarm-remove",
+                new ConfirmationScope("sw1", "swarm-controller", "inst1")));
         verify(lifecycle).removeSwarm("sw1");
     }
 }

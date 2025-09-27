@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.11.1] - 2025-09-26
+Timestamp: 2025-09-26T00:00:00Z
+
+- Swarm controller: derive config-update routing keys via `ControlPlaneRouting.signal` so Start/Stop All fan-outs target `sig.config-update.<swarm>.ALL.ALL`, ensuring bees receive broadcasts and the controller resumes itself.
+
 ## [0.11.0] - 2025-09-25
 Timestamp: 2025-09-25T00:00:00Z
 
