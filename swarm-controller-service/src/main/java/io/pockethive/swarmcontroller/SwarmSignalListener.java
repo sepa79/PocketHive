@@ -273,7 +273,8 @@ public class SwarmSignalListener {
     if (!isLocalSwarm(key.swarmId())) {
       return false;
     }
-    if (!ROLE.equalsIgnoreCase(defaultSegment(key.role(), ROLE))) {
+    String roleSegment = defaultSegment(key.role(), ROLE);
+    if (!ROLE.equalsIgnoreCase(roleSegment) && !isAllSegment(roleSegment)) {
       return false;
     }
     String instanceSegment = key.instance();
@@ -290,7 +291,8 @@ public class SwarmSignalListener {
     if (!isLocalSwarm(key.swarmId())) {
       return false;
     }
-    if (!ROLE.equalsIgnoreCase(defaultSegment(key.role(), ROLE))) {
+    String roleSegment = defaultSegment(key.role(), ROLE);
+    if (!ROLE.equalsIgnoreCase(roleSegment) && !isAllSegment(roleSegment)) {
       return false;
     }
     String targetInstance = key.instance();

@@ -478,10 +478,13 @@ class SwarmSignalListenerTest {
         eq(ControlPlaneRouting.signal("config-update", Topology.SWARM_ID, "processor", "ALL")), eq(body));
     verify(lifecycle, never()).setSwarmEnabled(anyBoolean());
     ArgumentCaptor<String> readyPayload = ArgumentCaptor.forClass(String.class);
+    String expectedReadyKey = ControlPlaneRouting.event("ready.config-update",
+        new ConfirmationScope(Topology.SWARM_ID, "processor", "inst"));
     verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
-        eq(controllerReadyEvent("config-update", "inst")), readyPayload.capture());
+        eq(expectedReadyKey), readyPayload.capture());
     JsonNode readyNode = mapper.readTree(readyPayload.getValue());
-    assertThat(readyNode.path("state").path("scope").isMissingNode()).isTrue();
+    assertThat(readyNode.path("scope").path("role").asText()).isEqualTo("processor");
+    assertThat(readyNode.path("scope").path("instance").asText()).isEqualTo("inst");
   }
 
   @Test
@@ -506,10 +509,13 @@ class SwarmSignalListenerTest {
         eq(ControlPlaneRouting.signal("config-update", Topology.SWARM_ID, "processor", "alpha")), eq(body));
     verify(lifecycle, never()).setSwarmEnabled(anyBoolean());
     ArgumentCaptor<String> readyPayload = ArgumentCaptor.forClass(String.class);
+    String expectedReadyKey = ControlPlaneRouting.event("ready.config-update",
+        new ConfirmationScope(Topology.SWARM_ID, "processor", "alpha"));
     verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
-        eq(controllerReadyEvent("config-update", "inst")), readyPayload.capture());
+        eq(expectedReadyKey), readyPayload.capture());
     JsonNode readyNode = mapper.readTree(readyPayload.getValue());
-    assertThat(readyNode.path("state").path("scope").isMissingNode()).isTrue();
+    assertThat(readyNode.path("scope").path("role").asText()).isEqualTo("processor");
+    assertThat(readyNode.path("scope").path("instance").asText()).isEqualTo("alpha");
   }
 
   @Test
@@ -533,10 +539,13 @@ class SwarmSignalListenerTest {
         eq(ControlPlaneRouting.signal("config-update", Topology.SWARM_ID, "ALL", "ALL")), eq(body));
     verify(lifecycle, never()).setSwarmEnabled(anyBoolean());
     ArgumentCaptor<String> readyPayload = ArgumentCaptor.forClass(String.class);
+    String expectedReadyKey = ControlPlaneRouting.event("ready.config-update",
+        new ConfirmationScope(Topology.SWARM_ID, "swarm-controller", "inst"));
     verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
-        eq(controllerReadyEvent("config-update", "inst")), readyPayload.capture());
+        eq(expectedReadyKey), readyPayload.capture());
     JsonNode readyNode = mapper.readTree(readyPayload.getValue());
-    assertThat(readyNode.path("state").path("scope").isMissingNode()).isTrue();
+    assertThat(readyNode.path("scope").path("role").asText()).isEqualTo("swarm-controller");
+    assertThat(readyNode.path("scope").path("instance").asText()).isEqualTo("inst");
   }
 
   @Test

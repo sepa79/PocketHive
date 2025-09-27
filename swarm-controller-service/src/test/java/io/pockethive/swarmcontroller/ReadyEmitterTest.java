@@ -1,6 +1,8 @@
 package io.pockethive.swarmcontroller;
 
 import io.pockethive.Topology;
+import io.pockethive.control.ConfirmationScope;
+import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -21,15 +23,19 @@ class ReadyEmitterTest {
     void emitsReadyEventOnStartup() {
         ReadyEmitter emitter = new ReadyEmitter(rabbit, "inst");
         emitter.emit();
-        verify(rabbit).convertAndSend(Topology.CONTROL_EXCHANGE, "ev.ready.swarm-controller.inst", "");
+        ConfirmationScope scope = ConfirmationScope.forInstance(Topology.SWARM_ID, "swarm-controller", "inst");
+        String routingKey = ControlPlaneRouting.event("ready.swarm-controller", scope);
+        verify(rabbit).convertAndSend(Topology.CONTROL_EXCHANGE, routingKey, "");
     }
 
     @Test
     void ignoresAmqpFailures() {
         ReadyEmitter emitter = new ReadyEmitter(rabbit, "inst");
+        ConfirmationScope scope = ConfirmationScope.forInstance(Topology.SWARM_ID, "swarm-controller", "inst");
+        String routingKey = ControlPlaneRouting.event("ready.swarm-controller", scope);
         doThrow(new AmqpConnectException(new IllegalStateException("boom")))
             .when(rabbit)
-            .convertAndSend(Topology.CONTROL_EXCHANGE, "ev.ready.swarm-controller.inst", "");
+            .convertAndSend(Topology.CONTROL_EXCHANGE, routingKey, "");
         assertDoesNotThrow(emitter::emit);
     }
 }
