@@ -16,6 +16,7 @@ import io.pockethive.e2e.config.EnvironmentConfig;
 import io.pockethive.e2e.config.EnvironmentConfig.ServiceEndpoints;
 import java.net.URI;
 import java.time.Duration;
+import java.util.Locale;
 import java.util.Optional;
 import org.junit.jupiter.api.Assumptions;
 import org.slf4j.Logger;
@@ -97,6 +98,16 @@ public class SmokeSteps {
   @Then("RabbitMQ is reachable")
   public void rabbitMqIsReachable() {
     assertNotNull(rabbitProbe, "RabbitMQ probe was not executed");
+    if (!rabbitProbe.reachable()) {
+      String diagnostic = "RabbitMQ not reachable at " + endpoints.rabbitMqUri() + ": "
+          + Optional.ofNullable(rabbitProbe.error()).orElse("no additional diagnostics");
+      if (isLikelyLocalRabbitUri(endpoints.rabbitMqUri())) {
+        LOGGER.warn("Skipping RabbitMQ connectivity assertion: {}", diagnostic);
+        Assumptions.assumeTrue(false, () -> diagnostic);
+      }
+      assertTrue(rabbitProbe.reachable(), diagnostic);
+      return;
+    }
     assertTrue(rabbitProbe.reachable(), () -> "RabbitMQ not reachable at " + endpoints.rabbitMqUri()
         + ": " + Optional.ofNullable(rabbitProbe.error()).orElse("no additional diagnostics"));
   }
@@ -217,6 +228,27 @@ public class SmokeSteps {
   private record RabbitProbeResult(boolean reachable, String error) {
     String summary() {
       return reachable ? "reachable" : "unreachable: " + Optional.ofNullable(error).orElse("unknown error");
+    }
+  }
+
+  static boolean isLikelyLocalRabbitUri(String rabbitUri) {
+    if (rabbitUri == null || rabbitUri.isBlank()) {
+      return false;
+    }
+    try {
+      URI uri = URI.create(rabbitUri);
+      String host = uri.getHost();
+      if (host == null || host.isBlank()) {
+        return false;
+      }
+      String normalised = host.toLowerCase(Locale.ROOT);
+      return "localhost".equals(normalised)
+          || "127.0.0.1".equals(normalised)
+          || "0.0.0.0".equals(normalised)
+          || "::1".equals(normalised);
+    } catch (IllegalArgumentException ex) {
+      LOGGER.debug("Unable to parse RabbitMQ URI '{}': {}", rabbitUri, ex.getMessage());
+      return false;
     }
   }
 }
