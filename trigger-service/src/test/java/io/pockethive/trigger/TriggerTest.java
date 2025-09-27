@@ -5,7 +5,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.Topology;
 import io.pockethive.asyncapi.AsyncApiSchemaValidator;
 import io.pockethive.control.CommandTarget;
+import io.pockethive.control.ConfirmationScope;
 import io.pockethive.control.ControlSignal;
+import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -38,6 +40,7 @@ class TriggerTest {
     private final ObjectMapper mapper = new ObjectMapper();
     private TriggerConfig triggerConfig;
     private Trigger trigger;
+    private ConfirmationScope confirmationScope;
 
     @BeforeEach
     void setUp() {
@@ -49,6 +52,7 @@ class TriggerTest {
         triggerConfig.setBody("{}");
         triggerConfig.setHeaders(new LinkedHashMap<>());
         trigger = new Trigger(rabbit, "inst", triggerConfig, mapper);
+        confirmationScope = ConfirmationScope.forInstance(Topology.SWARM_ID, "trigger", "inst");
         clearInvocations(rabbit);
     }
 
@@ -57,12 +61,16 @@ class TriggerTest {
         String correlationId = UUID.randomUUID().toString();
         String idempotencyKey = UUID.randomUUID().toString();
         ControlSignal signal = ControlSignal.forInstance(
-            "status-request", "sw1", "trigger", "inst", correlationId, idempotencyKey);
+            "status-request", Topology.SWARM_ID, "trigger", "inst", correlationId, idempotencyKey);
 
-        trigger.onControl(mapper.writeValueAsString(signal), "sig.status-request.trigger.inst", null);
+        trigger.onControl(
+            mapper.writeValueAsString(signal),
+            ControlPlaneRouting.signal("status-request", Topology.SWARM_ID, "trigger", "inst"),
+            null);
 
         ArgumentCaptor<String> payload = ArgumentCaptor.forClass(String.class);
-        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("ev.status-full.trigger.inst"), payload.capture());
+        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
+            eq(ControlPlaneRouting.event("status-full", confirmationScope)), payload.capture());
         JsonNode node = mapper.readTree(payload.getValue());
         List<String> errors = ASYNC_API.validate("#/components/schemas/ControlStatusFullPayload", node);
         assertThat(errors).isEmpty();
@@ -85,10 +93,13 @@ class TriggerTest {
         String correlationId = UUID.randomUUID().toString();
         String idempotencyKey = UUID.randomUUID().toString();
         ControlSignal signal = ControlSignal.forInstance(
-            "config-update", "sw1", "trigger", "inst", correlationId, idempotencyKey,
+            "config-update", Topology.SWARM_ID, "trigger", "inst", correlationId, idempotencyKey,
             CommandTarget.INSTANCE, args);
 
-        trigger.onControl(mapper.writeValueAsString(signal), "sig.config-update.trigger.inst", null);
+        trigger.onControl(
+            mapper.writeValueAsString(signal),
+            ControlPlaneRouting.signal("config-update", Topology.SWARM_ID, "trigger", "inst"),
+            null);
 
         Boolean enabled = (Boolean) ReflectionTestUtils.getField(trigger, "enabled");
         assertThat(enabled).isTrue();
@@ -101,7 +112,8 @@ class TriggerTest {
         assertThat(triggerConfig.getHeaders()).containsEntry("X-Test", "123");
 
         ArgumentCaptor<String> payload = ArgumentCaptor.forClass(String.class);
-        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("ev.ready.config-update.trigger.inst"), payload.capture());
+        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
+            eq(ControlPlaneRouting.event("ready.config-update", confirmationScope)), payload.capture());
         JsonNode node = mapper.readTree(payload.getValue());
         assertThat(node.path("result").asText()).isEqualTo("success");
         assertThat(node.path("signal").asText()).isEqualTo("config-update");
@@ -109,12 +121,13 @@ class TriggerTest {
         assertThat(node.path("idempotencyKey").asText()).isEqualTo(idempotencyKey);
         assertThat(node.path("scope").path("role").asText()).isEqualTo("trigger");
         assertThat(node.path("scope").path("instance").asText()).isEqualTo("inst");
-        assertThat(node.path("scope").path("swarmId").asText()).isEqualTo("sw1");
+        assertThat(node.path("scope").path("swarmId").asText()).isEqualTo(Topology.SWARM_ID);
         assertThat(node.path("state").path("scope").isMissingNode()).isTrue();
         assertThat(node.path("state").path("enabled").asBoolean()).isTrue();
         assertThat(node.has("args")).isFalse();
 
-        verify(rabbit, never()).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("ev.error.config-update.trigger.inst"), anyString());
+        verify(rabbit, never()).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
+            eq(ControlPlaneRouting.event("error.config-update", confirmationScope)), anyString());
         List<String> readyErrors = ASYNC_API.validate("#/components/schemas/CommandReadyPayload", node);
         assertThat(readyErrors).isEmpty();
     }
@@ -126,13 +139,17 @@ class TriggerTest {
         String correlationId = UUID.randomUUID().toString();
         String idempotencyKey = UUID.randomUUID().toString();
         ControlSignal signal = ControlSignal.forInstance(
-            "config-update", "sw1", "trigger", "inst", correlationId, idempotencyKey,
+            "config-update", Topology.SWARM_ID, "trigger", "inst", correlationId, idempotencyKey,
             CommandTarget.INSTANCE, args);
 
-        trigger.onControl(mapper.writeValueAsString(signal), "sig.config-update.trigger.inst", null);
+        trigger.onControl(
+            mapper.writeValueAsString(signal),
+            ControlPlaneRouting.signal("config-update", Topology.SWARM_ID, "trigger", "inst"),
+            null);
 
         ArgumentCaptor<String> payload = ArgumentCaptor.forClass(String.class);
-        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("ev.error.config-update.trigger.inst"), payload.capture());
+        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
+            eq(ControlPlaneRouting.event("error.config-update", confirmationScope)), payload.capture());
         JsonNode node = mapper.readTree(payload.getValue());
         assertThat(node.path("result").asText()).isEqualTo("error");
         assertThat(node.path("signal").asText()).isEqualTo("config-update");
@@ -149,7 +166,8 @@ class TriggerTest {
         assertThat(enabled).isFalse();
         assertThat(triggerConfig.getIntervalMs()).isZero();
 
-        verify(rabbit, never()).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("ev.ready.config-update.trigger.inst"), anyString());
+        verify(rabbit, never()).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
+            eq(ControlPlaneRouting.event("ready.config-update", confirmationScope)), anyString());
     }
 
     @Test
@@ -158,17 +176,21 @@ class TriggerTest {
         String correlationId = UUID.randomUUID().toString();
         String idempotencyKey = UUID.randomUUID().toString();
         ControlSignal signal = ControlSignal.forInstance(
-            "config-update", "sw1", "trigger", "inst", correlationId, idempotencyKey,
+            "config-update", Topology.SWARM_ID, "trigger", "inst", correlationId, idempotencyKey,
             CommandTarget.INSTANCE, args);
 
-        trigger.onControl(mapper.writeValueAsString(signal), "sig.config-update.trigger.inst", null);
+        trigger.onControl(
+            mapper.writeValueAsString(signal),
+            ControlPlaneRouting.signal("config-update", Topology.SWARM_ID, "trigger", "inst"),
+            null);
 
         AtomicLong counter = (AtomicLong) ReflectionTestUtils.getField(trigger, "counter");
         assertThat(counter).isNotNull();
         assertThat(counter.get()).isEqualTo(1L);
 
         ArgumentCaptor<String> payload = ArgumentCaptor.forClass(String.class);
-        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("ev.ready.config-update.trigger.inst"), payload.capture());
+        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
+            eq(ControlPlaneRouting.event("ready.config-update", confirmationScope)), payload.capture());
         JsonNode node = mapper.readTree(payload.getValue());
         assertThat(node.has("args")).isFalse();
         assertThat(node.path("state").path("scope").isMissingNode()).isTrue();
