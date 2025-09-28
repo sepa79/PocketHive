@@ -139,20 +139,24 @@ public class SwarmSignalListener {
     }
   }
 
-  private void processSwarmSignal(ControlSignal cs, String swarmId, SignalAction action, String label) {
+  private void processSwarmSignal(ControlSignal cs,
+                                  String resolvedSignal,
+                                  String swarmId,
+                                  SignalAction action,
+                                  String label) {
     MDC.put("correlation_id", cs.correlationId());
     MDC.put("idempotency_key", cs.idempotencyKey());
     try {
       log.info("{} signal for swarm {}", label.substring(0, 1).toUpperCase() + label.substring(1), swarmId);
       action.apply(serializeArgs(cs));
-      emitSuccess(cs, swarmId);
+      emitSuccess(cs, resolvedSignal, swarmId);
     } catch (Exception e) {
       log.warn(label, e);
-      emitError(cs, e, swarmId);
+      emitError(cs, e, resolvedSignal, swarmId);
     }
   }
 
-  private void processConfigUpdate(ControlSignalEnvelope envelope, String rawPayload) {
+  private void processConfigUpdate(ControlSignalEnvelope envelope, String rawPayload, String resolvedSignal) {
     ControlSignal cs = envelope.signal();
     MDC.put("correlation_id", cs.correlationId());
     MDC.put("idempotency_key", cs.idempotencyKey());
@@ -216,12 +220,12 @@ public class SwarmSignalListener {
         case ALL -> fanouts.add(() -> forwardToAll(cs, rawPayload));
       }
 
-      CommandState state = configCommandState(cs, stateEnabled, details);
+      CommandState state = configCommandState(cs, resolvedSignal, stateEnabled, details);
       fanouts.forEach(Runnable::run);
-      emitSuccess(cs, null, state);
+      emitSuccess(cs, resolvedSignal, null, state);
     } catch (Exception e) {
       log.warn("config update", e);
-      emitError(cs, e, null);
+      emitError(cs, e, resolvedSignal, null);
     }
   }
 
@@ -234,12 +238,12 @@ public class SwarmSignalListener {
     switch (signal) {
       case "swarm-template" -> {
         if (isForLocalSwarm(cs)) {
-          processSwarmSignal(cs, swarmIdOrDefault(cs), args -> lifecycle.prepare(args), "template");
+          processSwarmSignal(cs, signal, swarmIdOrDefault(cs), args -> lifecycle.prepare(args), "template");
         }
       }
       case "swarm-start" -> {
         if (isForLocalSwarm(cs)) {
-          processSwarmSignal(cs, swarmIdOrDefault(cs), args -> {
+          processSwarmSignal(cs, signal, swarmIdOrDefault(cs), args -> {
             lifecycle.start(args);
             sendStatusFull();
           }, "start");
@@ -247,19 +251,19 @@ public class SwarmSignalListener {
       }
       case "swarm-stop" -> {
         if (isForLocalSwarm(cs)) {
-          processSwarmSignal(cs, swarmIdOrDefault(cs), args -> lifecycle.stop(), "stop");
+          processSwarmSignal(cs, signal, swarmIdOrDefault(cs), args -> lifecycle.stop(), "stop");
         }
       }
       case "swarm-remove" -> {
         if (isForLocalSwarm(cs)) {
-          processSwarmSignal(cs, swarmIdOrDefault(cs), args -> lifecycle.remove(), "remove");
+          processSwarmSignal(cs, signal, swarmIdOrDefault(cs), args -> lifecycle.remove(), "remove");
         }
       }
       case "status-request" -> {
         log.debug("Status request received: {}", envelope.routingKey());
         sendStatusFull();
       }
-      case "config-update" -> processConfigUpdate(envelope, rawPayload);
+      case "config-update" -> processConfigUpdate(envelope, rawPayload, signal);
       default -> {
         // ignore other signals
       }
@@ -320,15 +324,19 @@ public class SwarmSignalListener {
     sendStatusDelta();
   }
 
-  private void emitSuccess(ControlSignal cs, String swarmIdFallback) {
-    emitSuccess(cs, swarmIdFallback, null);
+  private void emitSuccess(ControlSignal cs, String resolvedSignal, String swarmIdFallback) {
+    emitSuccess(cs, resolvedSignal, swarmIdFallback, null);
   }
 
-  private void emitSuccess(ControlSignal cs, String swarmIdFallback, CommandState overrideState) {
+  private void emitSuccess(ControlSignal cs,
+                           String resolvedSignal,
+                           String swarmIdFallback,
+                           CommandState overrideState) {
     ConfirmationScope scope = scopeFor(cs, swarmIdFallback);
-    CommandState baseState = overrideState != null ? overrideState : stateForSuccess(cs);
+    String signal = confirmationSignal(cs, resolvedSignal);
+    CommandState baseState = overrideState != null ? overrideState : stateForSuccess(signal);
     CommandState state = enrichState(cs, baseState);
-    String type = successEventType(cs.signal());
+    String type = successEventType(signal);
     if (type == null) {
       return;
     }
@@ -336,7 +344,7 @@ public class SwarmSignalListener {
         Instant.now(),
         cs.correlationId(),
         cs.idempotencyKey(),
-        cs.signal(),
+        signal,
         scope,
         state
     );
@@ -344,18 +352,22 @@ public class SwarmSignalListener {
     sendControl(ControlPlaneRouting.event(type, scope), json, "ev.ready");
   }
 
-  private void emitError(ControlSignal cs, Exception e, String swarmIdFallback) {
+  private void emitError(ControlSignal cs,
+                         Exception e,
+                         String resolvedSignal,
+                         String swarmIdFallback) {
     ConfirmationScope scope = scopeFor(cs, swarmIdFallback);
-    CommandState state = enrichState(cs, stateForError(cs));
-    String type = errorEventType(cs.signal());
+    String signal = confirmationSignal(cs, resolvedSignal);
+    CommandState state = enrichState(cs, stateForError(signal));
+    String type = errorEventType(signal);
     ErrorConfirmation confirmation = new ErrorConfirmation(
         Instant.now(),
         cs.correlationId(),
         cs.idempotencyKey(),
-        cs.signal(),
+        signal,
         scope,
         state,
-        phaseForSignal(cs.signal()),
+        phaseForSignal(signal),
         e.getClass().getSimpleName(),
         e.getMessage(),
         Boolean.FALSE,
@@ -373,8 +385,9 @@ public class SwarmSignalListener {
     return new ConfirmationScope(swarmId, role, instance);
   }
 
-  private CommandState stateForSuccess(ControlSignal cs) {
-    String status = switch (cs.signal()) {
+  private CommandState stateForSuccess(String signal) {
+    String effectiveSignal = signal == null ? "" : signal;
+    String status = switch (effectiveSignal) {
       case "swarm-template" -> "Ready";
       case "swarm-start" -> "Running";
       case "swarm-stop" -> "Stopped";
@@ -412,9 +425,10 @@ public class SwarmSignalListener {
   }
 
   private CommandState configCommandState(ControlSignal cs,
+                                          String resolvedSignal,
                                           Boolean enabled,
                                           Map<String, Object> details) {
-    CommandState base = stateForSuccess(cs);
+    CommandState base = stateForSuccess(confirmationSignal(cs, resolvedSignal));
     Map<String, Object> detailCopy = (details == null || details.isEmpty()) ? null : new LinkedHashMap<>(details);
     return new CommandState(base != null ? base.status() : null, enabled, detailCopy);
   }
@@ -550,12 +564,13 @@ public class SwarmSignalListener {
 
   private record TargetSpec(String role, String instance) {}
 
-  private CommandState stateForError(ControlSignal cs) {
+  private CommandState stateForError(String signal) {
     String state = stateFromLifecycle();
     if (state != null) {
       return new CommandState(state, null, null);
     }
-    return switch (cs.signal()) {
+    String effectiveSignal = signal == null ? "" : signal;
+    return switch (effectiveSignal) {
       case "swarm-start" -> new CommandState("Stopped", null, null);
       case "swarm-stop" -> new CommandState("Running", null, null);
       case "swarm-remove" -> new CommandState("Stopped", null, null);
@@ -578,6 +593,9 @@ public class SwarmSignalListener {
   }
 
   private String phaseForSignal(String signal) {
+    if (signal == null || signal.isBlank()) {
+      return signal;
+    }
     return switch (signal) {
       case "swarm-template" -> "template";
       case "swarm-start" -> "start";
@@ -586,6 +604,10 @@ public class SwarmSignalListener {
       case "config-update" -> "config-update";
       default -> signal;
     };
+  }
+
+  private String confirmationSignal(ControlSignal cs, String resolvedSignal) {
+    return defaultSegment(cs != null ? cs.signal() : null, resolvedSignal);
   }
 
   private String toJson(Object value) {

@@ -53,6 +53,12 @@ class SwarmSignalListenerTest {
         """.formatted(corr, id, sig, Topology.SWARM_ID);
   }
 
+  private String signalWithoutCommand(String id, String corr) {
+    return """
+        {"correlationId":"%s","idempotencyKey":"%s","swarmId":"%s","args":{}}
+        """.formatted(corr, id, Topology.SWARM_ID);
+  }
+
   private String configAllSignal(boolean enabled) {
     return """
         {"correlationId":"c-all","idempotencyKey":"i-all","signal":"config-update","swarmId":"%s","role":"swarm-controller","instance":"inst","commandTarget":"all","args":{"data":{"enabled":%s}}}
@@ -181,6 +187,25 @@ class SwarmSignalListenerTest {
     assertThat(stopNode.path("correlationId").asText()).isEqualTo("c2");
     assertThat(stopNode.path("idempotencyKey").asText()).isEqualTo("i2");
     assertThat(stopNode.path("state").path("status").asText()).isEqualTo("Stopped");
+    assertThat(stopNode.path("scope").path("swarmId").asText()).isEqualTo(Topology.SWARM_ID);
+    assertThat(stopNode.path("scope").path("role").asText()).isEqualTo("swarm-controller");
+    assertThat(stopNode.path("scope").path("instance").asText()).isEqualTo("inst");
+  }
+
+  @Test
+  void stopConfirmationUsesResolvedSignalWhenMissingCommandField() throws Exception {
+    when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
+    SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", mapper);
+    listener.handle(signalWithoutCommand("i2x", "c2x"), controllerSignal("swarm-stop"));
+    verify(lifecycle).stop();
+    ArgumentCaptor<String> stopPayload = ArgumentCaptor.forClass(String.class);
+    verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
+        eq(controllerReadyEvent("swarm-stop", "inst")),
+        stopPayload.capture());
+    JsonNode stopNode = mapper.readTree(stopPayload.getValue());
+    assertThat(stopNode.path("signal").asText()).isEqualTo("swarm-stop");
+    assertThat(stopNode.path("correlationId").asText()).isEqualTo("c2x");
+    assertThat(stopNode.path("idempotencyKey").asText()).isEqualTo("i2x");
     assertThat(stopNode.path("scope").path("swarmId").asText()).isEqualTo(Topology.SWARM_ID);
     assertThat(stopNode.path("scope").path("role").asText()).isEqualTo("swarm-controller");
     assertThat(stopNode.path("scope").path("instance").asText()).isEqualTo("inst");
