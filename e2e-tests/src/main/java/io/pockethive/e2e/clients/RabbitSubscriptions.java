@@ -7,6 +7,7 @@ import org.springframework.messaging.simp.stomp.StompSession;
 import org.springframework.messaging.simp.stomp.StompSessionHandler;
 
 import io.pockethive.e2e.config.EnvironmentConfig.RabbitMqSettings;
+import io.pockethive.e2e.support.ControlPlaneEvents;
 
 /**
  * Placeholder messaging client. Actual subscription helpers will be introduced in later phases.
@@ -31,6 +32,10 @@ public final class RabbitSubscriptions {
 
   public ConnectionFactory connectionFactory() {
     return connectionFactory;
+  }
+
+  public ControlPlaneEvents controlPlaneEvents() {
+    return new ControlPlaneEvents(connectionFactory);
   }
 
   /**
