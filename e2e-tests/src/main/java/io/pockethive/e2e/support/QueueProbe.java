@@ -1,7 +1,7 @@
 package io.pockethive.e2e.support;
 
-import java.util.Map;
 import java.util.Objects;
+import java.util.Properties;
 
 import org.springframework.amqp.rabbit.connection.ConnectionFactory;
 import org.springframework.amqp.rabbit.core.RabbitAdmin;
@@ -20,7 +20,7 @@ public final class QueueProbe {
 
   public boolean exists(String queueName) {
     Objects.requireNonNull(queueName, "queueName");
-    Map<String, Object> properties = rabbitAdmin.getQueueProperties(queueName);
+    Properties properties = rabbitAdmin.getQueueProperties(queueName);
     return properties != null;
   }
 }
