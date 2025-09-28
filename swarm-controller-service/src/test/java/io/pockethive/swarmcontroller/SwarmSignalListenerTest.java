@@ -629,6 +629,30 @@ class SwarmSignalListenerTest {
   }
 
   @Test
+  void swarmBroadcastWithoutRoleIsIgnored() throws Exception {
+    when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
+    when(lifecycle.getMetrics()).thenReturn(new SwarmMetrics(0,0,0,0, java.time.Instant.now()));
+    SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", mapper);
+    reset(lifecycle, rabbit);
+    stubLifecycleDefaults();
+
+    String body = """
+        {"correlationId":"c-loop","idempotencyKey":"i-loop","signal":"config-update",
+         "swarmId":"%s",
+         "commandTarget":"swarm",
+         "role":null,
+         "instance":null,
+         "args":{"data":{"enabled":false}}}
+        """.formatted(Topology.SWARM_ID);
+
+    listener.handle(body, ControlPlaneRouting.signal("config-update", Topology.SWARM_ID, "ALL", "ALL"));
+
+    verify(lifecycle, never()).setSwarmEnabled(anyBoolean());
+    verify(rabbit, never()).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
+        eq(controllerReadyEvent("config-update", "inst")), anyString());
+  }
+
+  @Test
   void repliesToStatusRequest() {
     when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
     SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", mapper);

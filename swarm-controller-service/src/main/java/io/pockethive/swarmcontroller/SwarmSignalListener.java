@@ -295,6 +295,11 @@ public class SwarmSignalListener {
     if (!ROLE.equalsIgnoreCase(roleSegment) && !isAllSegment(roleSegment)) {
       return false;
     }
+    if (isAllSegment(roleSegment)
+        && commandTarget == CommandTarget.SWARM
+        && (cs.role() == null || cs.role().isBlank() || isAllSegment(cs.role()))) {
+      return false;
+    }
     String targetInstance = key.instance();
     if (isAllSegment(targetInstance)) {
       return commandTarget == CommandTarget.SWARM || commandTarget == CommandTarget.ALL;
