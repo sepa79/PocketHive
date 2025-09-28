@@ -11,7 +11,7 @@ fi
 
 export ORCHESTRATOR_BASE_URL="${ORCHESTRATOR_BASE_URL:-http://localhost:8088/orchestrator}"
 export SCENARIO_MANAGER_BASE_URL="${SCENARIO_MANAGER_BASE_URL:-http://localhost:8088/scenario-manager}"
-export RABBITMQ_HOST="${RABBITMQ_HOST:-rabbitmq}"
+export RABBITMQ_HOST="${RABBITMQ_HOST:-localhost}"
 export RABBITMQ_PORT="${RABBITMQ_PORT:-5672}"
 export RABBITMQ_DEFAULT_USER="${RABBITMQ_DEFAULT_USER:-guest}"
 export RABBITMQ_DEFAULT_PASS="${RABBITMQ_DEFAULT_PASS:-guest}"
