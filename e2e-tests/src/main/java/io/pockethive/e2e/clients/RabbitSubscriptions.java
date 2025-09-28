@@ -1,14 +1,12 @@
 package io.pockethive.e2e.clients;
 
-import java.net.URI;
-import java.net.URISyntaxException;
-import java.util.Objects;
-
 import org.springframework.amqp.rabbit.connection.CachingConnectionFactory;
 import org.springframework.amqp.rabbit.connection.ConnectionFactory;
 import org.springframework.lang.Nullable;
 import org.springframework.messaging.simp.stomp.StompSession;
 import org.springframework.messaging.simp.stomp.StompSessionHandler;
+
+import io.pockethive.e2e.config.EnvironmentConfig.RabbitMqSettings;
 
 /**
  * Placeholder messaging client. Actual subscription helpers will be introduced in later phases.
@@ -21,15 +19,14 @@ public final class RabbitSubscriptions {
     this.connectionFactory = connectionFactory;
   }
 
-  public static RabbitSubscriptions fromUri(String uri) {
-    Objects.requireNonNull(uri, "uri");
-    try {
-      CachingConnectionFactory factory = new CachingConnectionFactory();
-      factory.setUri(new URI(uri));
-      return new RabbitSubscriptions(factory);
-    } catch (URISyntaxException ex) {
-      throw new IllegalStateException("Invalid AMQP URI provided for RabbitMQ subscriptions", ex);
-    }
+  public static RabbitSubscriptions from(RabbitMqSettings settings) {
+    CachingConnectionFactory factory = new CachingConnectionFactory();
+    factory.setHost(settings.host());
+    factory.setPort(settings.port());
+    factory.setUsername(settings.username());
+    factory.setPassword(settings.password());
+    factory.setVirtualHost(settings.virtualHost());
+    return new RabbitSubscriptions(factory);
   }
 
   public ConnectionFactory connectionFactory() {

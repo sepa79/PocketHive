@@ -32,10 +32,10 @@ start-e2e-tests.bat           # Windows
 ```
 
 Both wrappers accept additional Maven arguments, which are forwarded to the underlying `./mvnw verify -pl e2e-tests -am`
-command. When invoked without extra configuration, the scripts seed the environment with localhost defaults that match
-the standard `docker compose` deployment (e.g. `http://localhost:8088/orchestrator`,
-`http://localhost:8088/scenario-manager`, `amqp://ph-observer:ph-observer@localhost:5672/`, and `ws://localhost:8088/ws`).
-Override any of these values by exporting the environment variables before launching the helper.
+command. When invoked without extra configuration, the scripts seed the environment with defaults that mirror the
+service container configuration (e.g. `http://localhost:8088/orchestrator`, `http://localhost:8088/scenario-manager`,
+`rabbitmq:5672` with the `guest/guest` account, and `ws://localhost:8088/ws`). Override any of these values by exporting
+the environment variables before launching the helper.
 
 The deployment smoke feature runs automatically once the required environment variables are present; otherwise the
 scenario is skipped via JUnit assumptions so local builds without a running stack still succeed. Remove the `@wip` tag
@@ -49,11 +49,19 @@ Environment variables will be referenced by the harness once the step implementa
 | --- | --- |
 | `ORCHESTRATOR_BASE_URL` | Base URL (e.g. `http://localhost:8080`) for orchestrator REST calls. |
 | `SCENARIO_MANAGER_BASE_URL` | Base URL for querying available templates via the Scenario Manager. |
-| `RABBITMQ_URI` | AMQP URI with credentials for control-plane and data-plane queues. |
+| `RABBITMQ_HOST` | RabbitMQ hostname to probe (defaults to `rabbitmq`). |
+| `RABBITMQ_PORT` | RabbitMQ port (defaults to `5672`). |
+| `RABBITMQ_DEFAULT_USER` | Username used for AMQP connectivity checks (defaults to `guest`). |
+| `RABBITMQ_DEFAULT_PASS` | Password paired with `RABBITMQ_DEFAULT_USER` (defaults to `guest`). |
+| `RABBITMQ_VHOST` | RabbitMQ virtual host (defaults to `/`). |
 | `UI_WEBSOCKET_URI` | WebSocket endpoint exposed by the nginx proxy for UI-equivalent subscriptions. |
 | `UI_BASE_URL` | Base HTTP URL for the nginx UI proxy. When omitted the harness derives it from `UI_WEBSOCKET_URI`. |
 | `SWARM_ID` | Default swarm identifier used by shared steps (override per scenario when required). |
 | `IDEMPOTENCY_KEY_PREFIX` | Prefix applied to generated idempotency keys to simplify log correlation. |
+
+The harness consumes the same RabbitMQ environment variables as the orchestrator's Spring Boot configuration. Configure
+them once (for example in your shell profile or deployment manifest) and both the service and the smoke checks will
+point at the same broker.
 
 ## Phase roadmap reference
 
