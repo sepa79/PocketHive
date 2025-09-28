@@ -11,7 +11,7 @@ class SmokeStepsTest {
   void detectsLocalRabbitHostnames() {
     assertTrue(SmokeSteps.isLikelyLocalRabbitUri("amqp://guest:guest@localhost:5672/"));
     assertTrue(SmokeSteps.isLikelyLocalRabbitUri("amqp://guest:guest@127.0.0.1:5672/"));
-    assertTrue(SmokeSteps.isLikelyLocalRabbitUri("amqp://guest:guest@::1:5672/"));
+    assertTrue(SmokeSteps.isLikelyLocalRabbitUri("amqp://guest:guest@[::1]:5672/"));
     assertTrue(SmokeSteps.isLikelyLocalRabbitUri("amqp://guest:guest@0.0.0.0:5672/"));
   }
 

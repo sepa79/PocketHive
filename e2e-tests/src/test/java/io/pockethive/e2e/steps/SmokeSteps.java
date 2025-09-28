@@ -241,7 +241,11 @@ public class SmokeSteps {
       if (host == null || host.isBlank()) {
         return false;
       }
-      String normalised = host.toLowerCase(Locale.ROOT);
+      String normalisedHost = host;
+      if (normalisedHost.startsWith("[") && normalisedHost.endsWith("]") && normalisedHost.length() > 2) {
+        normalisedHost = normalisedHost.substring(1, normalisedHost.length() - 1);
+      }
+      String normalised = normalisedHost.toLowerCase(Locale.ROOT);
       return "localhost".equals(normalised)
           || "127.0.0.1".equals(normalised)
           || "0.0.0.0".equals(normalised)
