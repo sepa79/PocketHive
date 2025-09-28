@@ -16,7 +16,11 @@ if not exist mvnw.cmd (
 
 if not defined ORCHESTRATOR_BASE_URL set "ORCHESTRATOR_BASE_URL=http://localhost:8088/orchestrator"
 if not defined SCENARIO_MANAGER_BASE_URL set "SCENARIO_MANAGER_BASE_URL=http://localhost:8088/scenario-manager"
-if not defined RABBITMQ_URI set "RABBITMQ_URI=amqp://ph-observer:ph-observer@localhost:5672/"
+if not defined RABBITMQ_HOST set "RABBITMQ_HOST=rabbitmq"
+if not defined RABBITMQ_PORT set "RABBITMQ_PORT=5672"
+if not defined RABBITMQ_DEFAULT_USER set "RABBITMQ_DEFAULT_USER=guest"
+if not defined RABBITMQ_DEFAULT_PASS set "RABBITMQ_DEFAULT_PASS=guest"
+if not defined RABBITMQ_VHOST set "RABBITMQ_VHOST=/"
 if not defined UI_BASE_URL set "UI_BASE_URL=http://localhost:8088"
 if not defined UI_WEBSOCKET_URI set "UI_WEBSOCKET_URI=ws://localhost:8088/ws"
 

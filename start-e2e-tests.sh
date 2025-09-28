@@ -11,7 +11,11 @@ fi
 
 export ORCHESTRATOR_BASE_URL="${ORCHESTRATOR_BASE_URL:-http://localhost:8088/orchestrator}"
 export SCENARIO_MANAGER_BASE_URL="${SCENARIO_MANAGER_BASE_URL:-http://localhost:8088/scenario-manager}"
-export RABBITMQ_URI="${RABBITMQ_URI:-amqp://ph-observer:ph-observer@localhost:5672/}"
+export RABBITMQ_HOST="${RABBITMQ_HOST:-rabbitmq}"
+export RABBITMQ_PORT="${RABBITMQ_PORT:-5672}"
+export RABBITMQ_DEFAULT_USER="${RABBITMQ_DEFAULT_USER:-guest}"
+export RABBITMQ_DEFAULT_PASS="${RABBITMQ_DEFAULT_PASS:-guest}"
+export RABBITMQ_VHOST="${RABBITMQ_VHOST:-/}"
 export UI_BASE_URL="${UI_BASE_URL:-http://localhost:8088}"
 export UI_WEBSOCKET_URI="${UI_WEBSOCKET_URI:-ws://localhost:8088/ws}"
 

@@ -11,7 +11,11 @@ public final class EnvironmentConfig {
 
   public static final String ORCHESTRATOR_BASE_URL = "ORCHESTRATOR_BASE_URL";
   public static final String SCENARIO_MANAGER_BASE_URL = "SCENARIO_MANAGER_BASE_URL";
-  public static final String RABBITMQ_URI = "RABBITMQ_URI";
+  public static final String RABBITMQ_HOST = "RABBITMQ_HOST";
+  public static final String RABBITMQ_PORT = "RABBITMQ_PORT";
+  public static final String RABBITMQ_DEFAULT_USER = "RABBITMQ_DEFAULT_USER";
+  public static final String RABBITMQ_DEFAULT_PASS = "RABBITMQ_DEFAULT_PASS";
+  public static final String RABBITMQ_VHOST = "RABBITMQ_VHOST";
   public static final String UI_WEBSOCKET_URI = "UI_WEBSOCKET_URI";
   public static final String UI_BASE_URL = "UI_BASE_URL";
   public static final String SWARM_ID = "SWARM_ID";
@@ -59,12 +63,29 @@ public final class EnvironmentConfig {
     return new ServiceEndpoints(
         requiredUri(ORCHESTRATOR_BASE_URL),
         requiredUri(SCENARIO_MANAGER_BASE_URL),
-        required(RABBITMQ_URI),
+        loadRabbitMqSettings(),
         env(UI_WEBSOCKET_URI).map(EnvironmentConfig::toUri),
         resolveUiBaseUrl(),
         env(SWARM_ID).orElse("pockethive-e2e"),
         env(IDEMPOTENCY_KEY_PREFIX).orElse("ph-e2e")
     );
+  }
+
+  private static RabbitMqSettings loadRabbitMqSettings() {
+    String host = env(RABBITMQ_HOST).orElse("rabbitmq");
+    int port = env(RABBITMQ_PORT)
+        .map(value -> {
+          try {
+            return Integer.parseInt(value);
+          } catch (NumberFormatException ex) {
+            throw new IllegalStateException("Invalid RabbitMQ port configured: " + value, ex);
+          }
+        })
+        .orElse(5672);
+    String username = env(RABBITMQ_DEFAULT_USER).orElse("guest");
+    String password = env(RABBITMQ_DEFAULT_PASS).orElse("guest");
+    String virtualHost = env(RABBITMQ_VHOST).orElse("/");
+    return new RabbitMqSettings(host, port, username, password, virtualHost);
   }
 
   private static Optional<String> env(String variable) {
@@ -87,7 +108,7 @@ public final class EnvironmentConfig {
   public record ServiceEndpoints(
       URI orchestratorBaseUrl,
       URI scenarioManagerBaseUrl,
-      String rabbitMqUri,
+      RabbitMqSettings rabbitMq,
       Optional<URI> uiWebsocketUri,
       Optional<URI> uiBaseUrl,
       String defaultSwarmId,
@@ -102,12 +123,52 @@ public final class EnvironmentConfig {
       return Map.of(
           "orchestratorBaseUrl", orchestratorBaseUrl.toString(),
           "scenarioManagerBaseUrl", scenarioManagerBaseUrl.toString(),
-          "rabbitMqUri", rabbitMqUri,
+          "rabbitMqHost", rabbitMq.host(),
+          "rabbitMqPort", Integer.toString(rabbitMq.port()),
+          "rabbitMqUsername", rabbitMq.username(),
+          "rabbitMqVirtualHost", rabbitMq.virtualHost(),
           "uiWebsocketUri", uiWebsocketUri.map(URI::toString).orElse("<not-configured>"),
           "uiBaseUrl", uiBaseUrl.map(URI::toString).orElse("<not-configured>"),
           "defaultSwarmId", defaultSwarmId,
           "idempotencyKeyPrefix", idempotencyKeyPrefix
       );
+    }
+  }
+
+  public record RabbitMqSettings(String host, int port, String username, String password, String virtualHost) {
+
+    public RabbitMqSettings {
+      host = requireNonBlank(host, "RabbitMQ host");
+      username = requireNonBlank(username, "RabbitMQ username");
+      password = password == null ? "" : password;
+      virtualHost = normaliseVirtualHost(virtualHost);
+    }
+
+    public String redactedUri() {
+      String safeUser = username.isBlank() ? "<anonymous>" : username;
+      String vhostSegment = "/".equals(virtualHost) ? "/" : ensureLeadingSlash(virtualHost);
+      return String.format("amqp://%s:***@%s:%d%s", safeUser, host, port, vhostSegment);
+    }
+
+    private static String normaliseVirtualHost(String value) {
+      if (value == null || value.isBlank()) {
+        return "/";
+      }
+      return value;
+    }
+
+    private static String requireNonBlank(String value, String field) {
+      if (value == null || value.isBlank()) {
+        throw new IllegalStateException(field + " must not be blank");
+      }
+      return value;
+    }
+
+    private static String ensureLeadingSlash(String value) {
+      if (value.startsWith("/")) {
+        return value;
+      }
+      return "/" + value;
     }
   }
 
