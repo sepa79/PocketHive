@@ -1,0 +1,3 @@
+io.pockethive.controlplane.spring.ControlPlaneCommonAutoConfiguration
+io.pockethive.controlplane.spring.WorkerControlPlaneAutoConfiguration
+io.pockethive.controlplane.spring.ManagerControlPlaneAutoConfiguration

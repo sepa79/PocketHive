@@ -1,0 +1,138 @@
+{
+  "properties": [
+    {
+      "name": "pockethive.control-plane.enabled",
+      "type": "java.lang.Boolean",
+      "description": "Enable PocketHive control-plane auto-configuration.",
+      "defaultValue": true
+    },
+    {
+      "name": "pockethive.control-plane.declare-topology",
+      "type": "java.lang.Boolean",
+      "description": "Declare queues and bindings derived from the configured topology descriptors.",
+      "defaultValue": true
+    },
+    {
+      "name": "pockethive.control-plane.exchange",
+      "type": "java.lang.String",
+      "description": "Control-plane exchange name used for signal and event traffic.",
+      "defaultValue": "ph.control"
+    },
+    {
+      "name": "pockethive.control-plane.swarm-id",
+      "type": "java.lang.String",
+      "description": "Default swarm identifier used when participant-specific values are not provided.",
+      "defaultValue": "default"
+    },
+    {
+      "name": "pockethive.control-plane.publisher.enabled",
+      "type": "java.lang.Boolean",
+      "description": "Expose an AmqpTemplate-backed control-plane publisher bean.",
+      "defaultValue": true
+    },
+    {
+      "name": "pockethive.control-plane.worker.enabled",
+      "type": "java.lang.Boolean",
+      "description": "Enable worker control-plane auto-configuration.",
+      "defaultValue": true
+    },
+    {
+      "name": "pockethive.control-plane.worker.declare-topology",
+      "type": "java.lang.Boolean",
+      "description": "Declare worker queues and bindings based on the worker topology descriptor.",
+      "defaultValue": true
+    },
+    {
+      "name": "pockethive.control-plane.worker.role",
+      "type": "java.lang.String",
+      "description": "Worker role identifier used to resolve the control-plane topology descriptor."
+    },
+    {
+      "name": "pockethive.control-plane.worker.instance-id",
+      "type": "java.lang.String",
+      "description": "Worker instance identifier used for queue naming and self-filtering."
+    },
+    {
+      "name": "pockethive.control-plane.worker.listener.enabled",
+      "type": "java.lang.Boolean",
+      "description": "Expose the WorkerControlPlane listener adapter.",
+      "defaultValue": true
+    },
+    {
+      "name": "pockethive.control-plane.worker.skip-self-signals",
+      "type": "java.lang.Boolean",
+      "description": "Skip signals published by the same worker instance.",
+      "defaultValue": true
+    },
+    {
+      "name": "pockethive.control-plane.worker.duplicate-cache.enabled",
+      "type": "java.lang.Boolean",
+      "description": "Enable duplicate signal detection for workers.",
+      "defaultValue": true
+    },
+    {
+      "name": "pockethive.control-plane.worker.duplicate-cache.ttl",
+      "type": "java.time.Duration",
+      "description": "Retention period for the worker duplicate signal cache.",
+      "defaultValue": "PT5M"
+    },
+    {
+      "name": "pockethive.control-plane.worker.duplicate-cache.capacity",
+      "type": "java.lang.Integer",
+      "description": "Maximum entries kept in the worker duplicate signal cache.",
+      "defaultValue": 1024
+    },
+    {
+      "name": "pockethive.control-plane.manager.enabled",
+      "type": "java.lang.Boolean",
+      "description": "Enable manager control-plane auto-configuration.",
+      "defaultValue": true
+    },
+    {
+      "name": "pockethive.control-plane.manager.declare-topology",
+      "type": "java.lang.Boolean",
+      "description": "Declare manager queues and bindings based on the manager topology descriptor.",
+      "defaultValue": true
+    },
+    {
+      "name": "pockethive.control-plane.manager.role",
+      "type": "java.lang.String",
+      "description": "Manager role identifier used to resolve the control-plane topology descriptor."
+    },
+    {
+      "name": "pockethive.control-plane.manager.instance-id",
+      "type": "java.lang.String",
+      "description": "Manager instance identifier used for queue naming and self-filtering."
+    },
+    {
+      "name": "pockethive.control-plane.manager.listener.enabled",
+      "type": "java.lang.Boolean",
+      "description": "Configure consumer-side features for manager services.",
+      "defaultValue": true
+    },
+    {
+      "name": "pockethive.control-plane.manager.skip-self-signals",
+      "type": "java.lang.Boolean",
+      "description": "Skip signals emitted by the same manager instance when consuming messages.",
+      "defaultValue": true
+    },
+    {
+      "name": "pockethive.control-plane.manager.duplicate-cache.enabled",
+      "type": "java.lang.Boolean",
+      "description": "Enable duplicate signal detection for manager listeners.",
+      "defaultValue": true
+    },
+    {
+      "name": "pockethive.control-plane.manager.duplicate-cache.ttl",
+      "type": "java.time.Duration",
+      "description": "Retention period for the manager duplicate signal cache.",
+      "defaultValue": "PT5M"
+    },
+    {
+      "name": "pockethive.control-plane.manager.duplicate-cache.capacity",
+      "type": "java.lang.Integer",
+      "description": "Maximum entries kept in the manager duplicate signal cache.",
+      "defaultValue": 1024
+    }
+  ]
+}
