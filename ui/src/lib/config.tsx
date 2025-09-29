@@ -18,7 +18,7 @@ const readOnlyUser =
 const readOnlyPasscode =
   import.meta.env.VITE_STOMP_READONLY_PASSCODE || import.meta.env.VITE_STOMP_PASSCODE || 'ph-observer'
 
-const config: UIConfig = {
+const defaultConfig: UIConfig = {
   rabbitmq: `http://${host}:15672/`,
   prometheus: `http://${host}:9090/`,
   grafana: `http://${host}:3000/`,
@@ -30,7 +30,22 @@ const config: UIConfig = {
 }
 
 type Listener = (cfg: UIConfig) => void
-let listeners: Listener[] = []
+
+const globalObject = globalThis as typeof globalThis & {
+  __POCKETHIVE_UI_CONFIG__?: UIConfig
+  __POCKETHIVE_UI_CONFIG_LISTENERS__?: Listener[]
+}
+
+if (!globalObject.__POCKETHIVE_UI_CONFIG__) {
+  globalObject.__POCKETHIVE_UI_CONFIG__ = defaultConfig
+}
+
+if (!globalObject.__POCKETHIVE_UI_CONFIG_LISTENERS__) {
+  globalObject.__POCKETHIVE_UI_CONFIG_LISTENERS__ = []
+}
+
+const config = globalObject.__POCKETHIVE_UI_CONFIG__
+const listeners = globalObject.__POCKETHIVE_UI_CONFIG_LISTENERS__
 
 export function getConfig() {
   return config
@@ -45,7 +60,10 @@ export function subscribeConfig(fn: Listener) {
   listeners.push(fn)
   fn(config)
   return () => {
-    listeners = listeners.filter((l) => l !== fn)
+    const index = listeners.indexOf(fn)
+    if (index >= 0) {
+      listeners.splice(index, 1)
+    }
   }
 }
 

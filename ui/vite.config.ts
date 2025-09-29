@@ -6,6 +6,15 @@ import federation from '@originjs/vite-plugin-federation'
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
   const isScenario = mode === 'scenario'
+  const isTest = mode === 'test'
+
+  const testScenarioAlias = isTest
+    ? {
+        '@ph/scenario/ScenarioApp': fileURLToPath(
+          new URL('./src/__mocks__/scenarioAppRemote.tsx', import.meta.url),
+        ),
+      }
+    : {}
 
   return {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -45,7 +54,8 @@ export default defineConfig(({ mode }) => {
     },
     resolve: {
       alias: {
-        '@ph/shell': fileURLToPath(new URL('./src/shell/index.ts', import.meta.url))
+        '@ph/shell': fileURLToPath(new URL('./src/shell/index.ts', import.meta.url)),
+        ...testScenarioAlias,
       }
     }
   }
