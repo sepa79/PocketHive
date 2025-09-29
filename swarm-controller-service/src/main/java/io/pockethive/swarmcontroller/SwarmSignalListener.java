@@ -333,13 +333,10 @@ public class SwarmSignalListener {
                            String swarmIdFallback,
                            CommandState overrideState) {
     ConfirmationScope scope = scopeFor(cs, swarmIdFallback);
-    String signal = confirmationSignal(cs, resolvedSignal);
+    String signal = requireSignal(confirmationSignal(cs, resolvedSignal), "Ready confirmation");
     CommandState baseState = overrideState != null ? overrideState : stateForSuccess(signal);
     CommandState state = enrichState(cs, baseState);
     String type = successEventType(signal);
-    if (type == null) {
-      return;
-    }
     ReadyConfirmation confirmation = new ReadyConfirmation(
         Instant.now(),
         cs.correlationId(),
@@ -357,7 +354,7 @@ public class SwarmSignalListener {
                          String resolvedSignal,
                          String swarmIdFallback) {
     ConfirmationScope scope = scopeFor(cs, swarmIdFallback);
-    String signal = confirmationSignal(cs, resolvedSignal);
+    String signal = requireSignal(confirmationSignal(cs, resolvedSignal), "Error confirmation");
     CommandState state = enrichState(cs, stateForError(signal));
     String type = errorEventType(signal);
     ErrorConfirmation confirmation = new ErrorConfirmation(
@@ -399,38 +396,35 @@ public class SwarmSignalListener {
   }
 
   private String successEventType(String signal) {
-    if (signal == null || signal.isBlank()) {
-      return null;
+    String nonBlankSignal = requireSignal(signal, "Ready event type");
+    if (nonBlankSignal.startsWith("swarm-")) {
+      return "ready." + nonBlankSignal;
     }
-    if (signal.startsWith("swarm-")) {
-      return "ready." + signal;
-    }
-    if ("config-update".equals(signal)) {
+    if ("config-update".equals(nonBlankSignal)) {
       return "ready.config-update";
     }
-    return "ready." + signal;
+    return "ready." + nonBlankSignal;
   }
 
   private String errorEventType(String signal) {
-    if (signal == null || signal.isBlank()) {
-      return "error";
+    String nonBlankSignal = requireSignal(signal, "Error event type");
+    if (nonBlankSignal.startsWith("swarm-")) {
+      return "error." + nonBlankSignal;
     }
-    if (signal.startsWith("swarm-")) {
-      return "error." + signal;
-    }
-    if ("config-update".equals(signal)) {
+    if ("config-update".equals(nonBlankSignal)) {
       return "error.config-update";
     }
-    return "error." + signal;
+    return "error." + nonBlankSignal;
   }
 
   private CommandState configCommandState(ControlSignal cs,
                                           String resolvedSignal,
                                           Boolean enabled,
                                           Map<String, Object> details) {
-    CommandState base = stateForSuccess(confirmationSignal(cs, resolvedSignal));
+    String signal = requireSignal(confirmationSignal(cs, resolvedSignal), "Config confirmation state");
+    CommandState base = stateForSuccess(signal);
     Map<String, Object> detailCopy = (details == null || details.isEmpty()) ? null : new LinkedHashMap<>(details);
-    return new CommandState(base != null ? base.status() : null, enabled, detailCopy);
+    return new CommandState(base.status(), enabled, detailCopy);
   }
 
   private CommandState enrichState(ControlSignal cs, CommandState baseState) {
@@ -608,6 +602,13 @@ public class SwarmSignalListener {
 
   private String confirmationSignal(ControlSignal cs, String resolvedSignal) {
     return defaultSegment(cs != null ? cs.signal() : null, resolvedSignal);
+  }
+
+  private String requireSignal(String signal, String context) {
+    if (signal == null || signal.isBlank()) {
+      throw new IllegalArgumentException(context + " requires a resolved control signal");
+    }
+    return signal;
   }
 
   private String toJson(Object value) {

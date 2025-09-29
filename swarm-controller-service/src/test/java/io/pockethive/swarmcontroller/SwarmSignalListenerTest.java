@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.Topology;
 import io.pockethive.control.ConfirmationScope;
+import io.pockethive.control.ControlSignal;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.docker.DockerDaemonUnavailableException;
 import io.pockethive.swarmcontroller.SwarmStatus;
@@ -17,11 +18,13 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.ArrayList;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
@@ -209,6 +212,17 @@ class SwarmSignalListenerTest {
     assertThat(stopNode.path("scope").path("swarmId").asText()).isEqualTo(Topology.SWARM_ID);
     assertThat(stopNode.path("scope").path("role").asText()).isEqualTo("swarm-controller");
     assertThat(stopNode.path("scope").path("instance").asText()).isEqualTo("inst");
+  }
+
+  @Test
+  void readyConfirmationRequiresResolvedSignal() {
+    SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", mapper);
+    ControlSignal cs = ControlSignal.forSwarm(null, Topology.SWARM_ID, "corr-missing", "id-missing");
+
+    assertThatThrownBy(() -> ReflectionTestUtils.invokeMethod(listener,
+        "emitSuccess", cs, null, Topology.SWARM_ID, null))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("Ready confirmation requires a resolved control signal");
   }
 
   @Test
