@@ -1,6 +1,7 @@
 package io.pockethive.scenarios;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.pockethive.scenarios.model.Scenario;
 import jakarta.validation.Valid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

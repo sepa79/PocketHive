@@ -14,6 +14,8 @@ public class ScenarioConfig {
     @Bean
     MappingJackson2HttpMessageConverter yamlConverter() {
         ObjectMapper mapper = new ObjectMapper(new YAMLFactory());
+        mapper.findAndRegisterModules();
+        mapper.setSerializationInclusion(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL);
         MappingJackson2HttpMessageConverter converter = new MappingJackson2HttpMessageConverter(mapper);
         converter.setSupportedMediaTypes(List.of(
                 MediaType.valueOf("application/x-yaml"),

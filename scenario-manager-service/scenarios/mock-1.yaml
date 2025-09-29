@@ -1,24 +1,56 @@
 id: mock-1
-name: Mock-1
-description: Sample scenario with generator, moderator, processor and postprocessor.
-template:
-  image: pockethive-swarm-controller:latest
-  bees:
-    - role: generator
-      image: pockethive-generator:latest
-      work:
-        out: gen
-    - role: moderator
-      image: pockethive-moderator:latest
-      work:
-        in: gen
-        out: mod
-    - role: processor
-      image: pockethive-processor:latest
-      work:
-        in: mod
-        out: final
-    - role: postprocessor
-      image: pockethive-postprocessor:latest
-      work:
-        in: final
+name: Mock Load
+version: 0.1.0
+description: Simple mock scenario for local testing
+assets:
+  suts:
+    - id: sut-api
+      name: Mock API
+      baseUrls:
+        - https://sut.local
+  datasets:
+    - id: dataset-inline
+      name: Inline Users
+      provider:
+        type: inline
+        inline:
+          rows:
+            - id: user-1
+              email: user1@example.com
+  swarmTemplates:
+    - id: template-basic
+      name: Basic Template
+      processor:
+        sutRef: sut-api
+        endpointRef: ping
+scenario:
+  schedule:
+    startAt: 2025-01-01T00:00:00Z
+  runConfig:
+    runPrefix: mock
+    allowParallel: false
+  tracks:
+    - name: Warmup
+      templateRef: template-basic
+      datasetRef: dataset-inline
+      blocks:
+        - type: Ramp
+          rateFrom: 1
+          rateTo: 5
+          durationSec: 30
+        - type: Hold
+          rate: 5
+          durationSec: 60
+        - type: Signal
+          name: ready
+    - name: Main
+      templateRef: template-basic
+      blocks:
+        - type: WaitFor
+          signal: ready
+          timeoutSec: 120
+        - type: Spike
+          rate: 20
+          durationSec: 15
+        - type: Pause
+          durationSec: 10

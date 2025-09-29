@@ -1,14 +1,27 @@
 package io.pockethive.scenarios;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import io.pockethive.scenarios.model.Scenario;
 import jakarta.annotation.PostConstruct;
+import jakarta.validation.ConstraintViolation;
+import jakarta.validation.ConstraintViolationException;
+import jakarta.validation.Validator;
+
 import java.io.IOException;
-import java.nio.file.*;
-import java.util.*;
+import java.nio.file.DirectoryStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Service
@@ -16,14 +29,18 @@ public class ScenarioService {
     public enum Format { JSON, YAML }
 
     private final Path storageDir;
-    private final ObjectMapper jsonMapper = new ObjectMapper();
-    private final ObjectMapper yamlMapper = new ObjectMapper(new YAMLFactory());
+    private final ObjectMapper jsonMapper;
+    private final ObjectMapper yamlMapper;
+    private final Validator validator;
     private final Map<String, Scenario> scenarios = new ConcurrentHashMap<>();
     private final Map<String, Format> formats = new ConcurrentHashMap<>();
 
-    public ScenarioService(@Value("${scenarios.dir:scenarios}") String dir) throws IOException {
+    public ScenarioService(@Value("${scenarios.dir:scenarios}") String dir, Validator validator) throws IOException {
         this.storageDir = Paths.get(dir);
         Files.createDirectories(this.storageDir);
+        this.validator = validator;
+        this.jsonMapper = configure(new ObjectMapper());
+        this.yamlMapper = configure(new ObjectMapper(new YAMLFactory()));
     }
 
     @PostConstruct
@@ -50,6 +67,7 @@ public class ScenarioService {
     }
 
     public Scenario create(Scenario scenario, Format format) throws IOException {
+        validate(scenario);
         if (scenarios.putIfAbsent(scenario.getId(), scenario) != null) {
             throw new IllegalArgumentException("Scenario already exists");
         }
@@ -60,6 +78,7 @@ public class ScenarioService {
 
     public Scenario update(String id, Scenario scenario, Format format) throws IOException {
         scenario.setId(id);
+        validate(scenario);
         scenarios.put(id, scenario);
         formats.put(id, format);
         write(scenario, format);
@@ -75,7 +94,10 @@ public class ScenarioService {
     }
 
     private Scenario read(Path path, Format format) throws IOException {
-        return (format == Format.JSON ? jsonMapper : yamlMapper).readValue(path.toFile(), Scenario.class);
+        Scenario scenario = (format == Format.JSON ? jsonMapper : yamlMapper)
+                .readValue(path.toFile(), Scenario.class);
+        validate(scenario);
+        return scenario;
     }
 
     private void write(Scenario scenario, Format format) throws IOException {
@@ -106,5 +128,19 @@ public class ScenarioService {
             return Format.YAML;
         }
         return Format.JSON;
+    }
+
+    private ObjectMapper configure(ObjectMapper mapper) {
+        mapper.findAndRegisterModules();
+        mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+        mapper.setSerializationInclusion(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL);
+        return mapper;
+    }
+
+    private void validate(Scenario scenario) {
+        Set<ConstraintViolation<Scenario>> violations = validator.validate(scenario);
+        if (!violations.isEmpty()) {
+            throw new ConstraintViolationException(violations);
+        }
     }
 }
