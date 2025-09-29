@@ -47,6 +47,7 @@ import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.amqp.rabbit.listener.MessageListenerContainer;
 import org.springframework.amqp.rabbit.listener.RabbitListenerEndpointRegistry;
 import org.springframework.amqp.support.AmqpHeaders;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -85,9 +86,9 @@ public class Processor {
 
   public Processor(RabbitTemplate rabbit,
                    MeterRegistry meterRegistry,
-                   ControlPlaneIdentity identity,
+                   @Qualifier("workerControlPlaneIdentity") ControlPlaneIdentity identity,
                    ControlPlaneEmitter controlEmitter,
-                   ControlPlaneTopologyDescriptor topology,
+                   @Qualifier("workerControlPlaneTopologyDescriptor") ControlPlaneTopologyDescriptor topology,
                    WorkerControlPlane controlPlane,
                    String baseUrl,
                    RabbitListenerEndpointRegistry listenerRegistry) {
