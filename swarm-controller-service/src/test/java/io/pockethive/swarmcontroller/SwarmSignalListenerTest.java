@@ -116,6 +116,55 @@ class SwarmSignalListenerTest {
   }
 
   @Test
+  void handleRejectsBlankRoutingKey() {
+    SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", mapper);
+
+    assertThatThrownBy(() -> listener.handle("{}", " "))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("routing key");
+  }
+
+  @Test
+  void handleRejectsNullRoutingKey() {
+    SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", mapper);
+
+    assertThatThrownBy(() -> listener.handle("{}", null))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("routing key");
+  }
+
+  @Test
+  void statusEventRequiresParsableRoutingKey() {
+    SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", mapper);
+
+    assertThatThrownBy(() -> listener.handle(status(Topology.SWARM_ID, true), "ev.status-"))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("confirmation scope");
+  }
+
+  @Test
+  void statusEventRequiresRoleSegment() {
+    SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", mapper);
+
+    String routingKey = "ev.status-delta.%s..inst".formatted(Topology.SWARM_ID);
+
+    assertThatThrownBy(() -> listener.handle(status(Topology.SWARM_ID, true), routingKey))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("role segment");
+  }
+
+  @Test
+  void statusEventRequiresInstanceSegment() {
+    SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", mapper);
+
+    String routingKey = "ev.status-delta.%s.swarm-controller.".formatted(Topology.SWARM_ID);
+
+    assertThatThrownBy(() -> listener.handle(status(Topology.SWARM_ID, true), routingKey))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("instance segment");
+  }
+
+  @Test
   void templateEmitsConfirmation() throws Exception {
     when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
     SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", mapper);

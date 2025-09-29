@@ -35,7 +35,14 @@ public class ControllerStatusListener {
 
     @RabbitListener(queues = "#{controllerStatusQueue.name}")
     public void handle(String body, @Header(AmqpHeaders.RECEIVED_ROUTING_KEY) String routingKey) {
-        if (routingKey == null) return;
+        if (routingKey == null || routingKey.isBlank()) {
+            log.warn("Received controller status message with null or blank routing key; payload snippet={}", snippet(body));
+            throw new IllegalArgumentException("Controller status routing key must not be null or blank");
+        }
+        if (body == null || body.isBlank()) {
+            log.warn("Received controller status message with null or blank payload for routing key {}", routingKey);
+            throw new IllegalArgumentException("Controller status payload must not be null or blank");
+        }
         String payloadSnippet = snippet(body);
         if (routingKey.startsWith("ev.status-")) {
             log.debug("[CTRL] RECV rk={} payload={}", routingKey, payloadSnippet);

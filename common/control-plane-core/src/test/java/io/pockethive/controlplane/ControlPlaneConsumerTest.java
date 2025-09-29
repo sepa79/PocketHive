@@ -16,6 +16,7 @@ import java.time.ZoneOffset;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class ControlPlaneConsumerTest {
 
@@ -59,6 +60,45 @@ class ControlPlaneConsumerTest {
 
         assertThat(result).isFalse();
         assertThat(processed).hasValue(0);
+    }
+
+    @Test
+    void rejectsNullPayload() {
+        ControlPlaneConsumer consumer = ControlPlaneConsumer.builder(mapper)
+            .identity(new ControlPlaneIdentity("swarm", "generator", "gen-1"))
+            .build();
+
+        assertThatThrownBy(() -> consumer.consume(null, "sig.config-update.generator.gen-1", env -> { }))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("payload must not be null or blank");
+    }
+
+    @Test
+    void rejectsBlankRoutingKey() throws Exception {
+        ControlPlaneConsumer consumer = ControlPlaneConsumer.builder(mapper)
+            .identity(new ControlPlaneIdentity("swarm", "generator", "gen-1"))
+            .build();
+
+        ControlSignal signal = new ControlSignal("config-update", "corr", "id", "swarm", "generator", "gen-1", CommandTarget.INSTANCE, null);
+        assertThatThrownBy(() -> consumer.consume(mapper.writeValueAsString(signal), "  ", env -> { }))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("routingKey must not be null or blank");
+    }
+
+    @Test
+    void processesValidPayload() throws Exception {
+        ControlPlaneConsumer consumer = ControlPlaneConsumer.builder(mapper)
+            .identity(new ControlPlaneIdentity("swarm", "generator", "gen-2"))
+            .build();
+
+        ControlSignal signal = new ControlSignal("config-update", "corr", "id", "swarm", "generator", "gen-2", CommandTarget.INSTANCE, null);
+        String payload = mapper.writeValueAsString(signal);
+
+        AtomicInteger processed = new AtomicInteger();
+        boolean consumed = consumer.consume(payload, "sig.config-update.generator.gen-2", env -> processed.incrementAndGet());
+
+        assertThat(consumed).isTrue();
+        assertThat(processed).hasValue(1);
     }
 
     private static final class MutableClock extends Clock {

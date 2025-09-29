@@ -25,11 +25,13 @@ import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 @ExtendWith(MockitoExtension.class)
 class PostProcessorTest {
@@ -175,5 +177,28 @@ class PostProcessorTest {
         assertThat(node.path("state").path("enabled").asBoolean()).isFalse();
         List<String> errorPayload = ASYNC_API.validate("#/components/schemas/CommandErrorPayload", node);
         assertThat(errorPayload).isEmpty();
+    }
+
+    @Test
+    void onControlRejectsBlankPayload() {
+        String routingKey = ControlPlaneRouting.signal("status-request", Topology.SWARM_ID, "postprocessor", "inst");
+
+        assertThatThrownBy(() -> postProcessor.onControl(" \n", routingKey, null))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("payload");
+
+        verifyNoInteractions(rabbit);
+    }
+
+    @Test
+    void onControlRejectsBlankRoutingKey() throws Exception {
+        String payload = mapper.writeValueAsString(ControlSignal.forInstance(
+            "status-request", Topology.SWARM_ID, "postprocessor", "inst", UUID.randomUUID().toString(), UUID.randomUUID().toString()));
+
+        assertThatThrownBy(() -> postProcessor.onControl(payload, "  ", null))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("routing key");
+
+        verifyNoInteractions(rabbit);
     }
 }

@@ -24,11 +24,13 @@ import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 @ExtendWith(MockitoExtension.class)
 class TriggerTest {
@@ -196,5 +198,28 @@ class TriggerTest {
         assertThat(node.path("state").path("scope").isMissingNode()).isTrue();
         List<String> readyErrors = ASYNC_API.validate("#/components/schemas/CommandReadyPayload", node);
         assertThat(readyErrors).isEmpty();
+    }
+
+    @Test
+    void onControlRejectsBlankPayload() {
+        String routingKey = ControlPlaneRouting.signal("status-request", Topology.SWARM_ID, "trigger", "inst");
+
+        assertThatThrownBy(() -> trigger.onControl(" \n", routingKey, null))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("payload");
+
+        verifyNoInteractions(rabbit);
+    }
+
+    @Test
+    void onControlRejectsBlankRoutingKey() throws Exception {
+        String payload = mapper.writeValueAsString(ControlSignal.forInstance(
+            "status-request", Topology.SWARM_ID, "trigger", "inst", UUID.randomUUID().toString(), UUID.randomUUID().toString()));
+
+        assertThatThrownBy(() -> trigger.onControl(payload, "  ", null))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("routing key");
+
+        verifyNoInteractions(rabbit);
     }
 }

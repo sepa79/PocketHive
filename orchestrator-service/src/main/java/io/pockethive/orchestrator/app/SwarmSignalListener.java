@@ -88,16 +88,25 @@ public class SwarmSignalListener {
 
     @RabbitListener(queues = "#{controlQueue.name}")
     public void handle(String body, @Header(AmqpHeaders.RECEIVED_ROUTING_KEY) String routingKey) {
-        if (routingKey == null || !routingKey.startsWith("ev.")) {
+        if (routingKey == null || routingKey.isBlank()) {
+            log.warn("Received control-plane event with null or blank routing key; payload snippet={}", snippet(body));
+            throw new IllegalArgumentException("Control-plane routing key must not be null or blank");
+        }
+        if (!routingKey.startsWith("ev.")) {
+            log.warn("Received control-plane event with unexpected routing key prefix; rk={} payload snippet={}", routingKey, snippet(body));
+            throw new IllegalArgumentException("Control-plane routing key must start with 'ev.'");
+        }
+        String snippet = snippet(body);
+        if (routingKey.startsWith("ev.status-")) {
+            log.debug("[CTRL] RECV rk={} inst={} payload={}", routingKey, instanceId, snippet);
             return;
         }
         RoutingKey key = ControlPlaneRouting.parseEvent(routingKey);
         if (key == null || key.type() == null) {
-            log.debug("[CTRL] Ignoring control event with routing key {}", routingKey);
-            return;
+            log.warn("Unable to parse control event routing key {}; payload snippet={}", routingKey, snippet);
+            throw new IllegalArgumentException("Control-plane routing key is malformed");
         }
 
-        String snippet = snippet(body);
         boolean statusEvent = key.type().startsWith("status-");
         if (statusEvent) {
             log.debug("[CTRL] RECV rk={} inst={} payload={}", routingKey, instanceId, snippet);

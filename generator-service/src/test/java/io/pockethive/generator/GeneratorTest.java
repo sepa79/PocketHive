@@ -24,12 +24,14 @@ import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isA;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 @ExtendWith(MockitoExtension.class)
 class GeneratorTest {
@@ -163,5 +165,28 @@ class GeneratorTest {
 
         Double ratePerSec = (Double) ReflectionTestUtils.getField(generator, "ratePerSec");
         assertThat(ratePerSec).isEqualTo(0.0);
+    }
+
+    @Test
+    void onControlRejectsBlankPayload() {
+        String routingKey = ControlPlaneRouting.signal("config-update", Topology.SWARM_ID, "generator", "inst");
+
+        assertThatThrownBy(() -> generator.onControl("  ", routingKey, null))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("payload");
+
+        verifyNoInteractions(rabbit);
+    }
+
+    @Test
+    void onControlRejectsBlankRoutingKey() throws Exception {
+        String payload = mapper.writeValueAsString(ControlSignal.forInstance(
+            "status-request", Topology.SWARM_ID, "generator", "inst", UUID.randomUUID().toString(), UUID.randomUUID().toString()));
+
+        assertThatThrownBy(() -> generator.onControl(payload, "  ", null))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("routing key");
+
+        verifyNoInteractions(rabbit);
     }
 }

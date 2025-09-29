@@ -32,9 +32,8 @@ public final class ControlPlaneConsumer {
 
     public boolean consume(String payload, String routingKey, ControlSignalHandler handler) {
         Objects.requireNonNull(handler, "handler");
-        if (payload == null || payload.isBlank() || routingKey == null || routingKey.isBlank()) {
-            return false;
-        }
+        requireText(payload, "payload");
+        requireText(routingKey, "routingKey");
         ControlSignal signal = parse(payload);
         ControlSignalEnvelope envelope = new ControlSignalEnvelope(signal, routingKey, payload, clock.instant());
         if (!selfFilter.shouldProcess(identity, envelope)) {
@@ -50,6 +49,12 @@ public final class ControlPlaneConsumer {
             throw runtimeException;
         } catch (Exception ex) {
             throw new RuntimeException(ex);
+        }
+    }
+
+    private static void requireText(String value, String name) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException(name + " must not be null or blank");
         }
     }
 
