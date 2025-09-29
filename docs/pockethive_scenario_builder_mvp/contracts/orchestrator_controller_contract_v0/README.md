@@ -5,6 +5,8 @@ This pack defines the bare-minimum messaging contract between Orchestrator and S
 
 Files:
 - `contract.md`
+- `topics.md`
 - `sequences/orchestrator-controller.mmd`
 - `examples/plan-example.json`
 - `tests/contract-conformance.md`
+- `CHANGELOG.md`

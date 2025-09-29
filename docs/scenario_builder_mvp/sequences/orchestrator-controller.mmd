@@ -1,0 +1,11 @@
+
+sequenceDiagram
+  participant QN as Orchestrator
+  participant MSH as Controller
+
+  QN->>MSH: sig.config-update.{swarmId} (kind=plan, blocks[])
+  MSH-->>QN: ack/ok
+  QN->>MSH: sig.swarm-start.{swarmId} { runId, planId }
+  MSH-->>QN: started
+  MSH-->>QN: complete
+  QN->>MSH: sig.swarm-stop.{swarmId} { runId }

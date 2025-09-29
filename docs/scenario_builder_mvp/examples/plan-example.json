@@ -1,0 +1,34 @@
+{
+  "kind": "plan",
+  "runId": "b5a3b5b4-9a0b-45a5-9f6d-6c2f8e1a1234",
+  "planId": "checkout-peak@1",
+  "blocks": [
+    {
+      "atSec": 0,
+      "operation": "hold",
+      "unit": "rate",
+      "value": 10,
+      "durationSec": 120
+    },
+    {
+      "atSec": 120,
+      "operation": "ramp",
+      "unit": "rate",
+      "from": 10,
+      "to": 100,
+      "durationSec": 120
+    },
+    {
+      "atSec": 240,
+      "operation": "hold",
+      "unit": "rate",
+      "value": 100,
+      "durationSec": 300
+    },
+    {
+      "atSec": 540,
+      "operation": "pause",
+      "durationSec": 30
+    }
+  ]
+}
