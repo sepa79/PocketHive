@@ -26,3 +26,5 @@ pockethive:
       role: processor
       swarm-id: ${ph.swarmId}
       instance-id: ${bee.name:${random.uuid}}
+    manager:
+      enabled: false
