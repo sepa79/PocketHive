@@ -1,0 +1,32 @@
+{
+  "routingKey": "ev.status-delta.swarm-A.generator.gen-1",
+  "payload": {
+    "event": "status",
+    "version": "1.0",
+    "messageId": "<<ANY>>",
+    "timestamp": "<<ANY>>",
+    "location": "<<ANY>>",
+    "kind": "status-delta",
+    "role": "generator",
+    "instance": "gen-1",
+    "swarmId": "swarm-A",
+    "traffic": "exchange.main",
+    "enabled": true,
+    "queues": {
+      "work": {
+        "out": [
+          "queue.work"
+        ]
+      },
+      "control": {
+        "out": [
+          "ev.status-delta.swarm-A.generator.gen-1"
+        ]
+      }
+    },
+    "data": {
+      "tps": 7,
+      "custom": "value"
+    }
+  }
+}

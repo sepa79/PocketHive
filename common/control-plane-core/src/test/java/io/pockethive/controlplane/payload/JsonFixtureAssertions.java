@@ -10,15 +10,15 @@ import java.io.InputStream;
 import java.util.Iterator;
 import java.util.Map.Entry;
 
-final class JsonFixtureAssertions {
+public final class JsonFixtureAssertions {
 
-    static final String ANY_VALUE = "<<ANY>>";
+    public static final String ANY_VALUE = "<<ANY>>";
     private static final ObjectMapper MAPPER = new ObjectMapper().findAndRegisterModules();
 
     private JsonFixtureAssertions() {
     }
 
-    static void assertMatchesFixture(String fixtureName, String json) throws IOException {
+    public static void assertMatchesFixture(String fixtureName, String json) throws IOException {
         try (InputStream input = JsonFixtureAssertions.class.getResourceAsStream(fixtureName)) {
             assertNotNull(input, () -> "Missing fixture " + fixtureName);
             JsonNode expected = MAPPER.readTree(input);

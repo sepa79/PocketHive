@@ -1,0 +1,38 @@
+{
+  "signals": {
+    "scoped": "sig.status-request.swarmA.generator.gen-1",
+    "broadcast": "sig.config-update.ALL.generator.ALL"
+  },
+  "events": {
+    "ready": "ev.ready.config-update.swarmA.generator.gen-1",
+    "status": "ev.status-delta.swarmA.generator.gen-1"
+  },
+  "parsed": {
+    "signal": {
+      "prefix": "sig",
+      "type": "config-update",
+      "swarmId": "swarmA",
+      "role": "generator",
+      "instance": "gen-1",
+      "matches": {
+        "role": true,
+        "swarm": true,
+        "type": true,
+        "instance": true
+      }
+    },
+    "event": {
+      "prefix": "ev",
+      "type": "ready.config-update",
+      "swarmId": "swarmA",
+      "role": "generator",
+      "instance": "gen-1",
+      "matches": {
+        "role": true,
+        "swarm": true,
+        "type": true,
+        "instance": true
+      }
+    }
+  }
+}

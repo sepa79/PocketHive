@@ -20,12 +20,12 @@ import org.springframework.context.annotation.Configuration;
  */
 @Configuration(proxyBeanMethods = false)
 @ConditionalOnClass({TopicExchange.class, RabbitTemplate.class})
+@ConditionalOnProperty(prefix = "pockethive.control-plane", name = "enabled", havingValue = "true", matchIfMissing = true)
 @EnableConfigurationProperties(ControlPlaneProperties.class)
 public class ControlPlaneCommonAutoConfiguration {
 
     @Bean(name = "controlPlaneExchange")
     @ConditionalOnMissingBean(name = "controlPlaneExchange")
-    @ConditionalOnProperty(prefix = "pockethive.control-plane", name = "enabled", havingValue = "true", matchIfMissing = true)
     TopicExchange controlPlaneExchange(ControlPlaneProperties properties) {
         String exchange = requireText(properties.getExchange(), "pockethive.control-plane.exchange");
         return ExchangeBuilder.topicExchange(exchange).durable(true).build();
