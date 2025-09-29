@@ -32,6 +32,7 @@ interface AssetState {
   upsertSwarmTemplate: (asset: SwarmTemplateAsset) => void
   removeSwarmTemplate: (id: string) => void
   reset: () => void
+  hydrate: (collections: AssetCollections) => void
 }
 const memoryStorage: StateStorage = {
   getItem: () => null,
@@ -80,6 +81,17 @@ export const useAssetStore = create<AssetState>()(
           swarmTemplates: state.swarmTemplates.filter((asset) => asset.id !== id),
         })),
       reset: () => set(() => emptyCollections()),
+      hydrate: (collections: AssetCollections) =>
+        set(() => ({
+          sutAssets: sortByName(collections.sutAssets),
+          datasetAssets: sortByName(collections.datasetAssets),
+          swarmTemplates: sortByName(
+            collections.swarmTemplates.map((template) => ({
+              ...template,
+              swarmSize: Math.max(1, template.swarmSize),
+            })),
+          ),
+        })),
     }),
     {
       name: STORAGE_KEY,
