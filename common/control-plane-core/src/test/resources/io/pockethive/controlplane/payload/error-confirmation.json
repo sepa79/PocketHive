@@ -1,0 +1,24 @@
+{
+  "ts": "2024-01-02T03:04:05Z",
+  "correlationId": "corr-2",
+  "idempotencyKey": "idem-2",
+  "signal": "swarm-stop",
+  "scope": {
+    "swarmId": "swarm-1",
+    "role": "processor",
+    "instance": "instance-7"
+  },
+  "result": "error",
+  "state": {
+    "status": "Failed",
+    "enabled": null,
+    "details": null
+  },
+  "phase": "shutdown",
+  "code": "ERR-42",
+  "message": "Something went wrong",
+  "retryable": false,
+  "details": {
+    "stack": "trace"
+  }
+}
