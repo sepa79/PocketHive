@@ -1,5 +1,6 @@
 package io.pockethive.e2e.clients;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import java.net.URI;
 import java.time.Duration;
 import java.util.Objects;
@@ -91,6 +92,7 @@ public final class OrchestratorClient {
     return template.replace("{swarmId}", swarmId);
   }
 
+  @JsonIgnoreProperties(ignoreUnknown = true)
   public record ControlResponse(String correlationId, String idempotencyKey, Watch watch, long timeoutMs) {
 
     public Watch watch() {
