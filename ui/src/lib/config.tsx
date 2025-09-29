@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 
 export type UIConfig = {
   rabbitmq: string
@@ -26,7 +26,7 @@ const config: UIConfig = {
   stompUrl: `/ws`,
   stompUser: readOnlyUser,
   stompPasscode: readOnlyPasscode,
-  stompSubscription: '/exchange/ph.control/ev.#',
+  stompSubscription: '/exchange/ph.control/ev.#'
 }
 
 type Listener = (cfg: UIConfig) => void
@@ -49,8 +49,16 @@ export function subscribeConfig(fn: Listener) {
   }
 }
 
-export function useConfig(): UIConfig {
+const ConfigContext = createContext<UIConfig>(config)
+
+export function ConfigProvider({ children }: { children: ReactNode }): JSX.Element {
   const [cfg, setCfg] = useState(config)
+
   useEffect(() => subscribeConfig(setCfg), [])
-  return cfg
+
+  return <ConfigContext.Provider value={cfg}>{children}</ConfigContext.Provider>
+}
+
+export function useConfig(): UIConfig {
+  return useContext(ConfigContext)
 }

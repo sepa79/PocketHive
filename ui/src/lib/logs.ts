@@ -1,4 +1,4 @@
-import { useUIStore } from '../store'
+import { useUIStore } from '@ph/shell'
 
 export type LogSource = 'hive' | 'ui'
 export type LogChannel = 'stomp' | 'rest' | 'internal'

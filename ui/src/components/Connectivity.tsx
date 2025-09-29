@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { Plug, Square } from 'lucide-react'
 import { Client } from '@stomp/stompjs'
+import { getConfig, setConfig } from '@ph/shell'
+
 import { setClient as setStompClient } from '../lib/stompClient'
 import { logOther } from '../lib/logs'
-import { getConfig, setConfig } from '../lib/config'
 
 export default function Connectivity() {
   const [state, setState] = useState<'connected' | 'connecting' | 'disconnected'>('disconnected')

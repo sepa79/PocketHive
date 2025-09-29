@@ -1,13 +1,13 @@
 import { NavLink, Outlet } from 'react-router-dom'
 import { Hexagon, Radio, Droplet, Workflow } from 'lucide-react'
+import { useEffect } from 'react'
+import { PanelGroup, Panel, PanelResizeHandle } from 'react-resizable-panels'
+import { useConfig, useUIStore } from '@ph/shell'
+
 import MonolithIcon from '../icons/Monolith'
 import Health from '../components/Health'
 import Connectivity from '../components/Connectivity'
-import { useUIStore } from '../store'
-import { useEffect } from 'react'
-import { useConfig } from '../lib/config'
 import BuzzPanel from '../components/BuzzPanel'
-import { PanelGroup, Panel, PanelResizeHandle } from 'react-resizable-panels'
 
 export default function Layout() {
   const {

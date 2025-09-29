@@ -69,6 +69,17 @@ settings:
 Hosts can then import the module with `import('@ph/scenario/ScenarioApp')` and call the exported `mount` helper to render the
 Scenario Builder placeholder into a DOM node.
 
+### Shell integration and shared hooks
+
+PocketHive's host shell now centralises cross-cutting providers—such as UI configuration and shared state—in the
+`ShellProviders` component. Wrap both the host router and any remote mount points with this component to ensure the remote
+consumes the same React Query client, configuration context and future theme/auth providers as the host.
+
+Remote modules should import hooks and context accessors from the `@ph/shell` barrel. This guarantees a single instance of
+shared utilities like `useConfig` and `useUIStore` across host and remote bundles when Module Federation loads the remote at
+runtime. See `src/scenario/ScenarioApp.integration.test.tsx` for an example that asserts the remote receives the host-provided
+RabbitMQ/Prometheus endpoints and store state when rendered through the shell.
+
 ### Build
 
 Type‑checks the project and generates production assets in `dist/`:

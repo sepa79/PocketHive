@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach } from 'vitest'
-import { useUIStore } from './store'
+import { useUIStore } from '@ph/shell'
 
 describe('useUIStore messageLimit', () => {
   beforeEach(() => {

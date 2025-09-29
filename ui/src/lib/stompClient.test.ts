@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { Client } from '@stomp/stompjs'
 import { setClient } from './stompClient'
 import { subscribeLogs, type LogEntry, resetLogs } from './logs'
-import { useUIStore } from '../store'
+import { useUIStore } from '@ph/shell'
 
 /**
  * @vitest-environment jsdom

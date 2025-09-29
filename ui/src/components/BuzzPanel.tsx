@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { PanelLeft, PanelRight, PanelBottom } from 'lucide-react'
+import { useConfig, useUIStore } from '@ph/shell'
+
 import { subscribeLogs, type LogEntry, type LogChannel, type LogSource } from '../lib/logs'
-import { useConfig } from '../lib/config'
-import { useUIStore } from '../store'
 
 function LogView({
   sourceFilter,
