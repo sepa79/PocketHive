@@ -69,6 +69,23 @@ settings:
 Hosts can then import the module with `import('@ph/scenario/ScenarioApp')` and call the exported `mount` helper to render the
 Scenario Builder placeholder into a DOM node.
 
+#### Saving and loading scenarios
+
+The remote exposes a full Scenario Builder workflow:
+
+1. Visit `/scenario` to load saved scenarios. The list view calls `GET /scenario-manager/scenarios` and renders each scenario with
+   an "Open" link that routes to the editor.
+2. Select **New scenario** to bootstrap an empty workspace. The top bar lets you provide a unique scenario ID and human-friendly
+   name while the metadata form captures an operator-facing summary.
+3. Populate systems, datasets and swarm templates with the asset inspector. State is persisted via the shared asset store so it
+   survives navigation within the remote.
+4. Press **Save Scenario** to POST the scenario payload. The API client automatically switches to PUT when editing an existing
+   scenario (`/scenario/edit/:id`) and rehydrates the asset store from the server response. Success or validation errors surface
+   through the shared toast system.
+
+When hosting the remote, ensure the `ShellProviders` wrapper is applied so the Scenario Builder can access the shared React Query
+client, toast store and configuration context required for these workflows.
+
 ### Shell integration and shared hooks
 
 PocketHive's host shell now centralises cross-cutting providers—such as UI configuration and shared state—in the

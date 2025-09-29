@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { cleanup, render, screen } from '@testing-library/react'
 import * as matchers from '@testing-library/jest-dom/matchers'
+import { MemoryRouter, Route, Routes } from 'react-router-dom'
 
 expect.extend(matchers)
 
@@ -23,7 +24,7 @@ describe('ScenarioApp shell integration', () => {
     useUIStore.setState({ messageLimit: 100 })
   })
 
-  it('reads configuration and store values from the host shell', () => {
+  it('reads configuration and store values from the host shell', async () => {
     setConfig({
       rabbitmq: 'https://host.example/rabbitmq',
       prometheus: 'https://host.example/prometheus',
@@ -32,12 +33,16 @@ describe('ScenarioApp shell integration', () => {
 
     render(
       <ShellProviders>
-        <ScenarioApp />
+        <MemoryRouter initialEntries={['/scenario/new']}>
+          <Routes>
+            <Route path="/scenario/*" element={<ScenarioApp />} />
+          </Routes>
+        </MemoryRouter>
       </ShellProviders>
     )
 
-    expect(screen.getByTestId('config-rabbitmq')).toHaveTextContent('https://host.example/rabbitmq')
-    expect(screen.getByTestId('config-prometheus')).toHaveTextContent('https://host.example/prometheus')
-    expect(screen.getByTestId('ui-message-limit')).toHaveTextContent('256')
+    expect(await screen.findByTestId('config-rabbitmq')).toHaveTextContent('https://host.example/rabbitmq')
+    expect(await screen.findByTestId('config-prometheus')).toHaveTextContent('https://host.example/prometheus')
+    expect(await screen.findByTestId('ui-message-limit')).toHaveTextContent('256')
   })
 })

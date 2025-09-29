@@ -113,4 +113,41 @@ describe('asset store', () => {
       swarmSize: 5,
     })
   })
+
+  it('hydrates state from server payloads', () => {
+    const { hydrate } = useAssetStore.getState()
+
+    hydrate({
+      sutAssets: [
+        { id: 'sut-b', name: 'Beta', entrypoint: 'img:b', version: '1.0' },
+        { id: 'sut-a', name: 'Alpha', entrypoint: 'img:a', version: '1.0' },
+      ],
+      datasetAssets: [
+        { id: 'data-b', name: 'B dataset', uri: 's3://b', format: 'json' },
+        { id: 'data-a', name: 'A dataset', uri: 's3://a', format: 'csv' },
+      ],
+      swarmTemplates: [
+        {
+          id: 'template-b',
+          name: 'Template B',
+          sutId: 'sut-b',
+          datasetId: 'data-b',
+          swarmSize: 0,
+        },
+        {
+          id: 'template-a',
+          name: 'Template A',
+          sutId: 'sut-a',
+          datasetId: 'data-a',
+          swarmSize: 2,
+        },
+      ],
+    })
+
+    const state = useAssetStore.getState()
+    expect(state.sutAssets.map((sut) => sut.name)).toEqual(['Alpha', 'Beta'])
+    expect(state.datasetAssets.map((dataset) => dataset.name)).toEqual(['A dataset', 'B dataset'])
+    expect(state.swarmTemplates[0]).toMatchObject({ name: 'Template A', swarmSize: 2 })
+    expect(state.swarmTemplates[1]).toMatchObject({ name: 'Template B', swarmSize: 1 })
+  })
 })
