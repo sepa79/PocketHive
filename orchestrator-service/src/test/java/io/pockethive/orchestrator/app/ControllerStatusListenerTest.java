@@ -29,6 +29,16 @@ class ControllerStatusListenerTest {
     }
 
     @Test
+    void updatesRegistryFromTopLevelFlags() {
+        ControllerStatusListener listener = new ControllerStatusListener(registry, new ObjectMapper());
+        String json = "{\"swarmId\":\"sw1\",\"data\":{\"swarmStatus\":\"STOPPED\",\"workloadsEnabled\":false,\"controllerEnabled\":true}}";
+        listener.handle(json, "ev.status-delta.swarm-controller.inst1");
+        verify(registry).refresh("sw1", SwarmHealth.DEGRADED);
+        verify(registry).updateWorkEnabled("sw1", false);
+        verify(registry).updateControllerEnabled("sw1", true);
+    }
+
+    @Test
     void statusLogsEmitAtDebug(CapturedOutput output) {
         ControllerStatusListener listener = new ControllerStatusListener(registry, new ObjectMapper());
 

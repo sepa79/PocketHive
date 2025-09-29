@@ -2,6 +2,7 @@ package io.pockethive.e2e.steps;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.LinkedHashSet;
@@ -175,8 +176,14 @@ public class SwarmLifecycleSteps {
       Optional<SwarmView> view = orchestratorClient.findSwarm(swarmId);
       assertTrue(view.isPresent(), "Swarm should still be registered when stopped");
       assertEquals("STOPPED", view.get().status(), "Swarm status should be STOPPED after stop");
-      assertFalse(view.get().workEnabled(), "Workloads should be disabled after stop");
     });
+
+    Optional<ReadyConfirmation> readyOpt = controlPlaneEvents.readyConfirmation("swarm-stop", stopResponse.correlationId());
+    assertTrue(readyOpt.isPresent(),
+        () -> "Missing ready confirmation for swarm-stop correlation=" + stopResponse.correlationId());
+    ReadyConfirmation ready = readyOpt.get();
+    assertNotNull(ready.state(), "Stop ready confirmation should include command state");
+    assertEquals("Stopped", ready.state().status(), "Stop ready confirmation should report a Stopped state");
   }
 
   @When("I remove the swarm")

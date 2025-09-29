@@ -54,12 +54,23 @@ public class ControllerStatusListener {
             if (swarmId != null) {
                 JsonNode state = data.path("state");
                 JsonNode workloads = state.path("workloads");
+                boolean updatedWorkloads = false;
                 if (!workloads.isMissingNode() && workloads.has("enabled")) {
                     registry.updateWorkEnabled(swarmId, workloads.path("enabled").asBoolean());
+                    updatedWorkloads = true;
                 }
+                if (!updatedWorkloads && data.has("workloadsEnabled")) {
+                    registry.updateWorkEnabled(swarmId, data.path("workloadsEnabled").asBoolean());
+                }
+
                 JsonNode controller = state.path("controller");
+                boolean updatedController = false;
                 if (!controller.isMissingNode() && controller.has("enabled")) {
                     registry.updateControllerEnabled(swarmId, controller.path("enabled").asBoolean());
+                    updatedController = true;
+                }
+                if (!updatedController && data.has("controllerEnabled")) {
+                    registry.updateControllerEnabled(swarmId, data.path("controllerEnabled").asBoolean());
                 }
             }
         } catch (Exception e) {
