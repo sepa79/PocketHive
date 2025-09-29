@@ -146,16 +146,16 @@ export const useUpsertScenario = (
   options?: Omit<UseMutationOptions<ScenarioDocument, Error, ScenarioDraft>, 'mutationFn'>,
 ) => {
   const queryClient = useQueryClient()
+  const { onSuccess, ...rest } = options ?? {}
+
   return useMutation({
     mutationFn: upsertScenario,
-    onSuccess: async (scenario, ...rest) => {
+    onSuccess: async (scenario, ...restArgs) => {
       queryClient.setQueryData(['scenarios', scenario.id], scenario)
       await queryClient.invalidateQueries({ queryKey: ['scenarios'] })
-      if (options?.onSuccess) {
-        options.onSuccess(scenario, ...rest)
-      }
+      await onSuccess?.(scenario, ...restArgs)
     },
-    ...options,
+    ...rest,
   })
 }
 
