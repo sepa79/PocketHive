@@ -43,6 +43,32 @@ Run the development server with hot reload (default at http://localhost:5173):
 npm run dev
 ```
 
+### Scenario Remote (`@ph/scenario`)
+
+Run the Module Federation remote in isolation. The dev server exposes the remote entry at
+`http://localhost:5173/assets/remoteEntry.js` while also mounting the placeholder UI for quick visual checks.
+
+```bash
+npm run dev:scenario
+```
+
+Build the remote for distribution. Bundled assets are written to `dist/scenario/` so they can be published independently of the
+main console bundle.
+
+```bash
+npm run build:scenario
+```
+
+To consume the remote from a host application, configure Module Federation (or the compatible loader) with the following
+settings:
+
+- **Remote name**: `@ph/scenario`
+- **Remote entry URL**: `<scenario-server>/assets/remoteEntry.js`
+- **Exposed module**: `./ScenarioApp`
+
+Hosts can then import the module with `import('@ph/scenario/ScenarioApp')` and call the exported `mount` helper to render the
+Scenario Builder placeholder into a DOM node.
+
 ### Build
 
 Type‑checks the project and generates production assets in `dist/`:

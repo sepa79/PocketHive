@@ -15,6 +15,12 @@
   </head>
   <body>
     <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
+    <script type="module">
+      if (import.meta.env.MODE === 'scenario') {
+        await import('/src/scenario/remoteEntry.ts')
+      } else {
+        await import('/src/main.tsx')
+      }
+    </script>
   </body>
 </html>
