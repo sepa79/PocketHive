@@ -1,0 +1,490 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pockethive.io/schema/scenario-v0.json",
+  "title": "PocketHive Scenario (v0)",
+  "type": "object",
+  "required": [
+    "id",
+    "name",
+    "version",
+    "assets",
+    "scenario"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Stable scenario id (slug or UUID)."
+    },
+    "name": {
+      "type": "string"
+    },
+    "version": {
+      "type": "string",
+      "description": "Scenario definition version (semantic)."
+    },
+    "description": {
+      "type": "string"
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Freeform tags/labels/owner info"
+    },
+    "assets": {
+      "type": "object",
+      "required": [
+        "suts",
+        "datasets",
+        "swarmTemplates"
+      ],
+      "properties": {
+        "suts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "name"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "baseUrls": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "format": "uri"
+                }
+              },
+              "endpoints": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "method",
+                    "path"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "method": {
+                      "type": "string",
+                      "enum": [
+                        "GET",
+                        "POST",
+                        "PUT",
+                        "PATCH",
+                        "DELETE",
+                        "HEAD",
+                        "OPTIONS"
+                      ]
+                    },
+                    "path": {
+                      "type": "string"
+                    },
+                    "timeoutMs": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "notes": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "authProfileRef": {
+                "type": "string",
+                "description": "Placeholder for MVP; Processor will handle tokens later."
+              }
+            }
+          }
+        },
+        "datasets": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "name",
+              "provider"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "provider": {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "redis",
+                      "csv",
+                      "inline"
+                    ]
+                  },
+                  "redis": {
+                    "type": "object",
+                    "properties": {
+                      "keys": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "namespace": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "csv": {
+                    "type": "object",
+                    "properties": {
+                      "path": {
+                        "type": "string"
+                      },
+                      "delimiter": {
+                        "type": "string",
+                        "default": ","
+                      },
+                      "hasHeader": {
+                        "type": "boolean",
+                        "default": true
+                      }
+                    }
+                  },
+                  "inline": {
+                    "type": "object",
+                    "properties": {
+                      "rows": {
+                        "type": "array",
+                        "items": {
+                          "type": "object"
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "bindings": {
+                "type": "array",
+                "description": "Field mapping hints for Generators",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "field",
+                    "source"
+                  ],
+                  "properties": {
+                    "field": {
+                      "type": "string"
+                    },
+                    "source": {
+                      "type": "string",
+                      "description": "Column/key name"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "swarmTemplates": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "name",
+              "roles",
+              "processor"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "roles": {
+                "type": "object",
+                "properties": {
+                  "generator": {
+                    "type": "boolean",
+                    "default": true
+                  },
+                  "moderator": {
+                    "type": "boolean",
+                    "default": true
+                  },
+                  "processor": {
+                    "type": "boolean",
+                    "default": true
+                  },
+                  "postProcessor": {
+                    "type": "boolean",
+                    "default": true
+                  }
+                }
+              },
+              "generator": {
+                "type": "object",
+                "properties": {
+                  "maxConcurrency": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "thinkTimeMs": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "jitterPct": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  }
+                }
+              },
+              "moderator": {
+                "type": "object",
+                "properties": {}
+              },
+              "processor": {
+                "type": "object",
+                "required": [
+                  "sutRef"
+                ],
+                "properties": {
+                  "sutRef": {
+                    "type": "string"
+                  },
+                  "endpointRef": {
+                    "type": "string"
+                  },
+                  "headers": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string"
+                    }
+                  },
+                  "authProfileRef": {
+                    "type": "string",
+                    "description": "Placeholder for MVP; Processor injects token later."
+                  }
+                }
+              },
+              "postProcessor": {
+                "type": "object",
+                "properties": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "scenario": {
+      "type": "object",
+      "required": [
+        "schedule",
+        "tracks"
+      ],
+      "properties": {
+        "schedule": {
+          "type": "object",
+          "properties": {
+            "startAt": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "cron": {
+              "type": "string",
+              "description": "Optional CRON for recurring runs"
+            }
+          }
+        },
+        "runConfig": {
+          "type": "object",
+          "properties": {
+            "runPrefix": {
+              "type": "string",
+              "description": "Prefix to allow parallel runs"
+            },
+            "allowParallel": {
+              "type": "boolean",
+              "default": true
+            }
+          }
+        },
+        "tracks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "name",
+              "templateRef",
+              "blocks"
+            ],
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "templateRef": {
+                "type": "string"
+              },
+              "datasetRef": {
+                "type": "string"
+              },
+              "instances": {
+                "type": "integer",
+                "minimum": 1,
+                "default": 1
+              },
+              "blocks": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "oneOf": [
+                    {
+                      "properties": {
+                        "type": {
+                          "const": "Ramp"
+                        },
+                        "rateFrom": {
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        "rateTo": {
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        "durationSec": {
+                          "type": "integer",
+                          "minimum": 1
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "rateFrom",
+                        "rateTo",
+                        "durationSec"
+                      ]
+                    },
+                    {
+                      "properties": {
+                        "type": {
+                          "const": "Hold"
+                        },
+                        "rate": {
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        "durationSec": {
+                          "type": "integer",
+                          "minimum": 1
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "rate",
+                        "durationSec"
+                      ]
+                    },
+                    {
+                      "properties": {
+                        "type": {
+                          "const": "Spike"
+                        },
+                        "rate": {
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        "durationSec": {
+                          "type": "integer",
+                          "minimum": 1
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "rate",
+                        "durationSec"
+                      ]
+                    },
+                    {
+                      "properties": {
+                        "type": {
+                          "const": "Pause"
+                        },
+                        "durationSec": {
+                          "type": "integer",
+                          "minimum": 1
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "durationSec"
+                      ]
+                    },
+                    {
+                      "properties": {
+                        "type": {
+                          "const": "Signal"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "payload": {
+                          "type": "object"
+                        },
+                        "atOffsetSec": {
+                          "type": "integer",
+                          "minimum": 0
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "name"
+                      ]
+                    },
+                    {
+                      "properties": {
+                        "type": {
+                          "const": "WaitFor"
+                        },
+                        "signal": {
+                          "type": "string"
+                        },
+                        "timeoutSec": {
+                          "type": "integer",
+                          "minimum": 1
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "signal"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
