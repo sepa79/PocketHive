@@ -1,8 +1,9 @@
 import { Client, type StompSubscription } from '@stomp/stompjs'
 import type { Component } from '../types/hive'
 import { isControlEvent, type ControlEvent } from '../types/control'
+import { useUIStore } from '@ph/shell'
+
 import { logIn, logError } from './logs'
-import { useUIStore } from '../store'
 
 export type ComponentListener = (components: Component[]) => void
 export interface TopologyNode {

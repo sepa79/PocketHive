@@ -15,6 +15,11 @@
     "noEmit": true,
     "resolveJsonModule": true,
     "jsx": "react-jsx",
+    "baseUrl": ".",
+    "paths": {
+      "@ph/shell": ["./src/shell/index.ts"],
+      "@ph/shell/*": ["./src/shell/*"]
+    },
 
     /* Linting */
     "strict": true,
