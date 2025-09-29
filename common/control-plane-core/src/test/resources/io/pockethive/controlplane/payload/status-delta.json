@@ -1,0 +1,22 @@
+{
+  "event": "status",
+  "version": "1.0",
+  "messageId": "<<ANY>>",
+  "timestamp": "<<ANY>>",
+  "location": "<<ANY>>",
+  "kind": "status-delta",
+  "role": "processor",
+  "instance": "instance-7",
+  "swarmId": "swarm-1",
+  "enabled": false,
+  "queues": {
+    "control": {
+      "out": [
+        "rk.status"
+      ]
+    }
+  },
+  "data": {
+    "tps": 7
+  }
+}
