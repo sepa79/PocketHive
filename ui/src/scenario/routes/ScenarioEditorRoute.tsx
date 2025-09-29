@@ -12,6 +12,7 @@ export function Component() {
   const { scenarioId } = useParams<{ scenarioId: string }>()
   const isEditing = Boolean(scenarioId)
   const hydrate = useAssetStore((state) => state.hydrate)
+  const [hasHydratedAssets, setHasHydratedAssets] = useState(!isEditing)
   const [metadata, setMetadata] = useState<ScenarioMetadata>({
     id: scenarioId ?? '',
     name: '',
@@ -25,6 +26,9 @@ export function Component() {
   useEffect(() => {
     if (!scenarioId) {
       setMetadata({ id: '', name: '', description: '' })
+      setHasHydratedAssets(true)
+    } else {
+      setHasHydratedAssets(false)
     }
   }, [scenarioId])
 
@@ -40,8 +44,15 @@ export function Component() {
         name: data.name,
         description: data.description ?? '',
       })
+      setHasHydratedAssets(true)
     }
   }, [data, hydrate])
+
+  useEffect(() => {
+    if (isEditing && isError) {
+      setHasHydratedAssets(false)
+    }
+  }, [isEditing, isError])
 
   const updateMetadata = (updates: Partial<ScenarioMetadata>) => {
     setMetadata((prev) => ({
@@ -84,6 +95,7 @@ export function Component() {
         allowIdEdit={!isEditing}
         onChange={updateMetadata}
         onSaved={handleSaved}
+        isSaveDisabled={!hasHydratedAssets || isLoading}
       />
       <div className="flex-1">{body}</div>
     </div>

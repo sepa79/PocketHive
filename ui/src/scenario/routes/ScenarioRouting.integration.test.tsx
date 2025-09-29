@@ -23,6 +23,17 @@ const renderWithRouter = (initialEntry: string) =>
     { onRender: () => undefined },
   )
 
+const createDeferred = <T,>() => {
+  let resolve!: (value: T | PromiseLike<T>) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res
+    reject = rej
+  })
+
+  return { promise, resolve, reject }
+}
+
 const resetStores = () => {
   useAssetStore.getState().reset()
   useUIStore.setState({ toast: null })
@@ -184,5 +195,78 @@ describe('Scenario routes', () => {
 
     expect(remoteShell.useUIStore).toBe(hostStore)
     expect(hostStore.getState().toast).toBe(toastMessage)
+  })
+
+  it('disables saving until the scenario payload hydrates when editing', async () => {
+    const user = userEvent.setup()
+
+    const scenarioResponse = {
+      id: 'baseline',
+      name: 'Baseline scenario',
+      description: 'Existing scenario',
+      sutAssets: [
+        { id: 'sut-1', name: 'System', entrypoint: 'image:latest', version: '1.0.0' },
+      ],
+      datasetAssets: [
+        { id: 'dataset-1', name: 'Dataset', uri: 's3://bucket', format: 'json' },
+      ],
+      swarmTemplates: [],
+    }
+
+    const detailDeferred = createDeferred<Response>()
+
+    apiFetchSpy.mockImplementation(async (path, init) => {
+      if (path === '/scenario-manager/scenarios' && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify([]), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+
+      if (path === '/scenario-manager/scenarios/baseline' && (!init || init.method === undefined)) {
+        return detailDeferred.promise
+      }
+
+      if (path === '/scenario-manager/scenarios/baseline' && init?.method === 'PUT') {
+        return new Response(JSON.stringify(scenarioResponse), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+
+      throw new Error(`Unexpected request: ${String(path)}`)
+    })
+
+    renderWithRouter('/scenario/edit/baseline')
+
+    const loadingButton = await screen.findByRole('button', { name: /Loading scenario…/i })
+    expect(loadingButton).toBeDisabled()
+
+    await user.click(loadingButton)
+
+    expect(
+      apiFetchSpy.mock.calls.some(
+        ([requestPath, init]) => requestPath === '/scenario-manager/scenarios/baseline' && init?.method === 'PUT',
+      ),
+    ).toBe(false)
+
+    detailDeferred.resolve(
+      new Response(JSON.stringify(scenarioResponse), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    )
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /Save Scenario/i })).not.toBeDisabled())
+
+    await user.click(screen.getByRole('button', { name: /Save Scenario/i }))
+
+    await waitFor(() =>
+      expect(
+        apiFetchSpy.mock.calls.some(
+          ([requestPath, init]) => requestPath === '/scenario-manager/scenarios/baseline' && init?.method === 'PUT',
+        ),
+      ).toBe(true),
+    )
   })
 })

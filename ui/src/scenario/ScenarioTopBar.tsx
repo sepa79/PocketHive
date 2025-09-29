@@ -11,13 +11,14 @@ interface ScenarioTopBarProps {
   allowIdEdit: boolean
   onChange: (updates: Partial<ScenarioMetadata>) => void
   onSaved?: (scenario: ScenarioDocument) => void
+  isSaveDisabled?: boolean
 }
 
 const labelStyles = 'text-xs uppercase tracking-[0.35em] text-amber-300'
 const inputStyles =
   'w-full rounded border border-slate-700 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-amber-400 focus:outline-none'
 
-const ScenarioTopBar = ({ draft, allowIdEdit, onChange, onSaved }: ScenarioTopBarProps) => {
+const ScenarioTopBar = ({ draft, allowIdEdit, onChange, onSaved, isSaveDisabled = false }: ScenarioTopBarProps) => {
   const navigate = useNavigate()
   const setToast = useUIStore((state) => state.setToast)
   const sutAssets = useAssetStore((state) => state.sutAssets)
@@ -28,6 +29,10 @@ const ScenarioTopBar = ({ draft, allowIdEdit, onChange, onSaved }: ScenarioTopBa
   const [error, setError] = useState<string | null>(null)
 
   const handleSave = async () => {
+    if (isSaveDisabled) {
+      return
+    }
+
     const id = draft.id?.trim()
     const name = draft.name.trim()
     const description = draft.description.trim()
@@ -113,9 +118,9 @@ const ScenarioTopBar = ({ draft, allowIdEdit, onChange, onSaved }: ScenarioTopBa
             type="button"
             className="rounded bg-amber-500 px-5 py-2 text-sm font-semibold text-slate-950 shadow transition hover:bg-amber-400 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
             onClick={handleSave}
-            disabled={isPending}
+            disabled={isPending || isSaveDisabled}
           >
-            {isPending ? 'Saving…' : 'Save Scenario'}
+            {isPending ? 'Saving…' : isSaveDisabled ? 'Loading scenario…' : 'Save Scenario'}
           </button>
         </div>
       </div>
