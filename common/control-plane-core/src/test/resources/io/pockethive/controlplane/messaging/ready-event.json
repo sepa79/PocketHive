@@ -1,0 +1,25 @@
+{
+  "routingKey": "ev.ready.swarm-start.swarm-A.generator.gen-1",
+  "payload": {
+    "ts": "2024-01-01T00:00:00Z",
+    "correlationId": "corr-1",
+    "idempotencyKey": "idem-1",
+    "signal": "swarm-start",
+    "scope": {
+      "swarmId": "swarm-A",
+      "role": "generator",
+      "instance": "gen-1"
+    },
+    "result": "success",
+    "state": {
+      "status": "Running",
+      "enabled": true,
+      "details": {
+        "tasks": 5
+      }
+    },
+    "details": {
+      "durationMs": 120
+    }
+  }
+}

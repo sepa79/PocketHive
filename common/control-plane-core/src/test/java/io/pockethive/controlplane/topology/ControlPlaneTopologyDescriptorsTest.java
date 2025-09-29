@@ -1,17 +1,26 @@
 package io.pockethive.controlplane.topology;
 
-import static org.assertj.core.api.Assertions.assertThat;
-
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.Topology;
+import io.pockethive.controlplane.payload.JsonFixtureAssertions;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
+import java.io.IOException;
 import java.util.Collection;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
+
+import static org.assertj.core.api.Assertions.assertThat;
 
 class ControlPlaneTopologyDescriptorsTest {
 
     private static final String INSTANCE = "inst";
+    private static final ObjectMapper MAPPER = new ObjectMapper().findAndRegisterModules();
 
     @Test
     void processorDescriptorMatchesRabbitConfig() {
@@ -31,6 +40,24 @@ class ControlPlaneTopologyDescriptorsTest {
             .containsExactlyInAnyOrderElementsOf(expectedWorkerConfigSignals("processor", ControlPlaneRouteCatalog.INSTANCE_TOKEN));
         assertThat(routes.statusSignals())
             .containsExactlyInAnyOrderElementsOf(expectedWorkerStatusSignals("processor", ControlPlaneRouteCatalog.INSTANCE_TOKEN));
+    }
+
+    @Test
+    void descriptorDslMatchesGoldenFixture() throws IOException {
+        Map<String, Object> document = new LinkedHashMap<>();
+        document.put("processor", describe(new ProcessorControlPlaneTopologyDescriptor()));
+        document.put("generator", describe(new GeneratorControlPlaneTopologyDescriptor()));
+        document.put("trigger", describe(new TriggerControlPlaneTopologyDescriptor()));
+        document.put("moderator", describe(new ModeratorControlPlaneTopologyDescriptor()));
+        document.put("postprocessor", describe(new PostProcessorControlPlaneTopologyDescriptor()));
+        document.put("swarmController", describe(new SwarmControllerControlPlaneTopologyDescriptor()));
+        document.put("orchestrator", describe(new OrchestratorControlPlaneTopologyDescriptor()));
+        document.put("scenarioManager", describe(new ScenarioManagerTopologyDescriptor()));
+
+        String json = MAPPER.writeValueAsString(document);
+        JsonFixtureAssertions.assertMatchesFixture(
+            "/io/pockethive/controlplane/topology/topology-descriptors.json",
+            json);
     }
 
     @Test
@@ -149,6 +176,46 @@ class ControlPlaneTopologyDescriptorsTest {
 
     private static ControlQueueDescriptor requireQueue(ControlPlaneTopologyDescriptor descriptor) {
         return descriptor.controlQueue(INSTANCE).orElseThrow();
+    }
+
+    private Map<String, Object> describe(ControlPlaneTopologyDescriptor descriptor) {
+        Map<String, Object> node = new LinkedHashMap<>();
+        node.put("role", descriptor.role());
+        node.put("controlQueue", descriptor.controlQueue(INSTANCE).map(this::describe).orElse(null));
+        node.put("additionalQueues", describeQueues(descriptor.additionalQueues(INSTANCE)));
+        ControlPlaneRouteCatalog routes = descriptor.routes();
+        node.put("routes", Map.of(
+            "configSignals", sorted(routes.configSignals()),
+            "statusSignals", sorted(routes.statusSignals()),
+            "lifecycleSignals", sorted(routes.lifecycleSignals()),
+            "statusEvents", sorted(routes.statusEvents()),
+            "lifecycleEvents", sorted(routes.lifecycleEvents()),
+            "otherEvents", sorted(routes.otherEvents())
+        ));
+        return node;
+    }
+
+    private Map<String, Object> describe(ControlQueueDescriptor queue) {
+        Map<String, Object> node = new LinkedHashMap<>();
+        node.put("name", queue.name());
+        node.put("signalBindings", sorted(queue.signalBindings()));
+        node.put("eventBindings", sorted(queue.eventBindings()));
+        node.put("allBindings", sorted(queue.allBindings()));
+        return node;
+    }
+
+    private List<Map<String, Object>> describeQueues(Collection<QueueDescriptor> queues) {
+        return queues.stream()
+            .sorted(Comparator.comparing(QueueDescriptor::name))
+            .map(queue -> Map.of(
+                "name", queue.name(),
+                "bindings", sorted(queue.bindings())
+            ))
+            .collect(Collectors.toList());
+    }
+
+    private List<String> sorted(Set<String> values) {
+        return values.stream().sorted().collect(Collectors.toList());
     }
 
     private static Set<String> expectedWorkerSignals(String role, String instanceSegment) {

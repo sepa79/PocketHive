@@ -28,3 +28,4 @@ Welcome to the PocketHive documentation hub. Use these resources to understand t
 
 ## Contributing
 - [Contributor Guide](../CONTRIBUTING.md)
+- [Control Plane Testing Playbook](ci/control-plane-testing.md)

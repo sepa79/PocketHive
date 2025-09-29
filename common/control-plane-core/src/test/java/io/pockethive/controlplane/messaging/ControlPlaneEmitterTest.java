@@ -1,17 +1,21 @@
 package io.pockethive.controlplane.messaging;
 
+import static io.pockethive.controlplane.payload.JsonFixtureAssertions.ANY_VALUE;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.pockethive.control.CommandState;
 import io.pockethive.control.ConfirmationScope;
 import io.pockethive.controlplane.ControlPlaneIdentity;
+import io.pockethive.controlplane.payload.JsonFixtureAssertions;
 import io.pockethive.controlplane.payload.RoleContext;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import java.time.Instant;
+import java.io.IOException;
 import java.util.Map;
+import java.util.function.Consumer;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -50,12 +54,11 @@ class ControlPlaneEmitterTest {
         String expectedRoute = ControlPlaneRouting.event("ready", "swarm-start",
             RoleContext.fromIdentity(identity).toScope());
         assertThat(message.routingKey()).isEqualTo(expectedRoute);
-        JsonNode payload = MAPPER.readTree((String) message.payload());
-        assertThat(payload.get("signal").asText()).isEqualTo("swarm-start");
-        assertThat(payload.get("correlationId").asText()).isEqualTo("corr-1");
-        assertThat(payload.get("scope").get("role").asText()).isEqualTo("generator");
-        assertThat(payload.get("state").get("details").get("tasks").asInt()).isEqualTo(5);
-        assertThat(payload.get("details").get("durationMs").asInt()).isEqualTo(120);
+
+        String json = describeEvent(message, payload -> { });
+        JsonFixtureAssertions.assertMatchesFixture(
+            "/io/pockethive/controlplane/messaging/ready-event.json",
+            json);
     }
 
     @Test
@@ -72,6 +75,7 @@ class ControlPlaneEmitterTest {
             .retryable(Boolean.FALSE)
             .result("error")
             .details(Map.of("stack", "trace"))
+            .timestamp(Instant.parse("2024-01-02T00:00:00Z"))
             .build();
 
         emitter.emitError(context);
@@ -81,12 +85,11 @@ class ControlPlaneEmitterTest {
         String expectedRoute = ControlPlaneRouting.event("error", "swarm-stop",
             new ConfirmationScope("swarm-A", "generator", "gen-1"));
         assertThat(message.routingKey()).isEqualTo(expectedRoute);
-        JsonNode payload = MAPPER.readTree((String) message.payload());
-        assertThat(payload.get("signal").asText()).isEqualTo("swarm-stop");
-        assertThat(payload.get("phase").asText()).isEqualTo("shutdown");
-        assertThat(payload.get("code").asText()).isEqualTo("ERR-42");
-        assertThat(payload.get("retryable").asBoolean()).isFalse();
-        assertThat(payload.get("details").get("stack").asText()).isEqualTo("trace");
+
+        String json = describeEvent(message, payload -> { });
+        JsonFixtureAssertions.assertMatchesFixture(
+            "/io/pockethive/controlplane/messaging/error-event.json",
+            json);
     }
 
     @Test
@@ -105,12 +108,15 @@ class ControlPlaneEmitterTest {
         String expectedRoute = ControlPlaneRouting.event("status-delta",
             new ConfirmationScope("swarm-A", "generator", "gen-1"));
         assertThat(message.routingKey()).isEqualTo(expectedRoute);
-        JsonNode payload = MAPPER.readTree((String) message.payload());
-        assertThat(payload.get("kind").asText()).isEqualTo("status-delta");
-        assertThat(payload.get("role").asText()).isEqualTo("generator");
-        assertThat(payload.path("queues").path("control").path("out").get(0).asText())
-            .isEqualTo(expectedRoute);
-        assertThat(payload.path("data").path("custom").asText()).isEqualTo("value");
+
+        String json = describeEvent(message, payload -> {
+            payload.put("messageId", ANY_VALUE);
+            payload.put("timestamp", ANY_VALUE);
+            payload.put("location", ANY_VALUE);
+        });
+        JsonFixtureAssertions.assertMatchesFixture(
+            "/io/pockethive/controlplane/messaging/status-delta-event.json",
+            json);
     }
 
     @Test
@@ -119,6 +125,17 @@ class ControlPlaneEmitterTest {
         assertThatThrownBy(() -> ControlPlaneEmitter.generator(wrong, publisher))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("Identity role mismatch");
+    }
+
+    private static String describeEvent(EventMessage message, Consumer<ObjectNode> payloadCustomiser) throws IOException {
+        ObjectNode payload = (ObjectNode) MAPPER.readTree((String) message.payload());
+        if (payloadCustomiser != null) {
+            payloadCustomiser.accept(payload);
+        }
+        ObjectNode document = MAPPER.createObjectNode();
+        document.put("routingKey", message.routingKey());
+        document.set("payload", payload);
+        return MAPPER.writeValueAsString(document);
     }
 
     private static final class CapturingPublisher implements ControlPlanePublisher {

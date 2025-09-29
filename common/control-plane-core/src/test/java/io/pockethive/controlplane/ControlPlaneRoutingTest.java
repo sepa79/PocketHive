@@ -1,12 +1,19 @@
 package io.pockethive.controlplane;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.control.ConfirmationScope;
+import io.pockethive.controlplane.payload.JsonFixtureAssertions;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
+import java.io.IOException;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 class ControlPlaneRoutingTest {
+
+    private static final ObjectMapper MAPPER = new ObjectMapper().findAndRegisterModules();
 
     @Test
     void signalRoutingUsesAllPlaceholder() {
@@ -46,5 +53,44 @@ class ControlPlaneRoutingTest {
         assertThat(key.matchesSwarm("swarmA")).isTrue();
         assertThat(key.matchesRole("generator")).isTrue();
         assertThat(key.matchesInstance("gen-1")).isTrue();
+    }
+
+    @Test
+    void routingDslMatchesGoldenFixture() throws IOException {
+        ConfirmationScope scope = new ConfirmationScope("swarmA", "generator", "gen-1");
+        Map<String, Object> document = new LinkedHashMap<>();
+        document.put("signals", Map.of(
+            "broadcast", ControlPlaneRouting.signal("config-update", null, "generator", null),
+            "scoped", ControlPlaneRouting.signal("status-request", "swarmA", "generator", "gen-1")
+        ));
+        document.put("events", Map.of(
+            "ready", ControlPlaneRouting.event("ready", "config-update", scope),
+            "status", ControlPlaneRouting.event("status-delta", scope)
+        ));
+        document.put("parsed", Map.of(
+            "signal", describe(ControlPlaneRouting.parseSignal("sig.config-update.swarmA.generator.gen-1")),
+            "event", describe(ControlPlaneRouting.parseEvent("ev.ready.config-update.swarmA.generator.gen-1"))
+        ));
+
+        String json = MAPPER.writeValueAsString(document);
+        JsonFixtureAssertions.assertMatchesFixture(
+            "/io/pockethive/controlplane/routing/routing-dsl.json",
+            json);
+    }
+
+    private Map<String, Object> describe(ControlPlaneRouting.RoutingKey key) {
+        Map<String, Object> node = new LinkedHashMap<>();
+        node.put("prefix", key.prefix());
+        node.put("type", key.type());
+        node.put("swarmId", key.swarmId());
+        node.put("role", key.role());
+        node.put("instance", key.instance());
+        node.put("matches", Map.of(
+            "type", key.matchesType(key.type()),
+            "swarm", key.matchesSwarm(key.swarmId()),
+            "role", key.matchesRole(key.role()),
+            "instance", key.matchesInstance(key.instance())
+        ));
+        return node;
     }
 }
