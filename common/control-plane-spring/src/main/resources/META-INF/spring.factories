@@ -1,0 +1,4 @@
+org.springframework.boot.autoconfigure.EnableAutoConfiguration=\
+  io.pockethive.controlplane.spring.ControlPlaneCommonAutoConfiguration,\
+  io.pockethive.controlplane.spring.WorkerControlPlaneAutoConfiguration,\
+  io.pockethive.controlplane.spring.ManagerControlPlaneAutoConfiguration
