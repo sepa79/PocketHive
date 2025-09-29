@@ -12,6 +12,7 @@ Key guidelines include:
 - Favour domain logic over framework code; keep domains free of technical noise.
 - Provide tests and documentation when applicable.
 - Reject null, empty, or blank parameters by failing fast (e.g., throw `IllegalArgumentException`) instead of defaulting or returning quietly.
+- Emit structured warn/error logs (include routing key, message type, correlation id, etc.) when rejecting malformed messages, sanitizing sensitive payload data before logging.
 - Ensure new or modified handlers include unit tests that cover these guard clauses.
 - Never expose credentials or personal data.
 - Stick to approved technologies (Java 21, React, JUnit 5, Cucumber, ArchUnit, existing AMQP/HTTP libs).
