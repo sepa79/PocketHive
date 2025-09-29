@@ -1,6 +1,26 @@
 id: mock-1
 name: Mock-1
 description: Sample scenario with generator, moderator, processor and postprocessor.
+assets:
+  suts:
+    - id: sut-generic
+      name: Sample Generator SUT
+      description: Sample entrypoint for the generator role.
+      entrypoint: /opt/bin/start-generator.sh
+      version: "1.0.0"
+  datasets:
+    - id: dataset-gen
+      name: Generator output seed
+      description: Seed data used by the generator stage.
+      uri: s3://pockethive/mock/datasets/generator-seed.json
+      format: json
+  swarmTemplates:
+    - id: swarm-default
+      name: Default swarm
+      description: Generator to postprocessor baseline pipeline.
+      sutId: sut-generic
+      datasetId: dataset-gen
+      swarmSize: 1
 template:
   image: pockethive-swarm-controller:latest
   bees:
@@ -22,3 +42,4 @@ template:
       image: pockethive-postprocessor:latest
       work:
         in: final
+tracks: []
