@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.11.2] - 2025-09-27
+Timestamp: 2025-09-27T00:00:00Z
+
+- Docs: refresh the published changelog HTML fallback and align the embedded version metadata with 0.11.2 for offline viewing.
+
 ## [0.11.1] - 2025-09-26
 Timestamp: 2025-09-26T00:00:00Z
 

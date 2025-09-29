@@ -26,22 +26,559 @@
 <body>
   <header>
     <a href="/">← Back</a>
-    <div style="margin-left:auto" class="muted">Version: <span id="ver">0.9.5</span></div>
+    <div style="margin-left:auto" class="muted">Version: <span id="ver">0.11.2</span></div>
   </header>
   <main>
     <div id="chg">
+      <h1>Changelog</h1>
+      <div style="height:6px"></div>
+      <pre>All notable changes to this project will be documented in this file.</pre>
+      <div style="height:6px"></div>
+      <h2>[0.11.2] - 2025-09-27</h2>
+      <pre>Timestamp: 2025-09-27T00:00:00Z</pre>
+      <div style="height:6px"></div>
+      <ul>
+      <li>Docs: refresh the published changelog HTML fallback and align the embedded version metadata with 0.11.2 for offline viewing.</li>
+      </ul>
+      <div style="height:6px"></div>
+      <h2>[0.11.1] - 2025-09-26</h2>
+      <pre>Timestamp: 2025-09-26T00:00:00Z</pre>
+      <div style="height:6px"></div>
+      <ul>
+      <li>Swarm controller: derive config-update routing keys via `ControlPlaneRouting.signal` so Start/Stop All fan-outs target `sig.config-update.&lt;swarm&gt;.ALL.ALL`, ensuring bees receive broadcasts and the controller resumes itself.</li>
+      </ul>
+      <div style="height:6px"></div>
+      <h2>[0.11.0] - 2025-09-25</h2>
+      <pre>Timestamp: 2025-09-25T00:00:00Z</pre>
+      <div style="height:6px"></div>
+      <ul>
+      <li>Build: Copy common/control-plane-core module into every service Docker build context so Docker builds resolve worker control-plane helpers.</li>
+      <li>Orchestrator: Default controller toggle requests to CommandTarget.SWARM when omitted and backfill tests covering legacy payloads.</li>
+      <li>UI: Send commandTarget with swarm manager enable/disable calls and expand Vitest coverage to guard the new payload contract.</li>
+      </ul>
+      <div style="height:6px"></div>
+      <h2>[0.10.2] - 2025-09-19</h2>
+      <pre>Timestamp: 2025-09-19T00:00:00Z</pre>
+      <div style="height:6px"></div>
+      <ul>
+      <li>UI: replace the queen-specific swarm controls with a dedicated orchestrator panel that surfaces health via HAL indicators, shows active swarm counts, toggles the orchestrator enablement badge, and confirms start/stop commands before dispatching them.</li>
+      <li>Swarm controller: advertise the concrete `sig.swarm-*` control routes for the active swarm in status events and emit config-update confirmations on the precise `ev.ready.config-update.&lt;role&gt;.&lt;instance&gt;` routing key so orchestrator clients can correlate responses.</li>
+      <li>Tooling: rewrite the Windows `start-hive.bat` bootstrapper into a staged workflow that validates Docker prerequisites, allows selecting clean/build/start phases, and removes duplicated echo syntax.</li>
+      </ul>
+      <div style="height:6px"></div>
+      <h2>[0.10.1] - 2025-09-18</h2>
+      <pre>Timestamp: 2025-09-18T00:00:00Z</pre>
+      <div style="height:6px"></div>
+      <ul>
+      <li>UI: render swarm controllers as grouped topology cards that embed their swarm component icons and preview internal queues while leaving hive-level services outside swarm navigation.</li>
+      <li>UI: open swarm details from the controller&#x27;s Details action to show full component cards and keep hive-level selections from toggling swarm filters.</li>
+      <li>UI: display instance identifiers and role metadata on topology cards, including active swarm totals for orchestrators, while preserving node positions after drag updates.</li>
+      </ul>
+      <div style="height:6px"></div>
+      <h2>[0.10.0] - 2025-09-17</h2>
+      <pre>Timestamp: 2025-09-17T00:00:00Z</pre>
+      <div style="height:6px"></div>
+      <ul>
+      <li>Orchestrator: mount the controller&#x27;s Docker socket bind mount, wrap swarm-template control signals, and propagate the socket path/`DOCKER_HOST` so controllers can talk to whatever daemon the runtime exposes.</li>
+      <li>Docker client: surface Docker daemon availability failures with a dedicated exception and allow callers to customise the `HostConfig` while keeping automatic control-network discovery, enabling bind mounts without losing networking defaults.</li>
+      <li>SwarmController: redeclare queues when they go missing and honour `DOCKER_HOST` overrides from the environment or JVM properties to reuse the orchestrator&#x27;s socket configuration.</li>
+      <li>Control-plane services: project the AsyncAPI control payload schemas into runtime validation so generator, moderator, processor, postprocessor, and trigger services enforce the documented signal shape.</li>
+      <li>UI (Buzz): add an error filter to the log stream to spotlight failing events quickly.</li>
+      <li>Tests: cover Docker socket propagation, host bind wiring, AsyncAPI schema validation, and controller Docker host overrides.</li>
+      </ul>
+      <div style="height:6px"></div>
+      <h2>[0.9.6] - 2025-09-16</h2>
+      <pre>Timestamp: 2025-09-16T00:00:00Z</pre>
+      <div style="height:6px"></div>
+      <ul>
+      <li>Docs: align `ControlSignal` payload documentation with runtime shape, including `signal`/scope/`args`, and bump AsyncAPI spec to 0.5.0.</li>
+      </ul>
+      <div style="height:6px"></div>
+      <h2>[0.9.5] - 2025-09-15</h2>
+      <pre>Timestamp: 2025-09-15T10:01:39Z</pre>
+      <div style="height:6px"></div>
+      <ul>
+      <li>SwarmController: emit control signal confirmations, dedupe signals, sort lifecycle by dependency, request status on staleness, and record metrics.</li>
+      <li>Orchestrator: publish swarm created/ready events, listen for control events, track controller health, and guard duplicate stops.</li>
+      <li>UI: render swarm topology with React Flow, gate swarm start on readiness, and log API fetches.</li>
+      <li>Docs: simplify component READMEs and document swarm lifecycle events and startup.</li>
+      <li>Tests: verify status bindings, confirmation flow, and ready/error binding patterns.</li>
+      <li>UI: migrate swarm actions to REST</li>
+      <li>Orchestrator: retain REST argument names by compiling with `-parameters`</li>
+      </ul>
+      <div style="height:6px"></div>
+      <h2>[0.9.4] - 2025-09-11</h2>
+      <pre>Timestamp: 2025-09-11T23:42:19Z</pre>
+      <div style="height:6px"></div>
+      <ul>
+      <li>SwarmController: attach containers to control network, derive network automatically, and propagate swarm ID via shared Docker client.</li>
+      <li>Orchestrator/UI: surface swarm creation errors with detailed events.</li>
+      <li>ScenarioManager/UI: return JSON for scenario endpoints and load scenario details by ID in swarm modal.</li>
+      <li>Tests: fix swarm-controller topology and RabbitMQ expectations.</li>
+      </ul>
+      <div style="height:6px"></div>
+      <h2>[0.9.3] - 2025-09-11</h2>
+      <pre>Timestamp: 2025-09-11T08:25:35Z</pre>
+      <div style="height:6px"></div>
+      <ul>
+      <li>Fix: use curl in log-aggregator healthcheck to ensure container starts.</li>
+      </ul>
+      <div style="height:6px"></div>
+      <h2>[0.9.2] - 2025-09-10</h2>
+      <pre>Timestamp: 2025-09-10T15:30:28Z</pre>
+      <div style="height:6px"></div>
+      <ul>
+      <li>Docs: remove Queen tab references, note only Queen runs initially and describe scenario-based swarm creation.</li>
+      <li>Docs: document `GET /scenarios`, STOMP `sig.swarm-create`/`sig.swarm-start` endpoints and update architecture diagrams.</li>
+      </ul>
+      <div style="height:6px"></div>
       <h2>[0.9.1] - 2025-09-09</h2>
       <pre>Timestamp: 2025-09-09T23:22:21Z</pre>
       <div style="height:6px"></div>
       <ul>
-        <li>SwarmController: emit status after startup.</li>
-        <li>SwarmControllerService: support multiple containers per role.</li>
-        <li>Herald: add status controls, metrics, and handshake between queen and herald.</li>
-        <li>SwarmController: manage container lifecycle with Docker and clean up resources on stop.</li>
-        <li>Fix: keep controller enabled, provide ObjectMapper bean, and remove invalid binding builder call.</li>
-        <li>Docs: outline scenario manager and swarm lifecycle.</li>
-        <li>Tests: verify queue provisioning and RabbitTemplate messaging conversions.</li>
+      <li>SwarmController: emit status after startup.</li>
+      <li>SwarmControllerService: support multiple containers per role.</li>
+      <li>Herald: add status controls, metrics, and handshake between queen and herald.</li>
+      <li>SwarmController: manage container lifecycle with Docker and clean up resources on stop.</li>
+      <li>Fix: keep controller enabled, provide ObjectMapper bean, and remove invalid binding builder call.</li>
+      <li>Docs: outline scenario manager and swarm lifecycle.</li>
+      <li>Tests: verify queue provisioning and RabbitTemplate messaging conversions.</li>
       </ul>
+      <div style="height:6px"></div>
+      <h2>[0.9.0] - 2025-09-09</h2>
+      <pre>Timestamp: 2025-09-09T18:39:00Z</pre>
+      <div style="height:6px"></div>
+      <ul>
+      <li>SwarmController: introduce service to orchestrate swarm lifecycle and handle control signals.</li>
+      <li>Swarm: UI supports creating swarms and incorporates swarm ID in bee names and metrics.</li>
+      <li>Build: centralize topology constants in a shared module and copy shared modules into service images.</li>
+      <li>Fix: resolve topology-core parent POM and update bee role aliases.</li>
+      <li>Docs: expand guidance on control signals, orchestration roles, and multi-region queue adapters.</li>
+      </ul>
+      <div style="height:6px"></div>
+      <h2>[0.8.2] - 2025-09-08</h2>
+      <pre>Timestamp: 2025-09-08T10:27:41Z</pre>
+      <div style="height:6px"></div>
+      <ul>
+      <li>Traffic: scope exchanges and queues by swarm ID (`ph.&lt;swarmId&gt;.hive`, `ph.&lt;swarmId&gt;.gen`, `ph.&lt;swarmId&gt;.mod`).</li>
+      <li>Orchestrator: remove swarm-specific queues after containers stop.</li>
+      <li>Docs: note `PH_SWARM_ID` env for multi-swarm isolation.</li>
+      </ul>
+      <div style="height:6px"></div>
+      <h2>[0.8.1] - 2025-09-04</h2>
+      <pre>Timestamp: 2025-09-04T17:55:20Z</pre>
+      <div style="height:6px"></div>
+      <ul>
+      <li>Build: centralize module parent version via revision property and bump to 0.8.1.</li>
+      <li>UI: let Hive, Buzz, and Nectar views fill the viewport with flexible layouts.</li>
+      </ul>
+      <div style="height:6px"></div>
+      <h2>[0.8.0] - 2025-09-04</h2>
+      <pre>Timestamp: 2025-09-04T17:17:36Z</pre>
+      <div style="height:6px"></div>
+      <ul>
+      <li>**BREAKING**: Remove all legacy UI files and directories (`UI-Legacy/`, `ui/assets/js/`)</li>
+      <li>Clean up codebase by eliminating unused static JavaScript modules</li>
+      <li>Update documentation to reflect React-only UI architecture</li>
+      <li>Bump version to 0.8.0 to reflect major cleanup</li>
+      </ul>
+      <div style="height:6px"></div>
+      <h2>[0.7.1] - 2025-09-04</h2>
+      <pre>Timestamp: 2025-09-04T11:28:55Z</pre>
+      <div style="height:6px"></div>
+      <ul>
+      <li>UI: add start/stop toggle and manual status refresh for each component.</li>
+      <li>UI: send config updates over role-specific control routes and show enabled state in drawers; disabled components appear gray in topology.</li>
+      <li>Docs: relocate spec and control-plane rules under docs/ and update references and UI Dockerfile.</li>
+      </ul>
+      <div style="height:6px"></div>
+      <h2>[0.7.0] - 2025-09-04</h2>
+      <pre>Timestamp: 2025-09-04T01:41:55Z</pre>
+      <div style="height:6px"></div>
+      <ul>
+      <li>UI: topology nodes render with type-specific shapes and a legend, plus smaller queue labels and arrows for clarity.</li>
+      <li>UI: topology view lays out components in a linear row, resizes with its container, and includes a reset button.</li>
+      </ul>
+      <div style="height:6px"></div>
+      <h2>[0.6.3] - 2025-09-03</h2>
+      <pre>Timestamp: 2025-09-03T22:57:37Z</pre>
+      <div style="height:6px"></div>
+      <ul>
+      <li>UI: render interactive topology view with draggable nodes, zoom/pan, and queue tooltips.</li>
+      <li>UI: preserve node positions across STOMP topology updates.</li>
+      <li>Services: map roles to bee aliases and generate role-based bee names without spaces.</li>
+      </ul>
+      <div style="height:6px"></div>
+      <h2>[0.6.2] - 2025-09-03</h2>
+      <pre>Timestamp: 2025-09-03T19:33:17Z</pre>
+      <div style="height:6px"></div>
+      <ul>
+      <li>UI: add STOMP client with shared connection, log streams, and configuration tab in Buzz.</li>
+      <li>UI: build Hive page with live component list, detail drawer, and queue panel.</li>
+      </ul>
+      <div style="height:6px"></div>
+      <h2>[0.6.1] - 2025-09-03</h2>
+      <pre>Timestamp: 2025-09-03T12:18:00Z</pre>
+      <div style="height:6px"></div>
+      <ul>
+      <li>UI: archive the static site under `UI-Legacy` and scaffold a React 19 + Vite app in `/ui` with the Hive view and menu.</li>
+      </ul>
+      <div style="height:6px"></div>
+      <h2>[0.6.0] - 2025-09-02</h2>
+      <pre>Timestamp: 2025-09-02T22:51:35Z</pre>
+      <div style="height:6px"></div>
+      <ul>
+      <li>WireMock: enable cross-origin admin access</li>
+      <li>WireMock: return 200 JSON for generator&#x27;s default `/api/test` request</li>
+      <li>UI: request WireMock admin using browser hostname and CORS headers</li>
+      </ul>
+      <div style="height:6px"></div>
+      <h2>[0.5.12] - 2025-09-02</h2>
+      <pre>Timestamp: 2025-09-02T20:54:45Z</pre>
+      <div style="height:6px"></div>
+      <ul>
+      <li>Grafana: remove the Loki Logs dashboard</li>
+      </ul>
+      <div style="height:6px"></div>
+      <h2>[0.5.11] - 2025-09-02</h2>
+      <pre>Timestamp: 2025-09-02T17:23:07Z</pre>
+      <div style="height:6px"></div>
+      <ul>
+      <li>Trigger: introduce service for scheduled external calls and include it in the Compose stack.</li>
+      <li>UI: source version from the root VERSION file.</li>
+      </ul>
+      <div style="height:6px"></div>
+      <h2>[0.5.10] - 2025-09-02</h2>
+      <pre>Timestamp: 2025-09-02T16:50:02Z</pre>
+      <div style="height:6px"></div>
+      <ul>
+      <li>UI: enhance hive view with component details.</li>
+      </ul>
+      <div style="height:6px"></div>
+      <h2>[0.5.9] - 2025-09-02</h2>
+      <pre>Timestamp: 2025-09-02T14:44:30Z</pre>
+      <div style="height:6px"></div>
+      <ul>
+      <li>Log aggregator: parse raw AMQP messages, tolerate unknown fields, and ensure every Loki stream has a label (defaulting to `service=&quot;unknown&quot;`).</li>
+      </ul>
+      <div style="height:6px"></div>
+      <h2>[0.5.8] - 2025-09-02</h2>
+      <pre>Timestamp: 2025-09-02T12:52:14Z</pre>
+      <div style="height:6px"></div>
+      <ul>
+      <li>Processor: forward moderated messages unchanged to the system under test and relay the response to the final queue.</li>
+      <li>Processor: default base URL includes WireMock port 8080.</li>
+      <li>UI: cap WireMock journal view to the 25 most recent requests.</li>
+      </ul>
+      <div style="height:6px"></div>
+      <h2>[0.5.7] - 2025-09-02</h2>
+      <pre>Timestamp: 2025-09-02T12:42:27Z</pre>
+      <div style="height:6px"></div>
+      <ul>
+      <li>Generator: support sub-1 TPS rates by accumulating fractional requests.</li>
+      <li>UI: add numeric input for generator rate and stretch slider to panel width.</li>
+      </ul>
+      <div style="height:6px"></div>
+      <h2>[0.5.6] - 2025-09-01</h2>
+      <pre>Timestamp: 2025-09-01T23:45:28Z</pre>
+      <div style="height:6px"></div>
+      <ul>
+      <li>UI: add dropdown under WireMock icon to view request journal from `/__admin/requests`.</li>
+      <li>Chore: remove unused ESLint directive in Buzz menu.</li>
+      </ul>
+      <h2>[0.5.5] - 2025-09-01</h2>
+      <pre>Timestamp: 2025-09-01T23:35:26Z</pre>
+      <div style="height:6px"></div>
+      <ul>
+      <li>Generator: construct HTTP messages from configuration with Hello World defaults for path, method, headers, and body.</li>
+      <li>Processor: expose configurable base URL (default `http://wiremock`) for downstream calls.</li>
+      <li>UI: add dedicated sections for message template and base URL, requiring explicit confirmation for updates.</li>
+      </ul>
+      <div style="height:6px"></div>
+      <h2>[0.5.4] - 2025-09-01</h2>
+      <pre>Timestamp: 2025-09-01T22:21:33Z</pre>
+      <div style="height:6px"></div>
+      <ul>
+      <li>UI: ensure Buzz OUT panel logs broadcast and UI control messages by fetching the STOMP client on demand.</li>
+      <li>Docs: expand README and requirements to describe Buzz IN/OUT logs and UI controls.</li>
+      </ul>
+      <div style="height:6px"></div>
+      <h2>[0.5.3] - 2025-09-01</h2>
+      <pre>Timestamp: 2025-09-01T22:06:01Z</pre>
+      <div style="height:6px"></div>
+      <ul>
+      <li>Docker: disable WireMock request journaling for lean performance tests.</li>
+      </ul>
+      <div style="height:6px"></div>
+      <h2>[0.5.2] - 2025-09-01</h2>
+      <pre>Timestamp: 2025-09-01T21:54:24Z</pre>
+      <div style="height:6px"></div>
+      <ul>
+      <li>Docker: upgrade WireMock image and relax volume permissions so the container starts without MissingResourceException.</li>
+      </ul>
+      <div style="height:6px"></div>
+      <h2>[0.5.1] - 2025-09-01</h2>
+      <pre>Timestamp: 2025-09-01T21:36:58Z</pre>
+      <div style="height:6px"></div>
+      <ul>
+      <li>UI: add top-bar icon links to RabbitMQ, Prometheus, Grafana, and WireMock, pre-filled with default credentials where applicable.</li>
+      </ul>
+      <div style="height:6px"></div>
+      <h2>[0.5.0] - 2025-09-01</h2>
+      <pre>Timestamp: 2025-09-01T21:21:35Z</pre>
+      <div style="height:6px"></div>
+      <ul>
+      <li>Observability: integrate Loki and Promtail logging stack with a dedicated log-aggregator service, RabbitMQ logback appender, and Grafana dashboards; services wait for the log-aggregator and route AMQP logs to console.</li>
+      <li>UI: refactor Hive panels into modular components with shared controls and a common status renderer; panels auto-request and render initial status, display generator rate and queue bindings/config, open controls in modals, toggle visibility, and provide tabbed system logs.</li>
+      <li>Control: announce inbound queues and publishing topics, use explicit control topics and dedicated per-service control queues; actions request status and status blocks expand with queue topology.</li>
+      <li>Processor: declare final queue binding and forward moderated messages to the postprocessor.</li>
+      <li>TPS: measure throughput using elapsed intervals across Generator, Moderator, and Processor.</li>
+      <li>Docker: add Wiremock service for NFT tests with journaling disabled.</li>
+      </ul>
+      <div style="height:6px"></div>
+      <h2>[0.4.20] - 2025-08-30</h2>
+      <pre>Timestamp: 2025-08-30T23:39:40Z</pre>
+      <div style="height:6px"></div>
+      <ul>
+      <li>UI: Reduce monolith icon depth to a quarter of its width for accurate proportions.</li>
+      </ul>
+      <div style="height:6px"></div>
+      <h2>[0.4.19] - 2025-08-30</h2>
+      <pre>Timestamp: 2025-08-30T23:33:46Z</pre>
+      <div style="height:6px"></div>
+      <ul>
+      <li>UI: Widen monolith status icon&#x27;s front face for clearer orientation.</li>
+      </ul>
+      <div style="height:6px"></div>
+      <h2>[0.4.18] - 2025-08-30</h2>
+      <pre>Timestamp: 2025-08-30T23:16:22Z</pre>
+      <div style="height:6px"></div>
+      <ul>
+      <li>UI: Correct isometric angle of monolith status icon.</li>
+      </ul>
+      <div style="height:6px"></div>
+      <h2>[0.4.17] - 2025-08-30</h2>
+      <pre>Timestamp: 2025-08-30T23:11:47Z</pre>
+      <div style="height:6px"></div>
+      <ul>
+      <li>UI: Remove ground from monolith status icon and add subtle pulsing glow with hover effect.</li>
+      </ul>
+      <div style="height:6px"></div>
+      <h2>[0.4.16] - 2025-08-30</h2>
+      <pre>Timestamp: 2025-08-30T22:58:51Z</pre>
+      <div style="height:6px"></div>
+      <ul>
+      <li>UI: Narrow the monolith status icon and anchor it to the ground.</li>
+      </ul>
+      <div style="height:6px"></div>
+      <h2>[0.4.15] - 2025-08-30</h2>
+      <pre>Timestamp: 2025-08-30T22:50:15Z</pre>
+      <div style="height:6px"></div>
+      <ul>
+      <li>UI: Swap Update Status button for Space Odyssey monolith icon with hover glow.</li>
+      </ul>
+      <div style="height:6px"></div>
+      <h2>[0.4.14] - 2025-08-30</h2>
+      <pre>Timestamp: 2025-08-30T22:25:29Z</pre>
+      <div style="height:6px"></div>
+      <ul>
+      <li>UI: Allow separate line limits for Control and System Logs with 10–500 range.</li>
+      </ul>
+      <div style="height:6px"></div>
+      <h2>[0.4.13] - 2025-08-30</h2>
+      <pre>Timestamp: 2025-08-30T22:20:47Z</pre>
+      <div style="height:6px"></div>
+      <ul>
+      <li>UI: Align TPS dropdown buttons with header menu style.</li>
+      </ul>
+      <div style="height:6px"></div>
+      <h2>[0.4.12] - 2025-08-30</h2>
+      <pre>Timestamp: 2025-08-30T22:12:26Z</pre>
+      <div style="height:6px"></div>
+      <ul>
+      <li>UI: Style TPS metric dropdown and options with shared menu dropdown theme.</li>
+      </ul>
+      <div style="height:6px"></div>
+      <h2>[0.4.11] - 2025-08-30</h2>
+      <pre>Timestamp: 2025-08-30T22:02:56Z</pre>
+      <div style="height:6px"></div>
+      <ul>
+      <li>UI: Match TPS dropdown menu styling to header Menu theme without bold text.</li>
+      </ul>
+      <div style="height:6px"></div>
+      <h2>[0.4.10] - 2025-08-30</h2>
+      <pre>Timestamp: 2025-08-30T21:48:20Z</pre>
+      <div style="height:6px"></div>
+      <ul>
+      <li>UI: Raise chart metric dropdown above graphs so it remains clickable.</li>
+      </ul>
+      <div style="height:6px"></div>
+      <h2>[0.4.9] - 2025-08-30</h2>
+      <pre>Timestamp: 2025-08-30T21:42:34Z</pre>
+      <div style="height:6px"></div>
+      <ul>
+      <li>UI: Replace metric selection with menu-style dropdown using menu button theme.</li>
+      </ul>
+      <div style="height:6px"></div>
+      <h2>[0.4.8] - 2025-08-30</h2>
+      <pre>Timestamp: 2025-08-30T21:32:51Z</pre>
+      <div style="height:6px"></div>
+      <ul>
+      <li>UI: Style chart metric dropdown to match the menu dropdown.</li>
+      </ul>
+      <div style="height:6px"></div>
+      <h2>[0.4.7] - 2025-08-30</h2>
+      <pre>Timestamp: 2025-08-30T21:14:45Z</pre>
+      <div style="height:6px"></div>
+      <ul>
+      <li>UI: Align log and system log line selectors in their header rows.</li>
+      <li>UI: Theme chart metric selector to match the menu button.</li>
+      </ul>
+      <div style="height:6px"></div>
+      <h2>[0.4.6] - 2025-08-30</h2>
+      <pre>Timestamp: 2025-08-30T21:04:56Z</pre>
+      <div style="height:6px"></div>
+      <ul>
+      <li>UI: Add themed line limit controls for control and system logs (default 600 lines).</li>
+      <li>UI: Style metric selection dropdown to match cyan button theme.</li>
+      </ul>
+      <div style="height:6px"></div>
+      <h2>[0.4.5] - 2025-08-30</h2>
+      <pre>Timestamp: 2025-08-30T20:55:01Z</pre>
+      <div style="height:6px"></div>
+      <ul>
+      <li>UI: Restore menu to original header position and remove logo hover spin.</li>
+      </ul>
+      <div style="height:6px"></div>
+      <h2>[0.4.4] - 2025-08-30</h2>
+      <pre>Timestamp: 2025-08-30T20:43:37Z</pre>
+      <div style="height:6px"></div>
+      <ul>
+      <li>UI: Remove animated network background, leaving a static dark backdrop.</li>
+      </ul>
+      <div style="height:6px"></div>
+      <h2>[0.4.3] - 2025-08-30</h2>
+      <pre>Timestamp: 2025-08-30T17:06:56Z</pre>
+      <div style="height:6px"></div>
+      <ul>
+      <li>UI: Move Menu beneath the spacestation logo and spin the logo when hovered.</li>
+      </ul>
+      <div style="height:6px"></div>
+      <h2>[0.4.2] - 2025-08-30</h2>
+      <pre>Timestamp: 2025-08-30T16:58:33Z</pre>
+      <div style="height:6px"></div>
+      <ul>
+      <li>UI: Replace heavy canvas network background with lightweight SVG animation to reduce GPU usage.</li>
+      </ul>
+      <div style="height:6px"></div>
+      <h2>[0.4.1] - 2025-08-29</h2>
+      <pre>Timestamp: 2025-08-29T14:39:23Z</pre>
+      <div style="height:6px"></div>
+      <ul>
+      <li>Auth: Default all components to RabbitMQ `guest/guest`; remove custom user creation script (`rabbitmq/add-user.sh`) and related Compose envs.</li>
+      <li>Compose: Stop setting `RABBITMQ_DEFAULT_USER/PASS`; services rely on defaults and `RABBITMQ_HOST` only.</li>
+      <li>UI: Defaults and placeholders use `guest/guest` (config.json, app.js, generator page, legacy controls).</li>
+      <li>Control-plane: Switch routing key kinds to kebab-case — `status-delta`, `status-full` (generator, moderator, processor, docs, spec, schema).</li>
+      <li>Docs: README, control-plane rules, AsyncAPI, and JSON schema updated to kebab-case and guest defaults.</li>
+      <li>RabbitMQ image: Do not copy `add-user.sh`. Note: `definitions.json` remains minimal; if it causes issues, consider removing it from the image.</li>
+      </ul>
+      <div style="height:6px"></div>
+      <h2>[0.4.0] - 2025-08-29</h2>
+      <pre>Timestamp: 2025-08-29T11:05:00Z</pre>
+      <div style="height:6px"></div>
+      <ul>
+      <li>UI: Added top-level tabs (Control, Swarm); Control hosts existing charts/logs.</li>
+      <li>UI: New Swarm View — auto-discovers components from Control messages, draws nodes and links (Generator → Moderator → Processor → SUT), with hold time and Clear &amp; Restart.</li>
+      <li>UI: Moved background selector into Menu; background options accessible via HAL-style icon near WS health.</li>
+      <li>UI: WS health icon opens connection menu; connection fields collapsed into dropdown.</li>
+      <li>UI: README available in app; fixed image paths and transparency; served docs/ and /ui alias in Nginx.</li>
+      <li>Docs: Simplified flow diagram with SUT and explicit data directions.</li>
+      </ul>
+      <div style="height:6px"></div>
+      <h2>[0.3.1] - 2025-08-29</h2>
+      <pre>Timestamp: 2025-08-29T10:50:00Z</pre>
+      <div style="height:6px"></div>
+      <ul>
+      <li>UI: README available in Menu (`/readme.html`) with in‑app markdown render.</li>
+      <li>UI: Fix README images (logo + flow) — copy `docs/` to image, path rewriting, and Nginx alias for `/ui/*`.</li>
+      <li>UI: Remove white backgrounds under images; transparent flow diagram background for dark UI.</li>
+      <li>UI: Background selector moved under Menu; add HAL‑style background options icon next to WS health.</li>
+      <li>UI: WS health icon opens connection menu.</li>
+      <li>Docs: Simplified flow diagram (components, queues, direction, SUT) and README tweaks.</li>
+      </ul>
+      <div style="height:6px"></div>
+      <h2>[0.3.0] - 2025-08-29</h2>
+      <pre>Timestamp: 2025-08-29T10:24:00Z</pre>
+      <div style="height:6px"></div>
+      <ul>
+      <li>UI: New &quot;Network&quot; background and 3‑mode selector (Bees / Network / Old).</li>
+      <li>UI: Auto‑apply controls for Network; performance pause for inactive backgrounds.</li>
+      <li>UI: HAL status eyes with center‑pulse animations and colorblind‑friendly contrast.</li>
+      <li>UI: Unified typography; improved dark dropdown styling and focus visibility.</li>
+      <li>UI: Removed duplicate top bars; simplified background UI logic.</li>
+      <li>UI: Nginx WS resolver fix so UI starts without RabbitMQ present.</li>
+      <li>Docs: Updated README with new visuals and notes.</li>
+      </ul>
+      <div style="height:6px"></div>
+      <h2>[0.2.3] - 2025-08-29</h2>
+      <pre>Timestamp: 2025-08-29T02:20:00Z</pre>
+      <div style="height:6px"></div>
+      <ul>
+      <li>UI: Refactor Events connection to use StompJS (same as Generator) instead of a custom STOMP client.</li>
+      <li>UI: Improve diagnostics around connect/handshake and socket lifecycle; clearer syslog entries.</li>
+      <li>UI: Normalize CRLF handling in STOMP frame parsing (pre-refactor) to avoid missed CONNECTED frames.</li>
+      <li>Docs: Update README with authentication notes (RabbitMQ `guest` remote restriction), recommended non‑guest user setup, and troubleshooting.</li>
+      </ul>
+      <div style="height:6px"></div>
+      <h2>[0.2.2] - 2025-08-29</h2>
+      <pre>Timestamp: 2025-08-29T01:24:02Z</pre>
+      <div style="height:6px"></div>
+      <ul>
+      <li>Docs: Add AsyncAPI spec (`docs/spec/asyncapi.yaml`) describing control/traffic contracts.</li>
+      <li>UI: Add API Docs page (`/docs.html`) and group header actions into a ☰ Menu dropdown.</li>
+      <li>UI: Fix changelog page showing duplicated header (remove extra static H1).</li>
+      <li>Config: Align exchanges across UI/backends — `ph.&lt;swarmId&gt;.hive` (traffic), `ph.control` (control).</li>
+      </ul>
+      <div style="height:6px"></div>
+      <h2>[0.2.1] - 2025-08-29</h2>
+      <pre>Timestamp: 2025-08-29T01:03:45Z</pre>
+      <div style="height:6px"></div>
+      <ul>
+      <li>UI: Add browser generator integration under `/generator/` and visible UI/WS health icons.</li>
+      <li>UI: Share connection settings (URL/login/pass/vhost) with generator via localStorage.</li>
+      <li>UI: Add changelog viewer (`/changelog.html`) and expose current `VERSION` and `CHANGELOG.md` via Nginx.</li>
+      <li>UI: Load global config from `/config.json` (STOMP path/vhost, subscriptions) for ready‑to‑run defaults.</li>
+      <li>Backend: Make topology names overridable via `PH_*` env; fix `@RabbitListener` to use property placeholders (compilation error resolved).</li>
+      <li>Compose: Start UI immediately; other services wait for RabbitMQ health.</li>
+      <li>Generator: Add UUID v4 polyfill for wider browser compatibility.</li>
+      </ul>
+      <div style="height:6px"></div>
+      <h2>[0.2.0] - 2025-08-29</h2>
+      <pre>Timestamp: 2025-08-29T00:18:36Z</pre>
+      <div style="height:6px"></div>
+      <ul>
+      <li>UI: Add Nginx reverse proxy for WebSocket at `/ws` to RabbitMQ Web‑STOMP (`rabbitmq:15674/ws`).</li>
+      <li>UI: Default WebSocket URL to same‑origin (`ws(s)://&lt;host&gt;/ws`) to avoid CORS/origin issues.</li>
+      <li>UI: Add System Logs panel to capture system events and user actions (connect/disconnect, field edits, WS lifecycle).</li>
+      <li>UI: Periodic health ping to `/healthz` with status transitions logged.</li>
+      <li>UI: Add `/healthz` endpoint in Nginx and Docker healthcheck for `ui` service.</li>
+      <li>Docs: Update README with stack, quick start, proxy, healthchecks, troubleshooting, and development notes.</li>
+      </ul>
+      <div style="height:6px"></div>
+      <h2>[0.1.1] - 2025-08-29</h2>
+      <pre>Timestamp: 2025-08-28T23:51:09Z</pre>
+      <div style="height:6px"></div>
+      <ul>
+      <li>Initial UI wiring and assets.</li>
+      </ul>
+      <div style="height:6px"></div>
+      <h2>[0.1.0] - 2025-08-29</h2>
+      <pre>Timestamp: 2025-08-28T23:07:54Z</pre>
+      <div style="height:6px"></div>
+      <ul>
+      <li>Initial repository setup.</li>
+      </ul>
+      <div style="height:6px"></div>
     </div>
   </main>
   <script>
@@ -50,7 +587,7 @@
       // Tiny MD to HTML: headers and bullets only, rest in <pre>
       const lines = md.split(/\r?\n/);
       const out=[]; let inList=false; let buf=[];
-      const flushPre=()=>{ if(buf.length){ out.push('<pre>'+buf.join('\n').replace(/[&<>]/g,s=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[s]))+'</pre>'); buf=[]; } };
+      const flushPre=()=>{ if(buf.length){ out.push('<pre>'+buf.join('\\n').replace(/[&<>]/g,s=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[s]))+'</pre>'); buf=[]; } };
       for(const line of lines){
         if(/^###\s+/.test(line)){ flushPre(); if(inList){ out.push('</ul>'); inList=false;} out.push('<h3>'+line.replace(/^###\s+/,'')+'</h3>'); continue; }
         if(/^##\s+/.test(line)){ flushPre(); if(inList){ out.push('</ul>'); inList=false;} out.push('<h2>'+line.replace(/^##\s+/,'')+'</h2>'); continue; }
@@ -60,7 +597,7 @@
         buf.push(line);
       }
       flushPre(); if(inList) out.push('</ul>');
-      return out.join('\n');
+      return out.join('\\n');
     }
     (async ()=>{
       const v = await loadText('../VERSION'); if(v) document.getElementById('ver').textContent = v.trim();
