@@ -33,44 +33,49 @@ type Listener = (cfg: UIConfig) => void
 
 const globalObject = globalThis as typeof globalThis & {
   __POCKETHIVE_UI_CONFIG__?: UIConfig
-  __POCKETHIVE_UI_CONFIG_LISTENERS__?: Listener[]
+  __POCKETHIVE_UI_CONFIG_LISTENERS__?: Set<Listener>
 }
 
-if (!globalObject.__POCKETHIVE_UI_CONFIG__) {
-  globalObject.__POCKETHIVE_UI_CONFIG__ = defaultConfig
+function ensureConfig(): UIConfig {
+  if (!globalObject.__POCKETHIVE_UI_CONFIG__) {
+    globalObject.__POCKETHIVE_UI_CONFIG__ = defaultConfig
+  }
+
+  return globalObject.__POCKETHIVE_UI_CONFIG__
 }
 
-if (!globalObject.__POCKETHIVE_UI_CONFIG_LISTENERS__) {
-  globalObject.__POCKETHIVE_UI_CONFIG_LISTENERS__ = []
+function ensureListeners(): Set<Listener> {
+  if (!globalObject.__POCKETHIVE_UI_CONFIG_LISTENERS__) {
+    globalObject.__POCKETHIVE_UI_CONFIG_LISTENERS__ = new Set()
+  }
+
+  return globalObject.__POCKETHIVE_UI_CONFIG_LISTENERS__
 }
 
-const config = globalObject.__POCKETHIVE_UI_CONFIG__
-const listeners = globalObject.__POCKETHIVE_UI_CONFIG_LISTENERS__
-
-export function getConfig() {
-  return config
+export function getConfig(): UIConfig {
+  return ensureConfig()
 }
 
 export function setConfig(partial: Partial<UIConfig>) {
-  Object.assign(config, partial)
-  listeners.forEach((l) => l(config))
+  const next = { ...ensureConfig(), ...partial }
+  globalObject.__POCKETHIVE_UI_CONFIG__ = next
+
+  ensureListeners().forEach((listener) => listener(next))
 }
 
 export function subscribeConfig(fn: Listener) {
-  listeners.push(fn)
-  fn(config)
+  const listeners = ensureListeners()
+  listeners.add(fn)
+  fn(getConfig())
   return () => {
-    const index = listeners.indexOf(fn)
-    if (index >= 0) {
-      listeners.splice(index, 1)
-    }
+    listeners.delete(fn)
   }
 }
 
-const ConfigContext = createContext<UIConfig>(config)
+const ConfigContext = createContext<UIConfig>(getConfig())
 
 export function ConfigProvider({ children }: { children: ReactNode }): JSX.Element {
-  const [cfg, setCfg] = useState(config)
+  const [cfg, setCfg] = useState(getConfig())
 
   useEffect(() => subscribeConfig(setCfg), [])
 
