@@ -6,7 +6,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:scenario": "vite --mode scenario",
     "build": "tsc -b && vite build",
+    "build:scenario": "tsc -p tsconfig.scenario.json && vite build --mode scenario",
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run"
@@ -24,6 +26,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.33.0",
+    "@originjs/vite-plugin-federation": "^1.4.1",
     "@testing-library/jest-dom": "^6.4.2",
     "@testing-library/react": "^16.0.1",
     "@testing-library/user-event": "^14.6.1",
