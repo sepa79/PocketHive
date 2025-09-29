@@ -26,11 +26,13 @@ import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
@@ -160,5 +162,30 @@ class ProcessorTest {
         verify(rabbit, never()).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
             eq(ControlPlaneRouting.event("ready.config-update", new ConfirmationScope(Topology.SWARM_ID, "processor", "inst"))),
             anyString());
+    }
+
+    @Test
+    void onControlRejectsBlankPayload() {
+        String routingKey = ControlPlaneRouting.signal("status-request", Topology.SWARM_ID, "processor", "inst");
+
+        assertThatThrownBy(() -> processor.onControl("", routingKey, null))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("payload");
+
+        verifyNoInteractions(rabbit);
+        verifyNoInteractions(listenerRegistry);
+    }
+
+    @Test
+    void onControlRejectsBlankRoutingKey() throws Exception {
+        String payload = mapper.writeValueAsString(ControlSignal.forInstance(
+            "status-request", Topology.SWARM_ID, "processor", "inst", UUID.randomUUID().toString(), UUID.randomUUID().toString()));
+
+        assertThatThrownBy(() -> processor.onControl(payload, "  ", null))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("routing key");
+
+        verifyNoInteractions(rabbit);
+        verifyNoInteractions(listenerRegistry);
     }
 }

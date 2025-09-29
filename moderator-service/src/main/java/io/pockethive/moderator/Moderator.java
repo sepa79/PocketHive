@@ -141,8 +141,13 @@ public class Moderator {
     ObservabilityContext ctx = ObservabilityContextUtil.fromHeader(trace);
     ObservabilityContextUtil.populateMdc(ctx);
     try {
-      if(payload==null || payload.isBlank()){
-        return;
+      if (rk == null || rk.isBlank()) {
+        log.warn("Received control payload with null or blank routing key; payloadLength={}", payload == null ? null : payload.length());
+        throw new IllegalArgumentException("Control routing key must not be null or blank");
+      }
+      if (payload == null || payload.isBlank()) {
+        log.warn("Received control payload with null or blank body for routing key {}", rk);
+        throw new IllegalArgumentException("Control payload must not be null or blank");
       }
       boolean handled = controlPlane.consume(payload, rk, controlListener);
       if (!handled) {

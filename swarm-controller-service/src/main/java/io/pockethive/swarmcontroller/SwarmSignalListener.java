@@ -77,17 +77,20 @@ public class SwarmSignalListener {
 
   @RabbitListener(queues = "#{controlQueue.name}")
   public void handle(String body, @Header(AmqpHeaders.RECEIVED_ROUTING_KEY) String routingKey) {
-    if (routingKey == null) return;
-    MDC.put("swarm_id", Topology.SWARM_ID);
-    MDC.put("service", ROLE);
-    MDC.put("instance", instanceId);
-    String snippet = snippet(body);
-    if (routingKey.startsWith("ev.status-") || routingKey.startsWith("sig.status-request")) {
-      log.debug("[CTRL] RECV rk={} inst={} payload={}", routingKey, instanceId, snippet);
-    } else {
-      log.info("[CTRL] RECV rk={} inst={} payload={}", routingKey, instanceId, snippet);
-    }
     try {
+      MDC.put("swarm_id", Topology.SWARM_ID);
+      MDC.put("service", ROLE);
+      MDC.put("instance", instanceId);
+      if (routingKey == null || routingKey.isBlank()) {
+        log.warn("Received control message with null or blank routing key; payload snippet={}", snippet(body));
+        throw new IllegalArgumentException("Control-plane routing key must not be null or blank");
+      }
+      String snippet = snippet(body);
+      if (routingKey.startsWith("ev.status-") || routingKey.startsWith("sig.status-request")) {
+        log.debug("[CTRL] RECV rk={} inst={} payload={}", routingKey, instanceId, snippet);
+      } else {
+        log.info("[CTRL] RECV rk={} inst={} payload={}", routingKey, instanceId, snippet);
+      }
       if (routingKey.startsWith("sig.")) {
         RoutingKey key = ControlPlaneRouting.parseSignal(routingKey);
         if (!shouldAcceptSignal(key)) {
@@ -110,16 +113,31 @@ public class SwarmSignalListener {
   private void handleStatusEvent(String routingKey, String body) {
     RoutingKey eventKey = ControlPlaneRouting.parseEvent(routingKey);
     if (eventKey == null) {
-      return;
+      MissingStatusSegment missingSegment = detectMissingStatusSegment(routingKey);
+      if (missingSegment == MissingStatusSegment.ROLE) {
+        log.warn("Received status event with missing role on routing key {}; payload snippet={}", routingKey, snippet(body));
+        throw new IllegalArgumentException("Status event routing key must include a role segment");
+      }
+      if (missingSegment == MissingStatusSegment.INSTANCE) {
+        log.warn("Received status event with missing instance on routing key {}; payload snippet={}", routingKey, snippet(body));
+        throw new IllegalArgumentException("Status event routing key must include an instance segment");
+      }
+      log.warn("Received status event with unparseable routing key {}; payload snippet={}", routingKey, snippet(body));
+      throw new IllegalArgumentException("Status event routing key must resolve to a confirmation scope");
     }
     if (!isLocalSwarm(eventKey.swarmId())) {
       log.debug("Ignoring status for swarm {} on routing key {}", eventKey.swarmId(), routingKey);
       return;
     }
     String role = eventKey.role();
+    if (role == null || role.isBlank()) {
+      log.warn("Received status event with missing role on routing key {}; payload snippet={}", routingKey, snippet(body));
+      throw new IllegalArgumentException("Status event routing key must include a role segment");
+    }
     String instance = eventKey.instance();
-    if (role == null || instance == null) {
-      return;
+    if (instance == null || instance.isBlank()) {
+      log.warn("Received status event with missing instance on routing key {}; payload snippet={}", routingKey, snippet(body));
+      throw new IllegalArgumentException("Status event routing key must include an instance segment");
     }
     try {
       JsonNode node = mapper.readTree(body);
@@ -735,6 +753,30 @@ public class SwarmSignalListener {
       return trimmed.substring(0, 300) + "…";
     }
     return trimmed;
+  }
+
+  private MissingStatusSegment detectMissingStatusSegment(String routingKey) {
+    if (routingKey == null) {
+      return null;
+    }
+    String[] segments = routingKey.split("\\.", -1);
+    if (segments.length < 5) {
+      return null;
+    }
+    String roleSegment = segments[segments.length - 2];
+    if (roleSegment == null || roleSegment.isBlank()) {
+      return MissingStatusSegment.ROLE;
+    }
+    String instanceSegment = segments[segments.length - 1];
+    if (instanceSegment == null || instanceSegment.isBlank()) {
+      return MissingStatusSegment.INSTANCE;
+    }
+    return null;
+  }
+
+  private enum MissingStatusSegment {
+    ROLE,
+    INSTANCE
   }
 
   private String defaultSegment(String value, String fallback) {

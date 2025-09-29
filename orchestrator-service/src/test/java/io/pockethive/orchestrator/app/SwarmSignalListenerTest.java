@@ -28,6 +28,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.startsWith;
@@ -64,6 +65,42 @@ class SwarmSignalListenerTest {
 
     private static String swarmSignal(String signal, String swarmId) {
         return ControlPlaneRouting.signal(signal, swarmId, "swarm-controller", "ALL");
+    }
+
+    @Test
+    void handleRejectsBlankRoutingKey() {
+        SwarmSignalListener listener = new SwarmSignalListener(rabbit, new SwarmPlanRegistry(), new SwarmCreateTracker(), new SwarmRegistry(), lifecycle, new ObjectMapper(), "inst0");
+
+        assertThatThrownBy(() -> listener.handle("{}", "  "))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("routing key");
+    }
+
+    @Test
+    void handleRejectsNullRoutingKey() {
+        SwarmSignalListener listener = new SwarmSignalListener(rabbit, new SwarmPlanRegistry(), new SwarmCreateTracker(), new SwarmRegistry(), lifecycle, new ObjectMapper(), "inst0");
+
+        assertThatThrownBy(() -> listener.handle("{}", null))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("routing key");
+    }
+
+    @Test
+    void handleRejectsNonEventPrefix() {
+        SwarmSignalListener listener = new SwarmSignalListener(rabbit, new SwarmPlanRegistry(), new SwarmCreateTracker(), new SwarmRegistry(), lifecycle, new ObjectMapper(), "inst0");
+
+        assertThatThrownBy(() -> listener.handle("{}", "sig.ready.swarm-controller.inst1"))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("start with 'ev.'");
+    }
+
+    @Test
+    void handleRejectsMalformedRoutingKey() {
+        SwarmSignalListener listener = new SwarmSignalListener(rabbit, new SwarmPlanRegistry(), new SwarmCreateTracker(), new SwarmRegistry(), lifecycle, new ObjectMapper(), "inst0");
+
+        assertThatThrownBy(() -> listener.handle("{}", "ev."))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("malformed");
     }
 
     @Test

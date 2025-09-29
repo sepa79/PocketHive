@@ -11,6 +11,10 @@ Key guidelines include:
 - Work within the requested scope and respect service boundaries.
 - Favour domain logic over framework code; keep domains free of technical noise.
 - Provide tests and documentation when applicable.
+- Reject null, empty, or blank parameters by failing fast (e.g., throw `IllegalArgumentException`) instead of defaulting or returning quietly.
+- Emit structured warn/error logs (include routing key, message type, correlation id, etc.) when rejecting malformed messages, sanitizing sensitive payload data before logging.
+- Ensure new or modified handlers include unit tests that cover these guard clauses.
+- When tightening handler validation that changes observable message requirements, refresh the relevant message-contract docs (e.g., under `docs/rules/` or service READMEs) and update integration/e2e tests to match.
 - Never expose credentials or personal data.
 - Stick to approved technologies (Java 21, React, JUnit 5, Cucumber, ArchUnit, existing AMQP/HTTP libs).
 - Output must be production ready: typed, formatted and secure.

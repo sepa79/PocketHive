@@ -24,10 +24,12 @@ import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -145,5 +147,28 @@ class ModeratorTest {
         verify(container, never()).stop();
         Boolean enabled = (Boolean) ReflectionTestUtils.getField(moderator, "enabled");
         assertThat(enabled).isFalse();
+    }
+
+    @Test
+    void onControlRejectsBlankPayload() {
+        String routingKey = ControlPlaneRouting.signal("config-update", SWARM_ID, "moderator", "inst");
+
+        assertThatThrownBy(() -> moderator.onControl(" \t", routingKey, null))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("payload");
+
+        verifyNoInteractions(rabbit);
+    }
+
+    @Test
+    void onControlRejectsBlankRoutingKey() throws Exception {
+        String payload = mapper.writeValueAsString(ControlSignal.forInstance(
+            "status-request", SWARM_ID, "moderator", "inst", UUID.randomUUID().toString(), UUID.randomUUID().toString()));
+
+        assertThatThrownBy(() -> moderator.onControl(payload, "  ", null))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("routing key");
+
+        verifyNoInteractions(rabbit);
     }
 }

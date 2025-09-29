@@ -11,6 +11,7 @@ import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.verify;
 
 @ExtendWith({MockitoExtension.class, OutputCaptureExtension.class})
@@ -45,5 +46,32 @@ class ControllerStatusListenerTest {
         listener.handle("{}", "ev.status-delta.swarm-controller.inst1");
 
         assertThat(output).doesNotContain("[CTRL] RECV rk=ev.status-delta.swarm-controller.inst1");
+    }
+
+    @Test
+    void handleRejectsBlankRoutingKey() {
+        ControllerStatusListener listener = new ControllerStatusListener(registry, new ObjectMapper());
+
+        assertThatThrownBy(() -> listener.handle("{}", "  "))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("routing key");
+    }
+
+    @Test
+    void handleRejectsNullRoutingKey() {
+        ControllerStatusListener listener = new ControllerStatusListener(registry, new ObjectMapper());
+
+        assertThatThrownBy(() -> listener.handle("{}", null))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("routing key");
+    }
+
+    @Test
+    void handleRejectsBlankPayload() {
+        ControllerStatusListener listener = new ControllerStatusListener(registry, new ObjectMapper());
+
+        assertThatThrownBy(() -> listener.handle(" ", "ev.status-delta.swarm-controller.inst1"))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("payload");
     }
 }
