@@ -24,12 +24,14 @@ import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 class ControlPlanePublisherIntegrationTest {
 
     private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
-        .withUserConfiguration(ControlPlaneCommonAutoConfiguration.class)
-        .withPropertyValues("pockethive.control-plane.exchange=ph.integration");
+        .withUserConfiguration(ControlPlaneCommonAutoConfiguration.class);
 
     @Test
     void publisherSendsSignalsAndEventsToConfiguredExchange() {
-        contextRunner.withBean(AmqpTemplate.class, () -> mock(AmqpTemplate.class)).run(context -> {
+        contextRunner
+            .withPropertyValues("pockethive.control-plane.exchange=ph.integration")
+            .withBean(AmqpTemplate.class, () -> mock(AmqpTemplate.class))
+            .run(context -> {
             ControlPlanePublisher publisher = context.getBean(ControlPlanePublisher.class);
             ControlPlaneProperties properties = context.getBean(ControlPlaneProperties.class);
             AmqpTemplate template = context.getBean(AmqpTemplate.class);
@@ -66,5 +68,18 @@ class ControlPlanePublisherIntegrationTest {
                 ControlPlaneRouting.event("ready", "swarm-start", scope));
             assertThat(payloadCaptor.getAllValues()).allSatisfy(payload -> assertThat(payload).isNotNull());
         });
+    }
+
+    @Test
+    void disablingControlPlaneSkipsCommonInfrastructure() {
+        contextRunner
+            .withPropertyValues("pockethive.control-plane.enabled=false")
+            .withBean(AmqpTemplate.class, () -> mock(AmqpTemplate.class))
+            .run(context -> {
+                assertThat(context).hasNotFailed();
+                assertThat(context).doesNotHaveBean("controlPlaneExchange");
+                assertThat(context).doesNotHaveBean(ControlPlaneTopologyDeclarableFactory.class);
+                assertThat(context).doesNotHaveBean(ControlPlanePublisher.class);
+            });
     }
 }
