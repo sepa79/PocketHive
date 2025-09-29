@@ -20,14 +20,6 @@ public class ProcessorConfig {
   private static final String CONTROL_EXCHANGE_PROPERTY =
       "${pockethive.control-plane.exchange:${PH_CONTROL_EXCHANGE:ph.control}}";
 
-  @Value("${ph.processor.baseUrl:}")
-  private String baseUrl;
-
-  @Bean
-  public String baseUrl(){
-    return baseUrl;
-  }
-
   @Bean
   @ConditionalOnMissingBean(ControlPlanePublisher.class)
   public ControlPlanePublisher processorControlPlanePublisher(

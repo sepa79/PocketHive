@@ -48,6 +48,7 @@ import org.springframework.amqp.rabbit.listener.MessageListenerContainer;
 import org.springframework.amqp.rabbit.listener.RabbitListenerEndpointRegistry;
 import org.springframework.amqp.support.AmqpHeaders;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -90,7 +91,7 @@ public class Processor {
                    ControlPlaneEmitter controlEmitter,
                    @Qualifier("workerControlPlaneTopologyDescriptor") ControlPlaneTopologyDescriptor topology,
                    WorkerControlPlane controlPlane,
-                   String baseUrl,
+                   @Value("${ph.processor.baseUrl:}") String baseUrl,
                    RabbitListenerEndpointRegistry listenerRegistry) {
     this.rabbit = Objects.requireNonNull(rabbit, "rabbit");
     this.identity = Objects.requireNonNull(identity, "identity");
