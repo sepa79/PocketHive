@@ -12,7 +12,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.amqp.core.Declarables;
 import org.springframework.amqp.core.Queue;
 import org.springframework.amqp.core.TopicExchange;
-import org.springframework.amqp.rabbit.core.RabbitOperations;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 
@@ -23,7 +23,7 @@ class WorkerControlPlaneAutoConfigurationTest {
             ControlPlaneCommonAutoConfiguration.class,
             WorkerControlPlaneAutoConfiguration.class))
         .withBean(ObjectMapper.class, ObjectMapper::new)
-        .withBean(RabbitOperations.class, () -> org.mockito.Mockito.mock(RabbitOperations.class))
+        .withBean(RabbitTemplate.class, () -> org.mockito.Mockito.mock(RabbitTemplate.class))
         .withPropertyValues(
             "pockethive.control-plane.worker.role=generator",
             "pockethive.control-plane.worker.instance-id=gen-1",

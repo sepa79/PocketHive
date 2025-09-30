@@ -7,7 +7,7 @@ import io.pockethive.controlplane.spring.ControlPlaneCommonAutoConfiguration;
 import io.pockethive.controlplane.spring.WorkerControlPlaneAutoConfiguration;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
-import org.springframework.amqp.rabbit.core.RabbitOperations;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Bean;
@@ -41,8 +41,8 @@ class TriggerControlPlaneConfigTest {
   @Configuration(proxyBeanMethods = false)
   static class TestConfig {
     @Bean
-    RabbitOperations amqpTemplate() {
-      return Mockito.mock(RabbitOperations.class);
+    RabbitTemplate amqpTemplate() {
+      return Mockito.mock(RabbitTemplate.class);
     }
 
     @Bean

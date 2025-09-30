@@ -6,7 +6,6 @@ import java.util.Objects;
 import org.springframework.amqp.core.ExchangeBuilder;
 import org.springframework.amqp.core.TopicExchange;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
-import org.springframework.amqp.rabbit.core.RabbitOperations;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
@@ -38,10 +37,10 @@ public class ControlPlaneCommonAutoConfiguration {
     }
 
     @Bean
-    @ConditionalOnBean(RabbitOperations.class)
+    @ConditionalOnBean(RabbitTemplate.class)
     @ConditionalOnMissingBean(ControlPlanePublisher.class)
     @ConditionalOnProperty(prefix = "pockethive.control-plane.publisher", name = "enabled", havingValue = "true", matchIfMissing = true)
-    ControlPlanePublisher controlPlanePublisher(RabbitOperations template, ControlPlaneProperties properties) {
+    ControlPlanePublisher controlPlanePublisher(RabbitTemplate template, ControlPlaneProperties properties) {
         String exchange = requireText(properties.getExchange(), "pockethive.control-plane.exchange");
         return new AmqpControlPlanePublisher(template, exchange);
     }
