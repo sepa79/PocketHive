@@ -109,10 +109,13 @@ class ControlPlaneEmitterTest {
             new ConfirmationScope("swarm-A", "generator", "gen-1"));
         assertThat(message.routingKey()).isEqualTo(expectedRoute);
 
-        String json = describeEvent(message, payload -> {
-            payload.put("messageId", ANY_VALUE);
-            payload.put("timestamp", ANY_VALUE);
-            payload.put("location", ANY_VALUE);
+        ObjectNode payloadNode = (ObjectNode) MAPPER.readTree((String) message.payload());
+        assertThat(payloadNode.get("origin").asText()).isEqualTo("gen-1");
+
+        String json = describeEvent(message, documentPayload -> {
+            documentPayload.put("messageId", ANY_VALUE);
+            documentPayload.put("timestamp", ANY_VALUE);
+            documentPayload.put("location", ANY_VALUE);
         });
         JsonFixtureAssertions.assertMatchesFixture(
             "/io/pockethive/controlplane/messaging/status-delta-event.json",

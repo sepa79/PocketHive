@@ -17,6 +17,12 @@ public interface SelfFilter {
             if (identity == null || envelope == null) {
                 return true;
             }
+            if (envelope.originatedFrom(identity)) {
+                return false;
+            }
+            if (envelope.signal() != null && envelope.signal().origin() != null) {
+                return true;
+            }
             return !envelope.targets(identity);
         };
     }

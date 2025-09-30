@@ -25,7 +25,7 @@ class ManagerControlPlaneTest {
             .identity(new io.pockethive.controlplane.ControlPlaneIdentity("swarm", "role", "inst"))
             .build();
 
-        ControlSignal signal = new ControlSignal("config-update", "corr", "idem", "swarm", "role", "inst", CommandTarget.ALL, null);
+        ControlSignal signal = new ControlSignal("config-update", "corr", "idem", "swarm", "role", "inst", null, CommandTarget.ALL, null);
         String payload = mapper.writeValueAsString(signal);
 
         AtomicBoolean handled = new AtomicBoolean();
@@ -43,7 +43,7 @@ class ManagerControlPlaneTest {
             .selfFilter(SelfFilter.skipSelfInstance())
             .build();
 
-        ControlSignal signal = new ControlSignal("config-update", "corr", "idem", "swarm", "role", "inst", CommandTarget.ALL, null);
+        ControlSignal signal = new ControlSignal("config-update", "corr", "idem", "swarm", "role", "inst", "inst", CommandTarget.ALL, null);
         String payload = mapper.writeValueAsString(signal);
 
         AtomicBoolean handled = new AtomicBoolean();
@@ -51,6 +51,24 @@ class ManagerControlPlaneTest {
 
         assertThat(result).isFalse();
         assertThat(handled).isFalse();
+    }
+
+    @Test
+    void processesSignalsFromOtherOriginsWhenSkippingSelf() throws Exception {
+        RecordingPublisher publisher = new RecordingPublisher();
+        ManagerControlPlane plane = ManagerControlPlane.builder(publisher, mapper)
+            .identity(new io.pockethive.controlplane.ControlPlaneIdentity("swarm", "role", "inst"))
+            .selfFilter(SelfFilter.skipSelfInstance())
+            .build();
+
+        ControlSignal signal = new ControlSignal("config-update", "corr", "idem", "swarm", "role", "inst", "other-inst", CommandTarget.ALL, null);
+        String payload = mapper.writeValueAsString(signal);
+
+        AtomicBoolean handled = new AtomicBoolean();
+        boolean result = plane.consume(payload, "sig.config-update.role.inst", envelope -> handled.set(true));
+
+        assertThat(result).isTrue();
+        assertThat(handled).isTrue();
     }
 
     @Test

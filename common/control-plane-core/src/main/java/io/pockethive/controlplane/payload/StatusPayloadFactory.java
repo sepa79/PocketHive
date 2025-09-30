@@ -36,6 +36,7 @@ public final class StatusPayloadFactory {
         builder.kind(kind)
             .role(context.role())
             .instance(context.instanceId())
+            .origin(context.instanceId())
             .swarmId(context.swarmId());
         customiser.accept(builder);
         return builder.toJson();

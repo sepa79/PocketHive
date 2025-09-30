@@ -9,6 +9,7 @@
     "kind": "status-delta",
     "role": "generator",
     "instance": "gen-1",
+    "origin": "gen-1",
     "swarmId": "swarm-A",
     "traffic": "exchange.main",
     "enabled": true,

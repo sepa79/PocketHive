@@ -35,6 +35,18 @@ public record ControlSignalEnvelope(ControlSignal signal, String routingKey, Str
         };
     }
 
+    public boolean originatedFrom(ControlPlaneIdentity identity) {
+        if (identity == null) {
+            return false;
+        }
+        String origin = normalise(signal.origin());
+        if (origin == null) {
+            return false;
+        }
+        String instanceId = normalise(identity.instanceId());
+        return Objects.equals(origin, instanceId);
+    }
+
     private static String normalise(String value) {
         if (value == null) {
             return null;
