@@ -27,10 +27,20 @@ export default defineConfig(({ mode }) => {
       react: { singleton: true, eager: true, requiredVersion: '^19.1.1' },
       'react-dom': { singleton: true, eager: true, requiredVersion: '^19.1.1' },
       zustand: { singleton: true, requiredVersion: '^5.0.8' },
-      '@ph/shell': { import: './src/shell/index.ts', singleton: true },
-      './src/lib/config': { import: './src/lib/config', singleton: true },
-      './src/store': { import: './src/store', singleton: true },
-    } as Parameters<typeof federation>[0]['shared'],
+    } as unknown as Parameters<typeof federation>[0]['shared'],
+  }
+
+  if (!isScenario && !isTest) {
+    const scenarioRemoteUrl =
+      process.env.VITE_SCENARIO_REMOTE_URL ?? 'http://localhost:5173/assets/remoteEntry.js'
+
+    federationOptions.remotes = {
+      '@ph/scenario': {
+        external: scenarioRemoteUrl,
+        externalType: 'url',
+        from: 'vite',
+      },
+    } as Parameters<typeof federation>[0]['remotes']
   }
 
   const config: UserConfig = {

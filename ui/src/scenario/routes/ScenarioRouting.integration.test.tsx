@@ -1,6 +1,7 @@
-import { afterEach, beforeEach, describe, expect, it, vi, type SpyInstance } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest'
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { act } from 'react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import * as matchers from '@testing-library/jest-dom/matchers'
 
@@ -42,10 +43,7 @@ const resetStores = () => {
 }
 
 describe('Scenario routes', () => {
-  let apiFetchSpy: SpyInstance<
-    ReturnType<typeof apiModule.apiFetch>,
-    Parameters<typeof apiModule.apiFetch>
-  >
+  let apiFetchSpy: MockInstance<typeof apiModule.apiFetch>
 
   beforeEach(() => {
     resetStores()
@@ -85,8 +83,6 @@ describe('Scenario routes', () => {
 
     const sutAsset = { id: 'sut-1', name: 'System', entrypoint: 'image:latest', version: '1.0.0' }
     const datasetAsset = { id: 'data-1', name: 'Dataset', uri: 's3://bucket', format: 'json' }
-    useAssetStore.getState().upsertSut(sutAsset)
-    useAssetStore.getState().upsertDataset(datasetAsset)
 
     const responseScenario = {
       id: 'smoke',
@@ -97,6 +93,8 @@ describe('Scenario routes', () => {
       swarmTemplates: [],
     }
 
+    let lastPostBody: unknown
+
     apiFetchSpy.mockImplementation(async (path: RequestInfo, init?: RequestInit) => {
       if (path === '/scenario-manager/scenarios' && (!init || init.method === undefined)) {
         return new Response(JSON.stringify([]), {
@@ -106,13 +104,7 @@ describe('Scenario routes', () => {
       }
 
       if (path === '/scenario-manager/scenarios' && init?.method === 'POST') {
-        const body = JSON.parse((init.body as string) ?? '{}')
-        expect(body).toMatchObject({
-          id: 'smoke',
-          name: 'Smoke scenario',
-          sutAssets: [sutAsset],
-          datasetAssets: [datasetAsset],
-        })
+        lastPostBody = JSON.parse((init.body as string) ?? '{}')
         return new Response(JSON.stringify(responseScenario), {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
@@ -135,9 +127,21 @@ describe('Scenario routes', () => {
     await user.type(await screen.findByLabelText(/Scenario Name/i), 'Smoke scenario')
     await user.type(await screen.findByLabelText(/Summary/i), 'Baseline description')
 
+    act(() => {
+      useAssetStore.getState().upsertSut(sutAsset)
+      useAssetStore.getState().upsertDataset(datasetAsset)
+    })
+
     await user.click(await screen.findByRole('button', { name: /Save Scenario/i }))
 
     await waitFor(() => expect(useUIStore.getState().toast).toBe('Scenario saved'))
+    await waitFor(() => expect(lastPostBody).toBeTruthy())
+    expect(lastPostBody).toMatchObject({
+      id: 'smoke',
+      name: 'Smoke scenario',
+      sutAssets: [sutAsset],
+      datasetAssets: [datasetAsset],
+    })
     await waitFor(() => {
       const postCall = apiFetchSpy.mock.calls.find(
         ([requestPath, init]: Parameters<typeof apiModule.apiFetch>) =>
