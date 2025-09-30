@@ -23,3 +23,13 @@ ph:
     method: GET
     body: ""
     headers: {}
+pockethive:
+  control-plane:
+    swarm-id: ${ph.swarmId}
+    worker:
+      role: trigger
+      swarm-id: ${ph.swarmId}
+      instance-id: ${bee.name:${random.uuid}}
+      skip-self-signals: false
+    manager:
+      enabled: false

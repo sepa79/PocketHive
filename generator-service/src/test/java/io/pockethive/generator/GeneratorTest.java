@@ -1,13 +1,31 @@
 package io.pockethive.generator;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.Topology;
 import io.pockethive.asyncapi.AsyncApiSchemaValidator;
 import io.pockethive.control.CommandTarget;
-import io.pockethive.control.ConfirmationScope;
 import io.pockethive.control.ControlSignal;
+import io.pockethive.controlplane.ControlPlaneIdentity;
+import io.pockethive.controlplane.messaging.ControlPlaneEmitter;
+import io.pockethive.controlplane.payload.RoleContext;
+import io.pockethive.controlplane.payload.StatusPayloadFactory;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
+import io.pockethive.controlplane.topology.ControlPlaneRouteCatalog;
+import io.pockethive.controlplane.topology.ControlPlaneTopologyDescriptor;
+import io.pockethive.controlplane.topology.ControlQueueDescriptor;
+import io.pockethive.controlplane.topology.GeneratorControlPlaneTopologyDescriptor;
+import io.pockethive.controlplane.worker.WorkerControlPlane;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.UUID;
+import java.util.stream.Collectors;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -18,175 +36,193 @@ import org.springframework.amqp.core.Message;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.test.util.ReflectionTestUtils;
 
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.ArgumentMatchers.isA;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
 
 @ExtendWith(MockitoExtension.class)
 class GeneratorTest {
 
-    @Mock
-    RabbitTemplate rabbit;
+  private static final AsyncApiSchemaValidator ASYNC_API = AsyncApiSchemaValidator.loadDefault();
 
-    private static final AsyncApiSchemaValidator ASYNC_API = AsyncApiSchemaValidator.loadDefault();
-    private final ObjectMapper mapper = new ObjectMapper();
-    private MessageConfig messageConfig;
-    private Generator generator;
+  @Mock
+  RabbitTemplate rabbit;
 
-    @BeforeEach
-    void setUp() {
-        messageConfig = new MessageConfig();
-        messageConfig.setPath("/default");
-        messageConfig.setMethod("GET");
-        messageConfig.setBody("{}");
-        messageConfig.setHeaders(new LinkedHashMap<>());
-        generator = new Generator(rabbit, "inst", messageConfig, mapper);
-        clearInvocations(rabbit);
+  @Mock
+  ControlPlaneEmitter controlEmitter;
+
+  private final ObjectMapper mapper = new ObjectMapper();
+  private ControlPlaneIdentity identity;
+  private ControlPlaneTopologyDescriptor topology;
+  private WorkerControlPlane workerControlPlane;
+  private MessageConfig messageConfig;
+  private Generator generator;
+  private String controlQueueName;
+
+  @BeforeEach
+  void setUp() {
+    identity = new ControlPlaneIdentity(Topology.SWARM_ID, "generator", "inst");
+    topology = new GeneratorControlPlaneTopologyDescriptor();
+    workerControlPlane = WorkerControlPlane.builder(mapper)
+        .identity(identity)
+        .build();
+    messageConfig = new MessageConfig();
+    messageConfig.setPath("/api/test");
+    messageConfig.setMethod("POST");
+    messageConfig.setBody("payload");
+    messageConfig.setHeaders(Map.of("X-Test", "true"));
+    generator = new Generator(rabbit, controlEmitter, identity, topology, workerControlPlane,
+        messageConfig, mapper);
+    clearInvocations(controlEmitter, rabbit);
+    controlQueueName = topology.controlQueue(identity.instanceId())
+        .map(ControlQueueDescriptor::name)
+        .orElseThrow();
+  }
+
+  @Test
+  void statusRequestEmitsFullStatus() throws Exception {
+    String correlationId = UUID.randomUUID().toString();
+    String idempotencyKey = UUID.randomUUID().toString();
+    ControlSignal signal = ControlSignal.forInstance("status-request", identity.swarmId(),
+        identity.role(), identity.instanceId(), correlationId, idempotencyKey);
+
+    generator.onControl(mapper.writeValueAsString(signal),
+        ControlPlaneRouting.signal("status-request", identity.swarmId(), identity.role(),
+            identity.instanceId()), null);
+
+    ArgumentCaptor<ControlPlaneEmitter.StatusContext> captor =
+        ArgumentCaptor.forClass(ControlPlaneEmitter.StatusContext.class);
+    verify(controlEmitter).emitStatusSnapshot(captor.capture());
+    ControlPlaneEmitter.StatusContext context = captor.getValue();
+      StatusPayloadFactory factory = new StatusPayloadFactory(RoleContext.fromIdentity(identity));
+      String payload = factory.snapshot(context.customiser());
+    JsonNode node = mapper.readTree(payload);
+    List<String> errors = ASYNC_API.validate("#/components/schemas/ControlStatusFullPayload", node);
+    assertThat(errors).isEmpty();
+    assertThat(node.path("queues").path("control").path("in").get(0).asText())
+        .isEqualTo(controlQueueName);
+    List<String> actualRoutes = mapper.convertValue(
+        node.path("queues").path("control").path("routes"),
+        new TypeReference<List<String>>() { });
+    if (actualRoutes == null) {
+      actualRoutes = List.of();
     }
+    assertThat(actualRoutes)
+        .containsExactlyInAnyOrderElementsOf(resolveRoutes(topology));
+    assertThat(node.path("traffic").asText()).isEqualTo(Topology.EXCHANGE);
+    assertThat(node.path("queues").path("work").path("out").get(0).asText())
+        .isEqualTo(Topology.GEN_QUEUE);
+    verify(controlEmitter, never()).emitStatusDelta(any());
+  }
 
-    @Test
-    void statusRequestEmitsFullStatus() throws Exception {
-        String correlationId = UUID.randomUUID().toString();
-        String idempotencyKey = UUID.randomUUID().toString();
-        ControlSignal signal = ControlSignal.forInstance(
-            "status-request", Topology.SWARM_ID, "generator", "inst", correlationId, idempotencyKey);
+  @Test
+  void configUpdateAppliesDataAndEmitsConfirmation() throws Exception {
+    Map<String, Object> data = new LinkedHashMap<>();
+    data.put("enabled", true);
+    data.put("ratePerSec", 5.0);
+    data.put("singleRequest", true);
+    data.put("path", "/other");
+    data.put("method", "PUT");
+    data.put("body", "{}");
+    data.put("headers", Map.of("Accept", "application/json"));
+    Map<String, Object> args = new LinkedHashMap<>();
+    args.put("data", data);
+    String correlationId = UUID.randomUUID().toString();
+    String idempotencyKey = UUID.randomUUID().toString();
+    ControlSignal signal = ControlSignal.forInstance("config-update", identity.swarmId(),
+        identity.role(), identity.instanceId(), correlationId, idempotencyKey,
+        CommandTarget.INSTANCE, args);
 
-        generator.onControl(mapper.writeValueAsString(signal),
-            ControlPlaneRouting.signal("status-request", Topology.SWARM_ID, "generator", "inst"), null);
+    generator.onControl(mapper.writeValueAsString(signal),
+        ControlPlaneRouting.signal("config-update", identity.swarmId(), identity.role(),
+            identity.instanceId()), null);
 
-        ArgumentCaptor<String> payload = ArgumentCaptor.forClass(String.class);
-        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
-            eq(ControlPlaneRouting.event("status-full", new ConfirmationScope(Topology.SWARM_ID, "generator", "inst"))),
-            payload.capture());
-        JsonNode node = mapper.readTree(payload.getValue());
-        List<String> errors = ASYNC_API.validate("#/components/schemas/ControlStatusFullPayload", node);
-        assertThat(errors).isEmpty();
+    ArgumentCaptor<ControlPlaneEmitter.ReadyContext> captor =
+        ArgumentCaptor.forClass(ControlPlaneEmitter.ReadyContext.class);
+    verify(controlEmitter).emitReady(captor.capture());
+    ControlPlaneEmitter.ReadyContext context = captor.getValue();
+    assertThat(context.signal()).isEqualTo("config-update");
+    assertThat(context.correlationId()).isEqualTo(correlationId);
+    assertThat(context.idempotencyKey()).isEqualTo(idempotencyKey);
+    assertThat(context.state().enabled()).isTrue();
+    Map<String, Object> stateDetails = context.state().details();
+    assertThat(stateDetails).isNotNull();
+    assertThat(stateDetails).containsEntry("path", "/other");
+    assertThat(stateDetails).containsEntry("method", "PUT");
+    assertThat(context.result()).isEqualTo("success");
+    verify(rabbit).convertAndSend(eq(Topology.EXCHANGE), eq(Topology.GEN_QUEUE), any(Message.class));
+    Double rate = (Double) ReflectionTestUtils.getField(generator, "ratePerSec");
+    assertThat(rate).isEqualTo(5.0);
+    Boolean enabled = (Boolean) ReflectionTestUtils.getField(generator, "enabled");
+    assertThat(enabled).isTrue();
+  }
+
+  @Test
+  void configUpdateErrorEmitsErrorConfirmation() throws Exception {
+    Map<String, Object> args = Map.of("data", Map.of("ratePerSec", "oops"));
+    String correlationId = UUID.randomUUID().toString();
+    String idempotencyKey = UUID.randomUUID().toString();
+    ControlSignal signal = ControlSignal.forInstance("config-update", identity.swarmId(),
+        identity.role(), identity.instanceId(), correlationId, idempotencyKey,
+        CommandTarget.INSTANCE, args);
+
+    generator.onControl(mapper.writeValueAsString(signal),
+        ControlPlaneRouting.signal("config-update", identity.swarmId(), identity.role(),
+            identity.instanceId()), null);
+
+    ArgumentCaptor<ControlPlaneEmitter.ErrorContext> captor =
+        ArgumentCaptor.forClass(ControlPlaneEmitter.ErrorContext.class);
+    verify(controlEmitter).emitError(captor.capture());
+    ControlPlaneEmitter.ErrorContext context = captor.getValue();
+    assertThat(context.signal()).isEqualTo("config-update");
+    assertThat(context.correlationId()).isEqualTo(correlationId);
+    assertThat(context.state().enabled()).isFalse();
+    assertThat(context.code()).isEqualTo("IllegalArgumentException");
+    assertThat(context.result()).isEqualTo("error");
+    verify(controlEmitter, never()).emitReady(any());
+    verify(rabbit, never()).convertAndSend(eq(Topology.CONTROL_EXCHANGE), anyString(), any(Object.class));
+  }
+
+  @Test
+  void onControlRejectsBlankPayload() {
+    String routingKey = ControlPlaneRouting.signal("status-request", identity.swarmId(),
+        identity.role(), identity.instanceId());
+
+    assertThatThrownBy(() -> generator.onControl(" ", routingKey, null))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("payload");
+
+    verify(controlEmitter, never()).emitStatusSnapshot(any());
+  }
+
+  private List<String> resolveRoutes(ControlPlaneTopologyDescriptor descriptor) {
+    ControlPlaneRouteCatalog catalog = descriptor.routes();
+    List<String> resolved = new ArrayList<>();
+    resolved.addAll(expandRoutes(catalog.configSignals()));
+    resolved.addAll(expandRoutes(catalog.statusSignals()));
+    resolved.addAll(expandRoutes(catalog.lifecycleSignals()));
+    resolved.addAll(expandRoutes(catalog.statusEvents()));
+    resolved.addAll(expandRoutes(catalog.lifecycleEvents()));
+    resolved.addAll(expandRoutes(catalog.otherEvents()));
+    return resolved.stream()
+        .filter(route -> route != null && !route.isBlank())
+        .collect(Collectors.toCollection(LinkedHashSet::new))
+        .stream()
+        .toList();
+  }
+
+  private List<String> expandRoutes(Set<String> templates) {
+    if (templates == null || templates.isEmpty()) {
+      return List.of();
     }
-
-    @Test
-    void configUpdateAppliesArgsAndEmitsConfirmation() throws Exception {
-        Map<String, Object> headers = new LinkedHashMap<>();
-        headers.put("X-Test", "123");
-        Map<String, Object> data = new LinkedHashMap<>();
-        data.put("enabled", true);
-        data.put("ratePerSec", 5.5);
-        data.put("singleRequest", true);
-        data.put("path", "/next");
-        data.put("method", "POST");
-        data.put("body", "{\"msg\":\"hi\"}");
-        data.put("headers", headers);
-        Map<String, Object> args = new LinkedHashMap<>();
-        args.put("data", data);
-        String correlationId = UUID.randomUUID().toString();
-        String idempotencyKey = UUID.randomUUID().toString();
-        ControlSignal signal = ControlSignal.forInstance(
-            "config-update", Topology.SWARM_ID, "generator", "inst", correlationId, idempotencyKey,
-            CommandTarget.INSTANCE, args);
-
-        generator.onControl(mapper.writeValueAsString(signal),
-            ControlPlaneRouting.signal("config-update", Topology.SWARM_ID, "generator", "inst"), null);
-
-        Boolean enabled = (Boolean) ReflectionTestUtils.getField(generator, "enabled");
-        assertThat(enabled).isTrue();
-        Double ratePerSec = (Double) ReflectionTestUtils.getField(generator, "ratePerSec");
-        assertThat(ratePerSec).isEqualTo(5.5);
-        assertThat(messageConfig.getPath()).isEqualTo("/next");
-        assertThat(messageConfig.getMethod()).isEqualTo("POST");
-        assertThat(messageConfig.getBody()).isEqualTo("{\"msg\":\"hi\"}");
-        assertThat(messageConfig.getHeaders()).containsEntry("X-Test", "123");
-
-        verify(rabbit).convertAndSend(eq(Topology.EXCHANGE), eq(Topology.GEN_QUEUE), isA(Message.class));
-
-        ArgumentCaptor<String> payload = ArgumentCaptor.forClass(String.class);
-        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
-            eq(ControlPlaneRouting.event("ready.config-update", new ConfirmationScope(Topology.SWARM_ID, "generator", "inst"))),
-            payload.capture());
-        JsonNode node = mapper.readTree(payload.getValue());
-        assertThat(node.path("result").asText()).isEqualTo("success");
-        assertThat(node.path("signal").asText()).isEqualTo("config-update");
-        assertThat(node.path("correlationId").asText()).isEqualTo(correlationId);
-        assertThat(node.path("idempotencyKey").asText()).isEqualTo(idempotencyKey);
-        assertThat(node.path("scope").path("role").asText()).isEqualTo("generator");
-        assertThat(node.path("scope").path("instance").asText()).isEqualTo("inst");
-        assertThat(node.path("scope").path("swarmId").asText()).isEqualTo(Topology.SWARM_ID);
-        assertThat(node.path("state").path("scope").isMissingNode()).isTrue();
-        assertThat(node.path("state").path("enabled").asBoolean()).isTrue();
-        assertThat(node.has("args")).isFalse();
-        List<String> readyErrors = ASYNC_API.validate("#/components/schemas/CommandReadyPayload", node);
-        assertThat(readyErrors).isEmpty();
-    }
-
-    @Test
-    void configUpdateEmitsErrorWhenRateIsInvalid() throws Exception {
-        Map<String, Object> data = Map.of("ratePerSec", "oops");
-        Map<String, Object> args = Map.of("data", data);
-        String correlationId = UUID.randomUUID().toString();
-        String idempotencyKey = UUID.randomUUID().toString();
-        ControlSignal signal = ControlSignal.forInstance(
-            "config-update", Topology.SWARM_ID, "generator", "inst", correlationId, idempotencyKey,
-            CommandTarget.INSTANCE, args);
-
-        generator.onControl(mapper.writeValueAsString(signal),
-            ControlPlaneRouting.signal("config-update", Topology.SWARM_ID, "generator", "inst"), null);
-
-        ArgumentCaptor<String> payload = ArgumentCaptor.forClass(String.class);
-        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
-            eq(ControlPlaneRouting.event("error.config-update", new ConfirmationScope(Topology.SWARM_ID, "generator", "inst"))),
-            payload.capture());
-        JsonNode node = mapper.readTree(payload.getValue());
-        assertThat(node.path("result").asText()).isEqualTo("error");
-        assertThat(node.path("signal").asText()).isEqualTo("config-update");
-        assertThat(node.path("correlationId").asText()).isEqualTo(correlationId);
-        assertThat(node.path("idempotencyKey").asText()).isEqualTo(idempotencyKey);
-        assertThat(node.path("scope").path("role").asText()).isEqualTo("generator");
-        assertThat(node.path("scope").path("instance").asText()).isEqualTo("inst");
-        assertThat(node.path("code").asText()).isEqualTo("IllegalArgumentException");
-        assertThat(node.path("message").asText()).isNotBlank();
-        assertThat(node.path("state").path("scope").isMissingNode()).isTrue();
-        assertThat(node.path("state").path("enabled").asBoolean()).isFalse();
-        List<String> errorPayload = ASYNC_API.validate("#/components/schemas/CommandErrorPayload", node);
-        assertThat(errorPayload).isEmpty();
-
-        verify(rabbit, never()).convertAndSend(eq(Topology.EXCHANGE), eq(Topology.GEN_QUEUE), isA(Message.class));
-        verify(rabbit, never()).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
-            eq(ControlPlaneRouting.event("ready.config-update", new ConfirmationScope(Topology.SWARM_ID, "generator", "inst"))),
-            anyString());
-
-        Double ratePerSec = (Double) ReflectionTestUtils.getField(generator, "ratePerSec");
-        assertThat(ratePerSec).isEqualTo(0.0);
-    }
-
-    @Test
-    void onControlRejectsBlankPayload() {
-        String routingKey = ControlPlaneRouting.signal("config-update", Topology.SWARM_ID, "generator", "inst");
-
-        assertThatThrownBy(() -> generator.onControl("  ", routingKey, null))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("payload");
-
-        verifyNoInteractions(rabbit);
-    }
-
-    @Test
-    void onControlRejectsBlankRoutingKey() throws Exception {
-        String payload = mapper.writeValueAsString(ControlSignal.forInstance(
-            "status-request", Topology.SWARM_ID, "generator", "inst", UUID.randomUUID().toString(), UUID.randomUUID().toString()));
-
-        assertThatThrownBy(() -> generator.onControl(payload, "  ", null))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("routing key");
-
-        verifyNoInteractions(rabbit);
-    }
+    return templates.stream()
+        .filter(Objects::nonNull)
+        .map(route -> route.replace(ControlPlaneRouteCatalog.INSTANCE_TOKEN, identity.instanceId()))
+        .toList();
+  }
 }

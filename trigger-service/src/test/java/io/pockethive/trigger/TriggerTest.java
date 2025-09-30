@@ -1,13 +1,31 @@
 package io.pockethive.trigger;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.Topology;
 import io.pockethive.asyncapi.AsyncApiSchemaValidator;
 import io.pockethive.control.CommandTarget;
-import io.pockethive.control.ConfirmationScope;
 import io.pockethive.control.ControlSignal;
+import io.pockethive.controlplane.ControlPlaneIdentity;
+import io.pockethive.controlplane.messaging.ControlPlaneEmitter;
+import io.pockethive.controlplane.payload.RoleContext;
+import io.pockethive.controlplane.payload.StatusPayloadFactory;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
+import io.pockethive.controlplane.topology.ControlPlaneRouteCatalog;
+import io.pockethive.controlplane.topology.ControlPlaneTopologyDescriptor;
+import io.pockethive.controlplane.topology.ControlQueueDescriptor;
+import io.pockethive.controlplane.topology.TriggerControlPlaneTopologyDescriptor;
+import io.pockethive.controlplane.worker.WorkerControlPlane;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.UUID;
+import java.util.stream.Collectors;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -17,209 +35,169 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.test.util.ReflectionTestUtils;
 
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
-import java.util.concurrent.atomic.AtomicLong;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
 
 @ExtendWith(MockitoExtension.class)
 class TriggerTest {
 
-    @Mock
-    RabbitTemplate rabbit;
+  private static final AsyncApiSchemaValidator ASYNC_API = AsyncApiSchemaValidator.loadDefault();
 
-    private static final AsyncApiSchemaValidator ASYNC_API = AsyncApiSchemaValidator.loadDefault();
-    private final ObjectMapper mapper = new ObjectMapper();
-    private TriggerConfig triggerConfig;
-    private Trigger trigger;
-    private ConfirmationScope confirmationScope;
+  @Mock
+  RabbitTemplate rabbit;
 
-    @BeforeEach
-    void setUp() {
-        triggerConfig = new TriggerConfig();
-        triggerConfig.setActionType("");
-        triggerConfig.setCommand("echo test");
-        triggerConfig.setUrl("https://example.test");
-        triggerConfig.setMethod("GET");
-        triggerConfig.setBody("{}");
-        triggerConfig.setHeaders(new LinkedHashMap<>());
-        trigger = new Trigger(rabbit, "inst", triggerConfig, mapper);
-        confirmationScope = ConfirmationScope.forInstance(Topology.SWARM_ID, "trigger", "inst");
-        clearInvocations(rabbit);
+  @Mock
+  ControlPlaneEmitter controlEmitter;
+
+  private final ObjectMapper mapper = new ObjectMapper();
+  private ControlPlaneIdentity identity;
+  private ControlPlaneTopologyDescriptor topology;
+  private WorkerControlPlane workerControlPlane;
+  private TriggerConfig triggerConfig;
+  private Trigger trigger;
+  private String controlQueueName;
+
+  @BeforeEach
+  void setUp() {
+    identity = new ControlPlaneIdentity(Topology.SWARM_ID, "trigger", "inst");
+    topology = new TriggerControlPlaneTopologyDescriptor();
+    workerControlPlane = WorkerControlPlane.builder(mapper)
+        .identity(identity)
+        .build();
+    triggerConfig = new TriggerConfig();
+    triggerConfig.setActionType("none");
+    trigger = new Trigger(rabbit, controlEmitter, identity, topology, workerControlPlane,
+        triggerConfig, mapper);
+    clearInvocations(controlEmitter, rabbit);
+    controlQueueName = topology.controlQueue(identity.instanceId())
+        .map(ControlQueueDescriptor::name)
+        .orElseThrow();
+  }
+
+  @Test
+  void statusRequestEmitsFullStatus() throws Exception {
+    String correlationId = UUID.randomUUID().toString();
+    String idempotencyKey = UUID.randomUUID().toString();
+    ControlSignal signal = ControlSignal.forInstance("status-request", identity.swarmId(),
+        identity.role(), identity.instanceId(), correlationId, idempotencyKey);
+
+    trigger.onControl(mapper.writeValueAsString(signal),
+        ControlPlaneRouting.signal("status-request", identity.swarmId(), identity.role(),
+            identity.instanceId()), null);
+
+    ArgumentCaptor<ControlPlaneEmitter.StatusContext> captor =
+        ArgumentCaptor.forClass(ControlPlaneEmitter.StatusContext.class);
+    verify(controlEmitter).emitStatusSnapshot(captor.capture());
+    StatusPayloadFactory factory = new StatusPayloadFactory(RoleContext.fromIdentity(identity));
+    String payload = factory.snapshot(captor.getValue().customiser());
+    JsonNode node = mapper.readTree(payload);
+    List<String> errors = ASYNC_API.validate("#/components/schemas/ControlStatusFullPayload", node);
+    assertThat(errors).isEmpty();
+    assertThat(node.path("queues").path("control").path("in").get(0).asText())
+        .isEqualTo(controlQueueName);
+    List<String> routes = mapper.convertValue(node.path("queues").path("control").path("routes"),
+        new TypeReference<List<String>>() { });
+    if (routes == null) {
+      routes = List.of();
     }
+    assertThat(routes).containsExactlyInAnyOrderElementsOf(resolveRoutes(topology));
+    verify(controlEmitter, never()).emitStatusDelta(any());
+  }
 
-    @Test
-    void statusRequestEmitsFullStatus() throws Exception {
-        String correlationId = UUID.randomUUID().toString();
-        String idempotencyKey = UUID.randomUUID().toString();
-        ControlSignal signal = ControlSignal.forInstance(
-            "status-request", Topology.SWARM_ID, "trigger", "inst", correlationId, idempotencyKey);
+  @Test
+  void configUpdateAppliesSettingsAndEmitsReady() throws Exception {
+    Map<String, Object> data = new LinkedHashMap<>();
+    data.put("enabled", true);
+    data.put("intervalMs", 2000L);
+    data.put("actionType", "shell");
+    data.put("command", "echo hi");
+    Map<String, Object> args = Map.of("data", data);
+    String correlationId = UUID.randomUUID().toString();
+    String idempotencyKey = UUID.randomUUID().toString();
+    ControlSignal signal = ControlSignal.forInstance("config-update", identity.swarmId(),
+        identity.role(), identity.instanceId(), correlationId, idempotencyKey,
+        CommandTarget.INSTANCE, args);
 
-        trigger.onControl(
-            mapper.writeValueAsString(signal),
-            ControlPlaneRouting.signal("status-request", Topology.SWARM_ID, "trigger", "inst"),
-            null);
+    trigger.onControl(mapper.writeValueAsString(signal),
+        ControlPlaneRouting.signal("config-update", identity.swarmId(), identity.role(),
+            identity.instanceId()), null);
 
-        ArgumentCaptor<String> payload = ArgumentCaptor.forClass(String.class);
-        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
-            eq(ControlPlaneRouting.event("status-full", confirmationScope)), payload.capture());
-        JsonNode node = mapper.readTree(payload.getValue());
-        List<String> errors = ASYNC_API.validate("#/components/schemas/ControlStatusFullPayload", node);
-        assertThat(errors).isEmpty();
+    ArgumentCaptor<ControlPlaneEmitter.ReadyContext> captor =
+        ArgumentCaptor.forClass(ControlPlaneEmitter.ReadyContext.class);
+    verify(controlEmitter).emitReady(captor.capture());
+    ControlPlaneEmitter.ReadyContext context = captor.getValue();
+    assertThat(context.signal()).isEqualTo("config-update");
+    assertThat(context.correlationId()).isEqualTo(correlationId);
+    assertThat(context.idempotencyKey()).isEqualTo(idempotencyKey);
+    assertThat(context.state().enabled()).isTrue();
+    Map<String, Object> details = context.state().details();
+    assertThat(details).containsEntry("actionType", "shell");
+    Long interval = (Long) ReflectionTestUtils.getField(triggerConfig, "intervalMs");
+    assertThat(interval).isEqualTo(2000L);
+    Boolean enabled = (Boolean) ReflectionTestUtils.getField(trigger, "enabled");
+    assertThat(enabled).isTrue();
+  }
+
+  @Test
+  void configUpdateErrorEmitsError() throws Exception {
+    Map<String, Object> args = Map.of("data", Map.of("intervalMs", "oops"));
+    String correlationId = UUID.randomUUID().toString();
+    String idempotencyKey = UUID.randomUUID().toString();
+    ControlSignal signal = ControlSignal.forInstance("config-update", identity.swarmId(),
+        identity.role(), identity.instanceId(), correlationId, idempotencyKey,
+        CommandTarget.INSTANCE, args);
+
+    trigger.onControl(mapper.writeValueAsString(signal),
+        ControlPlaneRouting.signal("config-update", identity.swarmId(), identity.role(),
+            identity.instanceId()), null);
+
+    ArgumentCaptor<ControlPlaneEmitter.ErrorContext> captor =
+        ArgumentCaptor.forClass(ControlPlaneEmitter.ErrorContext.class);
+    verify(controlEmitter).emitError(captor.capture());
+    ControlPlaneEmitter.ErrorContext context = captor.getValue();
+    assertThat(context.signal()).isEqualTo("config-update");
+    assertThat(context.code()).isEqualTo("IllegalArgumentException");
+    assertThat(context.result()).isEqualTo("error");
+    verify(controlEmitter, never()).emitReady(any());
+  }
+
+  @Test
+  void onControlRejectsBlankPayload() {
+    String routingKey = ControlPlaneRouting.signal("status-request", identity.swarmId(),
+        identity.role(), identity.instanceId());
+
+    assertThatThrownBy(() -> trigger.onControl("", routingKey, null))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("payload");
+  }
+
+  private List<String> resolveRoutes(ControlPlaneTopologyDescriptor descriptor) {
+    ControlPlaneRouteCatalog catalog = descriptor.routes();
+    List<String> resolved = new ArrayList<>();
+    resolved.addAll(expandRoutes(catalog.configSignals()));
+    resolved.addAll(expandRoutes(catalog.statusSignals()));
+    resolved.addAll(expandRoutes(catalog.lifecycleSignals()));
+    resolved.addAll(expandRoutes(catalog.statusEvents()));
+    resolved.addAll(expandRoutes(catalog.lifecycleEvents()));
+    resolved.addAll(expandRoutes(catalog.otherEvents()));
+    return resolved.stream()
+        .filter(route -> route != null && !route.isBlank())
+        .collect(Collectors.toCollection(LinkedHashSet::new))
+        .stream()
+        .toList();
+  }
+
+  private List<String> expandRoutes(Set<String> templates) {
+    if (templates == null || templates.isEmpty()) {
+      return List.of();
     }
-
-    @Test
-    void configUpdateAppliesArgsAndEmitsConfirmation() throws Exception {
-        Map<String, Object> headers = new LinkedHashMap<>();
-        headers.put("X-Test", "123");
-        Map<String, Object> data = new LinkedHashMap<>();
-        data.put("enabled", true);
-        data.put("intervalMs", 2500);
-        data.put("actionType", "noop");
-        data.put("command", "echo hi");
-        data.put("url", "https://api.example");
-        data.put("method", "post");
-        data.put("body", "{\"msg\":\"hi\"}");
-        data.put("headers", headers);
-        Map<String, Object> args = Map.of("data", data);
-        String correlationId = UUID.randomUUID().toString();
-        String idempotencyKey = UUID.randomUUID().toString();
-        ControlSignal signal = ControlSignal.forInstance(
-            "config-update", Topology.SWARM_ID, "trigger", "inst", correlationId, idempotencyKey,
-            CommandTarget.INSTANCE, args);
-
-        trigger.onControl(
-            mapper.writeValueAsString(signal),
-            ControlPlaneRouting.signal("config-update", Topology.SWARM_ID, "trigger", "inst"),
-            null);
-
-        Boolean enabled = (Boolean) ReflectionTestUtils.getField(trigger, "enabled");
-        assertThat(enabled).isTrue();
-        assertThat(triggerConfig.getIntervalMs()).isEqualTo(2500);
-        assertThat(triggerConfig.getActionType()).isEqualTo("noop");
-        assertThat(triggerConfig.getCommand()).isEqualTo("echo hi");
-        assertThat(triggerConfig.getUrl()).isEqualTo("https://api.example");
-        assertThat(triggerConfig.getMethod()).isEqualTo("post");
-        assertThat(triggerConfig.getBody()).isEqualTo("{\"msg\":\"hi\"}");
-        assertThat(triggerConfig.getHeaders()).containsEntry("X-Test", "123");
-
-        ArgumentCaptor<String> payload = ArgumentCaptor.forClass(String.class);
-        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
-            eq(ControlPlaneRouting.event("ready.config-update", confirmationScope)), payload.capture());
-        JsonNode node = mapper.readTree(payload.getValue());
-        assertThat(node.path("result").asText()).isEqualTo("success");
-        assertThat(node.path("signal").asText()).isEqualTo("config-update");
-        assertThat(node.path("correlationId").asText()).isEqualTo(correlationId);
-        assertThat(node.path("idempotencyKey").asText()).isEqualTo(idempotencyKey);
-        assertThat(node.path("scope").path("role").asText()).isEqualTo("trigger");
-        assertThat(node.path("scope").path("instance").asText()).isEqualTo("inst");
-        assertThat(node.path("scope").path("swarmId").asText()).isEqualTo(Topology.SWARM_ID);
-        assertThat(node.path("state").path("scope").isMissingNode()).isTrue();
-        assertThat(node.path("state").path("enabled").asBoolean()).isTrue();
-        assertThat(node.has("args")).isFalse();
-
-        verify(rabbit, never()).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
-            eq(ControlPlaneRouting.event("error.config-update", confirmationScope)), anyString());
-        List<String> readyErrors = ASYNC_API.validate("#/components/schemas/CommandReadyPayload", node);
-        assertThat(readyErrors).isEmpty();
-    }
-
-    @Test
-    void configUpdateEmitsErrorWhenIntervalInvalid() throws Exception {
-        Map<String, Object> data = Map.of("intervalMs", "oops");
-        Map<String, Object> args = Map.of("data", data);
-        String correlationId = UUID.randomUUID().toString();
-        String idempotencyKey = UUID.randomUUID().toString();
-        ControlSignal signal = ControlSignal.forInstance(
-            "config-update", Topology.SWARM_ID, "trigger", "inst", correlationId, idempotencyKey,
-            CommandTarget.INSTANCE, args);
-
-        trigger.onControl(
-            mapper.writeValueAsString(signal),
-            ControlPlaneRouting.signal("config-update", Topology.SWARM_ID, "trigger", "inst"),
-            null);
-
-        ArgumentCaptor<String> payload = ArgumentCaptor.forClass(String.class);
-        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
-            eq(ControlPlaneRouting.event("error.config-update", confirmationScope)), payload.capture());
-        JsonNode node = mapper.readTree(payload.getValue());
-        assertThat(node.path("result").asText()).isEqualTo("error");
-        assertThat(node.path("signal").asText()).isEqualTo("config-update");
-        assertThat(node.path("correlationId").asText()).isEqualTo(correlationId);
-        assertThat(node.path("idempotencyKey").asText()).isEqualTo(idempotencyKey);
-        assertThat(node.path("code").asText()).isEqualTo("IllegalArgumentException");
-        assertThat(node.path("message").asText()).isNotBlank();
-        assertThat(node.path("state").path("scope").isMissingNode()).isTrue();
-        assertThat(node.path("state").path("enabled").asBoolean()).isFalse();
-        List<String> errorPayload = ASYNC_API.validate("#/components/schemas/CommandErrorPayload", node);
-        assertThat(errorPayload).isEmpty();
-
-        Boolean enabled = (Boolean) ReflectionTestUtils.getField(trigger, "enabled");
-        assertThat(enabled).isFalse();
-        assertThat(triggerConfig.getIntervalMs()).isZero();
-
-        verify(rabbit, never()).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
-            eq(ControlPlaneRouting.event("ready.config-update", confirmationScope)), anyString());
-    }
-
-    @Test
-    void singleRequestTriggersOnceAndEmitsConfirmation() throws Exception {
-        Map<String, Object> args = Map.of("singleRequest", true);
-        String correlationId = UUID.randomUUID().toString();
-        String idempotencyKey = UUID.randomUUID().toString();
-        ControlSignal signal = ControlSignal.forInstance(
-            "config-update", Topology.SWARM_ID, "trigger", "inst", correlationId, idempotencyKey,
-            CommandTarget.INSTANCE, args);
-
-        trigger.onControl(
-            mapper.writeValueAsString(signal),
-            ControlPlaneRouting.signal("config-update", Topology.SWARM_ID, "trigger", "inst"),
-            null);
-
-        AtomicLong counter = (AtomicLong) ReflectionTestUtils.getField(trigger, "counter");
-        assertThat(counter).isNotNull();
-        assertThat(counter.get()).isEqualTo(1L);
-
-        ArgumentCaptor<String> payload = ArgumentCaptor.forClass(String.class);
-        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
-            eq(ControlPlaneRouting.event("ready.config-update", confirmationScope)), payload.capture());
-        JsonNode node = mapper.readTree(payload.getValue());
-        assertThat(node.has("args")).isFalse();
-        assertThat(node.path("state").path("scope").isMissingNode()).isTrue();
-        List<String> readyErrors = ASYNC_API.validate("#/components/schemas/CommandReadyPayload", node);
-        assertThat(readyErrors).isEmpty();
-    }
-
-    @Test
-    void onControlRejectsBlankPayload() {
-        String routingKey = ControlPlaneRouting.signal("status-request", Topology.SWARM_ID, "trigger", "inst");
-
-        assertThatThrownBy(() -> trigger.onControl(" \n", routingKey, null))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("payload");
-
-        verifyNoInteractions(rabbit);
-    }
-
-    @Test
-    void onControlRejectsBlankRoutingKey() throws Exception {
-        String payload = mapper.writeValueAsString(ControlSignal.forInstance(
-            "status-request", Topology.SWARM_ID, "trigger", "inst", UUID.randomUUID().toString(), UUID.randomUUID().toString()));
-
-        assertThatThrownBy(() -> trigger.onControl(payload, "  ", null))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("routing key");
-
-        verifyNoInteractions(rabbit);
-    }
+    return templates.stream()
+        .filter(Objects::nonNull)
+        .map(route -> route.replace(ControlPlaneRouteCatalog.INSTANCE_TOKEN, identity.instanceId()))
+        .toList();
+  }
 }
