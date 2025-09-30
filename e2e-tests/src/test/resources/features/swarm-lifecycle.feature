@@ -9,7 +9,10 @@ Feature: Swarm lifecycle golden path
     Then the swarm is registered and queues are declared
     When I start the swarm
     Then the swarm reports running
+    And each template component reports running and enabled
     When I stop the swarm
     Then the swarm reports stopped
+    And each template component reports disabled
+    And the workload queues remain stable
     When I remove the swarm
     Then the swarm is removed and lifecycle confirmations are recorded

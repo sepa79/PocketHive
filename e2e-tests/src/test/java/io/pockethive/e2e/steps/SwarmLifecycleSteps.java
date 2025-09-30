@@ -5,9 +5,12 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.time.Instant;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -63,6 +66,9 @@ public class SwarmLifecycleSteps {
   private ControlResponse startResponse;
   private ControlResponse stopResponse;
   private ControlResponse removeResponse;
+  private QueueProbe queueProbe;
+  private Instant startIssuedAt;
+  private Instant stopIssuedAt;
 
   @Given("the swarm lifecycle harness is initialised")
   public void theSwarmLifecycleHarnessIsInitialised() {
@@ -127,10 +133,10 @@ public class SwarmLifecycleSteps {
       assertEquals("READY", view.get().status(), "Swarm status should be READY after template applied");
     });
 
-    QueueProbe probe = new QueueProbe(rabbitSubscriptions.connectionFactory());
+    queueProbe = new QueueProbe(rabbitSubscriptions.connectionFactory());
     for (String suffix : expectedQueueSuffixes(template)) {
       String queueName = "ph." + swarmId + "." + suffix;
-      assertTrue(probe.exists(queueName), () -> "Expected workload queue to exist: " + queueName);
+      assertTrue(queueProbe.exists(queueName), () -> "Expected workload queue to exist: " + queueName);
     }
   }
 
@@ -138,6 +144,7 @@ public class SwarmLifecycleSteps {
   public void iStartTheSwarm() {
     ensureCreateResponse();
     String idempotencyKey = idKey("start");
+    startIssuedAt = Instant.now();
     startResponse = orchestratorClient.startSwarm(swarmId, new ControlRequest(idempotencyKey, "e2e lifecycle start"));
     LOGGER.info("Start request correlation={} watch={}", startResponse.correlationId(), startResponse.watch());
   }
@@ -161,6 +168,7 @@ public class SwarmLifecycleSteps {
   public void iStopTheSwarm() {
     ensureStartResponse();
     String idempotencyKey = idKey("stop");
+    stopIssuedAt = Instant.now();
     stopResponse = orchestratorClient.stopSwarm(swarmId, new ControlRequest(idempotencyKey, "e2e lifecycle stop"));
     LOGGER.info("Stop request correlation={} watch={}", stopResponse.correlationId(), stopResponse.watch());
   }
@@ -213,6 +221,54 @@ public class SwarmLifecycleSteps {
     assertEquals(1, controlPlaneEvents.readyCount("swarm-stop"), "Expected exactly one swarm-stop ready event");
     assertEquals(1, controlPlaneEvents.readyCount("swarm-remove"), "Expected exactly one swarm-remove ready event");
     assertTrue(controlPlaneEvents.errors().isEmpty(), "No error confirmations should be emitted during the golden path");
+  }
+
+  @And("each template component reports running and enabled")
+  public void eachTemplateComponentReportsRunningAndEnabled() {
+    ensureStartResponse();
+    ensureTemplate();
+    awaitComponentConfigState(true, startIssuedAt);
+
+    SwarmAssertions.await("swarm health running", () -> {
+      Optional<SwarmView> viewOpt = orchestratorClient.findSwarm(swarmId);
+      assertTrue(viewOpt.isPresent(), "Swarm should be present while workloads are enabled");
+      SwarmView view = viewOpt.get();
+      assertEquals("RUNNING", view.health(), "Swarm health should report RUNNING when workloads are enabled");
+      assertNotNull(view.heartbeat(), "Swarm heartbeat should be populated when workloads run");
+      assertFalse(view.heartbeat().isBlank(), "Swarm heartbeat should be non-empty when workloads run");
+      assertTrue(view.workEnabled(), "Workloads should remain enabled after start");
+    });
+  }
+
+  @And("each template component reports disabled")
+  public void eachTemplateComponentReportsDisabled() {
+    ensureStopResponse();
+    ensureTemplate();
+    awaitComponentConfigState(false, stopIssuedAt);
+
+    SwarmAssertions.await("workloads disabled", () -> {
+      Optional<SwarmView> viewOpt = orchestratorClient.findSwarm(swarmId);
+      assertTrue(viewOpt.isPresent(), "Swarm should remain registered when stopped");
+      SwarmView view = viewOpt.get();
+      assertFalse(view.workEnabled(), "Workloads should be disabled after stop");
+    });
+  }
+
+  @And("the workload queues remain stable")
+  public void theWorkloadQueuesRemainStable() {
+    ensureStopResponse();
+    ensureTemplate();
+    Assumptions.assumeTrue(queueProbe != null, "Queue probe not initialised");
+    Set<String> suffixes = expectedQueueSuffixes(template);
+    long threshold = 1_000L;
+    for (String suffix : suffixes) {
+      String queueName = "ph." + swarmId + "." + suffix;
+      SwarmAssertions.await("queue " + queueName + " below threshold", () -> {
+        long count = queueProbe.messageCount(queueName);
+        assertTrue(count < threshold,
+            () -> "Queue " + queueName + " should stay below " + threshold + " messages but had " + count);
+      });
+    }
   }
 
   @After
@@ -320,6 +376,66 @@ public class SwarmLifecycleSteps {
       }
     }
     return suffixes;
+  }
+
+  private Set<String> expectedRoles(SwarmTemplate template) {
+    Set<String> roles = new LinkedHashSet<>();
+    if (template.bees() != null) {
+      for (Bee bee : template.bees()) {
+        if (bee.role() != null && !bee.role().isBlank()) {
+          roles.add(bee.role());
+        }
+      }
+    }
+    return roles;
+  }
+
+  private void awaitComponentConfigState(boolean enabled, Instant since) {
+    Assumptions.assumeTrue(controlPlaneEvents != null, "Control plane events not available");
+    Set<String> roles = expectedRoles(template);
+    Assumptions.assumeTrue(!roles.isEmpty(), "No roles found in scenario template");
+
+    String expectation = enabled ? "enabled" : "disabled";
+    SwarmAssertions.await("config-update confirmations for " + expectation, () -> {
+      Map<String, ReadyConfirmation> matches = new HashMap<>();
+      for (ControlPlaneEvents.ConfirmationEnvelope env : controlPlaneEvents.confirmations()) {
+        if (!isOnOrAfter(env.receivedAt(), since)) {
+          continue;
+        }
+        if (!(env.confirmation() instanceof ReadyConfirmation ready)) {
+          continue;
+        }
+        if (!"config-update".equalsIgnoreCase(ready.signal())) {
+          continue;
+        }
+        if (ready.scope() == null || ready.scope().role() == null) {
+          continue;
+        }
+        if (ready.scope().swarmId() == null || !swarmId.equalsIgnoreCase(ready.scope().swarmId())) {
+          continue;
+        }
+        if (!roles.contains(ready.scope().role())) {
+          continue;
+        }
+        if (ready.state() == null || ready.state().enabled() == null) {
+          continue;
+        }
+        if (!Boolean.valueOf(enabled).equals(ready.state().enabled())) {
+          continue;
+        }
+        matches.putIfAbsent(ready.scope().role(), ready);
+      }
+      assertEquals(roles, matches.keySet(),
+          "Expected config-update ready events with enabled=" + enabled + " for roles " + roles
+              + " but observed " + matches.keySet());
+    });
+  }
+
+  private boolean isOnOrAfter(Instant timestamp, Instant reference) {
+    if (timestamp == null || reference == null) {
+      return true;
+    }
+    return !timestamp.isBefore(reference);
   }
 
   private String idKey(String action) {
