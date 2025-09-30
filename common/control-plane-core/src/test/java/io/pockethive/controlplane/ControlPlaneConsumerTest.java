@@ -31,7 +31,7 @@ class ControlPlaneConsumerTest {
             .clock(clock)
             .build();
 
-        ControlSignal signal = new ControlSignal("config-update", "corr", "idemp", "swarm", "generator", "gen-1", CommandTarget.INSTANCE, null);
+        ControlSignal signal = new ControlSignal("config-update", "corr", "idemp", "swarm", "generator", "gen-1", null, CommandTarget.INSTANCE, null);
         String payload = mapper.writeValueAsString(signal);
 
         AtomicInteger processed = new AtomicInteger();
@@ -52,7 +52,7 @@ class ControlPlaneConsumerTest {
             .selfFilter(SelfFilter.skipSelfInstance())
             .build();
 
-        ControlSignal signal = new ControlSignal("config-update", "corr", "id", "swarm", "generator", "gen-1", CommandTarget.INSTANCE, null);
+        ControlSignal signal = new ControlSignal("config-update", "corr", "id", "swarm", "generator", "gen-1", "gen-1", CommandTarget.INSTANCE, null);
         String payload = mapper.writeValueAsString(signal);
 
         AtomicInteger processed = new AtomicInteger();
@@ -60,6 +60,40 @@ class ControlPlaneConsumerTest {
 
         assertThat(result).isFalse();
         assertThat(processed).hasValue(0);
+    }
+
+    @Test
+    void selfFilterFallsBackWhenOriginMissing() throws Exception {
+        ControlPlaneConsumer consumer = ControlPlaneConsumer.builder(mapper)
+            .identity(new ControlPlaneIdentity("swarm", "generator", "gen-1"))
+            .selfFilter(SelfFilter.skipSelfInstance())
+            .build();
+
+        ControlSignal signal = new ControlSignal("config-update", "corr", "id", "swarm", "generator", "gen-1", null, CommandTarget.INSTANCE, null);
+        String payload = mapper.writeValueAsString(signal);
+
+        AtomicInteger processed = new AtomicInteger();
+        boolean result = consumer.consume(payload, "sig.config-update.generator.gen-1", env -> processed.incrementAndGet());
+
+        assertThat(result).isFalse();
+        assertThat(processed).hasValue(0);
+    }
+
+    @Test
+    void selfFilterProcessesWhenOriginDiffers() throws Exception {
+        ControlPlaneConsumer consumer = ControlPlaneConsumer.builder(mapper)
+            .identity(new ControlPlaneIdentity("swarm", "generator", "gen-1"))
+            .selfFilter(SelfFilter.skipSelfInstance())
+            .build();
+
+        ControlSignal signal = new ControlSignal("config-update", "corr", "id", "swarm", "generator", "gen-1", "gen-2", CommandTarget.INSTANCE, null);
+        String payload = mapper.writeValueAsString(signal);
+
+        AtomicInteger processed = new AtomicInteger();
+        boolean result = consumer.consume(payload, "sig.config-update.generator.gen-1", env -> processed.incrementAndGet());
+
+        assertThat(result).isTrue();
+        assertThat(processed).hasValue(1);
     }
 
     @Test
@@ -79,7 +113,7 @@ class ControlPlaneConsumerTest {
             .identity(new ControlPlaneIdentity("swarm", "generator", "gen-1"))
             .build();
 
-        ControlSignal signal = new ControlSignal("config-update", "corr", "id", "swarm", "generator", "gen-1", CommandTarget.INSTANCE, null);
+        ControlSignal signal = new ControlSignal("config-update", "corr", "id", "swarm", "generator", "gen-1", null, CommandTarget.INSTANCE, null);
         assertThatThrownBy(() -> consumer.consume(mapper.writeValueAsString(signal), "  ", env -> { }))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessage("routingKey must not be null or blank");
@@ -91,7 +125,7 @@ class ControlPlaneConsumerTest {
             .identity(new ControlPlaneIdentity("swarm", "generator", "gen-2"))
             .build();
 
-        ControlSignal signal = new ControlSignal("config-update", "corr", "id", "swarm", "generator", "gen-2", CommandTarget.INSTANCE, null);
+        ControlSignal signal = new ControlSignal("config-update", "corr", "id", "swarm", "generator", "gen-2", null, CommandTarget.INSTANCE, null);
         String payload = mapper.writeValueAsString(signal);
 
         AtomicInteger processed = new AtomicInteger();

@@ -109,6 +109,9 @@ class ControlPlaneEmitterTest {
             new ConfirmationScope("swarm-A", "generator", "gen-1"));
         assertThat(message.routingKey()).isEqualTo(expectedRoute);
 
+        ObjectNode payload = (ObjectNode) MAPPER.readTree((String) message.payload());
+        assertThat(payload.get("origin").asText()).isEqualTo("gen-1");
+
         String json = describeEvent(message, payload -> {
             payload.put("messageId", ANY_VALUE);
             payload.put("timestamp", ANY_VALUE);

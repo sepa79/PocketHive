@@ -194,6 +194,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
         .kind("status-delta")
         .role("swarm-controller")
         .instance(instanceId)
+        .origin(instanceId)
         .swarmId(Topology.SWARM_ID)
         .controlIn(controlQueue)
         .controlRoutes(
@@ -513,6 +514,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
         swarmId,
         role,
         instance,
+        instanceId,
         commandTarget,
         args);
     try {

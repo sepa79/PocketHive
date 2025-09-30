@@ -87,7 +87,7 @@ class WorkerControlPlaneTest {
     @Test
     void forwardsUnsupportedSignals() throws Exception {
         ControlSignal signal = new ControlSignal("unknown", null, null, null, null, null,
-            CommandTarget.ALL, Map.of());
+            null, CommandTarget.ALL, Map.of());
         AtomicReference<WorkerSignalListener.WorkerSignalContext> ref = new AtomicReference<>();
 
         WorkerSignalListener listener = new WorkerSignalListener() {

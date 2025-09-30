@@ -7,6 +7,7 @@
   "kind": "status-full",
   "role": "processor",
   "instance": "instance-7",
+  "origin": "instance-7",
   "swarmId": "swarm-1",
   "traffic": "ph.traffic",
   "watermark": "2024-01-01T00:00:00Z",

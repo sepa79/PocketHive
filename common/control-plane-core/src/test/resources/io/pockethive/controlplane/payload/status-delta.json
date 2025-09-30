@@ -7,6 +7,7 @@
   "kind": "status-delta",
   "role": "processor",
   "instance": "instance-7",
+  "origin": "instance-7",
   "swarmId": "swarm-1",
   "enabled": false,
   "queues": {

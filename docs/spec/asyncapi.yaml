@@ -627,6 +627,9 @@ components:
         instance:
           type: string
           description: Target instance identifier; use ALL for role-wide commands
+        origin:
+          type: string
+          description: Component instance identifier that emitted the signal
         commandTarget:
           type: string
           description: High-level target classification that guides routing decisions
