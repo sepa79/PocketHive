@@ -14,3 +14,13 @@ logging:
 ph:
   swarmId: ${PH_SWARM_ID:default}
   finalQueue: ${PH_FINAL_QUEUE:ph.${ph.swarmId}.final}
+pockethive:
+  control-plane:
+    swarm-id: ${ph.swarmId}
+    worker:
+      role: postprocessor
+      swarm-id: ${ph.swarmId}
+      instance-id: ${bee.name:${random.uuid}}
+      skip-self-signals: false
+    manager:
+      enabled: false

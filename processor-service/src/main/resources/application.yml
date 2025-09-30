@@ -19,3 +19,13 @@ ph:
   finalQueue: ${PH_FINAL_QUEUE:ph.${ph.swarmId}.final}
   processor:
     baseUrl: ${PH_BASE_URL:http://wiremock:8080}
+pockethive:
+  control-plane:
+    swarm-id: ${ph.swarmId}
+    worker:
+      role: processor
+      swarm-id: ${ph.swarmId}
+      instance-id: ${bee.name:${random.uuid}}
+      skip-self-signals: false
+    manager:
+      enabled: false

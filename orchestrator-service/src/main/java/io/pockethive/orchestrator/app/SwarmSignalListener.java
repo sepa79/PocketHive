@@ -265,7 +265,7 @@ public class SwarmSignalListener {
         String correlationId = info != null ? info.correlationId() : null;
         String idempotencyKey = info != null ? info.idempotencyKey() : null;
         return new ControlSignal("swarm-template", correlationId, idempotencyKey, plan.id(), null, null,
-            CommandTarget.SWARM, args);
+            instanceId, CommandTarget.SWARM, args);
     }
 
     private void emitCreateReady(Pending info) {
@@ -398,6 +398,7 @@ public class SwarmSignalListener {
             .kind("status-full")
             .role(ROLE)
             .instance(instanceId)
+            .origin(instanceId)
             .swarmId(SCOPE)
             .enabled(true)
             .controlIn(controlQueue)
@@ -419,6 +420,7 @@ public class SwarmSignalListener {
             .kind("status-delta")
             .role(ROLE)
             .instance(instanceId)
+            .origin(instanceId)
             .swarmId(SCOPE)
             .enabled(true)
             .controlIn(controlQueue)

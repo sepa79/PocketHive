@@ -52,6 +52,14 @@ public class StatusEnvelopeBuilder {
         return this;
     }
 
+    public StatusEnvelopeBuilder origin(String origin) {
+        if (origin == null || origin.isBlank()) {
+            throw new IllegalArgumentException("origin must not be blank");
+        }
+        root.put("origin", origin);
+        return this;
+    }
+
     public StatusEnvelopeBuilder swarmId(String swarmId) {
         root.put("swarmId", swarmId);
         return this;

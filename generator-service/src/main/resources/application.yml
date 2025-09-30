@@ -22,3 +22,13 @@ ph:
       method: POST
       body: hello-world
       headers: {}
+pockethive:
+  control-plane:
+    swarm-id: ${ph.swarmId}
+    worker:
+      role: generator
+      swarm-id: ${ph.swarmId}
+      instance-id: ${bee.name:${random.uuid}}
+      skip-self-signals: false
+    manager:
+      enabled: false

@@ -1,0 +1,22 @@
+{
+  "ts": "2024-01-02T03:04:05Z",
+  "correlationId": "corr-1",
+  "idempotencyKey": "idem-1",
+  "signal": "swarm-start",
+  "scope": {
+    "swarmId": "swarm-1",
+    "role": "processor",
+    "instance": "instance-7"
+  },
+  "result": "success",
+  "state": {
+    "status": "Running",
+    "enabled": true,
+    "details": {
+      "tasks": 5
+    }
+  },
+  "details": {
+    "durationMs": 123
+  }
+}
