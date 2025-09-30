@@ -159,4 +159,3 @@ export const useUpsertScenario = (
   })
 }
 
-export type { ScenarioDocument }

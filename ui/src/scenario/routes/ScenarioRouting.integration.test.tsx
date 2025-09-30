@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi, type SpyInstance } from 'vitest'
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
@@ -20,7 +20,6 @@ const renderWithRouter = (initialEntry: string) =>
         </Routes>
       </MemoryRouter>
     </ShellProviders>,
-    { onRender: () => undefined },
   )
 
 const createDeferred = <T,>() => {
@@ -43,7 +42,10 @@ const resetStores = () => {
 }
 
 describe('Scenario routes', () => {
-  let apiFetchSpy: ReturnType<typeof vi.spyOn>
+  let apiFetchSpy: SpyInstance<
+    ReturnType<typeof apiModule.apiFetch>,
+    Parameters<typeof apiModule.apiFetch>
+  >
 
   beforeEach(() => {
     resetStores()
@@ -95,7 +97,7 @@ describe('Scenario routes', () => {
       swarmTemplates: [],
     }
 
-    apiFetchSpy.mockImplementation(async (path, init) => {
+    apiFetchSpy.mockImplementation(async (path: RequestInfo, init?: RequestInit) => {
       if (path === '/scenario-manager/scenarios' && (!init || init.method === undefined)) {
         return new Response(JSON.stringify([]), {
           status: 200,
@@ -138,12 +140,16 @@ describe('Scenario routes', () => {
     await waitFor(() => expect(useUIStore.getState().toast).toBe('Scenario saved'))
     await waitFor(() => {
       const postCall = apiFetchSpy.mock.calls.find(
-        ([requestPath, init]) => requestPath === '/scenario-manager/scenarios' && init?.method === 'POST',
+        ([requestPath, init]: Parameters<typeof apiModule.apiFetch>) =>
+          requestPath === '/scenario-manager/scenarios' && init?.method === 'POST',
       )
       expect(postCall).toBeTruthy()
     })
     await waitFor(() => {
-      const detailCall = apiFetchSpy.mock.calls.find(([requestPath]) => requestPath === '/scenario-manager/scenarios/smoke')
+      const detailCall = apiFetchSpy.mock.calls.find(
+        ([requestPath]: Parameters<typeof apiModule.apiFetch>) =>
+          requestPath === '/scenario-manager/scenarios/smoke',
+      )
       expect(detailCall).toBeTruthy()
     })
     const idInput = await screen.findByDisplayValue('smoke')
@@ -153,7 +159,7 @@ describe('Scenario routes', () => {
   it('surfaces validation errors returned from the API', async () => {
     const user = userEvent.setup()
 
-    apiFetchSpy.mockImplementation(async (path, init) => {
+    apiFetchSpy.mockImplementation(async (path: RequestInfo, init?: RequestInit) => {
       if (path === '/scenario-manager/scenarios' && (!init || init.method === undefined)) {
         return new Response(JSON.stringify([]), {
           status: 200,
@@ -215,7 +221,7 @@ describe('Scenario routes', () => {
 
     const detailDeferred = createDeferred<Response>()
 
-    apiFetchSpy.mockImplementation(async (path, init) => {
+    apiFetchSpy.mockImplementation(async (path: RequestInfo, init?: RequestInit) => {
       if (path === '/scenario-manager/scenarios' && (!init || init.method === undefined)) {
         return new Response(JSON.stringify([]), {
           status: 200,
@@ -246,7 +252,8 @@ describe('Scenario routes', () => {
 
     expect(
       apiFetchSpy.mock.calls.some(
-        ([requestPath, init]) => requestPath === '/scenario-manager/scenarios/baseline' && init?.method === 'PUT',
+        ([requestPath, init]: Parameters<typeof apiModule.apiFetch>) =>
+          requestPath === '/scenario-manager/scenarios/baseline' && init?.method === 'PUT',
       ),
     ).toBe(false)
 
@@ -264,7 +271,8 @@ describe('Scenario routes', () => {
     await waitFor(() =>
       expect(
         apiFetchSpy.mock.calls.some(
-          ([requestPath, init]) => requestPath === '/scenario-manager/scenarios/baseline' && init?.method === 'PUT',
+          ([requestPath, init]: Parameters<typeof apiModule.apiFetch>) =>
+            requestPath === '/scenario-manager/scenarios/baseline' && init?.method === 'PUT',
         ),
       ).toBe(true),
     )

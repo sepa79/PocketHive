@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import type { ReactNode } from 'react'
 import { useParams } from 'react-router-dom'
 
 import { useScenario, type ScenarioDocument } from '../api/scenarioManager'
@@ -12,6 +13,7 @@ export function Component() {
   const { scenarioId } = useParams<{ scenarioId: string }>()
   const isEditing = Boolean(scenarioId)
   const hydrate = useAssetStore((state) => state.hydrate)
+  const resetAssets = useAssetStore((state) => state.reset)
   const [hasHydratedAssets, setHasHydratedAssets] = useState(!isEditing)
   const [metadata, setMetadata] = useState<ScenarioMetadata>({
     id: scenarioId ?? '',
@@ -25,12 +27,13 @@ export function Component() {
 
   useEffect(() => {
     if (!scenarioId) {
+      resetAssets()
       setMetadata({ id: '', name: '', description: '' })
       setHasHydratedAssets(true)
     } else {
       setHasHydratedAssets(false)
     }
-  }, [scenarioId])
+  }, [resetAssets, scenarioId])
 
   useEffect(() => {
     if (data) {
@@ -69,7 +72,7 @@ export function Component() {
     })
   }
 
-  let body: JSX.Element
+  let body: ReactNode
   if (isEditing && isLoading) {
     body = (
       <div className="flex items-center justify-center p-12 text-sm text-slate-300">

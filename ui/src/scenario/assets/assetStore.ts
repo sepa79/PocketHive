@@ -1,12 +1,13 @@
 import { create } from 'zustand'
-import { StateStorage, createJSONStorage, persist } from 'zustand/middleware'
+import { createJSONStorage, persist } from 'zustand/middleware'
+import type { StateStorage } from 'zustand/middleware'
 
-import {
+import { emptyCollections, sortByName } from './assets'
+import type {
+  AssetCollections,
   DatasetAsset,
   SwarmTemplateAsset,
   SutAsset,
-  emptyCollections,
-  sortByName,
 } from './assets'
 
 const STORAGE_KEY = 'ph.scenario.assets'
