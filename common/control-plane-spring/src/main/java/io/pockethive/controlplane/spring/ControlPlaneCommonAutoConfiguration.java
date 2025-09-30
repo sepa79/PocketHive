@@ -6,6 +6,8 @@ import java.util.Objects;
 import org.springframework.amqp.core.ExchangeBuilder;
 import org.springframework.amqp.core.TopicExchange;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.boot.autoconfigure.AutoConfigureAfter;
+import org.springframework.boot.autoconfigure.amqp.RabbitAutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
@@ -18,6 +20,7 @@ import org.springframework.context.annotation.Configuration;
  * Shared auto-configuration that exposes reusable beans for control-plane components.
  */
 @Configuration(proxyBeanMethods = false)
+@AutoConfigureAfter(RabbitAutoConfiguration.class)
 @ConditionalOnClass({TopicExchange.class, RabbitTemplate.class})
 @ConditionalOnProperty(prefix = "pockethive.control-plane", name = "enabled", havingValue = "true", matchIfMissing = true)
 @EnableConfigurationProperties(ControlPlaneProperties.class)
