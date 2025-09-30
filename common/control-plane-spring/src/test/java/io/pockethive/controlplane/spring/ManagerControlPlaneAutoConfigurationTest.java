@@ -8,10 +8,10 @@ import io.pockethive.controlplane.manager.ManagerControlPlane;
 import io.pockethive.controlplane.messaging.ControlPlanePublisher;
 import java.util.List;
 import org.junit.jupiter.api.Test;
-import org.springframework.amqp.core.AmqpTemplate;
 import org.springframework.amqp.core.Declarables;
 import org.springframework.amqp.core.Queue;
 import org.springframework.amqp.core.TopicExchange;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 
@@ -22,7 +22,7 @@ class ManagerControlPlaneAutoConfigurationTest {
             ControlPlaneCommonAutoConfiguration.class,
             ManagerControlPlaneAutoConfiguration.class))
         .withBean(ObjectMapper.class, ObjectMapper::new)
-        .withBean(AmqpTemplate.class, () -> org.mockito.Mockito.mock(AmqpTemplate.class))
+        .withBean(RabbitTemplate.class, () -> org.mockito.Mockito.mock(RabbitTemplate.class))
         .withPropertyValues(
             "pockethive.control-plane.manager.role=orchestrator",
             "pockethive.control-plane.manager.instance-id=orch-1",

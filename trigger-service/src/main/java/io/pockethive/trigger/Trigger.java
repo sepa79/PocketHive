@@ -1,18 +1,22 @@
 package io.pockethive.trigger;
 
 import io.pockethive.Topology;
+import io.pockethive.control.CommandState;
 import io.pockethive.control.ControlSignal;
 import io.pockethive.control.ConfirmationScope;
 import io.pockethive.controlplane.ControlPlaneIdentity;
+import io.pockethive.controlplane.messaging.ControlPlaneEmitter;
+import io.pockethive.controlplane.routing.ControlPlaneRouting;
+import io.pockethive.controlplane.topology.ControlPlaneRouteCatalog;
+import io.pockethive.controlplane.topology.ControlPlaneTopologyDescriptor;
+import io.pockethive.controlplane.topology.ControlQueueDescriptor;
 import io.pockethive.controlplane.worker.WorkerConfigCommand;
 import io.pockethive.controlplane.worker.WorkerControlPlane;
 import io.pockethive.controlplane.worker.WorkerSignalListener;
 import io.pockethive.controlplane.worker.WorkerSignalListener.WorkerSignalContext;
 import io.pockethive.controlplane.worker.WorkerStatusRequest;
-import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.observability.ObservabilityContext;
 import io.pockethive.observability.ObservabilityContextUtil;
-import io.pockethive.observability.StatusEnvelopeBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
@@ -27,7 +31,6 @@ import org.springframework.stereotype.Component;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
@@ -35,9 +38,15 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.time.Instant;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Collectors;
 
 @Component
 @EnableScheduling
@@ -46,29 +55,46 @@ public class Trigger {
   private static final String ROLE = "trigger";
   private static final TypeReference<Map<String, String>> MAP_STRING_STRING = new TypeReference<>() {};
   private static final long STATUS_INTERVAL_MS = 5000L;
+  private static final String CONFIG_PHASE = "apply";
 
   private final RabbitTemplate rabbit;
+  private final ControlPlaneEmitter controlEmitter;
+  private final WorkerControlPlane controlPlane;
+  private final WorkerSignalListener controlListener;
+  private final ControlPlaneIdentity identity;
+  private final ConfirmationScope confirmationScope;
+  private final String swarmId;
   private final String instanceId;
+  private final String controlQueueName;
+  private final String[] controlRoutes;
   private final TriggerConfig config;
   private final ObjectMapper objectMapper;
   private volatile boolean enabled = false;
   private volatile long lastRun = 0L;
   private final AtomicLong counter = new AtomicLong();
   private volatile long lastStatusTs = System.currentTimeMillis();
-  private final WorkerControlPlane controlPlane;
-  private final WorkerSignalListener controlListener;
 
   public Trigger(RabbitTemplate rabbit,
-                 @Qualifier("instanceId") String instanceId,
+                 @Qualifier("triggerControlPlaneEmitter") ControlPlaneEmitter controlEmitter,
+                 @Qualifier("workerControlPlaneIdentity") ControlPlaneIdentity identity,
+                 @Qualifier("workerControlPlaneTopologyDescriptor") ControlPlaneTopologyDescriptor topology,
+                 WorkerControlPlane controlPlane,
                  TriggerConfig config,
                  ObjectMapper objectMapper) {
-    this.rabbit = rabbit;
-    this.instanceId = instanceId;
-    this.config = config;
-    this.objectMapper = objectMapper;
-    this.controlPlane = WorkerControlPlane.builder(objectMapper)
-        .identity(new ControlPlaneIdentity(Topology.SWARM_ID, ROLE, instanceId))
-        .build();
+    this.rabbit = Objects.requireNonNull(rabbit, "rabbit");
+    this.controlEmitter = Objects.requireNonNull(controlEmitter, "controlEmitter");
+    this.controlPlane = Objects.requireNonNull(controlPlane, "controlPlane");
+    this.identity = Objects.requireNonNull(identity, "identity");
+    this.swarmId = identity.swarmId();
+    this.instanceId = identity.instanceId();
+    this.confirmationScope = new ConfirmationScope(swarmId, identity.role(), instanceId);
+    ControlPlaneTopologyDescriptor descriptor = Objects.requireNonNull(topology, "topology");
+    this.controlQueueName = descriptor.controlQueue(instanceId)
+        .map(ControlQueueDescriptor::name)
+        .orElseThrow(() -> new IllegalStateException("Trigger control queue descriptor is missing"));
+    this.controlRoutes = resolveRoutes(descriptor, identity);
+    this.config = Objects.requireNonNull(config, "config");
+    this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper");
     this.controlListener = new WorkerSignalListener() {
       @Override
       public void onStatusRequest(WorkerStatusRequest request) {
@@ -101,12 +127,18 @@ public class Trigger {
         log.debug("Ignoring unsupported control signal {}", context.envelope().signal().signal());
       }
     };
-    try { sendStatusFull(0); } catch (Exception ignore) {}
+    try {
+      sendStatusFull(0);
+    } catch (Exception ignore) {
+      // best-effort during startup
+    }
   }
 
   @Scheduled(fixedRate = 1000)
   public void tick() {
-    if (!enabled) return;
+    if (!enabled) {
+      return;
+    }
     long now = System.currentTimeMillis();
     if (now - lastRun >= config.getIntervalMs()) {
       lastRun = now;
@@ -123,7 +155,7 @@ public class Trigger {
     sendStatusDelta(tps);
   }
 
-  @RabbitListener(queues = "#{@controlQueue.name}")
+  @RabbitListener(queues = "#{@triggerControlQueueName}")
   public void onControl(String payload,
                         @Header(AmqpHeaders.RECEIVED_ROUTING_KEY) String rk,
                         @Header(value = ObservabilityContextUtil.HEADER, required = false) String trace) {
@@ -131,7 +163,8 @@ public class Trigger {
     ObservabilityContextUtil.populateMdc(ctx);
     try {
       if (rk == null || rk.isBlank()) {
-        log.warn("Received control payload with null or blank routing key; payloadLength={}", payload == null ? null : payload.length());
+        log.warn("Received control payload with null or blank routing key; payloadLength={}",
+            payload == null ? null : payload.length());
         throw new IllegalArgumentException("Control routing key must not be null or blank");
       }
       if (payload == null || payload.isBlank()) {
@@ -257,91 +290,38 @@ public class Trigger {
   }
 
   private void emitConfigSuccess(ControlSignal cs) {
-    String swarm = resolveSwarm(cs);
-    String role = resolveRole(cs);
-    String instance = resolveInstance(cs);
-    String rk = ControlPlaneRouting.event("ready.config-update",
-        new ConfirmationScope(swarm, role, instance));
-    ObjectNode payload = confirmationPayload(cs, "success", role, instance);
-    String json = payload.toString();
-    logControlSend(rk, json);
-    rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, json);
+    String signal = requireText(cs.signal(), "signal");
+    String correlationId = requireText(cs.correlationId(), "correlationId");
+    String idempotencyKey = requireText(cs.idempotencyKey(), "idempotencyKey");
+    CommandState state = currentState("completed");
+    var context = ControlPlaneEmitter.ReadyContext.builder(signal, correlationId, idempotencyKey, state)
+        .result("success")
+        .build();
+    String routingKey = ControlPlaneRouting.event("ready", signal, confirmationScope);
+    logControlSend(routingKey, "result=success enabled=" + enabled);
+    controlEmitter.emitReady(context);
   }
 
   private void emitConfigError(ControlSignal cs, Exception e) {
-    String swarm = resolveSwarm(cs);
-    String role = resolveRole(cs);
-    String instance = resolveInstance(cs);
-    String rk = ControlPlaneRouting.event("error.config-update",
-        new ConfirmationScope(swarm, role, instance));
-    ObjectNode payload = confirmationPayload(cs, "error", role, instance);
-    payload.put("code", e.getClass().getSimpleName());
+    String signal = requireText(cs.signal(), "signal");
+    String correlationId = requireText(cs.correlationId(), "correlationId");
+    String idempotencyKey = requireText(cs.idempotencyKey(), "idempotencyKey");
+    String code = e.getClass().getSimpleName();
     String message = e.getMessage();
     if (message == null || message.isBlank()) {
-      message = e.getClass().getSimpleName();
+      message = code;
     }
-    payload.put("message", message);
-    String json = payload.toString();
-    logControlSend(rk, json);
-    rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, json);
-  }
-
-  private ObjectNode confirmationPayload(ControlSignal cs, String result, String role, String instance) {
-    ObjectNode payload = objectMapper.createObjectNode();
-    payload.put("ts", Instant.now().toString());
-    payload.put("signal", cs.signal());
-    payload.put("result", result);
-    payload.set("scope", scopeNode(cs, role, instance));
-    payload.set("state", stateNode(cs, role, instance));
-    if (cs.correlationId() != null) {
-      payload.put("correlationId", cs.correlationId());
-    }
-    if (cs.idempotencyKey() != null) {
-      payload.put("idempotencyKey", cs.idempotencyKey());
-    }
-    return payload;
-  }
-
-  private ObjectNode scopeNode(ControlSignal cs, String role, String instance) {
-    ObjectNode scope = objectMapper.createObjectNode();
-    String swarm = resolveSwarm(cs);
-    if (swarm != null && !swarm.isBlank()) {
-      scope.put("swarmId", swarm);
-    }
-    if (role != null && !role.isBlank()) {
-      scope.put("role", role);
-    }
-    if (instance != null && !instance.isBlank()) {
-      scope.put("instance", instance);
-    }
-    return scope;
-  }
-
-  private ObjectNode stateNode(ControlSignal cs, String role, String instance) {
-    ObjectNode state = objectMapper.createObjectNode();
-    state.put("enabled", enabled);
-    return state;
-  }
-
-  private String resolveSwarm(ControlSignal cs) {
-    if (cs.swarmId() != null && !cs.swarmId().isBlank()) {
-      return cs.swarmId();
-    }
-    return Topology.SWARM_ID;
-  }
-
-  private String resolveRole(ControlSignal cs) {
-    if (cs.role() != null && !cs.role().isBlank()) {
-      return cs.role();
-    }
-    return ROLE;
-  }
-
-  private String resolveInstance(ControlSignal cs) {
-    if (cs.instance() != null && !cs.instance().isBlank()) {
-      return cs.instance();
-    }
-    return instanceId;
+    CommandState state = currentState("failed");
+    Map<String, Object> details = new LinkedHashMap<>(stateDetails());
+    details.put("exception", code);
+    var context = ControlPlaneEmitter.ErrorContext.builder(signal, correlationId, idempotencyKey, state, CONFIG_PHASE, code, message)
+        .retryable(Boolean.FALSE)
+        .result("error")
+        .details(details)
+        .build();
+    String routingKey = ControlPlaneRouting.event("error", signal, confirmationScope);
+    logControlSend(routingKey, "result=error code=" + code + " enabled=" + enabled);
+    controlEmitter.emitError(context);
   }
 
   private void triggerOnce() {
@@ -373,20 +353,20 @@ public class Trigger {
 
   private void callRest() {
     try {
-      HttpRequest.Builder b = HttpRequest.newBuilder().uri(URI.create(config.getUrl()));
-      String m = config.getMethod() == null ? "GET" : config.getMethod().toUpperCase();
-      log.debug("[REST] REQ {} {} headers={} body={}", m, config.getUrl(), config.getHeaders(), snippet(config.getBody()));
+      HttpRequest.Builder builder = HttpRequest.newBuilder().uri(URI.create(config.getUrl()));
+      String method = config.getMethod() == null ? "GET" : config.getMethod().toUpperCase();
+      log.debug("[REST] REQ {} {} headers={} body={}", method, config.getUrl(), config.getHeaders(), snippet(config.getBody()));
       if (config.getBody() != null && !config.getBody().isEmpty()) {
-        b.method(m, HttpRequest.BodyPublishers.ofString(config.getBody()));
+        builder.method(method, HttpRequest.BodyPublishers.ofString(config.getBody()));
       } else {
-        b.method(m, HttpRequest.BodyPublishers.noBody());
+        builder.method(method, HttpRequest.BodyPublishers.noBody());
       }
-      for (Map.Entry<String, String> e : config.getHeaders().entrySet()) {
-        b.header(e.getKey(), e.getValue());
+      for (Map.Entry<String, String> entry : config.getHeaders().entrySet()) {
+        builder.header(entry.getKey(), entry.getValue());
       }
-      HttpResponse<String> response = HttpClient.newHttpClient().send(b.build(), HttpResponse.BodyHandlers.ofString());
+      HttpResponse<String> response = HttpClient.newHttpClient().send(builder.build(), HttpResponse.BodyHandlers.ofString());
       log.debug("[REST] RESP {} {} status={} headers={} body={}",
-          m,
+          method,
           config.getUrl(),
           response.statusCode(),
           response.headers().map(),
@@ -397,59 +377,15 @@ public class Trigger {
   }
 
   private void sendStatusDelta(long tps) {
-    String controlQueue = controlQueueName();
-    String routingKey = ControlPlaneRouting.event("status-delta",
-        new ConfirmationScope(Topology.SWARM_ID, ROLE, instanceId));
-    String json = new StatusEnvelopeBuilder()
-        .kind("status-delta")
-        .role(ROLE)
-        .instance(instanceId)
-        .origin(instanceId)
-        .swarmId(Topology.SWARM_ID)
-        .traffic(Topology.EXCHANGE)
-        .controlIn(controlQueue)
-        .controlRoutes(controlRoutes())
-        .controlOut(routingKey)
-        .tps(tps)
-        .enabled(enabled)
-        .data("intervalMs", config.getIntervalMs())
-        .data("actionType", config.getActionType())
-        .data("command", config.getCommand())
-        .data("url", config.getUrl())
-        .data("method", config.getMethod())
-        .data("body", config.getBody())
-        .data("headers", config.getHeaders())
-        .toJson();
-    logControlSend(routingKey, json);
-    rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, routingKey, json);
+    String routingKey = ControlPlaneRouting.event("status-delta", confirmationScope);
+    logControlSend(routingKey, "tps=" + tps + " enabled=" + enabled);
+    controlEmitter.emitStatusDelta(statusContext(tps));
   }
 
   private void sendStatusFull(long tps) {
-    String controlQueue = controlQueueName();
-    String routingKey = ControlPlaneRouting.event("status-full",
-        new ConfirmationScope(Topology.SWARM_ID, ROLE, instanceId));
-    String json = new StatusEnvelopeBuilder()
-        .kind("status-full")
-        .role(ROLE)
-        .instance(instanceId)
-        .origin(instanceId)
-        .swarmId(Topology.SWARM_ID)
-        .traffic(Topology.EXCHANGE)
-        .controlIn(controlQueue)
-        .controlRoutes(controlRoutes())
-        .controlOut(routingKey)
-        .tps(tps)
-        .enabled(enabled)
-        .data("intervalMs", config.getIntervalMs())
-        .data("actionType", config.getActionType())
-        .data("command", config.getCommand())
-        .data("url", config.getUrl())
-        .data("method", config.getMethod())
-        .data("body", config.getBody())
-        .data("headers", config.getHeaders())
-        .toJson();
-    logControlSend(routingKey, json);
-    rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, routingKey, json);
+    String routingKey = ControlPlaneRouting.event("status-full", confirmationScope);
+    logControlSend(routingKey, "tps=" + tps + " enabled=" + enabled);
+    controlEmitter.emitStatusSnapshot(statusContext(tps));
   }
 
   private void logControlReceive(String routingKey, String signal, String payload) {
@@ -463,30 +399,14 @@ public class Trigger {
     }
   }
 
-  private String controlQueueName() {
-    return Topology.CONTROL_QUEUE + "." + Topology.SWARM_ID + "." + ROLE + "." + instanceId;
-  }
-
-  private String[] controlRoutes() {
-    return new String[] {
-        ControlPlaneRouting.signal("config-update", "ALL", ROLE, "ALL"),
-        ControlPlaneRouting.signal("config-update", Topology.SWARM_ID, ROLE, "ALL"),
-        ControlPlaneRouting.signal("config-update", Topology.SWARM_ID, ROLE, instanceId),
-        ControlPlaneRouting.signal("config-update", Topology.SWARM_ID, "ALL", "ALL"),
-        ControlPlaneRouting.signal("status-request", "ALL", ROLE, "ALL"),
-        ControlPlaneRouting.signal("status-request", Topology.SWARM_ID, ROLE, "ALL"),
-        ControlPlaneRouting.signal("status-request", Topology.SWARM_ID, ROLE, instanceId)
-    };
-  }
-
-  private void logControlSend(String routingKey, String payload) {
-    String snippet = snippet(payload);
+  private void logControlSend(String routingKey, String details) {
+    String snippet = details == null ? "" : details;
     if (routingKey.contains(".status-")) {
-      log.debug("[CTRL] SEND rk={} inst={} payload={}", routingKey, instanceId, snippet);
+      log.debug("[CTRL] SEND rk={} inst={} {}", routingKey, instanceId, snippet);
     } else if (routingKey.contains(".config-update.")) {
-      log.info("[CTRL] SEND rk={} inst={} payload={}", routingKey, instanceId, snippet);
+      log.info("[CTRL] SEND rk={} inst={} {}", routingKey, instanceId, snippet);
     } else {
-      log.info("[CTRL] SEND rk={} inst={} payload={}", routingKey, instanceId, snippet);
+      log.info("[CTRL] SEND rk={} inst={} {}", routingKey, instanceId, snippet);
     }
   }
 
@@ -499,5 +419,69 @@ public class Trigger {
       return trimmed.substring(0, 300) + "…";
     }
     return trimmed;
+  }
+
+  private ControlPlaneEmitter.StatusContext statusContext(long tps) {
+    return ControlPlaneEmitter.StatusContext.of(builder -> builder
+        .traffic(Topology.EXCHANGE)
+        .controlIn(controlQueueName)
+        .controlRoutes(controlRoutes)
+        .tps(tps)
+        .enabled(enabled)
+        .data("intervalMs", config.getIntervalMs())
+        .data("actionType", config.getActionType())
+        .data("command", config.getCommand())
+        .data("url", config.getUrl())
+        .data("method", config.getMethod())
+        .data("body", config.getBody())
+        .data("headers", config.getHeaders()));
+  }
+
+  private CommandState currentState(String status) {
+    return new CommandState(status, enabled, stateDetails());
+  }
+
+  private Map<String, Object> stateDetails() {
+    Map<String, Object> details = new LinkedHashMap<>();
+    details.put("intervalMs", config.getIntervalMs());
+    details.put("actionType", config.getActionType());
+    details.put("command", config.getCommand());
+    details.put("url", config.getUrl());
+    details.put("method", config.getMethod());
+    details.put("body", config.getBody());
+    details.put("headers", config.getHeaders());
+    return details;
+  }
+
+  private static String[] resolveRoutes(ControlPlaneTopologyDescriptor descriptor, ControlPlaneIdentity identity) {
+    ControlPlaneRouteCatalog routes = descriptor.routes();
+    List<String> resolved = new ArrayList<>();
+    resolved.addAll(expandRoutes(routes.configSignals(), identity));
+    resolved.addAll(expandRoutes(routes.statusSignals(), identity));
+    resolved.addAll(expandRoutes(routes.lifecycleSignals(), identity));
+    resolved.addAll(expandRoutes(routes.statusEvents(), identity));
+    resolved.addAll(expandRoutes(routes.lifecycleEvents(), identity));
+    resolved.addAll(expandRoutes(routes.otherEvents(), identity));
+    LinkedHashSet<String> unique = resolved.stream()
+        .filter(route -> route != null && !route.isBlank())
+        .collect(Collectors.toCollection(LinkedHashSet::new));
+    return unique.toArray(String[]::new);
+  }
+
+  private static List<String> expandRoutes(Set<String> templates, ControlPlaneIdentity identity) {
+    if (templates == null || templates.isEmpty()) {
+      return List.of();
+    }
+    return templates.stream()
+        .filter(Objects::nonNull)
+        .map(route -> route.replace(ControlPlaneRouteCatalog.INSTANCE_TOKEN, identity.instanceId()))
+        .toList();
+  }
+
+  private static String requireText(String value, String field) {
+    if (value == null || value.isBlank()) {
+      throw new IllegalArgumentException(field + " must not be null or blank");
+    }
+    return value;
   }
 }
