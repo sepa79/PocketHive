@@ -18,7 +18,7 @@ import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
-import org.springframework.amqp.core.AmqpTemplate;
+import org.springframework.amqp.rabbit.core.RabbitOperations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 
 class ControlPlanePublisherIntegrationTest {
@@ -30,11 +30,11 @@ class ControlPlanePublisherIntegrationTest {
     void publisherSendsSignalsAndEventsToConfiguredExchange() {
         contextRunner
             .withPropertyValues("pockethive.control-plane.exchange=ph.integration")
-            .withBean(AmqpTemplate.class, () -> mock(AmqpTemplate.class))
+            .withBean(RabbitOperations.class, () -> mock(RabbitOperations.class))
             .run(context -> {
             ControlPlanePublisher publisher = context.getBean(ControlPlanePublisher.class);
             ControlPlaneProperties properties = context.getBean(ControlPlaneProperties.class);
-            AmqpTemplate template = context.getBean(AmqpTemplate.class);
+            RabbitOperations template = context.getBean(RabbitOperations.class);
 
             ControlPlaneIdentity identity = new ControlPlaneIdentity("swarm-A", "generator", "gen-1");
             ControlPlaneEmitter emitter = ControlPlaneEmitter.generator(identity, publisher);
@@ -74,7 +74,7 @@ class ControlPlanePublisherIntegrationTest {
     void disablingControlPlaneSkipsCommonInfrastructure() {
         contextRunner
             .withPropertyValues("pockethive.control-plane.enabled=false")
-            .withBean(AmqpTemplate.class, () -> mock(AmqpTemplate.class))
+            .withBean(RabbitOperations.class, () -> mock(RabbitOperations.class))
             .run(context -> {
                 assertThat(context).hasNotFailed();
                 assertThat(context).doesNotHaveBean("controlPlaneExchange");
