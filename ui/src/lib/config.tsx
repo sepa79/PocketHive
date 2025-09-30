@@ -1,4 +1,11 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  type ReactElement,
+  type ReactNode,
+} from 'react'
 
 export type UIConfig = {
   rabbitmq: string
@@ -74,7 +81,7 @@ export function subscribeConfig(fn: Listener) {
 
 const ConfigContext = createContext<UIConfig>(getConfig())
 
-export function ConfigProvider({ children }: { children: ReactNode }): JSX.Element {
+export function ConfigProvider({ children }: { children: ReactNode }): ReactElement {
   const [cfg, setCfg] = useState(getConfig())
 
   useEffect(() => subscribeConfig(setCfg), [])

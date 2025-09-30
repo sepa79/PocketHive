@@ -1,4 +1,5 @@
-import { ReactNode, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
+import type { ReactNode } from 'react'
 import { useConfig, useUIStore } from '@ph/shell'
 
 import LeftNav from './LeftNav'

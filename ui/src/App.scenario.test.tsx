@@ -18,13 +18,7 @@ vi.mock('@stomp/stompjs', () => ({
   })),
 }))
 
-vi.mock(
-  '@ph/scenario/ScenarioApp',
-  () => ({
-    default: () => <div>Scenario Builder Placeholder</div>,
-  }),
-  { virtual: true },
-)
+vi.mock('@ph/scenario/ScenarioApp', () => import('./__mocks__/scenarioAppRemote'))
 
 const App = (await import('./App')).default
 
