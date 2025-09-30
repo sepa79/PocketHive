@@ -30,6 +30,7 @@ class OrchestratorControlPlaneConfig {
             ? BeeNameGenerator.generate(ROLE, swarmId)
             : existing;
         System.setProperty("bee.name", resolved);
+        properties.getManager().setInstanceId(resolved);
         return resolved;
     }
 
