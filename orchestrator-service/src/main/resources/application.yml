@@ -9,3 +9,12 @@ management.endpoints.web.exposure.include: health,info,prometheus
 
 logging:
   pattern.level: "%5p [%X{traceId}]"
+
+pockethive:
+  control-plane:
+    exchange: ${PH_CONTROL_EXCHANGE:ph.control}
+    swarm-id: ${PH_SWARM_ID:default}
+    manager:
+      role: orchestrator
+    worker:
+      enabled: false

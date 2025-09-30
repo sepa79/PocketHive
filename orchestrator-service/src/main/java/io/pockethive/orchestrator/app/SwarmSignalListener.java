@@ -1,11 +1,6 @@
 package io.pockethive.orchestrator.app;
 
-import io.pockethive.Topology;
 import com.fasterxml.jackson.core.type.TypeReference;
-import io.pockethive.observability.StatusEnvelopeBuilder;
-import io.pockethive.control.ConfirmationScope;
-import io.pockethive.control.ReadyConfirmation;
-import io.pockethive.control.ErrorConfirmation;
 import io.pockethive.control.CommandState;
 import io.pockethive.control.CommandTarget;
 import io.pockethive.control.ControlSignal;
@@ -19,10 +14,8 @@ import io.pockethive.swarm.model.SwarmPlan;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.amqp.core.AmqpTemplate;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.amqp.support.AmqpHeaders;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -30,15 +23,23 @@ import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Map;
+import java.util.List;
+import java.util.Objects;
+import java.util.Set;
 
 import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.controlplane.manager.ManagerControlPlane;
-import io.pockethive.controlplane.messaging.AmqpControlPlanePublisher;
+import io.pockethive.controlplane.messaging.ControlPlaneEmitter;
 import io.pockethive.controlplane.messaging.EventMessage;
 import io.pockethive.controlplane.messaging.SignalMessage;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.controlplane.routing.ControlPlaneRouting.RoutingKey;
+import io.pockethive.controlplane.topology.ControlPlaneRouteCatalog;
+import io.pockethive.controlplane.topology.ControlPlaneTopologyDescriptor;
+import io.pockethive.controlplane.payload.RoleContext;
+import org.springframework.beans.factory.annotation.Qualifier;
 
 /**
  * Handles control-plane signals for orchestrator and dispatches swarm plans when
@@ -48,7 +49,6 @@ import io.pockethive.controlplane.routing.ControlPlaneRouting.RoutingKey;
 @EnableScheduling
 public class SwarmSignalListener {
     private static final String ROLE = "orchestrator";
-    private static final String SCOPE = "hive";
     private static final long STATUS_INTERVAL_MS = 5000L;
     private static final Duration TEMPLATE_TIMEOUT = Duration.ofMillis(120_000L);
     private static final Logger log = LoggerFactory.getLogger(SwarmSignalListener.class);
@@ -58,27 +58,36 @@ public class SwarmSignalListener {
     private final SwarmCreateTracker creates;
     private final ContainerLifecycleManager lifecycle;
     private final ObjectMapper json;
-    private final String instanceId;
     private final ManagerControlPlane controlPlane;
+    private final ControlPlaneEmitter controlEmitter;
+    private final ControlPlaneTopologyDescriptor topology;
+    private final ControlPlaneIdentity identity;
+    private final String instanceId;
+    private final String controlQueue;
+    private final List<String> controlRoutes;
 
-    public SwarmSignalListener(AmqpTemplate rabbit,
-                               SwarmPlanRegistry plans,
+    public SwarmSignalListener(SwarmPlanRegistry plans,
                                SwarmCreateTracker creates,
                                SwarmRegistry registry,
                                ContainerLifecycleManager lifecycle,
                                ObjectMapper json,
-                               @Qualifier("instanceId") String instanceId) {
+                               ManagerControlPlane controlPlane,
+                               ControlPlaneEmitter controlEmitter,
+                               ControlPlaneIdentity managerControlPlaneIdentity,
+                               @Qualifier("managerControlPlaneTopologyDescriptor") ControlPlaneTopologyDescriptor descriptor,
+                               @Qualifier("managerControlQueueName") String controlQueue) {
         this.plans = plans;
         this.creates = creates;
         this.registry = registry;
         this.lifecycle = lifecycle;
         this.json = json.findAndRegisterModules();
-        this.instanceId = instanceId;
-        this.controlPlane = ManagerControlPlane.builder(
-            new AmqpControlPlanePublisher(rabbit, Topology.CONTROL_EXCHANGE),
-            this.json)
-            .identity(new ControlPlaneIdentity(SCOPE, ROLE, instanceId))
-            .build();
+        this.controlPlane = Objects.requireNonNull(controlPlane, "controlPlane");
+        this.controlEmitter = Objects.requireNonNull(controlEmitter, "controlEmitter");
+        this.topology = Objects.requireNonNull(descriptor, "descriptor");
+        this.identity = Objects.requireNonNull(managerControlPlaneIdentity, "identity");
+        this.instanceId = identity.instanceId();
+        this.controlQueue = Objects.requireNonNull(controlQueue, "controlQueue");
+        this.controlRoutes = List.copyOf(resolveControlRoutes(descriptor.routes()));
         try {
             sendStatusFull();
         } catch (Exception e) {
@@ -86,7 +95,7 @@ public class SwarmSignalListener {
         }
     }
 
-    @RabbitListener(queues = "#{controlQueue.name}")
+    @RabbitListener(queues = "#{managerControlQueueName}")
     public void handle(String body, @Header(AmqpHeaders.RECEIVED_ROUTING_KEY) String routingKey) {
         if (routingKey == null || routingKey.isBlank()) {
             log.warn("Received control-plane event with null or blank routing key; payload snippet={}", snippet(body));
@@ -269,39 +278,44 @@ public class SwarmSignalListener {
     }
 
     private void emitCreateReady(Pending info) {
+        if (info == null) {
+            return;
+        }
         try {
-            String rk = ControlPlaneRouting.event("ready.swarm-create", orchestratorScope(info.swarmId()));
-            ReadyConfirmation conf = new ReadyConfirmation(
-                java.time.Instant.now(),
-                info.correlationId(),
-                info.idempotencyKey(),
-                "swarm-create",
-                ConfirmationScope.forSwarm(info.swarmId()),
-                CommandState.status("Ready"));
-            String payload = json.writeValueAsString(conf);
-            sendControl(rk, payload, "ev.ready");
+            ControlPlaneEmitter emitter = emitterForSwarm(info.swarmId());
+            ControlPlaneEmitter.ReadyContext context = ControlPlaneEmitter.ReadyContext.builder(
+                    "swarm-create",
+                    requireText(info.correlationId(), "swarm-create correlationId"),
+                    requireText(info.idempotencyKey(), "swarm-create idempotencyKey"),
+                    CommandState.status("Ready"))
+                .timestamp(Instant.now())
+                .build();
+            logReady(context);
+            emitter.emitReady(context);
         } catch (Exception e) {
             log.warn("create ready send", e);
         }
     }
 
     private void emitCreateError(Pending info) {
+        if (info == null) {
+            return;
+        }
         try {
-            String rk = ControlPlaneRouting.event("error.swarm-create", orchestratorScope(info.swarmId()));
-            ErrorConfirmation conf = new ErrorConfirmation(
-                java.time.Instant.now(),
-                info.correlationId(),
-                info.idempotencyKey(),
-                "swarm-create",
-                ConfirmationScope.forSwarm(info.swarmId()),
-                CommandState.status("Removed"),
-                "controller-bootstrap",
-                "controller-error",
-                "controller failed",
-                Boolean.TRUE,
-                null);
-            String payload = json.writeValueAsString(conf);
-            sendControl(rk, payload, "ev.error");
+            ControlPlaneEmitter emitter = emitterForSwarm(info.swarmId());
+            ControlPlaneEmitter.ErrorContext context = ControlPlaneEmitter.ErrorContext.builder(
+                    "swarm-create",
+                    requireText(info.correlationId(), "swarm-create correlationId"),
+                    requireText(info.idempotencyKey(), "swarm-create idempotencyKey"),
+                    CommandState.status("Removed"),
+                    "controller-bootstrap",
+                    "controller-error",
+                    "controller failed")
+                .timestamp(Instant.now())
+                .retryable(Boolean.TRUE)
+                .build();
+            logError(context);
+            emitter.emitError(context);
         } catch (Exception e) {
             log.warn("create error send", e);
         }
@@ -312,21 +326,20 @@ public class SwarmSignalListener {
             return;
         }
         try {
-            String rk = ControlPlaneRouting.event("error.swarm-create", orchestratorScope(info.swarmId()));
-            ErrorConfirmation conf = new ErrorConfirmation(
-                java.time.Instant.now(),
-                info.correlationId(),
-                info.idempotencyKey(),
-                "swarm-create",
-                ConfirmationScope.forSwarm(info.swarmId()),
-                CommandState.status("Failed"),
-                "controller-bootstrap",
-                "timeout",
-                "controller did not become ready in time",
-                Boolean.TRUE,
-                null);
-            String payload = json.writeValueAsString(conf);
-            sendControl(rk, payload, "ev.error");
+            ControlPlaneEmitter emitter = emitterForSwarm(info.swarmId());
+            ControlPlaneEmitter.ErrorContext context = ControlPlaneEmitter.ErrorContext.builder(
+                    "swarm-create",
+                    requireText(info.correlationId(), "swarm-create correlationId"),
+                    requireText(info.idempotencyKey(), "swarm-create idempotencyKey"),
+                    CommandState.status("Failed"),
+                    "controller-bootstrap",
+                    "timeout",
+                    "controller did not become ready in time")
+                .timestamp(Instant.now())
+                .retryable(Boolean.TRUE)
+                .build();
+            logError(context);
+            emitter.emitError(context);
         } catch (Exception e) {
             log.warn("create timeout send", e);
         }
@@ -337,24 +350,45 @@ public class SwarmSignalListener {
             return;
         }
         try {
-            String rk = ControlPlaneRouting.event("error." + signal, orchestratorScope(info.swarmId()));
-            ErrorConfirmation conf = new ErrorConfirmation(
-                java.time.Instant.now(),
-                info.correlationId(),
-                info.idempotencyKey(),
-                signal,
-                ConfirmationScope.forSwarm(info.swarmId()),
-                CommandState.status("Failed"),
-                phase,
-                "timeout",
-                message,
-                Boolean.TRUE,
-                null);
-            String payload = json.writeValueAsString(conf);
-            sendControl(rk, payload, "ev.error");
+            ControlPlaneEmitter emitter = emitterForSwarm(info.swarmId());
+            ControlPlaneEmitter.ErrorContext context = ControlPlaneEmitter.ErrorContext.builder(
+                    signal,
+                    requireText(info.correlationId(), signal + " correlationId"),
+                    requireText(info.idempotencyKey(), signal + " idempotencyKey"),
+                    CommandState.status("Failed"),
+                    phase,
+                    "timeout",
+                    message)
+                .timestamp(Instant.now())
+                .retryable(Boolean.TRUE)
+                .build();
+            logError(context);
+            emitter.emitError(context);
         } catch (Exception e) {
             log.warn("phase timeout send {}", signal, e);
         }
+    }
+
+    private ControlPlaneEmitter emitterForSwarm(String swarmId) {
+        RoleContext role = new RoleContext(requireText(swarmId, "swarmId"), topology.role(), instanceId);
+        return ControlPlaneEmitter.using(topology, role, controlPlane.publisher());
+    }
+
+    private void logReady(ControlPlaneEmitter.ReadyContext context) {
+        log.info("[CTRL] SEND ev.ready signal={} inst={} corr={} idem={}",
+            context.signal(), instanceId, context.correlationId(), context.idempotencyKey());
+    }
+
+    private void logError(ControlPlaneEmitter.ErrorContext context) {
+        log.info("[CTRL] SEND ev.error signal={} inst={} corr={} idem={} code={}",
+            context.signal(), instanceId, context.correlationId(), context.idempotencyKey(), context.code());
+    }
+
+    private static String requireText(String value, String context) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException(context + " must not be blank");
+        }
+        return value;
     }
 
     @Scheduled(fixedRate = STATUS_INTERVAL_MS)
@@ -392,47 +426,45 @@ public class SwarmSignalListener {
     }
 
     private void sendStatusFull() {
-        String controlQueue = Topology.CONTROL_QUEUE + "." + ROLE + "." + instanceId;
-        String rk = "ev.status-full." + ROLE + "." + instanceId;
-        String json = new StatusEnvelopeBuilder()
-            .kind("status-full")
-            .role(ROLE)
-            .instance(instanceId)
-            .origin(instanceId)
-            .swarmId(SCOPE)
+        ControlPlaneEmitter.StatusContext context = ControlPlaneEmitter.StatusContext.of(builder -> builder
             .enabled(true)
             .controlIn(controlQueue)
-            .controlRoutes(
-                "ev.ready.#",
-                "ev.error.#",
-                "ev.status-full.swarm-controller.*",
-                "ev.status-delta.swarm-controller.*")
-            .controlOut(rk)
-            .data("swarmCount", registry.count())
-            .toJson();
-        sendControl(rk, json, "status");
+            .controlRoutes(controlRoutes.toArray(String[]::new))
+            .data("swarmCount", registry.count()));
+        controlEmitter.emitStatusSnapshot(context);
+        log.debug("[CTRL] SEND status-full inst={} swarmCount={}", instanceId, registry.count());
     }
 
     private void sendStatusDelta() {
-        String controlQueue = Topology.CONTROL_QUEUE + "." + ROLE + "." + instanceId;
-        String rk = "ev.status-delta." + ROLE + "." + instanceId;
-        String json = new StatusEnvelopeBuilder()
-            .kind("status-delta")
-            .role(ROLE)
-            .instance(instanceId)
-            .origin(instanceId)
-            .swarmId(SCOPE)
+        ControlPlaneEmitter.StatusContext context = ControlPlaneEmitter.StatusContext.of(builder -> builder
             .enabled(true)
             .controlIn(controlQueue)
-            .controlRoutes(
-                "ev.ready.#",
-                "ev.error.#",
-                "ev.status-full.swarm-controller.*",
-                "ev.status-delta.swarm-controller.*")
-            .controlOut(rk)
-            .data("swarmCount", registry.count())
-            .toJson();
-        sendControl(rk, json, "status");
+            .controlRoutes(controlRoutes.toArray(String[]::new))
+            .data("swarmCount", registry.count()));
+        controlEmitter.emitStatusDelta(context);
+        log.debug("[CTRL] SEND status-delta inst={} swarmCount={}", instanceId, registry.count());
+    }
+
+    private List<String> resolveControlRoutes(ControlPlaneRouteCatalog catalog) {
+        if (catalog == null) {
+            return List.of();
+        }
+        List<String> routes = new ArrayList<>();
+        collectRoutes(routes, catalog.lifecycleEvents());
+        collectRoutes(routes, catalog.statusEvents());
+        return routes;
+    }
+
+    private void collectRoutes(List<String> target, Set<String> templates) {
+        if (templates == null || templates.isEmpty()) {
+            return;
+        }
+        for (String template : templates) {
+            if (template == null || template.isBlank()) {
+                continue;
+            }
+            target.add(template.replace(ControlPlaneRouteCatalog.INSTANCE_TOKEN, instanceId));
+        }
     }
 
     private void sendControl(String routingKey, String payload, String context) {
@@ -467,7 +499,4 @@ public class SwarmSignalListener {
         return trimmed;
     }
 
-    private ConfirmationScope orchestratorScope(String swarmId) {
-        return new ConfirmationScope(swarmId, ROLE, "ALL");
-    }
 }
