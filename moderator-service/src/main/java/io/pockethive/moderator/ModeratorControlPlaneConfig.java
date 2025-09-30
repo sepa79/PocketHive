@@ -3,15 +3,22 @@ package io.pockethive.moderator;
 import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.controlplane.messaging.ControlPlaneEmitter;
 import io.pockethive.controlplane.messaging.ControlPlanePublisher;
+import io.pockethive.controlplane.spring.ControlPlaneCommonAutoConfiguration;
+import io.pockethive.controlplane.spring.WorkerControlPlaneAutoConfiguration;
 import io.pockethive.controlplane.topology.ControlPlaneTopologyDescriptor;
 import io.pockethive.controlplane.topology.ControlQueueDescriptor;
 import java.util.Objects;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.boot.autoconfigure.ImportAutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration(proxyBeanMethods = false)
+@ImportAutoConfiguration({
+    ControlPlaneCommonAutoConfiguration.class,
+    WorkerControlPlaneAutoConfiguration.class
+})
 class ModeratorControlPlaneConfig {
 
   @Bean(name = "moderatorControlPlaneEmitter")
