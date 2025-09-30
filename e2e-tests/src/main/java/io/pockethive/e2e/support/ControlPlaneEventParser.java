@@ -1,7 +1,9 @@
 package io.pockethive.e2e.support;
 
 import java.io.IOException;
+import java.time.Instant;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
@@ -40,10 +42,24 @@ public final class ControlPlaneEventParser {
     return objectMapper.readValue(body, type);
   }
 
+  public StatusPayload parseStatus(String routingKey, byte[] body) throws IOException {
+    if (routingKey == null || body == null) {
+      return null;
+    }
+    if (!routingKey.startsWith("ev.status-full.") && !routingKey.startsWith("ev.status-delta.")) {
+      return null;
+    }
+    return objectMapper.readValue(body, StatusPayload.class);
+  }
+
   private static ObjectMapper createDefaultMapper() {
     ObjectMapper mapper = new ObjectMapper();
     mapper.registerModule(new JavaTimeModule());
     mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
     return mapper;
+  }
+
+  @JsonIgnoreProperties(ignoreUnknown = true)
+  public record StatusPayload(String swarmId, String role, Boolean enabled, Instant timestamp) {
   }
 }

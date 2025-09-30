@@ -396,46 +396,33 @@ public class SwarmLifecycleSteps {
     Assumptions.assumeTrue(!roles.isEmpty(), "No roles found in scenario template");
 
     String expectation = enabled ? "enabled" : "disabled";
-    SwarmAssertions.await("config-update confirmations for " + expectation, () -> {
-      Map<String, ReadyConfirmation> matches = new HashMap<>();
-      for (ControlPlaneEvents.ConfirmationEnvelope env : controlPlaneEvents.confirmations()) {
-        if (!isOnOrAfter(env.receivedAt(), since)) {
-          continue;
-        }
-        if (!(env.confirmation() instanceof ReadyConfirmation ready)) {
-          continue;
-        }
-        if (!"config-update".equalsIgnoreCase(ready.signal())) {
-          continue;
-        }
-        if (ready.scope() == null || ready.scope().role() == null) {
-          continue;
-        }
-        if (ready.scope().swarmId() == null || !swarmId.equalsIgnoreCase(ready.scope().swarmId())) {
-          continue;
-        }
-        if (!roles.contains(ready.scope().role())) {
-          continue;
-        }
-        if (ready.state() == null || ready.state().enabled() == null) {
-          continue;
-        }
-        if (!Boolean.valueOf(enabled).equals(ready.state().enabled())) {
-          continue;
-        }
-        matches.putIfAbsent(ready.scope().role(), ready);
-      }
-      assertEquals(roles, matches.keySet(),
-          "Expected config-update ready events with enabled=" + enabled + " for roles " + roles
-              + " but observed " + matches.keySet());
-    });
-  }
-
-  private boolean isOnOrAfter(Instant timestamp, Instant reference) {
-    if (timestamp == null || reference == null) {
-      return true;
+    Set<String> normalizedRoles = new LinkedHashSet<>();
+    for (String role : roles) {
+      normalizedRoles.add(role.toLowerCase(Locale.ROOT));
     }
-    return !timestamp.isBefore(reference);
+
+    SwarmAssertions.await("status events for " + expectation, () -> {
+      Map<String, Boolean> latest = controlPlaneEvents.latestEnabledByRole(swarmId, since);
+      Map<String, Boolean> normalized = new HashMap<>();
+      latest.forEach((role, value) -> {
+        if (role != null && value != null) {
+          normalized.put(role.toLowerCase(Locale.ROOT), value);
+        }
+      });
+
+      assertEquals(normalizedRoles, normalized.keySet(),
+          "Expected status events to report enabled=" + enabled + " for roles " + roles
+              + " but observed " + latest);
+
+      for (String roleKey : normalizedRoles) {
+        Boolean observed = normalized.get(roleKey);
+        assertNotNull(observed,
+            () -> "Missing status event for role " + roleKey + " while awaiting enabled=" + enabled);
+        assertEquals(Boolean.valueOf(enabled), observed,
+            () -> "Status events for role " + roleKey + " reported enabled=" + observed
+                + " while awaiting " + expectation);
+      }
+    });
   }
 
   private String idKey(String action) {
