@@ -51,6 +51,7 @@ class OrchestratorControlPlaneConfig {
         if (instanceId == null || instanceId.isBlank()) {
             throw new IllegalStateException("Manager instance id is not initialised");
         }
+        properties.getManager().setInstanceId(instanceId);
         return instanceId;
     }
 
