@@ -120,7 +120,7 @@ class SwarmEventFlowIntegrationTest {
         verify(publisher).publishEvent(eventCaptor.capture());
         EventMessage readyEvent = eventCaptor.getValue();
         assertThat(readyEvent.routingKey()).isEqualTo(ControlPlaneRouting.event(
-            "ready.swarm-create", new ConfirmationScope(SWARM_ID, "orchestrator", ORCHESTRATOR_INSTANCE)));
+            "ready.swarm-create", new ConfirmationScope(SWARM_ID, "orchestrator", "ALL")));
         JsonNode readyPayload = mapper.readTree(readyEvent.payload().toString());
         assertThat(readyPayload.path("state").path("status").asText()).isEqualTo("Ready");
 

@@ -150,7 +150,7 @@ class SwarmSignalListenerTest {
         verify(publisher).publishEvent(eventCaptor.capture());
         EventMessage ready = eventCaptor.getValue();
         assertThat(ready.routingKey()).isEqualTo(ControlPlaneRouting.event(
-            "ready.swarm-create", new ConfirmationScope(SWARM_ID, "orchestrator", ORCHESTRATOR_INSTANCE)));
+            "ready.swarm-create", new ConfirmationScope(SWARM_ID, "orchestrator", "ALL")));
         JsonNode readyPayload = mapper.readTree(ready.payload().toString());
         assertThat(readyPayload.path("state").path("status").asText()).isEqualTo("Ready");
         assertThat(plans.find(CONTROLLER_INSTANCE)).isEmpty();
@@ -170,7 +170,7 @@ class SwarmSignalListenerTest {
         verify(publisher).publishEvent(eventCaptor.capture());
         EventMessage error = eventCaptor.getValue();
         assertThat(error.routingKey()).isEqualTo(ControlPlaneRouting.event(
-            "error.swarm-create", new ConfirmationScope(SWARM_ID, "orchestrator", ORCHESTRATOR_INSTANCE)));
+            "error.swarm-create", new ConfirmationScope(SWARM_ID, "orchestrator", "ALL")));
         JsonNode payload = mapper.readTree(error.payload().toString());
         assertThat(payload.path("code").asText()).isEqualTo("controller-error");
         assertThat(payload.path("state").path("status").asText()).isEqualTo("Removed");

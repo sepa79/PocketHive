@@ -53,6 +53,8 @@ public class SwarmSignalListener {
     private static final Duration TEMPLATE_TIMEOUT = Duration.ofMillis(120_000L);
     private static final Logger log = LoggerFactory.getLogger(SwarmSignalListener.class);
 
+    private static final String BROADCAST_INSTANCE = "ALL";
+
     private final SwarmPlanRegistry plans;
     private final SwarmRegistry registry;
     private final SwarmCreateTracker creates;
@@ -370,7 +372,7 @@ public class SwarmSignalListener {
     }
 
     private ControlPlaneEmitter emitterForSwarm(String swarmId) {
-        RoleContext role = new RoleContext(requireText(swarmId, "swarmId"), topology.role(), instanceId);
+        RoleContext role = new RoleContext(requireText(swarmId, "swarmId"), topology.role(), BROADCAST_INSTANCE);
         return ControlPlaneEmitter.using(topology, role, controlPlane.publisher());
     }
 
