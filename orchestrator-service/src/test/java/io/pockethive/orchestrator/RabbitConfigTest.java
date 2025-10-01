@@ -1,23 +1,30 @@
 package io.pockethive.orchestrator;
 
+import io.pockethive.Topology;
+import io.pockethive.controlplane.ControlPlaneIdentity;
+import io.pockethive.controlplane.spring.ControlPlaneTopologyDescriptorFactory;
+import io.pockethive.controlplane.topology.ControlPlaneTopologyDescriptor;
 import org.junit.jupiter.api.Test;
-import org.springframework.amqp.core.Binding;
-import org.springframework.amqp.core.Queue;
-import org.springframework.amqp.core.TopicExchange;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 class RabbitConfigTest {
 
-    private final RabbitConfig config = new RabbitConfig();
+    private final OrchestratorControlPlaneConfig config = new OrchestratorControlPlaneConfig();
+    private final ControlPlaneTopologyDescriptor descriptor =
+        ControlPlaneTopologyDescriptorFactory.forManagerRole("orchestrator");
 
     @Test
-    void bindsReadyAndErrorWithWidePattern() {
-        Queue queue = config.controlQueue("inst1");
-        TopicExchange exchange = config.controlExchange();
-        Binding ready = config.bindReady(queue, exchange);
-        Binding error = config.bindError(queue, exchange);
-        assertThat(ready.getRoutingKey()).isEqualTo("ev.ready.#");
-        assertThat(error.getRoutingKey()).isEqualTo("ev.error.#");
+    void resolvesControlQueueNameFromDescriptor() {
+        ControlPlaneIdentity identity = new ControlPlaneIdentity("swarm-1", descriptor.role(), "orch-1");
+        String queueName = config.managerControlQueueName(descriptor, identity);
+        assertThat(queueName).isEqualTo(Topology.CONTROL_QUEUE + ".orchestrator.orch-1");
+    }
+
+    @Test
+    void resolvesControllerStatusQueueNameFromDescriptor() {
+        ControlPlaneIdentity identity = new ControlPlaneIdentity("swarm-1", descriptor.role(), "orch-1");
+        String queueName = config.controllerStatusQueueName(descriptor, identity);
+        assertThat(queueName).isEqualTo(Topology.CONTROL_QUEUE + ".orchestrator-status.orch-1");
     }
 }

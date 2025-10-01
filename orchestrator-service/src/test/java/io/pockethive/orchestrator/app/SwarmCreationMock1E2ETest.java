@@ -13,6 +13,8 @@ import io.pockethive.Topology;
 import io.pockethive.control.ControlSignal;
 import io.pockethive.control.ConfirmationScope;
 import io.pockethive.control.ReadyConfirmation;
+import io.pockethive.controlplane.ControlPlaneIdentity;
+import io.pockethive.controlplane.spring.ControlPlaneProperties;
 import io.pockethive.docker.DockerContainerClient;
 import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmPlanRegistry;
@@ -34,10 +36,11 @@ import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.springframework.amqp.core.AmqpAdmin;
 import org.springframework.amqp.core.AnonymousQueue;
+import org.springframework.amqp.core.Message;
 import org.springframework.amqp.core.Binding;
 import org.springframework.amqp.core.BindingBuilder;
-import org.springframework.amqp.core.Message;
 import org.springframework.amqp.core.Queue;
+import org.springframework.amqp.core.QueueBuilder;
 import org.springframework.amqp.core.TopicExchange;
 import org.springframework.amqp.rabbit.connection.ConnectionFactory;
 import org.springframework.amqp.rabbit.core.RabbitAdmin;
@@ -97,32 +100,23 @@ class SwarmCreationMock1E2ETest {
     ObjectMapper objectMapper;
 
     @Autowired
-    @Qualifier("controlExchange")
+    @Qualifier("controlPlaneExchange")
     TopicExchange controlExchange;
 
     @Autowired
-    @Qualifier("controlQueue")
-    Queue controlQueue;
+    @Qualifier("managerControlQueueName")
+    String controlQueueName;
 
     @Autowired
-    @Qualifier("controllerStatusQueue")
-    Queue controllerStatusQueue;
+    @Qualifier("controllerStatusQueueName")
+    String controllerStatusQueueName;
 
     @Autowired
-    @Qualifier("bindReady")
-    Binding readyBinding;
+    @Qualifier("managerControlPlaneIdentity")
+    ControlPlaneIdentity managerIdentity;
 
     @Autowired
-    @Qualifier("bindError")
-    Binding errorBinding;
-
-    @Autowired
-    @Qualifier("bindControllerStatusFull")
-    Binding statusFullBinding;
-
-    @Autowired
-    @Qualifier("bindControllerStatusDelta")
-    Binding statusDeltaBinding;
+    ControlPlaneProperties controlPlaneProperties;
 
     @DynamicPropertySource
     static void registerProperties(DynamicPropertyRegistry registry) {
@@ -184,6 +178,9 @@ class SwarmCreationMock1E2ETest {
         assertThat(body).isNotNull();
         String correlationId = body.correlationId();
         assertThat(correlationId).isNotBlank();
+
+        assertThat(managerIdentity.instanceId()).isNotBlank();
+        assertThat(controlPlaneProperties.getManager().getInstanceId()).isEqualTo(managerIdentity.instanceId());
 
         Swarm swarm = swarmRegistry.find(swarmId).orElseThrow();
         assertThat(swarm.getContainerId()).isEqualTo("container-123");
@@ -260,15 +257,46 @@ class SwarmCreationMock1E2ETest {
     }
 
     private void declareOrchestratorBindings(RabbitAdmin admin) {
+        Queue controlQueue = QueueBuilder.durable(controlQueueName).build();
+        Queue statusQueue = QueueBuilder.durable(controllerStatusQueueName).build();
+        Binding ready = BindingBuilder.bind(controlQueue)
+            .to(controlExchange)
+            .with(readyPattern());
+        Binding error = BindingBuilder.bind(controlQueue)
+            .to(controlExchange)
+            .with(errorPattern());
+        Binding statusFull = BindingBuilder.bind(statusQueue)
+            .to(controlExchange)
+            .with(statusPattern("status-full"));
+        Binding statusDelta = BindingBuilder.bind(statusQueue)
+            .to(controlExchange)
+            .with(statusPattern("status-delta"));
+
         admin.declareExchange(controlExchange);
         admin.declareQueue(controlQueue);
-        admin.declareQueue(controllerStatusQueue);
-        admin.declareBinding(readyBinding);
-        admin.declareBinding(errorBinding);
-        admin.declareBinding(statusFullBinding);
-        admin.declareBinding(statusDeltaBinding);
-        admin.purgeQueue(controlQueue.getName(), true);
-        admin.purgeQueue(controllerStatusQueue.getName(), true);
+        admin.declareQueue(statusQueue);
+        admin.declareBinding(ready);
+        admin.declareBinding(error);
+        admin.declareBinding(statusFull);
+        admin.declareBinding(statusDelta);
+        admin.purgeQueue(controlQueueName, true);
+        admin.purgeQueue(controllerStatusQueueName, true);
+    }
+
+    private String readyPattern() {
+        return ControlPlaneRouting.event("ready", ConfirmationScope.EMPTY)
+            .replace(".ALL.ALL.ALL", ".#");
+    }
+
+    private String errorPattern() {
+        return ControlPlaneRouting.event("error", ConfirmationScope.EMPTY)
+            .replace(".ALL.ALL.ALL", ".#");
+    }
+
+    private String statusPattern(String type) {
+        ConfirmationScope scope = new ConfirmationScope(null, "swarm-controller", "*");
+        return ControlPlaneRouting.event(type, scope)
+            .replace(".ALL.swarm-controller", ".swarm-controller");
     }
 
     private HttpEntity<Map<String, String>> jsonRequest(Map<String, String> body) {

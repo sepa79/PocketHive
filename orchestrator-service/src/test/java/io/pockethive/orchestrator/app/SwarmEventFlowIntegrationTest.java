@@ -1,91 +1,152 @@
 package io.pockethive.orchestrator.app;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.pockethive.Topology;
+import io.pockethive.control.ConfirmationScope;
+import io.pockethive.control.ControlSignal;
+import io.pockethive.controlplane.ControlPlaneIdentity;
+import io.pockethive.controlplane.manager.ManagerControlPlane;
+import io.pockethive.controlplane.messaging.ControlPlaneEmitter;
+import io.pockethive.controlplane.messaging.ControlPlanePublisher;
+import io.pockethive.controlplane.messaging.EventMessage;
+import io.pockethive.controlplane.messaging.SignalMessage;
+import io.pockethive.controlplane.routing.ControlPlaneRouting;
+import io.pockethive.controlplane.spring.ControlPlaneTopologyDescriptorFactory;
+import io.pockethive.controlplane.topology.ControlPlaneTopologyDescriptor;
+import io.pockethive.controlplane.topology.ControlQueueDescriptor;
 import io.pockethive.orchestrator.domain.Swarm;
-import io.pockethive.orchestrator.domain.SwarmPlanRegistry;
-import io.pockethive.orchestrator.domain.SwarmRegistry;
-import io.pockethive.orchestrator.domain.SwarmStatus;
 import io.pockethive.orchestrator.domain.SwarmCreateTracker;
 import io.pockethive.orchestrator.domain.SwarmCreateTracker.Pending;
 import io.pockethive.orchestrator.domain.SwarmCreateTracker.Phase;
+import io.pockethive.orchestrator.domain.SwarmPlanRegistry;
+import io.pockethive.orchestrator.domain.SwarmRegistry;
+import io.pockethive.orchestrator.domain.SwarmStatus;
 import io.pockethive.orchestrator.domain.SwarmHealth;
 import io.pockethive.swarm.model.SwarmPlan;
-import io.pockethive.controlplane.routing.ControlPlaneRouting;
-import io.pockethive.control.ConfirmationScope;
+import java.time.Instant;
+import java.util.List;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.amqp.core.AmqpTemplate;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.clearInvocations;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
 class SwarmEventFlowIntegrationTest {
 
+    private static final String SWARM_ID = "sw1";
+    private static final String ORCHESTRATOR_INSTANCE = "orch-1";
+    private static final String CONTROLLER_INSTANCE = "controller-1";
+
     @Mock
-    AmqpTemplate rabbit;
+    private ContainerLifecycleManager lifecycle;
+
     @Mock
-    ContainerLifecycleManager lifecycle;
+    private ManagerControlPlane controlPlane;
+
+    @Mock
+    private ControlPlaneEmitter controlEmitter;
+
+    @Mock
+    private ControlPlanePublisher publisher;
+
+    @Captor
+    private ArgumentCaptor<SignalMessage> signalCaptor;
+
+    @Captor
+    private ArgumentCaptor<EventMessage> eventCaptor;
+
+    private final ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
+    private final ControlPlaneTopologyDescriptor descriptor =
+        ControlPlaneTopologyDescriptorFactory.forManagerRole("orchestrator");
+    private final ControlPlaneIdentity identity =
+        new ControlPlaneIdentity(SWARM_ID, descriptor.role(), ORCHESTRATOR_INSTANCE);
+
+    private String controlQueueName;
+    private SwarmPlanRegistry plans;
+    private SwarmCreateTracker tracker;
+    private SwarmRegistry registry;
+    private SwarmSignalListener signalListener;
+    private ControllerStatusListener statusListener;
+
+    @BeforeEach
+    void setUp() {
+        controlQueueName = descriptor.controlQueue(identity.instanceId())
+            .map(ControlQueueDescriptor::name)
+            .orElseThrow();
+        lenient().when(controlPlane.publisher()).thenReturn(publisher);
+        lenient().doNothing().when(controlEmitter).emitStatusSnapshot(any());
+        lenient().doNothing().when(controlEmitter).emitStatusDelta(any());
+        plans = new SwarmPlanRegistry();
+        tracker = new SwarmCreateTracker();
+        registry = new SwarmRegistry();
+        signalListener = new SwarmSignalListener(plans, tracker, registry, lifecycle, mapper,
+            controlPlane, controlEmitter, identity, descriptor, controlQueueName);
+        statusListener = new ControllerStatusListener(registry, mapper);
+        clearInvocations(controlPlane, controlEmitter, publisher, lifecycle);
+    }
 
     @Test
     void processesStatusAndConfirmations() throws Exception {
-        SwarmPlanRegistry plans = new SwarmPlanRegistry();
-        SwarmPlan plan = new SwarmPlan("sw1", java.util.List.of());
-        plans.register("inst1", plan);
-        SwarmCreateTracker tracker = new SwarmCreateTracker();
-        tracker.register("inst1", new Pending("sw1", "inst1", "corr", "idem", Phase.CONTROLLER, java.time.Instant.now().plusSeconds(60)));
-        SwarmRegistry registry = new SwarmRegistry();
-        registry.register(new Swarm("sw1", "inst1", "cid"));
-        registry.updateStatus("sw1", SwarmStatus.CREATING);
-        ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
-        SwarmSignalListener signal = new SwarmSignalListener(rabbit, plans, tracker, registry, lifecycle, mapper, "inst0");
-        ControllerStatusListener statusListener = new ControllerStatusListener(registry, new ObjectMapper());
+        SwarmPlan plan = new SwarmPlan(SWARM_ID, List.of());
+        plans.register(CONTROLLER_INSTANCE, plan);
+        Pending pending = new Pending(SWARM_ID, CONTROLLER_INSTANCE, "corr", "idem",
+            Phase.CONTROLLER, Instant.now().plusSeconds(60));
+        tracker.register(CONTROLLER_INSTANCE, pending);
+        registry.register(new Swarm(SWARM_ID, CONTROLLER_INSTANCE, "cid"));
+        registry.updateStatus(SWARM_ID, SwarmStatus.CREATING);
 
-        signal.handle("",
-            ControlPlaneRouting.event("ready.swarm-controller",
-                new ConfirmationScope("sw1", "swarm-controller", "inst1")));
-        ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
-        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
-            eq(ControlPlaneRouting.signal("swarm-template", "sw1", "swarm-controller", "ALL")), anyString());
-        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
-            eq(ControlPlaneRouting.event("ready.swarm-create", new ConfirmationScope("sw1", "orchestrator", "ALL"))),
-            captor.capture());
-        String conf = captor.getValue();
-        var ready = mapper.readTree(conf);
-        assertThat(ready.path("correlationId").asText()).isEqualTo("corr");
-        assertThat(ready.path("idempotencyKey").asText()).isEqualTo("idem");
-        assertThat(ready.path("state").path("status").asText()).isEqualTo("Ready");
+        signalListener.handle("{}", ControlPlaneRouting.event("ready.swarm-controller",
+            new ConfirmationScope(SWARM_ID, "swarm-controller", CONTROLLER_INSTANCE)));
 
-        signal.handle("",
-            ControlPlaneRouting.event("ready.swarm-template",
-                new ConfirmationScope("sw1", "swarm-controller", "inst1")));
-        assertThat(registry.find("sw1").get().getStatus()).isEqualTo(SwarmStatus.READY);
+        verify(controlPlane).publishSignal(signalCaptor.capture());
+        SignalMessage template = signalCaptor.getValue();
+        assertThat(template.routingKey()).isEqualTo(ControlPlaneRouting.signal(
+            "swarm-template", SWARM_ID, "swarm-controller", "ALL"));
+        ControlSignal controlSignal = mapper.readValue(template.payload().toString(), ControlSignal.class);
+        assertThat(controlSignal.signal()).isEqualTo("swarm-template");
+        assertThat(controlSignal.correlationId()).isEqualTo("corr");
+        assertThat(controlSignal.idempotencyKey()).isEqualTo("idem");
 
-        signal.handle("",
-            ControlPlaneRouting.event("ready.swarm-start",
-                new ConfirmationScope("sw1", "swarm-controller", "inst1")));
-        assertThat(registry.find("sw1").get().getStatus()).isEqualTo(SwarmStatus.RUNNING);
+        verify(publisher).publishEvent(eventCaptor.capture());
+        EventMessage readyEvent = eventCaptor.getValue();
+        assertThat(readyEvent.routingKey()).isEqualTo(ControlPlaneRouting.event(
+            "ready.swarm-create", new ConfirmationScope(SWARM_ID, "orchestrator", "ALL")));
+        JsonNode readyPayload = mapper.readTree(readyEvent.payload().toString());
+        assertThat(readyPayload.path("state").path("status").asText()).isEqualTo("Ready");
+
+        signalListener.handle("{}", ControlPlaneRouting.event("ready.swarm-template",
+            new ConfirmationScope(SWARM_ID, "swarm-controller", CONTROLLER_INSTANCE)));
+        assertThat(registry.find(SWARM_ID)).map(Swarm::getStatus).contains(SwarmStatus.READY);
+
+        tracker.expectStart(SWARM_ID, "start-corr", "start-idem", java.time.Duration.ofSeconds(30));
+        signalListener.handle("{}", ControlPlaneRouting.event("ready.swarm-start",
+            new ConfirmationScope(SWARM_ID, "swarm-controller", CONTROLLER_INSTANCE)));
+        assertThat(registry.find(SWARM_ID)).map(Swarm::getStatus).contains(SwarmStatus.RUNNING);
 
         statusListener.handle("{\"swarmId\":\"sw1\",\"data\":{\"swarmStatus\":\"RUNNING\",\"state\":{\"workloads\":{\"enabled\":false},\"controller\":{\"enabled\":true}}}}",
-            "ev.status-delta.swarm-controller.inst1");
-        assertEquals(SwarmHealth.RUNNING, registry.find("sw1").get().getHealth());
-        assertThat(registry.find("sw1").get().isWorkEnabled()).isFalse();
-        assertThat(registry.find("sw1").get().isControllerEnabled()).isTrue();
+            "ev.status-delta.sw1.swarm-controller." + CONTROLLER_INSTANCE);
+        Swarm swarm = registry.find(SWARM_ID).orElseThrow();
+        assertEquals(SwarmHealth.RUNNING, swarm.getHealth());
+        assertThat(swarm.isWorkEnabled()).isFalse();
+        assertThat(swarm.isControllerEnabled()).isTrue();
 
-        signal.handle("",
-            ControlPlaneRouting.event("ready.swarm-stop",
-                new ConfirmationScope("sw1", "swarm-controller", "inst1")));
-        verify(lifecycle).stopSwarm("sw1");
-        signal.handle("",
-            ControlPlaneRouting.event("ready.swarm-remove",
-                new ConfirmationScope("sw1", "swarm-controller", "inst1")));
-        verify(lifecycle).removeSwarm("sw1");
+        tracker.expectStop(SWARM_ID, "stop-corr", "stop-idem", java.time.Duration.ofSeconds(30));
+        signalListener.handle("{}", ControlPlaneRouting.event("ready.swarm-stop",
+            new ConfirmationScope(SWARM_ID, "swarm-controller", CONTROLLER_INSTANCE)));
+        verify(lifecycle).stopSwarm(SWARM_ID);
+
+        signalListener.handle("{}", ControlPlaneRouting.event("ready.swarm-remove",
+            new ConfirmationScope(SWARM_ID, "swarm-controller", CONTROLLER_INSTANCE)));
+        verify(lifecycle).removeSwarm(SWARM_ID);
     }
 }
