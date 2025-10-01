@@ -11,9 +11,8 @@ import io.pockethive.controlplane.topology.ControlQueueDescriptor;
 import io.pockethive.controlplane.topology.QueueDescriptor;
 import io.pockethive.util.BeeNameGenerator;
 import java.util.Objects;
-import org.springframework.beans.BeansException;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.beans.factory.config.BeanPostProcessor;
+import org.springframework.beans.factory.config.BeanFactoryPostProcessor;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -24,31 +23,24 @@ class OrchestratorControlPlaneConfig {
     private static final String ROLE = "orchestrator";
 
     @Bean
-    static BeanPostProcessor managerInstanceIdInitializer() {
-        return new BeanPostProcessor() {
-            @Override
-            public Object postProcessAfterInitialization(Object bean, String beanName) throws BeansException {
-                if (!(bean instanceof ControlPlaneProperties properties)) {
-                    return bean;
-                }
+    static BeanFactoryPostProcessor managerInstanceIdInitializer() {
+        return beanFactory -> {
+            ControlPlaneProperties properties = beanFactory.getBean(ControlPlaneProperties.class);
+            Objects.requireNonNull(properties, "properties");
 
-                Objects.requireNonNull(properties, "properties");
-
-                String configured = properties.getManager().getInstanceId();
-                if (configured != null && !configured.isBlank()) {
-                    System.setProperty("bee.name", configured);
-                    return bean;
-                }
-
-                String existing = System.getProperty("bee.name");
-                String swarmId = resolveManagerSwarmId(properties);
-                String resolved = (existing == null || existing.isBlank())
-                    ? BeeNameGenerator.generate(ROLE, swarmId)
-                    : existing;
-                System.setProperty("bee.name", resolved);
-                properties.getManager().setInstanceId(resolved);
-                return bean;
+            String configured = properties.getManager().getInstanceId();
+            if (configured != null && !configured.isBlank()) {
+                System.setProperty("bee.name", configured);
+                return;
             }
+
+            String existing = System.getProperty("bee.name");
+            String swarmId = resolveManagerSwarmId(properties);
+            String resolved = (existing == null || existing.isBlank())
+                ? BeeNameGenerator.generate(ROLE, swarmId)
+                : existing;
+            System.setProperty("bee.name", resolved);
+            properties.getManager().setInstanceId(resolved);
         };
     }
 
