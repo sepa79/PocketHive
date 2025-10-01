@@ -1,0 +1,106 @@
+# PocketHive Control-Plane Worker & Manager Bootstrap Guide
+
+This guide explains how to wire a new worker or manager service against the refactored control-plane APIs.
+It covers the topology descriptors, emitters, and Spring Boot starters introduced in the refactor so teams can
+bootstrap participants without copying configuration boilerplate.
+
+## 1. Choose the right topology descriptor
+
+Each PocketHive role ships with an immutable topology descriptor that defines queue names, bindings, and
+supported routes. Resolve descriptors through `ControlPlaneTopologyDescriptorFactory` to avoid hard-coded
+strings:
+
+```java
+ControlPlaneTopologyDescriptor workerDescriptor =
+    ControlPlaneTopologyDescriptorFactory.forWorkerRole("processor");
+ControlPlaneTopologyDescriptor managerDescriptor =
+    ControlPlaneTopologyDescriptorFactory.forManagerRole("orchestrator");
+```
+
+The descriptor validates role identifiers and exposes helpers for declaring the control queue and any
+fan-out/status queues your service requires.
+
+## 2. Emit control-plane traffic through `ControlPlaneEmitter`
+
+`ControlPlaneEmitter` wraps routing conventions and payload factories. Build it with your descriptor and a
+`ControlPlanePublisher` implementation (the Spring starter provides an AMQP publisher automatically):
+
+```java
+ControlPlaneIdentity identity = new ControlPlaneIdentity("swarm-1", workerDescriptor.role(), "processor-1");
+ControlPlaneEmitter emitter = ControlPlaneEmitter.using(
+    workerDescriptor,
+    RoleContext.fromIdentity(identity),
+    publisher
+);
+emitter.emitReady(ControlPlaneEmitter.ReadyContext.builder(
+    "config-sync", correlationId, commandId, CommandState.status("Ready"))
+    .result("ok")
+    .build());
+```
+
+The emitter guarantees routing keys and payload schemas remain consistent across services.
+
+## 3. Enable the Spring Boot starters
+
+Include the Worker SDK starter to auto-register descriptors, identities, AMQP declarables, and the
+control-plane publisher. The starter composes `ControlPlaneCommonAutoConfiguration`,
+`WorkerControlPlaneAutoConfiguration`, and `ManagerControlPlaneAutoConfiguration` so both worker and manager
+roles can be enabled from configuration.
+
+```xml
+<dependency>
+  <groupId>io.pockethive</groupId>
+  <artifactId>worker-sdk</artifactId>
+</dependency>
+```
+
+Configure minimal properties for each role:
+
+```yaml
+pockethive:
+  control-plane:
+    exchange: ph.control
+    swarm-id: swarm-1
+    worker:
+      role: processor
+      instance-id: processor-1
+    manager:
+      enabled: false # disable if the service is worker-only
+```
+
+With the starter in place, inject the beans exported by the auto-configuration:
+
+```java
+@Bean
+CommandLineRunner controlPlaneRunner(ControlPlaneEmitter emitter, WorkerControlPlane workerControlPlane) {
+    return args -> workerControlPlane.registerListener(signal -> {
+        // handle inbound control signals
+    });
+}
+```
+
+Toggle `pockethive.control-plane.worker.enabled` or `.manager.enabled` to opt into the respective topology
+wiring.
+
+## 4. Use the testing fixtures
+
+The Worker SDK also provides `ControlPlaneTestFixtures` to simplify unit tests:
+
+```java
+ControlPlaneProperties properties = ControlPlaneTestFixtures.workerProperties("swarm-1", "generator", "worker-a");
+ControlPlaneEmitter emitter = ControlPlaneTestFixtures.workerEmitter(publisher, identity);
+```
+
+Fixtures construct canonical identities, descriptors, and ready-to-use emitters so tests can focus on
+business logic rather than wiring.
+
+## 5. Migration checklist
+
+1. Add the `worker-sdk` dependency to your worker/manager service.
+2. Remove bespoke queue declarations and rely on `ControlPlaneTopologyDescriptorFactory` for topology.
+3. Replace manual JSON payload builders with `ControlPlaneEmitter` helpers.
+4. Configure `pockethive.control-plane.*` properties for your service roles.
+5. Update unit tests to use `ControlPlaneTestFixtures` for canonical descriptors and identities.
+
+With these steps your service aligns with the shared control-plane contract and benefits from centralised
+configuration, routing, and payload generation.
