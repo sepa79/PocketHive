@@ -13,6 +13,8 @@ import io.pockethive.Topology;
 import io.pockethive.control.ControlSignal;
 import io.pockethive.control.ConfirmationScope;
 import io.pockethive.control.ReadyConfirmation;
+import io.pockethive.controlplane.ControlPlaneIdentity;
+import io.pockethive.controlplane.spring.ControlPlaneProperties;
 import io.pockethive.docker.DockerContainerClient;
 import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmPlanRegistry;
@@ -109,6 +111,13 @@ class SwarmCreationMock1E2ETest {
     @Qualifier("controllerStatusQueueName")
     String controllerStatusQueueName;
 
+    @Autowired
+    @Qualifier("managerControlPlaneIdentity")
+    ControlPlaneIdentity managerIdentity;
+
+    @Autowired
+    ControlPlaneProperties controlPlaneProperties;
+
     @DynamicPropertySource
     static void registerProperties(DynamicPropertyRegistry registry) {
         if (!RABBIT.isRunning()) {
@@ -169,6 +178,9 @@ class SwarmCreationMock1E2ETest {
         assertThat(body).isNotNull();
         String correlationId = body.correlationId();
         assertThat(correlationId).isNotBlank();
+
+        assertThat(managerIdentity.instanceId()).isNotBlank();
+        assertThat(controlPlaneProperties.getManager().getInstanceId()).isEqualTo(managerIdentity.instanceId());
 
         Swarm swarm = swarmRegistry.find(swarmId).orElseThrow();
         assertThat(swarm.getContainerId()).isEqualTo("container-123");

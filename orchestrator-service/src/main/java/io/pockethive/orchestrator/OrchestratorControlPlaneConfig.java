@@ -12,6 +12,7 @@ import io.pockethive.controlplane.topology.QueueDescriptor;
 import io.pockethive.util.BeeNameGenerator;
 import java.util.Objects;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.config.BeanFactoryPostProcessor;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -22,16 +23,35 @@ class OrchestratorControlPlaneConfig {
     private static final String ROLE = "orchestrator";
 
     @Bean
+    static BeanFactoryPostProcessor managerInstanceIdInitializer() {
+        return beanFactory -> {
+            ControlPlaneProperties properties = beanFactory.getBean(ControlPlaneProperties.class);
+            Objects.requireNonNull(properties, "properties");
+
+            String configured = properties.getManager().getInstanceId();
+            if (configured != null && !configured.isBlank()) {
+                System.setProperty("bee.name", configured);
+                return;
+            }
+
+            String existing = System.getProperty("bee.name");
+            String swarmId = resolveManagerSwarmId(properties);
+            String resolved = (existing == null || existing.isBlank())
+                ? BeeNameGenerator.generate(ROLE, swarmId)
+                : existing;
+            System.setProperty("bee.name", resolved);
+            properties.getManager().setInstanceId(resolved);
+        };
+    }
+
+    @Bean
     String instanceId(ControlPlaneProperties properties) {
         Objects.requireNonNull(properties, "properties");
-        String existing = System.getProperty("bee.name");
-        String swarmId = resolveManagerSwarmId(properties);
-        String resolved = (existing == null || existing.isBlank())
-            ? BeeNameGenerator.generate(ROLE, swarmId)
-            : existing;
-        System.setProperty("bee.name", resolved);
-        properties.getManager().setInstanceId(resolved);
-        return resolved;
+        String instanceId = properties.getManager().getInstanceId();
+        if (instanceId == null || instanceId.isBlank()) {
+            throw new IllegalStateException("Manager instance id is not initialised");
+        }
+        return instanceId;
     }
 
     @Bean(name = "managerControlPlaneTopologyDescriptor")
@@ -88,7 +108,7 @@ class OrchestratorControlPlaneConfig {
             .orElseThrow(() -> new IllegalStateException("Orchestrator status queue descriptor is missing"));
     }
 
-    private String resolveManagerSwarmId(ControlPlaneProperties properties) {
+    private static String resolveManagerSwarmId(ControlPlaneProperties properties) {
         String override = properties.getManager().getSwarmId();
         if (override != null && !override.isBlank()) {
             return override;
