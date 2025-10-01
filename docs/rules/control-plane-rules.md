@@ -119,7 +119,7 @@
 
 - **Controller aggregates:** `status-delta` on change + at least every **10s** (watermark), optional periodic `status-full`.
 - **Components:** `status-full` on startup and upon `status-request`; `status-delta` on change.
-- If a component is **stale** beyond TTL, Controller **polls Actuator** before asserting Ready/Running.
+- If a component is **stale** beyond TTL, Controller **requests status** before asserting Ready/Running.
 
 ---
 

@@ -50,8 +50,8 @@ The refactor is technically feasible but high-effort:
 - [x] Design topology descriptor interfaces and enumerate required routes/bindings per role.
 - [x] Implement payload builders and publishers with contract tests.
 - [x] Provide Spring-friendly factories/starter modules.
-- [ ] Migrate one worker service as a pilot and document the process.
-- [ ] Roll out to remaining workers, then managers, retiring bespoke helpers.
+- [x] Migrate one worker service as a pilot and document the process.
+- [x] Roll out to remaining workers, then managers, retiring bespoke helpers.
 - [x] Publish developer documentation and optional SDK tooling.
 
 ## New control-plane APIs available
