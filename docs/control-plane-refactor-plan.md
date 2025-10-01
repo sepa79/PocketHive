@@ -47,9 +47,33 @@ The refactor is technically feasible but high-effort:
 - Keep the new abstractions modular so teams can opt into DSL factories without losing the ability to customise edge-case workflows.
 
 ## Next Steps Checklist
-- [ ] Design topology descriptor interfaces and enumerate required routes/bindings per role.
-- [ ] Implement payload builders and publishers with contract tests.
-- [ ] Provide Spring-friendly factories/starter modules.
+- [x] Design topology descriptor interfaces and enumerate required routes/bindings per role.
+- [x] Implement payload builders and publishers with contract tests.
+- [x] Provide Spring-friendly factories/starter modules.
 - [ ] Migrate one worker service as a pilot and document the process.
 - [ ] Roll out to remaining workers, then managers, retiring bespoke helpers.
-- [ ] Publish developer documentation and optional SDK tooling.
+- [x] Publish developer documentation and optional SDK tooling.
+
+## New control-plane APIs available
+
+The shared control-plane descriptors, emitters, and Spring Boot starters are now published for service teams:
+
+- `ControlPlaneTopologyDescriptorFactory` resolves worker/manager descriptors that encapsulate queue and routing
+  topology for each role.
+- `ControlPlaneEmitter` exposes ready/error/status helpers that emit typed payloads through a `ControlPlanePublisher`.
+- The optional [`worker-sdk`](../common/worker-sdk/README.md) module bundles the auto-configuration for both worker and
+  manager roles plus `ControlPlaneTestFixtures` for unit tests.
+- Developer documentation, including bootstrap walkthroughs and migration checklists, lives in
+  [`docs/control-plane/worker-guide.md`](control-plane/worker-guide.md).
+
+### Migration quick-start
+
+1. Add the `worker-sdk` dependency to your service and enable the relevant `pockethive.control-plane.*` properties.
+2. Replace bespoke queue declarations with descriptors from `ControlPlaneTopologyDescriptorFactory`.
+3. Route outbound confirmations/status updates through `ControlPlaneEmitter` to standardise payloads.
+4. Adopt `ControlPlaneTestFixtures` in new tests to ensure canonical identities and descriptors.
+5. Coordinate pilot migrations (starting with a single worker) before rolling out to all services.
+
+Sample usage snippets are available in the [worker bootstrap guide](control-plane/worker-guide.md) and in the
+[`PocketHiveWorkerSdkAutoConfiguration`](../common/worker-sdk/src/main/java/io/pockethive/worker/sdk/autoconfigure/PocketHiveWorkerSdkAutoConfiguration.java)
+source.
