@@ -79,7 +79,7 @@ public class Processor extends AbstractWorkerRuntime {
                    ControlPlaneEmitter controlEmitter,
                    @Qualifier("workerControlPlaneTopologyDescriptor") ControlPlaneTopologyDescriptor topology,
                    WorkerControlPlane controlPlane,
-                   @Value("${ph.processor.baseUrl:}") String baseUrl,
+                   @Value("${pockethive.processor.base-url:${ph.processor.baseUrl:${PH_BASE_URL:}}}") String baseUrl,
                    RabbitListenerEndpointRegistry listenerRegistry) {
     super(log, controlEmitter, controlPlane, identity, topology);
     this.rabbit = Objects.requireNonNull(rabbit, "rabbit");
@@ -111,7 +111,7 @@ public class Processor extends AbstractWorkerRuntime {
     }
   }
 
-  @RabbitListener(id = "workListener", queues = "${ph.modQueue:ph.default.mod}")
+  @RabbitListener(id = "workListener", queues = "${pockethive.worker.queues.mod:${ph.modQueue:ph.default.mod}}")
   public void onModerated(Message message,
                           @Header(value = ObservabilityContextUtil.HEADER, required = false) String trace) {
     Instant received = Instant.now();

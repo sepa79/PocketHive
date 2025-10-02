@@ -112,7 +112,7 @@ public class PostProcessor extends AbstractWorkerRuntime {
     }
   }
 
-  @RabbitListener(id = "workListener", queues = "${ph.finalQueue:ph.default.final}")
+  @RabbitListener(id = "workListener", queues = "${pockethive.worker.queues.final:${ph.finalQueue:ph.default.final}}")
   public void onFinal(Message message,
                       @Header(value = "x-ph-trace", required = false) String trace,
                       @Header(value = "x-ph-error", required = false) Boolean error) {

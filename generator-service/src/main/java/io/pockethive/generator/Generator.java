@@ -79,7 +79,7 @@ public class Generator extends AbstractWorkerRuntime {
     try { sendStatusFull(0); } catch (Exception ignore) { }
   }
 
-  @Value("${ph.gen.ratePerSec:0}")
+  @Value("${pockethive.generator.rate-per-sec:${ph.gen.ratePerSec:0}}")
   private volatile double ratePerSec;
 
   private double carryOver = 0;

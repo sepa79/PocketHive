@@ -71,7 +71,7 @@ public class Moderator extends AbstractWorkerRuntime {
     }
   }
 
-  @RabbitListener(id = "workListener", queues = "${ph.genQueue:ph.default.gen}")
+  @RabbitListener(id = "workListener", queues = "${pockethive.worker.queues.gen:${ph.genQueue:ph.default.gen}}")
   public void onGenerated(Message message,
                           @Header(value = "x-ph-service", required = false) String service,
                           @Header(value = ObservabilityContextUtil.HEADER, required = false) String trace) {
