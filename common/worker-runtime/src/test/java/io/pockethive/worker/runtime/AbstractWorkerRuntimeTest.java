@@ -134,6 +134,21 @@ class AbstractWorkerRuntimeTest {
     verify(emitter).emitStatusSnapshot(any());
   }
 
+  @Test
+  void listenerLifecycleExecutesSuppliedActions() {
+    StringBuilder calls = new StringBuilder();
+    AbstractWorkerRuntime.ListenerLifecycle lifecycle = runtime.createLifecycle(
+        () -> calls.append("start"),
+        () -> calls.append("stop"));
+
+    lifecycle.enable();
+    lifecycle.disable();
+    lifecycle.apply(true);
+    lifecycle.apply(false);
+
+    assertThat(calls.toString()).isEqualTo("startstopstartstop");
+  }
+
   private static final class TestTopologyDescriptor implements ControlPlaneTopologyDescriptor {
 
     @Override
@@ -206,6 +221,10 @@ class AbstractWorkerRuntimeTest {
 
     private void sendFullForTest(long tps) {
       sendStatusFull(tps);
+    }
+
+    private AbstractWorkerRuntime.ListenerLifecycle createLifecycle(Runnable start, Runnable stop) {
+      return listenerLifecycle(start, stop);
     }
   }
 }

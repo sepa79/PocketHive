@@ -161,6 +161,25 @@ class ProcessorTest {
     }
 
     @Test
+    void configUpdateDisablesListenerWhenPreviouslyEnabled() throws Exception {
+        ReflectionTestUtils.setField(processor, "enabled", true);
+        Map<String, Object> args = Map.of(
+            "data", Map.of("enabled", false)
+        );
+        String correlationId = UUID.randomUUID().toString();
+        String idempotencyKey = UUID.randomUUID().toString();
+        ControlSignal signal = ControlSignal.forInstance(
+            "config-update", identity.swarmId(), identity.role(), identity.instanceId(), correlationId, idempotencyKey,
+            CommandTarget.INSTANCE, args);
+
+        when(listenerRegistry.getListenerContainer("workListener")).thenReturn(workContainer);
+        processor.onControl(mapper.writeValueAsString(signal),
+            ControlPlaneRouting.signal("config-update", identity.swarmId(), identity.role(), identity.instanceId()), null);
+
+        verify(workContainer).stop();
+    }
+
+    @Test
     void configUpdateErrorEmitsErrorConfirmation() throws Exception {
         Map<String, Object> args = Map.of(
             "data", Map.of("enabled", "oops")

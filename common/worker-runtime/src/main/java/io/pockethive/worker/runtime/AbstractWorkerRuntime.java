@@ -176,6 +176,12 @@ public abstract class AbstractWorkerRuntime {
     controlEmitter.emitStatusSnapshot(statusContext(tps));
   }
 
+  protected final ListenerLifecycle listenerLifecycle(Runnable enableAction, Runnable disableAction) {
+    Objects.requireNonNull(enableAction, "enableAction");
+    Objects.requireNonNull(disableAction, "disableAction");
+    return new ListenerLifecycle(enableAction, disableAction);
+  }
+
   protected final void logControlReceive(String routingKey, String signal, String payload) {
     String snippet = snippet(payload);
     if (signal != null && signal.startsWith("status")) {
@@ -242,5 +248,32 @@ public abstract class AbstractWorkerRuntime {
         .filter(Objects::nonNull)
         .map(route -> route.replace(ControlPlaneRouteCatalog.INSTANCE_TOKEN, instanceId))
         .toList();
+  }
+
+  public static final class ListenerLifecycle {
+
+    private final Runnable enableAction;
+    private final Runnable disableAction;
+
+    private ListenerLifecycle(Runnable enableAction, Runnable disableAction) {
+      this.enableAction = enableAction;
+      this.disableAction = disableAction;
+    }
+
+    public void apply(boolean enabled) {
+      if (enabled) {
+        enable();
+      } else {
+        disable();
+      }
+    }
+
+    public void enable() {
+      enableAction.run();
+    }
+
+    public void disable() {
+      disableAction.run();
+    }
   }
 }

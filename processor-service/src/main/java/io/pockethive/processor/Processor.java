@@ -11,31 +11,28 @@ import io.pockethive.control.CommandState;
 import io.pockethive.control.ControlSignal;
 import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.controlplane.messaging.ControlPlaneEmitter;
+import io.pockethive.controlplane.messaging.ControlPlaneEmitter.ErrorContext;
+import io.pockethive.controlplane.messaging.ControlPlaneEmitter.ReadyContext;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
-import io.pockethive.controlplane.topology.ControlPlaneRouteCatalog;
 import io.pockethive.controlplane.topology.ControlPlaneTopologyDescriptor;
-import io.pockethive.controlplane.topology.ControlQueueDescriptor;
 import io.pockethive.controlplane.worker.WorkerConfigCommand;
 import io.pockethive.controlplane.worker.WorkerControlPlane;
-import io.pockethive.controlplane.worker.WorkerSignalListener;
-import io.pockethive.controlplane.worker.WorkerSignalListener.WorkerSignalContext;
-import io.pockethive.controlplane.worker.WorkerStatusRequest;
 import io.pockethive.observability.ObservabilityContext;
 import io.pockethive.observability.ObservabilityContextUtil;
+import io.pockethive.worker.runtime.AbstractWorkerRuntime;
+import io.pockethive.worker.runtime.AbstractWorkerRuntime.ListenerLifecycle;
+import io.pockethive.worker.runtime.WorkerMessageEnvelope;
+import io.pockethive.worker.runtime.WorkerMessageEnvelopeCodec;
+import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
-import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
-import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
@@ -53,11 +50,10 @@ import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
-import io.pockethive.control.ConfirmationScope;
 
 @Component
 @EnableScheduling
-public class Processor {
+public class Processor extends AbstractWorkerRuntime {
 
   private static final Logger log = LoggerFactory.getLogger(Processor.class);
   private static final long STATUS_INTERVAL_MS = 5000L;
@@ -65,24 +61,16 @@ public class Processor {
   private static final String CONFIG_PHASE = "apply";
 
   private final RabbitTemplate rabbit;
-  private final ControlPlaneEmitter controlEmitter;
-  private final WorkerControlPlane controlPlane;
-  private final WorkerSignalListener controlListener;
-  private final RabbitListenerEndpointRegistry registry;
   private final DistributionSummary sutLatency;
   private final Counter messageCounter;
   private final HttpClient http = HttpClient.newHttpClient();
-  private final ControlPlaneIdentity identity;
-  private final ConfirmationScope confirmationScope;
-  private final String controlQueueName;
-  private final String[] controlRoutes;
-  private final String role;
-  private final String swarmId;
-  private final String instanceId;
+  private final RabbitListenerEndpointRegistry registry;
+  private final ListenerLifecycle workListenerLifecycle;
+  private final WorkerMessageEnvelopeCodec envelopeCodec;
 
   private double lastCount = 0;
   private volatile String baseUrl;
-  private volatile boolean enabled = false;
+  private volatile boolean enabled;
   private volatile long lastStatusTs = System.currentTimeMillis();
 
   public Processor(RabbitTemplate rabbit,
@@ -93,23 +81,18 @@ public class Processor {
                    WorkerControlPlane controlPlane,
                    @Value("${ph.processor.baseUrl:}") String baseUrl,
                    RabbitListenerEndpointRegistry listenerRegistry) {
+    super(log, controlEmitter, controlPlane, identity, topology);
     this.rabbit = Objects.requireNonNull(rabbit, "rabbit");
-    this.identity = Objects.requireNonNull(identity, "identity");
-    this.controlEmitter = Objects.requireNonNull(controlEmitter, "controlEmitter");
-    this.controlPlane = Objects.requireNonNull(controlPlane, "controlPlane");
     this.registry = Objects.requireNonNull(listenerRegistry, "listenerRegistry");
     this.baseUrl = baseUrl;
-    this.role = identity.role();
-    this.swarmId = identity.swarmId();
-    this.instanceId = identity.instanceId();
-    this.confirmationScope = new ConfirmationScope(swarmId, role, instanceId);
+    this.envelopeCodec = new WorkerMessageEnvelopeCodec(MAPPER);
+    this.workListenerLifecycle = listenerLifecycle(
+        () -> updateListenerState(true),
+        () -> updateListenerState(false));
 
-    ControlPlaneTopologyDescriptor descriptor = Objects.requireNonNull(topology, "topology");
-    this.controlQueueName = descriptor.controlQueue(instanceId)
-        .map(ControlQueueDescriptor::name)
-        .orElseThrow(() -> new IllegalStateException("Processor control queue descriptor is missing"));
-    this.controlRoutes = resolveRoutes(descriptor, identity);
-
+    String role = identity.role();
+    String instanceId = identity.instanceId();
+    String swarmId = identity.swarmId();
     this.sutLatency = DistributionSummary.builder("processor_request_time_ms")
         .tag("service", role)
         .tag("instance", instanceId)
@@ -120,40 +103,6 @@ public class Processor {
         .tag("instance", instanceId)
         .tag("swarm", swarmId)
         .register(meterRegistry);
-
-    this.controlListener = new WorkerSignalListener() {
-      @Override
-      public void onStatusRequest(WorkerStatusRequest request) {
-        ControlSignal signal = request.signal();
-        if (signal.correlationId() != null) {
-          MDC.put("correlation_id", signal.correlationId());
-        }
-        if (signal.idempotencyKey() != null) {
-          MDC.put("idempotency_key", signal.idempotencyKey());
-        }
-        logControlReceive(request.envelope().routingKey(), signal.signal(), request.payload());
-        sendStatusFull(0);
-      }
-
-      @Override
-      public void onConfigUpdate(WorkerConfigCommand command) {
-        ControlSignal signal = command.signal();
-        if (signal.correlationId() != null) {
-          MDC.put("correlation_id", signal.correlationId());
-        }
-        if (signal.idempotencyKey() != null) {
-          MDC.put("idempotency_key", signal.idempotencyKey());
-        }
-        logControlReceive(command.envelope().routingKey(), signal.signal(), command.payload());
-        handleConfigUpdate(command);
-      }
-
-      @Override
-      public void onUnsupported(WorkerSignalContext context) {
-        log.debug("Ignoring unsupported control signal {}", context.envelope().signal().signal());
-      }
-    };
-
     log.info("Base URL: {}", baseUrl);
     try {
       sendStatusFull(0);
@@ -168,21 +117,24 @@ public class Processor {
     Instant received = Instant.now();
     ObservabilityContext ctx = ObservabilityContextUtil.fromHeader(trace);
     if (ctx == null) {
-      ctx = ObservabilityContextUtil.init("processor", instanceId);
+      ctx = ObservabilityContextUtil.init("processor", identity().instanceId());
       ctx.getHops().clear();
     }
     ObservabilityContextUtil.populateMdc(ctx);
     try {
       if (enabled) {
-        String raw = new String(message.getBody(), StandardCharsets.UTF_8);
-        log.debug("Forwarding to SUT: {}", raw);
-        byte[] resp = sendToSut(message.getBody());
+        WorkerMessageEnvelope envelope = decodeEnvelope(message);
+        ObjectNode payload = envelope.payload();
+        log.debug("Forwarding to SUT: {}", payload.toString());
+        byte[] resp = sendToSut(payload);
         Instant processed = Instant.now();
-        ObservabilityContextUtil.appendHop(ctx, "processor", instanceId, received, processed);
+        ObservabilityContextUtil.appendHop(ctx, "processor", identity().instanceId(), received, processed);
         Message out = MessageBuilder
             .withBody(resp)
             .setContentType(MessageProperties.CONTENT_TYPE_JSON)
             .setContentEncoding(StandardCharsets.UTF_8.name())
+            .setMessageId(envelope.messageId())
+            .setTimestamp(java.util.Date.from(envelope.timestamp()))
             .setHeader("x-ph-service", "processor")
             .setHeader(ObservabilityContextUtil.HEADER, ObservabilityContextUtil.toHeader(ctx))
             .build();
@@ -216,14 +168,15 @@ public class Processor {
     ObservabilityContextUtil.populateMdc(ctx);
     try {
       if (rk == null || rk.isBlank()) {
-        log.warn("Received control payload with null or blank routing key; payloadLength={}", payload == null ? null : payload.length());
+        log.warn("Received control payload with null or blank routing key; payloadLength={}",
+            payload == null ? null : payload.length());
         throw new IllegalArgumentException("Control routing key must not be null or blank");
       }
       if (payload == null || payload.isBlank()) {
         log.warn("Received control payload with null or blank body for routing key {}", rk);
         throw new IllegalArgumentException("Control payload must not be null or blank");
       }
-      boolean handled = controlPlane.consume(payload, rk, controlListener);
+      boolean handled = controlPlane().consume(payload, rk, controlListener());
       if (!handled) {
         log.debug("Ignoring control payload on routing key {}", rk);
       }
@@ -232,7 +185,8 @@ public class Processor {
     }
   }
 
-  private void handleConfigUpdate(WorkerConfigCommand command) {
+  @Override
+  protected void handleConfigUpdate(WorkerConfigCommand command) {
     ControlSignal cs = command.signal();
     try {
       applyConfig(command.data());
@@ -243,22 +197,32 @@ public class Processor {
     }
   }
 
+  @Override
+  protected ControlPlaneEmitter.StatusContext statusContext(long tps) {
+    return baseStatusContext(tps, builder -> builder
+        .traffic(Topology.EXCHANGE)
+        .workIn(Topology.MOD_QUEUE)
+        .workRoutes(Topology.MOD_QUEUE)
+        .workOut(Topology.FINAL_QUEUE)
+        .enabled(enabled)
+        .data("baseUrl", baseUrl));
+  }
+
+  @Override
+  protected String statusLogDetails(long tps) {
+    return super.statusLogDetails(tps) + " enabled=" + enabled + " baseUrl=" + baseUrl;
+  }
+
   private void applyConfig(Map<String, Object> data) {
     if (data == null || data.isEmpty()) {
       return;
     }
     if (data.containsKey("enabled")) {
       boolean newEnabled = parseBoolean(data.get("enabled"), "enabled", enabled);
-      if (newEnabled != enabled) {
-        enabled = newEnabled;
-        MessageListenerContainer c = registry.getListenerContainer("workListener");
-        if (c != null) {
-          if (enabled) {
-            c.start();
-          } else {
-            c.stop();
-          }
-        }
+      boolean changed = newEnabled != enabled;
+      enabled = newEnabled;
+      if (changed) {
+        workListenerLifecycle.apply(enabled);
       }
     }
     if (data.containsKey("baseUrl")) {
@@ -299,12 +263,12 @@ public class Processor {
     String correlationId = requireText(cs.correlationId(), "correlationId");
     String idempotencyKey = requireText(cs.idempotencyKey(), "idempotencyKey");
     CommandState state = currentState("completed");
-    var context = ControlPlaneEmitter.ReadyContext.builder(signal, correlationId, idempotencyKey, state)
+    ReadyContext context = ReadyContext.builder(signal, correlationId, idempotencyKey, state)
         .result("success")
         .build();
-    String routingKey = ControlPlaneRouting.event("ready", signal, confirmationScope);
+    String routingKey = ControlPlaneRouting.event("ready", signal, confirmationScope());
     logControlSend(routingKey, "result=success enabled=" + enabled);
-    controlEmitter.emitReady(context);
+    controlEmitter().emitReady(context);
   }
 
   private void emitConfigError(ControlSignal cs, Exception e) {
@@ -319,40 +283,14 @@ public class Processor {
     CommandState state = currentState("failed");
     Map<String, Object> details = new LinkedHashMap<>(stateDetails());
     details.put("exception", code);
-    var context = ControlPlaneEmitter.ErrorContext.builder(signal, correlationId, idempotencyKey, state, CONFIG_PHASE, code, message)
+    ErrorContext context = ErrorContext.builder(signal, correlationId, idempotencyKey, state, CONFIG_PHASE, code, message)
         .retryable(Boolean.FALSE)
         .result("error")
         .details(details)
         .build();
-    String routingKey = ControlPlaneRouting.event("error", signal, confirmationScope);
+    String routingKey = ControlPlaneRouting.event("error", signal, confirmationScope());
     logControlSend(routingKey, "result=error code=" + code + " enabled=" + enabled);
-    controlEmitter.emitError(context);
-  }
-
-  private void sendStatusDelta(long tps) {
-    String routingKey = ControlPlaneRouting.event("status-delta", confirmationScope);
-    logControlSend(routingKey, "tps=" + tps + " enabled=" + enabled + " baseUrl=" + baseUrl);
-    controlEmitter.emitStatusDelta(statusContext(tps));
-  }
-
-  private void sendStatusFull(long tps) {
-    String routingKey = ControlPlaneRouting.event("status-full", confirmationScope);
-    logControlSend(routingKey, "tps=" + tps + " enabled=" + enabled + " baseUrl=" + baseUrl);
-    controlEmitter.emitStatusSnapshot(statusContext(tps));
-  }
-
-  private ControlPlaneEmitter.StatusContext statusContext(long tps) {
-    return ControlPlaneEmitter.StatusContext.of(builder -> {
-      builder.traffic(Topology.EXCHANGE)
-          .workIn(Topology.MOD_QUEUE)
-          .workRoutes(Topology.MOD_QUEUE)
-          .workOut(Topology.FINAL_QUEUE)
-          .controlIn(controlQueueName)
-          .controlRoutes(controlRoutes)
-          .enabled(enabled)
-          .tps(tps)
-          .data("baseUrl", baseUrl);
-    });
+    controlEmitter().emitError(context);
   }
 
   private CommandState currentState(String status) {
@@ -365,69 +303,13 @@ public class Processor {
     return details;
   }
 
-  private static String[] resolveRoutes(ControlPlaneTopologyDescriptor descriptor, ControlPlaneIdentity identity) {
-    ControlPlaneRouteCatalog routes = descriptor.routes();
-    List<String> resolved = new ArrayList<>();
-    resolved.addAll(expandRoutes(routes.configSignals(), identity));
-    resolved.addAll(expandRoutes(routes.statusSignals(), identity));
-    resolved.addAll(expandRoutes(routes.lifecycleSignals(), identity));
-    resolved.addAll(expandRoutes(routes.statusEvents(), identity));
-    resolved.addAll(expandRoutes(routes.lifecycleEvents(), identity));
-    resolved.addAll(expandRoutes(routes.otherEvents(), identity));
-    LinkedHashSet<String> unique = resolved.stream()
-        .filter(route -> route != null && !route.isBlank())
-        .collect(Collectors.toCollection(LinkedHashSet::new));
-    return unique.toArray(String[]::new);
-  }
-
-  private static List<String> expandRoutes(Set<String> templates, ControlPlaneIdentity identity) {
-    if (templates == null || templates.isEmpty()) {
-      return List.of();
-    }
-    return templates.stream()
-        .filter(Objects::nonNull)
-        .map(route -> route.replace(ControlPlaneRouteCatalog.INSTANCE_TOKEN, identity.instanceId()))
-        .toList();
-  }
-
-  private static String requireText(String value, String field) {
-    if (value == null || value.isBlank()) {
-      throw new IllegalArgumentException(field + " must not be null or blank");
-    }
-    return value;
-  }
-
-  private void logControlReceive(String routingKey, String signal, String payload) {
-    String snippet = snippet(payload);
-    if (signal != null && signal.startsWith("status")) {
-      log.debug("[CTRL] RECV rk={} inst={} payload={}", routingKey, instanceId, snippet);
-    } else if ("config-update".equals(signal)) {
-      log.info("[CTRL] RECV rk={} inst={} payload={}", routingKey, instanceId, snippet);
-    } else {
-      log.info("[CTRL] RECV rk={} inst={} payload={}", routingKey, instanceId, snippet);
-    }
-  }
-
-  private void logControlSend(String routingKey, String details) {
-    String snippet = details == null ? "" : details;
-    if (routingKey.contains(".status-")) {
-      log.debug("[CTRL] SEND rk={} inst={} {}", routingKey, instanceId, snippet);
-    } else if (routingKey.contains(".config-update.")) {
-      log.info("[CTRL] SEND rk={} inst={} {}", routingKey, instanceId, snippet);
-    } else {
-      log.info("[CTRL] SEND rk={} inst={} {}", routingKey, instanceId, snippet);
-    }
-  }
-
-  private byte[] sendToSut(byte[] bodyBytes) {
+  private byte[] sendToSut(ObjectNode payload) {
     long start = System.currentTimeMillis();
     String method = "GET";
     URI target = null;
     try {
-      JsonNode node = MAPPER.readTree(bodyBytes);
-      String path = node.path("path").asText("/");
-      method = node.path("method").asText("GET").toUpperCase();
-
+      String path = payload.path("path").asText("/");
+      method = payload.path("method").asText("GET").toUpperCase();
       target = buildUri(path);
       if (target == null) {
         long dur = System.currentTimeMillis() - start;
@@ -437,12 +319,12 @@ public class Processor {
 
       HttpRequest.Builder req = HttpRequest.newBuilder(target);
 
-      JsonNode headers = node.path("headers");
+      JsonNode headers = payload.path("headers");
       if (headers.isObject()) {
         headers.fields().forEachRemaining(e -> req.header(e.getKey(), e.getValue().asText()));
       }
 
-      JsonNode bodyNode = node.path("body");
+      JsonNode bodyNode = payload.path("body");
       HttpRequest.BodyPublisher bodyPublisher;
       String bodyStr = null;
       if (bodyNode.isMissingNode() || bodyNode.isNull()) {
@@ -467,7 +349,7 @@ public class Processor {
       log.debug("HTTP {} {} -> {} body={} headers={} ({} ms)", method, target, resp.statusCode(),
           snippet(resp.body()), resp.headers().map(), dur);
 
-      var result = MAPPER.createObjectNode();
+      ObjectNode result = MAPPER.createObjectNode();
       result.put("status", resp.statusCode());
       result.set("headers", MAPPER.valueToTree(resp.headers().map()));
       result.put("body", resp.body());
@@ -494,10 +376,86 @@ public class Processor {
     }
   }
 
-  private static String snippet(String s) {
-    if (s == null) {
-      return "";
+  private WorkerMessageEnvelope decodeEnvelope(Message message) {
+    ObjectNode node = readBody(message);
+    MessageProperties properties = message.getMessageProperties();
+    ensureMessageId(node, properties);
+    ensureTimestamp(node, properties);
+    putIfMissing(node, "role", identity().role());
+    putIfMissing(node, "instance", identity().instanceId());
+    putIfMissing(node, "swarmId", identity().swarmId());
+    return envelopeCodec.decode(node);
+  }
+
+  private ObjectNode readBody(Message message) {
+    try {
+      JsonNode node = MAPPER.readTree(message.getBody());
+      if (!node.isObject()) {
+        throw new IllegalArgumentException("Moderated payload must be a JSON object");
+      }
+      return (ObjectNode) node;
+    } catch (IOException e) {
+      throw new IllegalArgumentException("Unable to parse moderated payload", e);
     }
-    return s.length() > 300 ? s.substring(0, 300) + "…" : s;
+  }
+
+  private void ensureMessageId(ObjectNode node, MessageProperties properties) {
+    String messageId = textOrNull(node.get("messageId"));
+    if (messageId == null || messageId.isBlank()) {
+      messageId = properties.getMessageId();
+      if (messageId == null || messageId.isBlank()) {
+        messageId = textOrNull(node.get("id"));
+      }
+      if (messageId == null || messageId.isBlank()) {
+        throw new IllegalArgumentException("messageId must not be null or blank");
+      }
+      node.put("messageId", messageId);
+    }
+  }
+
+  private void ensureTimestamp(ObjectNode node, MessageProperties properties) {
+    if (node.hasNonNull("timestamp")) {
+      return;
+    }
+    Instant timestamp = null;
+    if (properties.getTimestamp() != null) {
+      timestamp = properties.getTimestamp().toInstant();
+    } else {
+      String createdAt = textOrNull(node.get("createdAt"));
+      if (createdAt != null && !createdAt.isBlank()) {
+        node.put("timestamp", createdAt);
+        return;
+      }
+    }
+    if (timestamp == null) {
+      timestamp = Instant.now();
+    }
+    node.put("timestamp", timestamp.toString());
+  }
+
+  private void putIfMissing(ObjectNode node, String field, String value) {
+    if (!node.hasNonNull(field) && value != null) {
+      node.put(field, value);
+    }
+  }
+
+  private String textOrNull(JsonNode node) {
+    if (node == null || node.isNull()) {
+      return null;
+    }
+    String text = node.asText();
+    return text != null && text.isBlank() ? null : text;
+  }
+
+  private void updateListenerState(boolean start) {
+    MessageListenerContainer container = registry.getListenerContainer("workListener");
+    if (container == null) {
+      return;
+    }
+    if (start) {
+      container.start();
+    } else {
+      container.stop();
+    }
   }
 }
