@@ -1,68 +1,228 @@
 # PocketHive
 
-PocketHive is a portable transaction swarm. It orchestrates containerised components that generate, moderate, process and analyse workloads through durable queues.
+PocketHive is a RabbitMQ‑centric load & behavior simulator that orchestrates swarms of modular workers (“bees”) to generate traffic, transform data, and emit results and telemetry. It is useful for repeatable performance testing, scenario‑driven demos, and production‑like simulations for APIs and message‑driven systems (ISO‑8583, REST, SOAP, custom protocols).
 
-## Architecture
+> TL;DR: **UI → Orchestrator → Swarms**. The **Orchestrator** applies a **Scenario Plan** and manages swarms. **Swarms** are pipelines of small services (Generator → Moderator → Processor → Post‑Processor + optional Triggers).
 
-### Swarm data flow
+---
+
+## Contents
+
+- [Why PocketHive?](#why-pockethive)
+- [Key Ideas](#key-ideas)
+- [High‑level Architecture](#high-level-architecture)
+  - [1) Product flow (no queues)](#1-product-flow-no-queues)
+  - [2) Swarm composition & internal queues](#2-swarm-composition--internal-queues)
+  - [3) Deployment view](#3-deployment-view)
+- [Core Components](#core-components)
+- [Configuration](#configuration)
+- [Observability](#observability)
+- [Contributing](#contributing)
+- [License](#license)
+
+---
+
+## Why PocketHive?
+
+- **Scenario‑driven**: Reproduce realistic workloads with shareable, versioned plans.
+- **Composable**: Mix and match modular workers (generator/moderator/processor/post‑processor/trigger).
+- **Deterministic or chaotic—your choice**: Shape traffic precisely or inject controlled randomness.
+- **Production‑adjacent**: Glue to real brokers, real service mocks, real sinks; watch metrics & logs like in prod.
+- **Fast iteration**: Start/stop/adjust swarms on demand from a simple UI.
+
+---
+
+## Key Ideas
+
+- **Scenario Plan**: A declarative plan the Orchestrator applies to create/configure swarms.
+- **Swarm**: A unit of execution made of small services forming a pipeline (see below).
+- **Control vs Work/Data**:
+  - **Control**: Commands/lifecycle/config (lightweight, low‑cardinality).
+  - **Work/Data**: The main data stream through the pipeline.
+- **Observability first**: Every component emits structured logs/metrics for fast feedback.
+
+---
+
+## High‑level Architecture
+
+### 1) Product flow
 
 ```mermaid
 flowchart LR
-  subgraph Control["Control plane"]
-    O["Orchestrator (Queen)"]
-    SC["Swarm Controller (Marshal)"]
+  UI["UI (Hive Dashboard)"]
+  ORCH[Orchestrator]
+  S1["Swarm A"]
+  S2["Swarm B"]
+  S3["Swarm C"]
+
+  %% Left-to-right main flow
+  UI -->|Start/Stop Scenario, Apply Plan| ORCH
+  ORCH <--> S1
+  ORCH <--> S2
+  ORCH <--> S3
+
+  %% Group the swarms AFTER layout is established (keeps them on the right)
+  subgraph SWARMS["Swarms (one or many)"]
+    direction LR
+    S1
+    S2
+    S3
   end
-
-  subgraph Traffic["RabbitMQ — ph.<swarmId>.hive"]
-    EX[(Topic exchange)]
-    QGEN[[Queue ph.<swarmId>.gen]]
-    QMOD[[Queue ph.<swarmId>.mod]]
-    QFINAL[[Queue ph.<swarmId>.final]]
-  end
-
-  subgraph Workers["Swarm workers (Bees)"]
-    G[Generator]
-    M[Moderator]
-    P[Processor]
-    PP[Post-Processor]
-  end
-
-  R[(Redis dataset fragments)]
-  SUT[(System Under Test)]
-  OBS[Observability & analytics]
-
-  O -. REST / AMQP .- SC
-  SC -->|sig.* control| G
-  SC -->|sig.* control| M
-  SC -->|sig.* control| P
-  SC -->|sig.* control| PP
-
-  G -->|publish ph.<swarmId>.gen| EX
-  EX -->|route to| QGEN
-  QGEN -->|consume| M
-  M -->|forward ph.<swarmId>.mod| EX
-  EX -->|route to| QMOD
-  QMOD -->|consume| P
-  P -->|publish ph.<swarmId>.final| EX
-  EX -->|route to| QFINAL
-  QFINAL -->|consume| PP
-
-  G <-->|lookup dataset| R
-  P -->|HTTP request/response| SUT
-  PP -->|metrics & logs| OBS
 ```
 
-The Orchestrator drives each swarm through the Swarm Controller, which applies the plan, enables roles in dependency order, an
-d relays `sig.*` control signals. Transaction messages move left to right through RabbitMQ queues: the Generator produces into
-`ph.<swarmId>.gen`, the Moderator conditions and forwards to `ph.<swarmId>.mod`, the Processor relays each call to the System 
-Under Test (SUT) and publishes responses into `ph.<swarmId>.final`, where the Post-Processor captures metrics and observability
-streams. Generators can hydrate payload templates from Redis-backed dataset fragments to diversify traffic.
+**What this says**: The UI asks the Orchestrator to run a scenario; the Orchestrator spins up/configures swarms; swarms run and report back; the UI shows live status/results.
+
+---
+
+### 2) Swarm composition & internal queues
+
+```mermaid
+flowchart LR
+  %% Swarm boundary
+  subgraph SWARM["Swarm <swarmId>"]
+    direction LR
+
+    %% Control plane
+    subgraph CONTROL["Control plane"]
+      MSH["Swarm Controller (Marshal)"]
+    end
+
+    %% Components
+    GEN[Generator]
+    MOD[Moderator]
+    PRC[Processor]
+    PST[Post‑Processor]
+    TRG["Trigger(s)"]
+
+    %% Work/Data pipeline
+    subgraph DATA["Work/Data pipeline"]
+      GEN --> MOD --> PRC --> PST
+    end
+
+    %% Control relationships (dashed)
+    MSH -. start/stop/config .-> GEN
+    MSH -. rate/shape .-> MOD
+    MSH -. config .-> PRC
+    MSH -. sinks/format .-> PST
+    MSH -. rules .-> TRG
+
+    %% Telemetry fan‑in
+    TELE[(Telemetry / Events)]
+    GEN --- TELE
+    MOD --- TELE
+    PRC --- TELE
+    PST --- TELE
+    TRG --- TELE
+  end
+
+  %% External observers
+  LOG[(Log Aggregator)]
+  OBS[(Prometheus / Grafana / Loki)]
+
+  TELE --> LOG
+  TELE --> OBS
+```
+
+Reading guide:
+- **Control**: dashed arrows from **Swarm Controller** to components.
+- **Work/Data**: left→right stream—`Generator → Moderator → Processor → Post‑Processor`. **Trigger** can inject/react to events.
+- **Telemetry**: components emit to a shared telemetry hub that feeds logs/metrics.
+
+---
+
+### 3) Deployment view
+
+```mermaid
+flowchart LR
+  %% Left-to-right layout with UI on the far left
+  UI["UI (Hive Dashboard)"]
+  ORCH[Orchestrator]
+  SCEN[Scenario Manager]
+  WM[WireMock / SUT Doubles]
+
+  subgraph SWARMS["Swarms (dynamic set)"]
+    direction LR
+    SA[Swarm A]
+    SB[Swarm B]
+    SC[Swarm C]
+  end
+
+  %% Observability cluster to the far right
+  subgraph OBSV["Observability"]
+    direction TB
+    LOG[(Log Aggregator)]
+    OBS[(Prometheus / Grafana / Loki)]
+  end
+
+  %% Core flow
+  UI -- REST --> ORCH -- AMQP --> SWARMS
+  ORCH -- REST --> SCEN
+  SWARMS --> WM
+
+  %% Telemetry
+  SWARMS --> LOG
+  SWARMS --> OBS
+  ORCH --> OBS
+  UI --> OBS
+```
+
+---
+
+## Core Components
+
+### UI (Hive Dashboard)
+- Start/stop scenarios, apply plans, inspect status.
+- Live metrics and logs dashboards (links to Grafana/Loki).
+
+### Orchestrator
+- Applies **Scenario Plans** and manages a dynamic set of swarms.
+- Creates/updates/destroys swarms; pushes control/config; aggregates status.
+
+### Scenario Manager
+- Source of truth for reusable **Scenario Plans** and datasets.
+- Versionable artifacts that the Orchestrator can fetch/apply.
+
+### Swarm
+A single unit of execution composed of:
+- **Swarm Controller (Marshal)** – the control brain for the swarm.
+- **Generator** – emits traffic/messages (shaped by the plan).
+- **Moderator** – gates, validates, and shapes throughput.
+- **Processor** – transforms, enriches, routes.
+- **Post‑Processor** – sinks results (files, HTTP, MQ, DB, etc.).
+- **Trigger(s)** – reacts to events or schedules, may inject control or data.
+
+> Swarms are **independent** and **composable**; scale them horizontally across scenarios or tenants.
+
+---
+
+## Configuration
+
+All services read environment variables (see each service’s README/Dockerfile). Typical knobs:
+- `RABBITMQ_HOST`, `RABBITMQ_USER`, `RABBITMQ_PASSWORD`
+- `PH_CONTROL_EXCHANGE` (control plane, direct)
+- `PH_DATA_EXCHANGE` / queues for work/data paths
+- Logging: `LOG_LEVEL`, structured log toggles
+- Metrics scraping endpoints for Prometheus
+
+Keep configuration **explicit**—favor declaring values over hidden defaults.
+
+---
+
+## Observability
+
+- **Metrics**: each component exposes counters/histograms (throughput, errors, latencies). Scraped by Prometheus, visualized in Grafana.
+- **Logs**: structured JSON logs ingested by the log aggregator and browsed via Loki.
+- **Events**: optionally surfaced to UI for human‑readable timelines.
+
+---
 
 ## Quick start
 1. Install Docker.
 2. Run `./start-hive.sh` (Linux/macOS) or `start-hive.bat` (Windows) to clean previous runs, build the images and launch RabbitMQ, services and the UI. Use `--help` to run individual stages (clean, build, start) when needed.
    - Alternatively run `docker compose up -d` directly to start the stack with your existing images.
 3. Open <http://localhost:8088>. Only the Orchestrator (Queen) runs initially. Create and start swarms from the Hive view by selecting a scenario.
+
+---
 
 ## Documentation
 - [Docs index](docs/README.md)
@@ -73,4 +233,12 @@ streams. Generators can hydrate payload templates from Redis-backed dataset frag
 
 ---
 
-PocketHive · portable transaction · swarm
+## Contributing
+
+Issues and PRs are welcome. Please align PRs to the component boundaries and keep architecture docs up‑to‑date (diagrams above are copy‑paste‑ready).
+
+---
+
+## License
+
+This project is licensed under the project’s repository license. See `LICENSE` in the root for details.
