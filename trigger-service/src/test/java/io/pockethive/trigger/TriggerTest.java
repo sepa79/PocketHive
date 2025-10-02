@@ -105,6 +105,14 @@ class TriggerTest {
       routes = List.of();
     }
     assertThat(routes).containsExactlyInAnyOrderElementsOf(resolveRoutes(topology));
+    assertThat(node.path("traffic").asText()).isEqualTo(Topology.EXCHANGE);
+    assertThat(node.path("enabled").asBoolean()).isFalse();
+    JsonNode data = node.path("data");
+    assertThat(data.has("intervalMs")).isTrue();
+    assertThat(data.path("intervalMs").asLong()).isEqualTo(triggerConfig.getIntervalMs());
+    assertThat(data.has("actionType")).isTrue();
+    assertThat(data.has("headers")).isTrue();
+    assertThat(data.has("lastRunTs")).isTrue();
     verify(controlEmitter, never()).emitStatusDelta(any());
   }
 
@@ -136,6 +144,7 @@ class TriggerTest {
     assertThat(context.state().enabled()).isTrue();
     Map<String, Object> details = context.state().details();
     assertThat(details).containsEntry("actionType", "shell");
+    assertThat(details).containsKey("lastRunTs");
     Long interval = (Long) ReflectionTestUtils.getField(triggerConfig, "intervalMs");
     assertThat(interval).isEqualTo(2000L);
     Boolean enabled = (Boolean) ReflectionTestUtils.getField(trigger, "enabled");
