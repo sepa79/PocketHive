@@ -5,6 +5,7 @@ import io.pockethive.Topology;
 import io.pockethive.controlplane.payload.JsonFixtureAssertions;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -120,7 +121,7 @@ class ControlPlaneTopologyDescriptorsTest {
 
         ControlQueueDescriptor queue = requireQueue(descriptor);
         assertThat(queue.name())
-            .isEqualTo(Topology.CONTROL_QUEUE + ".swarm-controller." + INSTANCE);
+            .isEqualTo(expectedSwarmControllerQueueName(Topology.CONTROL_QUEUE, Topology.SWARM_ID, INSTANCE));
         assertThat(queue.signalBindings())
             .containsExactlyInAnyOrderElementsOf(expectedSwarmControllerSignals(INSTANCE));
         assertThat(queue.eventBindings())
@@ -139,6 +140,21 @@ class ControlPlaneTopologyDescriptorsTest {
                 ControlPlaneRouting.signal("swarm-remove", Topology.SWARM_ID, "swarm-controller", "ALL"));
         assertThat(routes.statusEvents())
             .containsExactlyInAnyOrder("ev.status-full." + Topology.SWARM_ID + ".#", "ev.status-delta." + Topology.SWARM_ID + ".#");
+    }
+
+    private static String expectedSwarmControllerQueueName(String baseQueue, String swarmId, String instanceSegment) {
+        List<String> segments = new ArrayList<>();
+        for (String segment : baseQueue.split("\\.")) {
+            if (!segment.isBlank()) {
+                segments.add(segment);
+            }
+        }
+        if (!segments.contains(swarmId)) {
+            segments.add(swarmId);
+        }
+        segments.add("swarm-controller");
+        segments.add(instanceSegment);
+        return String.join(".", segments);
     }
 
     @Test
