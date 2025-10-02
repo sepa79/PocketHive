@@ -238,7 +238,7 @@
   "swarmController": {
     "role": "swarm-controller",
     "controlQueue": {
-      "name": "ph.control.swarm-controller.inst",
+      "name": "ph.control.default.swarm-controller.inst",
       "signalBindings": [
         "sig.config-update.ALL.swarm-controller.ALL",
         "sig.config-update.default.ALL.ALL",

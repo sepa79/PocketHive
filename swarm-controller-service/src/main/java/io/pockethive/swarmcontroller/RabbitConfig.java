@@ -1,15 +1,16 @@
 package io.pockethive.swarmcontroller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.micrometer.core.instrument.MeterRegistry;
 import io.pockethive.Topology;
+import io.pockethive.util.BeeNameGenerator;
+import java.util.ArrayList;
+import java.util.List;
 import org.springframework.amqp.core.*;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.boot.actuate.autoconfigure.metrics.MeterRegistryCustomizer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.boot.actuate.autoconfigure.metrics.MeterRegistryCustomizer;
-import io.micrometer.core.instrument.MeterRegistry;
-
-import io.pockethive.util.BeeNameGenerator;
 
 @Configuration
 public class RabbitConfig {
@@ -30,8 +31,36 @@ public class RabbitConfig {
 
   @Bean
   Queue controlQueue(String instanceId) {
-    String name = Topology.CONTROL_QUEUE + "." + ROLE + "." + instanceId;
+    String name = buildControlQueueName(Topology.CONTROL_QUEUE, Topology.SWARM_ID, ROLE, instanceId);
     return QueueBuilder.durable(name).build();
+  }
+
+  static String buildControlQueueName(String baseQueue, String swarmId, String role, String instanceId) {
+    if (baseQueue == null || baseQueue.isBlank()) {
+      throw new IllegalArgumentException("baseQueue must not be blank");
+    }
+    if (swarmId == null || swarmId.isBlank()) {
+      throw new IllegalArgumentException("swarmId must not be blank");
+    }
+    if (role == null || role.isBlank()) {
+      throw new IllegalArgumentException("role must not be blank");
+    }
+    if (instanceId == null || instanceId.isBlank()) {
+      throw new IllegalArgumentException("instanceId must not be blank");
+    }
+
+    List<String> segments = new ArrayList<>();
+    for (String segment : baseQueue.split("\\.")) {
+      if (!segment.isBlank()) {
+        segments.add(segment);
+      }
+    }
+    if (!segments.contains(swarmId)) {
+      segments.add(swarmId);
+    }
+    segments.add(role);
+    segments.add(instanceId);
+    return String.join(".", segments);
   }
 
   @Bean
