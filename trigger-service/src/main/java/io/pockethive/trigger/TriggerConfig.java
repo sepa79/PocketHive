@@ -1,13 +1,12 @@
 package io.pockethive.trigger;
 
+import java.util.HashMap;
+import java.util.Map;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
-import java.util.HashMap;
-import java.util.Map;
-
 @Component
-@ConfigurationProperties(prefix = "ph.trigger")
+@ConfigurationProperties(prefix = "pockethive.trigger")
 public class TriggerConfig {
   private long intervalMs = 0L;
   private String actionType = ""; // shell or rest

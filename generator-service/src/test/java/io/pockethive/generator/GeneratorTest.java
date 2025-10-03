@@ -17,6 +17,7 @@ import io.pockethive.controlplane.topology.ControlPlaneTopologyDescriptor;
 import io.pockethive.controlplane.topology.ControlQueueDescriptor;
 import io.pockethive.controlplane.topology.GeneratorControlPlaneTopologyDescriptor;
 import io.pockethive.controlplane.worker.WorkerControlPlane;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -26,6 +27,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import java.util.concurrent.atomic.AtomicLong;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -155,7 +157,18 @@ class GeneratorTest {
     assertThat(stateDetails).containsEntry("path", "/other");
     assertThat(stateDetails).containsEntry("method", "PUT");
     assertThat(context.result()).isEqualTo("success");
-    verify(rabbit).convertAndSend(eq(Topology.EXCHANGE), eq(Topology.GEN_QUEUE), any(Message.class));
+    ArgumentCaptor<Message> messageCaptor = ArgumentCaptor.forClass(Message.class);
+    verify(rabbit).convertAndSend(eq(Topology.EXCHANGE), eq(Topology.GEN_QUEUE), messageCaptor.capture());
+    Message outbound = messageCaptor.getValue();
+    String bodyJson = new String(outbound.getBody(), StandardCharsets.UTF_8);
+    Map<String, Object> emitted = mapper.readValue(bodyJson, new TypeReference<Map<String, Object>>() { });
+    assertThat(emitted).containsEntry("path", "/other");
+    assertThat(emitted).containsEntry("method", "PUT");
+    assertThat(emitted).containsKey("headers");
+    assertThat(emitted).containsKey("id");
+    assertThat(emitted.get("id")).isEqualTo(outbound.getMessageProperties().getMessageId());
+    assertThat(emitted).containsKey("createdAt");
+    assertThat(emitted).doesNotContainKeys("messageId", "timestamp", "role", "instance", "swarmId");
     Double rate = (Double) ReflectionTestUtils.getField(generator, "ratePerSec");
     assertThat(rate).isEqualTo(5.0);
     Boolean enabled = (Boolean) ReflectionTestUtils.getField(generator, "enabled");
@@ -186,6 +199,32 @@ class GeneratorTest {
     assertThat(context.result()).isEqualTo("error");
     verify(controlEmitter, never()).emitReady(any());
     verify(rabbit, never()).convertAndSend(eq(Topology.CONTROL_EXCHANGE), anyString(), any(Object.class));
+  }
+
+  @Test
+  void scheduledStatusEmitsDeltaWithConfigurationData() throws Exception {
+    clearInvocations(controlEmitter);
+    ReflectionTestUtils.setField(generator, "enabled", true);
+    ReflectionTestUtils.setField(generator, "lastStatusTs", System.currentTimeMillis() - 100);
+    AtomicLong counter = (AtomicLong) ReflectionTestUtils.getField(generator, "counter");
+    counter.addAndGet(4);
+
+    generator.status();
+
+    ArgumentCaptor<ControlPlaneEmitter.StatusContext> captor =
+        ArgumentCaptor.forClass(ControlPlaneEmitter.StatusContext.class);
+    verify(controlEmitter).emitStatusDelta(captor.capture());
+    ControlPlaneEmitter.StatusContext context = captor.getValue();
+    StatusPayloadFactory factory = new StatusPayloadFactory(RoleContext.fromIdentity(identity));
+    String payload = factory.delta(context.customiser());
+    JsonNode node = mapper.readTree(payload);
+    assertThat(node.path("queues").path("work").path("out").get(0).asText())
+        .isEqualTo(Topology.GEN_QUEUE);
+    assertThat(node.path("data").path("path").asText()).isEqualTo(messageConfig.getPath());
+    assertThat(node.path("data").path("method").asText()).isEqualTo(messageConfig.getMethod());
+    assertThat(node.path("data").path("headers").path("X-Test").asText()).isEqualTo("true");
+    assertThat(node.path("enabled").asBoolean()).isTrue();
+    assertThat(node.path("data").path("tps").asLong()).isGreaterThan(0);
   }
 
   @Test

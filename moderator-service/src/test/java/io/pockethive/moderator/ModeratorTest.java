@@ -125,6 +125,24 @@ class ModeratorTest {
   }
 
   @Test
+  void configUpdateDisablesListenerWhenAlreadyEnabled() throws Exception {
+    ReflectionTestUtils.setField(moderator, "enabled", true);
+    Map<String, Object> args = Map.of("data", Map.of("enabled", false));
+    String correlationId = UUID.randomUUID().toString();
+    String idempotencyKey = UUID.randomUUID().toString();
+    when(registry.getListenerContainer("workListener")).thenReturn(container);
+    ControlSignal signal = ControlSignal.forInstance("config-update", identity.swarmId(),
+        identity.role(), identity.instanceId(), correlationId, idempotencyKey,
+        CommandTarget.INSTANCE, args);
+
+    moderator.onControl(mapper.writeValueAsString(signal),
+        ControlPlaneRouting.signal("config-update", identity.swarmId(), identity.role(),
+            identity.instanceId()), null);
+
+    verify(container).stop();
+  }
+
+  @Test
   void configUpdateErrorEmitsError() throws Exception {
     Map<String, Object> args = Map.of("data", Map.of("enabled", "oops"));
     String correlationId = UUID.randomUUID().toString();

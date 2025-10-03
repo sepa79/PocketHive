@@ -11,15 +11,16 @@ management.endpoints.web.exposure.include: health,info,prometheus
 logging:
   pattern.level: "%5p [%X{traceId}]"
 
-ph:
-  swarmId: ${PH_SWARM_ID:default}
-  finalQueue: ${PH_FINAL_QUEUE:ph.${ph.swarmId}.final}
 pockethive:
+  worker:
+    swarm-id: ${POCKETHIVE_WORKER_SWARM_ID:${ph.swarmId:${PH_SWARM_ID:default}}}
+    queues:
+      final: ${POCKETHIVE_WORKER_QUEUES_FINAL:${ph.finalQueue:${PH_FINAL_QUEUE:ph.${pockethive.worker.swarm-id}.final}}}
   control-plane:
-    swarm-id: ${ph.swarmId}
+    swarm-id: ${pockethive.worker.swarm-id}
     worker:
       role: postprocessor
-      swarm-id: ${ph.swarmId}
+      swarm-id: ${pockethive.worker.swarm-id}
       instance-id: ${bee.name:${random.uuid}}
       skip-self-signals: false
     manager:
