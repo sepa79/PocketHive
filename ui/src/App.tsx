@@ -6,10 +6,8 @@ import HivePage from './pages/hive/HivePage'
 import Nectar from './pages/Nectar'
 import ScenarioHost from './pages/scenario/ScenarioHost'
 
-const scenarioRemoteId = '@ph/scenario/ScenarioApp'
-
 const ScenarioApp = lazy(async () =>
-  (await import(/* @vite-ignore */ scenarioRemoteId)) as typeof import('@ph/scenario/ScenarioApp'),
+  (await import('@ph/scenario/ScenarioApp')) as typeof import('@ph/scenario/ScenarioApp')
 )
 
 function ScenarioFallback() {

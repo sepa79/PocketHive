@@ -1,4 +1,11 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  type ReactElement,
+  type ReactNode,
+} from 'react'
 
 export type UIConfig = {
   rabbitmq: string
@@ -18,7 +25,7 @@ const readOnlyUser =
 const readOnlyPasscode =
   import.meta.env.VITE_STOMP_READONLY_PASSCODE || import.meta.env.VITE_STOMP_PASSCODE || 'ph-observer'
 
-const config: UIConfig = {
+const defaultConfig: UIConfig = {
   rabbitmq: `http://${host}:15672/`,
   prometheus: `http://${host}:9090/`,
   grafana: `http://${host}:3000/`,
@@ -30,29 +37,52 @@ const config: UIConfig = {
 }
 
 type Listener = (cfg: UIConfig) => void
-let listeners: Listener[] = []
 
-export function getConfig() {
-  return config
+const globalObject = globalThis as typeof globalThis & {
+  __POCKETHIVE_UI_CONFIG__?: UIConfig
+  __POCKETHIVE_UI_CONFIG_LISTENERS__?: Set<Listener>
+}
+
+function ensureConfig(): UIConfig {
+  if (!globalObject.__POCKETHIVE_UI_CONFIG__) {
+    globalObject.__POCKETHIVE_UI_CONFIG__ = defaultConfig
+  }
+
+  return globalObject.__POCKETHIVE_UI_CONFIG__
+}
+
+function ensureListeners(): Set<Listener> {
+  if (!globalObject.__POCKETHIVE_UI_CONFIG_LISTENERS__) {
+    globalObject.__POCKETHIVE_UI_CONFIG_LISTENERS__ = new Set()
+  }
+
+  return globalObject.__POCKETHIVE_UI_CONFIG_LISTENERS__
+}
+
+export function getConfig(): UIConfig {
+  return ensureConfig()
 }
 
 export function setConfig(partial: Partial<UIConfig>) {
-  Object.assign(config, partial)
-  listeners.forEach((l) => l(config))
+  const next = { ...ensureConfig(), ...partial }
+  globalObject.__POCKETHIVE_UI_CONFIG__ = next
+
+  ensureListeners().forEach((listener) => listener(next))
 }
 
 export function subscribeConfig(fn: Listener) {
-  listeners.push(fn)
-  fn(config)
+  const listeners = ensureListeners()
+  listeners.add(fn)
+  fn(getConfig())
   return () => {
-    listeners = listeners.filter((l) => l !== fn)
+    listeners.delete(fn)
   }
 }
 
-const ConfigContext = createContext<UIConfig>(config)
+const ConfigContext = createContext<UIConfig>(getConfig())
 
-export function ConfigProvider({ children }: { children: ReactNode }): JSX.Element {
-  const [cfg, setCfg] = useState(config)
+export function ConfigProvider({ children }: { children: ReactNode }): ReactElement {
+  const [cfg, setCfg] = useState(getConfig())
 
   useEffect(() => subscribeConfig(setCfg), [])
 

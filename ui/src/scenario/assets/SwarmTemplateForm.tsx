@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import type { ChangeEvent } from 'react'
 
 import AssetForm from './AssetForm'
 import type { DatasetAsset, SwarmTemplateAsset, SutAsset } from './assets'
@@ -117,7 +118,7 @@ export const SwarmTemplateForm = ({
         <input
           type="text"
           value={fields.id}
-          onChange={(event) => updateField('id', event.target.value)}
+          onChange={(event: ChangeEvent<HTMLInputElement>) => updateField('id', event.target.value)}
           aria-invalid={Boolean(errors.id)}
           aria-describedby="template-id-error"
           className="rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 focus:border-amber-400 focus:outline-none"
@@ -135,7 +136,7 @@ export const SwarmTemplateForm = ({
         <input
           type="text"
           value={fields.name}
-          onChange={(event) => updateField('name', event.target.value)}
+          onChange={(event: ChangeEvent<HTMLInputElement>) => updateField('name', event.target.value)}
           aria-invalid={Boolean(errors.name)}
           aria-describedby="template-name-error"
           className="rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 focus:border-amber-400 focus:outline-none"
@@ -151,7 +152,7 @@ export const SwarmTemplateForm = ({
         <span className="font-semibold text-slate-200">System under test</span>
         <select
           value={fields.sutId}
-          onChange={(event) => updateField('sutId', event.target.value)}
+          onChange={(event: ChangeEvent<HTMLSelectElement>) => updateField('sutId', event.target.value)}
           aria-invalid={Boolean(errors.sutId)}
           aria-describedby="template-sut-error"
           className="rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 focus:border-amber-400 focus:outline-none"
@@ -176,7 +177,7 @@ export const SwarmTemplateForm = ({
         <span className="font-semibold text-slate-200">Dataset</span>
         <select
           value={fields.datasetId}
-          onChange={(event) => updateField('datasetId', event.target.value)}
+          onChange={(event: ChangeEvent<HTMLSelectElement>) => updateField('datasetId', event.target.value)}
           aria-invalid={Boolean(errors.datasetId)}
           aria-describedby="template-dataset-error"
           className="rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 focus:border-amber-400 focus:outline-none"
@@ -203,7 +204,9 @@ export const SwarmTemplateForm = ({
           type="number"
           min={1}
           value={fields.swarmSize}
-          onChange={(event) => updateField('swarmSize', Number.parseInt(event.target.value, 10) || 0)}
+          onChange={(event: ChangeEvent<HTMLInputElement>) =>
+            updateField('swarmSize', Number.parseInt(event.target.value, 10) || 0)
+          }
           aria-invalid={Boolean(errors.swarmSize)}
           aria-describedby="template-swarm-error"
           className="rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 focus:border-amber-400 focus:outline-none"
@@ -219,7 +222,7 @@ export const SwarmTemplateForm = ({
         <span className="font-semibold text-slate-200">Description</span>
         <textarea
           value={fields.description}
-          onChange={(event) => updateField('description', event.target.value)}
+          onChange={(event: ChangeEvent<HTMLTextAreaElement>) => updateField('description', event.target.value)}
           className="min-h-[96px] rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 focus:border-amber-400 focus:outline-none"
         />
       </label>

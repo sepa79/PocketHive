@@ -1,12 +1,13 @@
 import { create } from 'zustand'
-import { StateStorage, createJSONStorage, persist } from 'zustand/middleware'
+import { createJSONStorage, persist } from 'zustand/middleware'
+import type { StateStorage } from 'zustand/middleware'
 
-import {
+import { emptyCollections, sortByName } from './assets'
+import type {
+  AssetCollections,
   DatasetAsset,
   SwarmTemplateAsset,
   SutAsset,
-  emptyCollections,
-  sortByName,
 } from './assets'
 
 const STORAGE_KEY = 'ph.scenario.assets'
@@ -32,6 +33,7 @@ interface AssetState {
   upsertSwarmTemplate: (asset: SwarmTemplateAsset) => void
   removeSwarmTemplate: (id: string) => void
   reset: () => void
+  hydrate: (collections: AssetCollections) => void
 }
 const memoryStorage: StateStorage = {
   getItem: () => null,
@@ -80,6 +82,17 @@ export const useAssetStore = create<AssetState>()(
           swarmTemplates: state.swarmTemplates.filter((asset) => asset.id !== id),
         })),
       reset: () => set(() => emptyCollections()),
+      hydrate: (collections: AssetCollections) =>
+        set(() => ({
+          sutAssets: sortByName(collections.sutAssets),
+          datasetAssets: sortByName(collections.datasetAssets),
+          swarmTemplates: sortByName(
+            collections.swarmTemplates.map((template) => ({
+              ...template,
+              swarmSize: Math.max(1, template.swarmSize),
+            })),
+          ),
+        })),
     }),
     {
       name: STORAGE_KEY,
