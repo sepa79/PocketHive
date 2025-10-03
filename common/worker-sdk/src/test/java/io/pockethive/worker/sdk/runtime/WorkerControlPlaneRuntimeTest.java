@@ -1,0 +1,137 @@
+package io.pockethive.worker.sdk.runtime;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import io.pockethive.Topology;
+import io.pockethive.control.CommandTarget;
+import io.pockethive.control.ControlSignal;
+import io.pockethive.controlplane.ControlPlaneIdentity;
+import io.pockethive.controlplane.messaging.ControlPlaneEmitter;
+import io.pockethive.controlplane.routing.ControlPlaneRouting;
+import io.pockethive.controlplane.topology.ControlPlaneTopologyDescriptor;
+import io.pockethive.controlplane.topology.GeneratorControlPlaneTopologyDescriptor;
+import io.pockethive.controlplane.worker.WorkerControlPlane;
+import io.pockethive.worker.sdk.config.WorkerType;
+import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.reset;
+import static org.mockito.Mockito.verify;
+
+@ExtendWith(MockitoExtension.class)
+class WorkerControlPlaneRuntimeTest {
+
+    private static final ObjectMapper MAPPER = new ObjectMapper();
+    private static final ControlPlaneIdentity IDENTITY = new ControlPlaneIdentity(Topology.SWARM_ID, "generator", "inst-1");
+    private static final ControlPlaneTopologyDescriptor TOPOLOGY = new GeneratorControlPlaneTopologyDescriptor();
+
+    private WorkerStateStore stateStore;
+    private WorkerDefinition definition;
+    private WorkerControlPlane controlPlane;
+    private WorkerControlPlaneRuntime runtime;
+
+    @Mock
+    private ControlPlaneEmitter emitter;
+
+    @BeforeEach
+    void setUp() {
+        stateStore = new WorkerStateStore();
+        definition = new WorkerDefinition(
+            "testWorker",
+            TestWorker.class,
+            WorkerType.GENERATOR,
+            "generator",
+            null,
+            "out.queue",
+            TestConfig.class
+        );
+        stateStore.getOrCreate(definition);
+        controlPlane = WorkerControlPlane.builder(MAPPER)
+            .identity(IDENTITY)
+            .build();
+        runtime = new WorkerControlPlaneRuntime(controlPlane, stateStore, MAPPER, emitter, IDENTITY, TOPOLOGY);
+        reset(emitter);
+    }
+
+    @Test
+    void workerConfigAccessibleAfterUpdate() throws Exception {
+        String correlationId = UUID.randomUUID().toString();
+        String idempotencyKey = UUID.randomUUID().toString();
+        Map<String, Object> args = Map.of(
+            "data", Map.of(
+                "enabled", true,
+                "ratePerSec", 12.5
+            )
+        );
+        ControlSignal signal = ControlSignal.forInstance(
+            "config-update",
+            IDENTITY.swarmId(),
+            IDENTITY.role(),
+            IDENTITY.instanceId(),
+            correlationId,
+            idempotencyKey,
+            CommandTarget.INSTANCE,
+            args
+        );
+        String payload = MAPPER.writeValueAsString(signal);
+        String routingKey = ControlPlaneRouting.signal("config-update", IDENTITY.swarmId(), IDENTITY.role(), IDENTITY.instanceId());
+
+        boolean handled = runtime.handle(payload, routingKey);
+
+        assertThat(handled).isTrue();
+        Optional<TestConfig> config = runtime.workerConfig(definition.beanName(), TestConfig.class);
+        assertThat(config).contains(new TestConfig(true, 12.5));
+        assertThat(runtime.workerEnabled(definition.beanName())).contains(true);
+        Map<String, Object> rawConfig = runtime.workerRawConfig(definition.beanName());
+        assertThat(rawConfig).containsEntry("ratePerSec", 12.5);
+        ArgumentCaptor<ControlPlaneEmitter.ReadyContext> captor = ArgumentCaptor.forClass(ControlPlaneEmitter.ReadyContext.class);
+        verify(emitter).emitReady(captor.capture());
+        assertThat(captor.getValue().signal()).isEqualTo("config-update");
+    }
+
+    @Test
+    void stateListenerReceivesSnapshots() throws Exception {
+        AtomicReference<WorkerControlPlaneRuntime.WorkerStateSnapshot> lastSnapshot = new AtomicReference<>();
+        runtime.registerStateListener(definition.beanName(), lastSnapshot::set);
+        WorkerControlPlaneRuntime.WorkerStateSnapshot initial = lastSnapshot.get();
+        assertThat(initial).isNotNull();
+        assertThat(initial.enabled()).isEmpty();
+
+        Map<String, Object> args = Map.of(
+            "data", Map.of("enabled", true)
+        );
+        ControlSignal signal = ControlSignal.forInstance(
+            "config-update",
+            IDENTITY.swarmId(),
+            IDENTITY.role(),
+            IDENTITY.instanceId(),
+            UUID.randomUUID().toString(),
+            UUID.randomUUID().toString(),
+            CommandTarget.INSTANCE,
+            args
+        );
+        String payload = MAPPER.writeValueAsString(signal);
+        String routingKey = ControlPlaneRouting.signal("config-update", IDENTITY.swarmId(), IDENTITY.role(), IDENTITY.instanceId());
+
+        runtime.handle(payload, routingKey);
+
+        WorkerControlPlaneRuntime.WorkerStateSnapshot snapshot = lastSnapshot.get();
+        assertThat(snapshot).isNotNull();
+        assertThat(snapshot.enabled()).contains(true);
+    }
+
+    private static final class TestWorker {
+        // marker class for definition
+    }
+
+    private record TestConfig(boolean enabled, double ratePerSec) {
+    }
+}

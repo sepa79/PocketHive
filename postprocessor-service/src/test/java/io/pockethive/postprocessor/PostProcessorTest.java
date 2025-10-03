@@ -1,155 +1,158 @@
 package io.pockethive.postprocessor;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.pockethive.Topology;
-import io.pockethive.asyncapi.AsyncApiSchemaValidator;
-import io.pockethive.control.CommandTarget;
-import io.pockethive.control.ControlSignal;
-import io.pockethive.controlplane.ControlPlaneIdentity;
-import io.pockethive.controlplane.messaging.ControlPlaneEmitter;
-import io.pockethive.controlplane.payload.RoleContext;
-import io.pockethive.controlplane.payload.StatusPayloadFactory;
-import io.pockethive.controlplane.routing.ControlPlaneRouting;
-import io.pockethive.controlplane.topology.ControlPlaneTopologyDescriptor;
-import io.pockethive.controlplane.topology.ControlQueueDescriptor;
-import io.pockethive.controlplane.topology.PostProcessorControlPlaneTopologyDescriptor;
-import io.pockethive.controlplane.worker.WorkerControlPlane;
+import io.pockethive.observability.Hop;
+import io.pockethive.observability.ObservabilityContext;
+import io.pockethive.worker.sdk.api.MessageWorker;
+import io.pockethive.worker.sdk.api.StatusPublisher;
+import io.pockethive.worker.sdk.api.WorkMessage;
+import io.pockethive.worker.sdk.api.WorkResult;
+import io.pockethive.worker.sdk.api.WorkerContext;
+import io.pockethive.worker.sdk.api.WorkerInfo;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
-import org.junit.jupiter.api.BeforeEach;
+import java.util.Objects;
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
-import org.springframework.amqp.rabbit.listener.MessageListenerContainer;
-import org.springframework.amqp.rabbit.listener.RabbitListenerEndpointRegistry;
-import org.springframework.test.util.ReflectionTestUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.clearInvocations;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
-@ExtendWith(MockitoExtension.class)
 class PostProcessorTest {
 
-  private static final AsyncApiSchemaValidator ASYNC_API = AsyncApiSchemaValidator.loadDefault();
+    private static final Instant START = Instant.parse("2024-01-01T00:00:00Z");
 
-  @Mock
-  RabbitTemplate rabbit;
+    @Test
+    void onMessageRecordsLatencyAndErrorsAndUpdatesStatus() {
+        PostProcessorWorkerImpl worker = new PostProcessorWorkerImpl(new PostProcessorDefaults(true));
+        ObservabilityContext context = new ObservabilityContext();
+        List<Hop> hops = new ArrayList<>();
+        hops.add(new Hop("generator", "gen-1", START, START.plusMillis(5)));
+        hops.add(new Hop("processor", "proc-1", START.plusMillis(5), START.plusMillis(15)));
+        context.setHops(hops);
+        context.setTraceId("trace-123");
 
-  @Mock
-  RabbitListenerEndpointRegistry registry;
+        WorkMessage message = WorkMessage.text("payload")
+                .header("x-ph-error", true)
+                .observabilityContext(context)
+                .build();
 
-  @Mock
-  MessageListenerContainer container;
+        TestWorkerContext workerContext = new TestWorkerContext(new PostProcessorWorkerConfig(true));
 
-  @Mock
-  ControlPlaneEmitter controlEmitter;
+        WorkResult result = worker.onMessage(message, workerContext);
 
-  private final ObjectMapper mapper = new ObjectMapper();
-  private SimpleMeterRegistry meterRegistry;
-  private ControlPlaneIdentity identity;
-  private ControlPlaneTopologyDescriptor topology;
-  private WorkerControlPlane workerControlPlane;
-  private PostProcessor postProcessor;
-  private String controlQueueName;
+        assertThat(result).isEqualTo(WorkResult.none());
+        assertThat(workerContext.statusData().get("enabled")).isEqualTo(true);
+        assertThat(workerContext.statusData().get("errors")).isEqualTo(1.0d);
+        assertThat(workerContext.statusData().get("hopLatencyMs")).isEqualTo(10L);
+        assertThat(workerContext.statusData().get("totalLatencyMs")).isEqualTo(15L);
+        assertThat(workerContext.statusData().get("hopCount")).isEqualTo(2);
 
-  @BeforeEach
-  void setUp() {
-    meterRegistry = new SimpleMeterRegistry();
-    identity = new ControlPlaneIdentity(Topology.SWARM_ID, "postprocessor", "inst");
-    topology = new PostProcessorControlPlaneTopologyDescriptor();
-    workerControlPlane = WorkerControlPlane.builder(mapper)
-        .identity(identity)
-        .build();
-    postProcessor = new PostProcessor(rabbit, meterRegistry, controlEmitter, identity, topology,
-        workerControlPlane, registry);
-    clearInvocations(controlEmitter, rabbit, registry, container);
-    controlQueueName = topology.controlQueue(identity.instanceId())
-        .map(ControlQueueDescriptor::name)
-        .orElseThrow();
-  }
+    MeterRegistry registry = workerContext.meterRegistry();
+    var hopSummary = registry.find("postprocessor_hop_latency_ms").summary();
+    var totalSummary = registry.find("postprocessor_total_latency_ms").summary();
+    var hopCountSummary = registry.find("postprocessor_hops").summary();
+    var errorsCounter = registry.find("postprocessor_errors_total").counter();
 
-  @Test
-  void statusRequestEmitsFullStatus() throws Exception {
-    String correlationId = UUID.randomUUID().toString();
-    String idempotencyKey = UUID.randomUUID().toString();
-    ControlSignal signal = ControlSignal.forInstance("status-request", identity.swarmId(),
-        identity.role(), identity.instanceId(), correlationId, idempotencyKey);
+    assertThat(hopSummary).isNotNull();
+    assertThat(hopSummary.totalAmount()).isEqualTo(10.0);
+    assertThat(totalSummary).isNotNull();
+    assertThat(totalSummary.totalAmount()).isEqualTo(15.0);
+    assertThat(hopCountSummary).isNotNull();
+    assertThat(hopCountSummary.totalAmount()).isEqualTo(2.0);
+    assertThat(errorsCounter).isNotNull();
+    assertThat(errorsCounter.count()).isEqualTo(1.0);
+    }
 
-    postProcessor.onControl(mapper.writeValueAsString(signal),
-        ControlPlaneRouting.signal("status-request", identity.swarmId(), identity.role(),
-            identity.instanceId()), null);
+    @Test
+    void onMessageUsesDefaultsWhenNoConfigPresent() {
+        PostProcessorWorkerImpl worker = new PostProcessorWorkerImpl(new PostProcessorDefaults(false));
+        ObservabilityContext context = new ObservabilityContext();
+        context.setHops(List.of());
 
-    ArgumentCaptor<ControlPlaneEmitter.StatusContext> captor =
-        ArgumentCaptor.forClass(ControlPlaneEmitter.StatusContext.class);
-    verify(controlEmitter).emitStatusSnapshot(captor.capture());
-    StatusPayloadFactory factory = new StatusPayloadFactory(RoleContext.fromIdentity(identity));
-    String payload = factory.snapshot(captor.getValue().customiser());
-    JsonNode node = mapper.readTree(payload);
-    List<String> errors = ASYNC_API.validate("#/components/schemas/ControlStatusFullPayload", node);
-    assertThat(errors).isEmpty();
-    assertThat(node.path("queues").path("control").path("in").get(0).asText())
-        .isEqualTo(controlQueueName);
-  }
+        WorkMessage message = WorkMessage.text("payload")
+                .build();
 
-  @Test
-  void configUpdateEnablesProcessingAndEmitsReady() throws Exception {
-    Map<String, Object> args = Map.of("data", Map.of("enabled", true));
-    String correlationId = UUID.randomUUID().toString();
-    String idempotencyKey = UUID.randomUUID().toString();
-    when(registry.getListenerContainer("workListener")).thenReturn(container);
-    ControlSignal signal = ControlSignal.forInstance("config-update", identity.swarmId(),
-        identity.role(), identity.instanceId(), correlationId, idempotencyKey,
-        CommandTarget.INSTANCE, args);
+        TestWorkerContext workerContext = new TestWorkerContext(null);
 
-    postProcessor.onControl(mapper.writeValueAsString(signal),
-        ControlPlaneRouting.signal("config-update", identity.swarmId(), identity.role(),
-            identity.instanceId()), null);
+        worker.onMessage(message, workerContext);
 
-    ArgumentCaptor<ControlPlaneEmitter.ReadyContext> captor =
-        ArgumentCaptor.forClass(ControlPlaneEmitter.ReadyContext.class);
-    verify(controlEmitter).emitReady(captor.capture());
-    Boolean enabled = (Boolean) ReflectionTestUtils.getField(postProcessor, "enabled");
-    assertThat(enabled).isTrue();
-    verify(container).start();
-  }
+        assertThat(workerContext.statusData().get("enabled")).isEqualTo(false);
+    }
 
-  @Test
-  void configUpdateErrorEmitsError() throws Exception {
-    Map<String, Object> args = Map.of("data", Map.of("enabled", "oops"));
-    String correlationId = UUID.randomUUID().toString();
-    String idempotencyKey = UUID.randomUUID().toString();
-    ControlSignal signal = ControlSignal.forInstance("config-update", identity.swarmId(),
-        identity.role(), identity.instanceId(), correlationId, idempotencyKey,
-        CommandTarget.INSTANCE, args);
+    private static final class TestWorkerContext implements WorkerContext {
+        private final PostProcessorWorkerConfig config;
+        private final WorkerInfo info = new WorkerInfo("postprocessor", "swarm", "instance", Topology.FINAL_QUEUE, null);
+        private final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
+        private final CapturingStatusPublisher statusPublisher = new CapturingStatusPublisher();
+        private final Logger logger = LoggerFactory.getLogger(MessageWorker.class);
 
-    postProcessor.onControl(mapper.writeValueAsString(signal),
-        ControlPlaneRouting.signal("config-update", identity.swarmId(), identity.role(),
-            identity.instanceId()), null);
+        private TestWorkerContext(PostProcessorWorkerConfig config) {
+            this.config = config;
+        }
 
-    ArgumentCaptor<ControlPlaneEmitter.ErrorContext> captor =
-        ArgumentCaptor.forClass(ControlPlaneEmitter.ErrorContext.class);
-    verify(controlEmitter).emitError(captor.capture());
-    verify(controlEmitter, never()).emitReady(any());
-  }
+        @Override
+        public WorkerInfo info() {
+            return info;
+        }
 
-  @Test
-  void onControlRejectsBlankPayload() {
-    String routingKey = ControlPlaneRouting.signal("status-request", identity.swarmId(),
-        identity.role(), identity.instanceId());
+        @Override
+        public <C> Optional<C> config(Class<C> type) {
+            if (config != null && type.isAssignableFrom(PostProcessorWorkerConfig.class)) {
+                return Optional.of(type.cast(config));
+            }
+            return Optional.empty();
+        }
 
-    assertThatThrownBy(() -> postProcessor.onControl("", routingKey, null))
-        .isInstanceOf(IllegalArgumentException.class)
-        .hasMessageContaining("payload");
-  }
+        @Override
+        public StatusPublisher statusPublisher() {
+            return statusPublisher;
+        }
+
+        @Override
+        public Logger logger() {
+            return logger;
+        }
+
+        @Override
+        public MeterRegistry meterRegistry() {
+            return meterRegistry;
+        }
+
+        @Override
+        public io.micrometer.observation.ObservationRegistry observationRegistry() {
+            return io.micrometer.observation.ObservationRegistry.create();
+        }
+
+        @Override
+        public ObservabilityContext observabilityContext() {
+            return null;
+        }
+
+        Map<String, Object> statusData() {
+            return Map.copyOf(statusPublisher.data);
+        }
+    }
+
+    private static final class CapturingStatusPublisher implements StatusPublisher {
+        private final Map<String, Object> data = new LinkedHashMap<>();
+        private final MutableStatus mutableStatus = new MutableStatus() {
+            @Override
+            public MutableStatus data(String key, Object value) {
+                data.put(key, value);
+                return this;
+            }
+        };
+
+        @Override
+        public void update(java.util.function.Consumer<MutableStatus> consumer) {
+            Objects.requireNonNull(consumer, "consumer").accept(mutableStatus);
+        }
+    }
 }

@@ -3,6 +3,9 @@ package io.pockethive.controlplane.spring;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.controlplane.consumer.SelfFilter;
+import io.pockethive.controlplane.messaging.ControlPlaneEmitter;
+import io.pockethive.controlplane.messaging.ControlPlanePublisher;
+import io.pockethive.controlplane.payload.RoleContext;
 import io.pockethive.controlplane.topology.ControlPlaneTopologyDescriptor;
 import io.pockethive.controlplane.worker.WorkerControlPlane;
 import java.util.List;
@@ -13,6 +16,7 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -76,6 +80,18 @@ public class WorkerControlPlaneAutoConfiguration {
             builder.duplicateCache(duplicate.getTtl(), duplicate.getCapacity());
         }
         return builder.build();
+    }
+
+    @Bean(name = "workerControlPlaneEmitter")
+    @ConditionalOnMissingBean(name = "workerControlPlaneEmitter")
+    @ConditionalOnBean(ControlPlanePublisher.class)
+    ControlPlaneEmitter workerControlPlaneEmitter(
+        @Qualifier("workerControlPlaneTopologyDescriptor") ControlPlaneTopologyDescriptor descriptor,
+        @Qualifier("workerControlPlaneIdentity") ControlPlaneIdentity identity,
+        ControlPlanePublisher publisher
+    ) {
+        RoleContext role = RoleContext.fromIdentity(identity);
+        return ControlPlaneEmitter.using(descriptor, role, publisher);
     }
 
     private static String requireText(String value, String property) {
