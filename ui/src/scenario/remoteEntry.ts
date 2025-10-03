@@ -25,6 +25,7 @@ export const mount = (element: HTMLElement): MountReturn => {
 }
 
 export { ScenarioApp }
+export default ScenarioApp
 
 if (import.meta.env.MODE === 'scenario' && import.meta.env.DEV) {
   const container = document.getElementById('root')
