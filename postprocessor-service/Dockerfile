@@ -8,7 +8,8 @@ COPY common/swarm-model/pom.xml common/swarm-model/pom.xml
 COPY common/control-plane-core/pom.xml common/control-plane-core/pom.xml
 COPY common/control-plane-spring/pom.xml common/control-plane-spring/pom.xml
 COPY common/worker-sdk/pom.xml common/worker-sdk/pom.xml
-COPY common/worker-runtime/pom.xml common/worker-runtime/pom.xml
+# ensure worker runtime module is staged for dependency resolution
+COPY common/worker-runtime/pom.xml ./common/worker-runtime/pom.xml
 COPY test/pom.xml test/pom.xml
 COPY e2e-tests/pom.xml e2e-tests/pom.xml
 COPY observability/pom.xml observability/pom.xml
@@ -27,7 +28,7 @@ COPY common/swarm-model/src common/swarm-model/src
 COPY common/control-plane-core/src common/control-plane-core/src
 COPY common/control-plane-spring/src common/control-plane-spring/src
 COPY common/worker-sdk/src common/worker-sdk/src
-COPY common/worker-runtime/src common/worker-runtime/src
+COPY common/worker-runtime/src ./common/worker-runtime/src
 COPY test/src test/src
 COPY e2e-tests/src e2e-tests/src
 COPY observability/src observability/src
