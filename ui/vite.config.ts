@@ -31,8 +31,10 @@ export default defineConfig(({ mode }) => {
   }
 
   if (!isScenario && !isTest) {
-    const scenarioRemoteUrl =
-      process.env.VITE_SCENARIO_REMOTE_URL ?? 'http://localhost:5173/assets/remoteEntry.js'
+    const defaultRemoteUrl =
+      mode === 'development' ? 'http://localhost:5173/assets/remoteEntry.js' : '/assets/remoteEntry.js'
+
+    const scenarioRemoteUrl = process.env.VITE_SCENARIO_REMOTE_URL ?? defaultRemoteUrl
 
     federationOptions.remotes = {
       '@ph/scenario': {

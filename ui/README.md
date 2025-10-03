@@ -60,7 +60,8 @@ npm run build:scenario
 ```
 
 To consume the remote from a host application, configure Module Federation (or the compatible loader) with the following
-settings:
+settings. The PocketHive UI image serves its own remote entry at `/assets/remoteEntry.js` by default, but you can point the host
+elsewhere by setting `VITE_SCENARIO_REMOTE_URL` during the build.
 
 - **Remote name**: `@ph/scenario`
 - **Remote entry URL**: `<scenario-server>/assets/remoteEntry.js`
