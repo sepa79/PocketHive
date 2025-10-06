@@ -73,8 +73,6 @@ class ProcessorRuntimeAdapterTest {
         ProcessorWorkerConfig.class
     );
     when(workerRegistry.all()).thenReturn(List.of(definition));
-    when(listenerRegistry.getListenerContainer("processorWorkerListener")).thenReturn(listenerContainer);
-    when(listenerContainer.isRunning()).thenReturn(false);
   }
 
   @Test
@@ -135,6 +133,9 @@ class ProcessorRuntimeAdapterTest {
 
   @Test
   void registersListenerAppliesDesiredStateAndEmitsSnapshot() {
+    when(listenerRegistry.getListenerContainer("processorWorkerListener")).thenReturn(listenerContainer);
+    when(listenerContainer.isRunning()).thenReturn(false);
+
     ProcessorRuntimeAdapter adapter = new ProcessorRuntimeAdapter(
         workerRuntime,
         workerRegistry,
