@@ -72,12 +72,16 @@ class ModeratorRuntimeAdapterTest {
         ModeratorWorkerConfig.class
     );
     when(workerRegistry.all()).thenReturn(List.of(definition));
+  }
+
+  private void stubListenerContainerStopped() {
     when(listenerRegistry.getListenerContainer("moderatorWorkerListener")).thenReturn(listenerContainer);
     when(listenerContainer.isRunning()).thenReturn(false);
   }
 
   @Test
   void onWorkDispatchesToWorkerAndPublishesResult() throws Exception {
+    stubListenerContainerStopped();
     doReturn(WorkResult.message(WorkMessage.text("forwarded").build()))
         .when(workerRuntime)
         .dispatch(eq("moderatorWorker"), any(WorkMessage.class));
@@ -107,6 +111,7 @@ class ModeratorRuntimeAdapterTest {
 
   @Test
   void onControlDelegatesToControlPlaneRuntime() {
+    stubListenerContainerStopped();
     ModeratorRuntimeAdapter adapter = new ModeratorRuntimeAdapter(
         workerRuntime,
         workerRegistry,
@@ -134,6 +139,7 @@ class ModeratorRuntimeAdapterTest {
 
   @Test
   void registersListenerAndAppliesDesiredState() {
+    stubListenerContainerStopped();
     ModeratorRuntimeAdapter adapter = new ModeratorRuntimeAdapter(
         workerRuntime,
         workerRegistry,
