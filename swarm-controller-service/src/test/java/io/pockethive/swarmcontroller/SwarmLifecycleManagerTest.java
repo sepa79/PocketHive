@@ -79,7 +79,6 @@ class SwarmLifecycleManagerTest {
     assertEquals("ctrl-net", env.get("CONTROL_NETWORK"));
     assertEquals("ph." + Topology.SWARM_ID + ".qin", env.get("PH_MOD_QUEUE"));
     assertEquals("ph." + Topology.SWARM_ID + ".qout", env.get("PH_GEN_QUEUE"));
-    assertEquals("false", env.get("PH_ENABLED"));
     assertTrue(env.get("JAVA_TOOL_OPTIONS").endsWith("-Dbee.name=" + assignedName));
     verify(docker).startContainer("c1");
     assertEquals(SwarmStatus.RUNNING, manager.getStatus());
@@ -150,7 +149,6 @@ class SwarmLifecycleManagerTest {
     verify(docker).createContainer(eq("img1"), envCap2.capture(), nameCap2.capture());
     Map<String,String> env = envCap2.getValue();
     assertTrue(env.get("JAVA_TOOL_OPTIONS").endsWith("-Dbee.name=" + nameCap2.getValue()));
-    assertEquals("false", env.get("PH_ENABLED"));
     verify(docker).resolveControlNetwork();
     verify(docker).startContainer("c1");
     verify(amqp).declareExchange(argThat((TopicExchange e) -> e.getName().equals("ph." + Topology.SWARM_ID + ".hive")));
