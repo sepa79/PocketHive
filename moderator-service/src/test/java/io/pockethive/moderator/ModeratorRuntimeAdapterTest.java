@@ -59,7 +59,8 @@ class ModeratorRuntimeAdapterTest {
 
   @BeforeEach
   void setUp() {
-    defaults = new ModeratorDefaults(true);
+    defaults = new ModeratorDefaults();
+    defaults.setEnabled(true);
     identity = new ControlPlaneIdentity(Topology.SWARM_ID, "moderator", "instance-1");
     definition = new WorkerDefinition(
         "moderatorWorker",

@@ -54,7 +54,9 @@ class GeneratorRuntimeAdapterTest {
     messageConfig.setPath("/default");
     messageConfig.setMethod("GET");
     messageConfig.setBody("{}");
-    defaults = new GeneratorDefaults(messageConfig, 2.0, true);
+    defaults = new GeneratorDefaults(messageConfig);
+    defaults.setRatePerSec(2.0);
+    defaults.setEnabled(true);
     identity = new ControlPlaneIdentity(Topology.SWARM_ID, "generator", "instance-1");
     definition = new WorkerDefinition(
         "generatorWorker",

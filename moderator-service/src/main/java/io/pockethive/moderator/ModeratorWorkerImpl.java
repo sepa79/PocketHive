@@ -8,6 +8,7 @@ import io.pockethive.worker.sdk.api.WorkResult;
 import io.pockethive.worker.sdk.api.WorkerContext;
 import io.pockethive.worker.sdk.config.PocketHiveWorker;
 import io.pockethive.worker.sdk.config.WorkerType;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 @Component("moderatorWorker")
@@ -22,6 +23,7 @@ class ModeratorWorkerImpl implements MessageWorker {
 
   private final ModeratorDefaults defaults;
 
+  @Autowired
   ModeratorWorkerImpl(ModeratorDefaults defaults) {
     this.defaults = defaults;
   }

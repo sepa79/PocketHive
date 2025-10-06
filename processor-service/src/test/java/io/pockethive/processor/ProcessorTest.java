@@ -56,7 +56,9 @@ class ProcessorTest {
 
     @Test
     void workerInvokesHttpAndPropagatesResponse() throws Exception {
-        ProcessorDefaults defaults = new ProcessorDefaults(true, "http://sut/");
+        ProcessorDefaults defaults = new ProcessorDefaults();
+        defaults.setEnabled(true);
+        defaults.setBaseUrl("http://sut/");
         HttpClient httpClient = mock(HttpClient.class);
         Clock clock = Clock.fixed(Instant.parse("2024-01-01T00:00:00Z"), ZoneOffset.UTC);
         ProcessorWorkerImpl worker = new ProcessorWorkerImpl(defaults, httpClient, clock);
@@ -113,7 +115,9 @@ class ProcessorTest {
 
     @Test
     void workerFallsBackToDefaultsWhenConfigMissing() throws Exception {
-        ProcessorDefaults defaults = new ProcessorDefaults(true, "http://defaults/");
+        ProcessorDefaults defaults = new ProcessorDefaults();
+        defaults.setEnabled(true);
+        defaults.setBaseUrl("http://defaults/");
         HttpClient httpClient = mock(HttpClient.class);
         Clock clock = Clock.fixed(Instant.parse("2024-01-01T00:00:00Z"), ZoneOffset.UTC);
         ProcessorWorkerImpl worker = new ProcessorWorkerImpl(defaults, httpClient, clock);
@@ -137,7 +141,9 @@ class ProcessorTest {
 
     @Test
     void workerReturnsErrorWhenBaseUrlMissing() throws Exception {
-        ProcessorDefaults defaults = new ProcessorDefaults(true, "");
+        ProcessorDefaults defaults = new ProcessorDefaults();
+        defaults.setEnabled(true);
+        defaults.setBaseUrl("");
         HttpClient httpClient = mock(HttpClient.class);
         Clock clock = Clock.systemUTC();
         ProcessorWorkerImpl worker = new ProcessorWorkerImpl(defaults, httpClient, clock);
@@ -177,7 +183,9 @@ class ProcessorTest {
         when(workerRegistry.all()).thenReturn(List.of(definition));
 
         ControlPlaneIdentity identity = new ControlPlaneIdentity("swarm", "processor", "instance");
-        ProcessorDefaults defaults = new ProcessorDefaults(true, "http://sut/");
+        ProcessorDefaults defaults = new ProcessorDefaults();
+        defaults.setEnabled(true);
+        defaults.setBaseUrl("http://sut/");
         ProcessorRuntimeAdapter adapter = new ProcessorRuntimeAdapter(
                 workerRuntime,
                 workerRegistry,
@@ -227,7 +235,9 @@ class ProcessorTest {
         when(workerRegistry.all()).thenReturn(List.of(definition));
 
         ControlPlaneIdentity identity = new ControlPlaneIdentity("swarm", "processor", "instance");
-        ProcessorDefaults defaults = new ProcessorDefaults(false, "");
+        ProcessorDefaults defaults = new ProcessorDefaults();
+        defaults.setEnabled(false);
+        defaults.setBaseUrl("");
         ProcessorRuntimeAdapter adapter = new ProcessorRuntimeAdapter(
                 workerRuntime,
                 workerRegistry,

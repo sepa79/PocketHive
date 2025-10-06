@@ -1,21 +1,32 @@
 package io.pockethive.processor;
 
-import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
 @Component
+@ConfigurationProperties(prefix = "ph.processor")
 class ProcessorDefaults {
 
-  private final boolean defaultEnabled;
-  private final String defaultBaseUrl;
+  private boolean enabled = false;
+  private String baseUrl = "";
 
-  ProcessorDefaults(@Value("${ph.processor.enabled:false}") boolean defaultEnabled,
-                    @Value("${ph.processor.baseUrl:}") String defaultBaseUrl) {
-    this.defaultEnabled = defaultEnabled;
-    this.defaultBaseUrl = defaultBaseUrl == null ? "" : defaultBaseUrl.trim();
+  public boolean isEnabled() {
+    return enabled;
+  }
+
+  public void setEnabled(boolean enabled) {
+    this.enabled = enabled;
+  }
+
+  public String getBaseUrl() {
+    return baseUrl;
+  }
+
+  public void setBaseUrl(String baseUrl) {
+    this.baseUrl = baseUrl == null ? "" : baseUrl.trim();
   }
 
   ProcessorWorkerConfig asConfig() {
-    return new ProcessorWorkerConfig(defaultEnabled, defaultBaseUrl);
+    return new ProcessorWorkerConfig(enabled, baseUrl);
   }
 }

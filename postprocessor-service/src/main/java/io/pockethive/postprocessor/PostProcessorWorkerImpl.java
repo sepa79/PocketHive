@@ -19,6 +19,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 @Component("postProcessorWorker")
@@ -35,6 +36,7 @@ class PostProcessorWorkerImpl implements MessageWorker {
   private final PostProcessorDefaults defaults;
   private final AtomicReference<PostProcessorMetrics> metricsRef = new AtomicReference<>();
 
+  @Autowired
   PostProcessorWorkerImpl(PostProcessorDefaults defaults) {
     this.defaults = Objects.requireNonNull(defaults, "defaults");
   }

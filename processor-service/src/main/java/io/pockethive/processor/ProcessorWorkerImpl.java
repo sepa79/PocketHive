@@ -29,6 +29,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
 import org.slf4j.Logger;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 @Component("processorWorker")
@@ -47,6 +48,7 @@ class ProcessorWorkerImpl implements MessageWorker {
   private final Clock clock;
   private final AtomicReference<ProcessorMetrics> metricsRef = new AtomicReference<>();
 
+  @Autowired
   ProcessorWorkerImpl(ProcessorDefaults defaults) {
     this(defaults, HttpClient.newHttpClient(), Clock.systemUTC());
   }

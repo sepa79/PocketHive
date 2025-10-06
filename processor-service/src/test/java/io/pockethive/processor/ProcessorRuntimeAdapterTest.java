@@ -59,7 +59,9 @@ class ProcessorRuntimeAdapterTest {
 
   @BeforeEach
   void setUp() {
-    defaults = new ProcessorDefaults(true, "http://sut/");
+    defaults = new ProcessorDefaults();
+    defaults.setEnabled(true);
+    defaults.setBaseUrl("http://sut/");
     identity = new ControlPlaneIdentity(Topology.SWARM_ID, "processor", "instance-1");
     definition = new WorkerDefinition(
         "processorWorker",

@@ -56,7 +56,8 @@ class PostProcessorRuntimeAdapterTest {
 
   @BeforeEach
   void setUp() {
-    defaults = new PostProcessorDefaults(true);
+    defaults = new PostProcessorDefaults();
+    defaults.setEnabled(true);
     identity = new ControlPlaneIdentity(Topology.SWARM_ID, "postprocessor", "instance-1");
     definition = new WorkerDefinition(
         "postProcessorWorker",

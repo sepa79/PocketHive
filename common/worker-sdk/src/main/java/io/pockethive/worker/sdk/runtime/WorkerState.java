@@ -11,7 +11,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.atomic.LongAdder;
 
-final class WorkerState {
+public final class WorkerState {
 
     private final WorkerDefinition definition;
     private final AtomicReference<Object> configRef = new AtomicReference<>();

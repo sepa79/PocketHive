@@ -1,18 +1,23 @@
 package io.pockethive.moderator;
 
-import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
 @Component
+@ConfigurationProperties(prefix = "ph.moderator")
 class ModeratorDefaults {
 
-  private final boolean defaultEnabled;
+  private boolean enabled = false;
 
-  ModeratorDefaults(@Value("${ph.moderator.enabled:false}") boolean defaultEnabled) {
-    this.defaultEnabled = defaultEnabled;
+  public boolean isEnabled() {
+    return enabled;
+  }
+
+  public void setEnabled(boolean enabled) {
+    this.enabled = enabled;
   }
 
   ModeratorWorkerConfig asConfig() {
-    return new ModeratorWorkerConfig(defaultEnabled);
+    return new ModeratorWorkerConfig(enabled);
   }
 }

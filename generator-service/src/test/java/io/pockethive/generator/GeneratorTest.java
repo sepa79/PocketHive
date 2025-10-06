@@ -30,7 +30,9 @@ class GeneratorTest {
     messageConfig.setMethod("POST");
     messageConfig.setBody("{}");
     messageConfig.setHeaders(Map.of("X-Test", "true"));
-    defaults = new GeneratorDefaults(messageConfig, 3.0, true);
+    defaults = new GeneratorDefaults(messageConfig);
+    defaults.setRatePerSec(3.0);
+    defaults.setEnabled(true);
     worker = new GeneratorWorkerImpl(defaults);
   }
 

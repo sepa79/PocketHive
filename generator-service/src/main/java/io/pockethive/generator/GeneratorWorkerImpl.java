@@ -13,6 +13,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
 import org.springframework.amqp.core.MessageProperties;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 @Component("generatorWorker")
@@ -26,6 +27,7 @@ class GeneratorWorkerImpl implements GeneratorWorker {
 
   private final GeneratorDefaults defaults;
 
+  @Autowired
   GeneratorWorkerImpl(GeneratorDefaults defaults) {
     this.defaults = defaults;
   }

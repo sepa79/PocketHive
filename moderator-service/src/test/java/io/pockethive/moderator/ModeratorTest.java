@@ -21,7 +21,8 @@ class ModeratorTest {
 
     @BeforeEach
     void setUp() {
-        defaults = new ModeratorDefaults(false);
+        defaults = new ModeratorDefaults();
+        defaults.setEnabled(false);
         worker = new ModeratorWorkerImpl(defaults);
     }
 

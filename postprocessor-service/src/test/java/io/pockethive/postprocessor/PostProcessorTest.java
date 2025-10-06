@@ -30,7 +30,9 @@ class PostProcessorTest {
 
     @Test
     void onMessageRecordsLatencyAndErrorsAndUpdatesStatus() {
-        PostProcessorWorkerImpl worker = new PostProcessorWorkerImpl(new PostProcessorDefaults(true));
+        PostProcessorDefaults defaults = new PostProcessorDefaults();
+        defaults.setEnabled(true);
+        PostProcessorWorkerImpl worker = new PostProcessorWorkerImpl(defaults);
         ObservabilityContext context = new ObservabilityContext();
         List<Hop> hops = new ArrayList<>();
         hops.add(new Hop("generator", "gen-1", START, START.plusMillis(5)));
@@ -72,7 +74,9 @@ class PostProcessorTest {
 
     @Test
     void onMessageUsesDefaultsWhenNoConfigPresent() {
-        PostProcessorWorkerImpl worker = new PostProcessorWorkerImpl(new PostProcessorDefaults(false));
+        PostProcessorDefaults defaults = new PostProcessorDefaults();
+        defaults.setEnabled(false);
+        PostProcessorWorkerImpl worker = new PostProcessorWorkerImpl(defaults);
         ObservabilityContext context = new ObservabilityContext();
         context.setHops(List.of());
 

@@ -1,28 +1,41 @@
 package io.pockethive.generator;
 
 import java.util.Map;
-import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
 @Component
+@ConfigurationProperties(prefix = "ph.gen")
 class GeneratorDefaults {
 
   private final MessageConfig messageConfig;
-  private final double defaultRatePerSec;
-  private final boolean defaultEnabled;
+  private double ratePerSec = 0;
+  private boolean enabled = false;
 
-  GeneratorDefaults(MessageConfig messageConfig,
-                    @Value("${ph.gen.ratePerSec:0}") double defaultRatePerSec,
-                    @Value("${ph.gen.enabled:false}") boolean defaultEnabled) {
+  GeneratorDefaults(MessageConfig messageConfig) {
     this.messageConfig = messageConfig;
-    this.defaultRatePerSec = defaultRatePerSec;
-    this.defaultEnabled = defaultEnabled;
+  }
+
+  public double getRatePerSec() {
+    return ratePerSec;
+  }
+
+  public void setRatePerSec(double ratePerSec) {
+    this.ratePerSec = ratePerSec;
+  }
+
+  public boolean isEnabled() {
+    return enabled;
+  }
+
+  public void setEnabled(boolean enabled) {
+    this.enabled = enabled;
   }
 
   GeneratorWorkerConfig asConfig() {
     return new GeneratorWorkerConfig(
-        defaultEnabled,
-        defaultRatePerSec,
+        enabled,
+        ratePerSec,
         false,
         resolvePath(),
         resolveMethod(),
