@@ -26,7 +26,7 @@ const config: UIConfig = {
   stompUrl: `/ws`,
   stompUser: readOnlyUser,
   stompPasscode: readOnlyPasscode,
-  stompSubscription: '/exchange/ph.control/ev.#',
+  stompSubscription: '/exchange/ph.control/#',
 }
 
 type Listener = (cfg: UIConfig) => void

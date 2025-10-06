@@ -25,7 +25,7 @@ let client: WrappedClient | null = null
 let controlSub: StompSubscription | null = null
 let listeners: ComponentListener[] = []
 let topoListeners: TopologyListener[] = []
-let controlDestination = '/exchange/ph.control/ev.#'
+let controlDestination = '/exchange/ph.control/#'
 const components: Record<string, Component> = {}
 const nodePositions: Record<string, { x: number; y: number }> = {}
 
@@ -117,6 +117,8 @@ export function setClient(newClient: Client | null, destination = controlDestina
     }
 
     controlSub = client.subscribe(controlDestination, (msg) => {
+      const destination = msg.headers.destination as string | undefined
+      if (destination && !/\/exchange\/ph\.control\/ev\./.test(destination)) return
       try {
         const raw = JSON.parse(msg.body)
         if (!isControlEvent(raw)) return
