@@ -10,6 +10,7 @@ import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.controlplane.topology.ControlPlaneTopologyDescriptor;
 import io.pockethive.controlplane.topology.GeneratorControlPlaneTopologyDescriptor;
 import io.pockethive.controlplane.worker.WorkerControlPlane;
+import io.pockethive.observability.StatusEnvelopeBuilder;
 import io.pockethive.worker.sdk.config.WorkerType;
 import java.util.Map;
 import java.util.Optional;
@@ -126,6 +127,74 @@ class WorkerControlPlaneRuntimeTest {
         WorkerControlPlaneRuntime.WorkerStateSnapshot snapshot = lastSnapshot.get();
         assertThat(snapshot).isNotNull();
         assertThat(snapshot.enabled()).contains(true);
+    }
+
+    @Test
+    void statusSnapshotsReflectWorkerEnablement() throws Exception {
+        runtime.emitStatusSnapshot();
+
+        ArgumentCaptor<ControlPlaneEmitter.StatusContext> statusCaptor =
+            ArgumentCaptor.forClass(ControlPlaneEmitter.StatusContext.class);
+        verify(emitter).emitStatusSnapshot(statusCaptor.capture());
+
+        Map<String, Object> initialSnapshot = buildSnapshot(statusCaptor.getValue());
+        assertThat(initialSnapshot.get("enabled")).isEqualTo(false);
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> initialData = (Map<String, Object>) initialSnapshot.get("data");
+        assertThat(initialData).isNotNull();
+        @SuppressWarnings("unchecked")
+        java.util.List<Map<String, Object>> initialWorkers =
+            (java.util.List<Map<String, Object>>) initialData.get("workers");
+        assertThat(initialWorkers).hasSize(1);
+        assertThat(initialWorkers.get(0).get("enabled")).isEqualTo(false);
+
+        reset(emitter);
+
+        Map<String, Object> args = Map.of(
+            "data", Map.of("enabled", true)
+        );
+        ControlSignal signal = ControlSignal.forInstance(
+            "config-update",
+            IDENTITY.swarmId(),
+            IDENTITY.role(),
+            IDENTITY.instanceId(),
+            UUID.randomUUID().toString(),
+            UUID.randomUUID().toString(),
+            CommandTarget.INSTANCE,
+            args
+        );
+        String payload = MAPPER.writeValueAsString(signal);
+        String routingKey = ControlPlaneRouting.signal("config-update", IDENTITY.swarmId(), IDENTITY.role(), IDENTITY.instanceId());
+
+        runtime.handle(payload, routingKey);
+
+        reset(emitter);
+        runtime.emitStatusSnapshot();
+
+        ArgumentCaptor<ControlPlaneEmitter.StatusContext> updatedCaptor =
+            ArgumentCaptor.forClass(ControlPlaneEmitter.StatusContext.class);
+        verify(emitter).emitStatusSnapshot(updatedCaptor.capture());
+
+        Map<String, Object> updatedSnapshot = buildSnapshot(updatedCaptor.getValue());
+        assertThat(updatedSnapshot.get("enabled")).isEqualTo(true);
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> updatedData = (Map<String, Object>) updatedSnapshot.get("data");
+        assertThat(updatedData).isNotNull();
+        @SuppressWarnings("unchecked")
+        java.util.List<Map<String, Object>> updatedWorkers =
+            (java.util.List<Map<String, Object>>) updatedData.get("workers");
+        assertThat(updatedWorkers).hasSize(1);
+        assertThat(updatedWorkers.get(0).get("enabled")).isEqualTo(true);
+    }
+
+    private Map<String, Object> buildSnapshot(ControlPlaneEmitter.StatusContext context) throws Exception {
+        StatusEnvelopeBuilder builder = new StatusEnvelopeBuilder();
+        context.customiser().accept(builder);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> snapshot = MAPPER.readValue(builder.toJson(), Map.class);
+        return snapshot;
     }
 
     private static final class TestWorker {
