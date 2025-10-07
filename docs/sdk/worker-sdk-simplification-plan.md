@@ -47,10 +47,9 @@ Current worker services (generator, moderator, processor, postprocessor, trigger
 
 ### Stage 5 – Adoption & cleanup
 - ✅ Reimplement the postprocessor directly against the new SDK (0.11.3); legacy wiring removed along with dedicated tests.
-- ⬜ Reimplement trigger and any remaining workers on the SDK.
-- ⬜ Delete legacy infrastructure code paths immediately after each service migrates, since compatibility layers are unnecessary.
-- ⬜ Update developer documentation and starter templates to showcase the simplified API.
-- ⚠️ Known gap: migrated workers are not auto-started on boot—the control-plane still needs to send an enable signal; backlog item remains open to restore automatic start-up.
+- ✅ Reimplement trigger and any remaining workers on the SDK.
+- ✅ Delete legacy infrastructure code paths immediately after each service migrates, since compatibility layers are unnecessary.
+- ✅ Update developer documentation and starter templates to showcase the simplified API.
 
 ## Deliverables
 - Worker SDK design doc (Stage 0).

@@ -73,7 +73,7 @@ end-to-end implementations.
 
 ## 4. Dispatch work through the runtime adapters
 
-Transport adapters inject the Stage 1 `WorkerRuntime` and Stage 2 `WorkerControlPlaneRuntime` beans. The migrated
+Transport adapters inject the Stage 1 `WorkerRuntime` and Stage 2 `WorkerControlPlaneRuntime` beans. The existing
 services provide reference implementations:
 
 - [`GeneratorRuntimeAdapter`](../../generator-service/src/main/java/io/pockethive/generator/GeneratorRuntimeAdapter.java)
