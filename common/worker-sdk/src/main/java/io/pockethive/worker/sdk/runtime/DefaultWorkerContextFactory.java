@@ -126,15 +126,14 @@ public final class DefaultWorkerContextFactory implements WorkerContextFactory {
     }
 
     private ObservabilityContext resolveObservabilityContext(WorkerInfo info, WorkMessage message) {
-        ObservabilityContext context = message.observabilityContext().orElse(null);
-        if (context == null) {
-            context = new ObservabilityContext();
+        ObservabilityContext context = message.observabilityContext().orElseGet(ObservabilityContext::new);
+        if (context.getTraceId() == null || context.getTraceId().isBlank()) {
             context.setTraceId(UUID.randomUUID().toString());
-            context.setHops(new ArrayList<>());
-        } else if (context.getHops() == null) {
+        }
+        if (context.getHops() == null) {
             context.setHops(new ArrayList<>());
         }
-        if (context.getSwarmId() == null) {
+        if (context.getSwarmId() == null || context.getSwarmId().isBlank()) {
             context.setSwarmId(info.swarmId());
         }
         return context;

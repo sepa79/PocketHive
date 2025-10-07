@@ -48,9 +48,9 @@ class WorkerObservabilityInterceptorTest {
         WorkResult result = interceptor.intercept(invocationContext, ctx -> WorkResult.message(ctx.message()));
 
         ObservabilityContext context = invocationContext.workerContext().observabilityContext();
-    assertThat(context.getTraceId()).isNotBlank();
-    assertThat(context.getHops()).hasSize(1);
-    assertThat(context.getHops().get(0).getProcessedAt()).isNotNull();
+        assertThat(context.getTraceId()).isNotBlank();
+        assertThat(context.getHops()).hasSize(1);
+        assertThat(context.getHops().get(0).getProcessedAt()).isNotNull();
 
         assertThat(MDC.get("traceId")).isNull();
         assertThat(MDC.get("swarmId")).isNull();
@@ -58,12 +58,14 @@ class WorkerObservabilityInterceptorTest {
         assertThat(result).isInstanceOf(WorkResult.Message.class);
         WorkMessage outbound = ((WorkResult.Message) result).value();
         assertThat(outbound.observabilityContext()).isPresent();
-    assertThat(outbound.observabilityContext().orElseThrow().getHops()).hasSize(1);
+        assertThat(outbound.observabilityContext().orElseThrow().getHops()).hasSize(1);
     }
 
     private WorkerContext workerContext(WorkerState state) {
         WorkerInfo info = new WorkerInfo("role", "swarm", "instance", "in.queue", "out.queue");
         ObservabilityContext observabilityContext = new ObservabilityContext();
+        observabilityContext.setTraceId("trace-id");
+        observabilityContext.setSwarmId(info.swarmId());
         observabilityContext.setHops(new java.util.ArrayList<>());
         return new WorkerContext() {
             @Override

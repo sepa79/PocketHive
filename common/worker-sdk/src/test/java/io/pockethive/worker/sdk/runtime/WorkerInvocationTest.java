@@ -159,7 +159,12 @@ class WorkerInvocationTest {
 
             @Override
             public io.pockethive.observability.ObservabilityContext observabilityContext() {
-                return new io.pockethive.observability.ObservabilityContext();
+                io.pockethive.observability.ObservabilityContext context =
+                    new io.pockethive.observability.ObservabilityContext();
+                context.setTraceId("test-trace");
+                context.setHops(new java.util.ArrayList<>());
+                context.setSwarmId(info.swarmId());
+                return context;
             }
         };
     }

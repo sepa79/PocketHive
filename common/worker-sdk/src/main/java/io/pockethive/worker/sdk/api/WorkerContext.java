@@ -61,6 +61,9 @@ public interface WorkerContext {
 
     /**
      * Returns the propagated observability context (trace identifiers and hop history).
+     * <p>
+     * Implementations must always return a non-{@code null} instance. The SDK runtime ensures callers
+     * receive an initialised context even when the inbound message does not include one.
      */
     ObservabilityContext observabilityContext();
 }

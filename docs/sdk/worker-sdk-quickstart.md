@@ -65,7 +65,8 @@ Use the `WorkerContext` to:
 
 - Retrieve typed configuration supplied by Stage 2 control-plane commands (`context.config(MyConfig.class)`).
 - Enrich Stage 2 status payloads via `context.statusPublisher()`.
-- Access Stage 3 observability hooks (`observationRegistry`, `observabilityContext`).
+- Access Stage 3 observability hooks (`observationRegistry`, `observabilityContext`). The runtime guarantees that
+  `observabilityContext()` returns an initialised instance so workers can append hops without null checks.
 
 Refer to the migrated [generator](../../generator-service/src/main/java/io/pockethive/generator/GeneratorWorkerImpl.java)
 and [processor](../../processor-service/src/main/java/io/pockethive/processor/ProcessorWorkerImpl.java) services for
@@ -100,7 +101,9 @@ WorkerRuntime runtime = WorkerSdkTestFixtures.runtime(applicationContext);
 
 Stage 3 enriches the runtime with Micrometer and Observation support. `WorkerContext.meterRegistry()` and
 `WorkerContext.observationRegistry()` surface the shared registries, while `WorkMessage` builders accept an
-`ObservabilityContext`. Use these hooks to emit custom metrics and propagate trace metadata as shown in the
+`ObservabilityContext`. The SDK ensures that `WorkerContext.observabilityContext()` never returns {@code null} and
+includes a trace id, hop list, and swarm id, making it safe to append hop metadata or forward the context as-is.
+Use these hooks to emit custom metrics and propagate trace metadata as shown in the
 [processor worker](../../processor-service/src/main/java/io/pockethive/processor/ProcessorWorkerImpl.java).
 
 For the full roadmap and design rationale, review the [Worker SDK simplification plan](worker-sdk-simplification-plan.md).
