@@ -11,7 +11,7 @@ import io.pockethive.worker.sdk.runtime.WorkerDefinition;
 import io.pockethive.worker.sdk.runtime.WorkerRegistry;
 import io.pockethive.worker.sdk.runtime.WorkerRuntime;
 import io.pockethive.worker.sdk.transport.rabbit.RabbitWorkMessageConverter;
-import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -68,7 +68,8 @@ class PostProcessorRuntimeAdapterTest {
         null,
         PostProcessorWorkerConfig.class
     );
-    when(workerRegistry.all()).thenReturn(List.of(definition));
+    when(workerRegistry.findByRoleAndType("postprocessor", WorkerType.MESSAGE))
+        .thenReturn(Optional.of(definition));
   }
 
   @Test

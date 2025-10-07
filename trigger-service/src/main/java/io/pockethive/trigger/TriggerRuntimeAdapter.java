@@ -32,7 +32,6 @@ class TriggerRuntimeAdapter {
   private static final Logger log = LoggerFactory.getLogger(TriggerRuntimeAdapter.class);
 
   private final WorkerRuntime workerRuntime;
-  private final WorkerRegistry workerRegistry;
   private final WorkerControlPlaneRuntime controlPlaneRuntime;
   private final ControlPlaneIdentity identity;
   private final TriggerDefaults defaults;
@@ -55,14 +54,12 @@ class TriggerRuntimeAdapter {
                         TriggerDefaults defaults,
                         Clock clock) {
     this.workerRuntime = Objects.requireNonNull(workerRuntime, "workerRuntime");
-    this.workerRegistry = Objects.requireNonNull(workerRegistry, "workerRegistry");
     this.controlPlaneRuntime = Objects.requireNonNull(controlPlaneRuntime, "controlPlaneRuntime");
     this.identity = Objects.requireNonNull(identity, "identity");
     this.defaults = Objects.requireNonNull(defaults, "defaults");
     this.clock = Objects.requireNonNull(clock, "clock");
-    this.triggerWorkers = workerRegistry.all().stream()
-        .filter(definition -> definition.workerType() == WorkerType.GENERATOR)
-        .filter(definition -> "trigger".equals(definition.role()))
+    WorkerRegistry registry = Objects.requireNonNull(workerRegistry, "workerRegistry");
+    this.triggerWorkers = registry.streamByRoleAndType("trigger", WorkerType.GENERATOR)
         .toList();
     initialiseStateListeners();
   }

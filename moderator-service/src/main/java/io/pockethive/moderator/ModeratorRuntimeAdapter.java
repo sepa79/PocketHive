@@ -59,9 +59,7 @@ class ModeratorRuntimeAdapter implements ApplicationListener<ContextRefreshedEve
     this.listenerRegistry = Objects.requireNonNull(listenerRegistry, "listenerRegistry");
     this.identity = Objects.requireNonNull(identity, "identity");
     this.defaults = Objects.requireNonNull(defaults, "defaults");
-    this.workerDefinition = workerRegistry.all().stream()
-        .filter(def -> def.workerType() == WorkerType.MESSAGE && "moderator".equals(def.role()))
-        .findFirst()
+    this.workerDefinition = workerRegistry.findByRoleAndType("moderator", WorkerType.MESSAGE)
         .orElseThrow(() -> new IllegalStateException("Moderator worker definition not found"));
   }
 

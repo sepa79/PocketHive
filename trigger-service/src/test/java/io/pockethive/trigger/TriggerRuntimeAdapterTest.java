@@ -12,12 +12,12 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -69,7 +69,8 @@ class TriggerRuntimeAdapterTest {
         null,
         TriggerWorkerConfig.class
     );
-    when(workerRegistry.all()).thenReturn(List.of(definition));
+    when(workerRegistry.streamByRoleAndType("trigger", WorkerType.GENERATOR))
+        .thenAnswer(invocation -> Stream.of(definition));
   }
 
   @Test

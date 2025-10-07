@@ -11,7 +11,7 @@ import io.pockethive.worker.sdk.runtime.WorkerRegistry;
 import io.pockethive.worker.sdk.runtime.WorkerRuntime;
 import io.pockethive.worker.sdk.transport.rabbit.RabbitWorkMessageConverter;
 import java.nio.charset.StandardCharsets;
-import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -72,7 +72,8 @@ class ProcessorRuntimeAdapterTest {
         Topology.FINAL_QUEUE,
         ProcessorWorkerConfig.class
     );
-    when(workerRegistry.all()).thenReturn(List.of(definition));
+    when(workerRegistry.findByRoleAndType("processor", WorkerType.MESSAGE))
+        .thenReturn(Optional.of(definition));
   }
 
   @Test
