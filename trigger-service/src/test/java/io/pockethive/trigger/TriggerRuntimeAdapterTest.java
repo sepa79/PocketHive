@@ -9,7 +9,15 @@ import io.pockethive.worker.sdk.runtime.WorkerDefinition;
 import io.pockethive.worker.sdk.runtime.WorkerRegistry;
 import io.pockethive.worker.sdk.runtime.WorkerRuntime;
 import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -22,6 +30,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -117,5 +127,92 @@ class TriggerRuntimeAdapterTest {
     ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
     verify(controlPlaneRuntime).registerStateListener(captor.capture(), any());
     assertThat(captor.getValue()).isEqualTo("triggerWorker");
+  }
+
+  @Test
+  void singleRequestRespectsIntervalBeforeNextDispatch() throws Exception {
+    MutableClock clock = new MutableClock(10_000L);
+    defaults.setIntervalMs(60_000L);
+    defaults.setEnabled(true);
+    doReturn(WorkResult.none()).when(workerRuntime).dispatch(eq("triggerWorker"), any(WorkMessage.class));
+
+    AtomicReference<Consumer<WorkerControlPlaneRuntime.WorkerStateSnapshot>> listenerRef =
+        new AtomicReference<>();
+    doAnswer(invocation -> {
+      listenerRef.set(invocation.getArgument(1));
+      return null;
+    }).when(controlPlaneRuntime).registerStateListener(eq("triggerWorker"), any());
+
+    TriggerRuntimeAdapter adapter = new TriggerRuntimeAdapter(
+        workerRuntime,
+        workerRegistry,
+        controlPlaneRuntime,
+        identity,
+        defaults,
+        clock
+    );
+
+    Consumer<WorkerControlPlaneRuntime.WorkerStateSnapshot> listener = listenerRef.get();
+    assertThat(listener).as("control-plane listener should be registered").isNotNull();
+
+    TriggerWorkerConfig singleRequestConfig = new TriggerWorkerConfig(
+        true,
+        60_000L,
+        true,
+        "shell",
+        "echo hi",
+        "",
+        "GET",
+        "",
+        Map.of()
+    );
+
+    WorkerControlPlaneRuntime.WorkerStateSnapshot snapshot =
+        mock(WorkerControlPlaneRuntime.WorkerStateSnapshot.class);
+    when(snapshot.config(TriggerWorkerConfig.class)).thenReturn(Optional.of(singleRequestConfig));
+    when(snapshot.enabled()).thenReturn(Optional.of(true));
+
+    listener.accept(snapshot);
+
+    adapter.tick();
+    verify(workerRuntime, times(1)).dispatch(eq("triggerWorker"), any(WorkMessage.class));
+
+    clock.advance(1_000L);
+    adapter.tick();
+    verify(workerRuntime, times(1)).dispatch(eq("triggerWorker"), any(WorkMessage.class));
+  }
+
+  private static final class MutableClock extends Clock {
+
+    private final AtomicLong millis;
+    private final ZoneId zone;
+
+    private MutableClock(long initialMillis) {
+      this(initialMillis, ZoneOffset.UTC);
+    }
+
+    private MutableClock(long initialMillis, ZoneId zone) {
+      this.millis = new AtomicLong(initialMillis);
+      this.zone = zone;
+    }
+
+    @Override
+    public ZoneId getZone() {
+      return zone;
+    }
+
+    @Override
+    public Clock withZone(ZoneId zone) {
+      return new MutableClock(millis.get(), zone);
+    }
+
+    @Override
+    public Instant instant() {
+      return Instant.ofEpochMilli(millis.get());
+    }
+
+    void advance(long deltaMillis) {
+      millis.addAndGet(deltaMillis);
+    }
   }
 }

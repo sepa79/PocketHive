@@ -81,6 +81,7 @@ class TriggerRuntimeAdapter {
         continue;
       }
       if (state.consumeSingleRequest()) {
+        state.recordInvocation(now);
         invokeWorker(definition);
         continue;
       }
@@ -198,6 +199,10 @@ class TriggerRuntimeAdapter {
 
     boolean consumeSingleRequest() {
       return singleRequestPending.getAndSet(false);
+    }
+
+    synchronized void recordInvocation(long now) {
+      lastInvocation = now;
     }
 
     boolean isEnabled() {
