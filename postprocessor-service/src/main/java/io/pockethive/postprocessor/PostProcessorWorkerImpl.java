@@ -17,7 +17,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -46,7 +45,8 @@ class PostProcessorWorkerImpl implements MessageWorker {
     PostProcessorWorkerConfig config = context.config(PostProcessorWorkerConfig.class)
         .orElseGet(defaults::asConfig);
 
-    ObservabilityContext observability = resolveObservabilityContext(in, context);
+    ObservabilityContext observability =
+        Objects.requireNonNull(context.observabilityContext(), "observabilityContext");
     LatencyMeasurements measurements = measureLatency(observability);
     boolean error = isError(in.headers().get(ERROR_HEADER));
 
@@ -65,19 +65,7 @@ class PostProcessorWorkerImpl implements MessageWorker {
     return WorkResult.none();
   }
 
-  private ObservabilityContext resolveObservabilityContext(WorkMessage message, WorkerContext context) {
-    ObservabilityContext fromContext = context.observabilityContext();
-    if (fromContext != null) {
-      return fromContext;
-    }
-    Optional<ObservabilityContext> fromMessage = message.observabilityContext();
-    return fromMessage.orElse(null);
-  }
-
   private LatencyMeasurements measureLatency(ObservabilityContext context) {
-    if (context == null) {
-      return LatencyMeasurements.zero();
-    }
     List<Hop> hops = context.getHops();
     if (hops == null || hops.isEmpty()) {
       return LatencyMeasurements.zero();

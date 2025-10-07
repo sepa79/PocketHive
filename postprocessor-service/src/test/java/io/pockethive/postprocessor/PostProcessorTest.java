@@ -45,7 +45,8 @@ class PostProcessorTest {
                 .observabilityContext(context)
                 .build();
 
-        TestWorkerContext workerContext = new TestWorkerContext(new PostProcessorWorkerConfig(true));
+        TestWorkerContext workerContext =
+                new TestWorkerContext(new PostProcessorWorkerConfig(true), context);
 
         WorkResult result = worker.onMessage(message, workerContext);
 
@@ -83,7 +84,7 @@ class PostProcessorTest {
         WorkMessage message = WorkMessage.text("payload")
                 .build();
 
-        TestWorkerContext workerContext = new TestWorkerContext(null);
+        TestWorkerContext workerContext = new TestWorkerContext(null, context);
 
         worker.onMessage(message, workerContext);
 
@@ -96,9 +97,11 @@ class PostProcessorTest {
         private final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
         private final CapturingStatusPublisher statusPublisher = new CapturingStatusPublisher();
         private final Logger logger = LoggerFactory.getLogger(MessageWorker.class);
+        private final ObservabilityContext observabilityContext;
 
-        private TestWorkerContext(PostProcessorWorkerConfig config) {
+        private TestWorkerContext(PostProcessorWorkerConfig config, ObservabilityContext observabilityContext) {
             this.config = config;
+            this.observabilityContext = Objects.requireNonNull(observabilityContext, "observabilityContext");
         }
 
         @Override
@@ -136,7 +139,7 @@ class PostProcessorTest {
 
         @Override
         public ObservabilityContext observabilityContext() {
-            return null;
+            return observabilityContext;
         }
 
         Map<String, Object> statusData() {
