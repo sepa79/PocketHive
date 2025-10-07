@@ -15,6 +15,7 @@ import org.springframework.core.Ordered;
 
 /**
  * Populates MDC and propagates observability context during worker execution.
+ * Enabled by the Stage 3 observability work outlined in {@code docs/sdk/worker-sdk-quickstart.md}.
  */
 public final class WorkerObservabilityInterceptor implements WorkerInvocationInterceptor, Ordered {
 

@@ -2,7 +2,8 @@
 
 This guide explains how to wire a new worker or manager service against the refactored control-plane APIs.
 It covers the topology descriptors, emitters, and Spring Boot starters introduced in the refactor so teams can
-bootstrap participants without copying configuration boilerplate.
+bootstrap participants without copying configuration boilerplate. For an end-to-end walkthrough of the Stage 1–3
+Worker SDK runtime, see the [Worker SDK quick start](../sdk/worker-sdk-quickstart.md).
 
 ## 1. Choose the right topology descriptor
 
@@ -40,12 +41,13 @@ emitter.emitReady(ControlPlaneEmitter.ReadyContext.builder(
 
 The emitter guarantees routing keys and payload schemas remain consistent across services.
 
-## 3. Enable the Spring Boot starters
+## 3. Enable the Spring Boot starters and runtime
 
 Include the Worker SDK starter to auto-register descriptors, identities, AMQP declarables, and the
-control-plane publisher. The starter composes `ControlPlaneCommonAutoConfiguration`,
-`WorkerControlPlaneAutoConfiguration`, and `ManagerControlPlaneAutoConfiguration` so both worker and manager
-roles can be enabled from configuration.
+control-plane publisher. The starter also exposes the Stage 1 `WorkerRuntime` and Stage 2
+`WorkerControlPlaneRuntime` beans described in the quick start. The auto-configuration composes
+`ControlPlaneCommonAutoConfiguration`, `WorkerControlPlaneAutoConfiguration`, and
+`ManagerControlPlaneAutoConfiguration` so both worker and manager roles can be enabled from configuration.
 
 ```xml
 <dependency>

@@ -11,6 +11,10 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.atomic.LongAdder;
 
+/**
+ * Tracks per-worker state for the runtime. Exposed indirectly via
+ * {@link WorkerControlPlaneRuntime.WorkerStateSnapshot}.
+ */
 public final class WorkerState {
 
     private final WorkerDefinition definition;

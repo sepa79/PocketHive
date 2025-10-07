@@ -16,6 +16,10 @@ import io.pockethive.observability.ObservabilityContextUtil;
 
 /**
  * Immutable representation of a worker message payload plus metadata.
+ * <p>
+ * The runtime converts transport-specific envelopes to {@code WorkMessage} instances before handing them to
+ * {@link MessageWorker} or {@link GeneratorWorker} implementations. Builders support text, JSON, and binary
+ * bodies, as described in {@code docs/sdk/worker-sdk-quickstart.md}.
  */
 public final class WorkMessage {
 
@@ -33,26 +37,46 @@ public final class WorkMessage {
         this.observabilityContext = observabilityContext;
     }
 
+    /**
+     * Returns the raw message body. Callers should treat the returned array as read-only.
+     */
     public byte[] body() {
         return body;
     }
 
+    /**
+     * Returns message headers as an immutable map.
+     */
     public Map<String, Object> headers() {
         return headers;
     }
 
+    /**
+     * Returns the charset used to interpret the body when reading it as text.
+     */
     public Charset charset() {
         return charset;
     }
 
+    /**
+     * Returns the propagated {@link ObservabilityContext}, if present.
+     */
     public Optional<ObservabilityContext> observabilityContext() {
         return Optional.ofNullable(observabilityContext);
     }
 
+    /**
+     * Decodes the body as a {@link String} using the configured {@link #charset()}.
+     */
     public String asString() {
         return new String(body, charset);
     }
 
+    /**
+     * Parses the body as a Jackson {@link JsonNode}.
+     *
+     * @throws IllegalStateException if the body cannot be parsed as JSON
+     */
     public JsonNode asJsonNode() {
         try {
             return DEFAULT_MAPPER.readTree(body);
@@ -61,6 +85,11 @@ public final class WorkMessage {
         }
     }
 
+    /**
+     * Deserialises the body to the specified type using the shared {@link ObjectMapper}.
+     *
+     * @throws IllegalStateException if the body cannot be parsed as JSON or does not match the target type
+     */
     public <T> T asJson(Class<T> targetType) {
         try {
             return DEFAULT_MAPPER.readValue(body, targetType);
@@ -69,19 +98,31 @@ public final class WorkMessage {
         }
     }
 
+    /**
+     * Creates a builder pre-populated with this message's contents.
+     */
     public Builder toBuilder() {
         return new Builder(this.body, this.headers, this.charset, this.observabilityContext);
     }
 
+    /**
+     * Returns a new builder with an empty body and UTF-8 charset.
+     */
     public static Builder builder() {
         return new Builder(new byte[0], Map.of(), StandardCharsets.UTF_8, null);
     }
 
+    /**
+     * Creates a builder with a UTF-8 encoded text body.
+     */
     public static Builder text(String body) {
         Objects.requireNonNull(body, "body");
         return new Builder(body.getBytes(StandardCharsets.UTF_8), Map.of(), StandardCharsets.UTF_8, null);
     }
 
+    /**
+     * Creates a builder containing the JSON serialisation of the supplied value.
+     */
     public static Builder json(Object value) {
         Objects.requireNonNull(value, "value");
         try {
@@ -92,6 +133,9 @@ public final class WorkMessage {
         }
     }
 
+    /**
+     * Creates a builder with a binary payload.
+     */
     public static Builder binary(byte[] body) {
         Objects.requireNonNull(body, "body");
         return new Builder(body.clone(), Map.of(), StandardCharsets.UTF_8, null);
@@ -110,11 +154,17 @@ public final class WorkMessage {
             this.observabilityContext = observabilityContext;
         }
 
+        /**
+         * Sets the raw body contents. The provided array is defensively copied.
+         */
         public Builder body(byte[] body) {
             this.body = Objects.requireNonNull(body, "body").clone();
             return this;
         }
 
+        /**
+         * Sets a UTF-8 encoded text body.
+         */
         public Builder textBody(String body) {
             Objects.requireNonNull(body, "body");
             this.body = body.getBytes(StandardCharsets.UTF_8);
@@ -122,6 +172,9 @@ public final class WorkMessage {
             return this;
         }
 
+        /**
+         * Serialises a value as JSON and stores it in the body using UTF-8 encoding.
+         */
         public Builder jsonBody(Object value) {
             Objects.requireNonNull(value, "value");
             try {
@@ -133,11 +186,17 @@ public final class WorkMessage {
             return this;
         }
 
+        /**
+         * Overrides the charset associated with the body for text conversions.
+         */
         public Builder charset(Charset charset) {
             this.charset = Objects.requireNonNull(charset, "charset");
             return this;
         }
 
+        /**
+         * Adds or removes a header. Passing {@code null} clears the header.
+         */
         public Builder header(String name, Object value) {
             Objects.requireNonNull(name, "name");
             if (value == null) {
@@ -148,6 +207,9 @@ public final class WorkMessage {
             return this;
         }
 
+        /**
+         * Replaces all headers with the provided map.
+         */
         public Builder headers(Map<String, Object> headers) {
             Objects.requireNonNull(headers, "headers");
             this.headers.clear();
@@ -155,6 +217,9 @@ public final class WorkMessage {
             return this;
         }
 
+        /**
+         * Associates an {@link ObservabilityContext} with the message and synchronises the corresponding header.
+         */
         public Builder observabilityContext(ObservabilityContext context) {
             this.observabilityContext = context;
             if (context == null) {
@@ -163,6 +228,9 @@ public final class WorkMessage {
             return this;
         }
 
+        /**
+         * Builds an immutable {@link WorkMessage} instance.
+         */
         public WorkMessage build() {
             Charset resolvedCharset = charset == null ? StandardCharsets.UTF_8 : charset;
             Map<String, Object> copy = new LinkedHashMap<>(headers);

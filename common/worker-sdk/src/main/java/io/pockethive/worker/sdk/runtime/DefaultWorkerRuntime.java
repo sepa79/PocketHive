@@ -10,6 +10,7 @@ import java.util.function.Function;
 
 /**
  * Default runtime implementation used by Stage 1.
+ * Integration notes and examples live in {@code docs/sdk/worker-sdk-quickstart.md}.
  */
 public final class DefaultWorkerRuntime implements WorkerRuntime {
 
