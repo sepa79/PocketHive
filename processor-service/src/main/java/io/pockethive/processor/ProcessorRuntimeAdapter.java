@@ -30,6 +30,32 @@ import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+/**
+ * Bridges the Spring Boot runtime with the PocketHive worker SDK for the processor service.
+ * <p>
+ * The adapter's lifecycle consists of three main responsibilities:
+ * <ol>
+ *   <li><strong>State listener registration</strong> – During {@link #initialiseStateListener()} we
+ *       subscribe to the control plane so feature flags (for example a payload on
+ *       {@code processor.control.toggle}) can enable or disable the Rabbit listener at runtime. The
+ *       default desired state is read from {@link ProcessorDefaults}.</li>
+ *   <li><strong>Work dispatch</strong> – {@link #onWork(Message)} is bound to the moderator queue via
+ *       {@link RabbitListener}. Incoming AMQP messages are converted into {@link WorkMessage}
+ *       instances and dispatched through {@link WorkerRuntime#dispatch(String, WorkMessage)}. When
+ *       a {@link WorkResult#message(WorkMessage) message result} is returned we forward it to the
+ *       final queue inside {@link #publishResult(WorkResult)}.</li>
+ *   <li><strong>Control-plane handling</strong> – {@link #onControl(String, String, String)} listens to
+ *       control topics (for example {@code processor.control.config}) so operators can push config
+ *       updates or request snapshots. Observability headers are preserved using
+ *       {@link ObservabilityContextUtil} to keep traces intact.</li>
+ * </ol>
+ * <p>
+ * Users can use this adapter as a blueprint for new workers: wire in your
+ * {@link WorkerDefinition} via the {@link WorkerRegistry}, bind listeners to your service-specific
+ * queues, and reuse {@link #toggleListener(boolean)} to guard your Rabbit containers with
+ * control-plane state. Override {@link #publishResult(WorkResult)} if your worker emits non-message
+ * results (e.g., acknowledgements only).
+ */
 @Component
 class ProcessorRuntimeAdapter implements ApplicationListener<ContextRefreshedEvent> {
 
@@ -46,6 +72,20 @@ class ProcessorRuntimeAdapter implements ApplicationListener<ContextRefreshedEve
   private final WorkerDefinition workerDefinition;
   private volatile boolean desiredEnabled;
 
+  /**
+   * Creates the runtime adapter with all infrastructure dependencies needed to dispatch work.
+   *
+   * @param workerRuntime worker engine that invokes {@code processorWorker}
+   * @param workerRegistry registry used to resolve the {@link WorkerDefinition} metadata such as
+   *                       queue bindings and bean names
+   * @param controlPlaneRuntime facade used to register state listeners and emit status snapshots
+   * @param rabbitTemplate template for publishing enriched {@link WorkMessage} instances back to
+   *                       RabbitMQ
+   * @param listenerRegistry Spring registry used to locate and control the listener container for
+   *                         {@link #LISTENER_ID}
+   * @param identity identifies the running instance (swarm, instance id) for logging and metrics
+   * @param defaults fallback configuration for the processor worker (base URL and enable flag)
+   */
   ProcessorRuntimeAdapter(WorkerRuntime workerRuntime,
                           WorkerRegistry workerRegistry,
                           WorkerControlPlaneRuntime controlPlaneRuntime,
@@ -63,6 +103,17 @@ class ProcessorRuntimeAdapter implements ApplicationListener<ContextRefreshedEve
         .orElseThrow(() -> new IllegalStateException("Processor worker definition not found"));
   }
 
+  /**
+   * Registers the control-plane listener after Spring constructs the adapter.
+   * <p>
+   * We capture the default {@link ProcessorWorkerConfig#enabled()} value, subscribe to
+   * {@link WorkerControlPlaneRuntime#registerStateListener(String, java.util.function.Consumer)},
+   * and immediately apply the desired state. This ensures that messages such as
+   * <pre>{@code {
+   *   "enabled": false
+   * }}</pre>
+   * sent on {@code processor.control.config} take effect without restarts.
+   */
   @PostConstruct
   void initialiseStateListener() {
     desiredEnabled = defaults.asConfig().enabled();
@@ -75,6 +126,11 @@ class ProcessorRuntimeAdapter implements ApplicationListener<ContextRefreshedEve
     controlPlaneRuntime.emitStatusSnapshot();
   }
 
+  /**
+   * Handles moderator queue messages and delegates them to the registered worker bean.
+   *
+   * @param message AMQP payload (converted to {@link WorkMessage}) received on the moderator queue
+   */
   @RabbitListener(id = LISTENER_ID, queues = "${ph.modQueue:" + TopologyDefaults.MOD_QUEUE + "}")
   public void onWork(Message message) {
     WorkMessage workMessage = messageConverter.fromMessage(message);
@@ -86,11 +142,29 @@ class ProcessorRuntimeAdapter implements ApplicationListener<ContextRefreshedEve
     }
   }
 
+  /**
+   * Periodically forwards worker status deltas to the control plane (every 5 seconds by default).
+   * Beginners can tweak the schedule with {@code ph.processor.statusIntervalMs} if the service
+   * needs faster or slower updates.
+   */
   @Scheduled(fixedRate = 5000)
   public void emitStatusDelta() {
     controlPlaneRuntime.emitStatusDelta();
   }
 
+  /**
+   * Consumes control-plane messages used to toggle the worker or push configuration.
+   * <p>
+   * Example routing keys include {@code processor.control.config} (config snapshots) and
+   * {@code processor.control.toggle} (explicit enable/disable). The payload is forwarded to
+   * {@link WorkerControlPlaneRuntime#handle(String, String)} which returns {@code true} when a
+   * handler is registered for the routing key. Observability context headers are propagated so
+   * dashboards can correlate operator actions.
+   *
+   * @param payload JSON control message (for example {@code {"baseUrl":"https://mock"}})
+   * @param routingKey AMQP routing key derived from the control exchange
+   * @param traceHeader optional observability header forwarded from orchestrator tooling
+   */
   @RabbitListener(queues = "#{@processorControlQueueName}")
   public void onControl(String payload,
                         @Header(AmqpHeaders.RECEIVED_ROUTING_KEY) String routingKey,
@@ -113,6 +187,13 @@ class ProcessorRuntimeAdapter implements ApplicationListener<ContextRefreshedEve
     }
   }
 
+  /**
+   * Publishes successful worker results to the final queue.
+   * <p>
+   * Only {@link WorkResult.Message} instances are forwarded; other result types (ack/nack) are
+   * ignored because the worker runtime already acknowledged them. Override this method if your
+   * worker emits other types that must be bridged to Rabbit.
+   */
   private void publishResult(WorkResult result) {
     if (!(result instanceof WorkResult.Message messageResult)) {
       return;
@@ -122,11 +203,25 @@ class ProcessorRuntimeAdapter implements ApplicationListener<ContextRefreshedEve
     rabbitTemplate.send(Topology.EXCHANGE, routingKey, outbound);
   }
 
+  /**
+   * Updates the desired state of the Rabbit listener and applies it immediately.
+   *
+   * @param enabled {@code true} to start consuming from the moderator queue, {@code false} to stop
+   */
   private void toggleListener(boolean enabled) {
     this.desiredEnabled = enabled;
     applyListenerState();
   }
 
+  /**
+   * Starts or stops the Rabbit listener container so the runtime matches {@link #desiredEnabled}.
+   * <p>
+   * This method is idempotent and can safely be called during context refreshes or control-plane
+   * updates. When the listener container is not yet registered we log the desired state for
+   * troubleshooting; subsequent invocations (triggered by
+   * {@link ApplicationListener#onApplicationEvent(org.springframework.context.ApplicationEvent)})
+   * will retry.
+   */
   private void applyListenerState() {
     var container = listenerRegistry.getListenerContainer(LISTENER_ID);
     if (container == null) {
@@ -142,6 +237,11 @@ class ProcessorRuntimeAdapter implements ApplicationListener<ContextRefreshedEve
     }
   }
 
+  /**
+   * Re-applies listener state when the Spring context is refreshed (e.g., after the container is
+   * fully initialised). This acts as a safety net in case {@link #applyListenerState()} ran before
+   * the listener container became available.
+   */
   @Override
   public void onApplicationEvent(ContextRefreshedEvent event) {
     applyListenerState();

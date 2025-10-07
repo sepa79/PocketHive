@@ -21,6 +21,28 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+/**
+ * The post-processor is the last hop in the PocketHive happy path. It listens to
+ * {@link Topology#FINAL_QUEUE} and focuses on observability: measuring end-to-end latency,
+ * counting hops, and flagging any {@code x-ph-error} markers set by upstream workers. When teams
+ * deploy PocketHive to staging or production they often scale the post-processor alongside their
+ * observability stack because its metrics feed Grafana dashboards such as "Pipeline Latency".
+ *
+ * <p>Each instance caches a {@link PostProcessorMetrics} bundle tied to the
+ * {@link io.pockethive.worker.sdk.api.WorkerInfo} (service, instance, swarm). Those Micrometer
+ * instruments produce metrics:</p>
+ * <ul>
+ *   <li>{@code postprocessor_hop_latency_ms}</li>
+ *   <li>{@code postprocessor_total_latency_ms}</li>
+ *   <li>{@code postprocessor_hops}</li>
+ *   <li>{@code postprocessor_errors_total}</li>
+ * </ul>
+ *
+ * <p>If you extend the worker—for example to emit custom histograms—do so within
+ * {@link PostProcessorMetrics#record(LatencyMeasurements, boolean)} so instrumentation stays
+ * consistent. The worker keeps publishing status updates so junior developers can see hop counts
+ * and running error totals without leaving the PocketHive UI.</p>
+ */
 @Component("postProcessorWorker")
 @PocketHiveWorker(
     role = "postprocessor",
@@ -40,6 +62,33 @@ class PostProcessorWorkerImpl implements MessageWorker {
     this.defaults = Objects.requireNonNull(defaults, "defaults");
   }
 
+  /**
+   * Observes the last leg of a message's journey. The method pulls
+   * {@link PostProcessorWorkerConfig} via {@code ph.postprocessor.enabled} (used mainly to toggle
+   * status displays) and inspects {@link ObservabilityContext#getHops()} to calculate per-hop and
+   * total latency. Expect each {@link Hop} to include {@code receivedAt} and {@code processedAt}
+   * timestamps—missing timestamps fall back to zero latency so the dashboards remain stable.
+   *
+   * <p>If upstream workers set an {@code x-ph-error} header—commonly a boolean string like
+   * {@code "true"}—the post-processor increments {@code postprocessor_errors_total}. This is the
+   * metric Grafana panels use to paint red alerts.</p>
+   *
+   * <p>After updating metrics the worker publishes a status heartbeat containing the effective
+   * enabled flag, hop counts, and latency snapshots. Junior engineers debugging the pipeline should
+   * first look here; the values reflect what the Micrometer counters recorded during the same
+   * invocation.</p>
+   *
+   * <p>The worker finishes by returning {@link WorkResult#none()} because the pipeline ends here.
+   * Teams who need to forward the results to another queue can swap in
+   * {@link WorkResult#message(WorkMessage)} and reuse message-building helpers from the generator
+   * or processor services.</p>
+   *
+   * @param in the message consumed from {@link Topology#FINAL_QUEUE}.
+   * @param context provides configuration, Micrometer {@link MeterRegistry}, and the current
+   *     {@link ObservabilityContext}.
+   * @return {@link WorkResult#none()} because the post-processor does not produce a follow-up
+   *     message.
+   */
   @Override
   public WorkResult onMessage(WorkMessage in, WorkerContext context) {
     PostProcessorWorkerConfig config = context.config(PostProcessorWorkerConfig.class)

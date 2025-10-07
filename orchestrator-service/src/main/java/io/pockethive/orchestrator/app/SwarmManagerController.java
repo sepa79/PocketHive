@@ -27,7 +27,12 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * REST surface for controller-level enable toggles.
+ * REST surface for toggling swarm controller workloads on or off via {@code /api/swarm-managers}.
+ * <p>
+ * While {@link SwarmController} handles full lifecycle operations, this controller focuses on
+ * {@code config-update} fan-out so operators can pause or resume work across one or many swarms. Each
+ * endpoint below references {@code docs/ORCHESTRATOR-REST.md#swarm-manager} and includes concrete JSON
+ * examples for junior engineers testing the API with {@code curl}.
  */
 @RestController
 @RequestMapping("/api/swarm-managers")
@@ -50,6 +55,21 @@ public class SwarmManagerController {
         this.json = json;
     }
 
+    /**
+     * POST {@code /api/swarm-managers/enabled} — fan-out a toggle to every registered swarm.
+     * <p>
+     * Accepts {@link ToggleRequest}; a typical request looks like:
+     * <pre>{@code
+     * {
+     *   "idempotencyKey": "ops-555",
+     *   "enabled": false,
+     *   "notes": "pause all swarms",
+     *   "commandTarget": {"scope": "SWARM"}
+     * }
+     * }</pre>
+     * The response body describes which swarms received new signals versus which reused existing
+     * correlations so dashboards know whether to expect {@code ready.config-update} events.
+     */
     @PostMapping("/enabled")
     public ResponseEntity<FanoutControlResponse> updateAll(@RequestBody ToggleRequest request) {
         String path = "/api/swarm-managers/enabled";
@@ -60,6 +80,13 @@ public class SwarmManagerController {
         return response;
     }
 
+    /**
+     * POST {@code /api/swarm-managers/{swarmId}/enabled} — target a single swarm controller.
+     * <p>
+     * Behaves like {@link #updateAll(ToggleRequest)} but restricts the fan-out to the provided
+     * {@code swarmId}. Returns 404 if the swarm has not yet registered a controller instance, guiding
+     * API clients to call the create/start workflow first.
+     */
     @PostMapping("/{swarmId}/enabled")
     public ResponseEntity<FanoutControlResponse> updateOne(@PathVariable String swarmId,
                                                            @RequestBody ToggleRequest request) {
@@ -72,6 +99,15 @@ public class SwarmManagerController {
         return response;
     }
 
+    /**
+     * Iterate through the provided swarms, publishing idempotent {@code config-update} signals.
+     * <p>
+     * For each swarm we check {@link IdempotencyStore}; if a correlation exists we return it immediately.
+     * Otherwise we construct {@link ControlSignal#forInstance(String, String, String, String, String, String, CommandTarget, Map)}
+     * with routing keys derived from {@link #routingKey(String, String)} and record the new correlation so
+     * retries remain deterministic. The resulting {@link FanoutControlResponse} lists each dispatch with a
+     * {@code reused} flag for observability.
+     */
     private FanoutControlResponse dispatch(Iterable<Swarm> swarms, ToggleRequest request) {
         List<Dispatch> dispatches = new ArrayList<>();
         for (Swarm swarm : swarms) {
@@ -104,10 +140,22 @@ public class SwarmManagerController {
         return new FanoutControlResponse(dispatches);
     }
 
+    /**
+     * Compute the control-plane routing key for a given swarm segment and controller instance.
+     * <p>
+     * Example: {@code routingKey("demo", "swarm-controller-demo-1")} yields
+     * {@code sig.config-update.demo.swarm-controller.swarm-controller-demo-1}.
+     */
     private static String routingKey(String swarmSegment, String instanceId) {
         return ControlPlaneRouting.signal("config-update", swarmSegment, "swarm-controller", instanceId);
     }
 
+    /**
+     * Convert the toggle request into the structured {@code args} block expected by worker runtimes.
+     * <p>
+     * Currently we only forward the {@code enabled} flag, but this method centralises the mapping so
+     * future extensions (e.g. role-specific limits) remain consistent across fan-out calls.
+     */
     private Map<String, Object> argsFor(ToggleRequest request) {
         Map<String, Object> args = new LinkedHashMap<>();
         Map<String, Object> data = new LinkedHashMap<>();
@@ -116,6 +164,13 @@ public class SwarmManagerController {
         return args;
     }
 
+    /**
+     * Build the {@link ControlResponse} returned to clients for a successful dispatch.
+     * <p>
+     * The watch section uses {@link ControlPlaneRouting#event(String, ConfirmationScope)} to point to the
+     * ready/error queues the UI should monitor. {@code CONFIG_UPDATE_TIMEOUT_MS} matches the contract in
+     * {@code docs/ORCHESTRATOR-REST.md} so front-ends align their polling windows.
+     */
     private ControlResponse accepted(String correlationId,
                                      String idempotencyKey,
                                      String swarmSegment,
@@ -128,12 +183,22 @@ public class SwarmManagerController {
         return new ControlResponse(correlationId, idempotencyKey, watch, CONFIG_UPDATE_TIMEOUT_MS);
     }
 
+    /**
+     * Publish a control message while logging the selected {@link CommandTarget} for debugging.
+     * <p>
+     * Example log when targeting a single instance:
+     * {@code [CTRL] SEND {"scope":"INSTANCE"} rk=sig.config-update.demo.swarm-controller.instance payload={...}}
+     */
     private void sendControl(String routingKey, String payload, CommandTarget context) {
         String label = context == null ? "SEND" : "SEND " + context.json();
         log.info("[CTRL] {} rk={} payload={}", label, routingKey, snippet(payload));
         rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, routingKey, payload);
     }
 
+    /**
+     * Serialize {@link ControlSignal} payloads, failing fast with {@link IllegalStateException} if
+     * serialization fails so REST callers receive an actionable 500 response.
+     */
     private String toJson(ControlSignal signal) {
         try {
             return json.writeValueAsString(signal);
@@ -143,10 +208,16 @@ public class SwarmManagerController {
         }
     }
 
+    /**
+     * Structured logging for incoming requests (mirrors {@link SwarmController#logRestRequest}).
+     */
     private void logRestRequest(String method, String path, Object body) {
         log.info("[REST] {} {} request={}", method, path, toSafeString(body));
     }
 
+    /**
+     * Structured logging for responses so operators can correlate toggles with HTTP statuses.
+     */
     private void logRestResponse(String method, String path, ResponseEntity<?> response) {
         if (response == null) {
             return;
@@ -154,6 +225,9 @@ public class SwarmManagerController {
         log.info("[REST] {} {} -> status={} body={}", method, path, response.getStatusCode(), toSafeString(response.getBody()));
     }
 
+    /**
+     * Clamp large JSON payloads before logging to keep entries readable.
+     */
     private static String toSafeString(Object value) {
         if (value == null) {
             return "";
@@ -165,6 +239,9 @@ public class SwarmManagerController {
         return text;
     }
 
+    /**
+     * Trim AMQP payloads for logging while retaining the opening JSON structure.
+     */
     private static String snippet(String payload) {
         if (payload == null) {
             return "";
@@ -176,6 +253,13 @@ public class SwarmManagerController {
         return trimmed;
     }
 
+    /**
+     * Request payload for toggle endpoints.
+     * <p>
+     * Validation occurs in the canonical constructor so API consumers get immediate feedback if they
+     * forget required fields. {@code commandTarget} defaults to {@link CommandTarget#SWARM} but can be set
+     * to {@code INSTANCE} when targeting a single controller.
+     */
     public record ToggleRequest(String idempotencyKey,
                                  Boolean enabled,
                                  String notes,
@@ -196,6 +280,9 @@ public class SwarmManagerController {
         }
     }
 
+    /**
+     * Response body that lists each dispatch along with correlation metadata and whether it was reused.
+     */
     public record FanoutControlResponse(List<Dispatch> dispatches) {}
 
     public record Dispatch(String swarm, String instanceId, ControlResponse response, boolean reused) {}
