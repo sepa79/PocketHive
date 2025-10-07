@@ -32,6 +32,35 @@ import org.slf4j.Logger;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+/**
+ * PocketHive message worker that performs the "processor" hop inside the default swarm pipeline.
+ * <p>
+ * The worker is wired into the {@link TopologyDefaults#MOD_QUEUE moderator queue} and receives
+ * {@link WorkMessage} payloads that typically originate from the orchestrator. For every incoming
+ * message we resolve configuration from the {@link WorkerContext}:
+ * <ul>
+ *   <li>If control plane overrides exist they are surfaced through
+ *       {@link WorkerContext#config(Class)}; otherwise we fall back to
+ *       {@link ProcessorDefaults#asConfig()} which points to {@code http://localhost:8082} and
+ *       enables the worker by default.</li>
+ *   <li>The resolved {@link ProcessorWorkerConfig#baseUrl() baseUrl} becomes the target for HTTP
+ *       enrichment. You can override it through control-plane config payloads such as
+ *       <pre>{@code {
+ *   "baseUrl": "https://inventory.internal/api",
+ *   "enabled": true
+ * }}</pre></li>
+ * </ul>
+ * Once configured, the worker performs an outbound HTTP call using the payload's {@code path},
+ * {@code method}, {@code headers}, and {@code body} fields. Success and failure paths both emit a
+ * {@link WorkResult} to the final queue, enriched with
+ * {@link ObservabilityContextUtil#appendHop(ObservabilityContext, String, String, java.time.Instant, java.time.Instant)
+ * observability metadata} and tracked through Micrometer metrics ({@code processor_request_time_ms}
+ * and {@code processor_messages_total}).
+ * <p>
+ * The defaults above can be tweaked by editing {@code processor-service/src/main/resources}
+ * configuration or by publishing control-plane overrides on the {@code processor.control.*} routing
+ * keys (for example {@code processor.control.config}).
+ */
 @Component("processorWorker")
 @PocketHiveWorker(
     role = "processor",
@@ -59,6 +88,37 @@ class ProcessorWorkerImpl implements MessageWorker {
     this.clock = Objects.requireNonNull(clock, "clock");
   }
 
+  /**
+   * Handles a single work message by resolving configuration, invoking the configured HTTP
+   * endpoint, enriching the response, and acknowledging the result back to PocketHive.
+   * <p>
+   * Processing flow:
+   * <ol>
+   *   <li><strong>Configuration resolution</strong> – We first look for a runtime override via
+   *       {@link WorkerContext#config(Class)}. When none is present the worker falls back to
+   *       {@link ProcessorDefaults#asConfig()} (enabled with {@code baseUrl=http://localhost:8082}).
+   *       The active configuration is echoed to the control plane through
+   *       {@link WorkerContext#statusPublisher()} for easy debugging.</li>
+   *   <li><strong>HTTP invocation</strong> – Using {@link #invokeHttp(WorkMessage, ProcessorWorkerConfig, Logger)}
+   *       we create a {@link HttpRequest} from the message body and forward it to the configured
+   *       service. The request defaults to {@code GET /} with no body when fields are missing.</li>
+   *   <li><strong>Error handling</strong> – Any exception (invalid config, network error, unexpected
+   *       HTTP failure) is logged at {@code WARN} level and converted into an error message via
+   *       {@link #buildError(String)} so downstream services still receive a structured response.</li>
+   *   <li><strong>Observability propagation</strong> – Before returning we call
+   *       {@link #enrich(WorkMessage, WorkerContext, ObservabilityContext, Instant)} to append the
+   *       hop metadata (role, instance id, timestamps) to the {@link ObservabilityContext}. This
+   *       keeps traces visible in Loki/Grafana.</li>
+   *   <li><strong>Metric collection</strong> – Latency and throughput are recorded through
+   *       {@link ProcessorMetrics}, tagging service, instance, and swarm identifiers for filtering
+   *       in Prometheus. Both success and failure paths report the elapsed time.</li>
+   * </ol>
+   *
+   * @param in incoming work message from the moderator queue
+   * @param context context provided by the runtime (metrics, logging, config, observability)
+   * @return a {@link WorkResult#message(WorkMessage)} destined for the final queue with the
+   *         observability envelope already updated
+   */
   @Override
   public WorkResult onMessage(WorkMessage in, WorkerContext context) {
     ProcessorWorkerConfig config = context.config(ProcessorWorkerConfig.class)

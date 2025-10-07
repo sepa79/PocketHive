@@ -33,7 +33,12 @@ import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.control.ConfirmationScope;
 
 /**
- * REST endpoints for swarm lifecycle operations.
+ * REST controller that exposes the swarm lifecycle API consumed by UI operators and automation.
+ * <p>
+ * Each method below corresponds to an endpoint documented in {@code docs/ORCHESTRATOR-REST.md}. The
+ * controller wraps AMQP interactions with idempotency tracking so clients can safely retry requests
+ * using the same {@code idempotencyKey}. Inline examples show the JSON bodies that junior developers
+ * can post with {@code curl} or their HTTP client of choice.
  */
 @RestController
 @RequestMapping("/api/swarms")
@@ -66,6 +71,22 @@ public class SwarmController {
         this.plans = plans;
     }
 
+    /**
+     * POST {@code /api/swarms/{swarmId}/create} — bootstrap a new swarm controller container.
+     * <p>
+     * The request body must include {@link SwarmCreateRequest#templateId()} and an {@code idempotencyKey}.
+     * Example payload:
+     * <pre>{@code
+     * {
+     *   "templateId": "baseline-demo",
+     *   "idempotencyKey": "ui-12345",
+     *   "notes": "seed demo swarm"
+     * }
+     * }</pre>
+     * We fetch the {@link SwarmTemplate}, record the plan, and delegate to the container lifecycle manager
+     * to start an instance. A {@link ControlResponse} containing correlation and watch routing keys is
+     * returned so callers can poll RabbitMQ for confirmation events.
+     */
     @PostMapping("/{swarmId}/create")
     public ResponseEntity<ControlResponse> create(@PathVariable String swarmId, @RequestBody SwarmCreateRequest req) {
         String path = "/api/swarms/" + swarmId + "/create";
@@ -91,6 +112,14 @@ public class SwarmController {
         return response;
     }
 
+    /**
+     * POST {@code /api/swarms/{swarmId}/start} — enable work inside an existing swarm controller.
+     * <p>
+     * The body accepts {@link ControlRequest}, typically {@code {"idempotencyKey":"cli-42"}}. We invoke
+     * {@link #sendSignal(String, String, String, long)} with the {@code swarm-start} signal so the swarm
+     * controller replays its {@code config-update(enabled=true)} flow. The response echoes the correlation
+     * id and watch keys (e.g. {@code ev.ready.swarm-start.swarm-controller.instance}) for observability.
+     */
     @PostMapping("/{swarmId}/start")
     public ResponseEntity<ControlResponse> start(@PathVariable String swarmId, @RequestBody ControlRequest req) {
         String path = "/api/swarms/" + swarmId + "/start";
@@ -100,6 +129,13 @@ public class SwarmController {
         return response;
     }
 
+    /**
+     * POST {@code /api/swarms/{swarmId}/stop} — pause workload processing.
+     * <p>
+     * Sends a {@code swarm-stop} control signal that causes the swarm controller to publish
+     * {@code config-update(enabled=false)} and eventually emit {@code ready.swarm-stop}. Clients can reuse
+     * the idempotency key when retrying to guarantee the same correlation id.
+     */
     @PostMapping("/{swarmId}/stop")
     public ResponseEntity<ControlResponse> stop(@PathVariable String swarmId, @RequestBody ControlRequest req) {
         String path = "/api/swarms/" + swarmId + "/stop";
@@ -109,6 +145,13 @@ public class SwarmController {
         return response;
     }
 
+    /**
+     * POST {@code /api/swarms/{swarmId}/remove} — delete queues and terminate the swarm controller.
+     * <p>
+     * After forwarding a {@code swarm-remove} signal the orchestrator expects a
+     * {@code ready.swarm-remove} event. The helper clarifies correlation usage so runbooks can wait for
+     * completion before cleaning up UI state.
+     */
     @PostMapping("/{swarmId}/remove")
     public ResponseEntity<ControlResponse> remove(@PathVariable String swarmId, @RequestBody ControlRequest req) {
         String path = "/api/swarms/" + swarmId + "/remove";
@@ -118,6 +161,14 @@ public class SwarmController {
         return response;
     }
 
+    /**
+     * Wrap common send logic for lifecycle signals ({@code swarm-start|stop|remove}).
+     * <p>
+     * We build a {@link ControlSignal} scoped to the swarm controller instance, resolve the routing key via
+     * {@link ControlPlaneRouting#signal(String, String, String, String)}, and update the
+     * {@link SwarmRegistry}/{@link SwarmCreateTracker} so downstream watchers know which confirmations to
+     * expect. The timeout is expressed in milliseconds for convenient alignment with API docs.
+     */
     private ResponseEntity<ControlResponse> sendSignal(String signal, String swarmId, String idempotencyKey, long timeoutMs) {
         Duration timeout = Duration.ofMillis(timeoutMs);
         return idempotentSend(signal, swarmId, idempotencyKey, timeoutMs, corr -> {
@@ -134,6 +185,14 @@ public class SwarmController {
         });
     }
 
+    /**
+     * Apply the orchestrator's idempotency contract to an outgoing signal.
+     * <p>
+     * If the {@link IdempotencyStore} already contains a correlation for {@code (swarmId, signal, key)} we
+     * short-circuit and return the existing {@link ControlResponse}. Otherwise a new correlation id is
+     * generated, {@code action.accept(corr)} publishes the control message, and the idempotency record is
+     * stored so retries remain consistent.
+     */
     private ResponseEntity<ControlResponse> idempotentSend(String signal, String swarmId, String idempotencyKey,
                                                            long timeoutMs, java.util.function.Consumer<String> action) {
         return idempotency.findCorrelation(swarmId, signal, idempotencyKey)
@@ -155,6 +214,13 @@ public class SwarmController {
             });
     }
 
+    /**
+     * Resolve the AMQP routing keys a client should watch for completion/error signals.
+     * <p>
+     * For {@code swarm-create} we watch the orchestrator's own events; subsequent lifecycle actions watch
+     * the specific swarm-controller instance (e.g. {@code ev.ready.swarm-start.swarm-controller.instance}).
+     * These values are documented in {@code docs/ORCHESTRATOR-REST.md#control-response}.
+     */
     private ControlResponse.Watch watchFor(String signal, String swarmId) {
         if ("swarm-create".equals(signal)) {
             ConfirmationScope scope = new ConfirmationScope(swarmId, "orchestrator", "ALL");
@@ -174,6 +240,12 @@ public class SwarmController {
             ControlPlaneRouting.event("error." + signal, scope));
     }
 
+    /**
+     * Retrieve the requested swarm template from the scenario service.
+     * <p>
+     * When a template cannot be resolved we raise an {@link IllegalStateException} so the API returns
+     * HTTP 500 and the UI can surface a friendly error. Logs include the template id for quick lookup.
+     */
     private SwarmTemplate fetchTemplate(String templateId) {
         try {
             SwarmTemplate template = scenarios.fetchTemplate(templateId);
@@ -187,6 +259,11 @@ public class SwarmController {
         }
     }
 
+    /**
+     * Validate that the template specifies a swarm-controller image.
+     * <p>
+     * Templates are considered invalid without an image because we cannot launch the controller container.
+     */
     private static String requireImage(SwarmTemplate template, String templateId) {
         String image = template.image();
         if (image == null || image.isBlank()) {
@@ -197,6 +274,21 @@ public class SwarmController {
 
     public record ControlRequest(String idempotencyKey, String notes) {}
 
+    /**
+     * GET {@code /api/swarms/{swarmId}} — fetch a snapshot of swarm state for dashboards.
+     * <p>
+     * Returns {@link SwarmView} with status, health, heartbeat, and toggle booleans. Example response:
+     * <pre>{@code
+     * {
+     *   "id": "demo",
+     *   "status": "RUNNING",
+     *   "health": "HEALTHY",
+     *   "heartbeat": "2024-03-15T12:00:00Z",
+     *   "workEnabled": true,
+     *   "controllerEnabled": true
+     * }
+     * }</pre>
+     */
     @GetMapping("/{swarmId}")
     public ResponseEntity<SwarmView> view(@PathVariable String swarmId) {
         String path = "/api/swarms/" + swarmId;
@@ -221,6 +313,12 @@ public class SwarmController {
                              boolean workEnabled,
                              boolean controllerEnabled) {}
 
+    /**
+     * Serialize control signals for RabbitMQ publishing.
+     * <p>
+     * Wraps {@link ObjectMapper#writeValueAsString(Object)} and rethrows as {@link IllegalStateException}
+     * so REST handlers surface a 500 if serialization fails.
+     */
     private String toJson(ControlSignal signal) {
         try {
             return json.writeValueAsString(signal);
@@ -230,16 +328,28 @@ public class SwarmController {
         }
     }
 
+    /**
+     * Emit a control-plane message and log the human-readable context.
+     * <p>
+     * Example log line: {@code [CTRL] SEND swarm-start rk=sig.swarm-start.demo payload={...}}. Having the
+     * snippet in logs helps engineers correlate REST calls to RabbitMQ traffic when debugging.
+     */
     private void sendControl(String routingKey, String payload, String context) {
         String label = (context == null || context.isBlank()) ? "SEND" : "SEND " + context;
         log.info("[CTRL] {} rk={} payload={}", label, routingKey, snippet(payload));
         rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, routingKey, payload);
     }
 
+    /**
+     * Structured logging for incoming REST requests, trimming large bodies for readability.
+     */
     private void logRestRequest(String method, String path, Object body) {
         log.info("[REST] {} {} request={}", method, path, toSafeString(body));
     }
 
+    /**
+     * Structured logging for REST responses so correlation id and status codes appear together.
+     */
     private void logRestResponse(String method, String path, ResponseEntity<?> response) {
         if (response == null) {
             return;
@@ -247,6 +357,9 @@ public class SwarmController {
         log.info("[REST] {} {} -> status={} body={}", method, path, response.getStatusCode(), toSafeString(response.getBody()));
     }
 
+    /**
+     * Render request/response bodies safely for logs (max 300 characters).
+     */
     private static String toSafeString(Object value) {
         if (value == null) {
             return "";
@@ -258,6 +371,9 @@ public class SwarmController {
         return text;
     }
 
+    /**
+     * Shorten AMQP payloads for logging while preserving leading JSON context.
+     */
     private static String snippet(String payload) {
         if (payload == null) {
             return "";
