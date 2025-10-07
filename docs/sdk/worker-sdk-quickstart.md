@@ -74,18 +74,66 @@ end-to-end implementations.
 
 ## 4. Dispatch work through the runtime adapters
 
-Transport adapters inject the Stage 1 `WorkerRuntime` and Stage 2 `WorkerControlPlaneRuntime` beans. The existing
-services provide reference implementations:
+Transport adapters inject the Stage 1 `WorkerRuntime` and Stage 2 `WorkerControlPlaneRuntime` beans. Message-based
+services should now compose the reusable [`RabbitMessageWorkerAdapter`](../../common/worker-sdk/src/main/java/io/pockethive/worker/sdk/transport/rabbit/RabbitMessageWorkerAdapter.java)
+instead of re-implementing listener toggling, Rabbit conversions, and control-plane validation.
 
-- [`GeneratorRuntimeAdapter`](../../generator-service/src/main/java/io/pockethive/generator/GeneratorRuntimeAdapter.java)
-  drives scheduled invocations and publishes results.
-- [`TriggerRuntimeAdapter`](../../trigger-service/src/main/java/io/pockethive/trigger/TriggerRuntimeAdapter.java) shows
-  how to fan-in RabbitMQ deliveries before calling `workerRuntime.dispatch(...)`.
-- [`ProcessorRuntimeAdapter`](../../processor-service/src/main/java/io/pockethive/processor/ProcessorRuntimeAdapter.java)
-  demonstrates how to register control-plane listeners to apply per-worker configuration.
+```java
+@Component
+class ProcessorRuntimeAdapter implements ApplicationListener<ContextRefreshedEvent> {
 
-These adapters call `WorkerControlPlaneRuntime.handle(...)` for inbound control-plane messages and subscribe to
-`WorkerStateSnapshot` updates to hydrate in-memory defaults.
+  private static final Logger log = LoggerFactory.getLogger(ProcessorRuntimeAdapter.class);
+  private final RabbitMessageWorkerAdapter delegate;
+
+  ProcessorRuntimeAdapter(WorkerRuntime workerRuntime,
+                          WorkerRegistry workerRegistry,
+                          WorkerControlPlaneRuntime controlPlaneRuntime,
+                          RabbitTemplate rabbitTemplate,
+                          RabbitListenerEndpointRegistry listenerRegistry,
+                          ControlPlaneIdentity identity,
+                          ProcessorDefaults defaults) {
+    WorkerDefinition definition = workerRegistry
+        .findByRoleAndType("processor", WorkerType.MESSAGE)
+        .orElseThrow();
+
+    delegate = RabbitMessageWorkerAdapter.builder()
+        .logger(log)
+        .listenerId("processorWorkerListener")
+        .displayName("Processor")
+        .workerDefinition(definition)
+        .controlPlaneRuntime(controlPlaneRuntime)
+        .listenerRegistry(listenerRegistry)
+        .identity(identity)
+        .defaultEnabledSupplier(() -> defaults.asConfig().enabled())
+        .desiredStateResolver(snapshot -> snapshot.enabled().orElse(defaults.asConfig().enabled()))
+        .dispatcher(message -> workerRuntime.dispatch(definition.beanName(), message))
+        .messageResultPublisher((result, outbound) -> {
+          String routingKey = Optional.ofNullable(definition.outQueue()).orElse(Topology.FINAL_QUEUE);
+          rabbitTemplate.send(Topology.EXCHANGE, routingKey, outbound);
+        })
+        .build();
+  }
+
+  @PostConstruct
+  void initialise() {
+    delegate.initialiseStateListener();
+  }
+
+  // Delegate @RabbitListener, control-plane, and scheduled hooks to the helper
+}
+```
+
+The helper registers control-plane listeners, converts AMQP messages via `RabbitWorkMessageConverter`, and emits status
+snapshots/deltas so service adapters can focus on wiring business-specific routing or result handling. See the updated
+[`processor`](../../processor-service/src/main/java/io/pockethive/processor/ProcessorRuntimeAdapter.java),
+[`moderator`](../../moderator-service/src/main/java/io/pockethive/moderator/ModeratorRuntimeAdapter.java), and
+[`postprocessor`](../../postprocessor-service/src/main/java/io/pockethive/postprocessor/PostProcessorRuntimeAdapter.java)
+adapters for complete examples.
+
+Generator/trigger style adapters remain available when you need scheduling or fan-in behaviour that differs from the
+message helper (for example, see the
+[`GeneratorRuntimeAdapter`](../../generator-service/src/main/java/io/pockethive/generator/GeneratorRuntimeAdapter.java)
+and [`TriggerRuntimeAdapter`](../../trigger-service/src/main/java/io/pockethive/trigger/TriggerRuntimeAdapter.java)).
 
 ## 5. Test with the SDK fixtures
 
