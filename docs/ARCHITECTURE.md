@@ -53,6 +53,7 @@ PocketHive splits the control plane into **managers** (orchestrator + swarm cont
 - Accept config updates from both the orchestrator (role/instance routing keys) and their controller (swarm broadcast) without relying on implicit routing conventions.
 - Emit **their own** status streams (`ev.status-{full|delta}.{swarmId}.{role}.{instance}`) and respond to manager `sig.status-request.{swarmId}.{role}.{instance}` heartbeats.
 - Apply `sig.config-update.{swarmId}.{role}.{instance}` (`enabled: true|false`) to control **workload** state only while keeping control listeners responsive.
+- Runtime behaviour, worker interfaces, and adoption guidance are covered in the [Worker SDK quick start](sdk/worker-sdk-quickstart.md).
 
 ---
 

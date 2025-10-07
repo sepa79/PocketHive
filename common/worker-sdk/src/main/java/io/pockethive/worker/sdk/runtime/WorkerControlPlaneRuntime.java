@@ -14,6 +14,7 @@ import io.pockethive.controlplane.worker.WorkerControlPlane;
 import io.pockethive.controlplane.worker.WorkerSignalListener;
 import io.pockethive.controlplane.worker.WorkerStatusRequest;
 import io.pockethive.worker.sdk.api.StatusPublisher;
+import io.pockethive.worker.sdk.config.PocketHiveWorker;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -33,7 +34,8 @@ import org.slf4j.LoggerFactory;
 
 /**
  * Integrates the worker runtime with the control-plane helper so configuration updates, status
- * requests, and confirmation events are handled consistently across worker services.
+ * requests, and confirmation events are handled consistently across worker services. Usage guidance
+ * lives in {@code docs/sdk/worker-sdk-quickstart.md}.
  */
 public final class WorkerControlPlaneRuntime {
 
@@ -555,30 +557,51 @@ public final class WorkerControlPlaneRuntime {
             this.state = Objects.requireNonNull(state, "state");
         }
 
+        /**
+         * Returns the worker definition derived from {@link PocketHiveWorker} metadata.
+         */
         public WorkerDefinition definition() {
             return state.definition();
         }
 
+        /**
+         * Indicates whether the worker is currently enabled according to the latest control-plane command.
+         */
         public Optional<Boolean> enabled() {
             return state.enabled();
         }
 
+        /**
+         * Returns the raw configuration map received from the control plane.
+         */
         public Map<String, Object> rawConfig() {
             return state.rawConfig();
         }
 
+        /**
+         * Returns the typed configuration if it can be converted to the requested class.
+         */
         public <C> Optional<C> config(Class<C> type) {
             return state.config(type);
         }
 
+        /**
+         * Returns the structured status payload last published by the worker.
+         */
         public Map<String, Object> statusData() {
             return state.statusData();
         }
 
+        /**
+         * Returns the set of inbound work routes observed for the worker.
+         */
         public Set<String> inboundRoutes() {
             return state.inboundRoutes();
         }
 
+        /**
+         * Returns the set of outbound work routes observed for the worker.
+         */
         public Set<String> outboundRoutes() {
             return state.outboundRoutes();
         }

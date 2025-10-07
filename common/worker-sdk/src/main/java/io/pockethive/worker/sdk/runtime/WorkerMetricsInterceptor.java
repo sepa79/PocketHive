@@ -9,6 +9,7 @@ import org.springframework.core.Ordered;
 
 /**
  * Records per-worker invocation timings using Micrometer.
+ * Enabled as part of the Stage 3 observability work described in {@code docs/sdk/worker-sdk-quickstart.md}.
  */
 public final class WorkerMetricsInterceptor implements WorkerInvocationInterceptor, Ordered {
 

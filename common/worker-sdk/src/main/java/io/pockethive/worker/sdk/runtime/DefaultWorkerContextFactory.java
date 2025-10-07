@@ -19,7 +19,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Baseline context factory used for Stage 1 runtime integration tests.
+ * Baseline context factory used for Stage 1 runtime integration tests and examples outlined in
+ * {@code docs/sdk/worker-sdk-quickstart.md}.
  */
 public final class DefaultWorkerContextFactory implements WorkerContextFactory {
 
@@ -29,10 +30,16 @@ public final class DefaultWorkerContextFactory implements WorkerContextFactory {
 
     private final Map<WorkerDefinition, Logger> loggers = new ConcurrentHashMap<>();
 
+    /**
+     * Creates a factory backed by a simple Micrometer registry and observation registry.
+     */
     public DefaultWorkerContextFactory(Function<Class<?>, Object> beanResolver) {
-    this(beanResolver, new SimpleMeterRegistry(), ObservationRegistry.create());
+        this(beanResolver, new SimpleMeterRegistry(), ObservationRegistry.create());
     }
 
+    /**
+     * Creates a factory using the provided registries.
+     */
     public DefaultWorkerContextFactory(
         Function<Class<?>, Object> beanResolver,
         MeterRegistry meterRegistry,

@@ -12,6 +12,7 @@ import java.util.UUID;
 
 /**
  * Helper utilities for exercising Worker SDK runtime components in tests.
+ * Complements the guidance in {@code docs/sdk/worker-sdk-quickstart.md}.
  */
 public final class WorkerSdkTestFixtures {
 

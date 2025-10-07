@@ -7,6 +7,9 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
+/**
+ * Repository of {@link WorkerState} instances keyed by worker bean name.
+ */
 public final class WorkerStateStore {
 
     private final Map<String, WorkerState> states = new ConcurrentHashMap<>();

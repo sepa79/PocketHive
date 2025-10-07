@@ -26,6 +26,11 @@ Welcome to the PocketHive documentation hub. Use these resources to understand t
 ## Core Modules
 - [Topology Core](../common/topology-core/README.md)
 
+## SDK
+- [Worker SDK Quick Start](sdk/worker-sdk-quickstart.md)
+- [Worker SDK Simplification Plan](sdk/worker-sdk-simplification-plan.md)
+- [Worker SDK Stage 1 Runtime](sdk/worker-sdk-stage1-runtime.md)
+
 ## Contributing
 - [Contributor Guide](../CONTRIBUTING.md)
 - [Control Plane Testing Playbook](ci/control-plane-testing.md)
