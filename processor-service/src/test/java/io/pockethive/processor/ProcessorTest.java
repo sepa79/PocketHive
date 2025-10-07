@@ -182,7 +182,8 @@ class ProcessorTest {
                 Topology.FINAL_QUEUE,
                 ProcessorWorkerConfig.class
         );
-        when(workerRegistry.all()).thenReturn(List.of(definition));
+        when(workerRegistry.findByRoleAndType("processor", WorkerType.MESSAGE))
+                .thenReturn(Optional.of(definition));
 
         ControlPlaneIdentity identity = new ControlPlaneIdentity("swarm", "processor", "instance");
         ProcessorDefaults defaults = new ProcessorDefaults();
@@ -234,7 +235,8 @@ class ProcessorTest {
                 Topology.FINAL_QUEUE,
                 ProcessorWorkerConfig.class
         );
-        when(workerRegistry.all()).thenReturn(List.of(definition));
+        when(workerRegistry.findByRoleAndType("processor", WorkerType.MESSAGE))
+                .thenReturn(Optional.of(definition));
 
         ControlPlaneIdentity identity = new ControlPlaneIdentity("swarm", "processor", "instance");
         ProcessorDefaults defaults = new ProcessorDefaults();

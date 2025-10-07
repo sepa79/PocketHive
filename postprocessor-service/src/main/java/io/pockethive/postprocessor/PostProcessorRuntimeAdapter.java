@@ -53,9 +53,7 @@ class PostProcessorRuntimeAdapter implements ApplicationListener<ContextRefreshe
     this.listenerRegistry = Objects.requireNonNull(listenerRegistry, "listenerRegistry");
     this.identity = Objects.requireNonNull(identity, "identity");
     this.defaults = Objects.requireNonNull(defaults, "defaults");
-    this.workerDefinition = workerRegistry.all().stream()
-        .filter(def -> def.workerType() == WorkerType.MESSAGE && "postprocessor".equals(def.role()))
-        .findFirst()
+    this.workerDefinition = workerRegistry.findByRoleAndType("postprocessor", WorkerType.MESSAGE)
         .orElseThrow(() -> new IllegalStateException("Post-processor worker definition not found"));
   }
 

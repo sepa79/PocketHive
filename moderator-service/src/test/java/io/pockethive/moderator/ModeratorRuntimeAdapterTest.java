@@ -11,7 +11,7 @@ import io.pockethive.worker.sdk.runtime.WorkerRegistry;
 import io.pockethive.worker.sdk.runtime.WorkerRuntime;
 import io.pockethive.worker.sdk.transport.rabbit.RabbitWorkMessageConverter;
 import java.nio.charset.StandardCharsets;
-import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -71,7 +71,8 @@ class ModeratorRuntimeAdapterTest {
         Topology.MOD_QUEUE,
         ModeratorWorkerConfig.class
     );
-    when(workerRegistry.all()).thenReturn(List.of(definition));
+    when(workerRegistry.findByRoleAndType("moderator", WorkerType.MESSAGE))
+        .thenReturn(Optional.of(definition));
   }
 
   private void stubListenerContainerStopped() {
