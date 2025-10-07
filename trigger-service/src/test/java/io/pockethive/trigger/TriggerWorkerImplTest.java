@@ -14,6 +14,7 @@ import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.mockito.ArgumentMatchers;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.slf4j.Logger;
@@ -49,7 +50,7 @@ class TriggerWorkerImplTest {
     defaults.setBody("{}\n");
     defaults.setHeaders(Map.of("X-Test", "1"));
 
-    when(httpClient.send(any(HttpRequest.class), any()))
+    when(httpClient.send(any(HttpRequest.class), ArgumentMatchers.<HttpResponse.BodyHandler<String>>any()))
         .thenReturn(httpResponse);
     when(httpResponse.statusCode()).thenReturn(200);
     when(httpResponse.body()).thenReturn("ok");
