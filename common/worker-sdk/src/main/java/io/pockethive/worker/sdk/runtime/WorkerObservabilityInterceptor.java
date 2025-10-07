@@ -7,9 +7,8 @@ import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pockethive.worker.sdk.api.WorkResult;
 import io.pockethive.worker.sdk.api.WorkerInfo;
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.List;
-import java.util.UUID;
+import java.util.Objects;
 import org.slf4j.MDC;
 import org.springframework.core.Ordered;
 
@@ -21,16 +20,16 @@ public final class WorkerObservabilityInterceptor implements WorkerInvocationInt
 
     @Override
     public WorkResult intercept(WorkerInvocationContext context, Chain chain) throws Exception {
-        ObservabilityContext observabilityContext = ensureContext(context);
+        ObservabilityContext observabilityContext = context.workerContext().observabilityContext();
+        Objects.requireNonNull(observabilityContext, "WorkerContext must provide an observability context");
         context.attributes().put("observabilityContext", observabilityContext);
         WorkerInfo info = context.workerContext().info();
         Instant started = Instant.now();
         Hop hop = new Hop(info.role(), info.instanceId(), started, null);
-        List<Hop> hops = observabilityContext.getHops();
-        if (hops == null) {
-            hops = new ArrayList<>();
-            observabilityContext.setHops(hops);
-        }
+        List<Hop> hops = Objects.requireNonNull(
+            observabilityContext.getHops(),
+            "WorkerContext must provide an observability hop history"
+        );
         hops.add(hop);
 
         String previousTrace = MDC.get("traceId");
@@ -45,27 +44,6 @@ public final class WorkerObservabilityInterceptor implements WorkerInvocationInt
             restore("traceId", previousTrace);
             restore("swarmId", previousSwarm);
         }
-    }
-
-    private ObservabilityContext ensureContext(WorkerInvocationContext context) {
-        ObservabilityContext existing = context.workerContext().observabilityContext();
-        if (existing != null) {
-            if (existing.getTraceId() == null) {
-                existing.setTraceId(UUID.randomUUID().toString());
-            }
-            if (existing.getHops() == null) {
-                existing.setHops(new ArrayList<>());
-            }
-            if (existing.getSwarmId() == null) {
-                existing.setSwarmId(context.workerContext().info().swarmId());
-            }
-            return existing;
-        }
-        ObservabilityContext generated = new ObservabilityContext();
-        generated.setTraceId(UUID.randomUUID().toString());
-        generated.setHops(new ArrayList<>());
-        generated.setSwarmId(context.workerContext().info().swarmId());
-        return generated;
     }
 
     private WorkResult attachContext(WorkResult result, ObservabilityContext context) {

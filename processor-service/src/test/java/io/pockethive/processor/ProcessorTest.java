@@ -92,8 +92,10 @@ class ProcessorTest {
 
         String traceHeader = (String) outbound.headers().get(ObservabilityContextUtil.HEADER);
         ObservabilityContext trace = ObservabilityContextUtil.fromHeader(traceHeader);
-        assertThat(trace.getHops()).hasSize(1);
-        assertThat(trace.getHops().get(0).getService()).isEqualTo("processor");
+        assertThat(trace.getHops()).hasSize(2);
+        assertThat(trace.getHops().get(0).getService()).isEqualTo("ingress");
+        assertThat(trace.getHops().get(1).getService()).isEqualTo("processor");
+        assertThat(context.observabilityContext().getHops()).hasSize(2);
 
         HttpRequest request = requestRef.get();
         assertThat(request).isNotNull();
@@ -273,9 +275,16 @@ class ProcessorTest {
         private final CapturingStatusPublisher statusPublisher = new CapturingStatusPublisher();
 
         private TestWorkerContext(ProcessorWorkerConfig config) {
+            this(config, defaultObservability());
+        }
+
+        private TestWorkerContext(ProcessorWorkerConfig config, ObservabilityContext observability) {
             this.config = config;
-            this.observability = ObservabilityContextUtil.init(info.role(), info.instanceId(), info.swarmId());
-            this.observability.getHops().clear();
+            this.observability = observability;
+        }
+
+        private static ObservabilityContext defaultObservability() {
+            return ObservabilityContextUtil.init("ingress", "ingress-instance", "swarm");
         }
 
         @Override

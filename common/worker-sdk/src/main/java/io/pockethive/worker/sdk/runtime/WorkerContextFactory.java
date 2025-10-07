@@ -11,6 +11,10 @@ public interface WorkerContextFactory {
 
     /**
      * Builds a {@link WorkerContext} for the given worker definition, state, and message.
+     * <p>
+     * Implementations must ensure the returned context exposes a non-{@code null}
+     * {@link WorkerContext#observabilityContext()} populated with a trace identifier, hop list, and
+     * swarm identifier so downstream interceptors can rely on it.
      */
     WorkerContext createContext(WorkerDefinition definition, WorkerState state, WorkMessage message);
 }

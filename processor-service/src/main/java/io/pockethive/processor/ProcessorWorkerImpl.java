@@ -168,13 +168,7 @@ class ProcessorWorkerImpl implements MessageWorker {
                              WorkerContext context,
                              ObservabilityContext observability,
                              Instant received) {
-    ObservabilityContext targetContext = observability;
-    if (targetContext == null) {
-      targetContext = ObservabilityContextUtil.init(context.info().role(), context.info().instanceId(), context.info().swarmId());
-      if (targetContext.getHops() != null) {
-        targetContext.getHops().clear();
-      }
-    }
+    ObservabilityContext targetContext = Objects.requireNonNull(observability, "observability");
     ObservabilityContextUtil.appendHop(targetContext,
         context.info().role(),
         context.info().instanceId(),
