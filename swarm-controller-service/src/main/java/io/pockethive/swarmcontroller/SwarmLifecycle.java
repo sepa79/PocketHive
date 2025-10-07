@@ -149,7 +149,7 @@ public interface SwarmLifecycle {
   /**
    * Convenience toggle invoked by REST endpoints to flip swarm workloads on or off.
    * <p>
-   * <strong>When it runs:</strong> triggered by {@code POST /api/swarm-managers/*/enabled} calls.
+   * <strong>When it runs:</strong> triggered by {@code POST /api/swarm-managers/{id}/enabled} calls.
    * Implementations should emit {@code config-update} signals and update
    * {@link #getStatus()} accordingly.
    *
