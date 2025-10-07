@@ -98,7 +98,7 @@ class ModeratorRuntimeAdapterTest {
     );
 
     adapter.initialiseStateListener();
-  verify(controlPlaneRuntime).emitStatusSnapshot();
+    verify(controlPlaneRuntime).emitStatusSnapshot();
 
     Message inbound = new RabbitWorkMessageConverter().toMessage(WorkMessage.text("body").build());
     adapter.onWork(inbound);
@@ -124,7 +124,7 @@ class ModeratorRuntimeAdapterTest {
     );
 
     adapter.initialiseStateListener();
-  verify(controlPlaneRuntime).emitStatusSnapshot();
+    verify(controlPlaneRuntime).emitStatusSnapshot();
 
     adapter.onControl("{}", "moderator.control", null);
     verify(controlPlaneRuntime).handle("{}", "moderator.control");
