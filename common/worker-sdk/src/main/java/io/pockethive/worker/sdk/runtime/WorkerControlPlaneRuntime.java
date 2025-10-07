@@ -441,7 +441,8 @@ public final class WorkerControlPlaneRuntime {
 
     private StatusSnapshot collectSnapshot(Collection<WorkerState> states, boolean snapshotMode) {
         long processedTotal = 0L;
-        boolean allEnabled = true;
+        boolean allEnabled = false;
+        boolean seenWorker = false;
         List<Map<String, Object>> workers = new ArrayList<>();
         Set<String> workIn = new LinkedHashSet<>();
         Set<String> workOut = new LinkedHashSet<>();
@@ -453,16 +454,18 @@ public final class WorkerControlPlaneRuntime {
             long processed = snapshotMode ? state.peekProcessedCount() : state.drainProcessedCount();
             processedTotal += processed;
             Boolean enabled = state.enabled().orElse(null);
-            if (enabled != null && !enabled) {
-                allEnabled = false;
+            boolean workerEnabled = Boolean.TRUE.equals(enabled);
+            if (!seenWorker) {
+                allEnabled = workerEnabled;
+                seenWorker = true;
+            } else if (allEnabled) {
+                allEnabled = workerEnabled;
             }
             Map<String, Object> workerEntry = new LinkedHashMap<>();
             workerEntry.put("worker", def.beanName());
             workerEntry.put("role", def.role());
             workerEntry.put(snapshotMode ? "processedTotal" : "processedDelta", processed);
-            if (enabled != null) {
-                workerEntry.put("enabled", enabled);
-            }
+            workerEntry.put("enabled", workerEnabled);
             Map<String, Object> config = state.rawConfig();
             if (!config.isEmpty()) {
                 workerEntry.put("config", config);
