@@ -1,0 +1,11 @@
+spring:
+  application:
+    name: processor-worker-starter
+
+pockethive:
+  control-plane:
+    exchange: ph.exchange
+    swarm-id: sample-swarm
+    worker:
+      role: processor
+      instance-id: processor-1
