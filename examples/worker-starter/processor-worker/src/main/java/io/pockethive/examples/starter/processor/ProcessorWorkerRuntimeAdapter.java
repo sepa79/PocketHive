@@ -62,6 +62,6 @@ class ProcessorWorkerRuntimeAdapter implements ApplicationListener<ContextRefres
 
   @Override
   public void onApplicationEvent(ContextRefreshedEvent event) {
-    delegate.startListener();
+    delegate.onApplicationEvent(event);
   }
 }

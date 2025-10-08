@@ -21,3 +21,6 @@ jobs:
 
       - name: Run Maven tests
         run: mvn -B -ntp test
+
+      - name: Build worker starter examples
+        run: mvn -B -ntp -f examples/worker-starter/pom.xml verify
