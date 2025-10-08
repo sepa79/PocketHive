@@ -15,6 +15,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.Objects;
 import org.slf4j.Logger;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 /**
@@ -53,6 +54,7 @@ class TriggerWorkerImpl implements GeneratorWorker {
   private final TriggerDefaults defaults;
   private final HttpClient httpClient;
 
+  @Autowired
   TriggerWorkerImpl(TriggerDefaults defaults) {
     this(defaults, HttpClient.newHttpClient());
   }

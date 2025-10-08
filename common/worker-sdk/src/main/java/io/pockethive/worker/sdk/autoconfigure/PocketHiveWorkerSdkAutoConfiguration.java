@@ -118,7 +118,7 @@ public class PocketHiveWorkerSdkAutoConfiguration {
         @Qualifier("workerControlPlaneEmitter") ControlPlaneEmitter controlPlaneEmitter,
         ObjectProvider<ObjectMapper> objectMapperProvider
     ) {
-        ObjectMapper mapper = objectMapperProvider.getIfAvailable(ObjectMapper::new);
+        ObjectMapper mapper = objectMapperProvider.getIfAvailable(() -> new ObjectMapper().findAndRegisterModules());
         return new WorkerControlPlaneRuntime(workerControlPlane, workerStateStore, mapper, controlPlaneEmitter, identity, topologyDescriptor);
     }
 
