@@ -136,25 +136,27 @@ class ProcessorWorkerImpl implements MessageWorker {
     Instant received = clock.instant();
     long start = System.nanoTime();
     try {
-      WorkMessage response = invokeHttp(in, config, logger);
+      WorkMessage response = invokeHttp(in, config, context);
       metrics.recordSuccess(Duration.ofNanos(System.nanoTime() - start));
       WorkMessage enriched = enrich(response, context, observability, received);
       return WorkResult.message(enriched);
     } catch (Exception ex) {
       metrics.recordFailure(Duration.ofNanos(System.nanoTime() - start));
       logger.warn("Processor request failed: {}", ex.toString(), ex);
-      WorkMessage error = buildError(ex);
+      WorkMessage error = buildError(context, ex);
       WorkMessage enriched = enrich(error, context, observability, received);
       return WorkResult.message(enriched);
     }
   }
 
-  private WorkMessage invokeHttp(WorkMessage message, ProcessorWorkerConfig config, Logger logger) throws Exception {
+  private WorkMessage invokeHttp(WorkMessage message, ProcessorWorkerConfig config, WorkerContext context)
+      throws Exception {
+    Logger logger = context.logger();
     JsonNode node = message.asJsonNode();
     String baseUrl = config.baseUrl();
     if (baseUrl == null || baseUrl.isBlank()) {
       logger.warn("No baseUrl configured; skipping HTTP call");
-      return buildError("invalid baseUrl");
+      return buildError(context, "invalid baseUrl");
     }
 
     String path = node.path("path").asText("/");
@@ -162,7 +164,7 @@ class ProcessorWorkerImpl implements MessageWorker {
     URI target = resolveTarget(baseUrl, path);
     if (target == null) {
       logger.warn("Invalid URI base='{}' path='{}'", baseUrl, path);
-      return buildError("invalid baseUrl");
+      return buildError(context, "invalid baseUrl");
     }
 
     HttpRequest.Builder requestBuilder = HttpRequest.newBuilder(target);
@@ -187,10 +189,10 @@ class ProcessorWorkerImpl implements MessageWorker {
     result.set("headers", MAPPER.valueToTree(response.headers().map()));
     result.put("body", response.body());
 
-  return WorkMessage.json(result)
-    .header("content-type", "application/json")
-    .header("x-ph-service", "processor")
-    .build();
+    return WorkMessage.json(result)
+        .header("content-type", "application/json")
+        .header("x-ph-service", context.info().role())
+        .build();
   }
 
   private URI resolveTarget(String baseUrl, String path) {
@@ -211,16 +213,16 @@ class ProcessorWorkerImpl implements MessageWorker {
     return Optional.of(MAPPER.writeValueAsString(bodyNode));
   }
 
-  private WorkMessage buildError(Exception ex) {
-    return buildError(ex.toString());
+  private WorkMessage buildError(WorkerContext context, Exception ex) {
+    return buildError(context, ex.toString());
   }
 
-  private WorkMessage buildError(String message) {
+  private WorkMessage buildError(WorkerContext context, String message) {
     ObjectNode result = MAPPER.createObjectNode();
     result.put("error", message);
     return WorkMessage.json(result)
         .header("content-type", "application/json")
-        .header("x-ph-service", "processor")
+        .header("x-ph-service", context.info().role())
         .build();
   }
 
