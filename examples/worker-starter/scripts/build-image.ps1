@@ -7,6 +7,9 @@ param(
     [switch]$Help
 )
 
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+
 function Resolve-RepoRoot {
     param([string]$StartPath)
 
@@ -136,7 +139,6 @@ if (Test-Path $MavenWrapper) {
 $ParentInstallArgs = @()
 $SdkInstallArgs = @()
 $ModuleBuildArgs = @('-B', '-pl', 'generator-worker,processor-worker', '-am', 'package')
-$DockerMavenArgs = @()
 
 if ($RootPom) {
     $ParentInstallArgs += @('-f', $RootPom)
@@ -150,14 +152,12 @@ if ($PocketHiveVersion) {
     $ParentInstallArgs += "-Drevision=$PocketHiveVersion"
     $SdkInstallArgs += "-Drevision=$PocketHiveVersion"
     $ModuleBuildArgs += "-Drevision=$PocketHiveVersion"
-    $DockerMavenArgs += "-Drevision=$PocketHiveVersion"
 }
 
 if ($SkipTests.IsPresent) {
     $ParentInstallArgs += '-DskipTests'
     $SdkInstallArgs += '-DskipTests'
     $ModuleBuildArgs += '-DskipTests'
-    $DockerMavenArgs += '-DskipTests'
 }
 
 if ($MavenCmd) {
@@ -190,12 +190,47 @@ if ($MavenCmd) {
         Pop-Location
     }
 } else {
-    Write-Warning "Maven executable not found. Skipping host build and relying on the Docker multi-stage build."
+    Write-Error 'Maven executable not found. Install Maven or use the bundled wrapper before building images.'
+    exit 1
 }
 
 if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
     Write-Error 'Docker CLI is required to build the container images.'
     exit 1
+}
+
+function Get-BuiltJar {
+    param(
+        [string]$ModuleDirectory
+    )
+
+    $moduleRoot = Join-Path $ProjectRoot $ModuleDirectory
+    $targetDir = Join-Path $moduleRoot 'target'
+
+    if (-not (Test-Path $targetDir)) {
+        throw "Expected build output not found: $targetDir. Run the script without -SkipTests (or build with Maven manually) before packaging the image."
+    }
+
+    $candidates = Get-ChildItem -Path $targetDir -Filter '*.jar' -File | Sort-Object LastWriteTime -Descending
+    if (-not $candidates -or $candidates.Count -eq 0) {
+        throw "No JAR artifacts found in $targetDir. Ensure the Maven build completed successfully."
+    }
+
+    $preferred = $candidates | Where-Object { $_.Name -notlike '*-original.jar' -and $_.Name -notlike '*-plain.jar' } | Select-Object -First 1
+    if (-not $preferred) {
+        $preferred = $candidates | Select-Object -First 1
+    }
+
+    if (-not $preferred) {
+        throw "Unable to determine which JAR to package from $targetDir."
+    }
+
+    $relative = [System.IO.Path]::GetRelativePath($moduleRoot, $preferred.FullName)
+    if ([string]::IsNullOrWhiteSpace($relative) -or $relative.StartsWith('..')) {
+        throw "Unable to derive a relative path for $($preferred.FullName)"
+    }
+
+    return $relative.Replace('\', '/')
 }
 
 function Invoke-DockerBuild {
@@ -205,12 +240,12 @@ function Invoke-DockerBuild {
     )
 
     $Dockerfile = Join-Path $ProjectRoot "$ModuleDirectory/docker/Dockerfile"
-    $dockerArgString = $DockerMavenArgs -join ' '
+    $jarRelativePath = Get-BuiltJar -ModuleDirectory $ModuleDirectory
     $dockerArgs = @(
-        '--build-arg', "MAVEN_ARGS=$dockerArgString",
+        '--build-arg', "APP_JAR=$jarRelativePath",
         '-t', $ImageName,
         '-f', $Dockerfile,
-        $ProjectRoot
+        (Join-Path $ProjectRoot $ModuleDirectory)
     )
 
     docker build @dockerArgs

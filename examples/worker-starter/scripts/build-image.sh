@@ -130,7 +130,6 @@ fi
 PARENT_INSTALL_ARGS=()
 SDK_INSTALL_ARGS=()
 MODULE_BUILD_ARGS=(-B -pl generator-worker,processor-worker -am package)
-DOCKER_MAVEN_ARGS=()
 
 if [[ -n "${ROOT_POM}" ]]; then
   PARENT_INSTALL_ARGS+=(-f "${ROOT_POM}")
@@ -144,14 +143,12 @@ if [[ -n "${POCKETHIVE_VERSION}" ]]; then
   PARENT_INSTALL_ARGS+=(-Drevision=${POCKETHIVE_VERSION})
   SDK_INSTALL_ARGS+=(-Drevision=${POCKETHIVE_VERSION})
   MODULE_BUILD_ARGS+=(-Drevision=${POCKETHIVE_VERSION})
-  DOCKER_MAVEN_ARGS+=(-Drevision=${POCKETHIVE_VERSION})
 fi
 
 if [[ "${SKIP_TESTS}" == "true" ]]; then
   PARENT_INSTALL_ARGS+=(-DskipTests)
   SDK_INSTALL_ARGS+=(-DskipTests)
   MODULE_BUILD_ARGS+=(-DskipTests)
-  DOCKER_MAVEN_ARGS+=(-DskipTests)
 fi
 
 if [[ -n "${MVN_CMD}" ]]; then
@@ -167,8 +164,34 @@ if [[ -n "${MVN_CMD}" ]]; then
   echo "Running Maven build with ${MVN_CMD} ${MODULE_BUILD_ARGS[*]}"
   ( cd "${PROJECT_ROOT}" && "${MVN_CMD}" "${MODULE_BUILD_ARGS[@]}" )
 else
-  echo "Maven executable not found. Skipping host build and relying on the Docker multi-stage build." >&2
+  echo "Maven executable not found. Install Maven or use the bundled wrapper before building images." >&2
+  exit 1
 fi
+
+find_built_jar() {
+  local module_dir="$1"
+  local target_dir="${PROJECT_ROOT}/${module_dir}/target"
+
+  if [[ ! -d "${target_dir}" ]]; then
+    echo "Expected build output not found: ${target_dir}" >&2
+    echo "Run the script without --skip-tests (or execute Maven manually) to compile the module before building the image." >&2
+    return 1
+  fi
+
+  local jar
+  jar="$(find "${target_dir}" -maxdepth 1 -type f -name '*.jar' ! -name '*-original.jar' ! -name '*-plain.jar' | head -n 1)"
+
+  if [[ -z "${jar}" ]]; then
+    jar="$(find "${target_dir}" -maxdepth 1 -type f -name '*.jar' | head -n 1)"
+  fi
+
+  if [[ -z "${jar}" ]]; then
+    echo "No JAR artifacts found in ${target_dir}. Ensure the Maven build completed successfully." >&2
+    return 1
+  fi
+
+  printf '%s\n' "${jar}"
+}
 
 if ! command -v docker >/dev/null 2>&1; then
   echo "Docker CLI is required to build the container images." >&2
@@ -178,12 +201,21 @@ fi
 build_image() {
   local module_dir="$1"
   local image_name="$2"
-  local maven_args="${DOCKER_MAVEN_ARGS[*]}"
+  local jar_path
+  jar_path="$(find_built_jar "${module_dir}")" || return 1
+
+  local relative_jar="${jar_path#${PROJECT_ROOT}/${module_dir}/}"
+
+  if [[ "${relative_jar}" == "${jar_path}" ]]; then
+    echo "Unable to derive relative path for ${jar_path}." >&2
+    return 1
+  fi
+
   docker build \
-    --build-arg "MAVEN_ARGS=${maven_args}" \
+    --build-arg "APP_JAR=${relative_jar}" \
     -t "${image_name}" \
     -f "${PROJECT_ROOT}/${module_dir}/docker/Dockerfile" \
-    "${PROJECT_ROOT}"
+    "${PROJECT_ROOT}/${module_dir}"
 }
 
 build_image "generator-worker" "${GEN_IMAGE}"
