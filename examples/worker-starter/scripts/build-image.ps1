@@ -79,9 +79,10 @@ $ProjectRoot = (Resolve-Path "$PSScriptRoot/.." ).Path
 $RepoRoot = Resolve-RepoRoot -StartPath $ProjectRoot
 $RootPom = $null
 if ($null -ne $RepoRoot) {
-    $RootPom = Join-Path $RepoRoot "pom.xml"
+    $RootPom = Join-Path $RepoRoot 'pom.xml'
 }
-$ProjectPom = Join-Path $ProjectRoot "pom.xml"
+
+$ProjectPom = Join-Path $ProjectRoot 'pom.xml'
 $PocketHiveVersion = $null
 if (Test-Path $ProjectPom) {
     $match = Select-String -Path $ProjectPom -Pattern '<pockethive\.version>(.+)</pockethive\.version>' -AllMatches | Select-Object -First 1
@@ -92,55 +93,75 @@ if (Test-Path $ProjectPom) {
 if (-not $PocketHiveVersion) {
     Write-Warning "Unable to determine PocketHive version from $ProjectPom."
 }
+
 $LocalRepo = $env:MAVEN_REPO_LOCAL
 if (-not $LocalRepo -or $LocalRepo.Trim().Length -eq 0) {
     if ($env:MAVEN_USER_HOME -and $env:MAVEN_USER_HOME.Trim().Length -gt 0) {
-        $LocalRepo = Join-Path $env:MAVEN_USER_HOME "repository"
+        $LocalRepo = Join-Path $env:MAVEN_USER_HOME 'repository'
     } else {
-        $LocalRepo = Join-Path $env:USERPROFILE ".m2\repository"
+        $LocalRepo = Join-Path $env:USERPROFILE '.m2\repository'
     }
 }
-$StaleParentDir = [System.IO.Path]::Combine($LocalRepo, 'io', 'pockethive', 'pockethive-mvp', '${revision}')
-if (Test-Path $StaleParentDir) {
-    Write-Host "Removing stale cached Maven metadata at $StaleParentDir"
-    Remove-Item -Path $StaleParentDir -Recurse -Force
-}
-$MavenWrapper = Join-Path $ProjectRoot "mvnw.cmd"
 
+function Copy-ParentPlaceholder {
+    param([string]$Version)
+
+    if (-not $Version -or $Version.Trim().Length -eq 0) {
+        return
+    }
+
+    $actualDir = Join-Path $LocalRepo (Join-Path 'io/pockethive/pockethive-mvp' $Version)
+    $placeholderDir = Join-Path $LocalRepo 'io/pockethive/pockethive-mvp/${revision}'
+    $sourcePom = Join-Path $actualDir "pockethive-mvp-$Version.pom"
+    if (-not (Test-Path $sourcePom)) {
+        return
+    }
+
+    if (Test-Path $placeholderDir) {
+        Remove-Item -Path $placeholderDir -Recurse -Force
+    }
+
+    New-Item -ItemType Directory -Path $placeholderDir -Force | Out-Null
+    Copy-Item -Path $sourcePom -Destination (Join-Path $placeholderDir 'pockethive-mvp-${revision}.pom') -Force
+}
+
+$MavenWrapper = Join-Path $ProjectRoot 'mvnw.cmd'
 $MavenCmd = $null
 if (Test-Path $MavenWrapper) {
     $MavenCmd = $MavenWrapper
 } elseif (Get-Command mvn -ErrorAction SilentlyContinue) {
-    $MavenCmd = "mvn"
+    $MavenCmd = 'mvn'
 }
 
 $ParentInstallArgs = @()
-$InstallArgs = @()
-if ($null -ne $RootPom) {
-    $ParentInstallArgs += "-f"
-    $ParentInstallArgs += $RootPom
-    $InstallArgs += "-f"
-    $InstallArgs += $RootPom
-}
-$ParentInstallArgs += @("-B", "-N", "install")
-$InstallArgs += @("-B", "-pl", "common/worker-sdk", "-am", "install")
-$MavenArgs = @("-B", "-pl", "generator-worker,processor-worker", "-am", "package")
+$SdkInstallArgs = @()
+$ModuleBuildArgs = @('-B', '-pl', 'generator-worker,processor-worker', '-am', 'package')
 $DockerMavenArgs = @()
-if ($PocketHiveVersion) {
-    $ParentInstallArgs += "-Drevision=$PocketHiveVersion"
-    $InstallArgs += "-Drevision=$PocketHiveVersion"
-    $MavenArgs += "-Drevision=$PocketHiveVersion"
-    $DockerMavenArgs += "-Drevision=$PocketHiveVersion"
-}
-if ($SkipTests.IsPresent) {
-    $ParentInstallArgs += "-DskipTests"
-    $InstallArgs += "-DskipTests"
-    $MavenArgs += "-DskipTests"
-    $DockerMavenArgs += "-DskipTests"
+
+if ($RootPom) {
+    $ParentInstallArgs += @('-f', $RootPom)
+    $SdkInstallArgs += @('-f', $RootPom)
 }
 
-if ($null -ne $MavenCmd) {
-    if ($null -ne $RootPom -and (Test-Path $RootPom)) {
+$ParentInstallArgs += @('-B', '-N', 'install')
+$SdkInstallArgs += @('-B', '-pl', 'common/worker-sdk', '-am', 'install')
+
+if ($PocketHiveVersion) {
+    $ParentInstallArgs += "-Drevision=$PocketHiveVersion"
+    $SdkInstallArgs += "-Drevision=$PocketHiveVersion"
+    $ModuleBuildArgs += "-Drevision=$PocketHiveVersion"
+    $DockerMavenArgs += "-Drevision=$PocketHiveVersion"
+}
+
+if ($SkipTests.IsPresent) {
+    $ParentInstallArgs += '-DskipTests'
+    $SdkInstallArgs += '-DskipTests'
+    $ModuleBuildArgs += '-DskipTests'
+    $DockerMavenArgs += '-DskipTests'
+}
+
+if ($MavenCmd) {
+    if ($RootPom -and (Test-Path $RootPom)) {
         Write-Host "Installing PocketHive parent POM with $MavenCmd $($ParentInstallArgs -join ' ')"
         Push-Location $RepoRoot
         try {
@@ -148,29 +169,23 @@ if ($null -ne $MavenCmd) {
         } finally {
             Pop-Location
         }
-        if ($PocketHiveVersion) {
-            $LocalParentDir = [System.IO.Path]::Combine($LocalRepo, 'io', 'pockethive', 'pockethive-mvp', $PocketHiveVersion)
-            if (Test-Path $LocalParentDir) {
-                if (-not (Test-Path $StaleParentDir)) {
-                    New-Item -ItemType Directory -Path $StaleParentDir | Out-Null
-                }
-                Copy-Item -Path (Join-Path $LocalParentDir "pockethive-mvp-$PocketHiveVersion.pom") -Destination (Join-Path $StaleParentDir "pockethive-mvp-\${revision}.pom") -Force
-            }
-        }
-        Write-Host "Installing parent and shared artifacts with $MavenCmd $($InstallArgs -join ' ')"
+        Copy-ParentPlaceholder -Version $PocketHiveVersion
+
+        Write-Host "Installing Worker SDK dependencies with $MavenCmd $($SdkInstallArgs -join ' ')"
         Push-Location $RepoRoot
         try {
-            & $MavenCmd @InstallArgs
+            & $MavenCmd @SdkInstallArgs
         } finally {
             Pop-Location
         }
     } else {
         Write-Warning "Unable to locate PocketHive repository root. Skipping parent install. Please install io.pockethive:pockethive-mvp manually."
     }
-    Write-Host "Running Maven build with $MavenCmd $($MavenArgs -join ' ')"
+
+    Write-Host "Running Maven build with $MavenCmd $($ModuleBuildArgs -join ' ')"
     Push-Location $ProjectRoot
     try {
-        & $MavenCmd @MavenArgs
+        & $MavenCmd @ModuleBuildArgs
     } finally {
         Pop-Location
     }
@@ -179,7 +194,7 @@ if ($null -ne $MavenCmd) {
 }
 
 if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
-    Write-Error "Docker CLI is required to build the container images."
+    Write-Error 'Docker CLI is required to build the container images.'
     exit 1
 }
 
@@ -192,18 +207,18 @@ function Invoke-DockerBuild {
     $Dockerfile = Join-Path $ProjectRoot "$ModuleDirectory/docker/Dockerfile"
     $dockerArgString = $DockerMavenArgs -join ' '
     $dockerArgs = @(
-        "--build-arg", "MAVEN_ARGS=$dockerArgString",
-        "-t", $ImageName,
-        "-f", $Dockerfile,
+        '--build-arg', "MAVEN_ARGS=$dockerArgString",
+        '-t', $ImageName,
+        '-f', $Dockerfile,
         $ProjectRoot
     )
 
     docker build @dockerArgs
 }
 
-Invoke-DockerBuild -ModuleDirectory "generator-worker" -ImageName $GeneratorImageName
-Invoke-DockerBuild -ModuleDirectory "processor-worker" -ImageName $ProcessorImageName
+Invoke-DockerBuild -ModuleDirectory 'generator-worker' -ImageName $GeneratorImageName
+Invoke-DockerBuild -ModuleDirectory 'processor-worker' -ImageName $ProcessorImageName
 
-Write-Host "`nBuilt images:" 
+Write-Host "`nBuilt images:"
 Write-Host "  Generator -> $GeneratorImageName"
 Write-Host "  Processor -> $ProcessorImageName"

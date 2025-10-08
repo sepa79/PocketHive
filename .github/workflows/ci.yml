@@ -22,5 +22,32 @@ jobs:
       - name: Run Maven tests
         run: mvn -B -ntp test
 
+      - name: Install PocketHive parent POM
+        run: mvn -B -ntp -N install
+
+      - name: Mirror parent POM for worker SDK placeholders
+        run: |
+          REV=$(cat VERSION)
+          if [ -z "$REV" ]; then
+            exit 0
+          fi
+          if [ -n "${MAVEN_REPO_LOCAL:-}" ]; then
+            LOCAL_REPO="${MAVEN_REPO_LOCAL}"
+          elif [ -n "${MAVEN_USER_HOME:-}" ]; then
+            LOCAL_REPO="${MAVEN_USER_HOME}/repository"
+          else
+            LOCAL_REPO="${HOME}/.m2/repository"
+          fi
+          ACTUAL="${LOCAL_REPO}/io/pockethive/pockethive-mvp/${REV}"
+          PLACEHOLDER="${LOCAL_REPO}/io/pockethive/pockethive-mvp/\\${revision}"
+          if [ -f "${ACTUAL}/pockethive-mvp-${REV}.pom" ]; then
+            rm -rf "${PLACEHOLDER}"
+            mkdir -p "${PLACEHOLDER}"
+            cp "${ACTUAL}/pockethive-mvp-${REV}.pom" "${PLACEHOLDER}/pockethive-mvp-\\${revision}.pom"
+          fi
+
+      - name: Install PocketHive Worker SDK
+        run: mvn -B -ntp -pl common/worker-sdk -am install -DskipTests
+
       - name: Build worker starter examples
-        run: mvn -B -ntp -f examples/worker-starter/pom.xml verify
+        run: mvn -B -ntp -f examples/worker-starter/pom.xml verify -Drevision="$(cat VERSION)"

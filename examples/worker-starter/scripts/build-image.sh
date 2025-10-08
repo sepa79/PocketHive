@@ -23,7 +23,8 @@ resolve_repo_root() {
   return 1
 }
 
-REPO_ROOT="$(resolve_repo_root || true)"
+REPO_ROOT="$(resolve_repo_root)" || REPO_ROOT=""
+
 ROOT_POM=""
 if [[ -n "${REPO_ROOT}" ]]; then
   ROOT_POM="${REPO_ROOT}/pom.xml"
@@ -42,11 +43,23 @@ if [[ -z "${LOCAL_REPO}" ]]; then
     LOCAL_REPO="${HOME}/.m2/repository"
   fi
 fi
-STALE_PARENT_DIR="${LOCAL_REPO}/io/pockethive/pockethive-mvp/\${revision}"
-if [[ -d "${STALE_PARENT_DIR}" ]]; then
-  echo "Removing stale cached Maven metadata at ${STALE_PARENT_DIR}"
-  rm -rf "${STALE_PARENT_DIR}"
-fi
+
+copy_parent_placeholder() {
+  if [[ -z "${POCKETHIVE_VERSION}" ]]; then
+    return 0
+  fi
+
+  local actual_dir="${LOCAL_REPO}/io/pockethive/pockethive-mvp/${POCKETHIVE_VERSION}"
+  local placeholder_dir="${LOCAL_REPO}/io/pockethive/pockethive-mvp/\${revision}"
+  local source_pom="${actual_dir}/pockethive-mvp-${POCKETHIVE_VERSION}.pom"
+  if [[ ! -f "${source_pom}" ]]; then
+    return 0
+  fi
+
+  rm -rf "${placeholder_dir}"
+  mkdir -p "${placeholder_dir}"
+  cp "${source_pom}" "${placeholder_dir}/pockethive-mvp-\${revision}.pom"
+}
 
 print_help() {
   cat <<'HELP'
@@ -87,9 +100,9 @@ while [[ $# -gt 0 ]]; do
       SKIP_TESTS="true"
       ;;
     *)
-      if [[ -z "$GEN_IMAGE" ]]; then
+      if [[ -z "${GEN_IMAGE}" ]]; then
         GEN_IMAGE="$1"
-      elif [[ -z "$PROC_IMAGE" ]]; then
+      elif [[ -z "${PROC_IMAGE}" ]]; then
         PROC_IMAGE="$1"
       else
         echo "Unknown argument: $1" >&2
@@ -101,7 +114,7 @@ while [[ $# -gt 0 ]]; do
   shift
 done
 
-if [[ -z "$GEN_IMAGE" || -z "$PROC_IMAGE" ]]; then
+if [[ -z "${GEN_IMAGE}" || -z "${PROC_IMAGE}" ]]; then
   echo "Both generator and processor image names are required." >&2
   print_help >&2
   exit 1
@@ -115,46 +128,44 @@ elif command -v mvn >/dev/null 2>&1; then
 fi
 
 PARENT_INSTALL_ARGS=()
-INSTALL_ARGS=()
+SDK_INSTALL_ARGS=()
+MODULE_BUILD_ARGS=(-B -pl generator-worker,processor-worker -am package)
+DOCKER_MAVEN_ARGS=()
+
 if [[ -n "${ROOT_POM}" ]]; then
   PARENT_INSTALL_ARGS+=(-f "${ROOT_POM}")
-  INSTALL_ARGS+=(-f "${ROOT_POM}")
+  SDK_INSTALL_ARGS+=(-f "${ROOT_POM}")
 fi
+
 PARENT_INSTALL_ARGS+=(-B -N install)
-INSTALL_ARGS+=(-B -pl common/worker-sdk -am install)
-MVN_ARGS=(-B -pl generator-worker,processor-worker -am package)
-DOCKER_MAVEN_ARGS=()
+SDK_INSTALL_ARGS+=(-B -pl common/worker-sdk -am install)
+
 if [[ -n "${POCKETHIVE_VERSION}" ]]; then
-  PARENT_INSTALL_ARGS+=("-Drevision=${POCKETHIVE_VERSION}")
-  INSTALL_ARGS+=("-Drevision=${POCKETHIVE_VERSION}")
-  MVN_ARGS+=("-Drevision=${POCKETHIVE_VERSION}")
-  DOCKER_MAVEN_ARGS+=("-Drevision=${POCKETHIVE_VERSION}")
+  PARENT_INSTALL_ARGS+=(-Drevision=${POCKETHIVE_VERSION})
+  SDK_INSTALL_ARGS+=(-Drevision=${POCKETHIVE_VERSION})
+  MODULE_BUILD_ARGS+=(-Drevision=${POCKETHIVE_VERSION})
+  DOCKER_MAVEN_ARGS+=(-Drevision=${POCKETHIVE_VERSION})
 fi
+
 if [[ "${SKIP_TESTS}" == "true" ]]; then
-  PARENT_INSTALL_ARGS+=("-DskipTests")
-  INSTALL_ARGS+=("-DskipTests")
-  MVN_ARGS+=("-DskipTests")
-  DOCKER_MAVEN_ARGS+=("-DskipTests")
+  PARENT_INSTALL_ARGS+=(-DskipTests)
+  SDK_INSTALL_ARGS+=(-DskipTests)
+  MODULE_BUILD_ARGS+=(-DskipTests)
+  DOCKER_MAVEN_ARGS+=(-DskipTests)
 fi
 
 if [[ -n "${MVN_CMD}" ]]; then
   if [[ -n "${ROOT_POM}" && -f "${ROOT_POM}" ]]; then
     echo "Installing PocketHive parent POM with ${MVN_CMD} ${PARENT_INSTALL_ARGS[*]}"
     ( cd "${REPO_ROOT}" && "${MVN_CMD}" "${PARENT_INSTALL_ARGS[@]}" )
-    if [[ -n "${POCKETHIVE_VERSION}" ]]; then
-      LOCAL_PARENT_DIR="${LOCAL_REPO}/io/pockethive/pockethive-mvp/${POCKETHIVE_VERSION}"
-      if [[ -d "${LOCAL_PARENT_DIR}" ]]; then
-        mkdir -p "${STALE_PARENT_DIR}"
-        cp "${LOCAL_PARENT_DIR}/pockethive-mvp-${POCKETHIVE_VERSION}.pom" "${STALE_PARENT_DIR}/pockethive-mvp-\${revision}.pom"
-      fi
-    fi
-    echo "Installing parent and shared artifacts with ${MVN_CMD} ${INSTALL_ARGS[*]}"
-    ( cd "${REPO_ROOT}" && "${MVN_CMD}" "${INSTALL_ARGS[@]}" )
+    copy_parent_placeholder
+    echo "Installing Worker SDK dependencies with ${MVN_CMD} ${SDK_INSTALL_ARGS[*]}"
+    ( cd "${REPO_ROOT}" && "${MVN_CMD}" "${SDK_INSTALL_ARGS[@]}" )
   else
     echo "Unable to locate PocketHive repository root. Skipping parent install. Please install io.pockethive:pockethive-mvp manually." >&2
   fi
-  echo "Running Maven build with ${MVN_CMD} ${MVN_ARGS[*]}"
-  ( cd "${PROJECT_ROOT}" && "${MVN_CMD}" "${MVN_ARGS[@]}" )
+  echo "Running Maven build with ${MVN_CMD} ${MODULE_BUILD_ARGS[*]}"
+  ( cd "${PROJECT_ROOT}" && "${MVN_CMD}" "${MODULE_BUILD_ARGS[@]}" )
 else
   echo "Maven executable not found. Skipping host build and relying on the Docker multi-stage build." >&2
 fi
@@ -178,4 +189,4 @@ build_image() {
 build_image "generator-worker" "${GEN_IMAGE}"
 build_image "processor-worker" "${PROC_IMAGE}"
 
-echo "\nBuilt images:\n  Generator -> ${GEN_IMAGE}\n  Processor -> ${PROC_IMAGE}"
+printf '\nBuilt images:\n  Generator -> %s\n  Processor -> %s\n' "${GEN_IMAGE}" "${PROC_IMAGE}"
