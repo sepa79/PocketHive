@@ -114,20 +114,26 @@ if (Test-Path $MavenWrapper) {
     $MavenCmd = "mvn"
 }
 
+$ParentInstallArgs = @()
 $InstallArgs = @()
 if ($null -ne $RootPom) {
+    $ParentInstallArgs += "-f"
+    $ParentInstallArgs += $RootPom
     $InstallArgs += "-f"
     $InstallArgs += $RootPom
 }
+$ParentInstallArgs += @("-B", "-N", "install")
 $InstallArgs += @("-B", "-pl", "common/worker-sdk", "-am", "install")
 $MavenArgs = @("-B", "-pl", "generator-worker,processor-worker", "-am", "package")
 $DockerMavenArgs = @()
 if ($PocketHiveVersion) {
+    $ParentInstallArgs += "-Drevision=$PocketHiveVersion"
     $InstallArgs += "-Drevision=$PocketHiveVersion"
     $MavenArgs += "-Drevision=$PocketHiveVersion"
     $DockerMavenArgs += "-Drevision=$PocketHiveVersion"
 }
 if ($SkipTests.IsPresent) {
+    $ParentInstallArgs += "-DskipTests"
     $InstallArgs += "-DskipTests"
     $MavenArgs += "-DskipTests"
     $DockerMavenArgs += "-DskipTests"
@@ -135,6 +141,22 @@ if ($SkipTests.IsPresent) {
 
 if ($null -ne $MavenCmd) {
     if ($null -ne $RootPom -and (Test-Path $RootPom)) {
+        Write-Host "Installing PocketHive parent POM with $MavenCmd $($ParentInstallArgs -join ' ')"
+        Push-Location $RepoRoot
+        try {
+            & $MavenCmd @ParentInstallArgs
+        } finally {
+            Pop-Location
+        }
+        if ($PocketHiveVersion) {
+            $LocalParentDir = [System.IO.Path]::Combine($LocalRepo, 'io', 'pockethive', 'pockethive-mvp', $PocketHiveVersion)
+            if (Test-Path $LocalParentDir) {
+                if (-not (Test-Path $StaleParentDir)) {
+                    New-Item -ItemType Directory -Path $StaleParentDir | Out-Null
+                }
+                Copy-Item -Path (Join-Path $LocalParentDir "pockethive-mvp-$PocketHiveVersion.pom") -Destination (Join-Path $StaleParentDir "pockethive-mvp-\${revision}.pom") -Force
+            }
+        }
         Write-Host "Installing parent and shared artifacts with $MavenCmd $($InstallArgs -join ' ')"
         Push-Location $RepoRoot
         try {

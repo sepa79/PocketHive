@@ -114,19 +114,24 @@ elif command -v mvn >/dev/null 2>&1; then
   MVN_CMD="mvn"
 fi
 
+PARENT_INSTALL_ARGS=()
 INSTALL_ARGS=()
 if [[ -n "${ROOT_POM}" ]]; then
+  PARENT_INSTALL_ARGS+=(-f "${ROOT_POM}")
   INSTALL_ARGS+=(-f "${ROOT_POM}")
 fi
+PARENT_INSTALL_ARGS+=(-B -N install)
 INSTALL_ARGS+=(-B -pl common/worker-sdk -am install)
 MVN_ARGS=(-B -pl generator-worker,processor-worker -am package)
 DOCKER_MAVEN_ARGS=()
 if [[ -n "${POCKETHIVE_VERSION}" ]]; then
+  PARENT_INSTALL_ARGS+=("-Drevision=${POCKETHIVE_VERSION}")
   INSTALL_ARGS+=("-Drevision=${POCKETHIVE_VERSION}")
   MVN_ARGS+=("-Drevision=${POCKETHIVE_VERSION}")
   DOCKER_MAVEN_ARGS+=("-Drevision=${POCKETHIVE_VERSION}")
 fi
 if [[ "${SKIP_TESTS}" == "true" ]]; then
+  PARENT_INSTALL_ARGS+=("-DskipTests")
   INSTALL_ARGS+=("-DskipTests")
   MVN_ARGS+=("-DskipTests")
   DOCKER_MAVEN_ARGS+=("-DskipTests")
@@ -134,6 +139,15 @@ fi
 
 if [[ -n "${MVN_CMD}" ]]; then
   if [[ -n "${ROOT_POM}" && -f "${ROOT_POM}" ]]; then
+    echo "Installing PocketHive parent POM with ${MVN_CMD} ${PARENT_INSTALL_ARGS[*]}"
+    ( cd "${REPO_ROOT}" && "${MVN_CMD}" "${PARENT_INSTALL_ARGS[@]}" )
+    if [[ -n "${POCKETHIVE_VERSION}" ]]; then
+      LOCAL_PARENT_DIR="${LOCAL_REPO}/io/pockethive/pockethive-mvp/${POCKETHIVE_VERSION}"
+      if [[ -d "${LOCAL_PARENT_DIR}" ]]; then
+        mkdir -p "${STALE_PARENT_DIR}"
+        cp "${LOCAL_PARENT_DIR}/pockethive-mvp-${POCKETHIVE_VERSION}.pom" "${STALE_PARENT_DIR}/pockethive-mvp-\${revision}.pom"
+      fi
+    fi
     echo "Installing parent and shared artifacts with ${MVN_CMD} ${INSTALL_ARGS[*]}"
     ( cd "${REPO_ROOT}" && "${MVN_CMD}" "${INSTALL_ARGS[@]}" )
   else
