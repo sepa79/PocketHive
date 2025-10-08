@@ -97,35 +97,28 @@ if (-not $PocketHiveVersion) {
     Write-Warning "Unable to determine PocketHive version from $ProjectPom."
 }
 
-$LocalRepo = $env:MAVEN_REPO_LOCAL
-if (-not $LocalRepo -or $LocalRepo.Trim().Length -eq 0) {
-    if ($env:MAVEN_USER_HOME -and $env:MAVEN_USER_HOME.Trim().Length -gt 0) {
-        $LocalRepo = Join-Path $env:MAVEN_USER_HOME 'repository'
-    } else {
-        $LocalRepo = Join-Path $env:USERPROFILE '.m2\repository'
-    }
-}
-
-function Copy-ParentPlaceholder {
-    param([string]$Version)
-
-    if (-not $Version -or $Version.Trim().Length -eq 0) {
+function Install-ParentPlaceholder {
+    if (-not $MavenCmd -or -not $RootPom -or -not (Test-Path $RootPom)) {
         return
     }
 
-    $actualDir = Join-Path $LocalRepo (Join-Path 'io/pockethive/pockethive-mvp' $Version)
-    $placeholderDir = Join-Path $LocalRepo 'io/pockethive/pockethive-mvp/${revision}'
-    $sourcePom = Join-Path $actualDir "pockethive-mvp-$Version.pom"
-    if (-not (Test-Path $sourcePom)) {
-        return
-    }
+    $installArgs = @(
+        '-B',
+        'install:install-file',
+        "-Dfile=$RootPom",
+        '-DgroupId=io.pockethive',
+        '-DartifactId=pockethive-mvp',
+        '-Dversion=${revision}',
+        '-Dpackaging=pom'
+    )
 
-    if (Test-Path $placeholderDir) {
-        Remove-Item -Path $placeholderDir -Recurse -Force
+    Write-Host "Installing PocketHive parent placeholder with $MavenCmd $($installArgs -join ' ')"
+    Push-Location $RepoRoot
+    try {
+        & $MavenCmd @installArgs
+    } finally {
+        Pop-Location
     }
-
-    New-Item -ItemType Directory -Path $placeholderDir -Force | Out-Null
-    Copy-Item -Path $sourcePom -Destination (Join-Path $placeholderDir 'pockethive-mvp-${revision}.pom') -Force
 }
 
 $MavenWrapper = Join-Path $ProjectRoot 'mvnw.cmd'
@@ -169,7 +162,7 @@ if ($MavenCmd) {
         } finally {
             Pop-Location
         }
-        Copy-ParentPlaceholder -Version $PocketHiveVersion
+        Install-ParentPlaceholder
 
         Write-Host "Installing Worker SDK dependencies with $MavenCmd $($SdkInstallArgs -join ' ')"
         Push-Location $RepoRoot

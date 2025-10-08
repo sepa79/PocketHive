@@ -35,30 +35,19 @@ if [[ -z "${POCKETHIVE_VERSION}" ]]; then
   echo "Warning: Unable to determine PocketHive version from ${PROJECT_ROOT}/pom.xml." >&2
 fi
 
-LOCAL_REPO="${MAVEN_REPO_LOCAL:-}"
-if [[ -z "${LOCAL_REPO}" ]]; then
-  if [[ -n "${MAVEN_USER_HOME:-}" ]]; then
-    LOCAL_REPO="${MAVEN_USER_HOME}/repository"
-  else
-    LOCAL_REPO="${HOME}/.m2/repository"
-  fi
-fi
-
-copy_parent_placeholder() {
-  if [[ -z "${POCKETHIVE_VERSION}" ]]; then
+install_parent_placeholder() {
+  if [[ -z "${MVN_CMD}" || -z "${ROOT_POM}" ]]; then
     return 0
   fi
 
-  local actual_dir="${LOCAL_REPO}/io/pockethive/pockethive-mvp/${POCKETHIVE_VERSION}"
-  local placeholder_dir="${LOCAL_REPO}/io/pockethive/pockethive-mvp/\${revision}"
-  local source_pom="${actual_dir}/pockethive-mvp-${POCKETHIVE_VERSION}.pom"
-  if [[ ! -f "${source_pom}" ]]; then
+  if [[ ! -f "${ROOT_POM}" ]]; then
     return 0
   fi
 
-  rm -rf "${placeholder_dir}"
-  mkdir -p "${placeholder_dir}"
-  cp "${source_pom}" "${placeholder_dir}/pockethive-mvp-\${revision}.pom"
+  local install_args=(-B install:install-file "-Dfile=${ROOT_POM}" -DgroupId=io.pockethive -DartifactId=pockethive-mvp "-Dversion=\${revision}" -Dpackaging=pom)
+
+  echo "Installing PocketHive parent placeholder with ${MVN_CMD} ${install_args[*]}"
+  ( cd "${REPO_ROOT}" && "${MVN_CMD}" "${install_args[@]}" )
 }
 
 print_help() {
@@ -155,7 +144,7 @@ if [[ -n "${MVN_CMD}" ]]; then
   if [[ -n "${ROOT_POM}" && -f "${ROOT_POM}" ]]; then
     echo "Installing PocketHive parent POM with ${MVN_CMD} ${PARENT_INSTALL_ARGS[*]}"
     ( cd "${REPO_ROOT}" && "${MVN_CMD}" "${PARENT_INSTALL_ARGS[@]}" )
-    copy_parent_placeholder
+    install_parent_placeholder
     echo "Installing Worker SDK dependencies with ${MVN_CMD} ${SDK_INSTALL_ARGS[*]}"
     ( cd "${REPO_ROOT}" && "${MVN_CMD}" "${SDK_INSTALL_ARGS[@]}" )
   else

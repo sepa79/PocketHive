@@ -50,10 +50,11 @@ Provide explicit image tags for each worker:
 
 Use `--help` (Bash) or `-Help` (PowerShell) for a complete description of the available arguments. Set the
 environment variable `SKIP_TESTS=true` (Bash) or pass `-SkipTests` (PowerShell) to skip Maven tests during the
-build. The scripts require Maven (or the provided wrapper) and will install the PocketHive parent POM plus the
-Worker SDK into your local `~/.m2` before compiling the generator and processor modules. The Dockerfiles now
-copy those host-built JARs directly into the runtime image—if the expected artifacts are missing the helpers
-fail fast and explain how to re-run the Maven build.
+build. The scripts require Maven (or the provided wrapper) and will install the PocketHive parent POM, publish a
+`${revision}` placeholder via `mvn install:install-file`, and install the Worker SDK into your local `~/.m2`
+before compiling the generator and processor modules. The Dockerfiles now copy those host-built JARs directly
+into the runtime image—if the expected artifacts are missing the helpers fail fast and explain how to re-run the
+Maven build.
 
 ## Copy checklist
 
