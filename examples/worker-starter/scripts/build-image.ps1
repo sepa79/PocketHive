@@ -45,14 +45,23 @@ if (Test-Path $MavenWrapper) {
     $MavenCmd = "mvn"
 }
 
+$InstallArgs = @("-B", "-pl", "common/worker-sdk", "-am", "install")
 $MavenArgs = @("-B", "-pl", "generator-worker,processor-worker", "-am", "package")
 $DockerMavenArgs = ""
 if ($SkipTests.IsPresent) {
+    $InstallArgs += "-DskipTests"
     $MavenArgs += "-DskipTests"
     $DockerMavenArgs = "-DskipTests"
 }
 
 if ($null -ne $MavenCmd) {
+    Write-Host "Installing parent and shared artifacts with $MavenCmd $($InstallArgs -join ' ')"
+    Push-Location $ProjectRoot
+    try {
+        & $MavenCmd @InstallArgs
+    } finally {
+        Pop-Location
+    }
     Write-Host "Running Maven build with $MavenCmd $($MavenArgs -join ' ')"
     Push-Location $ProjectRoot
     try {

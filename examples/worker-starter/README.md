@@ -50,8 +50,9 @@ Provide explicit image tags for each worker:
 
 Use `--help` (Bash) or `-Help` (PowerShell) for a complete description of the available arguments. Set the
 environment variable `SKIP_TESTS=true` (Bash) or pass `-SkipTests` (PowerShell) to skip Maven tests during the
-build. When Maven (`mvn` or the wrapper) is available locally the scripts run a host build first; otherwise the
-multi-stage Dockerfiles take care of compilation.
+build. When Maven (`mvn` or the wrapper) is available locally the scripts first install the shared PocketHive
+artifacts (parent POM + Worker SDK) into your local `~/.m2`, then compile the generator and processor modules.
+If Maven isn’t available the multi-stage Dockerfiles still take care of compilation inside the build container.
 
 ## Copy checklist
 
