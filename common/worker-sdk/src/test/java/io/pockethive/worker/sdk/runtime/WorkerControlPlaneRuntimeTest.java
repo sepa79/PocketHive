@@ -99,6 +99,50 @@ class WorkerControlPlaneRuntimeTest {
     }
 
     @Test
+    void configUpdateWithoutEnabledPreservesExistingState() throws Exception {
+        Map<String, Object> initialArgs = Map.of(
+            "data", Map.of("enabled", true)
+        );
+        ControlSignal initialSignal = ControlSignal.forInstance(
+            "config-update",
+            IDENTITY.swarmId(),
+            IDENTITY.role(),
+            IDENTITY.instanceId(),
+            UUID.randomUUID().toString(),
+            UUID.randomUUID().toString(),
+            CommandTarget.INSTANCE,
+            initialArgs
+        );
+        String initialPayload = MAPPER.writeValueAsString(initialSignal);
+        String routingKey = ControlPlaneRouting.signal("config-update", IDENTITY.swarmId(), IDENTITY.role(), IDENTITY.instanceId());
+
+        runtime.handle(initialPayload, routingKey);
+
+        assertThat(runtime.workerEnabled(definition.beanName())).contains(true);
+
+        Map<String, Object> updateArgs = Map.of(
+            "data", Map.of("ratePerSec", 20.0)
+        );
+        ControlSignal updateSignal = ControlSignal.forInstance(
+            "config-update",
+            IDENTITY.swarmId(),
+            IDENTITY.role(),
+            IDENTITY.instanceId(),
+            UUID.randomUUID().toString(),
+            UUID.randomUUID().toString(),
+            CommandTarget.INSTANCE,
+            updateArgs
+        );
+        String updatePayload = MAPPER.writeValueAsString(updateSignal);
+
+        runtime.handle(updatePayload, routingKey);
+
+        assertThat(runtime.workerEnabled(definition.beanName())).contains(true);
+        Map<String, Object> rawConfig = runtime.workerRawConfig(definition.beanName());
+        assertThat(rawConfig).containsEntry("ratePerSec", 20.0);
+    }
+
+    @Test
     void stateListenerReceivesSnapshots() throws Exception {
         AtomicReference<WorkerControlPlaneRuntime.WorkerStateSnapshot> lastSnapshot = new AtomicReference<>();
         runtime.registerStateListener(definition.beanName(), lastSnapshot::set);
