@@ -5,33 +5,8 @@ scrape_configs:
   - job_name: 'prometheus'
     static_configs:
       - targets: ['localhost:9090']
-  - job_name: 'log-aggregator'
+  - job_name: 'pushgateway'
+    honor_labels: true
     scrape_interval: 5s
-    metrics_path: /actuator/prometheus
     static_configs:
-      - targets: ['log-aggregator:8080']
-  - job_name: 'postprocessor'
-    scrape_interval: 5s
-    metrics_path: /actuator/prometheus
-    static_configs:
-      - targets: ['postprocessor:8080']
-  - job_name: 'processor'
-    scrape_interval: 5s
-    metrics_path: /actuator/prometheus
-    static_configs:
-      - targets: ['processor:8080']
-  - job_name: 'moderator'
-    scrape_interval: 5s
-    metrics_path: /actuator/prometheus
-    static_configs:
-      - targets: ['moderator:8080']
-  - job_name: 'generator'
-    scrape_interval: 5s
-    metrics_path: /actuator/prometheus
-    static_configs:
-      - targets: ['generator:8080']
-  - job_name: 'scenario-manager'
-    scrape_interval: 5s
-    metrics_path: /actuator/prometheus
-    static_configs:
-      - targets: ['scenario-manager:8080']
+      - targets: ['pushgateway:9091']

@@ -9,3 +9,16 @@ The Buzz panel aggregates REST and STOMP activity from both the Hive services an
 3. Adjust the **Limit** field to control how many recent messages are retained.
 
 Each entry displays its timestamp, origin, channel and payload to help operators trace system interactions.
+
+## Metrics Pushgateway
+
+PocketHive services now export Micrometer metrics to a Prometheus Pushgateway instead of exposing `/actuator/prometheus`.
+
+- **Service wiring.** Every bee receives the gateway URL (`MANAGEMENT_METRICS_EXPORT_PROMETHEUS_PUSHGATEWAY_BASE_URL`) from the swarm controller and publishes under the swarm id (job) and bee name (instance) labels. The Docker Compose profile also injects these variables for locally run services.
+- **Prometheus scrape.** The bundled Prometheus instance scrapes only the Pushgateway (`pushgateway:9091`) with `honor_labels: true`, so dashboards continue to use the swarm/bee labels that workers provide.
+- **Lifecycle hygiene.** During shutdown each service deletes its Pushgateway metrics (job + instance grouping key). Expect the series to vanish within one scrape interval after a container terminates.
+- **Retention runbook.** If a worker crashes without executing its shutdown hook, stale metrics remain. Operators can:
+  1. Inspect the Pushgateway UI (`http://pushgateway:9091`) to confirm lingering groups.
+  2. Manually delete metrics with `curl -X DELETE http://pushgateway:9091/metrics/job/<swarm>/instance/<bee-name>`.
+  3. Restart the swarm or offending bee to force a fresh push if the worker is still active.
+- **Alerting considerations.** Dashboards and alerts should filter on the swarm/bee tags rather than the old Prometheus scrape job names. Treat the absence of a bee's metrics as a potential failure once the Pushgateway retention window (default 15s scrape interval) elapses.

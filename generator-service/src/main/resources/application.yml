@@ -5,7 +5,7 @@ spring:
     port: ${RABBITMQ_PORT:5672}
     username: ${RABBITMQ_DEFAULT_USER:guest}
     password: ${RABBITMQ_DEFAULT_PASS:guest}
-management.endpoints.web.exposure.include: health,info,prometheus
+management.endpoints.web.exposure.include: health,info
 
 # Include traceId from MDC in log output
 logging:
