@@ -19,11 +19,6 @@ jobs:
           java-version: '21'
           cache: maven
 
-      - name: Clear cached PocketHive artifacts
-        run: |
-          rm -rf ~/.m2/repository/io/pockethive/pockethive-mvp
-          rm -rf ~/.m2/repository/io/pockethive/worker-sdk
-
       - name: Run Maven tests
         run: mvn -B -ntp test
 
