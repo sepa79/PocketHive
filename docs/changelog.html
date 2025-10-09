@@ -26,13 +26,23 @@
 <body>
   <header>
     <a href="/">← Back</a>
-    <div style="margin-left:auto" class="muted">Version: <span id="ver">0.11.2</span></div>
+    <div style="margin-left:auto" class="muted">Version: <span id="ver">0.12.0</span></div>
   </header>
   <main>
     <div id="chg">
       <h1>Changelog</h1>
       <div style="height:6px"></div>
       <pre>All notable changes to this project will be documented in this file.</pre>
+      <div style="height:6px"></div>
+      <h2>[0.12.0] - 2025-10-09</h2>
+      <pre>Timestamp: 2025-10-09T00:00:00Z</pre>
+      <div style="height:6px"></div>
+      <ul>
+      <li>Control-plane: Introduced an emitter DSL, payload factories, topology descriptors, and Spring auto-configuration so worker services share canonical routing, confirmation builders, and origin-aware filtering when handling control signals.</li>
+      <li>Worker SDK: Published the Worker SDK starter bundling the runtime, registry, state store, and observability-aware interceptors alongside Stage 1-3 adoption guides so teams can adopt the simplified worker pipeline.</li>
+      <li>Runtime adapters: Adopted the reusable <code>RabbitMessageWorkerAdapter</code> and Worker SDK across worker services, with the trigger runtime coordinating generator scheduling, single-request overrides, and status emission through the control plane.</li>
+      <li>Documentation: Consolidated the scenario builder MVP planning archive and refreshed contributor guidance/README content to orient teams around the new control-plane and worker tooling.</li>
+      </ul>
       <div style="height:6px"></div>
       <h2>[0.11.2] - 2025-09-27</h2>
       <pre>Timestamp: 2025-09-27T00:00:00Z</pre>
