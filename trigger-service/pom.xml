@@ -3,7 +3,7 @@
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>io.pockethive</groupId>
-    <artifactId>pockethive-mvp</artifactId>
+    <artifactId>pockethive</artifactId>
     <version>0.11.3</version>
   </parent>
   <artifactId>trigger-service</artifactId>

@@ -35,7 +35,7 @@ function Resolve-RepoRoot {
     while ($true) {
         $pomPath = Join-Path $dir 'pom.xml'
         if (Test-Path $pomPath) {
-            if (Select-String -Path $pomPath -Pattern '<artifactId>pockethive-mvp</artifactId>' -SimpleMatch -Quiet) {
+            if (Select-String -Path $pomPath -Pattern '<artifactId>pockethive</artifactId>' -SimpleMatch -Quiet) {
                 return $dir
             }
         }
@@ -112,7 +112,7 @@ function Install-ParentPlaceholder {
         'install:install-file',
         "-Dfile=$RootPom",
         '-DgroupId=io.pockethive',
-        '-DartifactId=pockethive-mvp',
+        '-DartifactId=pockethive',
         "-Dversion=$PocketHiveVersion",
         '-Dpackaging=pom'
     )
@@ -177,7 +177,7 @@ if ($MavenCmd) {
             Pop-Location
         }
     } else {
-        Write-Warning "Unable to locate PocketHive repository root. Skipping parent install. Please install io.pockethive:pockethive-mvp manually."
+        Write-Warning "Unable to locate PocketHive repository root. Skipping parent install. Please install io.pockethive:pockethive manually."
     }
 
     Write-Host "Running Maven build with $MavenCmd $($ModuleBuildArgs -join ' ')"

@@ -14,7 +14,7 @@ resolve_repo_root() {
 
   local dir="${PROJECT_ROOT}"
   while [[ "${dir}" != "/" ]]; do
-    if [[ -f "${dir}/pom.xml" ]] && grep -q '<artifactId>pockethive-mvp</artifactId>' "${dir}/pom.xml" 2>/dev/null; then
+    if [[ -f "${dir}/pom.xml" ]] && grep -q '<artifactId>pockethive</artifactId>' "${dir}/pom.xml" 2>/dev/null; then
       printf '%s\n' "${dir}"
       return 0
     fi
@@ -49,7 +49,7 @@ install_parent_placeholder() {
     return 0
   fi
 
-  local install_args=(-B install:install-file "-Dfile=${ROOT_POM}" -DgroupId=io.pockethive -DartifactId=pockethive-mvp "-Dversion=${POCKETHIVE_VERSION}" -Dpackaging=pom)
+  local install_args=(-B install:install-file "-Dfile=${ROOT_POM}" -DgroupId=io.pockethive -DartifactId=pockethive "-Dversion=${POCKETHIVE_VERSION}" -Dpackaging=pom)
 
   echo "Installing PocketHive parent placeholder with ${MVN_CMD} ${install_args[*]}"
   ( cd "${REPO_ROOT}" && "${MVN_CMD}" "${install_args[@]}" )
@@ -153,7 +153,7 @@ if [[ -n "${MVN_CMD}" ]]; then
     echo "Installing Worker SDK dependencies with ${MVN_CMD} ${SDK_INSTALL_ARGS[*]}"
     ( cd "${REPO_ROOT}" && "${MVN_CMD}" "${SDK_INSTALL_ARGS[@]}" )
   else
-    echo "Unable to locate PocketHive repository root. Skipping parent install. Please install io.pockethive:pockethive-mvp manually." >&2
+    echo "Unable to locate PocketHive repository root. Skipping parent install. Please install io.pockethive:pockethive manually." >&2
   fi
   echo "Running Maven build with ${MVN_CMD} ${MODULE_BUILD_ARGS[*]}"
   ( cd "${PROJECT_ROOT}" && "${MVN_CMD}" "${MODULE_BUILD_ARGS[@]}" )
