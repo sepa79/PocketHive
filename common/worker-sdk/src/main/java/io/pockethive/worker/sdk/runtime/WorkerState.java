@@ -69,7 +69,9 @@ public final class WorkerState {
     void updateConfig(Object config, Map<String, Object> rawData, Boolean enabled) {
         configRef.set(config);
         rawConfigRef.set(rawData == null ? Map.of() : Map.copyOf(rawData));
-        enabledRef.set(enabled);
+        if (enabled != null) {
+            enabledRef.set(enabled);
+        }
     }
 
     Map<String, Object> rawConfig() {
