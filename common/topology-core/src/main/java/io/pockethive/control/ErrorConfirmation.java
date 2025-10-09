@@ -1,8 +1,11 @@
 package io.pockethive.control;
 
+import static io.pockethive.control.ConfirmationSupport.DEFAULT_ERROR_RESULT;
+import static io.pockethive.control.ConfirmationSupport.defaultResult;
+import static io.pockethive.control.ConfirmationSupport.defaultScope;
+import static io.pockethive.control.ConfirmationSupport.immutableDetailsOrNull;
+
 import java.time.Instant;
-import java.util.Collections;
-import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
@@ -24,13 +27,9 @@ public record ErrorConfirmation(
 ) implements Confirmation {
 
     public ErrorConfirmation {
-        result = (result == null || result.isBlank()) ? "error" : result;
-        if (details != null && !details.isEmpty()) {
-            details = Collections.unmodifiableMap(new LinkedHashMap<>(details));
-        } else {
-            details = null;
-        }
-        scope = scope == null ? ConfirmationScope.EMPTY : scope;
+        result = defaultResult(result, DEFAULT_ERROR_RESULT);
+        details = immutableDetailsOrNull(details);
+        scope = defaultScope(scope);
     }
 
     public ErrorConfirmation(Instant ts,
@@ -42,7 +41,7 @@ public record ErrorConfirmation(
                              String phase,
                              String code,
                              String message) {
-        this(ts, correlationId, idempotencyKey, signal, scope, "error", state, phase, code, message, null, null);
+    this(ts, correlationId, idempotencyKey, signal, scope, DEFAULT_ERROR_RESULT, state, phase, code, message, null, null);
     }
 
     public ErrorConfirmation(Instant ts,
@@ -56,7 +55,7 @@ public record ErrorConfirmation(
                              String message,
                              Boolean retryable,
                              Map<String, Object> details) {
-        this(ts, correlationId, idempotencyKey, signal, scope, "error", state, phase, code, message, retryable, details);
+        this(ts, correlationId, idempotencyKey, signal, scope, DEFAULT_ERROR_RESULT, state, phase, code, message, retryable, details);
     }
 }
 

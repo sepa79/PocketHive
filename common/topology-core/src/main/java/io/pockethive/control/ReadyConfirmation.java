@@ -1,8 +1,11 @@
 package io.pockethive.control;
 
+import static io.pockethive.control.ConfirmationSupport.DEFAULT_READY_RESULT;
+import static io.pockethive.control.ConfirmationSupport.defaultResult;
+import static io.pockethive.control.ConfirmationSupport.defaultScope;
+import static io.pockethive.control.ConfirmationSupport.immutableDetailsOrNull;
+
 import java.time.Instant;
-import java.util.Collections;
-import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
@@ -20,13 +23,9 @@ public record ReadyConfirmation(
 ) implements Confirmation {
 
     public ReadyConfirmation {
-        result = (result == null || result.isBlank()) ? "success" : result;
-        if (details != null && !details.isEmpty()) {
-            details = Collections.unmodifiableMap(new LinkedHashMap<>(details));
-        } else {
-            details = null;
-        }
-        scope = scope == null ? ConfirmationScope.EMPTY : scope;
+        result = defaultResult(result, DEFAULT_READY_RESULT);
+        details = immutableDetailsOrNull(details);
+        scope = defaultScope(scope);
     }
 
     public ReadyConfirmation(Instant ts,
@@ -35,7 +34,7 @@ public record ReadyConfirmation(
                              String signal,
                              ConfirmationScope scope,
                              CommandState state) {
-        this(ts, correlationId, idempotencyKey, signal, scope, "success", state, null);
+        this(ts, correlationId, idempotencyKey, signal, scope, DEFAULT_READY_RESULT, state, null);
     }
 }
 

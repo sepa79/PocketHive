@@ -21,7 +21,7 @@ class PostProcessorControlPlaneConfigTest {
       .withConfiguration(AutoConfigurations.of(
           ControlPlaneCommonAutoConfiguration.class,
           WorkerControlPlaneAutoConfiguration.class))
-      .withUserConfiguration(TestConfig.class, PostProcessorControlPlaneConfig.class)
+    .withUserConfiguration(TestConfig.class, PostProcessorConfig.class)
       .withPropertyValues(
           "pockethive.control-plane.swarm-id=swarm-test",
           "pockethive.control-plane.worker.role=postprocessor",

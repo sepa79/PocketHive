@@ -199,16 +199,19 @@ public class SwarmSignalListener {
       Map<String, Object> details = new LinkedHashMap<>();
 
       List<Runnable> fanouts = new ArrayList<>();
+      boolean fromSelf = cs.origin() != null && instanceId.equalsIgnoreCase(cs.origin());
 
       switch (commandTarget) {
         case SWARM -> {
           if (enabledFlag != null && appliesToLocalSwarm(cs)) {
-            lifecycle.setSwarmEnabled(enabledFlag);
+            if (!fromSelf) {
+              lifecycle.setSwarmEnabled(enabledFlag);
+            }
             controllerEnabled = enabledFlag;
             sendStatusDelta();
             stateEnabled = enabledFlag;
             details.put("workloads", Map.of("enabled", enabledFlag));
-          } else {
+          } else if (!fromSelf) {
             fanouts.add(() -> forwardToAll(cs, rawPayload));
           }
         }
@@ -225,7 +228,9 @@ public class SwarmSignalListener {
             if (spec == null) {
               throw new IllegalArgumentException("commandTarget=instance requires role and instance fields");
             }
-            fanouts.add(() -> forwardToInstance(cs, rawPayload, spec));
+            if (!fromSelf) {
+              fanouts.add(() -> forwardToInstance(cs, rawPayload, spec));
+            }
           }
         }
         case ROLE -> {
@@ -233,9 +238,15 @@ public class SwarmSignalListener {
           if (roleTarget == null) {
             throw new IllegalArgumentException("commandTarget=role requires a role field");
           }
-          fanouts.add(() -> forwardToRole(cs, rawPayload, roleTarget));
+          if (!fromSelf) {
+            fanouts.add(() -> forwardToRole(cs, rawPayload, roleTarget));
+          }
         }
-        case ALL -> fanouts.add(() -> forwardToAll(cs, rawPayload));
+        case ALL -> {
+          if (!fromSelf) {
+            fanouts.add(() -> forwardToAll(cs, rawPayload));
+          }
+        }
       }
 
       CommandState state = configCommandState(cs, resolvedSignal, stateEnabled, details);
@@ -317,14 +328,12 @@ public class SwarmSignalListener {
     if (!ROLE.equalsIgnoreCase(roleSegment) && !isAllSegment(roleSegment)) {
       return false;
     }
-    if (isAllSegment(roleSegment)
-        && commandTarget == CommandTarget.SWARM
-        && (cs.role() == null || cs.role().isBlank() || isAllSegment(cs.role()))) {
-      return false;
-    }
     String targetInstance = key.instance();
     if (isAllSegment(targetInstance)) {
-      return commandTarget == CommandTarget.SWARM || commandTarget == CommandTarget.ALL;
+      if (commandTarget == CommandTarget.SWARM) {
+        return appliesToLocalSwarm(cs);
+      }
+      return commandTarget == CommandTarget.ALL;
     }
     if (instanceId.equalsIgnoreCase(targetInstance)) {
       return true;

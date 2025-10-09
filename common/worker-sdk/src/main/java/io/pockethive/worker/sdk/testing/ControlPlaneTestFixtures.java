@@ -11,6 +11,7 @@ import java.util.Objects;
 
 /**
  * Testing helpers that expose canonical control-plane descriptors and identities.
+ * Complements the configuration steps in {@code docs/sdk/worker-sdk-quickstart.md}.
  */
 public final class ControlPlaneTestFixtures {
 

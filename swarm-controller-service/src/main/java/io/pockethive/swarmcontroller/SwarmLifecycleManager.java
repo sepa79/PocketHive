@@ -13,7 +13,12 @@ import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
-import org.springframework.amqp.core.*;
+import org.springframework.amqp.core.AmqpAdmin;
+import org.springframework.amqp.core.Binding;
+import org.springframework.amqp.core.BindingBuilder;
+import org.springframework.amqp.core.Queue;
+import org.springframework.amqp.core.QueueBuilder;
+import org.springframework.amqp.core.TopicExchange;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
@@ -38,6 +43,14 @@ import java.util.concurrent.TimeUnit;
 
 import io.pockethive.docker.DockerContainerClient;
 
+/**
+ * Concrete {@link SwarmLifecycle} that wires the control plane to real infrastructure.
+ * <p>
+ * The manager accepts high-level commands from the orchestrator and turns them into RabbitMQ
+ * exchanges/queues, Docker container lifecycles, and status updates. When walking through the code,
+ * keep {@code docs/ARCHITECTURE.md#control-plane} open; each overridden method below maps to a control
+ * signal or REST call and explains the container/queue work that happens under the hood.
+ */
 @Component
 public class SwarmLifecycleManager implements SwarmLifecycle {
   private static final Logger log = LoggerFactory.getLogger(SwarmLifecycleManager.class);
@@ -74,6 +87,14 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
     this.instanceId = instanceId;
   }
 
+  /**
+   * Handle the orchestrator's request to start the swarm.
+   * <p>
+   * We resolve the active template (calling {@link #prepare(String)} if necessary), ensure the
+   * controller is tagged with swarm metadata via MDC for log correlation, and finally flip the swarm
+   * into an enabled state via {@link #setSwarmEnabled(boolean)}. When invoked after a pause, this path
+   * simply re-emits the config update without re-creating infrastructure.
+   */
   @Override
   public void start(String planJson) {
     MDC.put("swarm_id", Topology.SWARM_ID);
@@ -92,6 +113,19 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
     }
   }
 
+  /**
+   * Materialise a swarm plan without enabling work.
+   * <p>
+   * This method reads the provided JSON into {@link SwarmPlan}, declares the hive exchange, and
+   * ensures queues exist for every {@code work.in/out} suffix listed in the plan. For each
+   * {@link Bee} that specifies a container image we generate an instance name (e.g.
+   * {@code generator-demo-1}), inject PocketHive environment defaults (Rabbit host, log exchange,
+   * {@code PH_SWARM_ID}), and create/start the container via {@link DockerContainerClient}. The
+   * computed start order is cached so {@link #remove()} can stop containers in reverse.
+   * <p>
+   * Junior maintainers can tweak the environment defaults above by editing the map before
+   * {@link DockerContainerClient#createContainer} is invoked.
+   */
   @Override
   public void prepare(String templateJson) {
     MDC.put("swarm_id", Topology.SWARM_ID);
@@ -123,7 +157,6 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
             env.put("PH_CONTROL_EXCHANGE", Topology.CONTROL_EXCHANGE);
             env.put("RABBITMQ_HOST", java.util.Optional.ofNullable(System.getenv("RABBITMQ_HOST")).orElse("rabbitmq"));
             env.put("PH_LOGS_EXCHANGE", java.util.Optional.ofNullable(System.getenv("PH_LOGS_EXCHANGE")).orElse("ph.logs"));
-            env.put("PH_ENABLED", "false");
             String net = docker.resolveControlNetwork();
             if (net != null && !net.isBlank()) {
               env.put("CONTROL_NETWORK", net);
@@ -180,6 +213,13 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
     }
   }
 
+  /**
+   * Stop workload processing while leaving infrastructure available for quick restarts.
+   * <p>
+   * We publish a {@code config-update} signal with {@code enabled=false} (via
+   * {@link #setSwarmEnabled(boolean)}), emit a status-delta envelope for dashboards, and rely on the
+   * orchestrator to observe the ready/error events described in {@code docs/ORCHESTRATOR-REST.md}.
+   */
   @Override
   public void stop() {
     MDC.put("swarm_id", Topology.SWARM_ID);
@@ -218,6 +258,14 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
     MDC.clear();
   }
 
+  /**
+   * Fully tear down the swarm, deleting queues and removing Docker containers.
+   * <p>
+   * We iterate through the captured {@code startOrder} in reverse so downstream workers (e.g.
+   * postprocessors) stop before their dependencies vanish. After clearing containers and queues we
+   * update the internal {@link SwarmStatus} so {@link #getStatus()} and {@link #getMetrics()} reflect
+   * the removal.
+   */
   @Override
   public void remove() {
     MDC.put("swarm_id", Topology.SWARM_ID);
@@ -246,11 +294,24 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
     MDC.clear();
   }
 
+  /**
+   * Expose the controller's current lifecycle state for REST callers.
+   * <p>
+   * Used by {@code GET /api/swarms/{id}} to render status badges. When debugging, pair this with
+   * {@link #getMetrics()} to understand whether the swarm is paused, running, or removed.
+   */
   @Override
   public SwarmStatus getStatus() {
     return status;
   }
 
+  /**
+   * Update heartbeat metadata whenever a worker pings the controller.
+   * <p>
+   * The default overload stores the current timestamp, which feeds into {@link #getMetrics()} and the
+   * readiness check inside {@link #isFullyReady()}. During tests we call the timestamped overload to
+   * simulate stale heartbeats.
+   */
   @Override
   public void updateHeartbeat(String role, String instance) {
     updateHeartbeat(role, instance, System.currentTimeMillis());
@@ -260,11 +321,25 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
     lastSeen.put(role + "." + instance, timestamp);
   }
 
+  /**
+   * Remember whether a given worker accepted the latest config update.
+   * <p>
+   * Called when the control plane receives a {@code ready.config-update} event that includes the
+   * worker's {@code enabled} flag. These markers drive the {@code running} count reported in
+   * {@link #getMetrics()}.
+   */
   @Override
   public void updateEnabled(String role, String instance, boolean flag) {
     enabled.put(role + "." + instance, flag);
   }
 
+  /**
+   * Summarise desired vs. healthy vs. enabled workers.
+   * <p>
+   * We calculate the totals from readiness expectations and heartbeats, then produce a
+   * {@link SwarmMetrics} record that REST consumers use to populate health dashboards. The watermark
+   * value represents the oldest heartbeat so on-call engineers can spot stragglers.
+   */
   @Override
   public SwarmMetrics getMetrics() {
     int desired = expectedReady.values().stream().mapToInt(Integer::intValue).sum();
@@ -288,6 +363,13 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
     return new SwarmMetrics(desired, healthy, running, enabledCount, Instant.ofEpochMilli(watermark));
   }
 
+  /**
+   * Record that a worker reported ready and determine if the swarm can be marked live.
+   * <p>
+   * When the last expected worker role+instance combination arrives and the corresponding heartbeat is
+   * fresh, this method returns {@code true}. Callers typically translate that into a
+   * {@code ready.swarm-start} control event.
+   */
   @Override
   public synchronized boolean markReady(String role, String instance) {
     instancesByRole.computeIfAbsent(role, r -> new ArrayList<>());
@@ -389,6 +471,14 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
     return order;
   }
 
+  /**
+   * Consume a scenario runner payload and pre-schedule control signals.
+   * <p>
+   * The payload may include a {@code schedule[]} array with future control messages (for example
+   * {@code {"delayMs":1000,"routingKey":"sig.inject.demo","body":"{...}"}}). We store those in
+   * {@link #scheduledTasks} and emit a disabled {@code config-update} so workers apply the configuration
+   * without processing messages yet.
+   */
   @Override
   public synchronized void applyScenarioStep(String stepJson) {
     try {
@@ -417,6 +507,13 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
     }
   }
 
+  /**
+   * Enable workloads and fire any delayed scenario commands.
+   * <p>
+   * After publishing a {@code config-update} with {@code enabled=true} we queue each
+   * {@link ScenarioTask} with the scheduler so control injections (like traffic bursts) happen relative
+   * to the enable moment.
+   */
   @Override
   public synchronized void enableAll() {
     var data = mapper.createObjectNode();
@@ -431,6 +528,13 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
     }
   }
 
+  /**
+   * Toggle the swarm into a running or paused state.
+   * <p>
+   * Control-plane REST endpoints call this helper after validating the desired boolean. Enabling
+   * delegates to {@link #enableAll()} while disabling funnels through {@link #disableAll()} so both
+   * paths reuse the same config-update publishing logic.
+   */
   @Override
   public synchronized void setSwarmEnabled(boolean enabledFlag) {
     if (enabledFlag) {

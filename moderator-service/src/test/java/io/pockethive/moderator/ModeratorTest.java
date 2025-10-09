@@ -1,158 +1,104 @@
 package io.pockethive.moderator;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.pockethive.Topology;
-import io.pockethive.asyncapi.AsyncApiSchemaValidator;
-import io.pockethive.control.CommandTarget;
-import io.pockethive.control.ControlSignal;
-import io.pockethive.controlplane.ControlPlaneIdentity;
-import io.pockethive.controlplane.messaging.ControlPlaneEmitter;
-import io.pockethive.controlplane.payload.RoleContext;
-import io.pockethive.controlplane.payload.StatusPayloadFactory;
-import io.pockethive.controlplane.routing.ControlPlaneRouting;
-import io.pockethive.controlplane.topology.ControlPlaneTopologyDescriptor;
-import io.pockethive.controlplane.topology.ControlQueueDescriptor;
-import io.pockethive.controlplane.topology.ModeratorControlPlaneTopologyDescriptor;
-import io.pockethive.controlplane.worker.WorkerControlPlane;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import io.pockethive.worker.sdk.api.StatusPublisher;
+import io.pockethive.worker.sdk.api.WorkMessage;
+import io.pockethive.worker.sdk.api.WorkResult;
+import io.pockethive.worker.sdk.api.WorkerContext;
+import io.pockethive.worker.sdk.api.WorkerInfo;
+import java.nio.charset.StandardCharsets;
+import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
-import org.springframework.amqp.rabbit.listener.MessageListenerContainer;
-import org.springframework.amqp.rabbit.listener.RabbitListenerEndpointRegistry;
-import org.springframework.test.util.ReflectionTestUtils;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.clearInvocations;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
-@ExtendWith(MockitoExtension.class)
 class ModeratorTest {
 
-  private static final AsyncApiSchemaValidator ASYNC_API = AsyncApiSchemaValidator.loadDefault();
+    private ModeratorDefaults defaults;
+    private ModeratorWorkerImpl worker;
 
-  @Mock
-  RabbitTemplate rabbit;
+    @BeforeEach
+    void setUp() {
+        defaults = new ModeratorDefaults();
+        defaults.setEnabled(false);
+        worker = new ModeratorWorkerImpl(defaults);
+    }
 
-  @Mock
-  RabbitListenerEndpointRegistry registry;
+    @Test
+    void onMessageReturnsForwardedPayload() {
+        WorkMessage message = WorkMessage.builder()
+                .body("test".getBytes(StandardCharsets.UTF_8))
+                .header("original", "true")
+                .build();
 
-  @Mock
-  MessageListenerContainer container;
+        WorkResult result = worker.onMessage(message, new TestWorkerContext(new ModeratorWorkerConfig(true)));
 
-  @Mock
-  ControlPlaneEmitter controlEmitter;
+        assertThat(result).isInstanceOf(WorkResult.Message.class);
+        WorkMessage forwarded = ((WorkResult.Message) result).value();
+        assertThat(new String(forwarded.body(), StandardCharsets.UTF_8)).isEqualTo("test");
+        assertThat(forwarded.headers()).containsEntry("original", "true");
+        assertThat(forwarded.headers()).containsEntry("x-ph-service", "moderator");
+    }
 
-  private final ObjectMapper mapper = new ObjectMapper();
-  private ControlPlaneIdentity identity;
-  private ControlPlaneTopologyDescriptor topology;
-  private WorkerControlPlane workerControlPlane;
-  private Moderator moderator;
-  private String controlQueueName;
+    @Test
+    void usesDefaultsWhenConfigMissing() {
+        WorkMessage message = WorkMessage.builder()
+                .textBody("payload")
+                .build();
 
-  @BeforeEach
-  void setUp() {
-    identity = new ControlPlaneIdentity(Topology.SWARM_ID, "moderator", "inst");
-    topology = new ModeratorControlPlaneTopologyDescriptor();
-    workerControlPlane = WorkerControlPlane.builder(mapper)
-        .identity(identity)
-        .build();
-    moderator = new Moderator(rabbit, registry, controlEmitter, identity, topology, workerControlPlane);
-    clearInvocations(controlEmitter, rabbit, registry, container);
-    controlQueueName = topology.controlQueue(identity.instanceId())
-        .map(ControlQueueDescriptor::name)
-        .orElseThrow();
-  }
+        WorkResult result = worker.onMessage(message, new TestWorkerContext(null));
 
-  @Test
-  void statusRequestEmitsFullStatus() throws Exception {
-    String correlationId = UUID.randomUUID().toString();
-    String idempotencyKey = UUID.randomUUID().toString();
-    ControlSignal signal = ControlSignal.forInstance("status-request", identity.swarmId(),
-        identity.role(), identity.instanceId(), correlationId, idempotencyKey);
+        WorkMessage forwarded = ((WorkResult.Message) result).value();
+        assertThat(forwarded.headers()).containsEntry("x-ph-service", "moderator");
+    }
 
-    moderator.onControl(mapper.writeValueAsString(signal),
-        ControlPlaneRouting.signal("status-request", identity.swarmId(), identity.role(),
-            identity.instanceId()), null);
+    private static final class TestWorkerContext implements WorkerContext {
 
-    ArgumentCaptor<ControlPlaneEmitter.StatusContext> captor =
-        ArgumentCaptor.forClass(ControlPlaneEmitter.StatusContext.class);
-    verify(controlEmitter).emitStatusSnapshot(captor.capture());
-    StatusPayloadFactory factory = new StatusPayloadFactory(RoleContext.fromIdentity(identity));
-    String payload = factory.snapshot(captor.getValue().customiser());
-    JsonNode node = mapper.readTree(payload);
-    List<String> errors = ASYNC_API.validate("#/components/schemas/ControlStatusFullPayload", node);
-    assertThat(errors).isEmpty();
-    assertThat(node.path("queues").path("control").path("in").get(0).asText())
-        .isEqualTo(controlQueueName);
-    verify(controlEmitter, never()).emitStatusDelta(any());
-  }
+        private final ModeratorWorkerConfig config;
+        private final WorkerInfo info = new WorkerInfo("moderator", "swarm", "instance", Topology.GEN_QUEUE, Topology.MOD_QUEUE);
 
-  @Test
-  void configUpdateTogglesListenerAndEmitsReady() throws Exception {
-    Map<String, Object> args = Map.of("data", Map.of("enabled", true));
-    String correlationId = UUID.randomUUID().toString();
-    String idempotencyKey = UUID.randomUUID().toString();
-    when(registry.getListenerContainer("workListener")).thenReturn(container);
-    ControlSignal signal = ControlSignal.forInstance("config-update", identity.swarmId(),
-        identity.role(), identity.instanceId(), correlationId, idempotencyKey,
-        CommandTarget.INSTANCE, args);
+        private TestWorkerContext(ModeratorWorkerConfig config) {
+            this.config = config;
+        }
 
-    moderator.onControl(mapper.writeValueAsString(signal),
-        ControlPlaneRouting.signal("config-update", identity.swarmId(), identity.role(),
-            identity.instanceId()), null);
+        @Override
+        public WorkerInfo info() {
+            return info;
+        }
 
-    ArgumentCaptor<ControlPlaneEmitter.ReadyContext> captor =
-        ArgumentCaptor.forClass(ControlPlaneEmitter.ReadyContext.class);
-    verify(controlEmitter).emitReady(captor.capture());
-    ControlPlaneEmitter.ReadyContext context = captor.getValue();
-    assertThat(context.state().enabled()).isTrue();
-    Boolean enabled = (Boolean) ReflectionTestUtils.getField(moderator, "enabled");
-    assertThat(enabled).isTrue();
-    verify(container).start();
-  }
+        @Override
+        public <C> Optional<C> config(Class<C> type) {
+            if (config != null && type.isAssignableFrom(ModeratorWorkerConfig.class)) {
+                return Optional.of(type.cast(config));
+            }
+            return Optional.empty();
+        }
 
-  @Test
-  void configUpdateErrorEmitsError() throws Exception {
-    Map<String, Object> args = Map.of("data", Map.of("enabled", "oops"));
-    String correlationId = UUID.randomUUID().toString();
-    String idempotencyKey = UUID.randomUUID().toString();
-    ControlSignal signal = ControlSignal.forInstance("config-update", identity.swarmId(),
-        identity.role(), identity.instanceId(), correlationId, idempotencyKey,
-        CommandTarget.INSTANCE, args);
+        @Override
+        public StatusPublisher statusPublisher() {
+            return StatusPublisher.NO_OP;
+        }
 
-    moderator.onControl(mapper.writeValueAsString(signal),
-        ControlPlaneRouting.signal("config-update", identity.swarmId(), identity.role(),
-            identity.instanceId()), null);
+        @Override
+        public org.slf4j.Logger logger() {
+            return org.slf4j.LoggerFactory.getLogger("test");
+        }
 
-    ArgumentCaptor<ControlPlaneEmitter.ErrorContext> captor =
-        ArgumentCaptor.forClass(ControlPlaneEmitter.ErrorContext.class);
-    verify(controlEmitter).emitError(captor.capture());
-    ControlPlaneEmitter.ErrorContext context = captor.getValue();
-    assertThat(context.code()).isEqualTo("IllegalArgumentException");
-    verify(controlEmitter, never()).emitReady(any());
-  }
+        @Override
+        public io.micrometer.core.instrument.MeterRegistry meterRegistry() {
+            return new SimpleMeterRegistry();
+        }
 
-  @Test
-  void onControlRejectsBlankPayload() {
-    String routingKey = ControlPlaneRouting.signal("status-request", identity.swarmId(),
-        identity.role(), identity.instanceId());
+        @Override
+        public io.micrometer.observation.ObservationRegistry observationRegistry() {
+            return io.micrometer.observation.ObservationRegistry.create();
+        }
 
-    assertThatThrownBy(() -> moderator.onControl(" ", routingKey, null))
-        .isInstanceOf(IllegalArgumentException.class)
-        .hasMessageContaining("payload");
-  }
-
+        @Override
+        public io.pockethive.observability.ObservabilityContext observabilityContext() {
+            return new io.pockethive.observability.ObservabilityContext();
+        }
+    }
 }
