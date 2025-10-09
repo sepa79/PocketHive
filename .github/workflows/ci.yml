@@ -25,6 +25,7 @@ jobs:
       - name: Install worker dependencies and build starter examples
         run: |
           set -euo pipefail
+          rm -rf ~/.m2/repository/io/pockethive
           REVISION="$(cat VERSION)"
           mvn -B -ntp -N install
           mvn -B -ntp install:install-file -Dfile=pom.xml -DgroupId=io.pockethive -DartifactId=pockethive-mvp -Dversion='${revision}' -Dpackaging=pom
