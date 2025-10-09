@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.12.0] - 2025-10-09
+Timestamp: 2025-10-09T00:00:00Z
+
+- Control-plane: Introduced an emitter DSL, payload factories, topology descriptors, and Spring auto-configuration so worker services share canonical routing, confirmation builders, and origin-aware filtering when handling control signals.
+- Worker SDK: Published the Worker SDK starter bundling the runtime, registry, state store, and observability-aware interceptors alongside Stage 1–3 adoption guides so teams can adopt the simplified worker pipeline.
+- Runtime adapters: Adopted the reusable RabbitMessageWorkerAdapter and Worker SDK across worker services, with the trigger runtime coordinating generator scheduling, single-request overrides, and status emission through the control plane.
+- Documentation: Consolidated the scenario builder MVP planning archive and refreshed contributor guidance/README content to orient teams around the new control-plane and worker tooling.
+
 ## [0.11.2] - 2025-09-27
 Timestamp: 2025-09-27T00:00:00Z
 
