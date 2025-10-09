@@ -28,6 +28,6 @@ jobs:
           rm -rf ~/.m2/repository/io/pockethive
           REVISION="$(cat VERSION)"
           mvn -B -ntp -N install
-          mvn -B -ntp install:install-file -Dfile=pom.xml -DgroupId=io.pockethive -DartifactId=pockethive-mvp -Dversion='${revision}' -Dpackaging=pom
+          mvn -B -ntp install:install-file -Dfile=pom.xml -DgroupId=io.pockethive -DartifactId=pockethive-mvp -Dversion="$REVISION" -Dpackaging=pom
           mvn -B -ntp -pl common/worker-sdk -am install -DskipTests -Drevision="$REVISION"
           mvn -B -ntp -f examples/worker-starter/pom.xml verify -Drevision="$REVISION"

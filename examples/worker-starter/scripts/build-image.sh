@@ -44,7 +44,12 @@ install_parent_placeholder() {
     return 0
   fi
 
-  local install_args=(-B install:install-file "-Dfile=${ROOT_POM}" -DgroupId=io.pockethive -DartifactId=pockethive-mvp "-Dversion=\${revision}" -Dpackaging=pom)
+  if [[ -z "${POCKETHIVE_VERSION}" ]]; then
+    echo "Skipping parent placeholder install: PocketHive version is unknown." >&2
+    return 0
+  fi
+
+  local install_args=(-B install:install-file "-Dfile=${ROOT_POM}" -DgroupId=io.pockethive -DartifactId=pockethive-mvp "-Dversion=${POCKETHIVE_VERSION}" -Dpackaging=pom)
 
   echo "Installing PocketHive parent placeholder with ${MVN_CMD} ${install_args[*]}"
   ( cd "${REPO_ROOT}" && "${MVN_CMD}" "${install_args[@]}" )

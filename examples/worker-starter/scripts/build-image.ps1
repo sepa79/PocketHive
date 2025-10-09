@@ -102,13 +102,18 @@ function Install-ParentPlaceholder {
         return
     }
 
+    if (-not $PocketHiveVersion) {
+        Write-Warning 'Skipping parent placeholder install: PocketHive version is unknown.'
+        return
+    }
+
     $installArgs = @(
         '-B',
         'install:install-file',
         "-Dfile=$RootPom",
         '-DgroupId=io.pockethive',
         '-DartifactId=pockethive-mvp',
-        '-Dversion=${revision}',
+        "-Dversion=$PocketHiveVersion",
         '-Dpackaging=pom'
     )
 
