@@ -22,14 +22,11 @@ jobs:
       - name: Run Maven tests
         run: mvn -B -ntp test
 
-      - name: Install PocketHive parent POM
-        run: mvn -B -ntp -N install
-
-      - name: Install parent placeholder for worker starter builds
-        run: mvn -B -ntp install:install-file -Dfile=pom.xml -DgroupId=io.pockethive -DartifactId=pockethive-mvp -Dversion=\${revision} -Dpackaging=pom
-
-      - name: Install PocketHive Worker SDK
-        run: mvn -B -ntp -pl common/worker-sdk -am install -DskipTests
-
-      - name: Build worker starter examples
-        run: mvn -B -ntp -f examples/worker-starter/pom.xml verify -Drevision="$(cat VERSION)"
+      - name: Install worker dependencies and build starter examples
+        run: |
+          set -euo pipefail
+          REVISION="$(cat VERSION)"
+          mvn -B -ntp -N install
+          mvn -B -ntp install:install-file -Dfile=pom.xml -DgroupId=io.pockethive -DartifactId=pockethive-mvp -Dversion='${revision}' -Dpackaging=pom
+          mvn -B -ntp -pl common/worker-sdk -am install -DskipTests -Drevision="$REVISION"
+          mvn -B -ntp -f examples/worker-starter/pom.xml verify -Drevision="$REVISION"
