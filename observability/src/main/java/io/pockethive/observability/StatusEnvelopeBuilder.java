@@ -26,6 +26,7 @@ public class StatusEnvelopeBuilder {
     private final Map<String, Object> work = new LinkedHashMap<>();
     private final Map<String, Object> control = new LinkedHashMap<>();
     private final Map<String, Object> totals = new LinkedHashMap<>();
+    private final Map<String, Object> queueStats = new LinkedHashMap<>();
 
     public StatusEnvelopeBuilder() {
         root.put("event", "status");
@@ -102,6 +103,14 @@ public class StatusEnvelopeBuilder {
 
     public StatusEnvelopeBuilder traffic(String traffic) {
         root.put("traffic", traffic);
+        return this;
+    }
+
+    public StatusEnvelopeBuilder queueStats(Map<String, ?> queueStats) {
+        this.queueStats.clear();
+        if (queueStats != null && !queueStats.isEmpty()) {
+            this.queueStats.putAll(queueStats);
+        }
         return this;
     }
 
@@ -197,6 +206,7 @@ public class StatusEnvelopeBuilder {
         if (!work.isEmpty()) queues.put("work", work);
         if (!control.isEmpty()) queues.put("control", control);
         if (!queues.isEmpty()) root.put("queues", queues);
+        if (!queueStats.isEmpty()) root.put("queueStats", queueStats);
         if (!totals.isEmpty()) root.put("totals", totals);
         root.put("data", data.isEmpty() ? Collections.emptyMap() : data);
         try {

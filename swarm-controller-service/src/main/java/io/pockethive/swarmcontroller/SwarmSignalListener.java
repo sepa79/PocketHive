@@ -651,6 +651,7 @@ public class SwarmSignalListener {
     String state = determineState(m);
     SwarmStatus status = lifecycle.getStatus();
     boolean workloadsEnabled = workloadsEnabled(status);
+    Map<String, QueueStats> queueSnapshot = lifecycle.snapshotQueueStats();
     String controlQueue = Topology.CONTROL_QUEUE + "." + ROLE + "." + instanceId;
     ConfirmationScope scope = ConfirmationScope.forInstance(Topology.SWARM_ID, ROLE, instanceId);
     String rk = ControlPlaneRouting.event("status-full", scope);
@@ -668,6 +669,7 @@ public class SwarmSignalListener {
         .data("swarmStatus", status.name())
         .data("controllerEnabled", controllerEnabled)
         .data("workloadsEnabled", workloadsEnabled)
+        .queueStats(toQueueStatsPayload(queueSnapshot))
         .controlIn(controlQueue)
         .controlRoutes(controllerControlRoutes())
         .controlOut(rk)
@@ -680,6 +682,7 @@ public class SwarmSignalListener {
     String state = determineState(m);
     SwarmStatus status = lifecycle.getStatus();
     boolean workloadsEnabled = workloadsEnabled(status);
+    Map<String, QueueStats> queueSnapshot = lifecycle.snapshotQueueStats();
     String controlQueue = Topology.CONTROL_QUEUE + "." + ROLE + "." + instanceId;
     ConfirmationScope scope = ConfirmationScope.forInstance(Topology.SWARM_ID, ROLE, instanceId);
     String rk = ControlPlaneRouting.event("status-delta", scope);
@@ -697,11 +700,34 @@ public class SwarmSignalListener {
         .data("swarmStatus", status.name())
         .data("controllerEnabled", controllerEnabled)
         .data("workloadsEnabled", workloadsEnabled)
+        .queueStats(toQueueStatsPayload(queueSnapshot))
         .controlIn(controlQueue)
         .controlRoutes(controllerControlRoutes())
         .controlOut(rk)
         .toJson();
     sendControl(rk, payload, "status");
+  }
+
+  private Map<String, Map<String, Object>> toQueueStatsPayload(Map<String, QueueStats> snapshot) {
+    if (snapshot == null || snapshot.isEmpty()) {
+      return Map.of();
+    }
+    Map<String, Map<String, Object>> payload = new LinkedHashMap<>();
+    for (Map.Entry<String, QueueStats> entry : snapshot.entrySet()) {
+      String queueName = entry.getKey();
+      QueueStats stats = entry.getValue();
+      if (queueName == null || queueName.isBlank() || stats == null) {
+        continue;
+      }
+      Map<String, Object> values = new LinkedHashMap<>();
+      values.put("depth", stats.depth());
+      values.put("consumers", stats.consumers());
+      if (stats.oldestAgeSec() != null && stats.oldestAgeSec().isPresent()) {
+        values.put("oldestAgeSec", stats.oldestAgeSec().getAsLong());
+      }
+      payload.put(queueName, values);
+    }
+    return payload;
   }
 
   private String determineState(SwarmMetrics m) {

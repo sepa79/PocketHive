@@ -310,6 +310,7 @@ sequenceDiagram
 - `ts` (watermark), `swarmId`, and `{total, healthy, running, enabled}` counts.
 - **Max staleness** and, when applicable, **Degraded/Unknown** reason.
 - Recent **error summaries** (role/instance, reason, correlationId) for operator drill‑down.
+- Optional **queueStats** with per-queue depth/consumer counts (and `oldestAgeSec` when brokers expose it) to highlight backlog pressure.
 
 **Orchestrator** surfaces:
 - Provision/ready/start durations, failure counts by reason, current running/enabled counts, queue connection summaries.
