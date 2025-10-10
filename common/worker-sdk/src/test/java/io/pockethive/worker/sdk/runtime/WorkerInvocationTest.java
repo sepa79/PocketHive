@@ -125,7 +125,13 @@ class WorkerInvocationTest {
 
     private WorkerContextFactory contextFactory() {
         return (definition, state, message) -> new WorkerContext() {
-            private final WorkerInfo info = new WorkerInfo(definition.role(), "swarm", definition.beanName(), definition.inQueue(), definition.outQueue());
+            private final WorkerInfo info = new WorkerInfo(
+                definition.role(),
+                "swarm",
+                definition.beanName(),
+                definition.resolvedInQueue(),
+                definition.resolvedOutQueue()
+            );
 
             @Override
             public WorkerInfo info() {
