@@ -1,5 +1,7 @@
 package io.pockethive.worker.sdk.runtime;
 
+import io.pockethive.Topology;
+import io.pockethive.TopologyDefaults;
 import io.pockethive.worker.sdk.api.StatusPublisher;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -29,11 +31,13 @@ public final class WorkerState {
 
     WorkerState(WorkerDefinition definition) {
         this.definition = Objects.requireNonNull(definition, "definition");
-        if (definition.inQueue() != null) {
-            workInRoutes.add(definition.inQueue());
+        String inbound = resolveQueue(definition.inQueue());
+        if (inbound != null) {
+            workInRoutes.add(inbound);
         }
-        if (definition.outQueue() != null) {
-            workOutRoutes.add(definition.outQueue());
+        String outbound = resolveQueue(definition.outQueue());
+        if (outbound != null) {
+            workOutRoutes.add(outbound);
         }
     }
 
@@ -104,14 +108,16 @@ public final class WorkerState {
     }
 
     void addInboundRoute(String queue) {
-        if (queue != null && !queue.isBlank()) {
-            workInRoutes.add(queue);
+        String resolved = resolveQueue(queue);
+        if (resolved != null) {
+            workInRoutes.add(resolved);
         }
     }
 
     void addOutboundRoute(String queue) {
-        if (queue != null && !queue.isBlank()) {
-            workOutRoutes.add(queue);
+        String resolved = resolveQueue(queue);
+        if (resolved != null) {
+            workOutRoutes.add(resolved);
         }
     }
 
@@ -121,5 +127,18 @@ public final class WorkerState {
 
     Set<String> outboundRoutes() {
         return Set.copyOf(workOutRoutes);
+    }
+
+    private static String resolveQueue(String queue) {
+        if (queue == null || queue.isBlank()) {
+            return null;
+        }
+        return switch (queue) {
+            case TopologyDefaults.GEN_QUEUE -> Topology.GEN_QUEUE;
+            case TopologyDefaults.MOD_QUEUE -> Topology.MOD_QUEUE;
+            case TopologyDefaults.FINAL_QUEUE -> Topology.FINAL_QUEUE;
+            case TopologyDefaults.CONTROL_QUEUE -> Topology.CONTROL_QUEUE;
+            default -> queue;
+        };
     }
 }
