@@ -185,6 +185,40 @@ class SwarmLifecycleManagerTest {
   }
 
   @Test
+  void prepareRemovesLegacyBindingsOnSubsequentRuns() throws Exception {
+    SwarmLifecycleManager manager = new SwarmLifecycleManager(amqp, mapper, docker, rabbit, "inst");
+    SwarmPlan plan = new SwarmPlan("swarm", List.of(
+        new Bee("gen", "img1", new Work("in", "out"), null)));
+
+    Properties existing = new Properties();
+    when(amqp.getQueueProperties("ph." + Topology.SWARM_ID + ".in"))
+        .thenReturn(null)
+        .thenReturn(existing);
+    when(amqp.getQueueProperties("ph." + Topology.SWARM_ID + ".out"))
+        .thenReturn(null)
+        .thenReturn(existing);
+
+    manager.prepare(mapper.writeValueAsString(plan));
+    manager.prepare(mapper.writeValueAsString(plan));
+
+    ArgumentCaptor<Binding> legacyCaptor = ArgumentCaptor.forClass(Binding.class);
+    verify(amqp, times(4)).removeBinding(legacyCaptor.capture());
+    assertThat(legacyCaptor.getAllValues())
+        .extracting(Binding::getRoutingKey)
+        .containsExactlyInAnyOrder("in", "out", "in", "out");
+
+    ArgumentCaptor<Binding> bindingCaptor = ArgumentCaptor.forClass(Binding.class);
+    verify(amqp, times(4)).declareBinding(bindingCaptor.capture());
+    assertThat(bindingCaptor.getAllValues())
+        .extracting(Binding::getRoutingKey)
+        .containsExactlyInAnyOrder(
+            "ph." + Topology.SWARM_ID + ".in",
+            "ph." + Topology.SWARM_ID + ".out",
+            "ph." + Topology.SWARM_ID + ".in",
+            "ph." + Topology.SWARM_ID + ".out");
+  }
+
+  @Test
   void startSendsConfigUpdatesWithoutRestartingContainers() throws Exception {
     SwarmLifecycleManager manager = new SwarmLifecycleManager(amqp, mapper, docker, rabbit, "inst");
     SwarmPlan plan = new SwarmPlan("swarm", List.of(new Bee("gen", "img1", null, null)));

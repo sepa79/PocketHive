@@ -232,17 +232,19 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
         if (queueMissing) {
           declaredQueues.remove(suffix);
         }
+        Binding legacyBinding = new Binding(queueName, Binding.DestinationType.QUEUE,
+            hive.getName(), suffix, null);
+        amqp.removeBinding(legacyBinding);
+
+        Queue queue = QueueBuilder.durable(queueName).build();
         if (queueMissing || !declaredQueues.contains(suffix)) {
-          Queue q = QueueBuilder.durable(queueName).build();
-          amqp.declareQueue(q);
-          Binding legacyBinding = new Binding(queueName, Binding.DestinationType.QUEUE,
-              hive.getName(), suffix, null);
-          amqp.removeBinding(legacyBinding);
-          Binding b = BindingBuilder.bind(q).to(hive).with(queueName);
-          amqp.declareBinding(b);
+          amqp.declareQueue(queue);
           log.info("declared queue ph.{}.{}", Topology.SWARM_ID, suffix);
-          declaredQueues.add(suffix);
         }
+
+        Binding desiredBinding = BindingBuilder.bind(queue).to(hive).with(queueName);
+        amqp.declareBinding(desiredBinding);
+        declaredQueues.add(suffix);
       }
     } catch (JsonProcessingException e) {
       log.warn("Invalid template payload", e);
