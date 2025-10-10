@@ -25,7 +25,7 @@ class ControlPlaneTopologyDeclarableFactoryTest {
         .build();
 
     @Test
-    void workerTrafficQueuesBindToWorkExchange() {
+    void workerQueuesBindToControlExchange() {
         ControlPlaneTopologyDescriptor descriptor = new ProcessorControlPlaneTopologyDescriptor();
         ControlPlaneIdentity identity = new ControlPlaneIdentity("swarm-alpha", descriptor.role(), "proc-1");
 
@@ -39,7 +39,7 @@ class ControlPlaneTopologyDeclarableFactoryTest {
 
         assertThat(trafficBindings).isNotEmpty();
         assertThat(trafficBindings)
-            .allSatisfy(binding -> assertThat(binding.getExchange()).isEqualTo(workExchange.getName()));
+            .allSatisfy(binding -> assertThat(binding.getExchange()).isEqualTo(controlExchange.getName()));
     }
 
     @Test
