@@ -1,4 +1,12 @@
 version: "3.9"
+
+x-metrics-env: &metrics-env
+  MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_BASE_URL: http://pushgateway:9091
+  MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_ENABLED: "true"
+  MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_JOB: swarm1
+  MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_PUSH_RATE: 10s
+  MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_SHUTDOWN_OPERATION: DELETE
+  MANAGEMENT_METRICS_TAGS_SWARM: swarm1
 services:
   rabbitmq:
     build:
@@ -21,8 +29,11 @@ services:
       context: .
       dockerfile: orchestrator-service/Dockerfile
     environment:
+      <<: *metrics-env
       RABBITMQ_HOST: rabbitmq
       PH_CONTROL_EXCHANGE: ph.control
+      MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_GROUPING_KEY_INSTANCE: orchestrator
+      MANAGEMENT_METRICS_TAGS_INSTANCE: orchestrator
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
@@ -41,6 +52,7 @@ services:
       PH_CONTROL_EXCHANGE: ph.control
       PH_CONTROL_QUEUE: ph.control
       PH_SWARM_ID: swarm1
+      PH_PUSHGATEWAY_BASE_URL: http://pushgateway:9091
     depends_on:
       log-aggregator:
         condition: service_healthy
@@ -51,10 +63,13 @@ services:
       context: .
       dockerfile: generator-service/Dockerfile
     environment:
+      <<: *metrics-env
       RABBITMQ_HOST: rabbitmq
       PH_TRAFFIC_EXCHANGE: ph.swarm1.hive
       PH_CONTROL_QUEUE: ph.control
       PH_SWARM_ID: swarm1
+      MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_GROUPING_KEY_INSTANCE: generator
+      MANAGEMENT_METRICS_TAGS_INSTANCE: generator
     depends_on:
       log-aggregator:
         condition: service_healthy
@@ -65,10 +80,13 @@ services:
       context: .
       dockerfile: moderator-service/Dockerfile
     environment:
+      <<: *metrics-env
       RABBITMQ_HOST: rabbitmq
       PH_TRAFFIC_EXCHANGE: ph.swarm1.hive
       PH_CONTROL_QUEUE: ph.control
       PH_SWARM_ID: swarm1
+      MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_GROUPING_KEY_INSTANCE: moderator
+      MANAGEMENT_METRICS_TAGS_INSTANCE: moderator
     depends_on:
       log-aggregator:
         condition: service_healthy
@@ -79,10 +97,13 @@ services:
       context: .
       dockerfile: processor-service/Dockerfile
     environment:
+      <<: *metrics-env
       RABBITMQ_HOST: rabbitmq
       PH_TRAFFIC_EXCHANGE: ph.swarm1.hive
       PH_CONTROL_QUEUE: ph.control
       PH_SWARM_ID: swarm1
+      MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_GROUPING_KEY_INSTANCE: processor
+      MANAGEMENT_METRICS_TAGS_INSTANCE: processor
     depends_on:
       log-aggregator:
         condition: service_healthy
@@ -93,10 +114,13 @@ services:
       context: .
       dockerfile: postprocessor-service/Dockerfile
     environment:
+      <<: *metrics-env
       RABBITMQ_HOST: rabbitmq
       PH_TRAFFIC_EXCHANGE: ph.swarm1.hive
       PH_CONTROL_QUEUE: ph.control
       PH_SWARM_ID: swarm1
+      MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_GROUPING_KEY_INSTANCE: postprocessor
+      MANAGEMENT_METRICS_TAGS_INSTANCE: postprocessor
     depends_on:
       log-aggregator:
         condition: service_healthy
@@ -107,10 +131,13 @@ services:
       context: .
       dockerfile: trigger-service/Dockerfile
     environment:
+      <<: *metrics-env
       RABBITMQ_HOST: rabbitmq
       PH_TRAFFIC_EXCHANGE: ph.swarm1.hive
       PH_CONTROL_QUEUE: ph.control
       PH_SWARM_ID: swarm1
+      MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_GROUPING_KEY_INSTANCE: trigger
+      MANAGEMENT_METRICS_TAGS_INSTANCE: trigger
     depends_on:
       log-aggregator:
         condition: service_healthy
@@ -120,8 +147,11 @@ services:
       context: .
       dockerfile: scenario-manager-service/Dockerfile
     environment:
+      <<: *metrics-env
       RABBITMQ_HOST: rabbitmq
       PH_LOGS_QUEUE: ph.logs.agg
+      MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_GROUPING_KEY_INSTANCE: scenario-manager
+      MANAGEMENT_METRICS_TAGS_INSTANCE: scenario-manager
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/actuator/health | grep -q UP"]
       interval: 5s
@@ -139,10 +169,13 @@ services:
       context: .
       dockerfile: log-aggregator-service/Dockerfile
     environment:
+      <<: *metrics-env
       RABBITMQ_HOST: rabbitmq
       PH_LOGS_EXCHANGE: ph.logs
       PH_LOGS_QUEUE: ph.logs.agg
       PH_LOKI_URL: http://loki:3100
+      MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_GROUPING_KEY_INSTANCE: log-aggregator
+      MANAGEMENT_METRICS_TAGS_INSTANCE: log-aggregator
     depends_on:
       rabbitmq:
         condition: service_started
@@ -204,6 +237,17 @@ services:
       - "3100:3100"
     volumes:
       - ./loki/config.yml:/etc/loki/config.yml:ro
+
+  pushgateway:
+    image: prom/pushgateway:v1.9.0
+    expose:
+      - "9091"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:9091/-/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
 
   wiremock:
     image: wiremock/wiremock:3.13.1

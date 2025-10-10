@@ -75,6 +75,36 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
 
   private record ScenarioTask(long delayMs, String routingKey, String body) {}
 
+  private void applyMetricsEnv(Map<String, String> env, String beeName) {
+    String pushBaseUrl = firstNonBlank(
+        System.getenv("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_BASE_URL"),
+        System.getenv("MANAGEMENT_METRICS_EXPORT_PROMETHEUS_PUSHGATEWAY_BASE_URL"),
+        System.getenv("PH_PUSHGATEWAY_BASE_URL"));
+    if (pushBaseUrl == null || pushBaseUrl.isBlank()) {
+      return;
+    }
+    env.put("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_BASE_URL", pushBaseUrl);
+    env.putIfAbsent("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_ENABLED", "true");
+    env.put("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_JOB", Topology.SWARM_ID);
+    env.put("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_GROUPING_KEY_INSTANCE", beeName);
+    env.putIfAbsent("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_PUSH_RATE", "10s");
+    env.putIfAbsent("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_SHUTDOWN_OPERATION", "DELETE");
+    env.put("MANAGEMENT_METRICS_TAGS_SWARM", Topology.SWARM_ID);
+    env.put("MANAGEMENT_METRICS_TAGS_INSTANCE", beeName);
+  }
+
+  private static String firstNonBlank(String... values) {
+    if (values == null) {
+      return null;
+    }
+    for (String value : values) {
+      if (value != null && !value.isBlank()) {
+        return value;
+      }
+    }
+    return null;
+  }
+
   public SwarmLifecycleManager(AmqpAdmin amqp,
                                ObjectMapper mapper,
                                DockerContainerClient docker,
@@ -174,6 +204,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
               }
             }
             String beeName = BeeNameGenerator.generate(bee.role(), Topology.SWARM_ID);
+            env.put("BEE_NAME", beeName);
             String javaOpts = env.get("JAVA_TOOL_OPTIONS");
             if (javaOpts == null || javaOpts.isBlank()) {
               javaOpts = "";
@@ -181,6 +212,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
               javaOpts = javaOpts + " ";
             }
             env.put("JAVA_TOOL_OPTIONS", javaOpts + "-Dbee.name=" + beeName);
+            applyMetricsEnv(env, beeName);
             log.info("creating container {} for role {} using image {}", beeName, bee.role(), bee.image());
             log.info("container env for {}: {}", beeName, env);
             String containerId = docker.createContainer(bee.image(), env, beeName);
