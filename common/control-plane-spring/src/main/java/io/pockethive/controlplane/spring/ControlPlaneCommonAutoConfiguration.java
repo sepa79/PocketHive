@@ -36,8 +36,10 @@ public class ControlPlaneCommonAutoConfiguration {
 
     @Bean(name = "swarmWorkExchange")
     @ConditionalOnMissingBean(name = "swarmWorkExchange")
-    TopicExchange swarmWorkExchange() {
-        return ExchangeBuilder.topicExchange(Topology.EXCHANGE).durable(true).build();
+    TopicExchange swarmWorkExchange(ControlPlaneProperties properties) {
+        Objects.requireNonNull(properties, "properties");
+        String exchange = resolveWorkExchange(properties);
+        return ExchangeBuilder.topicExchange(exchange).durable(true).build();
     }
 
     @Bean
@@ -61,5 +63,29 @@ public class ControlPlaneCommonAutoConfiguration {
             throw new IllegalArgumentException(propertyName + " must not be null or blank");
         }
         return value;
+    }
+
+    private static String resolveWorkExchange(ControlPlaneProperties properties) {
+        String exchange = firstNonBlank(System.getenv("PH_TRAFFIC_EXCHANGE"),
+            System.getProperty("PH_TRAFFIC_EXCHANGE"));
+        if (isText(exchange)) {
+            return exchange;
+        }
+
+        String override = firstNonBlank(properties.getWorker().getSwarmId(),
+            properties.getManager().getSwarmId());
+        String swarmId = properties.resolveSwarmId(override);
+        return "ph." + swarmId + ".hive";
+    }
+
+    private static String firstNonBlank(String first, String second) {
+        if (isText(first)) {
+            return first;
+        }
+        return second;
+    }
+
+    private static boolean isText(String value) {
+        return value != null && !value.isBlank();
     }
 }
