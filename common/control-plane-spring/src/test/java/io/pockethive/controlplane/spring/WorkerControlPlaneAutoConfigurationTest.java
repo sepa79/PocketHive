@@ -38,6 +38,9 @@ class WorkerControlPlaneAutoConfigurationTest {
             TopicExchange exchange = context.getBean("controlPlaneExchange", TopicExchange.class);
             assertThat(exchange.getName()).isEqualTo("ph.control.worker");
 
+            TopicExchange workExchange = context.getBean("swarmWorkExchange", TopicExchange.class);
+            assertThat(workExchange.getName()).isEqualTo(Topology.EXCHANGE);
+
             ControlPlaneIdentity identity = context.getBean("workerControlPlaneIdentity", ControlPlaneIdentity.class);
             assertThat(identity.swarmId()).isEqualTo("swarm-alpha");
             assertThat(identity.instanceId()).isEqualTo("gen-1");

@@ -3,6 +3,7 @@ package io.pockethive.controlplane.topology;
 import io.pockethive.Topology;
 import io.pockethive.control.ConfirmationScope;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
+import io.pockethive.controlplane.topology.QueueDescriptor.ExchangeScope;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -36,7 +37,7 @@ public final class OrchestratorControlPlaneTopologyDescriptor implements Control
             controllerStatusPattern("status-full"),
             controllerStatusPattern("status-delta")
         );
-        return List.of(new QueueDescriptor(queueName, bindings));
+        return List.of(new QueueDescriptor(queueName, bindings, ExchangeScope.CONTROL));
     }
 
     @Override

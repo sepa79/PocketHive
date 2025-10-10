@@ -3,6 +3,7 @@ package io.pockethive.controlplane.spring;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.pockethive.Topology;
 import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.controlplane.manager.ManagerControlPlane;
 import io.pockethive.controlplane.messaging.ControlPlanePublisher;
@@ -37,6 +38,9 @@ class ManagerControlPlaneAutoConfigurationTest {
 
             TopicExchange exchange = context.getBean("controlPlaneExchange", TopicExchange.class);
             assertThat(exchange.getName()).isEqualTo("ph.control.manager");
+
+            TopicExchange workExchange = context.getBean("swarmWorkExchange", TopicExchange.class);
+            assertThat(workExchange.getName()).isEqualTo(Topology.EXCHANGE);
 
             ControlPlaneIdentity identity = context.getBean("managerControlPlaneIdentity", ControlPlaneIdentity.class);
             assertThat(identity.swarmId()).isEqualTo("swarm-beta");

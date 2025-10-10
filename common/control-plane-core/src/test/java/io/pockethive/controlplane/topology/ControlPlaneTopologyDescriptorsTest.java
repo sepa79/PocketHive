@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.Topology;
 import io.pockethive.controlplane.payload.JsonFixtureAssertions;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
+import io.pockethive.controlplane.topology.QueueDescriptor.ExchangeScope;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -34,7 +35,7 @@ class ControlPlaneTopologyDescriptorsTest {
             .containsExactlyInAnyOrderElementsOf(expectedWorkerSignals("processor", INSTANCE));
         assertThat(queue.eventBindings()).isEmpty();
         assertThat(descriptor.additionalQueues(INSTANCE))
-            .containsExactly(new QueueDescriptor(Topology.MOD_QUEUE, Set.of(Topology.MOD_QUEUE)));
+            .containsExactly(new QueueDescriptor(Topology.MOD_QUEUE, Set.of(Topology.MOD_QUEUE), ExchangeScope.TRAFFIC));
 
         ControlPlaneRouteCatalog routes = descriptor.routes();
         assertThat(routes.configSignals())
@@ -98,7 +99,7 @@ class ControlPlaneTopologyDescriptorsTest {
             .containsExactlyInAnyOrderElementsOf(expectedWorkerSignals("moderator", INSTANCE));
         assertThat(queue.eventBindings()).isEmpty();
         assertThat(descriptor.additionalQueues(INSTANCE))
-            .containsExactly(new QueueDescriptor(Topology.GEN_QUEUE, Set.of(Topology.GEN_QUEUE)));
+            .containsExactly(new QueueDescriptor(Topology.GEN_QUEUE, Set.of(Topology.GEN_QUEUE), ExchangeScope.TRAFFIC));
     }
 
     @Test
@@ -112,7 +113,7 @@ class ControlPlaneTopologyDescriptorsTest {
             .containsExactlyInAnyOrderElementsOf(expectedWorkerSignals("postprocessor", INSTANCE));
         assertThat(queue.eventBindings()).isEmpty();
         assertThat(descriptor.additionalQueues(INSTANCE))
-            .containsExactly(new QueueDescriptor(Topology.FINAL_QUEUE, Set.of(Topology.FINAL_QUEUE)));
+            .containsExactly(new QueueDescriptor(Topology.FINAL_QUEUE, Set.of(Topology.FINAL_QUEUE), ExchangeScope.TRAFFIC));
     }
 
     @Test
@@ -172,7 +173,8 @@ class ControlPlaneTopologyDescriptorsTest {
         assertThat(additional)
             .containsExactly(new QueueDescriptor(
                 Topology.CONTROL_QUEUE + ".orchestrator-status." + INSTANCE,
-                Set.of("ev.status-full.swarm-controller.*", "ev.status-delta.swarm-controller.*")));
+                Set.of("ev.status-full.swarm-controller.*", "ev.status-delta.swarm-controller.*"),
+                ExchangeScope.CONTROL));
 
         ControlPlaneRouteCatalog routes = descriptor.routes();
         assertThat(routes.lifecycleEvents())

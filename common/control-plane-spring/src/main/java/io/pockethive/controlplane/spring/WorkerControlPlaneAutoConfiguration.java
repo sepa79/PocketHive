@@ -58,11 +58,12 @@ public class WorkerControlPlaneAutoConfiguration {
         @Qualifier("workerControlPlaneTopologyDescriptor") ControlPlaneTopologyDescriptor descriptor,
         @Qualifier("workerControlPlaneIdentity") ControlPlaneIdentity identity,
         ControlPlaneTopologyDeclarableFactory factory,
-        TopicExchange controlPlaneExchange) {
+        @Qualifier("controlPlaneExchange") TopicExchange controlPlaneExchange,
+        @Qualifier("swarmWorkExchange") TopicExchange swarmWorkExchange) {
         if (!properties.isDeclareTopology() || !properties.getWorker().isDeclareTopology()) {
             return new Declarables(List.of());
         }
-        return factory.create(descriptor, identity, controlPlaneExchange);
+        return factory.create(descriptor, identity, controlPlaneExchange, swarmWorkExchange);
     }
 
     @Bean

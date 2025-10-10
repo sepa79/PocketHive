@@ -4,6 +4,7 @@ import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.controlplane.topology.ControlPlaneTopologyDescriptor;
 import io.pockethive.controlplane.topology.ControlQueueDescriptor;
 import io.pockethive.controlplane.topology.QueueDescriptor;
+import io.pockethive.controlplane.topology.QueueDescriptor.ExchangeScope;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -23,17 +24,19 @@ public final class ControlPlaneTopologyDeclarableFactory {
 
     public Declarables create(ControlPlaneTopologyDescriptor descriptor,
                               ControlPlaneIdentity identity,
-                              TopicExchange exchange) {
+                              TopicExchange controlExchange,
+                              TopicExchange workExchange) {
         Objects.requireNonNull(descriptor, "descriptor");
         Objects.requireNonNull(identity, "identity");
-        Objects.requireNonNull(exchange, "exchange");
+        Objects.requireNonNull(controlExchange, "controlExchange");
+        Objects.requireNonNull(workExchange, "workExchange");
         String instanceId = requireText(identity.instanceId(), "identity.instanceId");
         List<Declarable> declarables = new ArrayList<>();
         descriptor.controlQueue(instanceId).ifPresent(queueDescriptor ->
-            declarables.addAll(createControlQueue(queueDescriptor, exchange)));
+            declarables.addAll(createControlQueue(queueDescriptor, controlExchange)));
         Collection<QueueDescriptor> additionalQueues = descriptor.additionalQueues(instanceId);
         for (QueueDescriptor queueDescriptor : additionalQueues) {
-            declarables.addAll(createQueue(queueDescriptor, exchange));
+            declarables.addAll(createQueue(queueDescriptor, controlExchange, workExchange));
         }
         return new Declarables(declarables);
     }
@@ -51,8 +54,11 @@ public final class ControlPlaneTopologyDeclarableFactory {
         return declarables;
     }
 
-    private Collection<Declarable> createQueue(QueueDescriptor descriptor, TopicExchange exchange) {
+    private Collection<Declarable> createQueue(QueueDescriptor descriptor,
+                                               TopicExchange controlExchange,
+                                               TopicExchange workExchange) {
         Queue queue = QueueBuilder.durable(descriptor.name()).build();
+        TopicExchange exchange = descriptor.exchangeScope() == ExchangeScope.TRAFFIC ? workExchange : controlExchange;
         List<Declarable> declarables = new ArrayList<>();
         declarables.add(queue);
         for (String routingKey : descriptor.bindings()) {
