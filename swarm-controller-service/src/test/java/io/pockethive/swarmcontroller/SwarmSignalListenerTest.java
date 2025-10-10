@@ -13,6 +13,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.ArgumentMatcher;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
@@ -778,8 +779,8 @@ class SwarmSignalListenerTest {
     stubLifecycleDefaults();
     listener.handle(signal("status-request", "id-status", "corr-status"), statusRequestSignal("swarm-controller", "inst"));
     verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
-        argThat((String routingKey) -> routingKey.startsWith(statusEvent("status-full", "swarm-controller", "inst"))),
-        argThat(this::payloadContainsDefaultQueueStats));
+        argThat((ArgumentMatcher<String>) routingKey -> routingKey.startsWith(statusEvent("status-full", "swarm-controller", "inst"))),
+        argThat((ArgumentMatcher<String>) this::payloadContainsDefaultQueueStats));
     verify(lifecycle, atLeastOnce()).getStatus();
   }
 
@@ -788,8 +789,8 @@ class SwarmSignalListenerTest {
     when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
     new SwarmSignalListener(lifecycle, rabbit, "inst", mapper);
     verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
-        argThat((String routingKey) -> routingKey.startsWith(statusEvent("status-full", "swarm-controller", "inst"))),
-        argThat(this::payloadContainsDefaultQueueStats));
+        argThat((ArgumentMatcher<String>) routingKey -> routingKey.startsWith(statusEvent("status-full", "swarm-controller", "inst"))),
+        argThat((ArgumentMatcher<String>) this::payloadContainsDefaultQueueStats));
     verify(lifecycle, atLeastOnce()).getStatus();
   }
 
@@ -803,8 +804,8 @@ class SwarmSignalListenerTest {
       when(lifecycle.getMetrics()).thenReturn(new SwarmMetrics(0,0,0,0, java.time.Instant.now()));
       listener.status();
       verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
-          argThat((String routingKey) -> routingKey.startsWith(statusEvent("status-delta", "swarm-controller", "inst"))),
-          argThat(this::payloadContainsDefaultQueueStats));
+          argThat((ArgumentMatcher<String>) routingKey -> routingKey.startsWith(statusEvent("status-delta", "swarm-controller", "inst"))),
+          argThat((ArgumentMatcher<String>) this::payloadContainsDefaultQueueStats));
       verify(lifecycle, atLeastOnce()).getStatus();
   }
 
