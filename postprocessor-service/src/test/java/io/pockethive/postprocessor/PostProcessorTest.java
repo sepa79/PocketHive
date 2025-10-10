@@ -2,7 +2,6 @@ package io.pockethive.postprocessor;
 
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
-import io.pockethive.Topology;
 import io.pockethive.observability.Hop;
 import io.pockethive.observability.ObservabilityContext;
 import io.pockethive.worker.sdk.api.MessageWorker;
@@ -32,7 +31,9 @@ class PostProcessorTest {
     void onMessageRecordsLatencyAndErrorsAndUpdatesStatus() {
         PostProcessorDefaults defaults = new PostProcessorDefaults();
         defaults.setEnabled(true);
-        PostProcessorWorkerImpl worker = new PostProcessorWorkerImpl(defaults);
+        PostProcessorQueuesProperties queues = new PostProcessorQueuesProperties();
+        queues.setFinalQueue("ph.custom.final");
+        PostProcessorWorkerImpl worker = new PostProcessorWorkerImpl(defaults, queues);
         ObservabilityContext context = new ObservabilityContext();
         List<Hop> hops = new ArrayList<>();
         hops.add(new Hop("generator", "gen-1", START, START.plusMillis(5)));
@@ -56,6 +57,7 @@ class PostProcessorTest {
         assertThat(workerContext.statusData().get("hopLatencyMs")).isEqualTo(10L);
         assertThat(workerContext.statusData().get("totalLatencyMs")).isEqualTo(15L);
         assertThat(workerContext.statusData().get("hopCount")).isEqualTo(2);
+        assertThat(workerContext.workInRoute()).isEqualTo("ph.custom.final");
 
     MeterRegistry registry = workerContext.meterRegistry();
     var hopSummary = registry.find("postprocessor_hop_latency_ms").summary();
@@ -77,7 +79,7 @@ class PostProcessorTest {
     void onMessageUsesDefaultsWhenNoConfigPresent() {
         PostProcessorDefaults defaults = new PostProcessorDefaults();
         defaults.setEnabled(false);
-        PostProcessorWorkerImpl worker = new PostProcessorWorkerImpl(defaults);
+        PostProcessorWorkerImpl worker = new PostProcessorWorkerImpl(defaults, new PostProcessorQueuesProperties());
         ObservabilityContext context = new ObservabilityContext();
         context.setHops(List.of());
 
@@ -93,7 +95,7 @@ class PostProcessorTest {
 
     private static final class TestWorkerContext implements WorkerContext {
         private final PostProcessorWorkerConfig config;
-        private final WorkerInfo info = new WorkerInfo("postprocessor", "swarm", "instance", Topology.FINAL_QUEUE, null);
+        private final WorkerInfo info = new WorkerInfo("postprocessor", "swarm", "instance", "in", null);
         private final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
         private final CapturingStatusPublisher statusPublisher = new CapturingStatusPublisher();
         private final Logger logger = LoggerFactory.getLogger(MessageWorker.class);
@@ -145,6 +147,10 @@ class PostProcessorTest {
         Map<String, Object> statusData() {
             return Map.copyOf(statusPublisher.data);
         }
+
+        String workInRoute() {
+            return statusPublisher.workInRoute;
+        }
     }
 
     private static final class CapturingStatusPublisher implements StatusPublisher {
@@ -156,6 +162,13 @@ class PostProcessorTest {
                 return this;
             }
         };
+        private String workInRoute;
+
+        @Override
+        public StatusPublisher workIn(String route) {
+            this.workInRoute = route;
+            return this;
+        }
 
         @Override
         public void update(java.util.function.Consumer<MutableStatus> consumer) {

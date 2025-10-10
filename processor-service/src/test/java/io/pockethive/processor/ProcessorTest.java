@@ -61,7 +61,10 @@ class ProcessorTest {
         defaults.setBaseUrl("http://sut/");
         HttpClient httpClient = mock(HttpClient.class);
         Clock clock = Clock.fixed(Instant.parse("2024-01-01T00:00:00Z"), ZoneOffset.UTC);
-        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(defaults, httpClient, clock);
+        ProcessorQueuesProperties queues = new ProcessorQueuesProperties();
+        queues.setModQueue("ph.custom.mod");
+        queues.setFinalQueue("ph.custom.final");
+        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(defaults, queues, httpClient, clock);
         ProcessorWorkerConfig config = new ProcessorWorkerConfig(true, "http://sut/");
         TestWorkerContext context = new TestWorkerContext(config);
 
@@ -113,6 +116,8 @@ class ProcessorTest {
         assertThat(context.statusData())
                 .containsEntry("baseUrl", "http://sut/")
                 .containsEntry("enabled", true);
+        assertThat(context.workInRoute()).isEqualTo("ph.custom.mod");
+        assertThat(context.workOutRoute()).isEqualTo("ph.custom.final");
     }
 
     @Test
@@ -122,7 +127,7 @@ class ProcessorTest {
         defaults.setBaseUrl("http://defaults/");
         HttpClient httpClient = mock(HttpClient.class);
         Clock clock = Clock.fixed(Instant.parse("2024-01-01T00:00:00Z"), ZoneOffset.UTC);
-        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(defaults, httpClient, clock);
+        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(defaults, new ProcessorQueuesProperties(), httpClient, clock);
         TestWorkerContext context = new TestWorkerContext(null);
 
         AtomicReference<HttpRequest> requestRef = new AtomicReference<>();
@@ -148,7 +153,7 @@ class ProcessorTest {
         defaults.setBaseUrl("");
         HttpClient httpClient = mock(HttpClient.class);
         Clock clock = Clock.systemUTC();
-        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(defaults, httpClient, clock);
+        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(defaults, new ProcessorQueuesProperties(), httpClient, clock);
         ProcessorWorkerConfig config = new ProcessorWorkerConfig(true, " ");
         TestWorkerContext context = new TestWorkerContext(config);
 
@@ -330,6 +335,14 @@ class ProcessorTest {
         Map<String, Object> statusData() {
             return Map.copyOf(statusPublisher.data);
         }
+
+        String workInRoute() {
+            return statusPublisher.workInRoute;
+        }
+
+        String workOutRoute() {
+            return statusPublisher.workOutRoute;
+        }
     }
 
     private static final class CapturingStatusPublisher implements StatusPublisher {
@@ -341,6 +354,20 @@ class ProcessorTest {
                 return this;
             }
         };
+        private String workInRoute;
+        private String workOutRoute;
+
+        @Override
+        public StatusPublisher workIn(String route) {
+            this.workInRoute = route;
+            return this;
+        }
+
+        @Override
+        public StatusPublisher workOut(String route) {
+            this.workOutRoute = route;
+            return this;
+        }
 
         @Override
         public void update(java.util.function.Consumer<MutableStatus> consumer) {

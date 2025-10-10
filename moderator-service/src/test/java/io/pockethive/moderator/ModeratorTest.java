@@ -1,7 +1,6 @@
 package io.pockethive.moderator;
 
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
-import io.pockethive.Topology;
 import io.pockethive.worker.sdk.api.StatusPublisher;
 import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pockethive.worker.sdk.api.WorkResult;
@@ -17,13 +16,15 @@ import static org.assertj.core.api.Assertions.assertThat;
 class ModeratorTest {
 
     private ModeratorDefaults defaults;
+    private ModeratorQueuesProperties queues;
     private ModeratorWorkerImpl worker;
 
     @BeforeEach
     void setUp() {
         defaults = new ModeratorDefaults();
         defaults.setEnabled(false);
-        worker = new ModeratorWorkerImpl(defaults);
+        queues = new ModeratorQueuesProperties();
+        worker = new ModeratorWorkerImpl(defaults, queues);
     }
 
     @Test
@@ -33,13 +34,19 @@ class ModeratorTest {
                 .header("original", "true")
                 .build();
 
-        WorkResult result = worker.onMessage(message, new TestWorkerContext(new ModeratorWorkerConfig(true)));
+        TestWorkerContext context = new TestWorkerContext(new ModeratorWorkerConfig(true));
+        queues.setGenQueue("ph.custom.gen");
+        queues.setModQueue("ph.custom.mod");
+
+        WorkResult result = worker.onMessage(message, context);
 
         assertThat(result).isInstanceOf(WorkResult.Message.class);
         WorkMessage forwarded = ((WorkResult.Message) result).value();
         assertThat(new String(forwarded.body(), StandardCharsets.UTF_8)).isEqualTo("test");
         assertThat(forwarded.headers()).containsEntry("original", "true");
         assertThat(forwarded.headers()).containsEntry("x-ph-service", "moderator");
+        assertThat(context.workInRoute()).isEqualTo("ph.custom.gen");
+        assertThat(context.workOutRoute()).isEqualTo("ph.custom.mod");
     }
 
     @Test
@@ -57,7 +64,8 @@ class ModeratorTest {
     private static final class TestWorkerContext implements WorkerContext {
 
         private final ModeratorWorkerConfig config;
-        private final WorkerInfo info = new WorkerInfo("moderator", "swarm", "instance", Topology.GEN_QUEUE, Topology.MOD_QUEUE);
+        private final WorkerInfo info = new WorkerInfo("moderator", "swarm", "instance", "in", "out");
+        private final CapturingStatusPublisher statusPublisher = new CapturingStatusPublisher();
 
         private TestWorkerContext(ModeratorWorkerConfig config) {
             this.config = config;
@@ -78,7 +86,7 @@ class ModeratorTest {
 
         @Override
         public StatusPublisher statusPublisher() {
-            return StatusPublisher.NO_OP;
+            return statusPublisher;
         }
 
         @Override
@@ -99,6 +107,44 @@ class ModeratorTest {
         @Override
         public io.pockethive.observability.ObservabilityContext observabilityContext() {
             return new io.pockethive.observability.ObservabilityContext();
+        }
+
+        String workInRoute() {
+            return statusPublisher.workInRoute;
+        }
+
+        String workOutRoute() {
+            return statusPublisher.workOutRoute;
+        }
+    }
+
+    private static final class CapturingStatusPublisher implements StatusPublisher {
+        private final java.util.Map<String, Object> data = new java.util.LinkedHashMap<>();
+        private final MutableStatus mutableStatus = new MutableStatus() {
+            @Override
+            public MutableStatus data(String key, Object value) {
+                data.put(key, value);
+                return this;
+            }
+        };
+        private String workInRoute;
+        private String workOutRoute;
+
+        @Override
+        public StatusPublisher workIn(String route) {
+            this.workInRoute = route;
+            return this;
+        }
+
+        @Override
+        public StatusPublisher workOut(String route) {
+            this.workOutRoute = route;
+            return this;
+        }
+
+        @Override
+        public void update(java.util.function.Consumer<MutableStatus> consumer) {
+            java.util.Objects.requireNonNull(consumer, "consumer").accept(mutableStatus);
         }
     }
 }
