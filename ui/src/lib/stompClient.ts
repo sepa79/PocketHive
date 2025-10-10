@@ -35,6 +35,26 @@ interface QueueMetrics {
 const queueMetrics: Record<string, QueueMetrics> = {}
 const nodePositions: Record<string, { x: number; y: number }> = {}
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function getString(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined
+  const trimmed = value.trim()
+  return trimmed.length > 0 ? trimmed : undefined
+}
+
+function getBoolean(value: unknown): boolean | undefined {
+  if (typeof value === 'boolean') return value
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase()
+    if (normalized === 'true') return true
+    if (normalized === 'false') return false
+  }
+  return undefined
+}
+
 function enrichQueue(queue: QueueInfo): QueueInfo {
   const stats = queueMetrics[queue.name]
   if (!stats) {
@@ -182,8 +202,53 @@ export function setClient(newClient: Client | null, destination = controlDestina
         comp.lastHeartbeat = new Date(evt.timestamp).getTime()
         comp.status = evt.kind
         const cfg = { ...(comp.config || {}) }
-        if (evt.data) Object.assign(cfg, evt.data)
-        if (typeof evt.enabled === 'boolean') cfg.enabled = evt.enabled
+        let workerEnabled: boolean | undefined
+        const data = evt.data
+        if (data && typeof data === 'object') {
+          const { workers, ...rest } = data as Record<string, unknown> & {
+            workers?: unknown
+          }
+          Object.entries(rest).forEach(([key, value]) => {
+            if (key === 'enabled') return
+            cfg[key] = value
+          })
+          if (Array.isArray(workers)) {
+            const normalizedRole = evt.role?.toLowerCase?.()
+            const workerEntries = workers.filter(isRecord)
+            const selected =
+              normalizedRole && normalizedRole.length > 0
+                ? workerEntries.find((entry) => {
+                    const roleValue = getString(entry['role'])
+                    return roleValue !== undefined && roleValue.toLowerCase() === normalizedRole
+                  })
+                : undefined
+            if (selected) {
+              const configSection = selected['config']
+              if (isRecord(configSection)) {
+                Object.entries(configSection).forEach(([key, value]) => {
+                  cfg[key] = value
+                })
+              }
+              const dataSection = selected['data']
+              if (isRecord(dataSection)) {
+                Object.entries(dataSection).forEach(([key, value]) => {
+                  cfg[key] = value
+                })
+              }
+              const workerEnabledCandidate = getBoolean(selected['enabled'])
+              if (typeof workerEnabledCandidate === 'boolean') {
+                workerEnabled = workerEnabledCandidate
+              }
+            }
+          }
+        }
+        const aggregateEnabled =
+          typeof workerEnabled === 'boolean'
+            ? workerEnabled
+            : typeof evt.enabled === 'boolean'
+            ? evt.enabled
+            : undefined
+        if (typeof aggregateEnabled === 'boolean') cfg.enabled = aggregateEnabled
         if (Object.keys(cfg).length > 0) comp.config = cfg
         if (evt.queues || evt.inQueue) {
           const q: QueueInfo[] = []
