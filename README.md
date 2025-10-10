@@ -1,3 +1,5 @@
+![PocketHive Logo](ui/assets/logo.svg)
+
 # PocketHive
 
 PocketHive is a RabbitMQ‑centric load & behavior simulator that orchestrates swarms of modular workers (“bees”) to generate traffic, transform data, and emit results and telemetry. It is useful for repeatable performance testing, scenario‑driven demos, and production‑like simulations for APIs and message‑driven systems (ISO‑8583, REST, SOAP, custom protocols).

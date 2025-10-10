@@ -1,3 +1,5 @@
+![PocketHive Logo](../ui/assets/logo.svg)
+
 # PocketHive — ARCHITECTURE
 
 > **Status:** Authoritative architecture specification (reference for agents).  
