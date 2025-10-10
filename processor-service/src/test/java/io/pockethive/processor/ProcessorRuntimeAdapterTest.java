@@ -1,6 +1,7 @@
 package io.pockethive.processor;
 
 import io.pockethive.Topology;
+import io.pockethive.TopologyDefaults;
 import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pockethive.worker.sdk.api.WorkResult;
@@ -69,7 +70,7 @@ class ProcessorRuntimeAdapterTest {
         WorkerType.MESSAGE,
         "processor",
         Topology.MOD_QUEUE,
-        Topology.FINAL_QUEUE,
+        TopologyDefaults.FINAL_QUEUE,
         ProcessorWorkerConfig.class
     );
     when(workerRegistry.findByRoleAndType("processor", WorkerType.MESSAGE))

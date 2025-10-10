@@ -60,8 +60,8 @@ public final class DefaultWorkerContextFactory implements WorkerContextFactory {
             definition.role(),
             message.headers().getOrDefault("swarmId", "default").toString(),
             message.headers().getOrDefault("instanceId", definition.beanName()).toString(),
-            definition.inQueue(),
-            definition.outQueue()
+            definition.resolvedInQueue(),
+            definition.resolvedOutQueue()
         );
         ObservabilityContext observabilityContext = resolveObservabilityContext(info, message);
         return new DefaultWorkerContext(info, definition, state, logger, meterRegistry, observationRegistry, beanResolver, observabilityContext);

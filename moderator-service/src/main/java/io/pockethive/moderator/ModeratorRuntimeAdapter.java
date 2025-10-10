@@ -66,7 +66,7 @@ class ModeratorRuntimeAdapter implements ApplicationListener<ContextRefreshedEve
             .orElse(moderatorDefaults.asConfig().enabled())))
         .dispatcher(message -> runtime.dispatch(workerDefinition.beanName(), message))
         .messageResultPublisher((result, outbound) -> {
-          String routingKey = Optional.ofNullable(workerDefinition.outQueue()).orElse(Topology.MOD_QUEUE);
+          String routingKey = Optional.ofNullable(workerDefinition.resolvedOutQueue()).orElse(Topology.MOD_QUEUE);
           template.send(Topology.EXCHANGE, routingKey, outbound);
         })
         .dispatchErrorHandler(ex -> log.warn("Moderator worker invocation failed", ex))

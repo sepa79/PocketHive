@@ -1,7 +1,5 @@
 package io.pockethive.worker.sdk.runtime;
 
-import io.pockethive.Topology;
-import io.pockethive.TopologyDefaults;
 import io.pockethive.worker.sdk.api.StatusPublisher;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -31,11 +29,11 @@ public final class WorkerState {
 
     WorkerState(WorkerDefinition definition) {
         this.definition = Objects.requireNonNull(definition, "definition");
-        String inbound = resolveQueue(definition.inQueue());
+        String inbound = definition.resolvedInQueue();
         if (inbound != null) {
             workInRoutes.add(inbound);
         }
-        String outbound = resolveQueue(definition.outQueue());
+        String outbound = definition.resolvedOutQueue();
         if (outbound != null) {
             workOutRoutes.add(outbound);
         }
@@ -108,14 +106,14 @@ public final class WorkerState {
     }
 
     void addInboundRoute(String queue) {
-        String resolved = resolveQueue(queue);
+        String resolved = WorkerDefinition.resolveQueue(queue);
         if (resolved != null) {
             workInRoutes.add(resolved);
         }
     }
 
     void addOutboundRoute(String queue) {
-        String resolved = resolveQueue(queue);
+        String resolved = WorkerDefinition.resolveQueue(queue);
         if (resolved != null) {
             workOutRoutes.add(resolved);
         }
@@ -129,16 +127,4 @@ public final class WorkerState {
         return Set.copyOf(workOutRoutes);
     }
 
-    private static String resolveQueue(String queue) {
-        if (queue == null || queue.isBlank()) {
-            return null;
-        }
-        return switch (queue) {
-            case TopologyDefaults.GEN_QUEUE -> Topology.GEN_QUEUE;
-            case TopologyDefaults.MOD_QUEUE -> Topology.MOD_QUEUE;
-            case TopologyDefaults.FINAL_QUEUE -> Topology.FINAL_QUEUE;
-            case TopologyDefaults.CONTROL_QUEUE -> Topology.CONTROL_QUEUE;
-            default -> queue;
-        };
-    }
 }
