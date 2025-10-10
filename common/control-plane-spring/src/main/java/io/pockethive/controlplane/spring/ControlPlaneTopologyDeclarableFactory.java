@@ -33,9 +33,11 @@ public final class ControlPlaneTopologyDeclarableFactory {
         descriptor.controlQueue(instanceId).ifPresent(queueDescriptor ->
             declarables.addAll(createControlQueue(queueDescriptor, exchange)));
         Collection<QueueDescriptor> additionalQueues = descriptor.additionalQueues(instanceId);
-        TopicExchange trafficExchange = new TopicExchange(Topology.EXCHANGE);
-        for (QueueDescriptor queueDescriptor : additionalQueues) {
-            declarables.addAll(createQueue(queueDescriptor, trafficExchange));
+        if (!additionalQueues.isEmpty()) {
+            TopicExchange additionalExchange = resolveAdditionalQueueExchange(descriptor, exchange);
+            for (QueueDescriptor queueDescriptor : additionalQueues) {
+                declarables.addAll(createQueue(queueDescriptor, additionalExchange));
+            }
         }
         return new Declarables(declarables);
     }
@@ -64,6 +66,14 @@ public final class ControlPlaneTopologyDeclarableFactory {
             }
         }
         return declarables;
+    }
+
+    private TopicExchange resolveAdditionalQueueExchange(ControlPlaneTopologyDescriptor descriptor,
+                                                         TopicExchange controlExchange) {
+        if (ControlPlaneTopologyDescriptorFactory.isWorkerRole(descriptor.role())) {
+            return new TopicExchange(Topology.EXCHANGE);
+        }
+        return controlExchange;
     }
 
     private static boolean isText(String value) {
