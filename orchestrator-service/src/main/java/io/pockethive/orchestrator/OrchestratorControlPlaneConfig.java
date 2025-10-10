@@ -1,5 +1,6 @@
 package io.pockethive.orchestrator;
 
+import io.pockethive.Topology;
 import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.controlplane.messaging.ControlPlaneEmitter;
 import io.pockethive.controlplane.messaging.ControlPlanePublisher;
@@ -9,6 +10,7 @@ import io.pockethive.controlplane.spring.ControlPlaneTopologyDescriptorFactory;
 import io.pockethive.controlplane.topology.ControlPlaneTopologyDescriptor;
 import io.pockethive.controlplane.topology.ControlQueueDescriptor;
 import io.pockethive.controlplane.topology.QueueDescriptor;
+import io.pockethive.controlplane.topology.QueueScope;
 import io.pockethive.util.BeeNameGenerator;
 import java.util.Objects;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -93,10 +95,14 @@ class OrchestratorControlPlaneConfig {
         @Qualifier("managerControlPlaneIdentity") ControlPlaneIdentity identity) {
         Objects.requireNonNull(descriptor, "descriptor");
         Objects.requireNonNull(identity, "identity");
-        return descriptor.additionalQueues(identity.instanceId()).stream()
-            .findFirst()
+        String instanceId = identity.instanceId();
+        String role = Objects.requireNonNull(descriptor.role(), "descriptor.role()");
+        String fallback = Topology.CONTROL_QUEUE + "." + role + "-status." + instanceId;
+        return descriptor.additionalQueues(instanceId).stream()
+            .filter(queue -> queue.scope() != QueueScope.TRAFFIC)
             .map(QueueDescriptor::name)
-            .orElseThrow(() -> new IllegalStateException("Orchestrator status queue descriptor is missing"));
+            .findFirst()
+            .orElse(fallback);
     }
 
     private static String resolveManagerSwarmId(ControlPlaneProperties properties) {
