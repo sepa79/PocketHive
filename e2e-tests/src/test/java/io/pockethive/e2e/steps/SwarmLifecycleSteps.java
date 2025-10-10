@@ -43,6 +43,10 @@ import io.pockethive.e2e.support.ControlPlaneEvents;
 import io.pockethive.e2e.support.QueueProbe;
 import io.pockethive.e2e.support.SwarmAssertions;
 import io.pockethive.e2e.support.StatusEvent;
+import io.pockethive.controlplane.spring.ControlPlaneTopologyDescriptorFactory;
+import io.pockethive.controlplane.topology.ControlPlaneRouteCatalog;
+import io.pockethive.controlplane.topology.ControlPlaneTopologyDescriptor;
+import io.pockethive.controlplane.topology.ControlQueueDescriptor;
 import io.pockethive.swarm.model.Bee;
 import io.pockethive.swarm.model.SwarmTemplate;
 import io.pockethive.swarm.model.Work;
@@ -315,6 +319,10 @@ public class SwarmLifecycleSteps {
     String instance = workerInstances.get(role);
     assertNotNull(instance, () -> "No instance recorded for role " + role);
 
+    ControlPlaneTopologyDescriptor descriptor = workerDescriptor(role);
+    ControlQueueDescriptor controlQueueDescriptor = descriptor.controlQueue(instance)
+        .orElseThrow(() -> new AssertionError("No control queue descriptor for role " + role));
+
     String expectedInQueue = expectedInboundQueue(role);
     StatusEvent.InQueue inQueue = status.inQueue();
     if (expectedInQueue == null) {
@@ -334,8 +342,13 @@ public class SwarmLifecycleSteps {
     assertListEquals("queues.work.out for role " + role, expectedWorkOut(role), actualWorkOut);
 
     StatusEvent.QueueEndpoints controlQueues = status.queues().control();
-    List<String> actualControlRoutes = controlQueues == null ? List.of() : controlQueues.routes();
-    assertControlRoutes(role, expectedControlRoutes(role, instance), actualControlRoutes);
+    assertNotNull(controlQueues, () -> "Expected control queue metadata for role " + role);
+    assertListEquals("queues.control.in for role " + role,
+        List.of(controlQueueDescriptor.name()), controlQueues.in());
+
+    List<String> actualControlRoutes = controlQueues.routes();
+    List<String> expectedRoutes = expectedControlRoutes(descriptor, controlQueueDescriptor, instance);
+    assertControlRoutes(role, expectedRoutes, actualControlRoutes);
   }
 
   private boolean isStatusFullForRole(StatusEvent status, String role) {
@@ -367,16 +380,42 @@ public class SwarmLifecycleSteps {
     return queueList(queueNameForSuffix(work.out()));
   }
 
-  private List<String> expectedControlRoutes(String role, String instance) {
-    List<String> routes = new ArrayList<>();
-    routes.add(signalRoute("config-update", "ALL", role, "ALL"));
-    routes.add(signalRoute("config-update", swarmId, role, "ALL"));
-    routes.add(signalRoute("config-update", swarmId, role, instance));
-    routes.add(signalRoute("config-update", swarmId, "ALL", "ALL"));
-    routes.add(signalRoute("status-request", "ALL", role, "ALL"));
-    routes.add(signalRoute("status-request", swarmId, role, "ALL"));
-    routes.add(signalRoute("status-request", swarmId, role, instance));
-    return routes;
+  private List<String> expectedControlRoutes(ControlPlaneTopologyDescriptor descriptor,
+      ControlQueueDescriptor controlQueueDescriptor, String instance) {
+    LinkedHashSet<String> routes = new LinkedHashSet<>();
+    routes.addAll(controlQueueDescriptor.allBindings());
+
+    ControlPlaneRouteCatalog catalog = descriptor.routes();
+    routes.addAll(expandRoutes(catalog.configSignals(), instance));
+    routes.addAll(expandRoutes(catalog.statusSignals(), instance));
+    routes.addAll(expandRoutes(catalog.lifecycleSignals(), instance));
+    routes.addAll(expandRoutes(catalog.statusEvents(), instance));
+    routes.addAll(expandRoutes(catalog.lifecycleEvents(), instance));
+    routes.addAll(expandRoutes(catalog.otherEvents(), instance));
+
+    return List.copyOf(routes);
+  }
+
+  private List<String> expandRoutes(Set<String> templates, String instance) {
+    if (templates == null || templates.isEmpty()) {
+      return List.of();
+    }
+    List<String> resolved = new ArrayList<>(templates.size());
+    for (String template : templates) {
+      if (template == null || template.isBlank()) {
+        continue;
+      }
+      resolved.add(template.replace(ControlPlaneRouteCatalog.INSTANCE_TOKEN, instance));
+    }
+    return resolved;
+  }
+
+  private ControlPlaneTopologyDescriptor workerDescriptor(String role) {
+    try {
+      return ControlPlaneTopologyDescriptorFactory.forWorkerRole(role);
+    } catch (IllegalArgumentException ex) {
+      throw new AssertionError("Unsupported worker role " + role, ex);
+    }
   }
 
   private Bee findBee(String role) {
@@ -400,22 +439,6 @@ public class SwarmLifecycleSteps {
 
   private List<String> queueList(String queue) {
     return queue == null ? List.of() : List.of(queue);
-  }
-
-  private String signalRoute(String command, String swarm, String role, String instance) {
-    return String.join(".", "sig",
-        commandSegment(command),
-        segmentOrAll(swarm),
-        segmentOrAll(role),
-        segmentOrAll(instance));
-  }
-
-  private String commandSegment(String command) {
-    return command == null || command.isBlank() ? "ALL" : command.trim();
-  }
-
-  private String segmentOrAll(String value) {
-    return value == null || value.isBlank() ? "ALL" : value.trim();
   }
 
   private void assertListEquals(String context, List<String> expected, List<String> actual) {

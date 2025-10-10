@@ -39,6 +39,16 @@
     </dependency>
     <dependency>
       <groupId>io.pockethive</groupId>
+      <artifactId>control-plane-core</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>io.pockethive</groupId>
+      <artifactId>control-plane-spring</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>io.pockethive</groupId>
       <artifactId>swarm-model</artifactId>
       <version>${project.version}</version>
     </dependency>
