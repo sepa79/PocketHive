@@ -14,9 +14,9 @@ Each entry displays its timestamp, origin, channel and payload to help operators
 
 PocketHive services now export Micrometer metrics to a Prometheus Pushgateway instead of exposing `/actuator/prometheus`.
 
-- **Service wiring.** Every bee receives the gateway URL (`MANAGEMENT_METRICS_EXPORT_PROMETHEUS_PUSHGATEWAY_BASE_URL`) from the swarm controller and publishes under the swarm id (job) and bee name (instance) labels. The Docker Compose profile also injects these variables for locally run services.
+- **Service wiring.** Every bee receives the gateway URL (`MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_BASE_URL`) from the swarm controller and publishes under the swarm id (`MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_JOB`) and bee name (`MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_GROUPING_KEY_INSTANCE`) labels. The Docker Compose profile also injects these variables for locally run services.
 - **Prometheus scrape.** The bundled Prometheus instance scrapes only the Pushgateway (`pushgateway:9091`) with `honor_labels: true`, so dashboards continue to use the swarm/bee labels that workers provide.
-- **Lifecycle hygiene.** During shutdown each service deletes its Pushgateway metrics (job + instance grouping key). Expect the series to vanish within one scrape interval after a container terminates.
+- **Lifecycle hygiene.** During shutdown each service deletes its Pushgateway metrics (job + instance grouping key) via `MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_SHUTDOWN_OPERATION=DELETE`. Expect the series to vanish within one scrape interval after a container terminates.
 - **Retention runbook.** If a worker crashes without executing its shutdown hook, stale metrics remain. Operators can:
   1. Inspect the Pushgateway UI (`http://pushgateway:9091`) to confirm lingering groups.
   2. Manually delete metrics with `curl -X DELETE http://pushgateway:9091/metrics/job/<swarm>/instance/<bee-name>`.
