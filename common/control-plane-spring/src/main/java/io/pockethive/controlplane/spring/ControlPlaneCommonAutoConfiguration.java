@@ -1,5 +1,6 @@
 package io.pockethive.controlplane.spring;
 
+import io.pockethive.Topology;
 import io.pockethive.controlplane.messaging.AmqpControlPlanePublisher;
 import io.pockethive.controlplane.messaging.ControlPlanePublisher;
 import java.util.Objects;
@@ -31,6 +32,12 @@ public class ControlPlaneCommonAutoConfiguration {
     TopicExchange controlPlaneExchange(ControlPlaneProperties properties) {
         String exchange = requireText(properties.getExchange(), "pockethive.control-plane.exchange");
         return ExchangeBuilder.topicExchange(exchange).durable(true).build();
+    }
+
+    @Bean(name = "swarmWorkExchange")
+    @ConditionalOnMissingBean(name = "swarmWorkExchange")
+    TopicExchange swarmWorkExchange() {
+        return ExchangeBuilder.topicExchange(Topology.EXCHANGE).durable(true).build();
     }
 
     @Bean

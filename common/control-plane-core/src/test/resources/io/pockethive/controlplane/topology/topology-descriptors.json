@@ -28,7 +28,8 @@
         "name": "ph.default.mod",
         "bindings": [
           "ph.default.mod"
-        ]
+        ],
+        "scope": "TRAFFIC"
       }
     ],
     "routes": {
@@ -164,7 +165,8 @@
         "name": "ph.default.gen",
         "bindings": [
           "ph.default.gen"
-        ]
+        ],
+        "scope": "TRAFFIC"
       }
     ],
     "routes": {
@@ -214,7 +216,8 @@
         "name": "ph.default.final",
         "bindings": [
           "ph.default.final"
-        ]
+        ],
+        "scope": "TRAFFIC"
       }
     ],
     "routes": {
@@ -322,7 +325,8 @@
         "bindings": [
           "ev.status-delta.swarm-controller.*",
           "ev.status-full.swarm-controller.*"
-        ]
+        ],
+        "scope": "CONTROL"
       }
     ],
     "routes": {

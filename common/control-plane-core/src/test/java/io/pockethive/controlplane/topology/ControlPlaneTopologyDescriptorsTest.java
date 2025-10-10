@@ -34,7 +34,7 @@ class ControlPlaneTopologyDescriptorsTest {
             .containsExactlyInAnyOrderElementsOf(expectedWorkerSignals("processor", INSTANCE));
         assertThat(queue.eventBindings()).isEmpty();
         assertThat(descriptor.additionalQueues(INSTANCE))
-            .containsExactly(new QueueDescriptor(Topology.MOD_QUEUE, Set.of(Topology.MOD_QUEUE)));
+            .containsExactly(QueueDescriptor.traffic(Topology.MOD_QUEUE, Set.of(Topology.MOD_QUEUE)));
 
         ControlPlaneRouteCatalog routes = descriptor.routes();
         assertThat(routes.configSignals())
@@ -98,7 +98,7 @@ class ControlPlaneTopologyDescriptorsTest {
             .containsExactlyInAnyOrderElementsOf(expectedWorkerSignals("moderator", INSTANCE));
         assertThat(queue.eventBindings()).isEmpty();
         assertThat(descriptor.additionalQueues(INSTANCE))
-            .containsExactly(new QueueDescriptor(Topology.GEN_QUEUE, Set.of(Topology.GEN_QUEUE)));
+            .containsExactly(QueueDescriptor.traffic(Topology.GEN_QUEUE, Set.of(Topology.GEN_QUEUE)));
     }
 
     @Test
@@ -112,7 +112,7 @@ class ControlPlaneTopologyDescriptorsTest {
             .containsExactlyInAnyOrderElementsOf(expectedWorkerSignals("postprocessor", INSTANCE));
         assertThat(queue.eventBindings()).isEmpty();
         assertThat(descriptor.additionalQueues(INSTANCE))
-            .containsExactly(new QueueDescriptor(Topology.FINAL_QUEUE, Set.of(Topology.FINAL_QUEUE)));
+            .containsExactly(QueueDescriptor.traffic(Topology.FINAL_QUEUE, Set.of(Topology.FINAL_QUEUE)));
     }
 
     @Test
@@ -170,7 +170,7 @@ class ControlPlaneTopologyDescriptorsTest {
 
         Collection<QueueDescriptor> additional = descriptor.additionalQueues(INSTANCE);
         assertThat(additional)
-            .containsExactly(new QueueDescriptor(
+            .containsExactly(QueueDescriptor.control(
                 Topology.CONTROL_QUEUE + ".orchestrator-status." + INSTANCE,
                 Set.of("ev.status-full.swarm-controller.*", "ev.status-delta.swarm-controller.*")));
 
@@ -225,7 +225,8 @@ class ControlPlaneTopologyDescriptorsTest {
             .sorted(Comparator.comparing(QueueDescriptor::name))
             .map(queue -> Map.of(
                 "name", queue.name(),
-                "bindings", sorted(queue.bindings())
+                "bindings", sorted(queue.bindings()),
+                "scope", queue.scope().name()
             ))
             .collect(Collectors.toList());
     }

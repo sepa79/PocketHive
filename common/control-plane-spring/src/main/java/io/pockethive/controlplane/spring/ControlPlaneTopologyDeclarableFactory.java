@@ -23,17 +23,19 @@ public final class ControlPlaneTopologyDeclarableFactory {
 
     public Declarables create(ControlPlaneTopologyDescriptor descriptor,
                               ControlPlaneIdentity identity,
-                              TopicExchange exchange) {
+                              TopicExchange controlExchange,
+                              TopicExchange workExchange) {
         Objects.requireNonNull(descriptor, "descriptor");
         Objects.requireNonNull(identity, "identity");
-        Objects.requireNonNull(exchange, "exchange");
+        Objects.requireNonNull(controlExchange, "controlExchange");
+        Objects.requireNonNull(workExchange, "workExchange");
         String instanceId = requireText(identity.instanceId(), "identity.instanceId");
         List<Declarable> declarables = new ArrayList<>();
         descriptor.controlQueue(instanceId).ifPresent(queueDescriptor ->
-            declarables.addAll(createControlQueue(queueDescriptor, exchange)));
+            declarables.addAll(createControlQueue(queueDescriptor, controlExchange)));
         Collection<QueueDescriptor> additionalQueues = descriptor.additionalQueues(instanceId);
         for (QueueDescriptor queueDescriptor : additionalQueues) {
-            declarables.addAll(createQueue(queueDescriptor, exchange));
+            declarables.addAll(createQueue(queueDescriptor, selectExchange(queueDescriptor, controlExchange, workExchange)));
         }
         return new Declarables(declarables);
     }
@@ -62,6 +64,15 @@ public final class ControlPlaneTopologyDeclarableFactory {
             }
         }
         return declarables;
+    }
+
+    private TopicExchange selectExchange(QueueDescriptor descriptor,
+                                         TopicExchange controlExchange,
+                                         TopicExchange workExchange) {
+        return switch (descriptor.scope()) {
+            case CONTROL -> controlExchange;
+            case TRAFFIC -> workExchange;
+        };
     }
 
     private static boolean isText(String value) {

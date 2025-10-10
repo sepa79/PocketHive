@@ -36,7 +36,7 @@ public final class OrchestratorControlPlaneTopologyDescriptor implements Control
             controllerStatusPattern("status-full"),
             controllerStatusPattern("status-delta")
         );
-        return List.of(new QueueDescriptor(queueName, bindings));
+        return List.of(QueueDescriptor.control(queueName, bindings));
     }
 
     @Override

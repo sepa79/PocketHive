@@ -57,11 +57,12 @@ public class ManagerControlPlaneAutoConfiguration {
         @Qualifier("managerControlPlaneTopologyDescriptor") ControlPlaneTopologyDescriptor descriptor,
         @Qualifier("managerControlPlaneIdentity") ControlPlaneIdentity identity,
         ControlPlaneTopologyDeclarableFactory factory,
-        TopicExchange controlPlaneExchange) {
+        @Qualifier("controlPlaneExchange") TopicExchange controlPlaneExchange,
+        @Qualifier("swarmWorkExchange") TopicExchange swarmWorkExchange) {
         if (!properties.isDeclareTopology() || !properties.getManager().isDeclareTopology()) {
             return new Declarables(List.of());
         }
-        return factory.create(descriptor, identity, controlPlaneExchange);
+        return factory.create(descriptor, identity, controlPlaneExchange, swarmWorkExchange);
     }
 
     @Bean
