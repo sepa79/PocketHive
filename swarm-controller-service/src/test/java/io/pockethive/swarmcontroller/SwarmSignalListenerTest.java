@@ -859,7 +859,7 @@ class SwarmSignalListenerTest {
   }
 
   @Test
-  void statusIncludesMetrics() {
+  void statusIncludesMetrics() throws Exception {
     SwarmMetrics metrics = new SwarmMetrics(2,2,2,2, java.time.Instant.parse("2025-09-12T12:34:55Z"));
     when(lifecycle.getMetrics()).thenReturn(metrics);
     SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", mapper);
@@ -880,7 +880,7 @@ class SwarmSignalListenerTest {
   }
 
   @Test
-  void degradedAndUnknownStates() {
+  void degradedAndUnknownStates() throws Exception {
     SwarmMetrics degraded = new SwarmMetrics(3,2,2,2, java.time.Instant.now());
     when(lifecycle.getMetrics()).thenReturn(degraded);
     SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", mapper);
