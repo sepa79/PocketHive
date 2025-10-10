@@ -99,7 +99,7 @@ business logic rather than wiring.
 ## 5. Migration checklist
 
 1. Add the `worker-sdk` dependency to your worker/manager service.
-2. Remove bespoke queue declarations and rely on `ControlPlaneTopologyDescriptorFactory` for topology.
+2. Remove bespoke queue declarations and rely on `ControlPlaneTopologyDescriptorFactory` for topology. **Do not declare the hive traffic exchange (`ph.{swarmId}.hive`) or its work queues**—the Swarm Controller is the sole owner of those bindings.
 3. Replace manual JSON payload builders with `ControlPlaneEmitter` helpers.
 4. Configure `pockethive.control-plane.*` properties for your service roles.
 5. Update unit tests to use `ControlPlaneTestFixtures` for canonical descriptors and identities.
