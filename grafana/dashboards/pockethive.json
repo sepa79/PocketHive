@@ -9,7 +9,7 @@
       "datasource": "Prometheus",
       "targets": [
         {
-          "expr": "jvm_memory_used_bytes{area=\"heap\",service=\"postprocessor\",swarm=\"$swarm\"}"
+          "expr": "jvm_memory_used_bytes{area=\"heap\",service=\"postprocessor\",swarm=~\"$swarm\"}"
         }
       ],
       "lines": true,
@@ -22,7 +22,7 @@
       "datasource": "Prometheus",
       "targets": [
         {
-          "expr": "jvm_memory_used_bytes{area=\"heap\",service=\"processor\",swarm=\"$swarm\"}"
+          "expr": "jvm_memory_used_bytes{area=\"heap\",service=\"processor\",swarm=~\"$swarm\"}"
         }
       ],
       "lines": true,
@@ -35,7 +35,7 @@
       "datasource": "Prometheus",
       "targets": [
         {
-          "expr": "jvm_memory_used_bytes{area=\"heap\",service=\"moderator\",swarm=\"$swarm\"}"
+          "expr": "jvm_memory_used_bytes{area=\"heap\",service=\"moderator\",swarm=~\"$swarm\"}"
         }
       ],
       "lines": true,
@@ -48,7 +48,7 @@
       "datasource": "Prometheus",
       "targets": [
         {
-          "expr": "jvm_memory_used_bytes{area=\"heap\",service=\"generator\",swarm=\"$swarm\"}"
+          "expr": "jvm_memory_used_bytes{area=\"heap\",service=\"generator\",swarm=~\"$swarm\"}"
         }
       ],
       "lines": true,
