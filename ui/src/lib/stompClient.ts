@@ -213,13 +213,15 @@ export function setClient(newClient: Client | null, destination = controlDestina
             cfg[key] = value
           })
           if (Array.isArray(workers)) {
-            const normalizedRole = evt.role?.toLowerCase?.() ?? ''
+            const normalizedRole = evt.role?.toLowerCase?.()
             const workerEntries = workers.filter(isRecord)
             const selected =
-              workerEntries.find((entry) => {
-                const roleValue = getString(entry['role'])
-                return roleValue !== undefined && roleValue.toLowerCase() === normalizedRole
-              }) ?? workerEntries[0]
+              normalizedRole && normalizedRole.length > 0
+                ? workerEntries.find((entry) => {
+                    const roleValue = getString(entry['role'])
+                    return roleValue !== undefined && roleValue.toLowerCase() === normalizedRole
+                  })
+                : undefined
             if (selected) {
               const configSection = selected['config']
               if (isRecord(configSection)) {

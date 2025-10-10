@@ -176,6 +176,38 @@ describe('swarm lifecycle', () => {
       enabled: false,
     })
 
+    cb({
+      headers: baseHeaders,
+      body: JSON.stringify({
+        event: 'status',
+        kind: 'status',
+        version: '1',
+        role: 'swarm-controller',
+        instance: 'swarm-controller-sw1',
+        messageId: 'm-2',
+        timestamp: new Date().toISOString(),
+        enabled: false,
+        data: {
+          heartbeatIntervalSec: 15,
+          workers: [
+            {
+              role: 'processor',
+              enabled: true,
+              config: { batchSize: 10 },
+            },
+          ],
+        },
+      }),
+    })
+
+    const controller = latest.find((comp) => comp.id === 'swarm-controller-sw1')
+    expect(controller).toBeTruthy()
+    expect(controller?.config).toMatchObject({
+      heartbeatIntervalSec: 15,
+      enabled: false,
+    })
+    expect(controller?.config).not.toHaveProperty('batchSize')
+
     unsubscribe()
     setClient(null)
   })
