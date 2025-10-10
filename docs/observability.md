@@ -22,3 +22,13 @@ PocketHive services now export Micrometer metrics to a Prometheus Pushgateway in
   2. Manually delete metrics with `curl -X DELETE http://pushgateway:9091/metrics/job/<swarm>/instance/<bee-name>`.
   3. Restart the swarm or offending bee to force a fresh push if the worker is still active.
 - **Alerting considerations.** Dashboards and alerts should filter on the swarm/bee tags rather than the old Prometheus scrape job names. Treat the absence of a bee's metrics as a potential failure once the Pushgateway retention window (default 15s scrape interval) elapses.
+
+## Queue depth snapshots
+
+Status events now include an optional `queueStats` object keyed by queue name. Each entry surfaces the latest broker snapshot for that queue:
+
+- `depth` — current message count in the queue.
+- `consumers` — number of active consumers bound to the queue.
+- `oldestAgeSec` (optional) — age, in seconds, of the oldest message when the broker exposes it.
+
+Operators can correlate these numbers with the `queues` topology block to understand which bindings map to a growing backlog. Empty or unavailable stats simply omit the `queueStats` object.

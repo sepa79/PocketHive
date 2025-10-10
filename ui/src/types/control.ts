@@ -26,12 +26,26 @@ export interface ControlEvent {
       routes?: string[];
     };
   };
+  queueStats?: Record<
+    string,
+    {
+      depth: number;
+      consumers: number;
+      oldestAgeSec?: number;
+    }
+  >;
   data?: Record<string, unknown>;
 }
 
 export function isControlEvent(raw: unknown): raw is ControlEvent {
   if (!raw || typeof raw !== 'object') return false
   const evt = raw as ControlEvent
+  if (
+    'queueStats' in evt &&
+    evt.queueStats !== undefined &&
+    (evt.queueStats === null || typeof evt.queueStats !== 'object')
+  )
+    return false
   return (
     typeof evt.event === 'string' &&
     typeof evt.kind === 'string' &&

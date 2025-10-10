@@ -2,6 +2,8 @@ package io.pockethive.swarmcontroller;
 
 import io.pockethive.swarm.model.SwarmPlan;
 
+import java.util.Map;
+
 /**
  * Contract describing the high-level lifecycle hooks the swarm controller exposes to the orchestrator.
  * <p>
@@ -120,6 +122,17 @@ public interface SwarmLifecycle {
    * and the oldest heartbeat watermark so callers can render UI health badges.
    */
   SwarmMetrics getMetrics();
+
+  /**
+   * Capture a snapshot of RabbitMQ queue statistics for the active swarm.
+   * <p>
+   * Implementations should report message depth, consumer counts, and optionally the age (seconds) of
+   * the oldest message when the broker exposes that metric. Callers can merge this data into the
+   * {@code queueStats} envelope published by the control plane.
+   *
+   * @return a map keyed by fully-qualified queue name (e.g. {@code ph.demo.work.in}).
+   */
+  Map<String, QueueStats> snapshotQueueStats();
 
   /**
    * Apply a scenario plan step before enabling workloads.

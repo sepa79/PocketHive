@@ -16,6 +16,7 @@ import org.springframework.amqp.core.AmqpAdmin;
 import org.springframework.amqp.core.Binding;
 import org.springframework.amqp.core.Queue;
 import org.springframework.amqp.core.TopicExchange;
+import org.springframework.amqp.rabbit.core.RabbitAdmin;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
@@ -23,6 +24,8 @@ import io.pockethive.Topology;
 
 import java.util.List;
 import java.util.Map;
+import java.util.OptionalLong;
+import java.util.Properties;
 import org.mockito.ArgumentCaptor;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.Level;
@@ -458,5 +461,40 @@ class SwarmLifecycleManagerTest {
     assertThat(output)
         .doesNotContain("[CTRL] SEND rk=ev.status-delta.swarm-controller.inst")
         .doesNotContain("[CTRL] SEND rk=sig.status-request.gen.g1");
+  }
+
+  @Test
+  void snapshotQueueStatsReportsDepthConsumersAndOptionalAge() throws Exception {
+    SwarmLifecycleManager manager = new SwarmLifecycleManager(amqp, mapper, docker, rabbit, "inst");
+    SwarmPlan plan = new SwarmPlan("swarm", List.of(new Bee("gen", null, new Work("qin", "qout"), null)));
+
+    Properties qinProps = new Properties();
+    qinProps.put(RabbitAdmin.QUEUE_MESSAGE_COUNT, 5);
+    qinProps.put(RabbitAdmin.QUEUE_CONSUMER_COUNT, 2);
+    qinProps.put("x-queue-oldest-age-seconds", "17");
+
+    when(amqp.getQueueProperties("ph." + Topology.SWARM_ID + ".qin"))
+        .thenReturn(null)
+        .thenReturn(qinProps);
+    when(amqp.getQueueProperties("ph." + Topology.SWARM_ID + ".qout"))
+        .thenReturn(null)
+        .thenReturn(null);
+
+    manager.prepare(mapper.writeValueAsString(plan));
+
+    Map<String, QueueStats> snapshot = manager.snapshotQueueStats();
+
+    QueueStats qin = snapshot.get("ph." + Topology.SWARM_ID + ".qin");
+    assertThat(qin).isNotNull();
+    assertThat(qin.depth()).isEqualTo(5L);
+    assertThat(qin.consumers()).isEqualTo(2);
+    assertThat(qin.oldestAgeSec()).isPresent();
+    assertThat(qin.oldestAgeSec().orElseThrow()).isEqualTo(17L);
+
+    QueueStats qout = snapshot.get("ph." + Topology.SWARM_ID + ".qout");
+    assertThat(qout).isNotNull();
+    assertThat(qout.depth()).isZero();
+    assertThat(qout.consumers()).isZero();
+    assertThat(qout.oldestAgeSec()).isEqualTo(OptionalLong.empty());
   }
 }

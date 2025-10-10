@@ -470,6 +470,24 @@ components:
           type: array
           items:
             type: string
+        queueStats:
+          type: object
+          description: Runtime depth/consumer metrics keyed by queue name.
+          additionalProperties:
+            type: object
+            required:
+            - depth
+            - consumers
+            properties:
+              depth:
+                type: integer
+                minimum: 0
+              consumers:
+                type: integer
+                minimum: 0
+              oldestAgeSec:
+                type: number
+                minimum: 0
         queues:
           type: object
           properties:

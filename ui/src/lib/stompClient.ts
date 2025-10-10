@@ -1,5 +1,5 @@
 import { Client, type StompSubscription } from '@stomp/stompjs'
-import type { Component } from '../types/hive'
+import type { Component, QueueInfo } from '../types/hive'
 import { isControlEvent, type ControlEvent } from '../types/control'
 import { logIn, logError } from './logs'
 import { useUIStore } from '../store'
@@ -27,7 +27,48 @@ let listeners: ComponentListener[] = []
 let topoListeners: TopologyListener[] = []
 let controlDestination = '/exchange/ph.control/#'
 const components: Record<string, Component> = {}
+interface QueueMetrics {
+  depth: number
+  consumers: number
+  oldestAgeSec?: number
+}
+const queueMetrics: Record<string, QueueMetrics> = {}
 const nodePositions: Record<string, { x: number; y: number }> = {}
+
+function enrichQueue(queue: QueueInfo): QueueInfo {
+  const stats = queueMetrics[queue.name]
+  if (!stats) {
+    return { name: queue.name, role: queue.role }
+  }
+  const enriched: QueueInfo = {
+    name: queue.name,
+    role: queue.role,
+    depth: stats.depth,
+    consumers: stats.consumers,
+  }
+  if (typeof stats.oldestAgeSec === 'number') {
+    enriched.oldestAgeSec = stats.oldestAgeSec
+  }
+  return enriched
+}
+
+function applyQueueMetrics() {
+  Object.values(components).forEach((component) => {
+    component.queues = component.queues.map((queue) => enrichQueue(queue))
+  })
+}
+
+function updateQueueMetrics(stats: ControlEvent['queueStats']) {
+  if (!stats) return
+  Object.entries(stats).forEach(([queue, entry]) => {
+    if (!entry) return
+    const { depth, consumers, oldestAgeSec } = entry
+    if (typeof depth !== 'number' || typeof consumers !== 'number') return
+    const metric: QueueMetrics = { depth, consumers }
+    if (typeof oldestAgeSec === 'number') metric.oldestAgeSec = oldestAgeSec
+    queueMetrics[queue] = metric
+  })
+}
 
 function buildTopology(): Topology {
   const queues: Record<string, { prod: Set<string>; cons: Set<string> }> = {}
@@ -123,6 +164,7 @@ export function setClient(newClient: Client | null, destination = controlDestina
         const raw = JSON.parse(msg.body)
         if (!isControlEvent(raw)) return
         const evt = raw as ControlEvent
+        const eventQueueStats = evt.queueStats
         const id = evt.instance
         const swarmId = id.split('-')[0]
         const comp: Component = components[id] || {
@@ -144,7 +186,7 @@ export function setClient(newClient: Client | null, destination = controlDestina
         if (typeof evt.enabled === 'boolean') cfg.enabled = evt.enabled
         if (Object.keys(cfg).length > 0) comp.config = cfg
         if (evt.queues || evt.inQueue) {
-          const q: { name: string; role: 'producer' | 'consumer' }[] = []
+          const q: QueueInfo[] = []
           if (evt.queues) {
             q.push(...(evt.queues.work?.in?.map((n) => ({ name: n, role: 'consumer' as const })) ?? []))
             q.push(...(evt.queues.work?.out?.map((n) => ({ name: n, role: 'producer' as const })) ?? []))
@@ -157,6 +199,8 @@ export function setClient(newClient: Client | null, destination = controlDestina
           comp.queues = q
         }
         components[id] = comp
+        updateQueueMetrics(eventQueueStats)
+        applyQueueMetrics()
         listeners.forEach((l) => l(Object.values(components)))
         emitTopology()
       } catch {

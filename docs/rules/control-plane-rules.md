@@ -256,7 +256,11 @@
   "state": "Running",
   "totals": {"desired": 8, "healthy": 8, "running": 8, "enabled": 8},
   "watermark": "2025-09-12T12:34:55Z",
-  "maxStalenessSec": 10
+  "maxStalenessSec": 10,
+  "queueStats": {
+    "ph.work.alpha.moderator": {"depth": 6, "consumers": 3, "oldestAgeSec": 4.2},
+    "ph.control.alpha.swarm-controller.ctrl-1": {"depth": 0, "consumers": 1}
+  }
 }
 ```
 

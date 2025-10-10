@@ -19,6 +19,7 @@ import org.springframework.amqp.core.BindingBuilder;
 import org.springframework.amqp.core.Queue;
 import org.springframework.amqp.core.QueueBuilder;
 import org.springframework.amqp.core.TopicExchange;
+import org.springframework.amqp.rabbit.core.RabbitAdmin;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
@@ -35,6 +36,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.OptionalLong;
+import java.util.Properties;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.Executors;
@@ -395,6 +398,31 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
     return new SwarmMetrics(desired, healthy, running, enabledCount, Instant.ofEpochMilli(watermark));
   }
 
+  @Override
+  public Map<String, QueueStats> snapshotQueueStats() {
+    List<String> suffixes;
+    synchronized (declaredQueues) {
+      suffixes = List.copyOf(declaredQueues);
+    }
+    Map<String, QueueStats> snapshot = new LinkedHashMap<>(suffixes.size());
+    for (String suffix : suffixes) {
+      String queueName = "ph." + Topology.SWARM_ID + "." + suffix;
+      Properties properties = amqp.getQueueProperties(queueName);
+      if (properties == null) {
+        snapshot.put(queueName, QueueStats.empty());
+        continue;
+      }
+      long depth = coerceLong(properties.get(RabbitAdmin.QUEUE_MESSAGE_COUNT));
+      int consumers = coerceInt(properties.get(RabbitAdmin.QUEUE_CONSUMER_COUNT));
+      OptionalLong oldestAge = coerceOptionalLong(
+          properties.get("x-queue-oldest-age-seconds"),
+          properties.get("message_stats.age"),
+          properties.get("oldest_message_age_seconds"));
+      snapshot.put(queueName, new QueueStats(depth, consumers, oldestAge));
+    }
+    return snapshot;
+  }
+
   /**
    * Record that a worker reported ready and determine if the swarm can be marked live.
    * <p>
@@ -744,6 +772,56 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
       return null;
     }
     return "ALL".equalsIgnoreCase(trimmed) ? null : trimmed;
+  }
+
+  private static long coerceLong(Object value) {
+    if (value instanceof Number number) {
+      return number.longValue();
+    }
+    if (value instanceof String string) {
+      try {
+        return Long.parseLong(string);
+      } catch (NumberFormatException ignored) {
+        return 0L;
+      }
+    }
+    return 0L;
+  }
+
+  private static int coerceInt(Object value) {
+    if (value instanceof Number number) {
+      return number.intValue();
+    }
+    if (value instanceof String string) {
+      try {
+        return Integer.parseInt(string);
+      } catch (NumberFormatException ignored) {
+        return 0;
+      }
+    }
+    return 0;
+  }
+
+  private static OptionalLong coerceOptionalLong(Object... candidates) {
+    if (candidates == null) {
+      return OptionalLong.empty();
+    }
+    for (Object candidate : candidates) {
+      if (candidate == null) {
+        continue;
+      }
+      if (candidate instanceof Number number) {
+        return OptionalLong.of(number.longValue());
+      }
+      if (candidate instanceof String string) {
+        try {
+          return OptionalLong.of(Long.parseLong(string));
+        } catch (NumberFormatException ignored) {
+          // try next candidate
+        }
+      }
+    }
+    return OptionalLong.empty();
   }
 
   private static String snippet(String payload) {
