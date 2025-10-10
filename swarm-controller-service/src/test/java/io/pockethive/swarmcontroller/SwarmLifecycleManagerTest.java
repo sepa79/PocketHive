@@ -69,7 +69,18 @@ class SwarmLifecycleManagerTest {
     verify(amqp).declareExchange(argThat((TopicExchange e) -> e.getName().equals("ph." + Topology.SWARM_ID + ".hive")));
     verify(amqp).declareQueue(argThat((Queue q) -> q.getName().equals("ph." + Topology.SWARM_ID + ".qin")));
     verify(amqp).declareQueue(argThat((Queue q) -> q.getName().equals("ph." + Topology.SWARM_ID + ".qout")));
-    verify(amqp, times(2)).declareBinding(any(Binding.class));
+    ArgumentCaptor<Binding> bindingCaptor = ArgumentCaptor.forClass(Binding.class);
+    verify(amqp, times(2)).declareBinding(bindingCaptor.capture());
+    assertThat(bindingCaptor.getAllValues())
+        .extracting(Binding::getRoutingKey)
+        .containsExactlyInAnyOrder(
+            "ph." + Topology.SWARM_ID + ".qin",
+            "ph." + Topology.SWARM_ID + ".qout");
+    ArgumentCaptor<Binding> legacyCaptor = ArgumentCaptor.forClass(Binding.class);
+    verify(amqp, times(2)).removeBinding(legacyCaptor.capture());
+    assertThat(legacyCaptor.getAllValues())
+        .extracting(Binding::getRoutingKey)
+        .containsExactlyInAnyOrder("qin", "qout");
     ArgumentCaptor<Map<String,String>> envCap = ArgumentCaptor.forClass(Map.class);
     ArgumentCaptor<String> nameCap = ArgumentCaptor.forClass(String.class);
     verify(docker).createContainer(eq("img1"), envCap.capture(), nameCap.capture());
@@ -159,7 +170,18 @@ class SwarmLifecycleManagerTest {
     verify(amqp).declareExchange(argThat((TopicExchange e) -> e.getName().equals("ph." + Topology.SWARM_ID + ".hive")));
     verify(amqp).declareQueue(argThat((Queue q) -> q.getName().equals("ph." + Topology.SWARM_ID + ".a")));
     verify(amqp).declareQueue(argThat((Queue q) -> q.getName().equals("ph." + Topology.SWARM_ID + ".b")));
-    verify(amqp, times(2)).declareBinding(any(Binding.class));
+    ArgumentCaptor<Binding> prepareBindingCaptor = ArgumentCaptor.forClass(Binding.class);
+    verify(amqp, times(2)).declareBinding(prepareBindingCaptor.capture());
+    assertThat(prepareBindingCaptor.getAllValues())
+        .extracting(Binding::getRoutingKey)
+        .containsExactlyInAnyOrder(
+            "ph." + Topology.SWARM_ID + ".a",
+            "ph." + Topology.SWARM_ID + ".b");
+    ArgumentCaptor<Binding> prepareLegacyCaptor = ArgumentCaptor.forClass(Binding.class);
+    verify(amqp, times(2)).removeBinding(prepareLegacyCaptor.capture());
+    assertThat(prepareLegacyCaptor.getAllValues())
+        .extracting(Binding::getRoutingKey)
+        .containsExactlyInAnyOrder("a", "b");
   }
 
   @Test

@@ -235,7 +235,10 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
         if (queueMissing || !declaredQueues.contains(suffix)) {
           Queue q = QueueBuilder.durable(queueName).build();
           amqp.declareQueue(q);
-          Binding b = BindingBuilder.bind(q).to(hive).with(suffix);
+          Binding legacyBinding = new Binding(queueName, Binding.DestinationType.QUEUE,
+              hive.getName(), suffix, null);
+          amqp.removeBinding(legacyBinding);
+          Binding b = BindingBuilder.bind(q).to(hive).with(queueName);
           amqp.declareBinding(b);
           log.info("declared queue ph.{}.{}", Topology.SWARM_ID, suffix);
           declaredQueues.add(suffix);
