@@ -1,6 +1,7 @@
 package io.pockethive.generator;
 
 import io.pockethive.Topology;
+import io.pockethive.TopologyDefaults;
 import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pockethive.worker.sdk.api.WorkResult;
@@ -64,7 +65,7 @@ class GeneratorRuntimeAdapterTest {
         WorkerType.GENERATOR,
         "generator",
         null,
-        Topology.GEN_QUEUE,
+        TopologyDefaults.GEN_QUEUE,
         GeneratorWorkerConfig.class
     );
     when(workerRegistry.all()).thenReturn(List.of(definition));

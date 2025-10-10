@@ -73,7 +73,7 @@ class WorkerControlPlaneAutoConfigurationTest {
     }
 
     @Test
-    void bindsTrafficQueuesToTrafficExchange() {
+    void doesNotBindTrafficQueuesToTrafficExchange() {
         contextRunner
             .withPropertyValues("pockethive.control-plane.worker.role=moderator")
             .run(context -> {
@@ -86,8 +86,7 @@ class WorkerControlPlaneAutoConfigurationTest {
                     .filter(binding -> Topology.GEN_QUEUE.equals(binding.getDestination()))
                     .findFirst();
 
-                assertThat(trafficBinding).isPresent();
-                assertThat(trafficBinding.get().getExchange()).isEqualTo(Topology.EXCHANGE);
+                assertThat(trafficBinding).isEmpty();
             });
     }
 }

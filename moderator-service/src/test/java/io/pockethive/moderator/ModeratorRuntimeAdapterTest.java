@@ -1,6 +1,7 @@
 package io.pockethive.moderator;
 
 import io.pockethive.Topology;
+import io.pockethive.TopologyDefaults;
 import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pockethive.worker.sdk.api.WorkResult;
@@ -68,7 +69,7 @@ class ModeratorRuntimeAdapterTest {
         WorkerType.MESSAGE,
         "moderator",
         Topology.GEN_QUEUE,
-        Topology.MOD_QUEUE,
+        TopologyDefaults.MOD_QUEUE,
         ModeratorWorkerConfig.class
     );
     when(workerRegistry.findByRoleAndType("moderator", WorkerType.MESSAGE))

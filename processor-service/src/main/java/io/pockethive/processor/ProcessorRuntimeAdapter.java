@@ -71,7 +71,7 @@ class ProcessorRuntimeAdapter implements ApplicationListener<ContextRefreshedEve
             .orElse(processorDefaults.asConfig().enabled())))
         .dispatcher(message -> runtime.dispatch(workerDefinition.beanName(), message))
         .messageResultPublisher((result, outbound) -> {
-          String routingKey = Optional.ofNullable(workerDefinition.outQueue()).orElse(Topology.FINAL_QUEUE);
+          String routingKey = Optional.ofNullable(workerDefinition.resolvedOutQueue()).orElse(Topology.FINAL_QUEUE);
           template.send(Topology.EXCHANGE, routingKey, outbound);
         })
         .dispatchErrorHandler(ex -> log.warn("Processor worker invocation failed", ex))

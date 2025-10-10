@@ -108,7 +108,7 @@ class ProcessorRuntimeAdapter implements ApplicationListener<ContextRefreshedEve
         .desiredStateResolver(snapshot -> snapshot.enabled().orElse(defaults.asConfig().enabled()))
         .dispatcher(message -> workerRuntime.dispatch(definition.beanName(), message))
         .messageResultPublisher((result, outbound) -> {
-          String routingKey = Optional.ofNullable(definition.outQueue()).orElse(Topology.FINAL_QUEUE);
+          String routingKey = Optional.ofNullable(definition.resolvedOutQueue()).orElse(Topology.FINAL_QUEUE);
           rabbitTemplate.send(Topology.EXCHANGE, routingKey, outbound);
         })
         .build();

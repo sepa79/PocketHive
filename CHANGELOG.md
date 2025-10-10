@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.12.1] - 2025-10-10
+Timestamp: 2025-10-10T00:00:00Z
+
+- Swarm controller: clean up legacy short hive bindings on every prepare run, rebinding generator/moderator/processor queues with fully qualified routing keys so only controller-managed routes remain.
+- Worker runtime & SDK: resolve outbound queue names via swarm-qualified topology constants, remove processor-owned RabbitMQ declarables, and adjust runtime adapters/tests to rely on the controller-provisioned traffic queues.
+- Control-plane auto-config: restore worker/manager traffic bindings to the hive exchange using the qualified routing keys and harden tests that guard the declarable wiring.
+- Documentation: clarify that worker services consume the autoconfigured RabbitMQ topology and must not override the controller’s hive bindings.
+
 ## [0.12.0] - 2025-10-09
 Timestamp: 2025-10-09T00:00:00Z
 

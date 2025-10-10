@@ -1,5 +1,7 @@
 package io.pockethive.worker.sdk.runtime;
 
+import io.pockethive.Topology;
+import io.pockethive.TopologyDefaults;
 import io.pockethive.worker.sdk.api.WorkerContext;
 import io.pockethive.worker.sdk.config.PocketHiveWorker;
 import io.pockethive.worker.sdk.config.WorkerType;
@@ -40,6 +42,14 @@ public record WorkerDefinition(
         configType = configType == null || configType == Void.class ? Void.class : configType;
     }
 
+    public String resolvedInQueue() {
+        return resolveQueue(inQueue);
+    }
+
+    public String resolvedOutQueue() {
+        return resolveQueue(outQueue);
+    }
+
     private static String requireText(String value, String field) {
         if (value == null || value.isBlank()) {
             throw new IllegalArgumentException(field + " must not be blank");
@@ -49,5 +59,18 @@ public record WorkerDefinition(
 
     private static String normalize(String value) {
         return value == null || value.isBlank() ? null : value;
+    }
+
+    public static String resolveQueue(String queue) {
+        if (queue == null || queue.isBlank()) {
+            return null;
+        }
+        return switch (queue) {
+            case TopologyDefaults.GEN_QUEUE -> Topology.GEN_QUEUE;
+            case TopologyDefaults.MOD_QUEUE -> Topology.MOD_QUEUE;
+            case TopologyDefaults.FINAL_QUEUE -> Topology.FINAL_QUEUE;
+            case TopologyDefaults.CONTROL_QUEUE -> Topology.CONTROL_QUEUE;
+            default -> queue;
+        };
     }
 }
