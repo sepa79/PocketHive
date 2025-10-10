@@ -8,7 +8,9 @@
       "title": "Postprocessor Heap Memory",
       "datasource": "Prometheus",
       "targets": [
-        { "expr": "jvm_memory_used_bytes{area=\"heap\",job=\"postprocessor\"}" }
+        {
+          "expr": "jvm_memory_used_bytes{area=\"heap\",service=\"postprocessor\",swarm=\"$swarm\"}"
+        }
       ],
       "lines": true,
       "id": 1,
@@ -19,7 +21,9 @@
       "title": "Processor Heap Memory",
       "datasource": "Prometheus",
       "targets": [
-        { "expr": "jvm_memory_used_bytes{area=\"heap\",job=\"processor\"}" }
+        {
+          "expr": "jvm_memory_used_bytes{area=\"heap\",service=\"processor\",swarm=\"$swarm\"}"
+        }
       ],
       "lines": true,
       "id": 2,
@@ -30,7 +34,9 @@
       "title": "Moderator Heap Memory",
       "datasource": "Prometheus",
       "targets": [
-        { "expr": "jvm_memory_used_bytes{area=\"heap\",job=\"moderator\"}" }
+        {
+          "expr": "jvm_memory_used_bytes{area=\"heap\",service=\"moderator\",swarm=\"$swarm\"}"
+        }
       ],
       "lines": true,
       "id": 3,
@@ -41,7 +47,9 @@
       "title": "Generator Heap Memory",
       "datasource": "Prometheus",
       "targets": [
-        { "expr": "jvm_memory_used_bytes{area=\"heap\",job=\"generator\"}" }
+        {
+          "expr": "jvm_memory_used_bytes{area=\"heap\",service=\"generator\",swarm=\"$swarm\"}"
+        }
       ],
       "lines": true,
       "id": 4,
@@ -50,7 +58,29 @@
   ],
   "refresh": "5s",
   "time": { "from": "now-15m", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "swarm",
+        "label": "Swarm",
+        "type": "query",
+        "datasource": "Prometheus",
+        "definition": "label_values(jvm_memory_used_bytes, swarm)",
+        "query": "label_values(jvm_memory_used_bytes, swarm)",
+        "refresh": 2,
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".*",
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        },
+        "options": []
+      }
+    ]
+  },
   "schemaVersion": 27,
   "title": "PocketHive",
-  "version": 1
+  "version": 2
 }
