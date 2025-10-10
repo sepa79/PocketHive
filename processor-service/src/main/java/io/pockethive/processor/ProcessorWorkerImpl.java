@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.DistributionSummary;
 import io.micrometer.core.instrument.MeterRegistry;
+import io.pockethive.Topology;
 import io.pockethive.TopologyDefaults;
 import io.pockethive.observability.ObservabilityContext;
 import io.pockethive.observability.ObservabilityContextUtil;
@@ -72,20 +73,17 @@ class ProcessorWorkerImpl implements MessageWorker {
 
   private static final ObjectMapper MAPPER = new ObjectMapper();
   private final ProcessorDefaults defaults;
-  private final ProcessorQueuesProperties queues;
   private final HttpClient httpClient;
   private final Clock clock;
   private final AtomicReference<ProcessorMetrics> metricsRef = new AtomicReference<>();
 
   @Autowired
-  ProcessorWorkerImpl(ProcessorDefaults defaults, ProcessorQueuesProperties queues) {
-    this(defaults, queues, HttpClient.newHttpClient(), Clock.systemUTC());
+  ProcessorWorkerImpl(ProcessorDefaults defaults) {
+    this(defaults, HttpClient.newHttpClient(), Clock.systemUTC());
   }
 
-  ProcessorWorkerImpl(ProcessorDefaults defaults, ProcessorQueuesProperties queues,
-      HttpClient httpClient, Clock clock) {
+  ProcessorWorkerImpl(ProcessorDefaults defaults, HttpClient httpClient, Clock clock) {
     this.defaults = Objects.requireNonNull(defaults, "defaults");
-    this.queues = Objects.requireNonNull(queues, "queues");
     this.httpClient = Objects.requireNonNull(httpClient, "httpClient");
     this.clock = Objects.requireNonNull(clock, "clock");
   }
@@ -126,8 +124,8 @@ class ProcessorWorkerImpl implements MessageWorker {
     ProcessorWorkerConfig config = context.config(ProcessorWorkerConfig.class)
         .orElseGet(defaults::asConfig);
     context.statusPublisher()
-        .workIn(queues.getModQueue())
-        .workOut(queues.getFinalQueue())
+        .workIn(Topology.MOD_QUEUE)
+        .workOut(Topology.FINAL_QUEUE)
         .update(status -> status
             .data("baseUrl", config.baseUrl())
             .data("enabled", config.enabled()));

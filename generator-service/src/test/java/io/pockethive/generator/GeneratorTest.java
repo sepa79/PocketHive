@@ -3,6 +3,7 @@ package io.pockethive.generator;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import io.pockethive.Topology;
 import io.pockethive.worker.sdk.api.StatusPublisher;
 import io.pockethive.worker.sdk.api.WorkResult;
 import io.pockethive.worker.sdk.api.WorkerContext;
@@ -20,7 +21,6 @@ class GeneratorTest {
   private static final ObjectMapper MAPPER = new ObjectMapper();
 
   private GeneratorDefaults defaults;
-  private GeneratorQueuesProperties queues;
   private GeneratorWorkerImpl worker;
 
   @BeforeEach
@@ -33,8 +33,7 @@ class GeneratorTest {
     defaults = new GeneratorDefaults(messageConfig);
     defaults.setRatePerSec(3.0);
     defaults.setEnabled(true);
-    queues = new GeneratorQueuesProperties();
-    worker = new GeneratorWorkerImpl(defaults, queues);
+    worker = new GeneratorWorkerImpl(defaults);
   }
 
   @Test
@@ -49,10 +48,7 @@ class GeneratorTest {
         Map.of("X-Custom", "yes")
     );
 
-    TestWorkerContext context = new TestWorkerContext(config);
-    queues.setGenQueue("ph.custom.gen");
-
-    WorkResult result = worker.generate(context);
+    WorkResult result = worker.generate(new TestWorkerContext(config));
 
     assertThat(result).isInstanceOf(WorkResult.Message.class);
     JsonNode payload = MAPPER.readTree(((WorkResult.Message) result).value().asString());
@@ -63,7 +59,6 @@ class GeneratorTest {
     assertThat(((WorkResult.Message) result).value().headers())
         .containsEntry("content-type", MessageProperties.CONTENT_TYPE_JSON)
         .containsEntry("x-ph-service", "generator");
-    assertThat(context.workOutRoute()).isEqualTo("ph.custom.gen");
   }
 
   @Test
@@ -80,8 +75,7 @@ class GeneratorTest {
   private static final class TestWorkerContext implements WorkerContext {
 
     private final GeneratorWorkerConfig config;
-    private final WorkerInfo info = new WorkerInfo("generator", "swarm", "instance", "in", "out");
-    private final CapturingStatusPublisher statusPublisher = new CapturingStatusPublisher();
+    private final WorkerInfo info = new WorkerInfo("generator", "swarm", "instance", Topology.GEN_QUEUE, Topology.MOD_QUEUE);
 
     private TestWorkerContext(GeneratorWorkerConfig config) {
       this.config = config;
@@ -102,7 +96,7 @@ class GeneratorTest {
 
     @Override
     public StatusPublisher statusPublisher() {
-      return statusPublisher;
+      return StatusPublisher.NO_OP;
     }
 
     @Override
@@ -123,26 +117,6 @@ class GeneratorTest {
     @Override
     public io.pockethive.observability.ObservabilityContext observabilityContext() {
       return new io.pockethive.observability.ObservabilityContext();
-    }
-
-    String workOutRoute() {
-      return statusPublisher.workOutRoute;
-    }
-  }
-
-  private static final class CapturingStatusPublisher implements StatusPublisher {
-
-    private String workOutRoute;
-
-    @Override
-    public StatusPublisher workOut(String route) {
-      this.workOutRoute = route;
-      return this;
-    }
-
-    @Override
-    public void update(java.util.function.Consumer<MutableStatus> consumer) {
-      // no-op for tests
     }
   }
 }

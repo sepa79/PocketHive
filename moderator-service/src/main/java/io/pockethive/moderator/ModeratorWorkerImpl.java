@@ -1,5 +1,6 @@
 package io.pockethive.moderator;
 
+import io.pockethive.Topology;
 import io.pockethive.TopologyDefaults;
 import io.pockethive.worker.sdk.api.MessageWorker;
 import io.pockethive.worker.sdk.api.WorkMessage;
@@ -35,12 +36,10 @@ import org.springframework.stereotype.Component;
 class ModeratorWorkerImpl implements MessageWorker {
 
   private final ModeratorDefaults defaults;
-  private final ModeratorQueuesProperties queues;
 
   @Autowired
-  ModeratorWorkerImpl(ModeratorDefaults defaults, ModeratorQueuesProperties queues) {
+  ModeratorWorkerImpl(ModeratorDefaults defaults) {
     this.defaults = defaults;
-    this.queues = queues;
   }
 
   /**
@@ -67,8 +66,8 @@ class ModeratorWorkerImpl implements MessageWorker {
     ModeratorWorkerConfig config = context.config(ModeratorWorkerConfig.class)
         .orElseGet(defaults::asConfig);
     context.statusPublisher()
-        .workIn(queues.getGenQueue())
-        .workOut(queues.getModQueue())
+        .workIn(Topology.GEN_QUEUE)
+        .workOut(Topology.MOD_QUEUE)
         .update(status -> status
             .data("enabled", config.enabled()));
     WorkMessage out = in.toBuilder()
