@@ -1,5 +1,6 @@
 package io.pockethive.controlplane.spring;
 
+import io.pockethive.Topology;
 import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.controlplane.topology.ControlPlaneTopologyDescriptor;
 import io.pockethive.controlplane.topology.ControlQueueDescriptor;
@@ -32,8 +33,11 @@ public final class ControlPlaneTopologyDeclarableFactory {
         descriptor.controlQueue(instanceId).ifPresent(queueDescriptor ->
             declarables.addAll(createControlQueue(queueDescriptor, exchange)));
         Collection<QueueDescriptor> additionalQueues = descriptor.additionalQueues(instanceId);
-        for (QueueDescriptor queueDescriptor : additionalQueues) {
-            declarables.addAll(createQueue(queueDescriptor, exchange));
+        if (!additionalQueues.isEmpty()) {
+            TopicExchange additionalExchange = resolveAdditionalQueueExchange(descriptor, exchange);
+            for (QueueDescriptor queueDescriptor : additionalQueues) {
+                declarables.addAll(createQueue(queueDescriptor, additionalExchange));
+            }
         }
         return new Declarables(declarables);
     }
@@ -62,6 +66,14 @@ public final class ControlPlaneTopologyDeclarableFactory {
             }
         }
         return declarables;
+    }
+
+    private TopicExchange resolveAdditionalQueueExchange(ControlPlaneTopologyDescriptor descriptor,
+                                                         TopicExchange controlExchange) {
+        if (ControlPlaneTopologyDescriptorFactory.isWorkerRole(descriptor.role())) {
+            return new TopicExchange(Topology.EXCHANGE);
+        }
+        return controlExchange;
     }
 
     private static boolean isText(String value) {

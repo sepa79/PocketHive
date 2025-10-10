@@ -7,7 +7,9 @@ import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.controlplane.manager.ManagerControlPlane;
 import io.pockethive.controlplane.messaging.ControlPlanePublisher;
 import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
+import org.springframework.amqp.core.Binding;
 import org.springframework.amqp.core.Declarables;
 import org.springframework.amqp.core.Queue;
 import org.springframework.amqp.core.TopicExchange;
@@ -51,6 +53,21 @@ class ManagerControlPlaneAutoConfigurationTest {
             assertThat(queues)
                 .extracting(Queue::getName)
                 .contains("ph.control.orchestrator.orch-1", "ph.control.orchestrator-status.orch-1");
+        });
+    }
+
+    @Test
+    void bindsManagerAdditionalQueuesToControlExchange() {
+        contextRunner.run(context -> {
+            Declarables declarables = context.getBean("managerControlPlaneDeclarables", Declarables.class);
+            Optional<Binding> statusBinding = declarables.getDeclarables().stream()
+                .filter(Binding.class::isInstance)
+                .map(Binding.class::cast)
+                .filter(binding -> "ph.control.orchestrator-status.orch-1".equals(binding.getDestination()))
+                .findFirst();
+
+            assertThat(statusBinding).isPresent();
+            assertThat(statusBinding.get().getExchange()).isEqualTo("ph.control.manager");
         });
     }
 

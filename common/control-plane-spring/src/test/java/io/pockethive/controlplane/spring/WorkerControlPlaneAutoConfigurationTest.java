@@ -9,6 +9,7 @@ import io.pockethive.controlplane.messaging.ControlPlanePublisher;
 import io.pockethive.controlplane.worker.WorkerControlPlane;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
+import org.springframework.amqp.core.Binding;
 import org.springframework.amqp.core.Declarables;
 import org.springframework.amqp.core.Queue;
 import org.springframework.amqp.core.TopicExchange;
@@ -68,6 +69,25 @@ class WorkerControlPlaneAutoConfigurationTest {
             .run(context -> {
                 Declarables declarables = context.getBean("workerControlPlaneDeclarables", Declarables.class);
                 assertThat(declarables.getDeclarables()).isEmpty();
+            });
+    }
+
+    @Test
+    void bindsTrafficQueuesToTrafficExchange() {
+        contextRunner
+            .withPropertyValues("pockethive.control-plane.worker.role=moderator")
+            .run(context -> {
+                Declarables declarables = context.getBean("workerControlPlaneDeclarables", Declarables.class);
+                assertThat(declarables.getDeclarables()).isNotEmpty();
+
+                Optional<Binding> trafficBinding = declarables.getDeclarables().stream()
+                    .filter(Binding.class::isInstance)
+                    .map(Binding.class::cast)
+                    .filter(binding -> Topology.GEN_QUEUE.equals(binding.getDestination()))
+                    .findFirst();
+
+                assertThat(trafficBinding).isPresent();
+                assertThat(trafficBinding.get().getExchange()).isEqualTo(Topology.EXCHANGE);
             });
     }
 }
