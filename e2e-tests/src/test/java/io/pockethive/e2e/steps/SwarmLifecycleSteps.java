@@ -5,9 +5,13 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -38,6 +42,7 @@ import io.pockethive.e2e.config.EnvironmentConfig.ServiceEndpoints;
 import io.pockethive.e2e.support.ControlPlaneEvents;
 import io.pockethive.e2e.support.QueueProbe;
 import io.pockethive.e2e.support.SwarmAssertions;
+import io.pockethive.e2e.support.StatusEvent;
 import io.pockethive.swarm.model.Bee;
 import io.pockethive.swarm.model.SwarmTemplate;
 import io.pockethive.swarm.model.Work;
@@ -63,6 +68,10 @@ public class SwarmLifecycleSteps {
   private ControlResponse startResponse;
   private ControlResponse stopResponse;
   private ControlResponse removeResponse;
+
+  private final Map<String, StatusEvent> workerStatusByRole = new LinkedHashMap<>();
+  private final Map<String, String> workerInstances = new LinkedHashMap<>();
+  private boolean workerStatusesCaptured;
 
   @Given("the swarm lifecycle harness is initialised")
   public void theSwarmLifecycleHarnessIsInitialised() {
@@ -101,6 +110,23 @@ public class SwarmLifecycleSteps {
     LOGGER.info("Using scenario {} - {}", summary.id(), summary.name());
     scenarioDetails = scenarioManagerClient.fetchScenario(summary.id());
     template = Objects.requireNonNull(scenarioDetails.template(), "scenario template");
+  }
+
+  @And("the {string} scenario template is requested")
+  public void theScenarioTemplateIsRequested(String templateId) {
+    ensureHarness();
+    Objects.requireNonNull(templateId, "templateId");
+    String trimmed = templateId.trim();
+    Assumptions.assumeTrue(!trimmed.isEmpty(), "Skipping lifecycle scenario: template id must not be blank");
+    try {
+      scenarioDetails = scenarioManagerClient.fetchScenario(trimmed);
+    } catch (Exception ex) {
+      Assumptions.assumeTrue(false, () ->
+          "Skipping lifecycle scenario: failed to fetch scenario %s: %s".formatted(trimmed, ex.getMessage()));
+      return;
+    }
+    template = Objects.requireNonNull(scenarioDetails.template(), "scenario template");
+    LOGGER.info("Using scenario {} - {}", scenarioDetails.id(), scenarioDetails.name());
   }
 
   @When("I create the swarm from that template")
@@ -155,6 +181,16 @@ public class SwarmLifecycleSteps {
       assertEquals("RUNNING", view.get().status(), "Swarm status should be RUNNING after start");
       assertTrue(view.get().workEnabled(), "Workloads should be enabled after start");
     });
+
+    captureWorkerStatuses();
+  }
+
+  @And("the mock-1 worker statuses reflect the swarm topology")
+  public void theMock1WorkerStatusesReflectTheSwarmTopology() {
+    captureWorkerStatuses();
+    for (String role : workerRoles()) {
+      assertWorkerTopology(role);
+    }
   }
 
   @When("I stop the swarm")
@@ -228,6 +264,174 @@ public class SwarmLifecycleSteps {
         LOGGER.warn("Cleanup remove failed for swarm {}", swarmId, ex);
       }
     }
+  }
+
+  private void captureWorkerStatuses() {
+    if (workerStatusesCaptured) {
+      return;
+    }
+    ensureTemplate();
+    List<String> roles = workerRoles();
+    SwarmAssertions.await("status-full events for mock-1 workers", () -> {
+      List<ControlPlaneEvents.StatusEnvelope> statuses = controlPlaneEvents.statusesForSwarm(swarmId);
+      for (String role : roles) {
+        boolean present = statuses.stream()
+            .anyMatch(env -> isStatusFullForRole(env.status(), role));
+        assertTrue(present, () -> "Missing status-full event for role " + role);
+      }
+    });
+
+    List<ControlPlaneEvents.StatusEnvelope> statuses = controlPlaneEvents.statusesForSwarm(swarmId);
+    for (String role : roles) {
+      ControlPlaneEvents.StatusEnvelope envelope = statuses.stream()
+          .filter(env -> isStatusFullForRole(env.status(), role))
+          .max(Comparator.comparing(ControlPlaneEvents.StatusEnvelope::receivedAt))
+          .orElseThrow(() -> new AssertionError("No status-full captured for role " + role));
+      StatusEvent status = envelope.status();
+      workerStatusByRole.put(role, status);
+      String instance = status.instance();
+      assertNotNull(instance, () -> "Status event for role " + role + " should include an instance id");
+      assertFalse(instance.isBlank(), () -> "Status event for role " + role + " should include an instance id");
+      workerInstances.put(role, instance);
+      LOGGER.info("Captured status-full for role={} instance={}", role, instance);
+    }
+    workerStatusesCaptured = true;
+  }
+
+  private List<String> workerRoles() {
+    ensureTemplate();
+    LinkedHashSet<String> roles = new LinkedHashSet<>();
+    for (Bee bee : template.bees()) {
+      if (bee != null && bee.role() != null && !bee.role().isBlank()) {
+        roles.add(bee.role().trim().toLowerCase(Locale.ROOT));
+      }
+    }
+    return List.copyOf(roles);
+  }
+
+  private void assertWorkerTopology(String role) {
+    StatusEvent status = workerStatusByRole.get(role);
+    assertNotNull(status, () -> "No status recorded for role " + role);
+    String instance = workerInstances.get(role);
+    assertNotNull(instance, () -> "No instance recorded for role " + role);
+
+    String expectedInQueue = expectedInboundQueue(role);
+    StatusEvent.InQueue inQueue = status.inQueue();
+    if (expectedInQueue == null) {
+      if (inQueue != null && inQueue.name() != null && !inQueue.name().isBlank()) {
+        throw new AssertionError("Expected no inbound queue for role " + role + " but was " + inQueue.name());
+      }
+    } else {
+      assertNotNull(inQueue, () -> "Expected inbound queue for role " + role);
+      assertEquals(expectedInQueue, inQueue.name(),
+          () -> "Unexpected inbound queue for role " + role);
+    }
+
+    StatusEvent.QueueEndpoints workQueues = status.queues().work();
+    List<String> actualWorkIn = workQueues == null ? List.of() : workQueues.in();
+    List<String> actualWorkOut = workQueues == null ? List.of() : workQueues.out();
+    assertListEquals("queues.work.in for role " + role, expectedWorkIn(role), actualWorkIn);
+    assertListEquals("queues.work.out for role " + role, expectedWorkOut(role), actualWorkOut);
+
+    StatusEvent.QueueEndpoints controlQueues = status.queues().control();
+    List<String> actualControlRoutes = controlQueues == null ? List.of() : controlQueues.routes();
+    assertControlRoutes(role, expectedControlRoutes(role, instance), actualControlRoutes);
+  }
+
+  private boolean isStatusFullForRole(StatusEvent status, String role) {
+    return status != null
+        && "status-full".equalsIgnoreCase(status.kind())
+        && role.equalsIgnoreCase(status.role());
+  }
+
+  private String expectedInboundQueue(String role) {
+    Bee bee = findBee(role);
+    Work work = bee.work();
+    if (work == null || work.in() == null || work.in().isBlank()) {
+      return null;
+    }
+    return queueNameForSuffix(work.in());
+  }
+
+  private List<String> expectedWorkIn(String role) {
+    String queue = expectedInboundQueue(role);
+    return queueList(queue);
+  }
+
+  private List<String> expectedWorkOut(String role) {
+    Bee bee = findBee(role);
+    Work work = bee.work();
+    if (work == null || work.out() == null || work.out().isBlank()) {
+      return List.of();
+    }
+    return queueList(queueNameForSuffix(work.out()));
+  }
+
+  private List<String> expectedControlRoutes(String role, String instance) {
+    List<String> routes = new ArrayList<>();
+    routes.add(signalRoute("config-update", "ALL", role, "ALL"));
+    routes.add(signalRoute("config-update", swarmId, role, "ALL"));
+    routes.add(signalRoute("config-update", swarmId, role, instance));
+    routes.add(signalRoute("config-update", swarmId, "ALL", "ALL"));
+    routes.add(signalRoute("status-request", "ALL", role, "ALL"));
+    routes.add(signalRoute("status-request", swarmId, role, "ALL"));
+    routes.add(signalRoute("status-request", swarmId, role, instance));
+    return routes;
+  }
+
+  private Bee findBee(String role) {
+    ensureTemplate();
+    return template.bees().stream()
+        .filter(bee -> bee != null && bee.role() != null && role.equalsIgnoreCase(bee.role()))
+        .findFirst()
+        .orElseThrow(() -> new AssertionError("No bee with role " + role + " in template"));
+  }
+
+  private String queueNameForSuffix(String suffix) {
+    if (suffix == null || suffix.isBlank()) {
+      return null;
+    }
+    String trimmed = suffix.trim();
+    if (trimmed.contains(".")) {
+      return trimmed;
+    }
+    return "ph." + swarmId + "." + trimmed;
+  }
+
+  private List<String> queueList(String queue) {
+    return queue == null ? List.of() : List.of(queue);
+  }
+
+  private String signalRoute(String command, String swarm, String role, String instance) {
+    return String.join(".", "sig",
+        commandSegment(command),
+        segmentOrAll(swarm),
+        segmentOrAll(role),
+        segmentOrAll(instance));
+  }
+
+  private String commandSegment(String command) {
+    return command == null || command.isBlank() ? "ALL" : command.trim();
+  }
+
+  private String segmentOrAll(String value) {
+    return value == null || value.isBlank() ? "ALL" : value.trim();
+  }
+
+  private void assertListEquals(String context, List<String> expected, List<String> actual) {
+    List<String> expectedList = expected == null ? List.of() : List.copyOf(expected);
+    List<String> actualList = actual == null ? List.of() : List.copyOf(actual);
+    assertEquals(expectedList, actualList,
+        () -> context + " mismatch expected=" + expectedList + " actual=" + actualList);
+  }
+
+  private void assertControlRoutes(String role, List<String> expected, List<String> actual) {
+    List<String> expectedSorted = new ArrayList<>(expected == null ? List.of() : expected);
+    List<String> actualSorted = new ArrayList<>(actual == null ? List.of() : actual);
+    expectedSorted.sort(String::compareTo);
+    actualSorted.sort(String::compareTo);
+    assertEquals(expectedSorted, actualSorted,
+        () -> "control.routes mismatch for role " + role + " expected=" + expectedSorted + " actual=" + actualSorted);
   }
 
   private void ensureHarness() {
