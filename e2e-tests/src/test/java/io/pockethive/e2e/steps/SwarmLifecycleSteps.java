@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -26,6 +27,7 @@ import io.cucumber.java.en.And;
 import io.cucumber.java.en.Given;
 import io.cucumber.java.en.Then;
 import io.cucumber.java.en.When;
+import io.pockethive.Topology;
 import io.pockethive.control.ErrorConfirmation;
 import io.pockethive.control.ReadyConfirmation;
 import io.pockethive.e2e.clients.OrchestratorClient;
@@ -343,8 +345,9 @@ public class SwarmLifecycleSteps {
 
     StatusEvent.QueueEndpoints controlQueues = status.queues().control();
     assertNotNull(controlQueues, () -> "Expected control queue metadata for role " + role);
+    String expectedControlQueue = resolveTopologyValue(controlQueueDescriptor.name());
     assertListEquals("queues.control.in for role " + role,
-        List.of(controlQueueDescriptor.name()), controlQueues.in());
+        queueList(expectedControlQueue), controlQueues.in());
 
     List<String> actualControlRoutes = controlQueues.routes();
     List<String> expectedRoutes = expectedControlRoutes(descriptor, controlQueueDescriptor, instance);
@@ -383,15 +386,15 @@ public class SwarmLifecycleSteps {
   private List<String> expectedControlRoutes(ControlPlaneTopologyDescriptor descriptor,
       ControlQueueDescriptor controlQueueDescriptor, String instance) {
     LinkedHashSet<String> routes = new LinkedHashSet<>();
-    routes.addAll(controlQueueDescriptor.allBindings());
+    addTopologyValues(routes, controlQueueDescriptor.allBindings());
 
     ControlPlaneRouteCatalog catalog = descriptor.routes();
-    routes.addAll(expandRoutes(catalog.configSignals(), instance));
-    routes.addAll(expandRoutes(catalog.statusSignals(), instance));
-    routes.addAll(expandRoutes(catalog.lifecycleSignals(), instance));
-    routes.addAll(expandRoutes(catalog.statusEvents(), instance));
-    routes.addAll(expandRoutes(catalog.lifecycleEvents(), instance));
-    routes.addAll(expandRoutes(catalog.otherEvents(), instance));
+    addTopologyValues(routes, expandRoutes(catalog.configSignals(), instance));
+    addTopologyValues(routes, expandRoutes(catalog.statusSignals(), instance));
+    addTopologyValues(routes, expandRoutes(catalog.lifecycleSignals(), instance));
+    addTopologyValues(routes, expandRoutes(catalog.statusEvents(), instance));
+    addTopologyValues(routes, expandRoutes(catalog.lifecycleEvents(), instance));
+    addTopologyValues(routes, expandRoutes(catalog.otherEvents(), instance));
 
     return List.copyOf(routes);
   }
@@ -405,9 +408,29 @@ public class SwarmLifecycleSteps {
       if (template == null || template.isBlank()) {
         continue;
       }
-      resolved.add(template.replace(ControlPlaneRouteCatalog.INSTANCE_TOKEN, instance));
+      String materialised = template.replace(ControlPlaneRouteCatalog.INSTANCE_TOKEN, instance);
+      resolved.add(resolveTopologyValue(materialised));
     }
     return resolved;
+  }
+
+  private void addTopologyValues(Set<String> routes, Collection<String> values) {
+    if (values == null || values.isEmpty()) {
+      return;
+    }
+    for (String value : values) {
+      String resolved = resolveTopologyValue(value);
+      if (resolved != null && !resolved.isBlank()) {
+        routes.add(resolved);
+      }
+    }
+  }
+
+  private String resolveTopologyValue(String value) {
+    if (value == null || value.isBlank()) {
+      return value;
+    }
+    return value.replace(Topology.SWARM_ID, swarmId);
   }
 
   private ControlPlaneTopologyDescriptor workerDescriptor(String role) {
