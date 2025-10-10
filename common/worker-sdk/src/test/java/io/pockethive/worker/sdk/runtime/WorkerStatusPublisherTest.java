@@ -30,15 +30,27 @@ class WorkerStatusPublisherTest {
     }
 
     @Test
-    void workRouteHelpersRegisterAdditionalRoutes() {
+    void workRouteHelpersReplaceDefinitionRoutesWhenDifferent() {
         WorkerState state = new WorkerState(DEFINITION);
         WorkerStatusPublisher publisher = new WorkerStatusPublisher(state, () -> { }, () -> { });
 
         publisher.workIn("dynamic.in");
         publisher.workOut("dynamic.out");
 
-        assertThat(state.inboundRoutes()).contains("in.queue", "dynamic.in");
-        assertThat(state.outboundRoutes()).contains("out.queue", "dynamic.out");
+        assertThat(state.inboundRoutes()).containsExactlyInAnyOrder("dynamic.in");
+        assertThat(state.outboundRoutes()).containsExactlyInAnyOrder("dynamic.out");
+    }
+
+    @Test
+    void workRouteHelpersRetainDefinitionWhenUnchanged() {
+        WorkerState state = new WorkerState(DEFINITION);
+        WorkerStatusPublisher publisher = new WorkerStatusPublisher(state, () -> { }, () -> { });
+
+        publisher.workIn("in.queue");
+        publisher.workOut("out.queue");
+
+        assertThat(state.inboundRoutes()).containsExactlyInAnyOrder("in.queue");
+        assertThat(state.outboundRoutes()).containsExactlyInAnyOrder("out.queue");
     }
 
     @Test

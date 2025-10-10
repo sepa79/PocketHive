@@ -106,12 +106,20 @@ public final class WorkerState {
     void addInboundRoute(String queue) {
         if (queue != null && !queue.isBlank()) {
             workInRoutes.add(queue);
+            String definitionQueue = definition.inQueue();
+            if (definitionQueue != null && !definitionQueue.equals(queue)) {
+                workInRoutes.remove(definitionQueue);
+            }
         }
     }
 
     void addOutboundRoute(String queue) {
         if (queue != null && !queue.isBlank()) {
             workOutRoutes.add(queue);
+            String definitionQueue = definition.outQueue();
+            if (definitionQueue != null && !definitionQueue.equals(queue)) {
+                workOutRoutes.remove(definitionQueue);
+            }
         }
     }
 
