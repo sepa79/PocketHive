@@ -3,7 +3,6 @@ package io.pockethive.postprocessor;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.DistributionSummary;
 import io.micrometer.core.instrument.MeterRegistry;
-import io.pockethive.Topology;
 import io.pockethive.TopologyDefaults;
 import io.pockethive.observability.Hop;
 import io.pockethive.observability.ObservabilityContext;
@@ -55,11 +54,13 @@ class PostProcessorWorkerImpl implements MessageWorker {
   private static final String ERROR_HEADER = "x-ph-error";
 
   private final PostProcessorDefaults defaults;
+  private final PostProcessorQueuesProperties queues;
   private final AtomicReference<PostProcessorMetrics> metricsRef = new AtomicReference<>();
 
   @Autowired
-  PostProcessorWorkerImpl(PostProcessorDefaults defaults) {
+  PostProcessorWorkerImpl(PostProcessorDefaults defaults, PostProcessorQueuesProperties queues) {
     this.defaults = Objects.requireNonNull(defaults, "defaults");
+    this.queues = Objects.requireNonNull(queues, "queues");
   }
 
   /**
@@ -103,7 +104,7 @@ class PostProcessorWorkerImpl implements MessageWorker {
     metrics.record(measurements, error);
 
     context.statusPublisher()
-        .workIn(Topology.FINAL_QUEUE)
+        .workIn(queues.getFinalQueue())
         .update(status -> status
             .data("enabled", config.enabled())
             .data("errors", metrics.errorsCount())
