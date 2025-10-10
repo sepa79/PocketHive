@@ -73,12 +73,18 @@ class WorkerControlPlaneAutoConfigurationTest {
     }
 
     @Test
-    void bindsTrafficQueuesToTrafficExchange() {
+    void doesNotDeclareTrafficQueues() {
         contextRunner
             .withPropertyValues("pockethive.control-plane.worker.role=moderator")
             .run(context -> {
                 Declarables declarables = context.getBean("workerControlPlaneDeclarables", Declarables.class);
                 assertThat(declarables.getDeclarables()).isNotEmpty();
+
+                boolean declaresTrafficQueue = declarables.getDeclarables().stream()
+                    .filter(Queue.class::isInstance)
+                    .map(Queue.class::cast)
+                    .anyMatch(queue -> Topology.GEN_QUEUE.equals(queue.getName()));
+                assertThat(declaresTrafficQueue).isFalse();
 
                 Optional<Binding> trafficBinding = declarables.getDeclarables().stream()
                     .filter(Binding.class::isInstance)
@@ -86,8 +92,7 @@ class WorkerControlPlaneAutoConfigurationTest {
                     .filter(binding -> Topology.GEN_QUEUE.equals(binding.getDestination()))
                     .findFirst();
 
-                assertThat(trafficBinding).isPresent();
-                assertThat(trafficBinding.get().getExchange()).isEqualTo(Topology.EXCHANGE);
+                assertThat(trafficBinding).isEmpty();
             });
     }
 }

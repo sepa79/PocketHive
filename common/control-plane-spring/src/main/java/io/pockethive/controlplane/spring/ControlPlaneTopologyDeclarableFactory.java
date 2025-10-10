@@ -5,6 +5,7 @@ import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.controlplane.topology.ControlPlaneTopologyDescriptor;
 import io.pockethive.controlplane.topology.ControlQueueDescriptor;
 import io.pockethive.controlplane.topology.QueueDescriptor;
+import io.pockethive.controlplane.topology.QueueScope;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -36,6 +37,9 @@ public final class ControlPlaneTopologyDeclarableFactory {
         if (!additionalQueues.isEmpty()) {
             TopicExchange additionalExchange = resolveAdditionalQueueExchange(descriptor, exchange);
             for (QueueDescriptor queueDescriptor : additionalQueues) {
+                if (queueDescriptor.scope() == QueueScope.TRAFFIC) {
+                    continue;
+                }
                 declarables.addAll(createQueue(queueDescriptor, additionalExchange));
             }
         }
