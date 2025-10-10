@@ -778,7 +778,7 @@ class SwarmSignalListenerTest {
     stubLifecycleDefaults();
     listener.handle(signal("status-request", "id-status", "corr-status"), statusRequestSignal("swarm-controller", "inst"));
     verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
-        startsWith(statusEvent("status-full", "swarm-controller", "inst")),
+        argThat((String routingKey) -> routingKey.startsWith(statusEvent("status-full", "swarm-controller", "inst"))),
         argThat(this::payloadContainsDefaultQueueStats));
     verify(lifecycle, atLeastOnce()).getStatus();
   }
@@ -788,7 +788,7 @@ class SwarmSignalListenerTest {
     when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
     new SwarmSignalListener(lifecycle, rabbit, "inst", mapper);
     verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
-        startsWith(statusEvent("status-full", "swarm-controller", "inst")),
+        argThat((String routingKey) -> routingKey.startsWith(statusEvent("status-full", "swarm-controller", "inst"))),
         argThat(this::payloadContainsDefaultQueueStats));
     verify(lifecycle, atLeastOnce()).getStatus();
   }
@@ -803,7 +803,7 @@ class SwarmSignalListenerTest {
       when(lifecycle.getMetrics()).thenReturn(new SwarmMetrics(0,0,0,0, java.time.Instant.now()));
       listener.status();
       verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
-          startsWith(statusEvent("status-delta", "swarm-controller", "inst")),
+          argThat((String routingKey) -> routingKey.startsWith(statusEvent("status-delta", "swarm-controller", "inst"))),
           argThat(this::payloadContainsDefaultQueueStats));
       verify(lifecycle, atLeastOnce()).getStatus();
   }
