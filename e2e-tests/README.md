@@ -21,6 +21,23 @@ src/
     harness-skeleton.feature # Placeholder scenario tagged as @wip so it does not execute
 ```
 
+## Control-plane event helpers
+
+The `support` package exposes `ControlPlaneEvents`, a lightweight RabbitMQ consumer that aggregates both control-plane
+confirmations and worker status envelopes emitted on the `ev.status-*` routes. The helper offers the following
+capabilities for step definitions:
+
+- `statuses()` / `statusesForSwarm(swarmId)` expose the collected `StatusEvent` snapshots for ad-hoc inspection.
+- `latestStatusEvent(swarmId, role, instance)` returns the most recent status for a particular worker identity along with
+  `lastStatusSeenAt(...)` to retrieve the corresponding receive timestamp.
+- `assertWorkQueues(...)` and `assertControlQueues(...)` compare the advertised queue lists (`in`, `routes`, `out`) from
+  the snapshot against the expected values, throwing a descriptive `AssertionError` when they diverge. These assertions
+  are designed for Awaitility-driven steps that wait until the control plane publishes the desired topology.
+
+The status payloads are deserialised into the immutable `StatusEvent` DTO, which mirrors the schema produced by
+`StatusEnvelopeBuilder`. This keeps the test harness aligned with the production envelope format while still allowing the
+tests to focus on the relevant fields.
+
 ## Execution
 
 Run the suite once the PocketHive stack is deployed and the required environment variables are available. Helper

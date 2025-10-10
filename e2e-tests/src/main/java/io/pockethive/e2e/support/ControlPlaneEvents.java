@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -35,6 +36,7 @@ public final class ControlPlaneEvents implements AutoCloseable {
   private final String consumerTag;
   private final ControlPlaneEventParser parser;
   private final List<ConfirmationEnvelope> confirmations = new CopyOnWriteArrayList<>();
+  private final List<StatusEnvelope> statuses = new CopyOnWriteArrayList<>();
 
   public ControlPlaneEvents(ConnectionFactory connectionFactory) {
     Objects.requireNonNull(connectionFactory, "connectionFactory");
@@ -45,6 +47,8 @@ public final class ControlPlaneEvents implements AutoCloseable {
       this.queueName = channel.queueDeclare("", false, true, true, Collections.emptyMap()).getQueue();
       channel.queueBind(queueName, Topology.CONTROL_EXCHANGE, "ev.ready.#");
       channel.queueBind(queueName, Topology.CONTROL_EXCHANGE, "ev.error.#");
+      channel.queueBind(queueName, Topology.CONTROL_EXCHANGE, "ev.status-full.#");
+      channel.queueBind(queueName, Topology.CONTROL_EXCHANGE, "ev.status-delta.#");
       DeliverCallback callback = this::handleDelivery;
       this.consumerTag = channel.basicConsume(queueName, true, callback, consumerTag -> { });
     } catch (Exception ex) {
@@ -52,23 +56,46 @@ public final class ControlPlaneEvents implements AutoCloseable {
     }
   }
 
+  ControlPlaneEvents(ControlPlaneEventParser parser) {
+    this.connection = null;
+    this.channel = null;
+    this.queueName = null;
+    this.consumerTag = null;
+    this.parser = Objects.requireNonNull(parser, "parser");
+  }
+
   private void handleDelivery(String tag, Delivery delivery) {
     String routingKey = delivery.getEnvelope().getRoutingKey();
     byte[] body = delivery.getBody();
     try {
-      Confirmation confirmation = parser.parse(routingKey, body);
-      if (confirmation != null) {
-        confirmations.add(new ConfirmationEnvelope(routingKey, confirmation, Instant.now()));
+      ControlPlaneEventParser.ParsedEvent event = parser.parse(routingKey, body);
+      Instant receivedAt = Instant.now();
+      if (event.hasConfirmation()) {
+        recordConfirmation(routingKey, event.confirmation(), receivedAt);
+      } else if (event.hasStatus()) {
+        recordStatus(routingKey, event.status(), receivedAt);
       } else {
-        LOGGER.debug("Ignoring non-confirmation message on {}", routingKey);
+        LOGGER.debug("Ignoring unsupported control-plane message on {}", routingKey);
       }
     } catch (IOException ex) {
       LOGGER.warn("Failed to parse confirmation payload on {}", routingKey, ex);
     }
   }
 
+  void recordConfirmation(String routingKey, Confirmation confirmation, Instant receivedAt) {
+    confirmations.add(new ConfirmationEnvelope(routingKey, confirmation, receivedAt));
+  }
+
+  void recordStatus(String routingKey, StatusEvent status, Instant receivedAt) {
+    statuses.add(new StatusEnvelope(routingKey, status, receivedAt));
+  }
+
   public List<ConfirmationEnvelope> confirmations() {
     return new ArrayList<>(confirmations);
+  }
+
+  public List<StatusEnvelope> statuses() {
+    return new ArrayList<>(statuses);
   }
 
   public Optional<ConfirmationEnvelope> findReady(String signal, String correlationId) {
@@ -114,6 +141,49 @@ public final class ControlPlaneEvents implements AutoCloseable {
         .count();
   }
 
+  public List<StatusEnvelope> statusesForSwarm(String swarmId) {
+    if (swarmId == null) {
+      return List.of();
+    }
+    return statuses.stream()
+        .filter(env -> equalsIgnoreCase(swarmId, env.status().swarmId()))
+        .toList();
+  }
+
+  public Optional<StatusEnvelope> latestStatus(String swarmId, String role, String instance) {
+    return statuses.stream()
+        .filter(env -> matchesStatus(env.status(), swarmId, role, instance))
+        .max(Comparator.comparing(StatusEnvelope::receivedAt));
+  }
+
+  public Optional<StatusEvent> latestStatusEvent(String swarmId, String role, String instance) {
+    return latestStatus(swarmId, role, instance).map(StatusEnvelope::status);
+  }
+
+  public Optional<Instant> lastStatusSeenAt(String swarmId, String role, String instance) {
+    return latestStatus(swarmId, role, instance).map(StatusEnvelope::receivedAt);
+  }
+
+  public void assertWorkQueues(String swarmId, String role, String instance,
+      List<String> expectedIn, List<String> expectedRoutes, List<String> expectedOut) {
+    StatusEvent status = latestStatusEvent(swarmId, role, instance)
+        .orElseThrow(() -> new AssertionError("No status event recorded for " + describe(swarmId, role, instance)));
+    StatusEvent.QueueEndpoints queues = status.queues().work();
+    assertQueueSection("work.in", expectedIn, queues == null ? List.of() : queues.in());
+    assertQueueSection("work.routes", expectedRoutes, queues == null ? List.of() : queues.routes());
+    assertQueueSection("work.out", expectedOut, queues == null ? List.of() : queues.out());
+  }
+
+  public void assertControlQueues(String swarmId, String role, String instance,
+      List<String> expectedIn, List<String> expectedRoutes, List<String> expectedOut) {
+    StatusEvent status = latestStatusEvent(swarmId, role, instance)
+        .orElseThrow(() -> new AssertionError("No status event recorded for " + describe(swarmId, role, instance)));
+    StatusEvent.QueueEndpoints queues = status.queues().control();
+    assertQueueSection("control.in", expectedIn, queues == null ? List.of() : queues.in());
+    assertQueueSection("control.routes", expectedRoutes, queues == null ? List.of() : queues.routes());
+    assertQueueSection("control.out", expectedOut, queues == null ? List.of() : queues.out());
+  }
+
   @Override
   public void close() {
     try {
@@ -153,6 +223,37 @@ public final class ControlPlaneEvents implements AutoCloseable {
     return correlationId.equals(confirmation.correlationId());
   }
 
+  private boolean matchesStatus(StatusEvent status, String swarmId, String role, String instance) {
+    if (status == null) {
+      return false;
+    }
+    return equalsIgnoreCase(swarmId, status.swarmId())
+        && equalsIgnoreCase(role, status.role())
+        && equalsIgnoreCase(instance, status.instance());
+  }
+
+  private boolean equalsIgnoreCase(String left, String right) {
+    if (left == null || right == null) {
+      return false;
+    }
+    return left.equalsIgnoreCase(right);
+  }
+
+  private void assertQueueSection(String section, List<String> expected, List<String> actual) {
+    List<String> expectedList = expected == null ? List.of() : List.copyOf(expected);
+    List<String> actualList = actual == null ? List.of() : List.copyOf(actual);
+    if (!expectedList.equals(actualList)) {
+      throw new AssertionError(String.format("Queue section %s mismatch. expected=%s actual=%s", section, expectedList, actualList));
+    }
+  }
+
+  private String describe(String swarmId, String role, String instance) {
+    return "swarm=" + swarmId + ", role=" + role + ", instance=" + instance;
+  }
+
   public record ConfirmationEnvelope(String routingKey, Confirmation confirmation, Instant receivedAt) {
+  }
+
+  public record StatusEnvelope(String routingKey, StatusEvent status, Instant receivedAt) {
   }
 }

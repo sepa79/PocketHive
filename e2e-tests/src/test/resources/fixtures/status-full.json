@@ -1,0 +1,49 @@
+{
+  "event": "status",
+  "version": "1.0",
+  "messageId": "msg-123",
+  "timestamp": "2024-07-01T12:34:56Z",
+  "location": "local",
+  "kind": "status-full",
+  "role": "processor",
+  "instance": "processor-1",
+  "origin": "worker-control",
+  "swarmId": "swarm-alpha",
+  "enabled": true,
+  "state": "Running",
+  "watermark": "2024-07-01T12:34:50Z",
+  "maxStalenessSec": 45,
+  "traffic": "traffic.exchange",
+  "totals": {
+    "desired": 3,
+    "healthy": 3,
+    "running": 3,
+    "enabled": 3
+  },
+  "queueStats": {
+    "processor.input": {
+      "depth": 0
+    }
+  },
+  "inQueue": {
+    "name": "processor.input",
+    "routingKeys": ["ev.ready.processor", "ev.error.processor"]
+  },
+  "publishes": ["traffic.results"],
+  "queues": {
+    "work": {
+      "in": ["processor.input"],
+      "routes": ["rk.alpha"],
+      "out": ["rk.beta"]
+    },
+    "control": {
+      "in": ["control.input"],
+      "routes": ["ev.status-full.swarm-alpha"],
+      "out": ["ev.status-delta.swarm-alpha"]
+    }
+  },
+  "data": {
+    "tps": 123,
+    "extra": "value"
+  }
+}
