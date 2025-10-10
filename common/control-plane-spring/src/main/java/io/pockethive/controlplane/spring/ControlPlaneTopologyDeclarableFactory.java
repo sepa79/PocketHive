@@ -1,5 +1,6 @@
 package io.pockethive.controlplane.spring;
 
+import io.pockethive.Topology;
 import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.controlplane.topology.ControlPlaneTopologyDescriptor;
 import io.pockethive.controlplane.topology.ControlQueueDescriptor;
@@ -32,8 +33,9 @@ public final class ControlPlaneTopologyDeclarableFactory {
         descriptor.controlQueue(instanceId).ifPresent(queueDescriptor ->
             declarables.addAll(createControlQueue(queueDescriptor, exchange)));
         Collection<QueueDescriptor> additionalQueues = descriptor.additionalQueues(instanceId);
+        TopicExchange trafficExchange = new TopicExchange(Topology.EXCHANGE);
         for (QueueDescriptor queueDescriptor : additionalQueues) {
-            declarables.addAll(createQueue(queueDescriptor, exchange));
+            declarables.addAll(createQueue(queueDescriptor, trafficExchange));
         }
         return new Declarables(declarables);
     }
