@@ -15,12 +15,26 @@ export default function ComponentDetail({ component, onClose }: Props) {
 
   useEffect(() => {
     const cfg = component.config || {}
-    const init: Record<string, string> = { ...(cfg as Record<string, string>) }
-    if (cfg && typeof cfg === 'object' && 'headers' in cfg && typeof cfg.headers === 'object') {
-      try {
-        init.headers = JSON.stringify((cfg as { headers: unknown }).headers, null, 2)
-      } catch {
-        init.headers = ''
+    const init: Record<string, string> = {}
+    if (cfg && typeof cfg === 'object') {
+      Object.entries(cfg as Record<string, unknown>).forEach(([key, value]) => {
+        if (key === 'headers' || key === 'enabled') return
+        if (value === undefined || value === null) return
+        if (typeof value === 'string') {
+          init[key] = value
+        } else if (typeof value === 'number' || typeof value === 'boolean') {
+          init[key] = String(value)
+        }
+      })
+      const headersValue = (cfg as Record<string, unknown>).headers
+      if (typeof headersValue === 'string') {
+        init.headers = headersValue
+      } else if (headersValue && typeof headersValue === 'object') {
+        try {
+          init.headers = JSON.stringify(headersValue, null, 2)
+        } catch {
+          init.headers = ''
+        }
       }
     }
     setForm(init)

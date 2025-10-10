@@ -112,4 +112,71 @@ describe('swarm lifecycle', () => {
     unsubscribe()
     setClient(null)
   })
+
+  it('merges worker-specific config and data from status snapshots', () => {
+    const publish = vi.fn()
+    let cb: (msg: { body: string; headers: Record<string, string> }) => void = () => {}
+    const subscribe = vi
+      .fn()
+      .mockImplementation((_dest: string, fn: (msg: { body: string; headers: Record<string, string> }) => void) => {
+        cb = fn
+        return { unsubscribe() {} }
+      })
+    setClient({ active: true, publish, subscribe } as unknown as Client)
+
+    let latest: Component[] = []
+    const unsubscribe = subscribeComponents((list) => {
+      latest = list.map((comp) => ({
+        ...comp,
+        config: comp.config ? { ...comp.config } : undefined,
+      }))
+    })
+
+    const baseHeaders = { destination: '/exchange/ph.control/ev.status.swarm-sw1' }
+    cb({
+      headers: baseHeaders,
+      body: JSON.stringify({
+        event: 'status',
+        kind: 'status',
+        version: '1',
+        role: 'generator',
+        instance: 'generator-sw1',
+        messageId: 'm-1',
+        timestamp: new Date().toISOString(),
+        enabled: true,
+        data: {
+          processedTotal: 321,
+          workers: [
+            {
+              role: 'moderator',
+              enabled: true,
+              config: { ratePerSec: 2 },
+              data: { processedDelta: 7 },
+            },
+            {
+              role: 'generator',
+              enabled: false,
+              config: { ratePerSec: 5, path: '/demo' },
+              data: { processedDelta: 42 },
+            },
+          ],
+        },
+      }),
+    })
+
+    const generator = latest.find((comp) => comp.id === 'generator-sw1')
+    expect(generator).toBeTruthy()
+    expect(generator?.config).toBeTruthy()
+    expect(generator?.config).not.toHaveProperty('workers')
+    expect(generator?.config).toMatchObject({
+      ratePerSec: 5,
+      path: '/demo',
+      processedDelta: 42,
+      processedTotal: 321,
+      enabled: false,
+    })
+
+    unsubscribe()
+    setClient(null)
+  })
 })
