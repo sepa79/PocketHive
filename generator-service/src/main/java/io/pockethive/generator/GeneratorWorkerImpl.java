@@ -1,5 +1,6 @@
 package io.pockethive.generator;
 
+import io.pockethive.Topology;
 import io.pockethive.TopologyDefaults;
 import io.pockethive.worker.sdk.api.GeneratorWorker;
 import io.pockethive.worker.sdk.api.WorkMessage;
@@ -49,12 +50,10 @@ import org.springframework.stereotype.Component;
 class GeneratorWorkerImpl implements GeneratorWorker {
 
   private final GeneratorDefaults defaults;
-  private final GeneratorQueuesProperties queues;
 
   @Autowired
-  GeneratorWorkerImpl(GeneratorDefaults defaults, GeneratorQueuesProperties queues) {
+  GeneratorWorkerImpl(GeneratorDefaults defaults) {
     this.defaults = defaults;
-    this.queues = queues;
   }
 
   /**
@@ -102,7 +101,7 @@ class GeneratorWorkerImpl implements GeneratorWorker {
     GeneratorWorkerConfig config = context.config(GeneratorWorkerConfig.class)
         .orElseGet(defaults::asConfig);
     context.statusPublisher()
-        .workOut(queues.getGenQueue())
+        .workOut(Topology.GEN_QUEUE)
         .update(status -> status
             .data("path", config.path())
             .data("method", config.method())
