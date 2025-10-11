@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.12.2] - 2025-10-11
+Timestamp: 2025-10-11T00:00:00Z
+
+- Release: bump the PocketHive patch version to 0.12.2 so published artifacts and tooling reference the latest build.
+
 ## [0.12.1] - 2025-10-10
 Timestamp: 2025-10-10T00:00:00Z
 
