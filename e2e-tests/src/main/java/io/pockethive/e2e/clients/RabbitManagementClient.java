@@ -41,7 +41,7 @@ public final class RabbitManagementClient {
     Objects.requireNonNull(queueName, "queueName");
 
     String safeVhost = virtualHost.isBlank() ? "/" : virtualHost;
-    String path = "/queues/" + encodeSegment(safeVhost) + "/" + encodeSegment(queueName) + "/bindings";
+    String path = "/api/queues/" + encodeSegment(safeVhost) + "/" + encodeSegment(queueName) + "/bindings";
     List<QueueBinding> bindings = webClient.get()
         .uri(path)
         .accept(MediaType.APPLICATION_JSON)
