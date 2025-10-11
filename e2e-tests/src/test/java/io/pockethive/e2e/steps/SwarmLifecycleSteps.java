@@ -35,6 +35,7 @@ import io.pockethive.e2e.clients.OrchestratorClient.ControlRequest;
 import io.pockethive.e2e.clients.OrchestratorClient.ControlResponse;
 import io.pockethive.e2e.clients.OrchestratorClient.SwarmCreateRequest;
 import io.pockethive.e2e.clients.OrchestratorClient.SwarmView;
+import io.pockethive.e2e.clients.RabbitManagementClient;
 import io.pockethive.e2e.clients.RabbitSubscriptions;
 import io.pockethive.e2e.clients.ScenarioManagerClient;
 import io.pockethive.e2e.clients.ScenarioManagerClient.ScenarioDetails;
@@ -63,6 +64,7 @@ public class SwarmLifecycleSteps {
   private OrchestratorClient orchestratorClient;
   private ScenarioManagerClient scenarioManagerClient;
   private RabbitSubscriptions rabbitSubscriptions;
+  private RabbitManagementClient rabbitManagementClient;
   private ControlPlaneEvents controlPlaneEvents;
   private ScenarioDetails scenarioDetails;
   private SwarmTemplate template;
@@ -90,6 +92,7 @@ public class SwarmLifecycleSteps {
     orchestratorClient = OrchestratorClient.create(endpoints.orchestratorBaseUrl());
     scenarioManagerClient = ScenarioManagerClient.create(endpoints.scenarioManagerBaseUrl());
     rabbitSubscriptions = RabbitSubscriptions.from(endpoints.rabbitMq());
+    rabbitManagementClient = RabbitManagementClient.create(endpoints.rabbitMq());
     controlPlaneEvents = rabbitSubscriptions.controlPlaneEvents();
 
     String baseSwarmId = endpoints.defaultSwarmId();
@@ -340,6 +343,55 @@ public class SwarmLifecycleSteps {
     List<String> actualControlRoutes = controlQueues.routes();
     List<String> expectedRoutes = expectedControlRoutes(descriptor, controlQueueDescriptor, instance);
     assertControlRoutes(role, expectedRoutes, actualControlRoutes);
+
+    assertRabbitBindings(role, controlQueueDescriptor, expectedControlQueue);
+  }
+
+  private void assertRabbitBindings(String role, ControlQueueDescriptor controlQueueDescriptor, String queueName) {
+    assertNotNull(rabbitManagementClient, "RabbitMQ management client not initialised");
+
+    java.util.LinkedHashSet<String> expectedRoutingKeys = controlQueueDescriptor.allBindings().stream()
+        .map(this::resolveTopologyValue)
+        .filter(value -> value != null && !value.isBlank())
+        .collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new));
+
+    assertFalse(expectedRoutingKeys.isEmpty(),
+        () -> "No expected bindings derived for role " + role + " queue=" + queueName);
+    expectedRoutingKeys.forEach(value -> assertNoDefault("expected binding", role, queueName, value));
+    assertNoDefault("control queue", role, queueName, queueName);
+
+    List<RabbitManagementClient.QueueBinding> actualBindings = rabbitManagementClient.listBindings(
+        endpoints.rabbitMq().virtualHost(), queueName);
+
+    assertFalse(actualBindings.isEmpty(),
+        () -> "Management API reported no bindings for queue " + queueName + " role=" + role);
+
+    java.util.LinkedHashSet<String> actualRoutingKeys = new java.util.LinkedHashSet<>();
+    for (RabbitManagementClient.QueueBinding binding : actualBindings) {
+      assertNoDefault("binding", role, queueName, binding.routingKey());
+      assertNoDefault("binding source", role, queueName, binding.source());
+      assertNoDefault("binding destination", role, queueName, binding.destination());
+      actualRoutingKeys.add(binding.routingKey());
+    }
+
+    assertEquals(expectedRoutingKeys.size(), actualRoutingKeys.size(),
+        () -> "Binding count mismatch for role " + role + " queue=" + queueName
+            + " expected=" + expectedRoutingKeys.size() + " actual=" + actualRoutingKeys.size()
+            + " details=" + actualBindings.stream().map(RabbitManagementClient.QueueBinding::toSummary).toList());
+
+    assertEquals(expectedRoutingKeys, actualRoutingKeys,
+        () -> "Routing key mismatch for role " + role + " queue=" + queueName
+            + " expected=" + expectedRoutingKeys + " actual=" + actualRoutingKeys);
+  }
+
+  private void assertNoDefault(String context, String role, String queueName, String value) {
+    if (value == null) {
+      return;
+    }
+    if (value.toLowerCase(Locale.ROOT).contains("default")) {
+      throw new AssertionError(context + " contains forbidden keyword 'default' for role " + role
+          + " queue=" + queueName + " value=" + value);
+    }
   }
 
   private boolean isStatusFullForRole(StatusEvent status, String role) {

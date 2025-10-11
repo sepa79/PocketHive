@@ -2,6 +2,7 @@ package io.pockethive.e2e.config;
 
 import java.net.URI;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 
 /**
@@ -16,6 +17,8 @@ public final class EnvironmentConfig {
   public static final String RABBITMQ_DEFAULT_USER = "RABBITMQ_DEFAULT_USER";
   public static final String RABBITMQ_DEFAULT_PASS = "RABBITMQ_DEFAULT_PASS";
   public static final String RABBITMQ_VHOST = "RABBITMQ_VHOST";
+  public static final String RABBITMQ_MANAGEMENT_BASE_URL = "RABBITMQ_MANAGEMENT_BASE_URL";
+  public static final String RABBITMQ_MANAGEMENT_PORT = "RABBITMQ_MANAGEMENT_PORT";
   public static final String UI_WEBSOCKET_URI = "UI_WEBSOCKET_URI";
   public static final String UI_BASE_URL = "UI_BASE_URL";
   public static final String SWARM_ID = "SWARM_ID";
@@ -85,7 +88,21 @@ public final class EnvironmentConfig {
     String username = env(RABBITMQ_DEFAULT_USER).orElse("guest");
     String password = env(RABBITMQ_DEFAULT_PASS).orElse("guest");
     String virtualHost = env(RABBITMQ_VHOST).orElse("/");
-    return new RabbitMqSettings(host, port, username, password, virtualHost);
+    int managementPort = env(RABBITMQ_MANAGEMENT_PORT)
+        .map(value -> parsePort(value, "RabbitMQ management port"))
+        .orElse(15672);
+    URI managementBaseUrl = env(RABBITMQ_MANAGEMENT_BASE_URL)
+        .map(EnvironmentConfig::toUri)
+        .orElseGet(() -> httpUri(host, managementPort, "/api"));
+    return new RabbitMqSettings(host, port, username, password, virtualHost, managementBaseUrl);
+  }
+
+  private static int parsePort(String value, String field) {
+    try {
+      return Integer.parseInt(value);
+    } catch (NumberFormatException ex) {
+      throw new IllegalStateException("Invalid " + field + " configured: " + value, ex);
+    }
   }
 
   private static Optional<String> env(String variable) {
@@ -120,28 +137,35 @@ public final class EnvironmentConfig {
      * Sensitive information (such as credentials embedded in URIs) should be redacted before outputting.
      */
     public Map<String, String> asMap() {
-      return Map.of(
-          "orchestratorBaseUrl", orchestratorBaseUrl.toString(),
-          "scenarioManagerBaseUrl", scenarioManagerBaseUrl.toString(),
-          "rabbitMqHost", rabbitMq.host(),
-          "rabbitMqPort", Integer.toString(rabbitMq.port()),
-          "rabbitMqUsername", rabbitMq.username(),
-          "rabbitMqVirtualHost", rabbitMq.virtualHost(),
-          "uiWebsocketUri", uiWebsocketUri.map(URI::toString).orElse("<not-configured>"),
-          "uiBaseUrl", uiBaseUrl.map(URI::toString).orElse("<not-configured>"),
-          "defaultSwarmId", defaultSwarmId,
-          "idempotencyKeyPrefix", idempotencyKeyPrefix
+      return Map.ofEntries(
+          Map.entry("orchestratorBaseUrl", orchestratorBaseUrl.toString()),
+          Map.entry("scenarioManagerBaseUrl", scenarioManagerBaseUrl.toString()),
+          Map.entry("rabbitMqHost", rabbitMq.host()),
+          Map.entry("rabbitMqPort", Integer.toString(rabbitMq.port())),
+          Map.entry("rabbitMqUsername", rabbitMq.username()),
+          Map.entry("rabbitMqVirtualHost", rabbitMq.virtualHost()),
+          Map.entry("rabbitMqManagementBaseUrl", rabbitMq.managementBaseUrl().toString()),
+          Map.entry("uiWebsocketUri", uiWebsocketUri.map(URI::toString).orElse("<not-configured>")),
+          Map.entry("uiBaseUrl", uiBaseUrl.map(URI::toString).orElse("<not-configured>")),
+          Map.entry("defaultSwarmId", defaultSwarmId),
+          Map.entry("idempotencyKeyPrefix", idempotencyKeyPrefix)
       );
     }
   }
 
-  public record RabbitMqSettings(String host, int port, String username, String password, String virtualHost) {
+  public record RabbitMqSettings(String host,
+                                 int port,
+                                 String username,
+                                 String password,
+                                 String virtualHost,
+                                 URI managementBaseUrl) {
 
     public RabbitMqSettings {
       host = requireNonBlank(host, "RabbitMQ host");
       username = requireNonBlank(username, "RabbitMQ username");
       password = password == null ? "" : password;
       virtualHost = normaliseVirtualHost(virtualHost);
+      managementBaseUrl = Objects.requireNonNull(managementBaseUrl, "RabbitMQ management base URL must not be null");
     }
 
     public String redactedUri() {
@@ -198,6 +222,14 @@ public final class EnvironmentConfig {
       return new URI(httpScheme, websocketUri.getUserInfo(), websocketUri.getHost(), websocketUri.getPort(), null, null, null);
     } catch (Exception ex) {
       throw new IllegalStateException("Failed to derive HTTP base URL from WebSocket URI: " + websocketUri, ex);
+    }
+  }
+
+  private static URI httpUri(String host, int port, String path) {
+    try {
+      return new URI("http", null, host, port, path, null, null);
+    } catch (Exception ex) {
+      throw new IllegalStateException("Failed to construct RabbitMQ management URI", ex);
     }
   }
 }
