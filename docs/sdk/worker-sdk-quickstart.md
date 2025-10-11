@@ -52,6 +52,9 @@ class ProcessorWorkerImpl implements MessageWorker {
 
 Generator workers follow the same pattern but implement `GeneratorWorker` and omit `inQueue`.
 
+> **Status topology note**
+> The Worker SDK automatically mirrors the descriptor queues into the control-plane status payload via `statusPublisher().workIn(...)` and `statusPublisher().workOut(...)`. The legacy `inQueue` field in status events has been removed; consumers should rely on the richer `queues.work`/`queues.control` block instead.
+
 ## 3. Implement the worker interfaces
 
 The Stage 1 runtime discovers annotated beans and invokes the corresponding business interface:

@@ -9,10 +9,6 @@ export interface ControlEvent {
   timestamp: string;
   enabled?: boolean;
   traffic?: string;
-  inQueue?: {
-    name: string;
-    routingKeys?: string[];
-  };
   publishes?: string[];
   queues?: {
     work?: {
