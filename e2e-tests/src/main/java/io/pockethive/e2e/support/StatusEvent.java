@@ -26,7 +26,6 @@ public record StatusEvent(
     Long maxStalenessSec,
     Totals totals,
     Map<String, Object> queueStats,
-    InQueue inQueue,
     List<String> publishes,
     Queues queues,
     Map<String, Object> data,
@@ -44,14 +43,6 @@ public record StatusEvent(
       return Map.of();
     }
     return Collections.unmodifiableMap(new LinkedHashMap<>(source));
-  }
-
-  @JsonIgnoreProperties(ignoreUnknown = true)
-  public record InQueue(String name, List<String> routingKeys) {
-
-    public InQueue {
-      routingKeys = routingKeys == null ? List.of() : List.copyOf(routingKeys);
-    }
   }
 
   @JsonIgnoreProperties(ignoreUnknown = true)

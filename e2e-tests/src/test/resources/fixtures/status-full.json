@@ -25,10 +25,6 @@
       "depth": 0
     }
   },
-  "inQueue": {
-    "name": "processor.input",
-    "routingKeys": ["ev.ready.processor", "ev.error.processor"]
-  },
   "publishes": ["traffic.results"],
   "queues": {
     "work": {

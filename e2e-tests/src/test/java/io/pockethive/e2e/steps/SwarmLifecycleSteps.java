@@ -325,18 +325,6 @@ public class SwarmLifecycleSteps {
     ControlQueueDescriptor controlQueueDescriptor = descriptor.controlQueue(instance)
         .orElseThrow(() -> new AssertionError("No control queue descriptor for role " + role));
 
-    String expectedInQueue = expectedInboundQueue(role);
-    StatusEvent.InQueue inQueue = status.inQueue();
-    if (expectedInQueue == null) {
-      if (inQueue != null && inQueue.name() != null && !inQueue.name().isBlank()) {
-        throw new AssertionError("Expected no inbound queue for role " + role + " but was " + inQueue.name());
-      }
-    } else {
-      assertNotNull(inQueue, () -> "Expected inbound queue for role " + role);
-      assertEquals(expectedInQueue, inQueue.name(),
-          () -> "Unexpected inbound queue for role " + role);
-    }
-
     StatusEvent.QueueEndpoints workQueues = status.queues().work();
     List<String> actualWorkIn = workQueues == null ? List.of() : workQueues.in();
     List<String> actualWorkOut = workQueues == null ? List.of() : workQueues.out();

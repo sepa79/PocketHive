@@ -31,13 +31,23 @@ interface RFEdge {
   style: { stroke: string; strokeWidth: number }
 }
 
+interface NodeComponentProps {
+  id: string
+  data: Record<string, unknown>
+  selected: boolean
+  dragging: boolean
+  isConnectable: boolean
+  xPos: number
+  yPos: number
+}
+
 interface RFProps {
   nodes: RFNode[]
   edges: RFEdge[]
   onNodeDragStop: (e: unknown, node: RFNode) => void
   onNodesChange: (changes: { id: string; position: { x: number; y: number } }[]) => void
   children?: ReactNode
-  nodeTypes?: Record<string, React.ComponentType<any>>
+  nodeTypes?: Record<string, React.ComponentType<NodeComponentProps>>
 }
 
 const data = {
@@ -112,9 +122,7 @@ vi.mock('@xyflow/react', () => {
     return (
       <div data-testid="react-flow">
         {nodes.map((node) => {
-          const NodeComponent = props.nodeTypes?.[node.type ?? ''] as
-            | React.ComponentType<any>
-            | undefined
+          const NodeComponent = props.nodeTypes?.[node.type ?? '']
           if (!NodeComponent) {
             return null
           }
