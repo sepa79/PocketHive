@@ -52,7 +52,7 @@ Declare worker metadata via annotation or configuration record. Stage 1 will pre
     outQueue = Topology.GEN_QUEUE
 )
 ```
-For message workers, specify `inQueue` and `outQueue`. Descriptor also references the control-plane descriptor by role (no per-service overrides needed).
+For message workers, specify `inQueue` and `outQueue`. The runtime mirrors these bindings into the status payload under `queues.work`, replacing the legacy `inQueue` status field. Descriptor also references the control-plane descriptor by role (no per-service overrides needed).
 
 ## Control-Plane Behaviour
 - Worker runtime owns a `ControlPlaneRuntime` component that:

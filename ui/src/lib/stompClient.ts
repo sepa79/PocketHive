@@ -250,17 +250,12 @@ export function setClient(newClient: Client | null, destination = controlDestina
             : undefined
         if (typeof aggregateEnabled === 'boolean') cfg.enabled = aggregateEnabled
         if (Object.keys(cfg).length > 0) comp.config = cfg
-        if (evt.queues || evt.inQueue) {
+        if (evt.queues) {
           const q: QueueInfo[] = []
-          if (evt.queues) {
-            q.push(...(evt.queues.work?.in?.map((n) => ({ name: n, role: 'consumer' as const })) ?? []))
-            q.push(...(evt.queues.work?.out?.map((n) => ({ name: n, role: 'producer' as const })) ?? []))
-            q.push(...(evt.queues.control?.in?.map((n) => ({ name: n, role: 'consumer' as const })) ?? []))
-            q.push(...(evt.queues.control?.out?.map((n) => ({ name: n, role: 'producer' as const })) ?? []))
-          }
-          if (evt.inQueue?.name) {
-            q.push({ name: evt.inQueue.name, role: 'consumer' })
-          }
+          q.push(...(evt.queues.work?.in?.map((n) => ({ name: n, role: 'consumer' as const })) ?? []))
+          q.push(...(evt.queues.work?.out?.map((n) => ({ name: n, role: 'producer' as const })) ?? []))
+          q.push(...(evt.queues.control?.in?.map((n) => ({ name: n, role: 'consumer' as const })) ?? []))
+          q.push(...(evt.queues.control?.out?.map((n) => ({ name: n, role: 'producer' as const })) ?? []))
           comp.queues = q
         }
         components[id] = comp

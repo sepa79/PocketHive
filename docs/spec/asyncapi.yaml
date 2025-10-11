@@ -457,15 +457,6 @@ components:
           type: boolean
         traffic:
           type: string
-        inQueue:
-          type: object
-          properties:
-            name:
-              type: string
-            routingKeys:
-              type: array
-              items:
-                type: string
         publishes:
           type: array
           items:
@@ -490,9 +481,11 @@ components:
                 minimum: 0
         queues:
           type: object
+          description: Topology metadata grouped by work/control exchanges. This supersedes the legacy inQueue field.
           properties:
             work:
               type: object
+              description: Queues and routing keys bound to the worker traffic exchange.
               properties:
                 in:
                   type: array
@@ -508,6 +501,7 @@ components:
                     type: string
             control:
               type: object
+              description: Queues and routing keys bound to the worker control exchange.
               properties:
                 in:
                   type: array

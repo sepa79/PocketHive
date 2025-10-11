@@ -20,7 +20,6 @@ public class StatusEnvelopeBuilder {
 
     private final Map<String, Object> root = new LinkedHashMap<>();
     private final Map<String, Object> data = new LinkedHashMap<>();
-    private final Map<String, Object> inQueue = new LinkedHashMap<>();
     private final List<String> publishes = new ArrayList<>();
     private final Map<String, Object> queues = new LinkedHashMap<>();
     private final Map<String, Object> work = new LinkedHashMap<>();
@@ -154,20 +153,6 @@ public class StatusEnvelopeBuilder {
     }
 
     /**
-     * Describe the queue this component consumes from and the routing keys
-     * bound to it.
-     */
-    public StatusEnvelopeBuilder inQueue(String name, String... routingKeys) {
-        if (name != null && !name.isBlank()) {
-            inQueue.put("name", name);
-            if (routingKeys != null && routingKeys.length > 0) {
-                inQueue.put("routingKeys", Arrays.asList(routingKeys));
-            }
-        }
-        return this;
-    }
-
-    /**
      * Topics used when publishing results downstream on the traffic
      * exchange.
      */
@@ -197,9 +182,6 @@ public class StatusEnvelopeBuilder {
      * Serialise the collected fields into a JSON document.
      */
     public String toJson() {
-        if (!inQueue.isEmpty()) {
-            root.put("inQueue", inQueue);
-        }
         if (!publishes.isEmpty()) {
             root.put("publishes", publishes);
         }
