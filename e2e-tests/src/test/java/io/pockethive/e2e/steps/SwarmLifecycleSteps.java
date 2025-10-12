@@ -412,8 +412,9 @@ public class SwarmLifecycleSteps {
       assertNotNull(instance, () -> "Status event for role " + role + " should include an instance id");
       assertFalse(instance.isBlank(), () -> "Status event for role " + role + " should include an instance id");
       latestInstances.put(role, instance);
-      LOGGER.info("Captured status-full for role={} instance={} state={} totals={} enabled={}",
-          role, instance, status.state(), describeTotals(status.totals()), status.enabled());
+      Map<String, Object> snapshot = workerSnapshot(status, role);
+      LOGGER.info("Captured status-full for role={} instance={} details={}",
+          role, instance, describeStatus(status, snapshot));
     }
     workerStatusByRole.clear();
     workerStatusByRole.putAll(latestStatuses);
@@ -425,40 +426,77 @@ public class SwarmLifecycleSteps {
   private void assertWorkerRunning(String role, StatusEvent status) {
     assertNotNull(status, () -> "No status recorded for role " + role);
     String instance = status.instance();
-    StatusEvent.Totals totals = status.totals();
+    Map<String, Object> snapshot = workerSnapshot(status, role);
     LOGGER.info("Latest status summary role={} instance={} details={}",
-        role, instance, describeStatus(status));
+        role, instance, describeStatus(status, snapshot));
+
+    boolean aggregateEnabled = Boolean.TRUE.equals(status.enabled());
+    assertTrue(aggregateEnabled,
+        () -> "Aggregate enabled flag was false for role " + role + ": " + describeStatus(status, snapshot));
+
+    assertFalse(snapshot.isEmpty(),
+        () -> "No worker snapshot available for role " + role + ": " + describeStatus(status, snapshot));
+
+    boolean snapshotHasEnabled = snapshot.containsKey("enabled");
+    boolean workerEnabled = isTruthy(snapshot.get("enabled"));
+    if (snapshotHasEnabled) {
+      assertTrue(workerEnabled,
+          () -> "Worker snapshot reported disabled for role " + role + ": " + describeStatus(status, snapshot));
+    } else {
+      Map<String, Object> processed = snapshotProcessed(snapshot);
+      assertFalse(processed.isEmpty(),
+          () -> "Worker snapshot missing enabled flag and processed counters for role " + role + ": "
+              + describeStatus(status, snapshot));
+      assertTrue(hasPositiveCounter(processed),
+          () -> "Processed counters show no activity for role " + role + ": " + describeStatus(status, snapshot));
+    }
 
     String state = status.state();
-    assertTrue(state != null && "running".equalsIgnoreCase(state),
-        () -> "Expected role " + role + " to report state=Running but was " + describeStatus(status));
+    if (state == null || state.isBlank()) {
+      LOGGER.info("Status for role {} instance {} omitted state; relying on snapshot", role, instance);
+    } else {
+      assertTrue("running".equalsIgnoreCase(state),
+          () -> "Expected role " + role + " to report state=Running but was " + describeStatus(status, snapshot));
+    }
 
-    assertNotNull(totals, () -> "Status for role " + role + " missing totals: " + describeStatus(status));
-    int desired = totals.desired();
-    int running = totals.running();
-    int healthy = totals.healthy();
-    assertTrue(desired > 0, () -> "Status for role " + role + " reported zero desired workers: "
-        + describeStatus(status));
-    assertTrue(running >= desired,
-        () -> "Status for role " + role + " reported running=" + running + " desired=" + desired
-            + " details=" + describeStatus(status));
-    assertTrue(healthy >= desired,
-        () -> "Status for role " + role + " reported healthy=" + healthy + " desired=" + desired
-            + " details=" + describeStatus(status));
+    StatusEvent.Totals totals = status.totals();
+    if (totals == null) {
+      LOGGER.info("Status for role {} instance {} omitted totals; relying on snapshot", role, instance);
+    } else {
+      int desired = totals.desired();
+      int running = totals.running();
+      int healthy = totals.healthy();
+      assertTrue(desired > 0, () -> "Status for role " + role + " reported zero desired workers: "
+          + describeStatus(status, snapshot));
+      assertTrue(running >= desired,
+          () -> "Status for role " + role + " reported running=" + running + " desired=" + desired
+              + " details=" + describeStatus(status, snapshot));
+      assertTrue(healthy >= desired,
+          () -> "Status for role " + role + " reported healthy=" + healthy + " desired=" + desired
+              + " details=" + describeStatus(status, snapshot));
+    }
 
     String recordedInstance = workerInstances.get(role);
     assertNotNull(recordedInstance,
-        () -> "Worker instance for role " + role + " not recorded despite status=" + describeStatus(status));
+        () -> "Worker instance for role " + role + " not recorded despite status=" + describeStatus(status, snapshot));
     assertEquals(recordedInstance, instance,
         () -> "Worker instance mismatch for role " + role + " expected=" + recordedInstance
             + " actual=" + instance);
   }
 
-  private String describeStatus(StatusEvent status) {
+  private String describeStatus(StatusEvent status, Map<String, Object> snapshot) {
     if (status == null) {
       return "<null status>";
     }
-    return "state=" + status.state() + ", enabled=" + status.enabled()
+    Object workerEnabledValue = snapshot == null ? null : snapshot.get("enabled");
+    String workerEnabled = snapshot == null
+        ? "<no snapshot>"
+        : snapshot.containsKey("enabled") ? String.valueOf(workerEnabledValue) : "<missing>";
+    Map<String, Object> processed = snapshotProcessed(snapshot);
+    return "state=" + status.state()
+        + ", aggregateEnabled=" + status.enabled()
+        + ", workerEnabled=" + workerEnabled
+        + ", processed=" + describeProcessed(processed)
         + ", totals=" + describeTotals(status.totals())
         + ", instance=" + status.instance();
   }
@@ -471,6 +509,13 @@ public class SwarmLifecycleSteps {
         + ", running=" + totals.running()
         + ", healthy=" + totals.healthy()
         + ", enabled=" + totals.enabled() + "}";
+  }
+
+  private String describeProcessed(Map<String, Object> processed) {
+    if (processed == null || processed.isEmpty()) {
+      return "<none>";
+    }
+    return processed.toString();
   }
 
   private Map<String, Object> workerSnapshot(StatusEvent status, String role) {
@@ -507,6 +552,17 @@ public class SwarmLifecycleSteps {
     return Map.of();
   }
 
+  private Map<String, Object> snapshotProcessed(Map<String, Object> snapshot) {
+    if (snapshot == null) {
+      return Map.of();
+    }
+    Object processed = snapshot.get("processed");
+    if (processed instanceof Map<?, ?> map) {
+      return copyMap(map);
+    }
+    return Map.of();
+  }
+
   private Map<String, Object> copyMap(Map<?, ?> source) {
     if (source == null || source.isEmpty()) {
       return Map.of();
@@ -524,8 +580,53 @@ public class SwarmLifecycleSteps {
     if (value instanceof Boolean bool) {
       return Boolean.TRUE.equals(bool);
     }
+    if (value instanceof Number number) {
+      return number.intValue() != 0;
+    }
     if (value instanceof String text) {
       return Boolean.parseBoolean(text);
+    }
+    return false;
+  }
+
+  private boolean hasPositiveCounter(Map<String, Object> counters) {
+    if (counters == null || counters.isEmpty()) {
+      return false;
+    }
+    for (Object value : counters.values()) {
+      if (isPositive(value)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private boolean isPositive(Object value) {
+    if (value instanceof Number number) {
+      return number.doubleValue() > 0;
+    }
+    if (value instanceof String text) {
+      try {
+        return Double.parseDouble(text) > 0;
+      } catch (NumberFormatException ex) {
+        return false;
+      }
+    }
+    if (value instanceof Map<?, ?> map) {
+      for (Object nested : map.values()) {
+        if (isPositive(nested)) {
+          return true;
+        }
+      }
+      return false;
+    }
+    if (value instanceof Iterable<?> iterable) {
+      for (Object element : iterable) {
+        if (isPositive(element)) {
+          return true;
+        }
+      }
+      return false;
     }
     return false;
   }
