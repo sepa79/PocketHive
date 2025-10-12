@@ -1,6 +1,5 @@
 package io.pockethive.e2e.clients;
 
-import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
 import java.util.Locale;
@@ -8,7 +7,6 @@ import java.util.Objects;
 
 import org.springframework.http.MediaType;
 import org.springframework.web.reactive.function.client.WebClient;
-import org.springframework.web.util.UriUtils;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 
@@ -41,9 +39,10 @@ public final class RabbitManagementClient {
     Objects.requireNonNull(queueName, "queueName");
 
     String safeVhost = virtualHost.isBlank() ? "/" : virtualHost;
-    String path = "/api/queues/" + encodeSegment(safeVhost) + "/" + encodeSegment(queueName) + "/bindings";
     List<QueueBinding> bindings = webClient.get()
-        .uri(path)
+        .uri(uriBuilder -> uriBuilder
+            .pathSegment("queues", safeVhost, queueName, "bindings")
+            .build())
         .accept(MediaType.APPLICATION_JSON)
         .retrieve()
         .bodyToFlux(QueueBinding.class)
@@ -54,10 +53,6 @@ public final class RabbitManagementClient {
       throw new IllegalStateException("RabbitMQ management API returned no bindings for queue " + queueName);
     }
     return List.copyOf(bindings);
-  }
-
-  private static String encodeSegment(String value) {
-    return UriUtils.encodePathSegment(value, StandardCharsets.UTF_8);
   }
 
   public record QueueBinding(String source,
