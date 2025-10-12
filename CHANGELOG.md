@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.12.3] - 2025-10-12
+Timestamp: 2025-10-12T00:00:00Z
+
+- E2E lifecycle: exclude the implicit default-exchange binding from RabbitMQ management assertions so Mock-1 status checks only
+  evaluate the intentional control-plane routing keys.
+- Release: bump the PocketHive patch version to 0.12.3 so published artifacts and tooling reference the latest build.
+
 ## [0.12.2] - 2025-10-11
 Timestamp: 2025-10-11T00:00:00Z
 
