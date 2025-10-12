@@ -366,8 +366,18 @@ public class SwarmLifecycleSteps {
     assertFalse(actualBindings.isEmpty(),
         () -> "Management API reported no bindings for queue " + queueName + " role=" + role);
 
+    List<RabbitManagementClient.QueueBinding> filteredBindings = actualBindings.stream()
+        .filter(binding -> binding.source() != null && !binding.source().isBlank())
+        .toList();
+
+    assertFalse(filteredBindings.isEmpty(),
+        () -> "No non-default bindings reported for queue " + queueName + " role=" + role
+            + " details=" + actualBindings.stream()
+                .map(RabbitManagementClient.QueueBinding::toSummary)
+                .toList());
+
     java.util.LinkedHashSet<String> actualRoutingKeys = new java.util.LinkedHashSet<>();
-    for (RabbitManagementClient.QueueBinding binding : actualBindings) {
+    for (RabbitManagementClient.QueueBinding binding : filteredBindings) {
       assertNoDefault("binding", role, queueName, binding.routingKey());
       assertNoDefault("binding source", role, queueName, binding.source());
       assertNoDefault("binding destination", role, queueName, binding.destination());
@@ -377,7 +387,9 @@ public class SwarmLifecycleSteps {
     assertEquals(expectedRoutingKeys.size(), actualRoutingKeys.size(),
         () -> "Binding count mismatch for role " + role + " queue=" + queueName
             + " expected=" + expectedRoutingKeys.size() + " actual=" + actualRoutingKeys.size()
-            + " details=" + actualBindings.stream().map(RabbitManagementClient.QueueBinding::toSummary).toList());
+            + " details=" + filteredBindings.stream()
+                .map(RabbitManagementClient.QueueBinding::toSummary)
+                .toList());
 
     assertEquals(expectedRoutingKeys, actualRoutingKeys,
         () -> "Routing key mismatch for role " + role + " queue=" + queueName
