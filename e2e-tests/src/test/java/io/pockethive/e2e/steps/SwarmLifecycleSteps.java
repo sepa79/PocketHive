@@ -203,7 +203,13 @@ public class SwarmLifecycleSteps {
       assertTrue(view.get().workEnabled(), "Workloads should be enabled after start");
     });
 
-    captureWorkerStatuses();
+    SwarmAssertions.await("all workers running", () -> {
+      captureWorkerStatuses(true);
+      for (String role : workerRoles()) {
+        StatusEvent status = workerStatusByRole.get(role);
+        assertWorkerRunning(role, status);
+      }
+    });
   }
 
   @And("I request a single generator run")
@@ -374,7 +380,11 @@ public class SwarmLifecycleSteps {
   }
 
   private void captureWorkerStatuses() {
-    if (workerStatusesCaptured) {
+    captureWorkerStatuses(false);
+  }
+
+  private void captureWorkerStatuses(boolean forceRefresh) {
+    if (workerStatusesCaptured && !forceRefresh) {
       return;
     }
     ensureTemplate();
@@ -389,20 +399,78 @@ public class SwarmLifecycleSteps {
     });
 
     List<ControlPlaneEvents.StatusEnvelope> statuses = controlPlaneEvents.statusesForSwarm(swarmId);
+    Map<String, StatusEvent> latestStatuses = new LinkedHashMap<>();
+    Map<String, String> latestInstances = new LinkedHashMap<>();
     for (String role : roles) {
       ControlPlaneEvents.StatusEnvelope envelope = statuses.stream()
           .filter(env -> isStatusFullForRole(env.status(), role))
           .max(Comparator.comparing(ControlPlaneEvents.StatusEnvelope::receivedAt))
           .orElseThrow(() -> new AssertionError("No status-full captured for role " + role));
       StatusEvent status = envelope.status();
-      workerStatusByRole.put(role, status);
+      latestStatuses.put(role, status);
       String instance = status.instance();
       assertNotNull(instance, () -> "Status event for role " + role + " should include an instance id");
       assertFalse(instance.isBlank(), () -> "Status event for role " + role + " should include an instance id");
-      workerInstances.put(role, instance);
-      LOGGER.info("Captured status-full for role={} instance={}", role, instance);
+      latestInstances.put(role, instance);
+      LOGGER.info("Captured status-full for role={} instance={} state={} totals={} enabled={}",
+          role, instance, status.state(), describeTotals(status.totals()), status.enabled());
     }
+    workerStatusByRole.clear();
+    workerStatusByRole.putAll(latestStatuses);
+    workerInstances.clear();
+    workerInstances.putAll(latestInstances);
     workerStatusesCaptured = true;
+  }
+
+  private void assertWorkerRunning(String role, StatusEvent status) {
+    assertNotNull(status, () -> "No status recorded for role " + role);
+    String instance = status.instance();
+    StatusEvent.Totals totals = status.totals();
+    LOGGER.info("Latest status summary role={} instance={} details={}",
+        role, instance, describeStatus(status));
+
+    String state = status.state();
+    assertTrue(state != null && "running".equalsIgnoreCase(state),
+        () -> "Expected role " + role + " to report state=Running but was " + describeStatus(status));
+
+    assertNotNull(totals, () -> "Status for role " + role + " missing totals: " + describeStatus(status));
+    int desired = totals.desired();
+    int running = totals.running();
+    int healthy = totals.healthy();
+    assertTrue(desired > 0, () -> "Status for role " + role + " reported zero desired workers: "
+        + describeStatus(status));
+    assertTrue(running >= desired,
+        () -> "Status for role " + role + " reported running=" + running + " desired=" + desired
+            + " details=" + describeStatus(status));
+    assertTrue(healthy >= desired,
+        () -> "Status for role " + role + " reported healthy=" + healthy + " desired=" + desired
+            + " details=" + describeStatus(status));
+
+    String recordedInstance = workerInstances.get(role);
+    assertNotNull(recordedInstance,
+        () -> "Worker instance for role " + role + " not recorded despite status=" + describeStatus(status));
+    assertEquals(recordedInstance, instance,
+        () -> "Worker instance mismatch for role " + role + " expected=" + recordedInstance
+            + " actual=" + instance);
+  }
+
+  private String describeStatus(StatusEvent status) {
+    if (status == null) {
+      return "<null status>";
+    }
+    return "state=" + status.state() + ", enabled=" + status.enabled()
+        + ", totals=" + describeTotals(status.totals())
+        + ", instance=" + status.instance();
+  }
+
+  private String describeTotals(StatusEvent.Totals totals) {
+    if (totals == null) {
+      return "<null totals>";
+    }
+    return "{desired=" + totals.desired()
+        + ", running=" + totals.running()
+        + ", healthy=" + totals.healthy()
+        + ", enabled=" + totals.enabled() + "}";
   }
 
   private Map<String, Object> workerSnapshot(StatusEvent status, String role) {
