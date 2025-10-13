@@ -35,19 +35,59 @@ public final class WorkQueueConsumer implements AutoCloseable {
   private final Channel channel;
   private final String queueName;
 
+  private WorkQueueConsumer(org.springframework.amqp.rabbit.connection.Connection connection,
+                            Channel channel,
+                            String queueName) {
+    this.connection = Objects.requireNonNull(connection, "connection");
+    this.channel = Objects.requireNonNull(channel, "channel");
+    this.queueName = Objects.requireNonNull(queueName, "queueName");
+  }
+
   public WorkQueueConsumer(ConnectionFactory connectionFactory, String queueName) {
     Objects.requireNonNull(connectionFactory, "connectionFactory");
     Objects.requireNonNull(queueName, "queueName");
     if (queueName.isBlank()) {
       throw new IllegalArgumentException("queueName must not be blank");
     }
+    org.springframework.amqp.rabbit.connection.Connection newConnection = null;
+    Channel newChannel = null;
     try {
-      this.connection = connectionFactory.createConnection();
-      this.channel = connection.createChannel(false);
+      newConnection = connectionFactory.createConnection();
+      newChannel = newConnection.createChannel(false);
+      this.connection = newConnection;
+      this.channel = newChannel;
       this.queueName = queueName;
     } catch (Exception ex) {
+      closeQuietly(newChannel);
+      closeQuietly(newConnection);
       throw new IllegalStateException("Failed to initialise work queue consumer for " + queueName, ex);
     }
+  }
+
+  public static WorkQueueConsumer forExchangeTap(ConnectionFactory connectionFactory,
+                                                 String exchange,
+                                                 String routingKey) {
+    Objects.requireNonNull(connectionFactory, "connectionFactory");
+    Objects.requireNonNull(exchange, "exchange");
+    Objects.requireNonNull(routingKey, "routingKey");
+    org.springframework.amqp.rabbit.connection.Connection connection = null;
+    Channel channel = null;
+    try {
+      connection = connectionFactory.createConnection();
+      channel = connection.createChannel(false);
+      String queueName = channel.queueDeclare("", false, true, true, Map.of()).getQueue();
+      channel.queueBind(queueName, exchange, routingKey);
+      return new WorkQueueConsumer(connection, channel, queueName);
+    } catch (Exception ex) {
+      closeQuietly(channel);
+      closeQuietly(connection);
+      throw new IllegalStateException(
+          "Failed to initialise exchange tap for exchange=" + exchange + " routingKey=" + routingKey, ex);
+    }
+  }
+
+  public String queueName() {
+    return queueName;
   }
 
   public Optional<Message> basicGet() {
@@ -169,6 +209,30 @@ public final class WorkQueueConsumer implements AutoCloseable {
       if (connection != null) {
         connection.close();
       }
+    } catch (Exception ex) {
+      // ignore cleanup failures
+    }
+  }
+
+  private static void closeQuietly(Channel channel) {
+    if (channel == null) {
+      return;
+    }
+    try {
+      if (channel.isOpen()) {
+        channel.close();
+      }
+    } catch (Exception ex) {
+      // ignore cleanup failures
+    }
+  }
+
+  private static void closeQuietly(org.springframework.amqp.rabbit.connection.Connection connection) {
+    if (connection == null) {
+      return;
+    }
+    try {
+      connection.close();
     } catch (Exception ex) {
       // ignore cleanup failures
     }

@@ -92,6 +92,7 @@ public class SwarmLifecycleSteps {
   private final Map<String, String> workerInstances = new LinkedHashMap<>();
   private boolean workerStatusesCaptured;
   private WorkQueueConsumer workQueueConsumer;
+  private String tapQueueName;
 
   @Given("the swarm lifecycle harness is initialised")
   public void theSwarmLifecycleHarnessIsInitialised() {
@@ -216,6 +217,7 @@ public class SwarmLifecycleSteps {
   public void iRequestASingleGeneratorRun() {
     ensureStartResponse();
     captureWorkerStatuses();
+    ensureFinalQueueTap();
     String generatorInstance = workerInstances.get(GENERATOR_ROLE);
     assertNotNull(generatorInstance, "Generator instance should be discovered from status snapshots");
 
@@ -267,13 +269,11 @@ public class SwarmLifecycleSteps {
     ensureStartResponse();
     assertNotNull(generatorConfigResponse, "Generator config update was not issued");
 
-    String queue = finalQueueName();
-    if (workQueueConsumer == null) {
-      workQueueConsumer = new WorkQueueConsumer(rabbitSubscriptions.connectionFactory(), queue);
-    }
+    ensureFinalQueueTap();
+    String queue = tapQueueName != null ? tapQueueName : finalQueueName();
 
     WorkQueueConsumer.Message message = workQueueConsumer.consumeNext(SwarmAssertions.defaultTimeout())
-        .orElseThrow(() -> new AssertionError("No message observed on final queue " + queue));
+        .orElseThrow(() -> new AssertionError("No message observed on tap queue " + queue));
 
     try {
       JsonNode root = objectMapper.readTree(message.body());
@@ -364,6 +364,7 @@ public class SwarmLifecycleSteps {
         LOGGER.debug("Failed to close work queue consumer", ex);
       } finally {
         workQueueConsumer = null;
+        tapQueueName = null;
       }
     }
     if (controlPlaneEvents != null) {
@@ -633,6 +634,21 @@ public class SwarmLifecycleSteps {
 
   private String finalQueueName() {
     return "ph." + swarmId + ".final";
+  }
+
+  private String hiveExchangeName() {
+    return "ph." + swarmId + ".hive";
+  }
+
+  private void ensureFinalQueueTap() {
+    if (workQueueConsumer != null) {
+      return;
+    }
+    String exchange = hiveExchangeName();
+    String routingKey = finalQueueName();
+    workQueueConsumer = WorkQueueConsumer.forExchangeTap(rabbitSubscriptions.connectionFactory(), exchange, routingKey);
+    tapQueueName = workQueueConsumer.queueName();
+    LOGGER.info("Subscribed to final exchange tap queue={} exchange={} routingKey={}", tapQueueName, exchange, routingKey);
   }
 
   private boolean looksLikeJson(String text) {
