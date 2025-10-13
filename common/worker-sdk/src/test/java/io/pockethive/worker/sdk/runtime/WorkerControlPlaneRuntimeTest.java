@@ -9,6 +9,7 @@ import io.pockethive.controlplane.messaging.ControlPlaneEmitter;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.controlplane.topology.ControlPlaneTopologyDescriptor;
 import io.pockethive.controlplane.topology.GeneratorControlPlaneTopologyDescriptor;
+import io.pockethive.controlplane.topology.ProcessorControlPlaneTopologyDescriptor;
 import io.pockethive.controlplane.worker.WorkerControlPlane;
 import io.pockethive.observability.StatusEnvelopeBuilder;
 import io.pockethive.worker.sdk.config.WorkerType;
@@ -233,6 +234,91 @@ class WorkerControlPlaneRuntimeTest {
         assertThat(updatedWorkers.get(0).get("enabled")).isEqualTo(true);
     }
 
+    @Test
+    void processorBaseUrlPreservedWhenTogglingEnablement() throws Exception {
+        WorkerStateStore processorStore = new WorkerStateStore();
+        WorkerDefinition processorDefinition = new WorkerDefinition(
+            "processorWorker",
+            ProcessorTestWorker.class,
+            WorkerType.MESSAGE,
+            "processor",
+            null,
+            Topology.FINAL_QUEUE,
+            ProcessorWorkerConfig.class
+        );
+        WorkerState processorState = processorStore.getOrCreate(processorDefinition);
+        String defaultBaseUrl = "http://wiremock:8080";
+        processorState.updateConfig(
+            new ProcessorWorkerConfig(true, defaultBaseUrl),
+            Map.of("enabled", true, "baseUrl", defaultBaseUrl),
+            false
+        );
+
+        ControlPlaneIdentity processorIdentity = new ControlPlaneIdentity(Topology.SWARM_ID, "processor", "proc-1");
+        WorkerControlPlane processorControlPlane = WorkerControlPlane.builder(MAPPER)
+            .identity(processorIdentity)
+            .build();
+        WorkerControlPlaneRuntime processorRuntime = new WorkerControlPlaneRuntime(
+            processorControlPlane,
+            processorStore,
+            MAPPER,
+            emitter,
+            processorIdentity,
+            new ProcessorControlPlaneTopologyDescriptor()
+        );
+
+        Map<String, Object> args = Map.of("data", Map.of("enabled", true));
+        ControlSignal signal = ControlSignal.forInstance(
+            "config-update",
+            processorIdentity.swarmId(),
+            processorIdentity.role(),
+            processorIdentity.instanceId(),
+            UUID.randomUUID().toString(),
+            UUID.randomUUID().toString(),
+            CommandTarget.INSTANCE,
+            args
+        );
+        String routingKey = ControlPlaneRouting.signal(
+            "config-update",
+            processorIdentity.swarmId(),
+            processorIdentity.role(),
+            processorIdentity.instanceId()
+        );
+
+        boolean handled = processorRuntime.handle(MAPPER.writeValueAsString(signal), routingKey);
+
+        assertThat(handled).isTrue();
+        assertThat(processorRuntime.workerEnabled(processorDefinition.beanName())).contains(true);
+        Optional<ProcessorWorkerConfig> config = processorRuntime.workerConfig(
+            processorDefinition.beanName(),
+            ProcessorWorkerConfig.class
+        );
+        assertThat(config).isPresent();
+        assertThat(config.get().baseUrl()).isEqualTo(defaultBaseUrl);
+        assertThat(processorRuntime.workerRawConfig(processorDefinition.beanName()))
+            .containsEntry("baseUrl", defaultBaseUrl)
+            .containsEntry("enabled", true);
+
+        reset(emitter);
+        processorRuntime.emitStatusSnapshot();
+
+        ArgumentCaptor<ControlPlaneEmitter.StatusContext> statusCaptor =
+            ArgumentCaptor.forClass(ControlPlaneEmitter.StatusContext.class);
+        verify(emitter).emitStatusSnapshot(statusCaptor.capture());
+
+        Map<String, Object> snapshot = buildSnapshot(statusCaptor.getValue());
+        @SuppressWarnings("unchecked")
+        Map<String, Object> data = (Map<String, Object>) snapshot.get("data");
+        assertThat(data).isNotNull();
+        @SuppressWarnings("unchecked")
+        java.util.List<Map<String, Object>> workers = (java.util.List<Map<String, Object>>) data.get("workers");
+        assertThat(workers).isNotEmpty();
+        @SuppressWarnings("unchecked")
+        Map<String, Object> workerEntry = (Map<String, Object>) workers.get(0).get("config");
+        assertThat(workerEntry).isNotNull();
+        assertThat(workerEntry.get("baseUrl")).isEqualTo(defaultBaseUrl);
+    }
+
     private Map<String, Object> buildSnapshot(ControlPlaneEmitter.StatusContext context) throws Exception {
         StatusEnvelopeBuilder builder = new StatusEnvelopeBuilder();
         context.customiser().accept(builder);
@@ -246,5 +332,15 @@ class WorkerControlPlaneRuntimeTest {
     }
 
     private record TestConfig(boolean enabled, double ratePerSec) {
+    }
+
+    private static final class ProcessorTestWorker {
+        // marker class for processor definition
+    }
+
+    private record ProcessorWorkerConfig(boolean enabled, String baseUrl) {
+        ProcessorWorkerConfig {
+            baseUrl = baseUrl == null ? "" : baseUrl.trim();
+        }
     }
 }
