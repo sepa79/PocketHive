@@ -26,13 +26,48 @@
 <body>
   <header>
     <a href="/">← Back</a>
-    <div style="margin-left:auto" class="muted">Version: <span id="ver">0.12.0</span></div>
+    <div style="margin-left:auto" class="muted">Version: <span id="ver">0.12.4</span></div>
   </header>
   <main>
     <div id="chg">
       <h1>Changelog</h1>
       <div style="height:6px"></div>
       <pre>All notable changes to this project will be documented in this file.</pre>
+      <div style="height:6px"></div>
+      <h2>[0.12.4] - 2025-10-13</h2>
+      <pre>Timestamp: 2025-10-13T00:00:00Z</pre>
+      <div style="height:6px"></div>
+      <ul>
+      <li>Worker control-plane runtime: seed worker beans with their default configuration, preserve the derived enablement flag, and keep status publishers wired so workers surface meaningful state before receiving overrides.</li>
+      <li>Worker SDK: merge control-plane config updates on top of seeded defaults and expose helper accessors so worker services can read raw maps or typed configs without losing tracking of the latest enablement state.</li>
+      <li>Worker services: register each runtime adapter&#x27;s initial config with the control-plane helper so generator, moderator, processor, postprocessor, and trigger workers advertise their defaults immediately after startup.</li>
+      <li>Release: bump the PocketHive patch version to 0.12.4 so published artifacts and tooling reference the latest build.</li>
+      </ul>
+      <div style="height:6px"></div>
+      <h2>[0.12.3] - 2025-10-12</h2>
+      <pre>Timestamp: 2025-10-12T00:00:00Z</pre>
+      <div style="height:6px"></div>
+      <ul>
+      <li>E2E lifecycle: exclude the implicit default-exchange binding from RabbitMQ management assertions so Mock-1 status checks only evaluate the intentional control-plane routing keys.</li>
+      <li>Release: bump the PocketHive patch version to 0.12.3 so published artifacts and tooling reference the latest build.</li>
+      </ul>
+      <div style="height:6px"></div>
+      <h2>[0.12.2] - 2025-10-11</h2>
+      <pre>Timestamp: 2025-10-11T00:00:00Z</pre>
+      <div style="height:6px"></div>
+      <ul>
+      <li>Release: bump the PocketHive patch version to 0.12.2 so published artifacts and tooling reference the latest build.</li>
+      </ul>
+      <div style="height:6px"></div>
+      <h2>[0.12.1] - 2025-10-10</h2>
+      <pre>Timestamp: 2025-10-10T00:00:00Z</pre>
+      <div style="height:6px"></div>
+      <ul>
+      <li>Swarm controller: clean up legacy short hive bindings on every prepare run, rebinding generator/moderator/processor queues with fully qualified routing keys so only controller-managed routes remain.</li>
+      <li>Worker runtime &amp; SDK: resolve outbound queue names via swarm-qualified topology constants, remove processor-owned RabbitMQ declarables, and adjust runtime adapters/tests to rely on the controller-provisioned traffic queues.</li>
+      <li>Control-plane auto-config: restore worker/manager traffic bindings to the hive exchange using the qualified routing keys and harden tests that guard the declarable wiring.</li>
+      <li>Documentation: clarify that worker services consume the autoconfigured RabbitMQ topology and must not override the controller&#x27;s hive bindings.</li>
+      </ul>
       <div style="height:6px"></div>
       <h2>[0.12.0] - 2025-10-09</h2>
       <pre>Timestamp: 2025-10-09T00:00:00Z</pre>
