@@ -2,6 +2,7 @@ package io.pockethive.e2e.clients;
 
 import java.net.URI;
 import java.time.Duration;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -9,6 +10,8 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
+
+import io.pockethive.control.CommandTarget;
 
 /**
  * Thin wrapper around {@link WebClient} to access the Orchestrator REST API.
@@ -56,6 +59,15 @@ public final class OrchestratorClient {
     return postControlRequest(path("/api/swarms/{swarmId}/remove", swarmId), request, ControlResponse.class);
   }
 
+  public ControlResponse updateComponentConfig(String role, String instance, ComponentConfigRequest request) {
+    Objects.requireNonNull(role, "role");
+    Objects.requireNonNull(instance, "instance");
+    Objects.requireNonNull(request, "request");
+    ComponentConfigRequest targeted = request.withCommandTarget(CommandTarget.INSTANCE);
+    return postControlRequest(componentPath("/api/components/{role}/{instance}/config", role, instance),
+        targeted, ControlResponse.class);
+  }
+
   public Optional<SwarmView> findSwarm(String swarmId) {
     Objects.requireNonNull(swarmId, "swarmId");
     try {
@@ -91,6 +103,11 @@ public final class OrchestratorClient {
     return template.replace("{swarmId}", swarmId);
   }
 
+  private static String componentPath(String template, String role, String instance) {
+    String resolved = template.replace("{role}", role);
+    return resolved.replace("{instance}", instance);
+  }
+
   public record ControlResponse(String correlationId, String idempotencyKey, Watch watch, long timeoutMs) {
 
     public Watch watch() {
@@ -113,5 +130,42 @@ public final class OrchestratorClient {
                           String heartbeat,
                           boolean workEnabled,
                           boolean controllerEnabled) {
+  }
+
+  public record ComponentConfigRequest(String idempotencyKey,
+                                       Map<String, Object> patch,
+                                       String notes,
+                                       String swarmId,
+                                       CommandTarget commandTarget) {
+
+    public ComponentConfigRequest {
+      patch = patch == null || patch.isEmpty() ? Map.of() : Map.copyOf(patch);
+      commandTarget = commandTarget == null ? CommandTarget.INSTANCE : commandTarget;
+    }
+
+    public ComponentConfigRequest withCommandTarget(CommandTarget target) {
+      Objects.requireNonNull(target, "target");
+      if (target == commandTarget) {
+        return this;
+      }
+      return new ComponentConfigRequest(idempotencyKey, patch, notes, swarmId, target);
+    }
+
+    public ComponentConfigRequest withPatch(Map<String, Object> newPatch) {
+      Map<String, Object> safePatch = newPatch == null || newPatch.isEmpty()
+          ? Map.of()
+          : Map.copyOf(newPatch);
+      if (safePatch.equals(patch)) {
+        return this;
+      }
+      return new ComponentConfigRequest(idempotencyKey, safePatch, notes, swarmId, commandTarget);
+    }
+
+    public ComponentConfigRequest withSwarmId(String newSwarmId) {
+      if (Objects.equals(swarmId, newSwarmId)) {
+        return this;
+      }
+      return new ComponentConfigRequest(idempotencyKey, patch, notes, newSwarmId, commandTarget);
+    }
   }
 }

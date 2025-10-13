@@ -50,6 +50,7 @@ class SwarmSignalListenerTest {
     lenient().when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
     lenient().when(lifecycle.getMetrics()).thenReturn(new SwarmMetrics(0,0,0,0, java.time.Instant.now()));
     lenient().when(lifecycle.snapshotQueueStats()).thenReturn(DEFAULT_QUEUE_STATS);
+    lenient().when(lifecycle.isReadyForWork()).thenReturn(true);
   }
 
   @BeforeEach
@@ -77,8 +78,8 @@ class SwarmSignalListenerTest {
 
   private String status(String swarmId, boolean enabled) {
     return """
-        {"swarmId":"%s","data":{"enabled":%s}}
-        """.formatted(swarmId, enabled);
+        {"swarmId":"%s","enabled":%s,"data":{"enabled":%s}}
+        """.formatted(swarmId, enabled, enabled);
   }
 
   private String controllerSignal(String command) {
@@ -209,6 +210,53 @@ class SwarmSignalListenerTest {
     assertThat(node.path("message").asText()).contains("Docker daemon is unavailable");
     assertThat(node.path("correlationId").asText()).isEqualTo("c9");
     assertThat(node.path("idempotencyKey").asText()).isEqualTo("i9");
+  }
+
+  @Test
+  void templateReadyWaitsForWorkerStatuses() throws Exception {
+    when(lifecycle.isReadyForWork()).thenReturn(false, false, true);
+
+    SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", mapper);
+    reset(rabbit);
+
+    listener.handle(signal("swarm-template", "i0", "c0"), controllerSignal("swarm-template"));
+
+    verify(rabbit, never()).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
+        eq(controllerReadyEvent("swarm-template", "inst")), anyString());
+
+    when(lifecycle.markReady("gen", "g1")).thenReturn(true);
+    listener.handle(status(Topology.SWARM_ID, false), statusEvent("status-delta", "gen", "g1"));
+
+    ArgumentCaptor<String> payload = ArgumentCaptor.forClass(String.class);
+    verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
+        eq(controllerReadyEvent("swarm-template", "inst")), payload.capture());
+    JsonNode node = mapper.readTree(payload.getValue());
+    assertThat(node.path("correlationId").asText()).isEqualTo("c0");
+    assertThat(node.path("idempotencyKey").asText()).isEqualTo("i0");
+  }
+
+  @Test
+  void newTemplateReplacesPendingConfirmation() throws Exception {
+    when(lifecycle.isReadyForWork()).thenReturn(false, false, false, false, true);
+
+    SwarmSignalListener listener = new SwarmSignalListener(lifecycle, rabbit, "inst", mapper);
+    reset(rabbit);
+
+    listener.handle(signal("swarm-template", "i0", "c0"), controllerSignal("swarm-template"));
+    listener.handle(signal("swarm-template", "i1", "c1"), controllerSignal("swarm-template"));
+
+    verify(rabbit, never()).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
+        eq(controllerReadyEvent("swarm-template", "inst")), anyString());
+
+    when(lifecycle.markReady("gen", "g1")).thenReturn(true);
+    listener.handle(status(Topology.SWARM_ID, false), statusEvent("status-delta", "gen", "g1"));
+
+    ArgumentCaptor<String> payload = ArgumentCaptor.forClass(String.class);
+    verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
+        eq(controllerReadyEvent("swarm-template", "inst")), payload.capture());
+    JsonNode node = mapper.readTree(payload.getValue());
+    assertThat(node.path("correlationId").asText()).isEqualTo("c1");
+    assertThat(node.path("idempotencyKey").asText()).isEqualTo("i1");
   }
 
   @Test

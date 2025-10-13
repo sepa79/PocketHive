@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
@@ -22,15 +23,20 @@ import org.junit.jupiter.api.Assumptions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 import io.cucumber.java.After;
 import io.cucumber.java.en.And;
 import io.cucumber.java.en.Given;
 import io.cucumber.java.en.Then;
 import io.cucumber.java.en.When;
 import io.pockethive.Topology;
+import io.pockethive.control.CommandTarget;
 import io.pockethive.control.ErrorConfirmation;
 import io.pockethive.control.ReadyConfirmation;
 import io.pockethive.e2e.clients.OrchestratorClient;
+import io.pockethive.e2e.clients.OrchestratorClient.ComponentConfigRequest;
 import io.pockethive.e2e.clients.OrchestratorClient.ControlRequest;
 import io.pockethive.e2e.clients.OrchestratorClient.ControlResponse;
 import io.pockethive.e2e.clients.OrchestratorClient.SwarmCreateRequest;
@@ -46,6 +52,7 @@ import io.pockethive.e2e.support.ControlPlaneEvents;
 import io.pockethive.e2e.support.QueueProbe;
 import io.pockethive.e2e.support.SwarmAssertions;
 import io.pockethive.e2e.support.StatusEvent;
+import io.pockethive.e2e.support.WorkQueueConsumer;
 import io.pockethive.controlplane.spring.ControlPlaneTopologyDescriptorFactory;
 import io.pockethive.controlplane.topology.ControlPlaneRouteCatalog;
 import io.pockethive.controlplane.topology.ControlPlaneTopologyDescriptor;
@@ -60,6 +67,9 @@ import io.pockethive.swarm.model.Work;
 public class SwarmLifecycleSteps {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(SwarmLifecycleSteps.class);
+  private static final String GENERATOR_ROLE = "generator";
+
+  private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
   private ServiceEndpoints endpoints;
   private OrchestratorClient orchestratorClient;
   private ScenarioManagerClient scenarioManagerClient;
@@ -76,10 +86,13 @@ public class SwarmLifecycleSteps {
   private ControlResponse startResponse;
   private ControlResponse stopResponse;
   private ControlResponse removeResponse;
+  private ControlResponse generatorConfigResponse;
 
   private final Map<String, StatusEvent> workerStatusByRole = new LinkedHashMap<>();
   private final Map<String, String> workerInstances = new LinkedHashMap<>();
   private boolean workerStatusesCaptured;
+  private WorkQueueConsumer workQueueConsumer;
+  private String tapQueueName;
 
   @Given("the swarm lifecycle harness is initialised")
   public void theSwarmLifecycleHarnessIsInitialised() {
@@ -191,7 +204,56 @@ public class SwarmLifecycleSteps {
       assertTrue(view.get().workEnabled(), "Workloads should be enabled after start");
     });
 
+    SwarmAssertions.await("all workers running", () -> {
+      captureWorkerStatuses(true);
+      for (String role : workerRoles()) {
+        StatusEvent status = workerStatusByRole.get(role);
+        assertWorkerRunning(role, status);
+      }
+    });
+  }
+
+  @And("I request a single generator run")
+  public void iRequestASingleGeneratorRun() {
+    ensureStartResponse();
     captureWorkerStatuses();
+    ensureFinalQueueTap();
+    String generatorInstance = workerInstances.get(GENERATOR_ROLE);
+    assertNotNull(generatorInstance, "Generator instance should be discovered from status snapshots");
+
+    Map<String, Object> patch = new LinkedHashMap<>();
+    patch.put("enabled", true);
+    patch.put("singleRequest", true);
+
+    ComponentConfigRequest request = new ComponentConfigRequest(
+        idKey("generator-single"),
+        patch,
+        "e2e generator single request",
+        swarmId,
+        CommandTarget.INSTANCE
+    );
+
+    generatorConfigResponse = orchestratorClient.updateComponentConfig(GENERATOR_ROLE, generatorInstance, request);
+    LOGGER.info("Generator config-update requested for instance={} correlation={} ",
+        generatorInstance, generatorConfigResponse.correlationId());
+
+    awaitReady("config-update", generatorConfigResponse);
+    assertNoErrors(generatorConfigResponse.correlationId(), "generator config-update");
+    assertWatchMatched(generatorConfigResponse);
+
+    SwarmAssertions.await("generator status delta", () -> {
+      StatusEvent delta = controlPlaneEvents.latestStatusDeltaEvent(swarmId, GENERATOR_ROLE, generatorInstance)
+          .orElseThrow(() -> new AssertionError("No status-delta captured for generator"));
+      assertTrue("status-delta".equalsIgnoreCase(delta.kind()),
+          () -> "Expected status-delta kind for generator but was " + delta.kind());
+      Map<String, Object> snapshot = workerSnapshot(delta, GENERATOR_ROLE);
+      assertFalse(snapshot.isEmpty(), "Generator snapshot should include worker details");
+      assertTrue(isTruthy(snapshot.get("enabled")), "Generator snapshot should report enabled=true");
+      Map<String, Object> config = snapshotConfig(snapshot);
+      assertFalse(config.isEmpty(), "Generator snapshot should include applied config");
+      assertTrue(isTruthy(config.get("singleRequest")),
+          () -> "Expected singleRequest=true in generator config but was " + config.get("singleRequest"));
+    });
   }
 
   @And("the mock-1 worker statuses reflect the swarm topology")
@@ -199,6 +261,39 @@ public class SwarmLifecycleSteps {
     captureWorkerStatuses();
     for (String role : workerRoles()) {
       assertWorkerTopology(role);
+    }
+  }
+
+  @Then("the final queue receives the default generator response")
+  public void theFinalQueueReceivesTheDefaultGeneratorResponse() throws Exception {
+    ensureStartResponse();
+    assertNotNull(generatorConfigResponse, "Generator config update was not issued");
+
+    ensureFinalQueueTap();
+    String queue = tapQueueName != null ? tapQueueName : finalQueueName();
+
+    WorkQueueConsumer.Message message = workQueueConsumer.consumeNext(SwarmAssertions.defaultTimeout())
+        .orElseThrow(() -> new AssertionError("No message observed on tap queue " + queue));
+
+    try {
+      JsonNode root = objectMapper.readTree(message.body());
+      assertEquals(200, root.path("status").asInt(), "Final queue response should report status 200");
+      JsonNode bodyNode = root.path("body");
+      String bodyText = bodyNode.isMissingNode() ? message.bodyAsString() : bodyNode.asText();
+      if (bodyText == null || bodyText.isBlank()) {
+        bodyText = message.bodyAsString();
+      }
+      final String finalBodyText = bodyText;
+      assertTrue(finalBodyText.contains("default generator response"),
+          () -> "Final queue payload should include default generator response but was " + finalBodyText);
+      if (looksLikeJson(finalBodyText)) {
+        JsonNode parsedBody = objectMapper.readTree(finalBodyText);
+        assertEquals("default generator response", parsedBody.path("message").asText(),
+            "Generator response body should match WireMock default");
+      }
+      inspectObservabilityTrace(message);
+    } finally {
+      message.ack();
     }
   }
 
@@ -262,6 +357,16 @@ public class SwarmLifecycleSteps {
 
   @After
   public void tearDownLifecycle() {
+    if (workQueueConsumer != null) {
+      try {
+        workQueueConsumer.close();
+      } catch (Exception ex) {
+        LOGGER.debug("Failed to close work queue consumer", ex);
+      } finally {
+        workQueueConsumer = null;
+        tapQueueName = null;
+      }
+    }
     if (controlPlaneEvents != null) {
       controlPlaneEvents.close();
     }
@@ -276,7 +381,11 @@ public class SwarmLifecycleSteps {
   }
 
   private void captureWorkerStatuses() {
-    if (workerStatusesCaptured) {
+    captureWorkerStatuses(false);
+  }
+
+  private void captureWorkerStatuses(boolean forceRefresh) {
+    if (workerStatusesCaptured && !forceRefresh) {
       return;
     }
     ensureTemplate();
@@ -291,20 +400,321 @@ public class SwarmLifecycleSteps {
     });
 
     List<ControlPlaneEvents.StatusEnvelope> statuses = controlPlaneEvents.statusesForSwarm(swarmId);
+    Map<String, StatusEvent> latestStatuses = new LinkedHashMap<>();
+    Map<String, String> latestInstances = new LinkedHashMap<>();
     for (String role : roles) {
       ControlPlaneEvents.StatusEnvelope envelope = statuses.stream()
           .filter(env -> isStatusFullForRole(env.status(), role))
           .max(Comparator.comparing(ControlPlaneEvents.StatusEnvelope::receivedAt))
           .orElseThrow(() -> new AssertionError("No status-full captured for role " + role));
       StatusEvent status = envelope.status();
-      workerStatusByRole.put(role, status);
+      latestStatuses.put(role, status);
       String instance = status.instance();
       assertNotNull(instance, () -> "Status event for role " + role + " should include an instance id");
       assertFalse(instance.isBlank(), () -> "Status event for role " + role + " should include an instance id");
-      workerInstances.put(role, instance);
-      LOGGER.info("Captured status-full for role={} instance={}", role, instance);
+      latestInstances.put(role, instance);
+      Map<String, Object> snapshot = workerSnapshot(status, role);
+      LOGGER.info("Captured status-full for role={} instance={} details={}",
+          role, instance, describeStatus(status, snapshot));
     }
+    workerStatusByRole.clear();
+    workerStatusByRole.putAll(latestStatuses);
+    workerInstances.clear();
+    workerInstances.putAll(latestInstances);
     workerStatusesCaptured = true;
+  }
+
+  private void assertWorkerRunning(String role, StatusEvent status) {
+    assertNotNull(status, () -> "No status recorded for role " + role);
+    String instance = status.instance();
+    Map<String, Object> snapshot = workerSnapshot(status, role);
+    LOGGER.info("Latest status summary role={} instance={} details={}",
+        role, instance, describeStatus(status, snapshot));
+
+    boolean aggregateEnabled = Boolean.TRUE.equals(status.enabled());
+    assertTrue(aggregateEnabled,
+        () -> "Aggregate enabled flag was false for role " + role + ": " + describeStatus(status, snapshot));
+
+    assertFalse(snapshot.isEmpty(),
+        () -> "No worker snapshot available for role " + role + ": " + describeStatus(status, snapshot));
+
+    boolean snapshotHasEnabled = snapshot.containsKey("enabled");
+    boolean workerEnabled = isTruthy(snapshot.get("enabled"));
+    if (snapshotHasEnabled) {
+      assertTrue(workerEnabled,
+          () -> "Worker snapshot reported disabled for role " + role + ": " + describeStatus(status, snapshot));
+    } else {
+      Map<String, Object> processed = snapshotProcessed(snapshot);
+      assertFalse(processed.isEmpty(),
+          () -> "Worker snapshot missing enabled flag and processed counters for role " + role + ": "
+              + describeStatus(status, snapshot));
+      assertTrue(hasPositiveCounter(processed),
+          () -> "Processed counters show no activity for role " + role + ": " + describeStatus(status, snapshot));
+    }
+
+    String state = status.state();
+    if (state == null || state.isBlank()) {
+      LOGGER.info("Status for role {} instance {} omitted state; relying on snapshot", role, instance);
+    } else {
+      assertTrue("running".equalsIgnoreCase(state),
+          () -> "Expected role " + role + " to report state=Running but was " + describeStatus(status, snapshot));
+    }
+
+    StatusEvent.Totals totals = status.totals();
+    if (totals == null) {
+      LOGGER.info("Status for role {} instance {} omitted totals; relying on snapshot", role, instance);
+    } else {
+      int desired = totals.desired();
+      int running = totals.running();
+      int healthy = totals.healthy();
+      assertTrue(desired > 0, () -> "Status for role " + role + " reported zero desired workers: "
+          + describeStatus(status, snapshot));
+      assertTrue(running >= desired,
+          () -> "Status for role " + role + " reported running=" + running + " desired=" + desired
+              + " details=" + describeStatus(status, snapshot));
+      assertTrue(healthy >= desired,
+          () -> "Status for role " + role + " reported healthy=" + healthy + " desired=" + desired
+              + " details=" + describeStatus(status, snapshot));
+    }
+
+    String recordedInstance = workerInstances.get(role);
+    assertNotNull(recordedInstance,
+        () -> "Worker instance for role " + role + " not recorded despite status=" + describeStatus(status, snapshot));
+    assertEquals(recordedInstance, instance,
+        () -> "Worker instance mismatch for role " + role + " expected=" + recordedInstance
+            + " actual=" + instance);
+  }
+
+  private String describeStatus(StatusEvent status, Map<String, Object> snapshot) {
+    if (status == null) {
+      return "<null status>";
+    }
+    Object workerEnabledValue = snapshot == null ? null : snapshot.get("enabled");
+    String workerEnabled = snapshot == null
+        ? "<no snapshot>"
+        : snapshot.containsKey("enabled") ? String.valueOf(workerEnabledValue) : "<missing>";
+    Map<String, Object> processed = snapshotProcessed(snapshot);
+    return "state=" + status.state()
+        + ", aggregateEnabled=" + status.enabled()
+        + ", workerEnabled=" + workerEnabled
+        + ", processed=" + describeProcessed(processed)
+        + ", totals=" + describeTotals(status.totals())
+        + ", instance=" + status.instance();
+  }
+
+  private String describeTotals(StatusEvent.Totals totals) {
+    if (totals == null) {
+      return "<null totals>";
+    }
+    return "{desired=" + totals.desired()
+        + ", running=" + totals.running()
+        + ", healthy=" + totals.healthy()
+        + ", enabled=" + totals.enabled() + "}";
+  }
+
+  private String describeProcessed(Map<String, Object> processed) {
+    if (processed == null || processed.isEmpty()) {
+      return "<none>";
+    }
+    return processed.toString();
+  }
+
+  private Map<String, Object> workerSnapshot(StatusEvent status, String role) {
+    if (status == null) {
+      return Map.of();
+    }
+    Map<String, Object> data = status.data();
+    if (data == null || data.isEmpty()) {
+      return Map.of();
+    }
+    Object workers = data.get("workers");
+    if (!(workers instanceof List<?> list)) {
+      return Map.of();
+    }
+    for (Object candidate : list) {
+      if (candidate instanceof Map<?, ?> map) {
+        Object candidateRole = map.get("role");
+        if (candidateRole != null && role.equalsIgnoreCase(candidateRole.toString())) {
+          return copyMap(map);
+        }
+      }
+    }
+    return Map.of();
+  }
+
+  private Map<String, Object> snapshotConfig(Map<String, Object> snapshot) {
+    if (snapshot == null) {
+      return Map.of();
+    }
+    Object config = snapshot.get("config");
+    if (config instanceof Map<?, ?> map) {
+      return copyMap(map);
+    }
+    return Map.of();
+  }
+
+  private Map<String, Object> snapshotProcessed(Map<String, Object> snapshot) {
+    if (snapshot == null) {
+      return Map.of();
+    }
+    Object processed = snapshot.get("processed");
+    if (processed instanceof Map<?, ?> map) {
+      return copyMap(map);
+    }
+    return Map.of();
+  }
+
+  private Map<String, Object> copyMap(Map<?, ?> source) {
+    if (source == null || source.isEmpty()) {
+      return Map.of();
+    }
+    Map<String, Object> copy = new LinkedHashMap<>();
+    source.forEach((key, value) -> {
+      if (key != null) {
+        copy.put(key.toString(), value);
+      }
+    });
+    return copy.isEmpty() ? Map.of() : Map.copyOf(copy);
+  }
+
+  private boolean isTruthy(Object value) {
+    if (value instanceof Boolean bool) {
+      return Boolean.TRUE.equals(bool);
+    }
+    if (value instanceof Number number) {
+      return number.intValue() != 0;
+    }
+    if (value instanceof String text) {
+      return Boolean.parseBoolean(text);
+    }
+    return false;
+  }
+
+  private boolean hasPositiveCounter(Map<String, Object> counters) {
+    if (counters == null || counters.isEmpty()) {
+      return false;
+    }
+    for (Object value : counters.values()) {
+      if (isPositive(value)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private boolean isPositive(Object value) {
+    if (value instanceof Number number) {
+      return number.doubleValue() > 0;
+    }
+    if (value instanceof String text) {
+      try {
+        return Double.parseDouble(text) > 0;
+      } catch (NumberFormatException ex) {
+        return false;
+      }
+    }
+    if (value instanceof Map<?, ?> map) {
+      for (Object nested : map.values()) {
+        if (isPositive(nested)) {
+          return true;
+        }
+      }
+      return false;
+    }
+    if (value instanceof Iterable<?> iterable) {
+      for (Object element : iterable) {
+        if (isPositive(element)) {
+          return true;
+        }
+      }
+      return false;
+    }
+    return false;
+  }
+
+  private String finalQueueName() {
+    return "ph." + swarmId + ".final";
+  }
+
+  private String hiveExchangeName() {
+    return "ph." + swarmId + ".hive";
+  }
+
+  private void ensureFinalQueueTap() {
+    if (workQueueConsumer != null) {
+      return;
+    }
+    String exchange = hiveExchangeName();
+    String routingKey = finalQueueName();
+    workQueueConsumer = WorkQueueConsumer.forExchangeTap(rabbitSubscriptions.connectionFactory(), exchange, routingKey);
+    tapQueueName = workQueueConsumer.queueName();
+    LOGGER.info("Subscribed to final exchange tap queue={} exchange={} routingKey={}", tapQueueName, exchange, routingKey);
+  }
+
+  private boolean looksLikeJson(String text) {
+    if (text == null) {
+      return false;
+    }
+    String trimmed = text.trim();
+    return !trimmed.isEmpty() && (trimmed.charAt(0) == '{' || trimmed.charAt(0) == '[');
+  }
+
+  private void inspectObservabilityTrace(WorkQueueConsumer.Message message) throws IOException {
+    Map<String, Object> headers = message.headers();
+    Object traceHeader = headers.get("x-ph-trace");
+    if (traceHeader == null) {
+      LOGGER.info("Final queue message carried no x-ph-trace header");
+      return;
+    }
+    String headerText = traceHeader.toString();
+    if (headerText == null || headerText.isBlank()) {
+      return;
+    }
+    JsonNode trace = objectMapper.readTree(headerText);
+    JsonNode hopsNode = trace.path("hops");
+    if (!hopsNode.isArray()) {
+      return;
+    }
+    List<String> services = new ArrayList<>();
+    hopsNode.forEach(node -> {
+      String service = node.path("service").asText();
+      if (service != null && !service.isBlank()) {
+        services.add(service.toLowerCase(Locale.ROOT));
+      }
+    });
+    if (services.isEmpty()) {
+      return;
+    }
+    List<String> expectedPrefix = List.of("generator", "moderator", "processor");
+    assertTrue(containsChain(services, expectedPrefix),
+        () -> "Observability hops missing generator→moderator→processor chain: " + services);
+    List<String> fullChain = List.of("generator", "moderator", "processor", "postprocessor");
+    if (!containsChain(services, fullChain)) {
+      LOGGER.info("Postprocessor hop not yet observed in trace: {}", services);
+    }
+  }
+
+  private boolean containsChain(List<String> services, List<String> expected) {
+    if (expected.isEmpty()) {
+      return true;
+    }
+    int position = -1;
+    for (String role : expected) {
+      position = findNextIndex(services, role, position + 1);
+      if (position < 0) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  private int findNextIndex(List<String> services, String role, int startIndex) {
+    for (int i = startIndex; i < services.size(); i++) {
+      if (role.equalsIgnoreCase(services.get(i))) {
+        return i;
+      }
+    }
+    return -1;
   }
 
   private List<String> workerRoles() {

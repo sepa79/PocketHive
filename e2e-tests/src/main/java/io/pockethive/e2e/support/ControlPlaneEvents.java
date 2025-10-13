@@ -160,6 +160,16 @@ public final class ControlPlaneEvents implements AutoCloseable {
     return latestStatus(swarmId, role, instance).map(StatusEnvelope::status);
   }
 
+  public Optional<StatusEnvelope> latestStatusDelta(String swarmId, String role, String instance) {
+    return statuses.stream()
+        .filter(env -> isDelta(env.status()) && matchesStatus(env.status(), swarmId, role, instance))
+        .max(Comparator.comparing(StatusEnvelope::receivedAt));
+  }
+
+  public Optional<StatusEvent> latestStatusDeltaEvent(String swarmId, String role, String instance) {
+    return latestStatusDelta(swarmId, role, instance).map(StatusEnvelope::status);
+  }
+
   public Optional<Instant> lastStatusSeenAt(String swarmId, String role, String instance) {
     return latestStatus(swarmId, role, instance).map(StatusEnvelope::receivedAt);
   }
@@ -230,6 +240,10 @@ public final class ControlPlaneEvents implements AutoCloseable {
     return equalsIgnoreCase(swarmId, status.swarmId())
         && equalsIgnoreCase(role, status.role())
         && equalsIgnoreCase(instance, status.instance());
+  }
+
+  private boolean isDelta(StatusEvent status) {
+    return status != null && "status-delta".equalsIgnoreCase(status.kind());
   }
 
   private boolean equalsIgnoreCase(String left, String right) {

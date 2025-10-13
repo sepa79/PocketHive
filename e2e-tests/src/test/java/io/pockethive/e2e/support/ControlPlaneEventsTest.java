@@ -43,6 +43,18 @@ class ControlPlaneEventsTest {
   }
 
   @Test
+  void exposesLatestStatusDeltaEvent() throws Exception {
+    StatusEvent status = statusFixture();
+    StatusEvent delta = toDelta(status);
+    events.recordStatus("ev.status-full.swarm-alpha.processor.processor-1", status, Instant.parse("2024-07-01T12:34:00Z"));
+    events.recordStatus("ev.status-delta.swarm-alpha.processor.processor-1", delta, Instant.parse("2024-07-01T12:34:10Z"));
+
+    StatusEvent latestDelta = events.latestStatusDeltaEvent("swarm-alpha", "processor", "processor-1").orElseThrow();
+    assertEquals("status-delta", latestDelta.kind());
+    assertEquals("processor-1", latestDelta.instance());
+  }
+
+  @Test
   void assertsQueueLayouts() throws Exception {
     StatusEvent status = statusFixture();
     events.recordStatus("ev.status-full.swarm-alpha.processor.processor-1", status, Instant.parse("2024-07-01T12:34:56Z"));
@@ -88,5 +100,30 @@ class ControlPlaneEventsTest {
       assertNotNull(status, "Expected parsed status event");
       return status;
     }
+  }
+
+  private StatusEvent toDelta(StatusEvent source) {
+    return new StatusEvent(
+        source.event(),
+        source.version(),
+        source.messageId(),
+        source.timestamp(),
+        source.location(),
+        "status-delta",
+        source.role(),
+        source.instance(),
+        source.origin(),
+        source.swarmId(),
+        source.enabled(),
+        source.state(),
+        source.watermark(),
+        source.maxStalenessSec(),
+        source.totals(),
+        source.queueStats(),
+        source.publishes(),
+        source.queues(),
+        source.data(),
+        source.traffic()
+    );
   }
 }

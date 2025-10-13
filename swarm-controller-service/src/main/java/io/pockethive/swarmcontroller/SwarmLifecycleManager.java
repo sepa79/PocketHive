@@ -445,6 +445,14 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
     return isFullyReady();
   }
 
+  @Override
+  public synchronized boolean isReadyForWork() {
+    if (expectedReady.isEmpty()) {
+      return true;
+    }
+    return isFullyReady();
+  }
+
   private boolean isFullyReady() {
     long now = System.currentTimeMillis();
     for (Map.Entry<String, Integer> e : expectedReady.entrySet()) {

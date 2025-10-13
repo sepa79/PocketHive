@@ -10,6 +10,8 @@ Feature: Swarm lifecycle golden path
     Then the swarm is registered and queues are declared
     When I start the swarm
     Then the swarm reports running
+    And I request a single generator run
+    Then the final queue receives the default generator response
     And the mock-1 worker statuses reflect the swarm topology
     When I stop the swarm
     Then the swarm reports stopped

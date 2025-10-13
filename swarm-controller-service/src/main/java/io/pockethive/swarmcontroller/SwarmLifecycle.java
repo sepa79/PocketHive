@@ -169,4 +169,13 @@ public interface SwarmLifecycle {
    * @param enabled whether workloads should actively process messages ({@code true}) or pause ({@code false}).
    */
   void setSwarmEnabled(boolean enabled);
+
+  /**
+   * Determine whether the swarm has received all readiness signals required to safely enable work.
+   * <p>
+   * Implementations should return {@code true} when the controller has already observed every
+   * expected worker heartbeat (or when no workers are expected) so callers can emit the
+   * {@code ready.swarm-template} confirmation without racing the control-plane queue declarations.
+   */
+  boolean isReadyForWork();
 }

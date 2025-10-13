@@ -500,6 +500,32 @@ class SwarmLifecycleManagerTest {
   }
 
   @Test
+  void emptyPlanIsReadyForWorkImmediately() throws Exception {
+    SwarmLifecycleManager manager = new SwarmLifecycleManager(amqp, mapper, docker, rabbit, "inst");
+    SwarmPlan plan = new SwarmPlan("swarm", List.of());
+
+    manager.prepare(mapper.writeValueAsString(plan));
+
+    assertTrue(manager.isReadyForWork());
+  }
+
+  @Test
+  void readyForWorkRequiresAllExpectedWorkers() throws Exception {
+    SwarmLifecycleManager manager = new SwarmLifecycleManager(amqp, mapper, docker, rabbit, "inst");
+    SwarmPlan plan = new SwarmPlan("swarm", List.of(new Bee("gen", "img", null, null)));
+
+    manager.prepare(mapper.writeValueAsString(plan));
+
+    assertFalse(manager.isReadyForWork());
+
+    manager.updateHeartbeat("gen", "g1");
+    assertFalse(manager.isReadyForWork());
+
+    assertTrue(manager.markReady("gen", "g1"));
+    assertTrue(manager.isReadyForWork());
+  }
+
+  @Test
   void statusEmissionsLogAtDebug(CapturedOutput output) throws Exception {
     SwarmLifecycleManager manager = new SwarmLifecycleManager(amqp, mapper, docker, rabbit, "inst");
     SwarmPlan plan = new SwarmPlan("swarm", List.of(new Bee("gen", "img", null, null)));
