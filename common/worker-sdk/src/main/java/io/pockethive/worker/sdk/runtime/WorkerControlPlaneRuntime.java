@@ -203,6 +203,9 @@ public final class WorkerControlPlaneRuntime {
                 if (shouldReuseExistingConfig(state, workerConfig)) {
                     storedConfig = mergeWithExistingConfig(state, enabled);
                     typedConfig = existingTypedConfig(state);
+                    if (typedConfig == null) {
+                        typedConfig = convertConfig(state.definition(), storedConfig);
+                    }
                 } else {
                     storedConfig = workerConfig;
                     typedConfig = convertConfig(state.definition(), workerConfig);

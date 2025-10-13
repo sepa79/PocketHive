@@ -100,6 +100,28 @@ class WorkerControlPlaneRuntimeTest {
     }
 
     @Test
+    void enableOnlyUpdateCachesTypedConfigWhenMissing() throws Exception {
+        Map<String, Object> args = Map.of("data", Map.of("enabled", true));
+        ControlSignal signal = ControlSignal.forInstance(
+            "config-update",
+            IDENTITY.swarmId(),
+            IDENTITY.role(),
+            IDENTITY.instanceId(),
+            UUID.randomUUID().toString(),
+            UUID.randomUUID().toString(),
+            CommandTarget.INSTANCE,
+            args
+        );
+        String payload = MAPPER.writeValueAsString(signal);
+        String routingKey = ControlPlaneRouting.signal("config-update", IDENTITY.swarmId(), IDENTITY.role(), IDENTITY.instanceId());
+
+        runtime.handle(payload, routingKey);
+
+        Optional<TestConfig> config = runtime.workerConfig(definition.beanName(), TestConfig.class);
+        assertThat(config).contains(new TestConfig(true, 0.0));
+    }
+
+    @Test
     void configUpdateWithoutEnabledPreservesExistingState() throws Exception {
         Map<String, Object> initialArgs = Map.of(
             "data", Map.of("enabled", true)
