@@ -196,22 +196,10 @@ public final class WorkerControlPlaneRuntime {
             ensureStatusPublisher(state);
             Map<String, Object> workerConfig = workerConfigFor(state, sanitized);
             Boolean enabled = resolveEnabled(workerConfig, command.enabled());
-            Map<String, Object> readyConfig = workerConfig;
             try {
-                Map<String, Object> storedConfig;
-                Object typedConfig;
-                if (shouldReuseExistingConfig(state, workerConfig)) {
-                    storedConfig = mergeWithExistingConfig(state, enabled);
-                    typedConfig = existingTypedConfig(state);
-                    if (typedConfig == null) {
-                        typedConfig = convertConfig(state.definition(), storedConfig);
-                    }
-                } else {
-                    storedConfig = workerConfig;
-                    typedConfig = convertConfig(state.definition(), workerConfig);
-                }
-                state.updateConfig(typedConfig, storedConfig, enabled);
-                emitConfigReady(signal, state, readyConfig, enabled);
+                Object typedConfig = convertConfig(state.definition(), workerConfig);
+                state.updateConfig(typedConfig, workerConfig, enabled);
+                emitConfigReady(signal, state, workerConfig, enabled);
                 notifyStateListeners(state);
             } catch (Exception ex) {
                 emitConfigError(signal, state, ex);
@@ -373,40 +361,6 @@ public final class WorkerControlPlaneRuntime {
             }
         });
         return Map.copyOf(copy);
-    }
-
-    private boolean shouldReuseExistingConfig(WorkerState state, Map<String, Object> workerConfig) {
-        if (workerConfig == null || workerConfig.isEmpty()) {
-            return true;
-        }
-        for (String key : workerConfig.keySet()) {
-            if (!"enabled".equals(key)) {
-                return false;
-            }
-        }
-        return state.definition().configType() != Void.class;
-    }
-
-    private Map<String, Object> mergeWithExistingConfig(WorkerState state, Boolean enabled) {
-        Map<String, Object> existing = state.rawConfig();
-        if (existing.isEmpty() && enabled == null) {
-            return Map.of();
-        }
-        Map<String, Object> merged = new LinkedHashMap<>(existing);
-        if (enabled != null) {
-            merged.put("enabled", enabled);
-        }
-        return merged.isEmpty() ? Map.of() : Map.copyOf(merged);
-    }
-
-    private Object existingTypedConfig(WorkerState state) {
-        Class<?> configType = state.definition().configType();
-        if (configType == Void.class) {
-            return null;
-        }
-        @SuppressWarnings("unchecked")
-        Class<Object> castType = (Class<Object>) configType;
-        return state.config(castType).orElse(null);
     }
 
     private Boolean resolveEnabled(Map<String, Object> workerConfig, Boolean commandEnabled) {
