@@ -38,6 +38,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
 
 @Component
 @EnableScheduling
@@ -52,6 +53,7 @@ public class SwarmSignalListener {
   private static final long STATUS_INTERVAL_MS = 5000L;
   private static final long MAX_STALENESS_MS = 15_000L;
   private volatile boolean controllerEnabled = false;
+  private final AtomicReference<PendingTemplate> pendingTemplate = new AtomicReference<>();
 
   @Autowired
   public SwarmSignalListener(SwarmLifecycle lifecycle,
@@ -150,7 +152,10 @@ public class SwarmSignalListener {
       boolean enabled = node.path("data").path("enabled").asBoolean(true);
       lifecycle.updateEnabled(role, instance, enabled);
       if (!enabled) {
-        lifecycle.markReady(role, instance);
+        boolean ready = lifecycle.markReady(role, instance);
+        if (ready) {
+          tryEmitPendingTemplateReady();
+        }
       }
     } catch (Exception e) {
       log.warn("status parse", e);
@@ -167,10 +172,45 @@ public class SwarmSignalListener {
     try {
       log.info("{} signal for swarm {}", label.substring(0, 1).toUpperCase() + label.substring(1), swarmId);
       action.apply(serializeArgs(cs));
-      emitSuccess(cs, resolvedSignal, swarmId);
+      if ("swarm-template".equals(resolvedSignal)) {
+        onTemplateSuccess(cs, resolvedSignal, swarmId);
+      } else {
+        emitSuccess(cs, resolvedSignal, swarmId);
+      }
     } catch (Exception e) {
       log.warn(label, e);
       emitError(cs, e, resolvedSignal, swarmId);
+    }
+  }
+
+  private void onTemplateSuccess(ControlSignal cs, String resolvedSignal, String swarmId) {
+    if (lifecycle.isReadyForWork()) {
+      pendingTemplate.set(null);
+      emitSuccess(cs, resolvedSignal, swarmId);
+      return;
+    }
+
+    PendingTemplate newPending = new PendingTemplate(cs, resolvedSignal, swarmId);
+    PendingTemplate previous = pendingTemplate.getAndSet(newPending);
+    if (previous != null) {
+      log.debug("Replacing pending swarm-template confirmation for correlation {} with {}", previous.signal().correlationId(), cs.correlationId());
+    }
+    tryEmitPendingTemplateReady();
+  }
+
+  private void tryEmitPendingTemplateReady() {
+    while (true) {
+      PendingTemplate pending = pendingTemplate.get();
+      if (pending == null) {
+        return;
+      }
+      if (!lifecycle.isReadyForWork()) {
+        return;
+      }
+      if (pendingTemplate.compareAndSet(pending, null)) {
+        emitSuccess(pending.signal(), pending.resolvedSignal(), pending.swarmIdFallback());
+        return;
+      }
     }
   }
 
@@ -582,6 +622,8 @@ public class SwarmSignalListener {
     }
     return role;
   }
+
+  private record PendingTemplate(ControlSignal signal, String resolvedSignal, String swarmIdFallback) {}
 
   private record TargetSpec(String role, String instance) {}
 
