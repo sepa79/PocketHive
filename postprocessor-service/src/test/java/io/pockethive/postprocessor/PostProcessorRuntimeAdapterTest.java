@@ -90,6 +90,7 @@ class PostProcessorRuntimeAdapterTest {
     );
 
     adapter.initialiseStateListener();
+    verify(controlPlaneRuntime).registerDefaultConfig(eq("postProcessorWorker"), any());
     verify(controlPlaneRuntime).emitStatusSnapshot();
 
     Message inbound = new RabbitWorkMessageConverter().toMessage(WorkMessage.text("payload").build());
@@ -137,6 +138,7 @@ class PostProcessorRuntimeAdapterTest {
     );
 
     adapter.initialiseStateListener();
+    verify(controlPlaneRuntime).registerDefaultConfig(eq("postProcessorWorker"), any());
     verify(controlPlaneRuntime).emitStatusSnapshot();
 
     ArgumentCaptor<String> beanCaptor = ArgumentCaptor.forClass(String.class);

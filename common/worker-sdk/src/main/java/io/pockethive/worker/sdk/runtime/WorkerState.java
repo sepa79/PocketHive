@@ -69,10 +69,34 @@ public final class WorkerState {
     }
 
     void updateConfig(Object config, Map<String, Object> rawData, Boolean enabled) {
-        configRef.set(config);
-        rawConfigRef.set(rawData == null ? Map.of() : Map.copyOf(rawData));
+        if (config != null) {
+            configRef.set(config);
+        } else if (rawData == null) {
+            configRef.set(null);
+        }
+        if (rawData != null && !rawData.isEmpty()) {
+            rawConfigRef.set(Map.copyOf(rawData));
+        }
         if (enabled != null) {
             enabledRef.set(enabled);
+        }
+    }
+
+    boolean seedConfig(Object config, Map<String, Object> rawData, Boolean enabled) {
+        synchronized (this) {
+            if (configRef.get() != null || !rawConfigRef.get().isEmpty() || enabledRef.get() != null) {
+                return false;
+            }
+            if (config != null) {
+                configRef.set(config);
+            }
+            if (rawData != null && !rawData.isEmpty()) {
+                rawConfigRef.set(Map.copyOf(rawData));
+            }
+            if (enabled != null) {
+                enabledRef.set(enabled);
+            }
+            return true;
         }
     }
 

@@ -61,6 +61,7 @@ class ModeratorRuntimeAdapter implements ApplicationListener<ContextRefreshedEve
         .listenerRegistry(endpointRegistry)
         .identity(controlIdentity)
         .defaultEnabledSupplier(() -> moderatorDefaults.asConfig().enabled())
+        .defaultConfigSupplier(moderatorDefaults::asConfig)
         .desiredStateResolver(snapshot -> snapshot.enabled().orElseGet(() -> snapshot.config(ModeratorWorkerConfig.class)
             .map(ModeratorWorkerConfig::enabled)
             .orElse(moderatorDefaults.asConfig().enabled())))

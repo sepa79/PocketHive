@@ -1,16 +1,64 @@
 package io.pockethive.worker.sdk.runtime;
 
+import io.pockethive.worker.sdk.config.WorkerType;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.nio.file.Path;
+import java.util.Map;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 class WorkerStateTest {
+
+    @Test
+    void seedConfigInitialisesStateOnce() {
+        WorkerDefinition definition = new WorkerDefinition(
+            "testWorker",
+            Object.class,
+            WorkerType.GENERATOR,
+            "test-role",
+            null,
+            null,
+            TestConfig.class
+        );
+        WorkerState state = new WorkerState(definition);
+        TestConfig defaults = new TestConfig(true, 5.0);
+        Map<String, Object> rawDefaults = Map.of("enabled", true, "ratePerSec", 5.0);
+
+        boolean seeded = state.seedConfig(defaults, rawDefaults, true);
+
+        assertThat(seeded).isTrue();
+        assertThat(state.config(TestConfig.class)).contains(defaults);
+        assertThat(state.rawConfig()).isEqualTo(rawDefaults);
+        assertThat(state.enabled()).contains(true);
+        assertThat(state.seedConfig(new TestConfig(false, 1.0), Map.of(), false)).isFalse();
+    }
+
+    @Test
+    void updateConfigWithEmptyPayloadPreservesExistingRawConfig() {
+        WorkerDefinition definition = new WorkerDefinition(
+            "testWorker",
+            Object.class,
+            WorkerType.GENERATOR,
+            "test-role",
+            null,
+            null,
+            TestConfig.class
+        );
+        WorkerState state = new WorkerState(definition);
+        Map<String, Object> rawDefaults = Map.of("enabled", true, "ratePerSec", 5.0);
+        state.seedConfig(new TestConfig(true, 5.0), rawDefaults, true);
+
+        state.updateConfig(null, Map.of(), null);
+        assertThat(state.rawConfig()).isEqualTo(rawDefaults);
+
+        state.updateConfig(null, null, null);
+        assertThat(state.rawConfig()).isEqualTo(rawDefaults);
+    }
 
     @Test
     @SuppressWarnings({"unchecked", "resource"})
@@ -88,6 +136,9 @@ class WorkerStateTest {
             restoreProperty(inboundPropertyKey, originalInboundProperty);
             restoreProperty(outboundPropertyKey, originalOutboundProperty);
         }
+    }
+
+    private record TestConfig(boolean enabled, double ratePerSec) {
     }
 
     private static void restoreProperty(String key, String originalValue) {

@@ -99,6 +99,7 @@ class ModeratorRuntimeAdapterTest {
     );
 
     adapter.initialiseStateListener();
+    verify(controlPlaneRuntime).registerDefaultConfig(eq("moderatorWorker"), any());
     verify(controlPlaneRuntime).emitStatusSnapshot();
 
     Message inbound = new RabbitWorkMessageConverter().toMessage(WorkMessage.text("body").build());
@@ -125,6 +126,7 @@ class ModeratorRuntimeAdapterTest {
     );
 
     adapter.initialiseStateListener();
+    verify(controlPlaneRuntime).registerDefaultConfig(eq("moderatorWorker"), any());
     verify(controlPlaneRuntime).emitStatusSnapshot();
 
     adapter.onControl("{}", "moderator.control", null);
@@ -153,6 +155,7 @@ class ModeratorRuntimeAdapterTest {
     );
 
     adapter.initialiseStateListener();
+    verify(controlPlaneRuntime).registerDefaultConfig(eq("moderatorWorker"), any());
     verify(controlPlaneRuntime).emitStatusSnapshot();
 
     ArgumentCaptor<String> beanCaptor = ArgumentCaptor.forClass(String.class);

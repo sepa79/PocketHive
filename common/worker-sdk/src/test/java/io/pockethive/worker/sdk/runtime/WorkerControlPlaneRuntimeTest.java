@@ -63,6 +63,34 @@ class WorkerControlPlaneRuntimeTest {
     }
 
     @Test
+    void registerDefaultConfigSeedsState() throws Exception {
+        TestConfig defaults = new TestConfig(true, 7.5);
+
+        runtime.registerDefaultConfig(definition.beanName(), defaults);
+
+        assertThat(runtime.workerConfig(definition.beanName(), TestConfig.class)).contains(defaults);
+        assertThat(runtime.workerRawConfig(definition.beanName()))
+            .containsEntry("ratePerSec", 7.5)
+            .containsEntry("enabled", true);
+        assertThat(runtime.workerEnabled(definition.beanName())).contains(true);
+
+        reset(emitter);
+        runtime.emitStatusSnapshot();
+
+        ArgumentCaptor<ControlPlaneEmitter.StatusContext> captor =
+            ArgumentCaptor.forClass(ControlPlaneEmitter.StatusContext.class);
+        verify(emitter).emitStatusSnapshot(captor.capture());
+
+        Map<String, Object> snapshot = buildSnapshot(captor.getValue());
+        @SuppressWarnings("unchecked")
+        Map<String, Object> data = (Map<String, Object>) snapshot.get("data");
+        @SuppressWarnings("unchecked")
+        java.util.List<Map<String, Object>> workers = (java.util.List<Map<String, Object>>) data.get("workers");
+        assertThat(workers).singleElement().satisfies(worker ->
+            assertThat(worker).containsEntry("worker", definition.beanName()).containsKey("config"));
+    }
+
+    @Test
     void workerConfigAccessibleAfterUpdate() throws Exception {
         String correlationId = UUID.randomUUID().toString();
         String idempotencyKey = UUID.randomUUID().toString();
@@ -140,6 +168,68 @@ class WorkerControlPlaneRuntimeTest {
         assertThat(runtime.workerEnabled(definition.beanName())).contains(true);
         Map<String, Object> rawConfig = runtime.workerRawConfig(definition.beanName());
         assertThat(rawConfig).containsEntry("ratePerSec", 20.0);
+    }
+
+    @Test
+    void partialConfigUpdateRetainsSeededDefaults() throws Exception {
+        TestConfig defaults = new TestConfig(true, 7.5);
+        runtime.registerDefaultConfig(definition.beanName(), defaults);
+        reset(emitter);
+
+        Map<String, Object> args = Map.of(
+            "data", Map.of("ratePerSec", 20.0)
+        );
+        ControlSignal signal = ControlSignal.forInstance(
+            "config-update",
+            IDENTITY.swarmId(),
+            IDENTITY.role(),
+            IDENTITY.instanceId(),
+            UUID.randomUUID().toString(),
+            UUID.randomUUID().toString(),
+            CommandTarget.INSTANCE,
+            args
+        );
+        String payload = MAPPER.writeValueAsString(signal);
+        String routingKey = ControlPlaneRouting.signal("config-update", IDENTITY.swarmId(), IDENTITY.role(), IDENTITY.instanceId());
+
+        runtime.handle(payload, routingKey);
+
+        Map<String, Object> rawConfig = runtime.workerRawConfig(definition.beanName());
+        assertThat(rawConfig)
+            .containsEntry("enabled", true)
+            .containsEntry("ratePerSec", 20.0);
+        assertThat(runtime.workerConfig(definition.beanName(), TestConfig.class)).contains(new TestConfig(true, 20.0));
+    }
+
+    @Test
+    void nullValuedConfigEntriesAreIgnored() throws Exception {
+        TestConfig defaults = new TestConfig(true, 7.5);
+        runtime.registerDefaultConfig(definition.beanName(), defaults);
+        reset(emitter);
+
+        Map<String, Object> data = new java.util.LinkedHashMap<>();
+        data.put("ratePerSec", null);
+        Map<String, Object> args = Map.of("data", data);
+        ControlSignal signal = ControlSignal.forInstance(
+            "config-update",
+            IDENTITY.swarmId(),
+            IDENTITY.role(),
+            IDENTITY.instanceId(),
+            UUID.randomUUID().toString(),
+            UUID.randomUUID().toString(),
+            CommandTarget.INSTANCE,
+            args
+        );
+        String payload = MAPPER.writeValueAsString(signal);
+        String routingKey = ControlPlaneRouting.signal("config-update", IDENTITY.swarmId(), IDENTITY.role(), IDENTITY.instanceId());
+
+        runtime.handle(payload, routingKey);
+
+        Map<String, Object> rawConfig = runtime.workerRawConfig(definition.beanName());
+        assertThat(rawConfig)
+            .containsEntry("enabled", true)
+            .containsEntry("ratePerSec", 7.5);
+        assertThat(runtime.workerConfig(definition.beanName(), TestConfig.class)).contains(defaults);
     }
 
     @Test

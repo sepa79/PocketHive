@@ -66,6 +66,7 @@ class ProcessorRuntimeAdapter implements ApplicationListener<ContextRefreshedEve
         .listenerRegistry(endpointRegistry)
         .identity(controlIdentity)
         .defaultEnabledSupplier(() -> processorDefaults.asConfig().enabled())
+        .defaultConfigSupplier(processorDefaults::asConfig)
         .desiredStateResolver(snapshot -> snapshot.enabled().orElseGet(() -> snapshot.config(ProcessorWorkerConfig.class)
             .map(ProcessorWorkerConfig::enabled)
             .orElse(processorDefaults.asConfig().enabled())))

@@ -15,6 +15,7 @@ import io.pockethive.controlplane.worker.WorkerSignalListener;
 import io.pockethive.controlplane.worker.WorkerStatusRequest;
 import io.pockethive.worker.sdk.api.StatusPublisher;
 import io.pockethive.worker.sdk.config.PocketHiveWorker;
+import com.fasterxml.jackson.core.type.TypeReference;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -41,6 +42,7 @@ public final class WorkerControlPlaneRuntime {
 
     private static final Logger log = LoggerFactory.getLogger(WorkerControlPlaneRuntime.class);
     private static final String CONFIG_PHASE = "apply";
+    private static final TypeReference<Map<String, Object>> DEFAULT_CONFIG_TYPE = new TypeReference<>() {};
 
     private final WorkerControlPlane workerControlPlane;
     private final WorkerStateStore stateStore;
@@ -126,6 +128,27 @@ public final class WorkerControlPlaneRuntime {
     }
 
     /**
+     * Seeds the worker state with the provided default configuration if no control-plane override has been applied yet.
+     */
+    public void registerDefaultConfig(String workerBeanName, Object defaultConfig) {
+        Objects.requireNonNull(workerBeanName, "workerBeanName");
+        if (defaultConfig == null) {
+            return;
+        }
+        WorkerState state = stateStore.find(workerBeanName).orElse(null);
+        if (state == null) {
+            log.warn("Unable to seed default config for unknown worker {}", workerBeanName);
+            return;
+        }
+        Map<String, Object> rawConfig = convertDefaultConfig(defaultConfig);
+        Boolean enabled = resolveEnabled(rawConfig, null);
+        if (state.seedConfig(defaultConfig, rawConfig, enabled)) {
+            ensureStatusPublisher(state);
+            notifyStateListeners(state);
+        }
+    }
+
+    /**
      * Registers a listener that will be notified for every worker state change. Existing worker snapshots are
      * delivered immediately upon registration.
      */
@@ -194,12 +217,14 @@ public final class WorkerControlPlaneRuntime {
         Map<String, Object> sanitized = sanitiseConfig(command.data());
         for (WorkerState state : targets) {
             ensureStatusPublisher(state);
-            Map<String, Object> workerConfig = workerConfigFor(state, sanitized);
-            Boolean enabled = resolveEnabled(workerConfig, command.enabled());
+            Map<String, Object> workerUpdate = workerConfigFor(state, sanitized);
+            Map<String, Object> filteredUpdate = withoutNullValues(workerUpdate);
+            Map<String, Object> mergedConfig = mergeWithExisting(state.rawConfig(), filteredUpdate);
+            Boolean enabled = resolveEnabled(mergedConfig, command.enabled());
             try {
-                Object typedConfig = convertConfig(state.definition(), workerConfig);
-                state.updateConfig(typedConfig, workerConfig, enabled);
-                emitConfigReady(signal, state, workerConfig, enabled);
+                Object typedConfig = convertConfig(state.definition(), mergedConfig);
+                state.updateConfig(typedConfig, mergedConfig, enabled);
+                emitConfigReady(signal, state, mergedConfig, enabled);
                 notifyStateListeners(state);
             } catch (Exception ex) {
                 emitConfigError(signal, state, ex);
@@ -220,6 +245,16 @@ public final class WorkerControlPlaneRuntime {
             String message = "Unable to convert control-plane config for worker '%s' to type %s".formatted(
                 definition.beanName(), configType.getSimpleName());
             throw new IllegalArgumentException(message, ex);
+        }
+    }
+
+    private Map<String, Object> convertDefaultConfig(Object defaultConfig) {
+        try {
+            Map<String, Object> converted = objectMapper.convertValue(defaultConfig, DEFAULT_CONFIG_TYPE);
+            return converted == null ? Map.of() : Map.copyOf(converted);
+        } catch (IllegalArgumentException ex) {
+            log.warn("Unable to convert default config of type {}", defaultConfig.getClass().getName(), ex);
+            return Map.of();
         }
     }
 
@@ -331,7 +366,7 @@ public final class WorkerControlPlaneRuntime {
         sanitized.remove("workerBean");
         sanitized.remove("bean");
         sanitized.remove("target");
-        return Map.copyOf(sanitized);
+        return Collections.unmodifiableMap(sanitized);
     }
 
     private Map<String, Object> workerConfigFor(WorkerState state, Map<String, Object> sanitized) {
@@ -351,6 +386,34 @@ public final class WorkerControlPlaneRuntime {
             return copyMap(nested);
         }
         return sanitized;
+    }
+
+    private Map<String, Object> withoutNullValues(Map<String, Object> candidate) {
+        if (candidate.isEmpty()) {
+            return Map.of();
+        }
+        Map<String, Object> filtered = new LinkedHashMap<>();
+        candidate.forEach((key, value) -> {
+            if (value != null) {
+                filtered.put(key, value);
+            }
+        });
+        if (filtered.isEmpty()) {
+            return Map.of();
+        }
+        return Map.copyOf(filtered);
+    }
+
+    private Map<String, Object> mergeWithExisting(Map<String, Object> existing, Map<String, Object> updates) {
+        if (updates.isEmpty()) {
+            return existing == null ? Map.of() : existing;
+        }
+        Map<String, Object> merged = new LinkedHashMap<>();
+        if (existing != null && !existing.isEmpty()) {
+            merged.putAll(existing);
+        }
+        merged.putAll(updates);
+        return Map.copyOf(merged);
     }
 
     private Map<String, Object> copyMap(Map<?, ?> source) {

@@ -94,6 +94,7 @@ class ProcessorRuntimeAdapterTest {
     );
 
     adapter.initialiseStateListener();
+    verify(controlPlaneRuntime).registerDefaultConfig(eq("processorWorker"), any());
     verify(controlPlaneRuntime).emitStatusSnapshot();
 
     Message inbound = new RabbitWorkMessageConverter().toMessage(WorkMessage.text("payload").build());
@@ -119,6 +120,7 @@ class ProcessorRuntimeAdapterTest {
     );
 
     adapter.initialiseStateListener();
+    verify(controlPlaneRuntime).registerDefaultConfig(eq("processorWorker"), any());
     verify(controlPlaneRuntime).emitStatusSnapshot();
 
     adapter.onControl("{}", "processor.control", null);
@@ -154,6 +156,7 @@ class ProcessorRuntimeAdapterTest {
     verify(controlPlaneRuntime).registerStateListener(beanCaptor.capture(), any());
     assertThat(beanCaptor.getValue()).isEqualTo("processorWorker");
     verify(listenerContainer, times(1)).start();
+    verify(controlPlaneRuntime).registerDefaultConfig(eq("processorWorker"), any());
     verify(controlPlaneRuntime).emitStatusSnapshot();
   }
 

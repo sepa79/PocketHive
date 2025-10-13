@@ -108,6 +108,7 @@ class ProcessorRuntimeAdapter implements ApplicationListener<ContextRefreshedEve
         .listenerRegistry(listenerRegistry)
         .identity(identity)
         .defaultEnabledSupplier(() -> defaults.asConfig().enabled())
+        .defaultConfigSupplier(defaults::asConfig)
         .desiredStateResolver(snapshot -> snapshot.enabled().orElse(defaults.asConfig().enabled()))
         .dispatcher(message -> workerRuntime.dispatch(definition.beanName(), message))
         .messageResultPublisher((result, outbound) -> {
