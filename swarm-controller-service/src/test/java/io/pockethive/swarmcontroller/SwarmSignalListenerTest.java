@@ -78,8 +78,8 @@ class SwarmSignalListenerTest {
 
   private String status(String swarmId, boolean enabled) {
     return """
-        {"swarmId":"%s","data":{"enabled":%s}}
-        """.formatted(swarmId, enabled);
+        {"swarmId":"%s","enabled":%s,"data":{"enabled":%s}}
+        """.formatted(swarmId, enabled, enabled);
   }
 
   private String controllerSignal(String command) {

@@ -149,7 +149,11 @@ public class SwarmSignalListener {
         return;
       }
       lifecycle.updateHeartbeat(role, instance);
-      boolean enabled = node.path("data").path("enabled").asBoolean(true);
+
+      JsonNode enabledNode = node.path("enabled");
+      boolean enabled = !enabledNode.isMissingNode() && !enabledNode.isNull()
+          ? enabledNode.asBoolean()
+          : node.path("data").path("enabled").asBoolean(true);
       lifecycle.updateEnabled(role, instance, enabled);
       if (!enabled) {
         boolean ready = lifecycle.markReady(role, instance);
