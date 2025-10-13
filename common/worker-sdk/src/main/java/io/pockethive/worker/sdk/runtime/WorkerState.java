@@ -74,12 +74,8 @@ public final class WorkerState {
         } else if (rawData == null) {
             configRef.set(null);
         }
-        if (rawData != null) {
-            if (!rawData.isEmpty()) {
-                rawConfigRef.set(Map.copyOf(rawData));
-            }
-        } else {
-            rawConfigRef.set(Map.of());
+        if (rawData != null && !rawData.isEmpty()) {
+            rawConfigRef.set(Map.copyOf(rawData));
         }
         if (enabled != null) {
             enabledRef.set(enabled);

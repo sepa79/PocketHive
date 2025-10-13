@@ -171,6 +171,68 @@ class WorkerControlPlaneRuntimeTest {
     }
 
     @Test
+    void partialConfigUpdateRetainsSeededDefaults() throws Exception {
+        TestConfig defaults = new TestConfig(true, 7.5);
+        runtime.registerDefaultConfig(definition.beanName(), defaults);
+        reset(emitter);
+
+        Map<String, Object> args = Map.of(
+            "data", Map.of("ratePerSec", 20.0)
+        );
+        ControlSignal signal = ControlSignal.forInstance(
+            "config-update",
+            IDENTITY.swarmId(),
+            IDENTITY.role(),
+            IDENTITY.instanceId(),
+            UUID.randomUUID().toString(),
+            UUID.randomUUID().toString(),
+            CommandTarget.INSTANCE,
+            args
+        );
+        String payload = MAPPER.writeValueAsString(signal);
+        String routingKey = ControlPlaneRouting.signal("config-update", IDENTITY.swarmId(), IDENTITY.role(), IDENTITY.instanceId());
+
+        runtime.handle(payload, routingKey);
+
+        Map<String, Object> rawConfig = runtime.workerRawConfig(definition.beanName());
+        assertThat(rawConfig)
+            .containsEntry("enabled", true)
+            .containsEntry("ratePerSec", 20.0);
+        assertThat(runtime.workerConfig(definition.beanName(), TestConfig.class)).contains(new TestConfig(true, 20.0));
+    }
+
+    @Test
+    void nullValuedConfigEntriesAreIgnored() throws Exception {
+        TestConfig defaults = new TestConfig(true, 7.5);
+        runtime.registerDefaultConfig(definition.beanName(), defaults);
+        reset(emitter);
+
+        Map<String, Object> data = new java.util.LinkedHashMap<>();
+        data.put("ratePerSec", null);
+        Map<String, Object> args = Map.of("data", data);
+        ControlSignal signal = ControlSignal.forInstance(
+            "config-update",
+            IDENTITY.swarmId(),
+            IDENTITY.role(),
+            IDENTITY.instanceId(),
+            UUID.randomUUID().toString(),
+            UUID.randomUUID().toString(),
+            CommandTarget.INSTANCE,
+            args
+        );
+        String payload = MAPPER.writeValueAsString(signal);
+        String routingKey = ControlPlaneRouting.signal("config-update", IDENTITY.swarmId(), IDENTITY.role(), IDENTITY.instanceId());
+
+        runtime.handle(payload, routingKey);
+
+        Map<String, Object> rawConfig = runtime.workerRawConfig(definition.beanName());
+        assertThat(rawConfig)
+            .containsEntry("enabled", true)
+            .containsEntry("ratePerSec", 7.5);
+        assertThat(runtime.workerConfig(definition.beanName(), TestConfig.class)).contains(defaults);
+    }
+
+    @Test
     void stateListenerReceivesSnapshots() throws Exception {
         AtomicReference<WorkerControlPlaneRuntime.WorkerStateSnapshot> lastSnapshot = new AtomicReference<>();
         runtime.registerStateListener(definition.beanName(), lastSnapshot::set);

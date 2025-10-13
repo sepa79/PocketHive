@@ -39,6 +39,28 @@ class WorkerStateTest {
     }
 
     @Test
+    void updateConfigWithEmptyPayloadPreservesExistingRawConfig() {
+        WorkerDefinition definition = new WorkerDefinition(
+            "testWorker",
+            Object.class,
+            WorkerType.GENERATOR,
+            "test-role",
+            null,
+            null,
+            TestConfig.class
+        );
+        WorkerState state = new WorkerState(definition);
+        Map<String, Object> rawDefaults = Map.of("enabled", true, "ratePerSec", 5.0);
+        state.seedConfig(new TestConfig(true, 5.0), rawDefaults, true);
+
+        state.updateConfig(null, Map.of(), null);
+        assertThat(state.rawConfig()).isEqualTo(rawDefaults);
+
+        state.updateConfig(null, null, null);
+        assertThat(state.rawConfig()).isEqualTo(rawDefaults);
+    }
+
+    @Test
     @SuppressWarnings({"unchecked", "resource"})
     void resolvesTopologyDefaultsUsingRuntimeQueues() throws Exception {
         String inboundPropertyKey = "PH_GEN_QUEUE";
