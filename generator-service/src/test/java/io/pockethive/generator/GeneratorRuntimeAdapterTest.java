@@ -16,7 +16,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
+import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
@@ -134,7 +136,9 @@ class GeneratorRuntimeAdapterTest {
     );
 
     ArgumentCaptor<String> beanCaptor = ArgumentCaptor.forClass(String.class);
-    verify(controlPlaneRuntime).registerStateListener(beanCaptor.capture(), any());
+    InOrder inOrder = Mockito.inOrder(controlPlaneRuntime);
+    inOrder.verify(controlPlaneRuntime).registerDefaultConfig(eq("generatorWorker"), any());
+    inOrder.verify(controlPlaneRuntime).registerStateListener(beanCaptor.capture(), any());
     assertThat(beanCaptor.getValue()).isEqualTo("generatorWorker");
   }
 }

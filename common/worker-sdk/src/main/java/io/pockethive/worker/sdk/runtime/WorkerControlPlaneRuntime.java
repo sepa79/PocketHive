@@ -15,6 +15,7 @@ import io.pockethive.controlplane.worker.WorkerSignalListener;
 import io.pockethive.controlplane.worker.WorkerStatusRequest;
 import io.pockethive.worker.sdk.api.StatusPublisher;
 import io.pockethive.worker.sdk.config.PocketHiveWorker;
+import com.fasterxml.jackson.core.type.TypeReference;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -41,6 +42,7 @@ public final class WorkerControlPlaneRuntime {
 
     private static final Logger log = LoggerFactory.getLogger(WorkerControlPlaneRuntime.class);
     private static final String CONFIG_PHASE = "apply";
+    private static final TypeReference<Map<String, Object>> DEFAULT_CONFIG_TYPE = new TypeReference<>() {};
 
     private final WorkerControlPlane workerControlPlane;
     private final WorkerStateStore stateStore;
@@ -122,6 +124,27 @@ public final class WorkerControlPlaneRuntime {
         stateListeners.computeIfAbsent(workerBeanName, key -> new CopyOnWriteArrayList<>()).add(listener);
         if (state != null) {
             safeInvoke(listener, new WorkerStateSnapshot(state));
+        }
+    }
+
+    /**
+     * Seeds the worker state with the provided default configuration if no control-plane override has been applied yet.
+     */
+    public void registerDefaultConfig(String workerBeanName, Object defaultConfig) {
+        Objects.requireNonNull(workerBeanName, "workerBeanName");
+        if (defaultConfig == null) {
+            return;
+        }
+        WorkerState state = stateStore.find(workerBeanName).orElse(null);
+        if (state == null) {
+            log.warn("Unable to seed default config for unknown worker {}", workerBeanName);
+            return;
+        }
+        Map<String, Object> rawConfig = convertDefaultConfig(defaultConfig);
+        Boolean enabled = resolveEnabled(rawConfig, null);
+        if (state.seedConfig(defaultConfig, rawConfig, enabled)) {
+            ensureStatusPublisher(state);
+            notifyStateListeners(state);
         }
     }
 
@@ -220,6 +243,16 @@ public final class WorkerControlPlaneRuntime {
             String message = "Unable to convert control-plane config for worker '%s' to type %s".formatted(
                 definition.beanName(), configType.getSimpleName());
             throw new IllegalArgumentException(message, ex);
+        }
+    }
+
+    private Map<String, Object> convertDefaultConfig(Object defaultConfig) {
+        try {
+            Map<String, Object> converted = objectMapper.convertValue(defaultConfig, DEFAULT_CONFIG_TYPE);
+            return converted == null ? Map.of() : Map.copyOf(converted);
+        } catch (IllegalArgumentException ex) {
+            log.warn("Unable to convert default config of type {}", defaultConfig.getClass().getName(), ex);
+            return Map.of();
         }
     }
 

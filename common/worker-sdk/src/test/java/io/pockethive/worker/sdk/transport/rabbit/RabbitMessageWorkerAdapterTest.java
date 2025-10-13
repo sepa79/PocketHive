@@ -15,7 +15,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
+import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -62,6 +64,8 @@ class RabbitMessageWorkerAdapterTest {
     private ControlPlaneIdentity identity;
     private Supplier<Boolean> defaultEnabled;
     private Function<WorkerControlPlaneRuntime.WorkerStateSnapshot, Boolean> desiredStateResolver;
+    private Supplier<Object> defaultConfig;
+    private DummyConfig defaults;
 
     @BeforeEach
     void setUp() {
@@ -77,6 +81,8 @@ class RabbitMessageWorkerAdapterTest {
         identity = new ControlPlaneIdentity("swarm-1", "processor", "instance-1");
         defaultEnabled = () -> true;
         desiredStateResolver = snapshot -> snapshot.enabled().orElseGet(defaultEnabled);
+        defaults = new DummyConfig(true);
+        defaultConfig = () -> defaults;
     }
 
     @Test
@@ -90,9 +96,11 @@ class RabbitMessageWorkerAdapterTest {
 
         @SuppressWarnings("unchecked")
         ArgumentCaptor<Consumer<WorkerControlPlaneRuntime.WorkerStateSnapshot>> listenerCaptor = ArgumentCaptor.forClass(Consumer.class);
-        verify(controlPlaneRuntime).registerStateListener(eq("processorWorker"), listenerCaptor.capture());
+        InOrder inOrder = Mockito.inOrder(controlPlaneRuntime);
+        inOrder.verify(controlPlaneRuntime).registerDefaultConfig(eq("processorWorker"), eq(defaults));
+        inOrder.verify(controlPlaneRuntime).registerStateListener(eq("processorWorker"), listenerCaptor.capture());
+        inOrder.verify(controlPlaneRuntime).emitStatusSnapshot();
         verify(listenerContainer).start();
-        verify(controlPlaneRuntime).emitStatusSnapshot();
 
         WorkerControlPlaneRuntime.WorkerStateSnapshot snapshot = mock(WorkerControlPlaneRuntime.WorkerStateSnapshot.class);
         when(snapshot.enabled()).thenReturn(Optional.of(false));
@@ -180,9 +188,13 @@ class RabbitMessageWorkerAdapterTest {
             .listenerRegistry(listenerRegistry)
             .identity(identity)
             .defaultEnabledSupplier(defaultEnabled)
+            .defaultConfigSupplier(defaultConfig)
             .desiredStateResolver(desiredStateResolver)
             .dispatcher(dispatcher)
             .messageResultPublisher(resultPublisher)
             .dispatchErrorHandler(errorHandler);
+    }
+
+    private record DummyConfig(boolean enabled) {
     }
 }

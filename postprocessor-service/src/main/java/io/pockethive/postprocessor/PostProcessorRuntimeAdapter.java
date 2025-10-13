@@ -56,6 +56,7 @@ class PostProcessorRuntimeAdapter implements ApplicationListener<ContextRefreshe
         .listenerRegistry(endpointRegistry)
         .identity(controlIdentity)
         .defaultEnabledSupplier(() -> postProcessorDefaults.asConfig().enabled())
+        .defaultConfigSupplier(postProcessorDefaults::asConfig)
         .desiredStateResolver(snapshot -> snapshot.enabled().orElseGet(() -> snapshot.config(PostProcessorWorkerConfig.class)
             .map(PostProcessorWorkerConfig::enabled)
             .orElse(postProcessorDefaults.asConfig().enabled())))

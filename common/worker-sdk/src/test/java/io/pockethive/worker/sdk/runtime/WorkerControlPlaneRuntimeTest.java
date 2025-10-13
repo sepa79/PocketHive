@@ -63,6 +63,34 @@ class WorkerControlPlaneRuntimeTest {
     }
 
     @Test
+    void registerDefaultConfigSeedsState() throws Exception {
+        TestConfig defaults = new TestConfig(true, 7.5);
+
+        runtime.registerDefaultConfig(definition.beanName(), defaults);
+
+        assertThat(runtime.workerConfig(definition.beanName(), TestConfig.class)).contains(defaults);
+        assertThat(runtime.workerRawConfig(definition.beanName()))
+            .containsEntry("ratePerSec", 7.5)
+            .containsEntry("enabled", true);
+        assertThat(runtime.workerEnabled(definition.beanName())).contains(true);
+
+        reset(emitter);
+        runtime.emitStatusSnapshot();
+
+        ArgumentCaptor<ControlPlaneEmitter.StatusContext> captor =
+            ArgumentCaptor.forClass(ControlPlaneEmitter.StatusContext.class);
+        verify(emitter).emitStatusSnapshot(captor.capture());
+
+        Map<String, Object> snapshot = buildSnapshot(captor.getValue());
+        @SuppressWarnings("unchecked")
+        Map<String, Object> data = (Map<String, Object>) snapshot.get("data");
+        @SuppressWarnings("unchecked")
+        java.util.List<Map<String, Object>> workers = (java.util.List<Map<String, Object>>) data.get("workers");
+        assertThat(workers).singleElement().satisfies(worker ->
+            assertThat(worker).containsEntry("worker", definition.beanName()).containsKey("config"));
+    }
+
+    @Test
     void workerConfigAccessibleAfterUpdate() throws Exception {
         String correlationId = UUID.randomUUID().toString();
         String idempotencyKey = UUID.randomUUID().toString();

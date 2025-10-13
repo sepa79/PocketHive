@@ -116,7 +116,9 @@ class GeneratorRuntimeAdapter {
 
   private void initialiseStateListeners() {
     for (WorkerDefinition definition : generatorWorkers) {
-      GeneratorState state = new GeneratorState(defaults.asConfig());
+      GeneratorWorkerConfig initialConfig = defaults.asConfig();
+      controlPlaneRuntime.registerDefaultConfig(definition.beanName(), initialConfig);
+      GeneratorState state = new GeneratorState(initialConfig);
       states.put(definition.beanName(), state);
       controlPlaneRuntime.registerStateListener(definition.beanName(), snapshot -> state.update(snapshot, defaults));
     }

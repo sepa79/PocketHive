@@ -55,6 +55,7 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
     private final RabbitListenerEndpointRegistry listenerRegistry;
     private final io.pockethive.controlplane.ControlPlaneIdentity identity;
     private final Supplier<Boolean> defaultEnabledSupplier;
+    private final Supplier<Object> defaultConfigSupplier;
     private final Function<WorkerStateSnapshot, Boolean> desiredStateResolver;
     private final WorkDispatcher dispatcher;
     private final MessageResultPublisher messageResultPublisher;
@@ -72,6 +73,7 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
         this.identity = builder.identity;
         this.defaultEnabledSupplier = builder.defaultEnabledSupplier;
         this.desiredStateResolver = builder.desiredStateResolver;
+        this.defaultConfigSupplier = builder.defaultConfigSupplier;
         this.dispatcher = builder.dispatcher;
         this.messageResultPublisher = builder.messageResultPublisher;
         this.dispatchErrorHandler = builder.dispatchErrorHandler;
@@ -96,6 +98,10 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
      */
     public void initialiseStateListener() {
         desiredEnabled = defaultEnabledSupplier.get();
+        Object defaultConfig = defaultConfigSupplier.get();
+        if (defaultConfig != null) {
+            controlPlaneRuntime.registerDefaultConfig(workerDefinition.beanName(), defaultConfig);
+        }
         controlPlaneRuntime.registerStateListener(workerDefinition.beanName(), snapshot -> {
             boolean enabled = Optional.ofNullable(desiredStateResolver.apply(snapshot)).orElse(desiredEnabled);
             toggleListener(enabled);
@@ -219,6 +225,7 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
         private RabbitListenerEndpointRegistry listenerRegistry;
         private io.pockethive.controlplane.ControlPlaneIdentity identity;
         private Supplier<Boolean> defaultEnabledSupplier;
+        private Supplier<Object> defaultConfigSupplier = () -> null;
         private Function<WorkerStateSnapshot, Boolean> desiredStateResolver;
         private WorkDispatcher dispatcher;
         private MessageResultPublisher messageResultPublisher;
@@ -323,6 +330,17 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
         }
 
         /**
+         * Supplies the default configuration instance that should be exposed before the control plane sends overrides.
+         *
+         * @param defaultConfigSupplier supplier that returns the default configuration object
+         * @return this builder instance
+         */
+        public Builder defaultConfigSupplier(Supplier<Object> defaultConfigSupplier) {
+            this.defaultConfigSupplier = Objects.requireNonNull(defaultConfigSupplier, "defaultConfigSupplier");
+            return this;
+        }
+
+        /**
          * Supplies the function that interprets control-plane snapshots and returns the desired listener
          * state. The helper will fall back to the last known desired value when {@code null} is returned.
          *
@@ -387,6 +405,7 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
             Objects.requireNonNull(listenerRegistry, "listenerRegistry");
             Objects.requireNonNull(identity, "identity");
             Objects.requireNonNull(defaultEnabledSupplier, "defaultEnabledSupplier");
+            Objects.requireNonNull(defaultConfigSupplier, "defaultConfigSupplier");
             Objects.requireNonNull(desiredStateResolver, "desiredStateResolver");
             Objects.requireNonNull(dispatcher, "dispatcher");
             if (dispatchErrorHandler == null) {

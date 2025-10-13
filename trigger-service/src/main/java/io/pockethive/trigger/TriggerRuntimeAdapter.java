@@ -120,7 +120,9 @@ class TriggerRuntimeAdapter {
 
   private void initialiseStateListeners() {
     for (WorkerDefinition definition : triggerWorkers) {
-      TriggerState state = new TriggerState(defaults.asConfig());
+      TriggerWorkerConfig initialConfig = defaults.asConfig();
+      controlPlaneRuntime.registerDefaultConfig(definition.beanName(), initialConfig);
+      TriggerState state = new TriggerState(initialConfig);
       states.put(definition.beanName(), state);
       controlPlaneRuntime.registerStateListener(definition.beanName(), snapshot -> state.update(snapshot, defaults));
     }
