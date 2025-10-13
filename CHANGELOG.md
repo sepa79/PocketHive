@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.12.4] - 2025-10-13
+Timestamp: 2025-10-13T00:00:00Z
+
+- Worker control-plane runtime: seed worker beans with their default configuration, preserve the derived enablement flag,
+  and keep status publishers wired so workers surface meaningful state before receiving overrides.
+- Worker SDK: merge control-plane config updates on top of seeded defaults and expose helper accessors so worker services can
+  read raw maps or typed configs without losing tracking of the latest enablement state.
+- Worker services: register each runtime adapter's initial config with the control-plane helper so generator, moderator,
+  processor, postprocessor, and trigger workers advertise their defaults immediately after startup.
+- Release: bump the PocketHive patch version to 0.12.4 so published artifacts and tooling reference the latest build.
+
 ## [0.12.3] - 2025-10-12
 Timestamp: 2025-10-12T00:00:00Z
 
