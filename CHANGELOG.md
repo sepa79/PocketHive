@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.12.5] - 2025-10-14
+Timestamp: 2025-10-14T00:00:00Z
+
+- Worker control-plane runtime: ensure partially targeted worker overrides ignore beans omitted from the workers map so their existing configuration is preserved.
+- Release: bump the PocketHive patch version to 0.12.5 so published artifacts and tooling reference the latest build.
+
 ## [0.12.4] - 2025-10-13
 Timestamp: 2025-10-13T00:00:00Z
 
