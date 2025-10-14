@@ -92,10 +92,18 @@ export default function Layout() {
             </button>
             {sidebarOpen && (
               <div id="menu-dropdown" className="dropdown-panel absolute right-0 mt-2" onMouseLeave={closeSidebar}>
-                <a href="/docs/readme.html" className="dropdown-item" onClick={closeSidebar}>README</a>
-                <a href="/docs/bindings.html" className="dropdown-item" onClick={closeSidebar}>Buzz Bindings</a>
-                <a href="/docs/changelog.html" className="dropdown-item" onClick={closeSidebar}>Changelog</a>
-                <a href="/docs/docs.html" className="dropdown-item" onClick={closeSidebar}>API Docs</a>
+                <NavLink to="/docs/readme" className="dropdown-item" onClick={closeSidebar}>
+                  README
+                </NavLink>
+                <NavLink to="/docs/bindings" className="dropdown-item" onClick={closeSidebar}>
+                  Buzz Bindings
+                </NavLink>
+                <NavLink to="/docs/changelog" className="dropdown-item" onClick={closeSidebar}>
+                  Changelog
+                </NavLink>
+                <NavLink to="/docs/api" className="dropdown-item" onClick={closeSidebar}>
+                  API Docs
+                </NavLink>
               </div>
             )}
           </div>

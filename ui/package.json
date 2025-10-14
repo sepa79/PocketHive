@@ -14,12 +14,17 @@
   "dependencies": {
     "@stomp/stompjs": "^7.1.1",
     "@tanstack/react-query": "^5.85.9",
+    "highlight.js": "^11.10.0",
     "lucide-react": "^0.542.0",
+    "mermaid": "^10.9.3",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "@xyflow/react": "^12.0.2",
+    "react-markdown": "^9.0.3",
     "react-resizable-panels": "^3.0.5",
     "react-router-dom": "^7.8.2",
+    "remark-gfm": "^4.0.0",
+    "rehype-highlight": "^7.0.2",
     "zustand": "^5.0.8"
   },
   "devDependencies": {
