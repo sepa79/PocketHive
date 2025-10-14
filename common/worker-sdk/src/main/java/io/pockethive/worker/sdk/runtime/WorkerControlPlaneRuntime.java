@@ -217,14 +217,19 @@ public final class WorkerControlPlaneRuntime {
         Map<String, Object> sanitized = sanitiseConfig(command.data());
         for (WorkerState state : targets) {
             ensureStatusPublisher(state);
-            Map<String, Object> workerUpdate = workerConfigFor(state, sanitized);
-            Map<String, Object> filteredUpdate = withoutNullValues(workerUpdate);
-            Map<String, Object> mergedConfig = mergeWithExisting(state.rawConfig(), filteredUpdate);
+            WorkerConfigPatch patch = workerConfigFor(state, sanitized);
+            Map<String, Object> filteredUpdate = withoutNullValues(patch.values());
+            Map<String, Object> mergedConfig = mergeWithExisting(state.rawConfig(), filteredUpdate, patch.resetRequested());
             Boolean enabled = resolveEnabled(mergedConfig, command.enabled());
             try {
-                Object typedConfig = convertConfig(state.definition(), mergedConfig);
-                state.updateConfig(typedConfig, mergedConfig, enabled);
-                emitConfigReady(signal, state, mergedConfig, enabled);
+                Object typedConfig = null;
+                Map<String, Object> rawDataForState = null;
+                if (patch.hasPayload()) {
+                    typedConfig = convertConfig(state.definition(), mergedConfig);
+                    rawDataForState = mergedConfig;
+                }
+                state.updateConfig(typedConfig, rawDataForState, enabled);
+                emitConfigReady(signal, state, rawDataForState == null ? Map.of() : rawDataForState, enabled);
                 notifyStateListeners(state);
             } catch (Exception ex) {
                 emitConfigError(signal, state, ex);
@@ -369,23 +374,36 @@ public final class WorkerControlPlaneRuntime {
         return Collections.unmodifiableMap(sanitized);
     }
 
-    private Map<String, Object> workerConfigFor(WorkerState state, Map<String, Object> sanitized) {
+    private WorkerConfigPatch workerConfigFor(WorkerState state, Map<String, Object> sanitized) {
         if (sanitized.isEmpty()) {
-            return Map.of();
+            return WorkerConfigPatch.empty();
         }
         String beanName = state.definition().beanName();
         Object workersSection = sanitized.get("workers");
         if (workersSection instanceof Map<?, ?> workersMap) {
+            if (!workersMap.containsKey(beanName)) {
+                return WorkerConfigPatch.empty();
+            }
             Object candidate = workersMap.get(beanName);
             if (candidate instanceof Map<?, ?> nested) {
-                return copyMap(nested);
+                Map<String, Object> copied = copyMap(nested);
+                boolean resetRequested = copied.isEmpty();
+                return new WorkerConfigPatch(copied, true, resetRequested);
+            }
+            if (candidate == null) {
+                return new WorkerConfigPatch(Map.of(), true, true);
             }
         }
         Object direct = sanitized.get(beanName);
         if (direct instanceof Map<?, ?> nested) {
-            return copyMap(nested);
+            Map<String, Object> copied = copyMap(nested);
+            boolean resetRequested = copied.isEmpty();
+            return new WorkerConfigPatch(copied, true, resetRequested);
         }
-        return sanitized;
+        if (direct == null && sanitized.containsKey(beanName)) {
+            return new WorkerConfigPatch(Map.of(), true, true);
+        }
+        return new WorkerConfigPatch(sanitized, false, false);
     }
 
     private Map<String, Object> withoutNullValues(Map<String, Object> candidate) {
@@ -404,7 +422,14 @@ public final class WorkerControlPlaneRuntime {
         return Map.copyOf(filtered);
     }
 
-    private Map<String, Object> mergeWithExisting(Map<String, Object> existing, Map<String, Object> updates) {
+    private Map<String, Object> mergeWithExisting(
+        Map<String, Object> existing,
+        Map<String, Object> updates,
+        boolean resetRequested
+    ) {
+        if (resetRequested) {
+            return Map.of();
+        }
         if (updates.isEmpty()) {
             return existing == null ? Map.of() : existing;
         }
@@ -414,6 +439,17 @@ public final class WorkerControlPlaneRuntime {
         }
         merged.putAll(updates);
         return Map.copyOf(merged);
+    }
+
+    private record WorkerConfigPatch(Map<String, Object> values, boolean targeted, boolean resetRequested) {
+
+        static WorkerConfigPatch empty() {
+            return new WorkerConfigPatch(Map.of(), false, false);
+        }
+
+        boolean hasPayload() {
+            return resetRequested || (values != null && !values.isEmpty());
+        }
     }
 
     private Map<String, Object> copyMap(Map<?, ?> source) {

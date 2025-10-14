@@ -39,7 +39,7 @@ class WorkerStateTest {
     }
 
     @Test
-    void updateConfigWithEmptyPayloadPreservesExistingRawConfig() {
+    void updateConfigWithEmptyMapClearsRawConfig() {
         WorkerDefinition definition = new WorkerDefinition(
             "testWorker",
             Object.class,
@@ -54,10 +54,31 @@ class WorkerStateTest {
         state.seedConfig(new TestConfig(true, 5.0), rawDefaults, true);
 
         state.updateConfig(null, Map.of(), null);
-        assertThat(state.rawConfig()).isEqualTo(rawDefaults);
+        assertThat(state.rawConfig()).isEmpty();
+        assertThat(state.config(TestConfig.class)).isEmpty();
+    }
 
-        state.updateConfig(null, null, null);
+    @Test
+    void updateConfigWithNullRawDataPreservesExistingRawConfig() {
+        WorkerDefinition definition = new WorkerDefinition(
+            "testWorker",
+            Object.class,
+            WorkerType.GENERATOR,
+            "test-role",
+            null,
+            null,
+            TestConfig.class
+        );
+        WorkerState state = new WorkerState(definition);
+        TestConfig defaults = new TestConfig(true, 5.0);
+        Map<String, Object> rawDefaults = Map.of("enabled", true, "ratePerSec", 5.0);
+        state.seedConfig(defaults, rawDefaults, true);
+
+        state.updateConfig(null, null, Boolean.FALSE);
+
         assertThat(state.rawConfig()).isEqualTo(rawDefaults);
+        assertThat(state.config(TestConfig.class)).contains(defaults);
+        assertThat(state.enabled()).contains(false);
     }
 
     @Test
