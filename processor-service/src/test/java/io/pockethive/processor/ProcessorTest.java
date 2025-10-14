@@ -17,14 +17,18 @@ import io.pockethive.worker.sdk.api.WorkerInfo;
 import io.pockethive.worker.sdk.config.WorkerType;
 import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
+import io.pockethive.worker.sdk.runtime.WorkerInvocationContext;
+import io.pockethive.worker.sdk.runtime.WorkerObservabilityInterceptor;
 import io.pockethive.worker.sdk.runtime.WorkerRegistry;
 import io.pockethive.worker.sdk.runtime.WorkerRuntime;
+import io.pockethive.worker.sdk.runtime.WorkerState;
 import io.pockethive.worker.sdk.transport.rabbit.RabbitWorkMessageConverter;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpHeaders;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.lang.reflect.Constructor;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -79,7 +83,7 @@ class ProcessorTest {
                 "body", Map.of("value", 42)
         )).build();
 
-        WorkResult result = worker.onMessage(inbound, context);
+        WorkResult result = invokeThroughObservabilityInterceptor(worker, context, inbound);
 
         assertThat(result).isInstanceOf(WorkResult.Message.class);
         WorkMessage outbound = ((WorkResult.Message) result).value();
@@ -102,13 +106,6 @@ class ProcessorTest {
         assertThat(request.uri()).isEqualTo(URI.create("http://sut/api"));
         assertThat(request.method()).isEqualTo("POST");
         assertThat(request.headers().firstValue("X-Test")).contains("true");
-
-        MeterRegistry registry = context.meterRegistry();
-        var counter = registry.find("processor_messages_total")
-            .tag("service", "processor")
-            .counter();
-        assertThat(counter).isNotNull();
-        assertThat(counter.count()).isEqualTo(1.0d);
 
         assertThat(context.statusData())
                 .containsEntry("baseUrl", "http://sut/")
@@ -267,6 +264,53 @@ class ProcessorTest {
 
         // ensure MDC was cleared during processing despite exceptions
         assertThat(MDC.getCopyOfContextMap()).isNullOrEmpty();
+    }
+
+    private WorkResult invokeThroughObservabilityInterceptor(ProcessorWorkerImpl worker,
+                                                             TestWorkerContext context,
+                                                             WorkMessage inbound) throws Exception {
+        WorkerDefinition definition = processorDefinition();
+        WorkerObservabilityInterceptor interceptor = new WorkerObservabilityInterceptor();
+        WorkerState state = instantiateWorkerState(definition);
+        WorkerInvocationContext invocationContext = instantiateInvocationContext(definition, state, context, inbound);
+        return interceptor.intercept(invocationContext, invocation ->
+                worker.onMessage(invocation.message(), invocation.workerContext()));
+    }
+
+    private static WorkerDefinition processorDefinition() {
+        return new WorkerDefinition(
+                "processorWorker",
+                ProcessorWorkerImpl.class,
+                WorkerType.MESSAGE,
+                "processor",
+                Topology.MOD_QUEUE,
+                Topology.FINAL_QUEUE,
+                ProcessorWorkerConfig.class
+        );
+    }
+
+    private static WorkerState instantiateWorkerState(WorkerDefinition definition) {
+        try {
+            Constructor<WorkerState> constructor = WorkerState.class.getDeclaredConstructor(WorkerDefinition.class);
+            constructor.setAccessible(true);
+            return constructor.newInstance(definition);
+        } catch (ReflectiveOperationException ex) {
+            throw new IllegalStateException("Unable to construct WorkerState", ex);
+        }
+    }
+
+    private static WorkerInvocationContext instantiateInvocationContext(WorkerDefinition definition,
+                                                                         WorkerState state,
+                                                                         WorkerContext workerContext,
+                                                                         WorkMessage message) {
+        try {
+            Constructor<WorkerInvocationContext> constructor = WorkerInvocationContext.class
+                    .getDeclaredConstructor(WorkerDefinition.class, WorkerState.class, WorkerContext.class, WorkMessage.class);
+            constructor.setAccessible(true);
+            return constructor.newInstance(definition, state, workerContext, message);
+        } catch (ReflectiveOperationException ex) {
+            throw new IllegalStateException("Unable to construct WorkerInvocationContext", ex);
+        }
     }
 
     private static final class TestWorkerContext implements WorkerContext {

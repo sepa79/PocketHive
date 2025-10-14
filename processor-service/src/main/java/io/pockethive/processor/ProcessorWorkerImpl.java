@@ -3,13 +3,8 @@ package io.pockethive.processor;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import io.micrometer.core.instrument.Counter;
-import io.micrometer.core.instrument.DistributionSummary;
-import io.micrometer.core.instrument.MeterRegistry;
 import io.pockethive.Topology;
 import io.pockethive.TopologyDefaults;
-import io.pockethive.observability.ObservabilityContext;
-import io.pockethive.observability.ObservabilityContextUtil;
 import io.pockethive.worker.sdk.api.MessageWorker;
 import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pockethive.worker.sdk.api.WorkResult;
@@ -22,12 +17,9 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
-import java.time.Duration;
-import java.time.Instant;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.concurrent.atomic.AtomicReference;
 import org.slf4j.Logger;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -52,10 +44,8 @@ import org.springframework.stereotype.Component;
  * </ul>
  * Once configured, the worker performs an outbound HTTP call using the payload's {@code path},
  * {@code method}, {@code headers}, and {@code body} fields. Success and failure paths both emit a
- * {@link WorkResult} to the final queue, enriched with
- * {@link ObservabilityContextUtil#appendHop(ObservabilityContext, String, String, java.time.Instant, java.time.Instant)
- * observability metadata} and tracked through Micrometer metrics ({@code processor_request_time_ms}
- * and {@code processor_messages_total}).
+ * {@link WorkResult} to the final queue, and the runtime's observability interceptor adds the hop
+ * metadata so downstream services can trace the request.
  * <p>
  * The defaults above can be tweaked by editing {@code processor-service/src/main/resources}
  * configuration or by publishing control-plane overrides on the {@code processor.control.*} routing
@@ -75,7 +65,6 @@ class ProcessorWorkerImpl implements MessageWorker {
   private final ProcessorDefaults defaults;
   private final HttpClient httpClient;
   private final Clock clock;
-  private final AtomicReference<ProcessorMetrics> metricsRef = new AtomicReference<>();
 
   @Autowired
   ProcessorWorkerImpl(ProcessorDefaults defaults) {
@@ -105,13 +94,9 @@ class ProcessorWorkerImpl implements MessageWorker {
    *   <li><strong>Error handling</strong> – Any exception (invalid config, network error, unexpected
    *       HTTP failure) is logged at {@code WARN} level and converted into an error message via
    *       {@link #buildError(String)} so downstream services still receive a structured response.</li>
-   *   <li><strong>Observability propagation</strong> – Before returning we call
-   *       {@link #enrich(WorkMessage, WorkerContext, ObservabilityContext, Instant)} to append the
-   *       hop metadata (role, instance id, timestamps) to the {@link ObservabilityContext}. This
-   *       keeps traces visible in Loki/Grafana.</li>
-   *   <li><strong>Metric collection</strong> – Latency and throughput are recorded through
-   *       {@link ProcessorMetrics}, tagging service, instance, and swarm identifiers for filtering
-   *       in Prometheus. Both success and failure paths report the elapsed time.</li>
+ *   <li><strong>Observability propagation</strong> – The runtime's
+ *       {@code WorkerObservabilityInterceptor} attaches the hop metadata (role, instance id,
+ *       timestamps) to the shared observability context so traces remain visible in Loki/Grafana.</li>
    * </ol>
    *
    * @param in incoming work message from the moderator queue
@@ -130,22 +115,14 @@ class ProcessorWorkerImpl implements MessageWorker {
             .data("baseUrl", config.baseUrl())
             .data("enabled", config.enabled()));
 
-    ProcessorMetrics metrics = metrics(context);
     Logger logger = context.logger();
-    ObservabilityContext observability = context.observabilityContext();
-    Instant received = clock.instant();
-    long start = System.nanoTime();
     try {
       WorkMessage response = invokeHttp(in, config, context);
-      metrics.recordSuccess(Duration.ofNanos(System.nanoTime() - start));
-      WorkMessage enriched = enrich(response, context, observability, received);
-      return WorkResult.message(enriched);
+      return WorkResult.message(response);
     } catch (Exception ex) {
-      metrics.recordFailure(Duration.ofNanos(System.nanoTime() - start));
       logger.warn("Processor request failed: {}", ex.toString(), ex);
       WorkMessage error = buildError(context, ex);
-      WorkMessage enriched = enrich(error, context, observability, received);
-      return WorkResult.message(enriched);
+      return WorkResult.message(error);
     }
   }
 
@@ -181,7 +158,7 @@ class ProcessorWorkerImpl implements MessageWorker {
 
     logger.debug("HTTP {} {} headers={} body={}", method, target, headersNode, body.orElse(""));
 
-  HttpResponse<String> response = httpClient.send(requestBuilder.build(), HttpResponse.BodyHandlers.ofString());
+    HttpResponse<String> response = httpClient.send(requestBuilder.build(), HttpResponse.BodyHandlers.ofString());
     logger.debug("HTTP {} {} -> {}", method, target, response.statusCode());
 
     ObjectNode result = MAPPER.createObjectNode();
@@ -226,67 +203,4 @@ class ProcessorWorkerImpl implements MessageWorker {
         .build();
   }
 
-  private WorkMessage enrich(WorkMessage message,
-                             WorkerContext context,
-                             ObservabilityContext observability,
-                             Instant received) {
-    ObservabilityContext targetContext = Objects.requireNonNull(observability, "observability");
-    ObservabilityContextUtil.appendHop(targetContext,
-        context.info().role(),
-        context.info().instanceId(),
-        received,
-        clock.instant());
-    return message.toBuilder()
-        .observabilityContext(targetContext)
-        .build();
-  }
-
-  private ProcessorMetrics metrics(WorkerContext context) {
-    ProcessorMetrics current = metricsRef.get();
-    if (current != null) {
-      return current;
-    }
-    synchronized (metricsRef) {
-      current = metricsRef.get();
-      if (current == null) {
-        current = new ProcessorMetrics(context.meterRegistry(), context);
-        metricsRef.set(current);
-      }
-      return current;
-    }
-  }
-
-  private static final class ProcessorMetrics {
-    private final DistributionSummary latencySummary;
-    private final Counter messageCounter;
-
-  ProcessorMetrics(MeterRegistry registry, WorkerContext context) {
-    String role = context.info().role();
-    String instance = context.info().instanceId();
-    String swarm = context.info().swarmId();
-    this.latencySummary = DistributionSummary.builder("processor_request_time_ms")
-      .tag("service", role)
-      .tag("instance", instance)
-      .tag("swarm", swarm)
-      .register(registry);
-    this.messageCounter = Counter.builder("processor_messages_total")
-      .tag("service", role)
-      .tag("instance", instance)
-      .tag("swarm", swarm)
-      .register(registry);
-    }
-
-    void recordSuccess(Duration duration) {
-      record(duration);
-    }
-
-    void recordFailure(Duration duration) {
-      record(duration);
-    }
-
-    private void record(Duration duration) {
-      latencySummary.record(duration.toMillis());
-      messageCounter.increment();
-    }
-  }
 }

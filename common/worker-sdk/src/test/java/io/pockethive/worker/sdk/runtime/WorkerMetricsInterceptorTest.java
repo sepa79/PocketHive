@@ -2,9 +2,11 @@ package io.pockethive.worker.sdk.runtime;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.micrometer.observation.ObservationRegistry;
 import io.pockethive.observability.ObservabilityContext;
+import io.pockethive.worker.sdk.autoconfigure.PocketHiveWorkerSdkAutoConfiguration;
 import io.pockethive.worker.sdk.api.StatusPublisher;
 import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pockethive.worker.sdk.api.WorkResult;
@@ -13,6 +15,9 @@ import io.pockethive.worker.sdk.api.WorkerInfo;
 import io.pockethive.worker.sdk.config.WorkerType;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
+import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
 
 class WorkerMetricsInterceptorTest {
 
@@ -25,6 +30,25 @@ class WorkerMetricsInterceptorTest {
         "out.metrics",
         Void.class
     );
+
+    private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
+        .withPropertyValues(
+            "pockethive.control-plane.worker.enabled=false",
+            "pockethive.control-plane.manager.enabled=false"
+        )
+        .withUserConfiguration(TestConfiguration.class, PocketHiveWorkerSdkAutoConfiguration.class);
+
+    @Test
+    void autoConfigurationDisablesMetricsInterceptorByDefault() {
+        contextRunner.run(context -> assertThat(context).doesNotHaveBean(WorkerMetricsInterceptor.class));
+    }
+
+    @Test
+    void autoConfigurationEnablesMetricsInterceptorWhenPropertySet() {
+        contextRunner
+            .withPropertyValues("ph.worker.metrics.enabled=true")
+            .run(context -> assertThat(context).hasSingleBean(WorkerMetricsInterceptor.class));
+    }
 
     @Test
     void recordsInvocationDuration() throws Exception {
@@ -39,12 +63,12 @@ class WorkerMetricsInterceptorTest {
             WorkMessage.text("body").build()
         );
 
-    WorkResult result = interceptor.intercept(context, ctx -> WorkResult.none());
+        WorkResult result = interceptor.intercept(context, ctx -> WorkResult.none());
 
-    assertThat(result).isInstanceOf(WorkResult.None.class);
-    var timer = registry.find("pockethive.worker.invocation.duration").timer();
-    assertThat(timer).isNotNull();
-    assertThat(timer.count()).isEqualTo(1);
+        assertThat(result).isInstanceOf(WorkResult.None.class);
+        var timer = registry.find("pockethive.worker.invocation.duration").timer();
+        assertThat(timer).isNotNull();
+        assertThat(timer.count()).isEqualTo(1);
     }
 
     private WorkerContext workerContext(WorkerState state, SimpleMeterRegistry registry) {
@@ -87,5 +111,14 @@ class WorkerMetricsInterceptorTest {
                 return observabilityContext;
             }
         };
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class TestConfiguration {
+
+        @Bean
+        MeterRegistry meterRegistry() {
+            return new SimpleMeterRegistry();
+        }
     }
 }

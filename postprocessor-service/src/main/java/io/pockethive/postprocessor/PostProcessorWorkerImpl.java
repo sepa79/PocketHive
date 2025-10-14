@@ -15,6 +15,7 @@ import io.pockethive.worker.sdk.config.PocketHiveWorker;
 import io.pockethive.worker.sdk.config.WorkerType;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicReference;
@@ -96,6 +97,7 @@ class PostProcessorWorkerImpl implements MessageWorker {
 
     ObservabilityContext observability =
         Objects.requireNonNull(context.observabilityContext(), "observabilityContext");
+    appendTerminalHop(context, observability);
     LatencyMeasurements measurements = measureLatency(observability);
     boolean error = isError(in.headers().get(ERROR_HEADER));
 
@@ -107,11 +109,54 @@ class PostProcessorWorkerImpl implements MessageWorker {
         .update(status -> status
             .data("enabled", config.enabled())
             .data("errors", metrics.errorsCount())
-            .data("hopLatencyMs", measurements.hopMs())
+            .data("hopLatencyMs", measurements.latestHopMs())
             .data("totalLatencyMs", measurements.totalMs())
             .data("hopCount", measurements.hopCount()));
 
     return WorkResult.none();
+  }
+
+  private void appendTerminalHop(WorkerContext context, ObservabilityContext observability) {
+    List<Hop> hops = observability.getHops();
+    if (hops == null) {
+      hops = new ArrayList<>();
+      observability.setHops(hops);
+    }
+    Instant terminalTimestamp = resolveTerminalTimestamp(hops);
+    Hop last = hops.isEmpty() ? null : hops.get(hops.size() - 1);
+    if (last != null && matchesWorker(last, context)) {
+      if (last.getReceivedAt() == null) {
+        last.setReceivedAt(terminalTimestamp);
+      }
+      if (last.getProcessedAt() == null) {
+        last.setProcessedAt(terminalTimestamp);
+      }
+      return;
+    }
+    hops.add(
+        new Hop(
+            context.info().role(),
+            context.info().instanceId(),
+            terminalTimestamp,
+            terminalTimestamp));
+  }
+
+  private Instant resolveTerminalTimestamp(List<Hop> hops) {
+    if (!hops.isEmpty()) {
+      Hop last = hops.get(hops.size() - 1);
+      if (last.getProcessedAt() != null) {
+        return last.getProcessedAt();
+      }
+      if (last.getReceivedAt() != null) {
+        return last.getReceivedAt();
+      }
+    }
+    return Instant.now();
+  }
+
+  private boolean matchesWorker(Hop hop, WorkerContext context) {
+    return Objects.equals(hop.getService(), context.info().role())
+        && Objects.equals(hop.getInstance(), context.info().instanceId());
   }
 
   private LatencyMeasurements measureLatency(ObservabilityContext context) {
@@ -119,19 +164,33 @@ class PostProcessorWorkerImpl implements MessageWorker {
     if (hops == null || hops.isEmpty()) {
       return LatencyMeasurements.zero();
     }
-    int hopCount = hops.size();
-    Hop last = hops.get(hopCount - 1);
+    List<Long> hopDurations = new ArrayList<>(hops.size());
+    for (Hop hop : hops) {
+      hopDurations.add(durationMillis(hop));
+    }
     Hop first = hops.get(0);
-    long hopMs = durationMillis(last.getReceivedAt(), last.getProcessedAt());
-    long totalMs = durationMillis(first.getReceivedAt(), last.getProcessedAt());
-    return new LatencyMeasurements(hopMs, totalMs, hopCount);
+    Hop last = hops.get(hops.size() - 1);
+    long totalMs = durationMillis(
+        Objects.requireNonNull(first.getReceivedAt(), "first hop missing receivedAt"),
+        Objects.requireNonNull(last.getProcessedAt(), "last hop missing processedAt"));
+    return new LatencyMeasurements(List.copyOf(hopDurations), totalMs);
+  }
+
+  private long durationMillis(Hop hop) {
+    return durationMillis(
+        Objects.requireNonNull(hop.getReceivedAt(), () -> describeHop("receivedAt", hop)),
+        Objects.requireNonNull(hop.getProcessedAt(), () -> describeHop("processedAt", hop)));
   }
 
   private long durationMillis(Instant start, Instant end) {
-    if (start == null || end == null) {
-      return 0L;
-    }
     return Duration.between(start, end).toMillis();
+  }
+
+  private String describeHop(String missingField, Hop hop) {
+    return "hop "
+        + hop.getService()
+        + "(" + hop.getInstance() + ") missing "
+        + missingField;
   }
 
   private boolean isError(Object headerValue) {
@@ -159,9 +218,20 @@ class PostProcessorWorkerImpl implements MessageWorker {
     }
   }
 
-  private record LatencyMeasurements(long hopMs, long totalMs, int hopCount) {
+  private record LatencyMeasurements(List<Long> hopDurations, long totalMs) {
     static LatencyMeasurements zero() {
-      return new LatencyMeasurements(0L, 0L, 0);
+      return new LatencyMeasurements(List.of(), 0L);
+    }
+
+    int hopCount() {
+      return hopDurations.size();
+    }
+
+    long latestHopMs() {
+      if (hopDurations.isEmpty()) {
+        return 0L;
+      }
+      return hopDurations.get(hopDurations.size() - 1);
     }
   }
 
@@ -200,7 +270,9 @@ class PostProcessorWorkerImpl implements MessageWorker {
     }
 
     void record(LatencyMeasurements measurements, boolean error) {
-      hopLatency.record(measurements.hopMs());
+      for (Long hopMs : measurements.hopDurations()) {
+        hopLatency.record(hopMs);
+      }
       totalLatency.record(measurements.totalMs());
       hopCount.record(measurements.hopCount());
       if (error) {

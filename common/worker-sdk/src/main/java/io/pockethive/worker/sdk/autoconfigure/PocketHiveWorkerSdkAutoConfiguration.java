@@ -30,8 +30,9 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.ListableBeanFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
@@ -90,7 +91,7 @@ public class PocketHiveWorkerSdkAutoConfiguration {
         ObjectProvider<ObservationRegistry> observationRegistry
     ) {
         MeterRegistry meters = meterRegistry.getIfAvailable(SimpleMeterRegistry::new);
-    ObservationRegistry observations = observationRegistry.getIfAvailable(ObservationRegistry::create);
+        ObservationRegistry observations = observationRegistry.getIfAvailable(ObservationRegistry::create);
         return new DefaultWorkerContextFactory(beanFactory::getBean, meters, observations);
     }
 
@@ -130,6 +131,7 @@ public class PocketHiveWorkerSdkAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(MeterRegistry.class)
+    @ConditionalOnProperty(prefix = "ph.worker.metrics", name = "enabled", havingValue = "true")
     WorkerInvocationInterceptor workerMetricsInterceptor(MeterRegistry meterRegistry) {
         return new WorkerMetricsInterceptor(meterRegistry);
     }

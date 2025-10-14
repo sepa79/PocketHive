@@ -53,9 +53,9 @@ class PostProcessorTest {
         assertThat(result).isEqualTo(WorkResult.none());
         assertThat(workerContext.statusData().get("enabled")).isEqualTo(true);
         assertThat(workerContext.statusData().get("errors")).isEqualTo(1.0d);
-        assertThat(workerContext.statusData().get("hopLatencyMs")).isEqualTo(10L);
+        assertThat(workerContext.statusData().get("hopLatencyMs")).isEqualTo(0L);
         assertThat(workerContext.statusData().get("totalLatencyMs")).isEqualTo(15L);
-        assertThat(workerContext.statusData().get("hopCount")).isEqualTo(2);
+        assertThat(workerContext.statusData().get("hopCount")).isEqualTo(3);
 
     MeterRegistry registry = workerContext.meterRegistry();
     var hopSummary = registry.find("postprocessor_hop_latency_ms").summary();
@@ -64,13 +64,53 @@ class PostProcessorTest {
     var errorsCounter = registry.find("postprocessor_errors_total").counter();
 
     assertThat(hopSummary).isNotNull();
-    assertThat(hopSummary.totalAmount()).isEqualTo(10.0);
+    assertThat(hopSummary.totalAmount()).isEqualTo(15.0);
+    assertThat(hopSummary.count()).isEqualTo(3);
     assertThat(totalSummary).isNotNull();
     assertThat(totalSummary.totalAmount()).isEqualTo(15.0);
     assertThat(hopCountSummary).isNotNull();
-    assertThat(hopCountSummary.totalAmount()).isEqualTo(2.0);
+    assertThat(hopCountSummary.totalAmount()).isEqualTo(3.0);
     assertThat(errorsCounter).isNotNull();
     assertThat(errorsCounter.count()).isEqualTo(1.0);
+    }
+
+    @Test
+    void onMessageCompletesInFlightHopBeforeRecording() {
+        PostProcessorDefaults defaults = new PostProcessorDefaults();
+        defaults.setEnabled(true);
+        PostProcessorWorkerImpl worker = new PostProcessorWorkerImpl(defaults);
+        ObservabilityContext context = new ObservabilityContext();
+        List<Hop> hops = new ArrayList<>();
+        hops.add(new Hop("generator", "gen-1", START, START.plusMillis(5)));
+        hops.add(new Hop("moderator", "mod-1", START.plusMillis(5), START.plusMillis(10)));
+        Hop inFlight = new Hop("postprocessor", "instance", START.plusMillis(10), null);
+        hops.add(inFlight);
+        context.setHops(hops);
+        context.setTraceId("trace-456");
+
+        WorkMessage message = WorkMessage.text("payload")
+                .observabilityContext(context)
+                .build();
+
+        TestWorkerContext workerContext =
+                new TestWorkerContext(new PostProcessorWorkerConfig(true), context);
+
+        worker.onMessage(message, workerContext);
+
+        assertThat(inFlight.getProcessedAt()).isEqualTo(START.plusMillis(10));
+
+        MeterRegistry registry = workerContext.meterRegistry();
+        var hopSummary = registry.find("postprocessor_hop_latency_ms").summary();
+        var totalSummary = registry.find("postprocessor_total_latency_ms").summary();
+        var hopCountSummary = registry.find("postprocessor_hops").summary();
+
+        assertThat(hopSummary).isNotNull();
+        assertThat(hopSummary.count()).isEqualTo(3);
+        assertThat(hopSummary.totalAmount()).isEqualTo(10.0);
+        assertThat(totalSummary).isNotNull();
+        assertThat(totalSummary.totalAmount()).isEqualTo(10.0);
+        assertThat(hopCountSummary).isNotNull();
+        assertThat(hopCountSummary.totalAmount()).isEqualTo(3.0);
     }
 
     @Test
