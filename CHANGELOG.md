@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.12.6] - 2025-10-15
+Timestamp: 2025-10-15T00:00:00Z
+
+- Worker starter Docker builds: stage the repository documentation and parent modules inside the container context so AsyncAPI schema validation succeeds during packaging.
+- Release: bump the PocketHive patch version to 0.12.6 so published artifacts and tooling reference the latest build.
+
 ## [0.12.5] - 2025-10-14
 Timestamp: 2025-10-14T00:00:00Z
 

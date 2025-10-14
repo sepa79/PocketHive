@@ -3,6 +3,13 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+REPO_ROOT="$(cd "${PROJECT_ROOT}/../.." && pwd)"
+REVISION="$(tr -d '\r\n' < "${REPO_ROOT}/VERSION")"
+
+if [[ -z "${REVISION}" ]]; then
+  echo "Unable to determine repository revision from ${REPO_ROOT}/VERSION" >&2
+  exit 1
+fi
 
 print_help() {
   cat <<'HELP'
@@ -64,24 +71,24 @@ if [[ -z "$GEN_IMAGE" || -z "$PROC_IMAGE" ]]; then
 fi
 
 MVN_CMD=""
-if [[ -x "${PROJECT_ROOT}/mvnw" ]]; then
-  MVN_CMD="${PROJECT_ROOT}/mvnw"
+if [[ -x "${REPO_ROOT}/mvnw" ]]; then
+  MVN_CMD="${REPO_ROOT}/mvnw"
 elif command -v mvn >/dev/null 2>&1; then
   MVN_CMD="mvn"
 fi
 
-INSTALL_ARGS=(-B -pl common/worker-sdk -am install)
-MVN_ARGS=(-B -pl generator-worker,processor-worker -am package)
-DOCKER_MAVEN_ARGS=""
+INSTALL_ARGS=(-B -pl common/worker-sdk -am install "-Drevision=${REVISION}")
+MVN_ARGS=(-B -pl generator-worker,processor-worker -am package "-Drevision=${REVISION}")
+DOCKER_MAVEN_ARGS="-Drevision=${REVISION}"
 if [[ "${SKIP_TESTS}" == "true" ]]; then
   INSTALL_ARGS+=("-DskipTests")
   MVN_ARGS+=("-DskipTests")
-  DOCKER_MAVEN_ARGS="-DskipTests"
+  DOCKER_MAVEN_ARGS+=" -DskipTests"
 fi
 
 if [[ -n "${MVN_CMD}" ]]; then
   echo "Installing parent and shared artifacts with ${MVN_CMD} ${INSTALL_ARGS[*]}"
-  ( cd "${PROJECT_ROOT}" && "${MVN_CMD}" "${INSTALL_ARGS[@]}" )
+  ( cd "${REPO_ROOT}" && "${MVN_CMD}" "${INSTALL_ARGS[@]}" )
   echo "Running Maven build with ${MVN_CMD} ${MVN_ARGS[*]}"
   ( cd "${PROJECT_ROOT}" && "${MVN_CMD}" "${MVN_ARGS[@]}" )
 else
@@ -100,7 +107,7 @@ build_image() {
     --build-arg "MAVEN_ARGS=${DOCKER_MAVEN_ARGS}" \
     -t "${image_name}" \
     -f "${PROJECT_ROOT}/${module_dir}/docker/Dockerfile" \
-    "${PROJECT_ROOT}"
+    "${REPO_ROOT}"
 }
 
 build_image "generator-worker" "${GEN_IMAGE}"
