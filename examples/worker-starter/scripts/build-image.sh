@@ -3,6 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+REPO_ROOT="$(cd "${PROJECT_ROOT}/../.." && pwd)"
 
 print_help() {
   cat <<'HELP'
@@ -64,8 +65,8 @@ if [[ -z "$GEN_IMAGE" || -z "$PROC_IMAGE" ]]; then
 fi
 
 MVN_CMD=""
-if [[ -x "${PROJECT_ROOT}/mvnw" ]]; then
-  MVN_CMD="${PROJECT_ROOT}/mvnw"
+if [[ -x "${REPO_ROOT}/mvnw" ]]; then
+  MVN_CMD="${REPO_ROOT}/mvnw"
 elif command -v mvn >/dev/null 2>&1; then
   MVN_CMD="mvn"
 fi
@@ -81,7 +82,7 @@ fi
 
 if [[ -n "${MVN_CMD}" ]]; then
   echo "Installing parent and shared artifacts with ${MVN_CMD} ${INSTALL_ARGS[*]}"
-  ( cd "${PROJECT_ROOT}" && "${MVN_CMD}" "${INSTALL_ARGS[@]}" )
+  ( cd "${REPO_ROOT}" && "${MVN_CMD}" "${INSTALL_ARGS[@]}" )
   echo "Running Maven build with ${MVN_CMD} ${MVN_ARGS[*]}"
   ( cd "${PROJECT_ROOT}" && "${MVN_CMD}" "${MVN_ARGS[@]}" )
 else
