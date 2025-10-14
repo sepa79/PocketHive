@@ -14,6 +14,9 @@ logging:
 ph:
   swarmId: ${PH_SWARM_ID:default}
   finalQueue: ${PH_FINAL_QUEUE:ph.${ph.swarmId}.final}
+  worker:
+    metrics:
+      enabled: true
 pockethive:
   control-plane:
     swarm-id: ${ph.swarmId}

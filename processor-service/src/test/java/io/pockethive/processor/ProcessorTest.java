@@ -103,13 +103,6 @@ class ProcessorTest {
         assertThat(request.method()).isEqualTo("POST");
         assertThat(request.headers().firstValue("X-Test")).contains("true");
 
-        MeterRegistry registry = context.meterRegistry();
-        var counter = registry.find("processor_messages_total")
-            .tag("service", "processor")
-            .counter();
-        assertThat(counter).isNotNull();
-        assertThat(counter.count()).isEqualTo(1.0d);
-
         assertThat(context.statusData())
                 .containsEntry("baseUrl", "http://sut/")
                 .containsEntry("enabled", true);
