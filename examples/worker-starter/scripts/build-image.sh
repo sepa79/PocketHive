@@ -4,6 +4,12 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 REPO_ROOT="$(cd "${PROJECT_ROOT}/../.." && pwd)"
+REVISION="$(tr -d '\r\n' < "${REPO_ROOT}/VERSION")"
+
+if [[ -z "${REVISION}" ]]; then
+  echo "Unable to determine repository revision from ${REPO_ROOT}/VERSION" >&2
+  exit 1
+fi
 
 print_help() {
   cat <<'HELP'
@@ -71,13 +77,13 @@ elif command -v mvn >/dev/null 2>&1; then
   MVN_CMD="mvn"
 fi
 
-INSTALL_ARGS=(-B -pl common/worker-sdk -am install)
-MVN_ARGS=(-B -pl generator-worker,processor-worker -am package)
-DOCKER_MAVEN_ARGS=""
+INSTALL_ARGS=(-B -pl common/worker-sdk -am install "-Drevision=${REVISION}")
+MVN_ARGS=(-B -pl generator-worker,processor-worker -am package "-Drevision=${REVISION}")
+DOCKER_MAVEN_ARGS="-Drevision=${REVISION}"
 if [[ "${SKIP_TESTS}" == "true" ]]; then
   INSTALL_ARGS+=("-DskipTests")
   MVN_ARGS+=("-DskipTests")
-  DOCKER_MAVEN_ARGS="-DskipTests"
+  DOCKER_MAVEN_ARGS+=" -DskipTests"
 fi
 
 if [[ -n "${MVN_CMD}" ]]; then
