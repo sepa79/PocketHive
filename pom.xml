@@ -6,7 +6,8 @@
   <version>${revision}</version>
   <packaging>pom</packaging>
   <properties>
-  <revision>0.12.5</revision>
+    <!-- Flatten plugin resolves this CI-friendly revision into published POMs; see build plugins below. -->
+    <revision>0.12.5</revision>
     <logstash.logback.version>8.1</logstash.logback.version>
   </properties>
   <modules>
@@ -44,5 +45,32 @@
         </plugin>
       </plugins>
     </pluginManagement>
+    <plugins>
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>flatten-maven-plugin</artifactId>
+        <version>1.5.0</version>
+        <configuration>
+          <flattenMode>resolveCiFriendliesOnly</flattenMode>
+          <updatePomFile>true</updatePomFile>
+        </configuration>
+        <executions>
+          <execution>
+            <id>flatten</id>
+            <phase>process-resources</phase>
+            <goals>
+              <goal>flatten</goal>
+            </goals>
+          </execution>
+          <execution>
+            <id>flatten-clean</id>
+            <phase>clean</phase>
+            <goals>
+              <goal>clean</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
   </build>
 </project>
