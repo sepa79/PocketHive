@@ -381,6 +381,9 @@ public final class WorkerControlPlaneRuntime {
         String beanName = state.definition().beanName();
         Object workersSection = sanitized.get("workers");
         if (workersSection instanceof Map<?, ?> workersMap) {
+            if (!workersMap.containsKey(beanName)) {
+                return WorkerConfigPatch.empty();
+            }
             Object candidate = workersMap.get(beanName);
             if (candidate instanceof Map<?, ?> nested) {
                 Map<String, Object> copied = copyMap(nested);

@@ -214,6 +214,79 @@ class WorkerControlPlaneRuntimeTest {
     }
 
     @Test
+    void partiallyTargetedWorkersMapDoesNotResetUntouchedWorkers() throws Exception {
+        WorkerDefinition otherDefinition = new WorkerDefinition(
+            "secondaryWorker",
+            TestWorker.class,
+            WorkerType.GENERATOR,
+            "generator",
+            null,
+            "out.queue",
+            TestConfig.class
+        );
+        stateStore.getOrCreate(otherDefinition);
+        String routingKey = ControlPlaneRouting.signal("config-update", IDENTITY.swarmId(), IDENTITY.role(), IDENTITY.instanceId());
+
+        Map<String, Object> firstWorkerArgs = Map.of(
+            "worker", definition.beanName(),
+            "data", Map.of("ratePerSec", 17.5)
+        );
+        ControlSignal firstWorkerSignal = ControlSignal.forInstance(
+            "config-update",
+            IDENTITY.swarmId(),
+            IDENTITY.role(),
+            IDENTITY.instanceId(),
+            UUID.randomUUID().toString(),
+            UUID.randomUUID().toString(),
+            CommandTarget.INSTANCE,
+            firstWorkerArgs
+        );
+        runtime.handle(MAPPER.writeValueAsString(firstWorkerSignal), routingKey);
+
+        Map<String, Object> secondWorkerArgs = Map.of(
+            "worker", otherDefinition.beanName(),
+            "data", Map.of("ratePerSec", 42.0)
+        );
+        ControlSignal secondWorkerSignal = ControlSignal.forInstance(
+            "config-update",
+            IDENTITY.swarmId(),
+            IDENTITY.role(),
+            IDENTITY.instanceId(),
+            UUID.randomUUID().toString(),
+            UUID.randomUUID().toString(),
+            CommandTarget.INSTANCE,
+            secondWorkerArgs
+        );
+        runtime.handle(MAPPER.writeValueAsString(secondWorkerSignal), routingKey);
+
+        Map<String, Object> broadcastArgs = Map.of(
+            "data", Map.of(
+                "workers", Map.of(
+                    definition.beanName(), Map.of("ratePerSec", 99.0)
+                )
+            )
+        );
+        ControlSignal broadcastSignal = ControlSignal.forInstance(
+            "config-update",
+            IDENTITY.swarmId(),
+            IDENTITY.role(),
+            IDENTITY.instanceId(),
+            UUID.randomUUID().toString(),
+            UUID.randomUUID().toString(),
+            CommandTarget.ROLE,
+            broadcastArgs
+        );
+        runtime.handle(MAPPER.writeValueAsString(broadcastSignal), routingKey);
+
+        assertThat(runtime.workerRawConfig(definition.beanName()))
+            .containsEntry("ratePerSec", 99.0);
+        assertThat(runtime.workerRawConfig(otherDefinition.beanName()))
+            .containsEntry("ratePerSec", 42.0);
+        assertThat(runtime.workerConfig(otherDefinition.beanName(), TestConfig.class))
+            .contains(new TestConfig(false, 42.0));
+    }
+
+    @Test
     void configUpdateWithoutPayloadDoesNotClearExistingOverride() throws Exception {
         Map<String, Object> initialArgs = Map.of(
             "data", Map.of("ratePerSec", 18.0)
