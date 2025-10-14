@@ -171,6 +171,136 @@ class WorkerControlPlaneRuntimeTest {
     }
 
     @Test
+    void explicitEmptyPayloadResetsWorkerConfig() throws Exception {
+        Map<String, Object> initialArgs = Map.of(
+            "data", Map.of(
+                "enabled", true,
+                "ratePerSec", 15.0
+            )
+        );
+        ControlSignal initialSignal = ControlSignal.forInstance(
+            "config-update",
+            IDENTITY.swarmId(),
+            IDENTITY.role(),
+            IDENTITY.instanceId(),
+            UUID.randomUUID().toString(),
+            UUID.randomUUID().toString(),
+            CommandTarget.INSTANCE,
+            initialArgs
+        );
+        String routingKey = ControlPlaneRouting.signal("config-update", IDENTITY.swarmId(), IDENTITY.role(), IDENTITY.instanceId());
+        runtime.handle(MAPPER.writeValueAsString(initialSignal), routingKey);
+
+        Map<String, Object> resetArgs = Map.of(
+            "data", Map.of(
+                "workers", Map.of(definition.beanName(), Map.of())
+            )
+        );
+        ControlSignal resetSignal = ControlSignal.forInstance(
+            "config-update",
+            IDENTITY.swarmId(),
+            IDENTITY.role(),
+            IDENTITY.instanceId(),
+            UUID.randomUUID().toString(),
+            UUID.randomUUID().toString(),
+            CommandTarget.INSTANCE,
+            resetArgs
+        );
+
+        runtime.handle(MAPPER.writeValueAsString(resetSignal), routingKey);
+
+        assertThat(runtime.workerConfig(definition.beanName(), TestConfig.class)).isEmpty();
+        assertThat(runtime.workerRawConfig(definition.beanName())).isEmpty();
+    }
+
+    @Test
+    void configUpdateWithoutPayloadDoesNotClearExistingOverride() throws Exception {
+        Map<String, Object> initialArgs = Map.of(
+            "data", Map.of("ratePerSec", 18.0)
+        );
+        ControlSignal initialSignal = ControlSignal.forInstance(
+            "config-update",
+            IDENTITY.swarmId(),
+            IDENTITY.role(),
+            IDENTITY.instanceId(),
+            UUID.randomUUID().toString(),
+            UUID.randomUUID().toString(),
+            CommandTarget.INSTANCE,
+            initialArgs
+        );
+        String routingKey = ControlPlaneRouting.signal("config-update", IDENTITY.swarmId(), IDENTITY.role(), IDENTITY.instanceId());
+        runtime.handle(MAPPER.writeValueAsString(initialSignal), routingKey);
+
+        Map<String, Object> noopArgs = Map.of(
+            "worker", definition.beanName()
+        );
+        ControlSignal noopSignal = ControlSignal.forInstance(
+            "config-update",
+            IDENTITY.swarmId(),
+            IDENTITY.role(),
+            IDENTITY.instanceId(),
+            UUID.randomUUID().toString(),
+            UUID.randomUUID().toString(),
+            CommandTarget.INSTANCE,
+            noopArgs
+        );
+
+        runtime.handle(MAPPER.writeValueAsString(noopSignal), routingKey);
+
+        Map<String, Object> rawConfig = runtime.workerRawConfig(definition.beanName());
+        assertThat(rawConfig)
+            .containsEntry("ratePerSec", 18.0);
+        assertThat(runtime.workerConfig(definition.beanName(), TestConfig.class))
+            .contains(new TestConfig(false, 18.0));
+    }
+
+    @Test
+    void enablementToggleWithoutConfigRetainsExistingOverrides() throws Exception {
+        Map<String, Object> initialArgs = Map.of(
+            "data", Map.of(
+                "enabled", true,
+                "ratePerSec", 9.5
+            )
+        );
+        ControlSignal initialSignal = ControlSignal.forInstance(
+            "config-update",
+            IDENTITY.swarmId(),
+            IDENTITY.role(),
+            IDENTITY.instanceId(),
+            UUID.randomUUID().toString(),
+            UUID.randomUUID().toString(),
+            CommandTarget.INSTANCE,
+            initialArgs
+        );
+        String routingKey = ControlPlaneRouting.signal("config-update", IDENTITY.swarmId(), IDENTITY.role(), IDENTITY.instanceId());
+        runtime.handle(MAPPER.writeValueAsString(initialSignal), routingKey);
+
+        Map<String, Object> toggleArgs = Map.of(
+            "enabled", false
+        );
+        ControlSignal toggleSignal = ControlSignal.forInstance(
+            "config-update",
+            IDENTITY.swarmId(),
+            IDENTITY.role(),
+            IDENTITY.instanceId(),
+            UUID.randomUUID().toString(),
+            UUID.randomUUID().toString(),
+            CommandTarget.INSTANCE,
+            toggleArgs
+        );
+
+        runtime.handle(MAPPER.writeValueAsString(toggleSignal), routingKey);
+
+        assertThat(runtime.workerEnabled(definition.beanName())).contains(false);
+        Map<String, Object> rawConfig = runtime.workerRawConfig(definition.beanName());
+        assertThat(rawConfig)
+            .containsEntry("ratePerSec", 9.5)
+            .containsEntry("enabled", false);
+        assertThat(runtime.workerConfig(definition.beanName(), TestConfig.class))
+            .contains(new TestConfig(false, 9.5));
+    }
+
+    @Test
     void partialConfigUpdateRetainsSeededDefaults() throws Exception {
         TestConfig defaults = new TestConfig(true, 7.5);
         runtime.registerDefaultConfig(definition.beanName(), defaults);

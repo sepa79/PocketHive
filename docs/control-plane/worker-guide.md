@@ -84,6 +84,27 @@ CommandLineRunner controlPlaneRunner(ControlPlaneEmitter emitter, WorkerControlP
 Toggle `pockethive.control-plane.worker.enabled` or `.manager.enabled` to opt into the respective topology
 wiring.
 
+### Resetting worker overrides
+
+The control plane keeps the most recent override for each worker bean until you clear it. To revert to the
+boot-time defaults, emit a `config-update` signal that targets the worker with an explicit empty map. For
+example:
+
+```json
+{
+  "signal": "config-update",
+  "args": {
+    "workers": {
+      "exampleWorker": {}
+    }
+  }
+}
+```
+
+Because the payload singles out `exampleWorker` but provides no fields, the runtime interprets it as a reset
+and drops any stored overrides. Ordinary enable/disable toggles that omit configuration continue to work as
+before; only targeted empty maps trigger the reset behaviour.
+
 ## 4. Use the testing fixtures
 
 The Worker SDK also provides `ControlPlaneTestFixtures` to simplify unit tests:
