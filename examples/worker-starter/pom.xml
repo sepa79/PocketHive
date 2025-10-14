@@ -26,8 +26,8 @@
 
   <properties>
     <java.version>21</java.version>
-    <!-- Keep this aligned with the parent revision so the examples match the repo build -->
-    <pockethive.version>${project.parent.version}</pockethive.version>
+    <!-- Keep this aligned with the repo revision so the examples match the main build -->
+    <pockethive.version>${revision}</pockethive.version>
     <spring.boot.version>3.2.3</spring.boot.version>
   </properties>
 
