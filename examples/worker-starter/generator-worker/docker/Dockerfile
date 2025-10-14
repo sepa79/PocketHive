@@ -17,6 +17,7 @@ COPY trigger-service ./trigger-service
 COPY scenario-manager-service ./scenario-manager-service
 COPY e2e-tests ./e2e-tests
 COPY test ./test
+COPY docs ./docs
 COPY examples/worker-starter ./examples/worker-starter
 
 ARG MAVEN_ARGS=""
