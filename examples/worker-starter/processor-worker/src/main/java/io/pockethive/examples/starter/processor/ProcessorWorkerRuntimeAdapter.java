@@ -1,6 +1,7 @@
 package io.pockethive.examples.starter.processor;
 
 import io.pockethive.controlplane.ControlPlaneIdentity;
+import io.pockethive.observability.ObservabilityContextUtil;
 import io.pockethive.worker.sdk.config.WorkerType;
 import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
@@ -11,10 +12,15 @@ import jakarta.annotation.PostConstruct;
 import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.amqp.core.Message;
+import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.amqp.rabbit.listener.RabbitListenerEndpointRegistry;
+import org.springframework.amqp.support.AmqpHeaders;
 import org.springframework.context.ApplicationListener;
 import org.springframework.context.event.ContextRefreshedEvent;
+import org.springframework.messaging.handler.annotation.Header;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 /**
@@ -24,6 +30,7 @@ import org.springframework.stereotype.Component;
 class ProcessorWorkerRuntimeAdapter implements ApplicationListener<ContextRefreshedEvent> {
 
   private static final Logger log = LoggerFactory.getLogger(ProcessorWorkerRuntimeAdapter.class);
+  private static final String LISTENER_ID = "sampleProcessorListener";
   private final RabbitMessageWorkerAdapter delegate;
 
   ProcessorWorkerRuntimeAdapter(WorkerRuntime workerRuntime,
@@ -40,7 +47,7 @@ class ProcessorWorkerRuntimeAdapter implements ApplicationListener<ContextRefres
     this.delegate = RabbitMessageWorkerAdapter.builder()
         .logger(log)
         .displayName("Sample Processor")
-        .listenerId("sampleProcessorListener")
+        .listenerId(LISTENER_ID)
         .workerDefinition(definition)
         .controlPlaneRuntime(controlPlaneRuntime)
         .listenerRegistry(listenerRegistry)
@@ -60,8 +67,25 @@ class ProcessorWorkerRuntimeAdapter implements ApplicationListener<ContextRefres
     delegate.initialiseStateListener();
   }
 
+  @RabbitListener(id = LISTENER_ID, queues = "${ph.processor.work.queue:ph.processor.in}")
+  public void onWork(Message message) {
+    delegate.onWork(message);
+  }
+
+  @Scheduled(fixedRate = 5000)
+  public void emitStatusDelta() {
+    delegate.emitStatusDelta();
+  }
+
+  @RabbitListener(queues = "${ph.processor.control.queue:ph.processor.control}")
+  public void onControl(String payload,
+                        @Header(AmqpHeaders.RECEIVED_ROUTING_KEY) String routingKey,
+                        @Header(value = ObservabilityContextUtil.HEADER, required = false) String traceHeader) {
+    delegate.onControl(payload, routingKey, traceHeader);
+  }
+
   @Override
   public void onApplicationEvent(ContextRefreshedEvent event) {
-    delegate.startListener();
+    delegate.onApplicationEvent(event);
   }
 }
