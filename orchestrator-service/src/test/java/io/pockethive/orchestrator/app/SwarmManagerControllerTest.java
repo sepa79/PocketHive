@@ -5,6 +5,7 @@ import io.pockethive.Topology;
 import io.pockethive.control.CommandTarget;
 import io.pockethive.control.ConfirmationScope;
 import io.pockethive.control.ControlSignal;
+import io.pockethive.controlplane.ControlPlaneSignals;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.orchestrator.domain.IdempotencyStore;
 import io.pockethive.orchestrator.domain.Swarm;
@@ -40,8 +41,10 @@ class SwarmManagerControllerTest {
         SwarmRegistry registry = new SwarmRegistry();
         registry.register(new Swarm("sw1", "ctrl-a", "c1"));
         registry.register(new Swarm("sw2", "ctrl-b", "c2"));
-        when(idempotency.findCorrelation(eq("sw1"), eq("config-update"), eq("idem-1"))).thenReturn(Optional.empty());
-        when(idempotency.findCorrelation(eq("sw2"), eq("config-update"), eq("idem-1"))).thenReturn(Optional.empty());
+        when(idempotency.findCorrelation(eq("sw1"), eq(ControlPlaneSignals.CONFIG_UPDATE), eq("idem-1")))
+            .thenReturn(Optional.empty());
+        when(idempotency.findCorrelation(eq("sw2"), eq(ControlPlaneSignals.CONFIG_UPDATE), eq("idem-1")))
+            .thenReturn(Optional.empty());
         SwarmManagerController controller = new SwarmManagerController(registry, rabbit, idempotency, mapper);
         SwarmManagerController.ToggleRequest request =
             new SwarmManagerController.ToggleRequest("idem-1", true, null, null);
@@ -50,16 +53,16 @@ class SwarmManagerControllerTest {
 
         ArgumentCaptor<String> payloads = ArgumentCaptor.forClass(String.class);
         verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
-            eq(ControlPlaneRouting.signal("config-update", "sw1", "swarm-controller", "ctrl-a")), payloads.capture());
+            eq(ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, "sw1", "swarm-controller", "ctrl-a")), payloads.capture());
         verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
-            eq(ControlPlaneRouting.signal("config-update", "sw2", "swarm-controller", "ctrl-b")), payloads.capture());
+            eq(ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, "sw2", "swarm-controller", "ctrl-b")), payloads.capture());
         List<String> sentPayloads = payloads.getAllValues();
         assertThat(sentPayloads).hasSize(2);
         java.util.List<String> swarmIds = new java.util.ArrayList<>();
         for (String json : sentPayloads) {
             ControlSignal signal = mapper.readValue(json, ControlSignal.class);
             swarmIds.add(signal.swarmId());
-            assertThat(signal.signal()).isEqualTo("config-update");
+            assertThat(signal.signal()).isEqualTo(ControlPlaneSignals.CONFIG_UPDATE);
             assertThat(signal.commandTarget()).isEqualTo(CommandTarget.SWARM);
             @SuppressWarnings("unchecked")
             var data = (java.util.Map<String, Object>) signal.args().get("data");
@@ -76,7 +79,8 @@ class SwarmManagerControllerTest {
     void toggleSingleControllerScope() throws Exception {
         SwarmRegistry registry = new SwarmRegistry();
         registry.register(new Swarm("sw9", "ctrl-z", "c9"));
-        when(idempotency.findCorrelation(eq("sw9"), eq("config-update"), eq("idem-2"))).thenReturn(Optional.empty());
+        when(idempotency.findCorrelation(eq("sw9"), eq(ControlPlaneSignals.CONFIG_UPDATE), eq("idem-2")))
+            .thenReturn(Optional.empty());
         SwarmManagerController controller = new SwarmManagerController(registry, rabbit, idempotency, mapper);
         SwarmManagerController.ToggleRequest request =
             new SwarmManagerController.ToggleRequest("idem-2", false, null, CommandTarget.INSTANCE);
@@ -85,7 +89,7 @@ class SwarmManagerControllerTest {
 
         ArgumentCaptor<String> payload = ArgumentCaptor.forClass(String.class);
         verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
-            eq(ControlPlaneRouting.signal("config-update", "sw9", "swarm-controller", "ctrl-z")), payload.capture());
+            eq(ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, "sw9", "swarm-controller", "ctrl-z")), payload.capture());
         ControlSignal signal = mapper.readValue(payload.getValue(), ControlSignal.class);
         assertThat(signal.commandTarget()).isEqualTo(CommandTarget.INSTANCE);
         @SuppressWarnings("unchecked")
@@ -98,7 +102,7 @@ class SwarmManagerControllerTest {
         SwarmManagerController.Dispatch dispatch = response.getBody().dispatches().getFirst();
         ConfirmationScope scope = new ConfirmationScope("sw9", "swarm-controller", "ctrl-z");
         assertThat(dispatch.response().watch().successTopic())
-            .isEqualTo(ControlPlaneRouting.event("ready.config-update", scope));
+            .isEqualTo(ControlPlaneRouting.event("ready." + ControlPlaneSignals.CONFIG_UPDATE, scope));
     }
 
     @Test

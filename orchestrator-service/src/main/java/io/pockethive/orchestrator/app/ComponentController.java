@@ -6,6 +6,7 @@ import io.pockethive.Topology;
 import io.pockethive.control.CommandTarget;
 import io.pockethive.control.ControlSignal;
 import io.pockethive.control.ConfirmationScope;
+import io.pockethive.controlplane.ControlPlaneSignals;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.orchestrator.domain.IdempotencyStore;
 import org.slf4j.Logger;
@@ -50,7 +51,7 @@ public class ComponentController {
         String swarmId = request.swarmId();
         String scope = scope(role, instance, swarmId);
         String swarmSegment = segmentOrAll(swarmId);
-        ResponseEntity<ControlResponse> response = idempotency.findCorrelation(scope, "config-update", request.idempotencyKey())
+        ResponseEntity<ControlResponse> response = idempotency.findCorrelation(scope, ControlPlaneSignals.CONFIG_UPDATE, request.idempotencyKey())
             .map(correlation -> {
                 log.info("[CTRL] reuse config-update role={} instance={} correlation={} idempotencyKey={} scope={}",
                     role, instance, correlation, request.idempotencyKey(), scope);
@@ -58,12 +59,12 @@ public class ComponentController {
             })
             .orElseGet(() -> {
                 String correlation = UUID.randomUUID().toString();
-                ControlSignal payload = ControlSignal.forInstance("config-update", swarmId, role, instance,
+                ControlSignal payload = ControlSignal.forInstance(ControlPlaneSignals.CONFIG_UPDATE, swarmId, role, instance,
                     correlation, request.idempotencyKey(),
                     commandTargetFrom(request), argsFrom(request));
                 String jsonPayload = toJson(payload);
-                sendControl(routingKey(swarmSegment, role, instance), jsonPayload, "config-update");
-                idempotency.record(scope, "config-update", request.idempotencyKey(), correlation);
+                sendControl(routingKey(swarmSegment, role, instance), jsonPayload, ControlPlaneSignals.CONFIG_UPDATE);
+                idempotency.record(scope, ControlPlaneSignals.CONFIG_UPDATE, request.idempotencyKey(), correlation);
                 log.info("[CTRL] issue config-update role={} instance={} correlation={} idempotencyKey={} scope={}",
                     role, instance, correlation, request.idempotencyKey(), scope);
                 return accepted(correlation, request.idempotencyKey(), swarmSegment, role, instance);
@@ -73,7 +74,7 @@ public class ComponentController {
     }
 
     private static String routingKey(String swarmId, String role, String instance) {
-        return ControlPlaneRouting.signal("config-update", swarmId, role, instance);
+        return ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, swarmId, role, instance);
     }
 
     private static String scope(String role, String instance, String swarmId) {

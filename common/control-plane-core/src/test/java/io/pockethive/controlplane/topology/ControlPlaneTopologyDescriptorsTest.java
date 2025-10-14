@@ -2,6 +2,7 @@ package io.pockethive.controlplane.topology;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.Topology;
+import io.pockethive.controlplane.ControlPlaneSignals;
 import io.pockethive.controlplane.payload.JsonFixtureAssertions;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import java.io.IOException;
@@ -134,10 +135,10 @@ class ControlPlaneTopologyDescriptorsTest {
             .containsExactlyInAnyOrderElementsOf(expectedSwarmControllerStatusSignals(ControlPlaneRouteCatalog.INSTANCE_TOKEN));
         assertThat(routes.lifecycleSignals())
             .containsExactlyInAnyOrder(
-                ControlPlaneRouting.signal("swarm-start", Topology.SWARM_ID, "swarm-controller", "ALL"),
-                ControlPlaneRouting.signal("swarm-template", Topology.SWARM_ID, "swarm-controller", "ALL"),
-                ControlPlaneRouting.signal("swarm-stop", Topology.SWARM_ID, "swarm-controller", "ALL"),
-                ControlPlaneRouting.signal("swarm-remove", Topology.SWARM_ID, "swarm-controller", "ALL"));
+                ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_START, Topology.SWARM_ID, "swarm-controller", "ALL"),
+                ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_TEMPLATE, Topology.SWARM_ID, "swarm-controller", "ALL"),
+                ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_STOP, Topology.SWARM_ID, "swarm-controller", "ALL"),
+                ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_REMOVE, Topology.SWARM_ID, "swarm-controller", "ALL"));
         assertThat(routes.statusEvents())
             .containsExactlyInAnyOrder("ev.status-full." + Topology.SWARM_ID + ".#", "ev.status-delta." + Topology.SWARM_ID + ".#");
     }
@@ -242,46 +243,46 @@ class ControlPlaneTopologyDescriptorsTest {
 
     private static Set<String> expectedWorkerConfigSignals(String role, String instanceSegment) {
         return Set.of(
-            ControlPlaneRouting.signal("config-update", "ALL", role, "ALL"),
-            ControlPlaneRouting.signal("config-update", Topology.SWARM_ID, role, "ALL"),
-            ControlPlaneRouting.signal("config-update", Topology.SWARM_ID, role, instanceSegment),
-            ControlPlaneRouting.signal("config-update", Topology.SWARM_ID, "ALL", "ALL")
+            ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, "ALL", role, "ALL"),
+            ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, Topology.SWARM_ID, role, "ALL"),
+            ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, Topology.SWARM_ID, role, instanceSegment),
+            ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, Topology.SWARM_ID, "ALL", "ALL")
         );
     }
 
     private static Set<String> expectedWorkerStatusSignals(String role, String instanceSegment) {
         return Set.of(
-            ControlPlaneRouting.signal("status-request", "ALL", role, "ALL"),
-            ControlPlaneRouting.signal("status-request", Topology.SWARM_ID, role, "ALL"),
-            ControlPlaneRouting.signal("status-request", Topology.SWARM_ID, role, instanceSegment)
+            ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, "ALL", role, "ALL"),
+            ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, Topology.SWARM_ID, role, "ALL"),
+            ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, Topology.SWARM_ID, role, instanceSegment)
         );
     }
 
     private static Set<String> expectedSwarmControllerSignals(String instanceSegment) {
         LinkedHashSet<String> merged = new LinkedHashSet<>(expectedSwarmControllerConfigSignals(instanceSegment));
         merged.addAll(expectedSwarmControllerStatusSignals(instanceSegment));
-        merged.add(ControlPlaneRouting.signal("swarm-start", Topology.SWARM_ID, "swarm-controller", "ALL"));
-        merged.add(ControlPlaneRouting.signal("swarm-template", Topology.SWARM_ID, "swarm-controller", "ALL"));
-        merged.add(ControlPlaneRouting.signal("swarm-stop", Topology.SWARM_ID, "swarm-controller", "ALL"));
-        merged.add(ControlPlaneRouting.signal("swarm-remove", Topology.SWARM_ID, "swarm-controller", "ALL"));
+        merged.add(ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_START, Topology.SWARM_ID, "swarm-controller", "ALL"));
+        merged.add(ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_TEMPLATE, Topology.SWARM_ID, "swarm-controller", "ALL"));
+        merged.add(ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_STOP, Topology.SWARM_ID, "swarm-controller", "ALL"));
+        merged.add(ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_REMOVE, Topology.SWARM_ID, "swarm-controller", "ALL"));
         return Set.copyOf(merged);
     }
 
     private static Set<String> expectedSwarmControllerConfigSignals(String instanceSegment) {
         return Set.of(
-            ControlPlaneRouting.signal("config-update", "ALL", "swarm-controller", "ALL"),
-            ControlPlaneRouting.signal("config-update", Topology.SWARM_ID, "swarm-controller", "ALL"),
-            ControlPlaneRouting.signal("config-update", Topology.SWARM_ID, "swarm-controller", instanceSegment),
-            ControlPlaneRouting.signal("config-update", Topology.SWARM_ID, "ALL", "ALL")
+            ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, "ALL", "swarm-controller", "ALL"),
+            ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, Topology.SWARM_ID, "swarm-controller", "ALL"),
+            ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, Topology.SWARM_ID, "swarm-controller", instanceSegment),
+            ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, Topology.SWARM_ID, "ALL", "ALL")
         );
     }
 
     private static Set<String> expectedSwarmControllerStatusSignals(String instanceSegment) {
         return Set.of(
-            ControlPlaneRouting.signal("status-request", "ALL", "swarm-controller", "ALL"),
-            ControlPlaneRouting.signal("status-request", Topology.SWARM_ID, "swarm-controller", "ALL"),
-            ControlPlaneRouting.signal("status-request", Topology.SWARM_ID, "swarm-controller", instanceSegment),
-            ControlPlaneRouting.signal("status-request", Topology.SWARM_ID, "ALL", "ALL")
+            ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, "ALL", "swarm-controller", "ALL"),
+            ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, Topology.SWARM_ID, "swarm-controller", "ALL"),
+            ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, Topology.SWARM_ID, "swarm-controller", instanceSegment),
+            ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, Topology.SWARM_ID, "ALL", "ALL")
         );
     }
 }

@@ -2,11 +2,12 @@ package io.pockethive.swarmcontroller;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.pockethive.controlplane.ControlPlaneSignals;
+import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.docker.DockerContainerClient;
 import io.pockethive.swarm.model.Bee;
 import io.pockethive.swarm.model.SwarmPlan;
 import io.pockethive.swarm.model.Work;
-import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -22,6 +23,7 @@ import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
 import io.pockethive.Topology;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.OptionalLong;
@@ -42,7 +44,7 @@ import static org.mockito.ArgumentMatchers.*;
 @ExtendWith({MockitoExtension.class, OutputCaptureExtension.class})
 class SwarmLifecycleManagerTest {
   private static final String BROADCAST_ROUTE =
-      ControlPlaneRouting.signal("config-update", Topology.SWARM_ID, "ALL", "ALL");
+      ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, Topology.SWARM_ID, "ALL", "ALL");
 
   @Mock
   AmqpAdmin amqp;
@@ -107,13 +109,19 @@ class SwarmLifecycleManagerTest {
         eq(BROADCAST_ROUTE),
         stopPayload.capture());
     JsonNode stopNode = mapper.readTree(stopPayload.getValue());
-    assertThat(stopNode.path("signal").asText()).isEqualTo("config-update");
+    assertThat(stopNode.path("signal").asText()).isEqualTo(ControlPlaneSignals.CONFIG_UPDATE);
     assertThat(stopNode.path("correlationId").asText()).isNotBlank();
     assertThat(stopNode.path("idempotencyKey").asText()).isNotBlank();
     assertThat(stopNode.path("args").path("data").path("enabled").asBoolean(true)).isFalse();
+    ArgumentCaptor<String> statusPayload = ArgumentCaptor.forClass(String.class);
     verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
         startsWith("ev.status-delta.swarm-controller.inst"),
-        argThat((String p) -> p.contains("STOPPED")));
+        statusPayload.capture());
+    JsonNode statusNode = mapper.readTree(statusPayload.getValue());
+    assertThat(statusNode.path("data").path("swarmStatus").asText()).isEqualTo("STOPPED");
+    List<String> controlRoutes = new ArrayList<>();
+    statusNode.path("queues").path("control").path("routes").forEach(route -> controlRoutes.add(route.asText()));
+    assertThat(controlRoutes).containsExactlyInAnyOrderElementsOf(expectedControllerRoutes("inst"));
     verifyNoInteractions(docker);
     verifyNoInteractions(amqp);
     assertEquals(SwarmStatus.STOPPED, manager.getStatus());
@@ -236,7 +244,7 @@ class SwarmLifecycleManagerTest {
         eq(BROADCAST_ROUTE),
         enablePayload.capture());
     JsonNode enableNode = mapper.readTree(enablePayload.getValue());
-    assertThat(enableNode.path("signal").asText()).isEqualTo("config-update");
+    assertThat(enableNode.path("signal").asText()).isEqualTo(ControlPlaneSignals.CONFIG_UPDATE);
     assertThat(enableNode.path("args").path("data").path("enabled").asBoolean(false)).isTrue();
     verifyNoMoreInteractions(docker);
     assertEquals(SwarmStatus.RUNNING, manager.getStatus());
@@ -265,7 +273,7 @@ class SwarmLifecycleManagerTest {
         eq(BROADCAST_ROUTE),
         scenarioPayload.capture());
     JsonNode scenarioNode = mapper.readTree(scenarioPayload.getValue());
-    assertThat(scenarioNode.path("signal").asText()).isEqualTo("config-update");
+    assertThat(scenarioNode.path("signal").asText()).isEqualTo(ControlPlaneSignals.CONFIG_UPDATE);
     assertThat(scenarioNode.path("commandTarget").asText()).isEqualTo("swarm");
     assertThat(scenarioNode.path("args").path("data").path("enabled").asBoolean(true)).isFalse();
     assertThat(scenarioNode.path("args").path("data").path("foo").asText()).isEqualTo("bar");
@@ -280,7 +288,7 @@ class SwarmLifecycleManagerTest {
         eq(BROADCAST_ROUTE),
         resumePayload.capture());
     JsonNode resumeNode = mapper.readTree(resumePayload.getValue());
-    assertThat(resumeNode.path("signal").asText()).isEqualTo("config-update");
+    assertThat(resumeNode.path("signal").asText()).isEqualTo(ControlPlaneSignals.CONFIG_UPDATE);
     assertThat(resumeNode.path("commandTarget").asText()).isEqualTo("swarm");
     assertThat(resumeNode.path("args").path("data").path("enabled").asBoolean(false)).isTrue();
     verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
@@ -307,7 +315,7 @@ class SwarmLifecycleManagerTest {
     ArgumentCaptor<String> roleRoute = ArgumentCaptor.forClass(String.class);
     ArgumentCaptor<String> rolePayload = ArgumentCaptor.forClass(String.class);
     verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), roleRoute.capture(), rolePayload.capture());
-    assertThat(roleRoute.getValue()).isEqualTo(ControlPlaneRouting.signal("config-update", Topology.SWARM_ID, "proc", null));
+    assertThat(roleRoute.getValue()).isEqualTo(ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, Topology.SWARM_ID, "proc", null));
     JsonNode roleNode = mapper.readTree(rolePayload.getValue());
     assertThat(roleNode.path("commandTarget").asText()).isEqualTo("role");
     assertThat(roleNode.path("role").asText()).isEqualTo("proc");
@@ -329,7 +337,7 @@ class SwarmLifecycleManagerTest {
     ArgumentCaptor<String> instanceRoute = ArgumentCaptor.forClass(String.class);
     ArgumentCaptor<String> instancePayload = ArgumentCaptor.forClass(String.class);
     verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), instanceRoute.capture(), instancePayload.capture());
-    assertThat(instanceRoute.getValue()).isEqualTo(ControlPlaneRouting.signal("config-update", Topology.SWARM_ID, "proc", "proc-1"));
+    assertThat(instanceRoute.getValue()).isEqualTo(ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, Topology.SWARM_ID, "proc", "proc-1"));
     JsonNode instanceNode = mapper.readTree(instancePayload.getValue());
     assertThat(instanceNode.path("commandTarget").asText()).isEqualTo("instance");
     assertThat(instanceNode.path("role").asText()).isEqualTo("proc");
@@ -357,7 +365,7 @@ class SwarmLifecycleManagerTest {
     verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), routingCaptor.capture(), payloadCaptor.capture());
 
     assertThat(routingCaptor.getValue())
-        .isEqualTo(ControlPlaneRouting.signal("config-update", Topology.SWARM_ID, "ALL", "ALL"));
+        .isEqualTo(ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, Topology.SWARM_ID, "ALL", "ALL"));
 
     JsonNode payload = mapper.readTree(payloadCaptor.getValue());
     assertThat(payload.path("swarmId").asText()).isEqualTo(Topology.SWARM_ID);
@@ -389,7 +397,7 @@ class SwarmLifecycleManagerTest {
         eq(BROADCAST_ROUTE),
         disablePayload.capture());
     JsonNode disableNode = mapper.readTree(disablePayload.getValue());
-    assertThat(disableNode.path("signal").asText()).isEqualTo("config-update");
+    assertThat(disableNode.path("signal").asText()).isEqualTo(ControlPlaneSignals.CONFIG_UPDATE);
     assertThat(disableNode.path("args").path("data").path("enabled").asBoolean(true)).isFalse();
     assertEquals(SwarmStatus.STOPPED, manager.getStatus());
   }
@@ -419,7 +427,7 @@ class SwarmLifecycleManagerTest {
     ArgumentCaptor<String> fanoutEnable = ArgumentCaptor.forClass(String.class);
     verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq(BROADCAST_ROUTE), fanoutEnable.capture());
     JsonNode fanoutEnableNode = mapper.readTree(fanoutEnable.getValue());
-    assertThat(fanoutEnableNode.path("signal").asText()).isEqualTo("config-update");
+    assertThat(fanoutEnableNode.path("signal").asText()).isEqualTo(ControlPlaneSignals.CONFIG_UPDATE);
     assertThat(fanoutEnableNode.path("args").path("data").path("enabled").asBoolean(false)).isTrue();
 
     reset(rabbit);
@@ -429,7 +437,7 @@ class SwarmLifecycleManagerTest {
     inStop.verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq(BROADCAST_ROUTE), fanoutDisable.capture());
     inStop.verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), startsWith("ev.status-delta.swarm-controller.inst"), anyString());
     JsonNode fanoutDisableNode = mapper.readTree(fanoutDisable.getValue());
-    assertThat(fanoutDisableNode.path("signal").asText()).isEqualTo("config-update");
+    assertThat(fanoutDisableNode.path("signal").asText()).isEqualTo(ControlPlaneSignals.CONFIG_UPDATE);
     assertThat(fanoutDisableNode.path("args").path("data").path("enabled").asBoolean(true)).isFalse();
 
     reset(docker);
@@ -468,7 +476,7 @@ class SwarmLifecycleManagerTest {
     ArgumentCaptor<String> broadcastEnable = ArgumentCaptor.forClass(String.class);
     verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq(BROADCAST_ROUTE), broadcastEnable.capture());
     JsonNode broadcastEnableNode = mapper.readTree(broadcastEnable.getValue());
-    assertThat(broadcastEnableNode.path("signal").asText()).isEqualTo("config-update");
+    assertThat(broadcastEnableNode.path("signal").asText()).isEqualTo(ControlPlaneSignals.CONFIG_UPDATE);
     assertThat(broadcastEnableNode.path("args").path("data").path("enabled").asBoolean(false)).isTrue();
 
     reset(rabbit);
@@ -478,7 +486,7 @@ class SwarmLifecycleManagerTest {
     inStop.verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq(BROADCAST_ROUTE), broadcastDisable.capture());
     inStop.verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), startsWith("ev.status-delta.swarm-controller.inst"), anyString());
     JsonNode broadcastDisableNode = mapper.readTree(broadcastDisable.getValue());
-    assertThat(broadcastDisableNode.path("signal").asText()).isEqualTo("config-update");
+    assertThat(broadcastDisableNode.path("signal").asText()).isEqualTo(ControlPlaneSignals.CONFIG_UPDATE);
     assertThat(broadcastDisableNode.path("args").path("data").path("enabled").asBoolean(true)).isFalse();
   }
 
@@ -493,7 +501,8 @@ class SwarmLifecycleManagerTest {
     reset(rabbit);
     manager.updateHeartbeat("gen", "g1", System.currentTimeMillis() - 20_000);
     assertFalse(manager.markReady("gen", "g1"));
-    verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq("sig.status-request.gen.g1"), anyString());
+    verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
+        eq(ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, Topology.SWARM_ID, "gen", "g1")), anyString());
 
     manager.updateHeartbeat("gen", "g1");
     assertTrue(manager.markReady("gen", "g1"));
@@ -542,7 +551,7 @@ class SwarmLifecycleManagerTest {
 
     assertThat(output)
         .doesNotContain("[CTRL] SEND rk=ev.status-delta.swarm-controller.inst")
-        .doesNotContain("[CTRL] SEND rk=sig.status-request.gen.g1");
+        .doesNotContain("[CTRL] SEND rk=" + ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, Topology.SWARM_ID, "gen", "g1"));
   }
 
   @Test
@@ -578,5 +587,20 @@ class SwarmLifecycleManagerTest {
     assertThat(qout.depth()).isZero();
     assertThat(qout.consumers()).isZero();
     assertThat(qout.oldestAgeSec()).isEqualTo(OptionalLong.empty());
+  }
+
+  private static List<String> expectedControllerRoutes(String instanceId) {
+    return List.of(
+        ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, "ALL", "swarm-controller", "ALL"),
+        ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, Topology.SWARM_ID, "swarm-controller", "ALL"),
+        ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, Topology.SWARM_ID, "swarm-controller", instanceId),
+        ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, Topology.SWARM_ID, "ALL", "ALL"),
+        ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, "ALL", "swarm-controller", "ALL"),
+        ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, Topology.SWARM_ID, "swarm-controller", "ALL"),
+        ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, Topology.SWARM_ID, "swarm-controller", instanceId),
+        ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_TEMPLATE, Topology.SWARM_ID, "swarm-controller", "ALL"),
+        ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_START, Topology.SWARM_ID, "swarm-controller", "ALL"),
+        ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_STOP, Topology.SWARM_ID, "swarm-controller", "ALL"),
+        ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_REMOVE, Topology.SWARM_ID, "swarm-controller", "ALL"));
   }
 }
