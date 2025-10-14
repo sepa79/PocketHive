@@ -1,0 +1,17 @@
+spring:
+  application:
+    name: generator-worker-starter
+
+pockethive:
+  control-plane:
+    exchange: ph.exchange
+    swarm-id: sample-swarm
+    worker:
+      role: generator
+      instance-id: generator-1
+
+starter:
+  generator:
+    enabled: true
+    rate-per-second: 1.0
+    message: "Hello from the generator"

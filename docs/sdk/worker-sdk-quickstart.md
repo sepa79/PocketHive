@@ -4,6 +4,13 @@ This guide shows how to adopt the simplified Worker SDK introduced in the Stage 
 [Stage 0 design](worker-sdk-stage0-design.md) and [Stage 1 runtime walkthrough](worker-sdk-stage1-runtime.md) when you need
 deeper architectural context.
 
+## 0. Start from the in-repo template (optional)
+
+Clone the `examples/worker-starter` directory when you want a copy-ready project that already wires the
+Worker SDK, control-plane defaults, and runtime adapters for both generator and processor roles. The template lives
+inside the monorepo so it always tracks the latest PocketHive release—copy it to your own repository, then follow the
+remaining steps to customise the worker roles, routing metadata, and business logic.
+
 ## 1. Add the dependency and starter
 
 Include the Worker SDK starter in your Spring Boot service. The starter composes the control-plane auto-configuration,
