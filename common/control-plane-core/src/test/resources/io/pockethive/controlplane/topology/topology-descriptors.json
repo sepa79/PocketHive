@@ -9,6 +9,7 @@
         "sig.config-update.default.processor.ALL",
         "sig.config-update.default.processor.inst",
         "sig.status-request.ALL.processor.ALL",
+        "sig.status-request.default.ALL.ALL",
         "sig.status-request.default.processor.ALL",
         "sig.status-request.default.processor.inst"
       ],
@@ -19,6 +20,7 @@
         "sig.config-update.default.processor.ALL",
         "sig.config-update.default.processor.inst",
         "sig.status-request.ALL.processor.ALL",
+        "sig.status-request.default.ALL.ALL",
         "sig.status-request.default.processor.ALL",
         "sig.status-request.default.processor.inst"
       ]
@@ -42,6 +44,7 @@
       "statusEvents": [],
       "statusSignals": [
         "sig.status-request.ALL.processor.ALL",
+        "sig.status-request.default.ALL.ALL",
         "sig.status-request.default.processor.ALL",
         "sig.status-request.default.processor.{instance}"
       ],
@@ -59,6 +62,7 @@
         "sig.config-update.default.generator.ALL",
         "sig.config-update.default.generator.inst",
         "sig.status-request.ALL.generator.ALL",
+        "sig.status-request.default.ALL.ALL",
         "sig.status-request.default.generator.ALL",
         "sig.status-request.default.generator.inst"
       ],
@@ -69,6 +73,7 @@
         "sig.config-update.default.generator.ALL",
         "sig.config-update.default.generator.inst",
         "sig.status-request.ALL.generator.ALL",
+        "sig.status-request.default.ALL.ALL",
         "sig.status-request.default.generator.ALL",
         "sig.status-request.default.generator.inst"
       ]
@@ -85,6 +90,7 @@
       "statusEvents": [],
       "statusSignals": [
         "sig.status-request.ALL.generator.ALL",
+        "sig.status-request.default.ALL.ALL",
         "sig.status-request.default.generator.ALL",
         "sig.status-request.default.generator.{instance}"
       ],
@@ -102,6 +108,7 @@
         "sig.config-update.default.trigger.ALL",
         "sig.config-update.default.trigger.inst",
         "sig.status-request.ALL.trigger.ALL",
+        "sig.status-request.default.ALL.ALL",
         "sig.status-request.default.trigger.ALL",
         "sig.status-request.default.trigger.inst"
       ],
@@ -112,6 +119,7 @@
         "sig.config-update.default.trigger.ALL",
         "sig.config-update.default.trigger.inst",
         "sig.status-request.ALL.trigger.ALL",
+        "sig.status-request.default.ALL.ALL",
         "sig.status-request.default.trigger.ALL",
         "sig.status-request.default.trigger.inst"
       ]
@@ -128,6 +136,7 @@
       "statusEvents": [],
       "statusSignals": [
         "sig.status-request.ALL.trigger.ALL",
+        "sig.status-request.default.ALL.ALL",
         "sig.status-request.default.trigger.ALL",
         "sig.status-request.default.trigger.{instance}"
       ],
@@ -145,6 +154,7 @@
         "sig.config-update.default.moderator.ALL",
         "sig.config-update.default.moderator.inst",
         "sig.status-request.ALL.moderator.ALL",
+        "sig.status-request.default.ALL.ALL",
         "sig.status-request.default.moderator.ALL",
         "sig.status-request.default.moderator.inst"
       ],
@@ -155,6 +165,7 @@
         "sig.config-update.default.moderator.ALL",
         "sig.config-update.default.moderator.inst",
         "sig.status-request.ALL.moderator.ALL",
+        "sig.status-request.default.ALL.ALL",
         "sig.status-request.default.moderator.ALL",
         "sig.status-request.default.moderator.inst"
       ]
@@ -178,6 +189,7 @@
       "statusEvents": [],
       "statusSignals": [
         "sig.status-request.ALL.moderator.ALL",
+        "sig.status-request.default.ALL.ALL",
         "sig.status-request.default.moderator.ALL",
         "sig.status-request.default.moderator.{instance}"
       ],
@@ -195,6 +207,7 @@
         "sig.config-update.default.postprocessor.ALL",
         "sig.config-update.default.postprocessor.inst",
         "sig.status-request.ALL.postprocessor.ALL",
+        "sig.status-request.default.ALL.ALL",
         "sig.status-request.default.postprocessor.ALL",
         "sig.status-request.default.postprocessor.inst"
       ],
@@ -205,6 +218,7 @@
         "sig.config-update.default.postprocessor.ALL",
         "sig.config-update.default.postprocessor.inst",
         "sig.status-request.ALL.postprocessor.ALL",
+        "sig.status-request.default.ALL.ALL",
         "sig.status-request.default.postprocessor.ALL",
         "sig.status-request.default.postprocessor.inst"
       ]
@@ -228,6 +242,7 @@
       "statusEvents": [],
       "statusSignals": [
         "sig.status-request.ALL.postprocessor.ALL",
+        "sig.status-request.default.ALL.ALL",
         "sig.status-request.default.postprocessor.ALL",
         "sig.status-request.default.postprocessor.{instance}"
       ],

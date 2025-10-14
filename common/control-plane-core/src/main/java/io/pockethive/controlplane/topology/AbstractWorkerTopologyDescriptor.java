@@ -41,7 +41,8 @@ abstract class AbstractWorkerTopologyDescriptor implements ControlPlaneTopologyD
         Set<String> statusSignals = Set.of(
             ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, "ALL", role, "ALL"),
             ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, Topology.SWARM_ID, role, "ALL"),
-            ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, Topology.SWARM_ID, role, id)
+            ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, Topology.SWARM_ID, role, id),
+            ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, Topology.SWARM_ID, "ALL", "ALL")
         );
         LinkedHashSet<String> allSignals = new LinkedHashSet<>(configSignals);
         allSignals.addAll(statusSignals);
@@ -65,7 +66,8 @@ abstract class AbstractWorkerTopologyDescriptor implements ControlPlaneTopologyD
         Set<String> statusRoutes = Set.of(
             ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, "ALL", role, "ALL"),
             ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, Topology.SWARM_ID, role, "ALL"),
-            ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, Topology.SWARM_ID, role, ControlPlaneRouteCatalog.INSTANCE_TOKEN)
+            ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, Topology.SWARM_ID, role, ControlPlaneRouteCatalog.INSTANCE_TOKEN),
+            ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, Topology.SWARM_ID, "ALL", "ALL")
         );
         return new ControlPlaneRouteCatalog(configRoutes, statusRoutes, Set.of(), Set.of(), Set.of(), Set.of());
     }
