@@ -6,6 +6,7 @@ import io.pockethive.Topology;
 import io.pockethive.control.CommandTarget;
 import io.pockethive.control.ControlSignal;
 import io.pockethive.control.ConfirmationScope;
+import io.pockethive.controlplane.ControlPlaneSignals;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.orchestrator.domain.IdempotencyStore;
 import io.pockethive.orchestrator.domain.Swarm;
@@ -117,13 +118,13 @@ public class SwarmManagerController {
             String swarmId = swarm.getId();
             String swarmSegment = segmentOrAll(swarmId);
             String scope = swarmId;
-            idempotency.findCorrelation(scope, "config-update", request.idempotencyKey())
+            idempotency.findCorrelation(scope, ControlPlaneSignals.CONFIG_UPDATE, request.idempotencyKey())
                 .ifPresentOrElse(correlation -> dispatches.add(new Dispatch(swarmSegment, swarm.getInstanceId(),
                         accepted(correlation, request.idempotencyKey(), swarmSegment, swarm.getInstanceId()), true)),
                     () -> {
                         String correlation = UUID.randomUUID().toString();
                         ControlSignal payload = ControlSignal.forInstance(
-                            "config-update",
+                            ControlPlaneSignals.CONFIG_UPDATE,
                             swarmId,
                             "swarm-controller",
                             swarm.getInstanceId(),
@@ -132,7 +133,7 @@ public class SwarmManagerController {
                             request.commandTarget(),
                             argsFor(request));
                         sendControl(routingKey(swarmSegment, swarm.getInstanceId()), toJson(payload), request.commandTarget());
-                        idempotency.record(scope, "config-update", request.idempotencyKey(), correlation);
+                        idempotency.record(scope, ControlPlaneSignals.CONFIG_UPDATE, request.idempotencyKey(), correlation);
                         dispatches.add(new Dispatch(swarmSegment, swarm.getInstanceId(),
                             accepted(correlation, request.idempotencyKey(), swarmSegment, swarm.getInstanceId()), false));
                     });
@@ -147,7 +148,7 @@ public class SwarmManagerController {
      * {@code sig.config-update.demo.swarm-controller.swarm-controller-demo-1}.
      */
     private static String routingKey(String swarmSegment, String instanceId) {
-        return ControlPlaneRouting.signal("config-update", swarmSegment, "swarm-controller", instanceId);
+        return ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, swarmSegment, "swarm-controller", instanceId);
     }
 
     /**

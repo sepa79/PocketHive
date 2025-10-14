@@ -5,6 +5,7 @@ import io.pockethive.Topology;
 import io.pockethive.control.CommandTarget;
 import io.pockethive.control.ConfirmationScope;
 import io.pockethive.control.ControlSignal;
+import io.pockethive.controlplane.ControlPlaneSignals;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.orchestrator.infra.InMemoryIdempotencyStore;
 import org.junit.jupiter.api.Test;
@@ -41,9 +42,9 @@ class ComponentControllerTest {
 
         ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
         verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
-            eq(ControlPlaneRouting.signal("config-update", "sw1", "generator", "c1")), captor.capture());
+            eq(ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, "sw1", "generator", "c1")), captor.capture());
         ControlSignal signal = mapper.readValue(captor.getValue(), ControlSignal.class);
-        assertThat(signal.signal()).isEqualTo("config-update");
+        assertThat(signal.signal()).isEqualTo(ControlPlaneSignals.CONFIG_UPDATE);
         assertThat(signal.role()).isEqualTo("generator");
         assertThat(signal.instance()).isEqualTo("c1");
         assertThat(signal.swarmId()).isEqualTo("sw1");
@@ -56,7 +57,7 @@ class ComponentControllerTest {
         assertThat(data).containsEntry("enabled", true);
         assertThat(response.getBody()).isNotNull();
         assertThat(response.getBody().watch().successTopic())
-            .isEqualTo(ControlPlaneRouting.event("ready.config-update",
+            .isEqualTo(ControlPlaneRouting.event("ready." + ControlPlaneSignals.CONFIG_UPDATE,
                 new ConfirmationScope("sw1", "generator", "c1")));
     }
 
@@ -70,7 +71,7 @@ class ComponentControllerTest {
         ResponseEntity<ControlResponse> second = controller.updateConfig("processor", "p1", request);
 
         verify(rabbit, times(1)).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
-            eq(ControlPlaneRouting.signal("config-update", "ALL", "processor", "p1")), anyString());
+            eq(ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, "ALL", "processor", "p1")), anyString());
         assertThat(first.getBody()).isNotNull();
         assertThat(second.getBody()).isNotNull();
         assertThat(first.getBody().correlationId()).isEqualTo(second.getBody().correlationId());
