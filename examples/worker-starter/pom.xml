@@ -7,7 +7,7 @@
   <parent>
     <groupId>io.pockethive</groupId>
     <artifactId>pockethive-mvp</artifactId>
-    <version>0.11.3</version>
+    <version>${revision}</version>
     <relativePath>../..</relativePath>
   </parent>
 
@@ -26,8 +26,8 @@
 
   <properties>
     <java.version>21</java.version>
-    <!-- Keep this aligned with the published PocketHive framework version -->
-    <pockethive.version>0.11.3</pockethive.version>
+    <!-- Keep this aligned with the parent revision so the examples match the repo build -->
+    <pockethive.version>${project.parent.version}</pockethive.version>
     <spring.boot.version>3.2.3</spring.boot.version>
   </properties>
 
