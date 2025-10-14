@@ -107,7 +107,7 @@ build_image() {
     --build-arg "MAVEN_ARGS=${DOCKER_MAVEN_ARGS}" \
     -t "${image_name}" \
     -f "${PROJECT_ROOT}/${module_dir}/docker/Dockerfile" \
-    "${PROJECT_ROOT}"
+    "${REPO_ROOT}"
 }
 
 build_image "generator-worker" "${GEN_IMAGE}"
