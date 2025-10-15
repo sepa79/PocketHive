@@ -22,6 +22,7 @@ import org.springframework.amqp.core.TopicExchange;
 import org.springframework.amqp.rabbit.core.RabbitAdmin;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import io.pockethive.observability.StatusEnvelopeBuilder;
@@ -130,6 +131,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
     }
   }
 
+  @Autowired
   public SwarmLifecycleManager(AmqpAdmin amqp,
                                ObjectMapper mapper,
                                DockerContainerClient docker,
