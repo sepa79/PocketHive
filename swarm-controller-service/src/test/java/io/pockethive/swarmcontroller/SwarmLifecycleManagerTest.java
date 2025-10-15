@@ -34,7 +34,6 @@ import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
 
-import static com.github.stefanbirkner.systemlambda.SystemLambda.withEnvironmentVariable;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -195,31 +194,36 @@ class SwarmLifecycleManagerTest {
 
   @Test
   void preparePropagatesMinimalPushgatewayEnvWhenConfigured() throws Exception {
-    withEnvironmentVariable("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_BASE_URL", "http://push:9091")
-        .and("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_ENABLED", "true")
-        .and("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_PUSH_RATE", "12s")
-        .and("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_SHUTDOWN_OPERATION", "DELETE")
-        .execute(() -> {
-          SwarmLifecycleManager manager = new SwarmLifecycleManager(amqp, mapper, docker, rabbit, "inst");
-          SwarmPlan plan = new SwarmPlan("swarm", List.of(new Bee("gen", "img1", null, null)));
-          when(docker.createContainer(eq("img1"), anyMap(), anyString())).thenReturn("c1");
+    SwarmLifecycleManager manager = new SwarmLifecycleManager(
+        amqp,
+        mapper,
+        docker,
+        rabbit,
+        "inst",
+        Map.of(
+            "MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_BASE_URL", "http://push:9091",
+            "MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_ENABLED", "true",
+            "MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_PUSH_RATE", "12s",
+            "MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_SHUTDOWN_OPERATION", "DELETE"
+        ));
+    SwarmPlan plan = new SwarmPlan("swarm", List.of(new Bee("gen", "img1", null, null)));
+    when(docker.createContainer(eq("img1"), anyMap(), anyString())).thenReturn("c1");
 
-          manager.prepare(mapper.writeValueAsString(plan));
+    manager.prepare(mapper.writeValueAsString(plan));
 
-          ArgumentCaptor<Map<String, String>> envCaptor = ArgumentCaptor.forClass(Map.class);
-          ArgumentCaptor<String> nameCaptor = ArgumentCaptor.forClass(String.class);
-          verify(docker).createContainer(eq("img1"), envCaptor.capture(), nameCaptor.capture());
-          Map<String, String> env = envCaptor.getValue();
-          String beeName = nameCaptor.getValue();
-          assertEquals("http://push:9091", env.get("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_BASE_URL"));
-          assertEquals("true", env.get("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_ENABLED"));
-          assertEquals("12s", env.get("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_PUSH_RATE"));
-          assertEquals("DELETE", env.get("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_SHUTDOWN_OPERATION"));
-          assertEquals(Topology.SWARM_ID, env.get("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_JOB"));
-          assertEquals(beeName, env.get("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_GROUPING_KEY_INSTANCE"));
-          assertFalse(env.containsKey("MANAGEMENT_METRICS_TAGS_SWARM"));
-          assertFalse(env.containsKey("MANAGEMENT_METRICS_TAGS_INSTANCE"));
-        });
+    ArgumentCaptor<Map<String, String>> envCaptor = ArgumentCaptor.forClass(Map.class);
+    ArgumentCaptor<String> nameCaptor = ArgumentCaptor.forClass(String.class);
+    verify(docker).createContainer(eq("img1"), envCaptor.capture(), nameCaptor.capture());
+    Map<String, String> env = envCaptor.getValue();
+    String beeName = nameCaptor.getValue();
+    assertEquals("http://push:9091", env.get("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_BASE_URL"));
+    assertEquals("true", env.get("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_ENABLED"));
+    assertEquals("12s", env.get("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_PUSH_RATE"));
+    assertEquals("DELETE", env.get("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_SHUTDOWN_OPERATION"));
+    assertEquals(Topology.SWARM_ID, env.get("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_JOB"));
+    assertEquals(beeName, env.get("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_GROUPING_KEY_INSTANCE"));
+    assertFalse(env.containsKey("MANAGEMENT_METRICS_TAGS_SWARM"));
+    assertFalse(env.containsKey("MANAGEMENT_METRICS_TAGS_INSTANCE"));
   }
 
   @Test

@@ -145,6 +145,15 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
                         DockerContainerClient docker,
                         RabbitTemplate rabbit,
                         String instanceId,
+                        Map<String, String> environment) {
+    this(amqp, mapper, docker, rabbit, instanceId, PushgatewayConfig.fromEnv(environment));
+  }
+
+  SwarmLifecycleManager(AmqpAdmin amqp,
+                        ObjectMapper mapper,
+                        DockerContainerClient docker,
+                        RabbitTemplate rabbit,
+                        String instanceId,
                         PushgatewayConfig pushgatewayConfig) {
     this.amqp = amqp;
     this.mapper = mapper;

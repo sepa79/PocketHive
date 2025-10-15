@@ -89,8 +89,12 @@ public class ContainerLifecycleManager {
             .orElse(DEFAULT_DOCKER_SOCKET);
     }
 
+    protected java.util.Map<String, String> environment() {
+        return System.getenv();
+    }
+
     private void applyPushgatewayEnv(java.util.Map<String, String> env, String swarmId) {
-        java.util.Map<String, String> source = System.getenv();
+        java.util.Map<String, String> source = environment();
         String baseUrl = source.get("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_BASE_URL");
         if (isBlank(baseUrl)) {
             return;
