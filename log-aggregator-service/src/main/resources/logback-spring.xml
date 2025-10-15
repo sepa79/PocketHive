@@ -2,16 +2,24 @@
   <include resource="org/springframework/boot/logging/logback/base.xml"/>
 
   <springProperty scope="context" name="roleIdentifier"
-                  source="pockethive.control-plane.worker.role"
+                  source="pockethive.control-plane.manager.role"
                   defaultValue="${spring.application.name}"/>
 
+  <springProperty scope="context" name="globalSwarmIdentifier"
+                  source="pockethive.control-plane.swarm-id"
+                  defaultValue=""/>
+
   <springProperty scope="context" name="swarmIdentifier"
-                  source="pockethive.control-plane.worker.swarm-id"
-                  defaultValue="${pockethive.control-plane.swarm-id:}"/>
+                  source="pockethive.control-plane.manager.swarm-id"
+                  defaultValue="${globalSwarmIdentifier}"/>
+
+  <springProperty scope="context" name="defaultInstanceIdentifier"
+                  source="bee.name"
+                  defaultValue="${spring.application.name}"/>
 
   <springProperty scope="context" name="instanceIdentifier"
-                  source="pockethive.control-plane.worker.instance-id"
-                  defaultValue="${bee.name:${spring.application.name}}"/>
+                  source="pockethive.control-plane.manager.instance-id"
+                  defaultValue="${defaultInstanceIdentifier}"/>
 
   <logger name="org.springframework.amqp" level="WARN" additivity="false">
     <appender-ref ref="CONSOLE"/>

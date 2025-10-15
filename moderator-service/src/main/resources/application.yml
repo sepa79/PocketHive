@@ -9,6 +9,7 @@ management.endpoints.web.exposure.include: health,info
 
 # Include traceId from MDC in log output
 logging:
+  config: classpath:logback-spring.xml
   pattern.level: "%5p [%X{traceId}]"
 
 # PocketHive topology (overridable via env PH_*)

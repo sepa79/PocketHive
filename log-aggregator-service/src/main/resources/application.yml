@@ -11,6 +11,7 @@ spring:
         missing-queues-fatal: true
 management.endpoints.web.exposure.include: health,info
 logging:
+  config: classpath:logback-spring.xml
   pattern.level: "%5p [%X{traceId}]"
 ph:
   logsQueue: ${PH_LOGS_QUEUE:ph.logs.agg}

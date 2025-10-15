@@ -8,6 +8,7 @@ spring:
 management.endpoints.web.exposure.include: health,info
 
 logging:
+  config: classpath:logback-spring.xml
   pattern.level: "%5p [%X{traceId}]"
 
 pockethive:

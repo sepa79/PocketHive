@@ -68,7 +68,11 @@ public class LogAggregator {
   private Map<String,Object> toPayload(List<LogEntry> logs){
     Map<Key, List<List<String>>> grouped = new HashMap<>();
     for(LogEntry l: logs){
-      Key key = new Key(empty(l.role()), empty(l.traceId()));
+      Key key = new Key(
+          empty(l.role()),
+          empty(l.swarmId()),
+          empty(l.instanceId()),
+          empty(l.traceId()));
       grouped.computeIfAbsent(key, k -> new ArrayList<>())
           .add(List.of(toNanos(l.timestamp()), l.message()));
     }
@@ -76,8 +80,10 @@ public class LogAggregator {
     for(var e: grouped.entrySet()){
       Map<String,String> labels = new HashMap<>();
       if(!e.getKey().role().isBlank()) labels.put("role", e.getKey().role());
+      if(!e.getKey().swarmId().isBlank()) labels.put("swarmId", e.getKey().swarmId());
+      if(!e.getKey().instanceId().isBlank()) labels.put("instanceId", e.getKey().instanceId());
       if(!e.getKey().traceId().isBlank()) labels.put("traceId", e.getKey().traceId());
-      if(labels.isEmpty()) labels.put("role", "unknown");
+      labels.putIfAbsent("role", "unknown");
       Map<String,Object> stream = new HashMap<>();
       stream.put("stream", labels);
       stream.put("values", e.getValue());
@@ -122,5 +128,5 @@ public class LogAggregator {
     }
   }
 
-  private record Key(String role, String traceId){}
+  private record Key(String role, String swarmId, String instanceId, String traceId){}
 }
