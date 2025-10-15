@@ -4,7 +4,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
 @Component
-@ConfigurationProperties(prefix = "ph.postprocessor")
+@ConfigurationProperties(prefix = "pockethive.control-plane.worker.postprocessor")
 class PostProcessorDefaults {
 
   private boolean enabled = false;

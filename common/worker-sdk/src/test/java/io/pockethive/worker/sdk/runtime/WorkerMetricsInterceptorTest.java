@@ -46,7 +46,7 @@ class WorkerMetricsInterceptorTest {
     @Test
     void autoConfigurationEnablesMetricsInterceptorWhenPropertySet() {
         contextRunner
-            .withPropertyValues("ph.worker.metrics.enabled=true")
+            .withPropertyValues("pockethive.control-plane.worker.metrics.enabled=true")
             .run(context -> assertThat(context).hasSingleBean(WorkerMetricsInterceptor.class));
     }
 

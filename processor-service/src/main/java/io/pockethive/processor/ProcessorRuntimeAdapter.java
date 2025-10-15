@@ -84,7 +84,9 @@ class ProcessorRuntimeAdapter implements ApplicationListener<ContextRefreshedEve
     delegate.initialiseStateListener();
   }
 
-  @RabbitListener(id = LISTENER_ID, queues = "${ph.modQueue:" + TopologyDefaults.MOD_QUEUE + "}")
+  @RabbitListener(
+      id = LISTENER_ID,
+      queues = "${pockethive.control-plane.queues.moderator:" + TopologyDefaults.MOD_QUEUE + "}")
   public void onWork(Message message) {
     delegate.onWork(message);
   }

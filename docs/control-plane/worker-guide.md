@@ -70,6 +70,10 @@ pockethive:
       enabled: false # disable if the service is worker-only
 ```
 
+Workers automatically inherit `pockethive.control-plane.swarm-id`; setting a
+dedicated `pockethive.control-plane.worker.swarm-id` override is no longer
+required unless you explicitly need the worker to join a different swarm.
+
 With the starter in place, inject the beans exported by the auto-configuration:
 
 ```java

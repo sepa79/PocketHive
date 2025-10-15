@@ -4,7 +4,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
 @Component
-@ConfigurationProperties(prefix = "ph.moderator")
+@ConfigurationProperties(prefix = "pockethive.control-plane.worker.moderator")
 class ModeratorDefaults {
 
   private boolean enabled = false;

@@ -5,7 +5,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
 @Component
-@ConfigurationProperties(prefix = "ph.gen")
+@ConfigurationProperties(prefix = "pockethive.control-plane.worker.generator")
 class GeneratorDefaults {
 
   private final MessageConfig messageConfig;

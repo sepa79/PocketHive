@@ -26,8 +26,10 @@ import org.springframework.stereotype.Component;
  *
  * <p>When PocketHive boots the generator worker it resolves configuration in three stages:</p>
  * <ol>
- *   <li>Read {@code ph.gen.*} defaults from {@link GeneratorDefaults} (for example a
- *       {@code ph.gen.rate-per-sec} property in {@code application.yml}).</li>
+ *   <li>Read {@code pockethive.control-plane.worker.generator.*} defaults from
+ *       {@link GeneratorDefaults} (for example a
+ *       {@code pockethive.control-plane.worker.generator.rate-per-sec} property in
+ *       {@code application.yml}).</li>
  *   <li>Merge in any runtime overrides supplied by the control plane. Those show up in
  *       {@link WorkerContext#config(Class)}.</li>
  *   <li>Publish a status heartbeat so operators see which path, method, and headers this worker is

@@ -20,7 +20,8 @@ import org.springframework.stereotype.Component;
  * the same pod.
  *
  * <p>Moderation is intentionally lightweight today—just pass-through with metadata—but junior
- * engineers can extend it with validation or routing logic. Flip the {@code ph.moderator.enabled}
+ * engineers can extend it with validation or routing logic. Flip the
+ * {@code pockethive.control-plane.worker.moderator.enabled}
  * flag in {@code application.yml} (or push a runtime override) to pause moderation during load
  * testing. The worker keeps publishing status updates so you can confirm its enabled/disabled state
  * from Grafana.</p>
@@ -45,7 +46,8 @@ class ModeratorWorkerImpl implements MessageWorker {
   /**
    * Accepts a message from the generator queue, records the moderator's enabled flag in the worker
    * status stream, and forwards the payload to the moderator queue. Configuration arrives via
-   * {@code ph.moderator.enabled} (boolean) and can be overridden live through the control plane. A
+   * {@code pockethive.control-plane.worker.moderator.enabled} (boolean) and can be overridden live
+   * through the control plane. A
    * simple JSON override looks like {@code {"enabled": true}}.
    *
    * <p>The moderator does not alter the payload body; it only ensures the outbound message carries

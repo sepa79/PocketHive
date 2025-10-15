@@ -131,7 +131,10 @@ public class PocketHiveWorkerSdkAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(MeterRegistry.class)
-    @ConditionalOnProperty(prefix = "ph.worker.metrics", name = "enabled", havingValue = "true")
+    @ConditionalOnProperty(
+        prefix = "pockethive.control-plane.worker.metrics",
+        name = "enabled",
+        havingValue = "true")
     WorkerInvocationInterceptor workerMetricsInterceptor(MeterRegistry meterRegistry) {
         return new WorkerMetricsInterceptor(meterRegistry);
     }

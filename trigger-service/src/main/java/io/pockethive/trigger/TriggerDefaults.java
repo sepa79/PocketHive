@@ -6,7 +6,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
 @Component
-@ConfigurationProperties(prefix = "ph.trigger")
+@ConfigurationProperties(prefix = "pockethive.control-plane.worker.trigger")
 class TriggerDefaults {
 
   private boolean enabled = false;

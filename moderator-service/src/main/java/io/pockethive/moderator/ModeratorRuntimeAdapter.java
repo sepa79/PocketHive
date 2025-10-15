@@ -79,7 +79,9 @@ class ModeratorRuntimeAdapter implements ApplicationListener<ContextRefreshedEve
     delegate.initialiseStateListener();
   }
 
-  @RabbitListener(id = LISTENER_ID, queues = "${ph.genQueue:" + TopologyDefaults.GEN_QUEUE + "}")
+  @RabbitListener(
+      id = LISTENER_ID,
+      queues = "${pockethive.control-plane.queues.generator:" + TopologyDefaults.GEN_QUEUE + "}")
   public void onWork(Message message) {
     delegate.onWork(message);
   }
