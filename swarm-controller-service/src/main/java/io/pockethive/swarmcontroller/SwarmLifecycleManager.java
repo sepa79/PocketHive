@@ -22,6 +22,7 @@ import org.springframework.amqp.core.TopicExchange;
 import org.springframework.amqp.rabbit.core.RabbitAdmin;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import io.pockethive.observability.StatusEnvelopeBuilder;
@@ -64,6 +65,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
   private final DockerContainerClient docker;
   private final RabbitTemplate rabbit;
   private final String instanceId;
+  private final PushgatewayConfig pushgatewayConfig;
   private final Map<String, List<String>> containers = new HashMap<>();
   private final Set<String> declaredQueues = new HashSet<>();
   private final Map<String, Integer> expectedReady = new HashMap<>();
@@ -81,45 +83,76 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
   private record ScenarioTask(long delayMs, String routingKey, String body) {}
 
   private void applyMetricsEnv(Map<String, String> env, String beeName) {
-    String pushBaseUrl = firstNonBlank(
-        System.getenv("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_BASE_URL"),
-        System.getenv("MANAGEMENT_METRICS_EXPORT_PROMETHEUS_PUSHGATEWAY_BASE_URL"),
-        System.getenv("PH_PUSHGATEWAY_BASE_URL"));
-    if (pushBaseUrl == null || pushBaseUrl.isBlank()) {
+    if (!pushgatewayConfig.hasBaseUrl()) {
       return;
     }
-    env.put("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_BASE_URL", pushBaseUrl);
-    env.putIfAbsent("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_ENABLED", "true");
+    env.put("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_BASE_URL", pushgatewayConfig.baseUrl());
+    if (pushgatewayConfig.enabled() != null) {
+      env.put("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_ENABLED", pushgatewayConfig.enabled());
+    }
+    if (pushgatewayConfig.pushRate() != null) {
+      env.put("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_PUSH_RATE", pushgatewayConfig.pushRate());
+    }
+    if (pushgatewayConfig.shutdownOperation() != null) {
+      env.put("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_SHUTDOWN_OPERATION",
+          pushgatewayConfig.shutdownOperation());
+    }
     env.put("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_JOB", Topology.SWARM_ID);
     env.put("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_GROUPING_KEY_INSTANCE", beeName);
-    env.putIfAbsent("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_PUSH_RATE", "10s");
-    env.putIfAbsent("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_SHUTDOWN_OPERATION", "DELETE");
-    env.put("MANAGEMENT_METRICS_TAGS_SWARM", Topology.SWARM_ID);
-    env.put("MANAGEMENT_METRICS_TAGS_INSTANCE", beeName);
   }
 
-  private static String firstNonBlank(String... values) {
-    if (values == null) {
-      return null;
+  private record PushgatewayConfig(String baseUrl, String enabled, String pushRate, String shutdownOperation) {
+    static PushgatewayConfig fromEnv(Map<String, String> env) {
+      String base = trimToNull(env.get("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_BASE_URL"));
+      return new PushgatewayConfig(base,
+          trimToNull(env.get("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_ENABLED")),
+          trimToNull(env.get("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_PUSH_RATE")),
+          trimToNull(env.get("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_SHUTDOWN_OPERATION")));
     }
-    for (String value : values) {
-      if (value != null && !value.isBlank()) {
-        return value;
+
+    boolean hasBaseUrl() {
+      return baseUrl != null && !baseUrl.isBlank();
+    }
+
+    private static String trimToNull(String value) {
+      if (value == null) {
+        return null;
       }
+      String trimmed = value.trim();
+      return trimmed.isEmpty() ? null : trimmed;
     }
-    return null;
   }
 
+  @Autowired
   public SwarmLifecycleManager(AmqpAdmin amqp,
                                ObjectMapper mapper,
                                DockerContainerClient docker,
                                RabbitTemplate rabbit,
                                @Qualifier("instanceId") String instanceId) {
+    this(amqp, mapper, docker, rabbit, instanceId, PushgatewayConfig.fromEnv(System.getenv()));
+  }
+
+  SwarmLifecycleManager(AmqpAdmin amqp,
+                        ObjectMapper mapper,
+                        DockerContainerClient docker,
+                        RabbitTemplate rabbit,
+                        String instanceId,
+                        Map<String, String> environment) {
+    this(amqp, mapper, docker, rabbit, instanceId, PushgatewayConfig.fromEnv(environment));
+  }
+
+  SwarmLifecycleManager(AmqpAdmin amqp,
+                        ObjectMapper mapper,
+                        DockerContainerClient docker,
+                        RabbitTemplate rabbit,
+                        String instanceId,
+                        PushgatewayConfig pushgatewayConfig) {
     this.amqp = amqp;
     this.mapper = mapper;
     this.docker = docker;
     this.rabbit = rabbit;
     this.instanceId = instanceId;
+    this.pushgatewayConfig = pushgatewayConfig;
   }
 
   /**

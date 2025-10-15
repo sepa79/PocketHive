@@ -33,10 +33,10 @@ import org.springframework.stereotype.Component;
  * {@link io.pockethive.worker.sdk.api.WorkerInfo} (service, instance, swarm). Those Micrometer
  * instruments produce metrics:</p>
  * <ul>
- *   <li>{@code postprocessor_hop_latency_ms}</li>
- *   <li>{@code postprocessor_total_latency_ms}</li>
- *   <li>{@code postprocessor_hops}</li>
- *   <li>{@code postprocessor_errors_total}</li>
+ *   <li>{@code ph_hop_latency_ms}</li>
+ *   <li>{@code ph_total_latency_ms}</li>
+ *   <li>{@code ph_hops}</li>
+ *   <li>{@code ph_errors_total}</li>
  * </ul>
  *
  * <p>If you extend the worker—for example to emit custom histograms—do so within
@@ -72,7 +72,7 @@ class PostProcessorWorkerImpl implements MessageWorker {
    * timestamps—missing timestamps fall back to zero latency so the dashboards remain stable.
    *
    * <p>If upstream workers set an {@code x-ph-error} header—commonly a boolean string like
-   * {@code "true"}—the post-processor increments {@code postprocessor_errors_total}. This is the
+ * {@code "true"}—the post-processor increments {@code ph_errors_total}. This is the
    * metric Grafana panels use to paint red alerts.</p>
    *
    * <p>After updating metrics the worker publishes a status heartbeat containing the effective

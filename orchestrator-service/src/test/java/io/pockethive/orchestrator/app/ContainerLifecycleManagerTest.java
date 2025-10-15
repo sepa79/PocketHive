@@ -87,6 +87,37 @@ class ContainerLifecycleManagerTest {
     }
 
     @Test
+    void startSwarmPropagatesPushgatewaySettingsWhenConfigured() {
+        SwarmRegistry registry = new SwarmRegistry();
+        when(docker.createAndStartContainer(eq("img"), anyMap(), anyString(), any())).thenReturn("cid");
+        ContainerLifecycleManager manager = new ContainerLifecycleManager(docker, registry, amqp) {
+            @Override
+            protected java.util.Map<String, String> environment() {
+                return java.util.Map.of(
+                    "MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_BASE_URL", "http://push:9091",
+                    "MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_ENABLED", "true",
+                    "MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_PUSH_RATE", "15s",
+                    "MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_SHUTDOWN_OPERATION", "DELETE"
+                );
+            }
+        };
+
+        manager.startSwarm("sw1", "img", "inst1");
+
+        ArgumentCaptor<java.util.Map<String, String>> envCaptor = ArgumentCaptor.forClass(java.util.Map.class);
+        verify(docker).createAndStartContainer(eq("img"), envCaptor.capture(), eq("inst1"), any());
+        java.util.Map<String, String> env = envCaptor.getValue();
+        assertEquals("http://push:9091", env.get("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_BASE_URL"));
+        assertEquals("true", env.get("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_ENABLED"));
+        assertEquals("15s", env.get("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_PUSH_RATE"));
+        assertEquals("DELETE", env.get("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_SHUTDOWN_OPERATION"));
+        assertEquals("sw1", env.get("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_JOB"));
+        assertNull(env.get("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_GROUPING_KEY_INSTANCE"));
+        assertNull(env.get("MANAGEMENT_METRICS_TAGS_SWARM"));
+        assertNull(env.get("MANAGEMENT_METRICS_TAGS_INSTANCE"));
+    }
+
+    @Test
     void stopSwarmMarksStoppedWithoutRemovingResources() {
         SwarmRegistry registry = new SwarmRegistry();
         Swarm swarm = new Swarm("sw1", "inst1", "cid");
