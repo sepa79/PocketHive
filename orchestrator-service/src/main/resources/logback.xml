@@ -1,6 +1,18 @@
 <configuration>
   <include resource="org/springframework/boot/logging/logback/base.xml"/>
 
+  <springProperty scope="context" name="roleIdentifier"
+                  source="pockethive.control-plane.manager.role"
+                  defaultValue="${spring.application.name}"/>
+
+  <springProperty scope="context" name="swarmIdentifier"
+                  source="pockethive.control-plane.manager.swarm-id"
+                  defaultValue="${pockethive.control-plane.swarm-id:}"/>
+
+  <springProperty scope="context" name="instanceIdentifier"
+                  source="pockethive.control-plane.manager.instance-id"
+                  defaultValue="${bee.name:${spring.application.name}}"/>
+
   <logger name="org.springframework.amqp" level="WARN" additivity="false">
     <appender-ref ref="CONSOLE"/>
   </logger>
@@ -17,7 +29,9 @@
         <password>${RABBITMQ_DEFAULT_PASS:-guest}</password>
         <virtualHost>${RABBITMQ_VHOST:-/}</virtualHost>
         <exchangeName>${PH_LOGS_EXCHANGE:-ph.logs}</exchangeName>
-        <encoder class="net.logstash.logback.encoder.LogstashEncoder"/>
+        <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+          <customFields>{"role":"${roleIdentifier}","swarmId":"${swarmIdentifier}","instanceId":"${instanceIdentifier}"}</customFields>
+        </encoder>
       </appender>
 
       <root level="INFO">

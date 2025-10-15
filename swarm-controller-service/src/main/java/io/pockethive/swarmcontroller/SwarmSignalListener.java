@@ -81,9 +81,6 @@ public class SwarmSignalListener {
   @RabbitListener(queues = "#{controlQueue.name}")
   public void handle(String body, @Header(AmqpHeaders.RECEIVED_ROUTING_KEY) String routingKey) {
     try {
-      MDC.put("swarm_id", Topology.SWARM_ID);
-      MDC.put("service", ROLE);
-      MDC.put("instance", instanceId);
       if (routingKey == null || routingKey.isBlank()) {
         log.warn("Received control message with null or blank routing key; payload snippet={}", snippet(body));
         throw new IllegalArgumentException("Control-plane routing key must not be null or blank");
