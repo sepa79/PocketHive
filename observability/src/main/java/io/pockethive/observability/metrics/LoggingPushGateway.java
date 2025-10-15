@@ -16,16 +16,20 @@ final class LoggingPushGateway extends PushGateway {
 
   private static final Logger log = LoggerFactory.getLogger(LoggingPushGateway.class);
 
+  private final String gatewayBaseUrl;
+
   LoggingPushGateway(URL baseUrl) {
     super(baseUrl);
+    this.gatewayBaseUrl = baseUrl.toString();
   }
 
   LoggingPushGateway(String address) {
     super(address);
+    this.gatewayBaseUrl = address;
   }
 
   String getGatewayBaseUrl() {
-    return this.gatewayBaseURL;
+    return gatewayBaseUrl;
   }
 
   @Override
