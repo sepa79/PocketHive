@@ -4,7 +4,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
 @Component
-@ConfigurationProperties(prefix = "ph.processor")
+@ConfigurationProperties(prefix = "pockethive.control-plane.worker.processor")
 class ProcessorDefaults {
 
   private boolean enabled = false;

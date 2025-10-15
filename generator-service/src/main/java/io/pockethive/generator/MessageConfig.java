@@ -7,7 +7,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 @Component
-@ConfigurationProperties(prefix = "ph.gen.message")
+@ConfigurationProperties(prefix = "pockethive.control-plane.worker.generator.message")
 public class MessageConfig {
   private String path;
   private String method;

@@ -12,19 +12,17 @@ logging:
   config: classpath:logback-spring.xml
   pattern.level: "%5p [%X{traceId}]"
 
-ph:
-  swarmId: ${PH_SWARM_ID:default}
-  finalQueue: ${PH_FINAL_QUEUE:ph.${ph.swarmId}.final}
-  worker:
-    metrics:
-      enabled: true
 pockethive:
   control-plane:
-    swarm-id: ${ph.swarmId}
+    swarm-id: ${PH_SWARM_ID:default}
+    queues:
+      final: ${PH_FINAL_QUEUE:ph.${pockethive.control-plane.swarm-id}.final}
     worker:
       role: postprocessor
-      swarm-id: ${ph.swarmId}
+      swarm-id: ${pockethive.control-plane.swarm-id}
       instance-id: ${bee.name:${random.uuid}}
       skip-self-signals: false
+      metrics:
+        enabled: true
     manager:
       enabled: false

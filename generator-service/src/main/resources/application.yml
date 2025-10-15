@@ -12,24 +12,22 @@ logging:
   config: classpath:logback-spring.xml
   pattern.level: "%5p [%X{traceId}]"
 
-# PocketHive topology (defaults overridable via env)
-ph:
-  swarmId: ${PH_SWARM_ID:default}
-  genQueue: ${PH_GEN_QUEUE:ph.${ph.swarmId}.gen}
-  modQueue: ${PH_MOD_QUEUE:ph.${ph.swarmId}.mod}
-  gen:
-    message:
-      path: /api/test
-      method: POST
-      body: hello-world
-      headers: {}
 pockethive:
   control-plane:
-    swarm-id: ${ph.swarmId}
+    swarm-id: ${PH_SWARM_ID:default}
+    queues:
+      generator: ${PH_GEN_QUEUE:ph.${pockethive.control-plane.swarm-id}.gen}
+      moderator: ${PH_MOD_QUEUE:ph.${pockethive.control-plane.swarm-id}.mod}
     worker:
       role: generator
-      swarm-id: ${ph.swarmId}
+      swarm-id: ${pockethive.control-plane.swarm-id}
       instance-id: ${bee.name:${random.uuid}}
       skip-self-signals: false
+      generator:
+        message:
+          path: /api/test
+          method: POST
+          body: hello-world
+          headers: {}
     manager:
       enabled: false

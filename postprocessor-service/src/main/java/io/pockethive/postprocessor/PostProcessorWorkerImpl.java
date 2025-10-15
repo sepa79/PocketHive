@@ -65,7 +65,8 @@ class PostProcessorWorkerImpl implements MessageWorker {
 
   /**
    * Observes the last leg of a message's journey. The method pulls
-   * {@link PostProcessorWorkerConfig} via {@code ph.postprocessor.enabled} (used mainly to toggle
+   * {@link PostProcessorWorkerConfig} via
+   * {@code pockethive.control-plane.worker.postprocessor.enabled} (used mainly to toggle
    * status displays) and inspects {@link ObservabilityContext#getHops()} to calculate per-hop and
    * total latency. Expect each {@link Hop} to include {@code receivedAt} and {@code processedAt}
    * timestamps—missing timestamps fall back to zero latency so the dashboards remain stable.

@@ -72,7 +72,9 @@ class PostProcessorRuntimeAdapter implements ApplicationListener<ContextRefreshe
     delegate.initialiseStateListener();
   }
 
-  @RabbitListener(id = LISTENER_ID, queues = "${ph.finalQueue:" + TopologyDefaults.FINAL_QUEUE + "}")
+  @RabbitListener(
+      id = LISTENER_ID,
+      queues = "${pockethive.control-plane.queues.final:" + TopologyDefaults.FINAL_QUEUE + "}")
   public void onWork(Message message) {
     delegate.onWork(message);
   }
