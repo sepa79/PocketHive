@@ -33,7 +33,7 @@ public class ContainerLifecycleManager {
         env.put("RABBITMQ_HOST", java.util.Optional.ofNullable(System.getenv("RABBITMQ_HOST")).orElse("rabbitmq"));
         env.put("PH_LOGS_EXCHANGE", java.util.Optional.ofNullable(System.getenv("PH_LOGS_EXCHANGE")).orElse("ph.logs"));
         env.put("PH_SWARM_ID", swarmId);
-        applyPushgatewayEnv(env, swarmId, instanceId);
+        applyPushgatewayEnv(env, swarmId);
         String net = docker.resolveControlNetwork();
         if (net != null && !net.isBlank()) {
             env.put("CONTROL_NETWORK", net);
@@ -89,7 +89,7 @@ public class ContainerLifecycleManager {
             .orElse(DEFAULT_DOCKER_SOCKET);
     }
 
-    private void applyPushgatewayEnv(java.util.Map<String, String> env, String swarmId, String instanceId) {
+    private void applyPushgatewayEnv(java.util.Map<String, String> env, String swarmId) {
         java.util.Map<String, String> source = System.getenv();
         String baseUrl = firstNonBlank(
             source.get("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_BASE_URL"),
@@ -104,7 +104,6 @@ public class ContainerLifecycleManager {
         copyIfPresent("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_PUSH_RATE", source, env);
         copyIfPresent("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_SHUTDOWN_OPERATION", source, env);
         env.put("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_JOB", swarmId);
-        env.put("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_GROUPING_KEY_INSTANCE", instanceId);
     }
 
     private static void copyIfPresent(String key, java.util.Map<String, String> source, java.util.Map<String, String> target) {
