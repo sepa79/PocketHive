@@ -104,7 +104,6 @@ class ContainerLifecycleManagerTest {
                 verify(docker).createAndStartContainer(eq("img"), envCaptor.capture(), eq("inst1"), any());
                 java.util.Map<String, String> env = envCaptor.getValue();
                 assertEquals("http://push:9091", env.get("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_BASE_URL"));
-                assertEquals("http://push:9091", env.get("PH_PUSHGATEWAY_BASE_URL"));
                 assertEquals("true", env.get("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_ENABLED"));
                 assertEquals("15s", env.get("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_PUSH_RATE"));
                 assertEquals("DELETE", env.get("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_SHUTDOWN_OPERATION"));

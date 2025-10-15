@@ -212,7 +212,6 @@ class SwarmLifecycleManagerTest {
           Map<String, String> env = envCaptor.getValue();
           String beeName = nameCaptor.getValue();
           assertEquals("http://push:9091", env.get("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_BASE_URL"));
-          assertEquals("http://push:9091", env.get("PH_PUSHGATEWAY_BASE_URL"));
           assertEquals("true", env.get("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_ENABLED"));
           assertEquals("12s", env.get("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_PUSH_RATE"));
           assertEquals("DELETE", env.get("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_SHUTDOWN_OPERATION"));

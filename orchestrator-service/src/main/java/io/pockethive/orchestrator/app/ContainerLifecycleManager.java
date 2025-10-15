@@ -91,15 +91,11 @@ public class ContainerLifecycleManager {
 
     private void applyPushgatewayEnv(java.util.Map<String, String> env, String swarmId) {
         java.util.Map<String, String> source = System.getenv();
-        String baseUrl = firstNonBlank(
-            source.get("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_BASE_URL"),
-            source.get("MANAGEMENT_METRICS_EXPORT_PROMETHEUS_PUSHGATEWAY_BASE_URL"),
-            source.get("PH_PUSHGATEWAY_BASE_URL"));
+        String baseUrl = source.get("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_BASE_URL");
         if (isBlank(baseUrl)) {
             return;
         }
         env.put("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_BASE_URL", baseUrl);
-        env.put("PH_PUSHGATEWAY_BASE_URL", baseUrl);
         copyIfPresent("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_ENABLED", source, env);
         copyIfPresent("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_PUSH_RATE", source, env);
         copyIfPresent("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_SHUTDOWN_OPERATION", source, env);
@@ -117,15 +113,4 @@ public class ContainerLifecycleManager {
         return value == null || value.isBlank();
     }
 
-    private static String firstNonBlank(String... values) {
-        if (values == null) {
-            return null;
-        }
-        for (String value : values) {
-            if (!isBlank(value)) {
-                return value;
-            }
-        }
-        return null;
-    }
 }

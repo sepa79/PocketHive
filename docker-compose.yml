@@ -52,7 +52,7 @@ services:
       PH_CONTROL_EXCHANGE: ph.control
       PH_CONTROL_QUEUE: ph.control
       PH_SWARM_ID: swarm1
-      PH_PUSHGATEWAY_BASE_URL: http://pushgateway:9091
+      MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_BASE_URL: http://pushgateway:9091
     depends_on:
       log-aggregator:
         condition: service_healthy

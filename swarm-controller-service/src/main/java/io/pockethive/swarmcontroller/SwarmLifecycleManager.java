@@ -86,7 +86,6 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
       return;
     }
     env.put("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_BASE_URL", pushgatewayConfig.baseUrl());
-    env.put("PH_PUSHGATEWAY_BASE_URL", pushgatewayConfig.baseUrl());
     pushgatewayConfig.enabled()
         .ifPresent(value -> env.put("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_ENABLED", value));
     pushgatewayConfig.pushRate()
@@ -97,24 +96,9 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
     env.put("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_GROUPING_KEY_INSTANCE", beeName);
   }
 
-  private static String firstNonBlank(String... values) {
-    if (values == null) {
-      return null;
-    }
-    for (String value : values) {
-      if (value != null && !value.isBlank()) {
-        return value;
-      }
-    }
-    return null;
-  }
-
   private record PushgatewayConfig(String baseUrl, String enabled, String pushRate, String shutdownOperation) {
     static PushgatewayConfig fromEnv(Map<String, String> env) {
-      String base = trimToNull(firstNonBlank(
-          env.get("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_BASE_URL"),
-          env.get("MANAGEMENT_METRICS_EXPORT_PROMETHEUS_PUSHGATEWAY_BASE_URL"),
-          env.get("PH_PUSHGATEWAY_BASE_URL")));
+      String base = trimToNull(env.get("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_BASE_URL"));
       return new PushgatewayConfig(base,
           trimToNull(env.get("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_ENABLED")),
           trimToNull(env.get("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_PUSH_RATE")),
