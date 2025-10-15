@@ -5,7 +5,9 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record LogEntry(
-    String service,
+    String role,
+    String swarmId,
+    String instanceId,
     String traceId,
     String level,
     String message,

@@ -1,0 +1,61 @@
+<configuration>
+  <include resource="org/springframework/boot/logging/logback/base.xml"/>
+
+  <springProperty scope="context" name="applicationName"
+                  source="spring.application.name"
+                  defaultValue="unknown"/>
+
+  <springProperty scope="context" name="roleIdentifier"
+                  source="pockethive.control-plane.worker.role"
+                  defaultValue="${applicationName}"/>
+
+  <springProperty scope="context" name="globalSwarmIdentifier"
+                  source="pockethive.control-plane.swarm-id"
+                  defaultValue=""/>
+
+  <springProperty scope="context" name="swarmIdentifier"
+                  source="pockethive.control-plane.worker.swarm-id"
+                  defaultValue="${globalSwarmIdentifier}"/>
+
+  <springProperty scope="context" name="defaultInstanceIdentifier"
+                  source="bee.name"
+                  defaultValue="${applicationName}"/>
+
+  <springProperty scope="context" name="instanceIdentifier"
+                  source="pockethive.control-plane.worker.instance-id"
+                  defaultValue="${defaultInstanceIdentifier}"/>
+
+  <logger name="org.springframework.amqp" level="WARN" additivity="false">
+    <appender-ref ref="CONSOLE"/>
+  </logger>
+  <logger name="com.rabbitmq" level="WARN" additivity="false">
+    <appender-ref ref="CONSOLE"/>
+  </logger>
+
+  <if condition='!"false".equalsIgnoreCase(property("RABBITMQ_LOGGING_ENABLED"))'>
+    <then>
+      <appender name="RABBIT" class="org.springframework.amqp.rabbit.logback.AmqpAppender">
+        <host>${RABBITMQ_HOST:-localhost}</host>
+        <port>${RABBITMQ_PORT:-5672}</port>
+        <username>${RABBITMQ_DEFAULT_USER:-guest}</username>
+        <password>${RABBITMQ_DEFAULT_PASS:-guest}</password>
+        <virtualHost>${RABBITMQ_VHOST:-/}</virtualHost>
+        <exchangeName>${PH_LOGS_EXCHANGE:-ph.logs}</exchangeName>
+        <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+          <customFields>{"role":"${roleIdentifier}","swarmId":"${swarmIdentifier}","instanceId":"${instanceIdentifier}"}</customFields>
+        </encoder>
+      </appender>
+
+      <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="RABBIT"/>
+      </root>
+    </then>
+    <else>
+      <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+      </root>
+    </else>
+  </if>
+</configuration>
+

@@ -13,7 +13,6 @@ import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.controlplane.ControlPlaneSignals;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.slf4j.MDC;
 import org.springframework.amqp.core.AmqpAdmin;
 import org.springframework.amqp.core.Binding;
 import org.springframework.amqp.core.BindingBuilder;
@@ -126,27 +125,19 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
   /**
    * Handle the orchestrator's request to start the swarm.
    * <p>
-   * We resolve the active template (calling {@link #prepare(String)} if necessary), ensure the
-   * controller is tagged with swarm metadata via MDC for log correlation, and finally flip the swarm
+   * We resolve the active template (calling {@link #prepare(String)} if necessary) and finally flip the swarm
    * into an enabled state via {@link #setSwarmEnabled(boolean)}. When invoked after a pause, this path
    * simply re-emits the config update without re-creating infrastructure.
    */
   @Override
   public void start(String planJson) {
-    MDC.put("swarm_id", Topology.SWARM_ID);
-    MDC.put("service", ROLE);
-    MDC.put("instance", instanceId);
     log.info("Starting swarm {}", Topology.SWARM_ID);
-    try {
-      if (containers.isEmpty()) {
-        prepare(planJson);
-      } else if (template == null) {
-        template = planJson;
-      }
-      setSwarmEnabled(true);
-    } finally {
-      MDC.clear();
+    if (containers.isEmpty()) {
+      prepare(planJson);
+    } else if (template == null) {
+      template = planJson;
     }
+    setSwarmEnabled(true);
   }
 
   /**
@@ -164,9 +155,6 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
    */
   @Override
   public void prepare(String templateJson) {
-    MDC.put("swarm_id", Topology.SWARM_ID);
-    MDC.put("service", ROLE);
-    MDC.put("instance", instanceId);
     log.info("Preparing swarm {}", Topology.SWARM_ID);
     try {
       this.template = templateJson;
@@ -251,8 +239,6 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
       }
     } catch (JsonProcessingException e) {
       log.warn("Invalid template payload", e);
-    } finally {
-      MDC.clear();
     }
   }
 
@@ -265,9 +251,6 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
    */
   @Override
   public void stop() {
-    MDC.put("swarm_id", Topology.SWARM_ID);
-    MDC.put("service", ROLE);
-    MDC.put("instance", instanceId);
     log.info("Stopping swarm {}", Topology.SWARM_ID);
     setSwarmEnabled(false);
 
@@ -287,7 +270,6 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
         .toJson();
     log.debug("[CTRL] SEND rk={} inst={} payload={}", rk, instanceId, snippet(payload));
     rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, payload);
-    MDC.clear();
   }
 
   private String[] controllerControlRoutes() {
@@ -317,9 +299,6 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
    */
   @Override
   public void remove() {
-    MDC.put("swarm_id", Topology.SWARM_ID);
-    MDC.put("service", ROLE);
-    MDC.put("instance", instanceId);
     log.info("Removing swarm {}", Topology.SWARM_ID);
     setSwarmEnabled(false);
     List<String> order = new ArrayList<>(startOrder);
@@ -340,7 +319,6 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
     declaredQueues.clear();
 
     status = SwarmStatus.REMOVED;
-    MDC.clear();
   }
 
   /**
