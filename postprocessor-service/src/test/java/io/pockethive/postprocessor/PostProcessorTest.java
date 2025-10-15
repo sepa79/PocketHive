@@ -58,10 +58,10 @@ class PostProcessorTest {
         assertThat(workerContext.statusData().get("hopCount")).isEqualTo(3);
 
     MeterRegistry registry = workerContext.meterRegistry();
-    var hopSummary = registry.find("postprocessor_hop_latency_ms").summary();
-    var totalSummary = registry.find("postprocessor_total_latency_ms").summary();
-    var hopCountSummary = registry.find("postprocessor_hops").summary();
-    var errorsCounter = registry.find("postprocessor_errors_total").counter();
+    var hopSummary = registry.find("ph_hop_latency_ms").summary();
+    var totalSummary = registry.find("ph_total_latency_ms").summary();
+    var hopCountSummary = registry.find("ph_hops").summary();
+    var errorsCounter = registry.find("ph_errors_total").counter();
 
     assertThat(hopSummary).isNotNull();
     assertThat(hopSummary.totalAmount()).isEqualTo(15.0);
@@ -100,9 +100,9 @@ class PostProcessorTest {
         assertThat(inFlight.getProcessedAt()).isEqualTo(START.plusMillis(10));
 
         MeterRegistry registry = workerContext.meterRegistry();
-        var hopSummary = registry.find("postprocessor_hop_latency_ms").summary();
-        var totalSummary = registry.find("postprocessor_total_latency_ms").summary();
-        var hopCountSummary = registry.find("postprocessor_hops").summary();
+        var hopSummary = registry.find("ph_hop_latency_ms").summary();
+        var totalSummary = registry.find("ph_total_latency_ms").summary();
+        var hopCountSummary = registry.find("ph_hops").summary();
 
         assertThat(hopSummary).isNotNull();
         assertThat(hopSummary.count()).isEqualTo(3);
