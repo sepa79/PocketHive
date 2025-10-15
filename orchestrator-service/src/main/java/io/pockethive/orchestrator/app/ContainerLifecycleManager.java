@@ -33,6 +33,7 @@ public class ContainerLifecycleManager {
         env.put("RABBITMQ_HOST", java.util.Optional.ofNullable(System.getenv("RABBITMQ_HOST")).orElse("rabbitmq"));
         env.put("PH_LOGS_EXCHANGE", java.util.Optional.ofNullable(System.getenv("PH_LOGS_EXCHANGE")).orElse("ph.logs"));
         env.put("PH_SWARM_ID", swarmId);
+        applyPushgatewayEnv(env, swarmId, instanceId);
         String net = docker.resolveControlNetwork();
         if (net != null && !net.isBlank()) {
             env.put("CONTROL_NETWORK", net);
@@ -86,5 +87,46 @@ public class ContainerLifecycleManager {
             .or(() -> java.util.Optional.ofNullable(System.getProperty("DOCKER_SOCKET_PATH")))
             .filter(path -> !path.isBlank())
             .orElse(DEFAULT_DOCKER_SOCKET);
+    }
+
+    private void applyPushgatewayEnv(java.util.Map<String, String> env, String swarmId, String instanceId) {
+        java.util.Map<String, String> source = System.getenv();
+        String baseUrl = firstNonBlank(
+            source.get("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_BASE_URL"),
+            source.get("MANAGEMENT_METRICS_EXPORT_PROMETHEUS_PUSHGATEWAY_BASE_URL"),
+            source.get("PH_PUSHGATEWAY_BASE_URL"));
+        if (isBlank(baseUrl)) {
+            return;
+        }
+        env.put("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_BASE_URL", baseUrl);
+        env.put("PH_PUSHGATEWAY_BASE_URL", baseUrl);
+        copyIfPresent("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_ENABLED", source, env);
+        copyIfPresent("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_PUSH_RATE", source, env);
+        copyIfPresent("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_SHUTDOWN_OPERATION", source, env);
+        env.put("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_JOB", swarmId);
+        env.put("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_GROUPING_KEY_INSTANCE", instanceId);
+    }
+
+    private static void copyIfPresent(String key, java.util.Map<String, String> source, java.util.Map<String, String> target) {
+        String value = source.get(key);
+        if (!isBlank(value)) {
+            target.put(key, value);
+        }
+    }
+
+    private static boolean isBlank(String value) {
+        return value == null || value.isBlank();
+    }
+
+    private static String firstNonBlank(String... values) {
+        if (values == null) {
+            return null;
+        }
+        for (String value : values) {
+            if (!isBlank(value)) {
+                return value;
+            }
+        }
+        return null;
     }
 }

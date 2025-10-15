@@ -13,6 +13,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.amqp.core.AmqpAdmin;
 
+import static com.github.stefanbirkner.systemlambda.SystemLambda.withEnvironmentVariable;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
@@ -84,6 +85,34 @@ class ContainerLifecycleManagerTest {
                 System.setProperty("DOCKER_SOCKET_PATH", previous);
             }
         }
+    }
+
+    @Test
+    void startSwarmPropagatesPushgatewaySettingsWhenConfigured() throws Exception {
+        withEnvironmentVariable("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_BASE_URL", "http://push:9091")
+            .and("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_ENABLED", "true")
+            .and("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_PUSH_RATE", "15s")
+            .and("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_SHUTDOWN_OPERATION", "DELETE")
+            .execute(() -> {
+                SwarmRegistry registry = new SwarmRegistry();
+                when(docker.createAndStartContainer(eq("img"), anyMap(), anyString(), any())).thenReturn("cid");
+                ContainerLifecycleManager manager = new ContainerLifecycleManager(docker, registry, amqp);
+
+                manager.startSwarm("sw1", "img", "inst1");
+
+                ArgumentCaptor<java.util.Map<String, String>> envCaptor = ArgumentCaptor.forClass(java.util.Map.class);
+                verify(docker).createAndStartContainer(eq("img"), envCaptor.capture(), eq("inst1"), any());
+                java.util.Map<String, String> env = envCaptor.getValue();
+                assertEquals("http://push:9091", env.get("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_BASE_URL"));
+                assertEquals("http://push:9091", env.get("PH_PUSHGATEWAY_BASE_URL"));
+                assertEquals("true", env.get("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_ENABLED"));
+                assertEquals("15s", env.get("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_PUSH_RATE"));
+                assertEquals("DELETE", env.get("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_SHUTDOWN_OPERATION"));
+                assertEquals("sw1", env.get("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_JOB"));
+                assertEquals("inst1", env.get("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_GROUPING_KEY_INSTANCE"));
+                assertNull(env.get("MANAGEMENT_METRICS_TAGS_SWARM"));
+                assertNull(env.get("MANAGEMENT_METRICS_TAGS_INSTANCE"));
+            });
     }
 
     @Test
