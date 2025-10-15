@@ -110,15 +110,15 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
       return baseUrl != null && !baseUrl.isBlank();
     }
 
-    java.util.Optional<String> enabled() {
+    public java.util.Optional<String> enabled() {
       return java.util.Optional.ofNullable(enabled);
     }
 
-    java.util.Optional<String> pushRate() {
+    public java.util.Optional<String> pushRate() {
       return java.util.Optional.ofNullable(pushRate);
     }
 
-    java.util.Optional<String> shutdownOperation() {
+    public java.util.Optional<String> shutdownOperation() {
       return java.util.Optional.ofNullable(shutdownOperation);
     }
 
