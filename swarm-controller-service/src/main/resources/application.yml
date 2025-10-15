@@ -15,3 +15,8 @@ ph:
   swarmId: ${PH_SWARM_ID:default}
   controlQueue: ${PH_CONTROL_QUEUE:ph.control}
   controlExchange: ${PH_CONTROL_EXCHANGE:ph.control}
+pockethive:
+  control-plane:
+    swarm-id: ${ph.swarmId}
+    manager:
+      role: swarm-controller
