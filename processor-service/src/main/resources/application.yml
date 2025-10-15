@@ -21,7 +21,6 @@ pockethive:
       final: ${PH_FINAL_QUEUE:ph.${pockethive.control-plane.swarm-id}.final}
     worker:
       role: processor
-      swarm-id: ${pockethive.control-plane.swarm-id}
       instance-id: ${bee.name:${random.uuid}}
       skip-self-signals: false
       processor:

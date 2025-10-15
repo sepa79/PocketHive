@@ -20,7 +20,6 @@ pockethive:
       moderator: ${PH_MOD_QUEUE:ph.${pockethive.control-plane.swarm-id}.mod}
     worker:
       role: generator
-      swarm-id: ${pockethive.control-plane.swarm-id}
       instance-id: ${bee.name:${random.uuid}}
       skip-self-signals: false
       generator:

@@ -20,7 +20,6 @@ pockethive:
       final: ${PH_FINAL_QUEUE:ph.${pockethive.control-plane.swarm-id}.final}
     worker:
       role: trigger
-      swarm-id: ${pockethive.control-plane.swarm-id}
       instance-id: ${bee.name:${random.uuid}}
       skip-self-signals: false
       trigger:
