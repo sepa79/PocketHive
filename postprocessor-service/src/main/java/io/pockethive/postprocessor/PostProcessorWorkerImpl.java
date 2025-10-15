@@ -121,6 +121,9 @@ class PostProcessorWorkerImpl implements MessageWorker {
     if (hops == null) {
       hops = new ArrayList<>();
       observability.setHops(hops);
+    } else if (!(hops instanceof ArrayList<?>)) {
+      hops = new ArrayList<>(hops);
+      observability.setHops(hops);
     }
     Instant terminalTimestamp = resolveTerminalTimestamp(hops);
     Hop last = hops.isEmpty() ? null : hops.get(hops.size() - 1);
