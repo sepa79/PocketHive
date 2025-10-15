@@ -199,9 +199,9 @@ exit /b %ERRORLEVEL%
 :run_build_bees
 call :stage_header "Building swarm controller and bee images"
 if defined USE_DOCKER_COMPOSE_LEGACY (
-  docker-compose build %BEE_SERVICES%
+  docker-compose --profile bees build %BEE_SERVICES%
 ) else (
-  docker compose build %BEE_SERVICES%
+  docker compose --profile bees build %BEE_SERVICES%
 )
 exit /b %ERRORLEVEL%
 

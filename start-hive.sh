@@ -69,7 +69,7 @@ run_build_core() {
 
 run_build_bees() {
   stage_header "Building swarm controller and bee images"
-  docker compose build "${BEE_SERVICES[@]}"
+  docker compose --profile bees build "${BEE_SERVICES[@]}"
 }
 
 run_start() {
