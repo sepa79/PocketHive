@@ -87,12 +87,16 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
       return;
     }
     env.put("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_BASE_URL", pushgatewayConfig.baseUrl());
-    pushgatewayConfig.enabled()
-        .ifPresent(value -> env.put("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_ENABLED", value));
-    pushgatewayConfig.pushRate()
-        .ifPresent(value -> env.put("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_PUSH_RATE", value));
-    pushgatewayConfig.shutdownOperation().ifPresent(value -> env.put(
-        "MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_SHUTDOWN_OPERATION", value));
+    if (pushgatewayConfig.enabled() != null) {
+      env.put("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_ENABLED", pushgatewayConfig.enabled());
+    }
+    if (pushgatewayConfig.pushRate() != null) {
+      env.put("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_PUSH_RATE", pushgatewayConfig.pushRate());
+    }
+    if (pushgatewayConfig.shutdownOperation() != null) {
+      env.put("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_SHUTDOWN_OPERATION",
+          pushgatewayConfig.shutdownOperation());
+    }
     env.put("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_JOB", Topology.SWARM_ID);
     env.put("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_GROUPING_KEY_INSTANCE", beeName);
   }
@@ -108,18 +112,6 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
 
     boolean hasBaseUrl() {
       return baseUrl != null && !baseUrl.isBlank();
-    }
-
-    public java.util.Optional<String> enabled() {
-      return java.util.Optional.ofNullable(enabled);
-    }
-
-    public java.util.Optional<String> pushRate() {
-      return java.util.Optional.ofNullable(pushRate);
-    }
-
-    public java.util.Optional<String> shutdownOperation() {
-      return java.util.Optional.ofNullable(shutdownOperation);
     }
 
     private static String trimToNull(String value) {
