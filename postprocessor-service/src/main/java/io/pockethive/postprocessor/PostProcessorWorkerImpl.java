@@ -248,28 +248,28 @@ class PostProcessorWorkerImpl implements MessageWorker {
     PostProcessorMetrics(MeterRegistry registry, WorkerContext context) {
       Objects.requireNonNull(registry, "registry");
       Objects.requireNonNull(context, "context");
-      String service = context.info().role();
+      String role = context.info().role();
       String instance = context.info().instanceId();
       String swarm = context.info().swarmId();
-      this.hopLatency = DistributionSummary.builder("postprocessor_hop_latency_ms")
-          .tag("service", service)
-          .tag("instance", instance)
-          .tag("swarm", swarm)
+      this.hopLatency = DistributionSummary.builder("ph_hop_latency_ms")
+          .tag("ph_role", role)
+          .tag("ph_instance", instance)
+          .tag("ph_swarm", swarm)
           .register(registry);
-      this.totalLatency = DistributionSummary.builder("postprocessor_total_latency_ms")
-          .tag("service", service)
-          .tag("instance", instance)
-          .tag("swarm", swarm)
+      this.totalLatency = DistributionSummary.builder("ph_total_latency_ms")
+          .tag("ph_role", role)
+          .tag("ph_instance", instance)
+          .tag("ph_swarm", swarm)
           .register(registry);
-      this.hopCount = DistributionSummary.builder("postprocessor_hops")
-          .tag("service", service)
-          .tag("instance", instance)
-          .tag("swarm", swarm)
+      this.hopCount = DistributionSummary.builder("ph_hops")
+          .tag("ph_role", role)
+          .tag("ph_instance", instance)
+          .tag("ph_swarm", swarm)
           .register(registry);
-      this.errorCounter = Counter.builder("postprocessor_errors_total")
-          .tag("service", service)
-          .tag("instance", instance)
-          .tag("swarm", swarm)
+      this.errorCounter = Counter.builder("ph_errors_total")
+          .tag("ph_role", role)
+          .tag("ph_instance", instance)
+          .tag("ph_swarm", swarm)
           .register(registry);
     }
 
