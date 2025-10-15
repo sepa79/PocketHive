@@ -19,6 +19,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicReference;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
@@ -54,6 +56,7 @@ import org.springframework.stereotype.Component;
 class PostProcessorWorkerImpl implements MessageWorker {
 
   private static final String ERROR_HEADER = "x-ph-error";
+  private static final Logger log = LoggerFactory.getLogger(PostProcessorWorkerImpl.class);
 
   private final PostProcessorDefaults defaults;
   private final AtomicReference<PostProcessorMetrics> metricsRef = new AtomicReference<>();
@@ -103,6 +106,14 @@ class PostProcessorWorkerImpl implements MessageWorker {
 
     PostProcessorMetrics metrics = metrics(context);
     metrics.record(measurements, error);
+    log.info(
+        "Recorded postprocessor metrics [swarm={}, instance={}, latestHopMs={}, totalMs={}, hopCount={}, error={}]; scheduling push via Micrometer",
+        context.info().swarmId(),
+        context.info().instanceId(),
+        measurements.latestHopMs(),
+        measurements.totalMs(),
+        measurements.hopCount(),
+        error);
 
     context.statusPublisher()
         .workIn(Topology.FINAL_QUEUE)

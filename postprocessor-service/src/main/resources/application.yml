@@ -10,6 +10,10 @@ management.endpoints.web.exposure.include: health,info
 # Include traceId from MDC in log output
 logging:
   pattern.level: "%5p [%X{traceId}]"
+  level:
+    org.springframework.boot.actuate.metrics.export.prometheus: DEBUG
+    io.micrometer.prometheus: DEBUG
+    io.prometheus.client.exporter.PushGateway: DEBUG
 
 ph:
   swarmId: ${PH_SWARM_ID:default}
