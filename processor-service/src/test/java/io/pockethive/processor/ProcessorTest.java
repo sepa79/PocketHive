@@ -14,6 +14,7 @@ import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pockethive.worker.sdk.api.WorkResult;
 import io.pockethive.worker.sdk.api.WorkerContext;
 import io.pockethive.worker.sdk.api.WorkerInfo;
+import io.pockethive.worker.sdk.autoconfigure.WorkerControlQueueListener;
 import io.pockethive.worker.sdk.config.WorkerType;
 import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
@@ -251,14 +252,16 @@ class ProcessorTest {
 
         adapter.initialiseStateListener();
 
-        adapter.onControl("{}", "processor.control", null);
+        WorkerControlQueueListener listener = new WorkerControlQueueListener(controlPlaneRuntime);
+
+        listener.onControl("{}", "processor.control", null);
         verify(controlPlaneRuntime).handle("{}", "processor.control");
 
-        assertThatThrownBy(() -> adapter.onControl(" ", "processor.control", null))
+        assertThatThrownBy(() -> listener.onControl(" ", "processor.control", null))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("payload");
 
-        assertThatThrownBy(() -> adapter.onControl("{}", " ", null))
+        assertThatThrownBy(() -> listener.onControl("{}", " ", null))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("routing key");
 

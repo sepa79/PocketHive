@@ -2,7 +2,6 @@ package io.pockethive.moderator;
 
 import io.pockethive.TopologyDefaults;
 import io.pockethive.controlplane.ControlPlaneIdentity;
-import io.pockethive.observability.ObservabilityContextUtil;
 import io.pockethive.worker.sdk.config.WorkerType;
 import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
@@ -17,10 +16,8 @@ import org.springframework.amqp.core.Message;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.amqp.rabbit.listener.RabbitListenerEndpointRegistry;
-import org.springframework.amqp.support.AmqpHeaders;
 import org.springframework.context.ApplicationListener;
 import org.springframework.context.event.ContextRefreshedEvent;
-import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -84,13 +81,6 @@ class ModeratorRuntimeAdapter implements ApplicationListener<ContextRefreshedEve
   @Scheduled(fixedRate = 5000)
   public void emitStatusDelta() {
     delegate.emitStatusDelta();
-  }
-
-  @RabbitListener(queues = "#{@workerControlQueueName}")
-  public void onControl(String payload,
-                        @Header(AmqpHeaders.RECEIVED_ROUTING_KEY) String routingKey,
-                        @Header(value = ObservabilityContextUtil.HEADER, required = false) String traceHeader) {
-    delegate.onControl(payload, routingKey, traceHeader);
   }
 
   @Override

@@ -5,6 +5,7 @@ import io.pockethive.TopologyDefaults;
 import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pockethive.worker.sdk.api.WorkResult;
+import io.pockethive.worker.sdk.autoconfigure.WorkerControlQueueListener;
 import io.pockethive.worker.sdk.config.WorkerType;
 import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
@@ -72,8 +73,6 @@ class ModeratorRuntimeAdapterTest {
         TopologyDefaults.MOD_QUEUE,
         ModeratorWorkerConfig.class
     );
-    when(workerRegistry.findByRoleAndType("moderator", WorkerType.MESSAGE))
-        .thenReturn(Optional.of(definition));
   }
 
   private void stubListenerContainerStopped() {
@@ -83,6 +82,8 @@ class ModeratorRuntimeAdapterTest {
 
   @Test
   void onWorkDispatchesToWorkerAndPublishesResult() throws Exception {
+    when(workerRegistry.findByRoleAndType("moderator", WorkerType.MESSAGE))
+        .thenReturn(Optional.of(definition));
     stubListenerContainerStopped();
     doReturn(WorkResult.message(WorkMessage.text("forwarded").build()))
         .when(workerRuntime)
@@ -113,36 +114,25 @@ class ModeratorRuntimeAdapterTest {
   }
 
   @Test
-  void onControlDelegatesToControlPlaneRuntime() {
-    stubListenerContainerStopped();
-    ModeratorRuntimeAdapter adapter = new ModeratorRuntimeAdapter(
-        workerRuntime,
-        workerRegistry,
-        controlPlaneRuntime,
-        rabbitTemplate,
-        listenerRegistry,
-        identity,
-        defaults
-    );
+  void controlQueueListenerDelegatesToControlPlaneRuntime() {
+    WorkerControlQueueListener listener = new WorkerControlQueueListener(controlPlaneRuntime);
 
-    adapter.initialiseStateListener();
-    verify(controlPlaneRuntime).registerDefaultConfig(eq("moderatorWorker"), any());
-    verify(controlPlaneRuntime).emitStatusSnapshot();
-
-    adapter.onControl("{}", "moderator.control", null);
+    listener.onControl("{}", "moderator.control", null);
     verify(controlPlaneRuntime).handle("{}", "moderator.control");
 
-    assertThatThrownBy(() -> adapter.onControl(" ", "moderator.control", null))
+    assertThatThrownBy(() -> listener.onControl(" ", "moderator.control", null))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("payload");
 
-    assertThatThrownBy(() -> adapter.onControl("{}", " ", null))
+    assertThatThrownBy(() -> listener.onControl("{}", " ", null))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("routing key");
   }
 
   @Test
   void registersListenerAndAppliesDesiredState() {
+    when(workerRegistry.findByRoleAndType("moderator", WorkerType.MESSAGE))
+        .thenReturn(Optional.of(definition));
     stubListenerContainerStopped();
     ModeratorRuntimeAdapter adapter = new ModeratorRuntimeAdapter(
         workerRuntime,
@@ -166,6 +156,8 @@ class ModeratorRuntimeAdapterTest {
 
   @Test
   void emitStatusDeltaDelegatesToControlPlaneRuntime() {
+    when(workerRegistry.findByRoleAndType("moderator", WorkerType.MESSAGE))
+        .thenReturn(Optional.of(definition));
     ModeratorRuntimeAdapter adapter = new ModeratorRuntimeAdapter(
         workerRuntime,
         workerRegistry,
