@@ -1,53 +1,40 @@
 package io.pockethive.moderator;
 
-import io.pockethive.util.BeeNameGenerator;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
+import io.pockethive.controlplane.spring.BeeIdentityProperties;
 import org.junit.jupiter.api.Test;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+import org.springframework.context.annotation.Configuration;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class ApplicationBeeNameTest {
 
-  private String originalBeeName;
+  private final ApplicationContextRunner contextRunner =
+      new ApplicationContextRunner().withUserConfiguration(TestConfiguration.class);
 
-  @BeforeEach
-  void captureOriginalBeeName() {
-    originalBeeName = System.getProperty("bee.name");
-  }
-
-  @AfterEach
-  void restoreBeeName() {
-    if (originalBeeName == null) {
-      System.clearProperty("bee.name");
-    } else {
-      System.setProperty("bee.name", originalBeeName);
-    }
+  @Test
+  void bindsExternallyProvidedBeeName() {
+    contextRunner
+        .withPropertyValues("pockethive.control-plane.worker.instance-id=external-moderator-bee")
+        .run(context ->
+            assertThat(context.getBean(BeeIdentityProperties.class).beeName())
+                .isEqualTo("external-moderator-bee"));
   }
 
   @Test
-  void resolvesExternallyProvidedBeeName() {
-    System.setProperty("bee.name", "external-moderator-bee");
-
-    assertThat(BeeNameGenerator.requireConfiguredName()).isEqualTo("external-moderator-bee");
+  void failsWhenBeeNameMissing() {
+    contextRunner.run(context -> assertThat(context).hasFailed());
   }
 
   @Test
-  void failsFastWhenBeeNameMissing() {
-    System.clearProperty("bee.name");
-
-    assertThatThrownBy(BeeNameGenerator::requireConfiguredName)
-        .isInstanceOf(IllegalStateException.class)
-        .hasMessageContaining("bee.name");
+  void failsWhenBeeNameBlank() {
+    contextRunner
+        .withPropertyValues("pockethive.control-plane.worker.instance-id=   ")
+        .run(context -> assertThat(context).hasFailed());
   }
 
-  @Test
-  void failsFastWhenBeeNameBlank() {
-    System.setProperty("bee.name", "   ");
-
-    assertThatThrownBy(BeeNameGenerator::requireConfiguredName)
-        .isInstanceOf(IllegalStateException.class)
-        .hasMessageContaining("bee.name");
-  }
+  @Configuration(proxyBeanMethods = false)
+  @EnableConfigurationProperties(BeeIdentityProperties.class)
+  static class TestConfiguration {}
 }

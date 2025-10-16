@@ -8,4 +8,5 @@ pockethive:
     swarm-id: sample-swarm
     worker:
       role: processor
-      instance-id: processor-1
+      # Override with POCKETHIVE_CONTROL_PLANE_WORKER_INSTANCE_ID when deploying
+      instance-id: ${POCKETHIVE_CONTROL_PLANE_WORKER_INSTANCE_ID:processor-1}

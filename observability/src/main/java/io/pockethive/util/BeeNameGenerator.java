@@ -85,14 +85,6 @@ public final class BeeNameGenerator {
         id);
   }
 
-  public static String requireConfiguredName() {
-    String beeName = System.getProperty("bee.name");
-    if (beeName == null || beeName.isBlank()) {
-      throw new IllegalStateException("bee.name system property must be provided");
-    }
-    return beeName;
-  }
-
   private static String randomFrom(List<String> options) {
     return options.get(ThreadLocalRandom.current().nextInt(options.size()));
   }

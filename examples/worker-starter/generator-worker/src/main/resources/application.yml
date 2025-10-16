@@ -8,7 +8,8 @@ pockethive:
     swarm-id: sample-swarm
     worker:
       role: generator
-      instance-id: generator-1
+      # Override with POCKETHIVE_CONTROL_PLANE_WORKER_INSTANCE_ID when deploying
+      instance-id: ${POCKETHIVE_CONTROL_PLANE_WORKER_INSTANCE_ID:generator-1}
 
 starter:
   generator:

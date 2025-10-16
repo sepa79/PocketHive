@@ -18,7 +18,8 @@ pockethive:
       final: ${PH_FINAL_QUEUE:ph.${pockethive.control-plane.swarm-id}.final}
     worker:
       role: postprocessor
-      instance-id: ${bee.name:${random.uuid}}
+      # Expect POCKETHIVE_CONTROL_PLANE_WORKER_INSTANCE_ID to supply the instance id
+      instance-id: ${POCKETHIVE_CONTROL_PLANE_WORKER_INSTANCE_ID}
       skip-self-signals: false
       metrics:
         enabled: true

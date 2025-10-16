@@ -1,7 +1,6 @@
 package io.pockethive.swarmcontroller;
 
 import io.pockethive.Topology;
-import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.amqp.AmqpException;
@@ -26,31 +25,13 @@ import static org.junit.jupiter.api.Assertions.*;
 @SpringBootTest
 @RabbitAvailable
 class SwarmLifecycleManagerIntegrationTest {
-  private static final String TEST_BEE_NAME = "test-swarm-controller-bee";
-  private static String previousBeeName;
-  private static boolean beeNameInitialized;
+  private static final String TEST_INSTANCE_ID = "test-swarm-controller-bee";
 
   @DynamicPropertySource
   static void rabbitProperties(DynamicPropertyRegistry registry) {
     registry.add("spring.rabbitmq.host", () -> RabbitAvailableCondition.getBrokerRunning().getHostName());
     registry.add("spring.rabbitmq.port", () -> RabbitAvailableCondition.getBrokerRunning().getPort());
-    registry.add("bee.name", () -> TEST_BEE_NAME);
-
-    if (!beeNameInitialized) {
-      previousBeeName = System.getProperty("bee.name");
-      System.setProperty("bee.name", TEST_BEE_NAME);
-      beeNameInitialized = true;
-    }
-  }
-
-  @AfterAll
-  static void restoreBeeNameProperty() {
-    if (previousBeeName == null) {
-      System.clearProperty("bee.name");
-    } else {
-      System.setProperty("bee.name", previousBeeName);
-    }
-    beeNameInitialized = false;
+    registry.add("pockethive.control-plane.worker.instance-id", () -> TEST_INSTANCE_ID);
   }
 
   @Autowired

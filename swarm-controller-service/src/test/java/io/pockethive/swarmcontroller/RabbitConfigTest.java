@@ -1,31 +1,32 @@
 package io.pockethive.swarmcontroller;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import io.pockethive.Topology;
-import org.junit.jupiter.api.AfterEach;
+import io.pockethive.controlplane.spring.BeeIdentityProperties;
 import org.junit.jupiter.api.Test;
 import org.springframework.amqp.core.Queue;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Import;
 
 class RabbitConfigTest {
 
-  private final RabbitConfig config = new RabbitConfig();
-
-  @AfterEach
-  void clearBeeName() {
-    System.clearProperty("bee.name");
-  }
+  private final ApplicationContextRunner contextRunner =
+      new ApplicationContextRunner().withUserConfiguration(TestConfiguration.class);
 
   @Test
   void controlQueueUsesSwarmRoleAndInstanceSegments() {
-    String instanceId = "test-instance";
-
-    Queue queue = config.controlQueue(instanceId);
-
-    assertEquals(
-        "ph.control." + Topology.SWARM_ID + ".swarm-controller." + instanceId,
-        queue.getName());
+    contextRunner
+        .withPropertyValues("pockethive.control-plane.worker.instance-id=test-instance")
+        .run(context -> {
+          Queue queue = context.getBean("controlQueue", Queue.class);
+          assertEquals(
+              "ph.control." + Topology.SWARM_ID + ".swarm-controller.test-instance",
+              queue.getName());
+        });
   }
 
   @Test
@@ -44,15 +45,19 @@ class RabbitConfigTest {
 
   @Test
   void instanceIdReturnsConfiguredBeeName() {
-    System.setProperty("bee.name", "test-swarm-controller-bee");
-
-    assertEquals("test-swarm-controller-bee", config.instanceId());
+    contextRunner
+        .withPropertyValues("pockethive.control-plane.worker.instance-id=test-swarm-controller-bee")
+        .run(context -> assertThat(context.getBean("instanceId", String.class))
+            .isEqualTo("test-swarm-controller-bee"));
   }
 
   @Test
   void instanceIdFailsWhenBeeNameMissing() {
-    System.clearProperty("bee.name");
-
-    assertThrows(IllegalStateException.class, config::instanceId);
+    contextRunner.run(context -> assertThat(context).hasFailed());
   }
+
+  @Configuration(proxyBeanMethods = false)
+  @EnableConfigurationProperties(BeeIdentityProperties.class)
+  @Import(RabbitConfig.class)
+  static class TestConfiguration {}
 }

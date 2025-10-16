@@ -19,7 +19,8 @@ pockethive:
       moderator: ${PH_MOD_QUEUE:ph.${pockethive.control-plane.swarm-id}.mod}
     worker:
       role: generator
-      instance-id: ${bee.name:${random.uuid}}
+      # Expect POCKETHIVE_CONTROL_PLANE_WORKER_INSTANCE_ID to supply the instance id
+      instance-id: ${POCKETHIVE_CONTROL_PLANE_WORKER_INSTANCE_ID}
       skip-self-signals: false
       generator:
         message:

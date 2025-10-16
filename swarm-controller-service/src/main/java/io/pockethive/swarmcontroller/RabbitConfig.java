@@ -2,7 +2,7 @@ package io.pockethive.swarmcontroller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.Topology;
-import io.pockethive.util.BeeNameGenerator;
+import io.pockethive.controlplane.spring.BeeIdentityProperties;
 import java.util.ArrayList;
 import java.util.List;
 import org.springframework.amqp.core.*;
@@ -20,8 +20,8 @@ public class RabbitConfig {
   }
 
   @Bean
-  public String instanceId() {
-    return BeeNameGenerator.requireConfiguredName();
+  public String instanceId(BeeIdentityProperties beeIdentityProperties) {
+    return beeIdentityProperties.beeName();
   }
 
   @Bean
