@@ -3,9 +3,14 @@ import ComponentList from './ComponentList'
 import ComponentDetail from './ComponentDetail'
 import TopologyView from './TopologyView'
 import SwarmCreateModal from './SwarmCreateModal'
-import { subscribeComponents } from '../../lib/stompClient'
+import {
+  subscribeComponents,
+  upsertSyntheticComponent,
+  removeSyntheticComponent,
+} from '../../lib/stompClient'
 import type { Component } from '../../types/hive'
 import OrchestratorPanel from './OrchestratorPanel'
+import { fetchWiremockComponent } from '../../lib/wiremockClient'
 
 export default function HivePage() {
   const [components, setComponents] = useState<Component[]>([])
@@ -19,6 +24,38 @@ export default function HivePage() {
     // component list current, so no manual `requestStatusFull` calls remain.
     const unsub = subscribeComponents(setComponents)
     return () => unsub()
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    let timer: number | undefined
+
+    const poll = async () => {
+      try {
+        const component = await fetchWiremockComponent()
+        if (cancelled) return
+        if (component) {
+          upsertSyntheticComponent(component)
+        } else {
+          removeSyntheticComponent('wiremock')
+        }
+      } catch {
+        if (!cancelled) {
+          removeSyntheticComponent('wiremock')
+        }
+      }
+    }
+
+    void poll()
+    timer = window.setInterval(() => {
+      void poll()
+    }, 5000)
+
+    return () => {
+      cancelled = true
+      if (timer) window.clearInterval(timer)
+      removeSyntheticComponent('wiremock')
+    }
   }, [])
 
   useEffect(() => {

@@ -27,6 +27,7 @@ let listeners: ComponentListener[] = []
 let topoListeners: TopologyListener[] = []
 let controlDestination = '/exchange/ph.control/#'
 const components: Record<string, Component> = {}
+const syntheticComponents: Record<string, Component> = {}
 interface QueueMetrics {
   depth: number
   consumers: number
@@ -34,6 +35,19 @@ interface QueueMetrics {
 }
 const queueMetrics: Record<string, QueueMetrics> = {}
 const nodePositions: Record<string, { x: number; y: number }> = {}
+
+function getMergedComponents(): Record<string, Component> {
+  const merged: Record<string, Component> = { ...components }
+  Object.entries(syntheticComponents).forEach(([id, comp]) => {
+    merged[id] = comp
+  })
+  return merged
+}
+
+function notifyComponentListeners() {
+  const merged = Object.values(getMergedComponents())
+  listeners.forEach((l) => l(merged))
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -73,7 +87,7 @@ function enrichQueue(queue: QueueInfo): QueueInfo {
 }
 
 function applyQueueMetrics() {
-  Object.values(components).forEach((component) => {
+  Object.values(getMergedComponents()).forEach((component) => {
     component.queues = component.queues.map((queue) => enrichQueue(queue))
   })
 }
@@ -90,9 +104,9 @@ function updateQueueMetrics(stats: ControlEvent['queueStats']) {
   })
 }
 
-function buildTopology(): Topology {
+function buildTopology(allComponents: Record<string, Component> = getMergedComponents()): Topology {
   const queues: Record<string, { prod: Set<string>; cons: Set<string> }> = {}
-  Object.values(components).forEach((comp) => {
+  Object.values(allComponents).forEach((comp) => {
     comp.queues.forEach((q) => {
       const entry = queues[q.name] || { prod: new Set<string>(), cons: new Set<string>() }
       if (q.role === 'producer') entry.prod.add(comp.id)
@@ -108,8 +122,12 @@ function buildTopology(): Topology {
       })
     })
   })
-  if (components['processor']) {
+  const processorTarget = allComponents['processor']
+  if (processorTarget) {
     edges.push({ from: 'processor', to: 'sut', queue: 'sut' })
+    if (allComponents['wiremock']) {
+      edges.push({ from: 'processor', to: 'wiremock', queue: 'sut' })
+    }
   }
   const seen = new Set<string>()
   const uniq = edges.filter((e) => {
@@ -118,7 +136,7 @@ function buildTopology(): Topology {
     seen.add(key)
     return true
   })
-  const nodes: TopologyNode[] = Object.values(components).map((c) => ({
+  const nodes: TopologyNode[] = Object.values(allComponents).map((c) => ({
     id: c.id,
     type: c.role || c.name,
     x: nodePositions[c.id]?.x,
@@ -126,7 +144,7 @@ function buildTopology(): Topology {
     enabled: c.config?.enabled !== false,
     swarmId: c.swarmId,
   }))
-  if (components['processor']) {
+  if (processorTarget) {
     nodes.push({
       id: 'sut',
       type: 'sut',
@@ -261,7 +279,7 @@ export function setClient(newClient: Client | null, destination = controlDestina
         components[id] = comp
         updateQueueMetrics(eventQueueStats)
         applyQueueMetrics()
-        listeners.forEach((l) => l(Object.values(components)))
+        notifyComponentListeners()
         emitTopology()
       } catch {
         // ignore parsing errors
@@ -272,7 +290,7 @@ export function setClient(newClient: Client | null, destination = controlDestina
 
 export function subscribeComponents(fn: ComponentListener) {
   listeners.push(fn)
-  fn(Object.values(components))
+  fn(Object.values(getMergedComponents()))
   return () => {
     listeners = listeners.filter((l) => l !== fn)
   }
@@ -284,6 +302,20 @@ export function subscribeTopology(fn: TopologyListener) {
   return () => {
     topoListeners = topoListeners.filter((l) => l !== fn)
   }
+}
+
+export function upsertSyntheticComponent(component: Component) {
+  syntheticComponents[component.id] = component
+  applyQueueMetrics()
+  notifyComponentListeners()
+  emitTopology()
+}
+
+export function removeSyntheticComponent(id: string) {
+  if (!(id in syntheticComponents)) return
+  delete syntheticComponents[id]
+  notifyComponentListeners()
+  emitTopology()
 }
 
 export function updateNodePosition(id: string, x: number, y: number) {
