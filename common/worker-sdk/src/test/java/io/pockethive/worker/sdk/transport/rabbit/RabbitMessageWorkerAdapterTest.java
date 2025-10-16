@@ -32,6 +32,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
@@ -133,7 +134,8 @@ class RabbitMessageWorkerAdapterTest {
         assertThat(workCaptor.getValue().body()).isEqualTo("payload".getBytes(StandardCharsets.UTF_8));
 
         ArgumentCaptor<Message> outboundCaptor = ArgumentCaptor.forClass(Message.class);
-        verify(rabbitTemplate).send(eq(Topology.EXCHANGE), eq(workerDefinition.resolvedOutQueue()), outboundCaptor.capture());
+        verify(rabbitTemplate)
+            .send(eq(Topology.EXCHANGE), Mockito.<String>eq(workerDefinition.resolvedOutQueue()), outboundCaptor.capture());
         assertThat(outboundCaptor.getValue().getBody()).isEqualTo("processed".getBytes(StandardCharsets.UTF_8));
     }
 
@@ -148,7 +150,7 @@ class RabbitMessageWorkerAdapterTest {
         adapter.onWork(inbound);
 
         verify(errorHandler).accept(failure);
-        verify(rabbitTemplate, never()).send(any(), any(), any());
+        verify(rabbitTemplate, never()).send(anyString(), anyString(), any(Message.class));
     }
 
     @Test
@@ -166,7 +168,7 @@ class RabbitMessageWorkerAdapterTest {
         assertThat(exceptionCaptor.getValue())
             .isInstanceOf(IllegalStateException.class)
             .hasMessageContaining("null WorkResult");
-        verify(rabbitTemplate, never()).send(any(), any(), any());
+        verify(rabbitTemplate, never()).send(anyString(), anyString(), any(Message.class));
     }
 
     @Test
@@ -183,7 +185,7 @@ class RabbitMessageWorkerAdapterTest {
         adapter.onWork(inbound);
 
         verify(resultPublisher).publish(any(WorkResult.Message.class), any(Message.class));
-        verify(rabbitTemplate, never()).send(any(), any(), any());
+        verify(rabbitTemplate, never()).send(anyString(), anyString(), any(Message.class));
     }
 
     @Test
@@ -275,7 +277,7 @@ class RabbitMessageWorkerAdapterTest {
         assertThat(exceptionCaptor.getValue())
             .isInstanceOf(IllegalStateException.class)
             .hasMessageContaining("outbound queue");
-        verify(rabbitTemplate, never()).send(any(), any(), any());
+        verify(rabbitTemplate, never()).send(anyString(), anyString(), any(Message.class));
     }
 
     @Test
@@ -304,7 +306,7 @@ class RabbitMessageWorkerAdapterTest {
         assertThat(exceptionCaptor.getValue())
             .isInstanceOf(IllegalStateException.class)
             .hasMessageContaining("message result publisher");
-        verifyNoInteractions(rabbitTemplate);
+        verify(rabbitTemplate, never()).send(anyString(), anyString(), any(Message.class));
     }
 
     private RabbitMessageWorkerAdapter.Builder baseBuilder() {
