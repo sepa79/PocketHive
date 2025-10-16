@@ -1,5 +1,6 @@
 package io.pockethive.examples.starter.generator;
 
+import io.pockethive.Topology;
 import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.observability.ObservabilityContext;
 import io.pockethive.observability.ObservabilityContextUtil;
@@ -105,8 +106,8 @@ class SampleGeneratorRuntimeAdapter {
   }
 
   private void publish(WorkMessage message) {
-    String routingKey = Optional.ofNullable(definition.outQueue()).orElse("ph.generator.out");
-    rabbitTemplate.send("ph.exchange", routingKey, messageConverter.toMessage(message));
+    String routingKey = Optional.ofNullable(definition.resolvedOutQueue()).orElse(Topology.GEN_QUEUE);
+    rabbitTemplate.send(Topology.EXCHANGE, routingKey, messageConverter.toMessage(message));
   }
 
   @Scheduled(fixedRate = 5000)

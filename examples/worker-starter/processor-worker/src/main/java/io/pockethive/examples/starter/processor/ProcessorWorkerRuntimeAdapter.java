@@ -1,5 +1,7 @@
 package io.pockethive.examples.starter.processor;
 
+import io.pockethive.Topology;
+import io.pockethive.TopologyDefaults;
 import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.observability.ObservabilityContextUtil;
 import io.pockethive.worker.sdk.config.WorkerType;
@@ -56,8 +58,8 @@ class ProcessorWorkerRuntimeAdapter implements ApplicationListener<ContextRefres
         .desiredStateResolver(snapshot -> snapshot.enabled().orElse(true))
         .dispatcher(message -> workerRuntime.dispatch(definition.beanName(), message))
         .messageResultPublisher((result, outbound) -> {
-          String routingKey = Optional.ofNullable(definition.outQueue()).orElse("ph.processor.out");
-          rabbitTemplate.send("ph.exchange", routingKey, outbound);
+          String routingKey = Optional.ofNullable(definition.resolvedOutQueue()).orElse(Topology.FINAL_QUEUE);
+          rabbitTemplate.send(Topology.EXCHANGE, routingKey, outbound);
         })
         .build();
   }
@@ -67,7 +69,9 @@ class ProcessorWorkerRuntimeAdapter implements ApplicationListener<ContextRefres
     delegate.initialiseStateListener();
   }
 
-  @RabbitListener(id = LISTENER_ID, queues = "${ph.processor.work.queue:ph.processor.in}")
+  @RabbitListener(
+      id = LISTENER_ID,
+      queues = "${ph.processor.work.queue:" + TopologyDefaults.MOD_QUEUE + "}")
   public void onWork(Message message) {
     delegate.onWork(message);
   }
@@ -77,7 +81,7 @@ class ProcessorWorkerRuntimeAdapter implements ApplicationListener<ContextRefres
     delegate.emitStatusDelta();
   }
 
-  @RabbitListener(queues = "${ph.processor.control.queue:ph.processor.control}")
+  @RabbitListener(queues = "${ph.processor.control.queue:" + TopologyDefaults.CONTROL_QUEUE + "}")
   public void onControl(String payload,
                         @Header(AmqpHeaders.RECEIVED_ROUTING_KEY) String routingKey,
                         @Header(value = ObservabilityContextUtil.HEADER, required = false) String traceHeader) {
