@@ -20,6 +20,8 @@ import java.time.Clock;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.atomic.DoubleAccumulator;
+import java.util.concurrent.atomic.LongAdder;
 import org.slf4j.Logger;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -62,9 +64,16 @@ import org.springframework.stereotype.Component;
 class ProcessorWorkerImpl implements MessageWorker {
 
   private static final ObjectMapper MAPPER = new ObjectMapper();
+  private static final String HEADER_DURATION = "x-ph-processor-duration-ms";
+  private static final String HEADER_SUCCESS = "x-ph-processor-success";
+  private static final String HEADER_STATUS = "x-ph-processor-status";
+
   private final ProcessorDefaults defaults;
   private final HttpClient httpClient;
   private final Clock clock;
+  private final LongAdder totalCalls = new LongAdder();
+  private final LongAdder successfulCalls = new LongAdder();
+  private final DoubleAccumulator totalLatencyMs = new DoubleAccumulator(Double::sum, 0.0);
 
   @Autowired
   ProcessorWorkerImpl(ProcessorDefaults defaults) {
@@ -93,7 +102,8 @@ class ProcessorWorkerImpl implements MessageWorker {
    *       service. The request defaults to {@code GET /} with no body when fields are missing.</li>
    *   <li><strong>Error handling</strong> – Any exception (invalid config, network error, unexpected
    *       HTTP failure) is logged at {@code WARN} level and converted into an error message via
-   *       {@link #buildError(String)} so downstream services still receive a structured response.</li>
+   *       {@link #buildError(WorkerContext, String, CallMetrics) buildError} so downstream services still receive a structured
+   *       response.</li>
  *   <li><strong>Observability propagation</strong> – The runtime's
  *       {@code WorkerObservabilityInterceptor} attaches the hop metadata (role, instance id,
  *       timestamps) to the shared observability context so traces remain visible in Loki/Grafana.</li>
@@ -108,20 +118,21 @@ class ProcessorWorkerImpl implements MessageWorker {
   public WorkResult onMessage(WorkMessage in, WorkerContext context) {
     ProcessorWorkerConfig config = context.config(ProcessorWorkerConfig.class)
         .orElseGet(defaults::asConfig);
-    context.statusPublisher()
-        .workIn(Topology.MOD_QUEUE)
-        .workOut(Topology.FINAL_QUEUE)
-        .update(status -> status
-            .data("baseUrl", config.baseUrl())
-            .data("enabled", config.enabled()));
 
     Logger logger = context.logger();
     try {
       WorkMessage response = invokeHttp(in, config, context);
+      publishStatus(context, config);
       return WorkResult.message(response);
+    } catch (ProcessorCallException ex) {
+      logger.warn("Processor request failed: {}", ex.getCause() != null ? ex.getCause().toString() : ex.toString(), ex);
+      WorkMessage error = buildError(context, ex.getCause() != null ? ex.getCause().toString() : ex.toString(), ex.metrics());
+      publishStatus(context, config);
+      return WorkResult.message(error);
     } catch (Exception ex) {
       logger.warn("Processor request failed: {}", ex.toString(), ex);
-      WorkMessage error = buildError(context, ex);
+      WorkMessage error = buildError(context, ex.toString(), CallMetrics.failure(0, -1));
+      publishStatus(context, config);
       return WorkResult.message(error);
     }
   }
@@ -133,7 +144,7 @@ class ProcessorWorkerImpl implements MessageWorker {
     String baseUrl = config.baseUrl();
     if (baseUrl == null || baseUrl.isBlank()) {
       logger.warn("No baseUrl configured; skipping HTTP call");
-      return buildError(context, "invalid baseUrl");
+      return buildError(context, "invalid baseUrl", CallMetrics.failure(0, -1));
     }
 
     String path = node.path("path").asText("/");
@@ -141,7 +152,7 @@ class ProcessorWorkerImpl implements MessageWorker {
     URI target = resolveTarget(baseUrl, path);
     if (target == null) {
       logger.warn("Invalid URI base='{}' path='{}'", baseUrl, path);
-      return buildError(context, "invalid baseUrl");
+      return buildError(context, "invalid baseUrl", CallMetrics.failure(0, -1));
     }
 
     HttpRequest.Builder requestBuilder = HttpRequest.newBuilder(target);
@@ -158,18 +169,33 @@ class ProcessorWorkerImpl implements MessageWorker {
 
     logger.debug("HTTP {} {} headers={} body={}", method, target, headersNode, body.orElse(""));
 
-    HttpResponse<String> response = httpClient.send(requestBuilder.build(), HttpResponse.BodyHandlers.ofString());
-    logger.debug("HTTP {} {} -> {}", method, target, response.statusCode());
+    long start = clock.millis();
+    try {
+      HttpResponse<String> response = httpClient.send(requestBuilder.build(), HttpResponse.BodyHandlers.ofString());
+      long duration = Math.max(0L, clock.millis() - start);
+      logger.debug("HTTP {} {} -> {}", method, target, response.statusCode());
 
-    ObjectNode result = MAPPER.createObjectNode();
-    result.put("status", response.statusCode());
-    result.set("headers", MAPPER.valueToTree(response.headers().map()));
-    result.put("body", response.body());
+      boolean success = isSuccessful(response.statusCode());
+      CallMetrics metrics = success
+          ? CallMetrics.success(duration, response.statusCode())
+          : CallMetrics.failure(duration, response.statusCode());
+      recordCall(metrics);
 
-    return WorkMessage.json(result)
-        .header("content-type", "application/json")
-        .header("x-ph-service", context.info().role())
-        .build();
+      ObjectNode result = MAPPER.createObjectNode();
+      result.put("status", response.statusCode());
+      result.set("headers", MAPPER.valueToTree(response.headers().map()));
+      result.put("body", response.body());
+
+      return applyCallHeaders(WorkMessage.json(result)
+          .header("content-type", "application/json")
+          .header("x-ph-service", context.info().role()), metrics)
+          .build();
+    } catch (Exception ex) {
+      long duration = Math.max(0L, clock.millis() - start);
+      CallMetrics metrics = CallMetrics.failure(duration, -1);
+      recordCall(metrics);
+      throw new ProcessorCallException(metrics, ex);
+    }
   }
 
   private URI resolveTarget(String baseUrl, String path) {
@@ -190,17 +216,83 @@ class ProcessorWorkerImpl implements MessageWorker {
     return Optional.of(MAPPER.writeValueAsString(bodyNode));
   }
 
-  private WorkMessage buildError(WorkerContext context, Exception ex) {
-    return buildError(context, ex.toString());
-  }
-
-  private WorkMessage buildError(WorkerContext context, String message) {
+  private WorkMessage buildError(WorkerContext context, String message, CallMetrics metrics) {
     ObjectNode result = MAPPER.createObjectNode();
     result.put("error", message);
-    return WorkMessage.json(result)
+    return applyCallHeaders(WorkMessage.json(result)
         .header("content-type", "application/json")
-        .header("x-ph-service", context.info().role())
+        .header("x-ph-service", context.info().role()), metrics)
         .build();
+  }
+
+  private WorkMessage.Builder applyCallHeaders(WorkMessage.Builder builder, CallMetrics metrics) {
+    return builder
+        .header(HEADER_DURATION, Long.toString(metrics.durationMs()))
+        .header(HEADER_SUCCESS, Boolean.toString(metrics.success()))
+        .header(HEADER_STATUS, Integer.toString(metrics.statusCode()));
+  }
+
+  private void publishStatus(WorkerContext context, ProcessorWorkerConfig config) {
+    context.statusPublisher()
+        .workIn(Topology.MOD_QUEUE)
+        .workOut(Topology.FINAL_QUEUE)
+        .update(status -> status
+            .data("baseUrl", config.baseUrl())
+            .data("enabled", config.enabled())
+            .data("transactions", totalCalls.sum())
+            .data("successRatio", successRatio())
+            .data("avgLatencyMs", averageLatencyMs()));
+  }
+
+  private void recordCall(CallMetrics metrics) {
+    totalCalls.increment();
+    totalLatencyMs.accumulate(metrics.durationMs());
+    if (metrics.success()) {
+      successfulCalls.increment();
+    }
+  }
+
+  private double averageLatencyMs() {
+    long calls = totalCalls.sum();
+    if (calls == 0L) {
+      return 0.0;
+    }
+    return totalLatencyMs.get() / calls;
+  }
+
+  private double successRatio() {
+    long calls = totalCalls.sum();
+    if (calls == 0L) {
+      return 0.0;
+    }
+    return (double) successfulCalls.sum() / calls;
+  }
+
+  private boolean isSuccessful(int statusCode) {
+    return statusCode >= 200 && statusCode < 300;
+  }
+
+  private static final class ProcessorCallException extends Exception {
+    private final CallMetrics metrics;
+
+    private ProcessorCallException(CallMetrics metrics, Exception cause) {
+      super(cause);
+      this.metrics = metrics;
+    }
+
+    private CallMetrics metrics() {
+      return metrics;
+    }
+  }
+
+  private record CallMetrics(long durationMs, boolean success, int statusCode) {
+    private static CallMetrics success(long durationMs, int statusCode) {
+      return new CallMetrics(durationMs, true, statusCode);
+    }
+
+    private static CallMetrics failure(long durationMs, int statusCode) {
+      return new CallMetrics(durationMs, false, statusCode);
+    }
   }
 
 }
