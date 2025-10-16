@@ -32,11 +32,13 @@ import java.net.http.HttpResponse;
 import java.lang.reflect.Constructor;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import javax.net.ssl.SSLSession;
 import org.junit.jupiter.api.Test;
@@ -93,7 +95,10 @@ class ProcessorTest {
         assertThat(payload.path("body").asText()).isEqualTo("{\"result\":\"ok\"}");
         assertThat(outbound.headers())
                 .containsEntry("content-type", "application/json")
-                .containsEntry("x-ph-service", "processor");
+                .containsEntry("x-ph-service", "processor")
+                .containsEntry("x-ph-processor-duration-ms", "0")
+                .containsEntry("x-ph-processor-success", "true")
+                .containsEntry("x-ph-processor-status", "201");
 
         String traceHeader = (String) outbound.headers().get(ObservabilityContextUtil.HEADER);
         ObservabilityContext trace = ObservabilityContextUtil.fromHeader(traceHeader);
@@ -110,7 +115,55 @@ class ProcessorTest {
 
         assertThat(context.statusData())
                 .containsEntry("baseUrl", "http://sut/")
-                .containsEntry("enabled", true);
+                .containsEntry("enabled", true)
+                .containsEntry("transactions", 1L)
+                .containsEntry("successRatio", 1.0)
+                .containsEntry("avgLatencyMs", 0.0);
+    }
+
+    @Test
+    void workerTracksRollingMetricsAcrossCalls() throws Exception {
+        ProcessorDefaults defaults = new ProcessorDefaults();
+        defaults.setEnabled(true);
+        defaults.setBaseUrl("http://sut/");
+        HttpClient httpClient = mock(HttpClient.class);
+        SequenceClock clock = new SequenceClock(0, 50, 100, 250);
+        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(defaults, httpClient, clock);
+        ProcessorWorkerConfig config = new ProcessorWorkerConfig(true, "http://sut/");
+        TestWorkerContext context = new TestWorkerContext(config);
+
+        AtomicInteger invocation = new AtomicInteger();
+        when(httpClient.send(any(), any())).thenAnswer(invocationOnMock -> {
+            HttpRequest request = invocationOnMock.getArgument(0, HttpRequest.class);
+            if (invocation.getAndIncrement() == 0) {
+                return SimpleHttpResponse.from(request, 200, Map.of(), "ok");
+            }
+            return SimpleHttpResponse.from(request, 502, Map.of(), "bad");
+        });
+
+        WorkMessage inbound = WorkMessage.json(Map.of("path", "/metrics")).build();
+
+        WorkResult first = worker.onMessage(inbound, context);
+        assertThat(first).isInstanceOf(WorkResult.Message.class);
+        WorkMessage firstMessage = ((WorkResult.Message) first).value();
+        assertThat(firstMessage.headers())
+                .containsEntry("x-ph-processor-duration-ms", "50")
+                .containsEntry("x-ph-processor-success", "true")
+                .containsEntry("x-ph-processor-status", "200");
+
+        WorkResult second = worker.onMessage(inbound, context);
+        assertThat(second).isInstanceOf(WorkResult.Message.class);
+        WorkMessage secondMessage = ((WorkResult.Message) second).value();
+        assertThat(secondMessage.headers())
+                .containsEntry("x-ph-processor-duration-ms", "150")
+                .containsEntry("x-ph-processor-success", "false")
+                .containsEntry("x-ph-processor-status", "502");
+
+        Map<String, Object> status = context.statusData();
+        assertThat(status)
+                .containsEntry("transactions", 2L);
+        assertThat((Double) status.get("successRatio")).isEqualTo(0.5);
+        assertThat((Double) status.get("avgLatencyMs")).isEqualTo(100.0);
     }
 
     @Test
@@ -155,8 +208,13 @@ class ProcessorTest {
         WorkResult result = worker.onMessage(inbound, context);
 
         assertThat(result).isInstanceOf(WorkResult.Message.class);
-        JsonNode payload = MAPPER.readTree(((WorkResult.Message) result).value().asString());
+        WorkMessage errorMessage = ((WorkResult.Message) result).value();
+        JsonNode payload = MAPPER.readTree(errorMessage.asString());
         assertThat(payload.path("error").asText()).isEqualTo("invalid baseUrl");
+        assertThat(errorMessage.headers())
+                .containsEntry("x-ph-processor-duration-ms", "0")
+                .containsEntry("x-ph-processor-success", "false")
+                .containsEntry("x-ph-processor-status", "-1");
         verify(httpClient, never()).send(any(), any());
     }
 
@@ -392,6 +450,43 @@ class ProcessorTest {
         @Override
         public void update(java.util.function.Consumer<MutableStatus> consumer) {
             consumer.accept(mutableStatus);
+        }
+    }
+
+    private static final class SequenceClock extends Clock {
+        private final long[] sequence;
+        private final ZoneOffset zone = ZoneOffset.UTC;
+        private int index;
+
+        private SequenceClock(long... sequence) {
+            if (sequence.length == 0) {
+                throw new IllegalArgumentException("sequence must not be empty");
+            }
+            this.sequence = sequence;
+        }
+
+        @Override
+        public ZoneId getZone() {
+            return zone;
+        }
+
+        @Override
+        public Clock withZone(ZoneId zone) {
+            return this;
+        }
+
+        @Override
+        public long millis() {
+            if (index < sequence.length) {
+                return sequence[index++];
+            }
+            return sequence[sequence.length - 1];
+        }
+
+        @Override
+        public Instant instant() {
+            int current = Math.max(0, Math.min(index - 1, sequence.length - 1));
+            return Instant.ofEpochMilli(sequence[current]);
         }
     }
 

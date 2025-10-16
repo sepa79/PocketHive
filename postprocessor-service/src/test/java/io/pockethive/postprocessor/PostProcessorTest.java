@@ -42,6 +42,9 @@ class PostProcessorTest {
 
         WorkMessage message = WorkMessage.text("payload")
                 .header("x-ph-error", true)
+                .header("x-ph-processor-duration-ms", "12")
+                .header("x-ph-processor-success", "true")
+                .header("x-ph-processor-status", "200")
                 .observabilityContext(context)
                 .build();
 
@@ -56,22 +59,88 @@ class PostProcessorTest {
         assertThat(workerContext.statusData().get("hopLatencyMs")).isEqualTo(0L);
         assertThat(workerContext.statusData().get("totalLatencyMs")).isEqualTo(15L);
         assertThat(workerContext.statusData().get("hopCount")).isEqualTo(3);
+        assertThat(workerContext.statusData().get("processorTransactions")).isEqualTo(1L);
+        assertThat(workerContext.statusData().get("processorSuccessRatio")).isEqualTo(1.0d);
+        assertThat(workerContext.statusData().get("processorAvgLatencyMs")).isEqualTo(12.0d);
 
-    MeterRegistry registry = workerContext.meterRegistry();
-    var hopSummary = registry.find("ph_hop_latency_ms").summary();
-    var totalSummary = registry.find("ph_total_latency_ms").summary();
-    var hopCountSummary = registry.find("ph_hops").summary();
-    var errorsCounter = registry.find("ph_errors_total").counter();
+        MeterRegistry registry = workerContext.meterRegistry();
+        var hopSummary = registry.find("ph_hop_latency_ms").summary();
+        var totalSummary = registry.find("ph_total_latency_ms").summary();
+        var hopCountSummary = registry.find("ph_hops").summary();
+        var errorsCounter = registry.find("ph_errors_total").counter();
+        var processorLatency = registry.find("ph_processor_latency_ms").summary();
+        var processorCalls = registry.find("ph_processor_calls_total").counter();
+        var processorSuccessCalls = registry.find("ph_processor_calls_success_total").counter();
+        var processorSuccessRatio = registry.find("ph_processor_success_ratio").gauge();
+        var processorAvgLatency = registry.find("ph_processor_latency_avg_ms").gauge();
 
-    assertThat(hopSummary).isNotNull();
-    assertThat(hopSummary.totalAmount()).isEqualTo(15.0);
-    assertThat(hopSummary.count()).isEqualTo(3);
-    assertThat(totalSummary).isNotNull();
-    assertThat(totalSummary.totalAmount()).isEqualTo(15.0);
-    assertThat(hopCountSummary).isNotNull();
-    assertThat(hopCountSummary.totalAmount()).isEqualTo(3.0);
-    assertThat(errorsCounter).isNotNull();
-    assertThat(errorsCounter.count()).isEqualTo(1.0);
+        assertThat(hopSummary).isNotNull();
+        assertThat(hopSummary.totalAmount()).isEqualTo(15.0);
+        assertThat(hopSummary.count()).isEqualTo(3);
+        assertThat(totalSummary).isNotNull();
+        assertThat(totalSummary.totalAmount()).isEqualTo(15.0);
+        assertThat(hopCountSummary).isNotNull();
+        assertThat(hopCountSummary.totalAmount()).isEqualTo(3.0);
+        assertThat(errorsCounter).isNotNull();
+        assertThat(errorsCounter.count()).isEqualTo(1.0);
+        assertThat(processorLatency).isNotNull();
+        assertThat(processorLatency.count()).isEqualTo(1);
+        assertThat(processorLatency.totalAmount()).isEqualTo(12.0);
+        assertThat(processorCalls).isNotNull();
+        assertThat(processorCalls.count()).isEqualTo(1.0);
+        assertThat(processorSuccessCalls).isNotNull();
+        assertThat(processorSuccessCalls.count()).isEqualTo(1.0);
+        assertThat(processorSuccessRatio).isNotNull();
+        assertThat(processorSuccessRatio.value()).isEqualTo(1.0);
+        assertThat(processorAvgLatency).isNotNull();
+        assertThat(processorAvgLatency.value()).isEqualTo(12.0);
+    }
+
+    @Test
+    void onMessageRecordsProcessorFailureMetrics() {
+        PostProcessorDefaults defaults = new PostProcessorDefaults();
+        defaults.setEnabled(true);
+        PostProcessorWorkerImpl worker = new PostProcessorWorkerImpl(defaults);
+        ObservabilityContext context = new ObservabilityContext();
+        List<Hop> hops = new ArrayList<>();
+        hops.add(new Hop("generator", "gen-1", START, START.plusMillis(5)));
+        context.setHops(hops);
+        context.setTraceId("trace-789");
+
+        WorkMessage message = WorkMessage.text("payload")
+                .header("x-ph-processor-duration-ms", "30")
+                .header("x-ph-processor-success", "false")
+                .header("x-ph-processor-status", "500")
+                .observabilityContext(context)
+                .build();
+
+        TestWorkerContext workerContext =
+                new TestWorkerContext(new PostProcessorWorkerConfig(true), context);
+
+        worker.onMessage(message, workerContext);
+
+        assertThat(workerContext.statusData().get("processorTransactions")).isEqualTo(1L);
+        assertThat(workerContext.statusData().get("processorSuccessRatio")).isEqualTo(0.0d);
+        assertThat(workerContext.statusData().get("processorAvgLatencyMs")).isEqualTo(30.0d);
+
+        MeterRegistry registry = workerContext.meterRegistry();
+        var processorLatency = registry.find("ph_processor_latency_ms").summary();
+        var processorCalls = registry.find("ph_processor_calls_total").counter();
+        var processorSuccessCalls = registry.find("ph_processor_calls_success_total").counter();
+        var processorSuccessRatio = registry.find("ph_processor_success_ratio").gauge();
+        var processorAvgLatency = registry.find("ph_processor_latency_avg_ms").gauge();
+
+        assertThat(processorLatency).isNotNull();
+        assertThat(processorLatency.count()).isEqualTo(1);
+        assertThat(processorLatency.totalAmount()).isEqualTo(30.0);
+        assertThat(processorCalls).isNotNull();
+        assertThat(processorCalls.count()).isEqualTo(1.0);
+        assertThat(processorSuccessCalls).isNotNull();
+        assertThat(processorSuccessCalls.count()).isEqualTo(0.0);
+        assertThat(processorSuccessRatio).isNotNull();
+        assertThat(processorSuccessRatio.value()).isEqualTo(0.0);
+        assertThat(processorAvgLatency).isNotNull();
+        assertThat(processorAvgLatency.value()).isEqualTo(30.0);
     }
 
     @Test
