@@ -5,6 +5,7 @@ import io.pockethive.TopologyDefaults;
 import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pockethive.worker.sdk.api.WorkResult;
+import io.pockethive.worker.sdk.autoconfigure.WorkerControlQueueListener;
 import io.pockethive.worker.sdk.config.WorkerType;
 import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
@@ -70,11 +71,11 @@ class GeneratorRuntimeAdapterTest {
         TopologyDefaults.GEN_QUEUE,
         GeneratorWorkerConfig.class
     );
-    when(workerRegistry.all()).thenReturn(List.of(definition));
   }
 
   @Test
   void tickDispatchesUsingDefaultRate() throws Exception {
+    when(workerRegistry.all()).thenReturn(List.of(definition));
     doReturn(WorkResult.message(WorkMessage.text("payload").build()))
         .when(workerRuntime)
         .dispatch(eq("generatorWorker"), any(WorkMessage.class));
@@ -102,30 +103,24 @@ class GeneratorRuntimeAdapterTest {
   }
 
   @Test
-  void onControlDelegatesToControlPlaneRuntime() {
-    GeneratorRuntimeAdapter adapter = new GeneratorRuntimeAdapter(
-        workerRuntime,
-        workerRegistry,
-        controlPlaneRuntime,
-        rabbitTemplate,
-        identity,
-        defaults
-    );
+  void controlQueueListenerDelegatesToControlPlaneRuntime() {
+    WorkerControlQueueListener listener = new WorkerControlQueueListener(controlPlaneRuntime);
 
-    adapter.onControl("{}", "generator.control", null);
+    listener.onControl("{}", "generator.control", null);
     verify(controlPlaneRuntime).handle("{}", "generator.control");
 
-    assertThatThrownBy(() -> adapter.onControl(" ", "generator.control", null))
+    assertThatThrownBy(() -> listener.onControl(" ", "generator.control", null))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("payload");
 
-    assertThatThrownBy(() -> adapter.onControl("{}", " ", null))
+    assertThatThrownBy(() -> listener.onControl("{}", " ", null))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("routing key");
   }
 
   @Test
   void registersStateListenerForEachGeneratorWorker() {
+    when(workerRegistry.all()).thenReturn(List.of(definition));
     new GeneratorRuntimeAdapter(
         workerRuntime,
         workerRegistry,

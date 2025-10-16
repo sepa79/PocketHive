@@ -3,6 +3,7 @@ package io.pockethive.trigger;
 import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pockethive.worker.sdk.api.WorkResult;
+import io.pockethive.worker.sdk.autoconfigure.WorkerControlQueueListener;
 import io.pockethive.worker.sdk.config.WorkerType;
 import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
@@ -71,12 +72,12 @@ class TriggerRuntimeAdapterTest {
         null,
         TriggerWorkerConfig.class
     );
-    when(workerRegistry.streamByRoleAndType("trigger", WorkerType.GENERATOR))
-        .thenAnswer(invocation -> Stream.of(definition));
   }
 
   @Test
   void tickDispatchesAndEmitsStatus() throws Exception {
+    when(workerRegistry.streamByRoleAndType("trigger", WorkerType.GENERATOR))
+        .thenAnswer(invocation -> Stream.of(definition));
     doReturn(WorkResult.none()).when(workerRuntime).dispatch(eq("triggerWorker"), any(WorkMessage.class));
     TriggerRuntimeAdapter adapter = new TriggerRuntimeAdapter(
         workerRuntime,
@@ -97,28 +98,24 @@ class TriggerRuntimeAdapterTest {
   }
 
   @Test
-  void onControlDelegatesToRuntime() {
-    TriggerRuntimeAdapter adapter = new TriggerRuntimeAdapter(
-        workerRuntime,
-        workerRegistry,
-        controlPlaneRuntime,
-        identity,
-        defaults
-    );
+  void controlQueueListenerDelegatesToRuntime() {
+    WorkerControlQueueListener listener = new WorkerControlQueueListener(controlPlaneRuntime);
 
-    adapter.onControl("{}", "trigger.control", null);
+    listener.onControl("{}", "trigger.control", null);
     verify(controlPlaneRuntime).handle("{}", "trigger.control");
 
-    assertThatThrownBy(() -> adapter.onControl(" ", "trigger.control", null))
+    assertThatThrownBy(() -> listener.onControl(" ", "trigger.control", null))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("payload");
-    assertThatThrownBy(() -> adapter.onControl("{}", " ", null))
+    assertThatThrownBy(() -> listener.onControl("{}", " ", null))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("routing key");
   }
 
   @Test
   void registersStateListenerForTriggerWorker() {
+    when(workerRegistry.streamByRoleAndType("trigger", WorkerType.GENERATOR))
+        .thenAnswer(invocation -> Stream.of(definition));
     new TriggerRuntimeAdapter(
         workerRuntime,
         workerRegistry,
@@ -136,6 +133,8 @@ class TriggerRuntimeAdapterTest {
 
   @Test
   void singleRequestRespectsIntervalBeforeNextDispatch() throws Exception {
+    when(workerRegistry.streamByRoleAndType("trigger", WorkerType.GENERATOR))
+        .thenAnswer(invocation -> Stream.of(definition));
     MutableClock clock = new MutableClock(10_000L);
     defaults.setIntervalMs(60_000L);
     defaults.setEnabled(true);

@@ -5,6 +5,7 @@ import io.pockethive.TopologyDefaults;
 import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pockethive.worker.sdk.api.WorkResult;
+import io.pockethive.worker.sdk.autoconfigure.WorkerControlQueueListener;
 import io.pockethive.worker.sdk.config.WorkerType;
 import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
@@ -68,12 +69,12 @@ class PostProcessorRuntimeAdapterTest {
         null,
         PostProcessorWorkerConfig.class
     );
-    when(workerRegistry.findByRoleAndType("postprocessor", WorkerType.MESSAGE))
-        .thenReturn(Optional.of(definition));
   }
 
   @Test
   void onWorkDispatchesToWorker() throws Exception {
+    when(workerRegistry.findByRoleAndType("postprocessor", WorkerType.MESSAGE))
+        .thenReturn(Optional.of(definition));
     lenient().when(listenerRegistry.getListenerContainer("postProcessorWorkerListener"))
         .thenReturn(listenerContainer);
     lenient().when(listenerContainer.isRunning()).thenReturn(false);
@@ -100,30 +101,25 @@ class PostProcessorRuntimeAdapterTest {
   }
 
   @Test
-  void onControlDelegatesToControlPlaneRuntime() {
-    PostProcessorRuntimeAdapter adapter = new PostProcessorRuntimeAdapter(
-        workerRuntime,
-        workerRegistry,
-        controlPlaneRuntime,
-        listenerRegistry,
-        identity,
-        defaults
-    );
+  void controlQueueListenerDelegatesToControlPlaneRuntime() {
+    WorkerControlQueueListener listener = new WorkerControlQueueListener(controlPlaneRuntime);
 
-    adapter.onControl("{}", TopologyDefaults.FINAL_QUEUE + ".control", null);
+    listener.onControl("{}", TopologyDefaults.FINAL_QUEUE + ".control", null);
     verify(controlPlaneRuntime).handle("{}", TopologyDefaults.FINAL_QUEUE + ".control");
 
-    assertThatThrownBy(() -> adapter.onControl(" ", "rk", null))
+    assertThatThrownBy(() -> listener.onControl(" ", "rk", null))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("payload");
 
-    assertThatThrownBy(() -> adapter.onControl("{}", " ", null))
+    assertThatThrownBy(() -> listener.onControl("{}", " ", null))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("routing key");
   }
 
   @Test
   void registersStateListenerAndAppliesDesiredState() {
+    when(workerRegistry.findByRoleAndType("postprocessor", WorkerType.MESSAGE))
+        .thenReturn(Optional.of(definition));
     lenient().when(listenerRegistry.getListenerContainer("postProcessorWorkerListener"))
         .thenReturn(listenerContainer);
     lenient().when(listenerContainer.isRunning()).thenReturn(false);
@@ -149,6 +145,8 @@ class PostProcessorRuntimeAdapterTest {
 
   @Test
   void emitStatusDeltaDelegatesToControlPlaneRuntime() {
+    when(workerRegistry.findByRoleAndType("postprocessor", WorkerType.MESSAGE))
+        .thenReturn(Optional.of(definition));
     PostProcessorRuntimeAdapter adapter = new PostProcessorRuntimeAdapter(
         workerRuntime,
         workerRegistry,

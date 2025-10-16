@@ -124,6 +124,13 @@ public class PocketHiveWorkerSdkAutoConfiguration {
     }
 
     @Bean
+    @ConditionalOnBean(WorkerControlPlaneRuntime.class)
+    @ConditionalOnMissingBean(WorkerControlQueueListener.class)
+    WorkerControlQueueListener workerControlQueueListener(WorkerControlPlaneRuntime controlPlaneRuntime) {
+        return new WorkerControlQueueListener(controlPlaneRuntime);
+    }
+
+    @Bean
     @ConditionalOnMissingBean
     WorkerInvocationInterceptor workerObservabilityInterceptor() {
         return new WorkerObservabilityInterceptor();

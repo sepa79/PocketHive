@@ -5,6 +5,7 @@ import io.pockethive.TopologyDefaults;
 import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pockethive.worker.sdk.api.WorkResult;
+import io.pockethive.worker.sdk.autoconfigure.WorkerControlQueueListener;
 import io.pockethive.worker.sdk.config.WorkerType;
 import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
@@ -73,12 +74,12 @@ class ProcessorRuntimeAdapterTest {
         TopologyDefaults.FINAL_QUEUE,
         ProcessorWorkerConfig.class
     );
-    when(workerRegistry.findByRoleAndType("processor", WorkerType.MESSAGE))
-        .thenReturn(Optional.of(definition));
   }
 
   @Test
   void onWorkDispatchesToWorkerAndPublishesResult() throws Exception {
+    when(workerRegistry.findByRoleAndType("processor", WorkerType.MESSAGE))
+        .thenReturn(Optional.of(definition));
     doReturn(WorkResult.message(WorkMessage.text("processed").build()))
         .when(workerRuntime)
         .dispatch(eq("processorWorker"), any(WorkMessage.class));
@@ -108,35 +109,25 @@ class ProcessorRuntimeAdapterTest {
   }
 
   @Test
-  void onControlDelegatesToControlPlaneRuntime() {
-    ProcessorRuntimeAdapter adapter = new ProcessorRuntimeAdapter(
-        workerRuntime,
-        workerRegistry,
-        controlPlaneRuntime,
-        rabbitTemplate,
-        listenerRegistry,
-        identity,
-        defaults
-    );
+  void controlQueueListenerDelegatesToControlPlaneRuntime() {
+    WorkerControlQueueListener listener = new WorkerControlQueueListener(controlPlaneRuntime);
 
-    adapter.initialiseStateListener();
-    verify(controlPlaneRuntime).registerDefaultConfig(eq("processorWorker"), any());
-    verify(controlPlaneRuntime).emitStatusSnapshot();
-
-    adapter.onControl("{}", "processor.control", null);
+    listener.onControl("{}", "processor.control", null);
     verify(controlPlaneRuntime).handle("{}", "processor.control");
 
-    assertThatThrownBy(() -> adapter.onControl(" ", "processor.control", null))
+    assertThatThrownBy(() -> listener.onControl(" ", "processor.control", null))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("payload");
 
-    assertThatThrownBy(() -> adapter.onControl("{}", " ", null))
+    assertThatThrownBy(() -> listener.onControl("{}", " ", null))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("routing key");
   }
 
   @Test
   void registersListenerAppliesDesiredStateAndEmitsSnapshot() {
+    when(workerRegistry.findByRoleAndType("processor", WorkerType.MESSAGE))
+        .thenReturn(Optional.of(definition));
     when(listenerRegistry.getListenerContainer("processorWorkerListener")).thenReturn(listenerContainer);
     when(listenerContainer.isRunning()).thenReturn(false);
 
@@ -162,6 +153,8 @@ class ProcessorRuntimeAdapterTest {
 
   @Test
   void emitStatusDeltaDelegatesToControlPlaneRuntime() {
+    when(workerRegistry.findByRoleAndType("processor", WorkerType.MESSAGE))
+        .thenReturn(Optional.of(definition));
     ProcessorRuntimeAdapter adapter = new ProcessorRuntimeAdapter(
         workerRuntime,
         workerRegistry,
