@@ -15,7 +15,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.amqp.rabbit.listener.RabbitListenerEndpointRegistry;
 import org.springframework.amqp.support.AmqpHeaders;
 import org.springframework.context.ApplicationListener;
@@ -35,14 +34,12 @@ class PostProcessorRuntimeAdapter implements ApplicationListener<ContextRefreshe
   PostProcessorRuntimeAdapter(WorkerRuntime workerRuntime,
                               WorkerRegistry workerRegistry,
                               WorkerControlPlaneRuntime controlPlaneRuntime,
-                              RabbitTemplate rabbitTemplate,
                               RabbitListenerEndpointRegistry listenerRegistry,
                               ControlPlaneIdentity identity,
                               PostProcessorDefaults defaults) {
     WorkerRuntime runtime = Objects.requireNonNull(workerRuntime, "workerRuntime");
     WorkerRegistry registry = Objects.requireNonNull(workerRegistry, "workerRegistry");
     WorkerControlPlaneRuntime controlRuntime = Objects.requireNonNull(controlPlaneRuntime, "controlPlaneRuntime");
-    RabbitTemplate template = Objects.requireNonNull(rabbitTemplate, "rabbitTemplate");
     RabbitListenerEndpointRegistry endpointRegistry = Objects.requireNonNull(listenerRegistry, "listenerRegistry");
     ControlPlaneIdentity controlIdentity = Objects.requireNonNull(identity, "identity");
     PostProcessorDefaults postProcessorDefaults = Objects.requireNonNull(defaults, "defaults");
@@ -64,7 +61,6 @@ class PostProcessorRuntimeAdapter implements ApplicationListener<ContextRefreshe
             .map(PostProcessorWorkerConfig::enabled)
             .orElse(postProcessorDefaults.asConfig().enabled())))
         .dispatcher(message -> runtime.dispatch(workerDefinition.beanName(), message))
-        .rabbitTemplate(template)
         .dispatchErrorHandler(ex -> log.warn("Post-processor worker invocation failed", ex))
         .build();
   }
