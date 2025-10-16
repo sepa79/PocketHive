@@ -4,6 +4,22 @@ import { sendConfigUpdate } from '../../lib/orchestratorApi'
 import type { MouseEvent } from 'react'
 import { Play, Square } from 'lucide-react'
 
+const CONFIG_UPDATE_ROLES = new Set([
+  'generator',
+  'moderator',
+  'processor',
+  'postprocessor',
+  'trigger',
+  'swarm-controller',
+])
+
+function supportsConfigToggle(role: string | undefined) {
+  if (!role) return false
+  const normalized = role.trim().toLowerCase()
+  if (!normalized) return false
+  return CONFIG_UPDATE_ROLES.has(normalized)
+}
+
 interface Props {
   components: Component[]
   selectedId?: string
@@ -24,6 +40,8 @@ export default function ComponentList({ components, selectedId, onSelect }: Prop
     <ul className="space-y-2 overflow-y-auto h-full">
       {components.map((c) => {
         const role = c.role.trim() || '—'
+        const canToggle = supportsConfigToggle(c.role)
+        const enabled = c.config?.enabled !== false
         return (
           <li
             key={c.id}
@@ -47,17 +65,22 @@ export default function ComponentList({ components, selectedId, onSelect }: Prop
                 )}
               </div>
               <div className="flex items-center gap-2">
-                <button
-                  className="p-1 rounded bg-white/10 hover:bg-white/20"
-                  onClick={(e) => toggle(e, c)}
-                >
-                  {c.config?.enabled === false ? (
-                    <Play className="h-4 w-4" />
-                  ) : (
-                    <Square className="h-4 w-4" />
-                  )}
-                </button>
+                {canToggle && (
+                  <button
+                    type="button"
+                    className="p-1 rounded bg-white/10 hover:bg-white/20"
+                    onClick={(e) => toggle(e, c)}
+                    aria-label={`${enabled ? 'Disable' : 'Enable'} ${c.id}`}
+                  >
+                    {enabled ? (
+                      <Square className="h-4 w-4" />
+                    ) : (
+                      <Play className="h-4 w-4" />
+                    )}
+                  </button>
+                )}
                 <span
+                  data-testid="component-status"
                   className={`h-3 w-3 rounded-full ${color(componentHealth(c))}`}
                 />
               </div>

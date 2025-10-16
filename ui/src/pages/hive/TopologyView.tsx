@@ -99,7 +99,11 @@ function ShapeNode({ data, selected }: NodeProps<ShapeNodeData>) {
   const componentId =
     typeof data.componentId === 'string' ? data.componentId.trim() : ''
   const fallbackLabel = typeof data.label === 'string' ? data.label : ''
-  const displayLabel = componentId || fallbackLabel
+  const normalizedRole = typeof role === 'string' ? role.trim() : ''
+  const normalizedFallback = fallbackLabel.trim()
+  const shouldUseFallback =
+    fallbackLabel.length > 0 && normalizedFallback !== normalizedRole
+  const displayLabel = shouldUseFallback ? fallbackLabel : componentId || fallbackLabel
   const metaEntries = useMemo(() => {
     if (!isOrchestrator) {
       return []
@@ -571,7 +575,10 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
           }
           const component = componentsById[node.id]
           const role = component?.role?.trim() || node.type
-          const label = component?.name?.trim() || component?.id?.trim() || node.id
+          const label =
+            component?.name?.trim() ||
+            component?.id?.trim() ||
+            node.id
           nodes.push({
             id: node.id,
             position,
@@ -640,7 +647,10 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
         }
         const component = componentsById[node.id]
         const role = component?.role?.trim() || node.type
-        const label = component?.name?.trim() || component?.id?.trim() || node.id
+        const label =
+          component?.name?.trim() ||
+          component?.id?.trim() ||
+          node.id
         return {
           id: node.id,
           position,
