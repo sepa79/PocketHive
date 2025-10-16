@@ -5,9 +5,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.rabbit.annotation.EnableRabbit;
 import org.springframework.boot.SpringApplication;
-import org.springframework.boot.actuate.info.InfoContributor;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.context.annotation.Bean;
 
 @EnableRabbit
 @SpringBootApplication
@@ -21,8 +19,4 @@ public class Application {
     SpringApplication.run(Application.class, args);
   }
 
-  @Bean
-  InfoContributor beeInfoContributor() {
-    return builder -> builder.withDetail("beeName", System.getProperty("bee.name"));
-  }
 }

@@ -5,7 +5,6 @@ spring:
     port: ${RABBITMQ_PORT:5672}
     username: ${RABBITMQ_DEFAULT_USER:guest}
     password: ${RABBITMQ_DEFAULT_PASS:guest}
-management.endpoints.web.exposure.include: health,info
 
 logging:
   config: classpath:logback-spring.xml
