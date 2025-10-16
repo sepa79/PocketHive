@@ -319,6 +319,46 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
         }
 
         /**
+         * Configures the default configuration hooks for the worker using the supplied typed defaults.
+         * <p>
+         * The helper seeds the control plane with the provided defaults, derives the initial enabled
+         * state and resolves subsequent desired state changes by inspecting either the explicit enabled
+         * flag or the latest typed configuration.
+         *
+         * @param configType        configuration class exposed by the worker runtime
+         * @param defaultsSupplier  supplier that returns the default configuration instance
+         * @param enabledExtractor  extractor that reads the enabled flag from the configuration
+         * @param <C>               type of the configuration object
+         * @return this builder instance
+         */
+        public <C> Builder withConfigDefaults(
+            Class<C> configType,
+            Supplier<C> defaultsSupplier,
+            Function<C, Boolean> enabledExtractor
+        ) {
+            Objects.requireNonNull(configType, "configType");
+            Objects.requireNonNull(defaultsSupplier, "defaultsSupplier");
+            Objects.requireNonNull(enabledExtractor, "enabledExtractor");
+
+            Supplier<C> typedDefaults = () -> Objects.requireNonNull(defaultsSupplier.get(),
+                "defaultsSupplier returned null config");
+            Supplier<Boolean> resolvedDefaultEnabled = () -> {
+                Boolean enabled = Objects.requireNonNull(enabledExtractor.apply(typedDefaults.get()),
+                    "enabledExtractor returned null default enabled flag");
+                return enabled;
+            };
+            Function<WorkerStateSnapshot, Boolean> resolvedDesiredState = snapshot -> snapshot.enabled()
+                .orElseGet(() -> snapshot.config(configType)
+                    .map(enabledExtractor)
+                    .orElseGet(resolvedDefaultEnabled));
+
+            this.defaultConfigSupplier = () -> typedDefaults.get();
+            this.defaultEnabledSupplier = resolvedDefaultEnabled;
+            this.desiredStateResolver = resolvedDesiredState;
+            return this;
+        }
+
+        /**
          * Supplies a callback that determines the default enabled state when the worker starts. The control
          * plane desired state can later override this initial value.
          *

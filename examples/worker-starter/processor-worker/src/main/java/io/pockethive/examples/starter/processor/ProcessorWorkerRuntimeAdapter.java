@@ -48,8 +48,7 @@ class ProcessorWorkerRuntimeAdapter implements ApplicationListener<ContextRefres
         .controlPlaneRuntime(controlPlaneRuntime)
         .listenerRegistry(listenerRegistry)
         .identity(identity)
-        .defaultEnabledSupplier(() -> true)
-        .desiredStateResolver(snapshot -> snapshot.enabled().orElse(true))
+        .withConfigDefaults(Boolean.class, () -> Boolean.TRUE, Boolean::booleanValue)
         .dispatcher(message -> workerRuntime.dispatch(definition.beanName(), message))
         .rabbitTemplate(rabbitTemplate)
         .build();
