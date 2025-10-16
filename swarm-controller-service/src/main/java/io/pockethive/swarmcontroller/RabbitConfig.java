@@ -1,14 +1,12 @@
 package io.pockethive.swarmcontroller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.micrometer.core.instrument.MeterRegistry;
 import io.pockethive.Topology;
 import io.pockethive.util.BeeNameGenerator;
 import java.util.ArrayList;
 import java.util.List;
 import org.springframework.amqp.core.*;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.boot.actuate.autoconfigure.metrics.MeterRegistryCustomizer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -163,12 +161,4 @@ public class RabbitConfig {
         .with("ev.status-delta." + Topology.SWARM_ID + ".#");
   }
 
-  @Bean
-  MeterRegistryCustomizer<MeterRegistry> metricsCommonTags(String instanceId) {
-    return registry -> registry.config().commonTags(
-        "swarm_id", Topology.SWARM_ID,
-        "service", ROLE,
-        "instance", instanceId
-    );
-  }
 }
