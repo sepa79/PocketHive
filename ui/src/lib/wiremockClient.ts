@@ -135,15 +135,6 @@ export async function fetchWiremockComponent(limit = 25): Promise<Component | nu
     .map((entry) => normaliseScenario(entry))
     .filter((entry): entry is WiremockScenarioSummary => entry !== null)
 
-  if (
-    !healthStatus &&
-    typeof totalRequests !== 'number' &&
-    recentRequests.length === 0 &&
-    unmatchedRequests.length === 0
-  ) {
-    return null
-  }
-
   let stubCount: number | undefined
   if (isRecord(mappings) && isRecord(mappings['meta'])) {
     const meta = mappings['meta'] as Record<string, unknown>
@@ -187,12 +178,15 @@ export async function fetchWiremockComponent(limit = 25): Promise<Component | nu
     config.version = version
   }
 
+  const now = Date.now()
+
   return {
     id: 'wiremock',
     name: 'WireMock',
     role: 'wiremock',
-    lastHeartbeat: Date.now(),
-    status: healthStatus,
+    swarmId: 'default',
+    lastHeartbeat: healthStatus ? now : 0,
+    status: healthStatus ?? 'ALERT',
     queues: [],
     config,
   }
