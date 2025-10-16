@@ -35,7 +35,7 @@ import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
@@ -45,13 +45,19 @@ import org.springframework.context.annotation.Import;
  * opt-in by depending on the Worker SDK starter.
  */
 @Configuration(proxyBeanMethods = false)
-@EnableConfigurationProperties(WorkerStatusSchedulerProperties.class)
 @Import({
     ControlPlaneCommonAutoConfiguration.class,
     WorkerControlPlaneAutoConfiguration.class,
     ManagerControlPlaneAutoConfiguration.class
 })
 public class PocketHiveWorkerSdkAutoConfiguration {
+
+    @Bean
+    @ConfigurationProperties(prefix = "pockethive.worker.status")
+    @ConditionalOnMissingBean
+    WorkerStatusSchedulerProperties workerStatusSchedulerProperties() {
+        return new WorkerStatusSchedulerProperties();
+    }
 
     @Bean
     @ConditionalOnMissingBean
