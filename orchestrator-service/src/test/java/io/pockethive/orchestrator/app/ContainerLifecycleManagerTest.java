@@ -42,7 +42,8 @@ class ContainerLifecycleManagerTest {
         ArgumentCaptor<java.util.function.UnaryOperator<HostConfig>> hostCaptor = ArgumentCaptor.forClass(java.util.function.UnaryOperator.class);
         verify(docker).createAndStartContainer(eq("img"), envCaptor.capture(), nameCaptor.capture(), hostCaptor.capture());
         assertEquals("inst1", nameCaptor.getValue());
-        assertEquals("-Dbee.name=inst1", envCaptor.getValue().get("JAVA_TOOL_OPTIONS"));
+        assertEquals("inst1", envCaptor.getValue().get("POCKETHIVE_CONTROL_PLANE_INSTANCE_ID"));
+        assertNull(envCaptor.getValue().get("JAVA_TOOL_OPTIONS"));
         assertEquals("/var/run/docker.sock", envCaptor.getValue().get("DOCKER_SOCKET_PATH"));
         assertEquals("unix:///var/run/docker.sock", envCaptor.getValue().get("DOCKER_HOST"));
         HostConfig hostConfig = HostConfig.newHostConfig();

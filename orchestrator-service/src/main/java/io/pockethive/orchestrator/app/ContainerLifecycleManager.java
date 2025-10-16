@@ -28,7 +28,7 @@ public class ContainerLifecycleManager {
 
     public Swarm startSwarm(String swarmId, String image, String instanceId) {
         java.util.Map<String, String> env = new java.util.HashMap<>();
-        env.put("JAVA_TOOL_OPTIONS", "-Dbee.name=" + instanceId);
+        env.put("POCKETHIVE_CONTROL_PLANE_INSTANCE_ID", instanceId);
         env.put("PH_CONTROL_EXCHANGE", Topology.CONTROL_EXCHANGE);
         env.put("RABBITMQ_HOST", java.util.Optional.ofNullable(System.getenv("RABBITMQ_HOST")).orElse("rabbitmq"));
         env.put("PH_LOGS_EXCHANGE", java.util.Optional.ofNullable(System.getenv("PH_LOGS_EXCHANGE")).orElse("ph.logs"));

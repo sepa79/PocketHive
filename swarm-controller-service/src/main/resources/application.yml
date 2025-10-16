@@ -23,3 +23,4 @@ pockethive:
       instance-id: ${POCKETHIVE_CONTROL_PLANE_WORKER_INSTANCE_ID}
     manager:
       role: swarm-controller
+      instance-id: ${POCKETHIVE_CONTROL_PLANE_INSTANCE_ID:${POCKETHIVE_CONTROL_PLANE_WORKER_INSTANCE_ID}}
