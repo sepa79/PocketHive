@@ -440,9 +440,8 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
                     throw new IllegalStateException("Worker " + workerDefinition.beanName()
                         + " must configure a RabbitTemplate or custom message result publisher");
                 }
-                RabbitTemplate template = rabbitTemplate;
-                String queue = outboundQueue;
-                messageResultPublisher = (result, message) -> template.send(Topology.EXCHANGE, queue, message);
+                messageResultPublisher =
+                    (result, message) -> rabbitTemplate.send(Topology.EXCHANGE, outboundQueue, message);
             }
             Objects.requireNonNull(messageResultPublisher, "messageResultPublisher");
             if (dispatchErrorHandler == null) {
