@@ -30,7 +30,7 @@ function isWiremockConfig(value: unknown): value is WiremockComponentConfig {
 }
 
 function formatRelative(timestamp?: number) {
-  if (typeof timestamp !== 'number' || Number.isNaN(timestamp)) return '—'
+  if (typeof timestamp !== 'number' || Number.isNaN(timestamp) || timestamp <= 0) return '—'
   const diffSec = Math.max(0, Math.floor((Date.now() - timestamp) / 1000))
   if (diffSec < 60) {
     return `${diffSec}s ago`
@@ -88,7 +88,7 @@ export default function WiremockPanel({ component }: Props) {
     : formatNumber(config.requestCount)
   const stubCountLabel = config.stubCountError ? '—' : formatNumber(config.stubCount)
   const unmatchedLabel = formatNumber(config.unmatchedCount)
-  const statusLabel = component.status ?? '—'
+  const heartbeatLabel = formatRelative(component.lastHeartbeat)
   const lastUpdatedLabel = formatRelative(config.lastUpdatedTs)
 
   const formatTimestamp = (timestamp: number) => formatRelative(timestamp)
@@ -129,7 +129,7 @@ export default function WiremockPanel({ component }: Props) {
           value={unmatchedLabel}
           error={config.unmatchedRequestsError}
         />
-        <WiremockStat label="Status" value={statusLabel} />
+        <WiremockStat label="Last heartbeat" value={heartbeatLabel} />
       </div>
       <WiremockRequestsTable
         title="Recent requests"

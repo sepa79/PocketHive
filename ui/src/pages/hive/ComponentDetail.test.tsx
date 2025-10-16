@@ -83,6 +83,7 @@ describe('ComponentDetail wiremock panel', () => {
     expect(within(panel).getByText('42')).toBeInTheDocument()
     expect(within(panel).getByText('Unmatched total')).toBeInTheDocument()
     expect(within(panel).getByText('1')).toBeInTheDocument()
+    expect(within(panel).getByText('Last heartbeat')).toBeInTheDocument()
 
     expect(within(panel).getByText(/Updated .*ago/i)).toBeInTheDocument()
 
@@ -92,6 +93,9 @@ describe('ComponentDetail wiremock panel', () => {
     const recentSection = within(panel).getByText('Recent requests').parentElement!
     expect(within(recentSection).getByText('GET')).toBeInTheDocument()
     expect(within(recentSection).getByText('/api/foo')).toBeInTheDocument()
+    const recentRow = within(recentSection).getByText('/api/foo').closest('tr')!
+    const recentCells = within(recentRow).getAllByRole('cell')
+    expect(recentCells[3]).not.toHaveTextContent('—')
 
     const unmatchedSection = within(panel).getByText('Unmatched requests').parentElement!
     expect(within(unmatchedSection).getByText('POST')).toBeInTheDocument()

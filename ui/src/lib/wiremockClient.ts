@@ -60,15 +60,35 @@ function extractVersion(health: unknown): string | undefined {
   return undefined
 }
 
+function parseLoggedDate(entry: Record<string, unknown>): number | undefined {
+  const raw = entry['loggedDate']
+  if (typeof raw === 'number') {
+    return raw
+  }
+  if (typeof raw === 'string' && raw.length > 0) {
+    const numeric = Number(raw)
+    if (!Number.isNaN(numeric)) {
+      return numeric
+    }
+    const parsed = Date.parse(raw)
+    if (!Number.isNaN(parsed)) {
+      return parsed
+    }
+  }
+  const loggedDateString = entry['loggedDateString']
+  if (typeof loggedDateString === 'string' && loggedDateString.length > 0) {
+    const parsed = Date.parse(loggedDateString)
+    if (!Number.isNaN(parsed)) {
+      return parsed
+    }
+  }
+  return undefined
+}
+
 function normaliseRequest(entry: unknown): WiremockRequestSummary | null {
   if (!isRecord(entry)) return null
   const id = typeof entry['id'] === 'string' ? entry['id'] : undefined
-  const loggedDate =
-    typeof entry['loggedDate'] === 'number'
-      ? entry['loggedDate']
-      : typeof entry['loggedDate'] === 'string'
-      ? Number.parseInt(entry['loggedDate'] as string, 10)
-      : undefined
+  const loggedDate = parseLoggedDate(entry)
   const request = isRecord(entry['request']) ? entry['request'] : undefined
   const response = isRecord(entry['response']) ? entry['response'] : undefined
   const method = request && typeof request['method'] === 'string' ? request['method'] : undefined
@@ -122,6 +142,8 @@ export async function fetchWiremockComponent(limit = 25): Promise<Component | nu
   const totalRequests = isRecord(count) && typeof count['count'] === 'number' ? count['count'] : undefined
   const recentRequestsRaw =
     isRecord(recent) && Array.isArray(recent['requests']) ? recent['requests'] : []
+  const recentMeta = isRecord(recent) && isRecord(recent['meta']) ? (recent['meta'] as Record<string, unknown>) : undefined
+  const recentTotal = recentMeta && typeof recentMeta['total'] === 'number' ? recentMeta['total'] : undefined
   const unmatchedRequestsRaw =
     isRecord(unmatched) && Array.isArray(unmatched['requests']) ? unmatched['requests'] : []
 
@@ -167,6 +189,8 @@ export async function fetchWiremockComponent(limit = 25): Promise<Component | nu
 
   if (typeof totalRequests === 'number') {
     config.requestCount = totalRequests
+  } else if (typeof recentTotal === 'number') {
+    config.requestCount = recentTotal
   } else if (count === null) {
     config.requestCountError = true
   }

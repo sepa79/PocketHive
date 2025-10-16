@@ -102,5 +102,51 @@ describe('fetchWiremockComponent', () => {
     expect(config.scenarios).toEqual([])
     expect(config.scenariosError).toBe(true)
   })
+
+  it('falls back to request meta totals and loggedDateString when counts are unavailable', async () => {
+    const responses = new Map<string, Response>([
+      ['http://localhost:8080/__admin/health', jsonResponse({ status: 'OK' })],
+      ['http://localhost:8080/__admin/requests/count', new Response(null, { status: 404 })],
+      [
+        'http://localhost:8080/__admin/requests?limit=25',
+        jsonResponse({
+          meta: { total: 96 },
+          requests: [
+            {
+              id: 'req-1',
+              loggedDateString: '2024-05-26T10:00:00Z',
+              request: { method: 'POST', url: '/api/test' },
+              response: { status: 201 },
+            },
+          ],
+        }),
+      ],
+      ['http://localhost:8080/__admin/requests/unmatched', jsonResponse({ requests: [] })],
+      ['http://localhost:8080/__admin/mappings', jsonResponse({})],
+      ['http://localhost:8080/__admin/scenarios', jsonResponse({ scenarios: [] })],
+    ])
+
+    apiFetchMock.mockImplementation(async (input: RequestInfo) => {
+      const key = typeof input === 'string' ? input : input.url
+      const response = responses.get(key)
+      if (!response) throw new Error(`Unexpected request: ${key}`)
+      return response
+    })
+
+    const component = await fetchWiremockComponent()
+
+    expect(component).not.toBeNull()
+    if (!component) throw new Error('component missing')
+    const config = component.config as WiremockComponentConfig
+    expect(config.requestCount).toBe(96)
+    expect(config.requestCountError).toBeUndefined()
+    expect(config.recentRequests[0]).toEqual(
+      expect.objectContaining({
+        id: 'req-1',
+        loggedDate: expect.any(Number),
+      }),
+    )
+    expect(config.recentRequests[0]?.loggedDate).toBe(Date.parse('2024-05-26T10:00:00Z'))
+  })
 })
 
