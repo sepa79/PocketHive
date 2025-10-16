@@ -1,5 +1,6 @@
 package io.pockethive.worker.sdk.transport.rabbit;
 
+import io.pockethive.Topology;
 import io.pockethive.observability.ObservabilityContext;
 import io.pockethive.observability.ObservabilityContextUtil;
 import io.pockethive.worker.sdk.api.WorkMessage;
@@ -15,6 +16,7 @@ import java.util.function.Supplier;
 import org.slf4j.Logger;
 import org.slf4j.MDC;
 import org.springframework.amqp.core.Message;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.amqp.rabbit.listener.MessageListenerContainer;
 import org.springframework.amqp.rabbit.listener.RabbitListenerEndpointRegistry;
 import org.springframework.context.ApplicationListener;
@@ -59,6 +61,8 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
     private final Function<WorkerStateSnapshot, Boolean> desiredStateResolver;
     private final WorkDispatcher dispatcher;
     private final MessageResultPublisher messageResultPublisher;
+    private final RabbitTemplate rabbitTemplate;
+    private final String outboundQueue;
     private final Consumer<Exception> dispatchErrorHandler;
     private final RabbitWorkMessageConverter messageConverter = new RabbitWorkMessageConverter();
     private volatile boolean desiredEnabled;
@@ -76,6 +80,8 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
         this.defaultConfigSupplier = builder.defaultConfigSupplier;
         this.dispatcher = builder.dispatcher;
         this.messageResultPublisher = builder.messageResultPublisher;
+        this.rabbitTemplate = builder.rabbitTemplate;
+        this.outboundQueue = builder.outboundQueue;
         this.dispatchErrorHandler = builder.dispatchErrorHandler;
     }
 
@@ -130,8 +136,8 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
                     Message outbound = messageConverter.toMessage(messageResult.value());
                     messageResultPublisher.publish(messageResult, outbound);
                 } else if (log.isDebugEnabled()) {
-                    log.debug("{} worker produced message result with {} bytes but no publisher is configured", displayName,
-                        messageResult.value().body().length);
+                    log.debug("{} worker produced message result with {} bytes but no publisher is configured (queue={})",
+                        displayName, messageResult.value().body().length, outboundQueue);
                 }
             }
         } catch (Exception ex) {
@@ -229,6 +235,8 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
         private Function<WorkerStateSnapshot, Boolean> desiredStateResolver;
         private WorkDispatcher dispatcher;
         private MessageResultPublisher messageResultPublisher;
+        private RabbitTemplate rabbitTemplate;
+        private String outboundQueue;
         private Consumer<Exception> dispatchErrorHandler;
 
         private Builder() {
@@ -378,6 +386,19 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
         }
 
         /**
+         * Supplies the {@link RabbitTemplate} used for publishing downstream {@link WorkResult.Message} payloads. When a
+         * template is provided and no custom {@link MessageResultPublisher} is configured the helper automatically
+         * publishes to {@link Topology#EXCHANGE} using the validated outbound queue.
+         *
+         * @param rabbitTemplate Spring AMQP template used to publish outbound messages
+         * @return this builder instance
+         */
+        public Builder rabbitTemplate(RabbitTemplate rabbitTemplate) {
+            this.rabbitTemplate = Objects.requireNonNull(rabbitTemplate, "rabbitTemplate");
+            return this;
+        }
+
+        /**
          * Overrides the default dispatch error handling behaviour which logs a warning when the dispatcher
          * throws. This allows services to integrate with their own observability or retry strategies.
          *
@@ -401,6 +422,12 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
                 displayName = workerDefinition != null ? workerDefinition.role() : "worker";
             }
             Objects.requireNonNull(workerDefinition, "workerDefinition");
+            String resolvedOutbound = workerDefinition.resolvedOutQueue();
+            if (resolvedOutbound == null || resolvedOutbound.isBlank()) {
+                throw new IllegalStateException(
+                    "Worker " + workerDefinition.beanName() + " must declare an outbound queue");
+            }
+            this.outboundQueue = resolvedOutbound;
             Objects.requireNonNull(controlPlaneRuntime, "controlPlaneRuntime");
             Objects.requireNonNull(listenerRegistry, "listenerRegistry");
             Objects.requireNonNull(identity, "identity");
@@ -408,6 +435,11 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
             Objects.requireNonNull(defaultConfigSupplier, "defaultConfigSupplier");
             Objects.requireNonNull(desiredStateResolver, "desiredStateResolver");
             Objects.requireNonNull(dispatcher, "dispatcher");
+            if (messageResultPublisher == null && rabbitTemplate != null) {
+                RabbitTemplate template = rabbitTemplate;
+                String queue = outboundQueue;
+                messageResultPublisher = (result, message) -> template.send(Topology.EXCHANGE, queue, message);
+            }
             if (dispatchErrorHandler == null) {
                 dispatchErrorHandler = ex -> log.warn("{} worker invocation failed", displayName, ex);
             }

@@ -1,5 +1,6 @@
 package io.pockethive.worker.sdk.transport.rabbit;
 
+import io.pockethive.Topology;
 import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pockethive.worker.sdk.api.WorkResult;
@@ -22,6 +23,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.core.Message;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.amqp.rabbit.listener.MessageListenerContainer;
 import org.springframework.amqp.rabbit.listener.RabbitListenerEndpointRegistry;
 import org.springframework.context.event.ContextRefreshedEvent;
@@ -55,10 +57,13 @@ class RabbitMessageWorkerAdapterTest {
     private RabbitMessageWorkerAdapter.WorkDispatcher dispatcher;
 
     @Mock
-    private RabbitMessageWorkerAdapter.MessageResultPublisher resultPublisher;
+    private Consumer<Exception> errorHandler;
 
     @Mock
-    private Consumer<Exception> errorHandler;
+    private RabbitTemplate rabbitTemplate;
+
+    @Mock
+    private RabbitMessageWorkerAdapter.MessageResultPublisher resultPublisher;
 
     private WorkerDefinition workerDefinition;
     private ControlPlaneIdentity identity;
@@ -127,7 +132,7 @@ class RabbitMessageWorkerAdapterTest {
         assertThat(workCaptor.getValue().body()).isEqualTo("payload".getBytes(StandardCharsets.UTF_8));
 
         ArgumentCaptor<Message> outboundCaptor = ArgumentCaptor.forClass(Message.class);
-        verify(resultPublisher).publish(any(WorkResult.Message.class), outboundCaptor.capture());
+        verify(rabbitTemplate).send(eq(Topology.EXCHANGE), eq(workerDefinition.resolvedOutQueue()), outboundCaptor.capture());
         assertThat(outboundCaptor.getValue().getBody()).isEqualTo("processed".getBytes(StandardCharsets.UTF_8));
     }
 
@@ -142,7 +147,24 @@ class RabbitMessageWorkerAdapterTest {
         adapter.onWork(inbound);
 
         verify(errorHandler).accept(failure);
-        verify(resultPublisher, never()).publish(any(), any());
+        verify(rabbitTemplate, never()).send(any(), any(), any());
+    }
+
+    @Test
+    void onWorkUsesCustomPublisherWhenProvided() throws Exception {
+        RabbitMessageWorkerAdapter adapter = builderWithoutTemplate()
+            .messageResultPublisher(resultPublisher)
+            .build();
+        RabbitWorkMessageConverter converter = new RabbitWorkMessageConverter();
+        Message inbound = converter.toMessage(WorkMessage.text("payload").build());
+
+        when(dispatcher.dispatch(any(WorkMessage.class)))
+            .thenReturn(WorkResult.message(WorkMessage.text("processed").build()));
+
+        adapter.onWork(inbound);
+
+        verify(resultPublisher).publish(any(WorkResult.Message.class), any(Message.class));
+        verify(rabbitTemplate, never()).send(any(), any(), any());
     }
 
     @Test
@@ -178,7 +200,24 @@ class RabbitMessageWorkerAdapterTest {
         verify(listenerRegistry).getListenerContainer("listener");
     }
 
-    private RabbitMessageWorkerAdapter.Builder builder() {
+    @Test
+    void buildFailsWhenOutboundQueueMissing() {
+        workerDefinition = new WorkerDefinition(
+            "processorWorker",
+            Object.class,
+            WorkerType.MESSAGE,
+            "processor",
+            "processor.in",
+            null,
+            Object.class
+        );
+
+        assertThatThrownBy(() -> builder().build())
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("outbound queue");
+    }
+
+    private RabbitMessageWorkerAdapter.Builder baseBuilder() {
         return RabbitMessageWorkerAdapter.builder()
             .logger(LOGGER)
             .listenerId("listener")
@@ -191,8 +230,15 @@ class RabbitMessageWorkerAdapterTest {
             .defaultConfigSupplier(defaultConfig)
             .desiredStateResolver(desiredStateResolver)
             .dispatcher(dispatcher)
-            .messageResultPublisher(resultPublisher)
             .dispatchErrorHandler(errorHandler);
+    }
+
+    private RabbitMessageWorkerAdapter.Builder builder() {
+        return baseBuilder().rabbitTemplate(rabbitTemplate);
+    }
+
+    private RabbitMessageWorkerAdapter.Builder builderWithoutTemplate() {
+        return baseBuilder();
     }
 
     private record DummyConfig(boolean enabled) {

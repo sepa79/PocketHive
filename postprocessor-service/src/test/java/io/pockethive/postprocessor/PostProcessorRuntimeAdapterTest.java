@@ -19,6 +19,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.amqp.core.Message;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.amqp.rabbit.listener.MessageListenerContainer;
 import org.springframework.amqp.rabbit.listener.RabbitListenerEndpointRegistry;
 
@@ -30,6 +31,7 @@ import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -43,6 +45,9 @@ class PostProcessorRuntimeAdapterTest {
 
   @Mock
   private WorkerControlPlaneRuntime controlPlaneRuntime;
+
+  @Mock
+  private RabbitTemplate rabbitTemplate;
 
   @Mock
   private RabbitListenerEndpointRegistry listenerRegistry;
@@ -65,7 +70,7 @@ class PostProcessorRuntimeAdapterTest {
         WorkerType.MESSAGE,
         "postprocessor",
         Topology.FINAL_QUEUE,
-        null,
+        TopologyDefaults.FINAL_QUEUE,
         PostProcessorWorkerConfig.class
     );
     when(workerRegistry.findByRoleAndType("postprocessor", WorkerType.MESSAGE))
@@ -84,6 +89,7 @@ class PostProcessorRuntimeAdapterTest {
         workerRuntime,
         workerRegistry,
         controlPlaneRuntime,
+        rabbitTemplate,
         listenerRegistry,
         identity,
         defaults
@@ -97,6 +103,7 @@ class PostProcessorRuntimeAdapterTest {
     adapter.onWork(inbound);
 
     verify(workerRuntime).dispatch(eq("postProcessorWorker"), any(WorkMessage.class));
+    verifyNoInteractions(rabbitTemplate);
   }
 
   @Test
@@ -105,6 +112,7 @@ class PostProcessorRuntimeAdapterTest {
         workerRuntime,
         workerRegistry,
         controlPlaneRuntime,
+        rabbitTemplate,
         listenerRegistry,
         identity,
         defaults
@@ -132,6 +140,7 @@ class PostProcessorRuntimeAdapterTest {
         workerRuntime,
         workerRegistry,
         controlPlaneRuntime,
+        rabbitTemplate,
         listenerRegistry,
         identity,
         defaults
@@ -153,6 +162,7 @@ class PostProcessorRuntimeAdapterTest {
         workerRuntime,
         workerRegistry,
         controlPlaneRuntime,
+        rabbitTemplate,
         listenerRegistry,
         identity,
         defaults
@@ -161,5 +171,31 @@ class PostProcessorRuntimeAdapterTest {
     adapter.emitStatusDelta();
 
     verify(controlPlaneRuntime).emitStatusDelta();
+  }
+
+  @Test
+  void publishesMessageResultsToResolvedQueue() throws Exception {
+    lenient().when(listenerRegistry.getListenerContainer("postProcessorWorkerListener"))
+        .thenReturn(listenerContainer);
+    lenient().when(listenerContainer.isRunning()).thenReturn(false);
+
+    doReturn(WorkResult.message(WorkMessage.text("payload").build()))
+        .when(workerRuntime)
+        .dispatch(eq("postProcessorWorker"), any(WorkMessage.class));
+
+    PostProcessorRuntimeAdapter adapter = new PostProcessorRuntimeAdapter(
+        workerRuntime,
+        workerRegistry,
+        controlPlaneRuntime,
+        rabbitTemplate,
+        listenerRegistry,
+        identity,
+        defaults
+    );
+
+    Message inbound = new RabbitWorkMessageConverter().toMessage(WorkMessage.text("payload").build());
+    adapter.onWork(inbound);
+
+    verify(rabbitTemplate).send(eq(Topology.EXCHANGE), eq(TopologyDefaults.FINAL_QUEUE), any(Message.class));
   }
 }

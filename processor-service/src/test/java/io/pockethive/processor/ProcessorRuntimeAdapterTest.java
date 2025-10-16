@@ -102,7 +102,7 @@ class ProcessorRuntimeAdapterTest {
 
     verify(workerRuntime).dispatch(eq("processorWorker"), any(WorkMessage.class));
     ArgumentCaptor<Message> messageCaptor = ArgumentCaptor.forClass(Message.class);
-    verify(rabbitTemplate).send(eq(Topology.EXCHANGE), eq(Topology.FINAL_QUEUE), messageCaptor.capture());
+    verify(rabbitTemplate).send(eq(Topology.EXCHANGE), eq(definition.resolvedOutQueue()), messageCaptor.capture());
     assertThat(new String(messageCaptor.getValue().getBody(), StandardCharsets.UTF_8))
         .isEqualTo("processed");
   }
@@ -175,5 +175,32 @@ class ProcessorRuntimeAdapterTest {
     adapter.emitStatusDelta();
 
     verify(controlPlaneRuntime).emitStatusDelta();
+  }
+
+  @Test
+  void failsFastWhenOutboundQueueNotDefined() {
+    WorkerDefinition missingOutbound = new WorkerDefinition(
+        "processorWorker",
+        ProcessorWorkerImpl.class,
+        WorkerType.MESSAGE,
+        "processor",
+        Topology.MOD_QUEUE,
+        null,
+        ProcessorWorkerConfig.class
+    );
+    when(workerRegistry.findByRoleAndType("processor", WorkerType.MESSAGE))
+        .thenReturn(Optional.of(missingOutbound));
+
+    assertThatThrownBy(() -> new ProcessorRuntimeAdapter(
+        workerRuntime,
+        workerRegistry,
+        controlPlaneRuntime,
+        rabbitTemplate,
+        listenerRegistry,
+        identity,
+        defaults
+    ))
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessageContaining("outbound queue");
   }
 }
