@@ -28,7 +28,7 @@ public class RabbitConfig {
   TopicExchange controlExchange() { return new TopicExchange(Topology.CONTROL_EXCHANGE, true, false); }
 
   @Bean
-  Queue controlQueue(String instanceId) {
+  Queue controlQueue(@Qualifier("instanceId") String instanceId) {
     String name = buildControlQueueName(Topology.CONTROL_QUEUE, Topology.SWARM_ID, ROLE, instanceId);
     return QueueBuilder.durable(name).build();
   }
@@ -99,7 +99,7 @@ public class RabbitConfig {
   @Bean
   Binding bindConfigInstance(@Qualifier("controlQueue") Queue controlQueue,
                              @Qualifier("controlExchange") TopicExchange controlExchange,
-                             String instanceId) {
+                             @Qualifier("instanceId") String instanceId) {
     return BindingBuilder.bind(controlQueue).to(controlExchange)
         .with("sig.config-update." + Topology.SWARM_ID + ".swarm-controller." + instanceId);
   }
@@ -135,7 +135,7 @@ public class RabbitConfig {
   @Bean
   Binding bindStatusInstance(@Qualifier("controlQueue") Queue controlQueue,
                              @Qualifier("controlExchange") TopicExchange controlExchange,
-                             String instanceId) {
+                             @Qualifier("instanceId") String instanceId) {
     return BindingBuilder.bind(controlQueue).to(controlExchange)
         .with("sig.status-request." + Topology.SWARM_ID + ".swarm-controller." + instanceId);
   }
