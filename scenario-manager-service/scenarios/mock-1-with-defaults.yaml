@@ -1,0 +1,26 @@
+id: mock-1-with-defaults
+name: Mock-1-WithDefaults
+description: Sample scenario that ships the generator with a 5 msg/s default rate limit.
+template:
+  image: pockethive-swarm-controller:latest
+  bees:
+    - role: generator
+      image: pockethive-generator:latest
+      env:
+        POCKETHIVE_CONTROL_PLANE_WORKER_GENERATOR_RATE_PER_SEC: "5"
+      work:
+        out: gen
+    - role: moderator
+      image: pockethive-moderator:latest
+      work:
+        in: gen
+        out: mod
+    - role: processor
+      image: pockethive-processor:latest
+      work:
+        in: mod
+        out: final
+    - role: postprocessor
+      image: pockethive-postprocessor:latest
+      work:
+        in: final

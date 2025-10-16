@@ -9,7 +9,6 @@ COPY common/swarm-model/pom.xml common/swarm-model/pom.xml
 COPY common/control-plane-core/pom.xml common/control-plane-core/pom.xml
 COPY common/control-plane-spring/pom.xml common/control-plane-spring/pom.xml
 COPY common/worker-sdk/pom.xml common/worker-sdk/pom.xml
-COPY test/pom.xml test/pom.xml
 COPY e2e-tests/pom.xml e2e-tests/pom.xml
 COPY orchestrator-service/pom.xml orchestrator-service/pom.xml
 COPY generator-service/pom.xml generator-service/pom.xml
@@ -27,7 +26,6 @@ COPY common/swarm-model/src common/swarm-model/src
 COPY common/control-plane-core/src common/control-plane-core/src
 COPY common/control-plane-spring/src common/control-plane-spring/src
 COPY common/worker-sdk/src common/worker-sdk/src
-COPY test/src test/src
 COPY e2e-tests/src e2e-tests/src
 COPY orchestrator-service/src orchestrator-service/src
 COPY generator-service/src generator-service/src
