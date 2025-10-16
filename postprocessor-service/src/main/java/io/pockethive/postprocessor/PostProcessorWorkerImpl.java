@@ -2,6 +2,7 @@ package io.pockethive.postprocessor;
 
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.DistributionSummary;
+import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.pockethive.Topology;
 import io.pockethive.TopologyDefaults;
@@ -17,8 +18,11 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.atomic.DoubleAccumulator;
+import java.util.concurrent.atomic.LongAdder;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
@@ -40,7 +44,7 @@ import org.springframework.stereotype.Component;
  * </ul>
  *
  * <p>If you extend the worker—for example to emit custom histograms—do so within
- * {@link PostProcessorMetrics#record(LatencyMeasurements, boolean)} so instrumentation stays
+ * {@link PostProcessorMetrics#record(LatencyMeasurements, boolean, ProcessorCallStats)} so instrumentation stays
  * consistent. The worker keeps publishing status updates so junior developers can see hop counts
  * and running error totals without leaving the PocketHive UI.</p>
  */
@@ -54,6 +58,9 @@ import org.springframework.stereotype.Component;
 class PostProcessorWorkerImpl implements MessageWorker {
 
   private static final String ERROR_HEADER = "x-ph-error";
+  private static final String PROCESSOR_DURATION_HEADER = "x-ph-processor-duration-ms";
+  private static final String PROCESSOR_SUCCESS_HEADER = "x-ph-processor-success";
+  private static final String PROCESSOR_STATUS_HEADER = "x-ph-processor-status";
 
   private final PostProcessorDefaults defaults;
   private final AtomicReference<PostProcessorMetrics> metricsRef = new AtomicReference<>();
@@ -100,10 +107,11 @@ class PostProcessorWorkerImpl implements MessageWorker {
         Objects.requireNonNull(context.observabilityContext(), "observabilityContext");
     appendTerminalHop(context, observability);
     LatencyMeasurements measurements = measureLatency(observability);
+    ProcessorCallStats processorStats = extractProcessorStats(in.headers());
     boolean error = isError(in.headers().get(ERROR_HEADER));
 
     PostProcessorMetrics metrics = metrics(context);
-    metrics.record(measurements, error);
+    metrics.record(measurements, error, processorStats);
 
     context.statusPublisher()
         .workIn(Topology.FINAL_QUEUE)
@@ -112,7 +120,10 @@ class PostProcessorWorkerImpl implements MessageWorker {
             .data("errors", metrics.errorsCount())
             .data("hopLatencyMs", measurements.latestHopMs())
             .data("totalLatencyMs", measurements.totalMs())
-            .data("hopCount", measurements.hopCount()));
+            .data("hopCount", measurements.hopCount())
+            .data("processorTransactions", metrics.processorTransactions())
+            .data("processorSuccessRatio", metrics.processorSuccessRatio())
+            .data("processorAvgLatencyMs", metrics.processorAverageLatencyMs()));
 
     return WorkResult.none();
   }
@@ -207,6 +218,57 @@ class PostProcessorWorkerImpl implements MessageWorker {
     return false;
   }
 
+  private ProcessorCallStats extractProcessorStats(Map<String, Object> headers) {
+    if (headers == null || headers.isEmpty()) {
+      return ProcessorCallStats.empty();
+    }
+    Long duration = parseLong(headers.get(PROCESSOR_DURATION_HEADER));
+    Boolean success = parseBoolean(headers.get(PROCESSOR_SUCCESS_HEADER));
+    Integer status = parseInteger(headers.get(PROCESSOR_STATUS_HEADER));
+    if (duration == null && success == null && status == null) {
+      return ProcessorCallStats.empty();
+    }
+    return new ProcessorCallStats(duration, success, status);
+  }
+
+  private Long parseLong(Object value) {
+    if (value instanceof Number number) {
+      return number.longValue();
+    }
+    if (value instanceof String text) {
+      try {
+        return Long.parseLong(text);
+      } catch (NumberFormatException ignored) {
+        return null;
+      }
+    }
+    return null;
+  }
+
+  private Boolean parseBoolean(Object value) {
+    if (value instanceof Boolean bool) {
+      return bool;
+    }
+    if (value instanceof String text) {
+      return Boolean.parseBoolean(text);
+    }
+    return null;
+  }
+
+  private Integer parseInteger(Object value) {
+    if (value instanceof Number number) {
+      return number.intValue();
+    }
+    if (value instanceof String text) {
+      try {
+        return Integer.parseInt(text);
+      } catch (NumberFormatException ignored) {
+        return null;
+      }
+    }
+    return null;
+  }
+
   private PostProcessorMetrics metrics(WorkerContext context) {
     PostProcessorMetrics current = metricsRef.get();
     if (current != null) {
@@ -244,6 +306,13 @@ class PostProcessorWorkerImpl implements MessageWorker {
     private final DistributionSummary totalLatency;
     private final DistributionSummary hopCount;
     private final Counter errorCounter;
+    private final DistributionSummary processorLatency;
+    private final Counter processorCalls;
+    private final Counter processorSuccessCalls;
+    private final LongAdder processorTransactionCount = new LongAdder();
+    private final LongAdder processorSuccesses = new LongAdder();
+    private final LongAdder processorLatencySamples = new LongAdder();
+    private final DoubleAccumulator processorLatencyTotal = new DoubleAccumulator(Double::sum, 0.0);
 
     PostProcessorMetrics(MeterRegistry registry, WorkerContext context) {
       Objects.requireNonNull(registry, "registry");
@@ -271,9 +340,34 @@ class PostProcessorWorkerImpl implements MessageWorker {
           .tag("ph_instance", instance)
           .tag("ph_swarm", swarm)
           .register(registry);
+      this.processorLatency = DistributionSummary.builder("ph_processor_latency_ms")
+          .tag("ph_role", role)
+          .tag("ph_instance", instance)
+          .tag("ph_swarm", swarm)
+          .register(registry);
+      this.processorCalls = Counter.builder("ph_processor_calls_total")
+          .tag("ph_role", role)
+          .tag("ph_instance", instance)
+          .tag("ph_swarm", swarm)
+          .register(registry);
+      this.processorSuccessCalls = Counter.builder("ph_processor_calls_success_total")
+          .tag("ph_role", role)
+          .tag("ph_instance", instance)
+          .tag("ph_swarm", swarm)
+          .register(registry);
+      Gauge.builder("ph_processor_success_ratio", this, PostProcessorMetrics::processorSuccessRatio)
+          .tag("ph_role", role)
+          .tag("ph_instance", instance)
+          .tag("ph_swarm", swarm)
+          .register(registry);
+      Gauge.builder("ph_processor_latency_avg_ms", this, PostProcessorMetrics::processorAverageLatencyMs)
+          .tag("ph_role", role)
+          .tag("ph_instance", instance)
+          .tag("ph_swarm", swarm)
+          .register(registry);
     }
 
-    void record(LatencyMeasurements measurements, boolean error) {
+    void record(LatencyMeasurements measurements, boolean error, ProcessorCallStats processorStats) {
       for (Long hopMs : measurements.hopDurations()) {
         hopLatency.record(hopMs);
       }
@@ -282,10 +376,73 @@ class PostProcessorWorkerImpl implements MessageWorker {
       if (error) {
         errorCounter.increment();
       }
+      recordProcessorStats(processorStats);
     }
 
     double errorsCount() {
       return errorCounter.count();
+    }
+
+    long processorTransactions() {
+      return processorTransactionCount.sum();
+    }
+
+    double processorSuccessRatio() {
+      long total = processorTransactionCount.sum();
+      if (total == 0L) {
+        return 0.0;
+      }
+      return (double) processorSuccesses.sum() / total;
+    }
+
+    double processorAverageLatencyMs() {
+      long samples = processorLatencySamples.sum();
+      if (samples == 0L) {
+        return 0.0;
+      }
+      return processorLatencyTotal.get() / samples;
+    }
+
+    private void recordProcessorStats(ProcessorCallStats processorStats) {
+      if (processorStats == null || !processorStats.hasValues()) {
+        return;
+      }
+      boolean counted = false;
+      Boolean success = processorStats.success();
+      if (success != null) {
+        processorTransactionCount.increment();
+        processorCalls.increment();
+        counted = true;
+        if (success) {
+          processorSuccessCalls.increment();
+          processorSuccesses.increment();
+        }
+      }
+      Long duration = processorStats.durationMs();
+      if (duration != null) {
+        processorLatency.record(duration);
+        processorLatencyTotal.accumulate(duration);
+        processorLatencySamples.increment();
+        if (!counted) {
+          processorTransactionCount.increment();
+          processorCalls.increment();
+          counted = true;
+        }
+      }
+      if (!counted && processorStats.statusCode() != null) {
+        processorTransactionCount.increment();
+        processorCalls.increment();
+      }
+    }
+  }
+
+  private record ProcessorCallStats(Long durationMs, Boolean success, Integer statusCode) {
+    static ProcessorCallStats empty() {
+      return new ProcessorCallStats(null, null, null);
+    }
+
+    boolean hasValues() {
+      return durationMs != null || success != null || statusCode != null;
     }
   }
 }
