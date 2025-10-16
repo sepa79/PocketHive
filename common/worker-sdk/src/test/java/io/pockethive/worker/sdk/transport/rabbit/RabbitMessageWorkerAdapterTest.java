@@ -151,6 +151,24 @@ class RabbitMessageWorkerAdapterTest {
     }
 
     @Test
+    void onWorkThrowsWhenDispatcherReturnsNullResult() throws Exception {
+        RabbitMessageWorkerAdapter adapter = builder().build();
+        RabbitWorkMessageConverter converter = new RabbitWorkMessageConverter();
+        Message inbound = converter.toMessage(WorkMessage.text("payload").build());
+
+        when(dispatcher.dispatch(any(WorkMessage.class))).thenReturn(null);
+
+        adapter.onWork(inbound);
+
+        ArgumentCaptor<Exception> exceptionCaptor = ArgumentCaptor.forClass(Exception.class);
+        verify(errorHandler).accept(exceptionCaptor.capture());
+        assertThat(exceptionCaptor.getValue())
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("null WorkResult");
+        verify(rabbitTemplate, never()).send(any(), any(), any());
+    }
+
+    @Test
     void onWorkUsesCustomPublisherWhenProvided() throws Exception {
         RabbitMessageWorkerAdapter adapter = builderWithoutTemplate()
             .messageResultPublisher(resultPublisher)

@@ -131,9 +131,16 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
         WorkMessage workMessage = messageConverter.fromMessage(message);
         try {
             WorkResult result = dispatcher.dispatch(workMessage);
+            if (result == null) {
+                throw new IllegalStateException(
+                    "Worker " + workerDefinition.beanName() + " returned null WorkResult");
+            }
             if (result instanceof WorkResult.Message messageResult) {
                 Message outbound = messageConverter.toMessage(messageResult.value());
                 messageResultPublisher.publish(messageResult, outbound);
+            } else if (!(result instanceof WorkResult.None)) {
+                throw new IllegalStateException("Worker " + workerDefinition.beanName()
+                    + " returned unsupported WorkResult type: " + result.getClass().getName());
             }
         } catch (Exception ex) {
             dispatchErrorHandler.accept(ex);
