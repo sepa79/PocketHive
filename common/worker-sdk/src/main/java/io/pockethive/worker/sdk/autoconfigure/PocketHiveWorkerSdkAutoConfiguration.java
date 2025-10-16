@@ -22,6 +22,8 @@ import io.pockethive.worker.sdk.runtime.WorkerObservabilityInterceptor;
 import io.pockethive.worker.sdk.runtime.WorkerRegistry;
 import io.pockethive.worker.sdk.runtime.WorkerRuntime;
 import io.pockethive.worker.sdk.runtime.WorkerStateStore;
+import io.pockethive.worker.sdk.runtime.WorkerStatusScheduler;
+import io.pockethive.worker.sdk.runtime.WorkerStatusSchedulerProperties;
 import io.pockethive.worker.sdk.runtime.WorkerInvocationInterceptor;
 import java.util.ArrayList;
 import java.util.List;
@@ -33,6 +35,7 @@ import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
@@ -42,6 +45,7 @@ import org.springframework.context.annotation.Import;
  * opt-in by depending on the Worker SDK starter.
  */
 @Configuration(proxyBeanMethods = false)
+@EnableConfigurationProperties(WorkerStatusSchedulerProperties.class)
 @Import({
     ControlPlaneCommonAutoConfiguration.class,
     WorkerControlPlaneAutoConfiguration.class,
@@ -128,6 +132,16 @@ public class PocketHiveWorkerSdkAutoConfiguration {
     @ConditionalOnMissingBean(WorkerControlQueueListener.class)
     WorkerControlQueueListener workerControlQueueListener(WorkerControlPlaneRuntime controlPlaneRuntime) {
         return new WorkerControlQueueListener(controlPlaneRuntime);
+    }
+
+    @Bean
+    @ConditionalOnBean(WorkerControlPlaneRuntime.class)
+    @ConditionalOnMissingBean
+    WorkerStatusScheduler workerStatusScheduler(
+        WorkerControlPlaneRuntime controlPlaneRuntime,
+        WorkerStatusSchedulerProperties properties
+    ) {
+        return new WorkerStatusScheduler(controlPlaneRuntime, properties);
     }
 
     @Bean

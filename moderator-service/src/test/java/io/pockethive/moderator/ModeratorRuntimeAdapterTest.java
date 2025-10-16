@@ -14,6 +14,7 @@ import io.pockethive.worker.sdk.runtime.WorkerRuntime;
 import io.pockethive.worker.sdk.transport.rabbit.RabbitWorkMessageConverter;
 import java.nio.charset.StandardCharsets;
 import java.util.Optional;
+import java.util.function.Consumer;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -26,10 +27,13 @@ import org.springframework.amqp.rabbit.listener.MessageListenerContainer;
 import org.springframework.amqp.rabbit.listener.RabbitListenerEndpointRegistry;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -100,7 +104,9 @@ class ModeratorRuntimeAdapterTest {
     );
 
     adapter.initialiseStateListener();
-    verify(controlPlaneRuntime).registerDefaultConfig(eq("moderatorWorker"), any());
+    ArgumentCaptor<Object> defaultConfigCaptor = ArgumentCaptor.forClass(Object.class);
+    verify(controlPlaneRuntime).registerDefaultConfig(eq("moderatorWorker"), defaultConfigCaptor.capture());
+    assertThat(defaultConfigCaptor.getValue()).isEqualTo(new ModeratorWorkerConfig(true));
     verify(controlPlaneRuntime).emitStatusSnapshot();
 
     Message inbound = new RabbitWorkMessageConverter().toMessage(WorkMessage.text("body").build());
@@ -145,17 +151,25 @@ class ModeratorRuntimeAdapterTest {
     );
 
     adapter.initialiseStateListener();
-    verify(controlPlaneRuntime).registerDefaultConfig(eq("moderatorWorker"), any());
+    ArgumentCaptor<Object> defaultConfigCaptor = ArgumentCaptor.forClass(Object.class);
+    verify(controlPlaneRuntime).registerDefaultConfig(eq("moderatorWorker"), defaultConfigCaptor.capture());
+    assertThat(defaultConfigCaptor.getValue()).isEqualTo(new ModeratorWorkerConfig(true));
+    ArgumentCaptor<Consumer<WorkerControlPlaneRuntime.WorkerStateSnapshot>> listenerCaptor = ArgumentCaptor.forClass(Consumer.class);
+    verify(controlPlaneRuntime).registerStateListener(eq("moderatorWorker"), listenerCaptor.capture());
+    verify(listenerContainer, times(1)).start();
     verify(controlPlaneRuntime).emitStatusSnapshot();
 
-    ArgumentCaptor<String> beanCaptor = ArgumentCaptor.forClass(String.class);
-    verify(controlPlaneRuntime).registerStateListener(beanCaptor.capture(), any());
-    assertThat(beanCaptor.getValue()).isEqualTo("moderatorWorker");
-    verify(listenerContainer, times(1)).start();
+    WorkerControlPlaneRuntime.WorkerStateSnapshot snapshot = mock(WorkerControlPlaneRuntime.WorkerStateSnapshot.class);
+    when(snapshot.enabled()).thenReturn(Optional.empty());
+    when(snapshot.config(ModeratorWorkerConfig.class)).thenReturn(Optional.of(new ModeratorWorkerConfig(false)));
+    when(listenerContainer.isRunning()).thenReturn(true);
+
+    listenerCaptor.getValue().accept(snapshot);
+    verify(listenerContainer).stop();
   }
 
   @Test
-  void emitStatusDeltaDelegatesToControlPlaneRuntime() {
+  void onWorkDelegatesErrorsToDispatchHandler() throws Exception {
     when(workerRegistry.findByRoleAndType("moderator", WorkerType.MESSAGE))
         .thenReturn(Optional.of(definition));
     ModeratorRuntimeAdapter adapter = new ModeratorRuntimeAdapter(
@@ -168,8 +182,11 @@ class ModeratorRuntimeAdapterTest {
         defaults
     );
 
-    adapter.emitStatusDelta();
+    Message inbound = new RabbitWorkMessageConverter().toMessage(WorkMessage.text("payload").build());
+    doThrow(new RuntimeException("boom")).when(workerRuntime)
+        .dispatch(eq("moderatorWorker"), any(WorkMessage.class));
 
-    verify(controlPlaneRuntime).emitStatusDelta();
+    assertThatCode(() -> adapter.onWork(inbound)).doesNotThrowAnyException();
   }
+
 }

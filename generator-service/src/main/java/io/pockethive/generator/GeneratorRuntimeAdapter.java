@@ -81,11 +81,6 @@ class GeneratorRuntimeAdapter {
     }
   }
 
-  @Scheduled(fixedRate = 5000)
-  public void emitStatusDelta() {
-    controlPlaneRuntime.emitStatusDelta();
-  }
-
   private void initialiseStateListeners() {
     for (WorkerDefinition definition : generatorWorkers) {
       GeneratorWorkerConfig initialConfig = defaults.asConfig();

@@ -17,7 +17,6 @@ import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.amqp.rabbit.listener.RabbitListenerEndpointRegistry;
 import org.springframework.context.ApplicationListener;
 import org.springframework.context.event.ContextRefreshedEvent;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 /**
@@ -49,8 +48,7 @@ class ProcessorWorkerRuntimeAdapter implements ApplicationListener<ContextRefres
         .controlPlaneRuntime(controlPlaneRuntime)
         .listenerRegistry(listenerRegistry)
         .identity(identity)
-        .defaultEnabledSupplier(() -> true)
-        .desiredStateResolver(snapshot -> snapshot.enabled().orElse(true))
+        .withConfigDefaults(Boolean.class, () -> Boolean.TRUE, Boolean::booleanValue)
         .dispatcher(message -> workerRuntime.dispatch(definition.beanName(), message))
         .rabbitTemplate(rabbitTemplate)
         .build();
@@ -66,11 +64,6 @@ class ProcessorWorkerRuntimeAdapter implements ApplicationListener<ContextRefres
       queues = "${ph.processor.work.queue:" + TopologyDefaults.MOD_QUEUE + "}")
   public void onWork(Message message) {
     delegate.onWork(message);
-  }
-
-  @Scheduled(fixedRate = 5000)
-  public void emitStatusDelta() {
-    delegate.emitStatusDelta();
   }
 
   @Override

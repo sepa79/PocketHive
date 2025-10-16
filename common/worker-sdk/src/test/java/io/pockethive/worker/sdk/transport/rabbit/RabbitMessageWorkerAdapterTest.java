@@ -10,8 +10,6 @@ import io.pockethive.worker.sdk.runtime.WorkerDefinition;
 import java.nio.charset.StandardCharsets;
 import java.util.Optional;
 import java.util.function.Consumer;
-import java.util.function.Function;
-import java.util.function.Supplier;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -70,9 +68,6 @@ class RabbitMessageWorkerAdapterTest {
 
     private WorkerDefinition workerDefinition;
     private ControlPlaneIdentity identity;
-    private Supplier<Boolean> defaultEnabled;
-    private Function<WorkerControlPlaneRuntime.WorkerStateSnapshot, Boolean> desiredStateResolver;
-    private Supplier<Object> defaultConfig;
     private DummyConfig defaults;
 
     @BeforeEach
@@ -87,10 +82,7 @@ class RabbitMessageWorkerAdapterTest {
             Object.class
         );
         identity = new ControlPlaneIdentity("swarm-1", "processor", "instance-1");
-        defaultEnabled = () -> true;
-        desiredStateResolver = snapshot -> snapshot.enabled().orElseGet(defaultEnabled);
         defaults = new DummyConfig(true);
-        defaultConfig = () -> defaults;
     }
 
     @Test
@@ -111,7 +103,8 @@ class RabbitMessageWorkerAdapterTest {
         verify(listenerContainer).start();
 
         WorkerControlPlaneRuntime.WorkerStateSnapshot snapshot = mock(WorkerControlPlaneRuntime.WorkerStateSnapshot.class);
-        when(snapshot.enabled()).thenReturn(Optional.of(false));
+        when(snapshot.enabled()).thenReturn(Optional.empty());
+        when(snapshot.config(DummyConfig.class)).thenReturn(Optional.of(new DummyConfig(false)));
         when(listenerContainer.isRunning()).thenReturn(true);
 
         listenerCaptor.getValue().accept(snapshot);
@@ -321,9 +314,7 @@ class RabbitMessageWorkerAdapterTest {
             .controlPlaneRuntime(controlPlaneRuntime)
             .listenerRegistry(listenerRegistry)
             .identity(identity)
-            .defaultEnabledSupplier(defaultEnabled)
-            .defaultConfigSupplier(defaultConfig)
-            .desiredStateResolver(desiredStateResolver)
+            .withConfigDefaults(DummyConfig.class, () -> defaults, DummyConfig::enabled)
             .dispatcher(dispatcher)
             .dispatchErrorHandler(errorHandler);
     }

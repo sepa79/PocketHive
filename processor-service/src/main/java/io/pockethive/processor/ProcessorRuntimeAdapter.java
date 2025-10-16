@@ -18,7 +18,6 @@ import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.amqp.rabbit.listener.RabbitListenerEndpointRegistry;
 import org.springframework.context.ApplicationListener;
 import org.springframework.context.event.ContextRefreshedEvent;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 /**
@@ -58,11 +57,7 @@ class ProcessorRuntimeAdapter implements ApplicationListener<ContextRefreshedEve
         .controlPlaneRuntime(controlRuntime)
         .listenerRegistry(endpointRegistry)
         .identity(controlIdentity)
-        .defaultEnabledSupplier(() -> processorDefaults.asConfig().enabled())
-        .defaultConfigSupplier(processorDefaults::asConfig)
-        .desiredStateResolver(snapshot -> snapshot.enabled().orElseGet(() -> snapshot.config(ProcessorWorkerConfig.class)
-            .map(ProcessorWorkerConfig::enabled)
-            .orElse(processorDefaults.asConfig().enabled())))
+        .withConfigDefaults(ProcessorWorkerConfig.class, processorDefaults::asConfig, ProcessorWorkerConfig::enabled)
         .dispatcher(message -> runtime.dispatch(workerDefinition.beanName(), message))
         .rabbitTemplate(template)
         .dispatchErrorHandler(ex -> log.warn("Processor worker invocation failed", ex))
@@ -79,11 +74,6 @@ class ProcessorRuntimeAdapter implements ApplicationListener<ContextRefreshedEve
       queues = "${pockethive.control-plane.queues.moderator:" + TopologyDefaults.MOD_QUEUE + "}")
   public void onWork(Message message) {
     delegate.onWork(message);
-  }
-
-  @Scheduled(fixedRate = 5000)
-  public void emitStatusDelta() {
-    delegate.emitStatusDelta();
   }
 
   @Override

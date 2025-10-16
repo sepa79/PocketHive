@@ -114,9 +114,7 @@ class ProcessorRuntimeAdapter implements ApplicationListener<ContextRefreshedEve
         .controlPlaneRuntime(controlPlaneRuntime)
         .listenerRegistry(listenerRegistry)
         .identity(identity)
-        .defaultEnabledSupplier(() -> defaults.asConfig().enabled())
-        .defaultConfigSupplier(defaults::asConfig)
-        .desiredStateResolver(snapshot -> snapshot.enabled().orElse(defaults.asConfig().enabled()))
+        .withConfigDefaults(ProcessorWorkerConfig.class, defaults::asConfig, ProcessorWorkerConfig::enabled)
         .dispatcher(message -> workerRuntime.dispatch(definition.beanName(), message))
         .rabbitTemplate(rabbitTemplate)
         .build();

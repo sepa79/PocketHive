@@ -90,11 +90,9 @@ class TriggerRuntimeAdapterTest {
 
     adapter.emitInitialStatus();
     adapter.tick();
-    adapter.emitStatusDelta();
 
     verify(workerRuntime, times(1)).dispatch(eq("triggerWorker"), any(WorkMessage.class));
     verify(controlPlaneRuntime).emitStatusSnapshot();
-    verify(controlPlaneRuntime).emitStatusDelta();
   }
 
   @Test

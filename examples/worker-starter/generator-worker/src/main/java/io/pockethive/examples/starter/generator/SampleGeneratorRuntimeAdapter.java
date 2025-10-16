@@ -110,11 +110,6 @@ class SampleGeneratorRuntimeAdapter {
     rabbitTemplate.send(Topology.EXCHANGE, routingKey, messageConverter.toMessage(message));
   }
 
-  @Scheduled(fixedRate = 5000)
-  void emitStatusDelta() {
-    controlPlaneRuntime.emitStatusDelta();
-  }
-
   @RabbitListener(queues = "#{@workerControlQueueName}")
   void onControl(String payload,
                  @Header(AmqpHeaders.RECEIVED_ROUTING_KEY) String routingKey,

@@ -14,6 +14,7 @@ import io.pockethive.worker.sdk.runtime.WorkerRuntime;
 import io.pockethive.worker.sdk.transport.rabbit.RabbitWorkMessageConverter;
 import java.nio.charset.StandardCharsets;
 import java.util.Optional;
+import java.util.function.Consumer;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -26,10 +27,13 @@ import org.springframework.amqp.rabbit.listener.MessageListenerContainer;
 import org.springframework.amqp.rabbit.listener.RabbitListenerEndpointRegistry;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -95,7 +99,10 @@ class ProcessorRuntimeAdapterTest {
     );
 
     adapter.initialiseStateListener();
-    verify(controlPlaneRuntime).registerDefaultConfig(eq("processorWorker"), any());
+    ArgumentCaptor<Object> defaultConfigCaptor = ArgumentCaptor.forClass(Object.class);
+    verify(controlPlaneRuntime).registerDefaultConfig(eq("processorWorker"), defaultConfigCaptor.capture());
+    assertThat(defaultConfigCaptor.getValue())
+        .isEqualTo(new ProcessorWorkerConfig(true, "http://sut/"));
     verify(controlPlaneRuntime).emitStatusSnapshot();
 
     Message inbound = new RabbitWorkMessageConverter().toMessage(WorkMessage.text("payload").build());
@@ -143,31 +150,22 @@ class ProcessorRuntimeAdapterTest {
 
     adapter.initialiseStateListener();
 
-    ArgumentCaptor<String> beanCaptor = ArgumentCaptor.forClass(String.class);
-    verify(controlPlaneRuntime).registerStateListener(beanCaptor.capture(), any());
-    assertThat(beanCaptor.getValue()).isEqualTo("processorWorker");
+    ArgumentCaptor<Object> defaultConfigCaptor = ArgumentCaptor.forClass(Object.class);
+    verify(controlPlaneRuntime).registerDefaultConfig(eq("processorWorker"), defaultConfigCaptor.capture());
+    assertThat(defaultConfigCaptor.getValue()).isEqualTo(new ProcessorWorkerConfig(true, "http://sut/"));
+    ArgumentCaptor<Consumer<WorkerControlPlaneRuntime.WorkerStateSnapshot>> listenerCaptor = ArgumentCaptor.forClass(Consumer.class);
+    verify(controlPlaneRuntime).registerStateListener(eq("processorWorker"), listenerCaptor.capture());
     verify(listenerContainer, times(1)).start();
-    verify(controlPlaneRuntime).registerDefaultConfig(eq("processorWorker"), any());
     verify(controlPlaneRuntime).emitStatusSnapshot();
-  }
 
-  @Test
-  void emitStatusDeltaDelegatesToControlPlaneRuntime() {
-    when(workerRegistry.findByRoleAndType("processor", WorkerType.MESSAGE))
-        .thenReturn(Optional.of(definition));
-    ProcessorRuntimeAdapter adapter = new ProcessorRuntimeAdapter(
-        workerRuntime,
-        workerRegistry,
-        controlPlaneRuntime,
-        rabbitTemplate,
-        listenerRegistry,
-        identity,
-        defaults
-    );
+    WorkerControlPlaneRuntime.WorkerStateSnapshot snapshot = mock(WorkerControlPlaneRuntime.WorkerStateSnapshot.class);
+    when(snapshot.enabled()).thenReturn(Optional.empty());
+    when(snapshot.config(ProcessorWorkerConfig.class))
+        .thenReturn(Optional.of(new ProcessorWorkerConfig(false, "http://sut/")));
+    when(listenerContainer.isRunning()).thenReturn(true);
 
-    adapter.emitStatusDelta();
-
-    verify(controlPlaneRuntime).emitStatusDelta();
+    listenerCaptor.getValue().accept(snapshot);
+    verify(listenerContainer).stop();
   }
 
   @Test
@@ -195,5 +193,26 @@ class ProcessorRuntimeAdapterTest {
     ))
         .isInstanceOf(IllegalStateException.class)
         .hasMessageContaining("outbound queue");
+  }
+
+  @Test
+  void onWorkDelegatesErrorsToDispatchHandler() throws Exception {
+    when(workerRegistry.findByRoleAndType("processor", WorkerType.MESSAGE))
+        .thenReturn(Optional.of(definition));
+    ProcessorRuntimeAdapter adapter = new ProcessorRuntimeAdapter(
+        workerRuntime,
+        workerRegistry,
+        controlPlaneRuntime,
+        rabbitTemplate,
+        listenerRegistry,
+        identity,
+        defaults
+    );
+
+    Message inbound = new RabbitWorkMessageConverter().toMessage(WorkMessage.text("payload").build());
+    doThrow(new RuntimeException("boom")).when(workerRuntime)
+        .dispatch(eq("processorWorker"), any(WorkMessage.class));
+
+    assertThatCode(() -> adapter.onWork(inbound)).doesNotThrowAnyException();
   }
 }

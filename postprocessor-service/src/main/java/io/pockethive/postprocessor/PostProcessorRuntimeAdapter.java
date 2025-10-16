@@ -17,7 +17,6 @@ import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.amqp.rabbit.listener.RabbitListenerEndpointRegistry;
 import org.springframework.context.ApplicationListener;
 import org.springframework.context.event.ContextRefreshedEvent;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -52,11 +51,7 @@ class PostProcessorRuntimeAdapter implements ApplicationListener<ContextRefreshe
         .controlPlaneRuntime(controlRuntime)
         .listenerRegistry(endpointRegistry)
         .identity(controlIdentity)
-        .defaultEnabledSupplier(() -> postProcessorDefaults.asConfig().enabled())
-        .defaultConfigSupplier(postProcessorDefaults::asConfig)
-        .desiredStateResolver(snapshot -> snapshot.enabled().orElseGet(() -> snapshot.config(PostProcessorWorkerConfig.class)
-            .map(PostProcessorWorkerConfig::enabled)
-            .orElse(postProcessorDefaults.asConfig().enabled())))
+        .withConfigDefaults(PostProcessorWorkerConfig.class, postProcessorDefaults::asConfig, PostProcessorWorkerConfig::enabled)
         .dispatcher(message -> runtime.dispatch(workerDefinition.beanName(), message))
         .dispatchErrorHandler(ex -> log.warn("Post-processor worker invocation failed", ex))
         .build();
@@ -72,11 +67,6 @@ class PostProcessorRuntimeAdapter implements ApplicationListener<ContextRefreshe
       queues = "${pockethive.control-plane.queues.final:" + TopologyDefaults.FINAL_QUEUE + "}")
   public void onWork(Message message) {
     delegate.onWork(message);
-  }
-
-  @Scheduled(fixedRate = 5000)
-  public void emitStatusDelta() {
-    delegate.emitStatusDelta();
   }
 
   @Override
