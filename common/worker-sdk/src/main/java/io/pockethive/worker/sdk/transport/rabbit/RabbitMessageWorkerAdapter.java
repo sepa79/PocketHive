@@ -132,15 +132,8 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
         try {
             WorkResult result = dispatcher.dispatch(workMessage);
             if (result instanceof WorkResult.Message messageResult) {
-                if (messageResultPublisher != null) {
-                    Message outbound = messageConverter.toMessage(messageResult.value());
-                    messageResultPublisher.publish(messageResult, outbound);
-                } else if (log.isDebugEnabled()) {
-                    // Some workers (for example the post-processor) intentionally swallow outbound payloads,
-                    // so we keep the queue validation but allow the publisher hook to be absent.
-                    log.debug("{} worker produced message result with {} bytes but no publisher is configured (queue={})",
-                        displayName, messageResult.value().body().length, outboundQueue);
-                }
+                Message outbound = messageConverter.toMessage(messageResult.value());
+                messageResultPublisher.publish(messageResult, outbound);
             }
         } catch (Exception ex) {
             dispatchErrorHandler.accept(ex);
@@ -435,11 +428,16 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
             Objects.requireNonNull(defaultConfigSupplier, "defaultConfigSupplier");
             Objects.requireNonNull(desiredStateResolver, "desiredStateResolver");
             Objects.requireNonNull(dispatcher, "dispatcher");
-            if (messageResultPublisher == null && rabbitTemplate != null) {
+            if (messageResultPublisher == null) {
+                if (rabbitTemplate == null) {
+                    throw new IllegalStateException("Worker " + workerDefinition.beanName()
+                        + " must configure a RabbitTemplate or custom message result publisher");
+                }
                 RabbitTemplate template = rabbitTemplate;
                 String queue = outboundQueue;
                 messageResultPublisher = (result, message) -> template.send(Topology.EXCHANGE, queue, message);
             }
+            Objects.requireNonNull(messageResultPublisher, "messageResultPublisher");
             if (dispatchErrorHandler == null) {
                 dispatchErrorHandler = ex -> log.warn("{} worker invocation failed", displayName, ex);
             }

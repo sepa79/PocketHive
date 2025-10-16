@@ -217,6 +217,13 @@ class RabbitMessageWorkerAdapterTest {
             .hasMessageContaining("outbound queue");
     }
 
+    @Test
+    void buildFailsWhenPublisherMissing() {
+        assertThatThrownBy(() -> builderWithoutTemplate().build())
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("message result publisher");
+    }
+
     private RabbitMessageWorkerAdapter.Builder baseBuilder() {
         return RabbitMessageWorkerAdapter.builder()
             .logger(LOGGER)

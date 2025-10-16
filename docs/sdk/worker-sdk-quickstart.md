@@ -139,6 +139,11 @@ snapshots/deltas so service adapters can focus on orchestration concerns rather 
 [`postprocessor`](../../postprocessor-service/src/main/java/io/pockethive/postprocessor/PostProcessorRuntimeAdapter.java)
 adapters for complete examples.
 
+> **Publisher configuration**
+> Provide either `.rabbitTemplate(...)` (for the default publishing behaviour) or a custom
+> `.messageResultPublisher(...)`. The builder fails fast when neither option is supplied so misconfigured workers do not
+> start.
+
 Generator/trigger style adapters remain available when you need scheduling or fan-in behaviour that differs from the
 message helper (for example, see the
 [`GeneratorRuntimeAdapter`](../../generator-service/src/main/java/io/pockethive/generator/GeneratorRuntimeAdapter.java)
