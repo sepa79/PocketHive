@@ -1,6 +1,5 @@
 package io.pockethive.examples.starter.processor;
 
-import io.pockethive.Topology;
 import io.pockethive.TopologyDefaults;
 import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.observability.ObservabilityContextUtil;
@@ -11,7 +10,6 @@ import io.pockethive.worker.sdk.runtime.WorkerRegistry;
 import io.pockethive.worker.sdk.runtime.WorkerRuntime;
 import io.pockethive.worker.sdk.transport.rabbit.RabbitMessageWorkerAdapter;
 import jakarta.annotation.PostConstruct;
-import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.core.Message;
@@ -57,10 +55,7 @@ class ProcessorWorkerRuntimeAdapter implements ApplicationListener<ContextRefres
         .defaultEnabledSupplier(() -> true)
         .desiredStateResolver(snapshot -> snapshot.enabled().orElse(true))
         .dispatcher(message -> workerRuntime.dispatch(definition.beanName(), message))
-        .messageResultPublisher((result, outbound) -> {
-          String routingKey = Optional.ofNullable(definition.resolvedOutQueue()).orElse(Topology.FINAL_QUEUE);
-          rabbitTemplate.send(Topology.EXCHANGE, routingKey, outbound);
-        })
+        .rabbitTemplate(rabbitTemplate)
         .build();
   }
 

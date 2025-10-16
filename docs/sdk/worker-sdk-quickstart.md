@@ -118,10 +118,7 @@ class ProcessorRuntimeAdapter implements ApplicationListener<ContextRefreshedEve
         .defaultConfigSupplier(defaults::asConfig)
         .desiredStateResolver(snapshot -> snapshot.enabled().orElse(defaults.asConfig().enabled()))
         .dispatcher(message -> workerRuntime.dispatch(definition.beanName(), message))
-        .messageResultPublisher((result, outbound) -> {
-          String routingKey = Optional.ofNullable(definition.resolvedOutQueue()).orElse(Topology.FINAL_QUEUE);
-          rabbitTemplate.send(Topology.EXCHANGE, routingKey, outbound);
-        })
+        .rabbitTemplate(rabbitTemplate)
         .build();
   }
 
@@ -134,12 +131,18 @@ class ProcessorRuntimeAdapter implements ApplicationListener<ContextRefreshedEve
 }
 ```
 
-The helper registers control-plane listeners, converts AMQP messages via `RabbitWorkMessageConverter`, and emits status
-snapshots/deltas so service adapters can focus on wiring business-specific routing or result handling. See the updated
+The helper registers control-plane listeners, converts AMQP messages via `RabbitWorkMessageConverter`, publishes
+`WorkResult.Message` payloads to `Topology.EXCHANGE` using the validated outbound queue, and emits status
+snapshots/deltas so service adapters can focus on orchestration concerns rather than RabbitMQ plumbing. See the updated
 [`processor`](../../processor-service/src/main/java/io/pockethive/processor/ProcessorRuntimeAdapter.java),
 [`moderator`](../../moderator-service/src/main/java/io/pockethive/moderator/ModeratorRuntimeAdapter.java), and
 [`postprocessor`](../../postprocessor-service/src/main/java/io/pockethive/postprocessor/PostProcessorRuntimeAdapter.java)
 adapters for complete examples.
+
+> **Publisher configuration**
+> Provide either `.rabbitTemplate(...)` (for the default publishing behaviour) or a custom
+> `.messageResultPublisher(...)`. The builder fails fast when neither option is supplied so misconfigured workers do not
+> start.
 
 Generator/trigger style adapters remain available when you need scheduling or fan-in behaviour that differs from the
 message helper (for example, see the

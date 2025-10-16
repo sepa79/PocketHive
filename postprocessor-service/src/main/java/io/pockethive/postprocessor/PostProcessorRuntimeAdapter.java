@@ -61,8 +61,6 @@ class PostProcessorRuntimeAdapter implements ApplicationListener<ContextRefreshe
             .map(PostProcessorWorkerConfig::enabled)
             .orElse(postProcessorDefaults.asConfig().enabled())))
         .dispatcher(message -> runtime.dispatch(workerDefinition.beanName(), message))
-        .messageResultPublisher((result, outbound) ->
-            log.debug("Dropping unexpected outbound message from post-processor worker: {} bytes", outbound.getBody().length))
         .dispatchErrorHandler(ex -> log.warn("Post-processor worker invocation failed", ex))
         .build();
   }

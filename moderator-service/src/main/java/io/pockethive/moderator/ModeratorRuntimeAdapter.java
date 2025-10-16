@@ -1,6 +1,5 @@
 package io.pockethive.moderator;
 
-import io.pockethive.Topology;
 import io.pockethive.TopologyDefaults;
 import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.observability.ObservabilityContextUtil;
@@ -12,7 +11,6 @@ import io.pockethive.worker.sdk.runtime.WorkerRuntime;
 import io.pockethive.worker.sdk.transport.rabbit.RabbitMessageWorkerAdapter;
 import jakarta.annotation.PostConstruct;
 import java.util.Objects;
-import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.core.Message;
@@ -66,10 +64,7 @@ class ModeratorRuntimeAdapter implements ApplicationListener<ContextRefreshedEve
             .map(ModeratorWorkerConfig::enabled)
             .orElse(moderatorDefaults.asConfig().enabled())))
         .dispatcher(message -> runtime.dispatch(workerDefinition.beanName(), message))
-        .messageResultPublisher((result, outbound) -> {
-          String routingKey = Optional.ofNullable(workerDefinition.resolvedOutQueue()).orElse(Topology.MOD_QUEUE);
-          template.send(Topology.EXCHANGE, routingKey, outbound);
-        })
+        .rabbitTemplate(template)
         .dispatchErrorHandler(ex -> log.warn("Moderator worker invocation failed", ex))
         .build();
   }

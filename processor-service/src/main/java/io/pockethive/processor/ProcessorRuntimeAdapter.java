@@ -1,6 +1,5 @@
 package io.pockethive.processor;
 
-import io.pockethive.Topology;
 import io.pockethive.TopologyDefaults;
 import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.observability.ObservabilityContextUtil;
@@ -12,7 +11,6 @@ import io.pockethive.worker.sdk.runtime.WorkerRuntime;
 import io.pockethive.worker.sdk.transport.rabbit.RabbitMessageWorkerAdapter;
 import jakarta.annotation.PostConstruct;
 import java.util.Objects;
-import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.core.Message;
@@ -28,8 +26,7 @@ import org.springframework.stereotype.Component;
 
 /**
  * Bridges the Spring Boot runtime with the PocketHive worker SDK for the processor service while delegating
- * shared plumbing to {@link RabbitMessageWorkerAdapter}. Role-specific concerns such as outbound routing remain in
- * this adapter.
+ * shared plumbing and outbound routing to {@link RabbitMessageWorkerAdapter}.
  */
 @Component
 class ProcessorRuntimeAdapter implements ApplicationListener<ContextRefreshedEvent> {
@@ -56,7 +53,6 @@ class ProcessorRuntimeAdapter implements ApplicationListener<ContextRefreshedEve
 
     WorkerDefinition workerDefinition = registry.findByRoleAndType("processor", WorkerType.MESSAGE)
         .orElseThrow(() -> new IllegalStateException("Processor worker definition not found"));
-
     this.delegate = RabbitMessageWorkerAdapter.builder()
         .logger(log)
         .listenerId(LISTENER_ID)
@@ -71,10 +67,7 @@ class ProcessorRuntimeAdapter implements ApplicationListener<ContextRefreshedEve
             .map(ProcessorWorkerConfig::enabled)
             .orElse(processorDefaults.asConfig().enabled())))
         .dispatcher(message -> runtime.dispatch(workerDefinition.beanName(), message))
-        .messageResultPublisher((result, outbound) -> {
-          String routingKey = Optional.ofNullable(workerDefinition.resolvedOutQueue()).orElse(Topology.FINAL_QUEUE);
-          template.send(Topology.EXCHANGE, routingKey, outbound);
-        })
+        .rabbitTemplate(template)
         .dispatchErrorHandler(ex -> log.warn("Processor worker invocation failed", ex))
         .build();
   }

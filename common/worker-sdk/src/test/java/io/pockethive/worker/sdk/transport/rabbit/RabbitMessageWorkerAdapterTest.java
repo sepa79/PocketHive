@@ -1,5 +1,6 @@
 package io.pockethive.worker.sdk.transport.rabbit;
 
+import io.pockethive.Topology;
 import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pockethive.worker.sdk.api.WorkResult;
@@ -22,19 +23,23 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.core.Message;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.amqp.rabbit.listener.MessageListenerContainer;
 import org.springframework.amqp.rabbit.listener.RabbitListenerEndpointRegistry;
 import org.springframework.context.event.ContextRefreshedEvent;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -55,10 +60,13 @@ class RabbitMessageWorkerAdapterTest {
     private RabbitMessageWorkerAdapter.WorkDispatcher dispatcher;
 
     @Mock
-    private RabbitMessageWorkerAdapter.MessageResultPublisher resultPublisher;
+    private Consumer<Exception> errorHandler;
 
     @Mock
-    private Consumer<Exception> errorHandler;
+    private RabbitTemplate rabbitTemplate;
+
+    @Mock
+    private RabbitMessageWorkerAdapter.MessageResultPublisher resultPublisher;
 
     private WorkerDefinition workerDefinition;
     private ControlPlaneIdentity identity;
@@ -127,7 +135,8 @@ class RabbitMessageWorkerAdapterTest {
         assertThat(workCaptor.getValue().body()).isEqualTo("payload".getBytes(StandardCharsets.UTF_8));
 
         ArgumentCaptor<Message> outboundCaptor = ArgumentCaptor.forClass(Message.class);
-        verify(resultPublisher).publish(any(WorkResult.Message.class), outboundCaptor.capture());
+        verify(rabbitTemplate)
+            .send(eq(Topology.EXCHANGE), Mockito.<String>eq(workerDefinition.resolvedOutQueue()), outboundCaptor.capture());
         assertThat(outboundCaptor.getValue().getBody()).isEqualTo("processed".getBytes(StandardCharsets.UTF_8));
     }
 
@@ -142,7 +151,42 @@ class RabbitMessageWorkerAdapterTest {
         adapter.onWork(inbound);
 
         verify(errorHandler).accept(failure);
-        verify(resultPublisher, never()).publish(any(), any());
+        verifyNoInteractions(rabbitTemplate);
+    }
+
+    @Test
+    void onWorkThrowsWhenDispatcherReturnsNullResult() throws Exception {
+        RabbitMessageWorkerAdapter adapter = builder().build();
+        RabbitWorkMessageConverter converter = new RabbitWorkMessageConverter();
+        Message inbound = converter.toMessage(WorkMessage.text("payload").build());
+
+        when(dispatcher.dispatch(any(WorkMessage.class))).thenReturn(null);
+
+        adapter.onWork(inbound);
+
+        ArgumentCaptor<Exception> exceptionCaptor = ArgumentCaptor.forClass(Exception.class);
+        verify(errorHandler).accept(exceptionCaptor.capture());
+        assertThat(exceptionCaptor.getValue())
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("null WorkResult");
+        verifyNoInteractions(rabbitTemplate);
+    }
+
+    @Test
+    void onWorkUsesCustomPublisherWhenProvided() throws Exception {
+        RabbitMessageWorkerAdapter adapter = builderWithoutTemplate()
+            .messageResultPublisher(resultPublisher)
+            .build();
+        RabbitWorkMessageConverter converter = new RabbitWorkMessageConverter();
+        Message inbound = converter.toMessage(WorkMessage.text("payload").build());
+
+        when(dispatcher.dispatch(any(WorkMessage.class)))
+            .thenReturn(WorkResult.message(WorkMessage.text("processed").build()));
+
+        adapter.onWork(inbound);
+
+        verify(resultPublisher).publish(any(WorkResult.Message.class), any(Message.class));
+        verifyNoInteractions(rabbitTemplate);
     }
 
     @Test
@@ -178,7 +222,97 @@ class RabbitMessageWorkerAdapterTest {
         verify(listenerRegistry).getListenerContainer("listener");
     }
 
-    private RabbitMessageWorkerAdapter.Builder builder() {
+    @Test
+    void buildFailsWhenTemplateConfiguredWithoutOutboundQueue() {
+        workerDefinition = new WorkerDefinition(
+            "processorWorker",
+            Object.class,
+            WorkerType.MESSAGE,
+            "processor",
+            "processor.in",
+            null,
+            Object.class
+        );
+
+        assertThatThrownBy(() -> builder().build())
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("outbound queue");
+    }
+
+    @Test
+    void buildAllowsMissingOutboundQueueWhenNoPublisherConfigured() {
+        workerDefinition = new WorkerDefinition(
+            "processorWorker",
+            Object.class,
+            WorkerType.MESSAGE,
+            "processor",
+            "processor.in",
+            null,
+            Object.class
+        );
+
+        assertThatCode(() -> builderWithoutTemplate().build()).doesNotThrowAnyException();
+    }
+
+    @Test
+    void onWorkThrowsWhenMessageResultProducedWithoutOutboundQueue() throws Exception {
+        workerDefinition = new WorkerDefinition(
+            "processorWorker",
+            Object.class,
+            WorkerType.MESSAGE,
+            "processor",
+            "processor.in",
+            null,
+            Object.class
+        );
+
+        RabbitMessageWorkerAdapter adapter = builderWithoutTemplate().build();
+        RabbitWorkMessageConverter converter = new RabbitWorkMessageConverter();
+        Message inbound = converter.toMessage(WorkMessage.text("payload").build());
+
+        when(dispatcher.dispatch(any(WorkMessage.class)))
+            .thenReturn(WorkResult.message(WorkMessage.text("processed").build()));
+
+        adapter.onWork(inbound);
+
+        ArgumentCaptor<Exception> exceptionCaptor = ArgumentCaptor.forClass(Exception.class);
+        verify(errorHandler).accept(exceptionCaptor.capture());
+        assertThat(exceptionCaptor.getValue())
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("outbound queue");
+        verifyNoInteractions(rabbitTemplate);
+    }
+
+    @Test
+    void onWorkThrowsWhenMessageResultProducedWithoutPublisher() throws Exception {
+        workerDefinition = new WorkerDefinition(
+            "processorWorker",
+            Object.class,
+            WorkerType.MESSAGE,
+            "processor",
+            "processor.in",
+            "processor.out",
+            Object.class
+        );
+
+        RabbitMessageWorkerAdapter adapter = builderWithoutTemplate().build();
+        RabbitWorkMessageConverter converter = new RabbitWorkMessageConverter();
+        Message inbound = converter.toMessage(WorkMessage.text("payload").build());
+
+        when(dispatcher.dispatch(any(WorkMessage.class)))
+            .thenReturn(WorkResult.message(WorkMessage.text("processed").build()));
+
+        adapter.onWork(inbound);
+
+        ArgumentCaptor<Exception> exceptionCaptor = ArgumentCaptor.forClass(Exception.class);
+        verify(errorHandler).accept(exceptionCaptor.capture());
+        assertThat(exceptionCaptor.getValue())
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("message result publisher");
+        verify(rabbitTemplate, never()).send(anyString(), anyString(), any(Message.class));
+    }
+
+    private RabbitMessageWorkerAdapter.Builder baseBuilder() {
         return RabbitMessageWorkerAdapter.builder()
             .logger(LOGGER)
             .listenerId("listener")
@@ -191,8 +325,15 @@ class RabbitMessageWorkerAdapterTest {
             .defaultConfigSupplier(defaultConfig)
             .desiredStateResolver(desiredStateResolver)
             .dispatcher(dispatcher)
-            .messageResultPublisher(resultPublisher)
             .dispatchErrorHandler(errorHandler);
+    }
+
+    private RabbitMessageWorkerAdapter.Builder builder() {
+        return baseBuilder().rabbitTemplate(rabbitTemplate);
+    }
+
+    private RabbitMessageWorkerAdapter.Builder builderWithoutTemplate() {
+        return baseBuilder();
     }
 
     private record DummyConfig(boolean enabled) {
