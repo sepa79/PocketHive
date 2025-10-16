@@ -136,6 +136,8 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
                     Message outbound = messageConverter.toMessage(messageResult.value());
                     messageResultPublisher.publish(messageResult, outbound);
                 } else if (log.isDebugEnabled()) {
+                    // Some workers (for example the post-processor) intentionally swallow outbound payloads,
+                    // so we keep the queue validation but allow the publisher hook to be absent.
                     log.debug("{} worker produced message result with {} bytes but no publisher is configured (queue={})",
                         displayName, messageResult.value().body().length, outboundQueue);
                 }
@@ -266,8 +268,8 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
         }
 
         /**
-         * Sets a human readable display name used in log entries. When omitted the worker role from the
-         * {@link WorkerDefinition} is used.
+         * Sets a human readable display name used in log entries. The display name is mandatory so that
+         * lifecycle and diagnostic logs can always identify the worker instance.
          *
          * @param displayName descriptive label for log messages
          * @return this builder instance
@@ -279,7 +281,7 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
 
         /**
          * Supplies the {@link WorkerDefinition} associated with the adapter. The definition is used for
-         * control-plane registration and to resolve the default display name when none is provided.
+         * control-plane registration and queue resolution.
          *
          * @param workerDefinition worker metadata from the hosting service
          * @return this builder instance
@@ -418,9 +420,7 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
         public RabbitMessageWorkerAdapter build() {
             Objects.requireNonNull(log, "log");
             Objects.requireNonNull(listenerId, "listenerId");
-            if (displayName == null) {
-                displayName = workerDefinition != null ? workerDefinition.role() : "worker";
-            }
+            Objects.requireNonNull(displayName, "displayName");
             Objects.requireNonNull(workerDefinition, "workerDefinition");
             String resolvedOutbound = workerDefinition.resolvedOutQueue();
             if (resolvedOutbound == null || resolvedOutbound.isBlank()) {
