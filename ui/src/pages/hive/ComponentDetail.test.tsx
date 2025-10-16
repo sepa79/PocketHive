@@ -42,7 +42,7 @@ const wiremockConfig: WiremockComponentConfig = {
     { id: 'scenario-1', name: 'Happy path', state: 'Started' },
     { id: 'scenario-2', name: 'Edge case', state: 'Complete', completed: true },
   ],
-  adminUrl: '/wiremock/__admin/',
+  adminUrl: 'http://localhost:8080/__admin/',
   lastUpdatedTs: baseTimestamp - 30_000,
 }
 
@@ -87,7 +87,7 @@ describe('ComponentDetail wiremock panel', () => {
     expect(within(panel).getByText(/Updated .*ago/i)).toBeInTheDocument()
 
     const adminLink = within(panel).getByRole('link', { name: 'Open admin' })
-    expect(adminLink).toHaveAttribute('href', '/wiremock/__admin/')
+    expect(adminLink).toHaveAttribute('href', 'http://localhost:8080/__admin/')
 
     const recentSection = within(panel).getByText('Recent requests').parentElement!
     expect(within(recentSection).getByText('GET')).toBeInTheDocument()

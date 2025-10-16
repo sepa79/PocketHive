@@ -1,4 +1,5 @@
 import { apiFetch } from './api'
+import { getConfig } from './config'
 import type { Component } from '../types/hive'
 
 export interface WiremockRequestSummary {
@@ -104,7 +105,9 @@ async function fetchJson(path: string): Promise<unknown | null> {
 }
 
 export async function fetchWiremockComponent(limit = 25): Promise<Component | null> {
-  const base = '/wiremock/__admin'
+  const configUrl = getConfig().wiremock
+  const base =
+    typeof configUrl === 'string' && configUrl.length > 0 ? configUrl.replace(/\/+$/, '') : '/wiremock/__admin'
   const [health, count, recent, unmatched, mappings, scenarios] = await Promise.all([
     fetchJson(`${base}/health`),
     fetchJson(`${base}/requests/count`),

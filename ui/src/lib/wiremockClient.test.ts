@@ -25,10 +25,10 @@ describe('fetchWiremockComponent', () => {
 
   it('returns a populated component snapshot when metrics are available', async () => {
     const responses = new Map<string, Response>([
-      ['/wiremock/__admin/health', jsonResponse({ status: 'OK', version: '3.1.0' })],
-      ['/wiremock/__admin/requests/count', jsonResponse({ count: 42 })],
+      ['http://localhost:8080/__admin/health', jsonResponse({ status: 'OK', version: '3.1.0' })],
+      ['http://localhost:8080/__admin/requests/count', jsonResponse({ count: 42 })],
       [
-        '/wiremock/__admin/requests?limit=25',
+        'http://localhost:8080/__admin/requests?limit=25',
         jsonResponse({
           requests: [
             {
@@ -41,15 +41,15 @@ describe('fetchWiremockComponent', () => {
         }),
       ],
       [
-        '/wiremock/__admin/requests/unmatched',
+        'http://localhost:8080/__admin/requests/unmatched',
         jsonResponse({ meta: { total: 1 }, requests: [] }),
       ],
       [
-        '/wiremock/__admin/mappings',
+        'http://localhost:8080/__admin/mappings',
         jsonResponse({ meta: { total: 5 } }),
       ],
       [
-        '/wiremock/__admin/scenarios',
+        'http://localhost:8080/__admin/scenarios',
         jsonResponse({ scenarios: [{ id: 's', name: 'Scenario', state: 'Started' }] }),
       ],
     ])
