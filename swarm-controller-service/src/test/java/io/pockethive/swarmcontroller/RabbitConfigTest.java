@@ -7,8 +7,10 @@ import io.pockethive.Topology;
 import io.pockethive.controlplane.spring.BeeIdentityProperties;
 import org.junit.jupiter.api.Test;
 import org.springframework.amqp.core.Queue;
+import org.springframework.amqp.core.TopicExchange;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
 
@@ -59,5 +61,10 @@ class RabbitConfigTest {
   @Configuration(proxyBeanMethods = false)
   @EnableConfigurationProperties(BeeIdentityProperties.class)
   @Import(RabbitConfig.class)
-  static class TestConfiguration {}
+  static class TestConfiguration {
+    @Bean(name = "controlPlaneExchange")
+    TopicExchange controlPlaneExchange() {
+      return new TopicExchange(Topology.CONTROL_EXCHANGE, true, false);
+    }
+  }
 }
