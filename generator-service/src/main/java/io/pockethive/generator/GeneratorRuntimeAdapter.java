@@ -92,7 +92,7 @@ class GeneratorRuntimeAdapter {
     controlPlaneRuntime.emitStatusDelta();
   }
 
-  @RabbitListener(queues = "#{@generatorControlQueueName}")
+  @RabbitListener(queues = "#{@workerControlQueueName}")
   public void onControl(String payload,
                         @Header(AmqpHeaders.RECEIVED_ROUTING_KEY) String routingKey,
                         @Header(value = ObservabilityContextUtil.HEADER, required = false) String traceHeader) {

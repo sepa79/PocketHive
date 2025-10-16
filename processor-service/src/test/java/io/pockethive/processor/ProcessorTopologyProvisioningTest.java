@@ -25,7 +25,6 @@ class ProcessorTopologyProvisioningTest {
         .withConfiguration(AutoConfigurations.of(
             ControlPlaneCommonAutoConfiguration.class,
             WorkerControlPlaneAutoConfiguration.class))
-        .withUserConfiguration(ProcessorConfig.class)
         .withBean(ObjectMapper.class, ObjectMapper::new)
         .withBean(RabbitTemplate.class, () -> Mockito.mock(RabbitTemplate.class))
         .withPropertyValues(

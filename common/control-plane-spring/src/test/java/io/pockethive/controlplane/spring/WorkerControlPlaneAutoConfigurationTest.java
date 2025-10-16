@@ -6,8 +6,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.Topology;
 import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.controlplane.messaging.ControlPlanePublisher;
+import io.pockethive.controlplane.topology.ControlPlaneRouteCatalog;
+import io.pockethive.controlplane.topology.ControlPlaneTopologyDescriptor;
+import io.pockethive.controlplane.topology.ControlQueueDescriptor;
 import io.pockethive.controlplane.worker.WorkerControlPlane;
 import java.util.Optional;
+import org.springframework.beans.factory.BeanCreationException;
 import org.junit.jupiter.api.Test;
 import org.springframework.amqp.core.Binding;
 import org.springframework.amqp.core.Declarables;
@@ -16,6 +20,8 @@ import org.springframework.amqp.core.TopicExchange;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
 
 class WorkerControlPlaneAutoConfigurationTest {
 
@@ -52,6 +58,9 @@ class WorkerControlPlaneAutoConfigurationTest {
             assertThat(queue).isPresent();
             String expectedQueue = Topology.CONTROL_QUEUE + "." + Topology.SWARM_ID + ".generator.gen-1";
             assertThat(queue.get().getName()).isEqualTo(expectedQueue);
+
+            String queueName = context.getBean("workerControlQueueName", String.class);
+            assertThat(queueName).isEqualTo(expectedQueue);
         });
     }
 
@@ -88,5 +97,44 @@ class WorkerControlPlaneAutoConfigurationTest {
 
                 assertThat(trafficBinding).isEmpty();
             });
+    }
+
+    @Test
+    void failsFastWhenControlQueueDescriptorMissing() {
+        contextRunner
+            .withPropertyValues("pockethive.control-plane.worker.role=test-role")
+            .withUserConfiguration(MissingQueueDescriptorConfiguration.class)
+            .run(context -> {
+                assertThat(context).hasFailed();
+                Throwable failure = context.getStartupFailure();
+                assertThat(failure).isInstanceOf(BeanCreationException.class);
+                assertThat(failure).hasRootCauseInstanceOf(IllegalStateException.class);
+                assertThat(failure).hasRootCauseMessage(
+                    "Control queue descriptor is missing for worker role test-role");
+            });
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class MissingQueueDescriptorConfiguration {
+
+        @Bean("workerControlPlaneTopologyDescriptor")
+        ControlPlaneTopologyDescriptor missingControlQueueDescriptor() {
+            return new ControlPlaneTopologyDescriptor() {
+                @Override
+                public String role() {
+                    return "test-role";
+                }
+
+                @Override
+                public Optional<ControlQueueDescriptor> controlQueue(String instanceId) {
+                    return Optional.empty();
+                }
+
+                @Override
+                public ControlPlaneRouteCatalog routes() {
+                    return ControlPlaneRouteCatalog.empty();
+                }
+            };
+        }
     }
 }
