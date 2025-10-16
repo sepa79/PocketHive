@@ -1,17 +1,18 @@
 package io.pockethive.swarmcontroller;
 
 import io.pockethive.Topology;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.amqp.AmqpException;
 import org.springframework.amqp.AmqpIOException;
 import org.springframework.amqp.core.*;
+import org.springframework.amqp.rabbit.core.RabbitAdmin;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.amqp.rabbit.junit.RabbitAvailable;
 import org.springframework.amqp.rabbit.junit.RabbitAvailableCondition;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.amqp.rabbit.core.RabbitAdmin;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -25,10 +26,31 @@ import static org.junit.jupiter.api.Assertions.*;
 @SpringBootTest
 @RabbitAvailable
 class SwarmLifecycleManagerIntegrationTest {
+  private static final String TEST_BEE_NAME = "test-swarm-controller-bee";
+  private static String previousBeeName;
+  private static boolean beeNameInitialized;
+
   @DynamicPropertySource
   static void rabbitProperties(DynamicPropertyRegistry registry) {
     registry.add("spring.rabbitmq.host", () -> RabbitAvailableCondition.getBrokerRunning().getHostName());
     registry.add("spring.rabbitmq.port", () -> RabbitAvailableCondition.getBrokerRunning().getPort());
+    registry.add("bee.name", () -> TEST_BEE_NAME);
+
+    if (!beeNameInitialized) {
+      previousBeeName = System.getProperty("bee.name");
+      System.setProperty("bee.name", TEST_BEE_NAME);
+      beeNameInitialized = true;
+    }
+  }
+
+  @AfterAll
+  static void restoreBeeNameProperty() {
+    if (previousBeeName == null) {
+      System.clearProperty("bee.name");
+    } else {
+      System.setProperty("bee.name", previousBeeName);
+    }
+    beeNameInitialized = false;
   }
 
   @Autowired

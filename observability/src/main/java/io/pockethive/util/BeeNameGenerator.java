@@ -23,7 +23,13 @@ public final class BeeNameGenerator {
           "twirly",
           "glowy",
           "jolly",
-          "snappy");
+          "snappy",
+          "sparkly",
+          "sunny",
+          "peppery",
+          "breezy",
+          "amber",
+          "sprightly");
 
   private static final List<String> SECOND_PARTS =
       List.of(
@@ -38,7 +44,13 @@ public final class BeeNameGenerator {
           "wiggle",
           "dance",
           "flutter",
-          "zing");
+          "zing",
+          "hum",
+          "swirl",
+          "gleam",
+          "glimmer",
+          "shine",
+          "twist");
 
   private BeeNameGenerator() {}
 
@@ -71,6 +83,14 @@ public final class BeeNameGenerator {
         sanitize(first, "bee"),
         sanitize(second, "bee"),
         id);
+  }
+
+  public static String requireConfiguredName() {
+    String beeName = System.getProperty("bee.name");
+    if (beeName == null || beeName.isBlank()) {
+      throw new IllegalStateException("bee.name system property must be provided");
+    }
+    return beeName;
   }
 
   private static String randomFrom(List<String> options) {

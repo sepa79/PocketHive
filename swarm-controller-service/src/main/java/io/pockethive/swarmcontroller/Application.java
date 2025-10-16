@@ -1,6 +1,5 @@
 package io.pockethive.swarmcontroller;
 
-import io.pockethive.Topology;
 import io.pockethive.util.BeeNameGenerator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -17,11 +16,7 @@ public class Application {
   private static final Logger log = LoggerFactory.getLogger(Application.class);
 
   public static void main(String[] args) {
-    String existing = System.getProperty("bee.name");
-    String beeName = (existing == null || existing.isBlank())
-        ? BeeNameGenerator.generate("swarm-controller", Topology.SWARM_ID)
-        : existing;
-    System.setProperty("bee.name", beeName);
+    String beeName = BeeNameGenerator.requireConfiguredName();
     log.info("Bee name: {}", beeName);
     SpringApplication.run(Application.class, args);
   }

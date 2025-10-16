@@ -1,14 +1,21 @@
 package io.pockethive.swarmcontroller;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import io.pockethive.Topology;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.amqp.core.Queue;
 
 class RabbitConfigTest {
 
   private final RabbitConfig config = new RabbitConfig();
+
+  @AfterEach
+  void clearBeeName() {
+    System.clearProperty("bee.name");
+  }
 
   @Test
   void controlQueueUsesSwarmRoleAndInstanceSegments() {
@@ -33,5 +40,19 @@ class RabbitConfigTest {
         instanceId);
 
     assertEquals(baseQueue + ".swarm-controller." + instanceId, queueName);
+  }
+
+  @Test
+  void instanceIdReturnsConfiguredBeeName() {
+    System.setProperty("bee.name", "test-swarm-controller-bee");
+
+    assertEquals("test-swarm-controller-bee", config.instanceId());
+  }
+
+  @Test
+  void instanceIdFailsWhenBeeNameMissing() {
+    System.clearProperty("bee.name");
+
+    assertThrows(IllegalStateException.class, config::instanceId);
   }
 }
