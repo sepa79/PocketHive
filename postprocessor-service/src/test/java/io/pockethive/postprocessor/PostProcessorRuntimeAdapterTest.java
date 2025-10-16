@@ -70,7 +70,7 @@ class PostProcessorRuntimeAdapterTest {
         WorkerType.MESSAGE,
         "postprocessor",
         Topology.FINAL_QUEUE,
-        TopologyDefaults.FINAL_QUEUE,
+        null,
         PostProcessorWorkerConfig.class
     );
     when(workerRegistry.findByRoleAndType("postprocessor", WorkerType.MESSAGE))
@@ -171,31 +171,5 @@ class PostProcessorRuntimeAdapterTest {
     adapter.emitStatusDelta();
 
     verify(controlPlaneRuntime).emitStatusDelta();
-  }
-
-  @Test
-  void publishesMessageResultsToResolvedQueue() throws Exception {
-    lenient().when(listenerRegistry.getListenerContainer("postProcessorWorkerListener"))
-        .thenReturn(listenerContainer);
-    lenient().when(listenerContainer.isRunning()).thenReturn(false);
-
-    doReturn(WorkResult.message(WorkMessage.text("payload").build()))
-        .when(workerRuntime)
-        .dispatch(eq("postProcessorWorker"), any(WorkMessage.class));
-
-    PostProcessorRuntimeAdapter adapter = new PostProcessorRuntimeAdapter(
-        workerRuntime,
-        workerRegistry,
-        controlPlaneRuntime,
-        rabbitTemplate,
-        listenerRegistry,
-        identity,
-        defaults
-    );
-
-    Message inbound = new RabbitWorkMessageConverter().toMessage(WorkMessage.text("payload").build());
-    adapter.onWork(inbound);
-
-    verify(rabbitTemplate).send(eq(Topology.EXCHANGE), eq(TopologyDefaults.FINAL_QUEUE), any(Message.class));
   }
 }

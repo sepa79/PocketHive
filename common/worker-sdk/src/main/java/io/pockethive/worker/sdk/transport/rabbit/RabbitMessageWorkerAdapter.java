@@ -423,11 +423,9 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
             Objects.requireNonNull(displayName, "displayName");
             Objects.requireNonNull(workerDefinition, "workerDefinition");
             String resolvedOutbound = workerDefinition.resolvedOutQueue();
-            if (resolvedOutbound == null || resolvedOutbound.isBlank()) {
-                throw new IllegalStateException(
-                    "Worker " + workerDefinition.beanName() + " must declare an outbound queue");
+            if (resolvedOutbound != null && !resolvedOutbound.isBlank()) {
+                this.outboundQueue = resolvedOutbound;
             }
-            this.outboundQueue = resolvedOutbound;
             Objects.requireNonNull(controlPlaneRuntime, "controlPlaneRuntime");
             Objects.requireNonNull(listenerRegistry, "listenerRegistry");
             Objects.requireNonNull(identity, "identity");
@@ -436,12 +434,18 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
             Objects.requireNonNull(desiredStateResolver, "desiredStateResolver");
             Objects.requireNonNull(dispatcher, "dispatcher");
             if (messageResultPublisher == null) {
-                if (rabbitTemplate == null) {
-                    throw new IllegalStateException("Worker " + workerDefinition.beanName()
-                        + " must configure a RabbitTemplate or custom message result publisher");
+                if (rabbitTemplate != null && outboundQueue != null) {
+                    messageResultPublisher =
+                        (result, message) -> rabbitTemplate.send(Topology.EXCHANGE, outboundQueue, message);
+                } else {
+                    messageResultPublisher = (result, message) -> {
+                        String missing = rabbitTemplate == null
+                            ? "a message result publisher"
+                            : "an outbound queue";
+                        throw new IllegalStateException("Worker " + workerDefinition.beanName()
+                            + " attempted to publish WorkResult.Message but has not configured " + missing);
+                    };
                 }
-                messageResultPublisher =
-                    (result, message) -> rabbitTemplate.send(Topology.EXCHANGE, outboundQueue, message);
             }
             Objects.requireNonNull(messageResultPublisher, "messageResultPublisher");
             if (dispatchErrorHandler == null) {
