@@ -1,6 +1,12 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { Client } from '@stomp/stompjs'
-import { setClient, subscribeComponents } from './stompClient'
+import {
+  setClient,
+  subscribeComponents,
+  subscribeTopology,
+  upsertSyntheticComponent,
+  removeSyntheticComponent,
+} from './stompClient'
 import { subscribeLogs, type LogEntry, resetLogs } from './logs'
 import { useUIStore } from '../store'
 import type { Component } from '../types/hive'
@@ -209,6 +215,87 @@ describe('swarm lifecycle', () => {
     expect(controller?.config).not.toHaveProperty('batchSize')
 
     unsubscribe()
+    setClient(null)
+  })
+
+  it('notifies listeners when synthetic components are upserted', () => {
+    const snapshots: Component[][] = []
+    const unsubscribe = subscribeComponents((list) => {
+      snapshots.push(list.map((component) => ({ ...component })))
+    })
+
+    const component: Component = {
+      id: 'wiremock',
+      name: 'WireMock',
+      role: 'wiremock',
+      lastHeartbeat: Date.now(),
+      queues: [],
+      config: { healthStatus: 'UP', requestCount: 5 },
+    }
+
+    upsertSyntheticComponent(component)
+
+    const latest = snapshots.at(-1)
+    expect(latest?.some((entry) => entry.id === 'wiremock')).toBe(true)
+
+    removeSyntheticComponent('wiremock')
+    unsubscribe()
+  })
+
+  it('emits topology edges targeting wiremock when the synthetic component is present', () => {
+    const publish = vi.fn()
+    let cb: (msg: { body: string; headers: Record<string, string> }) => void = () => {}
+    const subscribe = vi
+      .fn()
+      .mockImplementation((_dest: string, fn: (msg: { body: string; headers: Record<string, string> }) => void) => {
+        cb = fn
+        return { unsubscribe() {} }
+      })
+    setClient({ active: true, publish, subscribe } as unknown as Client)
+
+    const topologies: { nodes: unknown[]; edges: { from: string; to: string; queue: string }[] }[] = []
+    const unsubscribeTopo = subscribeTopology((topology) => {
+      topologies.push({
+        nodes: topology.nodes.map((n) => ({ ...n })),
+        edges: topology.edges.map((e) => ({ ...e })),
+      })
+    })
+
+    const baseHeaders = { destination: '/exchange/ph.control/ev.status.swarm-default' }
+    cb({
+      headers: baseHeaders,
+      body: JSON.stringify({
+        event: 'status',
+        kind: 'status',
+        version: '1',
+        role: 'processor',
+        instance: 'processor',
+        messageId: 'm-processor',
+        timestamp: new Date().toISOString(),
+      }),
+    })
+
+    let latest = topologies.at(-1)
+    expect(latest?.edges).toContainEqual({ from: 'processor', to: 'sut', queue: 'sut' })
+    expect(latest?.edges?.some((edge) => edge.to === 'wiremock')).toBe(false)
+
+    const wiremock: Component = {
+      id: 'wiremock',
+      name: 'WireMock',
+      role: 'wiremock',
+      lastHeartbeat: Date.now(),
+      queues: [],
+      config: { healthStatus: 'UP' },
+    }
+    upsertSyntheticComponent(wiremock)
+
+    latest = topologies.at(-1)
+    expect(latest?.edges).toContainEqual({ from: 'processor', to: 'wiremock', queue: 'sut' })
+    expect(latest?.edges).toContainEqual({ from: 'processor', to: 'sut', queue: 'sut' })
+    expect(latest?.nodes.some((node) => (node as { id: string }).id === 'wiremock')).toBe(true)
+
+    unsubscribeTopo()
+    removeSyntheticComponent('wiremock')
     setClient(null)
   })
 })
