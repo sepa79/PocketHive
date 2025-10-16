@@ -43,6 +43,8 @@ class ContainerLifecycleManagerTest {
         verify(docker).createAndStartContainer(eq("img"), envCaptor.capture(), nameCaptor.capture(), hostCaptor.capture());
         assertEquals("inst1", nameCaptor.getValue());
         assertEquals("inst1", envCaptor.getValue().get("POCKETHIVE_CONTROL_PLANE_INSTANCE_ID"));
+        assertEquals(io.pockethive.Topology.CONTROL_EXCHANGE, envCaptor.getValue().get("POCKETHIVE_CONTROL_PLANE_EXCHANGE"));
+        assertEquals("sw1", envCaptor.getValue().get("POCKETHIVE_CONTROL_PLANE_SWARM_ID"));
         assertNull(envCaptor.getValue().get("JAVA_TOOL_OPTIONS"));
         assertEquals("/var/run/docker.sock", envCaptor.getValue().get("DOCKER_SOCKET_PATH"));
         assertEquals("unix:///var/run/docker.sock", envCaptor.getValue().get("DOCKER_HOST"));

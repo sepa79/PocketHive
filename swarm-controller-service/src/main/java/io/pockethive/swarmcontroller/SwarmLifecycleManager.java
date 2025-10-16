@@ -180,7 +180,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
    * ensures queues exist for every {@code work.in/out} suffix listed in the plan. For each
    * {@link Bee} that specifies a container image we generate an instance name (e.g.
    * {@code generator-demo-1}), inject PocketHive environment defaults (Rabbit host, log exchange,
-   * {@code PH_SWARM_ID}), and create/start the container via {@link DockerContainerClient}. The
+   * {@code POCKETHIVE_CONTROL_PLANE_SWARM_ID}), and create/start the container via {@link DockerContainerClient}. The
    * computed start order is cached so {@link #remove()} can stop containers in reverse.
    * <p>
    * Junior maintainers can tweak the environment defaults above by editing the map before
@@ -210,10 +210,12 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
           }
           if (bee.image() != null) {
             Map<String, String> env = new HashMap<>();
-            env.put("PH_SWARM_ID", Topology.SWARM_ID);
-            env.put("PH_CONTROL_EXCHANGE", Topology.CONTROL_EXCHANGE);
+            env.put("POCKETHIVE_CONTROL_PLANE_SWARM_ID", Topology.SWARM_ID);
+            env.put("POCKETHIVE_CONTROL_PLANE_EXCHANGE", Topology.CONTROL_EXCHANGE);
             env.put("RABBITMQ_HOST", java.util.Optional.ofNullable(System.getenv("RABBITMQ_HOST")).orElse("rabbitmq"));
-            env.put("PH_LOGS_EXCHANGE", java.util.Optional.ofNullable(System.getenv("PH_LOGS_EXCHANGE")).orElse("ph.logs"));
+            env.put(
+                "POCKETHIVE_LOGS_EXCHANGE",
+                java.util.Optional.ofNullable(System.getenv("POCKETHIVE_LOGS_EXCHANGE")).orElse("ph.logs"));
             String net = docker.resolveControlNetwork();
             if (net != null && !net.isBlank()) {
               env.put("CONTROL_NETWORK", net);
@@ -231,18 +233,8 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
               }
             }
             String beeName = BeeNameGenerator.generate(bee.role(), Topology.SWARM_ID);
-            env.put("BEE_NAME", beeName);
             env.put("POCKETHIVE_CONTROL_PLANE_INSTANCE_ID", beeName);
             env.put("POCKETHIVE_CONTROL_PLANE_WORKER_INSTANCE_ID", beeName);
-            String javaOpts = env.get("JAVA_TOOL_OPTIONS");
-            if (javaOpts == null || javaOpts.isBlank()) {
-              javaOpts = "";
-            } else if (!javaOpts.endsWith(" ")) {
-              javaOpts = javaOpts + " ";
-            }
-            javaOpts = javaOpts + "-Dbee.name=" + beeName;
-            javaOpts = javaOpts + " -Dpockethive.control-plane.worker.instance-id=" + beeName;
-            env.put("JAVA_TOOL_OPTIONS", javaOpts);
             applyMetricsEnv(env, beeName);
             log.info("creating container {} for role {} using image {}", beeName, bee.role(), bee.image());
             log.info("container env for {}: {}", beeName, env);

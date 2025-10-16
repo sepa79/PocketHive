@@ -13,11 +13,12 @@ management.endpoints.web.exposure.include: health,info
 logging:
   config: classpath:logback-spring.xml
   pattern.level: "%5p [%X{traceId}]"
-ph:
-  logsQueue: ${PH_LOGS_QUEUE:ph.logs.agg}
+pockethive:
+  logs:
+    queue: ${POCKETHIVE_LOGS_QUEUE:ph.logs.agg}
   loki:
-    url: ${PH_LOKI_URL:http://loki:3100}
-    maxRetries: ${PH_LOKI_MAX_RETRIES:3}
-    backoffMs: ${PH_LOKI_BACKOFF_MS:500}
-    batchSize: ${PH_LOKI_BATCH_SIZE:100}
-    flushIntervalMs: ${PH_LOKI_FLUSH_INTERVAL_MS:1000}
+    url: ${POCKETHIVE_LOKI_URL:http://loki:3100}
+    maxRetries: ${POCKETHIVE_LOKI_MAX_RETRIES:3}
+    backoffMs: ${POCKETHIVE_LOKI_BACKOFF_MS:500}
+    batchSize: ${POCKETHIVE_LOKI_BATCH_SIZE:100}
+    flushIntervalMs: ${POCKETHIVE_LOKI_FLUSH_INTERVAL_MS:1000}

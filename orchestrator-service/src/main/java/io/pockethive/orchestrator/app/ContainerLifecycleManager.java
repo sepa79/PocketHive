@@ -29,10 +29,12 @@ public class ContainerLifecycleManager {
     public Swarm startSwarm(String swarmId, String image, String instanceId) {
         java.util.Map<String, String> env = new java.util.HashMap<>();
         env.put("POCKETHIVE_CONTROL_PLANE_INSTANCE_ID", instanceId);
-        env.put("PH_CONTROL_EXCHANGE", Topology.CONTROL_EXCHANGE);
+        env.put("POCKETHIVE_CONTROL_PLANE_EXCHANGE", Topology.CONTROL_EXCHANGE);
+        env.put("POCKETHIVE_CONTROL_PLANE_SWARM_ID", swarmId);
         env.put("RABBITMQ_HOST", java.util.Optional.ofNullable(System.getenv("RABBITMQ_HOST")).orElse("rabbitmq"));
-        env.put("PH_LOGS_EXCHANGE", java.util.Optional.ofNullable(System.getenv("PH_LOGS_EXCHANGE")).orElse("ph.logs"));
-        env.put("PH_SWARM_ID", swarmId);
+        env.put(
+            "POCKETHIVE_LOGS_EXCHANGE",
+            java.util.Optional.ofNullable(System.getenv("POCKETHIVE_LOGS_EXCHANGE")).orElse("ph.logs"));
         applyPushgatewayEnv(env, swarmId);
         String net = docker.resolveControlNetwork();
         if (net != null && !net.isBlank()) {

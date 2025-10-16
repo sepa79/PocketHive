@@ -29,7 +29,7 @@ services:
     environment:
       <<: *metrics-env
       RABBITMQ_HOST: rabbitmq
-      PH_CONTROL_EXCHANGE: ph.control
+      POCKETHIVE_CONTROL_PLANE_EXCHANGE: ph.control
       MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_GROUPING_KEY_INSTANCE: orchestrator
       MANAGEMENT_METRICS_TAGS_INSTANCE: orchestrator
     volumes:
@@ -48,9 +48,9 @@ services:
     environment:
       <<: *metrics-env
       RABBITMQ_HOST: rabbitmq
-      PH_CONTROL_EXCHANGE: ph.control
-      PH_CONTROL_QUEUE: ph.control
-      PH_SWARM_ID: swarm1
+      POCKETHIVE_CONTROL_PLANE_EXCHANGE: ph.control
+      POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE: ph.control
+      POCKETHIVE_CONTROL_PLANE_SWARM_ID: swarm1
     depends_on:
       log-aggregator:
         condition: service_healthy
@@ -63,9 +63,9 @@ services:
     environment:
       <<: *metrics-env
       RABBITMQ_HOST: rabbitmq
-      PH_TRAFFIC_EXCHANGE: ph.swarm1.hive
-      PH_CONTROL_QUEUE: ph.control
-      PH_SWARM_ID: swarm1
+      POCKETHIVE_TRAFFIC_EXCHANGE: ph.swarm1.hive
+      POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE: ph.control
+      POCKETHIVE_CONTROL_PLANE_SWARM_ID: swarm1
       MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_GROUPING_KEY_INSTANCE: generator
       MANAGEMENT_METRICS_TAGS_INSTANCE: generator
     depends_on:
@@ -80,9 +80,9 @@ services:
     environment:
       <<: *metrics-env
       RABBITMQ_HOST: rabbitmq
-      PH_TRAFFIC_EXCHANGE: ph.swarm1.hive
-      PH_CONTROL_QUEUE: ph.control
-      PH_SWARM_ID: swarm1
+      POCKETHIVE_TRAFFIC_EXCHANGE: ph.swarm1.hive
+      POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE: ph.control
+      POCKETHIVE_CONTROL_PLANE_SWARM_ID: swarm1
       MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_GROUPING_KEY_INSTANCE: moderator
       MANAGEMENT_METRICS_TAGS_INSTANCE: moderator
     depends_on:
@@ -97,9 +97,9 @@ services:
     environment:
       <<: *metrics-env
       RABBITMQ_HOST: rabbitmq
-      PH_TRAFFIC_EXCHANGE: ph.swarm1.hive
-      PH_CONTROL_QUEUE: ph.control
-      PH_SWARM_ID: swarm1
+      POCKETHIVE_TRAFFIC_EXCHANGE: ph.swarm1.hive
+      POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE: ph.control
+      POCKETHIVE_CONTROL_PLANE_SWARM_ID: swarm1
       MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_GROUPING_KEY_INSTANCE: processor
       MANAGEMENT_METRICS_TAGS_INSTANCE: processor
     depends_on:
@@ -114,9 +114,9 @@ services:
     environment:
       <<: *metrics-env
       RABBITMQ_HOST: rabbitmq
-      PH_TRAFFIC_EXCHANGE: ph.swarm1.hive
-      PH_CONTROL_QUEUE: ph.control
-      PH_SWARM_ID: swarm1
+      POCKETHIVE_TRAFFIC_EXCHANGE: ph.swarm1.hive
+      POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE: ph.control
+      POCKETHIVE_CONTROL_PLANE_SWARM_ID: swarm1
       MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_GROUPING_KEY_INSTANCE: postprocessor
       MANAGEMENT_METRICS_TAGS_INSTANCE: postprocessor
     depends_on:
@@ -131,9 +131,9 @@ services:
     environment:
       <<: *metrics-env
       RABBITMQ_HOST: rabbitmq
-      PH_TRAFFIC_EXCHANGE: ph.swarm1.hive
-      PH_CONTROL_QUEUE: ph.control
-      PH_SWARM_ID: swarm1
+      POCKETHIVE_TRAFFIC_EXCHANGE: ph.swarm1.hive
+      POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE: ph.control
+      POCKETHIVE_CONTROL_PLANE_SWARM_ID: swarm1
       MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_GROUPING_KEY_INSTANCE: trigger
       MANAGEMENT_METRICS_TAGS_INSTANCE: trigger
     depends_on:
@@ -147,7 +147,7 @@ services:
     environment:
       <<: *metrics-env
       RABBITMQ_HOST: rabbitmq
-      PH_LOGS_QUEUE: ph.logs.agg
+      POCKETHIVE_LOGS_QUEUE: ph.logs.agg
       MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_GROUPING_KEY_INSTANCE: scenario-manager
       MANAGEMENT_METRICS_TAGS_INSTANCE: scenario-manager
     healthcheck:
@@ -169,9 +169,9 @@ services:
     environment:
       <<: *metrics-env
       RABBITMQ_HOST: rabbitmq
-      PH_LOGS_EXCHANGE: ph.logs
-      PH_LOGS_QUEUE: ph.logs.agg
-      PH_LOKI_URL: http://loki:3100
+      POCKETHIVE_LOGS_EXCHANGE: ph.logs
+      POCKETHIVE_LOGS_QUEUE: ph.logs.agg
+      POCKETHIVE_LOKI_URL: http://loki:3100
       MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_GROUPING_KEY_INSTANCE: log-aggregator
       MANAGEMENT_METRICS_TAGS_INSTANCE: log-aggregator
     depends_on:

@@ -13,8 +13,8 @@ logging:
 
 pockethive:
   control-plane:
-    exchange: ${PH_CONTROL_EXCHANGE:ph.control}
-    swarm-id: ${PH_SWARM_ID:default}
+    exchange: ${POCKETHIVE_CONTROL_PLANE_EXCHANGE:ph.control}
+    swarm-id: ${POCKETHIVE_CONTROL_PLANE_SWARM_ID:default}
     manager:
       role: orchestrator
     worker:

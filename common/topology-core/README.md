@@ -8,15 +8,15 @@ The `io.pockethive.Topology` class exposes the following names:
 
 | Constant | Environment variable | Default |
 | --- | --- | --- |
-| `Topology.SWARM_ID` | `PH_SWARM_ID` | `default` |
-| `Topology.EXCHANGE` | `PH_TRAFFIC_EXCHANGE` | `ph.<swarm>.hive` |
-| `Topology.GEN_QUEUE` | `PH_GEN_QUEUE` | `ph.<swarm>.gen` |
-| `Topology.MOD_QUEUE` | `PH_MOD_QUEUE` | `ph.<swarm>.mod` |
-| `Topology.FINAL_QUEUE` | `PH_FINAL_QUEUE` | `ph.<swarm>.final` |
-| `Topology.CONTROL_QUEUE` | `PH_CONTROL_QUEUE` | `ph.control` |
-| `Topology.CONTROL_EXCHANGE` | `PH_CONTROL_EXCHANGE` | `ph.control` |
+| `Topology.SWARM_ID` | `POCKETHIVE_CONTROL_PLANE_SWARM_ID` | `default` |
+| `Topology.EXCHANGE` | `POCKETHIVE_TRAFFIC_EXCHANGE` | `ph.<swarm>.hive` |
+| `Topology.GEN_QUEUE` | `POCKETHIVE_CONTROL_PLANE_QUEUES_GENERATOR` | `ph.<swarm>.gen` |
+| `Topology.MOD_QUEUE` | `POCKETHIVE_CONTROL_PLANE_QUEUES_MODERATOR` | `ph.<swarm>.mod` |
+| `Topology.FINAL_QUEUE` | `POCKETHIVE_CONTROL_PLANE_QUEUES_FINAL` | `ph.<swarm>.final` |
+| `Topology.CONTROL_QUEUE` | `POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE` | `ph.control` |
+| `Topology.CONTROL_EXCHANGE` | `POCKETHIVE_CONTROL_PLANE_EXCHANGE` | `ph.control` |
 
-Each constant first checks an environment variable (or JVM system property) and falls back to the default value shown.
+Each constant first checks the environment variable (or JVM system property) and falls back to the default value shown.
 
 ## Usage
 
@@ -36,11 +36,11 @@ All services rely on these constants to keep queue and exchange names consistent
 Supply environment variables or `-D` system properties at runtime to override defaults:
 
 ```bash
-PH_SWARM_ID=beta PH_GEN_QUEUE=ph.beta.custom ./run-service
+POCKETHIVE_CONTROL_PLANE_SWARM_ID=beta POCKETHIVE_CONTROL_PLANE_QUEUES_GENERATOR=ph.beta.custom ./run-service
 ```
 
 ```bash
-java -DPH_SWARM_ID=beta -DPH_GEN_QUEUE=ph.beta.custom ...
+java -DPOCKETHIVE_CONTROL_PLANE_SWARM_ID=beta -DPOCKETHIVE_CONTROL_PLANE_QUEUES_GENERATOR=ph.beta.custom ...
 ```
 
 This allows services to join different swarms or adjust routing without code changes.

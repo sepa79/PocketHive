@@ -13,10 +13,10 @@ logging:
 
 pockethive:
   control-plane:
-    swarm-id: ${PH_SWARM_ID:default}
+    swarm-id: ${POCKETHIVE_CONTROL_PLANE_SWARM_ID:default}
     queues:
-      generator: ${PH_GEN_QUEUE:ph.${pockethive.control-plane.swarm-id}.gen}
-      moderator: ${PH_MOD_QUEUE:ph.${pockethive.control-plane.swarm-id}.mod}
+      generator: ${POCKETHIVE_CONTROL_PLANE_QUEUES_GENERATOR:ph.${pockethive.control-plane.swarm-id}.gen}
+      moderator: ${POCKETHIVE_CONTROL_PLANE_QUEUES_MODERATOR:ph.${pockethive.control-plane.swarm-id}.mod}
     worker:
       role: moderator
       # Expect POCKETHIVE_CONTROL_PLANE_WORKER_INSTANCE_ID to supply the instance id

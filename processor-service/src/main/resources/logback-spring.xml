@@ -40,7 +40,7 @@
         <username>${RABBITMQ_DEFAULT_USER:-guest}</username>
         <password>${RABBITMQ_DEFAULT_PASS:-guest}</password>
         <virtualHost>${RABBITMQ_VHOST:-/}</virtualHost>
-        <exchangeName>${PH_LOGS_EXCHANGE:-ph.logs}</exchangeName>
+        <exchangeName>${POCKETHIVE_LOGS_EXCHANGE:-ph.logs}</exchangeName>
         <encoder class="net.logstash.logback.encoder.LogstashEncoder">
           <customFields>{"role":"${roleIdentifier}","swarmId":"${swarmIdentifier}","instanceId":"${instanceIdentifier}"}</customFields>
         </encoder>
