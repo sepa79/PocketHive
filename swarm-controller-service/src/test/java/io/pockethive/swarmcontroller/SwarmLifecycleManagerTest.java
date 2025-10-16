@@ -96,7 +96,11 @@ class SwarmLifecycleManagerTest {
     assertEquals("ph." + Topology.SWARM_ID + ".qin", env.get("PH_MOD_QUEUE"));
     assertEquals("ph." + Topology.SWARM_ID + ".qout", env.get("PH_GEN_QUEUE"));
     assertEquals(assignedName, env.get("BEE_NAME"));
-    assertTrue(env.get("JAVA_TOOL_OPTIONS").endsWith("-Dbee.name=" + assignedName));
+    assertEquals(assignedName, env.get("POCKETHIVE_CONTROL_PLANE_INSTANCE_ID"));
+    assertEquals(assignedName, env.get("POCKETHIVE_CONTROL_PLANE_WORKER_INSTANCE_ID"));
+    String javaOptions = env.get("JAVA_TOOL_OPTIONS");
+    assertThat(javaOptions).contains("-Dbee.name=" + assignedName);
+    assertThat(javaOptions).contains("-Dpockethive.control-plane.worker.instance-id=" + assignedName);
     verify(docker).startContainer("c1");
     assertEquals(SwarmStatus.RUNNING, manager.getStatus());
 
@@ -172,7 +176,11 @@ class SwarmLifecycleManagerTest {
     verify(docker).createContainer(eq("img1"), envCap2.capture(), nameCap2.capture());
     Map<String,String> env = envCap2.getValue();
     assertEquals(nameCap2.getValue(), env.get("BEE_NAME"));
-    assertTrue(env.get("JAVA_TOOL_OPTIONS").endsWith("-Dbee.name=" + nameCap2.getValue()));
+    assertEquals(nameCap2.getValue(), env.get("POCKETHIVE_CONTROL_PLANE_INSTANCE_ID"));
+    assertEquals(nameCap2.getValue(), env.get("POCKETHIVE_CONTROL_PLANE_WORKER_INSTANCE_ID"));
+    String javaOptions2 = env.get("JAVA_TOOL_OPTIONS");
+    assertThat(javaOptions2).contains("-Dbee.name=" + nameCap2.getValue());
+    assertThat(javaOptions2).contains("-Dpockethive.control-plane.worker.instance-id=" + nameCap2.getValue());
     verify(docker).resolveControlNetwork();
     verify(docker).startContainer("c1");
     verify(amqp).declareExchange(argThat((TopicExchange e) -> e.getName().equals("ph." + Topology.SWARM_ID + ".hive")));

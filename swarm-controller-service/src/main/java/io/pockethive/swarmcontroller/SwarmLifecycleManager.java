@@ -232,13 +232,17 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
             }
             String beeName = BeeNameGenerator.generate(bee.role(), Topology.SWARM_ID);
             env.put("BEE_NAME", beeName);
+            env.put("POCKETHIVE_CONTROL_PLANE_INSTANCE_ID", beeName);
+            env.put("POCKETHIVE_CONTROL_PLANE_WORKER_INSTANCE_ID", beeName);
             String javaOpts = env.get("JAVA_TOOL_OPTIONS");
             if (javaOpts == null || javaOpts.isBlank()) {
               javaOpts = "";
             } else if (!javaOpts.endsWith(" ")) {
               javaOpts = javaOpts + " ";
             }
-            env.put("JAVA_TOOL_OPTIONS", javaOpts + "-Dbee.name=" + beeName);
+            javaOpts = javaOpts + "-Dbee.name=" + beeName;
+            javaOpts = javaOpts + " -Dpockethive.control-plane.worker.instance-id=" + beeName;
+            env.put("JAVA_TOOL_OPTIONS", javaOpts);
             applyMetricsEnv(env, beeName);
             log.info("creating container {} for role {} using image {}", beeName, bee.role(), bee.image());
             log.info("container env for {}: {}", beeName, env);
