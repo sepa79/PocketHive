@@ -46,6 +46,7 @@ interface RFProps {
   edges: RFEdge[]
   onNodeDragStop: (e: unknown, node: RFNode) => void
   onNodesChange: (changes: { id: string; position: { x: number; y: number } }[]) => void
+  onNodeClick?: (e: unknown, node: RFNode) => void
   children?: ReactNode
   nodeTypes?: Record<string, React.ComponentType<NodeComponentProps>>
 }
