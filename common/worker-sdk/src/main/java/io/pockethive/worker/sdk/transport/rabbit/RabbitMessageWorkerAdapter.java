@@ -434,14 +434,18 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
             Objects.requireNonNull(desiredStateResolver, "desiredStateResolver");
             Objects.requireNonNull(dispatcher, "dispatcher");
             if (messageResultPublisher == null) {
-                if (rabbitTemplate != null && outboundQueue != null) {
+                if (rabbitTemplate != null) {
+                    if (outboundQueue == null) {
+                        throw new IllegalStateException("Worker " + workerDefinition.beanName()
+                            + " must declare an outbound queue when using the RabbitTemplate publisher");
+                    }
                     messageResultPublisher =
                         (result, message) -> rabbitTemplate.send(Topology.EXCHANGE, outboundQueue, message);
                 } else {
                     messageResultPublisher = (result, message) -> {
-                        String missing = rabbitTemplate == null
-                            ? "a message result publisher"
-                            : "an outbound queue";
+                        String missing = outboundQueue == null
+                            ? "an outbound queue"
+                            : "a message result publisher";
                         throw new IllegalStateException("Worker " + workerDefinition.beanName()
                             + " attempted to publish WorkResult.Message but has not configured " + missing);
                     };

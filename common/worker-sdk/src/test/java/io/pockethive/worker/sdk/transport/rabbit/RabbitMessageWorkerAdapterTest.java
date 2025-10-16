@@ -222,7 +222,7 @@ class RabbitMessageWorkerAdapterTest {
     }
 
     @Test
-    void buildAllowsMissingOutboundQueueWhenTemplatePresent() {
+    void buildFailsWhenTemplateConfiguredWithoutOutboundQueue() {
         workerDefinition = new WorkerDefinition(
             "processorWorker",
             Object.class,
@@ -233,7 +233,9 @@ class RabbitMessageWorkerAdapterTest {
             Object.class
         );
 
-        assertThatCode(() -> builder().build()).doesNotThrowAnyException();
+        assertThatThrownBy(() -> builder().build())
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("outbound queue");
     }
 
     @Test
