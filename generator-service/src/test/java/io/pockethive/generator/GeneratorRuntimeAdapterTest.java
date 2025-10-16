@@ -91,15 +91,12 @@ class GeneratorRuntimeAdapterTest {
 
     adapter.emitInitialStatus();
     adapter.tick();
-    adapter.emitStatusDelta();
-
     verify(workerRuntime, times(2)).dispatch(eq("generatorWorker"), any(WorkMessage.class));
     ArgumentCaptor<Message> messageCaptor = ArgumentCaptor.forClass(Message.class);
     verify(rabbitTemplate, times(2)).send(eq(Topology.EXCHANGE), eq(Topology.GEN_QUEUE), messageCaptor.capture());
     assertThat(messageCaptor.getAllValues())
         .allSatisfy(message -> assertThat(new String(message.getBody(), StandardCharsets.UTF_8)).isEqualTo("payload"));
     verify(controlPlaneRuntime).emitStatusSnapshot();
-    verify(controlPlaneRuntime).emitStatusDelta();
   }
 
   @Test

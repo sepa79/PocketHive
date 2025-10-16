@@ -85,11 +85,6 @@ class TriggerRuntimeAdapter {
     }
   }
 
-  @Scheduled(fixedRate = 5000)
-  public void emitStatusDelta() {
-    controlPlaneRuntime.emitStatusDelta();
-  }
-
   private void initialiseStateListeners() {
     for (WorkerDefinition definition : triggerWorkers) {
       TriggerWorkerConfig initialConfig = defaults.asConfig();

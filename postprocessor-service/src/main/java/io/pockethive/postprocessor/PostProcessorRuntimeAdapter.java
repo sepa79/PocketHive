@@ -17,7 +17,6 @@ import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.amqp.rabbit.listener.RabbitListenerEndpointRegistry;
 import org.springframework.context.ApplicationListener;
 import org.springframework.context.event.ContextRefreshedEvent;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -72,11 +71,6 @@ class PostProcessorRuntimeAdapter implements ApplicationListener<ContextRefreshe
       queues = "${pockethive.control-plane.queues.final:" + TopologyDefaults.FINAL_QUEUE + "}")
   public void onWork(Message message) {
     delegate.onWork(message);
-  }
-
-  @Scheduled(fixedRate = 5000)
-  public void emitStatusDelta() {
-    delegate.emitStatusDelta();
   }
 
   @Override

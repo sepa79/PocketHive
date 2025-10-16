@@ -148,15 +148,6 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
     }
 
     /**
-     * Forwards scheduled status delta requests to the control plane helper.
-     *
-     * @see WorkerControlPlaneRuntime#emitStatusDelta()
-     */
-    public void emitStatusDelta() {
-        controlPlaneRuntime.emitStatusDelta();
-    }
-
-    /**
      * Handles control-plane payloads, enforcing the standard validation and observability wiring.
      * <p>
      * Implementations should delegate any inbound control queue consumption to this method so that the

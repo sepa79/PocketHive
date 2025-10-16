@@ -18,7 +18,6 @@ import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.amqp.rabbit.listener.RabbitListenerEndpointRegistry;
 import org.springframework.context.ApplicationListener;
 import org.springframework.context.event.ContextRefreshedEvent;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -76,11 +75,6 @@ class ModeratorRuntimeAdapter implements ApplicationListener<ContextRefreshedEve
       queues = "${pockethive.control-plane.queues.generator:" + TopologyDefaults.GEN_QUEUE + "}")
   public void onWork(Message message) {
     delegate.onWork(message);
-  }
-
-  @Scheduled(fixedRate = 5000)
-  public void emitStatusDelta() {
-    delegate.emitStatusDelta();
   }
 
   @Override

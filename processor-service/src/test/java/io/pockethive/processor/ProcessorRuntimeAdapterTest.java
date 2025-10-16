@@ -152,25 +152,6 @@ class ProcessorRuntimeAdapterTest {
   }
 
   @Test
-  void emitStatusDeltaDelegatesToControlPlaneRuntime() {
-    when(workerRegistry.findByRoleAndType("processor", WorkerType.MESSAGE))
-        .thenReturn(Optional.of(definition));
-    ProcessorRuntimeAdapter adapter = new ProcessorRuntimeAdapter(
-        workerRuntime,
-        workerRegistry,
-        controlPlaneRuntime,
-        rabbitTemplate,
-        listenerRegistry,
-        identity,
-        defaults
-    );
-
-    adapter.emitStatusDelta();
-
-    verify(controlPlaneRuntime).emitStatusDelta();
-  }
-
-  @Test
   void failsFastWhenOutboundQueueNotDefined() {
     WorkerDefinition missingOutbound = new WorkerDefinition(
         "processorWorker",

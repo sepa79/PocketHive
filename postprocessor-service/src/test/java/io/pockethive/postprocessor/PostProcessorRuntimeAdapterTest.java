@@ -143,21 +143,4 @@ class PostProcessorRuntimeAdapterTest {
     assertThat(beanCaptor.getValue()).isEqualTo("postProcessorWorker");
   }
 
-  @Test
-  void emitStatusDeltaDelegatesToControlPlaneRuntime() {
-    when(workerRegistry.findByRoleAndType("postprocessor", WorkerType.MESSAGE))
-        .thenReturn(Optional.of(definition));
-    PostProcessorRuntimeAdapter adapter = new PostProcessorRuntimeAdapter(
-        workerRuntime,
-        workerRegistry,
-        controlPlaneRuntime,
-        listenerRegistry,
-        identity,
-        defaults
-    );
-
-    adapter.emitStatusDelta();
-
-    verify(controlPlaneRuntime).emitStatusDelta();
-  }
 }

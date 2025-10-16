@@ -154,22 +154,4 @@ class ModeratorRuntimeAdapterTest {
     verify(listenerContainer, times(1)).start();
   }
 
-  @Test
-  void emitStatusDeltaDelegatesToControlPlaneRuntime() {
-    when(workerRegistry.findByRoleAndType("moderator", WorkerType.MESSAGE))
-        .thenReturn(Optional.of(definition));
-    ModeratorRuntimeAdapter adapter = new ModeratorRuntimeAdapter(
-        workerRuntime,
-        workerRegistry,
-        controlPlaneRuntime,
-        rabbitTemplate,
-        listenerRegistry,
-        identity,
-        defaults
-    );
-
-    adapter.emitStatusDelta();
-
-    verify(controlPlaneRuntime).emitStatusDelta();
-  }
 }
