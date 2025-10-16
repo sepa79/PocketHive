@@ -39,6 +39,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -150,7 +151,7 @@ class RabbitMessageWorkerAdapterTest {
         adapter.onWork(inbound);
 
         verify(errorHandler).accept(failure);
-        verify(rabbitTemplate, never()).send(anyString(), anyString(), any(Message.class));
+        verifyNoInteractions(rabbitTemplate);
     }
 
     @Test
@@ -168,7 +169,7 @@ class RabbitMessageWorkerAdapterTest {
         assertThat(exceptionCaptor.getValue())
             .isInstanceOf(IllegalStateException.class)
             .hasMessageContaining("null WorkResult");
-        verify(rabbitTemplate, never()).send(anyString(), anyString(), any(Message.class));
+        verifyNoInteractions(rabbitTemplate);
     }
 
     @Test
@@ -185,7 +186,7 @@ class RabbitMessageWorkerAdapterTest {
         adapter.onWork(inbound);
 
         verify(resultPublisher).publish(any(WorkResult.Message.class), any(Message.class));
-        verify(rabbitTemplate, never()).send(anyString(), anyString(), any(Message.class));
+        verifyNoInteractions(rabbitTemplate);
     }
 
     @Test
@@ -265,7 +266,7 @@ class RabbitMessageWorkerAdapterTest {
             Object.class
         );
 
-        RabbitMessageWorkerAdapter adapter = builder().build();
+        RabbitMessageWorkerAdapter adapter = builderWithoutTemplate().build();
         RabbitWorkMessageConverter converter = new RabbitWorkMessageConverter();
         Message inbound = converter.toMessage(WorkMessage.text("payload").build());
 
@@ -279,7 +280,7 @@ class RabbitMessageWorkerAdapterTest {
         assertThat(exceptionCaptor.getValue())
             .isInstanceOf(IllegalStateException.class)
             .hasMessageContaining("outbound queue");
-        verify(rabbitTemplate, never()).send(anyString(), anyString(), any(Message.class));
+        verifyNoInteractions(rabbitTemplate);
     }
 
     @Test
