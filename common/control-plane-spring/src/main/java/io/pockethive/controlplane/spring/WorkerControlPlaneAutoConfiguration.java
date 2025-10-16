@@ -7,6 +7,7 @@ import io.pockethive.controlplane.messaging.ControlPlaneEmitter;
 import io.pockethive.controlplane.messaging.ControlPlanePublisher;
 import io.pockethive.controlplane.payload.RoleContext;
 import io.pockethive.controlplane.topology.ControlPlaneTopologyDescriptor;
+import io.pockethive.controlplane.topology.ControlQueueDescriptor;
 import io.pockethive.controlplane.worker.WorkerControlPlane;
 import java.util.List;
 import java.util.Objects;
@@ -92,6 +93,18 @@ public class WorkerControlPlaneAutoConfiguration {
     ) {
         RoleContext role = RoleContext.fromIdentity(identity);
         return ControlPlaneEmitter.using(descriptor, role, publisher);
+    }
+
+    @Bean(name = "workerControlQueueName")
+    @ConditionalOnMissingBean(name = "workerControlQueueName")
+    String workerControlQueueName(
+        @Qualifier("workerControlPlaneTopologyDescriptor") ControlPlaneTopologyDescriptor descriptor,
+        @Qualifier("workerControlPlaneIdentity") ControlPlaneIdentity identity
+    ) {
+        return descriptor.controlQueue(identity.instanceId())
+            .map(ControlQueueDescriptor::name)
+            .orElseThrow(() -> new IllegalStateException(
+                "Control queue descriptor is missing for worker role " + descriptor.role()));
     }
 
     private static String requireText(String value, String property) {

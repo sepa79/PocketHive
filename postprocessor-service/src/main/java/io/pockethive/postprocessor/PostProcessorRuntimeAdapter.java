@@ -82,7 +82,7 @@ class PostProcessorRuntimeAdapter implements ApplicationListener<ContextRefreshe
     delegate.emitStatusDelta();
   }
 
-  @RabbitListener(queues = "#{@postProcessorControlQueueName}")
+  @RabbitListener(queues = "#{@workerControlQueueName}")
   public void onControl(String payload,
                         @Header(AmqpHeaders.RECEIVED_ROUTING_KEY) String routingKey,
                         @Header(value = ObservabilityContextUtil.HEADER, required = false) String traceHeader) {

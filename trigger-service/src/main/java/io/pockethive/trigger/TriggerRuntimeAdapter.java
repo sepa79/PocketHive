@@ -96,7 +96,7 @@ class TriggerRuntimeAdapter {
     controlPlaneRuntime.emitStatusDelta();
   }
 
-  @RabbitListener(queues = "#{@triggerControlQueueName}")
+  @RabbitListener(queues = "#{@workerControlQueueName}")
   public void onControl(String payload,
                         @Header(AmqpHeaders.RECEIVED_ROUTING_KEY) String routingKey,
                         @Header(value = ObservabilityContextUtil.HEADER, required = false) String traceHeader) {

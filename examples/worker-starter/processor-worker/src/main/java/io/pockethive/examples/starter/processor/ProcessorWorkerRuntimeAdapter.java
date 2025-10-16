@@ -76,7 +76,7 @@ class ProcessorWorkerRuntimeAdapter implements ApplicationListener<ContextRefres
     delegate.emitStatusDelta();
   }
 
-  @RabbitListener(queues = "${ph.processor.control.queue:" + TopologyDefaults.CONTROL_QUEUE + "}")
+  @RabbitListener(queues = "#{@workerControlQueueName}")
   public void onControl(String payload,
                         @Header(AmqpHeaders.RECEIVED_ROUTING_KEY) String routingKey,
                         @Header(value = ObservabilityContextUtil.HEADER, required = false) String traceHeader) {
