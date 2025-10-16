@@ -3,6 +3,7 @@ import type { Component } from '../../types/hive'
 import { sendConfigUpdate } from '../../lib/orchestratorApi'
 import QueuesPanel from './QueuesPanel'
 import { heartbeatHealth, colorForHealth } from '../../lib/health'
+import WiremockPanel from './WiremockPanel'
 
 interface Props {
   component: Component
@@ -98,6 +99,13 @@ export default function ComponentDetail({ component, onClose }: Props) {
 
   const health = heartbeatHealth(component.lastHeartbeat)
   const role = component.role.trim() || '—'
+  const normalizedRole = component.role.trim().toLowerCase()
+  const isWiremock = normalizedRole === 'wiremock'
+
+  const renderedContent = renderForm(component, form, setForm, single)
+  const containerClass = isWiremock
+    ? 'mb-4'
+    : 'p-4 border border-white/10 rounded mb-4 text-sm text-white/60 space-y-2'
 
   return (
     <div className="flex-1 p-4 overflow-y-auto relative">
@@ -124,15 +132,15 @@ export default function ComponentDetail({ component, onClose }: Props) {
             : '—'}
         </div>
       </div>
-      <div className="p-4 border border-white/10 rounded mb-4 text-sm text-white/60 space-y-2">
-        {renderForm(component.role, form, setForm, single)}
-      </div>
-      <button
-        className="mb-4 rounded bg-blue-600 px-3 py-1 text-sm"
-        onClick={handleSubmit}
-      >
-        Confirm
-      </button>
+      <div className={containerClass}>{renderedContent}</div>
+      {!isWiremock && (
+        <button
+          className="mb-4 rounded bg-blue-600 px-3 py-1 text-sm"
+          onClick={handleSubmit}
+        >
+          Confirm
+        </button>
+      )}
       {toast && (
         <div className="fixed bottom-4 right-4 bg-black/80 text-white px-4 py-2 rounded">
           {toast}
@@ -145,11 +153,12 @@ export default function ComponentDetail({ component, onClose }: Props) {
 }
 
 function renderForm(
-  role: string | undefined,
+  component: Component,
   form: Record<string, string>,
   setForm: (f: Record<string, string>) => void,
   single: () => void,
 ) {
+  const role = component.role?.trim().toLowerCase()
   const input = (
     key: string,
     type: string = 'text',
@@ -164,6 +173,8 @@ function renderForm(
     />
   )
   switch (role) {
+    case 'wiremock':
+      return <WiremockPanel component={component} />
     case 'generator':
       return (
         <div className="space-y-2">

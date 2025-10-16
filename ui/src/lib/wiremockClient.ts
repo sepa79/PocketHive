@@ -1,12 +1,37 @@
 import { apiFetch } from './api'
 import type { Component } from '../types/hive'
 
-interface WiremockRequestSummary {
+export interface WiremockRequestSummary {
   id?: string
   method?: string
   url?: string
   status?: number
   loggedDate?: number
+}
+
+export interface WiremockScenarioSummary {
+  id?: string
+  name: string
+  state: string
+  completed?: boolean
+}
+
+export interface WiremockComponentConfig extends Record<string, unknown> {
+  healthStatus: string
+  version?: string
+  requestCount?: number
+  requestCountError?: boolean
+  stubCount?: number
+  stubCountError?: boolean
+  unmatchedCount?: number
+  recentRequests: WiremockRequestSummary[]
+  recentRequestsError?: boolean
+  unmatchedRequests: WiremockRequestSummary[]
+  unmatchedRequestsError?: boolean
+  scenarios: WiremockScenarioSummary[]
+  scenariosError?: boolean
+  adminUrl: string
+  lastUpdatedTs: number
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -57,6 +82,17 @@ function normaliseRequest(entry: unknown): WiremockRequestSummary | null {
   }
 }
 
+function normaliseScenario(entry: unknown): WiremockScenarioSummary | null {
+  if (!isRecord(entry)) return null
+  const name = typeof entry['name'] === 'string' ? entry['name'] : undefined
+  const state = typeof entry['state'] === 'string' ? entry['state'] : undefined
+  if (!name || !state) return null
+  const scenario: WiremockScenarioSummary = { name, state }
+  if (typeof entry['id'] === 'string') scenario.id = entry['id']
+  if (typeof entry['completed'] === 'boolean') scenario.completed = entry['completed']
+  return scenario
+}
+
 async function fetchJson(path: string): Promise<unknown | null> {
   try {
     const response = await apiFetch(path)
@@ -69,11 +105,13 @@ async function fetchJson(path: string): Promise<unknown | null> {
 
 export async function fetchWiremockComponent(limit = 25): Promise<Component | null> {
   const base = '/wiremock/__admin'
-  const [health, count, recent, unmatched] = await Promise.all([
+  const [health, count, recent, unmatched, mappings, scenarios] = await Promise.all([
     fetchJson(`${base}/health`),
     fetchJson(`${base}/requests/count`),
     fetchJson(`${base}/requests?limit=${limit}`),
     fetchJson(`${base}/requests/unmatched`),
+    fetchJson(`${base}/mappings`),
+    fetchJson(`${base}/scenarios`),
   ])
 
   const healthStatus = extractHealthStatus(health || undefined)
@@ -91,18 +129,60 @@ export async function fetchWiremockComponent(limit = 25): Promise<Component | nu
     .map((entry) => normaliseRequest(entry))
     .filter((entry): entry is WiremockRequestSummary => entry !== null)
 
-  if (!healthStatus && typeof totalRequests !== 'number' && recentRequests.length === 0) {
+  const scenariosRaw =
+    isRecord(scenarios) && Array.isArray(scenarios['scenarios']) ? scenarios['scenarios'] : []
+  const scenarioSummaries = scenariosRaw
+    .map((entry) => normaliseScenario(entry))
+    .filter((entry): entry is WiremockScenarioSummary => entry !== null)
+
+  if (
+    !healthStatus &&
+    typeof totalRequests !== 'number' &&
+    recentRequests.length === 0 &&
+    unmatchedRequests.length === 0
+  ) {
     return null
   }
 
-  const config: Record<string, unknown> = {
+  let stubCount: number | undefined
+  if (isRecord(mappings) && isRecord(mappings['meta'])) {
+    const meta = mappings['meta'] as Record<string, unknown>
+    if (typeof meta['total'] === 'number') {
+      stubCount = meta['total']
+    }
+  }
+  const unmatchedMetaTotal =
+    isRecord(unmatched) && isRecord(unmatched['meta'])
+      ? (unmatched['meta'] as Record<string, unknown>)['total']
+      : undefined
+  const unmatchedTotal =
+    typeof unmatchedMetaTotal === 'number' ? unmatchedMetaTotal : unmatchedRequests.length
+
+  const config: WiremockComponentConfig = {
     healthStatus: healthStatus ?? 'UNKNOWN',
     recentRequests,
+    recentRequestsError: recent === null,
     unmatchedRequests,
+    unmatchedRequestsError: unmatched === null,
+    unmatchedCount: unmatchedTotal,
+    scenarios: scenarioSummaries,
+    scenariosError: scenarios === null,
+    adminUrl: `${base}/`,
+    lastUpdatedTs: Date.now(),
   }
+
   if (typeof totalRequests === 'number') {
     config.requestCount = totalRequests
+  } else if (count === null) {
+    config.requestCountError = true
   }
+
+  if (typeof stubCount === 'number') {
+    config.stubCount = stubCount
+  } else if (mappings === null) {
+    config.stubCountError = true
+  }
+
   if (version) {
     config.version = version
   }
