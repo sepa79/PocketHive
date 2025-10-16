@@ -10,17 +10,13 @@ logging:
   config: classpath:logback-spring.xml
   pattern.level: "%5p [%X{traceId}]"
 
-ph:
-  swarmId: ${PH_SWARM_ID:default}
-  controlQueue: ${PH_CONTROL_QUEUE:ph.control}
-  controlExchange: ${PH_CONTROL_EXCHANGE:ph.control}
 pockethive:
   control-plane:
-    swarm-id: ${ph.swarmId}
+    exchange: ${PH_CONTROL_EXCHANGE}
+    swarm-id: ${PH_SWARM_ID}
     worker:
       role: swarm-controller
-      # Expect POCKETHIVE_CONTROL_PLANE_WORKER_INSTANCE_ID to supply the instance id
-      instance-id: ${POCKETHIVE_CONTROL_PLANE_WORKER_INSTANCE_ID}
+      instance-id: ${POCKETHIVE_CONTROL_PLANE_WORKER_INSTANCE_ID:${POCKETHIVE_CONTROL_PLANE_INSTANCE_ID}}
     manager:
       role: swarm-controller
       instance-id: ${POCKETHIVE_CONTROL_PLANE_INSTANCE_ID:${POCKETHIVE_CONTROL_PLANE_WORKER_INSTANCE_ID}}

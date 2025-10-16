@@ -31,7 +31,10 @@ class SwarmLifecycleManagerIntegrationTest {
   static void rabbitProperties(DynamicPropertyRegistry registry) {
     registry.add("spring.rabbitmq.host", () -> RabbitAvailableCondition.getBrokerRunning().getHostName());
     registry.add("spring.rabbitmq.port", () -> RabbitAvailableCondition.getBrokerRunning().getPort());
-    registry.add("pockethive.control-plane.worker.instance-id", () -> TEST_INSTANCE_ID);
+    registry.add("PH_SWARM_ID", () -> Topology.SWARM_ID);
+    registry.add("PH_CONTROL_EXCHANGE", () -> Topology.CONTROL_EXCHANGE);
+    registry.add("POCKETHIVE_CONTROL_PLANE_INSTANCE_ID", () -> TEST_INSTANCE_ID);
+    registry.add("POCKETHIVE_CONTROL_PLANE_WORKER_INSTANCE_ID", () -> TEST_INSTANCE_ID);
   }
 
   @Autowired
