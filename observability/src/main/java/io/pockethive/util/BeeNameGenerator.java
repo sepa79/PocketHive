@@ -23,7 +23,13 @@ public final class BeeNameGenerator {
           "twirly",
           "glowy",
           "jolly",
-          "snappy");
+          "snappy",
+          "sparkly",
+          "sunny",
+          "peppery",
+          "breezy",
+          "amber",
+          "sprightly");
 
   private static final List<String> SECOND_PARTS =
       List.of(
@@ -38,7 +44,13 @@ public final class BeeNameGenerator {
           "wiggle",
           "dance",
           "flutter",
-          "zing");
+          "zing",
+          "hum",
+          "swirl",
+          "gleam",
+          "glimmer",
+          "shine",
+          "twist");
 
   private BeeNameGenerator() {}
 

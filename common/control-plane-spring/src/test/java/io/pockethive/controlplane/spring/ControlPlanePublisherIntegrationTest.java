@@ -24,7 +24,8 @@ import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 class ControlPlanePublisherIntegrationTest {
 
     private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
-        .withUserConfiguration(ControlPlaneCommonAutoConfiguration.class);
+        .withUserConfiguration(ControlPlaneCommonAutoConfiguration.class)
+        .withPropertyValues("pockethive.control-plane.worker.enabled=false");
 
     @Test
     void publisherSendsSignalsAndEventsToConfiguredExchange() {

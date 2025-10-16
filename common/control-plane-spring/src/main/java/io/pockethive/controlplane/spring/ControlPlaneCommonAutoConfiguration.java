@@ -23,7 +23,7 @@ import org.springframework.context.annotation.Configuration;
 @AutoConfigureAfter(RabbitAutoConfiguration.class)
 @ConditionalOnClass({TopicExchange.class, RabbitTemplate.class})
 @ConditionalOnProperty(prefix = "pockethive.control-plane", name = "enabled", havingValue = "true", matchIfMissing = true)
-@EnableConfigurationProperties(ControlPlaneProperties.class)
+@EnableConfigurationProperties({ControlPlaneProperties.class, BeeIdentityProperties.class})
 public class ControlPlaneCommonAutoConfiguration {
 
     @Bean(name = "controlPlaneExchange")

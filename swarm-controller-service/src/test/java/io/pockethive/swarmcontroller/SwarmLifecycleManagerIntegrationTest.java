@@ -6,12 +6,12 @@ import org.junit.jupiter.api.Test;
 import org.springframework.amqp.AmqpException;
 import org.springframework.amqp.AmqpIOException;
 import org.springframework.amqp.core.*;
+import org.springframework.amqp.rabbit.core.RabbitAdmin;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.amqp.rabbit.junit.RabbitAvailable;
 import org.springframework.amqp.rabbit.junit.RabbitAvailableCondition;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.amqp.rabbit.core.RabbitAdmin;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -25,10 +25,13 @@ import static org.junit.jupiter.api.Assertions.*;
 @SpringBootTest
 @RabbitAvailable
 class SwarmLifecycleManagerIntegrationTest {
+  private static final String TEST_INSTANCE_ID = "test-swarm-controller-bee";
+
   @DynamicPropertySource
   static void rabbitProperties(DynamicPropertyRegistry registry) {
     registry.add("spring.rabbitmq.host", () -> RabbitAvailableCondition.getBrokerRunning().getHostName());
     registry.add("spring.rabbitmq.port", () -> RabbitAvailableCondition.getBrokerRunning().getPort());
+    registry.add("pockethive.control-plane.worker.instance-id", () -> TEST_INSTANCE_ID);
   }
 
   @Autowired
