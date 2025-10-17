@@ -1,6 +1,5 @@
 package io.pockethive.orchestrator;
 
-import io.pockethive.Topology;
 import io.pockethive.util.BeeNameGenerator;
 import java.util.HashMap;
 import java.util.Map;
@@ -20,11 +19,14 @@ public final class OrchestratorControlPlaneInitializer
     private static final String INSTANCE_ID_PROPERTY = "pockethive.control-plane.manager.instance-id";
     private static final String MANAGER_SWARM_ID_PROPERTY = "pockethive.control-plane.manager.swarm-id";
     private static final String SWARM_ID_PROPERTY = "pockethive.control-plane.swarm-id";
+    private static final String SWARM_ID_ENV = "POCKETHIVE_CONTROL_PLANE_SWARM_ID";
     private static final String PROPERTY_SOURCE_NAME = "orchestratorControlPlaneDefaults";
 
     @Override
     public void initialize(ConfigurableApplicationContext applicationContext) {
         ConfigurableEnvironment environment = applicationContext.getEnvironment();
+        String swarmId = resolveSwarmId(environment);
+        System.setProperty(SWARM_ID_ENV, swarmId);
         String configured = normalise(environment.getProperty(INSTANCE_ID_PROPERTY));
         if (configured != null) {
             System.setProperty(BEE_NAME_PROPERTY, configured);
@@ -33,7 +35,6 @@ public final class OrchestratorControlPlaneInitializer
         }
 
         String existing = normalise(System.getProperty(BEE_NAME_PROPERTY));
-        String swarmId = resolveSwarmId(environment);
         String resolved = existing != null ? existing : BeeNameGenerator.generate(ROLE, swarmId);
 
         System.setProperty(BEE_NAME_PROPERTY, resolved);
@@ -67,7 +68,12 @@ public final class OrchestratorControlPlaneInitializer
         if (global != null) {
             return global;
         }
-        return Topology.SWARM_ID;
+        throw new IllegalStateException(
+            "Missing required PocketHive configuration: "
+                + SWARM_ID_PROPERTY
+                + " (or set the "
+                + SWARM_ID_ENV
+                + " environment variable)");
     }
 
     private static String normalise(String value) {
