@@ -29,7 +29,7 @@ class ProcessorTopologyProvisioningTest {
         .withBean(RabbitTemplate.class, () -> Mockito.mock(RabbitTemplate.class))
         .withPropertyValues(
             "pockethive.control-plane.worker.role=processor",
-            "pockethive.control-plane.worker.instance-id=processor-1",
+            "pockethive.control-plane.instance-id=processor-1",
             "pockethive.control-plane.swarm-id=swarm-alpha",
             "pockethive.control-plane.exchange=ph.control.worker");
 

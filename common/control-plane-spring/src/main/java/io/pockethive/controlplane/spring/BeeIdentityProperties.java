@@ -6,10 +6,10 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 /**
  * Exposes the externally supplied bee identity resolved from Spring configuration.
  */
-@ConfigurationProperties(prefix = "pockethive.control-plane.worker")
+@ConfigurationProperties(prefix = "pockethive.control-plane")
 public class BeeIdentityProperties implements InitializingBean {
 
-    public static final String INSTANCE_ID_PROPERTY = "pockethive.control-plane.worker.instance-id";
+    public static final String INSTANCE_ID_PROPERTY = "pockethive.control-plane.instance-id";
 
     private boolean enabled = true;
     private String instanceId;
@@ -44,7 +44,7 @@ public class BeeIdentityProperties implements InitializingBean {
     public void afterPropertiesSet() {
         if (enabled && (instanceId == null || instanceId.isBlank())) {
             throw new IllegalStateException(
-                INSTANCE_ID_PROPERTY + " must be provided when the worker control plane is enabled");
+                INSTANCE_ID_PROPERTY + " must be provided when the control plane is enabled");
         }
     }
 }

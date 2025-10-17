@@ -33,7 +33,7 @@ class WorkerControlPlaneAutoConfigurationTest {
         .withBean(RabbitTemplate.class, () -> org.mockito.Mockito.mock(RabbitTemplate.class))
         .withPropertyValues(
             "pockethive.control-plane.worker.role=generator",
-            "pockethive.control-plane.worker.instance-id=gen-1",
+            "pockethive.control-plane.instance-id=gen-1",
             "pockethive.control-plane.swarm-id=swarm-alpha",
             "pockethive.control-plane.exchange=ph.control.worker");
 

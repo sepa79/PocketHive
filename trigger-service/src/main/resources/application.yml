@@ -13,14 +13,13 @@ logging:
 pockethive:
   control-plane:
     swarm-id: ${POCKETHIVE_CONTROL_PLANE_SWARM_ID:default}
+    instance-id: ${POCKETHIVE_CONTROL_PLANE_INSTANCE_ID:${spring.application.name}}
     queues:
       generator: ${POCKETHIVE_CONTROL_PLANE_QUEUES_GENERATOR:ph.${pockethive.control-plane.swarm-id}.gen}
       moderator: ${POCKETHIVE_CONTROL_PLANE_QUEUES_MODERATOR:ph.${pockethive.control-plane.swarm-id}.mod}
       final: ${POCKETHIVE_CONTROL_PLANE_QUEUES_FINAL:ph.${pockethive.control-plane.swarm-id}.final}
     worker:
       role: trigger
-      # Expect POCKETHIVE_CONTROL_PLANE_WORKER_INSTANCE_ID to supply the instance id
-      instance-id: ${POCKETHIVE_CONTROL_PLANE_WORKER_INSTANCE_ID}
       skip-self-signals: false
       trigger:
         interval-ms: 60000

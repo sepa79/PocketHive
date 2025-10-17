@@ -63,16 +63,16 @@ pockethive:
   control-plane:
     exchange: ph.control
     swarm-id: swarm-1
+    instance-id: processor-1
     worker:
       role: processor
-      instance-id: processor-1
     manager:
       enabled: false # disable if the service is worker-only
 ```
 
-Workers automatically inherit `pockethive.control-plane.swarm-id`; setting a
-dedicated `pockethive.control-plane.worker.swarm-id` override is no longer
-required unless you explicitly need the worker to join a different swarm.
+Workers and managers automatically inherit `pockethive.control-plane.swarm-id`
+and `pockethive.control-plane.instance-id`. Participant-specific overrides are
+no longer supported—set the shared properties once at the control-plane level.
 
 With the starter in place, inject the beans exported by the auto-configuration:
 

@@ -17,8 +17,7 @@ public final class OrchestratorControlPlaneInitializer
 
     private static final String ROLE = "orchestrator";
     private static final String BEE_NAME_PROPERTY = "bee.name";
-    private static final String INSTANCE_ID_PROPERTY = "pockethive.control-plane.manager.instance-id";
-    private static final String MANAGER_SWARM_ID_PROPERTY = "pockethive.control-plane.manager.swarm-id";
+    private static final String INSTANCE_ID_PROPERTY = "pockethive.control-plane.instance-id";
     private static final String SWARM_ID_PROPERTY = "pockethive.control-plane.swarm-id";
     private static final String PROPERTY_SOURCE_NAME = "orchestratorControlPlaneDefaults";
 
@@ -59,10 +58,6 @@ public final class OrchestratorControlPlaneInitializer
     }
 
     private static String resolveSwarmId(Environment environment) {
-        String managerOverride = normalise(environment.getProperty(MANAGER_SWARM_ID_PROPERTY));
-        if (managerOverride != null) {
-            return managerOverride;
-        }
         String global = normalise(environment.getProperty(SWARM_ID_PROPERTY));
         if (global != null) {
             return global;

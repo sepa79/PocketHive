@@ -19,9 +19,8 @@ class ControlPlaneTestFixturesTest {
         ControlPlaneProperties properties = ControlPlaneTestFixtures.workerProperties("swarm-1", " generator ", "worker-a");
 
         assertThat(properties.getSwarmId()).isEqualTo("swarm-1");
-        assertThat(properties.getWorker().getSwarmId()).isEqualTo("swarm-1");
         assertThat(properties.getWorker().getRole()).isEqualTo("generator");
-        assertThat(properties.getWorker().getInstanceId()).isEqualTo("worker-a");
+        assertThat(properties.getIdentity().getInstanceId()).isEqualTo("worker-a");
     }
 
     @Test

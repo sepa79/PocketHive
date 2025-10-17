@@ -34,7 +34,6 @@ class SwarmLifecycleManagerIntegrationTest {
     registry.add("POCKETHIVE_CONTROL_PLANE_SWARM_ID", () -> Topology.SWARM_ID);
     registry.add("POCKETHIVE_CONTROL_PLANE_EXCHANGE", () -> Topology.CONTROL_EXCHANGE);
     registry.add("POCKETHIVE_CONTROL_PLANE_INSTANCE_ID", () -> TEST_INSTANCE_ID);
-    registry.add("POCKETHIVE_CONTROL_PLANE_WORKER_INSTANCE_ID", () -> TEST_INSTANCE_ID);
   }
 
   @Autowired

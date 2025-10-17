@@ -31,6 +31,8 @@ This file is a **navigation and guardrails** page for both human and AI contribu
 
 ## 2) Minimal, enforceable rules (no duplication)
 
+- **No cascading defaults, no implicit back-compat:** When configuring services or libraries, never layer fallback property chains. Assume breaking changes are acceptable unless the task explicitly calls for backward compatibility.
+
 ### 2.1 Java & libraries
 - **Java 21 (LTS)** across services.
 - **Lombok is allowed** to keep code concise. Recommended annotations:

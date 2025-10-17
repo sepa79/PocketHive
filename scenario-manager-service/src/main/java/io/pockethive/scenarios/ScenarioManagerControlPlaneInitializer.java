@@ -18,8 +18,7 @@ public final class ScenarioManagerControlPlaneInitializer
   private static final String PROPERTY_SOURCE_NAME = "scenarioManagerControlPlaneDefaults";
   private static final String APPLICATION_NAME_PROPERTY = "spring.application.name";
   private static final String ROLE_PROPERTY = "pockethive.control-plane.manager.role";
-  private static final String INSTANCE_ID_PROPERTY = "pockethive.control-plane.manager.instance-id";
-  private static final String MANAGER_SWARM_ID_PROPERTY = "pockethive.control-plane.manager.swarm-id";
+  private static final String INSTANCE_ID_PROPERTY = "pockethive.control-plane.instance-id";
   private static final String GLOBAL_SWARM_ID_PROPERTY = "pockethive.control-plane.swarm-id";
   private static final String BEE_NAME_PROPERTY = "bee.name";
 
@@ -67,18 +66,11 @@ public final class ScenarioManagerControlPlaneInitializer
 
   private static String resolveSwarmId(
       ConfigurableEnvironment environment, Map<String, Object> defaults) {
-    String managerOverride = normalise(environment.getProperty(MANAGER_SWARM_ID_PROPERTY));
-    if (managerOverride != null) {
-      return managerOverride;
-    }
-
     String global = normalise(environment.getProperty(GLOBAL_SWARM_ID_PROPERTY));
     if (global != null) {
-      defaults.put(MANAGER_SWARM_ID_PROPERTY, global);
       return global;
     }
 
-    defaults.put(MANAGER_SWARM_ID_PROPERTY, Topology.SWARM_ID);
     if (isBlank(environment.getProperty(GLOBAL_SWARM_ID_PROPERTY))) {
       defaults.put(GLOBAL_SWARM_ID_PROPERTY, Topology.SWARM_ID);
     }

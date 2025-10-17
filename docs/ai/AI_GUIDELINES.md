@@ -6,6 +6,7 @@
 - Never expose credentials or personal data.
 - Stick to approved technologies: Java 21, React, JUnit 5, Cucumber, and AMQP/HTTP libraries already in use.
 - Output must be production ready: typed, formatted and secure.
+- No cascading defaults, no implicit back-compat: do not create fallback property chains, and assume breaking changes are acceptable unless backward compatibility is explicitly requested.
 - Review the [rules](../rules/) and [specifications](../spec/) before making changes.
 - Follow project policy and Conventional Commits.
 - When adding or removing Maven modules, update the root `pom.xml` `<modules>` section and commit any new module folders; otherwise builds fail with `Child module ... does not exist`.

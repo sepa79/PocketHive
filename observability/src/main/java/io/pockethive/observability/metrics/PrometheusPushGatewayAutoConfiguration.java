@@ -34,9 +34,7 @@ public class PrometheusPushGatewayAutoConfiguration {
       }
       String instanceId = resolveFirstNonBlank(environment,
           "management.metrics.tags.instance",
-          "pockethive.control-plane.worker.instance-id",
-          "pockethive.control-plane.manager.instance-id",
-          "POCKETHIVE_CONTROL_PLANE_WORKER_INSTANCE_ID",
+          "pockethive.control-plane.instance-id",
           "POCKETHIVE_CONTROL_PLANE_INSTANCE_ID");
       if (StringUtils.hasText(instanceId)) {
         registry.config().commonTags("instance", instanceId);
