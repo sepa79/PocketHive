@@ -32,17 +32,17 @@ public class LogAggregator {
   private final int batchSize;
 
   public LogAggregator(
-      @Value("${pockethive.loki.url:http://loki:3100}") String lokiBase,
-      @Value("${pockethive.loki.maxRetries:3}") int maxRetries,
-      @Value("${pockethive.loki.backoffMs:500}") long backoffMs,
-      @Value("${pockethive.loki.batchSize:100}") int batchSize) {
+      @Value("${pockethive.loki.url}") String lokiBase,
+      @Value("${pockethive.loki.maxRetries}") int maxRetries,
+      @Value("${pockethive.loki.backoffMs}") long backoffMs,
+      @Value("${pockethive.loki.batchSize}") int batchSize) {
     this.lokiUri = URI.create(lokiBase + "/loki/api/v1/push");
     this.maxRetries = maxRetries;
     this.backoffMs = backoffMs;
     this.batchSize = batchSize;
   }
 
-  @RabbitListener(queues = "${pockethive.logs.queue:ph.logs.agg}")
+  @RabbitListener(queues = "${pockethive.logs.queue}")
   public void onLog(Message message){
     try{
       String json = new String(message.getBody(), StandardCharsets.UTF_8);
@@ -53,7 +53,7 @@ public class LogAggregator {
     }
   }
 
-  @Scheduled(fixedRateString = "${pockethive.loki.flushIntervalMs:1000}")
+  @Scheduled(fixedRateString = "${pockethive.loki.flushIntervalMs}")
   public void flush(){
     List<LogEntry> batch = new ArrayList<>();
     for(int i=0;i<batchSize;i++){

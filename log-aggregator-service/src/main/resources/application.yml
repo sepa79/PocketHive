@@ -1,21 +1,38 @@
+# Default configuration for local development. Override values using standard Spring property overrides
+# (for example SPRING_APPLICATION_NAME, SPRING_RABBITMQ_HOST, or POCKETHIVE_CONTROL_PLANE_SWARM_ID).
 spring:
-  application.name: log-aggregator
+  application:
+    name: log-aggregator
   rabbitmq:
     host: ${RABBITMQ_HOST:rabbitmq}
     port: ${RABBITMQ_PORT:5672}
-    username: ${RABBITMQ_DEFAULT_USER:guest}
-    password: ${RABBITMQ_DEFAULT_PASS:guest}
+    username: ${RABBITMQ_USER:guest}
+    password: ${RABBITMQ_PASS:guest}
     listener:
       simple:
         auto-declare: false
         missing-queues-fatal: true
-management.endpoints.web.exposure.include: health,info
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
 logging:
   config: classpath:logback-spring.xml
-  pattern.level: "%5p [%X{traceId}]"
+  pattern:
+    level: "%5p [%X{traceId}]"
+
 pockethive:
+  control-plane:
+    swarm-id: default
+    instance-id: log-aggregator
+    manager:
+      role: log-aggregator
   logs:
     queue: ${POCKETHIVE_LOGS_QUEUE:ph.logs.agg}
+    exchange: ${POCKETHIVE_LOGS_EXCHANGE:ph.logs}
   loki:
     url: ${POCKETHIVE_LOKI_URL:http://loki:3100}
     maxRetries: ${POCKETHIVE_LOKI_MAX_RETRIES:3}
