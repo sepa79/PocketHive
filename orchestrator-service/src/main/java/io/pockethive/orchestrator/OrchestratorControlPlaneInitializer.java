@@ -20,6 +20,8 @@ public final class OrchestratorControlPlaneInitializer
     private static final String MANAGER_SWARM_ID_PROPERTY = "pockethive.control-plane.manager.swarm-id";
     private static final String SWARM_ID_PROPERTY = "pockethive.control-plane.swarm-id";
     private static final String SWARM_ID_ENV = "POCKETHIVE_CONTROL_PLANE_SWARM_ID";
+    private static final String CONTROL_QUEUE_PROPERTY = "pockethive.control-plane.control.queue-prefix";
+    private static final String CONTROL_QUEUE_ENV = "POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE";
     private static final String PROPERTY_SOURCE_NAME = "orchestratorControlPlaneDefaults";
 
     @Override
@@ -27,6 +29,7 @@ public final class OrchestratorControlPlaneInitializer
         ConfigurableEnvironment environment = applicationContext.getEnvironment();
         String swarmId = resolveSwarmId(environment);
         System.setProperty(SWARM_ID_ENV, swarmId);
+        configureControlQueuePrefix(environment);
         String configured = normalise(environment.getProperty(INSTANCE_ID_PROPERTY));
         if (configured != null) {
             System.setProperty(BEE_NAME_PROPERTY, configured);
@@ -40,6 +43,13 @@ public final class OrchestratorControlPlaneInitializer
         System.setProperty(BEE_NAME_PROPERTY, resolved);
         System.setProperty(INSTANCE_ID_PROPERTY, resolved);
         injectInstanceId(environment, resolved);
+    }
+
+    private static void configureControlQueuePrefix(Environment environment) {
+        String prefix = normalise(environment.getProperty(CONTROL_QUEUE_PROPERTY));
+        if (prefix != null) {
+            System.setProperty(CONTROL_QUEUE_ENV, prefix);
+        }
     }
 
     @Override
