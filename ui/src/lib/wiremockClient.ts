@@ -1,12 +1,38 @@
 import { apiFetch } from './api'
+import { getConfig } from './config'
 import type { Component } from '../types/hive'
 
-interface WiremockRequestSummary {
+export interface WiremockRequestSummary {
   id?: string
   method?: string
   url?: string
   status?: number
   loggedDate?: number
+}
+
+export interface WiremockScenarioSummary {
+  id?: string
+  name: string
+  state: string
+  completed?: boolean
+}
+
+export interface WiremockComponentConfig extends Record<string, unknown> {
+  healthStatus: string
+  version?: string
+  requestCount?: number
+  requestCountError?: boolean
+  stubCount?: number
+  stubCountError?: boolean
+  unmatchedCount?: number
+  recentRequests: WiremockRequestSummary[]
+  recentRequestsError?: boolean
+  unmatchedRequests: WiremockRequestSummary[]
+  unmatchedRequestsError?: boolean
+  scenarios: WiremockScenarioSummary[]
+  scenariosError?: boolean
+  adminUrl: string
+  lastUpdatedTs: number
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -34,15 +60,54 @@ function extractVersion(health: unknown): string | undefined {
   return undefined
 }
 
+function parseLoggedDate(entry: Record<string, unknown>): number | undefined {
+  const parseValue = (value: unknown): number | undefined => {
+    if (typeof value === 'number') {
+      return value
+    }
+    if (typeof value === 'string' && value.length > 0) {
+      const numeric = Number(value)
+      if (!Number.isNaN(numeric)) {
+        return numeric
+      }
+      const parsed = Date.parse(value)
+      if (!Number.isNaN(parsed)) {
+        return parsed
+      }
+    }
+    return undefined
+  }
+
+  const direct = parseValue(entry['loggedDate'])
+  if (typeof direct === 'number') {
+    return direct
+  }
+
+  const directString = parseValue(entry['loggedDateString'])
+  if (typeof directString === 'number') {
+    return directString
+  }
+
+  const request = isRecord(entry['request']) ? entry['request'] : null
+  if (request) {
+    const nested = parseValue(request['loggedDate'])
+    if (typeof nested === 'number') {
+      return nested
+    }
+
+    const nestedString = parseValue(request['loggedDateString'])
+    if (typeof nestedString === 'number') {
+      return nestedString
+    }
+  }
+
+  return undefined
+}
+
 function normaliseRequest(entry: unknown): WiremockRequestSummary | null {
   if (!isRecord(entry)) return null
   const id = typeof entry['id'] === 'string' ? entry['id'] : undefined
-  const loggedDate =
-    typeof entry['loggedDate'] === 'number'
-      ? entry['loggedDate']
-      : typeof entry['loggedDate'] === 'string'
-      ? Number.parseInt(entry['loggedDate'] as string, 10)
-      : undefined
+  const loggedDate = parseLoggedDate(entry)
   const request = isRecord(entry['request']) ? entry['request'] : undefined
   const response = isRecord(entry['response']) ? entry['response'] : undefined
   const method = request && typeof request['method'] === 'string' ? request['method'] : undefined
@@ -57,6 +122,17 @@ function normaliseRequest(entry: unknown): WiremockRequestSummary | null {
   }
 }
 
+function normaliseScenario(entry: unknown): WiremockScenarioSummary | null {
+  if (!isRecord(entry)) return null
+  const name = typeof entry['name'] === 'string' ? entry['name'] : undefined
+  const state = typeof entry['state'] === 'string' ? entry['state'] : undefined
+  if (!name || !state) return null
+  const scenario: WiremockScenarioSummary = { name, state }
+  if (typeof entry['id'] === 'string') scenario.id = entry['id']
+  if (typeof entry['completed'] === 'boolean') scenario.completed = entry['completed']
+  return scenario
+}
+
 async function fetchJson(path: string): Promise<unknown | null> {
   try {
     const response = await apiFetch(path)
@@ -68,12 +144,16 @@ async function fetchJson(path: string): Promise<unknown | null> {
 }
 
 export async function fetchWiremockComponent(limit = 25): Promise<Component | null> {
-  const base = '/wiremock/__admin'
-  const [health, count, recent, unmatched] = await Promise.all([
+  const configUrl = getConfig().wiremock
+  const base =
+    typeof configUrl === 'string' && configUrl.length > 0 ? configUrl.replace(/\/+$/, '') : '/wiremock/__admin'
+  const [health, count, recent, unmatched, mappings, scenarios] = await Promise.all([
     fetchJson(`${base}/health`),
     fetchJson(`${base}/requests/count`),
     fetchJson(`${base}/requests?limit=${limit}`),
     fetchJson(`${base}/requests/unmatched`),
+    fetchJson(`${base}/mappings`),
+    fetchJson(`${base}/scenarios`),
   ])
 
   const healthStatus = extractHealthStatus(health || undefined)
@@ -81,6 +161,8 @@ export async function fetchWiremockComponent(limit = 25): Promise<Component | nu
   const totalRequests = isRecord(count) && typeof count['count'] === 'number' ? count['count'] : undefined
   const recentRequestsRaw =
     isRecord(recent) && Array.isArray(recent['requests']) ? recent['requests'] : []
+  const recentMeta = isRecord(recent) && isRecord(recent['meta']) ? (recent['meta'] as Record<string, unknown>) : undefined
+  const recentTotal = recentMeta && typeof recentMeta['total'] === 'number' ? recentMeta['total'] : undefined
   const unmatchedRequestsRaw =
     isRecord(unmatched) && Array.isArray(unmatched['requests']) ? unmatched['requests'] : []
 
@@ -91,28 +173,66 @@ export async function fetchWiremockComponent(limit = 25): Promise<Component | nu
     .map((entry) => normaliseRequest(entry))
     .filter((entry): entry is WiremockRequestSummary => entry !== null)
 
-  if (!healthStatus && typeof totalRequests !== 'number' && recentRequests.length === 0) {
-    return null
-  }
+  const scenariosRaw =
+    isRecord(scenarios) && Array.isArray(scenarios['scenarios']) ? scenarios['scenarios'] : []
+  const scenarioSummaries = scenariosRaw
+    .map((entry) => normaliseScenario(entry))
+    .filter((entry): entry is WiremockScenarioSummary => entry !== null)
 
-  const config: Record<string, unknown> = {
+  let stubCount: number | undefined
+  if (isRecord(mappings) && isRecord(mappings['meta'])) {
+    const meta = mappings['meta'] as Record<string, unknown>
+    if (typeof meta['total'] === 'number') {
+      stubCount = meta['total']
+    }
+  }
+  const unmatchedMetaTotal =
+    isRecord(unmatched) && isRecord(unmatched['meta'])
+      ? (unmatched['meta'] as Record<string, unknown>)['total']
+      : undefined
+  const unmatchedTotal =
+    typeof unmatchedMetaTotal === 'number' ? unmatchedMetaTotal : unmatchedRequests.length
+
+  const config: WiremockComponentConfig = {
     healthStatus: healthStatus ?? 'UNKNOWN',
     recentRequests,
+    recentRequestsError: recent === null,
     unmatchedRequests,
+    unmatchedRequestsError: unmatched === null,
+    unmatchedCount: unmatchedTotal,
+    scenarios: scenarioSummaries,
+    scenariosError: scenarios === null,
+    adminUrl: `${base}/`,
+    lastUpdatedTs: Date.now(),
   }
+
   if (typeof totalRequests === 'number') {
     config.requestCount = totalRequests
+  } else if (typeof recentTotal === 'number') {
+    config.requestCount = recentTotal
+  } else if (count === null) {
+    config.requestCountError = true
   }
+
+  if (typeof stubCount === 'number') {
+    config.stubCount = stubCount
+  } else if (mappings === null) {
+    config.stubCountError = true
+  }
+
   if (version) {
     config.version = version
   }
+
+  const now = Date.now()
 
   return {
     id: 'wiremock',
     name: 'WireMock',
     role: 'wiremock',
-    lastHeartbeat: Date.now(),
-    status: healthStatus,
+    swarmId: 'default',
+    lastHeartbeat: healthStatus ? now : 0,
+    status: healthStatus ?? 'ALERT',
     queues: [],
     config,
   }

@@ -74,6 +74,12 @@ export default function HivePage() {
 
   const orchestrator = components.find((c) => isOrchestrator(c)) ?? null
 
+  const normalizeSwarmId = (comp: Component) => {
+    const value = comp.swarmId?.trim()
+    if (!value) return 'default'
+    return value
+  }
+
   const filtered = components.filter((c) => {
     if (isOrchestrator(c)) return false
     const haystack = search.toLowerCase()
@@ -81,14 +87,15 @@ export default function HivePage() {
       c.name.toLowerCase().includes(haystack) ||
       c.id.toLowerCase().includes(haystack) ||
       c.role.toLowerCase().includes(haystack)
+    const swarmKey = normalizeSwarmId(c)
     const matchesSwarm =
       !activeSwarm ||
-      (activeSwarm === 'default' ? !c.swarmId : c.swarmId === activeSwarm)
+      (activeSwarm === 'default' ? swarmKey === 'default' : swarmKey === activeSwarm)
     return matchesSearch && matchesSwarm
   })
 
   const grouped = filtered.reduce<Record<string, Component[]>>((acc, c) => {
-    const swarm = c.swarmId || 'default'
+    const swarm = normalizeSwarmId(c)
     acc[swarm] = acc[swarm] || []
     acc[swarm].push(c)
     return acc

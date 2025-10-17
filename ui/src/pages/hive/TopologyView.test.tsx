@@ -46,6 +46,7 @@ interface RFProps {
   edges: RFEdge[]
   onNodeDragStop: (e: unknown, node: RFNode) => void
   onNodesChange: (changes: { id: string; position: { x: number; y: number } }[]) => void
+  onNodeClick?: (e: unknown, node: RFNode) => void
   children?: ReactNode
   nodeTypes?: Record<string, React.ComponentType<NodeComponentProps>>
 }
@@ -57,6 +58,7 @@ const data = {
     { id: 'sw1-processor', type: 'processor', swarmId: 'sw1' } as Node,
     { id: 'c', type: 'generator' } as Node,
     { id: 'hive-orchestrator', type: 'orchestrator', swarmId: 'hive' } as Node,
+    { id: 'wiremock', type: 'wiremock' } as Node,
   ],
   edges: [
     { from: 'sw1-generator', to: 'sw1-processor', queue: 'internal-q' },
@@ -104,6 +106,12 @@ const components = [
     config: { swarmCount: 4, enabled: true },
     status: 'status-full',
   },
+  {
+    id: 'wiremock',
+    name: 'WireMock',
+    role: 'wiremock',
+    queues: [],
+  },
 ]
 const updateNodePosition = vi.fn<(id: string, x: number, y: number) => void>()
 
@@ -112,6 +120,11 @@ beforeEach(() => {
   if (orchestrator) {
     orchestrator.name = 'hive-orchestrator'
     orchestrator.role = 'orchestrator'
+  }
+  const wiremock = components.find((component) => component.id === 'wiremock')
+  if (wiremock) {
+    wiremock.name = 'WireMock'
+    wiremock.role = 'wiremock'
   }
 })
 
@@ -127,7 +140,11 @@ vi.mock('@xyflow/react', () => {
             return null
           }
           return (
-            <div key={node.id} data-node-id={node.id}>
+            <div
+              key={node.id}
+              data-node-id={node.id}
+              onClick={() => props.onNodeClick?.({}, node)}
+            >
               <NodeComponent
                 id={node.id}
                 data={node.data}
@@ -261,8 +278,8 @@ test('orchestrator card renders instance name, role and active swarm count only'
 test('filters nodes for default swarm', () => {
   render(<TopologyView swarmId="default" />)
   const props = (globalThis as unknown as { __RF_PROPS__: RFProps }).__RF_PROPS__
-  expect(props.nodes).toHaveLength(1)
-  expect(props.nodes[0].id).toBe('c')
+  const ids = props.nodes.map((node) => node.id).sort()
+  expect(ids).toEqual(['c', 'wiremock'])
 })
 
 test('orchestrator falls back to instance id when name is empty', () => {
@@ -272,5 +289,16 @@ test('orchestrator falls back to instance id when name is empty', () => {
   const props = (globalThis as unknown as { __RF_PROPS__: RFProps }).__RF_PROPS__
   const orchestratorNode = props.nodes.find((node) => node.id === 'hive-orchestrator')
   expect(orchestratorNode?.data.label).toBe('hive-orchestrator')
+})
+
+test('wiremock node renders label and triggers selection', () => {
+  const onSelect = vi.fn()
+  render(<TopologyView onSelect={onSelect} />)
+  const props = (globalThis as unknown as { __RF_PROPS__: RFProps }).__RF_PROPS__
+  const wiremockNode = props.nodes.find((node) => node.id === 'wiremock') as RFNode | undefined
+  expect(wiremockNode).toBeDefined()
+  expect((wiremockNode?.data as { label?: string })?.label).toBe('WireMock')
+  props.onNodeClick?.({}, wiremockNode as RFNode)
+  expect(onSelect).toHaveBeenCalledWith('wiremock')
 })
 

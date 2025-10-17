@@ -8,15 +8,22 @@ import { vi, test, expect, beforeEach, afterEach } from 'vitest'
 import HivePage from './HivePage'
 import type { Component } from '../../types/hive'
 import { subscribeComponents } from '../../lib/stompClient'
+import { fetchWiremockComponent } from '../../lib/wiremockClient'
 import * as orchestratorApi from '../../lib/orchestratorApi'
 import { apiFetch } from '../../lib/api'
 
 vi.mock('../../lib/stompClient', () => ({
   subscribeComponents: vi.fn(),
+  upsertSyntheticComponent: vi.fn(),
+  removeSyntheticComponent: vi.fn(),
 }))
 
 vi.mock('../../lib/api', () => ({
   apiFetch: vi.fn(),
+}))
+
+vi.mock('../../lib/wiremockClient', () => ({
+  fetchWiremockComponent: vi.fn(),
 }))
 
 vi.mock('./TopologyView', () => ({
@@ -61,6 +68,7 @@ beforeEach(() => {
   )
   apiFetchMock.mockClear()
   apiFetchMock.mockResolvedValue(new Response(null, { status: 202 }))
+  vi.mocked(fetchWiremockComponent).mockResolvedValue(null)
   sendConfigUpdateSpy.mockClear()
 })
 
@@ -285,4 +293,30 @@ test('shows unassigned components when selecting default swarm', async () => {
     (_content, element) => element?.textContent?.trim() === 'generator',
   )
   expect(gens.length).toBeGreaterThan(0)
+})
+
+test('renders wiremock synthetic entry without toggle and opens detail drawer', async () => {
+  comps.push({
+    id: 'wiremock',
+    name: 'WireMock',
+    role: 'wiremock',
+    lastHeartbeat: 0,
+    status: 'OK',
+    queues: [],
+  })
+  const user = userEvent.setup()
+  render(<HivePage />)
+  const label = await screen.findByText(
+    (_content, element) =>
+      element?.textContent?.trim() === 'wiremock' &&
+      element.classList.contains('font-medium'),
+  )
+  const entry = label.closest('li')
+  expect(entry).not.toBeNull()
+  if (!entry) throw new Error('WireMock entry not found')
+  expect(within(entry).queryAllByRole('button')).toHaveLength(0)
+  expect(within(entry).getByTestId('component-status')).toBeInTheDocument()
+  await user.click(entry)
+  const closeButtons = await screen.findAllByRole('button', { name: '×' })
+  expect(closeButtons.length).toBeGreaterThan(0)
 })
