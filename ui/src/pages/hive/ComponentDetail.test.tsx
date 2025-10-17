@@ -75,6 +75,8 @@ describe('ComponentDetail wiremock panel', () => {
     const panel = screen.getByTestId('wiremock-panel')
     expect(panel).toBeInTheDocument()
 
+    expect(screen.queryByRole('heading', { name: 'Queues' })).not.toBeInTheDocument()
+
     expect(within(panel).getByText('Health')).toBeInTheDocument()
     expect(within(panel).getAllByText('OK').length).toBeGreaterThan(0)
     expect(within(panel).getByText('Stub count')).toBeInTheDocument()

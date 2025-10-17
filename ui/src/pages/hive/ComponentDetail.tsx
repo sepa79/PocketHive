@@ -146,8 +146,12 @@ export default function ComponentDetail({ component, onClose }: Props) {
           {toast}
         </div>
       )}
-      <h3 className="text-lg mb-2">Queues</h3>
-      <QueuesPanel queues={component.queues} />
+      {!isWiremock && (
+        <>
+          <h3 className="text-lg mb-2">Queues</h3>
+          <QueuesPanel queues={component.queues} />
+        </>
+      )}
     </div>
   )
 }
