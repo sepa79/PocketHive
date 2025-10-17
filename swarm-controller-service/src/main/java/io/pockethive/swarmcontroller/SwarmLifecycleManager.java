@@ -3,7 +3,6 @@ package io.pockethive.swarmcontroller;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.pockethive.Topology;
 import io.pockethive.control.CommandTarget;
 import io.pockethive.control.ControlSignal;
 import io.pockethive.swarm.model.Bee;
@@ -11,6 +10,7 @@ import io.pockethive.swarm.model.SwarmPlan;
 import io.pockethive.swarm.model.Work;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.controlplane.ControlPlaneSignals;
+import io.pockethive.swarmcontroller.config.SwarmControllerProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.core.AmqpAdmin;
@@ -58,13 +58,16 @@ import io.pockethive.docker.DockerContainerClient;
 @Component
 public class SwarmLifecycleManager implements SwarmLifecycle {
   private static final Logger log = LoggerFactory.getLogger(SwarmLifecycleManager.class);
-  private static final String ROLE = "swarm-controller";
 
   private final AmqpAdmin amqp;
   private final ObjectMapper mapper;
   private final DockerContainerClient docker;
   private final RabbitTemplate rabbit;
   private final String instanceId;
+  private final SwarmControllerProperties properties;
+  private final String role;
+  private final String swarmId;
+  private final String controlExchange;
   private final PushgatewayConfig pushgatewayConfig;
   private final Map<String, List<String>> containers = new HashMap<>();
   private final Set<String> declaredQueues = new HashSet<>();
@@ -87,27 +90,24 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
       return;
     }
     env.put("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_BASE_URL", pushgatewayConfig.baseUrl());
-    if (pushgatewayConfig.enabled() != null) {
-      env.put("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_ENABLED", pushgatewayConfig.enabled());
-    }
-    if (pushgatewayConfig.pushRate() != null) {
-      env.put("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_PUSH_RATE", pushgatewayConfig.pushRate());
-    }
-    if (pushgatewayConfig.shutdownOperation() != null) {
-      env.put("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_SHUTDOWN_OPERATION",
-          pushgatewayConfig.shutdownOperation());
-    }
-    env.put("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_JOB", Topology.SWARM_ID);
+    env.put("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_ENABLED", pushgatewayConfig.enabled());
+    env.put("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_PUSH_RATE", pushgatewayConfig.pushRate());
+    env.put("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_SHUTDOWN_OPERATION",
+        pushgatewayConfig.shutdownOperation());
+    env.put("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_JOB", swarmId);
     env.put("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_GROUPING_KEY_INSTANCE", beeName);
   }
 
   private record PushgatewayConfig(String baseUrl, String enabled, String pushRate, String shutdownOperation) {
-    static PushgatewayConfig fromEnv(Map<String, String> env) {
-      String base = trimToNull(env.get("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_BASE_URL"));
-      return new PushgatewayConfig(base,
-          trimToNull(env.get("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_ENABLED")),
-          trimToNull(env.get("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_PUSH_RATE")),
-          trimToNull(env.get("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_SHUTDOWN_OPERATION")));
+    static PushgatewayConfig fromProperties(SwarmControllerProperties.Pushgateway pushgateway) {
+      if (pushgateway == null) {
+        return new PushgatewayConfig(null, "false", "PT1M", "DELETE");
+      }
+      String base = trimToNull(pushgateway.baseUrl());
+      String enabled = Boolean.toString(pushgateway.enabled());
+      String pushRate = pushgateway.pushRate() != null ? pushgateway.pushRate().toString() : null;
+      String shutdown = trimToNull(pushgateway.shutdownOperation());
+      return new PushgatewayConfig(base, enabled, pushRate, shutdown);
     }
 
     boolean hasBaseUrl() {
@@ -128,8 +128,10 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
                                ObjectMapper mapper,
                                DockerContainerClient docker,
                                RabbitTemplate rabbit,
-                               @Qualifier("instanceId") String instanceId) {
-    this(amqp, mapper, docker, rabbit, instanceId, PushgatewayConfig.fromEnv(System.getenv()));
+                               @Qualifier("instanceId") String instanceId,
+                               SwarmControllerProperties properties) {
+    this(amqp, mapper, docker, rabbit, instanceId, properties,
+        PushgatewayConfig.fromProperties(properties.getMetrics().pushgateway()));
   }
 
   SwarmLifecycleManager(AmqpAdmin amqp,
@@ -137,21 +139,17 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
                         DockerContainerClient docker,
                         RabbitTemplate rabbit,
                         String instanceId,
-                        Map<String, String> environment) {
-    this(amqp, mapper, docker, rabbit, instanceId, PushgatewayConfig.fromEnv(environment));
-  }
-
-  SwarmLifecycleManager(AmqpAdmin amqp,
-                        ObjectMapper mapper,
-                        DockerContainerClient docker,
-                        RabbitTemplate rabbit,
-                        String instanceId,
+                        SwarmControllerProperties properties,
                         PushgatewayConfig pushgatewayConfig) {
     this.amqp = amqp;
     this.mapper = mapper;
     this.docker = docker;
     this.rabbit = rabbit;
     this.instanceId = instanceId;
+    this.properties = properties;
+    this.role = properties.getRole();
+    this.swarmId = properties.getSwarmId();
+    this.controlExchange = properties.getControlExchange();
     this.pushgatewayConfig = pushgatewayConfig;
   }
 
@@ -164,7 +162,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
    */
   @Override
   public void start(String planJson) {
-    log.info("Starting swarm {}", Topology.SWARM_ID);
+    log.info("Starting swarm {}", swarmId);
     if (containers.isEmpty()) {
       prepare(planJson);
     } else if (template == null) {
@@ -188,13 +186,13 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
    */
   @Override
   public void prepare(String templateJson) {
-    log.info("Preparing swarm {}", Topology.SWARM_ID);
+    log.info("Preparing swarm {}", swarmId);
     try {
       this.template = templateJson;
       SwarmPlan plan = mapper.readValue(templateJson, SwarmPlan.class);
-      TopicExchange hive = new TopicExchange("ph." + Topology.SWARM_ID + ".hive", true, false);
+      TopicExchange hive = new TopicExchange(properties.hiveExchange(), true, false);
       amqp.declareExchange(hive);
-      log.info("declared hive exchange ph.{}.hive", Topology.SWARM_ID);
+      log.info("declared hive exchange {}", properties.hiveExchange());
 
       expectedReady.clear();
       instancesByRole.clear();
@@ -210,12 +208,10 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
           }
           if (bee.image() != null) {
             Map<String, String> env = new HashMap<>();
-            env.put("POCKETHIVE_CONTROL_PLANE_SWARM_ID", Topology.SWARM_ID);
-            env.put("POCKETHIVE_CONTROL_PLANE_EXCHANGE", Topology.CONTROL_EXCHANGE);
-            env.put("RABBITMQ_HOST", java.util.Optional.ofNullable(System.getenv("RABBITMQ_HOST")).orElse("rabbitmq"));
-            env.put(
-                "POCKETHIVE_LOGS_EXCHANGE",
-                java.util.Optional.ofNullable(System.getenv("POCKETHIVE_LOGS_EXCHANGE")).orElse("ph.logs"));
+            env.put("POCKETHIVE_CONTROL_PLANE_SWARM_ID", swarmId);
+            env.put("POCKETHIVE_CONTROL_PLANE_EXCHANGE", controlExchange);
+            env.put("RABBITMQ_HOST", properties.getRabbit().host());
+            env.put("POCKETHIVE_LOGS_EXCHANGE", properties.getRabbit().logsExchange());
             String net = docker.resolveControlNetwork();
             if (net != null && !net.isBlank()) {
               env.put("CONTROL_NETWORK", net);
@@ -225,14 +221,14 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
                 String value = e.getValue();
                 if (bee.work() != null) {
                   if (bee.work().in() != null)
-                    value = value.replace("${in}", "ph." + Topology.SWARM_ID + "." + bee.work().in());
+                    value = value.replace("${in}", properties.queueName(bee.work().in()));
                   if (bee.work().out() != null)
-                    value = value.replace("${out}", "ph." + Topology.SWARM_ID + "." + bee.work().out());
+                    value = value.replace("${out}", properties.queueName(bee.work().out()));
                 }
                 env.put(e.getKey(), value);
               }
             }
-            String beeName = BeeNameGenerator.generate(bee.role(), Topology.SWARM_ID);
+            String beeName = BeeNameGenerator.generate(bee.role(), swarmId);
             env.put("POCKETHIVE_CONTROL_PLANE_INSTANCE_ID", beeName);
             applyMetricsEnv(env, beeName);
             log.info("creating container {} for role {} using image {}", beeName, bee.role(), bee.image());
@@ -246,7 +242,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
       }
 
       for (String suffix : suffixes) {
-        String queueName = "ph." + Topology.SWARM_ID + "." + suffix;
+        String queueName = properties.queueName(suffix);
         boolean queueMissing = amqp.getQueueProperties(queueName) == null;
         if (queueMissing) {
           declaredQueues.remove(suffix);
@@ -258,7 +254,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
         Queue queue = QueueBuilder.durable(queueName).build();
         if (queueMissing || !declaredQueues.contains(suffix)) {
           amqp.declareQueue(queue);
-          log.info("declared queue ph.{}.{}", Topology.SWARM_ID, suffix);
+          log.info("declared queue {}", queueName);
         }
 
         Binding desiredBinding = BindingBuilder.bind(queue).to(hive).with(queueName);
@@ -279,17 +275,17 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
    */
   @Override
   public void stop() {
-    log.info("Stopping swarm {}", Topology.SWARM_ID);
+    log.info("Stopping swarm {}", swarmId);
     setSwarmEnabled(false);
 
-    String controlQueue = Topology.CONTROL_QUEUE + "." + ROLE + "." + instanceId;
-    String rk = "ev.status-delta.swarm-controller." + instanceId;
+    String controlQueue = properties.controlQueueName(role, instanceId);
+    String rk = "ev.status-delta." + role + "." + instanceId;
     String payload = new StatusEnvelopeBuilder()
         .kind("status-delta")
-        .role(ROLE)
+        .role(role)
         .instance(instanceId)
         .origin(instanceId)
-        .swarmId(Topology.SWARM_ID)
+        .swarmId(swarmId)
         .controlIn(controlQueue)
         .controlRoutes(controllerControlRoutes())
         .controlOut(rk)
@@ -297,23 +293,23 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
         .data("swarmStatus", status.name())
         .toJson();
     log.debug("[CTRL] SEND rk={} inst={} payload={}", rk, instanceId, snippet(payload));
-    rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, payload);
+    rabbit.convertAndSend(controlExchange, rk, payload);
   }
 
   private String[] controllerControlRoutes() {
-    String swarm = Topology.SWARM_ID;
+    String swarm = swarmId;
     return new String[] {
-        ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, "ALL", ROLE, "ALL"),
-        ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, swarm, ROLE, "ALL"),
-        ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, swarm, ROLE, instanceId),
+        ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, "ALL", role, "ALL"),
+        ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, swarm, role, "ALL"),
+        ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, swarm, role, instanceId),
         ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, swarm, "ALL", "ALL"),
-        ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, "ALL", ROLE, "ALL"),
-        ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, swarm, ROLE, "ALL"),
-        ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, swarm, ROLE, instanceId),
-        ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_TEMPLATE, swarm, ROLE, "ALL"),
-        ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_START, swarm, ROLE, "ALL"),
-        ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_STOP, swarm, ROLE, "ALL"),
-        ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_REMOVE, swarm, ROLE, "ALL")
+        ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, "ALL", role, "ALL"),
+        ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, swarm, role, "ALL"),
+        ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, swarm, role, instanceId),
+        ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_TEMPLATE, swarm, role, "ALL"),
+        ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_START, swarm, role, "ALL"),
+        ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_STOP, swarm, role, "ALL"),
+        ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_REMOVE, swarm, role, "ALL")
     };
   }
 
@@ -327,7 +323,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
    */
   @Override
   public void remove() {
-    log.info("Removing swarm {}", Topology.SWARM_ID);
+    log.info("Removing swarm {}", swarmId);
     setSwarmEnabled(false);
     List<String> order = new ArrayList<>(startOrder);
     java.util.Collections.reverse(order);
@@ -340,10 +336,11 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
     containers.clear();
 
     for (String suffix : declaredQueues) {
-      log.info("deleting queue ph.{}.{}", Topology.SWARM_ID, suffix);
-      amqp.deleteQueue("ph." + Topology.SWARM_ID + "." + suffix);
+      String queueName = properties.queueName(suffix);
+      log.info("deleting queue {}", queueName);
+      amqp.deleteQueue(queueName);
     }
-    amqp.deleteExchange("ph." + Topology.SWARM_ID + ".hive");
+    amqp.deleteExchange(properties.hiveExchange());
     declaredQueues.clear();
 
     status = SwarmStatus.REMOVED;
@@ -426,7 +423,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
     }
     Map<String, QueueStats> snapshot = new LinkedHashMap<>(suffixes.size());
     for (String suffix : suffixes) {
-      String queueName = "ph." + Topology.SWARM_ID + "." + suffix;
+      String queueName = properties.queueName(suffix);
       Properties properties = amqp.getQueueProperties(queueName);
       if (properties == null) {
         snapshot.put(queueName, QueueStats.empty());
@@ -487,9 +484,9 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
   }
 
   private void requestStatus(String role, String instance) {
-    String rk = ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, Topology.SWARM_ID, role, instance);
+    String rk = ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, swarmId, role, instance);
     log.debug("[CTRL] SEND rk={} inst={} payload={}", rk, instanceId, "{}");
-    rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, rk, "{}");
+    rabbit.convertAndSend(controlExchange, rk, "{}");
   }
 
   private List<String> computeStartOrder(SwarmPlan plan) {
@@ -589,7 +586,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
       }
       data.put("enabled", false);
       publishConfigUpdate(data, "scenario step");
-      log.info("scenario step applied for swarm {}", Topology.SWARM_ID);
+      log.info("scenario step applied for swarm {}", swarmId);
     } catch (Exception e) {
       log.warn("scenario step", e);
     }
@@ -611,7 +608,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
     for (ScenarioTask t : scheduledTasks) {
       scheduler.schedule(() -> {
         log.info("dispatching scheduled {} body {}", t.routingKey, t.body);
-        rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, t.routingKey, t.body);
+        rabbit.convertAndSend(controlExchange, t.routingKey, t.body);
       }, t.delayMs, TimeUnit.MILLISECONDS);
     }
   }
@@ -664,7 +661,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
       commandTarget = CommandTarget.SWARM;
     }
 
-    String swarmId = normaliseSwarmHint(swarmHint);
+    String resolvedSwarmId = normaliseSwarmHint(swarmHint);
     String role = roleHint;
     String instance = instanceHint;
 
@@ -677,7 +674,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
         instance = legacySpec.instance();
       }
       if (role == null || role.isBlank()) {
-        role = ROLE;
+        role = this.role;
       }
       if (instance == null || instance.isBlank()) {
         instance = instanceId;
@@ -695,15 +692,15 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
       instance = null;
     }
 
-    if (swarmId == null) {
-      swarmId = Topology.SWARM_ID;
+    if (resolvedSwarmId == null) {
+      resolvedSwarmId = swarmId;
     }
 
     ControlSignal signal = new ControlSignal(
         ControlPlaneSignals.CONFIG_UPDATE,
         correlationId,
         idempotencyKey,
-        swarmId,
+        resolvedSwarmId,
         role,
         instance,
         instanceId,
@@ -711,9 +708,9 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
         args);
     try {
       String payload = mapper.writeValueAsString(signal);
-      String routingKey = ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, swarmId, role, instance);
+      String routingKey = ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, resolvedSwarmId, role, instance);
       log.info("{} config-update rk={} correlation={} payload {}", context, routingKey, correlationId, snippet(payload));
-      rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, routingKey, payload);
+      rabbit.convertAndSend(controlExchange, routingKey, payload);
     } catch (JsonProcessingException e) {
       throw new IllegalStateException("Failed to serialize config-update signal", e);
     }

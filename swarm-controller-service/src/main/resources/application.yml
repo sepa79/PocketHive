@@ -1,14 +1,14 @@
 spring:
-  application.name: swarm-controller-service
+  application.name: ${SPRING_APPLICATION_NAME:swarm-controller-service}
   rabbitmq:
-    host: ${RABBITMQ_HOST:rabbitmq}
-    port: ${RABBITMQ_PORT:5672}
-    username: ${RABBITMQ_DEFAULT_USER:guest}
-    password: ${RABBITMQ_DEFAULT_PASS:guest}
+    host: ${SPRING_RABBITMQ_HOST:rabbitmq}
+    port: ${SPRING_RABBITMQ_PORT:5672}
+    username: ${SPRING_RABBITMQ_USERNAME:guest}
+    password: ${SPRING_RABBITMQ_PASSWORD:guest}
 
 logging:
-  config: classpath:logback-spring.xml
-  pattern.level: "%5p [%X{traceId}]"
+  config: ${LOGGING_CONFIG:classpath:logback-spring.xml}
+  pattern.level: ${LOGGING_PATTERN_LEVEL:"%5p [%X{traceId}]"}
 
 pockethive:
   control-plane:
@@ -16,6 +16,19 @@ pockethive:
     swarm-id: ${POCKETHIVE_CONTROL_PLANE_SWARM_ID:default}
     instance-id: ${POCKETHIVE_CONTROL_PLANE_INSTANCE_ID:${spring.application.name}}
     worker:
-      enabled: false
+      enabled: ${POCKETHIVE_CONTROL_PLANE_WORKER_ENABLED:false}
     manager:
-      role: swarm-controller
+      role: ${POCKETHIVE_CONTROL_PLANE_MANAGER_ROLE:${POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_ROLE:swarm-controller}}
+    swarm-controller:
+      control-queue-prefix: ${POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_CONTROL_QUEUE_PREFIX:ph.control}
+      traffic:
+        queue-prefix: ${POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_TRAFFIC_QUEUE_PREFIX:}
+      rabbit:
+        logs-exchange: ${POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGS_EXCHANGE:ph.logs}
+      metrics:
+        pushgateway:
+          enabled: ${POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_ENABLED:false}
+          push-rate: ${POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_PUSH_RATE:PT1M}
+          shutdown-operation: ${POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_SHUTDOWN_OPERATION:DELETE}
+      docker:
+        socket-path: ${POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_DOCKER_SOCKET_PATH:/var/run/docker.sock}

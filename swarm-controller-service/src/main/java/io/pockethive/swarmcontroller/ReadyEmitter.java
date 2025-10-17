@@ -2,11 +2,11 @@ package io.pockethive.swarmcontroller;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.pockethive.Topology;
 import io.pockethive.control.CommandState;
 import io.pockethive.control.ConfirmationScope;
 import io.pockethive.control.ReadyConfirmation;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
+import io.pockethive.swarmcontroller.config.SwarmControllerProperties;
 import java.time.Instant;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -28,29 +28,36 @@ public class ReadyEmitter {
     private final RabbitTemplate rabbit;
     private final String instanceId;
     private final ObjectMapper mapper;
+    private final SwarmControllerProperties properties;
 
-    public ReadyEmitter(RabbitTemplate rabbit, @Qualifier("instanceId") String instanceId, ObjectMapper mapper) {
+    public ReadyEmitter(RabbitTemplate rabbit,
+                        @Qualifier("instanceId") String instanceId,
+                        ObjectMapper mapper,
+                        SwarmControllerProperties properties) {
         this.rabbit = rabbit;
         this.instanceId = instanceId;
         this.mapper = mapper.findAndRegisterModules();
+        this.properties = properties;
     }
 
     @EventListener(ApplicationReadyEvent.class)
     public void emit() {
-        ConfirmationScope scope = ConfirmationScope.forInstance(Topology.SWARM_ID, "swarm-controller", instanceId);
+        String swarmId = properties.getSwarmId();
+        String role = properties.getRole();
+        ConfirmationScope scope = ConfirmationScope.forInstance(swarmId, role, instanceId);
         ReadyConfirmation confirmation = new ReadyConfirmation(
             Instant.now(),
             null,
             null,
-            "swarm-controller",
+            role,
             scope,
             CommandState.status("Ready")
         );
-        String routingKey = ControlPlaneRouting.event("ready.swarm-controller", scope);
+        String routingKey = ControlPlaneRouting.event("ready." + role, scope);
         try {
             String payload = mapper.writeValueAsString(confirmation);
             log.info("[CTRL] SEND rk={} inst={} payload={}", routingKey, instanceId, snippet(payload));
-            rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, routingKey, payload);
+            rabbit.convertAndSend(properties.getControlExchange(), routingKey, payload);
         } catch (JsonProcessingException e) {
             log.warn("ready emit serialization", e);
         } catch (AmqpException e) {
