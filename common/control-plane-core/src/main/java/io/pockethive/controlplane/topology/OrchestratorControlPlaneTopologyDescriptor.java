@@ -1,6 +1,5 @@
 package io.pockethive.controlplane.topology;
 
-import io.pockethive.Topology;
 import io.pockethive.control.ConfirmationScope;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import java.util.Collection;
@@ -20,7 +19,7 @@ public final class OrchestratorControlPlaneTopologyDescriptor implements Control
     @Override
     public Optional<ControlQueueDescriptor> controlQueue(String instanceId) {
         String id = requireInstanceId(instanceId);
-        String queueName = Topology.CONTROL_QUEUE + "." + ROLE + "." + id;
+        String queueName = controlQueuePrefix() + "." + ROLE + "." + id;
         Set<String> readyErrorEvents = Set.of(
             lifecycleEventPattern("ready"),
             lifecycleEventPattern("error")
@@ -31,7 +30,7 @@ public final class OrchestratorControlPlaneTopologyDescriptor implements Control
     @Override
     public Collection<QueueDescriptor> additionalQueues(String instanceId) {
         String id = requireInstanceId(instanceId);
-        String queueName = Topology.CONTROL_QUEUE + ".orchestrator-status." + id;
+        String queueName = controlQueuePrefix() + ".orchestrator-status." + id;
         Set<String> bindings = Set.of(
             controllerStatusPattern("status-full"),
             controllerStatusPattern("status-delta")
@@ -68,5 +67,27 @@ public final class OrchestratorControlPlaneTopologyDescriptor implements Control
             throw new IllegalArgumentException("instanceId must not be blank");
         }
         return instanceId;
+    }
+
+    private static String controlQueuePrefix() {
+        String prefix = resolve("POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE");
+        if (prefix == null || prefix.isBlank()) {
+            throw new IllegalStateException(
+                "Missing required PocketHive topology configuration for POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE. "
+                    + "Provide it via environment variable or JVM system property.");
+        }
+        return prefix;
+    }
+
+    private static String resolve(String key) {
+        String env = System.getenv(key);
+        if (env != null && !env.isBlank()) {
+            return env;
+        }
+        String property = System.getProperty(key);
+        if (property != null && !property.isBlank()) {
+            return property;
+        }
+        return null;
     }
 }
