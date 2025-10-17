@@ -22,7 +22,7 @@ logging:
 pockethive:
   control-plane:
     exchange: ${POCKETHIVE_CONTROL_PLANE_EXCHANGE:ph.control}
-    swarm-id: ${POCKETHIVE_CONTROL_PLANE_SWARM_ID:default}
+    swarm-id: ${POCKETHIVE_CONTROL_PLANE_SWARM_ID:hive}
     instance-id: ${POCKETHIVE_CONTROL_PLANE_INSTANCE_ID:orchestrator-local}
     manager:
       role: ${POCKETHIVE_CONTROL_PLANE_MANAGER_ROLE:orchestrator}
@@ -39,7 +39,7 @@ pockethive:
         socket-path: ${POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_DOCKER_SOCKET_PATH:/var/run/docker.sock}
       pushgateway:
         enabled: ${POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_PUSHGATEWAY_ENABLED:false}
-        base-url: ${POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_PUSHGATEWAY_BASE_URL:}
+        base-url: ${POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_PUSHGATEWAY_BASE_URL:http://pushgateway:9091}
         push-rate: ${POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_PUSHGATEWAY_PUSH_RATE:PT1M}
         shutdown-operation: ${POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_PUSHGATEWAY_SHUTDOWN_OPERATION:}
       scenario-manager:
