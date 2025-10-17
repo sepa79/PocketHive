@@ -13,12 +13,12 @@ import org.springframework.core.env.MutablePropertySources;
 public final class ScenarioManagerControlPlaneInitializer
     implements ApplicationContextInitializer<ConfigurableApplicationContext>, Ordered {
 
-  private static final String ROLE = "scenario-manager";
   private static final String PROPERTY_SOURCE_NAME = "scenarioManagerControlPlaneDefaults";
   private static final String APPLICATION_NAME_PROPERTY = "spring.application.name";
   private static final String ROLE_PROPERTY = "pockethive.control-plane.manager.role";
   private static final String INSTANCE_ID_PROPERTY = "pockethive.control-plane.manager.instance-id";
   private static final String GLOBAL_SWARM_ID_PROPERTY = "pockethive.control-plane.swarm-id";
+  private static final String DEFAULT_ROLE = "scenario-manager";
 
   @Override
   public void initialize(ConfigurableApplicationContext applicationContext) {
@@ -51,14 +51,14 @@ public final class ScenarioManagerControlPlaneInitializer
   private static void ensureApplicationName(
       ConfigurableEnvironment environment, Map<String, Object> defaults) {
     if (isBlank(environment.getProperty(APPLICATION_NAME_PROPERTY))) {
-      defaults.put(APPLICATION_NAME_PROPERTY, ROLE);
+      defaults.put(APPLICATION_NAME_PROPERTY, resolveRole(environment));
     }
   }
 
   private static void ensureRole(
       ConfigurableEnvironment environment, Map<String, Object> defaults) {
     if (isBlank(environment.getProperty(ROLE_PROPERTY))) {
-      defaults.put(ROLE_PROPERTY, ROLE);
+      defaults.put(ROLE_PROPERTY, DEFAULT_ROLE);
     }
   }
 
@@ -72,11 +72,19 @@ public final class ScenarioManagerControlPlaneInitializer
   private static void ensureInstance(
       ConfigurableEnvironment environment, Map<String, Object> defaults) {
     if (isBlank(environment.getProperty(INSTANCE_ID_PROPERTY))) {
-      defaults.put(INSTANCE_ID_PROPERTY, ROLE);
+      defaults.put(INSTANCE_ID_PROPERTY, resolveRole(environment));
     }
   }
 
   private static boolean isBlank(String value) {
     return value == null || value.isBlank();
+  }
+
+  private static String resolveRole(ConfigurableEnvironment environment) {
+    String configuredRole = environment.getProperty(ROLE_PROPERTY);
+    if (isBlank(configuredRole)) {
+      return DEFAULT_ROLE;
+    }
+    return configuredRole;
   }
 }
