@@ -201,8 +201,8 @@ A single unit of execution composed of:
 
 All services read environment variables (see each service’s README/Dockerfile). Typical knobs:
 - `RABBITMQ_HOST`, `RABBITMQ_USER`, `RABBITMQ_PASSWORD`
-- `PH_CONTROL_EXCHANGE` (control plane, direct)
-- `PH_DATA_EXCHANGE` / queues for work/data paths
+- `POCKETHIVE_CONTROL_PLANE_EXCHANGE` (control plane, direct)
+- `POCKETHIVE_TRAFFIC_EXCHANGE` / queues for work/data paths
 - Logging: `LOG_LEVEL`, structured log toggles
 - Metrics scraping endpoints for Prometheus
 

@@ -27,17 +27,19 @@ public class PrometheusPushGatewayAutoConfiguration {
     return registry -> {
       String swarmId = resolveFirstNonBlank(environment,
           "management.metrics.tags.swarm",
-          "ph.swarmId",
-          "PH_SWARM_ID");
+          "pockethive.control-plane.swarm-id",
+          "POCKETHIVE_CONTROL_PLANE_SWARM_ID");
       if (StringUtils.hasText(swarmId)) {
         registry.config().commonTags("swarm", swarmId);
       }
-      String beeName = resolveFirstNonBlank(environment,
-          "bee.name",
-          "BEE_NAME",
-          "management.metrics.tags.instance");
-      if (StringUtils.hasText(beeName)) {
-        registry.config().commonTags("bee", beeName);
+      String instanceId = resolveFirstNonBlank(environment,
+          "management.metrics.tags.instance",
+          "pockethive.control-plane.worker.instance-id",
+          "pockethive.control-plane.manager.instance-id",
+          "POCKETHIVE_CONTROL_PLANE_WORKER_INSTANCE_ID",
+          "POCKETHIVE_CONTROL_PLANE_INSTANCE_ID");
+      if (StringUtils.hasText(instanceId)) {
+        registry.config().commonTags("instance", instanceId);
       }
     };
   }

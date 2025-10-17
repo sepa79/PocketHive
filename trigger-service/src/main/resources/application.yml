@@ -12,11 +12,11 @@ logging:
 
 pockethive:
   control-plane:
-    swarm-id: ${PH_SWARM_ID:default}
+    swarm-id: ${POCKETHIVE_CONTROL_PLANE_SWARM_ID:default}
     queues:
-      generator: ${PH_GEN_QUEUE:ph.${pockethive.control-plane.swarm-id}.gen}
-      moderator: ${PH_MOD_QUEUE:ph.${pockethive.control-plane.swarm-id}.mod}
-      final: ${PH_FINAL_QUEUE:ph.${pockethive.control-plane.swarm-id}.final}
+      generator: ${POCKETHIVE_CONTROL_PLANE_QUEUES_GENERATOR:ph.${pockethive.control-plane.swarm-id}.gen}
+      moderator: ${POCKETHIVE_CONTROL_PLANE_QUEUES_MODERATOR:ph.${pockethive.control-plane.swarm-id}.mod}
+      final: ${POCKETHIVE_CONTROL_PLANE_QUEUES_FINAL:ph.${pockethive.control-plane.swarm-id}.final}
     worker:
       role: trigger
       # Expect POCKETHIVE_CONTROL_PLANE_WORKER_INSTANCE_ID to supply the instance id
@@ -26,7 +26,7 @@ pockethive:
         interval-ms: 60000
         action-type: shell
         command: echo hello
-        url: ${PH_TRIGGER_URL:http://wiremock}
+        url: http://wiremock
         method: GET
         body: ""
         headers: {}

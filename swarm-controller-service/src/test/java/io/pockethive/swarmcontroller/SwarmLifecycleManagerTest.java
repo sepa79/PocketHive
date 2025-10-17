@@ -60,7 +60,7 @@ class SwarmLifecycleManagerTest {
     SwarmLifecycleManager manager = new SwarmLifecycleManager(amqp, mapper, docker, rabbit, "inst");
     SwarmPlan plan = new SwarmPlan("swarm", List.of(
         new Bee("gen", "img1", new Work("qin", "qout"),
-            Map.of("PH_MOD_QUEUE", "${in}", "PH_GEN_QUEUE", "${out}"))));
+            Map.of("POCKETHIVE_CONTROL_PLANE_QUEUES_MODERATOR", "${in}", "POCKETHIVE_CONTROL_PLANE_QUEUES_GENERATOR", "${out}"))));
     when(docker.createContainer(eq("img1"), anyMap(), anyString())).thenReturn("c1");
     when(docker.resolveControlNetwork()).thenReturn("ctrl-net");
 
@@ -88,19 +88,16 @@ class SwarmLifecycleManagerTest {
     verify(docker).createContainer(eq("img1"), envCap.capture(), nameCap.capture());
     Map<String,String> env = envCap.getValue();
     String assignedName = nameCap.getValue();
-    assertEquals(Topology.SWARM_ID, env.get("PH_SWARM_ID"));
-    assertEquals(Topology.CONTROL_EXCHANGE, env.get("PH_CONTROL_EXCHANGE"));
+    assertEquals(Topology.SWARM_ID, env.get("POCKETHIVE_CONTROL_PLANE_SWARM_ID"));
+    assertEquals(Topology.CONTROL_EXCHANGE, env.get("POCKETHIVE_CONTROL_PLANE_EXCHANGE"));
     assertEquals("rabbitmq", env.get("RABBITMQ_HOST"));
-    assertEquals("ph.logs", env.get("PH_LOGS_EXCHANGE"));
+    assertEquals("ph.logs", env.get("POCKETHIVE_LOGS_EXCHANGE"));
     assertEquals("ctrl-net", env.get("CONTROL_NETWORK"));
-    assertEquals("ph." + Topology.SWARM_ID + ".qin", env.get("PH_MOD_QUEUE"));
-    assertEquals("ph." + Topology.SWARM_ID + ".qout", env.get("PH_GEN_QUEUE"));
-    assertEquals(assignedName, env.get("BEE_NAME"));
+    assertEquals("ph." + Topology.SWARM_ID + ".qin", env.get("POCKETHIVE_CONTROL_PLANE_QUEUES_MODERATOR"));
+    assertEquals("ph." + Topology.SWARM_ID + ".qout", env.get("POCKETHIVE_CONTROL_PLANE_QUEUES_GENERATOR"));
     assertEquals(assignedName, env.get("POCKETHIVE_CONTROL_PLANE_INSTANCE_ID"));
     assertEquals(assignedName, env.get("POCKETHIVE_CONTROL_PLANE_WORKER_INSTANCE_ID"));
-    String javaOptions = env.get("JAVA_TOOL_OPTIONS");
-    assertThat(javaOptions).contains("-Dbee.name=" + assignedName);
-    assertThat(javaOptions).contains("-Dpockethive.control-plane.worker.instance-id=" + assignedName);
+    assertThat(env).doesNotContainKeys("BEE_NAME", "JAVA_TOOL_OPTIONS");
     verify(docker).startContainer("c1");
     assertEquals(SwarmStatus.RUNNING, manager.getStatus());
 
@@ -166,7 +163,7 @@ class SwarmLifecycleManagerTest {
     SwarmLifecycleManager manager = new SwarmLifecycleManager(amqp, mapper, docker, rabbit, "inst");
     SwarmPlan plan = new SwarmPlan("swarm", List.of(
         new Bee("gen", "img1", new Work("a", "b"),
-            Map.of("PH_IN_QUEUE", "${in}", "PH_OUT_QUEUE", "${out}"))));
+            Map.of("CUSTOM_IN_QUEUE", "${in}", "CUSTOM_OUT_QUEUE", "${out}"))));
     when(docker.createContainer(eq("img1"), anyMap(), anyString())).thenReturn("c1");
 
     manager.prepare(mapper.writeValueAsString(plan));
@@ -175,12 +172,9 @@ class SwarmLifecycleManagerTest {
     ArgumentCaptor<String> nameCap2 = ArgumentCaptor.forClass(String.class);
     verify(docker).createContainer(eq("img1"), envCap2.capture(), nameCap2.capture());
     Map<String,String> env = envCap2.getValue();
-    assertEquals(nameCap2.getValue(), env.get("BEE_NAME"));
     assertEquals(nameCap2.getValue(), env.get("POCKETHIVE_CONTROL_PLANE_INSTANCE_ID"));
     assertEquals(nameCap2.getValue(), env.get("POCKETHIVE_CONTROL_PLANE_WORKER_INSTANCE_ID"));
-    String javaOptions2 = env.get("JAVA_TOOL_OPTIONS");
-    assertThat(javaOptions2).contains("-Dbee.name=" + nameCap2.getValue());
-    assertThat(javaOptions2).contains("-Dpockethive.control-plane.worker.instance-id=" + nameCap2.getValue());
+    assertThat(env).doesNotContainKeys("BEE_NAME", "JAVA_TOOL_OPTIONS");
     verify(docker).resolveControlNetwork();
     verify(docker).startContainer("c1");
     verify(amqp).declareExchange(argThat((TopicExchange e) -> e.getName().equals("ph." + Topology.SWARM_ID + ".hive")));

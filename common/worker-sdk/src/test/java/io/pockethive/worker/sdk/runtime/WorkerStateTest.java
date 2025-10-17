@@ -84,8 +84,8 @@ class WorkerStateTest {
     @Test
     @SuppressWarnings({"unchecked", "resource"})
     void resolvesTopologyDefaultsUsingRuntimeQueues() throws Exception {
-        String inboundPropertyKey = "PH_GEN_QUEUE";
-        String outboundPropertyKey = "PH_MOD_QUEUE";
+        String inboundPropertyKey = "POCKETHIVE_CONTROL_PLANE_QUEUES_GENERATOR";
+        String outboundPropertyKey = "POCKETHIVE_CONTROL_PLANE_QUEUES_MODERATOR";
         String originalInboundProperty = System.getProperty(inboundPropertyKey);
         String originalOutboundProperty = System.getProperty(outboundPropertyKey);
         String runtimeGenQueue = "ph.runtime.gen";

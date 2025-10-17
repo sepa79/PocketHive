@@ -12,14 +12,14 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 
 class TopologyTest {
     private String loadGenQueue(String swarmId) throws Exception {
-        System.setProperty("PH_SWARM_ID", swarmId);
+        System.setProperty("POCKETHIVE_CONTROL_PLANE_SWARM_ID", swarmId);
         URL classes = Paths.get("..", "common", "topology-core", "target", "classes").toUri().toURL();
         try (URLClassLoader cl = new URLClassLoader(new URL[]{classes}, null)) {
             Class<?> top = Class.forName("io.pockethive.Topology", true, cl);
             Field field = top.getField("GEN_QUEUE");
             return (String) field.get(null);
         } finally {
-            System.clearProperty("PH_SWARM_ID");
+            System.clearProperty("POCKETHIVE_CONTROL_PLANE_SWARM_ID");
         }
     }
 

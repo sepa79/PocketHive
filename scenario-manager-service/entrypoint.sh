@@ -2,7 +2,7 @@
 set -e
 
 HOST="${RABBITMQ_HOST:-rabbitmq}"
-QUEUE="${PH_LOGS_QUEUE:-ph.logs.agg}"
+QUEUE="${POCKETHIVE_LOGS_QUEUE:-ph.logs.agg}"
 USER="${RABBITMQ_USER:-guest}"
 PASS="${RABBITMQ_PASS:-guest}"
 
