@@ -22,7 +22,7 @@
     <appender-ref ref="CONSOLE"/>
   </logger>
 
-  <if condition='!"false".equalsIgnoreCase(property("rabbitLoggingEnabled"))'>
+  <if condition='"true".equalsIgnoreCase(property("rabbitLoggingEnabled"))'>
     <then>
       <appender name="RABBIT" class="org.springframework.amqp.rabbit.logback.AmqpAppender">
         <host>${rabbitHost}</host>
