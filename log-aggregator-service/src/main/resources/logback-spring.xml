@@ -3,27 +3,17 @@
 
   <springProperty scope="context" name="applicationName"
                   source="spring.application.name"
-                  defaultValue="unknown"/>
+                  defaultValue="log-aggregator"/>
 
   <springProperty scope="context" name="roleIdentifier"
                   source="pockethive.control-plane.manager.role"
                   defaultValue="${applicationName}"/>
 
-  <springProperty scope="context" name="globalSwarmIdentifier"
-                  source="pockethive.control-plane.swarm-id"
-                  defaultValue=""/>
-
   <springProperty scope="context" name="swarmIdentifier"
-                  source="pockethive.control-plane.manager.swarm-id"
-                  defaultValue="${globalSwarmIdentifier}"/>
-
-  <springProperty scope="context" name="defaultInstanceIdentifier"
-                  source="bee.name"
-                  defaultValue="${applicationName}"/>
+                  source="pockethive.control-plane.swarm-id"/>
 
   <springProperty scope="context" name="instanceIdentifier"
-                  source="pockethive.control-plane.manager.instance-id"
-                  defaultValue="${defaultInstanceIdentifier}"/>
+                  source="pockethive.control-plane.manager.instance-id"/>
 
   <logger name="org.springframework.amqp" level="WARN" additivity="false">
     <appender-ref ref="CONSOLE"/>

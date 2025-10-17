@@ -14,6 +14,11 @@ logging:
   config: classpath:logback-spring.xml
   pattern.level: "%5p [%X{traceId}]"
 pockethive:
+  control-plane:
+    swarm-id: ${POCKETHIVE_CONTROL_PLANE_SWARM_ID:hive}
+    manager:
+      role: ${POCKETHIVE_CONTROL_PLANE_MANAGER_ROLE:log-aggregator}
+      instance-id: ${POCKETHIVE_CONTROL_PLANE_MANAGER_INSTANCE_ID:log-aggregator}
   logs:
     queue: ${POCKETHIVE_LOGS_QUEUE:ph.logs.agg}
   loki:
