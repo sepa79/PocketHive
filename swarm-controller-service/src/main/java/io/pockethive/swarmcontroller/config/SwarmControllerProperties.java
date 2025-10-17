@@ -34,10 +34,11 @@ public class SwarmControllerProperties {
         this.role = requireNonBlank(role, "role");
         this.controlExchange = requireNonBlank(controlExchange, "controlExchange");
         this.controlQueuePrefix = requireNonBlank(controlQueuePrefix, "controlQueuePrefix");
-        this.traffic = Objects.requireNonNull(traffic, "traffic").withDefaults(this.swarmId);
-        this.rabbit = Objects.requireNonNull(rabbit, "rabbit").withDefaults();
-        this.metrics = Objects.requireNonNull(metrics, "metrics").withDefaults();
-        this.docker = Objects.requireNonNull(docker, "docker").withDefaults();
+        this.traffic = Objects.requireNonNullElseGet(traffic, () -> new Traffic(null, null))
+            .withDefaults(this.swarmId);
+        this.rabbit = Objects.requireNonNullElseGet(rabbit, () -> new Rabbit(null, null)).withDefaults();
+        this.metrics = Objects.requireNonNullElseGet(metrics, () -> new Metrics(null)).withDefaults();
+        this.docker = Objects.requireNonNullElseGet(docker, () -> new Docker(null, null)).withDefaults();
     }
 
     public String getSwarmId() {
