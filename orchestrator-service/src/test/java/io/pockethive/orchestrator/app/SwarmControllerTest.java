@@ -206,7 +206,8 @@ class SwarmControllerTest {
             new SwarmRegistry(),
             mapper,
             scenarioClient,
-            new SwarmPlanRegistry());
+            new SwarmPlanRegistry(),
+            controlExchange);
 
         MockMvc mvc = MockMvcBuilders.standaloneSetup(ctrl)
             .setMessageConverters(new MappingJackson2HttpMessageConverter(mapper))
@@ -232,7 +233,8 @@ class SwarmControllerTest {
             new SwarmRegistry(),
             mapper,
             scenarioClient,
-            new SwarmPlanRegistry());
+            new SwarmPlanRegistry(),
+            controlExchange);
 
         MockMvc mvc = MockMvcBuilders.standaloneSetup(ctrl)
             .setMessageConverters(new MappingJackson2HttpMessageConverter(mapper))

@@ -184,7 +184,8 @@ class ContainerLifecycleManagerTest {
         SwarmRegistry registry = new SwarmRegistry();
         Swarm swarm = new Swarm("sw1", "inst1", "cid");
         registry.register(swarm);
-        ContainerLifecycleManager manager = new ContainerLifecycleManager(docker, registry, amqp);
+        TopicExchange controlExchange = new TopicExchange("ph.control");
+        ContainerLifecycleManager manager = new ContainerLifecycleManager(docker, registry, amqp, controlExchange);
 
         manager.removeSwarm(swarm.getId());
 
@@ -202,7 +203,8 @@ class ContainerLifecycleManagerTest {
         Swarm sw2 = new Swarm("sw2", "inst2", "c2");
         registry.register(sw1);
         registry.register(sw2);
-        ContainerLifecycleManager manager = new ContainerLifecycleManager(docker, registry, amqp);
+        TopicExchange controlExchange = new TopicExchange("ph.control");
+        ContainerLifecycleManager manager = new ContainerLifecycleManager(docker, registry, amqp, controlExchange);
 
         manager.removeSwarm(sw1.getId());
         manager.removeSwarm(sw2.getId());
