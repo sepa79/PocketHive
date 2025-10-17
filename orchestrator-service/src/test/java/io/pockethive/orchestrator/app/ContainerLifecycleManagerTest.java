@@ -12,6 +12,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.amqp.core.AmqpAdmin;
+import org.springframework.amqp.core.TopicExchange;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -28,7 +29,8 @@ class ContainerLifecycleManagerTest {
     void startSwarmCreatesAndRegisters() {
         SwarmRegistry registry = new SwarmRegistry();
         when(docker.createAndStartContainer(eq("img"), anyMap(), anyString(), any())).thenReturn("cid");
-        ContainerLifecycleManager manager = new ContainerLifecycleManager(docker, registry, amqp);
+        TopicExchange controlExchange = new TopicExchange("ph.control");
+        ContainerLifecycleManager manager = new ContainerLifecycleManager(docker, registry, amqp, controlExchange);
 
         Swarm swarm = manager.startSwarm("sw1", "img", "inst1");
 
@@ -43,7 +45,7 @@ class ContainerLifecycleManagerTest {
         verify(docker).createAndStartContainer(eq("img"), envCaptor.capture(), nameCaptor.capture(), hostCaptor.capture());
         assertEquals("inst1", nameCaptor.getValue());
         assertEquals("inst1", envCaptor.getValue().get("POCKETHIVE_CONTROL_PLANE_INSTANCE_ID"));
-        assertEquals(io.pockethive.Topology.CONTROL_EXCHANGE, envCaptor.getValue().get("POCKETHIVE_CONTROL_PLANE_EXCHANGE"));
+        assertEquals(controlExchange.getName(), envCaptor.getValue().get("POCKETHIVE_CONTROL_PLANE_EXCHANGE"));
         assertEquals("sw1", envCaptor.getValue().get("POCKETHIVE_CONTROL_PLANE_SWARM_ID"));
         assertNull(envCaptor.getValue().get("JAVA_TOOL_OPTIONS"));
         assertEquals("/var/run/docker.sock", envCaptor.getValue().get("DOCKER_SOCKET_PATH"));
@@ -64,7 +66,8 @@ class ContainerLifecycleManagerTest {
         try {
             SwarmRegistry registry = new SwarmRegistry();
             when(docker.createAndStartContainer(eq("img"), anyMap(), anyString(), any())).thenReturn("cid");
-            ContainerLifecycleManager manager = new ContainerLifecycleManager(docker, registry, amqp);
+            TopicExchange controlExchange = new TopicExchange("ph.control");
+            ContainerLifecycleManager manager = new ContainerLifecycleManager(docker, registry, amqp, controlExchange);
 
             manager.startSwarm("sw1", "img", "inst1");
 
@@ -93,7 +96,8 @@ class ContainerLifecycleManagerTest {
     void startSwarmPropagatesPushgatewaySettingsWhenConfigured() {
         SwarmRegistry registry = new SwarmRegistry();
         when(docker.createAndStartContainer(eq("img"), anyMap(), anyString(), any())).thenReturn("cid");
-        ContainerLifecycleManager manager = new ContainerLifecycleManager(docker, registry, amqp) {
+        TopicExchange controlExchange = new TopicExchange("ph.control");
+        ContainerLifecycleManager manager = new ContainerLifecycleManager(docker, registry, amqp, controlExchange) {
             @Override
             protected java.util.Map<String, String> environment() {
                 return java.util.Map.of(
@@ -129,7 +133,8 @@ class ContainerLifecycleManagerTest {
         registry.updateStatus(swarm.getId(), SwarmStatus.READY);
         registry.updateStatus(swarm.getId(), SwarmStatus.STARTING);
         registry.updateStatus(swarm.getId(), SwarmStatus.RUNNING);
-        ContainerLifecycleManager manager = new ContainerLifecycleManager(docker, registry, amqp);
+        TopicExchange controlExchange = new TopicExchange("ph.control");
+        ContainerLifecycleManager manager = new ContainerLifecycleManager(docker, registry, amqp, controlExchange);
 
         manager.stopSwarm(swarm.getId());
 
@@ -146,7 +151,8 @@ class ContainerLifecycleManagerTest {
         registry.updateStatus(swarm.getId(), SwarmStatus.READY);
         registry.updateStatus(swarm.getId(), SwarmStatus.STARTING);
         registry.updateStatus(swarm.getId(), SwarmStatus.RUNNING);
-        ContainerLifecycleManager manager = new ContainerLifecycleManager(docker, registry, amqp);
+        TopicExchange controlExchange = new TopicExchange("ph.control");
+        ContainerLifecycleManager manager = new ContainerLifecycleManager(docker, registry, amqp, controlExchange);
 
         assertDoesNotThrow(() -> {
             manager.stopSwarm(swarm.getId());
@@ -166,7 +172,8 @@ class ContainerLifecycleManagerTest {
         registry.updateStatus(swarm.getId(), SwarmStatus.STARTING);
         registry.updateStatus(swarm.getId(), SwarmStatus.RUNNING);
         registry.updateStatus(swarm.getId(), SwarmStatus.FAILED);
-        ContainerLifecycleManager manager = new ContainerLifecycleManager(docker, registry, amqp);
+        TopicExchange controlExchange = new TopicExchange("ph.control");
+        ContainerLifecycleManager manager = new ContainerLifecycleManager(docker, registry, amqp, controlExchange);
 
         assertDoesNotThrow(() -> manager.stopSwarm(swarm.getId()));
         assertEquals(SwarmStatus.STOPPED, swarm.getStatus());

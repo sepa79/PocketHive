@@ -1,7 +1,6 @@
 package io.pockethive.orchestrator.app;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.pockethive.Topology;
 import io.pockethive.control.ControlSignal;
 import io.pockethive.control.ConfirmationScope;
 import io.pockethive.controlplane.ControlPlaneSignals;
@@ -24,6 +23,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.amqp.core.AmqpTemplate;
+import org.springframework.amqp.core.TopicExchange;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
@@ -51,6 +51,7 @@ class SwarmControllerTest {
     ScenarioClient scenarioClient;
 
     private final ObjectMapper mapper = new JacksonConfiguration().objectMapper();
+    private final TopicExchange controlExchange = new TopicExchange("ph.control");
 
     @Test
     void startPublishesControlSignal() throws Exception {
@@ -67,13 +68,14 @@ class SwarmControllerTest {
             registry,
             mapper,
             scenarioClient,
-            new SwarmPlanRegistry());
+            new SwarmPlanRegistry(),
+            controlExchange);
         SwarmController.ControlRequest req = new SwarmController.ControlRequest("idem", null);
 
         ResponseEntity<ControlResponse> resp = ctrl.start("sw1", req);
 
         ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
-        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
+        verify(rabbit).convertAndSend(eq(controlExchange.getName()),
             eq(ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_START, "sw1", "swarm-controller", "ALL")), captor.capture());
         ControlSignal sig = mapper.readValue(captor.getValue(), ControlSignal.class);
         assertThat(sig.signal()).isEqualTo(ControlPlaneSignals.SWARM_START);
@@ -108,7 +110,8 @@ class SwarmControllerTest {
             new SwarmRegistry(),
             mapper,
             scenarioClient,
-            plans);
+            plans,
+            controlExchange);
         SwarmCreateRequest req = new SwarmCreateRequest("tpl-1", "idem", null);
 
         ctrl.create("sw1", req);
@@ -134,14 +137,15 @@ class SwarmControllerTest {
             registry,
             mapper,
             scenarioClient,
-            new SwarmPlanRegistry());
+            new SwarmPlanRegistry(),
+            controlExchange);
         SwarmController.ControlRequest req = new SwarmController.ControlRequest("idem", null);
 
         ResponseEntity<ControlResponse> r1 = ctrl.start("sw1", req);
         ResponseEntity<ControlResponse> r2 = ctrl.start("sw1", req);
 
         ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
-        verify(rabbit, times(1)).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
+        verify(rabbit, times(1)).convertAndSend(eq(controlExchange.getName()),
             eq(ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_START, "sw1", "swarm-controller", "ALL")), captor.capture());
         assertThat(r1.getBody().correlationId()).isEqualTo(r2.getBody().correlationId());
     }
@@ -158,7 +162,8 @@ class SwarmControllerTest {
             registry,
             mapper,
             scenarioClient,
-            new SwarmPlanRegistry());
+            new SwarmPlanRegistry(),
+            controlExchange);
 
         ResponseEntity<SwarmController.SwarmView> resp = ctrl.view("sw1");
         assertThat(resp.getBody().id()).isEqualTo("sw1");
@@ -179,7 +184,8 @@ class SwarmControllerTest {
             new SwarmRegistry(),
             mapper,
             scenarioClient,
-            plans);
+            plans,
+            controlExchange);
         SwarmCreateRequest req = new SwarmCreateRequest("tpl-missing", "idem", null);
 
         assertThatThrownBy(() -> ctrl.create("sw1", req))

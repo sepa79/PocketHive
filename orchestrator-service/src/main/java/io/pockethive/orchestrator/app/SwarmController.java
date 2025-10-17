@@ -2,7 +2,6 @@ package io.pockethive.orchestrator.app;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.pockethive.Topology;
 import io.pockethive.control.ControlSignal;
 import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmCreateRequest;
@@ -20,6 +19,8 @@ import io.pockethive.swarm.model.SwarmTemplate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.core.AmqpTemplate;
+import org.springframework.amqp.core.TopicExchange;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -52,6 +53,7 @@ public class SwarmController {
     private final SwarmPlanRegistry plans;
     private final ScenarioClient scenarios;
     private final ObjectMapper json;
+    private final String controlExchange;
 
     public SwarmController(AmqpTemplate rabbit,
                            ContainerLifecycleManager lifecycle,
@@ -60,7 +62,8 @@ public class SwarmController {
                            SwarmRegistry registry,
                            ObjectMapper json,
                            ScenarioClient scenarios,
-                           SwarmPlanRegistry plans) {
+                           SwarmPlanRegistry plans,
+                           @Qualifier("controlPlaneExchange") TopicExchange controlExchange) {
         this.rabbit = rabbit;
         this.lifecycle = lifecycle;
         this.creates = creates;
@@ -69,6 +72,7 @@ public class SwarmController {
         this.json = json;
         this.scenarios = scenarios;
         this.plans = plans;
+        this.controlExchange = java.util.Objects.requireNonNull(controlExchange, "controlExchange").getName();
     }
 
     /**
@@ -337,7 +341,7 @@ public class SwarmController {
     private void sendControl(String routingKey, String payload, String context) {
         String label = (context == null || context.isBlank()) ? "SEND" : "SEND " + context;
         log.info("[CTRL] {} rk={} payload={}", label, routingKey, snippet(payload));
-        rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, routingKey, payload);
+        rabbit.convertAndSend(controlExchange, routingKey, payload);
     }
 
     /**

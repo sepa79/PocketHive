@@ -1,7 +1,6 @@
 package io.pockethive.orchestrator.app;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.pockethive.Topology;
 import io.pockethive.control.CommandTarget;
 import io.pockethive.control.ConfirmationScope;
 import io.pockethive.control.ControlSignal;
@@ -14,6 +13,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.amqp.core.AmqpTemplate;
+import org.springframework.amqp.core.TopicExchange;
 import org.springframework.http.ResponseEntity;
 
 import java.util.Map;
@@ -31,17 +31,19 @@ class ComponentControllerTest {
     AmqpTemplate rabbit;
 
     private final ObjectMapper mapper = new JacksonConfiguration().objectMapper();
+    private final TopicExchange controlExchange = new TopicExchange("ph.control");
 
     @Test
     void updateConfigPublishesControlSignal() throws Exception {
-        ComponentController controller = new ComponentController(rabbit, new InMemoryIdempotencyStore(), mapper);
+        ComponentController controller =
+            new ComponentController(rabbit, new InMemoryIdempotencyStore(), mapper, controlExchange);
         ComponentController.ConfigUpdateRequest request =
             new ComponentController.ConfigUpdateRequest("idem", Map.of("enabled", true), null, "sw1", CommandTarget.SWARM);
 
         ResponseEntity<ControlResponse> response = controller.updateConfig("generator", "c1", request);
 
         ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
-        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
+        verify(rabbit).convertAndSend(eq(controlExchange.getName()),
             eq(ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, "sw1", "generator", "c1")), captor.capture());
         ControlSignal signal = mapper.readValue(captor.getValue(), ControlSignal.class);
         assertThat(signal.signal()).isEqualTo(ControlPlaneSignals.CONFIG_UPDATE);
@@ -63,14 +65,15 @@ class ComponentControllerTest {
 
     @Test
     void configUpdateIsIdempotent() {
-        ComponentController controller = new ComponentController(rabbit, new InMemoryIdempotencyStore(), mapper);
+        ComponentController controller =
+            new ComponentController(rabbit, new InMemoryIdempotencyStore(), mapper, controlExchange);
         ComponentController.ConfigUpdateRequest request =
             new ComponentController.ConfigUpdateRequest("idem", Map.of(), null, null, CommandTarget.INSTANCE);
 
         ResponseEntity<ControlResponse> first = controller.updateConfig("processor", "p1", request);
         ResponseEntity<ControlResponse> second = controller.updateConfig("processor", "p1", request);
 
-        verify(rabbit, times(1)).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
+        verify(rabbit, times(1)).convertAndSend(eq(controlExchange.getName()),
             eq(ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, "ALL", "processor", "p1")), anyString());
         assertThat(first.getBody()).isNotNull();
         assertThat(second.getBody()).isNotNull();

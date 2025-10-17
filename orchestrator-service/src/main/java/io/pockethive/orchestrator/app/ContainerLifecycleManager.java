@@ -1,14 +1,16 @@
 package io.pockethive.orchestrator.app;
 
 import com.github.dockerjava.api.model.Bind;
-import io.pockethive.Topology;
 import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmRegistry;
 import io.pockethive.orchestrator.domain.SwarmStatus;
 import io.pockethive.docker.DockerContainerClient;
+import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.core.AmqpAdmin;
+import org.springframework.amqp.core.TopicExchange;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -17,19 +19,24 @@ public class ContainerLifecycleManager {
     private final DockerContainerClient docker;
     private final SwarmRegistry registry;
     private final AmqpAdmin amqp;
+    private final TopicExchange controlExchange;
 
     private static final String DEFAULT_DOCKER_SOCKET = "/var/run/docker.sock";
 
-    public ContainerLifecycleManager(DockerContainerClient docker, SwarmRegistry registry, AmqpAdmin amqp) {
+    public ContainerLifecycleManager(DockerContainerClient docker,
+                                     SwarmRegistry registry,
+                                     AmqpAdmin amqp,
+                                     @Qualifier("controlPlaneExchange") TopicExchange controlExchange) {
         this.docker = docker;
         this.registry = registry;
         this.amqp = amqp;
+        this.controlExchange = Objects.requireNonNull(controlExchange, "controlExchange");
     }
 
     public Swarm startSwarm(String swarmId, String image, String instanceId) {
         java.util.Map<String, String> env = new java.util.HashMap<>();
         env.put("POCKETHIVE_CONTROL_PLANE_INSTANCE_ID", instanceId);
-        env.put("POCKETHIVE_CONTROL_PLANE_EXCHANGE", Topology.CONTROL_EXCHANGE);
+        env.put("POCKETHIVE_CONTROL_PLANE_EXCHANGE", controlExchange.getName());
         env.put("POCKETHIVE_CONTROL_PLANE_SWARM_ID", swarmId);
         env.put("RABBITMQ_HOST", java.util.Optional.ofNullable(System.getenv("RABBITMQ_HOST")).orElse("rabbitmq"));
         env.put(

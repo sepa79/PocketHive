@@ -9,7 +9,6 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.pockethive.Topology;
 import io.pockethive.control.ControlSignal;
 import io.pockethive.control.ConfirmationScope;
 import io.pockethive.control.ReadyConfirmation;
@@ -205,7 +204,7 @@ class SwarmCreationMock1E2ETest {
         admin.declareBinding(createBinding);
 
         rabbitTemplate.convertAndSend(
-            Topology.CONTROL_EXCHANGE,
+            controlExchange.getName(),
             ControlPlaneRouting.event("ready.swarm-controller",
                 new ConfirmationScope(swarmId, "swarm-controller", instanceId)),
             "{}");
@@ -247,7 +246,7 @@ class SwarmCreationMock1E2ETest {
         assertThat(swarmPlanRegistry.find(instanceId)).isEmpty();
 
         rabbitTemplate.convertAndSend(
-            Topology.CONTROL_EXCHANGE,
+            controlExchange.getName(),
             ControlPlaneRouting.event("ready.swarm-template",
                 new ConfirmationScope(swarmId, "swarm-controller", instanceId)),
             "{}");
