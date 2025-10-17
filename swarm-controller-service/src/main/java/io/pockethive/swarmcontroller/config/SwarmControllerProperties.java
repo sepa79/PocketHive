@@ -2,14 +2,14 @@ package io.pockethive.swarmcontroller.config;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import java.time.Duration;
 import java.util.Objects;
 import org.springframework.boot.context.properties.ConfigurationProperties;
-import org.springframework.boot.context.properties.bind.DefaultValue;
 import org.springframework.validation.annotation.Validated;
 
 @Validated
-@ConfigurationProperties(prefix = "pockethive.control-plane.swarm-controller")
+@ConfigurationProperties(prefix = "pockethive.control-plane")
 public class SwarmControllerProperties {
 
     private final String swarmId;
@@ -21,24 +21,19 @@ public class SwarmControllerProperties {
     private final Metrics metrics;
     private final Docker docker;
 
-    public SwarmControllerProperties(
-        @DefaultValue("default") @NotBlank String swarmId,
-        @DefaultValue("swarm-controller") @NotBlank String role,
-        @DefaultValue("ph.control") @NotBlank String controlExchange,
-        @DefaultValue("ph.control") @NotBlank String controlQueuePrefix,
-        @DefaultValue Traffic traffic,
-        @DefaultValue Rabbit rabbit,
-        @DefaultValue Metrics metrics,
-        @DefaultValue Docker docker) {
+    public SwarmControllerProperties(@NotBlank String swarmId,
+                                     @NotBlank String exchange,
+                                     @Valid Manager manager,
+                                     @Valid SwarmController swarmController) {
         this.swarmId = requireNonBlank(swarmId, "swarmId");
-        this.role = requireNonBlank(role, "role");
-        this.controlExchange = requireNonBlank(controlExchange, "controlExchange");
-        this.controlQueuePrefix = requireNonBlank(controlQueuePrefix, "controlQueuePrefix");
-        this.traffic = Objects.requireNonNullElseGet(traffic, () -> new Traffic(null, null))
-            .withDefaults(this.swarmId);
-        this.rabbit = Objects.requireNonNullElseGet(rabbit, () -> new Rabbit(null, null)).withDefaults();
-        this.metrics = Objects.requireNonNullElseGet(metrics, () -> new Metrics(null)).withDefaults();
-        this.docker = Objects.requireNonNullElseGet(docker, () -> new Docker(null, null)).withDefaults();
+        this.role = requireNonBlank(Objects.requireNonNull(manager, "manager").role(), "manager.role");
+        this.controlExchange = requireNonBlank(exchange, "exchange");
+        SwarmController resolved = Objects.requireNonNull(swarmController, "swarmController");
+        this.controlQueuePrefix = requireNonBlank(resolved.controlQueuePrefix(), "controlQueuePrefix");
+        this.traffic = Objects.requireNonNull(resolved.traffic(), "traffic");
+        this.rabbit = Objects.requireNonNull(resolved.rabbit(), "rabbit");
+        this.metrics = Objects.requireNonNull(resolved.metrics(), "metrics");
+        this.docker = Objects.requireNonNull(resolved.docker(), "docker");
     }
 
     public String getSwarmId() {
@@ -78,7 +73,7 @@ public class SwarmControllerProperties {
     }
 
     public String queueName(String suffix) {
-        return traffic.queueName(requireNonBlank(suffix, "suffix"));
+        return traffic.queueName(suffix);
     }
 
     public String controlQueueName(String instanceId) {
@@ -91,11 +86,58 @@ public class SwarmControllerProperties {
         return controlQueuePrefix + "." + resolvedRole + "." + resolvedInstance;
     }
 
-    private static String requireNonBlank(String value, String name) {
-        if (value == null || value.isBlank()) {
-            throw new IllegalArgumentException(name + " must not be blank");
+    @Validated
+    public static final class Manager {
+        private final String role;
+
+        public Manager(@NotBlank String role) {
+            this.role = requireNonBlank(role, "role");
         }
-        return value;
+
+        public String role() {
+            return role;
+        }
+    }
+
+    @Validated
+    public static final class SwarmController {
+        private final String controlQueuePrefix;
+        private final Traffic traffic;
+        private final Rabbit rabbit;
+        private final Metrics metrics;
+        private final Docker docker;
+
+        public SwarmController(@NotBlank String controlQueuePrefix,
+                               @Valid Traffic traffic,
+                               @Valid Rabbit rabbit,
+                               @Valid Metrics metrics,
+                               @Valid Docker docker) {
+            this.controlQueuePrefix = requireNonBlank(controlQueuePrefix, "controlQueuePrefix");
+            this.traffic = Objects.requireNonNull(traffic, "traffic");
+            this.rabbit = Objects.requireNonNull(rabbit, "rabbit");
+            this.metrics = Objects.requireNonNull(metrics, "metrics");
+            this.docker = Objects.requireNonNull(docker, "docker");
+        }
+
+        public String controlQueuePrefix() {
+            return controlQueuePrefix;
+        }
+
+        public Traffic traffic() {
+            return traffic;
+        }
+
+        public Rabbit rabbit() {
+            return rabbit;
+        }
+
+        public Metrics metrics() {
+            return metrics;
+        }
+
+        public Docker docker() {
+            return docker;
+        }
     }
 
     @Validated
@@ -103,15 +145,9 @@ public class SwarmControllerProperties {
         private final String hiveExchange;
         private final String queuePrefix;
 
-        public Traffic(String hiveExchange, String queuePrefix) {
-            this.hiveExchange = hiveExchange;
-            this.queuePrefix = queuePrefix;
-        }
-
-        private Traffic withDefaults(String swarmId) {
-            String prefix = normalisePrefix(defaultIfBlank(queuePrefix, "ph." + swarmId));
-            String exchange = defaultIfBlank(hiveExchange, prefix + ".hive");
-            return new Traffic(exchange, prefix);
+        public Traffic(@NotBlank String hiveExchange, @NotBlank String queuePrefix) {
+            this.hiveExchange = requireNonBlank(hiveExchange, "hiveExchange");
+            this.queuePrefix = requireNonBlank(queuePrefix, "queuePrefix");
         }
 
         public String hiveExchange() {
@@ -133,15 +169,9 @@ public class SwarmControllerProperties {
         private final String host;
         private final String logsExchange;
 
-        public Rabbit(String host, String logsExchange) {
-            this.host = host;
-            this.logsExchange = logsExchange;
-        }
-
-        private Rabbit withDefaults() {
-            String resolvedHost = defaultIfBlank(host, "rabbitmq");
-            String resolvedLogs = defaultIfBlank(logsExchange, "ph.logs");
-            return new Rabbit(resolvedHost, resolvedLogs);
+        public Rabbit(@NotBlank String host, @NotBlank String logsExchange) {
+            this.host = requireNonBlank(host, "host");
+            this.logsExchange = requireNonBlank(logsExchange, "logsExchange");
         }
 
         public String host() {
@@ -157,12 +187,8 @@ public class SwarmControllerProperties {
     public static final class Metrics {
         private final @Valid Pushgateway pushgateway;
 
-        public Metrics(@DefaultValue Pushgateway pushgateway) {
-            this.pushgateway = pushgateway == null ? Pushgateway.disabled() : pushgateway;
-        }
-
-        private Metrics withDefaults() {
-            return new Metrics(pushgateway.withDefaults());
+        public Metrics(@Valid Pushgateway pushgateway) {
+            this.pushgateway = Objects.requireNonNull(pushgateway, "pushgateway");
         }
 
         public Pushgateway pushgateway() {
@@ -177,25 +203,14 @@ public class SwarmControllerProperties {
         private final Duration pushRate;
         private final String shutdownOperation;
 
-        public Pushgateway(
-            @DefaultValue("false") boolean enabled,
-            String baseUrl,
-            @DefaultValue("PT1M") Duration pushRate,
-            String shutdownOperation) {
+        public Pushgateway(boolean enabled,
+                           String baseUrl,
+                           @NotNull Duration pushRate,
+                           @NotBlank String shutdownOperation) {
             this.enabled = enabled;
             this.baseUrl = baseUrl;
-            this.pushRate = pushRate;
-            this.shutdownOperation = shutdownOperation;
-        }
-
-        private static Pushgateway disabled() {
-            return new Pushgateway(false, null, Duration.ofMinutes(1), "DELETE");
-        }
-
-        private Pushgateway withDefaults() {
-            Duration rate = pushRate != null ? pushRate : Duration.ofMinutes(1);
-            String operation = defaultIfBlank(shutdownOperation, "DELETE");
-            return new Pushgateway(enabled, baseUrl, rate, operation);
+            this.pushRate = Objects.requireNonNull(pushRate, "pushRate");
+            this.shutdownOperation = requireNonBlank(shutdownOperation, "shutdownOperation");
         }
 
         public boolean enabled() {
@@ -224,14 +239,9 @@ public class SwarmControllerProperties {
         private final String host;
         private final String socketPath;
 
-        public Docker(String host, String socketPath) {
+        public Docker(String host, @NotBlank String socketPath) {
             this.host = host;
-            this.socketPath = socketPath;
-        }
-
-        private Docker withDefaults() {
-            String resolvedSocket = defaultIfBlank(socketPath, "/var/run/docker.sock");
-            return new Docker(host, resolvedSocket);
+            this.socketPath = requireNonBlank(socketPath, "socketPath");
         }
 
         public String host() {
@@ -247,15 +257,10 @@ public class SwarmControllerProperties {
         }
     }
 
-    private static String defaultIfBlank(String value, String defaultValue) {
-        return (value == null || value.isBlank()) ? defaultValue : value;
-    }
-
-    private static String normalisePrefix(String value) {
-        String trimmed = requireNonBlank(value, "queuePrefix");
-        if (trimmed.endsWith(".")) {
-            return trimmed.substring(0, trimmed.length() - 1);
+    private static String requireNonBlank(String value, String name) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException(name + " must not be blank");
         }
-        return trimmed;
+        return value;
     }
 }

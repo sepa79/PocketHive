@@ -200,14 +200,17 @@ class SwarmLifecycleManagerTest {
   void preparePropagatesMinimalPushgatewayEnvWhenConfigured() throws Exception {
     SwarmControllerProperties properties = new SwarmControllerProperties(
         Topology.SWARM_ID,
-        "swarm-controller",
         Topology.CONTROL_EXCHANGE,
-        "ph.control",
-        new SwarmControllerProperties.Traffic(null, null),
-        new SwarmControllerProperties.Rabbit("rabbitmq", "ph.logs"),
-        new SwarmControllerProperties.Metrics(
-            new SwarmControllerProperties.Pushgateway(true, "http://push:9091", Duration.ofSeconds(12), "DELETE")),
-        new SwarmControllerProperties.Docker(null, "/var/run/docker.sock"));
+        new SwarmControllerProperties.Manager("swarm-controller"),
+        new SwarmControllerProperties.SwarmController(
+            "ph.control",
+            new SwarmControllerProperties.Traffic(
+                "ph." + Topology.SWARM_ID + ".hive",
+                "ph." + Topology.SWARM_ID),
+            new SwarmControllerProperties.Rabbit("rabbitmq", "ph.logs"),
+            new SwarmControllerProperties.Metrics(
+                new SwarmControllerProperties.Pushgateway(true, "http://push:9091", Duration.ofSeconds(12), "DELETE")),
+            new SwarmControllerProperties.Docker(null, "/var/run/docker.sock")));
     SwarmLifecycleManager manager = new SwarmLifecycleManager(
         amqp, mapper, docker, rabbit, "inst", properties);
     SwarmPlan plan = new SwarmPlan("swarm", List.of(new Bee("gen", "img1", null, null)));

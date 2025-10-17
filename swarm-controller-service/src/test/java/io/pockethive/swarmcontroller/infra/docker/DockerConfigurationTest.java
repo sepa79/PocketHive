@@ -12,15 +12,7 @@ class DockerConfigurationTest {
 
   @Test
   void dockerClientConfigHonorsConfiguredHost() {
-    SwarmControllerProperties properties = new SwarmControllerProperties(
-        Topology.SWARM_ID,
-        "swarm-controller",
-        Topology.CONTROL_EXCHANGE,
-        "ph.control",
-        new SwarmControllerProperties.Traffic(null, null),
-        new SwarmControllerProperties.Rabbit("rabbitmq", "ph.logs"),
-        new SwarmControllerProperties.Metrics(
-            new SwarmControllerProperties.Pushgateway(false, null, Duration.ofMinutes(1), "DELETE")),
+    SwarmControllerProperties properties = propertiesWithDocker(
         new SwarmControllerProperties.Docker("unix:///custom/docker.sock", "/var/run/docker.sock"));
     DockerConfiguration configuration = new DockerConfiguration(properties);
 
@@ -31,20 +23,28 @@ class DockerConfigurationTest {
 
   @Test
   void dockerClientConfigFallsBackToSocketPath() {
-    SwarmControllerProperties properties = new SwarmControllerProperties(
-        Topology.SWARM_ID,
-        "swarm-controller",
-        Topology.CONTROL_EXCHANGE,
-        "ph.control",
-        new SwarmControllerProperties.Traffic(null, null),
-        new SwarmControllerProperties.Rabbit("rabbitmq", "ph.logs"),
-        new SwarmControllerProperties.Metrics(
-            new SwarmControllerProperties.Pushgateway(false, null, Duration.ofMinutes(1), "DELETE")),
+    SwarmControllerProperties properties = propertiesWithDocker(
         new SwarmControllerProperties.Docker(null, "/custom/docker.sock"));
     DockerConfiguration configuration = new DockerConfiguration(properties);
 
     DefaultDockerClientConfig config = configuration.dockerClientConfig();
 
     assertThat(config.getDockerHost().toString()).isEqualTo("unix:///custom/docker.sock");
+  }
+
+  private SwarmControllerProperties propertiesWithDocker(SwarmControllerProperties.Docker docker) {
+    return new SwarmControllerProperties(
+        Topology.SWARM_ID,
+        Topology.CONTROL_EXCHANGE,
+        new SwarmControllerProperties.Manager("swarm-controller"),
+        new SwarmControllerProperties.SwarmController(
+            "ph.control",
+            new SwarmControllerProperties.Traffic(
+                "ph." + Topology.SWARM_ID + ".hive",
+                "ph." + Topology.SWARM_ID),
+            new SwarmControllerProperties.Rabbit("rabbitmq", "ph.logs"),
+            new SwarmControllerProperties.Metrics(
+                new SwarmControllerProperties.Pushgateway(false, null, Duration.ofMinutes(1), "DELETE")),
+            docker));
   }
 }
