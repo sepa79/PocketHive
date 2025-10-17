@@ -1,6 +1,6 @@
 pockethive:
   control-plane:
-    swarm-id: ${POCKETHIVE_CONTROL_PLANE_SWARM_ID:${POCKETHIVE_SWARM_ID:default}}
+    swarm-id: ${POCKETHIVE_CONTROL_PLANE_SWARM_ID:hive}
     manager:
       role: ${POCKETHIVE_CONTROL_PLANE_MANAGER_ROLE:scenario-manager}
       instance-id: ${POCKETHIVE_CONTROL_PLANE_MANAGER_INSTANCE_ID:scenario-manager}
