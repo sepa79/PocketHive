@@ -33,8 +33,7 @@ describe('fetchWiremockComponent', () => {
           requests: [
             {
               id: 'abc',
-              loggedDate: 1700000000000,
-              request: { method: 'GET', url: '/path' },
+              request: { method: 'GET', url: '/path', loggedDate: 1700000000000 },
               response: { status: 200 },
             },
           ],
@@ -114,8 +113,7 @@ describe('fetchWiremockComponent', () => {
           requests: [
             {
               id: 'req-1',
-              loggedDateString: '2024-05-26T10:00:00Z',
-              request: { method: 'POST', url: '/api/test' },
+              request: { method: 'POST', url: '/api/test', loggedDateString: '2024-05-26T10:00:00Z' },
               response: { status: 201 },
             },
           ],

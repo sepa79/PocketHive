@@ -61,27 +61,46 @@ function extractVersion(health: unknown): string | undefined {
 }
 
 function parseLoggedDate(entry: Record<string, unknown>): number | undefined {
-  const raw = entry['loggedDate']
-  if (typeof raw === 'number') {
-    return raw
-  }
-  if (typeof raw === 'string' && raw.length > 0) {
-    const numeric = Number(raw)
-    if (!Number.isNaN(numeric)) {
-      return numeric
+  const parseValue = (value: unknown): number | undefined => {
+    if (typeof value === 'number') {
+      return value
     }
-    const parsed = Date.parse(raw)
-    if (!Number.isNaN(parsed)) {
-      return parsed
+    if (typeof value === 'string' && value.length > 0) {
+      const numeric = Number(value)
+      if (!Number.isNaN(numeric)) {
+        return numeric
+      }
+      const parsed = Date.parse(value)
+      if (!Number.isNaN(parsed)) {
+        return parsed
+      }
+    }
+    return undefined
+  }
+
+  const direct = parseValue(entry['loggedDate'])
+  if (typeof direct === 'number') {
+    return direct
+  }
+
+  const directString = parseValue(entry['loggedDateString'])
+  if (typeof directString === 'number') {
+    return directString
+  }
+
+  const request = isRecord(entry['request']) ? entry['request'] : null
+  if (request) {
+    const nested = parseValue(request['loggedDate'])
+    if (typeof nested === 'number') {
+      return nested
+    }
+
+    const nestedString = parseValue(request['loggedDateString'])
+    if (typeof nestedString === 'number') {
+      return nestedString
     }
   }
-  const loggedDateString = entry['loggedDateString']
-  if (typeof loggedDateString === 'string' && loggedDateString.length > 0) {
-    const parsed = Date.parse(loggedDateString)
-    if (!Number.isNaN(parsed)) {
-      return parsed
-    }
-  }
+
   return undefined
 }
 
