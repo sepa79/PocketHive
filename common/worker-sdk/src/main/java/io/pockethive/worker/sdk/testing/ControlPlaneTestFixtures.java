@@ -22,10 +22,9 @@ public final class ControlPlaneTestFixtures {
         ControlPlaneProperties properties = new ControlPlaneProperties();
         String resolvedSwarm = requireText("swarmId", swarmId);
         properties.setSwarmId(resolvedSwarm);
+        properties.setInstanceId(requireText("instanceId", instanceId));
         ControlPlaneProperties.WorkerProperties worker = properties.getWorker();
-        worker.setSwarmId(resolvedSwarm);
         worker.setRole(requireText("role", role));
-        worker.setInstanceId(requireText("instanceId", instanceId));
         return properties;
     }
 
@@ -33,10 +32,9 @@ public final class ControlPlaneTestFixtures {
         ControlPlaneProperties properties = new ControlPlaneProperties();
         String resolvedSwarm = requireText("swarmId", swarmId);
         properties.setSwarmId(resolvedSwarm);
+        properties.setInstanceId(requireText("instanceId", instanceId));
         ControlPlaneProperties.ManagerProperties manager = properties.getManager();
-        manager.setSwarmId(resolvedSwarm);
         manager.setRole(requireText("role", role));
-        manager.setInstanceId(requireText("instanceId", instanceId));
         return properties;
     }
 

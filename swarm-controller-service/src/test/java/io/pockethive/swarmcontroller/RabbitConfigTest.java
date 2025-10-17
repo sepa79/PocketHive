@@ -22,7 +22,7 @@ class RabbitConfigTest {
   @Test
   void controlQueueUsesSwarmRoleAndInstanceSegments() {
     contextRunner
-        .withPropertyValues("pockethive.control-plane.worker.instance-id=test-instance")
+        .withPropertyValues("pockethive.control-plane.instance-id=test-instance")
         .run(context -> {
           Queue queue = context.getBean("controlQueue", Queue.class);
           assertEquals(
@@ -48,7 +48,7 @@ class RabbitConfigTest {
   @Test
   void instanceIdReturnsConfiguredBeeName() {
     contextRunner
-        .withPropertyValues("pockethive.control-plane.worker.instance-id=test-swarm-controller-bee")
+        .withPropertyValues("pockethive.control-plane.instance-id=test-swarm-controller-bee")
         .run(context -> assertThat(context.getBean("instanceId", String.class))
             .isEqualTo("test-swarm-controller-bee"));
   }

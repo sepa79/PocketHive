@@ -16,7 +16,7 @@ class ApplicationBeeNameTest {
   @Test
   void bindsExternallyProvidedBeeName() {
     contextRunner
-        .withPropertyValues("pockethive.control-plane.worker.instance-id=external-moderator-bee")
+        .withPropertyValues("pockethive.control-plane.instance-id=external-moderator-bee")
         .run(context ->
             assertThat(context.getBean(BeeIdentityProperties.class).beeName())
                 .isEqualTo("external-moderator-bee"));
@@ -30,7 +30,7 @@ class ApplicationBeeNameTest {
   @Test
   void failsWhenBeeNameBlank() {
     contextRunner
-        .withPropertyValues("pockethive.control-plane.worker.instance-id=   ")
+        .withPropertyValues("pockethive.control-plane.instance-id=   ")
         .run(context -> assertThat(context).hasFailed());
   }
 

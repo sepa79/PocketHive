@@ -180,7 +180,7 @@ class SwarmCreationMock1E2ETest {
         assertThat(correlationId).isNotBlank();
 
         assertThat(managerIdentity.instanceId()).isNotBlank();
-        assertThat(controlPlaneProperties.getManager().getInstanceId()).isEqualTo(managerIdentity.instanceId());
+        assertThat(controlPlaneProperties.getInstanceId()).isEqualTo(managerIdentity.instanceId());
 
         Swarm swarm = swarmRegistry.find(swarmId).orElseThrow();
         assertThat(swarm.getContainerId()).isEqualTo("container-123");

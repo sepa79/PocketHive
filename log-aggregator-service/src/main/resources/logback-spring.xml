@@ -9,20 +9,16 @@
                   source="pockethive.control-plane.manager.role"
                   defaultValue="${applicationName}"/>
 
-  <springProperty scope="context" name="globalSwarmIdentifier"
+  <springProperty scope="context" name="swarmIdentifier"
                   source="pockethive.control-plane.swarm-id"
                   defaultValue=""/>
-
-  <springProperty scope="context" name="swarmIdentifier"
-                  source="pockethive.control-plane.manager.swarm-id"
-                  defaultValue="${globalSwarmIdentifier}"/>
 
   <springProperty scope="context" name="defaultInstanceIdentifier"
                   source="bee.name"
                   defaultValue="${applicationName}"/>
 
   <springProperty scope="context" name="instanceIdentifier"
-                  source="pockethive.control-plane.manager.instance-id"
+                  source="pockethive.control-plane.instance-id"
                   defaultValue="${defaultInstanceIdentifier}"/>
 
   <logger name="org.springframework.amqp" level="WARN" additivity="false">

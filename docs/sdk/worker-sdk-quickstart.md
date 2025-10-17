@@ -31,9 +31,9 @@ pockethive:
   control-plane:
     exchange: ph.control
     swarm-id: swarm-1
+    instance-id: processor-1
     worker:
       role: processor
-      instance-id: processor-1
 ```
 
 See the [control-plane worker guide](../control-plane/worker-guide.md) for full property reference.

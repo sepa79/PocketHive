@@ -21,8 +21,13 @@
     {
       "name": "pockethive.control-plane.swarm-id",
       "type": "java.lang.String",
-      "description": "Default swarm identifier used when participant-specific values are not provided.",
+      "description": "Swarm identifier shared by all control-plane participants.",
       "defaultValue": "default"
+    },
+    {
+      "name": "pockethive.control-plane.instance-id",
+      "type": "java.lang.String",
+      "description": "Control-plane instance identifier shared by worker and manager roles."
     },
     {
       "name": "pockethive.control-plane.publisher.enabled",
@@ -46,11 +51,6 @@
       "name": "pockethive.control-plane.worker.role",
       "type": "java.lang.String",
       "description": "Worker role identifier used to resolve the control-plane topology descriptor."
-    },
-    {
-      "name": "pockethive.control-plane.worker.instance-id",
-      "type": "java.lang.String",
-      "description": "Worker instance identifier used for queue naming and self-filtering."
     },
     {
       "name": "pockethive.control-plane.worker.listener.enabled",
@@ -98,11 +98,6 @@
       "name": "pockethive.control-plane.manager.role",
       "type": "java.lang.String",
       "description": "Manager role identifier used to resolve the control-plane topology descriptor."
-    },
-    {
-      "name": "pockethive.control-plane.manager.instance-id",
-      "type": "java.lang.String",
-      "description": "Manager instance identifier used for queue naming and self-filtering."
     },
     {
       "name": "pockethive.control-plane.manager.listener.enabled",

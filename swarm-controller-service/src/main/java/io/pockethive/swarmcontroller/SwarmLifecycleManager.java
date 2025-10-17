@@ -234,7 +234,6 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
             }
             String beeName = BeeNameGenerator.generate(bee.role(), Topology.SWARM_ID);
             env.put("POCKETHIVE_CONTROL_PLANE_INSTANCE_ID", beeName);
-            env.put("POCKETHIVE_CONTROL_PLANE_WORKER_INSTANCE_ID", beeName);
             applyMetricsEnv(env, beeName);
             log.info("creating container {} for role {} using image {}", beeName, bee.role(), bee.image());
             log.info("container env for {}: {}", beeName, env);

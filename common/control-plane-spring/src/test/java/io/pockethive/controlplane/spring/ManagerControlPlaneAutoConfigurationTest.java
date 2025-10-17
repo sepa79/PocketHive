@@ -28,7 +28,7 @@ class ManagerControlPlaneAutoConfigurationTest {
         .withPropertyValues(
             "pockethive.control-plane.worker.enabled=false",
             "pockethive.control-plane.manager.role=orchestrator",
-            "pockethive.control-plane.manager.instance-id=orch-1",
+            "pockethive.control-plane.instance-id=orch-1",
             "pockethive.control-plane.swarm-id=swarm-beta",
             "pockethive.control-plane.exchange=ph.control.manager");
 

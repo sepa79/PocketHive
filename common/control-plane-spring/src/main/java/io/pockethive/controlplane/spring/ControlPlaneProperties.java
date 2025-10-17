@@ -14,7 +14,7 @@ public class ControlPlaneProperties {
     private boolean enabled = true;
     private boolean declareTopology = true;
     private String exchange = Topology.CONTROL_EXCHANGE;
-    private String swarmId = Topology.SWARM_ID;
+    private final IdentityProperties identity = new IdentityProperties();
     private final PublisherProperties publisher = new PublisherProperties();
     private final WorkerProperties worker = new WorkerProperties();
     private final ManagerProperties manager = new ManagerProperties();
@@ -43,16 +43,28 @@ public class ControlPlaneProperties {
         this.exchange = exchange;
     }
 
+    public PublisherProperties getPublisher() {
+        return publisher;
+    }
+
+    public IdentityProperties getIdentity() {
+        return identity;
+    }
+
     public String getSwarmId() {
-        return swarmId;
+        return identity.getSwarmId();
     }
 
     public void setSwarmId(String swarmId) {
-        this.swarmId = swarmId;
+        identity.setSwarmId(swarmId);
     }
 
-    public PublisherProperties getPublisher() {
-        return publisher;
+    public String getInstanceId() {
+        return identity.getInstanceId();
+    }
+
+    public void setInstanceId(String instanceId) {
+        identity.setInstanceId(instanceId);
     }
 
     public WorkerProperties getWorker() {
@@ -61,13 +73,6 @@ public class ControlPlaneProperties {
 
     public ManagerProperties getManager() {
         return manager;
-    }
-
-    String resolveSwarmId(String override) {
-        if (override != null && !override.isBlank()) {
-            return override;
-        }
-        return swarmId;
     }
 
     public static final class PublisherProperties {
@@ -85,9 +90,7 @@ public class ControlPlaneProperties {
     public static class ParticipantProperties {
         private boolean enabled = true;
         private boolean declareTopology = true;
-        private String swarmId;
         private String role;
-        private String instanceId;
 
         public boolean isEnabled() {
             return enabled;
@@ -105,28 +108,12 @@ public class ControlPlaneProperties {
             this.declareTopology = declareTopology;
         }
 
-        public String getSwarmId() {
-            return swarmId;
-        }
-
-        public void setSwarmId(String swarmId) {
-            this.swarmId = swarmId;
-        }
-
         public String getRole() {
             return role;
         }
 
         public void setRole(String role) {
             this.role = role;
-        }
-
-        public String getInstanceId() {
-            return instanceId;
-        }
-
-        public void setInstanceId(String instanceId) {
-            this.instanceId = instanceId;
         }
     }
 
@@ -212,6 +199,28 @@ public class ControlPlaneProperties {
                 throw new IllegalArgumentException("duplicate-cache.capacity must be positive");
             }
             this.capacity = capacity;
+        }
+    }
+
+    public final class IdentityProperties {
+
+        private String swarmId = Topology.SWARM_ID;
+        private String instanceId;
+
+        public String getSwarmId() {
+            return swarmId;
+        }
+
+        public void setSwarmId(String swarmId) {
+            this.swarmId = swarmId;
+        }
+
+        public String getInstanceId() {
+            return instanceId;
+        }
+
+        public void setInstanceId(String instanceId) {
+            this.instanceId = instanceId;
         }
     }
 }

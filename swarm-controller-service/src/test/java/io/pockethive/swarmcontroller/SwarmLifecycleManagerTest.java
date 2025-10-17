@@ -96,7 +96,7 @@ class SwarmLifecycleManagerTest {
     assertEquals("ph." + Topology.SWARM_ID + ".qin", env.get("POCKETHIVE_CONTROL_PLANE_QUEUES_MODERATOR"));
     assertEquals("ph." + Topology.SWARM_ID + ".qout", env.get("POCKETHIVE_CONTROL_PLANE_QUEUES_GENERATOR"));
     assertEquals(assignedName, env.get("POCKETHIVE_CONTROL_PLANE_INSTANCE_ID"));
-    assertEquals(assignedName, env.get("POCKETHIVE_CONTROL_PLANE_WORKER_INSTANCE_ID"));
+    assertEquals(assignedName, env.get("POCKETHIVE_CONTROL_PLANE_INSTANCE_ID"));
     assertThat(env).doesNotContainKeys("BEE_NAME", "JAVA_TOOL_OPTIONS");
     verify(docker).startContainer("c1");
     assertEquals(SwarmStatus.RUNNING, manager.getStatus());
@@ -173,7 +173,7 @@ class SwarmLifecycleManagerTest {
     verify(docker).createContainer(eq("img1"), envCap2.capture(), nameCap2.capture());
     Map<String,String> env = envCap2.getValue();
     assertEquals(nameCap2.getValue(), env.get("POCKETHIVE_CONTROL_PLANE_INSTANCE_ID"));
-    assertEquals(nameCap2.getValue(), env.get("POCKETHIVE_CONTROL_PLANE_WORKER_INSTANCE_ID"));
+    assertEquals(nameCap2.getValue(), env.get("POCKETHIVE_CONTROL_PLANE_INSTANCE_ID"));
     assertThat(env).doesNotContainKeys("BEE_NAME", "JAVA_TOOL_OPTIONS");
     verify(docker).resolveControlNetwork();
     verify(docker).startContainer("c1");

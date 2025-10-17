@@ -46,10 +46,9 @@ public class WorkerControlPlaneAutoConfiguration {
     @ConditionalOnMissingBean(name = "workerControlPlaneIdentity")
     ControlPlaneIdentity workerControlPlaneIdentity(
         @Qualifier("workerControlPlaneTopologyDescriptor") ControlPlaneTopologyDescriptor descriptor) {
-        String swarmId = requireText(properties.resolveSwarmId(properties.getWorker().getSwarmId()),
-            "pockethive.control-plane.swarm-id");
-        String instanceId = requireText(properties.getWorker().getInstanceId(),
-            "pockethive.control-plane.worker.instance-id");
+        ControlPlaneProperties.IdentityProperties identity = properties.getIdentity();
+        String swarmId = requireText(identity.getSwarmId(), "pockethive.control-plane.swarm-id");
+        String instanceId = requireText(identity.getInstanceId(), "pockethive.control-plane.instance-id");
         return new ControlPlaneIdentity(swarmId, descriptor.role(), instanceId);
     }
 

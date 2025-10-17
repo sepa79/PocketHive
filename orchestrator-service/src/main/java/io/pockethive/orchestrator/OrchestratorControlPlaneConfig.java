@@ -21,12 +21,12 @@ class OrchestratorControlPlaneConfig {
 
     private static final String ROLE = "orchestrator";
     private static final String BEE_NAME_PROPERTY = "bee.name";
-    private static final String INSTANCE_ID_PROPERTY = "pockethive.control-plane.manager.instance-id";
+    private static final String INSTANCE_ID_PROPERTY = "pockethive.control-plane.instance-id";
 
     @Bean
     String instanceId(ControlPlaneProperties properties) {
         Objects.requireNonNull(properties, "properties");
-        String resolved = normalise(properties.getManager().getInstanceId());
+        String resolved = normalise(properties.getInstanceId());
         if (resolved == null) {
             resolved = normalise(System.getProperty(INSTANCE_ID_PROPERTY));
         }
@@ -39,7 +39,7 @@ class OrchestratorControlPlaneConfig {
         if (resolved == null) {
             throw new IllegalStateException("Manager instance id could not be resolved");
         }
-        properties.getManager().setInstanceId(resolved);
+        properties.setInstanceId(resolved);
         System.setProperty(BEE_NAME_PROPERTY, resolved);
         System.setProperty(INSTANCE_ID_PROPERTY, resolved);
         return resolved;
@@ -60,7 +60,7 @@ class OrchestratorControlPlaneConfig {
         Objects.requireNonNull(properties, "properties");
         Objects.requireNonNull(descriptor, "descriptor");
         Objects.requireNonNull(instanceId, "instanceId");
-        String swarmId = resolveManagerSwarmId(properties);
+        String swarmId = requireText(properties.getSwarmId(), "pockethive.control-plane.swarm-id");
         return new ControlPlaneIdentity(swarmId, descriptor.role(), instanceId);
     }
 
@@ -99,17 +99,16 @@ class OrchestratorControlPlaneConfig {
             .orElseThrow(() -> new IllegalStateException("Orchestrator status queue descriptor is missing"));
     }
 
-    private static String resolveManagerSwarmId(ControlPlaneProperties properties) {
-        String override = properties.getManager().getSwarmId();
-        if (override != null && !override.isBlank()) {
-            return override;
-        }
-        return properties.getSwarmId();
-    }
-
     private static String normalise(String value) {
         if (value == null || value.isBlank()) {
             return null;
+        }
+        return value;
+    }
+
+    private static String requireText(String value, String property) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalStateException(property + " must not be null or blank");
         }
         return value;
     }

@@ -14,9 +14,8 @@ pockethive:
   control-plane:
     exchange: ${POCKETHIVE_CONTROL_PLANE_EXCHANGE:ph.control}
     swarm-id: ${POCKETHIVE_CONTROL_PLANE_SWARM_ID:default}
+    instance-id: ${POCKETHIVE_CONTROL_PLANE_INSTANCE_ID:${spring.application.name}}
     worker:
       enabled: false
-      instance-id: ${POCKETHIVE_CONTROL_PLANE_WORKER_INSTANCE_ID:${POCKETHIVE_CONTROL_PLANE_INSTANCE_ID:${spring.application.name}}}
     manager:
       role: swarm-controller
-      instance-id: ${POCKETHIVE_CONTROL_PLANE_INSTANCE_ID:${POCKETHIVE_CONTROL_PLANE_WORKER_INSTANCE_ID:${spring.application.name}}}
