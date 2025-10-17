@@ -27,6 +27,8 @@ pockethive:
       rabbit:
         host: ${POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_HOST:${RABBITMQ_HOST:${SPRING_RABBITMQ_HOST:rabbitmq}}}
         logs-exchange: ${POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGS_EXCHANGE:ph.logs}
+        logging:
+          enabled: ${POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGGING_ENABLED:false}
       metrics:
         pushgateway:
           enabled: ${POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_ENABLED:false}
