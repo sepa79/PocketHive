@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.12.7] - 2025-10-17
+Timestamp: 2025-10-17T00:00:00Z
+
+- Control plane & orchestrator: unify identity property naming across auto-configurations, enforce explicit topology/config defaults, propagate swarm identifiers from service configuration, and inline swarm id resolution so control-plane metadata stays accurate across orchestrator and log aggregator instances.
+- Worker runtime: introduce the WorkerStatusScheduler with configuration hooks, centralize delta scheduling, propagate control-plane instance ids through environment wiring, and extend processor/postprocessor metrics collection to cover HTTP hops and Pushgateway publishing.
+- UI: add a WireMock synthetic component with polling, metrics panels, request history, and scenario visibility fixes so hive dashboards surface WireMock health alongside other services.
+- Ops: standardize environment variable names across manifests and deduplicate the orchestrator instance id configuration to simplify deployment management.
+- Tests: configure the unified control-plane identity defaults in integration and unit tests to keep assertions aligned with the new property names.
+- Release: bump the PocketHive patch version to 0.12.7 so published artifacts and tooling reference the latest build.
+
 ## [0.12.6] - 2025-10-15
 Timestamp: 2025-10-15T00:00:00Z
 
