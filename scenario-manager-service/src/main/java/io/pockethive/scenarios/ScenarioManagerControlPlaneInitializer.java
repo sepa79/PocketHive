@@ -14,6 +14,7 @@ import org.springframework.core.env.PropertySource;
 public final class ScenarioManagerControlPlaneInitializer
     implements ApplicationContextInitializer<ConfigurableApplicationContext>, Ordered {
 
+  private static final String DEFAULT_ROLE = "scenario-manager";
   private static final String PROPERTY_SOURCE_NAME = "scenarioManagerControlPlaneDefaults";
   private static final String APPLICATION_NAME_PROPERTY = "spring.application.name";
   private static final String ROLE_PROPERTY = "pockethive.control-plane.manager.role";
@@ -93,7 +94,6 @@ public final class ScenarioManagerControlPlaneInitializer
       }
     }
 
-    throw new IllegalStateException(
-        "Missing configured value for " + ROLE_PROPERTY + " and no default found in property sources");
+    return DEFAULT_ROLE;
   }
 }
