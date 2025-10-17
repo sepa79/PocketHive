@@ -2,11 +2,12 @@ package io.pockethive.orchestrator.infra.scenario;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.orchestrator.app.ScenarioClient;
+import io.pockethive.orchestrator.config.OrchestratorProperties;
 import io.pockethive.orchestrator.domain.ScenarioPlan;
 import io.pockethive.swarm.model.SwarmTemplate;
+import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.net.URI;
@@ -14,7 +15,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
-
+ 
 /**
  * HTTP client to retrieve templates from scenario-manager-service.
  */
@@ -29,26 +30,18 @@ public class ScenarioManagerClient implements ScenarioClient {
     private final String baseUrl;
     private final Duration requestTimeout;
 
-    public ScenarioManagerClient(
-        ObjectMapper json,
-        @Value("${scenario-manager.url:}") String configuredBaseUrl,
-        @Value("${scenario-manager.http.connect-timeout:PT5S}") Duration connectTimeout,
-        @Value("${scenario-manager.http.read-timeout:PT30S}") Duration requestTimeout
-    ) {
+    public ScenarioManagerClient(ObjectMapper json, OrchestratorProperties properties) {
         this.json = json;
-        Duration httpConnectTimeout = resolveTimeout(connectTimeout, DEFAULT_CONNECT_TIMEOUT);
+        OrchestratorProperties.ScenarioManager scenario = properties.getScenarioManager();
+        Objects.requireNonNull(scenario, "scenario");
+        Duration httpConnectTimeout = resolveTimeout(
+            scenario.getHttp().getConnectTimeout(), DEFAULT_CONNECT_TIMEOUT);
         this.http = HttpClient.newBuilder()
             .connectTimeout(httpConnectTimeout)
             .build();
-        String envUrl = System.getenv("SCENARIO_MANAGER_URL");
-        if (configuredBaseUrl != null && !configuredBaseUrl.isBlank()) {
-            this.baseUrl = configuredBaseUrl;
-        } else if (envUrl != null && !envUrl.isBlank()) {
-            this.baseUrl = envUrl;
-        } else {
-            this.baseUrl = "http://scenario-manager:8080";
-        }
-        this.requestTimeout = resolveTimeout(requestTimeout, DEFAULT_REQUEST_TIMEOUT);
+        this.baseUrl = requireBaseUrl(scenario.getUrl());
+        this.requestTimeout = resolveTimeout(
+            scenario.getHttp().getReadTimeout(), DEFAULT_REQUEST_TIMEOUT);
     }
 
     @Override
@@ -74,5 +67,13 @@ public class ScenarioManagerClient implements ScenarioClient {
             return fallback;
         }
         return candidate;
+    }
+
+    private static String requireBaseUrl(String baseUrl) {
+        if (baseUrl == null || baseUrl.isBlank()) {
+            throw new IllegalStateException(
+                "pockethive.control-plane.orchestrator.scenario-manager.url must not be null or blank");
+        }
+        return baseUrl;
     }
 }

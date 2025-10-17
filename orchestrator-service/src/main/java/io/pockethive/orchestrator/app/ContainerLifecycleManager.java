@@ -1,14 +1,19 @@
 package io.pockethive.orchestrator.app;
 
 import com.github.dockerjava.api.model.Bind;
-import io.pockethive.Topology;
+import io.pockethive.controlplane.spring.ControlPlaneProperties;
+import io.pockethive.docker.DockerContainerClient;
+import io.pockethive.orchestrator.config.OrchestratorProperties;
 import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmRegistry;
 import io.pockethive.orchestrator.domain.SwarmStatus;
-import io.pockethive.docker.DockerContainerClient;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.core.AmqpAdmin;
+import org.springframework.boot.autoconfigure.amqp.RabbitProperties;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -17,30 +22,49 @@ public class ContainerLifecycleManager {
     private final DockerContainerClient docker;
     private final SwarmRegistry registry;
     private final AmqpAdmin amqp;
+    private final OrchestratorProperties properties;
+    private final ControlPlaneProperties controlPlaneProperties;
+    private final RabbitProperties rabbitProperties;
 
-    private static final String DEFAULT_DOCKER_SOCKET = "/var/run/docker.sock";
-
-    public ContainerLifecycleManager(DockerContainerClient docker, SwarmRegistry registry, AmqpAdmin amqp) {
-        this.docker = docker;
-        this.registry = registry;
-        this.amqp = amqp;
+    public ContainerLifecycleManager(
+        DockerContainerClient docker,
+        SwarmRegistry registry,
+        AmqpAdmin amqp,
+        OrchestratorProperties properties,
+        ControlPlaneProperties controlPlaneProperties,
+        RabbitProperties rabbitProperties) {
+        this.docker = Objects.requireNonNull(docker, "docker");
+        this.registry = Objects.requireNonNull(registry, "registry");
+        this.amqp = Objects.requireNonNull(amqp, "amqp");
+        this.properties = Objects.requireNonNull(properties, "properties");
+        this.controlPlaneProperties = Objects.requireNonNull(controlPlaneProperties, "controlPlaneProperties");
+        this.rabbitProperties = Objects.requireNonNull(rabbitProperties, "rabbitProperties");
     }
 
     public Swarm startSwarm(String swarmId, String image, String instanceId) {
-        java.util.Map<String, String> env = new java.util.HashMap<>();
+        Map<String, String> env = new HashMap<>();
         env.put("POCKETHIVE_CONTROL_PLANE_INSTANCE_ID", instanceId);
-        env.put("POCKETHIVE_CONTROL_PLANE_EXCHANGE", Topology.CONTROL_EXCHANGE);
+        env.put(
+            "POCKETHIVE_CONTROL_PLANE_EXCHANGE",
+            requireControlPlaneSetting(
+                controlPlaneProperties.getExchange(), "pockethive.control-plane.exchange"));
         env.put("POCKETHIVE_CONTROL_PLANE_SWARM_ID", swarmId);
-        env.put("RABBITMQ_HOST", java.util.Optional.ofNullable(System.getenv("RABBITMQ_HOST")).orElse("rabbitmq"));
+        env.put("RABBITMQ_HOST", requireRabbitSetting(rabbitProperties.getHost(), "spring.rabbitmq.host"));
+        env.put("RABBITMQ_PORT", Integer.toString(requireRabbitPort(rabbitProperties)));
+        env.put("RABBITMQ_DEFAULT_USER", requireRabbitSetting(rabbitProperties.getUsername(), "spring.rabbitmq.username"));
+        env.put("RABBITMQ_DEFAULT_PASS", requireRabbitSetting(rabbitProperties.getPassword(), "spring.rabbitmq.password"));
+        env.put("RABBITMQ_VHOST", requireRabbitSetting(rabbitProperties.getVirtualHost(), "spring.rabbitmq.virtual-host"));
         env.put(
             "POCKETHIVE_LOGS_EXCHANGE",
-            java.util.Optional.ofNullable(System.getenv("POCKETHIVE_LOGS_EXCHANGE")).orElse("ph.logs"));
+            requireRabbitSetting(
+                properties.getRabbit().getLogsExchange(),
+                "pockethive.control-plane.orchestrator.rabbit.logs-exchange"));
         applyPushgatewayEnv(env, swarmId);
         String net = docker.resolveControlNetwork();
         if (net != null && !net.isBlank()) {
             env.put("CONTROL_NETWORK", net);
         }
-        String dockerSocket = resolveDockerSocketPath();
+        String dockerSocket = properties.getDocker().getSocketPath();
         env.put("DOCKER_SOCKET_PATH", dockerSocket);
         env.put("DOCKER_HOST", "unix://" + dockerSocket);
         log.info("launching controller for swarm {} as instance {} using image {}", swarmId, instanceId, image);
@@ -83,40 +107,44 @@ public class ContainerLifecycleManager {
         });
     }
 
-    private static String resolveDockerSocketPath() {
-        return java.util.Optional.ofNullable(System.getenv("DOCKER_SOCKET_PATH"))
-            .filter(path -> !path.isBlank())
-            .or(() -> java.util.Optional.ofNullable(System.getProperty("DOCKER_SOCKET_PATH")))
-            .filter(path -> !path.isBlank())
-            .orElse(DEFAULT_DOCKER_SOCKET);
+    private static String requireRabbitSetting(String value, String propertyName) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalStateException(propertyName + " must not be null or blank");
+        }
+        return value;
     }
 
-    protected java.util.Map<String, String> environment() {
-        return System.getenv();
+    private static int requireRabbitPort(RabbitProperties properties) {
+        int port = properties.getPort();
+        if (port <= 0) {
+            throw new IllegalStateException("spring.rabbitmq.port must be greater than zero");
+        }
+        return port;
     }
 
-    private void applyPushgatewayEnv(java.util.Map<String, String> env, String swarmId) {
-        java.util.Map<String, String> source = environment();
-        String baseUrl = source.get("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_BASE_URL");
-        if (isBlank(baseUrl)) {
+    private static String requireControlPlaneSetting(String value, String propertyName) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalStateException(propertyName + " must not be null or blank");
+        }
+        return value;
+    }
+
+    private void applyPushgatewayEnv(Map<String, String> env, String swarmId) {
+        OrchestratorProperties.Pushgateway pushgateway = properties.getPushgateway();
+        if (!pushgateway.isEnabled() || !pushgateway.hasBaseUrl()) {
             return;
         }
-        env.put("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_BASE_URL", baseUrl);
-        copyIfPresent("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_ENABLED", source, env);
-        copyIfPresent("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_PUSH_RATE", source, env);
-        copyIfPresent("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_SHUTDOWN_OPERATION", source, env);
+        env.put("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_ENABLED", Boolean.toString(pushgateway.isEnabled()));
+        env.put("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_BASE_URL", pushgateway.getBaseUrl());
+        env.put(
+            "MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_PUSH_RATE",
+            pushgateway.getPushRate().toString());
+        String shutdownOperation = pushgateway.getShutdownOperation();
+        if (shutdownOperation != null && !shutdownOperation.isBlank()) {
+            env.put(
+                "MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_SHUTDOWN_OPERATION",
+                shutdownOperation);
+        }
         env.put("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_JOB", swarmId);
     }
-
-    private static void copyIfPresent(String key, java.util.Map<String, String> source, java.util.Map<String, String> target) {
-        String value = source.get(key);
-        if (!isBlank(value)) {
-            target.put(key, value);
-        }
-    }
-
-    private static boolean isBlank(String value) {
-        return value == null || value.isBlank();
-    }
-
 }

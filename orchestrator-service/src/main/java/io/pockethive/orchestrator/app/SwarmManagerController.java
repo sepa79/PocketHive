@@ -2,12 +2,12 @@ package io.pockethive.orchestrator.app;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.pockethive.Topology;
 import io.pockethive.control.CommandTarget;
 import io.pockethive.control.ControlSignal;
 import io.pockethive.control.ConfirmationScope;
 import io.pockethive.controlplane.ControlPlaneSignals;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
+import io.pockethive.controlplane.spring.ControlPlaneProperties;
 import io.pockethive.orchestrator.domain.IdempotencyStore;
 import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmRegistry;
@@ -45,15 +45,18 @@ public class SwarmManagerController {
     private final AmqpTemplate rabbit;
     private final IdempotencyStore idempotency;
     private final ObjectMapper json;
+    private final String controlExchange;
 
     public SwarmManagerController(SwarmRegistry registry,
                                   AmqpTemplate rabbit,
                                   IdempotencyStore idempotency,
-                                  ObjectMapper json) {
+                                  ObjectMapper json,
+                                  ControlPlaneProperties controlPlaneProperties) {
         this.registry = registry;
         this.rabbit = rabbit;
         this.idempotency = idempotency;
         this.json = json;
+        this.controlExchange = requireExchange(controlPlaneProperties);
     }
 
     /**
@@ -193,7 +196,15 @@ public class SwarmManagerController {
     private void sendControl(String routingKey, String payload, CommandTarget context) {
         String label = context == null ? "SEND" : "SEND " + context.json();
         log.info("[CTRL] {} rk={} payload={}", label, routingKey, snippet(payload));
-        rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, routingKey, payload);
+        rabbit.convertAndSend(controlExchange, routingKey, payload);
+    }
+
+    private static String requireExchange(ControlPlaneProperties properties) {
+        String exchange = properties.getExchange();
+        if (exchange == null || exchange.isBlank()) {
+            throw new IllegalStateException("pockethive.control-plane.exchange must not be null or blank");
+        }
+        return exchange;
     }
 
     /**

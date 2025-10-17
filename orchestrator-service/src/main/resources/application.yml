@@ -1,21 +1,49 @@
 spring:
-  application.name: orchestrator-service
+  application:
+    name: orchestrator-service
   rabbitmq:
     host: ${RABBITMQ_HOST:rabbitmq}
     port: ${RABBITMQ_PORT:5672}
     username: ${RABBITMQ_DEFAULT_USER:guest}
     password: ${RABBITMQ_DEFAULT_PASS:guest}
-management.endpoints.web.exposure.include: health,info
+    virtual-host: ${RABBITMQ_VHOST:/}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
 
 logging:
   config: classpath:logback-spring.xml
-  pattern.level: "%5p [%X{traceId}]"
+  pattern:
+    level: "%5p [%X{traceId}]"
 
 pockethive:
   control-plane:
     exchange: ${POCKETHIVE_CONTROL_PLANE_EXCHANGE:ph.control}
-    swarm-id: ${POCKETHIVE_CONTROL_PLANE_SWARM_ID:default}
+    swarm-id: ${POCKETHIVE_CONTROL_PLANE_SWARM_ID:hive}
+    instance-id: ${POCKETHIVE_CONTROL_PLANE_INSTANCE_ID:orchestrator-local}
     manager:
-      role: orchestrator
+      role: ${POCKETHIVE_CONTROL_PLANE_MANAGER_ROLE:orchestrator}
     worker:
-      enabled: false
+      enabled: ${POCKETHIVE_CONTROL_PLANE_WORKER_ENABLED:false}
+    orchestrator:
+      control-queue-prefix: ${POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_CONTROL_QUEUE_PREFIX:ph.control.orchestrator}
+      status-queue-prefix: ${POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_STATUS_QUEUE_PREFIX:ph.control.orchestrator-status}
+      rabbit:
+        logs-exchange: ${POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_RABBIT_LOGS_EXCHANGE:ph.logs}
+        logging:
+          enabled: ${POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_RABBIT_LOGGING_ENABLED:false}
+      docker:
+        socket-path: ${POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_DOCKER_SOCKET_PATH:/var/run/docker.sock}
+      pushgateway:
+        enabled: ${POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_PUSHGATEWAY_ENABLED:false}
+        base-url: ${POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_PUSHGATEWAY_BASE_URL:http://pushgateway:9091}
+        push-rate: ${POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_PUSHGATEWAY_PUSH_RATE:PT1M}
+        shutdown-operation: ${POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_PUSHGATEWAY_SHUTDOWN_OPERATION:}
+      scenario-manager:
+        url: ${POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_SCENARIO_MANAGER_URL:http://scenario-manager:8080}
+        http:
+          connect-timeout: ${POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_SCENARIO_MANAGER_HTTP_CONNECT_TIMEOUT:PT5S}
+          read-timeout: ${POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_SCENARIO_MANAGER_HTTP_READ_TIMEOUT:PT30S}
