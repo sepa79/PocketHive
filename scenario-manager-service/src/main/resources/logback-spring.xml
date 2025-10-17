@@ -1,10 +1,18 @@
 <configuration>
   <include resource="org/springframework/boot/logging/logback/base.xml"/>
 
-  <!-- Scenario manager does not participate in the control-plane routing, so the log identifiers are constant. -->
-  <property scope="context" name="roleIdentifier" value="scenario-manager"/>
-  <property scope="context" name="swarmIdentifier" value="default"/>
-  <property scope="context" name="instanceIdentifier" value="scenario-manager"/>
+  <springProperty
+      scope="context"
+      name="roleIdentifier"
+      source="pockethive.control-plane.manager.role"/>
+  <springProperty
+      scope="context"
+      name="swarmIdentifier"
+      source="pockethive.control-plane.swarm-id"/>
+  <springProperty
+      scope="context"
+      name="instanceIdentifier"
+      source="pockethive.control-plane.manager.instance-id"/>
 
   <logger name="org.springframework.amqp" level="WARN" additivity="false">
     <appender-ref ref="CONSOLE"/>

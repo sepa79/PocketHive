@@ -1,7 +1,6 @@
 package io.pockethive.scenarios;
 
 import io.pockethive.Topology;
-import io.pockethive.util.BeeNameGenerator;
 import java.util.HashMap;
 import java.util.Map;
 import org.springframework.context.ApplicationContextInitializer;
@@ -19,9 +18,7 @@ public final class ScenarioManagerControlPlaneInitializer
   private static final String APPLICATION_NAME_PROPERTY = "spring.application.name";
   private static final String ROLE_PROPERTY = "pockethive.control-plane.manager.role";
   private static final String INSTANCE_ID_PROPERTY = "pockethive.control-plane.manager.instance-id";
-  private static final String MANAGER_SWARM_ID_PROPERTY = "pockethive.control-plane.manager.swarm-id";
   private static final String GLOBAL_SWARM_ID_PROPERTY = "pockethive.control-plane.swarm-id";
-  private static final String BEE_NAME_PROPERTY = "bee.name";
 
   @Override
   public void initialize(ConfigurableApplicationContext applicationContext) {
@@ -30,8 +27,8 @@ public final class ScenarioManagerControlPlaneInitializer
 
     ensureApplicationName(environment, defaults);
     ensureRole(environment, defaults);
-    String swarmId = resolveSwarmId(environment, defaults);
-    ensureInstance(environment, defaults, swarmId);
+    ensureSwarmId(environment, defaults);
+    ensureInstance(environment, defaults);
 
     if (defaults.isEmpty()) {
       return;
@@ -65,57 +62,21 @@ public final class ScenarioManagerControlPlaneInitializer
     }
   }
 
-  private static String resolveSwarmId(
+  private static void ensureSwarmId(
       ConfigurableEnvironment environment, Map<String, Object> defaults) {
-    String managerOverride = normalise(environment.getProperty(MANAGER_SWARM_ID_PROPERTY));
-    if (managerOverride != null) {
-      return managerOverride;
-    }
-
-    String global = normalise(environment.getProperty(GLOBAL_SWARM_ID_PROPERTY));
-    if (global != null) {
-      defaults.put(MANAGER_SWARM_ID_PROPERTY, global);
-      return global;
-    }
-
-    defaults.put(MANAGER_SWARM_ID_PROPERTY, Topology.SWARM_ID);
     if (isBlank(environment.getProperty(GLOBAL_SWARM_ID_PROPERTY))) {
       defaults.put(GLOBAL_SWARM_ID_PROPERTY, Topology.SWARM_ID);
     }
-    return Topology.SWARM_ID;
   }
 
   private static void ensureInstance(
-      ConfigurableEnvironment environment, Map<String, Object> defaults, String swarmId) {
-    String configuredInstance = normalise(environment.getProperty(INSTANCE_ID_PROPERTY));
-    if (configuredInstance != null) {
-      System.setProperty(BEE_NAME_PROPERTY, configuredInstance);
-      if (isBlank(environment.getProperty(BEE_NAME_PROPERTY))) {
-        defaults.put(BEE_NAME_PROPERTY, configuredInstance);
-      }
-      return;
+      ConfigurableEnvironment environment, Map<String, Object> defaults) {
+    if (isBlank(environment.getProperty(INSTANCE_ID_PROPERTY))) {
+      defaults.put(INSTANCE_ID_PROPERTY, ROLE);
     }
-
-    String beeName = normalise(environment.getProperty(BEE_NAME_PROPERTY));
-    if (beeName == null) {
-      beeName = normalise(System.getProperty(BEE_NAME_PROPERTY));
-    }
-    if (beeName == null) {
-      beeName = BeeNameGenerator.generate(ROLE, swarmId);
-    }
-
-    defaults.put(INSTANCE_ID_PROPERTY, beeName);
-    if (isBlank(environment.getProperty(BEE_NAME_PROPERTY))) {
-      defaults.put(BEE_NAME_PROPERTY, beeName);
-    }
-    System.setProperty(BEE_NAME_PROPERTY, beeName);
   }
 
   private static boolean isBlank(String value) {
     return value == null || value.isBlank();
-  }
-
-  private static String normalise(String value) {
-    return isBlank(value) ? null : value;
   }
 }
