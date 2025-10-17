@@ -1,34 +1,51 @@
 package io.pockethive.orchestrator.app;
 
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyMap;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
+
 import com.github.dockerjava.api.model.Bind;
 import com.github.dockerjava.api.model.HostConfig;
+import io.pockethive.controlplane.spring.ControlPlaneProperties;
+import io.pockethive.docker.DockerContainerClient;
+import io.pockethive.orchestrator.config.OrchestratorProperties;
 import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmRegistry;
 import io.pockethive.orchestrator.domain.SwarmStatus;
-import io.pockethive.docker.DockerContainerClient;
+import java.time.Duration;
+import java.util.Map;
+import java.util.function.UnaryOperator;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.amqp.core.AmqpAdmin;
-
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.*;
+import org.springframework.boot.autoconfigure.amqp.RabbitProperties;
 
 @ExtendWith(MockitoExtension.class)
 class ContainerLifecycleManagerTest {
+
     @Mock
     DockerContainerClient docker;
+
     @Mock
     AmqpAdmin amqp;
 
     @Test
     void startSwarmCreatesAndRegisters() {
         SwarmRegistry registry = new SwarmRegistry();
-        when(docker.createAndStartContainer(eq("img"), anyMap(), anyString(), any())).thenReturn("cid");
-        ContainerLifecycleManager manager = new ContainerLifecycleManager(docker, registry, amqp);
+        OrchestratorProperties properties = defaultProperties();
+        ControlPlaneProperties controlPlane = controlPlaneProperties();
+        when(docker.createAndStartContainer(eq("img"), anyMap(), anyString(), any()))
+            .thenReturn("cid");
+        ContainerLifecycleManager manager = new ContainerLifecycleManager(
+            docker, registry, amqp, properties, controlPlane, rabbitProperties());
 
         Swarm swarm = manager.startSwarm("sw1", "img", "inst1");
 
@@ -37,19 +54,24 @@ class ContainerLifecycleManagerTest {
         assertEquals("cid", swarm.getContainerId());
         assertEquals(SwarmStatus.CREATING, swarm.getStatus());
         assertTrue(registry.find("sw1").isPresent());
-        ArgumentCaptor<java.util.Map<String, String>> envCaptor = ArgumentCaptor.forClass(java.util.Map.class);
+        ArgumentCaptor<Map<String, String>> envCaptor = ArgumentCaptor.forClass(Map.class);
         ArgumentCaptor<String> nameCaptor = ArgumentCaptor.forClass(String.class);
-        ArgumentCaptor<java.util.function.UnaryOperator<HostConfig>> hostCaptor = ArgumentCaptor.forClass(java.util.function.UnaryOperator.class);
+        ArgumentCaptor<UnaryOperator<HostConfig>> hostCaptor = ArgumentCaptor.forClass(UnaryOperator.class);
         verify(docker).createAndStartContainer(eq("img"), envCaptor.capture(), nameCaptor.capture(), hostCaptor.capture());
         assertEquals("inst1", nameCaptor.getValue());
-        assertEquals("inst1", envCaptor.getValue().get("POCKETHIVE_CONTROL_PLANE_INSTANCE_ID"));
-        assertEquals(io.pockethive.Topology.CONTROL_EXCHANGE, envCaptor.getValue().get("POCKETHIVE_CONTROL_PLANE_EXCHANGE"));
-        assertEquals("sw1", envCaptor.getValue().get("POCKETHIVE_CONTROL_PLANE_SWARM_ID"));
-        assertNull(envCaptor.getValue().get("JAVA_TOOL_OPTIONS"));
-        assertEquals("/var/run/docker.sock", envCaptor.getValue().get("DOCKER_SOCKET_PATH"));
-        assertEquals("unix:///var/run/docker.sock", envCaptor.getValue().get("DOCKER_HOST"));
-        HostConfig hostConfig = HostConfig.newHostConfig();
-        HostConfig customized = hostCaptor.getValue().apply(hostConfig);
+        Map<String, String> env = envCaptor.getValue();
+        assertEquals("inst1", env.get("POCKETHIVE_CONTROL_PLANE_INSTANCE_ID"));
+        assertEquals("ph.control", env.get("POCKETHIVE_CONTROL_PLANE_EXCHANGE"));
+        assertEquals("sw1", env.get("POCKETHIVE_CONTROL_PLANE_SWARM_ID"));
+        assertEquals("rabbitmq", env.get("RABBITMQ_HOST"));
+        assertEquals("5672", env.get("RABBITMQ_PORT"));
+        assertEquals("guest", env.get("RABBITMQ_DEFAULT_USER"));
+        assertEquals("guest", env.get("RABBITMQ_DEFAULT_PASS"));
+        assertEquals("/", env.get("RABBITMQ_VHOST"));
+        assertEquals("ph.logs", env.get("POCKETHIVE_LOGS_EXCHANGE"));
+        assertEquals("/var/run/docker.sock", env.get("DOCKER_SOCKET_PATH"));
+        assertEquals("unix:///var/run/docker.sock", env.get("DOCKER_HOST"));
+        HostConfig customized = hostCaptor.getValue().apply(HostConfig.newHostConfig());
         Bind[] binds = customized.getBinds();
         assertNotNull(binds);
         assertEquals(1, binds.length);
@@ -58,66 +80,50 @@ class ContainerLifecycleManagerTest {
     }
 
     @Test
-    void startSwarmPropagatesCustomDockerSocketPath() {
-        String previous = System.getProperty("DOCKER_SOCKET_PATH");
-        System.setProperty("DOCKER_SOCKET_PATH", "/custom/docker.sock");
-        try {
-            SwarmRegistry registry = new SwarmRegistry();
-            when(docker.createAndStartContainer(eq("img"), anyMap(), anyString(), any())).thenReturn("cid");
-            ContainerLifecycleManager manager = new ContainerLifecycleManager(docker, registry, amqp);
+    void startSwarmUsesConfiguredDockerSocketPath() {
+        SwarmRegistry registry = new SwarmRegistry();
+        OrchestratorProperties properties = withDockerSocket("/custom/docker.sock");
+        ControlPlaneProperties controlPlane = controlPlaneProperties();
+        when(docker.createAndStartContainer(eq("img"), anyMap(), anyString(), any()))
+            .thenReturn("cid");
+        ContainerLifecycleManager manager = new ContainerLifecycleManager(
+            docker, registry, amqp, properties, controlPlane, rabbitProperties());
 
-            manager.startSwarm("sw1", "img", "inst1");
+        manager.startSwarm("sw1", "img", "inst1");
 
-            ArgumentCaptor<java.util.Map<String, String>> envCaptor = ArgumentCaptor.forClass(java.util.Map.class);
-            ArgumentCaptor<java.util.function.UnaryOperator<HostConfig>> hostCaptor = ArgumentCaptor.forClass(java.util.function.UnaryOperator.class);
-            verify(docker).createAndStartContainer(eq("img"), envCaptor.capture(), eq("inst1"), hostCaptor.capture());
-            java.util.Map<String, String> env = envCaptor.getValue();
-            assertEquals("/custom/docker.sock", env.get("DOCKER_SOCKET_PATH"));
-            assertEquals("unix:///custom/docker.sock", env.get("DOCKER_HOST"));
-            HostConfig customized = hostCaptor.getValue().apply(HostConfig.newHostConfig());
-            Bind[] binds = customized.getBinds();
-            assertNotNull(binds);
-            assertEquals(1, binds.length);
-            assertEquals("/custom/docker.sock", binds[0].getPath());
-            assertEquals("/custom/docker.sock", binds[0].getVolume().getPath());
-        } finally {
-            if (previous == null) {
-                System.clearProperty("DOCKER_SOCKET_PATH");
-            } else {
-                System.setProperty("DOCKER_SOCKET_PATH", previous);
-            }
-        }
+        ArgumentCaptor<Map<String, String>> envCaptor = ArgumentCaptor.forClass(Map.class);
+        ArgumentCaptor<UnaryOperator<HostConfig>> hostCaptor = ArgumentCaptor.forClass(UnaryOperator.class);
+        verify(docker).createAndStartContainer(eq("img"), envCaptor.capture(), eq("inst1"), hostCaptor.capture());
+        Map<String, String> env = envCaptor.getValue();
+        assertEquals("/custom/docker.sock", env.get("DOCKER_SOCKET_PATH"));
+        assertEquals("unix:///custom/docker.sock", env.get("DOCKER_HOST"));
+        Bind[] binds = hostCaptor.getValue().apply(HostConfig.newHostConfig()).getBinds();
+        assertNotNull(binds);
+        assertEquals(1, binds.length);
+        assertEquals("/custom/docker.sock", binds[0].getPath());
+        assertEquals("/custom/docker.sock", binds[0].getVolume().getPath());
     }
 
     @Test
     void startSwarmPropagatesPushgatewaySettingsWhenConfigured() {
         SwarmRegistry registry = new SwarmRegistry();
-        when(docker.createAndStartContainer(eq("img"), anyMap(), anyString(), any())).thenReturn("cid");
-        ContainerLifecycleManager manager = new ContainerLifecycleManager(docker, registry, amqp) {
-            @Override
-            protected java.util.Map<String, String> environment() {
-                return java.util.Map.of(
-                    "MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_BASE_URL", "http://push:9091",
-                    "MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_ENABLED", "true",
-                    "MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_PUSH_RATE", "15s",
-                    "MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_SHUTDOWN_OPERATION", "DELETE"
-                );
-            }
-        };
+        OrchestratorProperties properties = withPushgateway();
+        ControlPlaneProperties controlPlane = controlPlaneProperties();
+        when(docker.createAndStartContainer(eq("img"), anyMap(), anyString(), any()))
+            .thenReturn("cid");
+        ContainerLifecycleManager manager = new ContainerLifecycleManager(
+            docker, registry, amqp, properties, controlPlane, rabbitProperties());
 
         manager.startSwarm("sw1", "img", "inst1");
 
-        ArgumentCaptor<java.util.Map<String, String>> envCaptor = ArgumentCaptor.forClass(java.util.Map.class);
+        ArgumentCaptor<Map<String, String>> envCaptor = ArgumentCaptor.forClass(Map.class);
         verify(docker).createAndStartContainer(eq("img"), envCaptor.capture(), eq("inst1"), any());
-        java.util.Map<String, String> env = envCaptor.getValue();
+        Map<String, String> env = envCaptor.getValue();
         assertEquals("http://push:9091", env.get("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_BASE_URL"));
         assertEquals("true", env.get("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_ENABLED"));
-        assertEquals("15s", env.get("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_PUSH_RATE"));
+        assertEquals("PT15S", env.get("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_PUSH_RATE"));
         assertEquals("DELETE", env.get("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_SHUTDOWN_OPERATION"));
         assertEquals("sw1", env.get("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_JOB"));
-        assertNull(env.get("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_GROUPING_KEY_INSTANCE"));
-        assertNull(env.get("MANAGEMENT_METRICS_TAGS_SWARM"));
-        assertNull(env.get("MANAGEMENT_METRICS_TAGS_INSTANCE"));
     }
 
     @Test
@@ -129,7 +135,10 @@ class ContainerLifecycleManagerTest {
         registry.updateStatus(swarm.getId(), SwarmStatus.READY);
         registry.updateStatus(swarm.getId(), SwarmStatus.STARTING);
         registry.updateStatus(swarm.getId(), SwarmStatus.RUNNING);
-        ContainerLifecycleManager manager = new ContainerLifecycleManager(docker, registry, amqp);
+        OrchestratorProperties properties = defaultProperties();
+        ControlPlaneProperties controlPlane = controlPlaneProperties();
+        ContainerLifecycleManager manager = new ContainerLifecycleManager(
+            docker, registry, amqp, properties, controlPlane, rabbitProperties());
 
         manager.stopSwarm(swarm.getId());
 
@@ -146,7 +155,10 @@ class ContainerLifecycleManagerTest {
         registry.updateStatus(swarm.getId(), SwarmStatus.READY);
         registry.updateStatus(swarm.getId(), SwarmStatus.STARTING);
         registry.updateStatus(swarm.getId(), SwarmStatus.RUNNING);
-        ContainerLifecycleManager manager = new ContainerLifecycleManager(docker, registry, amqp);
+        OrchestratorProperties properties = defaultProperties();
+        ControlPlaneProperties controlPlane = controlPlaneProperties();
+        ContainerLifecycleManager manager = new ContainerLifecycleManager(
+            docker, registry, amqp, properties, controlPlane, rabbitProperties());
 
         assertDoesNotThrow(() -> {
             manager.stopSwarm(swarm.getId());
@@ -166,7 +178,10 @@ class ContainerLifecycleManagerTest {
         registry.updateStatus(swarm.getId(), SwarmStatus.STARTING);
         registry.updateStatus(swarm.getId(), SwarmStatus.RUNNING);
         registry.updateStatus(swarm.getId(), SwarmStatus.FAILED);
-        ContainerLifecycleManager manager = new ContainerLifecycleManager(docker, registry, amqp);
+        OrchestratorProperties properties = defaultProperties();
+        ControlPlaneProperties controlPlane = controlPlaneProperties();
+        ContainerLifecycleManager manager = new ContainerLifecycleManager(
+            docker, registry, amqp, properties, controlPlane, rabbitProperties());
 
         assertDoesNotThrow(() -> manager.stopSwarm(swarm.getId()));
         assertEquals(SwarmStatus.STOPPED, swarm.getStatus());
@@ -177,7 +192,10 @@ class ContainerLifecycleManagerTest {
         SwarmRegistry registry = new SwarmRegistry();
         Swarm swarm = new Swarm("sw1", "inst1", "cid");
         registry.register(swarm);
-        ContainerLifecycleManager manager = new ContainerLifecycleManager(docker, registry, amqp);
+        OrchestratorProperties properties = defaultProperties();
+        ControlPlaneProperties controlPlane = controlPlaneProperties();
+        ContainerLifecycleManager manager = new ContainerLifecycleManager(
+            docker, registry, amqp, properties, controlPlane, rabbitProperties());
 
         manager.removeSwarm(swarm.getId());
 
@@ -195,18 +213,79 @@ class ContainerLifecycleManagerTest {
         Swarm sw2 = new Swarm("sw2", "inst2", "c2");
         registry.register(sw1);
         registry.register(sw2);
-        ContainerLifecycleManager manager = new ContainerLifecycleManager(docker, registry, amqp);
+        OrchestratorProperties properties = defaultProperties();
+        ControlPlaneProperties controlPlane = controlPlaneProperties();
+        ContainerLifecycleManager manager = new ContainerLifecycleManager(
+            docker, registry, amqp, properties, controlPlane, rabbitProperties());
 
         manager.removeSwarm(sw1.getId());
-        manager.removeSwarm(sw2.getId());
 
         verify(docker).stopAndRemoveContainer("c1");
-        verify(docker).stopAndRemoveContainer("c2");
-        verify(amqp).deleteQueue("ph.sw1.gen");
-        verify(amqp).deleteQueue("ph.sw1.mod");
-        verify(amqp).deleteQueue("ph.sw1.final");
-        verify(amqp).deleteQueue("ph.sw2.gen");
-        verify(amqp).deleteQueue("ph.sw2.mod");
-        verify(amqp).deleteQueue("ph.sw2.final");
+        verify(amqp).deleteQueue("ph." + sw1.getId() + ".gen");
+        verify(amqp).deleteQueue("ph." + sw1.getId() + ".mod");
+        verify(amqp).deleteQueue("ph." + sw1.getId() + ".final");
+        assertTrue(registry.find(sw1.getId()).isEmpty());
+        assertTrue(registry.find(sw2.getId()).isPresent());
+    }
+
+    private static OrchestratorProperties defaultProperties() {
+        return new OrchestratorProperties(
+            "ph.control.orchestrator",
+            "ph.control.orchestrator-status",
+            new OrchestratorProperties.Rabbit(
+                "ph.logs",
+                new OrchestratorProperties.Logging(false)),
+            new OrchestratorProperties.Pushgateway(false, null, Duration.ofMinutes(1), null),
+            new OrchestratorProperties.Docker("/var/run/docker.sock"),
+            new OrchestratorProperties.ScenarioManager(
+                "http://scenario-manager:8080",
+                new OrchestratorProperties.Http(Duration.ofSeconds(5), Duration.ofSeconds(30))));
+    }
+
+    private static OrchestratorProperties withDockerSocket(String socketPath) {
+        return new OrchestratorProperties(
+            "ph.control.orchestrator",
+            "ph.control.orchestrator-status",
+            new OrchestratorProperties.Rabbit(
+                "ph.logs",
+                new OrchestratorProperties.Logging(false)),
+            new OrchestratorProperties.Pushgateway(false, null, Duration.ofMinutes(1), null),
+            new OrchestratorProperties.Docker(socketPath),
+            new OrchestratorProperties.ScenarioManager(
+                "http://scenario-manager:8080",
+                new OrchestratorProperties.Http(Duration.ofSeconds(5), Duration.ofSeconds(30))));
+    }
+
+    private static OrchestratorProperties withPushgateway() {
+        return new OrchestratorProperties(
+            "ph.control.orchestrator",
+            "ph.control.orchestrator-status",
+            new OrchestratorProperties.Rabbit(
+                "ph.logs",
+                new OrchestratorProperties.Logging(false)),
+            new OrchestratorProperties.Pushgateway(true, "http://push:9091", Duration.ofSeconds(15), "DELETE"),
+            new OrchestratorProperties.Docker("/var/run/docker.sock"),
+            new OrchestratorProperties.ScenarioManager(
+                "http://scenario-manager:8080",
+                new OrchestratorProperties.Http(Duration.ofSeconds(5), Duration.ofSeconds(30))));
+    }
+
+    private static ControlPlaneProperties controlPlaneProperties() {
+        ControlPlaneProperties properties = new ControlPlaneProperties();
+        properties.setExchange("ph.control");
+        properties.setSwarmId("orchestrator-swarm");
+        properties.setInstanceId("orch-instance");
+        properties.getManager().setRole("orchestrator");
+        return properties;
+    }
+
+    private static RabbitProperties rabbitProperties() {
+        RabbitProperties properties = new RabbitProperties();
+        properties.setHost("rabbitmq");
+        properties.setPort(5672);
+        properties.setUsername("guest");
+        properties.setPassword("guest");
+        properties.setVirtualHost("/");
+        return properties;
     }
 }

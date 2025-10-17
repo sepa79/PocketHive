@@ -2,12 +2,12 @@ package io.pockethive.orchestrator.app;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.pockethive.Topology;
 import io.pockethive.control.CommandTarget;
 import io.pockethive.control.ControlSignal;
 import io.pockethive.control.ConfirmationScope;
 import io.pockethive.controlplane.ControlPlaneSignals;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
+import io.pockethive.controlplane.spring.ControlPlaneProperties;
 import io.pockethive.orchestrator.domain.IdempotencyStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -35,11 +35,17 @@ public class ComponentController {
     private final AmqpTemplate rabbit;
     private final IdempotencyStore idempotency;
     private final ObjectMapper json;
+    private final String controlExchange;
 
-    public ComponentController(AmqpTemplate rabbit, IdempotencyStore idempotency, ObjectMapper json) {
+    public ComponentController(
+        AmqpTemplate rabbit,
+        IdempotencyStore idempotency,
+        ObjectMapper json,
+        ControlPlaneProperties controlPlaneProperties) {
         this.rabbit = rabbit;
         this.idempotency = idempotency;
         this.json = json;
+        this.controlExchange = requireExchange(controlPlaneProperties);
     }
 
     @PostMapping("/{role}/{instance}/config")
@@ -140,7 +146,15 @@ public class ComponentController {
     private void sendControl(String routingKey, String payload, String context) {
         String label = (context == null || context.isBlank()) ? "SEND" : "SEND " + context;
         log.info("[CTRL] {} rk={} payload={}", label, routingKey, snippet(payload));
-        rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, routingKey, payload);
+        rabbit.convertAndSend(controlExchange, routingKey, payload);
+    }
+
+    private static String requireExchange(ControlPlaneProperties properties) {
+        String exchange = properties.getExchange();
+        if (exchange == null || exchange.isBlank()) {
+            throw new IllegalStateException("pockethive.control-plane.exchange must not be null or blank");
+        }
+        return exchange;
     }
 
     private void logRestRequest(String method, String path, Object body) {

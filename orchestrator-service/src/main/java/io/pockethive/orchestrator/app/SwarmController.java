@@ -2,7 +2,6 @@ package io.pockethive.orchestrator.app;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.pockethive.Topology;
 import io.pockethive.control.ControlSignal;
 import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmCreateRequest;
@@ -17,6 +16,7 @@ import io.pockethive.orchestrator.domain.SwarmStatus;
 import io.pockethive.swarm.model.Bee;
 import io.pockethive.swarm.model.SwarmPlan;
 import io.pockethive.swarm.model.SwarmTemplate;
+import io.pockethive.controlplane.spring.ControlPlaneProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.core.AmqpTemplate;
@@ -27,6 +27,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+import java.util.Objects;
 
 import io.pockethive.util.BeeNameGenerator;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
@@ -52,6 +53,7 @@ public class SwarmController {
     private final SwarmPlanRegistry plans;
     private final ScenarioClient scenarios;
     private final ObjectMapper json;
+    private final String controlExchange;
 
     public SwarmController(AmqpTemplate rabbit,
                            ContainerLifecycleManager lifecycle,
@@ -60,7 +62,8 @@ public class SwarmController {
                            SwarmRegistry registry,
                            ObjectMapper json,
                            ScenarioClient scenarios,
-                           SwarmPlanRegistry plans) {
+                           SwarmPlanRegistry plans,
+                           ControlPlaneProperties controlPlaneProperties) {
         this.rabbit = rabbit;
         this.lifecycle = lifecycle;
         this.creates = creates;
@@ -69,6 +72,7 @@ public class SwarmController {
         this.json = json;
         this.scenarios = scenarios;
         this.plans = plans;
+        this.controlExchange = requireExchange(controlPlaneProperties);
     }
 
     /**
@@ -337,7 +341,16 @@ public class SwarmController {
     private void sendControl(String routingKey, String payload, String context) {
         String label = (context == null || context.isBlank()) ? "SEND" : "SEND " + context;
         log.info("[CTRL] {} rk={} payload={}", label, routingKey, snippet(payload));
-        rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, routingKey, payload);
+        rabbit.convertAndSend(controlExchange, routingKey, payload);
+    }
+
+    private static String requireExchange(ControlPlaneProperties properties) {
+        Objects.requireNonNull(properties, "properties");
+        String exchange = properties.getExchange();
+        if (exchange == null || exchange.isBlank()) {
+            throw new IllegalStateException("pockethive.control-plane.exchange must not be null or blank");
+        }
+        return exchange;
     }
 
     /**

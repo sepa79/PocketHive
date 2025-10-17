@@ -1,15 +1,23 @@
 package io.pockethive.orchestrator.app;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.pockethive.Topology;
 import io.pockethive.control.CommandTarget;
 import io.pockethive.control.ConfirmationScope;
 import io.pockethive.control.ControlSignal;
 import io.pockethive.controlplane.ControlPlaneSignals;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
+import io.pockethive.controlplane.spring.ControlPlaneProperties;
 import io.pockethive.orchestrator.domain.IdempotencyStore;
 import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmRegistry;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -18,19 +26,12 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.amqp.core.AmqpTemplate;
 import org.springframework.http.ResponseEntity;
 
-import java.util.List;
-import java.util.Optional;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
-
 @ExtendWith(MockitoExtension.class)
 class SwarmManagerControllerTest {
 
     @Mock
     AmqpTemplate rabbit;
+
     @Mock
     IdempotencyStore idempotency;
 
@@ -45,27 +46,32 @@ class SwarmManagerControllerTest {
             .thenReturn(Optional.empty());
         when(idempotency.findCorrelation(eq("sw2"), eq(ControlPlaneSignals.CONFIG_UPDATE), eq("idem-1")))
             .thenReturn(Optional.empty());
-        SwarmManagerController controller = new SwarmManagerController(registry, rabbit, idempotency, mapper);
+        SwarmManagerController controller = new SwarmManagerController(
+            registry,
+            rabbit,
+            idempotency,
+            mapper,
+            controlPlaneProperties());
         SwarmManagerController.ToggleRequest request =
             new SwarmManagerController.ToggleRequest("idem-1", true, null, null);
 
         ResponseEntity<SwarmManagerController.FanoutControlResponse> response = controller.updateAll(request);
 
         ArgumentCaptor<String> payloads = ArgumentCaptor.forClass(String.class);
-        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
+        verify(rabbit).convertAndSend(eq("ph.control"),
             eq(ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, "sw1", "swarm-controller", "ctrl-a")), payloads.capture());
-        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
+        verify(rabbit).convertAndSend(eq("ph.control"),
             eq(ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, "sw2", "swarm-controller", "ctrl-b")), payloads.capture());
         List<String> sentPayloads = payloads.getAllValues();
         assertThat(sentPayloads).hasSize(2);
-        java.util.List<String> swarmIds = new java.util.ArrayList<>();
+        List<String> swarmIds = new java.util.ArrayList<>();
         for (String json : sentPayloads) {
             ControlSignal signal = mapper.readValue(json, ControlSignal.class);
             swarmIds.add(signal.swarmId());
             assertThat(signal.signal()).isEqualTo(ControlPlaneSignals.CONFIG_UPDATE);
             assertThat(signal.commandTarget()).isEqualTo(CommandTarget.SWARM);
             @SuppressWarnings("unchecked")
-            var data = (java.util.Map<String, Object>) signal.args().get("data");
+            Map<String, Object> data = (Map<String, Object>) signal.args().get("data");
             assertThat(data).containsEntry("enabled", true);
             assertThat(data).doesNotContainKey("target");
         }
@@ -81,19 +87,24 @@ class SwarmManagerControllerTest {
         registry.register(new Swarm("sw9", "ctrl-z", "c9"));
         when(idempotency.findCorrelation(eq("sw9"), eq(ControlPlaneSignals.CONFIG_UPDATE), eq("idem-2")))
             .thenReturn(Optional.empty());
-        SwarmManagerController controller = new SwarmManagerController(registry, rabbit, idempotency, mapper);
+        SwarmManagerController controller = new SwarmManagerController(
+            registry,
+            rabbit,
+            idempotency,
+            mapper,
+            controlPlaneProperties());
         SwarmManagerController.ToggleRequest request =
             new SwarmManagerController.ToggleRequest("idem-2", false, null, CommandTarget.INSTANCE);
 
         ResponseEntity<SwarmManagerController.FanoutControlResponse> response = controller.updateOne("sw9", request);
 
         ArgumentCaptor<String> payload = ArgumentCaptor.forClass(String.class);
-        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
+        verify(rabbit).convertAndSend(eq("ph.control"),
             eq(ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, "sw9", "swarm-controller", "ctrl-z")), payload.capture());
         ControlSignal signal = mapper.readValue(payload.getValue(), ControlSignal.class);
         assertThat(signal.commandTarget()).isEqualTo(CommandTarget.INSTANCE);
         @SuppressWarnings("unchecked")
-        var data = (java.util.Map<String, Object>) signal.args().get("data");
+        Map<String, Object> data = (Map<String, Object>) signal.args().get("data");
         assertThat(data).containsEntry("enabled", false);
         assertThat(data).doesNotContainKey("target");
         assertThat(response.getStatusCode().value()).isEqualTo(202);
@@ -119,4 +130,12 @@ class SwarmManagerControllerTest {
         assertThat(request.commandTarget()).isEqualTo(CommandTarget.SWARM);
     }
 
+    private static ControlPlaneProperties controlPlaneProperties() {
+        ControlPlaneProperties properties = new ControlPlaneProperties();
+        properties.setExchange("ph.control");
+        properties.setSwarmId("default");
+        properties.setInstanceId("orch-instance");
+        properties.getManager().setRole("orchestrator");
+        return properties;
+    }
 }

@@ -1,13 +1,20 @@
 package io.pockethive.orchestrator.app;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.pockethive.Topology;
 import io.pockethive.control.CommandTarget;
 import io.pockethive.control.ConfirmationScope;
 import io.pockethive.control.ControlSignal;
 import io.pockethive.controlplane.ControlPlaneSignals;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
+import io.pockethive.controlplane.spring.ControlPlaneProperties;
 import io.pockethive.orchestrator.infra.InMemoryIdempotencyStore;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -15,14 +22,6 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.amqp.core.AmqpTemplate;
 import org.springframework.http.ResponseEntity;
-
-import java.util.Map;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
 class ComponentControllerTest {
@@ -34,14 +33,18 @@ class ComponentControllerTest {
 
     @Test
     void updateConfigPublishesControlSignal() throws Exception {
-        ComponentController controller = new ComponentController(rabbit, new InMemoryIdempotencyStore(), mapper);
+        ComponentController controller = new ComponentController(
+            rabbit,
+            new InMemoryIdempotencyStore(),
+            mapper,
+            controlPlaneProperties());
         ComponentController.ConfigUpdateRequest request =
             new ComponentController.ConfigUpdateRequest("idem", Map.of("enabled", true), null, "sw1", CommandTarget.SWARM);
 
         ResponseEntity<ControlResponse> response = controller.updateConfig("generator", "c1", request);
 
         ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
-        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
+        verify(rabbit).convertAndSend(eq("ph.control"),
             eq(ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, "sw1", "generator", "c1")), captor.capture());
         ControlSignal signal = mapper.readValue(captor.getValue(), ControlSignal.class);
         assertThat(signal.signal()).isEqualTo(ControlPlaneSignals.CONFIG_UPDATE);
@@ -63,17 +66,30 @@ class ComponentControllerTest {
 
     @Test
     void configUpdateIsIdempotent() {
-        ComponentController controller = new ComponentController(rabbit, new InMemoryIdempotencyStore(), mapper);
+        ComponentController controller = new ComponentController(
+            rabbit,
+            new InMemoryIdempotencyStore(),
+            mapper,
+            controlPlaneProperties());
         ComponentController.ConfigUpdateRequest request =
             new ComponentController.ConfigUpdateRequest("idem", Map.of(), null, null, CommandTarget.INSTANCE);
 
         ResponseEntity<ControlResponse> first = controller.updateConfig("processor", "p1", request);
         ResponseEntity<ControlResponse> second = controller.updateConfig("processor", "p1", request);
 
-        verify(rabbit, times(1)).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
+        verify(rabbit, times(1)).convertAndSend(eq("ph.control"),
             eq(ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, "ALL", "processor", "p1")), anyString());
         assertThat(first.getBody()).isNotNull();
         assertThat(second.getBody()).isNotNull();
         assertThat(first.getBody().correlationId()).isEqualTo(second.getBody().correlationId());
+    }
+
+    private static ControlPlaneProperties controlPlaneProperties() {
+        ControlPlaneProperties properties = new ControlPlaneProperties();
+        properties.setExchange("ph.control");
+        properties.setSwarmId("default");
+        properties.setInstanceId("orch-instance");
+        properties.getManager().setRole("orchestrator");
+        return properties;
     }
 }
