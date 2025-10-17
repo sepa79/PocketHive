@@ -1,6 +1,5 @@
 package io.pockethive.logaggregator;
 
-import io.pockethive.Topology;
 import io.pockethive.util.BeeNameGenerator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -35,7 +34,7 @@ public class Application {
             "Missing required PocketHive configuration: pockethive.control-plane.swarm-id");
       }
       System.setProperty("POCKETHIVE_CONTROL_PLANE_SWARM_ID", swarmId);
-      String beeName = BeeNameGenerator.generate("log-aggregator", Topology.SWARM_ID);
+      String beeName = BeeNameGenerator.generate("log-aggregator", swarmId);
       System.setProperty("bee.name", beeName);
     };
   }
