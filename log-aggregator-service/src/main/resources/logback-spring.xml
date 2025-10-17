@@ -7,7 +7,7 @@
   <springProperty scope="context" name="instanceIdentifier" source="pockethive.control-plane.instance-id" defaultValue="${applicationName}"/>
 
   <springProperty scope="context" name="rabbitHost" source="spring.rabbitmq.host"/>
-  <springProperty scope="context" name="rabbitPort" source="spring.rabbitmq.port"/>
+  <springProperty scope="context" name="rabbitPort" source="spring.rabbitmq.port" defaultValue="5672"/>
   <springProperty scope="context" name="rabbitUsername" source="spring.rabbitmq.username"/>
   <springProperty scope="context" name="rabbitPassword" source="spring.rabbitmq.password"/>
   <springProperty scope="context" name="rabbitVirtualHost" source="spring.rabbitmq.virtual-host" defaultValue="/"/>
