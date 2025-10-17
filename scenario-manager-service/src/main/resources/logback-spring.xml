@@ -1,10 +1,17 @@
 <configuration>
   <include resource="org/springframework/boot/logging/logback/base.xml"/>
 
-  <!-- Scenario manager does not participate in the control-plane routing, so the log identifiers are constant. -->
-  <property scope="context" name="roleIdentifier" value="scenario-manager"/>
-  <property scope="context" name="swarmIdentifier" value="default"/>
-  <property scope="context" name="instanceIdentifier" value="scenario-manager"/>
+  <springProperty scope="context" name="roleIdentifier" source="pockethive.control-plane.manager.role"/>
+  <springProperty scope="context" name="swarmIdentifier" source="pockethive.control-plane.swarm-id"/>
+  <springProperty scope="context" name="instanceIdentifier" source="pockethive.control-plane.instance-id"/>
+
+  <springProperty scope="context" name="rabbitHost" source="spring.rabbitmq.host"/>
+  <springProperty scope="context" name="rabbitPort" source="spring.rabbitmq.port"/>
+  <springProperty scope="context" name="rabbitUsername" source="spring.rabbitmq.username"/>
+  <springProperty scope="context" name="rabbitPassword" source="spring.rabbitmq.password"/>
+  <springProperty scope="context" name="rabbitVirtualHost" source="spring.rabbitmq.virtual-host" defaultValue="/"/>
+
+  <springProperty scope="context" name="logsExchange" source="pockethive.logs.exchange" defaultValue="ph.logs"/>
 
   <logger name="org.springframework.amqp" level="WARN" additivity="false">
     <appender-ref ref="CONSOLE"/>
@@ -16,12 +23,12 @@
   <if condition='!"false".equalsIgnoreCase(property("RABBITMQ_LOGGING_ENABLED"))'>
     <then>
       <appender name="RABBIT" class="org.springframework.amqp.rabbit.logback.AmqpAppender">
-        <host>${RABBITMQ_HOST:-localhost}</host>
-        <port>${RABBITMQ_PORT:-5672}</port>
-        <username>${RABBITMQ_DEFAULT_USER:-guest}</username>
-        <password>${RABBITMQ_DEFAULT_PASS:-guest}</password>
-        <virtualHost>${RABBITMQ_VHOST:-/}</virtualHost>
-        <exchangeName>${POCKETHIVE_LOGS_EXCHANGE:-ph.logs}</exchangeName>
+        <host>${rabbitHost}</host>
+        <port>${rabbitPort}</port>
+        <username>${rabbitUsername}</username>
+        <password>${rabbitPassword}</password>
+        <virtualHost>${rabbitVirtualHost}</virtualHost>
+        <exchangeName>${logsExchange}</exchangeName>
         <encoder class="net.logstash.logback.encoder.LogstashEncoder">
           <customFields>{"role":"${roleIdentifier}","swarmId":"${swarmIdentifier}","instanceId":"${instanceIdentifier}"}</customFields>
         </encoder>

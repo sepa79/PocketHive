@@ -1,4 +1,8 @@
+# Default configuration for local development. Override values using standard Spring mechanisms
+# such as SPRING_APPLICATION_JSON or SPRING_RABBITMQ_* environment variables.
 spring:
+  application:
+    name: scenario-manager
   rabbitmq:
     host: ${RABBITMQ_HOST:rabbitmq}
     port: ${RABBITMQ_PORT:5672}
@@ -7,3 +11,13 @@ spring:
 
 logging:
   config: classpath:logback-spring.xml
+
+pockethive:
+  control-plane:
+    swarm-id: default
+    instance-id: scenario-manager
+    manager:
+      role: scenario-manager
+  logs:
+    queue: ${POCKETHIVE_LOGS_QUEUE:ph.logs.agg}
+    exchange: ${POCKETHIVE_LOGS_EXCHANGE:ph.logs}

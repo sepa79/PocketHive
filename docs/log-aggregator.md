@@ -4,15 +4,21 @@ The `log-aggregator` service consumes log events from RabbitMQ and forwards them
 
 ## Configuration
 
-| Environment Variable | Description | Default |
-|---------------------|-------------|---------|
-| `POCKETHIVE_LOGS_EXCHANGE`  | RabbitMQ exchange to bind for log messages. | `ph.logs` |
-| `POCKETHIVE_LOGS_QUEUE`     | Queue name used by the aggregator. | `ph.logs.agg` |
-| `POCKETHIVE_LOKI_URL`       | Base URL for Loki ("/loki/api/v1/push" is appended). | `http://loki:3100` |
-| `POCKETHIVE_LOKI_MAX_RETRIES` | Number of attempts for pushing a batch. | `3` |
-| `POCKETHIVE_LOKI_BACKOFF_MS` | Initial backoff in milliseconds between retries. | `500` |
-| `POCKETHIVE_LOKI_BATCH_SIZE` | Maximum number of log entries per batch. | `100` |
-| `POCKETHIVE_LOKI_FLUSH_INTERVAL_MS` | Flush interval for sending batches. | `1000` |
+| Property / Env Var | Description | Default |
+|--------------------|-------------|---------|
+| `spring.rabbitmq.host` (`RABBITMQ_HOST`) | RabbitMQ host. | `rabbitmq` |
+| `spring.rabbitmq.port` (`RABBITMQ_PORT`) | RabbitMQ port. | `5672` |
+| `spring.rabbitmq.username` (`RABBITMQ_USER`) | RabbitMQ username. | `guest` |
+| `spring.rabbitmq.password` (`RABBITMQ_PASS`) | RabbitMQ password. | `guest` |
+| `pockethive.logs.exchange` (`POCKETHIVE_LOGS_EXCHANGE`) | RabbitMQ exchange to bind for log messages. | `ph.logs` |
+| `pockethive.logs.queue` (`POCKETHIVE_LOGS_QUEUE`) | Queue name used by the aggregator. | `ph.logs.agg` |
+| `pockethive.loki.url` (`POCKETHIVE_LOKI_URL`) | Base URL for Loki ("/loki/api/v1/push" is appended). | `http://loki:3100` |
+| `pockethive.loki.maxRetries` (`POCKETHIVE_LOKI_MAX_RETRIES`) | Number of attempts for pushing a batch. | `3` |
+| `pockethive.loki.backoffMs` (`POCKETHIVE_LOKI_BACKOFF_MS`) | Initial backoff in milliseconds between retries. | `500` |
+| `pockethive.loki.batchSize` (`POCKETHIVE_LOKI_BATCH_SIZE`) | Maximum number of log entries per batch. | `100` |
+| `pockethive.loki.flushIntervalMs` (`POCKETHIVE_LOKI_FLUSH_INTERVAL_MS`) | Flush interval for sending batches. | `1000` |
+
+Defaults live in `log-aggregator-service/src/main/resources/application.yml`, so any standard Spring override mechanism works (environment variables, `application-*.yml`, or command-line `--property=value`).
 
 The service batches incoming messages and sends them to Loki with labels for `service` and `traceId`.
 
