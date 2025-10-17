@@ -357,7 +357,12 @@ public class SwarmSignalListener {
       return false;
     }
     String roleSegment = defaultSegment(key.role(), role);
-    if (!role.equalsIgnoreCase(roleSegment) && !isAllSegment(roleSegment)) {
+    boolean roleMatchesController = role.equalsIgnoreCase(roleSegment) || isAllSegment(roleSegment);
+    if (!roleMatchesController) {
+      String type = defaultSegment(key.type(), null);
+      if (ControlPlaneSignals.CONFIG_UPDATE.equalsIgnoreCase(type)) {
+        return true;
+      }
       return false;
     }
     String instanceSegment = key.instance();
@@ -375,8 +380,9 @@ public class SwarmSignalListener {
       return false;
     }
     String roleSegment = defaultSegment(key.role(), role);
-    if (!role.equalsIgnoreCase(roleSegment) && !isAllSegment(roleSegment)) {
-      return false;
+    boolean roleMatchesController = role.equalsIgnoreCase(roleSegment) || isAllSegment(roleSegment);
+    if (!roleMatchesController) {
+      return commandTarget == CommandTarget.INSTANCE || commandTarget == CommandTarget.ROLE;
     }
     String targetInstance = key.instance();
     if (isAllSegment(targetInstance)) {

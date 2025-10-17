@@ -673,6 +673,38 @@ class SwarmSignalListenerTest {
   }
 
   @Test
+  void instanceTargetForOtherRoleRoutingIsForwarded() throws Exception {
+    when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
+    when(lifecycle.getMetrics()).thenReturn(new SwarmMetrics(0,0,0,0, java.time.Instant.now()));
+    SwarmSignalListener listener = newListener(lifecycle, rabbit, "inst", mapper);
+    reset(lifecycle, rabbit);
+    stubLifecycleDefaults();
+
+    String body = """
+        {"correlationId":"c13a","idempotencyKey":"i13a","signal":"config-update",
+         "swarmId":"%s",
+         "role":"generator","instance":"worker-1",
+         "commandTarget":"instance",
+         "args":{"data":{"singleRequest":true}}}
+        """.formatted(Topology.SWARM_ID);
+
+    String generatorRouting = ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE,
+        Topology.SWARM_ID, "generator", "worker-1");
+
+    listener.handle(body, generatorRouting);
+
+    verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq(generatorRouting), eq(body));
+    ArgumentCaptor<String> readyPayload = ArgumentCaptor.forClass(String.class);
+    String expectedReadyKey = ControlPlaneRouting.event("ready." + ControlPlaneSignals.CONFIG_UPDATE,
+        new ConfirmationScope(Topology.SWARM_ID, "generator", "worker-1"));
+    verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
+        eq(expectedReadyKey), readyPayload.capture());
+    JsonNode readyNode = mapper.readTree(readyPayload.getValue());
+    assertThat(readyNode.path("scope").path("role").asText()).isEqualTo("generator");
+    assertThat(readyNode.path("scope").path("instance").asText()).isEqualTo("worker-1");
+  }
+
+  @Test
   void allTargetFanOutsGlobally() throws Exception {
     when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
     when(lifecycle.getMetrics()).thenReturn(new SwarmMetrics(0,0,0,0, java.time.Instant.now()));
