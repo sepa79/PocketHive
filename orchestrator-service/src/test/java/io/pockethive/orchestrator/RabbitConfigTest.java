@@ -19,16 +19,17 @@ class RabbitConfigTest {
         controlPlane.getManager().setRole("orchestrator");
 
         OrchestratorProperties properties = new OrchestratorProperties(
-            "ph.control.orchestrator",
-            "ph.control.orchestrator-status",
-            new OrchestratorProperties.Rabbit(
-                "ph.logs",
-                new OrchestratorProperties.Logging(false)),
-            new OrchestratorProperties.Pushgateway(false, null, Duration.ofMinutes(1), null),
-            new OrchestratorProperties.Docker("/var/run/docker.sock"),
-            new OrchestratorProperties.ScenarioManager(
-                "http://scenario-manager:8080",
-                new OrchestratorProperties.Http(Duration.ofSeconds(5), Duration.ofSeconds(30))));
+            new OrchestratorProperties.Orchestrator(
+                "ph.control.orchestrator",
+                "ph.control.orchestrator-status",
+                new OrchestratorProperties.Rabbit(
+                    "ph.logs",
+                    new OrchestratorProperties.Logging(Boolean.FALSE)),
+                new OrchestratorProperties.Pushgateway(Boolean.FALSE, null, Duration.ofMinutes(1), null),
+                new OrchestratorProperties.Docker("/var/run/docker.sock"),
+                new OrchestratorProperties.ScenarioManager(
+                    "http://scenario-manager:8080",
+                    new OrchestratorProperties.Http(Duration.ofSeconds(5), Duration.ofSeconds(30)))));
 
         OrchestratorControlPlaneConfig config = new OrchestratorControlPlaneConfig(controlPlane, properties);
         ControlPlaneIdentity identity = new ControlPlaneIdentity("swarm-alpha", "orchestrator", "orch-1");

@@ -4,58 +4,91 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import java.time.Duration;
+import java.util.Objects;
 import org.springframework.boot.context.properties.ConfigurationProperties;
-import org.springframework.boot.context.properties.bind.DefaultValue;
 import org.springframework.validation.annotation.Validated;
 
 @Validated
-@ConfigurationProperties(prefix = "pockethive.control-plane.orchestrator")
+@ConfigurationProperties(prefix = "pockethive.control-plane")
 public class OrchestratorProperties {
 
-    private final String controlQueuePrefix;
-    private final String statusQueuePrefix;
-    private final @Valid Rabbit rabbit;
-    private final @Valid Pushgateway pushgateway;
-    private final @Valid Docker docker;
-    private final @Valid ScenarioManager scenarioManager;
+    private final Orchestrator orchestrator;
 
-    public OrchestratorProperties(
-        @DefaultValue("ph.control.orchestrator") @NotBlank String controlQueuePrefix,
-        @DefaultValue("ph.control.orchestrator-status") @NotBlank String statusQueuePrefix,
-        @DefaultValue Rabbit rabbit,
-        @DefaultValue Pushgateway pushgateway,
-        @DefaultValue Docker docker,
-        @DefaultValue ScenarioManager scenarioManager) {
-        this.controlQueuePrefix = controlQueuePrefix;
-        this.statusQueuePrefix = statusQueuePrefix;
-        this.rabbit = rabbit;
-        this.pushgateway = pushgateway;
-        this.docker = docker;
-        this.scenarioManager = scenarioManager;
+    public OrchestratorProperties(@Valid Orchestrator orchestrator) {
+        this.orchestrator = Objects.requireNonNull(orchestrator, "orchestrator");
     }
 
     public String getControlQueuePrefix() {
-        return controlQueuePrefix;
+        return orchestrator.controlQueuePrefix();
     }
 
     public String getStatusQueuePrefix() {
-        return statusQueuePrefix;
+        return orchestrator.statusQueuePrefix();
     }
 
     public Rabbit getRabbit() {
-        return rabbit;
+        return orchestrator.rabbit();
     }
 
     public Pushgateway getPushgateway() {
-        return pushgateway;
+        return orchestrator.pushgateway();
     }
 
     public Docker getDocker() {
-        return docker;
+        return orchestrator.docker();
     }
 
     public ScenarioManager getScenarioManager() {
-        return scenarioManager;
+        return orchestrator.scenarioManager();
+    }
+
+    @Validated
+    public static final class Orchestrator {
+
+        private final String controlQueuePrefix;
+        private final String statusQueuePrefix;
+        private final @Valid Rabbit rabbit;
+        private final @Valid Pushgateway pushgateway;
+        private final @Valid Docker docker;
+        private final @Valid ScenarioManager scenarioManager;
+
+        public Orchestrator(@NotBlank String controlQueuePrefix,
+                             @NotBlank String statusQueuePrefix,
+                             @Valid Rabbit rabbit,
+                             @Valid Pushgateway pushgateway,
+                             @Valid Docker docker,
+                             @Valid ScenarioManager scenarioManager) {
+            this.controlQueuePrefix = requireNonBlank(controlQueuePrefix, "controlQueuePrefix");
+            this.statusQueuePrefix = requireNonBlank(statusQueuePrefix, "statusQueuePrefix");
+            this.rabbit = Objects.requireNonNull(rabbit, "rabbit");
+            this.pushgateway = Objects.requireNonNull(pushgateway, "pushgateway");
+            this.docker = Objects.requireNonNull(docker, "docker");
+            this.scenarioManager = Objects.requireNonNull(scenarioManager, "scenarioManager");
+        }
+
+        public String controlQueuePrefix() {
+            return controlQueuePrefix;
+        }
+
+        public String statusQueuePrefix() {
+            return statusQueuePrefix;
+        }
+
+        public Rabbit rabbit() {
+            return rabbit;
+        }
+
+        public Pushgateway pushgateway() {
+            return pushgateway;
+        }
+
+        public Docker docker() {
+            return docker;
+        }
+
+        public ScenarioManager scenarioManager() {
+            return scenarioManager;
+        }
     }
 
     @Validated
@@ -64,9 +97,9 @@ public class OrchestratorProperties {
         private final String logsExchange;
         private final @Valid Logging logging;
 
-        public Rabbit(@DefaultValue("ph.logs") @NotBlank String logsExchange, @DefaultValue Logging logging) {
-            this.logsExchange = logsExchange;
-            this.logging = logging;
+        public Rabbit(@NotBlank String logsExchange, @Valid Logging logging) {
+            this.logsExchange = requireNonBlank(logsExchange, "logsExchange");
+            this.logging = Objects.requireNonNull(logging, "logging");
         }
 
         public String getLogsExchange() {
@@ -83,8 +116,8 @@ public class OrchestratorProperties {
 
         private final boolean enabled;
 
-        public Logging(@DefaultValue("false") boolean enabled) {
-            this.enabled = enabled;
+        public Logging(@NotNull Boolean enabled) {
+            this.enabled = Objects.requireNonNull(enabled, "enabled");
         }
 
         public boolean isEnabled() {
@@ -100,14 +133,13 @@ public class OrchestratorProperties {
         private final Duration pushRate;
         private final String shutdownOperation;
 
-        public Pushgateway(
-            @DefaultValue("false") boolean enabled,
-            String baseUrl,
-            @DefaultValue("PT1M") Duration pushRate,
-            String shutdownOperation) {
-            this.enabled = enabled;
+        public Pushgateway(@NotNull Boolean enabled,
+                           String baseUrl,
+                           @NotNull Duration pushRate,
+                           String shutdownOperation) {
+            this.enabled = Objects.requireNonNull(enabled, "enabled");
             this.baseUrl = baseUrl;
-            this.pushRate = pushRate;
+            this.pushRate = Objects.requireNonNull(pushRate, "pushRate");
             this.shutdownOperation = shutdownOperation;
         }
 
@@ -138,7 +170,7 @@ public class OrchestratorProperties {
         private final String socketPath;
 
         public Docker(@NotBlank String socketPath) {
-            this.socketPath = socketPath;
+            this.socketPath = requireNonBlank(socketPath, "socketPath");
         }
 
         public String getSocketPath() {
@@ -152,9 +184,9 @@ public class OrchestratorProperties {
         private final String url;
         private final @Valid Http http;
 
-        public ScenarioManager(@NotBlank String url, @DefaultValue Http http) {
-            this.url = url;
-            this.http = http;
+        public ScenarioManager(@NotBlank String url, @Valid Http http) {
+            this.url = requireNonBlank(url, "url");
+            this.http = Objects.requireNonNull(http, "http");
         }
 
         public String getUrl() {
@@ -173,8 +205,8 @@ public class OrchestratorProperties {
         private final Duration readTimeout;
 
         public Http(@NotNull Duration connectTimeout, @NotNull Duration readTimeout) {
-            this.connectTimeout = connectTimeout;
-            this.readTimeout = readTimeout;
+            this.connectTimeout = Objects.requireNonNull(connectTimeout, "connectTimeout");
+            this.readTimeout = Objects.requireNonNull(readTimeout, "readTimeout");
         }
 
         public Duration getConnectTimeout() {
@@ -184,5 +216,12 @@ public class OrchestratorProperties {
         public Duration getReadTimeout() {
             return readTimeout;
         }
+    }
+
+    private static String requireNonBlank(String value, String name) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException(name + " must not be blank");
+        }
+        return value;
     }
 }
