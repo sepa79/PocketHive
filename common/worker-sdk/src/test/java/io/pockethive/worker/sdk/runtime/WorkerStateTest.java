@@ -84,31 +84,15 @@ class WorkerStateTest {
     @Test
     @SuppressWarnings({"unchecked", "resource"})
     void resolvesTopologyDefaultsUsingRuntimeQueues() throws Exception {
-        String swarmPropertyKey = "POCKETHIVE_CONTROL_PLANE_SWARM_ID";
         String inboundPropertyKey = "POCKETHIVE_CONTROL_PLANE_QUEUES_GENERATOR";
         String outboundPropertyKey = "POCKETHIVE_CONTROL_PLANE_QUEUES_MODERATOR";
-        String finalQueuePropertyKey = "POCKETHIVE_CONTROL_PLANE_QUEUES_FINAL";
-        String exchangePropertyKey = "POCKETHIVE_TRAFFIC_EXCHANGE";
-        String controlQueuePropertyKey = "POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE";
-        String controlExchangePropertyKey = "POCKETHIVE_CONTROL_PLANE_EXCHANGE";
-        String originalSwarmProperty = System.getProperty(swarmPropertyKey);
         String originalInboundProperty = System.getProperty(inboundPropertyKey);
         String originalOutboundProperty = System.getProperty(outboundPropertyKey);
-        String originalFinalQueueProperty = System.getProperty(finalQueuePropertyKey);
-        String originalExchangeProperty = System.getProperty(exchangePropertyKey);
-        String originalControlQueueProperty = System.getProperty(controlQueuePropertyKey);
-        String originalControlExchangeProperty = System.getProperty(controlExchangePropertyKey);
-        String runtimeSwarmId = "runtime";
         String runtimeGenQueue = "ph.runtime.gen";
         String runtimeModQueue = "ph.runtime.mod";
 
-        System.setProperty(swarmPropertyKey, runtimeSwarmId);
         System.setProperty(inboundPropertyKey, runtimeGenQueue);
         System.setProperty(outboundPropertyKey, runtimeModQueue);
-        System.setProperty(finalQueuePropertyKey, "ph.runtime.final");
-        System.setProperty(exchangePropertyKey, "ph." + runtimeSwarmId + ".hive");
-        System.setProperty(controlQueuePropertyKey, "ph.control");
-        System.setProperty(controlExchangePropertyKey, "ph.control");
         URL[] urls = new URL[] {
             Path.of("target", "classes").toAbsolutePath().toUri().toURL(),
             Path.of("..", "topology-core", "target", "classes").toAbsolutePath().toUri().toURL()
@@ -170,13 +154,8 @@ class WorkerStateTest {
                 .containsExactly(resolvedModQueue)
                 .doesNotContain(defaultModQueue);
         } finally {
-            restoreProperty(swarmPropertyKey, originalSwarmProperty);
             restoreProperty(inboundPropertyKey, originalInboundProperty);
             restoreProperty(outboundPropertyKey, originalOutboundProperty);
-            restoreProperty(finalQueuePropertyKey, originalFinalQueueProperty);
-            restoreProperty(exchangePropertyKey, originalExchangeProperty);
-            restoreProperty(controlQueuePropertyKey, originalControlQueueProperty);
-            restoreProperty(controlExchangePropertyKey, originalControlExchangeProperty);
         }
     }
 

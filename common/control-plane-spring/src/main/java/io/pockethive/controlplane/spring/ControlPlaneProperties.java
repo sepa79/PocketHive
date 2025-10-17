@@ -1,5 +1,6 @@
 package io.pockethive.controlplane.spring;
 
+import io.pockethive.Topology;
 import java.time.Duration;
 import java.util.Objects;
 import org.springframework.boot.context.properties.ConfigurationProperties;
@@ -12,8 +13,8 @@ public class ControlPlaneProperties {
 
     private boolean enabled = true;
     private boolean declareTopology = true;
-    private String exchange = resolve("POCKETHIVE_CONTROL_PLANE_EXCHANGE");
-    private String swarmId = resolve("POCKETHIVE_CONTROL_PLANE_SWARM_ID");
+    private String exchange = Topology.CONTROL_EXCHANGE;
+    private String swarmId = Topology.SWARM_ID;
     private final PublisherProperties publisher = new PublisherProperties();
     private final WorkerProperties worker = new WorkerProperties();
     private final ManagerProperties manager = new ManagerProperties();
@@ -60,21 +61,6 @@ public class ControlPlaneProperties {
 
     public ManagerProperties getManager() {
         return manager;
-    }
-
-    private static String resolve(String key) {
-        if (key == null || key.isBlank()) {
-            return null;
-        }
-        String env = System.getenv(key);
-        if (env != null && !env.isBlank()) {
-            return env;
-        }
-        String property = System.getProperty(key);
-        if (property != null && !property.isBlank()) {
-            return property;
-        }
-        return null;
     }
 
     String resolveSwarmId(String override) {

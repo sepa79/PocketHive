@@ -1,5 +1,6 @@
 package io.pockethive.orchestrator;
 
+import io.pockethive.Topology;
 import org.springframework.amqp.core.*;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
@@ -7,9 +8,12 @@ import org.springframework.context.annotation.Configuration;
 
 @Configuration
 public class RabbitConfig {
+    private static final String ROLE = "orchestrator";
+
     @Bean
-    Queue controlQueue(@Qualifier("managerControlQueueName") String controlQueueName){
-        return QueueBuilder.durable(controlQueueName).build();
+    Queue controlQueue(String instanceId){
+        String name = Topology.CONTROL_QUEUE + "." + ROLE + "." + instanceId;
+        return QueueBuilder.durable(name).build();
     }
 
     @Bean
@@ -25,8 +29,9 @@ public class RabbitConfig {
     }
 
     @Bean
-    Queue controllerStatusQueue(@Qualifier("controllerStatusQueueName") String controllerStatusQueueName){
-        return QueueBuilder.durable(controllerStatusQueueName).build();
+    Queue controllerStatusQueue(String instanceId){
+        String name = Topology.CONTROL_QUEUE + ".orchestrator-status." + instanceId;
+        return QueueBuilder.durable(name).build();
     }
 
     @Bean

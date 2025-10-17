@@ -13,9 +13,9 @@ logging:
 
 pockethive:
   control-plane:
-    swarm-id: ${POCKETHIVE_CONTROL_PLANE_SWARM_ID}
+    swarm-id: ${POCKETHIVE_CONTROL_PLANE_SWARM_ID:default}
     queues:
-      final: ${POCKETHIVE_CONTROL_PLANE_QUEUES_FINAL}
+      final: ${POCKETHIVE_CONTROL_PLANE_QUEUES_FINAL:ph.${pockethive.control-plane.swarm-id}.final}
     worker:
       role: postprocessor
       # Expect POCKETHIVE_CONTROL_PLANE_WORKER_INSTANCE_ID to supply the instance id

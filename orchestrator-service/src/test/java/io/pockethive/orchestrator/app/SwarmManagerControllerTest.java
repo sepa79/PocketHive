@@ -1,6 +1,7 @@
 package io.pockethive.orchestrator.app;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.pockethive.Topology;
 import io.pockethive.control.CommandTarget;
 import io.pockethive.control.ConfirmationScope;
 import io.pockethive.control.ControlSignal;
@@ -15,7 +16,6 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.amqp.core.AmqpTemplate;
-import org.springframework.amqp.core.TopicExchange;
 import org.springframework.http.ResponseEntity;
 
 import java.util.List;
@@ -35,7 +35,6 @@ class SwarmManagerControllerTest {
     IdempotencyStore idempotency;
 
     private final ObjectMapper mapper = new JacksonConfiguration().objectMapper();
-    private final TopicExchange controlExchange = new TopicExchange("ph.control");
 
     @Test
     void fanOutToggleToAllControllers() throws Exception {
@@ -46,17 +45,16 @@ class SwarmManagerControllerTest {
             .thenReturn(Optional.empty());
         when(idempotency.findCorrelation(eq("sw2"), eq(ControlPlaneSignals.CONFIG_UPDATE), eq("idem-1")))
             .thenReturn(Optional.empty());
-        SwarmManagerController controller =
-            new SwarmManagerController(registry, rabbit, idempotency, mapper, controlExchange);
+        SwarmManagerController controller = new SwarmManagerController(registry, rabbit, idempotency, mapper);
         SwarmManagerController.ToggleRequest request =
             new SwarmManagerController.ToggleRequest("idem-1", true, null, null);
 
         ResponseEntity<SwarmManagerController.FanoutControlResponse> response = controller.updateAll(request);
 
         ArgumentCaptor<String> payloads = ArgumentCaptor.forClass(String.class);
-        verify(rabbit).convertAndSend(eq(controlExchange.getName()),
+        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
             eq(ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, "sw1", "swarm-controller", "ctrl-a")), payloads.capture());
-        verify(rabbit).convertAndSend(eq(controlExchange.getName()),
+        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
             eq(ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, "sw2", "swarm-controller", "ctrl-b")), payloads.capture());
         List<String> sentPayloads = payloads.getAllValues();
         assertThat(sentPayloads).hasSize(2);
@@ -83,15 +81,14 @@ class SwarmManagerControllerTest {
         registry.register(new Swarm("sw9", "ctrl-z", "c9"));
         when(idempotency.findCorrelation(eq("sw9"), eq(ControlPlaneSignals.CONFIG_UPDATE), eq("idem-2")))
             .thenReturn(Optional.empty());
-        SwarmManagerController controller =
-            new SwarmManagerController(registry, rabbit, idempotency, mapper, controlExchange);
+        SwarmManagerController controller = new SwarmManagerController(registry, rabbit, idempotency, mapper);
         SwarmManagerController.ToggleRequest request =
             new SwarmManagerController.ToggleRequest("idem-2", false, null, CommandTarget.INSTANCE);
 
         ResponseEntity<SwarmManagerController.FanoutControlResponse> response = controller.updateOne("sw9", request);
 
         ArgumentCaptor<String> payload = ArgumentCaptor.forClass(String.class);
-        verify(rabbit).convertAndSend(eq(controlExchange.getName()),
+        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE),
             eq(ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, "sw9", "swarm-controller", "ctrl-z")), payload.capture());
         ControlSignal signal = mapper.readValue(payload.getValue(), ControlSignal.class);
         assertThat(signal.commandTarget()).isEqualTo(CommandTarget.INSTANCE);

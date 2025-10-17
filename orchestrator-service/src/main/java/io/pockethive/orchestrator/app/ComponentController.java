@@ -2,18 +2,16 @@ package io.pockethive.orchestrator.app;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.pockethive.Topology;
 import io.pockethive.control.CommandTarget;
 import io.pockethive.control.ControlSignal;
 import io.pockethive.control.ConfirmationScope;
 import io.pockethive.controlplane.ControlPlaneSignals;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.orchestrator.domain.IdempotencyStore;
-import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.core.AmqpTemplate;
-import org.springframework.amqp.core.TopicExchange;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -37,16 +35,11 @@ public class ComponentController {
     private final AmqpTemplate rabbit;
     private final IdempotencyStore idempotency;
     private final ObjectMapper json;
-    private final String controlExchange;
 
-    public ComponentController(AmqpTemplate rabbit,
-                               IdempotencyStore idempotency,
-                               ObjectMapper json,
-                               @Qualifier("controlPlaneExchange") TopicExchange controlExchange) {
+    public ComponentController(AmqpTemplate rabbit, IdempotencyStore idempotency, ObjectMapper json) {
         this.rabbit = rabbit;
         this.idempotency = idempotency;
         this.json = json;
-        this.controlExchange = Objects.requireNonNull(controlExchange, "controlExchange").getName();
     }
 
     @PostMapping("/{role}/{instance}/config")
@@ -147,7 +140,7 @@ public class ComponentController {
     private void sendControl(String routingKey, String payload, String context) {
         String label = (context == null || context.isBlank()) ? "SEND" : "SEND " + context;
         log.info("[CTRL] {} rk={} payload={}", label, routingKey, snippet(payload));
-        rabbit.convertAndSend(controlExchange, routingKey, payload);
+        rabbit.convertAndSend(Topology.CONTROL_EXCHANGE, routingKey, payload);
     }
 
     private void logRestRequest(String method, String path, Object body) {

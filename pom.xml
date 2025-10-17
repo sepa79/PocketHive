@@ -46,36 +46,6 @@
     </pluginManagement>
     <plugins>
       <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-surefire-plugin</artifactId>
-        <configuration>
-          <systemPropertyVariables>
-            <POCKETHIVE_CONTROL_PLANE_SWARM_ID>test-swarm</POCKETHIVE_CONTROL_PLANE_SWARM_ID>
-            <POCKETHIVE_TRAFFIC_EXCHANGE>ph.test-swarm.hive</POCKETHIVE_TRAFFIC_EXCHANGE>
-            <POCKETHIVE_CONTROL_PLANE_QUEUES_GENERATOR>ph.test-swarm.gen</POCKETHIVE_CONTROL_PLANE_QUEUES_GENERATOR>
-            <POCKETHIVE_CONTROL_PLANE_QUEUES_MODERATOR>ph.test-swarm.mod</POCKETHIVE_CONTROL_PLANE_QUEUES_MODERATOR>
-            <POCKETHIVE_CONTROL_PLANE_QUEUES_FINAL>ph.test-swarm.final</POCKETHIVE_CONTROL_PLANE_QUEUES_FINAL>
-            <POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE>ph.control</POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE>
-            <POCKETHIVE_CONTROL_PLANE_EXCHANGE>ph.control</POCKETHIVE_CONTROL_PLANE_EXCHANGE>
-          </systemPropertyVariables>
-        </configuration>
-      </plugin>
-      <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-failsafe-plugin</artifactId>
-        <configuration>
-          <systemPropertyVariables>
-            <POCKETHIVE_CONTROL_PLANE_SWARM_ID>test-swarm</POCKETHIVE_CONTROL_PLANE_SWARM_ID>
-            <POCKETHIVE_TRAFFIC_EXCHANGE>ph.test-swarm.hive</POCKETHIVE_TRAFFIC_EXCHANGE>
-            <POCKETHIVE_CONTROL_PLANE_QUEUES_GENERATOR>ph.test-swarm.gen</POCKETHIVE_CONTROL_PLANE_QUEUES_GENERATOR>
-            <POCKETHIVE_CONTROL_PLANE_QUEUES_MODERATOR>ph.test-swarm.mod</POCKETHIVE_CONTROL_PLANE_QUEUES_MODERATOR>
-            <POCKETHIVE_CONTROL_PLANE_QUEUES_FINAL>ph.test-swarm.final</POCKETHIVE_CONTROL_PLANE_QUEUES_FINAL>
-            <POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE>ph.control</POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE>
-            <POCKETHIVE_CONTROL_PLANE_EXCHANGE>ph.control</POCKETHIVE_CONTROL_PLANE_EXCHANGE>
-          </systemPropertyVariables>
-        </configuration>
-      </plugin>
-      <plugin>
         <groupId>org.codehaus.mojo</groupId>
         <artifactId>flatten-maven-plugin</artifactId>
         <version>1.5.0</version>

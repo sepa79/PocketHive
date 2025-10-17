@@ -14,8 +14,6 @@ logging:
   config: classpath:logback-spring.xml
   pattern.level: "%5p [%X{traceId}]"
 pockethive:
-  control-plane:
-    swarm-id: ${POCKETHIVE_CONTROL_PLANE_SWARM_ID}
   logs:
     queue: ${POCKETHIVE_LOGS_QUEUE:ph.logs.agg}
   loki:
