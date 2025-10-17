@@ -34,7 +34,9 @@ class WorkerMetricsInterceptorTest {
     private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
         .withPropertyValues(
             "pockethive.control-plane.worker.enabled=false",
-            "pockethive.control-plane.manager.enabled=false"
+            "pockethive.control-plane.manager.enabled=false",
+            "pockethive.control-plane.instance-id=metrics-test",
+            "pockethive.control-plane.swarm-id=metrics-swarm"
         )
         .withUserConfiguration(TestConfiguration.class, PocketHiveWorkerSdkAutoConfiguration.class);
 

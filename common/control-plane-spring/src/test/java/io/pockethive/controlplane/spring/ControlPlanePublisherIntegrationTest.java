@@ -25,7 +25,9 @@ class ControlPlanePublisherIntegrationTest {
 
     private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
         .withUserConfiguration(ControlPlaneCommonAutoConfiguration.class)
-        .withPropertyValues("pockethive.control-plane.worker.enabled=false");
+        .withPropertyValues(
+            "pockethive.control-plane.worker.enabled=false",
+            "pockethive.control-plane.instance-id=integration-test");
 
     @Test
     void publisherSendsSignalsAndEventsToConfiguredExchange() {
