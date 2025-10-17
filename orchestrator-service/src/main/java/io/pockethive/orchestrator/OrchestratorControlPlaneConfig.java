@@ -22,6 +22,7 @@ class OrchestratorControlPlaneConfig {
     private static final String ROLE = "orchestrator";
     private static final String BEE_NAME_PROPERTY = "bee.name";
     private static final String INSTANCE_ID_PROPERTY = "pockethive.control-plane.instance-id";
+    private static final String SWARM_ID_PROPERTY = "pockethive.control-plane.swarm-id";
 
     @Bean
     String instanceId(ControlPlaneProperties properties) {
@@ -34,7 +35,7 @@ class OrchestratorControlPlaneConfig {
             resolved = normalise(System.getProperty(BEE_NAME_PROPERTY));
         }
         if (resolved == null) {
-            resolved = BeeNameGenerator.generate(ROLE, resolveManagerSwarmId(properties));
+            resolved = BeeNameGenerator.generate(ROLE, resolveSwarmId(properties));
         }
         if (resolved == null) {
             throw new IllegalStateException("Manager instance id could not be resolved");
@@ -60,7 +61,7 @@ class OrchestratorControlPlaneConfig {
         Objects.requireNonNull(properties, "properties");
         Objects.requireNonNull(descriptor, "descriptor");
         Objects.requireNonNull(instanceId, "instanceId");
-        String swarmId = requireText(properties.getSwarmId(), "pockethive.control-plane.swarm-id");
+        String swarmId = requireText(properties.getSwarmId(), SWARM_ID_PROPERTY);
         return new ControlPlaneIdentity(swarmId, descriptor.role(), instanceId);
     }
 
@@ -111,5 +112,16 @@ class OrchestratorControlPlaneConfig {
             throw new IllegalStateException(property + " must not be null or blank");
         }
         return value;
+    }
+
+    private static String resolveSwarmId(ControlPlaneProperties properties) {
+        String resolved = normalise(properties.getSwarmId());
+        if (resolved == null) {
+            resolved = normalise(System.getProperty(SWARM_ID_PROPERTY));
+        }
+        if (resolved == null) {
+            throw new IllegalStateException("Manager swarm id could not be resolved");
+        }
+        return resolved;
     }
 }
