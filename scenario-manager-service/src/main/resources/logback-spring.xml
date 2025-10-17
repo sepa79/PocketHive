@@ -23,7 +23,7 @@
   </logger>
 
   <if
-    condition='"true".equalsIgnoreCase(property("rabbitLoggingEnabled"))'>
+    condition='Boolean.parseBoolean(String.valueOf(property("rabbitLoggingEnabled")))'>
     <then>
       <appender name="RABBIT" class="org.springframework.amqp.rabbit.logback.AmqpAppender">
         <host>${rabbitHost}</host>
