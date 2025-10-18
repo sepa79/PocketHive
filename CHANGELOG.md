@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.12.8] - 2025-10-18
+Timestamp: 2025-10-18T00:00:00Z
+
+- Control plane & orchestrator: replace ad-hoc initializers with the new `OrchestratorProperties` binding, align every property
+  with the control-plane namespace, and refresh Docker Compose overrides, logging configuration, and scenario manager client
+  handling to respect the updated config surface and keep tests green.
+- Swarm controller: introduce strongly typed `SwarmControllerProperties`, fix binding defaults, forward worker configuration
+  updates, and sync application/logback settings with the consolidated control-plane placeholders to stabilise lifecycle, Docker,
+  and messaging tests.
+- Scenario manager & log aggregator: unify RabbitMQ placeholder usage, supply default ports for Logback, convert the AMQP log
+  toggle to an explicit boolean parse, and drop obsolete control-plane initializer wiring so runtime logging honours configuration
+  flags.
+- Documentation: retire the outdated manager override note, publish the explicit control-plane configuration migration plan, and
+  expand the orchestrator configuration guide around the new property model.
+- Release: bump the PocketHive patch version to 0.12.8 so published artifacts and tooling reference the latest build.
+
 ## [0.12.7] - 2025-10-17
 Timestamp: 2025-10-17T00:00:00Z
 
