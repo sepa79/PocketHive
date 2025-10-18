@@ -5,6 +5,8 @@
   <springProperty scope="context" name="swarmIdentifier" source="pockethive.control-plane.swarm-id"/>
   <springProperty scope="context" name="instanceIdentifier" source="pockethive.control-plane.instance-id"/>
 
+  <springProperty scope="context" name="rabbitLoggingEnabled" source="rabbitmq.logging.enabled" defaultValue="false"/>
+
   <springProperty scope="context" name="rabbitHost" source="spring.rabbitmq.host"/>
   <springProperty scope="context" name="rabbitPort" source="spring.rabbitmq.port" defaultValue="5672"/>
   <springProperty scope="context" name="rabbitUsername" source="spring.rabbitmq.username"/>
@@ -20,7 +22,8 @@
     <appender-ref ref="CONSOLE"/>
   </logger>
 
-  <if condition='!"false".equalsIgnoreCase(property("RABBITMQ_LOGGING_ENABLED"))'>
+  <if
+    condition='Boolean.parseBoolean(property("rabbitLoggingEnabled") != null ? property("rabbitLoggingEnabled") : "false")'>
     <then>
       <appender name="RABBIT" class="org.springframework.amqp.rabbit.logback.AmqpAppender">
         <host>${rabbitHost}</host>

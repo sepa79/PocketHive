@@ -22,7 +22,10 @@ import java.io.IOException;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-@SpringBootTest
+@SpringBootTest(properties = {
+    "pockethive.control-plane.swarm-controller.rabbit.logging.enabled=false",
+    "rabbitmq.logging.enabled=false"
+})
 @RabbitAvailable
 class SwarmLifecycleManagerIntegrationTest {
   private static final String TEST_INSTANCE_ID = "test-swarm-controller-bee";

@@ -7,7 +7,6 @@ import io.pockethive.control.CommandTarget;
 import io.pockethive.control.ConfirmationScope;
 import io.pockethive.control.ErrorConfirmation;
 import io.pockethive.control.ReadyConfirmation;
-import io.pockethive.Topology;
 import io.pockethive.control.ControlSignal;
 import io.pockethive.observability.StatusEnvelopeBuilder;
 import io.pockethive.controlplane.ControlPlaneIdentity;
@@ -19,6 +18,7 @@ import io.pockethive.controlplane.messaging.EventMessage;
 import io.pockethive.controlplane.messaging.SignalMessage;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.controlplane.routing.ControlPlaneRouting.RoutingKey;
+import io.pockethive.swarmcontroller.config.SwarmControllerProperties;
 import io.pockethive.swarmcontroller.SwarmMetrics;
 import io.pockethive.swarmcontroller.SwarmStatus;
 import org.slf4j.Logger;
@@ -45,12 +45,15 @@ import java.util.concurrent.atomic.AtomicReference;
 @EnableScheduling
 public class SwarmSignalListener {
   private static final Logger log = LoggerFactory.getLogger(SwarmSignalListener.class);
-  private static final String ROLE = "swarm-controller";
   private final SwarmLifecycle lifecycle;
   private final RabbitTemplate rabbit;
   private final String instanceId;
   private final ObjectMapper mapper;
   private final ManagerControlPlane controlPlane;
+  private final SwarmControllerProperties properties;
+  private final String swarmId;
+  private final String role;
+  private final String controlExchange;
   private static final long STATUS_INTERVAL_MS = 5000L;
   private static final long MAX_STALENESS_MS = 15_000L;
   private volatile boolean controllerEnabled = false;
@@ -60,15 +63,20 @@ public class SwarmSignalListener {
   public SwarmSignalListener(SwarmLifecycle lifecycle,
                              RabbitTemplate rabbit,
                              @Qualifier("instanceId") String instanceId,
-                             ObjectMapper mapper) {
+                             ObjectMapper mapper,
+                             SwarmControllerProperties properties) {
     this.lifecycle = lifecycle;
     this.rabbit = rabbit;
     this.instanceId = instanceId;
     this.mapper = mapper.findAndRegisterModules();
+    this.properties = properties;
+    this.swarmId = properties.getSwarmId();
+    this.role = properties.getRole();
+    this.controlExchange = properties.getControlExchange();
     this.controlPlane = ManagerControlPlane.builder(
-        new AmqpControlPlanePublisher(rabbit, Topology.CONTROL_EXCHANGE),
+        new AmqpControlPlanePublisher(rabbit, controlExchange),
         this.mapper)
-        .identity(new ControlPlaneIdentity(Topology.SWARM_ID, ROLE, instanceId))
+        .identity(new ControlPlaneIdentity(swarmId, role, instanceId))
         .duplicateCache(java.time.Duration.ofMinutes(1), 256)
         .build();
     try {
@@ -142,7 +150,7 @@ public class SwarmSignalListener {
     try {
       JsonNode node = mapper.readTree(body);
       String payloadSwarm = node.path("swarmId").asText(null);
-      if (payloadSwarm != null && !payloadSwarm.isBlank() && !Topology.SWARM_ID.equals(payloadSwarm)) {
+      if (payloadSwarm != null && !payloadSwarm.isBlank() && !swarmId.equals(payloadSwarm)) {
         log.debug("Ignoring status payload for swarm {} on routing key {}", payloadSwarm, routingKey);
         return;
       }
@@ -348,8 +356,13 @@ public class SwarmSignalListener {
     if (!isLocalSwarm(key.swarmId())) {
       return false;
     }
-    String roleSegment = defaultSegment(key.role(), ROLE);
-    if (!ROLE.equalsIgnoreCase(roleSegment) && !isAllSegment(roleSegment)) {
+    String roleSegment = defaultSegment(key.role(), role);
+    boolean roleMatchesController = role.equalsIgnoreCase(roleSegment) || isAllSegment(roleSegment);
+    if (!roleMatchesController) {
+      String type = defaultSegment(key.type(), null);
+      if (ControlPlaneSignals.CONFIG_UPDATE.equalsIgnoreCase(type)) {
+        return true;
+      }
       return false;
     }
     String instanceSegment = key.instance();
@@ -366,9 +379,10 @@ public class SwarmSignalListener {
     if (!isLocalSwarm(key.swarmId())) {
       return false;
     }
-    String roleSegment = defaultSegment(key.role(), ROLE);
-    if (!ROLE.equalsIgnoreCase(roleSegment) && !isAllSegment(roleSegment)) {
-      return false;
+    String roleSegment = defaultSegment(key.role(), role);
+    boolean roleMatchesController = role.equalsIgnoreCase(roleSegment) || isAllSegment(roleSegment);
+    if (!roleMatchesController) {
+      return commandTarget == CommandTarget.INSTANCE || commandTarget == CommandTarget.ROLE;
     }
     String targetInstance = key.instance();
     if (isAllSegment(targetInstance)) {
@@ -445,8 +459,8 @@ public class SwarmSignalListener {
 
   private ConfirmationScope scopeFor(ControlSignal cs, String swarmIdFallback) {
     String swarmId = defaultSegment(cs.swarmId(), swarmIdFallback);
-    swarmId = defaultSegment(swarmId, Topology.SWARM_ID);
-    String role = defaultSegment(cs.role(), ROLE);
+    swarmId = defaultSegment(swarmId, swarmId);
+    String role = defaultSegment(cs.role(), this.role);
     String instance = defaultSegment(cs.instance(), instanceId);
     return new ConfirmationScope(swarmId, role, instance);
   }
@@ -562,7 +576,7 @@ public class SwarmSignalListener {
   private String swarmIdOrDefault(ControlSignal cs) {
     String swarmId = cs.swarmId();
     if (swarmId == null || swarmId.isBlank()) {
-      return Topology.SWARM_ID;
+      return swarmId;
     }
     return swarmId;
   }
@@ -584,7 +598,7 @@ public class SwarmSignalListener {
     if (targetSwarm == null || targetSwarm.isBlank()) {
       return true;
     }
-    return Topology.SWARM_ID.equalsIgnoreCase(targetSwarm);
+    return swarmId.equalsIgnoreCase(targetSwarm);
   }
 
   private String resolveSignal(ControlSignalEnvelope envelope) {
@@ -601,7 +615,7 @@ public class SwarmSignalListener {
     if (role == null || role.isBlank()) {
       return false;
     }
-    if (!ROLE.equalsIgnoreCase(role)) {
+    if (!this.role.equalsIgnoreCase(role)) {
       return false;
     }
     String targetInstance = cs.instance();
@@ -696,15 +710,15 @@ public class SwarmSignalListener {
     SwarmStatus status = lifecycle.getStatus();
     boolean workloadsEnabled = workloadsEnabled(status);
     Map<String, QueueStats> queueSnapshot = lifecycle.snapshotQueueStats();
-    String controlQueue = Topology.CONTROL_QUEUE + "." + ROLE + "." + instanceId;
-    ConfirmationScope scope = ConfirmationScope.forInstance(Topology.SWARM_ID, ROLE, instanceId);
+    String controlQueue = properties.controlQueueName(role, instanceId);
+    ConfirmationScope scope = ConfirmationScope.forInstance(swarmId, role, instanceId);
     String rk = ControlPlaneRouting.event("status-full", scope);
     String payload = new StatusEnvelopeBuilder()
         .kind("status-full")
-        .role(ROLE)
+        .role(role)
         .instance(instanceId)
         .origin(instanceId)
-        .swarmId(Topology.SWARM_ID)
+        .swarmId(swarmId)
         .enabled(controllerEnabled)
         .state(state)
         .watermark(m.watermark())
@@ -727,15 +741,15 @@ public class SwarmSignalListener {
     SwarmStatus status = lifecycle.getStatus();
     boolean workloadsEnabled = workloadsEnabled(status);
     Map<String, QueueStats> queueSnapshot = lifecycle.snapshotQueueStats();
-    String controlQueue = Topology.CONTROL_QUEUE + "." + ROLE + "." + instanceId;
-    ConfirmationScope scope = ConfirmationScope.forInstance(Topology.SWARM_ID, ROLE, instanceId);
+    String controlQueue = properties.controlQueueName(role, instanceId);
+    ConfirmationScope scope = ConfirmationScope.forInstance(swarmId, role, instanceId);
     String rk = ControlPlaneRouting.event("status-delta", scope);
     String payload = new StatusEnvelopeBuilder()
         .kind("status-delta")
-        .role(ROLE)
+        .role(role)
         .instance(instanceId)
         .origin(instanceId)
-        .swarmId(Topology.SWARM_ID)
+        .swarmId(swarmId)
         .enabled(controllerEnabled)
         .state(state)
         .watermark(m.watermark())
@@ -789,19 +803,19 @@ public class SwarmSignalListener {
   }
 
   private String[] controllerControlRoutes() {
-    String swarm = Topology.SWARM_ID;
+    String swarm = swarmId;
     return new String[] {
-        ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, "ALL", ROLE, "ALL"),
-        ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, swarm, ROLE, "ALL"),
-        ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, swarm, ROLE, instanceId),
+        ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, "ALL", role, "ALL"),
+        ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, swarm, role, "ALL"),
+        ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, swarm, role, instanceId),
         ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, swarm, "ALL", "ALL"),
-        ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, "ALL", ROLE, "ALL"),
-        ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, swarm, ROLE, "ALL"),
-        ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, swarm, ROLE, instanceId),
-        ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_TEMPLATE, swarm, ROLE, "ALL"),
-        ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_START, swarm, ROLE, "ALL"),
-        ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_STOP, swarm, ROLE, "ALL"),
-        ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_REMOVE, swarm, ROLE, "ALL")
+        ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, "ALL", role, "ALL"),
+        ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, swarm, role, "ALL"),
+        ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, swarm, role, instanceId),
+        ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_TEMPLATE, swarm, role, "ALL"),
+        ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_START, swarm, role, "ALL"),
+        ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_STOP, swarm, role, "ALL"),
+        ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_REMOVE, swarm, role, "ALL")
     };
   }
 
@@ -872,9 +886,9 @@ public class SwarmSignalListener {
   }
 
   private String normaliseSwarmSegment(String value) {
-    String resolved = defaultSegment(value, Topology.SWARM_ID);
+    String resolved = defaultSegment(value, swarmId);
     if (isAllSegment(resolved)) {
-      return Topology.SWARM_ID;
+      return swarmId;
     }
     return resolved;
   }
@@ -883,6 +897,6 @@ public class SwarmSignalListener {
     if (value == null || value.isBlank()) {
       return true;
     }
-    return isAllSegment(value) || Topology.SWARM_ID.equalsIgnoreCase(value);
+    return isAllSegment(value) || swarmId.equalsIgnoreCase(value);
   }
 }

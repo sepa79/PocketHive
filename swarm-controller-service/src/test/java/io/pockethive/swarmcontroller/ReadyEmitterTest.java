@@ -1,10 +1,10 @@
 package io.pockethive.swarmcontroller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.pockethive.Topology;
 import io.pockethive.control.ConfirmationScope;
 import io.pockethive.control.ReadyConfirmation;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
+import io.pockethive.swarmcontroller.config.SwarmControllerProperties;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -28,14 +28,15 @@ class ReadyEmitterTest {
     @Test
     void emitsReadyEventOnStartup() throws Exception {
         ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
-        ReadyEmitter emitter = new ReadyEmitter(rabbit, "inst", mapper);
+        SwarmControllerProperties properties = SwarmControllerTestProperties.defaults();
+        ReadyEmitter emitter = new ReadyEmitter(rabbit, "inst", mapper, properties);
         emitter.emit();
-        ConfirmationScope scope = ConfirmationScope.forInstance(Topology.SWARM_ID, "swarm-controller", "inst");
-        String routingKey = ControlPlaneRouting.event("ready.swarm-controller", scope);
+        ConfirmationScope scope = ConfirmationScope.forInstance(properties.getSwarmId(), properties.getRole(), "inst");
+        String routingKey = ControlPlaneRouting.event("ready." + properties.getRole(), scope);
         ArgumentCaptor<String> payload = ArgumentCaptor.forClass(String.class);
-        verify(rabbit).convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq(routingKey), payload.capture());
+        verify(rabbit).convertAndSend(eq(properties.getControlExchange()), eq(routingKey), payload.capture());
         ReadyConfirmation confirmation = mapper.readValue(payload.getValue(), ReadyConfirmation.class);
-        assertThat(confirmation.signal()).isEqualTo("swarm-controller");
+        assertThat(confirmation.signal()).isEqualTo(properties.getRole());
         assertThat(confirmation.scope()).isEqualTo(scope);
         assertThat(confirmation.state().status()).isEqualTo("Ready");
     }
@@ -43,12 +44,13 @@ class ReadyEmitterTest {
     @Test
     void ignoresAmqpFailures() {
         ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
-        ReadyEmitter emitter = new ReadyEmitter(rabbit, "inst", mapper);
-        ConfirmationScope scope = ConfirmationScope.forInstance(Topology.SWARM_ID, "swarm-controller", "inst");
-        String routingKey = ControlPlaneRouting.event("ready.swarm-controller", scope);
+        SwarmControllerProperties properties = SwarmControllerTestProperties.defaults();
+        ReadyEmitter emitter = new ReadyEmitter(rabbit, "inst", mapper, properties);
+        ConfirmationScope scope = ConfirmationScope.forInstance(properties.getSwarmId(), properties.getRole(), "inst");
+        String routingKey = ControlPlaneRouting.event("ready." + properties.getRole(), scope);
         doThrow(new AmqpConnectException(new IllegalStateException("boom")))
             .when(rabbit)
-            .convertAndSend(eq(Topology.CONTROL_EXCHANGE), eq(routingKey), any(Object.class));
+            .convertAndSend(eq(properties.getControlExchange()), eq(routingKey), any(Object.class));
         assertDoesNotThrow(emitter::emit);
     }
 }

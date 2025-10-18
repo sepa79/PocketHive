@@ -22,7 +22,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 @SpringBootTest(
     webEnvironment = SpringBootTest.WebEnvironment.DEFINED_PORT,
-    properties = "RABBITMQ_LOGGING_ENABLED=false")
+    properties = "rabbitmq.logging.enabled=false")
 class ScenarioControllerSmokeTest {
 
     private static final Path TEMP_DIR = createTempDir();

@@ -15,7 +15,7 @@ import java.nio.file.Path;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-@SpringBootTest
+@SpringBootTest(properties = "rabbitmq.logging.enabled=false")
 @AutoConfigureMockMvc
 class ScenarioControllerTest {
 
@@ -28,6 +28,7 @@ class ScenarioControllerTest {
     @DynamicPropertySource
     static void properties(DynamicPropertyRegistry registry) {
         registry.add("scenarios.dir", () -> tempDir.toString());
+        registry.add("rabbitmq.logging.enabled", () -> "false");
     }
 
     @Test
