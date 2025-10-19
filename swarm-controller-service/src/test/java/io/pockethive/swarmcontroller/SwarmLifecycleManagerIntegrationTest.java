@@ -1,6 +1,7 @@
 package io.pockethive.swarmcontroller;
 
 import io.pockethive.Topology;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.amqp.AmqpException;
@@ -19,6 +20,8 @@ import org.springframework.test.context.DynamicPropertySource;
 import io.pockethive.docker.DockerContainerClient;
 
 import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -31,6 +34,19 @@ class SwarmLifecycleManagerIntegrationTest {
   private static final String TEST_INSTANCE_ID = "test-swarm-controller-bee";
 
   private static final String TRAFFIC_PREFIX = "ph." + Topology.SWARM_ID;
+
+  private static final Map<String, String> REQUIRED_ENV = Map.of(
+      "POCKETHIVE_CONTROL_PLANE_MANAGER_ROLE", "swarm-controller"
+  );
+
+  private static final Map<String, String> ORIGINAL_ENV = new HashMap<>();
+
+  static {
+    REQUIRED_ENV.forEach((key, value) -> {
+      ORIGINAL_ENV.put(key, System.getProperty(key));
+      System.setProperty(key, value);
+    });
+  }
 
   @DynamicPropertySource
   static void rabbitProperties(DynamicPropertyRegistry registry) {
@@ -99,6 +115,18 @@ class SwarmLifecycleManagerIntegrationTest {
 
   @MockBean
   DockerContainerClient docker;
+
+  @AfterAll
+  static void resetSystemProperties() {
+    REQUIRED_ENV.forEach((key, value) -> {
+      String original = ORIGINAL_ENV.get(key);
+      if (original == null) {
+        System.clearProperty(key);
+      } else {
+        System.setProperty(key, original);
+      }
+    });
+  }
 
   @AfterEach
   void cleanup() {
