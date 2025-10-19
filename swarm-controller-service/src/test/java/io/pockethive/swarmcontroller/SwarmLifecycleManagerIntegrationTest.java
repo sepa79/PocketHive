@@ -30,13 +30,59 @@ import static org.junit.jupiter.api.Assertions.*;
 class SwarmLifecycleManagerIntegrationTest {
   private static final String TEST_INSTANCE_ID = "test-swarm-controller-bee";
 
+  private static final String TRAFFIC_PREFIX = "ph." + Topology.SWARM_ID;
+
   @DynamicPropertySource
   static void rabbitProperties(DynamicPropertyRegistry registry) {
-    registry.add("spring.rabbitmq.host", () -> RabbitAvailableCondition.getBrokerRunning().getHostName());
-    registry.add("spring.rabbitmq.port", () -> RabbitAvailableCondition.getBrokerRunning().getPort());
+    registry.add(
+        "spring.rabbitmq.host",
+        () -> RabbitAvailableCondition.getBrokerRunning().getHostName());
+    registry.add(
+        "spring.rabbitmq.port",
+        () -> RabbitAvailableCondition.getBrokerRunning().getPort());
+    registry.add(
+        "SPRING_RABBITMQ_HOST",
+        () -> RabbitAvailableCondition.getBrokerRunning().getHostName());
+    registry.add(
+        "SPRING_RABBITMQ_PORT",
+        () -> RabbitAvailableCondition.getBrokerRunning().getPort());
+    registry.add("SPRING_RABBITMQ_USERNAME", () -> "guest");
+    registry.add("SPRING_RABBITMQ_PASSWORD", () -> "guest");
     registry.add("POCKETHIVE_CONTROL_PLANE_SWARM_ID", () -> Topology.SWARM_ID);
     registry.add("POCKETHIVE_CONTROL_PLANE_EXCHANGE", () -> Topology.CONTROL_EXCHANGE);
     registry.add("POCKETHIVE_CONTROL_PLANE_INSTANCE_ID", () -> TEST_INSTANCE_ID);
+    registry.add("POCKETHIVE_CONTROL_PLANE_WORKER_ENABLED", () -> Boolean.FALSE.toString());
+    registry.add("POCKETHIVE_CONTROL_PLANE_MANAGER_ROLE", () -> "swarm-controller");
+    registry.add(
+        "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_CONTROL_QUEUE_PREFIX",
+        () -> Topology.CONTROL_EXCHANGE);
+    registry.add(
+        "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_TRAFFIC_QUEUE_PREFIX",
+        () -> TRAFFIC_PREFIX);
+    registry.add(
+        "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_TRAFFIC_HIVE_EXCHANGE",
+        () -> TRAFFIC_PREFIX + ".hive");
+    registry.add(
+        "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_HOST",
+        () -> RabbitAvailableCondition.getBrokerRunning().getHostName());
+    registry.add(
+        "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGS_EXCHANGE",
+        () -> "ph.logs");
+    registry.add(
+        "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGGING_ENABLED",
+        () -> Boolean.FALSE.toString());
+    registry.add(
+        "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_ENABLED",
+        () -> Boolean.FALSE.toString());
+    registry.add(
+        "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_PUSH_RATE",
+        () -> "PT1M");
+    registry.add(
+        "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_SHUTDOWN_OPERATION",
+        () -> "DELETE");
+    registry.add(
+        "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_DOCKER_SOCKET_PATH",
+        () -> "/var/run/docker.sock");
   }
 
   @Autowired
