@@ -24,7 +24,8 @@ import static org.junit.jupiter.api.Assertions.*;
 
 @SpringBootTest(properties = {
     "pockethive.control-plane.swarm-controller.rabbit.logging.enabled=false",
-    "rabbitmq.logging.enabled=false"
+    "rabbitmq.logging.enabled=false",
+    "pockethive.control-plane.manager.role=swarm-controller"
 })
 @RabbitAvailable
 class SwarmLifecycleManagerIntegrationTest {
