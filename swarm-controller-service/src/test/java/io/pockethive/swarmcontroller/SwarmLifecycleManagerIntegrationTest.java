@@ -30,11 +30,14 @@ import static org.junit.jupiter.api.Assertions.*;
 })
 @RabbitAvailable
 class SwarmLifecycleManagerIntegrationTest {
+  private static final String TEST_INSTANCE_ID = "test-swarm-controller-bee";
+  private static final String ORIGINAL_SWARM_ID = System.getProperty("POCKETHIVE_CONTROL_PLANE_SWARM_ID");
+  private static final String ORIGINAL_INSTANCE_ID = System.getProperty("POCKETHIVE_CONTROL_PLANE_INSTANCE_ID");
+
   static {
     System.setProperty("POCKETHIVE_CONTROL_PLANE_SWARM_ID", Topology.SWARM_ID);
+    System.setProperty("POCKETHIVE_CONTROL_PLANE_INSTANCE_ID", TEST_INSTANCE_ID);
   }
-
-  private static final String TEST_INSTANCE_ID = "test-swarm-controller-bee";
 
   @DynamicPropertySource
   static void rabbitProperties(DynamicPropertyRegistry registry) {
@@ -50,6 +53,8 @@ class SwarmLifecycleManagerIntegrationTest {
     registry.add("POCKETHIVE_CONTROL_PLANE_SWARM_ID", () -> swarmId);
     registry.add("POCKETHIVE_CONTROL_PLANE_EXCHANGE", () -> Topology.CONTROL_EXCHANGE);
     registry.add("POCKETHIVE_CONTROL_PLANE_INSTANCE_ID", () -> TEST_INSTANCE_ID);
+    registry.add("pockethive.control-plane.swarm-id", () -> swarmId);
+    registry.add("pockethive.control-plane.instance-id", () -> TEST_INSTANCE_ID);
     registry.add("POCKETHIVE_CONTROL_PLANE_WORKER_ENABLED", () -> Boolean.FALSE.toString());
     registry.add("POCKETHIVE_CONTROL_PLANE_MANAGER_ROLE", () -> "swarm-controller");
     registry.add("pockethive.control-plane.manager.role", () -> "swarm-controller");
@@ -177,7 +182,16 @@ class SwarmLifecycleManagerIntegrationTest {
   }
 
   @AfterAll
-  static void clearSwarmIdProperty() {
-    System.clearProperty("POCKETHIVE_CONTROL_PLANE_SWARM_ID");
+  static void restoreSystemProperties() {
+    restore("POCKETHIVE_CONTROL_PLANE_SWARM_ID", ORIGINAL_SWARM_ID);
+    restore("POCKETHIVE_CONTROL_PLANE_INSTANCE_ID", ORIGINAL_INSTANCE_ID);
+  }
+
+  private static void restore(String key, String originalValue) {
+    if (originalValue == null) {
+      System.clearProperty(key);
+    } else {
+      System.setProperty(key, originalValue);
+    }
   }
 }
