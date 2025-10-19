@@ -2,6 +2,8 @@ package io.pockethive.swarmcontroller;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
 import io.pockethive.Topology;
 import io.pockethive.control.ConfirmationScope;
 import io.pockethive.control.ControlSignal;
@@ -10,8 +12,9 @@ import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.docker.DockerDaemonUnavailableException;
 import io.pockethive.swarmcontroller.SwarmStatus;
 import io.pockethive.swarmcontroller.SwarmMetrics;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.ArgumentMatcher;
@@ -21,6 +24,7 @@ import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -44,6 +48,8 @@ class SwarmSignalListenerTest {
 
   ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
 
+  private Level originalLogLevel;
+
   private SwarmSignalListener newListener(SwarmLifecycle lifecycle, RabbitTemplate rabbit, String instanceId, ObjectMapper mapper) {
     return new SwarmSignalListener(lifecycle, rabbit, instanceId, mapper, SwarmControllerTestProperties.defaults());
   }
@@ -61,6 +67,15 @@ class SwarmSignalListenerTest {
   @BeforeEach
   void setup() {
     stubLifecycleDefaults();
+    Logger logger = (Logger) LoggerFactory.getLogger(SwarmSignalListener.class);
+    originalLogLevel = logger.getLevel();
+    logger.setLevel(Level.INFO);
+  }
+
+  @AfterEach
+  void resetLoggingLevel() {
+    Logger logger = (Logger) LoggerFactory.getLogger(SwarmSignalListener.class);
+    logger.setLevel(originalLogLevel);
   }
 
   private String signal(String sig, String id, String corr) {
