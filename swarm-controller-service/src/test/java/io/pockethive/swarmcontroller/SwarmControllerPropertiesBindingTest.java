@@ -47,6 +47,30 @@ class SwarmControllerPropertiesBindingTest {
             });
   }
 
+  @Test
+  void failsWhenRabbitHostMissing() {
+    contextRunner
+        .withPropertyValues(
+            "pockethive.control-plane.swarm-id=swarm-a",
+            "pockethive.control-plane.exchange=ph.control",
+            "pockethive.control-plane.manager.role=swarm-controller",
+            "pockethive.control-plane.swarm-controller.control-queue-prefix=ph.control",
+            "pockethive.control-plane.swarm-controller.traffic.queue-prefix=ph.swarm-a",
+            "pockethive.control-plane.swarm-controller.traffic.hive-exchange=ph.swarm-a.hive",
+            "pockethive.control-plane.swarm-controller.rabbit.logs-exchange=ph.logs",
+            "pockethive.control-plane.swarm-controller.metrics.pushgateway.enabled=false",
+            "pockethive.control-plane.swarm-controller.metrics.pushgateway.push-rate=PT1M",
+            "pockethive.control-plane.swarm-controller.metrics.pushgateway.shutdown-operation=DELETE",
+            "pockethive.control-plane.swarm-controller.docker.socket-path=/var/run/docker.sock")
+        .run(
+            context -> {
+              Throwable failure = context.getStartupFailure();
+              assertThat(failure).isNotNull();
+              assertThat(failure).hasRootCauseInstanceOf(IllegalArgumentException.class);
+              assertThat(failure).hasRootCauseMessage("host must not be blank");
+            });
+  }
+
   @EnableConfigurationProperties(SwarmControllerProperties.class)
   private static class Config {}
 }
