@@ -68,7 +68,24 @@ class ContainerLifecycleManagerTest {
         assertEquals("guest", env.get("RABBITMQ_DEFAULT_USER"));
         assertEquals("guest", env.get("RABBITMQ_DEFAULT_PASS"));
         assertEquals("/", env.get("RABBITMQ_VHOST"));
+        assertEquals("rabbitmq", env.get("SPRING_RABBITMQ_HOST"));
+        assertEquals("5672", env.get("SPRING_RABBITMQ_PORT"));
+        assertEquals("guest", env.get("SPRING_RABBITMQ_USERNAME"));
+        assertEquals("guest", env.get("SPRING_RABBITMQ_PASSWORD"));
+        assertEquals("/", env.get("SPRING_RABBITMQ_VIRTUAL_HOST"));
         assertEquals("ph.logs", env.get("POCKETHIVE_LOGS_EXCHANGE"));
+        assertEquals("false", env.get("POCKETHIVE_CONTROL_PLANE_WORKER_ENABLED"));
+        assertEquals("swarm-controller", env.get("POCKETHIVE_CONTROL_PLANE_MANAGER_ROLE"));
+        assertEquals("ph.control", env.get("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_CONTROL_QUEUE_PREFIX"));
+        assertEquals("ph.sw1", env.get("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_TRAFFIC_QUEUE_PREFIX"));
+        assertEquals("ph.sw1.hive", env.get("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_TRAFFIC_HIVE_EXCHANGE"));
+        assertEquals("rabbitmq", env.get("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_HOST"));
+        assertEquals("ph.logs", env.get("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGS_EXCHANGE"));
+        assertEquals("false", env.get("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGGING_ENABLED"));
+        assertEquals("false", env.get("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_ENABLED"));
+        assertEquals("PT1M", env.get("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_PUSH_RATE"));
+        assertEquals("DELETE", env.get("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_SHUTDOWN_OPERATION"));
+        assertEquals("/var/run/docker.sock", env.get("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_DOCKER_SOCKET_PATH"));
         assertEquals("/var/run/docker.sock", env.get("DOCKER_SOCKET_PATH"));
         assertEquals("unix:///var/run/docker.sock", env.get("DOCKER_HOST"));
         HostConfig customized = hostCaptor.getValue().apply(HostConfig.newHostConfig());
@@ -279,6 +296,7 @@ class ContainerLifecycleManagerTest {
         properties.setSwarmId("orchestrator-swarm");
         properties.setInstanceId("orch-instance");
         properties.getManager().setRole("orchestrator");
+        properties.getWorker().setEnabled(false);
         return properties;
     }
 

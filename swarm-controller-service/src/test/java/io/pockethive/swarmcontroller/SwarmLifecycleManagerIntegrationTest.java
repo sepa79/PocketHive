@@ -32,11 +32,45 @@ class SwarmLifecycleManagerIntegrationTest {
 
   @DynamicPropertySource
   static void rabbitProperties(DynamicPropertyRegistry registry) {
-    registry.add("spring.rabbitmq.host", () -> RabbitAvailableCondition.getBrokerRunning().getHostName());
-    registry.add("spring.rabbitmq.port", () -> RabbitAvailableCondition.getBrokerRunning().getPort());
+    registry.add("SPRING_RABBITMQ_HOST", () -> RabbitAvailableCondition.getBrokerRunning().getHostName());
+    registry.add("SPRING_RABBITMQ_PORT", () -> Integer.toString(RabbitAvailableCondition.getBrokerRunning().getPort()));
+    registry.add("SPRING_RABBITMQ_USERNAME", () -> "guest");
+    registry.add("SPRING_RABBITMQ_PASSWORD", () -> "guest");
     registry.add("POCKETHIVE_CONTROL_PLANE_SWARM_ID", () -> Topology.SWARM_ID);
     registry.add("POCKETHIVE_CONTROL_PLANE_EXCHANGE", () -> Topology.CONTROL_EXCHANGE);
     registry.add("POCKETHIVE_CONTROL_PLANE_INSTANCE_ID", () -> TEST_INSTANCE_ID);
+    registry.add("POCKETHIVE_CONTROL_PLANE_WORKER_ENABLED", () -> "false");
+    registry.add("POCKETHIVE_CONTROL_PLANE_MANAGER_ROLE", () -> "swarm-controller");
+    registry.add(
+        "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_CONTROL_QUEUE_PREFIX",
+        () -> "ph.control");
+    registry.add(
+        "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_TRAFFIC_QUEUE_PREFIX",
+        () -> "ph." + Topology.SWARM_ID);
+    registry.add(
+        "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_TRAFFIC_HIVE_EXCHANGE",
+        () -> "ph." + Topology.SWARM_ID + ".hive");
+    registry.add(
+        "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_HOST",
+        () -> RabbitAvailableCondition.getBrokerRunning().getHostName());
+    registry.add(
+        "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGS_EXCHANGE",
+        () -> "ph.logs");
+    registry.add(
+        "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGGING_ENABLED",
+        () -> "false");
+    registry.add(
+        "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_ENABLED",
+        () -> "false");
+    registry.add(
+        "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_PUSH_RATE",
+        () -> "PT1M");
+    registry.add(
+        "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_SHUTDOWN_OPERATION",
+        () -> "DELETE");
+    registry.add(
+        "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_DOCKER_SOCKET_PATH",
+        () -> "/var/run/docker.sock");
   }
 
   @Autowired
