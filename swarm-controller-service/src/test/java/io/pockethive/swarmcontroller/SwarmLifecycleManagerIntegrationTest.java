@@ -20,6 +20,8 @@ import org.springframework.test.context.DynamicPropertySource;
 import io.pockethive.docker.DockerContainerClient;
 
 import java.io.IOException;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -30,13 +32,12 @@ import static org.junit.jupiter.api.Assertions.*;
 })
 @RabbitAvailable
 class SwarmLifecycleManagerIntegrationTest {
+  private static final Map<String, String> ORIGINAL_PROPERTIES = new LinkedHashMap<>();
   private static final String TEST_INSTANCE_ID = "test-swarm-controller-bee";
-  private static final String ORIGINAL_SWARM_ID = System.getProperty("POCKETHIVE_CONTROL_PLANE_SWARM_ID");
-  private static final String ORIGINAL_INSTANCE_ID = System.getProperty("POCKETHIVE_CONTROL_PLANE_INSTANCE_ID");
 
   static {
-    System.setProperty("POCKETHIVE_CONTROL_PLANE_SWARM_ID", Topology.SWARM_ID);
-    System.setProperty("POCKETHIVE_CONTROL_PLANE_INSTANCE_ID", TEST_INSTANCE_ID);
+    setRequiredSystemProperty("POCKETHIVE_CONTROL_PLANE_SWARM_ID", Topology.SWARM_ID);
+    setRequiredSystemProperty("POCKETHIVE_CONTROL_PLANE_INSTANCE_ID", TEST_INSTANCE_ID);
   }
 
   @DynamicPropertySource
@@ -45,49 +46,47 @@ class SwarmLifecycleManagerIntegrationTest {
     String swarmId = Topology.SWARM_ID;
     String swarmQueuePrefix = "ph." + swarmId;
 
-    registry.add("SPRING_RABBITMQ_HOST", broker::getHostName);
-    registry.add("SPRING_RABBITMQ_PORT", () -> Integer.toString(broker.getPort()));
-    registry.add("SPRING_RABBITMQ_USERNAME", () -> "guest");
-    registry.add("SPRING_RABBITMQ_PASSWORD", () -> "guest");
+    register(registry, "SPRING_RABBITMQ_HOST", "spring.rabbitmq.host", broker.getHostName());
+    register(registry, "SPRING_RABBITMQ_PORT", "spring.rabbitmq.port", Integer.toString(broker.getPort()));
+    register(registry, "SPRING_RABBITMQ_USERNAME", "spring.rabbitmq.username", "guest");
+    register(registry, "SPRING_RABBITMQ_PASSWORD", "spring.rabbitmq.password", "guest");
+    register(registry, "SPRING_RABBITMQ_VIRTUAL_HOST", "spring.rabbitmq.virtual-host", "/");
 
-    registry.add("POCKETHIVE_CONTROL_PLANE_SWARM_ID", () -> swarmId);
-    registry.add("POCKETHIVE_CONTROL_PLANE_EXCHANGE", () -> Topology.CONTROL_EXCHANGE);
-    registry.add("POCKETHIVE_CONTROL_PLANE_INSTANCE_ID", () -> TEST_INSTANCE_ID);
-    registry.add("pockethive.control-plane.swarm-id", () -> swarmId);
-    registry.add("pockethive.control-plane.instance-id", () -> TEST_INSTANCE_ID);
-    registry.add("POCKETHIVE_CONTROL_PLANE_WORKER_ENABLED", () -> Boolean.FALSE.toString());
-    registry.add("POCKETHIVE_CONTROL_PLANE_MANAGER_ROLE", () -> "swarm-controller");
-    registry.add("pockethive.control-plane.manager.role", () -> "swarm-controller");
-    registry.add(
-        "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_CONTROL_QUEUE_PREFIX",
-        () -> Topology.CONTROL_QUEUE);
-    registry.add(
-        "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_TRAFFIC_QUEUE_PREFIX",
-        () -> swarmQueuePrefix);
-    registry.add(
-        "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_TRAFFIC_HIVE_EXCHANGE",
-        () -> swarmQueuePrefix + ".hive");
-    registry.add(
-        "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_HOST",
-        broker::getHostName);
-    registry.add(
-        "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGS_EXCHANGE",
-        () -> "ph.logs");
-    registry.add(
-        "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGGING_ENABLED",
-        () -> Boolean.FALSE.toString());
-    registry.add(
-        "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_ENABLED",
-        () -> Boolean.FALSE.toString());
-    registry.add(
-        "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_PUSH_RATE",
-        () -> java.time.Duration.ofMinutes(1).toString());
-    registry.add(
-        "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_SHUTDOWN_OPERATION",
-        () -> "DELETE");
-    registry.add(
-        "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_DOCKER_SOCKET_PATH",
-        () -> "/var/run/docker.sock");
+    register(registry, "POCKETHIVE_CONTROL_PLANE_EXCHANGE", "pockethive.control-plane.exchange", Topology.CONTROL_EXCHANGE);
+    register(registry, "POCKETHIVE_CONTROL_PLANE_SWARM_ID", "pockethive.control-plane.swarm-id", swarmId);
+    register(registry, "POCKETHIVE_CONTROL_PLANE_INSTANCE_ID", "pockethive.control-plane.instance-id", TEST_INSTANCE_ID);
+    register(registry, "POCKETHIVE_CONTROL_PLANE_WORKER_ENABLED", "pockethive.control-plane.worker.enabled", Boolean.FALSE.toString());
+    register(registry, "POCKETHIVE_CONTROL_PLANE_MANAGER_ROLE", "pockethive.control-plane.manager.role", "swarm-controller");
+    register(registry, "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_CONTROL_QUEUE_PREFIX",
+        "pockethive.control-plane.swarm-controller.control-queue-prefix",
+        Topology.CONTROL_QUEUE);
+    register(registry, "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_TRAFFIC_QUEUE_PREFIX",
+        "pockethive.control-plane.swarm-controller.traffic.queue-prefix",
+        swarmQueuePrefix);
+    register(registry, "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_TRAFFIC_HIVE_EXCHANGE",
+        "pockethive.control-plane.swarm-controller.traffic.hive-exchange",
+        swarmQueuePrefix + ".hive");
+    register(registry, "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_HOST",
+        "pockethive.control-plane.swarm-controller.rabbit.host",
+        broker.getHostName());
+    register(registry, "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGS_EXCHANGE",
+        "pockethive.control-plane.swarm-controller.rabbit.logs-exchange",
+        "ph.logs");
+    register(registry, "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGGING_ENABLED",
+        "pockethive.control-plane.swarm-controller.rabbit.logging.enabled",
+        Boolean.FALSE.toString());
+    register(registry, "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_ENABLED",
+        "pockethive.control-plane.swarm-controller.metrics.pushgateway.enabled",
+        Boolean.FALSE.toString());
+    register(registry, "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_PUSH_RATE",
+        "pockethive.control-plane.swarm-controller.metrics.pushgateway.push-rate",
+        java.time.Duration.ofMinutes(1).toString());
+    register(registry, "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_SHUTDOWN_OPERATION",
+        "pockethive.control-plane.swarm-controller.metrics.pushgateway.shutdown-operation",
+        "DELETE");
+    register(registry, "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_DOCKER_SOCKET_PATH",
+        "pockethive.control-plane.swarm-controller.docker.socket-path",
+        "/var/run/docker.sock");
   }
 
   @Autowired
@@ -183,15 +182,25 @@ class SwarmLifecycleManagerIntegrationTest {
 
   @AfterAll
   static void restoreSystemProperties() {
-    restore("POCKETHIVE_CONTROL_PLANE_SWARM_ID", ORIGINAL_SWARM_ID);
-    restore("POCKETHIVE_CONTROL_PLANE_INSTANCE_ID", ORIGINAL_INSTANCE_ID);
+    ORIGINAL_PROPERTIES.forEach((key, value) -> {
+      if (value == null) {
+        System.clearProperty(key);
+      } else {
+        System.setProperty(key, value);
+      }
+    });
   }
 
-  private static void restore(String key, String originalValue) {
-    if (originalValue == null) {
-      System.clearProperty(key);
-    } else {
-      System.setProperty(key, originalValue);
+  private static void setRequiredSystemProperty(String key, String value) {
+    ORIGINAL_PROPERTIES.putIfAbsent(key, System.getProperty(key));
+    System.setProperty(key, value);
+  }
+
+  private static void register(DynamicPropertyRegistry registry, String envKey, String propertyKey, String value) {
+    setRequiredSystemProperty(envKey, value);
+    registry.add(envKey, () -> value);
+    if (propertyKey != null) {
+      registry.add(propertyKey, () -> value);
     }
   }
 }
