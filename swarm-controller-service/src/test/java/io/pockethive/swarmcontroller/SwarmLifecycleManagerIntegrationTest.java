@@ -1,6 +1,7 @@
 package io.pockethive.swarmcontroller;
 
 import io.pockethive.Topology;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.amqp.AmqpException;
@@ -29,6 +30,10 @@ import static org.junit.jupiter.api.Assertions.*;
 })
 @RabbitAvailable
 class SwarmLifecycleManagerIntegrationTest {
+  static {
+    System.setProperty("POCKETHIVE_CONTROL_PLANE_SWARM_ID", Topology.SWARM_ID);
+  }
+
   private static final String TEST_INSTANCE_ID = "test-swarm-controller-bee";
 
   @DynamicPropertySource
@@ -169,5 +174,10 @@ class SwarmLifecycleManagerIntegrationTest {
     assertTrue(exception instanceof AmqpIOException || exception.getCause() instanceof IOException);
 
     amqp.deleteQueue(q.getName());
+  }
+
+  @AfterAll
+  static void clearSwarmIdProperty() {
+    System.clearProperty("POCKETHIVE_CONTROL_PLANE_SWARM_ID");
   }
 }
