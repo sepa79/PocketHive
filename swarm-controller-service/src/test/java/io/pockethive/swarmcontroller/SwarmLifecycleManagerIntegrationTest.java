@@ -32,39 +32,44 @@ class SwarmLifecycleManagerIntegrationTest {
 
   @DynamicPropertySource
   static void rabbitProperties(DynamicPropertyRegistry registry) {
-    registry.add("SPRING_RABBITMQ_HOST", () -> RabbitAvailableCondition.getBrokerRunning().getHostName());
-    registry.add("SPRING_RABBITMQ_PORT", () -> Integer.toString(RabbitAvailableCondition.getBrokerRunning().getPort()));
+    var broker = RabbitAvailableCondition.getBrokerRunning();
+    String swarmId = Topology.SWARM_ID;
+    String swarmQueuePrefix = "ph." + swarmId;
+
+    registry.add("SPRING_RABBITMQ_HOST", broker::getHostName);
+    registry.add("SPRING_RABBITMQ_PORT", () -> Integer.toString(broker.getPort()));
     registry.add("SPRING_RABBITMQ_USERNAME", () -> "guest");
     registry.add("SPRING_RABBITMQ_PASSWORD", () -> "guest");
-    registry.add("POCKETHIVE_CONTROL_PLANE_SWARM_ID", () -> Topology.SWARM_ID);
+
+    registry.add("POCKETHIVE_CONTROL_PLANE_SWARM_ID", () -> swarmId);
     registry.add("POCKETHIVE_CONTROL_PLANE_EXCHANGE", () -> Topology.CONTROL_EXCHANGE);
     registry.add("POCKETHIVE_CONTROL_PLANE_INSTANCE_ID", () -> TEST_INSTANCE_ID);
-    registry.add("POCKETHIVE_CONTROL_PLANE_WORKER_ENABLED", () -> "false");
+    registry.add("POCKETHIVE_CONTROL_PLANE_WORKER_ENABLED", () -> Boolean.FALSE.toString());
     registry.add("POCKETHIVE_CONTROL_PLANE_MANAGER_ROLE", () -> "swarm-controller");
     registry.add(
         "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_CONTROL_QUEUE_PREFIX",
-        () -> "ph.control");
+        () -> Topology.CONTROL_QUEUE);
     registry.add(
         "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_TRAFFIC_QUEUE_PREFIX",
-        () -> "ph." + Topology.SWARM_ID);
+        () -> swarmQueuePrefix);
     registry.add(
         "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_TRAFFIC_HIVE_EXCHANGE",
-        () -> "ph." + Topology.SWARM_ID + ".hive");
+        () -> swarmQueuePrefix + ".hive");
     registry.add(
         "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_HOST",
-        () -> RabbitAvailableCondition.getBrokerRunning().getHostName());
+        broker::getHostName);
     registry.add(
         "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGS_EXCHANGE",
         () -> "ph.logs");
     registry.add(
         "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGGING_ENABLED",
-        () -> "false");
+        () -> Boolean.FALSE.toString());
     registry.add(
         "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_ENABLED",
-        () -> "false");
+        () -> Boolean.FALSE.toString());
     registry.add(
         "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_PUSH_RATE",
-        () -> "PT1M");
+        () -> java.time.Duration.ofMinutes(1).toString());
     registry.add(
         "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_SHUTDOWN_OPERATION",
         () -> "DELETE");
