@@ -439,7 +439,10 @@ class SwarmSignalListenerTest {
 
     listener.handle(body, controllerInstanceSignal(ControlPlaneSignals.CONFIG_UPDATE, "inst"));
 
-    assertThat(output)
+    String capturedLogs = output.getOut();
+    assertThat(capturedLogs)
+        .withFailMessage(() -> "Expected logs to contain '%s' but were:%n%s"
+            .formatted("[CTRL] RECV rk=" + controllerInstanceSignal(ControlPlaneSignals.CONFIG_UPDATE, "inst"), capturedLogs))
         .contains("[CTRL] RECV rk=" + controllerInstanceSignal(ControlPlaneSignals.CONFIG_UPDATE, "inst"))
         .doesNotContain("Config update received");
   }
