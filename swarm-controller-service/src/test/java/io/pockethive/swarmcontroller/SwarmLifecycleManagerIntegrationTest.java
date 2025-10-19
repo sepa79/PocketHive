@@ -46,6 +46,7 @@ class SwarmLifecycleManagerIntegrationTest {
     registry.add("POCKETHIVE_CONTROL_PLANE_INSTANCE_ID", () -> TEST_INSTANCE_ID);
     registry.add("POCKETHIVE_CONTROL_PLANE_WORKER_ENABLED", () -> Boolean.FALSE.toString());
     registry.add("POCKETHIVE_CONTROL_PLANE_MANAGER_ROLE", () -> "swarm-controller");
+    registry.add("pockethive.control-plane.manager.role", () -> "swarm-controller");
     registry.add(
         "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_CONTROL_QUEUE_PREFIX",
         () -> Topology.CONTROL_QUEUE);
