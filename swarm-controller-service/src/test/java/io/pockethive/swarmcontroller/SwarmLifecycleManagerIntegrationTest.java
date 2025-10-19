@@ -38,6 +38,29 @@ class SwarmLifecycleManagerIntegrationTest {
   static {
     setRequiredSystemProperty("POCKETHIVE_CONTROL_PLANE_SWARM_ID", Topology.SWARM_ID);
     setRequiredSystemProperty("POCKETHIVE_CONTROL_PLANE_INSTANCE_ID", TEST_INSTANCE_ID);
+
+    var broker = RabbitAvailableCondition.getBrokerRunning();
+    setRequiredSystemProperty("SPRING_RABBITMQ_HOST", broker.getHostName());
+    setRequiredSystemProperty("SPRING_RABBITMQ_PORT", Integer.toString(broker.getPort()));
+    setRequiredSystemProperty("SPRING_RABBITMQ_USERNAME", "guest");
+    setRequiredSystemProperty("SPRING_RABBITMQ_PASSWORD", "guest");
+    setRequiredSystemProperty("SPRING_RABBITMQ_VIRTUAL_HOST", "/");
+
+    setRequiredSystemProperty("POCKETHIVE_CONTROL_PLANE_EXCHANGE", Topology.CONTROL_EXCHANGE);
+    setRequiredSystemProperty("POCKETHIVE_CONTROL_PLANE_WORKER_ENABLED", Boolean.FALSE.toString());
+    setRequiredSystemProperty("POCKETHIVE_CONTROL_PLANE_MANAGER_ROLE", "swarm-controller");
+    setRequiredSystemProperty("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_CONTROL_QUEUE_PREFIX", Topology.CONTROL_QUEUE);
+    var swarmQueuePrefix = "ph." + Topology.SWARM_ID;
+    setRequiredSystemProperty("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_TRAFFIC_QUEUE_PREFIX", swarmQueuePrefix);
+    setRequiredSystemProperty("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_TRAFFIC_HIVE_EXCHANGE", swarmQueuePrefix + ".hive");
+    setRequiredSystemProperty("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_HOST", broker.getHostName());
+    setRequiredSystemProperty("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGS_EXCHANGE", "ph.logs");
+    setRequiredSystemProperty("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGGING_ENABLED", Boolean.FALSE.toString());
+    setRequiredSystemProperty("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_ENABLED", Boolean.FALSE.toString());
+    setRequiredSystemProperty("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_PUSH_RATE",
+        java.time.Duration.ofMinutes(1).toString());
+    setRequiredSystemProperty("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_SHUTDOWN_OPERATION", "DELETE");
+    setRequiredSystemProperty("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_DOCKER_SOCKET_PATH", "/var/run/docker.sock");
   }
 
   @DynamicPropertySource
