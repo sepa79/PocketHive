@@ -74,6 +74,8 @@ Workers and managers automatically inherit `pockethive.control-plane.swarm-id`
 and `pockethive.control-plane.instance-id`. Participant-specific overrides are
 no longer supported—set the shared properties once at the control-plane level.
 
+For a detailed breakdown of the Swarm Controller's environment contract, including every required `pockethive.control-plane.*` and RabbitMQ property, see the [Swarm Controller configuration reference](../../swarm-controller-service/README.md#configuration-reference).
+
 With the starter in place, inject the beans exported by the auto-configuration:
 
 ```java
