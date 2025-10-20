@@ -171,7 +171,7 @@ public class SwarmControllerProperties {
 
         public Rabbit(@NotBlank String logsExchange, @Valid Logging logging) {
             this.logsExchange = requireNonBlank(logsExchange, "logsExchange");
-            this.logging = Objects.requireNonNull(logging, "logging");
+            this.logging = logging != null ? logging : new Logging(null);
         }
 
         public String logsExchange() {
