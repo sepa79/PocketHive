@@ -41,6 +41,7 @@ class SwarmControllerPropertiesBindingTest {
               assertThat(properties.getTraffic().queuePrefix()).isEqualTo("ph.swarm-a");
               assertThat(properties.hiveExchange()).isEqualTo("ph.swarm-a.hive");
               assertThat(properties.getRabbit().logsExchange()).isEqualTo("ph.logs");
+              assertThat(properties.getRabbit().logging().enabled()).isFalse();
               assertThat(properties.getDocker().socketPath()).isEqualTo("/var/run/docker.sock");
             });
   }
