@@ -76,6 +76,50 @@ no longer supported—set the shared properties once at the control-plane level.
 
 For a detailed breakdown of the Swarm Controller's environment contract, including every required `pockethive.control-plane.*` and RabbitMQ property, see the [Swarm Controller configuration reference](../../swarm-controller-service/README.md#configuration-reference).
 
+### Runtime environment contract
+
+Swarm-managed workers now boot solely from the environment variables injected by the Swarm Controller. Every
+container **must** receive the following keys; missing values cause the entrypoint scripts and logging
+configuration to abort fast:
+
+| Category | Required variables |
+| --- | --- |
+| RabbitMQ connectivity | `SPRING_RABBITMQ_HOST`, `SPRING_RABBITMQ_PORT`, `SPRING_RABBITMQ_USERNAME`, `SPRING_RABBITMQ_PASSWORD`, `SPRING_RABBITMQ_VIRTUAL_HOST` |
+| Control-plane identity & routing | `POCKETHIVE_CONTROL_PLANE_EXCHANGE`, `POCKETHIVE_CONTROL_PLANE_SWARM_ID`, `POCKETHIVE_CONTROL_PLANE_INSTANCE_ID`, `POCKETHIVE_CONTROL_PLANE_QUEUES_GENERATOR`, `POCKETHIVE_CONTROL_PLANE_QUEUES_MODERATOR`, `POCKETHIVE_CONTROL_PLANE_QUEUES_FINAL`* |
+| Logging contract | `POCKETHIVE_LOGS_EXCHANGE`, `POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGGING_ENABLED`, `POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGS_EXCHANGE` |
+| Metrics (when enabled) | `POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_ENABLED`, `POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_BASE_URL`, `POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_PUSH_RATE`, `POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_SHUTDOWN_OPERATION`, `MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_ENABLED`, `MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_BASE_URL`, `MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_PUSH_RATE`, `MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_JOB`, `MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_GROUPING_KEY_INSTANCE` |
+
+\*Moderator-only roles ignore `POCKETHIVE_CONTROL_PLANE_QUEUES_FINAL`, and postprocessor-only roles ignore the
+generator/moderator queues. The Swarm Controller still injects all queue names so multi-role deployments receive a
+consistent contract.
+
+Local overrides (e.g., docker-compose or Kubernetes manifests) must now provide the same keys when running workers
+outside the Swarm Controller. A minimal docker-compose excerpt looks like this:
+
+```yaml
+services:
+  generator:
+    image: ghcr.io/pockethive/generator-service:latest
+    environment:
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: "5672"
+      SPRING_RABBITMQ_USERNAME: guest
+      SPRING_RABBITMQ_PASSWORD: guest
+      SPRING_RABBITMQ_VIRTUAL_HOST: "/"
+      POCKETHIVE_CONTROL_PLANE_EXCHANGE: ph.control
+      POCKETHIVE_CONTROL_PLANE_SWARM_ID: dev-swarm
+      POCKETHIVE_CONTROL_PLANE_INSTANCE_ID: generator-dev
+      POCKETHIVE_CONTROL_PLANE_QUEUES_GENERATOR: ph.dev.gen
+      POCKETHIVE_CONTROL_PLANE_QUEUES_MODERATOR: ph.dev.mod
+      POCKETHIVE_CONTROL_PLANE_QUEUES_FINAL: ph.dev.final
+      POCKETHIVE_LOGS_EXCHANGE: ph.logs
+      POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGGING_ENABLED: "true"
+      POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGS_EXCHANGE: ph.logs
+```
+
+When metrics pushing is enabled, include the Pushgateway variables from the table above. Outside of controlled Swarm
+deployments, keep these values in sync with the environment helper to avoid configuration drift.
+
 With the starter in place, inject the beans exported by the auto-configuration:
 
 ```java

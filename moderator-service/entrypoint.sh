@@ -1,9 +1,20 @@
 #!/bin/sh
-set -e
+set -eu
 
-HOST="${RABBITMQ_HOST:-rabbitmq}"
-USER="${RABBITMQ_USER:-guest}"
-PASS="${RABBITMQ_PASS:-guest}"
+require() {
+  if [ -z "$2" ]; then
+    echo "Missing required environment variable: $1" >&2
+    exit 1
+  fi
+}
+
+HOST="${SPRING_RABBITMQ_HOST}"
+USER="${SPRING_RABBITMQ_USERNAME}"
+PASS="${SPRING_RABBITMQ_PASSWORD}"
+
+require "SPRING_RABBITMQ_HOST" "$HOST"
+require "SPRING_RABBITMQ_USERNAME" "$USER"
+require "SPRING_RABBITMQ_PASSWORD" "$PASS"
 
 log(){
   printf '%s %s\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$1"
