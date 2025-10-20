@@ -68,7 +68,7 @@ public class ContainerLifecycleManager {
             requireRabbitSetting(
                 properties.getRabbit().getLogsExchange(),
                 "pockethive.control-plane.orchestrator.rabbit.logs-exchange"));
-        populateSwarmControllerEnv(env, resolvedSwarmId, controlExchange, rabbitHost);
+        populateSwarmControllerEnv(env, resolvedSwarmId, controlExchange);
         applyPushgatewayEnv(env, resolvedSwarmId);
         String net = docker.resolveControlNetwork();
         if (net != null && !net.isBlank()) {
@@ -141,8 +141,7 @@ public class ContainerLifecycleManager {
 
     private void populateSwarmControllerEnv(Map<String, String> env,
                                             String swarmId,
-                                            String controlExchange,
-                                            String rabbitHost) {
+                                            String controlExchange) {
         env.put("POCKETHIVE_CONTROL_PLANE_WORKER_ENABLED",
             Boolean.toString(controlPlaneProperties.getWorker().isEnabled()));
         env.put("POCKETHIVE_CONTROL_PLANE_MANAGER_ROLE", SWARM_CONTROLLER_ROLE);
@@ -151,7 +150,6 @@ public class ContainerLifecycleManager {
         String trafficPrefix = "ph." + swarmId;
         env.put("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_TRAFFIC_QUEUE_PREFIX", trafficPrefix);
         env.put("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_TRAFFIC_HIVE_EXCHANGE", trafficPrefix + ".hive");
-        env.put("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_HOST", rabbitHost);
         env.put("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGS_EXCHANGE",
             requireRabbitSetting(
                 properties.getRabbit().getLogsExchange(),

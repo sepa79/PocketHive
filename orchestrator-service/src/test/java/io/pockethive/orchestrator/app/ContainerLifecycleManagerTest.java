@@ -79,7 +79,6 @@ class ContainerLifecycleManagerTest {
         assertEquals("ph.control", env.get("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_CONTROL_QUEUE_PREFIX"));
         assertEquals("ph.sw1", env.get("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_TRAFFIC_QUEUE_PREFIX"));
         assertEquals("ph.sw1.hive", env.get("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_TRAFFIC_HIVE_EXCHANGE"));
-        assertEquals("rabbitmq", env.get("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_HOST"));
         assertEquals("ph.logs", env.get("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGS_EXCHANGE"));
         assertEquals("false", env.get("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGGING_ENABLED"));
         assertEquals("false", env.get("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_ENABLED"));

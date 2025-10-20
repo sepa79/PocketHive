@@ -53,7 +53,6 @@ class SwarmLifecycleManagerIntegrationTest {
     var swarmQueuePrefix = "ph." + Topology.SWARM_ID;
     setRequiredSystemProperty("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_TRAFFIC_QUEUE_PREFIX", swarmQueuePrefix);
     setRequiredSystemProperty("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_TRAFFIC_HIVE_EXCHANGE", swarmQueuePrefix + ".hive");
-    setRequiredSystemProperty("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_HOST", broker.getHostName());
     setRequiredSystemProperty("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGS_EXCHANGE", "ph.logs");
     setRequiredSystemProperty("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGGING_ENABLED", Boolean.FALSE.toString());
     setRequiredSystemProperty("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_ENABLED", Boolean.FALSE.toString());
@@ -89,9 +88,6 @@ class SwarmLifecycleManagerIntegrationTest {
     register(registry, "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_TRAFFIC_HIVE_EXCHANGE",
         "pockethive.control-plane.swarm-controller.traffic.hive-exchange",
         swarmQueuePrefix + ".hive");
-    register(registry, "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_HOST",
-        "pockethive.control-plane.swarm-controller.rabbit.host",
-        broker.getHostName());
     register(registry, "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGS_EXCHANGE",
         "pockethive.control-plane.swarm-controller.rabbit.logs-exchange",
         "ph.logs");
