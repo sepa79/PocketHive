@@ -228,6 +228,7 @@ class SwarmLifecycleManagerTest {
             new SwarmControllerProperties.Docker(null, "/var/run/docker.sock")));
     RabbitProperties rabbitProperties = new RabbitProperties();
     rabbitProperties.setHost("rabbitmq");
+    rabbitProperties.setPort(5672);
     SwarmLifecycleManager manager = new SwarmLifecycleManager(
         amqp, mapper, docker, rabbit, rabbitProperties, "inst", properties);
     SwarmPlan plan = new SwarmPlan("swarm", List.of(new Bee("gen", "img1", null, null)));
@@ -256,6 +257,7 @@ class SwarmLifecycleManagerTest {
     SwarmControllerProperties properties = SwarmControllerTestProperties.defaults();
     RabbitProperties rabbitProperties = new RabbitProperties();
     rabbitProperties.setHost("");
+    rabbitProperties.setPort(5672);
     SwarmLifecycleManager manager = new SwarmLifecycleManager(
         amqp, mapper, docker, rabbit, rabbitProperties, "inst", properties);
     SwarmPlan plan = new SwarmPlan("swarm", List.of(new Bee("gen", "img1", null, null)));
@@ -680,6 +682,7 @@ class SwarmLifecycleManagerTest {
   private SwarmLifecycleManager newManager() {
     RabbitProperties rabbitProperties = new RabbitProperties();
     rabbitProperties.setHost("rabbitmq");
+    rabbitProperties.setPort(5672);
     return new SwarmLifecycleManager(
         amqp, mapper, docker, rabbit, rabbitProperties, "inst", SwarmControllerTestProperties.defaults());
   }

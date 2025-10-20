@@ -134,7 +134,7 @@ public final class ControlPlaneContainerEnvironmentFactory {
         Objects.requireNonNull(rabbitProperties, "rabbitProperties");
         env.put("SPRING_RABBITMQ_HOST",
             requireSetting(rabbitProperties.getHost(), "spring.rabbitmq.host"));
-        env.put("SPRING_RABBITMQ_PORT", Integer.toString(requireRabbitPort(rabbitProperties)));
+        env.put("SPRING_RABBITMQ_PORT", requireRabbitPort(rabbitProperties));
         env.put("SPRING_RABBITMQ_USERNAME",
             requireSetting(rabbitProperties.getUsername(), "spring.rabbitmq.username"));
         env.put("SPRING_RABBITMQ_PASSWORD",
@@ -186,12 +186,12 @@ public final class ControlPlaneContainerEnvironmentFactory {
         return value;
     }
 
-    private static int requireRabbitPort(RabbitProperties properties) {
-        int port = properties.getPort();
-        if (port <= 0) {
-            throw new IllegalStateException("spring.rabbitmq.port must be greater than zero");
+    private static String requireRabbitPort(RabbitProperties properties) {
+        Integer port = properties.getPort();
+        if (port == null || port <= 0) {
+            throw new IllegalStateException("spring.rabbitmq.port must be a positive integer");
         }
-        return port;
+        return Integer.toString(port);
     }
 
     private static String requireArgument(String value, String description) {
