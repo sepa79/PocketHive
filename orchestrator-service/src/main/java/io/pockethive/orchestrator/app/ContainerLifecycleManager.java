@@ -58,11 +58,6 @@ public class ContainerLifecycleManager {
         String rabbitUser = requireRabbitSetting(rabbitProperties.getUsername(), "spring.rabbitmq.username");
         String rabbitPass = requireRabbitSetting(rabbitProperties.getPassword(), "spring.rabbitmq.password");
         String rabbitVhost = requireRabbitSetting(rabbitProperties.getVirtualHost(), "spring.rabbitmq.virtual-host");
-        env.put("RABBITMQ_HOST", rabbitHost);
-        env.put("RABBITMQ_PORT", rabbitPort);
-        env.put("RABBITMQ_DEFAULT_USER", rabbitUser);
-        env.put("RABBITMQ_DEFAULT_PASS", rabbitPass);
-        env.put("RABBITMQ_VHOST", rabbitVhost);
         env.put("SPRING_RABBITMQ_HOST", rabbitHost);
         env.put("SPRING_RABBITMQ_PORT", rabbitPort);
         env.put("SPRING_RABBITMQ_USERNAME", rabbitUser);

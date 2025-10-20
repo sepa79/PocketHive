@@ -63,11 +63,11 @@ class ContainerLifecycleManagerTest {
         assertEquals("inst1", env.get("POCKETHIVE_CONTROL_PLANE_INSTANCE_ID"));
         assertEquals("ph.control", env.get("POCKETHIVE_CONTROL_PLANE_EXCHANGE"));
         assertEquals("sw1", env.get("POCKETHIVE_CONTROL_PLANE_SWARM_ID"));
-        assertEquals("rabbitmq", env.get("RABBITMQ_HOST"));
-        assertEquals("5672", env.get("RABBITMQ_PORT"));
-        assertEquals("guest", env.get("RABBITMQ_DEFAULT_USER"));
-        assertEquals("guest", env.get("RABBITMQ_DEFAULT_PASS"));
-        assertEquals("/", env.get("RABBITMQ_VHOST"));
+        assertFalse(env.containsKey("RABBITMQ_HOST"));
+        assertFalse(env.containsKey("RABBITMQ_PORT"));
+        assertFalse(env.containsKey("RABBITMQ_DEFAULT_USER"));
+        assertFalse(env.containsKey("RABBITMQ_DEFAULT_PASS"));
+        assertFalse(env.containsKey("RABBITMQ_VHOST"));
         assertEquals("rabbitmq", env.get("SPRING_RABBITMQ_HOST"));
         assertEquals("5672", env.get("SPRING_RABBITMQ_PORT"));
         assertEquals("guest", env.get("SPRING_RABBITMQ_USERNAME"));
