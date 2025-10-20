@@ -98,7 +98,8 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
                                RabbitProperties rabbitProperties,
                                @Qualifier("instanceId") String instanceId,
                                SwarmControllerProperties properties) {
-    this(amqp, mapper, docker, rabbit, rabbitProperties, instanceId, properties);
+    this(amqp, mapper, docker, rabbit, rabbitProperties, instanceId, properties,
+        deriveWorkerSettings(properties));
   }
 
   SwarmLifecycleManager(AmqpAdmin amqp,
@@ -107,20 +108,26 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
                         RabbitTemplate rabbit,
                         RabbitProperties rabbitProperties,
                         String instanceId,
-                        SwarmControllerProperties properties) {
+                        SwarmControllerProperties properties,
+                        WorkerSettings workerSettings) {
     this.amqp = amqp;
     this.mapper = mapper;
     this.docker = docker;
     this.rabbit = rabbit;
     this.rabbitProperties = Objects.requireNonNull(rabbitProperties, "rabbitProperties");
-    this.instanceId = instanceId;
-    this.properties = properties;
+    this.instanceId = Objects.requireNonNull(instanceId, "instanceId");
+    this.properties = Objects.requireNonNull(properties, "properties");
     this.role = properties.getRole();
     this.swarmId = properties.getSwarmId();
     this.controlExchange = properties.getControlExchange();
+    this.workerSettings = Objects.requireNonNull(workerSettings, "workerSettings");
+  }
+
+  private static WorkerSettings deriveWorkerSettings(SwarmControllerProperties properties) {
+    Objects.requireNonNull(properties, "properties");
     SwarmControllerProperties.Traffic traffic = properties.getTraffic();
     SwarmControllerProperties.Pushgateway pushgateway = properties.getMetrics().pushgateway();
-    this.workerSettings = new WorkerSettings(
+    return new WorkerSettings(
         properties.getSwarmId(),
         properties.getControlExchange(),
         traffic.queuePrefix(),
