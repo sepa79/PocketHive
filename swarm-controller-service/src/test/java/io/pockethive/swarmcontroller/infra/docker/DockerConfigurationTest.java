@@ -42,7 +42,7 @@ class DockerConfigurationTest {
             new SwarmControllerProperties.Traffic(
                 "ph." + Topology.SWARM_ID + ".hive",
                 "ph." + Topology.SWARM_ID),
-            new SwarmControllerProperties.Rabbit("rabbitmq", "ph.logs"),
+            new SwarmControllerProperties.Rabbit("ph.logs"),
             new SwarmControllerProperties.Metrics(
                 new SwarmControllerProperties.Pushgateway(false, null, Duration.ofMinutes(1), "DELETE")),
             docker));

@@ -166,16 +166,10 @@ public class SwarmControllerProperties {
 
     @Validated
     public static final class Rabbit {
-        private final String host;
         private final String logsExchange;
 
-        public Rabbit(@NotBlank String host, @NotBlank String logsExchange) {
-            this.host = requireNonBlank(host, "host");
+        public Rabbit(@NotBlank String logsExchange) {
             this.logsExchange = requireNonBlank(logsExchange, "logsExchange");
-        }
-
-        public String host() {
-            return host;
         }
 
         public String logsExchange() {

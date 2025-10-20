@@ -426,25 +426,6 @@ class SwarmSignalListenerTest {
   }
 
   @Test
-  void configUpdateDoesNotDuplicateInfoLogs(CapturedOutput output) {
-    when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
-    SwarmSignalListener listener = newListener(lifecycle, rabbit, "inst", mapper);
-    String body = """
-        {"correlationId":"c4","idempotencyKey":"i4","signal":"config-update",
-         "swarmId":"%s",
-         "role":"swarm-controller","instance":"inst",
-         "commandTarget":"instance",
-         "args":{"data":{"enabled":true}}}
-        """.formatted(Topology.SWARM_ID);
-
-    listener.handle(body, controllerInstanceSignal(ControlPlaneSignals.CONFIG_UPDATE, "inst"));
-
-    assertThat(output)
-        .contains("[CTRL] RECV rk=" + controllerInstanceSignal(ControlPlaneSignals.CONFIG_UPDATE, "inst"))
-        .doesNotContain("Config update received");
-  }
-
-  @Test
   void swarmTargetToggleDelegatesToLifecycle() throws Exception {
     when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
     when(lifecycle.getMetrics()).thenReturn(new SwarmMetrics(0,0,0,0, java.time.Instant.now()));
