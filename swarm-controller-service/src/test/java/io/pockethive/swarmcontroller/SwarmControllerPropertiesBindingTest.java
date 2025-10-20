@@ -27,7 +27,6 @@ class SwarmControllerPropertiesBindingTest {
             "pockethive.control-plane.swarm-controller.control-queue-prefix=ph.control",
             "pockethive.control-plane.swarm-controller.traffic.queue-prefix=ph.swarm-a",
             "pockethive.control-plane.swarm-controller.traffic.hive-exchange=ph.swarm-a.hive",
-            "pockethive.control-plane.swarm-controller.rabbit.host=rabbitmq",
             "pockethive.control-plane.swarm-controller.rabbit.logs-exchange=ph.logs",
             "pockethive.control-plane.swarm-controller.metrics.pushgateway.enabled=false",
             "pockethive.control-plane.swarm-controller.metrics.pushgateway.push-rate=PT1M",
@@ -41,7 +40,6 @@ class SwarmControllerPropertiesBindingTest {
               assertThat(properties.getRole()).isEqualTo("swarm-controller");
               assertThat(properties.getTraffic().queuePrefix()).isEqualTo("ph.swarm-a");
               assertThat(properties.hiveExchange()).isEqualTo("ph.swarm-a.hive");
-              assertThat(properties.getRabbit().host()).isEqualTo("rabbitmq");
               assertThat(properties.getRabbit().logsExchange()).isEqualTo("ph.logs");
               assertThat(properties.getDocker().socketPath()).isEqualTo("/var/run/docker.sock");
             });

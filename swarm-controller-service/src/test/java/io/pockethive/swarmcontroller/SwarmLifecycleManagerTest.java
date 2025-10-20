@@ -20,6 +20,7 @@ import org.springframework.amqp.core.Queue;
 import org.springframework.amqp.core.TopicExchange;
 import org.springframework.amqp.rabbit.core.RabbitAdmin;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.boot.autoconfigure.amqp.RabbitProperties;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
 import io.pockethive.Topology;
@@ -207,12 +208,14 @@ class SwarmLifecycleManagerTest {
             new SwarmControllerProperties.Traffic(
                 "ph." + Topology.SWARM_ID + ".hive",
                 "ph." + Topology.SWARM_ID),
-            new SwarmControllerProperties.Rabbit("rabbitmq", "ph.logs"),
+            new SwarmControllerProperties.Rabbit("ph.logs"),
             new SwarmControllerProperties.Metrics(
                 new SwarmControllerProperties.Pushgateway(true, "http://push:9091", Duration.ofSeconds(12), "DELETE")),
             new SwarmControllerProperties.Docker(null, "/var/run/docker.sock")));
+    RabbitProperties rabbitProperties = new RabbitProperties();
+    rabbitProperties.setHost("rabbitmq");
     SwarmLifecycleManager manager = new SwarmLifecycleManager(
-        amqp, mapper, docker, rabbit, "inst", properties);
+        amqp, mapper, docker, rabbit, rabbitProperties, "inst", properties);
     SwarmPlan plan = new SwarmPlan("swarm", List.of(new Bee("gen", "img1", null, null)));
     when(docker.createContainer(eq("img1"), anyMap(), anyString())).thenReturn("c1");
 
@@ -646,7 +649,9 @@ class SwarmLifecycleManagerTest {
   }
 
   private SwarmLifecycleManager newManager() {
+    RabbitProperties rabbitProperties = new RabbitProperties();
+    rabbitProperties.setHost("rabbitmq");
     return new SwarmLifecycleManager(
-        amqp, mapper, docker, rabbit, "inst", SwarmControllerTestProperties.defaults());
+        amqp, mapper, docker, rabbit, rabbitProperties, "inst", SwarmControllerTestProperties.defaults());
   }
 }

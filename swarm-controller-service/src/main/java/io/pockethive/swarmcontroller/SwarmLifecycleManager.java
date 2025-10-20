@@ -23,6 +23,7 @@ import org.springframework.amqp.rabbit.core.RabbitAdmin;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.amqp.RabbitProperties;
 import org.springframework.stereotype.Component;
 
 import io.pockethive.observability.StatusEnvelopeBuilder;
@@ -37,6 +38,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.OptionalLong;
 import java.util.Properties;
 import java.util.Set;
@@ -65,6 +67,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
   private final RabbitTemplate rabbit;
   private final String instanceId;
   private final SwarmControllerProperties properties;
+  private final RabbitProperties rabbitProperties;
   private final String role;
   private final String swarmId;
   private final String controlExchange;
@@ -128,9 +131,10 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
                                ObjectMapper mapper,
                                DockerContainerClient docker,
                                RabbitTemplate rabbit,
+                               RabbitProperties rabbitProperties,
                                @Qualifier("instanceId") String instanceId,
                                SwarmControllerProperties properties) {
-    this(amqp, mapper, docker, rabbit, instanceId, properties,
+    this(amqp, mapper, docker, rabbit, rabbitProperties, instanceId, properties,
         PushgatewayConfig.fromProperties(properties.getMetrics().pushgateway()));
   }
 
@@ -138,6 +142,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
                         ObjectMapper mapper,
                         DockerContainerClient docker,
                         RabbitTemplate rabbit,
+                        RabbitProperties rabbitProperties,
                         String instanceId,
                         SwarmControllerProperties properties,
                         PushgatewayConfig pushgatewayConfig) {
@@ -145,6 +150,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
     this.mapper = mapper;
     this.docker = docker;
     this.rabbit = rabbit;
+    this.rabbitProperties = Objects.requireNonNull(rabbitProperties, "rabbitProperties");
     this.instanceId = instanceId;
     this.properties = properties;
     this.role = properties.getRole();
@@ -210,7 +216,11 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
             Map<String, String> env = new HashMap<>();
             env.put("POCKETHIVE_CONTROL_PLANE_SWARM_ID", swarmId);
             env.put("POCKETHIVE_CONTROL_PLANE_EXCHANGE", controlExchange);
-            env.put("RABBITMQ_HOST", properties.getRabbit().host());
+            String rabbitHost = rabbitProperties.getHost();
+            if (rabbitHost == null || rabbitHost.isBlank()) {
+              throw new IllegalStateException("spring.rabbitmq.host must be configured");
+            }
+            env.put("RABBITMQ_HOST", rabbitHost);
             env.put("POCKETHIVE_LOGS_EXCHANGE", properties.getRabbit().logsExchange());
             String net = docker.resolveControlNetwork();
             if (net != null && !net.isBlank()) {
