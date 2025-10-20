@@ -26,8 +26,7 @@ public final class ControlPlaneTestFixtures {
         String resolvedRole = requireText("role", role);
         String resolvedInstance = requireText("instanceId", instanceId);
 
-        WorkerControlPlaneProperties.Queues queues = new WorkerControlPlaneProperties.Queues(
-            Map.of(resolvedRole, resolvedSwarm + "." + resolvedRole));
+        Map<String, String> queueNames = Map.of(resolvedRole, resolvedSwarm + "." + resolvedRole);
         WorkerControlPlaneProperties.Worker worker = new WorkerControlPlaneProperties.Worker(
             true,
             true,
@@ -56,7 +55,7 @@ public final class ControlPlaneTestFixtures {
             "ph.control",
             resolvedSwarm,
             resolvedInstance,
-            queues,
+            queueNames,
             worker,
             swarmController);
     }

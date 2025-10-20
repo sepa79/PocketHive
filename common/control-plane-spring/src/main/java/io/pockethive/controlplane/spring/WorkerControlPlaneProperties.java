@@ -31,7 +31,7 @@ public final class WorkerControlPlaneProperties {
                                         String exchange,
                                         String swarmId,
                                         String instanceId,
-                                        @Valid Queues queues,
+                                        Map<String, String> queues,
                                         @Valid Worker worker,
                                         @Valid SwarmController swarmController) {
         this.enabled = enabled == null || enabled;
@@ -39,7 +39,7 @@ public final class WorkerControlPlaneProperties {
         this.exchange = requireNonBlank(exchange, "pockethive.control-plane.exchange");
         this.swarmId = requireNonBlank(swarmId, "pockethive.control-plane.swarm-id");
         this.instanceId = requireNonBlank(instanceId, "pockethive.control-plane.instance-id");
-        this.queues = Objects.requireNonNull(queues, "queues must not be null");
+        this.queues = new Queues(queues);
         this.worker = Objects.requireNonNull(worker, "worker must not be null");
         this.swarmController = Objects.requireNonNull(swarmController, "swarmController must not be null");
     }
