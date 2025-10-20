@@ -20,6 +20,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+import org.springframework.amqp.core.TopicExchange;
 
 class ControlPlanePublisherIntegrationTest {
 
@@ -36,8 +37,8 @@ class ControlPlanePublisherIntegrationTest {
             .withBean(RabbitTemplate.class, () -> mock(RabbitTemplate.class))
             .run(context -> {
             ControlPlanePublisher publisher = context.getBean(ControlPlanePublisher.class);
-            ControlPlaneProperties properties = context.getBean(ControlPlaneProperties.class);
             RabbitTemplate template = context.getBean(RabbitTemplate.class);
+            TopicExchange exchange = context.getBean("controlPlaneExchange", TopicExchange.class);
 
             ControlPlaneIdentity identity = new ControlPlaneIdentity("swarm-A", "generator", "gen-1");
             ControlPlaneEmitter emitter = ControlPlaneEmitter.generator(identity, publisher);
@@ -64,7 +65,7 @@ class ControlPlanePublisherIntegrationTest {
 
             ArgumentCaptor<String> routingCaptor = ArgumentCaptor.forClass(String.class);
             ArgumentCaptor<Object> payloadCaptor = ArgumentCaptor.forClass(Object.class);
-            verify(template, times(2)).convertAndSend(eq(properties.getExchange()), routingCaptor.capture(), payloadCaptor.capture());
+            verify(template, times(2)).convertAndSend(eq(exchange.getName()), routingCaptor.capture(), payloadCaptor.capture());
 
             List<String> routes = routingCaptor.getAllValues();
             assertThat(routes).contains(signalKey,

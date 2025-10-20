@@ -152,8 +152,11 @@ and [`TriggerRuntimeAdapter`](../../trigger-service/src/main/java/io/pockethive/
 Stage 1 introduced `ControlPlaneTestFixtures` and `WorkerSdkTestFixtures` to make unit tests deterministic. Use them to
 construct canonical identities, topology descriptors, and sample payloads without repeating boilerplate.
 
+`ControlPlaneTestFixtures.workerProperties(...)` now returns the validated `WorkerControlPlaneProperties` bean so tests
+can assert the same contract that production workers consume.
+
 ```java
-ControlPlaneProperties props = ControlPlaneTestFixtures.workerProperties("swarm-1", "processor", "processor-1");
+WorkerControlPlaneProperties props = ControlPlaneTestFixtures.workerProperties("swarm-1", "processor", "processor-1");
 WorkerRuntime runtime = WorkerSdkTestFixtures.runtime(applicationContext);
 ```
 

@@ -2,7 +2,6 @@ package io.pockethive.controlplane.spring;
 
 import io.pockethive.controlplane.messaging.AmqpControlPlanePublisher;
 import io.pockethive.controlplane.messaging.ControlPlanePublisher;
-import java.util.Objects;
 import org.springframework.amqp.core.ExchangeBuilder;
 import org.springframework.amqp.core.TopicExchange;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
@@ -13,6 +12,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -28,8 +28,9 @@ public class ControlPlaneCommonAutoConfiguration {
 
     @Bean(name = "controlPlaneExchange")
     @ConditionalOnMissingBean(name = "controlPlaneExchange")
-    TopicExchange controlPlaneExchange(ControlPlaneProperties properties) {
-        String exchange = requireText(properties.getExchange(), "pockethive.control-plane.exchange");
+    TopicExchange controlPlaneExchange(ObjectProvider<ControlPlaneProperties> managerProperties,
+                                       ObjectProvider<WorkerControlPlaneProperties> workerProperties) {
+        String exchange = resolveExchange(managerProperties, workerProperties);
         return ExchangeBuilder.topicExchange(exchange).durable(true).build();
     }
 
@@ -43,16 +44,24 @@ public class ControlPlaneCommonAutoConfiguration {
     @ConditionalOnBean(RabbitTemplate.class)
     @ConditionalOnMissingBean(ControlPlanePublisher.class)
     @ConditionalOnProperty(prefix = "pockethive.control-plane.publisher", name = "enabled", havingValue = "true", matchIfMissing = true)
-    ControlPlanePublisher controlPlanePublisher(RabbitTemplate template, ControlPlaneProperties properties) {
-        String exchange = requireText(properties.getExchange(), "pockethive.control-plane.exchange");
+    ControlPlanePublisher controlPlanePublisher(RabbitTemplate template,
+                                                ObjectProvider<ControlPlaneProperties> managerProperties,
+                                                ObjectProvider<WorkerControlPlaneProperties> workerProperties) {
+        String exchange = resolveExchange(managerProperties, workerProperties);
         return new AmqpControlPlanePublisher(template, exchange);
     }
 
-    private static String requireText(String value, String propertyName) {
-        Objects.requireNonNull(propertyName, "propertyName");
-        if (value == null || value.isBlank()) {
-            throw new IllegalArgumentException(propertyName + " must not be null or blank");
+    private static String resolveExchange(ObjectProvider<ControlPlaneProperties> managerProperties,
+                                          ObjectProvider<WorkerControlPlaneProperties> workerProperties) {
+        ControlPlaneProperties manager = managerProperties.getIfAvailable();
+        if (manager != null && manager.getExchange() != null && !manager.getExchange().isBlank()) {
+            return manager.getExchange();
         }
-        return value;
+        WorkerControlPlaneProperties worker = workerProperties.getIfAvailable();
+        if (worker != null && worker.getExchange() != null && !worker.getExchange().isBlank()) {
+            return worker.getExchange();
+        }
+        throw new IllegalArgumentException("pockethive.control-plane.exchange must not be null or blank");
     }
+
 }

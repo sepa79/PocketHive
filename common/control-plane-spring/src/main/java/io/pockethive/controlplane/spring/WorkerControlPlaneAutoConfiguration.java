@@ -18,6 +18,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -27,11 +28,12 @@ import org.springframework.context.annotation.Configuration;
 @Configuration(proxyBeanMethods = false)
 @ConditionalOnClass(WorkerControlPlane.class)
 @ConditionalOnProperty(prefix = "pockethive.control-plane.worker", name = "enabled", havingValue = "true", matchIfMissing = true)
+@EnableConfigurationProperties(WorkerControlPlaneProperties.class)
 public class WorkerControlPlaneAutoConfiguration {
 
-    private final ControlPlaneProperties properties;
+    private final WorkerControlPlaneProperties properties;
 
-    WorkerControlPlaneAutoConfiguration(ControlPlaneProperties properties) {
+    WorkerControlPlaneAutoConfiguration(WorkerControlPlaneProperties properties) {
         this.properties = Objects.requireNonNull(properties, "properties");
     }
 
@@ -46,9 +48,8 @@ public class WorkerControlPlaneAutoConfiguration {
     @ConditionalOnMissingBean(name = "workerControlPlaneIdentity")
     ControlPlaneIdentity workerControlPlaneIdentity(
         @Qualifier("workerControlPlaneTopologyDescriptor") ControlPlaneTopologyDescriptor descriptor) {
-        ControlPlaneProperties.IdentityProperties identity = properties.getIdentity();
-        String swarmId = requireText(identity.getSwarmId(), "pockethive.control-plane.swarm-id");
-        String instanceId = requireText(identity.getInstanceId(), "pockethive.control-plane.instance-id");
+        String swarmId = requireText(properties.getSwarmId(), "pockethive.control-plane.swarm-id");
+        String instanceId = requireText(properties.getInstanceId(), "pockethive.control-plane.instance-id");
         return new ControlPlaneIdentity(swarmId, descriptor.role(), instanceId);
     }
 
@@ -71,11 +72,11 @@ public class WorkerControlPlaneAutoConfiguration {
     WorkerControlPlane workerControlPlane(ObjectMapper objectMapper,
         @Qualifier("workerControlPlaneIdentity") ControlPlaneIdentity identity) {
         WorkerControlPlane.Builder builder = WorkerControlPlane.builder(objectMapper).identity(identity);
-        ControlPlaneProperties.WorkerProperties worker = properties.getWorker();
+        WorkerControlPlaneProperties.Worker worker = properties.getWorker();
         if (worker.isSkipSelfSignals()) {
             builder.selfFilter(SelfFilter.skipSelfInstance());
         }
-        ControlPlaneProperties.DuplicateCacheProperties duplicate = worker.getDuplicateCache();
+        WorkerControlPlaneProperties.Worker.DuplicateCache duplicate = worker.getDuplicateCache();
         if (duplicate.isEnabled()) {
             builder.duplicateCache(duplicate.getTtl(), duplicate.getCapacity());
         }

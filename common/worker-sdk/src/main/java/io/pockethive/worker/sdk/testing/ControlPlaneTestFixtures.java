@@ -5,8 +5,11 @@ import io.pockethive.controlplane.messaging.ControlPlaneEmitter;
 import io.pockethive.controlplane.messaging.ControlPlanePublisher;
 import io.pockethive.controlplane.payload.RoleContext;
 import io.pockethive.controlplane.spring.ControlPlaneProperties;
+import io.pockethive.controlplane.spring.WorkerControlPlaneProperties;
 import io.pockethive.controlplane.spring.ControlPlaneTopologyDescriptorFactory;
 import io.pockethive.controlplane.topology.ControlPlaneTopologyDescriptor;
+import java.time.Duration;
+import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -18,14 +21,44 @@ public final class ControlPlaneTestFixtures {
     private ControlPlaneTestFixtures() {
     }
 
-    public static ControlPlaneProperties workerProperties(String swarmId, String role, String instanceId) {
-        ControlPlaneProperties properties = new ControlPlaneProperties();
+    public static WorkerControlPlaneProperties workerProperties(String swarmId, String role, String instanceId) {
         String resolvedSwarm = requireText("swarmId", swarmId);
-        properties.setSwarmId(resolvedSwarm);
-        properties.setInstanceId(requireText("instanceId", instanceId));
-        ControlPlaneProperties.WorkerProperties worker = properties.getWorker();
-        worker.setRole(requireText("role", role));
-        return properties;
+        String resolvedRole = requireText("role", role);
+        String resolvedInstance = requireText("instanceId", instanceId);
+
+        WorkerControlPlaneProperties.Queues queues = new WorkerControlPlaneProperties.Queues(
+            Map.of(resolvedRole, resolvedSwarm + "." + resolvedRole));
+        WorkerControlPlaneProperties.Worker worker = new WorkerControlPlaneProperties.Worker(
+            true,
+            true,
+            resolvedRole,
+            null,
+            true,
+            null);
+        WorkerControlPlaneProperties.SwarmController.Rabbit.Logging logging =
+            new WorkerControlPlaneProperties.SwarmController.Rabbit.Logging(false);
+        WorkerControlPlaneProperties.SwarmController.Rabbit rabbit =
+            new WorkerControlPlaneProperties.SwarmController.Rabbit("ph.logs", logging);
+        WorkerControlPlaneProperties.SwarmController.Metrics.Pushgateway pushgateway =
+            new WorkerControlPlaneProperties.SwarmController.Metrics.Pushgateway(
+                false,
+                null,
+                Duration.ofMinutes(1),
+                "DELETE");
+        WorkerControlPlaneProperties.SwarmController swarmController =
+            new WorkerControlPlaneProperties.SwarmController(
+                rabbit,
+                new WorkerControlPlaneProperties.SwarmController.Metrics(pushgateway));
+
+        return new WorkerControlPlaneProperties(
+            true,
+            true,
+            "ph.control",
+            resolvedSwarm,
+            resolvedInstance,
+            queues,
+            worker,
+            swarmController);
     }
 
     public static ControlPlaneProperties managerProperties(String swarmId, String role, String instanceId) {

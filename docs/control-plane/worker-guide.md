@@ -56,7 +56,11 @@ control-plane publisher. The starter also exposes the Stage 1 `WorkerRuntime` an
 </dependency>
 ```
 
-Configure minimal properties for each role:
+### Configuration properties
+
+`WorkerControlPlaneAutoConfiguration` binds a dedicated `WorkerControlPlaneProperties` bean. It fails fast when
+any worker-facing control-plane keys are missing so misconfigurations surface at startup instead of being masked
+by defaults. Populate the swarm identity, queue names, logging exchange, and Pushgateway contract explicitly:
 
 ```yaml
 pockethive:
@@ -64,8 +68,23 @@ pockethive:
     exchange: ph.control
     swarm-id: swarm-1
     instance-id: processor-1
+    queues:
+      processor: ph.swarm-1.processor
+      final: ph.swarm-1.final
+    swarm-controller:
+      rabbit:
+        logs-exchange: ph.logs
+        logging:
+          enabled: true
+      metrics:
+        pushgateway:
+          enabled: true
+          base-url: http://pushgateway:9091
+          push-rate: PT30S
+          shutdown-operation: DELETE
     worker:
       role: processor
+      skip-self-signals: false
     manager:
       enabled: false # disable if the service is worker-only
 ```
@@ -73,6 +92,10 @@ pockethive:
 Workers and managers automatically inherit `pockethive.control-plane.swarm-id`
 and `pockethive.control-plane.instance-id`. Participant-specific overrides are
 no longer supported—set the shared properties once at the control-plane level.
+The worker queues map can contain any role-specific bindings; the Swarm
+Controller injects the same map into every worker container via environment
+variables, and `WorkerControlPlaneProperties` enforces that each declared entry
+is non-empty.
 
 For a detailed breakdown of the Swarm Controller's environment contract, including every required `pockethive.control-plane.*` and RabbitMQ property, see the [Swarm Controller configuration reference](../../swarm-controller-service/README.md#configuration-reference).
 
@@ -160,7 +183,7 @@ before; only targeted empty maps trigger the reset behaviour.
 The Worker SDK also provides `ControlPlaneTestFixtures` to simplify unit tests:
 
 ```java
-ControlPlaneProperties properties = ControlPlaneTestFixtures.workerProperties("swarm-1", "generator", "worker-a");
+WorkerControlPlaneProperties properties = ControlPlaneTestFixtures.workerProperties("swarm-1", "generator", "worker-a");
 ControlPlaneEmitter emitter = ControlPlaneTestFixtures.workerEmitter(publisher, identity);
 ```
 

@@ -31,7 +31,13 @@ class ProcessorTopologyProvisioningTest {
             "pockethive.control-plane.worker.role=processor",
             "pockethive.control-plane.instance-id=processor-1",
             "pockethive.control-plane.swarm-id=swarm-alpha",
-            "pockethive.control-plane.exchange=ph.control.worker");
+            "pockethive.control-plane.exchange=ph.control.worker",
+            "pockethive.control-plane.queues.processor=ph.swarm-alpha.processor",
+            "pockethive.control-plane.swarm-controller.rabbit.logs-exchange=ph.logs",
+            "pockethive.control-plane.swarm-controller.rabbit.logging.enabled=false",
+            "pockethive.control-plane.swarm-controller.metrics.pushgateway.enabled=false",
+            "pockethive.control-plane.swarm-controller.metrics.pushgateway.push-rate=PT1M",
+            "pockethive.control-plane.swarm-controller.metrics.pushgateway.shutdown-operation=DELETE");
 
     @Test
     void processorServiceDoesNotDeclareTrafficTopology() {
