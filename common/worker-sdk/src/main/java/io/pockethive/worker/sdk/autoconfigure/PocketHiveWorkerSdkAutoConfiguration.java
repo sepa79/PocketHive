@@ -98,11 +98,13 @@ public class PocketHiveWorkerSdkAutoConfiguration {
     WorkerContextFactory workerContextFactory(
         ConfigurableListableBeanFactory beanFactory,
         ObjectProvider<MeterRegistry> meterRegistry,
-        ObjectProvider<ObservationRegistry> observationRegistry
+        ObjectProvider<ObservationRegistry> observationRegistry,
+        ObjectProvider<ControlPlaneIdentity> controlPlaneIdentity
     ) {
         MeterRegistry meters = meterRegistry.getIfAvailable(SimpleMeterRegistry::new);
         ObservationRegistry observations = observationRegistry.getIfAvailable(ObservationRegistry::create);
-        return new DefaultWorkerContextFactory(beanFactory::getBean, meters, observations);
+        ControlPlaneIdentity identity = controlPlaneIdentity.getIfAvailable();
+        return new DefaultWorkerContextFactory(beanFactory::getBean, meters, observations, identity);
     }
 
     @Bean

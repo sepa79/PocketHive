@@ -8,7 +8,7 @@ Stage 1 delivers the first executable runtime for the simplified PocketHive Work
 |-----------|----------------|-------|
 | `WorkerDefinition` | Captures metadata from the `@PocketHiveWorker` annotation (role, type, queues, config class). | Normalises optional queue values and treats an unspecified config class as `Void`. |
 | `WorkerRegistry` | Immutable collection of discovered workers, keyed by Spring bean name. | Annotations are resolved at startup; missing or duplicate beans cause immediate failure. |
-| `DefaultWorkerContextFactory` | Creates a `WorkerContext` per invocation, wiring logger, metrics, observation registry, status publisher, and config snapshot. | Pulls `swarmId` / `instanceId` from message headers with sensible defaults for tests. |
+| `DefaultWorkerContextFactory` | Creates a `WorkerContext` per invocation, wiring logger, metrics, observation registry, status publisher, and config snapshot. | Requires `swarmId` / `instanceId` from message headers or the configured `ControlPlaneIdentity`; fails fast when neither is supplied. |
 | `WorkerInvocation` | Adapts the worker bean (`GeneratorWorker` or `MessageWorker`) to the runtime contract, handling status updates before/after execution. | Exceptions raise a FAILED status and bubble up to the caller for transport handling. |
 | `DefaultWorkerRuntime` | Runtime façade used by transports to dispatch messages to worker beans. | Instantiated via Spring auto-configuration and caches invocation adapters for quick lookups. |
 
@@ -18,7 +18,7 @@ Stage 1 delivers the first executable runtime for the simplified PocketHive Work
 
 - `StatusPublisher` — defaults to `StatusPublisher.NO_OP` but can be overridden by applications.
 - `WorkerRegistry` — scans the `ApplicationContext` for beans annotated with `@PocketHiveWorker` and creates `WorkerDefinition` records.
-- `WorkerContextFactory` — builds `DefaultWorkerContextFactory`, optionally reusing Micrometer `MeterRegistry` and `ObservationRegistry` if the application defines them.
+- `WorkerContextFactory` — builds `DefaultWorkerContextFactory`, optionally reusing Micrometer `MeterRegistry` and `ObservationRegistry` if the application defines them. When a `ControlPlaneIdentity` bean is present (via the control-plane Spring starter), it is passed to the factory so swarm/instance identifiers are enforced.
 - `WorkerRuntime` — assembles a `DefaultWorkerRuntime`, using the Spring bean factory as a resolver for worker and config beans.
 
 The auto-configuration remains part of the existing worker starter so services receive the new runtime simply by upgrading the dependency.
