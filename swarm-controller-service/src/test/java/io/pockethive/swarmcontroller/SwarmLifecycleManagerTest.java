@@ -38,6 +38,7 @@ import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -93,8 +94,19 @@ class SwarmLifecycleManagerTest {
     String assignedName = nameCap.getValue();
     assertEquals(Topology.SWARM_ID, env.get("POCKETHIVE_CONTROL_PLANE_SWARM_ID"));
     assertEquals(Topology.CONTROL_EXCHANGE, env.get("POCKETHIVE_CONTROL_PLANE_EXCHANGE"));
-    assertEquals("rabbitmq", env.get("RABBITMQ_HOST"));
+    assertEquals("rabbitmq", env.get("SPRING_RABBITMQ_HOST"));
+    assertEquals("5672", env.get("SPRING_RABBITMQ_PORT"));
+    assertEquals("guest", env.get("SPRING_RABBITMQ_USERNAME"));
+    assertEquals("guest", env.get("SPRING_RABBITMQ_PASSWORD"));
+    assertEquals("/", env.get("SPRING_RABBITMQ_VIRTUAL_HOST"));
     assertEquals("ph.logs", env.get("POCKETHIVE_LOGS_EXCHANGE"));
+    assertEquals("ph.logs", env.get("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGS_EXCHANGE"));
+    assertEquals("true", env.get("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGGING_ENABLED"));
+    assertEquals("false", env.get("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_ENABLED"));
+    assertEquals("PT1M", env.get("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_PUSH_RATE"));
+    assertEquals("DELETE", env.get("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_SHUTDOWN_OPERATION"));
+    assertThat(env).doesNotContainKey("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_BASE_URL");
+    assertThat(env).doesNotContainKey("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_BASE_URL");
     assertEquals("ctrl-net", env.get("CONTROL_NETWORK"));
     assertEquals("ph." + Topology.SWARM_ID + ".qin", env.get("POCKETHIVE_CONTROL_PLANE_QUEUES_MODERATOR"));
     assertEquals("ph." + Topology.SWARM_ID + ".qout", env.get("POCKETHIVE_CONTROL_PLANE_QUEUES_GENERATOR"));
@@ -208,7 +220,9 @@ class SwarmLifecycleManagerTest {
             new SwarmControllerProperties.Traffic(
                 "ph." + Topology.SWARM_ID + ".hive",
                 "ph." + Topology.SWARM_ID),
-            new SwarmControllerProperties.Rabbit("ph.logs"),
+            new SwarmControllerProperties.Rabbit(
+                "ph.logs",
+                new SwarmControllerProperties.Logging(true)),
             new SwarmControllerProperties.Metrics(
                 new SwarmControllerProperties.Pushgateway(true, "http://push:9091", Duration.ofSeconds(12), "DELETE")),
             new SwarmControllerProperties.Docker(null, "/var/run/docker.sock")));
@@ -226,6 +240,7 @@ class SwarmLifecycleManagerTest {
     verify(docker).createContainer(eq("img1"), envCaptor.capture(), nameCaptor.capture());
     Map<String, String> env = envCaptor.getValue();
     String beeName = nameCaptor.getValue();
+    assertEquals("http://push:9091", env.get("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_BASE_URL"));
     assertEquals("http://push:9091", env.get("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_BASE_URL"));
     assertEquals("true", env.get("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_ENABLED"));
     assertEquals("PT12S", env.get("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_PUSH_RATE"));
@@ -234,6 +249,20 @@ class SwarmLifecycleManagerTest {
     assertEquals(beeName, env.get("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_GROUPING_KEY_INSTANCE"));
     assertFalse(env.containsKey("MANAGEMENT_METRICS_TAGS_SWARM"));
     assertFalse(env.containsKey("MANAGEMENT_METRICS_TAGS_INSTANCE"));
+  }
+
+  @Test
+  void prepareFailsWhenRabbitHostMissing() throws Exception {
+    SwarmControllerProperties properties = SwarmControllerTestProperties.defaults();
+    RabbitProperties rabbitProperties = new RabbitProperties();
+    rabbitProperties.setHost("");
+    SwarmLifecycleManager manager = new SwarmLifecycleManager(
+        amqp, mapper, docker, rabbit, rabbitProperties, "inst", properties);
+    SwarmPlan plan = new SwarmPlan("swarm", List.of(new Bee("gen", "img1", null, null)));
+
+    assertThatThrownBy(() -> manager.prepare(mapper.writeValueAsString(plan)))
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessageContaining("spring.rabbitmq.host");
   }
 
   @Test
