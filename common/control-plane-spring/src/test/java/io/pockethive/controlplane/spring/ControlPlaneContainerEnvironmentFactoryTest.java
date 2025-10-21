@@ -38,6 +38,9 @@ class ControlPlaneContainerEnvironmentFactoryTest {
 
         assertThat(env).containsEntry("POCKETHIVE_CONTROL_PLANE_INSTANCE_ID", "controller-a");
         assertThat(env).containsEntry("POCKETHIVE_CONTROL_PLANE_SWARM_ID", "swarm-1");
+        assertThat(env).containsEntry(
+            "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_CONTROL_QUEUE_PREFIX",
+            "ph.control.swarm-1");
         assertThat(env).containsEntry("POCKETHIVE_LOGS_EXCHANGE", "ph.logs");
         assertThat(env).containsEntry("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGGING_ENABLED", "true");
         assertThat(env).containsEntry("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_BASE_URL", "http://push:9091");

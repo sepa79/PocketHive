@@ -3,6 +3,7 @@ package io.pockethive.swarmcontroller;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import io.pockethive.Topology;
 import io.pockethive.controlplane.spring.BeeIdentityProperties;
 import io.pockethive.swarmcontroller.config.SwarmControllerProperties;
 import org.junit.jupiter.api.Test;
@@ -15,7 +16,14 @@ class RabbitConfigTest {
   @Test
   void controlQueueNameUsesSwarmRoleAndInstanceSegments() {
     String queueName = config.controlQueueName("test-instance");
-    assertThat(queueName).isEqualTo(properties.controlQueueName("test-instance"));
+    assertThat(queueName)
+        .isEqualTo("ph.control." + Topology.SWARM_ID + ".swarm-controller.test-instance");
+  }
+
+  @Test
+  void controlQueuePrefixIncludesSwarmId() {
+    assertThat(properties.getControlQueuePrefix())
+        .isEqualTo("ph.control." + Topology.SWARM_ID);
   }
 
   @Test

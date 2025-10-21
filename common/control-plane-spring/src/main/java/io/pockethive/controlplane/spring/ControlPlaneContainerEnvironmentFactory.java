@@ -43,7 +43,7 @@ public final class ControlPlaneContainerEnvironmentFactory {
         env.put("POCKETHIVE_CONTROL_PLANE_MANAGER_ROLE", requireSetting(managerRole, "pockethive.control-plane.manager.role"));
         env.put(
             "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_CONTROL_QUEUE_PREFIX",
-            resolveControlQueuePrefix(controlPlaneProperties.getExchange()));
+            resolveControlQueuePrefix(controlPlaneProperties.getExchange(), resolvedSwarmId));
         String trafficPrefix = settings.trafficQueuePrefix() != null && !settings.trafficQueuePrefix().isBlank()
             ? settings.trafficQueuePrefix()
             : "ph." + resolvedSwarmId;
@@ -168,11 +168,17 @@ public final class ControlPlaneContainerEnvironmentFactory {
         }
     }
 
-    private static String resolveControlQueuePrefix(String controlExchange) {
-        if (controlExchange == null || controlExchange.isBlank()) {
-            return DEFAULT_CONTROL_QUEUE_PREFIX;
+    private static String resolveControlQueuePrefix(String controlExchange, String swarmId) {
+        String prefix = controlExchange == null || controlExchange.isBlank()
+            ? DEFAULT_CONTROL_QUEUE_PREFIX
+            : controlExchange;
+        if (prefix.endsWith("." + swarmId) || prefix.contains("." + swarmId + ".")) {
+            return prefix;
         }
-        return controlExchange;
+        if (prefix.endsWith(".")) {
+            return prefix + swarmId;
+        }
+        return prefix + "." + swarmId;
     }
 
     private static String resolvePushgatewayShutdownOperation(String shutdownOperation) {

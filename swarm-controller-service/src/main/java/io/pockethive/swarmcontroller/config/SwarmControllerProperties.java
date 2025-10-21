@@ -29,7 +29,8 @@ public class SwarmControllerProperties {
         this.role = requireNonBlank(Objects.requireNonNull(manager, "manager").role(), "manager.role");
         this.controlExchange = requireNonBlank(exchange, "exchange");
         SwarmController resolved = Objects.requireNonNull(swarmController, "swarmController");
-        this.controlQueuePrefix = requireNonBlank(resolved.controlQueuePrefix(), "controlQueuePrefix");
+        this.controlQueuePrefix = normalizeControlQueuePrefix(this.swarmId,
+            requireNonBlank(resolved.controlQueuePrefix(), "controlQueuePrefix"));
         this.traffic = Objects.requireNonNull(resolved.traffic(), "traffic");
         this.rabbit = Objects.requireNonNull(resolved.rabbit(), "rabbit");
         this.metrics = Objects.requireNonNull(resolved.metrics(), "metrics");
@@ -138,6 +139,18 @@ public class SwarmControllerProperties {
         public Docker docker() {
             return docker;
         }
+    }
+
+    private static String normalizeControlQueuePrefix(String swarmId, String prefix) {
+        String resolvedSwarmId = requireNonBlank(swarmId, "swarmId");
+        String normalized = requireNonBlank(prefix, "controlQueuePrefix");
+        if (normalized.endsWith("." + resolvedSwarmId) || normalized.contains("." + resolvedSwarmId + ".")) {
+            return normalized;
+        }
+        if (normalized.endsWith(".")) {
+            return normalized + resolvedSwarmId;
+        }
+        return normalized + "." + resolvedSwarmId;
     }
 
     @Validated
