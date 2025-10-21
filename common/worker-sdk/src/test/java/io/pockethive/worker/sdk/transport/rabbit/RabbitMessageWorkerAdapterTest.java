@@ -1,6 +1,5 @@
 package io.pockethive.worker.sdk.transport.rabbit;
 
-import io.pockethive.Topology;
 import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pockethive.worker.sdk.api.WorkResult;
@@ -79,6 +78,7 @@ class RabbitMessageWorkerAdapterTest {
             "processor",
             "processor.in",
             "processor.out",
+            "ph.test.hive",
             Object.class
         );
         identity = new ControlPlaneIdentity("swarm-1", "processor", "instance-1");
@@ -129,7 +129,7 @@ class RabbitMessageWorkerAdapterTest {
 
         ArgumentCaptor<Message> outboundCaptor = ArgumentCaptor.forClass(Message.class);
         verify(rabbitTemplate)
-            .send(eq(Topology.EXCHANGE), Mockito.<String>eq(workerDefinition.resolvedOutQueue()), outboundCaptor.capture());
+            .send(eq(workerDefinition.exchange()), Mockito.<String>eq(workerDefinition.outQueue()), outboundCaptor.capture());
         assertThat(outboundCaptor.getValue().getBody()).isEqualTo("processed".getBytes(StandardCharsets.UTF_8));
     }
 
@@ -224,12 +224,31 @@ class RabbitMessageWorkerAdapterTest {
             "processor",
             "processor.in",
             null,
+            "ph.test.hive",
             Object.class
         );
 
         assertThatThrownBy(() -> builder().build())
             .isInstanceOf(IllegalStateException.class)
             .hasMessageContaining("outbound queue");
+    }
+
+    @Test
+    void buildFailsWhenTemplateConfiguredWithoutExchange() {
+        workerDefinition = new WorkerDefinition(
+            "processorWorker",
+            Object.class,
+            WorkerType.MESSAGE,
+            "processor",
+            "processor.in",
+            "processor.out",
+            null,
+            Object.class
+        );
+
+        assertThatThrownBy(() -> builder().build())
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("exchange");
     }
 
     @Test
@@ -241,6 +260,7 @@ class RabbitMessageWorkerAdapterTest {
             "processor",
             "processor.in",
             null,
+            "ph.test.hive",
             Object.class
         );
 
@@ -255,6 +275,7 @@ class RabbitMessageWorkerAdapterTest {
             WorkerType.MESSAGE,
             "processor",
             "processor.in",
+            null,
             null,
             Object.class
         );
@@ -285,6 +306,7 @@ class RabbitMessageWorkerAdapterTest {
             "processor",
             "processor.in",
             "processor.out",
+            "ph.test.hive",
             Object.class
         );
 

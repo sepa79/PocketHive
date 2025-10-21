@@ -1,7 +1,5 @@
 package io.pockethive.generator;
 
-import io.pockethive.Topology;
-import io.pockethive.TopologyDefaults;
 import io.pockethive.worker.sdk.api.GeneratorWorker;
 import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pockethive.worker.sdk.api.WorkResult;
@@ -19,8 +17,9 @@ import org.springframework.stereotype.Component;
 /**
  * PocketHive's generator service is the "source" side of the default swarm pipeline. It runs
  * alongside the orchestrator in most deployments and continuously emits HTTP request work items
- * into {@link Topology#GEN_QUEUE}. Junior engineers can think of it as the friendly robot that
- * drafts the first message so downstream moderators, processors, and post-processors have
+ * into the generator queue configured via {@code pockethive.control-plane.queues.generator}.
+ * Junior engineers can think of it as the friendly robot that drafts the first message so
+ * downstream moderators, processors, and post-processors have
  * something to act on. The queue name and worker type are set by {@link PocketHiveWorker}
  * defaults, but you can override them in the annotation if you spin up a custom swarm.
  *
@@ -46,7 +45,7 @@ import org.springframework.stereotype.Component;
 @PocketHiveWorker(
     role = "generator",
     type = WorkerType.GENERATOR,
-    outQueue = TopologyDefaults.GEN_QUEUE,
+    outQueue = "generator",
     config = GeneratorWorkerConfig.class
 )
 class GeneratorWorkerImpl implements GeneratorWorker {
@@ -96,14 +95,15 @@ class GeneratorWorkerImpl implements GeneratorWorker {
    * @param context the PocketHive runtime context, including configuration and status/meter
    *     publishers.
    * @return a {@link WorkResult} wrapping the JSON message that should be placed on
-   *     {@link Topology#GEN_QUEUE}.
+   *     the configured generator queue.
    */
   @Override
   public WorkResult generate(WorkerContext context) {
     GeneratorWorkerConfig config = context.config(GeneratorWorkerConfig.class)
         .orElseGet(defaults::asConfig);
+    String outboundQueue = context.info().outQueue();
     context.statusPublisher()
-        .workOut(Topology.GEN_QUEUE)
+        .workOut(outboundQueue)
         .update(status -> status
             .data("path", config.path())
             .data("method", config.method())

@@ -19,7 +19,10 @@ public final class WorkerControlPlaneProperties {
 
     private final boolean enabled;
     private final boolean declareTopology;
+    private static final String TRAFFIC_EXCHANGE_ENV = "POCKETHIVE_CONTROL_PLANE_TRAFFIC_EXCHANGE";
+
     private final String exchange;
+    private final String trafficExchange;
     private final String swarmId;
     private final String instanceId;
     private final Queues queues;
@@ -29,6 +32,7 @@ public final class WorkerControlPlaneProperties {
     public WorkerControlPlaneProperties(Boolean enabled,
                                         Boolean declareTopology,
                                         String exchange,
+                                        String trafficExchange,
                                         String swarmId,
                                         String instanceId,
                                         Map<String, String> queues,
@@ -37,6 +41,7 @@ public final class WorkerControlPlaneProperties {
         this.enabled = enabled == null || enabled;
         this.declareTopology = declareTopology == null || declareTopology;
         this.exchange = requireNonBlank(exchange, "pockethive.control-plane.exchange");
+        this.trafficExchange = resolveTrafficExchange(trafficExchange);
         this.swarmId = requireNonBlank(swarmId, "pockethive.control-plane.swarm-id");
         this.instanceId = requireNonBlank(instanceId, "pockethive.control-plane.instance-id");
         this.queues = new Queues(queues);
@@ -54,6 +59,10 @@ public final class WorkerControlPlaneProperties {
 
     public String getExchange() {
         return exchange;
+    }
+
+    public String getTrafficExchange() {
+        return trafficExchange;
     }
 
     public String getSwarmId() {
@@ -305,5 +314,31 @@ public final class WorkerControlPlaneProperties {
             throw new IllegalArgumentException(property + " must not be null or blank");
         }
         return value;
+    }
+
+    private static String resolveTrafficExchange(String value) {
+        String candidate = normalizeTrafficExchange(value);
+        if (candidate == null) {
+            candidate = normalizeTrafficExchange(System.getenv(TRAFFIC_EXCHANGE_ENV));
+        }
+        if (candidate == null) {
+            throw new IllegalArgumentException(
+                "pockethive.control-plane.traffic-exchange must not be null or blank");
+        }
+        return candidate;
+    }
+
+    private static String normalizeTrafficExchange(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        if (trimmed.isEmpty()) {
+            return null;
+        }
+        if (trimmed.contains("${") || trimmed.contains("}")) {
+            return null;
+        }
+        return trimmed;
     }
 }

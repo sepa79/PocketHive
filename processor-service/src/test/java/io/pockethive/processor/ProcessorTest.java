@@ -4,8 +4,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
-import io.pockethive.Topology;
 import io.pockethive.controlplane.ControlPlaneIdentity;
+import io.pockethive.controlplane.spring.WorkerControlPlaneProperties;
 import io.pockethive.observability.ObservabilityContext;
 import io.pockethive.observability.ObservabilityContextUtil;
 import io.pockethive.worker.sdk.api.MessageWorker;
@@ -24,6 +24,7 @@ import io.pockethive.worker.sdk.runtime.WorkerRegistry;
 import io.pockethive.worker.sdk.runtime.WorkerRuntime;
 import io.pockethive.worker.sdk.runtime.WorkerState;
 import io.pockethive.worker.sdk.transport.rabbit.RabbitWorkMessageConverter;
+import io.pockethive.worker.sdk.testing.ControlPlaneTestFixtures;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpHeaders;
@@ -60,6 +61,11 @@ import static org.mockito.Mockito.when;
 class ProcessorTest {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
+    private static final WorkerControlPlaneProperties WORKER_PROPERTIES =
+        ControlPlaneTestFixtures.workerProperties("swarm", "processor", "instance");
+    private static final String MODERATOR_QUEUE = WORKER_PROPERTIES.getQueues().get("moderator");
+    private static final String FINAL_QUEUE = WORKER_PROPERTIES.getQueues().get("final");
+    private static final String TRAFFIC_EXCHANGE = WORKER_PROPERTIES.getTrafficExchange();
 
     @Test
     void workerInvokesHttpAndPropagatesResponse() throws Exception {
@@ -234,14 +240,18 @@ class ProcessorTest {
                 ProcessorWorkerImpl.class,
                 WorkerType.MESSAGE,
                 "processor",
-                Topology.MOD_QUEUE,
-                Topology.FINAL_QUEUE,
+                MODERATOR_QUEUE,
+                FINAL_QUEUE,
+                TRAFFIC_EXCHANGE,
                 ProcessorWorkerConfig.class
         );
         when(workerRegistry.findByRoleAndType("processor", WorkerType.MESSAGE))
                 .thenReturn(Optional.of(definition));
 
-        ControlPlaneIdentity identity = new ControlPlaneIdentity("swarm", "processor", "instance");
+        ControlPlaneIdentity identity = new ControlPlaneIdentity(
+                WORKER_PROPERTIES.getSwarmId(),
+                "processor",
+                WORKER_PROPERTIES.getInstanceId());
         ProcessorDefaults defaults = new ProcessorDefaults();
         defaults.setEnabled(true);
         defaults.setBaseUrl("http://sut/");
@@ -267,7 +277,7 @@ class ProcessorTest {
         adapter.onWork(inbound);
 
         verify(workerRuntime).dispatch(eq("processorWorker"), any(WorkMessage.class));
-        verify(rabbitTemplate).send(eq(Topology.EXCHANGE), eq(Topology.FINAL_QUEUE), any(Message.class));
+        verify(rabbitTemplate).send(eq(definition.exchange()), eq(definition.outQueue()), any(Message.class));
         verify(controlPlaneRuntime).emitStatusSnapshot();
     }
 
@@ -287,14 +297,18 @@ class ProcessorTest {
                 ProcessorWorkerImpl.class,
                 WorkerType.MESSAGE,
                 "processor",
-                Topology.MOD_QUEUE,
-                Topology.FINAL_QUEUE,
+                MODERATOR_QUEUE,
+                FINAL_QUEUE,
+                TRAFFIC_EXCHANGE,
                 ProcessorWorkerConfig.class
         );
         when(workerRegistry.findByRoleAndType("processor", WorkerType.MESSAGE))
                 .thenReturn(Optional.of(definition));
 
-        ControlPlaneIdentity identity = new ControlPlaneIdentity("swarm", "processor", "instance");
+        ControlPlaneIdentity identity = new ControlPlaneIdentity(
+                WORKER_PROPERTIES.getSwarmId(),
+                "processor",
+                WORKER_PROPERTIES.getInstanceId());
         ProcessorDefaults defaults = new ProcessorDefaults();
         defaults.setEnabled(false);
         defaults.setBaseUrl("");
@@ -344,8 +358,9 @@ class ProcessorTest {
                 ProcessorWorkerImpl.class,
                 WorkerType.MESSAGE,
                 "processor",
-                Topology.MOD_QUEUE,
-                Topology.FINAL_QUEUE,
+                MODERATOR_QUEUE,
+                FINAL_QUEUE,
+                TRAFFIC_EXCHANGE,
                 ProcessorWorkerConfig.class
         );
     }
@@ -376,7 +391,12 @@ class ProcessorTest {
 
     private static final class TestWorkerContext implements WorkerContext {
         private final ProcessorWorkerConfig config;
-        private final WorkerInfo info = new WorkerInfo("processor", "swarm", "instance", Topology.MOD_QUEUE, Topology.FINAL_QUEUE);
+        private final WorkerInfo info = new WorkerInfo(
+                "processor",
+                WORKER_PROPERTIES.getSwarmId(),
+                WORKER_PROPERTIES.getInstanceId(),
+                MODERATOR_QUEUE,
+                FINAL_QUEUE);
         private final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
         private final ObservabilityContext observability;
         private final CapturingStatusPublisher statusPublisher = new CapturingStatusPublisher();

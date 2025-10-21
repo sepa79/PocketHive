@@ -3,11 +3,12 @@ package io.pockethive.generator;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
-import io.pockethive.Topology;
+import io.pockethive.controlplane.spring.WorkerControlPlaneProperties;
 import io.pockethive.worker.sdk.api.StatusPublisher;
 import io.pockethive.worker.sdk.api.WorkResult;
 import io.pockethive.worker.sdk.api.WorkerContext;
 import io.pockethive.worker.sdk.api.WorkerInfo;
+import io.pockethive.worker.sdk.testing.ControlPlaneTestFixtures;
 import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
@@ -19,6 +20,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 class GeneratorTest {
 
   private static final ObjectMapper MAPPER = new ObjectMapper();
+  private static final WorkerControlPlaneProperties WORKER_PROPERTIES =
+      ControlPlaneTestFixtures.workerProperties("swarm", "generator", "instance");
+  private static final String IN_QUEUE = WORKER_PROPERTIES.getQueues().get("generator");
+  private static final String OUT_QUEUE = WORKER_PROPERTIES.getQueues().get("moderator");
 
   private GeneratorDefaults defaults;
   private GeneratorWorkerImpl worker;
@@ -75,7 +80,13 @@ class GeneratorTest {
   private static final class TestWorkerContext implements WorkerContext {
 
     private final GeneratorWorkerConfig config;
-    private final WorkerInfo info = new WorkerInfo("generator", "swarm", "instance", Topology.GEN_QUEUE, Topology.MOD_QUEUE);
+    private final WorkerInfo info = new WorkerInfo(
+        "generator",
+        WORKER_PROPERTIES.getSwarmId(),
+        WORKER_PROPERTIES.getInstanceId(),
+        IN_QUEUE,
+        OUT_QUEUE
+    );
 
     private TestWorkerContext(GeneratorWorkerConfig config) {
       this.config = config;

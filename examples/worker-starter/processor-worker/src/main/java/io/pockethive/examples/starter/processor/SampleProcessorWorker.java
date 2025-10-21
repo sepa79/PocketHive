@@ -1,7 +1,5 @@
 package io.pockethive.examples.starter.processor;
 
-import io.pockethive.Topology;
-import io.pockethive.TopologyDefaults;
 import io.pockethive.worker.sdk.api.MessageWorker;
 import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pockethive.worker.sdk.api.WorkResult;
@@ -18,8 +16,8 @@ import org.springframework.stereotype.Component;
 @PocketHiveWorker(
     role = "processor",
     type = WorkerType.MESSAGE,
-    inQueue = TopologyDefaults.MOD_QUEUE,
-    outQueue = TopologyDefaults.FINAL_QUEUE
+    inQueue = "moderator",
+    outQueue = "final"
 )
 class SampleProcessorWorker implements MessageWorker {
 
@@ -27,8 +25,10 @@ class SampleProcessorWorker implements MessageWorker {
   public WorkResult onMessage(WorkMessage message, WorkerContext context) {
     String processedPayload = message.asString().toUpperCase();
 
-    String inQueue = Optional.ofNullable(context.info().inQueue()).orElse(Topology.MOD_QUEUE);
-    String outQueue = Optional.ofNullable(context.info().outQueue()).orElse(Topology.FINAL_QUEUE);
+    String inQueue = Optional.ofNullable(context.info().inQueue())
+        .orElseThrow(() -> new IllegalStateException("Inbound queue not configured"));
+    String outQueue = Optional.ofNullable(context.info().outQueue())
+        .orElseThrow(() -> new IllegalStateException("Outbound queue not configured"));
 
     context.statusPublisher()
         .workIn(inQueue)

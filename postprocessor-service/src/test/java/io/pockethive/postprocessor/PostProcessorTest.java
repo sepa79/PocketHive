@@ -2,7 +2,7 @@ package io.pockethive.postprocessor;
 
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
-import io.pockethive.Topology;
+import io.pockethive.controlplane.spring.WorkerControlPlaneProperties;
 import io.pockethive.observability.Hop;
 import io.pockethive.observability.ObservabilityContext;
 import io.pockethive.worker.sdk.api.MessageWorker;
@@ -11,6 +11,7 @@ import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pockethive.worker.sdk.api.WorkResult;
 import io.pockethive.worker.sdk.api.WorkerContext;
 import io.pockethive.worker.sdk.api.WorkerInfo;
+import io.pockethive.worker.sdk.testing.ControlPlaneTestFixtures;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -27,6 +28,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 class PostProcessorTest {
 
     private static final Instant START = Instant.parse("2024-01-01T00:00:00Z");
+    private static final WorkerControlPlaneProperties WORKER_PROPERTIES =
+        ControlPlaneTestFixtures.workerProperties("swarm", "postprocessor", "instance");
+    private static final String FINAL_QUEUE = WORKER_PROPERTIES.getQueues().get("final");
 
     @Test
     void onMessageRecordsLatencyAndErrorsAndUpdatesStatus() {
@@ -202,7 +206,12 @@ class PostProcessorTest {
 
     private static final class TestWorkerContext implements WorkerContext {
         private final PostProcessorWorkerConfig config;
-        private final WorkerInfo info = new WorkerInfo("postprocessor", "swarm", "instance", Topology.FINAL_QUEUE, null);
+        private final WorkerInfo info = new WorkerInfo(
+            "postprocessor",
+            WORKER_PROPERTIES.getSwarmId(),
+            WORKER_PROPERTIES.getInstanceId(),
+            FINAL_QUEUE,
+            null);
         private final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
         private final CapturingStatusPublisher statusPublisher = new CapturingStatusPublisher();
         private final Logger logger = LoggerFactory.getLogger(MessageWorker.class);

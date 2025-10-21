@@ -4,8 +4,13 @@ spring:
 
 pockethive:
   control-plane:
-    exchange: ph.exchange
+    exchange: ph.control
+    traffic-exchange: ph.sample-swarm.hive
     swarm-id: sample-swarm
     instance-id: ${POCKETHIVE_CONTROL_PLANE_INSTANCE_ID:processor-1}
+    queues:
+      moderator: ph.sample-swarm.mod
+      processor: ph.sample-swarm.processor
+      final: ph.sample-swarm.final
     worker:
       role: processor

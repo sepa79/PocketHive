@@ -19,6 +19,12 @@
       "defaultValue": "ph.control"
     },
     {
+      "name": "pockethive.control-plane.traffic-exchange",
+      "type": "java.lang.String",
+      "description": "Hive traffic exchange used for worker work/result messages.",
+      "defaultValue": "ph.default.hive"
+    },
+    {
       "name": "pockethive.control-plane.swarm-id",
       "type": "java.lang.String",
       "description": "Swarm identifier shared by all control-plane participants.",

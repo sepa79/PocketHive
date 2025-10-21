@@ -3,10 +3,10 @@ package io.pockethive.swarmcontroller;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import io.pockethive.Topology;
 import io.pockethive.controlplane.spring.BeeIdentityProperties;
 import io.pockethive.swarmcontroller.config.SwarmControllerProperties;
 import org.junit.jupiter.api.Test;
-import org.springframework.amqp.core.Queue;
 
 class RabbitConfigTest {
 
@@ -14,9 +14,16 @@ class RabbitConfigTest {
   private final RabbitConfig config = new RabbitConfig(properties);
 
   @Test
-  void controlQueueUsesSwarmRoleAndInstanceSegments() {
-    Queue queue = config.controlQueue("test-instance");
-    assertThat(queue.getName()).isEqualTo(properties.controlQueueName("test-instance"));
+  void controlQueueNameUsesSwarmRoleAndInstanceSegments() {
+    String queueName = config.controlQueueName("test-instance");
+    assertThat(queueName)
+        .isEqualTo("ph.control." + Topology.SWARM_ID + ".swarm-controller.test-instance");
+  }
+
+  @Test
+  void controlQueuePrefixIncludesSwarmId() {
+    assertThat(properties.getControlQueuePrefix())
+        .isEqualTo("ph.control." + Topology.SWARM_ID);
   }
 
   @Test

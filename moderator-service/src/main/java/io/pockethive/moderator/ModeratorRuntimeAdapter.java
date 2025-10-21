@@ -1,6 +1,5 @@
 package io.pockethive.moderator;
 
-import io.pockethive.TopologyDefaults;
 import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.worker.sdk.config.WorkerType;
 import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime;
@@ -68,7 +67,7 @@ class ModeratorRuntimeAdapter implements ApplicationListener<ContextRefreshedEve
 
   @RabbitListener(
       id = LISTENER_ID,
-      queues = "${pockethive.control-plane.queues.generator:" + TopologyDefaults.GEN_QUEUE + "}")
+      queues = "${pockethive.control-plane.queues.generator}")
   public void onWork(Message message) {
     delegate.onWork(message);
   }

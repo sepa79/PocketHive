@@ -29,14 +29,8 @@ public final class WorkerState {
 
     WorkerState(WorkerDefinition definition) {
         this.definition = Objects.requireNonNull(definition, "definition");
-        String inbound = definition.resolvedInQueue();
-        if (inbound != null) {
-            workInRoutes.add(inbound);
-        }
-        String outbound = definition.resolvedOutQueue();
-        if (outbound != null) {
-            workOutRoutes.add(outbound);
-        }
+        addIfPresent(workInRoutes, definition.inQueue());
+        addIfPresent(workOutRoutes, definition.outQueue());
     }
 
     WorkerDefinition definition() {
@@ -133,17 +127,11 @@ public final class WorkerState {
     }
 
     void addInboundRoute(String queue) {
-        String resolved = WorkerDefinition.resolveQueue(queue);
-        if (resolved != null) {
-            workInRoutes.add(resolved);
-        }
+        addIfPresent(workInRoutes, queue);
     }
 
     void addOutboundRoute(String queue) {
-        String resolved = WorkerDefinition.resolveQueue(queue);
-        if (resolved != null) {
-            workOutRoutes.add(resolved);
-        }
+        addIfPresent(workOutRoutes, queue);
     }
 
     Set<String> inboundRoutes() {
@@ -154,4 +142,18 @@ public final class WorkerState {
         return Set.copyOf(workOutRoutes);
     }
 
+    private static void addIfPresent(Set<String> target, String queue) {
+        String normalised = normalise(queue);
+        if (normalised != null) {
+            target.add(normalised);
+        }
+    }
+
+    private static String normalise(String queue) {
+        if (queue == null) {
+            return null;
+        }
+        String trimmed = queue.trim();
+        return trimmed.isEmpty() ? null : trimmed;
+    }
 }

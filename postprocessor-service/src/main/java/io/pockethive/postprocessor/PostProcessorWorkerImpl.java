@@ -4,8 +4,6 @@ import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.DistributionSummary;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
-import io.pockethive.Topology;
-import io.pockethive.TopologyDefaults;
 import io.pockethive.observability.Hop;
 import io.pockethive.observability.ObservabilityContext;
 import io.pockethive.worker.sdk.api.MessageWorker;
@@ -27,8 +25,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 /**
- * The post-processor is the last hop in the PocketHive happy path. It listens to
- * {@link Topology#FINAL_QUEUE} and focuses on observability: measuring end-to-end latency,
+ * The post-processor is the last hop in the PocketHive happy path. It listens to the queue
+ * configured under {@code pockethive.control-plane.queues.final} and focuses on observability:
+ * measuring end-to-end latency,
  * counting hops, and flagging any {@code x-ph-error} markers set by upstream workers. When teams
  * deploy PocketHive to staging or production they often scale the post-processor alongside their
  * observability stack because its metrics feed Grafana dashboards such as "Pipeline Latency".
@@ -52,7 +51,7 @@ import org.springframework.stereotype.Component;
 @PocketHiveWorker(
     role = "postprocessor",
     type = WorkerType.MESSAGE,
-    inQueue = TopologyDefaults.FINAL_QUEUE,
+    inQueue = "final",
     config = PostProcessorWorkerConfig.class
 )
 class PostProcessorWorkerImpl implements MessageWorker {
@@ -92,7 +91,7 @@ class PostProcessorWorkerImpl implements MessageWorker {
    * {@link WorkResult#message(WorkMessage)} and reuse message-building helpers from the generator
    * or processor services.</p>
    *
-   * @param in the message consumed from {@link Topology#FINAL_QUEUE}.
+   * @param in the message consumed from the configured final queue.
    * @param context provides configuration, Micrometer {@link MeterRegistry}, and the current
    *     {@link ObservabilityContext}.
    * @return {@link WorkResult#none()} because the post-processor does not produce a follow-up
@@ -113,8 +112,9 @@ class PostProcessorWorkerImpl implements MessageWorker {
     PostProcessorMetrics metrics = metrics(context);
     metrics.record(measurements, error, processorStats);
 
+    String inboundQueue = context.info().inQueue();
     context.statusPublisher()
-        .workIn(Topology.FINAL_QUEUE)
+        .workIn(inboundQueue)
         .update(status -> status
             .data("enabled", config.enabled())
             .data("errors", metrics.errorsCount())

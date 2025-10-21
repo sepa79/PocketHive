@@ -70,6 +70,7 @@ class TriggerRuntimeAdapterTest {
         "trigger",
         null,
         null,
+        null,
         TriggerWorkerConfig.class
     );
   }

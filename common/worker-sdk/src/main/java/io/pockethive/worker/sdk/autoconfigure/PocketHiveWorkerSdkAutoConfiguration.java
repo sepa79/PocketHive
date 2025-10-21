@@ -9,7 +9,9 @@ import io.pockethive.controlplane.messaging.ControlPlaneEmitter;
 import io.pockethive.controlplane.spring.ControlPlaneCommonAutoConfiguration;
 import io.pockethive.controlplane.spring.ManagerControlPlaneAutoConfiguration;
 import io.pockethive.controlplane.spring.WorkerControlPlaneAutoConfiguration;
+import io.pockethive.controlplane.spring.WorkerControlPlaneProperties;
 import io.pockethive.controlplane.topology.ControlPlaneTopologyDescriptor;
+import io.pockethive.controlplane.topology.ControlQueueDescriptor;
 import io.pockethive.controlplane.worker.WorkerControlPlane;
 import io.pockethive.worker.sdk.config.PocketHiveWorker;
 import io.pockethive.worker.sdk.runtime.DefaultWorkerContextFactory;
@@ -26,7 +28,9 @@ import io.pockethive.worker.sdk.runtime.WorkerStatusScheduler;
 import io.pockethive.worker.sdk.runtime.WorkerStatusSchedulerProperties;
 import io.pockethive.worker.sdk.runtime.WorkerInvocationInterceptor;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.ListableBeanFactory;
@@ -61,7 +65,15 @@ public class PocketHiveWorkerSdkAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    WorkerRegistry workerRegistry(ListableBeanFactory beanFactory) {
+    WorkerRegistry workerRegistry(
+        ListableBeanFactory beanFactory,
+        ObjectProvider<WorkerControlPlaneProperties> workerProperties,
+        @Qualifier("workerControlPlaneTopologyDescriptor")
+        ObjectProvider<ControlPlaneTopologyDescriptor> topologyDescriptor
+    ) {
+        WorkerControlPlaneProperties properties = workerProperties.getIfAvailable();
+        ControlPlaneTopologyDescriptor topology = topologyDescriptor.getIfAvailable();
+        Map<String, String> queueAliases = buildQueueAliasMap(properties, topology);
         String[] beanNames = beanFactory.getBeanNamesForAnnotation(PocketHiveWorker.class);
         List<WorkerDefinition> definitions = new ArrayList<>(beanNames.length);
         for (String beanName : beanNames) {
@@ -77,8 +89,9 @@ public class PocketHiveWorkerSdkAutoConfiguration {
                 beanType,
                 annotation.type(),
                 annotation.role(),
-                annotation.inQueue(),
-                annotation.outQueue(),
+                resolveQueue(annotation.inQueue(), queueAliases),
+                resolveQueue(annotation.outQueue(), queueAliases),
+                resolveExchange(properties),
                 configType
             ));
         }
@@ -166,5 +179,51 @@ public class PocketHiveWorkerSdkAutoConfiguration {
         havingValue = "true")
     WorkerInvocationInterceptor workerMetricsInterceptor(MeterRegistry meterRegistry) {
         return new WorkerMetricsInterceptor(meterRegistry);
+    }
+
+    private static Map<String, String> buildQueueAliasMap(
+        WorkerControlPlaneProperties properties,
+        ControlPlaneTopologyDescriptor topology
+    ) {
+        if (properties == null) {
+            return Map.of();
+        }
+        Map<String, String> aliases = new LinkedHashMap<>();
+        properties.getQueues().names().forEach((key, value) -> {
+            String alias = normalise(key);
+            if (alias != null) {
+                aliases.put(alias, value);
+            }
+        });
+        if (topology != null) {
+            topology.controlQueue(properties.getInstanceId())
+                .map(ControlQueueDescriptor::name)
+                .ifPresent(name -> aliases.putIfAbsent("control", name));
+        }
+        return aliases;
+    }
+
+    private static String resolveExchange(WorkerControlPlaneProperties properties) {
+        if (properties == null) {
+            return null;
+        }
+        return normalise(properties.getTrafficExchange());
+    }
+
+    private static String resolveQueue(String queue, Map<String, String> aliases) {
+        String candidate = normalise(queue);
+        if (candidate == null) {
+            return null;
+        }
+        String resolved = aliases.get(candidate);
+        return resolved != null ? resolved : candidate;
+    }
+
+    private static String normalise(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
     }
 }

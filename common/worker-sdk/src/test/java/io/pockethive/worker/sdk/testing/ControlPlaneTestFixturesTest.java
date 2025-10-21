@@ -21,6 +21,10 @@ class ControlPlaneTestFixturesTest {
         assertThat(properties.getSwarmId()).isEqualTo("swarm-1");
         assertThat(properties.getWorker().getRole()).isEqualTo("generator");
         assertThat(properties.getInstanceId()).isEqualTo("worker-a");
+        assertThat(properties.getExchange()).isEqualTo("ph.control");
+        assertThat(properties.getTrafficExchange()).isEqualTo("ph.swarm-1.hive");
+        assertThat(properties.getQueues().get("generator")).isEqualTo("ph.swarm-1.gen");
+        assertThat(properties.getQueues().get("moderator")).isEqualTo("ph.swarm-1.mod");
     }
 
     @Test

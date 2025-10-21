@@ -1,8 +1,7 @@
 package io.pockethive.processor;
 
-import io.pockethive.Topology;
-import io.pockethive.TopologyDefaults;
 import io.pockethive.controlplane.ControlPlaneIdentity;
+import io.pockethive.controlplane.spring.WorkerControlPlaneProperties;
 import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pockethive.worker.sdk.api.WorkResult;
 import io.pockethive.worker.sdk.autoconfigure.WorkerControlQueueListener;
@@ -12,6 +11,7 @@ import io.pockethive.worker.sdk.runtime.WorkerDefinition;
 import io.pockethive.worker.sdk.runtime.WorkerRegistry;
 import io.pockethive.worker.sdk.runtime.WorkerRuntime;
 import io.pockethive.worker.sdk.transport.rabbit.RabbitWorkMessageConverter;
+import io.pockethive.worker.sdk.testing.ControlPlaneTestFixtures;
 import java.nio.charset.StandardCharsets;
 import java.util.Optional;
 import java.util.function.Consumer;
@@ -63,19 +63,30 @@ class ProcessorRuntimeAdapterTest {
   private WorkerDefinition definition;
   private ControlPlaneIdentity identity;
 
+  private static final WorkerControlPlaneProperties WORKER_PROPERTIES =
+      ControlPlaneTestFixtures.workerProperties("swarm-alpha", "processor", "instance-1");
+  private static final String IN_QUEUE = WORKER_PROPERTIES.getQueues().get("moderator");
+  private static final String OUT_QUEUE = WORKER_PROPERTIES.getQueues().get("final");
+  private static final String EXCHANGE = WORKER_PROPERTIES.getTrafficExchange();
+
   @BeforeEach
   void setUp() {
     defaults = new ProcessorDefaults();
     defaults.setEnabled(true);
     defaults.setBaseUrl("http://sut/");
-    identity = new ControlPlaneIdentity(Topology.SWARM_ID, "processor", "instance-1");
+    identity = new ControlPlaneIdentity(
+        WORKER_PROPERTIES.getSwarmId(),
+        "processor",
+        WORKER_PROPERTIES.getInstanceId()
+    );
     definition = new WorkerDefinition(
         "processorWorker",
         ProcessorWorkerImpl.class,
         WorkerType.MESSAGE,
         "processor",
-        Topology.MOD_QUEUE,
-        TopologyDefaults.FINAL_QUEUE,
+        IN_QUEUE,
+        OUT_QUEUE,
+        EXCHANGE,
         ProcessorWorkerConfig.class
     );
   }
@@ -110,7 +121,7 @@ class ProcessorRuntimeAdapterTest {
 
     verify(workerRuntime).dispatch(eq("processorWorker"), any(WorkMessage.class));
     ArgumentCaptor<Message> messageCaptor = ArgumentCaptor.forClass(Message.class);
-    verify(rabbitTemplate).send(eq(Topology.EXCHANGE), eq(definition.resolvedOutQueue()), messageCaptor.capture());
+    verify(rabbitTemplate).send(eq(definition.exchange()), eq(definition.outQueue()), messageCaptor.capture());
     assertThat(new String(messageCaptor.getValue().getBody(), StandardCharsets.UTF_8))
         .isEqualTo("processed");
   }
@@ -175,8 +186,9 @@ class ProcessorRuntimeAdapterTest {
         ProcessorWorkerImpl.class,
         WorkerType.MESSAGE,
         "processor",
-        Topology.MOD_QUEUE,
+        IN_QUEUE,
         null,
+        EXCHANGE,
         ProcessorWorkerConfig.class
     );
     when(workerRegistry.findByRoleAndType("processor", WorkerType.MESSAGE))

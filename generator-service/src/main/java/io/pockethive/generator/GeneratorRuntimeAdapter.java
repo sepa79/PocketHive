@@ -1,6 +1,5 @@
 package io.pockethive.generator;
 
-import io.pockethive.Topology;
 import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pockethive.worker.sdk.api.WorkResult;
@@ -110,15 +109,25 @@ class GeneratorRuntimeAdapter {
     }
     Message message = messageConverter.toMessage(messageResult.value());
     String routingKey = resolveOutbound(definition);
-    rabbitTemplate.send(Topology.EXCHANGE, routingKey, message);
+    String exchange = resolveExchange(definition);
+    rabbitTemplate.send(exchange, routingKey, message);
   }
 
   private String resolveOutbound(WorkerDefinition definition) {
-    String out = definition.resolvedOutQueue();
+    String out = definition.outQueue();
     if (out == null || out.isBlank()) {
       throw new IllegalStateException("Generator worker " + definition.beanName() + " has no outbound queue configured");
     }
     return out;
+  }
+
+  private String resolveExchange(WorkerDefinition definition) {
+    String exchange = definition.exchange();
+    if (exchange == null || exchange.isBlank()) {
+      throw new IllegalStateException(
+          "Generator worker " + definition.beanName() + " has no exchange configured");
+    }
+    return exchange;
   }
 
   private static final class GeneratorState {

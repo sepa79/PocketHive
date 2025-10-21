@@ -36,6 +36,7 @@ class WorkerControlPlaneAutoConfigurationTest {
             "pockethive.control-plane.instance-id=gen-1",
             "pockethive.control-plane.swarm-id=swarm-alpha",
             "pockethive.control-plane.exchange=ph.control.worker",
+            "pockethive.control-plane.traffic-exchange=ph.swarm-alpha.hive",
             "pockethive.control-plane.queues.generator=ph.swarm-alpha.gen",
             "pockethive.control-plane.queues.moderator=ph.swarm-alpha.mod",
             "pockethive.control-plane.swarm-controller.rabbit.logs-exchange=ph.logs",
@@ -104,6 +105,21 @@ class WorkerControlPlaneAutoConfigurationTest {
                     .findFirst();
 
                 assertThat(trafficBinding).isEmpty();
+            });
+    }
+
+    @Test
+    void failsWhenTrafficExchangeMissing() {
+        contextRunner
+            .withPropertyValues(
+                "pockethive.control-plane.traffic-exchange=${POCKETHIVE_CONTROL_PLANE_TRAFFIC_EXCHANGE}")
+            .run(context -> {
+                assertThat(context).hasFailed();
+                Throwable failure = context.getStartupFailure();
+                assertThat(failure).isInstanceOf(BeanCreationException.class);
+                assertThat(failure).hasRootCauseInstanceOf(IllegalArgumentException.class);
+                assertThat(failure).hasRootCauseMessage(
+                    "pockethive.control-plane.traffic-exchange must not be null or blank");
             });
     }
 

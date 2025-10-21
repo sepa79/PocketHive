@@ -28,6 +28,7 @@ class WorkerInvocationTest {
         "role",
         "in.queue",
         "out.queue",
+        "exchange.hive",
         Void.class
     );
 
@@ -129,8 +130,8 @@ class WorkerInvocationTest {
                 definition.role(),
                 "swarm",
                 definition.beanName(),
-                definition.resolvedInQueue(),
-                definition.resolvedOutQueue()
+                definition.inQueue(),
+                definition.outQueue()
             );
 
             @Override

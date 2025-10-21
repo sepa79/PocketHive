@@ -25,14 +25,7 @@
         "sig.status-request.default.processor.inst"
       ]
     },
-    "additionalQueues": [
-      {
-        "name": "ph.default.mod",
-        "bindings": [
-          "ph.default.mod"
-        ]
-      }
-    ],
+    "additionalQueues": [],
     "routes": {
       "configSignals": [
         "sig.config-update.ALL.processor.ALL",
@@ -170,14 +163,7 @@
         "sig.status-request.default.moderator.inst"
       ]
     },
-    "additionalQueues": [
-      {
-        "name": "ph.default.gen",
-        "bindings": [
-          "ph.default.gen"
-        ]
-      }
-    ],
+    "additionalQueues": [],
     "routes": {
       "configSignals": [
         "sig.config-update.ALL.moderator.ALL",
@@ -223,14 +209,7 @@
         "sig.status-request.default.postprocessor.inst"
       ]
     },
-    "additionalQueues": [
-      {
-        "name": "ph.default.final",
-        "bindings": [
-          "ph.default.final"
-        ]
-      }
-    ],
+    "additionalQueues": [],
     "routes": {
       "configSignals": [
         "sig.config-update.ALL.postprocessor.ALL",

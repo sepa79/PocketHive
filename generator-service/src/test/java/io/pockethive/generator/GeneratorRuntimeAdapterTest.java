@@ -1,8 +1,7 @@
 package io.pockethive.generator;
 
-import io.pockethive.Topology;
-import io.pockethive.TopologyDefaults;
 import io.pockethive.controlplane.ControlPlaneIdentity;
+import io.pockethive.controlplane.spring.WorkerControlPlaneProperties;
 import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pockethive.worker.sdk.api.WorkResult;
 import io.pockethive.worker.sdk.autoconfigure.WorkerControlQueueListener;
@@ -24,6 +23,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 
+import io.pockethive.worker.sdk.testing.ControlPlaneTestFixtures;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -52,6 +52,11 @@ class GeneratorRuntimeAdapterTest {
   private WorkerDefinition definition;
   private ControlPlaneIdentity identity;
 
+  private static final WorkerControlPlaneProperties WORKER_PROPERTIES =
+      ControlPlaneTestFixtures.workerProperties("swarm-alpha", "generator", "instance-1");
+  private static final String EXCHANGE = WORKER_PROPERTIES.getTrafficExchange();
+  private static final String OUT_QUEUE = WORKER_PROPERTIES.getQueues().get("generator");
+
   @BeforeEach
   void setUp() {
     MessageConfig messageConfig = new MessageConfig();
@@ -61,14 +66,19 @@ class GeneratorRuntimeAdapterTest {
     defaults = new GeneratorDefaults(messageConfig);
     defaults.setRatePerSec(2.0);
     defaults.setEnabled(true);
-    identity = new ControlPlaneIdentity(Topology.SWARM_ID, "generator", "instance-1");
+    identity = new ControlPlaneIdentity(
+        WORKER_PROPERTIES.getSwarmId(),
+        "generator",
+        WORKER_PROPERTIES.getInstanceId()
+    );
     definition = new WorkerDefinition(
         "generatorWorker",
         GeneratorWorkerImpl.class,
         WorkerType.GENERATOR,
         "generator",
         null,
-        TopologyDefaults.GEN_QUEUE,
+        OUT_QUEUE,
+        EXCHANGE,
         GeneratorWorkerConfig.class
     );
   }
@@ -93,7 +103,7 @@ class GeneratorRuntimeAdapterTest {
     adapter.tick();
     verify(workerRuntime, times(2)).dispatch(eq("generatorWorker"), any(WorkMessage.class));
     ArgumentCaptor<Message> messageCaptor = ArgumentCaptor.forClass(Message.class);
-    verify(rabbitTemplate, times(2)).send(eq(Topology.EXCHANGE), eq(Topology.GEN_QUEUE), messageCaptor.capture());
+    verify(rabbitTemplate, times(2)).send(eq(definition.exchange()), eq(definition.outQueue()), messageCaptor.capture());
     assertThat(messageCaptor.getAllValues())
         .allSatisfy(message -> assertThat(new String(message.getBody(), StandardCharsets.UTF_8)).isEqualTo("payload"));
     verify(controlPlaneRuntime).emitStatusSnapshot();

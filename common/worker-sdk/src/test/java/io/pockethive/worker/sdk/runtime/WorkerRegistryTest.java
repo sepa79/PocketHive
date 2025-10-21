@@ -17,6 +17,7 @@ class WorkerRegistryTest {
         "trigger",
         null,
         null,
+        null,
         Void.class
     );
 
@@ -27,6 +28,7 @@ class WorkerRegistryTest {
         "processor",
         "in",
         "out",
+        "exchange.hive",
         Void.class
     );
 
@@ -35,6 +37,7 @@ class WorkerRegistryTest {
         Object.class,
         WorkerType.MESSAGE,
         "trigger",
+        null,
         null,
         null,
         Void.class
