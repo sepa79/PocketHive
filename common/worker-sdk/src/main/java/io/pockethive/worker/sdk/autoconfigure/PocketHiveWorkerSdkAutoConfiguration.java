@@ -197,9 +197,12 @@ public class PocketHiveWorkerSdkAutoConfiguration {
         });
         WorkerControlPlaneProperties.ControlPlane controlPlane = properties.getControlPlane();
         if (controlPlane != null) {
-            String controlQueue = normalise(controlPlane.getControlQueueName());
+            String controlQueue = controlPlane.getControlQueueName();
             if (controlQueue != null) {
-                aliases.putIfAbsent("control", controlQueue);
+                String trimmed = controlQueue.trim();
+                if (!trimmed.isEmpty()) {
+                    aliases.putIfAbsent("control", trimmed);
+                }
             }
         }
         return aliases;

@@ -25,7 +25,7 @@ class PocketHiveWorkerSdkAutoConfigurationQueueResolutionTest {
             "pockethive.control-plane.worker.role=processor",
             "pockethive.control-plane.manager.enabled=false",
             "pockethive.control-plane.instance-id=instance-1",
-            "pockethive.control-plane.swarm-id=swarm-alpha",
+            "pockethive.control-plane.swarm-id=Swarm-Alpha",
             "pockethive.control-plane.exchange=swarm-alpha.control",
             "pockethive.control-plane.traffic-exchange=swarm-alpha.hive",
             "pockethive.control-plane.queues.in=swarm-alpha.in",
@@ -57,7 +57,7 @@ class PocketHiveWorkerSdkAutoConfigurationQueueResolutionTest {
             WorkerRegistry registry = context.getBean(WorkerRegistry.class);
             Optional<WorkerDefinition> definition = registry.find("controlQueueWorker");
             assertThat(definition).isPresent();
-            assertThat(definition.get().inQueue()).isEqualTo("ph.control.swarm-alpha.processor.instance-1");
+            assertThat(definition.get().inQueue()).isEqualTo("ph.control.Swarm-Alpha.processor.instance-1");
         });
     }
 
