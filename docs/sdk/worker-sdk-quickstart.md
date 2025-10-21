@@ -9,7 +9,8 @@ deeper architectural context.
 Clone the `examples/worker-starter` directory when you want a copy-ready project that already wires the
 Worker SDK, control-plane defaults, and runtime adapters for both generator and processor roles. The template lives
 inside the monorepo so it always tracks the latest PocketHive release—copy it to your own repository, then follow the
-remaining steps to customise the worker roles, routing metadata, and business logic.
+remaining steps to customise the worker roles, routing metadata, and business logic. The starter already demonstrates
+how to source queue/exchange names from `application.yml` so workers boot entirely from configuration.
 
 ## 1. Add the dependency and starter
 
@@ -24,19 +25,25 @@ synchronisation.
 </dependency>
 ```
 
-Configure the control-plane identity and role using the shared properties:
+Configure the control-plane identity, exchange, and queue aliases using the shared properties. Queue aliases map the
+logical names you use in annotations/tests to the concrete RabbitMQ queues provisioned by the Swarm Controller.
 
 ```yaml
 pockethive:
   control-plane:
-    exchange: ph.control
+    exchange: ph.swarm-1.hive
     swarm-id: swarm-1
     instance-id: processor-1
+    queues:
+      moderator: ph.swarm-1.mod
+      processor: ph.swarm-1.processor
+      final: ph.swarm-1.final
     worker:
       role: processor
 ```
 
-See the [control-plane worker guide](../control-plane/worker-guide.md) for full property reference.
+See the [control-plane worker guide](../control-plane/worker-guide.md#configuration-properties) for the full
+`WorkerControlPlaneProperties` reference and additional environment contract details.
 
 ## 2. Annotate worker beans
 
@@ -48,8 +55,8 @@ provide routing metadata. Optional `config` classes participate in Stage 2 contr
 @PocketHiveWorker(
     role = "processor",
     type = WorkerType.MESSAGE,
-    inQueue = TopologyDefaults.MOD_QUEUE,
-    outQueue = TopologyDefaults.FINAL_QUEUE,
+    inQueue = "moderator",
+    outQueue = "final",
     config = ProcessorWorkerConfig.class
 )
 class ProcessorWorkerImpl implements MessageWorker {
@@ -129,8 +136,13 @@ class ProcessorRuntimeAdapter implements ApplicationListener<ContextRefreshedEve
 }
 ```
 
+Subscribe your `@RabbitListener` endpoints to the same aliases exposed in configuration, for example
+`@RabbitListener(queues = "${pockethive.control-plane.queues.moderator}")`. The sample adapters in
+`examples/worker-starter` show how to delegate inbound delivery to the helper while keeping queue names in
+configuration.
+
 The helper registers control-plane listeners, converts AMQP messages via `RabbitWorkMessageConverter`, publishes
-`WorkResult.Message` payloads to `Topology.EXCHANGE` using the validated outbound queue, and emits status
+`WorkResult.Message` payloads to the exchange declared in `WorkerControlPlaneProperties`, and emits status
 snapshots/deltas so service adapters can focus on orchestration concerns rather than RabbitMQ plumbing. See the updated
 [`processor`](../../processor-service/src/main/java/io/pockethive/processor/ProcessorRuntimeAdapter.java),
 [`moderator`](../../moderator-service/src/main/java/io/pockethive/moderator/ModeratorRuntimeAdapter.java), and
@@ -153,7 +165,7 @@ Stage 1 introduced `ControlPlaneTestFixtures` and `WorkerSdkTestFixtures` to mak
 construct canonical identities, topology descriptors, and sample payloads without repeating boilerplate.
 
 `ControlPlaneTestFixtures.workerProperties(...)` now returns the validated `WorkerControlPlaneProperties` bean so tests
-can assert the same contract that production workers consume.
+can assert the same contract that production workers consume, including exchange and queue aliases.
 
 ```java
 WorkerControlPlaneProperties props = ControlPlaneTestFixtures.workerProperties("swarm-1", "processor", "processor-1");

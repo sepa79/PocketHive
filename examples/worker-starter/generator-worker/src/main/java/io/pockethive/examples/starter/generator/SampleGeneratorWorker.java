@@ -1,7 +1,5 @@
 package io.pockethive.examples.starter.generator;
 
-import io.pockethive.Topology;
-import io.pockethive.TopologyDefaults;
 import io.pockethive.worker.sdk.api.GeneratorWorker;
 import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pockethive.worker.sdk.api.WorkResult;
@@ -21,7 +19,7 @@ import org.springframework.stereotype.Component;
 @PocketHiveWorker(
     role = "generator",
     type = WorkerType.GENERATOR,
-    outQueue = TopologyDefaults.GEN_QUEUE,
+    outQueue = "generator",
     config = SampleGeneratorConfig.class
 )
 class SampleGeneratorWorker implements GeneratorWorker {
@@ -34,7 +32,8 @@ class SampleGeneratorWorker implements GeneratorWorker {
     SampleGeneratorConfig config = context.config(SampleGeneratorConfig.class)
         .orElse(FALLBACK_CONFIG);
 
-    String outQueue = Optional.ofNullable(context.info().outQueue()).orElse(Topology.GEN_QUEUE);
+    String outQueue = Optional.ofNullable(context.info().outQueue())
+        .orElseThrow(() -> new IllegalStateException("Outbound queue not configured"));
 
     context.statusPublisher()
         .workOut(outQueue)

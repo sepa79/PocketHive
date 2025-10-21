@@ -1,6 +1,5 @@
 package io.pockethive.examples.starter.processor;
 
-import io.pockethive.TopologyDefaults;
 import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.worker.sdk.config.WorkerType;
 import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime;
@@ -61,7 +60,7 @@ class ProcessorWorkerRuntimeAdapter implements ApplicationListener<ContextRefres
 
   @RabbitListener(
       id = LISTENER_ID,
-      queues = "${ph.processor.work.queue:" + TopologyDefaults.MOD_QUEUE + "}")
+      queues = "${pockethive.control-plane.queues.moderator}")
   public void onWork(Message message) {
     delegate.onWork(message);
   }
