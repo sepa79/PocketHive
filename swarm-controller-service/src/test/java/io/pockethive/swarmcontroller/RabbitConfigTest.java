@@ -6,7 +6,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import io.pockethive.controlplane.spring.BeeIdentityProperties;
 import io.pockethive.swarmcontroller.config.SwarmControllerProperties;
 import org.junit.jupiter.api.Test;
-import org.springframework.amqp.core.Queue;
 
 class RabbitConfigTest {
 
@@ -14,9 +13,9 @@ class RabbitConfigTest {
   private final RabbitConfig config = new RabbitConfig(properties);
 
   @Test
-  void controlQueueUsesSwarmRoleAndInstanceSegments() {
-    Queue queue = config.controlQueue("test-instance");
-    assertThat(queue.getName()).isEqualTo(properties.controlQueueName("test-instance"));
+  void controlQueueNameUsesSwarmRoleAndInstanceSegments() {
+    String queueName = config.controlQueueName("test-instance");
+    assertThat(queueName).isEqualTo(properties.controlQueueName("test-instance"));
   }
 
   @Test

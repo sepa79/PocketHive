@@ -86,7 +86,7 @@ public class SwarmSignalListener {
     }
   }
 
-  @RabbitListener(queues = "#{controlQueue.name}")
+  @RabbitListener(queues = "#{swarmControllerControlQueueName}")
   public void handle(String body, @Header(AmqpHeaders.RECEIVED_ROUTING_KEY) String routingKey) {
     try {
       if (routingKey == null || routingKey.isBlank()) {
