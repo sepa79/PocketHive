@@ -1,5 +1,6 @@
 package io.pockethive.controlplane.spring;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Duration;
@@ -23,6 +24,19 @@ class WorkerControlPlanePropertiesTest {
             .hasMessage(
                 "pockethive.control-plane.traffic-exchange must resolve to a concrete value, but was "
                     + placeholder);
+    }
+
+    @Test
+    void controlPlaneMetadataDerivedFromConfiguredIdentity() {
+        WorkerControlPlaneProperties properties = buildProperties("ph.swarm-alpha.hive");
+
+        WorkerControlPlaneProperties.ControlPlane controlPlane = properties.getControlPlane();
+        assertThat(controlPlane.getControlQueueName())
+            .isEqualTo("ph.control.swarm-alpha.generator.worker-1");
+        assertThat(controlPlane.getRoutes().configSignals())
+            .contains("sig.config-update.swarm-alpha.generator.{instance}");
+        assertThat(controlPlane.getRoutes().statusSignals())
+            .contains("sig.status-request.swarm-alpha.generator.{instance}");
     }
 
     private static WorkerControlPlaneProperties buildProperties(String trafficExchange) {

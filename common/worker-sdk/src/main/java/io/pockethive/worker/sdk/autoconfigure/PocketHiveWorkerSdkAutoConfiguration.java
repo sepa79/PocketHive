@@ -11,7 +11,6 @@ import io.pockethive.controlplane.spring.ManagerControlPlaneAutoConfiguration;
 import io.pockethive.controlplane.spring.WorkerControlPlaneAutoConfiguration;
 import io.pockethive.controlplane.spring.WorkerControlPlaneProperties;
 import io.pockethive.controlplane.topology.ControlPlaneTopologyDescriptor;
-import io.pockethive.controlplane.topology.ControlQueueDescriptor;
 import io.pockethive.controlplane.worker.WorkerControlPlane;
 import io.pockethive.worker.sdk.config.PocketHiveWorker;
 import io.pockethive.worker.sdk.runtime.DefaultWorkerContextFactory;
@@ -67,13 +66,10 @@ public class PocketHiveWorkerSdkAutoConfiguration {
     @ConditionalOnMissingBean
     WorkerRegistry workerRegistry(
         ListableBeanFactory beanFactory,
-        ObjectProvider<WorkerControlPlaneProperties> workerProperties,
-        @Qualifier("workerControlPlaneTopologyDescriptor")
-        ObjectProvider<ControlPlaneTopologyDescriptor> topologyDescriptor
+        ObjectProvider<WorkerControlPlaneProperties> workerProperties
     ) {
         WorkerControlPlaneProperties properties = workerProperties.getIfAvailable();
-        ControlPlaneTopologyDescriptor topology = topologyDescriptor.getIfAvailable();
-        Map<String, String> queueAliases = buildQueueAliasMap(properties, topology);
+        Map<String, String> queueAliases = buildQueueAliasMap(properties);
         String[] beanNames = beanFactory.getBeanNamesForAnnotation(PocketHiveWorker.class);
         List<WorkerDefinition> definitions = new ArrayList<>(beanNames.length);
         for (String beanName : beanNames) {
@@ -140,12 +136,17 @@ public class PocketHiveWorkerSdkAutoConfiguration {
         WorkerControlPlane workerControlPlane,
         WorkerStateStore workerStateStore,
         @Qualifier("workerControlPlaneIdentity") ControlPlaneIdentity identity,
-        @Qualifier("workerControlPlaneTopologyDescriptor") ControlPlaneTopologyDescriptor topologyDescriptor,
         @Qualifier("workerControlPlaneEmitter") ControlPlaneEmitter controlPlaneEmitter,
+        WorkerControlPlaneProperties workerControlPlaneProperties,
         ObjectProvider<ObjectMapper> objectMapperProvider
     ) {
         ObjectMapper mapper = objectMapperProvider.getIfAvailable(() -> new ObjectMapper().findAndRegisterModules());
-        return new WorkerControlPlaneRuntime(workerControlPlane, workerStateStore, mapper, controlPlaneEmitter, identity, topologyDescriptor);
+        WorkerControlPlaneProperties.ControlPlane controlPlane = Objects
+            .requireNonNull(workerControlPlaneProperties, "workerControlPlaneProperties must not be null")
+            .getControlPlane();
+        Objects.requireNonNull(controlPlane, "workerControlPlaneProperties.controlPlane must not be null");
+        return new WorkerControlPlaneRuntime(workerControlPlane, workerStateStore, mapper, controlPlaneEmitter, identity,
+            controlPlane);
     }
 
     @Bean
@@ -182,8 +183,7 @@ public class PocketHiveWorkerSdkAutoConfiguration {
     }
 
     private static Map<String, String> buildQueueAliasMap(
-        WorkerControlPlaneProperties properties,
-        ControlPlaneTopologyDescriptor topology
+        WorkerControlPlaneProperties properties
     ) {
         if (properties == null) {
             return Map.of();
@@ -195,10 +195,15 @@ public class PocketHiveWorkerSdkAutoConfiguration {
                 aliases.put(alias, value);
             }
         });
-        if (topology != null) {
-            topology.controlQueue(properties.getInstanceId())
-                .map(ControlQueueDescriptor::name)
-                .ifPresent(name -> aliases.putIfAbsent("control", name));
+        WorkerControlPlaneProperties.ControlPlane controlPlane = properties.getControlPlane();
+        if (controlPlane != null) {
+            String controlQueue = controlPlane.getControlQueueName();
+            if (controlQueue != null) {
+                String trimmed = controlQueue.trim();
+                if (!trimmed.isEmpty()) {
+                    aliases.putIfAbsent("control", trimmed);
+                }
+            }
         }
         return aliases;
     }
