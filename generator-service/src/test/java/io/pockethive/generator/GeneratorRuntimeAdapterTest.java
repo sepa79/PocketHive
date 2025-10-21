@@ -1,7 +1,5 @@
 package io.pockethive.generator;
 
-import io.pockethive.Topology;
-import io.pockethive.TopologyDefaults;
 import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pockethive.worker.sdk.api.WorkResult;
@@ -52,6 +50,10 @@ class GeneratorRuntimeAdapterTest {
   private WorkerDefinition definition;
   private ControlPlaneIdentity identity;
 
+  private static final String SWARM_ID = "swarm-alpha";
+  private static final String EXCHANGE = "swarm-alpha.hive";
+  private static final String OUT_QUEUE = "swarm-alpha.gen";
+
   @BeforeEach
   void setUp() {
     MessageConfig messageConfig = new MessageConfig();
@@ -61,15 +63,15 @@ class GeneratorRuntimeAdapterTest {
     defaults = new GeneratorDefaults(messageConfig);
     defaults.setRatePerSec(2.0);
     defaults.setEnabled(true);
-    identity = new ControlPlaneIdentity(Topology.SWARM_ID, "generator", "instance-1");
+    identity = new ControlPlaneIdentity(SWARM_ID, "generator", "instance-1");
     definition = new WorkerDefinition(
         "generatorWorker",
         GeneratorWorkerImpl.class,
         WorkerType.GENERATOR,
         "generator",
         null,
-        TopologyDefaults.GEN_QUEUE,
-        Topology.EXCHANGE,
+        OUT_QUEUE,
+        EXCHANGE,
         GeneratorWorkerConfig.class
     );
   }

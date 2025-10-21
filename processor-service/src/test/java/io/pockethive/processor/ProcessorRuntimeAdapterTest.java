@@ -1,7 +1,5 @@
 package io.pockethive.processor;
 
-import io.pockethive.Topology;
-import io.pockethive.TopologyDefaults;
 import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pockethive.worker.sdk.api.WorkResult;
@@ -63,20 +61,25 @@ class ProcessorRuntimeAdapterTest {
   private WorkerDefinition definition;
   private ControlPlaneIdentity identity;
 
+  private static final String SWARM_ID = "swarm-alpha";
+  private static final String IN_QUEUE = "swarm-alpha.moderation";
+  private static final String OUT_QUEUE = "swarm-alpha.final";
+  private static final String EXCHANGE = "swarm-alpha.hive";
+
   @BeforeEach
   void setUp() {
     defaults = new ProcessorDefaults();
     defaults.setEnabled(true);
     defaults.setBaseUrl("http://sut/");
-    identity = new ControlPlaneIdentity(Topology.SWARM_ID, "processor", "instance-1");
+    identity = new ControlPlaneIdentity(SWARM_ID, "processor", "instance-1");
     definition = new WorkerDefinition(
         "processorWorker",
         ProcessorWorkerImpl.class,
         WorkerType.MESSAGE,
         "processor",
-        Topology.MOD_QUEUE,
-        TopologyDefaults.FINAL_QUEUE,
-        Topology.EXCHANGE,
+        IN_QUEUE,
+        OUT_QUEUE,
+        EXCHANGE,
         ProcessorWorkerConfig.class
     );
   }
@@ -176,9 +179,9 @@ class ProcessorRuntimeAdapterTest {
         ProcessorWorkerImpl.class,
         WorkerType.MESSAGE,
         "processor",
-        Topology.MOD_QUEUE,
+        IN_QUEUE,
         null,
-        Topology.EXCHANGE,
+        EXCHANGE,
         ProcessorWorkerConfig.class
     );
     when(workerRegistry.findByRoleAndType("processor", WorkerType.MESSAGE))

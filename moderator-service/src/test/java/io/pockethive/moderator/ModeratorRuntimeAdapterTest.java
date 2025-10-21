@@ -1,7 +1,5 @@
 package io.pockethive.moderator;
 
-import io.pockethive.Topology;
-import io.pockethive.TopologyDefaults;
 import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pockethive.worker.sdk.api.WorkResult;
@@ -63,19 +61,24 @@ class ModeratorRuntimeAdapterTest {
   private WorkerDefinition definition;
   private ControlPlaneIdentity identity;
 
+  private static final String SWARM_ID = "swarm-alpha";
+  private static final String IN_QUEUE = "swarm-alpha.generator";
+  private static final String OUT_QUEUE = "swarm-alpha.moderation";
+  private static final String EXCHANGE = "swarm-alpha.hive";
+
   @BeforeEach
   void setUp() {
     defaults = new ModeratorDefaults();
     defaults.setEnabled(true);
-    identity = new ControlPlaneIdentity(Topology.SWARM_ID, "moderator", "instance-1");
+    identity = new ControlPlaneIdentity(SWARM_ID, "moderator", "instance-1");
     definition = new WorkerDefinition(
         "moderatorWorker",
         ModeratorWorkerImpl.class,
         WorkerType.MESSAGE,
         "moderator",
-        Topology.GEN_QUEUE,
-        TopologyDefaults.MOD_QUEUE,
-        Topology.EXCHANGE,
+        IN_QUEUE,
+        OUT_QUEUE,
+        EXCHANGE,
         ModeratorWorkerConfig.class
     );
   }

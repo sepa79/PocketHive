@@ -1,7 +1,5 @@
 package io.pockethive.postprocessor;
 
-import io.pockethive.Topology;
-import io.pockethive.TopologyDefaults;
 import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pockethive.worker.sdk.api.WorkResult;
@@ -58,19 +56,23 @@ class PostProcessorRuntimeAdapterTest {
   private WorkerDefinition definition;
   private ControlPlaneIdentity identity;
 
+  private static final String SWARM_ID = "swarm-alpha";
+  private static final String IN_QUEUE = "swarm-alpha.final";
+  private static final String EXCHANGE = "swarm-alpha.hive";
+
   @BeforeEach
   void setUp() {
     defaults = new PostProcessorDefaults();
     defaults.setEnabled(true);
-    identity = new ControlPlaneIdentity(Topology.SWARM_ID, "postprocessor", "instance-1");
+    identity = new ControlPlaneIdentity(SWARM_ID, "postprocessor", "instance-1");
     definition = new WorkerDefinition(
         "postProcessorWorker",
         PostProcessorWorkerImpl.class,
         WorkerType.MESSAGE,
         "postprocessor",
-        Topology.FINAL_QUEUE,
+        IN_QUEUE,
         null,
-        Topology.EXCHANGE,
+        EXCHANGE,
         PostProcessorWorkerConfig.class
     );
   }
@@ -110,8 +112,8 @@ class PostProcessorRuntimeAdapterTest {
   void controlQueueListenerDelegatesToControlPlaneRuntime() {
     WorkerControlQueueListener listener = new WorkerControlQueueListener(controlPlaneRuntime);
 
-    listener.onControl("{}", TopologyDefaults.FINAL_QUEUE + ".control", null);
-    verify(controlPlaneRuntime).handle("{}", TopologyDefaults.FINAL_QUEUE + ".control");
+    listener.onControl("{}", IN_QUEUE + ".control", null);
+    verify(controlPlaneRuntime).handle("{}", IN_QUEUE + ".control");
 
     assertThatThrownBy(() -> listener.onControl(" ", "rk", null))
         .isInstanceOf(IllegalArgumentException.class)
