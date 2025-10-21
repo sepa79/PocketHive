@@ -258,6 +258,7 @@ class RabbitMessageWorkerAdapterTest {
             "processor",
             "processor.in",
             null,
+            null,
             Object.class
         );
 

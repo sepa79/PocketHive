@@ -2,6 +2,7 @@ package io.pockethive.worker.sdk.autoconfigure;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.worker.sdk.api.MessageWorker;
 import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pockethive.worker.sdk.api.WorkResult;
@@ -27,8 +28,14 @@ class PocketHiveWorkerSdkAutoConfigurationQueueResolutionTest {
             "pockethive.control-plane.swarm-id=swarm-alpha",
             "pockethive.control-plane.exchange=swarm-alpha.hive",
             "pockethive.control-plane.queues.in=swarm-alpha.in",
-            "pockethive.control-plane.queues.out=swarm-alpha.out"
+            "pockethive.control-plane.queues.out=swarm-alpha.out",
+            "pockethive.control-plane.swarm-controller.rabbit.logs-exchange=swarm-alpha.logs",
+            "pockethive.control-plane.swarm-controller.rabbit.logging.enabled=false",
+            "pockethive.control-plane.swarm-controller.metrics.pushgateway.enabled=false",
+            "pockethive.control-plane.swarm-controller.metrics.pushgateway.push-rate=PT30S",
+            "pockethive.control-plane.swarm-controller.metrics.pushgateway.shutdown-operation=DELETE"
         )
+        .withBean(ObjectMapper.class, ObjectMapper::new)
         .withUserConfiguration(TestWorkerConfiguration.class, PocketHiveWorkerSdkAutoConfiguration.class);
 
     @Test
