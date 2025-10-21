@@ -129,8 +129,8 @@ class WorkerInvocationTest {
                 definition.role(),
                 "swarm",
                 definition.beanName(),
-                definition.resolvedInQueue(),
-                definition.resolvedOutQueue()
+                definition.inQueue(),
+                definition.outQueue()
             );
 
             @Override

@@ -114,7 +114,7 @@ class GeneratorRuntimeAdapter {
   }
 
   private String resolveOutbound(WorkerDefinition definition) {
-    String out = definition.resolvedOutQueue();
+    String out = definition.outQueue();
     if (out == null || out.isBlank()) {
       throw new IllegalStateException("Generator worker " + definition.beanName() + " has no outbound queue configured");
     }

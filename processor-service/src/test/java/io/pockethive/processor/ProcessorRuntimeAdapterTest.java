@@ -110,7 +110,7 @@ class ProcessorRuntimeAdapterTest {
 
     verify(workerRuntime).dispatch(eq("processorWorker"), any(WorkMessage.class));
     ArgumentCaptor<Message> messageCaptor = ArgumentCaptor.forClass(Message.class);
-    verify(rabbitTemplate).send(eq(Topology.EXCHANGE), eq(definition.resolvedOutQueue()), messageCaptor.capture());
+    verify(rabbitTemplate).send(eq(Topology.EXCHANGE), eq(definition.outQueue()), messageCaptor.capture());
     assertThat(new String(messageCaptor.getValue().getBody(), StandardCharsets.UTF_8))
         .isEqualTo("processed");
   }

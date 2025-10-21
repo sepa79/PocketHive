@@ -106,7 +106,7 @@ class SampleGeneratorRuntimeAdapter {
   }
 
   private void publish(WorkMessage message) {
-    String routingKey = Optional.ofNullable(definition.resolvedOutQueue()).orElse(Topology.GEN_QUEUE);
+    String routingKey = Optional.ofNullable(definition.outQueue()).orElse(Topology.GEN_QUEUE);
     rabbitTemplate.send(Topology.EXCHANGE, routingKey, messageConverter.toMessage(message));
   }
 

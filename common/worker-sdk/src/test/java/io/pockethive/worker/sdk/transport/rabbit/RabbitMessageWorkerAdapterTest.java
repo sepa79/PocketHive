@@ -1,6 +1,5 @@
 package io.pockethive.worker.sdk.transport.rabbit;
 
-import io.pockethive.Topology;
 import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pockethive.worker.sdk.api.WorkResult;
@@ -10,6 +9,7 @@ import io.pockethive.worker.sdk.runtime.WorkerDefinition;
 import java.nio.charset.StandardCharsets;
 import java.util.Optional;
 import java.util.function.Consumer;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -69,9 +69,12 @@ class RabbitMessageWorkerAdapterTest {
     private WorkerDefinition workerDefinition;
     private ControlPlaneIdentity identity;
     private DummyConfig defaults;
+    private String originalExchange;
 
     @BeforeEach
     void setUp() {
+        originalExchange = System.getProperty("POCKETHIVE_TRAFFIC_EXCHANGE");
+        System.setProperty("POCKETHIVE_TRAFFIC_EXCHANGE", "ph.test.hive");
         workerDefinition = new WorkerDefinition(
             "processorWorker",
             Object.class,
@@ -83,6 +86,15 @@ class RabbitMessageWorkerAdapterTest {
         );
         identity = new ControlPlaneIdentity("swarm-1", "processor", "instance-1");
         defaults = new DummyConfig(true);
+    }
+
+    @AfterEach
+    void tearDown() {
+        if (originalExchange == null) {
+            System.clearProperty("POCKETHIVE_TRAFFIC_EXCHANGE");
+        } else {
+            System.setProperty("POCKETHIVE_TRAFFIC_EXCHANGE", originalExchange);
+        }
     }
 
     @Test
@@ -129,7 +141,7 @@ class RabbitMessageWorkerAdapterTest {
 
         ArgumentCaptor<Message> outboundCaptor = ArgumentCaptor.forClass(Message.class);
         verify(rabbitTemplate)
-            .send(eq(Topology.EXCHANGE), Mockito.<String>eq(workerDefinition.resolvedOutQueue()), outboundCaptor.capture());
+            .send(eq("ph.test.hive"), Mockito.<String>eq(workerDefinition.outQueue()), outboundCaptor.capture());
         assertThat(outboundCaptor.getValue().getBody()).isEqualTo("processed".getBytes(StandardCharsets.UTF_8));
     }
 

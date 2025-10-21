@@ -453,7 +453,7 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
             Objects.requireNonNull(listenerId, "listenerId");
             Objects.requireNonNull(displayName, "displayName");
             Objects.requireNonNull(workerDefinition, "workerDefinition");
-            String resolvedOutbound = workerDefinition.resolvedOutQueue();
+            String resolvedOutbound = workerDefinition.outQueue();
             if (resolvedOutbound != null && !resolvedOutbound.isBlank()) {
                 this.outboundQueue = resolvedOutbound;
             }

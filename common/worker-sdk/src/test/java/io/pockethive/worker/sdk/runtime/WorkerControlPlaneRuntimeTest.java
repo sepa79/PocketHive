@@ -1,7 +1,6 @@
 package io.pockethive.worker.sdk.runtime;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.pockethive.Topology;
 import io.pockethive.control.CommandTarget;
 import io.pockethive.control.ControlSignal;
 import io.pockethive.controlplane.ControlPlaneIdentity;
@@ -31,7 +30,8 @@ import static org.mockito.Mockito.verify;
 class WorkerControlPlaneRuntimeTest {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
-    private static final ControlPlaneIdentity IDENTITY = new ControlPlaneIdentity(Topology.SWARM_ID, "generator", "inst-1");
+    private static final String SWARM_ID = "default";
+    private static final ControlPlaneIdentity IDENTITY = new ControlPlaneIdentity(SWARM_ID, "generator", "inst-1");
     private static final ControlPlaneTopologyDescriptor TOPOLOGY = new GeneratorControlPlaneTopologyDescriptor();
 
     private WorkerStateStore stateStore;
