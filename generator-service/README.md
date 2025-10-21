@@ -6,8 +6,9 @@ See the [architecture reference](../docs/ARCHITECTURE.md) and [control-plane rul
 
 ## Configuration
 
-Generator routing is supplied by `pockethive.control-plane.*` properties. Configure the hive exchange and queue aliases
-(`pockethive.control-plane.queues.generator`, etc.) in `application.yml` or environment variables; see the
+Generator routing is supplied by `pockethive.control-plane.*` properties. Configure the hive traffic exchange
+(`pockethive.control-plane.traffic-exchange`) and queue aliases (`pockethive.control-plane.queues.generator`, etc.) in
+`application.yml` or environment variables; see the
 [control-plane worker guide](../docs/control-plane/worker-guide.md#configuration-properties) for the complete property
 reference and [Worker SDK quick start](../docs/sdk/worker-sdk-quickstart.md) for sample YAML.
 

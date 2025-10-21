@@ -15,6 +15,7 @@ logging:
 pockethive:
   control-plane:
     exchange: ${POCKETHIVE_CONTROL_PLANE_EXCHANGE}
+    traffic-exchange: ${POCKETHIVE_CONTROL_PLANE_TRAFFIC_EXCHANGE}
     swarm-id: ${POCKETHIVE_CONTROL_PLANE_SWARM_ID}
     instance-id: ${POCKETHIVE_CONTROL_PLANE_INSTANCE_ID}
     queues:

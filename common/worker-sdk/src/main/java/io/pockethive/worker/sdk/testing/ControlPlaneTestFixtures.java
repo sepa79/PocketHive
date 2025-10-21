@@ -61,6 +61,7 @@ public final class ControlPlaneTestFixtures {
         return new WorkerControlPlaneProperties(
             true,
             true,
+            "ph.control",
             trafficPrefix + "hive",
             resolvedSwarm,
             resolvedInstance,

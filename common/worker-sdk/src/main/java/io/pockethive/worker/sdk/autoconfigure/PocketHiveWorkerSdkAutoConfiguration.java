@@ -207,7 +207,7 @@ public class PocketHiveWorkerSdkAutoConfiguration {
         if (properties == null) {
             return null;
         }
-        return normalise(properties.getExchange());
+        return normalise(properties.getTrafficExchange());
     }
 
     private static String resolveQueue(String queue, Map<String, String> aliases) {

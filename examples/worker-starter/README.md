@@ -31,7 +31,7 @@ Each module contains:
   `MessageWorker`).
 - Runtime adapters that show how to bridge the worker definition to RabbitMQ while listening for control-plane
   updates.
-- Minimal configuration defaults (`application.yml`) that bind the control-plane exchange, swarm identity, and queue
+- Minimal configuration defaults (`application.yml`) that bind the control-plane exchange, traffic exchange, swarm identity, and queue
   aliases used by the workers, plus focused unit tests exercising the behaviour.
 
 ## Build & package locally
@@ -63,7 +63,7 @@ When creating your own workers from this template:
 - [ ] Update Maven coordinates (`groupId`, `artifactId`, version) in the parent and module POMs.
 - [ ] Rename packages under `io.pockethive.examples.starter.generator` and `.processor` to match your namespace.
 - [ ] Adjust the `@PocketHiveWorker` annotations (role, queue aliases, config classes) to reflect your topology.
-- [ ] Align `pockethive.control-plane.*` defaults in each module’s `application.yml` (exchange, swarm identity, queue
+- [ ] Align `pockethive.control-plane.*` defaults in each module’s `application.yml` (control-plane exchange, traffic exchange, swarm identity, queue
       aliases) with the values provisioned by your Swarm Controller.
 - [ ] Replace the sample business logic and tests with your own, keeping the runtime adapters as references.
 - [ ] Update the build scripts or Dockerfiles if you change module names or image packaging conventions.

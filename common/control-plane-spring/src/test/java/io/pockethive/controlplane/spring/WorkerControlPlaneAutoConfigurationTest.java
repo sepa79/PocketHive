@@ -36,6 +36,7 @@ class WorkerControlPlaneAutoConfigurationTest {
             "pockethive.control-plane.instance-id=gen-1",
             "pockethive.control-plane.swarm-id=swarm-alpha",
             "pockethive.control-plane.exchange=ph.control.worker",
+            "pockethive.control-plane.traffic-exchange=ph.swarm-alpha.hive",
             "pockethive.control-plane.queues.generator=ph.swarm-alpha.gen",
             "pockethive.control-plane.queues.moderator=ph.swarm-alpha.mod",
             "pockethive.control-plane.swarm-controller.rabbit.logs-exchange=ph.logs",

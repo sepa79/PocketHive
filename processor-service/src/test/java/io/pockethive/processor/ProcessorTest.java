@@ -65,7 +65,7 @@ class ProcessorTest {
         ControlPlaneTestFixtures.workerProperties("swarm", "processor", "instance");
     private static final String MODERATOR_QUEUE = WORKER_PROPERTIES.getQueues().get("moderator");
     private static final String FINAL_QUEUE = WORKER_PROPERTIES.getQueues().get("final");
-    private static final String TRAFFIC_EXCHANGE = WORKER_PROPERTIES.getExchange();
+    private static final String TRAFFIC_EXCHANGE = WORKER_PROPERTIES.getTrafficExchange();
 
     @Test
     void workerInvokesHttpAndPropagatesResponse() throws Exception {

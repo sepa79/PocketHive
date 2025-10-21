@@ -67,7 +67,7 @@ class ModeratorRuntimeAdapterTest {
       ControlPlaneTestFixtures.workerProperties("swarm-alpha", "moderator", "instance-1");
   private static final String IN_QUEUE = WORKER_PROPERTIES.getQueues().get("generator");
   private static final String OUT_QUEUE = WORKER_PROPERTIES.getQueues().get("moderator");
-  private static final String EXCHANGE = WORKER_PROPERTIES.getExchange();
+  private static final String EXCHANGE = WORKER_PROPERTIES.getTrafficExchange();
 
   @BeforeEach
   void setUp() {

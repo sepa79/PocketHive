@@ -25,7 +25,7 @@ class ProcessorTopologyProvisioningTest {
     private static final WorkerControlPlaneProperties WORKER_PROPERTIES =
         ControlPlaneTestFixtures.workerProperties("swarm-alpha", "processor", "processor-1");
     private static final String MODERATOR_QUEUE = WORKER_PROPERTIES.getQueues().get("moderator");
-    private static final String EXCHANGE = WORKER_PROPERTIES.getExchange();
+    private static final String EXCHANGE = WORKER_PROPERTIES.getTrafficExchange();
 
     private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
         .withConfiguration(AutoConfigurations.of(
@@ -37,7 +37,8 @@ class ProcessorTopologyProvisioningTest {
             "pockethive.control-plane.worker.role=processor",
             "pockethive.control-plane.instance-id=" + WORKER_PROPERTIES.getInstanceId(),
             "pockethive.control-plane.swarm-id=" + WORKER_PROPERTIES.getSwarmId(),
-            "pockethive.control-plane.exchange=" + EXCHANGE,
+            "pockethive.control-plane.exchange=" + WORKER_PROPERTIES.getExchange(),
+            "pockethive.control-plane.traffic-exchange=" + EXCHANGE,
             "pockethive.control-plane.queues.processor=" + WORKER_PROPERTIES.getQueues().get("processor"),
             "pockethive.control-plane.queues.moderator=" + MODERATOR_QUEUE,
             "pockethive.control-plane.queues.final=" + WORKER_PROPERTIES.getQueues().get("final"),

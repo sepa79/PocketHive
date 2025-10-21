@@ -25,13 +25,14 @@ synchronisation.
 </dependency>
 ```
 
-Configure the control-plane identity, exchange, and queue aliases using the shared properties. Queue aliases map the
+Configure the control-plane identity, traffic exchange, and queue aliases using the shared properties. Queue aliases map the
 logical names you use in annotations/tests to the concrete RabbitMQ queues provisioned by the Swarm Controller.
 
 ```yaml
 pockethive:
   control-plane:
-    exchange: ph.swarm-1.hive
+    exchange: ph.control
+    traffic-exchange: ph.swarm-1.hive
     swarm-id: swarm-1
     instance-id: processor-1
     queues:
@@ -142,7 +143,7 @@ Subscribe your `@RabbitListener` endpoints to the same aliases exposed in config
 configuration.
 
 The helper registers control-plane listeners, converts AMQP messages via `RabbitWorkMessageConverter`, publishes
-`WorkResult.Message` payloads to the exchange declared in `WorkerControlPlaneProperties`, and emits status
+`WorkResult.Message` payloads to the traffic exchange declared in `WorkerControlPlaneProperties`, and emits status
 snapshots/deltas so service adapters can focus on orchestration concerns rather than RabbitMQ plumbing. See the updated
 [`processor`](../../processor-service/src/main/java/io/pockethive/processor/ProcessorRuntimeAdapter.java),
 [`moderator`](../../moderator-service/src/main/java/io/pockethive/moderator/ModeratorRuntimeAdapter.java), and
@@ -165,7 +166,7 @@ Stage 1 introduced `ControlPlaneTestFixtures` and `WorkerSdkTestFixtures` to mak
 construct canonical identities, topology descriptors, and sample payloads without repeating boilerplate.
 
 `ControlPlaneTestFixtures.workerProperties(...)` now returns the validated `WorkerControlPlaneProperties` bean so tests
-can assert the same contract that production workers consume, including exchange and queue aliases.
+can assert the same contract that production workers consume, including traffic exchange and queue aliases.
 
 ```java
 WorkerControlPlaneProperties props = ControlPlaneTestFixtures.workerProperties("swarm-1", "processor", "processor-1");

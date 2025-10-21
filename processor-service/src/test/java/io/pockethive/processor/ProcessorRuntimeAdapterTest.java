@@ -67,7 +67,7 @@ class ProcessorRuntimeAdapterTest {
       ControlPlaneTestFixtures.workerProperties("swarm-alpha", "processor", "instance-1");
   private static final String IN_QUEUE = WORKER_PROPERTIES.getQueues().get("moderator");
   private static final String OUT_QUEUE = WORKER_PROPERTIES.getQueues().get("final");
-  private static final String EXCHANGE = WORKER_PROPERTIES.getExchange();
+  private static final String EXCHANGE = WORKER_PROPERTIES.getTrafficExchange();
 
   @BeforeEach
   void setUp() {

@@ -54,7 +54,7 @@ class GeneratorRuntimeAdapterTest {
 
   private static final WorkerControlPlaneProperties WORKER_PROPERTIES =
       ControlPlaneTestFixtures.workerProperties("swarm-alpha", "generator", "instance-1");
-  private static final String EXCHANGE = WORKER_PROPERTIES.getExchange();
+  private static final String EXCHANGE = WORKER_PROPERTIES.getTrafficExchange();
   private static final String OUT_QUEUE = WORKER_PROPERTIES.getQueues().get("generator");
 
   @BeforeEach

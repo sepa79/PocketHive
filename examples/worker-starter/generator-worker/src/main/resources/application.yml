@@ -4,7 +4,8 @@ spring:
 
 pockethive:
   control-plane:
-    exchange: ph.sample-swarm.hive
+    exchange: ph.control
+    traffic-exchange: ph.sample-swarm.hive
     swarm-id: sample-swarm
     instance-id: ${POCKETHIVE_CONTROL_PLANE_INSTANCE_ID:generator-1}
     queues:
