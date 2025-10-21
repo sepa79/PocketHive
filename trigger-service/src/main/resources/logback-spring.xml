@@ -2,24 +2,19 @@
   <include resource="org/springframework/boot/logging/logback/base.xml"/>
 
   <springProperty scope="context" name="applicationName"
-                  source="spring.application.name"
-                  defaultValue="unknown"/>
+                  source="spring.application.name"/>
 
   <springProperty scope="context" name="roleIdentifier"
-                  source="pockethive.control-plane.worker.role"
-                  defaultValue="${applicationName}"/>
+                  source="pockethive.control-plane.worker.role"/>
 
   <springProperty scope="context" name="swarmIdentifier"
-                  source="pockethive.control-plane.swarm-id"
-                  defaultValue=""/>
-
-  <springProperty scope="context" name="defaultInstanceIdentifier"
-                  source="bee.name"
-                  defaultValue="${applicationName}"/>
+                  source="pockethive.control-plane.swarm-id"/>
 
   <springProperty scope="context" name="instanceIdentifier"
-                  source="pockethive.control-plane.instance-id"
-                  defaultValue="${defaultInstanceIdentifier}"/>
+                  source="pockethive.control-plane.instance-id"/>
+
+  <springProperty scope="context" name="rabbitLoggingEnabled"
+                  source="pockethive.control-plane.swarm-controller.rabbit.logging.enabled"/>
 
   <logger name="org.springframework.amqp" level="WARN" additivity="false">
     <appender-ref ref="CONSOLE"/>
@@ -28,15 +23,15 @@
     <appender-ref ref="CONSOLE"/>
   </logger>
 
-  <if condition='!"false".equalsIgnoreCase(property("RABBITMQ_LOGGING_ENABLED"))'>
+  <if condition='!"false".equalsIgnoreCase(property("rabbitLoggingEnabled"))'>
     <then>
       <appender name="RABBIT" class="org.springframework.amqp.rabbit.logback.AmqpAppender">
-        <host>${RABBITMQ_HOST:-localhost}</host>
-        <port>${RABBITMQ_PORT:-5672}</port>
-        <username>${RABBITMQ_DEFAULT_USER:-guest}</username>
-        <password>${RABBITMQ_DEFAULT_PASS:-guest}</password>
-        <virtualHost>${RABBITMQ_VHOST:-/}</virtualHost>
-        <exchangeName>${POCKETHIVE_LOGS_EXCHANGE:-ph.logs}</exchangeName>
+        <host>${SPRING_RABBITMQ_HOST}</host>
+        <port>${SPRING_RABBITMQ_PORT}</port>
+        <username>${SPRING_RABBITMQ_USERNAME}</username>
+        <password>${SPRING_RABBITMQ_PASSWORD}</password>
+        <virtualHost>${SPRING_RABBITMQ_VIRTUAL_HOST}</virtualHost>
+        <exchangeName>${POCKETHIVE_LOGS_EXCHANGE}</exchangeName>
         <encoder class="net.logstash.logback.encoder.LogstashEncoder">
           <customFields>{"role":"${roleIdentifier}","swarmId":"${swarmIdentifier}","instanceId":"${instanceIdentifier}"}</customFields>
         </encoder>

@@ -1,10 +1,11 @@
 spring:
   application.name: processor-service
   rabbitmq:
-    host: ${RABBITMQ_HOST:rabbitmq}
-    port: ${RABBITMQ_PORT:5672}
-    username: ${RABBITMQ_DEFAULT_USER:guest}
-    password: ${RABBITMQ_DEFAULT_PASS:guest}
+    host: ${SPRING_RABBITMQ_HOST}
+    port: ${SPRING_RABBITMQ_PORT}
+    username: ${SPRING_RABBITMQ_USERNAME}
+    password: ${SPRING_RABBITMQ_PASSWORD}
+    virtual-host: ${SPRING_RABBITMQ_VIRTUAL_HOST}
 
 # Include traceId from MDC in log output
 logging:
@@ -13,12 +14,13 @@ logging:
 
 pockethive:
   control-plane:
-    swarm-id: ${POCKETHIVE_CONTROL_PLANE_SWARM_ID:default}
-    instance-id: ${POCKETHIVE_CONTROL_PLANE_INSTANCE_ID:${spring.application.name}}
+    exchange: ${POCKETHIVE_CONTROL_PLANE_EXCHANGE}
+    swarm-id: ${POCKETHIVE_CONTROL_PLANE_SWARM_ID}
+    instance-id: ${POCKETHIVE_CONTROL_PLANE_INSTANCE_ID}
     queues:
-      generator: ${POCKETHIVE_CONTROL_PLANE_QUEUES_GENERATOR:ph.${pockethive.control-plane.swarm-id}.gen}
-      moderator: ${POCKETHIVE_CONTROL_PLANE_QUEUES_MODERATOR:ph.${pockethive.control-plane.swarm-id}.mod}
-      final: ${POCKETHIVE_CONTROL_PLANE_QUEUES_FINAL:ph.${pockethive.control-plane.swarm-id}.final}
+      generator: ${POCKETHIVE_CONTROL_PLANE_QUEUES_GENERATOR}
+      moderator: ${POCKETHIVE_CONTROL_PLANE_QUEUES_MODERATOR}
+      final: ${POCKETHIVE_CONTROL_PLANE_QUEUES_FINAL}
     worker:
       role: processor
       skip-self-signals: false

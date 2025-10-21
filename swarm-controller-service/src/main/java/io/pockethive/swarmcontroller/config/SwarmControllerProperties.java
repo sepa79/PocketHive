@@ -167,13 +167,32 @@ public class SwarmControllerProperties {
     @Validated
     public static final class Rabbit {
         private final String logsExchange;
+        private final Logging logging;
 
-        public Rabbit(@NotBlank String logsExchange) {
+        public Rabbit(@NotBlank String logsExchange, @Valid Logging logging) {
             this.logsExchange = requireNonBlank(logsExchange, "logsExchange");
+            this.logging = logging != null ? logging : new Logging(null);
         }
 
         public String logsExchange() {
             return logsExchange;
+        }
+
+        public Logging logging() {
+            return logging;
+        }
+    }
+
+    @Validated
+    public static final class Logging {
+        private final boolean enabled;
+
+        public Logging(Boolean enabled) {
+            this.enabled = Boolean.TRUE.equals(enabled);
+        }
+
+        public boolean enabled() {
+            return enabled;
         }
     }
 

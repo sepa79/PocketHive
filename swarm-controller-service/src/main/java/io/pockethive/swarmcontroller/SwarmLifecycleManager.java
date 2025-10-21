@@ -10,6 +10,8 @@ import io.pockethive.swarm.model.SwarmPlan;
 import io.pockethive.swarm.model.Work;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.controlplane.ControlPlaneSignals;
+import io.pockethive.controlplane.spring.ControlPlaneContainerEnvironmentFactory;
+import io.pockethive.controlplane.spring.ControlPlaneContainerEnvironmentFactory.WorkerSettings;
 import io.pockethive.swarmcontroller.config.SwarmControllerProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -71,7 +73,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
   private final String role;
   private final String swarmId;
   private final String controlExchange;
-  private final PushgatewayConfig pushgatewayConfig;
+  private final WorkerSettings workerSettings;
   private final Map<String, List<String>> containers = new HashMap<>();
   private final Set<String> declaredQueues = new HashSet<>();
   private final Map<String, Integer> expectedReady = new HashMap<>();
@@ -88,44 +90,6 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
 
   private record ScenarioTask(long delayMs, String routingKey, String body) {}
 
-  private void applyMetricsEnv(Map<String, String> env, String beeName) {
-    if (!pushgatewayConfig.hasBaseUrl()) {
-      return;
-    }
-    env.put("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_BASE_URL", pushgatewayConfig.baseUrl());
-    env.put("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_ENABLED", pushgatewayConfig.enabled());
-    env.put("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_PUSH_RATE", pushgatewayConfig.pushRate());
-    env.put("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_SHUTDOWN_OPERATION",
-        pushgatewayConfig.shutdownOperation());
-    env.put("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_JOB", swarmId);
-    env.put("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_GROUPING_KEY_INSTANCE", beeName);
-  }
-
-  private record PushgatewayConfig(String baseUrl, String enabled, String pushRate, String shutdownOperation) {
-    static PushgatewayConfig fromProperties(SwarmControllerProperties.Pushgateway pushgateway) {
-      if (pushgateway == null) {
-        return new PushgatewayConfig(null, "false", "PT1M", "DELETE");
-      }
-      String base = trimToNull(pushgateway.baseUrl());
-      String enabled = Boolean.toString(pushgateway.enabled());
-      String pushRate = pushgateway.pushRate() != null ? pushgateway.pushRate().toString() : null;
-      String shutdown = trimToNull(pushgateway.shutdownOperation());
-      return new PushgatewayConfig(base, enabled, pushRate, shutdown);
-    }
-
-    boolean hasBaseUrl() {
-      return baseUrl != null && !baseUrl.isBlank();
-    }
-
-    private static String trimToNull(String value) {
-      if (value == null) {
-        return null;
-      }
-      String trimmed = value.trim();
-      return trimmed.isEmpty() ? null : trimmed;
-    }
-  }
-
   @Autowired
   public SwarmLifecycleManager(AmqpAdmin amqp,
                                ObjectMapper mapper,
@@ -135,7 +99,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
                                @Qualifier("instanceId") String instanceId,
                                SwarmControllerProperties properties) {
     this(amqp, mapper, docker, rabbit, rabbitProperties, instanceId, properties,
-        PushgatewayConfig.fromProperties(properties.getMetrics().pushgateway()));
+        deriveWorkerSettings(properties));
   }
 
   SwarmLifecycleManager(AmqpAdmin amqp,
@@ -145,18 +109,35 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
                         RabbitProperties rabbitProperties,
                         String instanceId,
                         SwarmControllerProperties properties,
-                        PushgatewayConfig pushgatewayConfig) {
+                        WorkerSettings workerSettings) {
     this.amqp = amqp;
     this.mapper = mapper;
     this.docker = docker;
     this.rabbit = rabbit;
     this.rabbitProperties = Objects.requireNonNull(rabbitProperties, "rabbitProperties");
-    this.instanceId = instanceId;
-    this.properties = properties;
+    this.instanceId = Objects.requireNonNull(instanceId, "instanceId");
+    this.properties = Objects.requireNonNull(properties, "properties");
     this.role = properties.getRole();
     this.swarmId = properties.getSwarmId();
     this.controlExchange = properties.getControlExchange();
-    this.pushgatewayConfig = pushgatewayConfig;
+    this.workerSettings = Objects.requireNonNull(workerSettings, "workerSettings");
+  }
+
+  private static WorkerSettings deriveWorkerSettings(SwarmControllerProperties properties) {
+    Objects.requireNonNull(properties, "properties");
+    SwarmControllerProperties.Traffic traffic = properties.getTraffic();
+    SwarmControllerProperties.Pushgateway pushgateway = properties.getMetrics().pushgateway();
+    return new WorkerSettings(
+        properties.getSwarmId(),
+        properties.getControlExchange(),
+        traffic.queuePrefix(),
+        traffic.hiveExchange(),
+        properties.getRabbit().logsExchange(),
+        properties.getRabbit().logging().enabled(),
+        pushgateway.enabled(),
+        pushgateway.baseUrl(),
+        pushgateway.pushRate(),
+        pushgateway.shutdownOperation());
   }
 
   /**
@@ -213,15 +194,9 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
             if (bee.work().out() != null) suffixes.add(bee.work().out());
           }
           if (bee.image() != null) {
-            Map<String, String> env = new HashMap<>();
-            env.put("POCKETHIVE_CONTROL_PLANE_SWARM_ID", swarmId);
-            env.put("POCKETHIVE_CONTROL_PLANE_EXCHANGE", controlExchange);
-            String rabbitHost = rabbitProperties.getHost();
-            if (rabbitHost == null || rabbitHost.isBlank()) {
-              throw new IllegalStateException("spring.rabbitmq.host must be configured");
-            }
-            env.put("RABBITMQ_HOST", rabbitHost);
-            env.put("POCKETHIVE_LOGS_EXCHANGE", properties.getRabbit().logsExchange());
+            String beeName = BeeNameGenerator.generate(bee.role(), swarmId);
+            Map<String, String> env = new LinkedHashMap<>(
+                ControlPlaneContainerEnvironmentFactory.workerEnvironment(beeName, workerSettings, rabbitProperties));
             String net = docker.resolveControlNetwork();
             if (net != null && !net.isBlank()) {
               env.put("CONTROL_NETWORK", net);
@@ -238,9 +213,6 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
                 env.put(e.getKey(), value);
               }
             }
-            String beeName = BeeNameGenerator.generate(bee.role(), swarmId);
-            env.put("POCKETHIVE_CONTROL_PLANE_INSTANCE_ID", beeName);
-            applyMetricsEnv(env, beeName);
             log.info("creating container {} for role {} using image {}", beeName, bee.role(), bee.image());
             log.info("container env for {}: {}", beeName, env);
             String containerId = docker.createContainer(bee.image(), env, beeName);

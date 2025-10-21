@@ -9,18 +9,18 @@ import io.pockethive.controlplane.messaging.ControlPlaneEmitter;
 import io.pockethive.controlplane.messaging.ControlPlanePublisher;
 import io.pockethive.controlplane.messaging.EventMessage;
 import io.pockethive.controlplane.messaging.SignalMessage;
-import io.pockethive.controlplane.spring.ControlPlaneProperties;
+import io.pockethive.controlplane.spring.WorkerControlPlaneProperties;
 import org.junit.jupiter.api.Test;
 
 class ControlPlaneTestFixturesTest {
 
     @Test
     void workerPropertiesPopulateFields() {
-        ControlPlaneProperties properties = ControlPlaneTestFixtures.workerProperties("swarm-1", " generator ", "worker-a");
+        WorkerControlPlaneProperties properties = ControlPlaneTestFixtures.workerProperties("swarm-1", " generator ", "worker-a");
 
         assertThat(properties.getSwarmId()).isEqualTo("swarm-1");
         assertThat(properties.getWorker().getRole()).isEqualTo("generator");
-        assertThat(properties.getIdentity().getInstanceId()).isEqualTo("worker-a");
+        assertThat(properties.getInstanceId()).isEqualTo("worker-a");
     }
 
     @Test
