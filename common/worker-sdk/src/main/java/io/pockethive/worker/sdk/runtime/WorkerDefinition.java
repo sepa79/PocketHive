@@ -16,6 +16,7 @@ public record WorkerDefinition(
     String role,
     String inQueue,
     String outQueue,
+    String exchange,
     Class<?> configType
 ) {
 
@@ -28,6 +29,7 @@ public record WorkerDefinition(
      * @param role       control-plane role identifier
      * @param inQueue    optional inbound queue name
      * @param outQueue   optional outbound queue name
+     * @param exchange   optional exchange used for outbound traffic
      * @param configType configuration class exposed to {@link WorkerContext#config(Class)}
      */
     public WorkerDefinition {
@@ -37,6 +39,7 @@ public record WorkerDefinition(
         role = requireText(role, "role");
         inQueue = normalize(inQueue);
         outQueue = normalize(outQueue);
+        exchange = normalize(exchange);
         configType = configType == null || configType == Void.class ? Void.class : configType;
     }
 

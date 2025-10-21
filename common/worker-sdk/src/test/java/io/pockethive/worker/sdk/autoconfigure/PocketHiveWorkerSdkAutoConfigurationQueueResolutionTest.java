@@ -25,6 +25,7 @@ class PocketHiveWorkerSdkAutoConfigurationQueueResolutionTest {
             "pockethive.control-plane.manager.enabled=false",
             "pockethive.control-plane.instance-id=instance-1",
             "pockethive.control-plane.swarm-id=swarm-alpha",
+            "pockethive.control-plane.exchange=swarm-alpha.hive",
             "pockethive.control-plane.queues.in=swarm-alpha.in",
             "pockethive.control-plane.queues.out=swarm-alpha.out"
         )
@@ -38,6 +39,7 @@ class PocketHiveWorkerSdkAutoConfigurationQueueResolutionTest {
             assertThat(definition).isPresent();
             assertThat(definition.get().inQueue()).isEqualTo("swarm-alpha.in");
             assertThat(definition.get().outQueue()).isEqualTo("swarm-alpha.out");
+            assertThat(definition.get().exchange()).isEqualTo("swarm-alpha.hive");
         });
     }
 

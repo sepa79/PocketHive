@@ -28,6 +28,7 @@ class WorkerMetricsInterceptorTest {
         "metrics-role",
         "in.metrics",
         "out.metrics",
+        "exchange.hive",
         Void.class
     );
 

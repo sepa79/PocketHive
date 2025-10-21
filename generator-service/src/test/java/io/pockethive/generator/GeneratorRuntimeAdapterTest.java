@@ -69,6 +69,7 @@ class GeneratorRuntimeAdapterTest {
         "generator",
         null,
         TopologyDefaults.GEN_QUEUE,
+        Topology.EXCHANGE,
         GeneratorWorkerConfig.class
     );
   }
@@ -93,7 +94,7 @@ class GeneratorRuntimeAdapterTest {
     adapter.tick();
     verify(workerRuntime, times(2)).dispatch(eq("generatorWorker"), any(WorkMessage.class));
     ArgumentCaptor<Message> messageCaptor = ArgumentCaptor.forClass(Message.class);
-    verify(rabbitTemplate, times(2)).send(eq(Topology.EXCHANGE), eq(Topology.GEN_QUEUE), messageCaptor.capture());
+    verify(rabbitTemplate, times(2)).send(eq(definition.exchange()), eq(definition.outQueue()), messageCaptor.capture());
     assertThat(messageCaptor.getAllValues())
         .allSatisfy(message -> assertThat(new String(message.getBody(), StandardCharsets.UTF_8)).isEqualTo("payload"));
     verify(controlPlaneRuntime).emitStatusSnapshot();

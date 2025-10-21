@@ -1,6 +1,5 @@
 package io.pockethive.worker.sdk.transport.rabbit;
 
-import io.pockethive.Topology;
 import io.pockethive.observability.ObservabilityContext;
 import io.pockethive.observability.ObservabilityContextUtil;
 import io.pockethive.worker.sdk.api.WorkMessage;
@@ -63,6 +62,7 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
     private final MessageResultPublisher messageResultPublisher;
     private final RabbitTemplate rabbitTemplate;
     private final String outboundQueue;
+    private final String outboundExchange;
     private final Consumer<Exception> dispatchErrorHandler;
     private final RabbitWorkMessageConverter messageConverter = new RabbitWorkMessageConverter();
     private volatile boolean desiredEnabled;
@@ -82,6 +82,7 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
         this.messageResultPublisher = builder.messageResultPublisher;
         this.rabbitTemplate = builder.rabbitTemplate;
         this.outboundQueue = builder.outboundQueue;
+        this.outboundExchange = builder.outboundExchange;
         this.dispatchErrorHandler = builder.dispatchErrorHandler;
     }
 
@@ -230,6 +231,7 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
         private MessageResultPublisher messageResultPublisher;
         private RabbitTemplate rabbitTemplate;
         private String outboundQueue;
+        private String outboundExchange;
         private Consumer<Exception> dispatchErrorHandler;
 
         private Builder() {
@@ -421,13 +423,25 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
         /**
          * Supplies the {@link RabbitTemplate} used for publishing downstream {@link WorkResult.Message} payloads. When a
          * template is provided and no custom {@link MessageResultPublisher} is configured the helper automatically
-         * publishes to {@link Topology#EXCHANGE} using the validated outbound queue.
+         * publishes to the exchange resolved from the {@link WorkerDefinition} unless an explicit override is supplied.
          *
          * @param rabbitTemplate Spring AMQP template used to publish outbound messages
          * @return this builder instance
          */
         public Builder rabbitTemplate(RabbitTemplate rabbitTemplate) {
             this.rabbitTemplate = Objects.requireNonNull(rabbitTemplate, "rabbitTemplate");
+            return this;
+        }
+
+        /**
+         * Overrides the exchange used when publishing {@link WorkResult.Message} payloads via the {@link RabbitTemplate}.
+         * Services can rely on this when the {@link WorkerDefinition} does not provide the exchange name.
+         *
+         * @param outboundExchange AMQP exchange name used for outbound traffic
+         * @return this builder instance
+         */
+        public Builder outboundExchange(String outboundExchange) {
+            this.outboundExchange = Objects.requireNonNull(outboundExchange, "outboundExchange");
             return this;
         }
 
@@ -457,6 +471,10 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
             if (resolvedOutbound != null && !resolvedOutbound.isBlank()) {
                 this.outboundQueue = resolvedOutbound;
             }
+            String resolvedExchange = workerDefinition.exchange();
+            if (resolvedExchange != null && !resolvedExchange.isBlank()) {
+                this.outboundExchange = resolvedExchange;
+            }
             Objects.requireNonNull(controlPlaneRuntime, "controlPlaneRuntime");
             Objects.requireNonNull(listenerRegistry, "listenerRegistry");
             Objects.requireNonNull(identity, "identity");
@@ -470,8 +488,14 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
                         throw new IllegalStateException("Worker " + workerDefinition.beanName()
                             + " must declare an outbound queue when using the RabbitTemplate publisher");
                     }
+                    if (outboundExchange == null) {
+                        throw new IllegalStateException("Worker " + workerDefinition.beanName()
+                            + " must declare an exchange when using the RabbitTemplate publisher");
+                    }
+                    String exchange = outboundExchange;
+                    String routingKey = outboundQueue;
                     messageResultPublisher =
-                        (result, message) -> rabbitTemplate.send(Topology.EXCHANGE, outboundQueue, message);
+                        (result, message) -> rabbitTemplate.send(exchange, routingKey, message);
                 } else {
                     messageResultPublisher = (result, message) -> {
                         String missing = outboundQueue == null

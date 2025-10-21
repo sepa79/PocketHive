@@ -21,6 +21,7 @@ class DefaultWorkerContextFactoryTest {
         "role",
         "in.queue",
         "out.queue",
+        "exchange.hive",
         Void.class
     );
 

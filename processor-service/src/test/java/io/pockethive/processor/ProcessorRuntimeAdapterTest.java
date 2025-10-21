@@ -76,6 +76,7 @@ class ProcessorRuntimeAdapterTest {
         "processor",
         Topology.MOD_QUEUE,
         TopologyDefaults.FINAL_QUEUE,
+        Topology.EXCHANGE,
         ProcessorWorkerConfig.class
     );
   }
@@ -110,7 +111,7 @@ class ProcessorRuntimeAdapterTest {
 
     verify(workerRuntime).dispatch(eq("processorWorker"), any(WorkMessage.class));
     ArgumentCaptor<Message> messageCaptor = ArgumentCaptor.forClass(Message.class);
-    verify(rabbitTemplate).send(eq(Topology.EXCHANGE), eq(definition.outQueue()), messageCaptor.capture());
+    verify(rabbitTemplate).send(eq(definition.exchange()), eq(definition.outQueue()), messageCaptor.capture());
     assertThat(new String(messageCaptor.getValue().getBody(), StandardCharsets.UTF_8))
         .isEqualTo("processed");
   }
@@ -177,6 +178,7 @@ class ProcessorRuntimeAdapterTest {
         "processor",
         Topology.MOD_QUEUE,
         null,
+        Topology.EXCHANGE,
         ProcessorWorkerConfig.class
     );
     when(workerRegistry.findByRoleAndType("processor", WorkerType.MESSAGE))

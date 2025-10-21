@@ -75,6 +75,7 @@ class ModeratorRuntimeAdapterTest {
         "moderator",
         Topology.GEN_QUEUE,
         TopologyDefaults.MOD_QUEUE,
+        Topology.EXCHANGE,
         ModeratorWorkerConfig.class
     );
   }
@@ -114,7 +115,7 @@ class ModeratorRuntimeAdapterTest {
 
     verify(workerRuntime).dispatch(eq("moderatorWorker"), any(WorkMessage.class));
     ArgumentCaptor<Message> messageCaptor = ArgumentCaptor.forClass(Message.class);
-    verify(rabbitTemplate).send(eq(Topology.EXCHANGE), eq(Topology.MOD_QUEUE), messageCaptor.capture());
+    verify(rabbitTemplate).send(eq(definition.exchange()), eq(definition.outQueue()), messageCaptor.capture());
     assertThat(new String(messageCaptor.getValue().getBody(), StandardCharsets.UTF_8))
         .isEqualTo("forwarded");
   }

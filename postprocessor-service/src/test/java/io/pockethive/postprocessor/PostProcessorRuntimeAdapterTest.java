@@ -70,6 +70,7 @@ class PostProcessorRuntimeAdapterTest {
         "postprocessor",
         Topology.FINAL_QUEUE,
         null,
+        Topology.EXCHANGE,
         PostProcessorWorkerConfig.class
     );
   }

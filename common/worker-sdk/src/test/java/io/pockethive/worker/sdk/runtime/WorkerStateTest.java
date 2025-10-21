@@ -17,6 +17,7 @@ class WorkerStateTest {
             "test-role",
             null,
             null,
+            null,
             TestConfig.class
         );
         WorkerState state = new WorkerState(definition);
@@ -41,6 +42,7 @@ class WorkerStateTest {
             "test-role",
             null,
             null,
+            null,
             TestConfig.class
         );
         WorkerState state = new WorkerState(definition);
@@ -59,6 +61,7 @@ class WorkerStateTest {
             Object.class,
             WorkerType.GENERATOR,
             "test-role",
+            null,
             null,
             null,
             TestConfig.class
@@ -84,6 +87,7 @@ class WorkerStateTest {
             "test-role",
             " in.runtime ",
             "out.runtime",
+            null,
             TestConfig.class
         );
         WorkerState state = new WorkerState(definition);

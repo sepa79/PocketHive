@@ -236,6 +236,7 @@ class ProcessorTest {
                 "processor",
                 Topology.MOD_QUEUE,
                 Topology.FINAL_QUEUE,
+                Topology.EXCHANGE,
                 ProcessorWorkerConfig.class
         );
         when(workerRegistry.findByRoleAndType("processor", WorkerType.MESSAGE))
@@ -267,7 +268,7 @@ class ProcessorTest {
         adapter.onWork(inbound);
 
         verify(workerRuntime).dispatch(eq("processorWorker"), any(WorkMessage.class));
-        verify(rabbitTemplate).send(eq(Topology.EXCHANGE), eq(Topology.FINAL_QUEUE), any(Message.class));
+        verify(rabbitTemplate).send(eq(definition.exchange()), eq(definition.outQueue()), any(Message.class));
         verify(controlPlaneRuntime).emitStatusSnapshot();
     }
 
@@ -289,6 +290,7 @@ class ProcessorTest {
                 "processor",
                 Topology.MOD_QUEUE,
                 Topology.FINAL_QUEUE,
+                Topology.EXCHANGE,
                 ProcessorWorkerConfig.class
         );
         when(workerRegistry.findByRoleAndType("processor", WorkerType.MESSAGE))
@@ -346,6 +348,7 @@ class ProcessorTest {
                 "processor",
                 Topology.MOD_QUEUE,
                 Topology.FINAL_QUEUE,
+                Topology.EXCHANGE,
                 ProcessorWorkerConfig.class
         );
     }

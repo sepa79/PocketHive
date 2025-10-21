@@ -52,6 +52,7 @@ class WorkerControlPlaneRuntimeTest {
             "generator",
             null,
             "out.queue",
+            "traffic.exchange",
             TestConfig.class
         );
         stateStore.getOrCreate(definition);
@@ -222,6 +223,7 @@ class WorkerControlPlaneRuntimeTest {
             "generator",
             null,
             "out.queue",
+            "traffic.exchange",
             TestConfig.class
         );
         stateStore.getOrCreate(otherDefinition);

@@ -91,6 +91,7 @@ public class PocketHiveWorkerSdkAutoConfiguration {
                 annotation.role(),
                 resolveQueue(annotation.inQueue(), queueAliases),
                 resolveQueue(annotation.outQueue(), queueAliases),
+                resolveExchange(properties),
                 configType
             ));
         }
@@ -200,6 +201,13 @@ public class PocketHiveWorkerSdkAutoConfiguration {
                 .ifPresent(name -> aliases.putIfAbsent("control", name));
         }
         return aliases;
+    }
+
+    private static String resolveExchange(WorkerControlPlaneProperties properties) {
+        if (properties == null) {
+            return null;
+        }
+        return normalise(properties.getExchange());
     }
 
     private static String resolveQueue(String queue, Map<String, String> aliases) {
