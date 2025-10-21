@@ -317,14 +317,28 @@ public final class WorkerControlPlaneProperties {
     }
 
     private static String resolveTrafficExchange(String value) {
-        String candidate = value;
-        if (candidate == null || candidate.isBlank()) {
-            candidate = System.getenv(TRAFFIC_EXCHANGE_ENV);
+        String candidate = normalizeTrafficExchange(value);
+        if (candidate == null) {
+            candidate = normalizeTrafficExchange(System.getenv(TRAFFIC_EXCHANGE_ENV));
         }
-        if (candidate == null || candidate.isBlank()) {
+        if (candidate == null) {
             throw new IllegalArgumentException(
                 "pockethive.control-plane.traffic-exchange must not be null or blank");
         }
         return candidate;
+    }
+
+    private static String normalizeTrafficExchange(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        if (trimmed.isEmpty()) {
+            return null;
+        }
+        if (trimmed.contains("${") || trimmed.contains("}")) {
+            return null;
+        }
+        return trimmed;
     }
 }

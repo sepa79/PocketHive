@@ -109,6 +109,21 @@ class WorkerControlPlaneAutoConfigurationTest {
     }
 
     @Test
+    void failsWhenTrafficExchangeMissing() {
+        contextRunner
+            .withPropertyValues(
+                "pockethive.control-plane.traffic-exchange=${POCKETHIVE_CONTROL_PLANE_TRAFFIC_EXCHANGE}")
+            .run(context -> {
+                assertThat(context).hasFailed();
+                Throwable failure = context.getStartupFailure();
+                assertThat(failure).isInstanceOf(BeanCreationException.class);
+                assertThat(failure).hasRootCauseInstanceOf(IllegalArgumentException.class);
+                assertThat(failure).hasRootCauseMessage(
+                    "pockethive.control-plane.traffic-exchange must not be null or blank");
+            });
+    }
+
+    @Test
     void failsFastWhenControlQueueDescriptorMissing() {
         contextRunner
             .withPropertyValues("pockethive.control-plane.worker.role=test-role")
