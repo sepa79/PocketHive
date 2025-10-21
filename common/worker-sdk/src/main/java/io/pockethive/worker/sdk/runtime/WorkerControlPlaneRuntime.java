@@ -7,8 +7,7 @@ import io.pockethive.control.ControlSignal;
 import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.controlplane.messaging.ControlPlaneEmitter;
 import io.pockethive.controlplane.topology.ControlPlaneRouteCatalog;
-import io.pockethive.controlplane.topology.ControlPlaneTopologyDescriptor;
-import io.pockethive.controlplane.topology.ControlQueueDescriptor;
+import io.pockethive.controlplane.spring.WorkerControlPlaneProperties;
 import io.pockethive.controlplane.worker.WorkerConfigCommand;
 import io.pockethive.controlplane.worker.WorkerControlPlane;
 import io.pockethive.controlplane.worker.WorkerSignalListener;
@@ -49,7 +48,6 @@ public final class WorkerControlPlaneRuntime {
     private final ObjectMapper objectMapper;
     private final ControlPlaneEmitter emitter;
     private final ControlPlaneIdentity identity;
-    private final ControlPlaneTopologyDescriptor topology;
     private final String controlQueueName;
     private final String[] controlRoutes;
     private final WorkerSignalListener signalListener = new WorkerSignalDispatcher();
@@ -62,16 +60,17 @@ public final class WorkerControlPlaneRuntime {
         ObjectMapper objectMapper,
         ControlPlaneEmitter emitter,
         ControlPlaneIdentity identity,
-        ControlPlaneTopologyDescriptor topology
+        WorkerControlPlaneProperties.ControlPlane controlPlane
     ) {
         this.workerControlPlane = Objects.requireNonNull(workerControlPlane, "workerControlPlane");
         this.stateStore = Objects.requireNonNull(stateStore, "stateStore");
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper");
         this.emitter = Objects.requireNonNull(emitter, "emitter");
         this.identity = Objects.requireNonNull(identity, "identity");
-        this.topology = Objects.requireNonNull(topology, "topology");
-        this.controlQueueName = topology.controlQueue(identity.instanceId()).map(ControlQueueDescriptor::name).orElse(null);
-        this.controlRoutes = resolveControlRoutes(topology.routes(), identity);
+        WorkerControlPlaneProperties.ControlPlane resolvedControlPlane =
+            Objects.requireNonNull(controlPlane, "controlPlane");
+        this.controlQueueName = resolvedControlPlane.getControlQueueName();
+        this.controlRoutes = resolveControlRoutes(resolvedControlPlane.getRoutes(), identity);
         // Ensure workers discovered during runtime bootstrap receive a status publisher.
         stateStore.all().forEach(this::ensureStatusPublisher);
     }

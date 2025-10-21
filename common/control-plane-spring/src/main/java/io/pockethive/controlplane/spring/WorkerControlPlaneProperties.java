@@ -1,11 +1,16 @@
 package io.pockethive.controlplane.spring;
 
+import io.pockethive.Topology;
+import io.pockethive.controlplane.ControlPlaneSignals;
+import io.pockethive.controlplane.routing.ControlPlaneRouting;
+import io.pockethive.controlplane.topology.ControlPlaneRouteCatalog;
 import jakarta.validation.Valid;
 import java.time.Duration;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.validation.annotation.Validated;
 
@@ -27,6 +32,7 @@ public final class WorkerControlPlaneProperties {
     private final Queues queues;
     private final Worker worker;
     private final SwarmController swarmController;
+    private final ControlPlane controlPlane;
 
     public WorkerControlPlaneProperties(Boolean enabled,
                                         Boolean declareTopology,
@@ -46,6 +52,7 @@ public final class WorkerControlPlaneProperties {
         this.queues = new Queues(queues);
         this.worker = Objects.requireNonNull(worker, "worker must not be null");
         this.swarmController = Objects.requireNonNull(swarmController, "swarmController must not be null");
+        this.controlPlane = ControlPlane.forWorker(this.swarmId, this.worker.getRole(), this.instanceId);
     }
 
     public boolean isEnabled() {
@@ -84,6 +91,10 @@ public final class WorkerControlPlaneProperties {
         return swarmController;
     }
 
+    public ControlPlane getControlPlane() {
+        return controlPlane;
+    }
+
     @Validated
     public static final class Queues {
 
@@ -111,6 +122,65 @@ public final class WorkerControlPlaneProperties {
 
         public String get(String queueName) {
             return names.get(queueName);
+        }
+    }
+
+    public static final class ControlPlane {
+
+        private final String controlQueueName;
+        private final ControlPlaneRouteCatalog routes;
+
+        private ControlPlane(String controlQueueName, ControlPlaneRouteCatalog routes) {
+            this.controlQueueName = controlQueueName;
+            this.routes = Objects.requireNonNull(routes, "routes must not be null");
+        }
+
+        public String getControlQueueName() {
+            return controlQueueName;
+        }
+
+        public ControlPlaneRouteCatalog getRoutes() {
+            return routes;
+        }
+
+        private static ControlPlane forWorker(String swarmId, String role, String instanceId) {
+            Objects.requireNonNull(swarmId, "swarmId must not be null");
+            Objects.requireNonNull(role, "role must not be null");
+            Objects.requireNonNull(instanceId, "instanceId must not be null");
+            String queue = Topology.CONTROL_QUEUE + "." + swarmId.trim() + "." + role.trim() + "." + instanceId.trim();
+            ControlPlaneRouteCatalog catalog = new ControlPlaneRouteCatalog(
+                configRoutes(swarmId, role),
+                statusRoutes(swarmId, role),
+                Set.of(),
+                Set.of(),
+                Set.of(),
+                Set.of()
+            );
+            return new ControlPlane(queue, catalog);
+        }
+
+        private static Set<String> configRoutes(String swarmId, String role) {
+            String resolvedSwarm = swarmId.trim();
+            String resolvedRole = role.trim();
+            return Set.of(
+                ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, "ALL", resolvedRole, "ALL"),
+                ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, resolvedSwarm, resolvedRole, "ALL"),
+                ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, resolvedSwarm, resolvedRole,
+                    ControlPlaneRouteCatalog.INSTANCE_TOKEN),
+                ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, resolvedSwarm, "ALL", "ALL")
+            );
+        }
+
+        private static Set<String> statusRoutes(String swarmId, String role) {
+            String resolvedSwarm = swarmId.trim();
+            String resolvedRole = role.trim();
+            return Set.of(
+                ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, "ALL", resolvedRole, "ALL"),
+                ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, resolvedSwarm, resolvedRole, "ALL"),
+                ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, resolvedSwarm, resolvedRole,
+                    ControlPlaneRouteCatalog.INSTANCE_TOKEN),
+                ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, resolvedSwarm, "ALL", "ALL")
+            );
         }
     }
 

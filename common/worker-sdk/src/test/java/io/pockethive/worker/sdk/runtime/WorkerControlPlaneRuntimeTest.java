@@ -6,11 +6,11 @@ import io.pockethive.control.ControlSignal;
 import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.controlplane.messaging.ControlPlaneEmitter;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
-import io.pockethive.controlplane.topology.ControlPlaneTopologyDescriptor;
-import io.pockethive.controlplane.topology.GeneratorControlPlaneTopologyDescriptor;
 import io.pockethive.controlplane.worker.WorkerControlPlane;
 import io.pockethive.observability.StatusEnvelopeBuilder;
 import io.pockethive.worker.sdk.config.WorkerType;
+import io.pockethive.worker.sdk.testing.ControlPlaneTestFixtures;
+import io.pockethive.controlplane.spring.WorkerControlPlaneProperties;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -32,7 +32,8 @@ class WorkerControlPlaneRuntimeTest {
     private static final ObjectMapper MAPPER = new ObjectMapper();
     private static final String SWARM_ID = "default";
     private static final ControlPlaneIdentity IDENTITY = new ControlPlaneIdentity(SWARM_ID, "generator", "inst-1");
-    private static final ControlPlaneTopologyDescriptor TOPOLOGY = new GeneratorControlPlaneTopologyDescriptor();
+    private static final WorkerControlPlaneProperties PROPERTIES =
+        ControlPlaneTestFixtures.workerProperties(SWARM_ID, "generator", "inst-1");
 
     private WorkerStateStore stateStore;
     private WorkerDefinition definition;
@@ -59,7 +60,8 @@ class WorkerControlPlaneRuntimeTest {
         controlPlane = WorkerControlPlane.builder(MAPPER)
             .identity(IDENTITY)
             .build();
-        runtime = new WorkerControlPlaneRuntime(controlPlane, stateStore, MAPPER, emitter, IDENTITY, TOPOLOGY);
+        runtime = new WorkerControlPlaneRuntime(controlPlane, stateStore, MAPPER, emitter, IDENTITY,
+            PROPERTIES.getControlPlane());
         reset(emitter);
     }
 

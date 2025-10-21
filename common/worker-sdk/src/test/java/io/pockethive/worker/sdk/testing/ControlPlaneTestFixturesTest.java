@@ -25,6 +25,12 @@ class ControlPlaneTestFixturesTest {
         assertThat(properties.getTrafficExchange()).isEqualTo("ph.swarm-1.hive");
         assertThat(properties.getQueues().get("generator")).isEqualTo("ph.swarm-1.gen");
         assertThat(properties.getQueues().get("moderator")).isEqualTo("ph.swarm-1.mod");
+        WorkerControlPlaneProperties.ControlPlane controlPlane = properties.getControlPlane();
+        assertThat(controlPlane.getControlQueueName()).isEqualTo("ph.control.swarm-1.generator.worker-a");
+        assertThat(controlPlane.getRoutes().configSignals())
+            .contains("sig.config-update.swarm-1.generator.{instance}");
+        assertThat(controlPlane.getRoutes().statusSignals())
+            .contains("sig.status-request.swarm-1.generator.{instance}");
     }
 
     @Test
