@@ -19,7 +19,6 @@ public final class WorkerControlPlaneProperties {
 
     private final boolean enabled;
     private final boolean declareTopology;
-    private static final String TRAFFIC_EXCHANGE_ENV = "POCKETHIVE_CONTROL_PLANE_TRAFFIC_EXCHANGE";
 
     private final String exchange;
     private final String trafficExchange;
@@ -317,27 +316,19 @@ public final class WorkerControlPlaneProperties {
     }
 
     private static String resolveTrafficExchange(String value) {
-        String candidate = normalizeTrafficExchange(value);
-        if (candidate == null) {
-            candidate = normalizeTrafficExchange(System.getenv(TRAFFIC_EXCHANGE_ENV));
-        }
-        if (candidate == null) {
+        if (value == null) {
             throw new IllegalArgumentException(
                 "pockethive.control-plane.traffic-exchange must not be null or blank");
         }
-        return candidate;
-    }
-
-    private static String normalizeTrafficExchange(String value) {
-        if (value == null) {
-            return null;
-        }
         String trimmed = value.trim();
         if (trimmed.isEmpty()) {
-            return null;
+            throw new IllegalArgumentException(
+                "pockethive.control-plane.traffic-exchange must not be null or blank");
         }
-        if (trimmed.contains("${") || trimmed.contains("}")) {
-            return null;
+        if (trimmed.startsWith("${") && trimmed.endsWith("}")) {
+            throw new IllegalArgumentException(
+                "pockethive.control-plane.traffic-exchange must resolve to a concrete value, but was "
+                    + trimmed);
         }
         return trimmed;
     }

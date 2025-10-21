@@ -119,7 +119,7 @@ class WorkerControlPlaneAutoConfigurationTest {
                 assertThat(failure).isInstanceOf(BeanCreationException.class);
                 assertThat(failure).hasRootCauseInstanceOf(IllegalArgumentException.class);
                 assertThat(failure).hasRootCauseMessage(
-                    "pockethive.control-plane.traffic-exchange must not be null or blank");
+                    "pockethive.control-plane.traffic-exchange must resolve to a concrete value, but was ${POCKETHIVE_CONTROL_PLANE_TRAFFIC_EXCHANGE}");
             });
     }
 
