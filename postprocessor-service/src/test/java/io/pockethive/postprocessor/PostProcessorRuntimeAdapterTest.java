@@ -1,6 +1,7 @@
 package io.pockethive.postprocessor;
 
 import io.pockethive.controlplane.ControlPlaneIdentity;
+import io.pockethive.controlplane.spring.WorkerControlPlaneProperties;
 import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pockethive.worker.sdk.api.WorkResult;
 import io.pockethive.worker.sdk.autoconfigure.WorkerControlQueueListener;
@@ -22,6 +23,7 @@ import org.springframework.amqp.core.Message;
 import org.springframework.amqp.rabbit.listener.MessageListenerContainer;
 import org.springframework.amqp.rabbit.listener.RabbitListenerEndpointRegistry;
 
+import io.pockethive.worker.sdk.testing.ControlPlaneTestFixtures;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -56,15 +58,20 @@ class PostProcessorRuntimeAdapterTest {
   private WorkerDefinition definition;
   private ControlPlaneIdentity identity;
 
-  private static final String SWARM_ID = "swarm-alpha";
-  private static final String IN_QUEUE = "swarm-alpha.final";
-  private static final String EXCHANGE = "swarm-alpha.hive";
+  private static final WorkerControlPlaneProperties WORKER_PROPERTIES =
+      ControlPlaneTestFixtures.workerProperties("swarm-alpha", "postprocessor", "instance-1");
+  private static final String IN_QUEUE = WORKER_PROPERTIES.getQueues().get("final");
+  private static final String EXCHANGE = WORKER_PROPERTIES.getExchange();
 
   @BeforeEach
   void setUp() {
     defaults = new PostProcessorDefaults();
     defaults.setEnabled(true);
-    identity = new ControlPlaneIdentity(SWARM_ID, "postprocessor", "instance-1");
+    identity = new ControlPlaneIdentity(
+        WORKER_PROPERTIES.getSwarmId(),
+        "postprocessor",
+        WORKER_PROPERTIES.getInstanceId()
+    );
     definition = new WorkerDefinition(
         "postProcessorWorker",
         PostProcessorWorkerImpl.class,

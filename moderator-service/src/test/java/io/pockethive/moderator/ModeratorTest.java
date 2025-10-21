@@ -1,12 +1,13 @@
 package io.pockethive.moderator;
 
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
-import io.pockethive.Topology;
+import io.pockethive.controlplane.spring.WorkerControlPlaneProperties;
 import io.pockethive.worker.sdk.api.StatusPublisher;
 import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pockethive.worker.sdk.api.WorkResult;
 import io.pockethive.worker.sdk.api.WorkerContext;
 import io.pockethive.worker.sdk.api.WorkerInfo;
+import io.pockethive.worker.sdk.testing.ControlPlaneTestFixtures;
 import java.nio.charset.StandardCharsets;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
@@ -18,6 +19,10 @@ class ModeratorTest {
 
     private ModeratorDefaults defaults;
     private ModeratorWorkerImpl worker;
+    private static final WorkerControlPlaneProperties WORKER_PROPERTIES =
+        ControlPlaneTestFixtures.workerProperties("swarm", "moderator", "instance");
+    private static final String IN_QUEUE = WORKER_PROPERTIES.getQueues().get("generator");
+    private static final String OUT_QUEUE = WORKER_PROPERTIES.getQueues().get("moderator");
 
     @BeforeEach
     void setUp() {
@@ -57,7 +62,12 @@ class ModeratorTest {
     private static final class TestWorkerContext implements WorkerContext {
 
         private final ModeratorWorkerConfig config;
-        private final WorkerInfo info = new WorkerInfo("moderator", "swarm", "instance", Topology.GEN_QUEUE, Topology.MOD_QUEUE);
+        private final WorkerInfo info = new WorkerInfo(
+                "moderator",
+                WORKER_PROPERTIES.getSwarmId(),
+                WORKER_PROPERTIES.getInstanceId(),
+                IN_QUEUE,
+                OUT_QUEUE);
 
         private TestWorkerContext(ModeratorWorkerConfig config) {
             this.config = config;

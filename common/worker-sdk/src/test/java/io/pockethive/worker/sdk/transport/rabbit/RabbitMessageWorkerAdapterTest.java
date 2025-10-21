@@ -234,6 +234,24 @@ class RabbitMessageWorkerAdapterTest {
     }
 
     @Test
+    void buildFailsWhenTemplateConfiguredWithoutExchange() {
+        workerDefinition = new WorkerDefinition(
+            "processorWorker",
+            Object.class,
+            WorkerType.MESSAGE,
+            "processor",
+            "processor.in",
+            "processor.out",
+            null,
+            Object.class
+        );
+
+        assertThatThrownBy(() -> builder().build())
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("exchange");
+    }
+
+    @Test
     void buildAllowsMissingOutboundQueueWhenNoPublisherConfigured() {
         workerDefinition = new WorkerDefinition(
             "processorWorker",

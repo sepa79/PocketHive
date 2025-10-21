@@ -1,6 +1,7 @@
 package io.pockethive.generator;
 
 import io.pockethive.controlplane.ControlPlaneIdentity;
+import io.pockethive.controlplane.spring.WorkerControlPlaneProperties;
 import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pockethive.worker.sdk.api.WorkResult;
 import io.pockethive.worker.sdk.autoconfigure.WorkerControlQueueListener;
@@ -22,6 +23,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 
+import io.pockethive.worker.sdk.testing.ControlPlaneTestFixtures;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -50,9 +52,10 @@ class GeneratorRuntimeAdapterTest {
   private WorkerDefinition definition;
   private ControlPlaneIdentity identity;
 
-  private static final String SWARM_ID = "swarm-alpha";
-  private static final String EXCHANGE = "swarm-alpha.hive";
-  private static final String OUT_QUEUE = "swarm-alpha.gen";
+  private static final WorkerControlPlaneProperties WORKER_PROPERTIES =
+      ControlPlaneTestFixtures.workerProperties("swarm-alpha", "generator", "instance-1");
+  private static final String EXCHANGE = WORKER_PROPERTIES.getExchange();
+  private static final String OUT_QUEUE = WORKER_PROPERTIES.getQueues().get("generator");
 
   @BeforeEach
   void setUp() {
@@ -63,7 +66,11 @@ class GeneratorRuntimeAdapterTest {
     defaults = new GeneratorDefaults(messageConfig);
     defaults.setRatePerSec(2.0);
     defaults.setEnabled(true);
-    identity = new ControlPlaneIdentity(SWARM_ID, "generator", "instance-1");
+    identity = new ControlPlaneIdentity(
+        WORKER_PROPERTIES.getSwarmId(),
+        "generator",
+        WORKER_PROPERTIES.getInstanceId()
+    );
     definition = new WorkerDefinition(
         "generatorWorker",
         GeneratorWorkerImpl.class,

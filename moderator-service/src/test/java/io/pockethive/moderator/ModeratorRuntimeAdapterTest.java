@@ -1,6 +1,7 @@
 package io.pockethive.moderator;
 
 import io.pockethive.controlplane.ControlPlaneIdentity;
+import io.pockethive.controlplane.spring.WorkerControlPlaneProperties;
 import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pockethive.worker.sdk.api.WorkResult;
 import io.pockethive.worker.sdk.autoconfigure.WorkerControlQueueListener;
@@ -24,6 +25,7 @@ import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.amqp.rabbit.listener.MessageListenerContainer;
 import org.springframework.amqp.rabbit.listener.RabbitListenerEndpointRegistry;
 
+import io.pockethive.worker.sdk.testing.ControlPlaneTestFixtures;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -61,16 +63,21 @@ class ModeratorRuntimeAdapterTest {
   private WorkerDefinition definition;
   private ControlPlaneIdentity identity;
 
-  private static final String SWARM_ID = "swarm-alpha";
-  private static final String IN_QUEUE = "swarm-alpha.generator";
-  private static final String OUT_QUEUE = "swarm-alpha.moderation";
-  private static final String EXCHANGE = "swarm-alpha.hive";
+  private static final WorkerControlPlaneProperties WORKER_PROPERTIES =
+      ControlPlaneTestFixtures.workerProperties("swarm-alpha", "moderator", "instance-1");
+  private static final String IN_QUEUE = WORKER_PROPERTIES.getQueues().get("generator");
+  private static final String OUT_QUEUE = WORKER_PROPERTIES.getQueues().get("moderator");
+  private static final String EXCHANGE = WORKER_PROPERTIES.getExchange();
 
   @BeforeEach
   void setUp() {
     defaults = new ModeratorDefaults();
     defaults.setEnabled(true);
-    identity = new ControlPlaneIdentity(SWARM_ID, "moderator", "instance-1");
+    identity = new ControlPlaneIdentity(
+        WORKER_PROPERTIES.getSwarmId(),
+        "moderator",
+        WORKER_PROPERTIES.getInstanceId()
+    );
     definition = new WorkerDefinition(
         "moderatorWorker",
         ModeratorWorkerImpl.class,

@@ -1,6 +1,7 @@
 package io.pockethive.processor;
 
 import io.pockethive.controlplane.ControlPlaneIdentity;
+import io.pockethive.controlplane.spring.WorkerControlPlaneProperties;
 import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pockethive.worker.sdk.api.WorkResult;
 import io.pockethive.worker.sdk.autoconfigure.WorkerControlQueueListener;
@@ -10,6 +11,7 @@ import io.pockethive.worker.sdk.runtime.WorkerDefinition;
 import io.pockethive.worker.sdk.runtime.WorkerRegistry;
 import io.pockethive.worker.sdk.runtime.WorkerRuntime;
 import io.pockethive.worker.sdk.transport.rabbit.RabbitWorkMessageConverter;
+import io.pockethive.worker.sdk.testing.ControlPlaneTestFixtures;
 import java.nio.charset.StandardCharsets;
 import java.util.Optional;
 import java.util.function.Consumer;
@@ -61,17 +63,22 @@ class ProcessorRuntimeAdapterTest {
   private WorkerDefinition definition;
   private ControlPlaneIdentity identity;
 
-  private static final String SWARM_ID = "swarm-alpha";
-  private static final String IN_QUEUE = "swarm-alpha.moderation";
-  private static final String OUT_QUEUE = "swarm-alpha.final";
-  private static final String EXCHANGE = "swarm-alpha.hive";
+  private static final WorkerControlPlaneProperties WORKER_PROPERTIES =
+      ControlPlaneTestFixtures.workerProperties("swarm-alpha", "processor", "instance-1");
+  private static final String IN_QUEUE = WORKER_PROPERTIES.getQueues().get("moderator");
+  private static final String OUT_QUEUE = WORKER_PROPERTIES.getQueues().get("final");
+  private static final String EXCHANGE = WORKER_PROPERTIES.getExchange();
 
   @BeforeEach
   void setUp() {
     defaults = new ProcessorDefaults();
     defaults.setEnabled(true);
     defaults.setBaseUrl("http://sut/");
-    identity = new ControlPlaneIdentity(SWARM_ID, "processor", "instance-1");
+    identity = new ControlPlaneIdentity(
+        WORKER_PROPERTIES.getSwarmId(),
+        "processor",
+        WORKER_PROPERTIES.getInstanceId()
+    );
     definition = new WorkerDefinition(
         "processorWorker",
         ProcessorWorkerImpl.class,

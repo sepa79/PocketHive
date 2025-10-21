@@ -9,6 +9,7 @@ import io.pockethive.controlplane.spring.WorkerControlPlaneProperties;
 import io.pockethive.controlplane.spring.ControlPlaneTopologyDescriptorFactory;
 import io.pockethive.controlplane.topology.ControlPlaneTopologyDescriptor;
 import java.time.Duration;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 
@@ -26,7 +27,15 @@ public final class ControlPlaneTestFixtures {
         String resolvedRole = requireText("role", role);
         String resolvedInstance = requireText("instanceId", instanceId);
 
-        Map<String, String> queueNames = Map.of(resolvedRole, resolvedSwarm + "." + resolvedRole);
+        Map<String, String> queueNames = new LinkedHashMap<>();
+        String trafficPrefix = "ph." + resolvedSwarm + ".";
+        queueNames.put("generator", trafficPrefix + "gen");
+        queueNames.put("moderator", trafficPrefix + "mod");
+        queueNames.put("processor", trafficPrefix + "processor");
+        queueNames.put("postprocessor", trafficPrefix + "post");
+        queueNames.put("trigger", trafficPrefix + "trigger");
+        queueNames.put("final", trafficPrefix + "final");
+        queueNames.putIfAbsent(resolvedRole, trafficPrefix + resolvedRole);
         WorkerControlPlaneProperties.Worker worker = new WorkerControlPlaneProperties.Worker(
             true,
             true,
@@ -52,7 +61,7 @@ public final class ControlPlaneTestFixtures {
         return new WorkerControlPlaneProperties(
             true,
             true,
-            "ph.control",
+            trafficPrefix + "hive",
             resolvedSwarm,
             resolvedInstance,
             queueNames,
