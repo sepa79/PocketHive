@@ -34,8 +34,7 @@ class ControlPlaneTopologyDescriptorsTest {
         assertThat(queue.signalBindings())
             .containsExactlyInAnyOrderElementsOf(expectedWorkerSignals("processor", INSTANCE));
         assertThat(queue.eventBindings()).isEmpty();
-        assertThat(descriptor.additionalQueues(INSTANCE))
-            .containsExactly(new QueueDescriptor(Topology.MOD_QUEUE, Set.of(Topology.MOD_QUEUE)));
+        assertThat(descriptor.additionalQueues(INSTANCE)).isEmpty();
 
         ControlPlaneRouteCatalog routes = descriptor.routes();
         assertThat(routes.configSignals())
@@ -98,8 +97,7 @@ class ControlPlaneTopologyDescriptorsTest {
         assertThat(queue.signalBindings())
             .containsExactlyInAnyOrderElementsOf(expectedWorkerSignals("moderator", INSTANCE));
         assertThat(queue.eventBindings()).isEmpty();
-        assertThat(descriptor.additionalQueues(INSTANCE))
-            .containsExactly(new QueueDescriptor(Topology.GEN_QUEUE, Set.of(Topology.GEN_QUEUE)));
+        assertThat(descriptor.additionalQueues(INSTANCE)).isEmpty();
     }
 
     @Test
@@ -112,8 +110,7 @@ class ControlPlaneTopologyDescriptorsTest {
         assertThat(queue.signalBindings())
             .containsExactlyInAnyOrderElementsOf(expectedWorkerSignals("postprocessor", INSTANCE));
         assertThat(queue.eventBindings()).isEmpty();
-        assertThat(descriptor.additionalQueues(INSTANCE))
-            .containsExactly(new QueueDescriptor(Topology.FINAL_QUEUE, Set.of(Topology.FINAL_QUEUE)));
+        assertThat(descriptor.additionalQueues(INSTANCE)).isEmpty();
     }
 
     @Test
