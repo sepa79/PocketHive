@@ -3,8 +3,6 @@ package io.pockethive.processor;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import io.pockethive.Topology;
-import io.pockethive.TopologyDefaults;
 import io.pockethive.worker.sdk.api.MessageWorker;
 import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pockethive.worker.sdk.api.WorkResult;
@@ -29,7 +27,8 @@ import org.springframework.stereotype.Component;
 /**
  * PocketHive message worker that performs the "processor" hop inside the default swarm pipeline.
  * <p>
- * The worker is wired into the {@link TopologyDefaults#MOD_QUEUE moderator queue} and receives
+ * The worker is wired into the moderator queue configured under
+ * {@code pockethive.control-plane.queues.moderator} and receives
  * {@link WorkMessage} payloads that typically originate from the orchestrator. For every incoming
  * message we resolve configuration from the {@link WorkerContext}:
  * <ul>
@@ -57,8 +56,8 @@ import org.springframework.stereotype.Component;
 @PocketHiveWorker(
     role = "processor",
     type = WorkerType.MESSAGE,
-  inQueue = TopologyDefaults.MOD_QUEUE,
-  outQueue = TopologyDefaults.FINAL_QUEUE,
+    inQueue = "moderator",
+    outQueue = "final",
     config = ProcessorWorkerConfig.class
 )
 class ProcessorWorkerImpl implements MessageWorker {
@@ -109,9 +108,9 @@ class ProcessorWorkerImpl implements MessageWorker {
  *       timestamps) to the shared observability context so traces remain visible in Loki/Grafana.</li>
    * </ol>
    *
-   * @param in incoming work message from the moderator queue
+   * @param in incoming work message from the configured moderator queue
    * @param context context provided by the runtime (metrics, logging, config, observability)
-   * @return a {@link WorkResult#message(WorkMessage)} destined for the final queue with the
+   * @return a {@link WorkResult#message(WorkMessage)} destined for the configured final queue with the
    *         observability envelope already updated
    */
   @Override
@@ -233,9 +232,11 @@ class ProcessorWorkerImpl implements MessageWorker {
   }
 
   private void publishStatus(WorkerContext context, ProcessorWorkerConfig config) {
+    String inboundQueue = context.info().inQueue();
+    String outboundQueue = context.info().outQueue();
     context.statusPublisher()
-        .workIn(Topology.MOD_QUEUE)
-        .workOut(Topology.FINAL_QUEUE)
+        .workIn(inboundQueue)
+        .workOut(outboundQueue)
         .update(status -> status
             .data("baseUrl", config.baseUrl())
             .data("enabled", config.enabled())

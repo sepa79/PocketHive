@@ -1,7 +1,5 @@
 package io.pockethive.moderator;
 
-import io.pockethive.Topology;
-import io.pockethive.TopologyDefaults;
 import io.pockethive.worker.sdk.api.MessageWorker;
 import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pockethive.worker.sdk.api.WorkResult;
@@ -14,7 +12,8 @@ import org.springframework.stereotype.Component;
 /**
  * The moderator service is the steady gatekeeper that vets messages coming out of the generator
  * queue before they enter the main processing lane. In the default PocketHive swarm it sits
- * between {@link Topology#GEN_QUEUE} and {@link Topology#MOD_QUEUE}, enriching messages with the
+ * between the generator and moderator queues configured under
+ * {@code pockethive.control-plane.queues}, enriching messages with the
  * {@code x-ph-service} header so downstream processors can tell who handed them the payload.
  * Deploy it near the generator for low latency; smaller teams often co-locate the two services in
  * the same pod.
@@ -30,8 +29,8 @@ import org.springframework.stereotype.Component;
 @PocketHiveWorker(
     role = "moderator",
     type = WorkerType.MESSAGE,
-    inQueue = TopologyDefaults.GEN_QUEUE,
-    outQueue = TopologyDefaults.MOD_QUEUE,
+    inQueue = "generator",
+    outQueue = "moderator",
     config = ModeratorWorkerConfig.class
 )
 class ModeratorWorkerImpl implements MessageWorker {
@@ -58,18 +57,20 @@ class ModeratorWorkerImpl implements MessageWorker {
    * {@code moderation-status} header after evaluating your own rules, or drop the message entirely
    * by returning {@link WorkResult#none()}.</p>
    *
-   * @param in the message pulled from {@link Topology#GEN_QUEUE}.
+   * @param in the message pulled from the configured generator queue.
    * @param context PocketHive runtime utilities (status publisher, worker info, configuration).
    * @return a {@link WorkResult} instructing the runtime to publish the updated message to
-   *     {@link Topology#MOD_QUEUE}.
+   *     the configured moderator queue.
    */
   @Override
   public WorkResult onMessage(WorkMessage in, WorkerContext context) {
     ModeratorWorkerConfig config = context.config(ModeratorWorkerConfig.class)
         .orElseGet(defaults::asConfig);
+    String inboundQueue = context.info().inQueue();
+    String outboundQueue = context.info().outQueue();
     context.statusPublisher()
-        .workIn(Topology.GEN_QUEUE)
-        .workOut(Topology.MOD_QUEUE)
+        .workIn(inboundQueue)
+        .workOut(outboundQueue)
         .update(status -> status
             .data("enabled", config.enabled()));
     WorkMessage out = in.toBuilder()
