@@ -23,6 +23,8 @@ if not defined RABBITMQ_DEFAULT_PASS set "RABBITMQ_DEFAULT_PASS=guest"
 if not defined RABBITMQ_VHOST set "RABBITMQ_VHOST=/"
 if not defined UI_BASE_URL set "UI_BASE_URL=http://localhost:8088"
 if not defined UI_WEBSOCKET_URI set "UI_WEBSOCKET_URI=ws://localhost:8088/ws"
+if not defined POCKETHIVE_CONTROL_PLANE_EXCHANGE set "POCKETHIVE_CONTROL_PLANE_EXCHANGE=ph.control"
+if not defined POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE_PREFIX set "POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE_PREFIX=ph.control"
 
 call mvnw.cmd verify -pl e2e-tests -am %*
 set "EXIT_CODE=%ERRORLEVEL%"
