@@ -12,10 +12,20 @@ supported routes. Resolve descriptors through `ControlPlaneTopologyDescriptorFac
 strings:
 
 ```java
+ControlPlaneTopologySettings workerSettings = new ControlPlaneTopologySettings(
+    "swarm-1",
+    "ph.control",
+    Map.of()
+);
 ControlPlaneTopologyDescriptor workerDescriptor =
-    ControlPlaneTopologyDescriptorFactory.forWorkerRole("processor");
+    ControlPlaneTopologyDescriptorFactory.forWorkerRole("processor", workerSettings);
+ControlPlaneTopologySettings managerSettings = new ControlPlaneTopologySettings(
+    "swarm-1",
+    "ph.control",
+    Map.of()
+);
 ControlPlaneTopologyDescriptor managerDescriptor =
-    ControlPlaneTopologyDescriptorFactory.forManagerRole("orchestrator");
+    ControlPlaneTopologyDescriptorFactory.forManagerRole("orchestrator", managerSettings);
 ```
 
 The descriptor validates role identifiers and exposes helpers for declaring the control queue and any
@@ -69,6 +79,7 @@ pockethive:
     traffic-exchange: ph.swarm-1.hive
     swarm-id: swarm-1
     instance-id: processor-1
+    control-queue-prefix: ph.control
     queues:
       processor: ph.swarm-1.processor
       final: ph.swarm-1.final
@@ -93,6 +104,8 @@ pockethive:
 Workers and managers automatically inherit `pockethive.control-plane.swarm-id`
 and `pockethive.control-plane.instance-id`. Participant-specific overrides are
 no longer supported—set the shared properties once at the control-plane level.
+The `control-queue-prefix` should capture only the shared prefix (for example,
+`ph.control`); the Swarm ID and role/instance segments are appended automatically.
 The worker queues map can contain any role-specific bindings; the Swarm
 Controller injects the same map into every worker container via environment
 variables, and `WorkerControlPlaneProperties` enforces that each declared entry
@@ -109,7 +122,7 @@ configuration to abort fast:
 | Category | Required variables |
 | --- | --- |
 | RabbitMQ connectivity | `SPRING_RABBITMQ_HOST`, `SPRING_RABBITMQ_PORT`, `SPRING_RABBITMQ_USERNAME`, `SPRING_RABBITMQ_PASSWORD`, `SPRING_RABBITMQ_VIRTUAL_HOST` |
-| Control-plane identity & routing | `POCKETHIVE_CONTROL_PLANE_EXCHANGE`, `POCKETHIVE_CONTROL_PLANE_TRAFFIC_EXCHANGE`, `POCKETHIVE_CONTROL_PLANE_SWARM_ID`, `POCKETHIVE_CONTROL_PLANE_INSTANCE_ID`, `POCKETHIVE_CONTROL_PLANE_QUEUES_GENERATOR`, `POCKETHIVE_CONTROL_PLANE_QUEUES_MODERATOR`, `POCKETHIVE_CONTROL_PLANE_QUEUES_FINAL`* |
+| Control-plane identity & routing | `POCKETHIVE_CONTROL_PLANE_EXCHANGE`, `POCKETHIVE_CONTROL_PLANE_TRAFFIC_EXCHANGE`, `POCKETHIVE_CONTROL_PLANE_SWARM_ID`, `POCKETHIVE_CONTROL_PLANE_INSTANCE_ID`, `POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE_PREFIX`, `POCKETHIVE_CONTROL_PLANE_QUEUES_GENERATOR`, `POCKETHIVE_CONTROL_PLANE_QUEUES_MODERATOR`, `POCKETHIVE_CONTROL_PLANE_QUEUES_FINAL`* |
 | Logging contract | `POCKETHIVE_LOGS_EXCHANGE`, `POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGGING_ENABLED`, `POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGS_EXCHANGE` |
 | Metrics (when enabled) | `POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_ENABLED`, `POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_BASE_URL`, `POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_PUSH_RATE`, `POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_SHUTDOWN_OPERATION`, `MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_ENABLED`, `MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_BASE_URL`, `MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_PUSH_RATE`, `MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_JOB`, `MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_GROUPING_KEY_INSTANCE` |
 
@@ -134,6 +147,7 @@ services:
       POCKETHIVE_CONTROL_PLANE_TRAFFIC_EXCHANGE: ph.dev.hive
       POCKETHIVE_CONTROL_PLANE_SWARM_ID: dev-swarm
       POCKETHIVE_CONTROL_PLANE_INSTANCE_ID: generator-dev
+      POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE_PREFIX: ph.control
       POCKETHIVE_CONTROL_PLANE_QUEUES_GENERATOR: ph.dev.gen
       POCKETHIVE_CONTROL_PLANE_QUEUES_MODERATOR: ph.dev.mod
       POCKETHIVE_CONTROL_PLANE_QUEUES_FINAL: ph.dev.final

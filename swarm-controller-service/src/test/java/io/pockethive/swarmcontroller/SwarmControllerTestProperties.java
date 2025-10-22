@@ -1,26 +1,31 @@
 package io.pockethive.swarmcontroller;
 
-import io.pockethive.Topology;
 import io.pockethive.swarmcontroller.config.SwarmControllerProperties;
 import java.time.Duration;
 
 final class SwarmControllerTestProperties {
+
+    static final String TEST_SWARM_ID = "default";
+    static final String CONTROL_EXCHANGE = "ph.control";
+    static final String CONTROL_QUEUE_PREFIX_BASE = "ph.control";
+    static final String CONTROL_QUEUE_PREFIX = CONTROL_QUEUE_PREFIX_BASE + "." + TEST_SWARM_ID;
+    static final String TRAFFIC_PREFIX = "ph." + TEST_SWARM_ID;
+    static final String HIVE_EXCHANGE = TRAFFIC_PREFIX + ".hive";
+    static final String LOGS_EXCHANGE = "ph.logs";
 
     private SwarmControllerTestProperties() {
     }
 
     static SwarmControllerProperties defaults() {
         return new SwarmControllerProperties(
-            Topology.SWARM_ID,
-            Topology.CONTROL_EXCHANGE,
+            TEST_SWARM_ID,
+            CONTROL_EXCHANGE,
+            CONTROL_QUEUE_PREFIX_BASE,
             new SwarmControllerProperties.Manager("swarm-controller"),
             new SwarmControllerProperties.SwarmController(
-                "ph.control",
-                new SwarmControllerProperties.Traffic(
-                    "ph." + Topology.SWARM_ID + ".hive",
-                    "ph." + Topology.SWARM_ID),
+                new SwarmControllerProperties.Traffic(HIVE_EXCHANGE, TRAFFIC_PREFIX),
                 new SwarmControllerProperties.Rabbit(
-                    "ph.logs",
+                    LOGS_EXCHANGE,
                     new SwarmControllerProperties.Logging(true)),
                 new SwarmControllerProperties.Metrics(
                     new SwarmControllerProperties.Pushgateway(false, null, Duration.ofMinutes(1), "DELETE")),

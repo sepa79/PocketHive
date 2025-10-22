@@ -77,8 +77,8 @@ class ContainerLifecycleManagerTest {
         assertEquals("false", env.get("POCKETHIVE_CONTROL_PLANE_WORKER_ENABLED"));
         assertEquals("swarm-controller", env.get("POCKETHIVE_CONTROL_PLANE_MANAGER_ROLE"));
         assertEquals(
-            "ph.control." + swarm.getId(),
-            env.get("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_CONTROL_QUEUE_PREFIX"));
+            controlPlane.getControlQueuePrefix(),
+            env.get("POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE_PREFIX"));
         assertEquals("ph.sw1", env.get("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_TRAFFIC_QUEUE_PREFIX"));
         assertEquals("ph.sw1.hive", env.get("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_TRAFFIC_HIVE_EXCHANGE"));
         assertEquals("ph.logs", env.get("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGS_EXCHANGE"));
@@ -294,6 +294,7 @@ class ContainerLifecycleManagerTest {
     private static ControlPlaneProperties controlPlaneProperties() {
         ControlPlaneProperties properties = new ControlPlaneProperties();
         properties.setExchange("ph.control");
+        properties.setControlQueuePrefix("ph.control.manager");
         properties.setSwarmId("orchestrator-swarm");
         properties.setInstanceId("orch-instance");
         properties.getManager().setRole("orchestrator");

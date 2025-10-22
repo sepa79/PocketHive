@@ -13,6 +13,7 @@ import io.pockethive.controlplane.messaging.SignalMessage;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.controlplane.spring.ControlPlaneTopologyDescriptorFactory;
 import io.pockethive.controlplane.topology.ControlPlaneTopologyDescriptor;
+import io.pockethive.controlplane.topology.ControlPlaneTopologySettings;
 import io.pockethive.controlplane.topology.ControlQueueDescriptor;
 import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmCreateTracker;
@@ -25,6 +26,7 @@ import io.pockethive.orchestrator.domain.SwarmHealth;
 import io.pockethive.swarm.model.SwarmPlan;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -66,8 +68,10 @@ class SwarmEventFlowIntegrationTest {
     private ArgumentCaptor<EventMessage> eventCaptor;
 
     private final ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
+    private final ControlPlaneTopologySettings settings =
+        new ControlPlaneTopologySettings(SWARM_ID, "ph.control", Map.of());
     private final ControlPlaneTopologyDescriptor descriptor =
-        ControlPlaneTopologyDescriptorFactory.forManagerRole("orchestrator");
+        ControlPlaneTopologyDescriptorFactory.forManagerRole("orchestrator", settings);
     private final ControlPlaneIdentity identity =
         new ControlPlaneIdentity(SWARM_ID, descriptor.role(), ORCHESTRATOR_INSTANCE);
 

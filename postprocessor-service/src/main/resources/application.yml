@@ -18,6 +18,7 @@ pockethive:
     traffic-exchange: ${POCKETHIVE_CONTROL_PLANE_TRAFFIC_EXCHANGE}
     swarm-id: ${POCKETHIVE_CONTROL_PLANE_SWARM_ID}
     instance-id: ${POCKETHIVE_CONTROL_PLANE_INSTANCE_ID}
+    control-queue-prefix: ${POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE_PREFIX}
     queues:
       final: ${POCKETHIVE_CONTROL_PLANE_QUEUES_FINAL}
     worker:

@@ -30,7 +30,7 @@ Generator workers periodically emit messages without a triggering inbound queue.
 @PocketHiveWorker(
     role = "generator",
     type = WorkerType.GENERATOR,
-    outQueue = TopologyDefaults.GEN_QUEUE,
+    outQueue = "ph.swarm-alpha.gen", // align with pockethive.control-plane.queues.generator
     config = GeneratorWorkerConfig.class
 )
 class GeneratorWorkerImpl implements GeneratorWorker {
@@ -41,8 +41,9 @@ class GeneratorWorkerImpl implements GeneratorWorker {
   public WorkResult generate(WorkerContext context) {
     GeneratorWorkerConfig config = context.config(GeneratorWorkerConfig.class)
         .orElseGet(defaults::asConfig);
+    String outQueue = context.info().outQueue();
     context.statusPublisher()
-        .workOut(Topology.GEN_QUEUE)
+        .workOut(outQueue)
         .update(status -> status.data("path", config.path()));
     return WorkResult.message(WorkMessage.json(buildPayload(config)).build());
   }
@@ -50,6 +51,10 @@ class GeneratorWorkerImpl implements GeneratorWorker {
 ```
 
 The full implementation lives in [`generator-service`](../../generator-service/src/main/java/io/pockethive/generator/GeneratorWorkerImpl.java).
+
+> The concrete queue names in the annotation examples are illustrative. Configure the values via
+> `pockethive.control-plane.queues.*` (or the corresponding environment variables) and keep the
+> annotation in sync with that configuration.
 
 ### `MessageWorker`
 
@@ -60,8 +65,8 @@ Message workers react to inbound queues. The runtime maps RabbitMQ deliveries in
 @PocketHiveWorker(
     role = "processor",
     type = WorkerType.MESSAGE,
-    inQueue = TopologyDefaults.MOD_QUEUE,
-    outQueue = TopologyDefaults.FINAL_QUEUE,
+    inQueue = "ph.swarm-alpha.mod",   // matches pockethive.control-plane.queues.moderator
+    outQueue = "ph.swarm-alpha.final", // matches pockethive.control-plane.queues.final
     config = ProcessorWorkerConfig.class
 )
 class ProcessorWorkerImpl implements MessageWorker {
@@ -70,9 +75,11 @@ class ProcessorWorkerImpl implements MessageWorker {
   public WorkResult onMessage(WorkMessage in, WorkerContext context) {
     ProcessorWorkerConfig config = context.config(ProcessorWorkerConfig.class)
         .orElseGet(defaults::asConfig);
+    String inQueue = context.info().inQueue();
+    String outQueue = context.info().outQueue();
     context.statusPublisher()
-        .workIn(Topology.MOD_QUEUE)
-        .workOut(Topology.FINAL_QUEUE)
+        .workIn(inQueue)
+        .workOut(outQueue)
         .update(status -> status.data("baseUrl", config.baseUrl()));
     WorkMessage enriched = invokeHttpAndEnrich(in, context, config);
     return WorkResult.message(enriched);

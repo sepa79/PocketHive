@@ -15,6 +15,7 @@ public class SwarmControllerProperties {
     private final String swarmId;
     private final String role;
     private final String controlExchange;
+    private final String controlQueuePrefixBase;
     private final String controlQueuePrefix;
     private final Traffic traffic;
     private final Rabbit rabbit;
@@ -23,14 +24,15 @@ public class SwarmControllerProperties {
 
     public SwarmControllerProperties(@NotBlank String swarmId,
                                      @NotBlank String exchange,
+                                     @NotBlank String controlQueuePrefix,
                                      @Valid Manager manager,
                                      @Valid SwarmController swarmController) {
         this.swarmId = requireNonBlank(swarmId, "swarmId");
         this.role = requireNonBlank(Objects.requireNonNull(manager, "manager").role(), "manager.role");
         this.controlExchange = requireNonBlank(exchange, "exchange");
+        this.controlQueuePrefixBase = requireNonBlank(controlQueuePrefix, "controlQueuePrefix");
+        this.controlQueuePrefix = normalizeControlQueuePrefix(this.swarmId, this.controlQueuePrefixBase);
         SwarmController resolved = Objects.requireNonNull(swarmController, "swarmController");
-        this.controlQueuePrefix = normalizeControlQueuePrefix(this.swarmId,
-            requireNonBlank(resolved.controlQueuePrefix(), "controlQueuePrefix"));
         this.traffic = Objects.requireNonNull(resolved.traffic(), "traffic");
         this.rabbit = Objects.requireNonNull(resolved.rabbit(), "rabbit");
         this.metrics = Objects.requireNonNull(resolved.metrics(), "metrics");
@@ -51,6 +53,10 @@ public class SwarmControllerProperties {
 
     public String getControlQueuePrefix() {
         return controlQueuePrefix;
+    }
+
+    public String getControlQueuePrefixBase() {
+        return controlQueuePrefixBase;
     }
 
     public Traffic getTraffic() {
@@ -102,26 +108,19 @@ public class SwarmControllerProperties {
 
     @Validated
     public static final class SwarmController {
-        private final String controlQueuePrefix;
         private final Traffic traffic;
         private final Rabbit rabbit;
         private final Metrics metrics;
         private final Docker docker;
 
-        public SwarmController(@NotBlank String controlQueuePrefix,
-                               @Valid Traffic traffic,
+        public SwarmController(@Valid Traffic traffic,
                                @Valid Rabbit rabbit,
                                @Valid Metrics metrics,
                                @Valid Docker docker) {
-            this.controlQueuePrefix = requireNonBlank(controlQueuePrefix, "controlQueuePrefix");
             this.traffic = Objects.requireNonNull(traffic, "traffic");
             this.rabbit = Objects.requireNonNull(rabbit, "rabbit");
             this.metrics = Objects.requireNonNull(metrics, "metrics");
             this.docker = Objects.requireNonNull(docker, "docker");
-        }
-
-        public String controlQueuePrefix() {
-            return controlQueuePrefix;
         }
 
         public Traffic traffic() {

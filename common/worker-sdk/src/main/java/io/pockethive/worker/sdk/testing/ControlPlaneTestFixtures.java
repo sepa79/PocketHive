@@ -8,10 +8,13 @@ import io.pockethive.controlplane.spring.ControlPlaneProperties;
 import io.pockethive.controlplane.spring.WorkerControlPlaneProperties;
 import io.pockethive.controlplane.spring.ControlPlaneTopologyDescriptorFactory;
 import io.pockethive.controlplane.topology.ControlPlaneTopologyDescriptor;
+import io.pockethive.controlplane.topology.ControlPlaneTopologySettings;
+import io.pockethive.controlplane.topology.QueueDescriptor;
 import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * Testing helpers that expose canonical control-plane descriptors and identities.
@@ -65,6 +68,7 @@ public final class ControlPlaneTestFixtures {
             trafficPrefix + "hive",
             resolvedSwarm,
             resolvedInstance,
+            "ph.control",
             queueNames,
             worker,
             swarmController);
@@ -73,6 +77,8 @@ public final class ControlPlaneTestFixtures {
     public static ControlPlaneProperties managerProperties(String swarmId, String role, String instanceId) {
         ControlPlaneProperties properties = new ControlPlaneProperties();
         String resolvedSwarm = requireText("swarmId", swarmId);
+        properties.setExchange("ph.control");
+        properties.setControlQueuePrefix("ph.control");
         properties.setSwarmId(resolvedSwarm);
         properties.setInstanceId(requireText("instanceId", instanceId));
         ControlPlaneProperties.ManagerProperties manager = properties.getManager();
@@ -91,22 +97,33 @@ public final class ControlPlaneTestFixtures {
     }
 
     public static ControlPlaneTopologyDescriptor workerTopology(String role) {
-        return ControlPlaneTopologyDescriptorFactory.forWorkerRole(requireText("role", role));
+        String resolvedRole = requireText("role", role);
+        ControlPlaneTopologySettings settings = workerTopologySettings("swarm-fixture", resolvedRole, "fixture-1");
+        return ControlPlaneTopologyDescriptorFactory.forWorkerRole(resolvedRole, settings);
     }
 
     public static ControlPlaneTopologyDescriptor managerTopology(String role) {
-        return ControlPlaneTopologyDescriptorFactory.forManagerRole(requireText("role", role));
+        String resolvedRole = requireText("role", role);
+        ControlPlaneTopologySettings settings = new ControlPlaneTopologySettings(
+            "swarm-fixture", "ph.control", Map.of());
+        return ControlPlaneTopologyDescriptorFactory.forManagerRole(resolvedRole, settings);
     }
 
     public static ControlPlaneEmitter workerEmitter(ControlPlanePublisher publisher, ControlPlaneIdentity identity) {
         ControlPlaneIdentity validated = Objects.requireNonNull(identity, "identity must not be null");
-        ControlPlaneTopologyDescriptor descriptor = workerTopology(validated.role());
+        ControlPlaneTopologySettings settings = workerTopologySettings(
+            validated.swarmId(), validated.role(), validated.instanceId());
+        ControlPlaneTopologyDescriptor descriptor = ControlPlaneTopologyDescriptorFactory
+            .forWorkerRole(validated.role(), settings);
         return ControlPlaneEmitter.using(descriptor, RoleContext.fromIdentity(validated), requirePublisher(publisher));
     }
 
     public static ControlPlaneEmitter managerEmitter(ControlPlanePublisher publisher, ControlPlaneIdentity identity) {
         ControlPlaneIdentity validated = Objects.requireNonNull(identity, "identity must not be null");
-        ControlPlaneTopologyDescriptor descriptor = managerTopology(validated.role());
+        ControlPlaneTopologySettings settings = new ControlPlaneTopologySettings(
+            validated.swarmId(), "ph.control", Map.of());
+        ControlPlaneTopologyDescriptor descriptor = ControlPlaneTopologyDescriptorFactory
+            .forManagerRole(validated.role(), settings);
         return ControlPlaneEmitter.using(descriptor, RoleContext.fromIdentity(validated), requirePublisher(publisher));
     }
 
@@ -123,5 +140,18 @@ public final class ControlPlaneTestFixtures {
             throw new IllegalArgumentException(field + " must not be blank");
         }
         return trimmed;
+    }
+
+    private static ControlPlaneTopologySettings workerTopologySettings(String swarmId, String role, String instanceId) {
+        WorkerControlPlaneProperties properties = workerProperties(swarmId, role, instanceId);
+        Map<String, QueueDescriptor> trafficQueues = new LinkedHashMap<>();
+        properties.getQueues().names().forEach((queueRole, queueName) ->
+            trafficQueues.put(queueRole, new QueueDescriptor(queueName, Set.of())));
+        String controlQueue = properties.getControlPlane().getControlQueueName();
+        String suffix = "." + swarmId + "." + role + "." + instanceId;
+        String prefix = controlQueue.endsWith(suffix)
+            ? controlQueue.substring(0, controlQueue.length() - suffix.length())
+            : controlQueue;
+        return new ControlPlaneTopologySettings(properties.getSwarmId(), prefix, trafficQueues);
     }
 }

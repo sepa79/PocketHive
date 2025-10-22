@@ -27,6 +27,7 @@ class PocketHiveWorkerSdkAutoConfigurationQueueResolutionTest {
             "pockethive.control-plane.instance-id=instance-1",
             "pockethive.control-plane.swarm-id=Swarm-Alpha",
             "pockethive.control-plane.exchange=swarm-alpha.control",
+            "pockethive.control-plane.control-queue-prefix=ph.control",
             "pockethive.control-plane.traffic-exchange=swarm-alpha.hive",
             "pockethive.control-plane.queues.in=swarm-alpha.in",
             "pockethive.control-plane.queues.out=swarm-alpha.out",

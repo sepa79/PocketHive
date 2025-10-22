@@ -1,6 +1,5 @@
 package io.pockethive.controlplane.spring;
 
-import io.pockethive.Topology;
 import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.controlplane.topology.ControlPlaneTopologyDescriptor;
 import io.pockethive.controlplane.topology.ControlQueueDescriptor;
@@ -24,17 +23,20 @@ public final class ControlPlaneTopologyDeclarableFactory {
 
     public Declarables create(ControlPlaneTopologyDescriptor descriptor,
                               ControlPlaneIdentity identity,
-                              TopicExchange exchange) {
+                              TopicExchange controlExchange,
+                              TopicExchange trafficExchange) {
         Objects.requireNonNull(descriptor, "descriptor");
         Objects.requireNonNull(identity, "identity");
-        Objects.requireNonNull(exchange, "exchange");
+        Objects.requireNonNull(controlExchange, "controlExchange");
+        Objects.requireNonNull(trafficExchange, "trafficExchange");
         String instanceId = requireText(identity.instanceId(), "identity.instanceId");
         List<Declarable> declarables = new ArrayList<>();
         descriptor.controlQueue(instanceId).ifPresent(queueDescriptor ->
-            declarables.addAll(createControlQueue(queueDescriptor, exchange)));
+            declarables.addAll(createControlQueue(queueDescriptor, controlExchange)));
         Collection<QueueDescriptor> additionalQueues = descriptor.additionalQueues(instanceId);
         if (!additionalQueues.isEmpty() && shouldDeclareAdditionalQueues(descriptor)) {
-            TopicExchange additionalExchange = resolveAdditionalQueueExchange(descriptor, exchange);
+            TopicExchange additionalExchange = resolveAdditionalQueueExchange(descriptor, controlExchange,
+                trafficExchange);
             for (QueueDescriptor queueDescriptor : additionalQueues) {
                 declarables.addAll(createQueue(queueDescriptor, additionalExchange));
             }
@@ -73,9 +75,10 @@ public final class ControlPlaneTopologyDeclarableFactory {
     }
 
     private TopicExchange resolveAdditionalQueueExchange(ControlPlaneTopologyDescriptor descriptor,
-                                                         TopicExchange controlExchange) {
+                                                         TopicExchange controlExchange,
+                                                         TopicExchange trafficExchange) {
         if (ControlPlaneTopologyDescriptorFactory.isWorkerRole(descriptor.role())) {
-            return new TopicExchange(Topology.EXCHANGE);
+            return trafficExchange;
         }
         return controlExchange;
     }

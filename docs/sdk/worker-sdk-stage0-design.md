@@ -49,10 +49,10 @@ Declare worker metadata via annotation or configuration record. Stage 1 will pre
 @PocketHiveWorker(
     role = "generator",
     type = WorkerType.GENERATOR,
-    outQueue = Topology.GEN_QUEUE
+    outQueue = "ph.swarm-alpha.gen" // matches pockethive.control-plane.queues.generator
 )
 ```
-For message workers, specify `inQueue` and `outQueue`. The runtime mirrors these bindings into the status payload under `queues.work`, replacing the legacy `inQueue` status field. Descriptor also references the control-plane descriptor by role (no per-service overrides needed).
+For message workers, specify `inQueue` and `outQueue`. The runtime mirrors these bindings into the status payload under `queues.work`, replacing the legacy `inQueue` status field. Descriptor also references the control-plane descriptor by role (no per-service overrides needed). Queue names must match the values supplied via `pockethive.control-plane.queues.*` (or the Swarm Controller environment contract); do not rely on the deprecated `Topology` defaults.
 
 ## Control-Plane Behaviour
 - Worker runtime owns a `ControlPlaneRuntime` component that:

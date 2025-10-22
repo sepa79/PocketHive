@@ -71,7 +71,7 @@ public class SmokeSteps {
 
     orchestratorClient = OrchestratorClient.create(orchestratorBaseUrl);
     scenarioManagerClient = ScenarioManagerClient.create(scenarioManagerBaseUrl);
-    rabbitSubscriptions = RabbitSubscriptions.from(endpoints.rabbitMq());
+    rabbitSubscriptions = RabbitSubscriptions.from(endpoints.rabbitMq(), endpoints.controlPlane());
     uiWebClient = WebClient.builder().baseUrl(uiBaseUrl.toString()).build();
 
     LOGGER.info("Smoke checks configured with endpoints: {}", endpoints.asMap());

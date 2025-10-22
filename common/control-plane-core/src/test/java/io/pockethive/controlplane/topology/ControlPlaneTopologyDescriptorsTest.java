@@ -1,7 +1,6 @@
 package io.pockethive.controlplane.topology;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.pockethive.Topology;
 import io.pockethive.controlplane.ControlPlaneSignals;
 import io.pockethive.controlplane.payload.JsonFixtureAssertions;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
@@ -21,16 +20,20 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class ControlPlaneTopologyDescriptorsTest {
 
+    private static final String SWARM_ID = "swarm-alpha";
+    private static final String CONTROL_QUEUE_PREFIX = "ph.control";
     private static final String INSTANCE = "inst";
     private static final ObjectMapper MAPPER = new ObjectMapper().findAndRegisterModules();
+    private static final ControlPlaneTopologySettings SETTINGS =
+        new ControlPlaneTopologySettings(SWARM_ID, CONTROL_QUEUE_PREFIX, Map.of());
 
     @Test
     void processorDescriptorMatchesRabbitConfig() {
-        ProcessorControlPlaneTopologyDescriptor descriptor = new ProcessorControlPlaneTopologyDescriptor();
+        ProcessorControlPlaneTopologyDescriptor descriptor = new ProcessorControlPlaneTopologyDescriptor(SETTINGS);
 
         ControlQueueDescriptor queue = requireQueue(descriptor);
         assertThat(queue.name())
-            .isEqualTo(Topology.CONTROL_QUEUE + "." + Topology.SWARM_ID + ".processor." + INSTANCE);
+            .isEqualTo(CONTROL_QUEUE_PREFIX + "." + SWARM_ID + ".processor." + INSTANCE);
         assertThat(queue.signalBindings())
             .containsExactlyInAnyOrderElementsOf(expectedWorkerSignals("processor", INSTANCE));
         assertThat(queue.eventBindings()).isEmpty();
@@ -46,13 +49,13 @@ class ControlPlaneTopologyDescriptorsTest {
     @Test
     void descriptorDslMatchesGoldenFixture() throws IOException {
         Map<String, Object> document = new LinkedHashMap<>();
-        document.put("processor", describe(new ProcessorControlPlaneTopologyDescriptor()));
-        document.put("generator", describe(new GeneratorControlPlaneTopologyDescriptor()));
-        document.put("trigger", describe(new TriggerControlPlaneTopologyDescriptor()));
-        document.put("moderator", describe(new ModeratorControlPlaneTopologyDescriptor()));
-        document.put("postprocessor", describe(new PostProcessorControlPlaneTopologyDescriptor()));
-        document.put("swarmController", describe(new SwarmControllerControlPlaneTopologyDescriptor()));
-        document.put("orchestrator", describe(new OrchestratorControlPlaneTopologyDescriptor()));
+        document.put("processor", describe(new ProcessorControlPlaneTopologyDescriptor(SETTINGS)));
+        document.put("generator", describe(new GeneratorControlPlaneTopologyDescriptor(SETTINGS)));
+        document.put("trigger", describe(new TriggerControlPlaneTopologyDescriptor(SETTINGS)));
+        document.put("moderator", describe(new ModeratorControlPlaneTopologyDescriptor(SETTINGS)));
+        document.put("postprocessor", describe(new PostProcessorControlPlaneTopologyDescriptor(SETTINGS)));
+        document.put("swarmController", describe(new SwarmControllerControlPlaneTopologyDescriptor(SETTINGS)));
+        document.put("orchestrator", describe(new OrchestratorControlPlaneTopologyDescriptor(SETTINGS)));
         document.put("scenarioManager", describe(new ScenarioManagerTopologyDescriptor()));
 
         String json = MAPPER.writeValueAsString(document);
@@ -63,11 +66,11 @@ class ControlPlaneTopologyDescriptorsTest {
 
     @Test
     void generatorDescriptorMatchesRabbitConfig() {
-        GeneratorControlPlaneTopologyDescriptor descriptor = new GeneratorControlPlaneTopologyDescriptor();
+        GeneratorControlPlaneTopologyDescriptor descriptor = new GeneratorControlPlaneTopologyDescriptor(SETTINGS);
 
         ControlQueueDescriptor queue = requireQueue(descriptor);
         assertThat(queue.name())
-            .isEqualTo(Topology.CONTROL_QUEUE + "." + Topology.SWARM_ID + ".generator." + INSTANCE);
+            .isEqualTo(CONTROL_QUEUE_PREFIX + "." + SWARM_ID + ".generator." + INSTANCE);
         assertThat(queue.signalBindings())
             .containsExactlyInAnyOrderElementsOf(expectedWorkerSignals("generator", INSTANCE));
         assertThat(queue.eventBindings()).isEmpty();
@@ -76,11 +79,11 @@ class ControlPlaneTopologyDescriptorsTest {
 
     @Test
     void triggerDescriptorMatchesRabbitConfig() {
-        TriggerControlPlaneTopologyDescriptor descriptor = new TriggerControlPlaneTopologyDescriptor();
+        TriggerControlPlaneTopologyDescriptor descriptor = new TriggerControlPlaneTopologyDescriptor(SETTINGS);
 
         ControlQueueDescriptor queue = requireQueue(descriptor);
         assertThat(queue.name())
-            .isEqualTo(Topology.CONTROL_QUEUE + "." + Topology.SWARM_ID + ".trigger." + INSTANCE);
+            .isEqualTo(CONTROL_QUEUE_PREFIX + "." + SWARM_ID + ".trigger." + INSTANCE);
         assertThat(queue.signalBindings())
             .containsExactlyInAnyOrderElementsOf(expectedWorkerSignals("trigger", INSTANCE));
         assertThat(queue.eventBindings()).isEmpty();
@@ -89,11 +92,11 @@ class ControlPlaneTopologyDescriptorsTest {
 
     @Test
     void moderatorDescriptorMatchesRabbitConfig() {
-        ModeratorControlPlaneTopologyDescriptor descriptor = new ModeratorControlPlaneTopologyDescriptor();
+        ModeratorControlPlaneTopologyDescriptor descriptor = new ModeratorControlPlaneTopologyDescriptor(SETTINGS);
 
         ControlQueueDescriptor queue = requireQueue(descriptor);
         assertThat(queue.name())
-            .isEqualTo(Topology.CONTROL_QUEUE + "." + Topology.SWARM_ID + ".moderator." + INSTANCE);
+            .isEqualTo(CONTROL_QUEUE_PREFIX + "." + SWARM_ID + ".moderator." + INSTANCE);
         assertThat(queue.signalBindings())
             .containsExactlyInAnyOrderElementsOf(expectedWorkerSignals("moderator", INSTANCE));
         assertThat(queue.eventBindings()).isEmpty();
@@ -102,11 +105,11 @@ class ControlPlaneTopologyDescriptorsTest {
 
     @Test
     void postProcessorDescriptorMatchesRabbitConfig() {
-        PostProcessorControlPlaneTopologyDescriptor descriptor = new PostProcessorControlPlaneTopologyDescriptor();
+        PostProcessorControlPlaneTopologyDescriptor descriptor = new PostProcessorControlPlaneTopologyDescriptor(SETTINGS);
 
         ControlQueueDescriptor queue = requireQueue(descriptor);
         assertThat(queue.name())
-            .isEqualTo(Topology.CONTROL_QUEUE + "." + Topology.SWARM_ID + ".postprocessor." + INSTANCE);
+            .isEqualTo(CONTROL_QUEUE_PREFIX + "." + SWARM_ID + ".postprocessor." + INSTANCE);
         assertThat(queue.signalBindings())
             .containsExactlyInAnyOrderElementsOf(expectedWorkerSignals("postprocessor", INSTANCE));
         assertThat(queue.eventBindings()).isEmpty();
@@ -115,15 +118,15 @@ class ControlPlaneTopologyDescriptorsTest {
 
     @Test
     void swarmControllerDescriptorMatchesRabbitConfig() {
-        SwarmControllerControlPlaneTopologyDescriptor descriptor = new SwarmControllerControlPlaneTopologyDescriptor();
+        SwarmControllerControlPlaneTopologyDescriptor descriptor = new SwarmControllerControlPlaneTopologyDescriptor(SETTINGS);
 
         ControlQueueDescriptor queue = requireQueue(descriptor);
         assertThat(queue.name())
-            .isEqualTo(expectedSwarmControllerQueueName(Topology.CONTROL_QUEUE, Topology.SWARM_ID, INSTANCE));
+            .isEqualTo(expectedSwarmControllerQueueName(CONTROL_QUEUE_PREFIX, SWARM_ID, INSTANCE));
         assertThat(queue.signalBindings())
             .containsExactlyInAnyOrderElementsOf(expectedSwarmControllerSignals(INSTANCE));
         assertThat(queue.eventBindings())
-            .containsExactlyInAnyOrder("ev.status-full." + Topology.SWARM_ID + ".#", "ev.status-delta." + Topology.SWARM_ID + ".#");
+            .containsExactlyInAnyOrder("ev.status-full." + SWARM_ID + ".#", "ev.status-delta." + SWARM_ID + ".#");
 
         ControlPlaneRouteCatalog routes = descriptor.routes();
         assertThat(routes.configSignals())
@@ -132,12 +135,12 @@ class ControlPlaneTopologyDescriptorsTest {
             .containsExactlyInAnyOrderElementsOf(expectedSwarmControllerStatusSignals(ControlPlaneRouteCatalog.INSTANCE_TOKEN));
         assertThat(routes.lifecycleSignals())
             .containsExactlyInAnyOrder(
-                ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_START, Topology.SWARM_ID, "swarm-controller", "ALL"),
-                ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_TEMPLATE, Topology.SWARM_ID, "swarm-controller", "ALL"),
-                ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_STOP, Topology.SWARM_ID, "swarm-controller", "ALL"),
-                ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_REMOVE, Topology.SWARM_ID, "swarm-controller", "ALL"));
+                ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_START, SWARM_ID, "swarm-controller", "ALL"),
+                ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_TEMPLATE, SWARM_ID, "swarm-controller", "ALL"),
+                ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_STOP, SWARM_ID, "swarm-controller", "ALL"),
+                ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_REMOVE, SWARM_ID, "swarm-controller", "ALL"));
         assertThat(routes.statusEvents())
-            .containsExactlyInAnyOrder("ev.status-full." + Topology.SWARM_ID + ".#", "ev.status-delta." + Topology.SWARM_ID + ".#");
+            .containsExactlyInAnyOrder("ev.status-full." + SWARM_ID + ".#", "ev.status-delta." + SWARM_ID + ".#");
     }
 
     private static String expectedSwarmControllerQueueName(String baseQueue, String swarmId, String instanceSegment) {
@@ -157,11 +160,11 @@ class ControlPlaneTopologyDescriptorsTest {
 
     @Test
     void orchestratorDescriptorMatchesRabbitConfig() {
-        OrchestratorControlPlaneTopologyDescriptor descriptor = new OrchestratorControlPlaneTopologyDescriptor();
+        OrchestratorControlPlaneTopologyDescriptor descriptor = new OrchestratorControlPlaneTopologyDescriptor(SETTINGS);
 
         ControlQueueDescriptor queue = requireQueue(descriptor);
         assertThat(queue.name())
-            .isEqualTo(Topology.CONTROL_QUEUE + ".orchestrator." + INSTANCE);
+            .isEqualTo(CONTROL_QUEUE_PREFIX + ".orchestrator." + INSTANCE);
         assertThat(queue.signalBindings()).isEmpty();
         assertThat(queue.eventBindings())
             .containsExactlyInAnyOrder("ev.ready.#", "ev.error.#");
@@ -169,7 +172,7 @@ class ControlPlaneTopologyDescriptorsTest {
         Collection<QueueDescriptor> additional = descriptor.additionalQueues(INSTANCE);
         assertThat(additional)
             .containsExactly(new QueueDescriptor(
-                Topology.CONTROL_QUEUE + ".orchestrator-status." + INSTANCE,
+                CONTROL_QUEUE_PREFIX + ".orchestrator-status." + INSTANCE,
                 Set.of("ev.status-full.swarm-controller.*", "ev.status-delta.swarm-controller.*")));
 
         ControlPlaneRouteCatalog routes = descriptor.routes();
@@ -241,46 +244,46 @@ class ControlPlaneTopologyDescriptorsTest {
     private static Set<String> expectedWorkerConfigSignals(String role, String instanceSegment) {
         return Set.of(
             ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, "ALL", role, "ALL"),
-            ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, Topology.SWARM_ID, role, "ALL"),
-            ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, Topology.SWARM_ID, role, instanceSegment),
-            ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, Topology.SWARM_ID, "ALL", "ALL")
+            ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, SWARM_ID, role, "ALL"),
+            ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, SWARM_ID, role, instanceSegment),
+            ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, SWARM_ID, "ALL", "ALL")
         );
     }
 
     private static Set<String> expectedWorkerStatusSignals(String role, String instanceSegment) {
         return Set.of(
             ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, "ALL", role, "ALL"),
-            ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, Topology.SWARM_ID, role, "ALL"),
-            ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, Topology.SWARM_ID, role, instanceSegment),
-            ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, Topology.SWARM_ID, "ALL", "ALL")
+            ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, SWARM_ID, role, "ALL"),
+            ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, SWARM_ID, role, instanceSegment),
+            ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, SWARM_ID, "ALL", "ALL")
         );
     }
 
     private static Set<String> expectedSwarmControllerSignals(String instanceSegment) {
         LinkedHashSet<String> merged = new LinkedHashSet<>(expectedSwarmControllerConfigSignals(instanceSegment));
         merged.addAll(expectedSwarmControllerStatusSignals(instanceSegment));
-        merged.add(ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_START, Topology.SWARM_ID, "swarm-controller", "ALL"));
-        merged.add(ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_TEMPLATE, Topology.SWARM_ID, "swarm-controller", "ALL"));
-        merged.add(ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_STOP, Topology.SWARM_ID, "swarm-controller", "ALL"));
-        merged.add(ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_REMOVE, Topology.SWARM_ID, "swarm-controller", "ALL"));
+        merged.add(ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_START, SWARM_ID, "swarm-controller", "ALL"));
+        merged.add(ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_TEMPLATE, SWARM_ID, "swarm-controller", "ALL"));
+        merged.add(ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_STOP, SWARM_ID, "swarm-controller", "ALL"));
+        merged.add(ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_REMOVE, SWARM_ID, "swarm-controller", "ALL"));
         return Set.copyOf(merged);
     }
 
     private static Set<String> expectedSwarmControllerConfigSignals(String instanceSegment) {
         return Set.of(
             ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, "ALL", "swarm-controller", "ALL"),
-            ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, Topology.SWARM_ID, "swarm-controller", "ALL"),
-            ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, Topology.SWARM_ID, "swarm-controller", instanceSegment),
-            ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, Topology.SWARM_ID, "ALL", "ALL")
+            ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, SWARM_ID, "swarm-controller", "ALL"),
+            ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, SWARM_ID, "swarm-controller", instanceSegment),
+            ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, SWARM_ID, "ALL", "ALL")
         );
     }
 
     private static Set<String> expectedSwarmControllerStatusSignals(String instanceSegment) {
         return Set.of(
             ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, "ALL", "swarm-controller", "ALL"),
-            ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, Topology.SWARM_ID, "swarm-controller", "ALL"),
-            ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, Topology.SWARM_ID, "swarm-controller", instanceSegment),
-            ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, Topology.SWARM_ID, "ALL", "ALL")
+            ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, SWARM_ID, "swarm-controller", "ALL"),
+            ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, SWARM_ID, "swarm-controller", instanceSegment),
+            ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, SWARM_ID, "ALL", "ALL")
         );
     }
 }

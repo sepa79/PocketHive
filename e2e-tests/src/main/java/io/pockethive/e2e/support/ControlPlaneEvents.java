@@ -18,7 +18,6 @@ import com.rabbitmq.client.Channel;
 import com.rabbitmq.client.DeliverCallback;
 import com.rabbitmq.client.Delivery;
 
-import io.pockethive.Topology;
 import io.pockethive.control.Confirmation;
 import io.pockethive.control.ErrorConfirmation;
 import io.pockethive.control.ReadyConfirmation;
@@ -37,18 +36,20 @@ public final class ControlPlaneEvents implements AutoCloseable {
   private final ControlPlaneEventParser parser;
   private final List<ConfirmationEnvelope> confirmations = new CopyOnWriteArrayList<>();
   private final List<StatusEnvelope> statuses = new CopyOnWriteArrayList<>();
+  private final String controlExchange;
 
-  public ControlPlaneEvents(ConnectionFactory connectionFactory) {
+  public ControlPlaneEvents(ConnectionFactory connectionFactory, String controlExchange) {
     Objects.requireNonNull(connectionFactory, "connectionFactory");
+    this.controlExchange = requireExchange(controlExchange);
     try {
       this.connection = connectionFactory.createConnection();
       this.channel = connection.createChannel(false);
       this.parser = new ControlPlaneEventParser();
       this.queueName = channel.queueDeclare("", false, true, true, Collections.emptyMap()).getQueue();
-      channel.queueBind(queueName, Topology.CONTROL_EXCHANGE, "ev.ready.#");
-      channel.queueBind(queueName, Topology.CONTROL_EXCHANGE, "ev.error.#");
-      channel.queueBind(queueName, Topology.CONTROL_EXCHANGE, "ev.status-full.#");
-      channel.queueBind(queueName, Topology.CONTROL_EXCHANGE, "ev.status-delta.#");
+      channel.queueBind(queueName, this.controlExchange, "ev.ready.#");
+      channel.queueBind(queueName, this.controlExchange, "ev.error.#");
+      channel.queueBind(queueName, this.controlExchange, "ev.status-full.#");
+      channel.queueBind(queueName, this.controlExchange, "ev.status-delta.#");
       DeliverCallback callback = this::handleDelivery;
       this.consumerTag = channel.basicConsume(queueName, true, callback, consumerTag -> { });
     } catch (Exception ex) {
@@ -62,6 +63,18 @@ public final class ControlPlaneEvents implements AutoCloseable {
     this.queueName = null;
     this.consumerTag = null;
     this.parser = Objects.requireNonNull(parser, "parser");
+    this.controlExchange = null;
+  }
+
+  private static String requireExchange(String exchange) {
+    if (exchange == null) {
+      throw new IllegalArgumentException("controlExchange must not be null");
+    }
+    String trimmed = exchange.trim();
+    if (trimmed.isEmpty()) {
+      throw new IllegalArgumentException("controlExchange must not be blank");
+    }
+    return trimmed;
   }
 
   private void handleDelivery(String tag, Delivery delivery) {

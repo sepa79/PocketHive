@@ -23,8 +23,8 @@ class SwarmControllerPropertiesBindingTest {
         .withPropertyValues(
             "pockethive.control-plane.swarm-id=swarm-a",
             "pockethive.control-plane.exchange=ph.control",
+            "pockethive.control-plane.control-queue-prefix=ph.control",
             "pockethive.control-plane.manager.role=swarm-controller",
-            "pockethive.control-plane.swarm-controller.control-queue-prefix=ph.control",
             "pockethive.control-plane.swarm-controller.traffic.queue-prefix=ph.swarm-a",
             "pockethive.control-plane.swarm-controller.traffic.hive-exchange=ph.swarm-a.hive",
             "pockethive.control-plane.swarm-controller.rabbit.logs-exchange=ph.logs",

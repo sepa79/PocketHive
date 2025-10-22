@@ -69,6 +69,7 @@ class WorkerControlPlanePropertiesTest {
             trafficExchange,
             "swarm-alpha",
             "worker-1",
+            "ph.control",
             queues,
             worker,
             swarmController);

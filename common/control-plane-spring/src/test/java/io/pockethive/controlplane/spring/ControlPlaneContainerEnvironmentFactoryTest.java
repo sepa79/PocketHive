@@ -14,7 +14,10 @@ class ControlPlaneContainerEnvironmentFactoryTest {
     void controllerEnvironmentBuildsCompleteMap() {
         ControlPlaneProperties controlPlaneProperties = new ControlPlaneProperties();
         controlPlaneProperties.setExchange("ph.control");
+        controlPlaneProperties.setControlQueuePrefix("ph.control");
         controlPlaneProperties.getWorker().setEnabled(false);
+        controlPlaneProperties.setSwarmId("swarm-1");
+        controlPlaneProperties.setInstanceId("controller-a");
         ControlPlaneContainerEnvironmentFactory.ControllerSettings settings =
             new ControlPlaneContainerEnvironmentFactory.ControllerSettings(
                 "ph.logs",
@@ -39,8 +42,8 @@ class ControlPlaneContainerEnvironmentFactoryTest {
         assertThat(env).containsEntry("POCKETHIVE_CONTROL_PLANE_INSTANCE_ID", "controller-a");
         assertThat(env).containsEntry("POCKETHIVE_CONTROL_PLANE_SWARM_ID", "swarm-1");
         assertThat(env).containsEntry(
-            "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_CONTROL_QUEUE_PREFIX",
-            "ph.control.swarm-1");
+            "POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE_PREFIX",
+            "ph.control");
         assertThat(env).containsEntry("POCKETHIVE_LOGS_EXCHANGE", "ph.logs");
         assertThat(env).containsEntry("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGGING_ENABLED", "true");
         assertThat(env).containsEntry("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_BASE_URL", "http://push:9091");
@@ -54,6 +57,7 @@ class ControlPlaneContainerEnvironmentFactoryTest {
         ControlPlaneContainerEnvironmentFactory.WorkerSettings settings =
             new ControlPlaneContainerEnvironmentFactory.WorkerSettings(
                 "swarm-1",
+                "ph.control",
                 "ph.control",
                 "ph.swarm-1",
                 "ph.swarm-1.hive",
@@ -72,6 +76,7 @@ class ControlPlaneContainerEnvironmentFactoryTest {
 
         assertThat(env).containsEntry("POCKETHIVE_CONTROL_PLANE_INSTANCE_ID", "bee-a");
         assertThat(env).containsEntry("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGS_EXCHANGE", "ph.logs");
+        assertThat(env).containsEntry("POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE_PREFIX", "ph.control");
         assertThat(env).containsEntry("POCKETHIVE_CONTROL_PLANE_QUEUES_GENERATOR", "ph.swarm-1.gen");
         assertThat(env).containsEntry("POCKETHIVE_CONTROL_PLANE_TRAFFIC_EXCHANGE", "ph.swarm-1.hive");
         assertThat(env).containsEntry("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_BASE_URL", "http://push:9091");
@@ -82,6 +87,7 @@ class ControlPlaneContainerEnvironmentFactoryTest {
         ControlPlaneContainerEnvironmentFactory.WorkerSettings settings =
             new ControlPlaneContainerEnvironmentFactory.WorkerSettings(
                 "swarm-1",
+                "ph.control",
                 "ph.control",
                 "ph.swarm-1",
                 "ph.swarm-1.hive",
