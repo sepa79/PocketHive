@@ -23,6 +23,8 @@ public final class EnvironmentConfig {
   public static final String UI_BASE_URL = "UI_BASE_URL";
   public static final String SWARM_ID = "SWARM_ID";
   public static final String IDEMPOTENCY_KEY_PREFIX = "IDEMPOTENCY_KEY_PREFIX";
+  public static final String CONTROL_PLANE_EXCHANGE = "POCKETHIVE_CONTROL_PLANE_EXCHANGE";
+  public static final String CONTROL_QUEUE_PREFIX = "POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE_PREFIX";
 
   private EnvironmentConfig() {
   }
@@ -63,6 +65,9 @@ public final class EnvironmentConfig {
    * @return record containing the configured endpoints and identifiers
    */
   public static ServiceEndpoints loadServiceEndpoints() {
+    String controlExchange = required(CONTROL_PLANE_EXCHANGE);
+    String controlQueuePrefix = required(CONTROL_QUEUE_PREFIX);
+
     return new ServiceEndpoints(
         requiredUri(ORCHESTRATOR_BASE_URL),
         requiredUri(SCENARIO_MANAGER_BASE_URL),
@@ -70,7 +75,8 @@ public final class EnvironmentConfig {
         env(UI_WEBSOCKET_URI).map(EnvironmentConfig::toUri),
         resolveUiBaseUrl(),
         env(SWARM_ID).orElse("pockethive-e2e"),
-        env(IDEMPOTENCY_KEY_PREFIX).orElse("ph-e2e")
+        env(IDEMPOTENCY_KEY_PREFIX).orElse("ph-e2e"),
+        new ControlPlaneSettings(controlExchange, controlQueuePrefix)
     );
   }
 
@@ -129,7 +135,8 @@ public final class EnvironmentConfig {
       Optional<URI> uiWebsocketUri,
       Optional<URI> uiBaseUrl,
       String defaultSwarmId,
-      String idempotencyKeyPrefix
+      String idempotencyKeyPrefix,
+      ControlPlaneSettings controlPlane
   ) {
 
     /**
@@ -148,7 +155,9 @@ public final class EnvironmentConfig {
           Map.entry("uiWebsocketUri", uiWebsocketUri.map(URI::toString).orElse("<not-configured>")),
           Map.entry("uiBaseUrl", uiBaseUrl.map(URI::toString).orElse("<not-configured>")),
           Map.entry("defaultSwarmId", defaultSwarmId),
-          Map.entry("idempotencyKeyPrefix", idempotencyKeyPrefix)
+          Map.entry("idempotencyKeyPrefix", idempotencyKeyPrefix),
+          Map.entry("controlPlaneExchange", controlPlane.exchange()),
+          Map.entry("controlQueuePrefix", controlPlane.controlQueuePrefix())
       );
     }
   }
@@ -193,6 +202,21 @@ public final class EnvironmentConfig {
         return value;
       }
       return "/" + value;
+    }
+  }
+
+  public record ControlPlaneSettings(String exchange, String controlQueuePrefix) {
+
+    public ControlPlaneSettings {
+      exchange = requireNonBlank(exchange, "Control-plane exchange");
+      controlQueuePrefix = requireNonBlank(controlQueuePrefix, "Control queue prefix");
+    }
+
+    private static String requireNonBlank(String value, String field) {
+      if (value == null || value.isBlank()) {
+        throw new IllegalStateException(field + " must not be blank");
+      }
+      return value;
     }
   }
 

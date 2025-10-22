@@ -31,7 +31,6 @@ import io.cucumber.java.en.And;
 import io.cucumber.java.en.Given;
 import io.cucumber.java.en.Then;
 import io.cucumber.java.en.When;
-import io.pockethive.Topology;
 import io.pockethive.control.CommandTarget;
 import io.pockethive.control.ErrorConfirmation;
 import io.pockethive.control.ReadyConfirmation;
@@ -47,6 +46,7 @@ import io.pockethive.e2e.clients.ScenarioManagerClient;
 import io.pockethive.e2e.clients.ScenarioManagerClient.ScenarioDetails;
 import io.pockethive.e2e.clients.ScenarioManagerClient.ScenarioSummary;
 import io.pockethive.e2e.config.EnvironmentConfig;
+import io.pockethive.e2e.config.EnvironmentConfig.ControlPlaneSettings;
 import io.pockethive.e2e.config.EnvironmentConfig.ServiceEndpoints;
 import io.pockethive.e2e.support.ControlPlaneEvents;
 import io.pockethive.e2e.support.QueueProbe;
@@ -77,6 +77,7 @@ public class SwarmLifecycleSteps {
   private RabbitSubscriptions rabbitSubscriptions;
   private RabbitManagementClient rabbitManagementClient;
   private ControlPlaneEvents controlPlaneEvents;
+  private ControlPlaneSettings controlPlane;
   private ScenarioDetails scenarioDetails;
   private SwarmTemplate template;
   private String swarmId;
@@ -105,7 +106,8 @@ public class SwarmLifecycleSteps {
 
     orchestratorClient = OrchestratorClient.create(endpoints.orchestratorBaseUrl());
     scenarioManagerClient = ScenarioManagerClient.create(endpoints.scenarioManagerBaseUrl());
-    rabbitSubscriptions = RabbitSubscriptions.from(endpoints.rabbitMq());
+    controlPlane = endpoints.controlPlane();
+    rabbitSubscriptions = RabbitSubscriptions.from(endpoints.rabbitMq(), controlPlane);
     rabbitManagementClient = RabbitManagementClient.create(endpoints.rabbitMq());
     controlPlaneEvents = rabbitSubscriptions.controlPlaneEvents();
 
@@ -893,13 +895,13 @@ public class SwarmLifecycleSteps {
     if (value == null || value.isBlank()) {
       return value;
     }
-    return value.replace(Topology.SWARM_ID, swarmId);
+    return value;
   }
 
   private ControlPlaneTopologyDescriptor workerDescriptor(String role) {
     try {
       ControlPlaneTopologySettings settings = new ControlPlaneTopologySettings(
-          swarmId, Topology.CONTROL_QUEUE, Map.of());
+          swarmId, controlPlane.controlQueuePrefix(), Map.of());
       return ControlPlaneTopologyDescriptorFactory.forWorkerRole(role, settings);
     } catch (IllegalArgumentException ex) {
       throw new AssertionError("Unsupported worker role " + role, ex);

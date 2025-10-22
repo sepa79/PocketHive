@@ -1,12 +1,16 @@
-# Topology Core
+# Topology Core (legacy)
 
-Shared constants for PocketHive's RabbitMQ topology.
+This module houses the legacy `io.pockethive.Topology` constants that used to seed queue and exchange
+names across the platform. The control-plane refactor has replaced these fallbacks with explicit
+configuration (`ControlPlaneProperties`, `WorkerControlPlaneProperties`, Swarm Controller environment
+variables, etc.). New code **must not** depend on `Topology`; fetch the required values from bound
+properties or descriptor settings instead.
 
-## Constants
+The table below is kept only as a reference while existing tests and documentation migrate off the
+class. Once every service consumes the new configuration-first contract the `Topology` API and this
+module will be removed.
 
-The `io.pockethive.Topology` class exposes the following names:
-
-| Constant | Environment variable | Default |
+| Legacy constant | Environment variable | Historical default |
 | --- | --- | --- |
 | `Topology.SWARM_ID` | `POCKETHIVE_CONTROL_PLANE_SWARM_ID` | `default` |
 | `Topology.EXCHANGE` | `POCKETHIVE_TRAFFIC_EXCHANGE` | `ph.<swarm>.hive` |
@@ -16,31 +20,5 @@ The `io.pockethive.Topology` class exposes the following names:
 | `Topology.CONTROL_QUEUE` | `POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE` | `ph.control` |
 | `Topology.CONTROL_EXCHANGE` | `POCKETHIVE_CONTROL_PLANE_EXCHANGE` | `ph.control` |
 
-Each constant first checks the environment variable (or JVM system property) and falls back to the default value shown.
-
-## Usage
-
-```java
-import io.pockethive.Topology;
-import com.rabbitmq.client.Channel;
-
-Channel channel = // obtain channel
-channel.exchangeDeclare(Topology.EXCHANGE, "topic", true);
-channel.queueDeclare(Topology.GEN_QUEUE, true, false, false, null);
-```
-
-All services rely on these constants to keep queue and exchange names consistent.
-
-## Overrides
-
-Supply environment variables or `-D` system properties at runtime to override defaults:
-
-```bash
-POCKETHIVE_CONTROL_PLANE_SWARM_ID=beta POCKETHIVE_CONTROL_PLANE_QUEUES_GENERATOR=ph.beta.custom ./run-service
-```
-
-```bash
-java -DPOCKETHIVE_CONTROL_PLANE_SWARM_ID=beta -DPOCKETHIVE_CONTROL_PLANE_QUEUES_GENERATOR=ph.beta.custom ...
-```
-
-This allows services to join different swarms or adjust routing without code changes.
+> ⚠️ These defaults exist only for backward compatibility. Services should validate that each property
+> is populated explicitly and fail fast when any value is missing.
