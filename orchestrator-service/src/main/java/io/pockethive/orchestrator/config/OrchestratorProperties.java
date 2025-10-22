@@ -30,10 +30,6 @@ public class OrchestratorProperties {
         return orchestrator.rabbit();
     }
 
-    public Pushgateway getPushgateway() {
-        return orchestrator.pushgateway();
-    }
-
     public Docker getDocker() {
         return orchestrator.docker();
     }
@@ -48,20 +44,17 @@ public class OrchestratorProperties {
         private final String controlQueuePrefix;
         private final String statusQueuePrefix;
         private final @Valid Rabbit rabbit;
-        private final @Valid Pushgateway pushgateway;
         private final @Valid Docker docker;
         private final @Valid ScenarioManager scenarioManager;
 
         public Orchestrator(@NotBlank String controlQueuePrefix,
                              @NotBlank String statusQueuePrefix,
                              @Valid Rabbit rabbit,
-                             @Valid Pushgateway pushgateway,
                              @Valid Docker docker,
                              @Valid ScenarioManager scenarioManager) {
             this.controlQueuePrefix = requireNonBlank(controlQueuePrefix, "controlQueuePrefix");
             this.statusQueuePrefix = requireNonBlank(statusQueuePrefix, "statusQueuePrefix");
             this.rabbit = Objects.requireNonNull(rabbit, "rabbit");
-            this.pushgateway = Objects.requireNonNull(pushgateway, "pushgateway");
             this.docker = Objects.requireNonNull(docker, "docker");
             this.scenarioManager = Objects.requireNonNull(scenarioManager, "scenarioManager");
         }
@@ -76,10 +69,6 @@ public class OrchestratorProperties {
 
         public Rabbit rabbit() {
             return rabbit;
-        }
-
-        public Pushgateway pushgateway() {
-            return pushgateway;
         }
 
         public Docker docker() {
@@ -122,45 +111,6 @@ public class OrchestratorProperties {
 
         public boolean isEnabled() {
             return enabled;
-        }
-    }
-
-    @Validated
-    public static final class Pushgateway {
-
-        private final boolean enabled;
-        private final String baseUrl;
-        private final Duration pushRate;
-        private final String shutdownOperation;
-
-        public Pushgateway(@NotNull Boolean enabled,
-                           String baseUrl,
-                           @NotNull Duration pushRate,
-                           String shutdownOperation) {
-            this.enabled = Objects.requireNonNull(enabled, "enabled");
-            this.baseUrl = baseUrl;
-            this.pushRate = Objects.requireNonNull(pushRate, "pushRate");
-            this.shutdownOperation = shutdownOperation;
-        }
-
-        public boolean isEnabled() {
-            return enabled;
-        }
-
-        public String getBaseUrl() {
-            return baseUrl;
-        }
-
-        public Duration getPushRate() {
-            return pushRate;
-        }
-
-        public String getShutdownOperation() {
-            return shutdownOperation;
-        }
-
-        public boolean hasBaseUrl() {
-            return baseUrl != null && !baseUrl.isBlank();
         }
     }
 

@@ -50,10 +50,6 @@ public class ContainerLifecycleManager {
             new ControlPlaneContainerEnvironmentFactory.ControllerSettings(
                 properties.getRabbit().getLogsExchange(),
                 properties.getRabbit().getLogging().isEnabled(),
-                properties.getPushgateway().isEnabled(),
-                properties.getPushgateway().getBaseUrl(),
-                properties.getPushgateway().getPushRate(),
-                properties.getPushgateway().getShutdownOperation(),
                 properties.getDocker().getSocketPath(),
                 "ph." + resolvedSwarmId,
                 "ph." + resolvedSwarmId + ".hive");

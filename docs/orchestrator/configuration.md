@@ -53,18 +53,6 @@ pockethive.control-plane.orchestrator.docker.socket-path    # Path to the Docker
 The socket path is injected into controller containers and determines the bind
 mount used during startup.
 
-## Metrics pushgateway
-
-```
-pockethive.control-plane.orchestrator.pushgateway.enabled            # Enable/disable Pushgateway integration
-pockethive.control-plane.orchestrator.pushgateway.base-url           # Base URL for the Pushgateway
-pockethive.control-plane.orchestrator.pushgateway.push-rate          # ISO-8601 duration between metric pushes
-pockethive.control-plane.orchestrator.pushgateway.shutdown-operation # Optional shutdown operation (e.g. DELETE)
-```
-
-When enabled, the orchestrator forwards these settings to swarm controller
-containers so they inherit the metrics contract.
-
 ## Scenario manager client
 
 ```
