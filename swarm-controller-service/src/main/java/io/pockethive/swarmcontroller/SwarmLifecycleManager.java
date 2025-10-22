@@ -27,8 +27,6 @@ import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.amqp.RabbitProperties;
-import org.springframework.boot.actuate.autoconfigure.metrics.export.prometheus.PrometheusProperties;
-import org.springframework.boot.actuate.metrics.export.prometheus.PrometheusPushGatewayManager;
 import org.springframework.stereotype.Component;
 
 import io.pockethive.observability.StatusEnvelopeBuilder;
@@ -100,10 +98,9 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
                                RabbitTemplate rabbit,
                                RabbitProperties rabbitProperties,
                                @Qualifier("instanceId") String instanceId,
-                               SwarmControllerProperties properties,
-                               PrometheusProperties prometheusProperties) {
+                               SwarmControllerProperties properties) {
     this(amqp, mapper, docker, rabbit, rabbitProperties, instanceId, properties,
-        deriveWorkerSettings(properties, prometheusProperties));
+        deriveWorkerSettings(properties));
   }
 
   SwarmLifecycleManager(AmqpAdmin amqp,
@@ -127,11 +124,17 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
     this.workerSettings = Objects.requireNonNull(workerSettings, "workerSettings");
   }
 
-  private static WorkerSettings deriveWorkerSettings(SwarmControllerProperties properties,
-                                                    PrometheusProperties prometheusProperties) {
+  private static WorkerSettings deriveWorkerSettings(SwarmControllerProperties properties) {
     Objects.requireNonNull(properties, "properties");
     SwarmControllerProperties.Traffic traffic = properties.getTraffic();
-    PushgatewaySettings metrics = pushgatewaySettings(prometheusProperties);
+    SwarmControllerProperties.Pushgateway pushgateway = properties.getMetrics().pushgateway();
+    PushgatewaySettings metrics = new PushgatewaySettings(
+        pushgateway.enabled(),
+        pushgateway.baseUrl(),
+        pushgateway.pushRate(),
+        pushgateway.shutdownOperation(),
+        pushgateway.job(),
+        pushgateway.groupingKey().instance());
     return new WorkerSettings(
         properties.getSwarmId(),
         properties.getControlExchange(),
@@ -141,57 +144,6 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
         properties.getRabbit().logsExchange(),
         properties.getRabbit().logging().enabled(),
         metrics);
-  }
-
-  private static PushgatewaySettings pushgatewaySettings(PrometheusProperties prometheusProperties) {
-    Objects.requireNonNull(prometheusProperties, "prometheusProperties");
-    PrometheusProperties.Pushgateway pushgateway = Objects
-        .requireNonNull(prometheusProperties.getPushgateway(),
-            "management.prometheus.metrics.export.pushgateway must be configured");
-    Boolean enabled = pushgateway.getEnabled();
-    if (enabled == null) {
-      throw new IllegalStateException("management.prometheus.metrics.export.pushgateway.enabled must not be null");
-    }
-    String baseUrl = requireNonBlank(pushgateway.getBaseUrl(),
-        "management.prometheus.metrics.export.pushgateway.base-url");
-    java.time.Duration pushRate = pushgateway.getPushRate();
-    if (pushRate == null) {
-      throw new IllegalStateException("management.prometheus.metrics.export.pushgateway.push-rate must not be null");
-    }
-    PrometheusPushGatewayManager.ShutdownOperation shutdownOperation = pushgateway.getShutdownOperation();
-    if (shutdownOperation == null) {
-      throw new IllegalStateException("management.prometheus.metrics.export.pushgateway.shutdown-operation must not be null");
-    }
-    String job = requireNonBlank(pushgateway.getJob(),
-        "management.prometheus.metrics.export.pushgateway.job");
-    String instance = requireGroupingInstance(pushgateway.getGroupingKey());
-    return new PushgatewaySettings(
-        enabled,
-        baseUrl,
-        pushRate,
-        shutdownOperation.name(),
-        job,
-        instance);
-  }
-
-  private static String requireGroupingInstance(java.util.Map<String, String> groupingKey) {
-    if (groupingKey == null) {
-      throw new IllegalStateException(
-          "management.prometheus.metrics.export.pushgateway.grouping-key.instance must not be null or blank");
-    }
-    String instance = groupingKey.get("instance");
-    if (instance == null || instance.isBlank()) {
-      throw new IllegalStateException(
-          "management.prometheus.metrics.export.pushgateway.grouping-key.instance must not be null or blank");
-    }
-    return instance;
-  }
-
-  private static String requireNonBlank(String value, String property) {
-    if (value == null || value.isBlank()) {
-      throw new IllegalStateException(property + " must not be null or blank");
-    }
-    return value;
   }
 
   /**

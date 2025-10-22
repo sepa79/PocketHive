@@ -61,12 +61,6 @@ class SwarmLifecycleManagerIntegrationTest {
     setRequiredSystemProperty("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGS_EXCHANGE", LOGS_EXCHANGE);
     setRequiredSystemProperty("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGGING_ENABLED", Boolean.FALSE.toString());
     setRequiredSystemProperty("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_DOCKER_SOCKET_PATH", "/var/run/docker.sock");
-    setRequiredSystemProperty("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_ENABLED", "true");
-    setRequiredSystemProperty("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_BASE_URL", "http://pushgateway:9091");
-    setRequiredSystemProperty("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_PUSH_RATE", "PT30S");
-    setRequiredSystemProperty("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_SHUTDOWN_OPERATION", "DELETE");
-    setRequiredSystemProperty("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_JOB", "swarm-job");
-    setRequiredSystemProperty("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_GROUPING_KEY_INSTANCE", "controller-instance");
   }
 
   @DynamicPropertySource
@@ -103,24 +97,6 @@ class SwarmLifecycleManagerIntegrationTest {
     register(registry, "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_DOCKER_SOCKET_PATH",
         "pockethive.control-plane.swarm-controller.docker.socket-path",
         "/var/run/docker.sock");
-    register(registry, "MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_ENABLED",
-        "management.prometheus.metrics.export.pushgateway.enabled",
-        "true");
-    register(registry, "MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_BASE_URL",
-        "management.prometheus.metrics.export.pushgateway.base-url",
-        "http://pushgateway:9091");
-    register(registry, "MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_PUSH_RATE",
-        "management.prometheus.metrics.export.pushgateway.push-rate",
-        "PT30S");
-    register(registry, "MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_SHUTDOWN_OPERATION",
-        "management.prometheus.metrics.export.pushgateway.shutdown-operation",
-        "DELETE");
-    register(registry, "MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_JOB",
-        "management.prometheus.metrics.export.pushgateway.job",
-        "swarm-job");
-    register(registry, "MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_GROUPING_KEY_INSTANCE",
-        "management.prometheus.metrics.export.pushgateway.grouping-key.instance",
-        "controller-instance");
   }
 
   private static String queue(String suffix) {

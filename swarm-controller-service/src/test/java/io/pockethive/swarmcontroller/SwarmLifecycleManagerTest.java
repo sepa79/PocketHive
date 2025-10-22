@@ -27,8 +27,6 @@ import org.springframework.amqp.core.Queue;
 import org.springframework.amqp.core.TopicExchange;
 import org.springframework.amqp.rabbit.core.RabbitAdmin;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
-import org.springframework.boot.actuate.autoconfigure.metrics.export.prometheus.PrometheusProperties;
-import org.springframework.boot.actuate.metrics.export.prometheus.PrometheusPushGatewayManager;
 import org.springframework.boot.autoconfigure.amqp.RabbitProperties;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
@@ -223,7 +221,7 @@ class SwarmLifecycleManagerTest {
     rabbitProperties.setHost("");
     rabbitProperties.setPort(5672);
     SwarmLifecycleManager manager = new SwarmLifecycleManager(
-        amqp, mapper, docker, rabbit, rabbitProperties, "inst", properties, prometheusProperties());
+        amqp, mapper, docker, rabbit, rabbitProperties, "inst", properties);
     SwarmPlan plan = new SwarmPlan("swarm", List.of(new Bee("gen", "img1", null, null)));
 
     assertThatThrownBy(() -> manager.prepare(mapper.writeValueAsString(plan)))
@@ -651,25 +649,6 @@ class SwarmLifecycleManagerTest {
     rabbitProperties.setPassword("guest");
     rabbitProperties.setVirtualHost("/");
     return new SwarmLifecycleManager(
-        amqp,
-        mapper,
-        docker,
-        rabbit,
-        rabbitProperties,
-        "inst",
-        SwarmControllerTestProperties.defaults(),
-        prometheusProperties());
-  }
-
-  private PrometheusProperties prometheusProperties() {
-    PrometheusProperties properties = new PrometheusProperties();
-    PrometheusProperties.Pushgateway pushgateway = properties.getPushgateway();
-    pushgateway.setEnabled(true);
-    pushgateway.setBaseUrl("http://pushgateway:9091");
-    pushgateway.setPushRate(java.time.Duration.ofSeconds(30));
-    pushgateway.setShutdownOperation(PrometheusPushGatewayManager.ShutdownOperation.DELETE);
-    pushgateway.setJob("swarm-job");
-    pushgateway.setGroupingKey(java.util.Map.of("instance", "controller-instance"));
-    return properties;
+        amqp, mapper, docker, rabbit, rabbitProperties, "inst", SwarmControllerTestProperties.defaults());
   }
 }
