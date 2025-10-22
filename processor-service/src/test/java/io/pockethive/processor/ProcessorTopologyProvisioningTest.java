@@ -38,6 +38,7 @@ class ProcessorTopologyProvisioningTest {
             "pockethive.control-plane.instance-id=" + WORKER_PROPERTIES.getInstanceId(),
             "pockethive.control-plane.swarm-id=" + WORKER_PROPERTIES.getSwarmId(),
             "pockethive.control-plane.exchange=" + WORKER_PROPERTIES.getExchange(),
+            "pockethive.control-plane.control-queue-prefix=" + WORKER_PROPERTIES.getControlQueuePrefix(),
             "pockethive.control-plane.traffic-exchange=" + EXCHANGE,
             "pockethive.control-plane.queues.processor=" + WORKER_PROPERTIES.getQueues().get("processor"),
             "pockethive.control-plane.queues.moderator=" + MODERATOR_QUEUE,
