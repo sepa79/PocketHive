@@ -110,6 +110,7 @@ class SwarmLifecycleManagerTest {
     assertEquals("ctrl-net", env.get("CONTROL_NETWORK"));
     assertEquals("ph." + Topology.SWARM_ID + ".qin", env.get("POCKETHIVE_CONTROL_PLANE_QUEUES_MODERATOR"));
     assertEquals("ph." + Topology.SWARM_ID + ".qout", env.get("POCKETHIVE_CONTROL_PLANE_QUEUES_GENERATOR"));
+    assertEquals("ph.control", env.get("POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE_PREFIX"));
     assertEquals(assignedName, env.get("POCKETHIVE_CONTROL_PLANE_INSTANCE_ID"));
     assertEquals(assignedName, env.get("POCKETHIVE_CONTROL_PLANE_INSTANCE_ID"));
     assertThat(env).doesNotContainKeys("BEE_NAME", "JAVA_TOOL_OPTIONS");
@@ -244,6 +245,7 @@ class SwarmLifecycleManagerTest {
     verify(docker).createContainer(eq("img1"), envCaptor.capture(), nameCaptor.capture());
     Map<String, String> env = envCaptor.getValue();
     String beeName = nameCaptor.getValue();
+    assertEquals("ph.control", env.get("POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE_PREFIX"));
     assertEquals("http://push:9091", env.get("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_BASE_URL"));
     assertEquals("http://push:9091", env.get("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_BASE_URL"));
     assertEquals("true", env.get("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_ENABLED"));

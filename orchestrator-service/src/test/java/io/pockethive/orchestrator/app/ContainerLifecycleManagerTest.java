@@ -77,7 +77,7 @@ class ContainerLifecycleManagerTest {
         assertEquals("false", env.get("POCKETHIVE_CONTROL_PLANE_WORKER_ENABLED"));
         assertEquals("swarm-controller", env.get("POCKETHIVE_CONTROL_PLANE_MANAGER_ROLE"));
         assertEquals(
-            "ph.control." + swarm.getId(),
+            controlPlane.getControlQueuePrefix(),
             env.get("POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE_PREFIX"));
         assertEquals("ph.sw1", env.get("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_TRAFFIC_QUEUE_PREFIX"));
         assertEquals("ph.sw1.hive", env.get("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_TRAFFIC_HIVE_EXCHANGE"));

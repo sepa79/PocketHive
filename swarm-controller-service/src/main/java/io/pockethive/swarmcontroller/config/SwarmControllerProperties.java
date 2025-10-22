@@ -15,6 +15,7 @@ public class SwarmControllerProperties {
     private final String swarmId;
     private final String role;
     private final String controlExchange;
+    private final String controlQueuePrefixBase;
     private final String controlQueuePrefix;
     private final Traffic traffic;
     private final Rabbit rabbit;
@@ -29,8 +30,8 @@ public class SwarmControllerProperties {
         this.swarmId = requireNonBlank(swarmId, "swarmId");
         this.role = requireNonBlank(Objects.requireNonNull(manager, "manager").role(), "manager.role");
         this.controlExchange = requireNonBlank(exchange, "exchange");
-        this.controlQueuePrefix = normalizeControlQueuePrefix(this.swarmId,
-            requireNonBlank(controlQueuePrefix, "controlQueuePrefix"));
+        this.controlQueuePrefixBase = requireNonBlank(controlQueuePrefix, "controlQueuePrefix");
+        this.controlQueuePrefix = normalizeControlQueuePrefix(this.swarmId, this.controlQueuePrefixBase);
         SwarmController resolved = Objects.requireNonNull(swarmController, "swarmController");
         this.traffic = Objects.requireNonNull(resolved.traffic(), "traffic");
         this.rabbit = Objects.requireNonNull(resolved.rabbit(), "rabbit");
@@ -52,6 +53,10 @@ public class SwarmControllerProperties {
 
     public String getControlQueuePrefix() {
         return controlQueuePrefix;
+    }
+
+    public String getControlQueuePrefixBase() {
+        return controlQueuePrefixBase;
     }
 
     public Traffic getTraffic() {

@@ -24,6 +24,7 @@ class RabbitConfigTest {
   void controlQueuePrefixIncludesSwarmId() {
     assertThat(properties.getControlQueuePrefix())
         .isEqualTo("ph.control." + Topology.SWARM_ID);
+    assertThat(properties.getControlQueuePrefixBase()).isEqualTo("ph.control");
   }
 
   @Test

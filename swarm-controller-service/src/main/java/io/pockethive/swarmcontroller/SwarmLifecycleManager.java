@@ -130,6 +130,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
     return new WorkerSettings(
         properties.getSwarmId(),
         properties.getControlExchange(),
+        properties.getControlQueuePrefixBase(),
         traffic.queuePrefix(),
         traffic.hiveExchange(),
         properties.getRabbit().logsExchange(),

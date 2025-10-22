@@ -12,7 +12,6 @@ import org.springframework.boot.autoconfigure.amqp.RabbitProperties;
  */
 public final class ControlPlaneContainerEnvironmentFactory {
 
-    private static final String DEFAULT_CONTROL_QUEUE_PREFIX = "ph.control";
     private static final String DEFAULT_PUSHGATEWAY_SHUTDOWN_OPERATION = "DELETE";
 
     private ControlPlaneContainerEnvironmentFactory() {
@@ -43,7 +42,8 @@ public final class ControlPlaneContainerEnvironmentFactory {
         env.put("POCKETHIVE_CONTROL_PLANE_MANAGER_ROLE", requireSetting(managerRole, "pockethive.control-plane.manager.role"));
         env.put(
             "POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE_PREFIX",
-            resolveControlQueuePrefix(controlPlaneProperties.getExchange(), resolvedSwarmId));
+            requireSetting(controlPlaneProperties.getControlQueuePrefix(),
+                "pockethive.control-plane.control-queue-prefix"));
         String trafficPrefix = settings.trafficQueuePrefix() != null && !settings.trafficQueuePrefix().isBlank()
             ? settings.trafficQueuePrefix()
             : "ph." + resolvedSwarmId;
@@ -104,6 +104,9 @@ public final class ControlPlaneContainerEnvironmentFactory {
         env.put(
             "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGS_EXCHANGE",
             requireSetting(settings.logsExchange(), "pockethive.control-plane.swarm-controller.rabbit.logs-exchange"));
+        env.put(
+            "POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE_PREFIX",
+            requireSetting(settings.controlQueuePrefix(), "pockethive.control-plane.control-queue-prefix"));
         env.put(
             "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGGING_ENABLED",
             Boolean.toString(settings.loggingEnabled()));
@@ -168,19 +171,6 @@ public final class ControlPlaneContainerEnvironmentFactory {
         }
     }
 
-    private static String resolveControlQueuePrefix(String controlExchange, String swarmId) {
-        String prefix = controlExchange == null || controlExchange.isBlank()
-            ? DEFAULT_CONTROL_QUEUE_PREFIX
-            : controlExchange;
-        if (prefix.endsWith("." + swarmId) || prefix.contains("." + swarmId + ".")) {
-            return prefix;
-        }
-        if (prefix.endsWith(".")) {
-            return prefix + swarmId;
-        }
-        return prefix + "." + swarmId;
-    }
-
     private static String resolvePushgatewayShutdownOperation(String shutdownOperation) {
         if (shutdownOperation == null || shutdownOperation.isBlank()) {
             return DEFAULT_PUSHGATEWAY_SHUTDOWN_OPERATION;
@@ -228,6 +218,7 @@ public final class ControlPlaneContainerEnvironmentFactory {
 
     public record WorkerSettings(String swarmId,
                                  String controlExchange,
+                                 String controlQueuePrefix,
                                  String trafficQueuePrefix,
                                  String hiveExchange,
                                  String logsExchange,
@@ -240,6 +231,7 @@ public final class ControlPlaneContainerEnvironmentFactory {
             Objects.requireNonNull(metricsPushRate, "metricsPushRate");
             requireArgument(swarmId, "swarmId");
             requireArgument(controlExchange, "controlExchange");
+            requireArgument(controlQueuePrefix, "controlQueuePrefix");
             requireArgument(trafficQueuePrefix, "trafficQueuePrefix");
             requireArgument(hiveExchange, "hiveExchange");
             requireArgument(logsExchange, "logsExchange");
