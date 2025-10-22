@@ -30,6 +30,10 @@ public class OrchestratorProperties {
         return orchestrator.rabbit();
     }
 
+    public Metrics getMetrics() {
+        return orchestrator.metrics();
+    }
+
     public Docker getDocker() {
         return orchestrator.docker();
     }
@@ -44,17 +48,20 @@ public class OrchestratorProperties {
         private final String controlQueuePrefix;
         private final String statusQueuePrefix;
         private final @Valid Rabbit rabbit;
+        private final @Valid Metrics metrics;
         private final @Valid Docker docker;
         private final @Valid ScenarioManager scenarioManager;
 
         public Orchestrator(@NotBlank String controlQueuePrefix,
                              @NotBlank String statusQueuePrefix,
                              @Valid Rabbit rabbit,
+                             @Valid Metrics metrics,
                              @Valid Docker docker,
                              @Valid ScenarioManager scenarioManager) {
             this.controlQueuePrefix = requireNonBlank(controlQueuePrefix, "controlQueuePrefix");
             this.statusQueuePrefix = requireNonBlank(statusQueuePrefix, "statusQueuePrefix");
             this.rabbit = Objects.requireNonNull(rabbit, "rabbit");
+            this.metrics = Objects.requireNonNull(metrics, "metrics");
             this.docker = Objects.requireNonNull(docker, "docker");
             this.scenarioManager = Objects.requireNonNull(scenarioManager, "scenarioManager");
         }
@@ -69,6 +76,10 @@ public class OrchestratorProperties {
 
         public Rabbit rabbit() {
             return rabbit;
+        }
+
+        public Metrics metrics() {
+            return metrics;
         }
 
         public Docker docker() {
@@ -111,6 +122,83 @@ public class OrchestratorProperties {
 
         public boolean isEnabled() {
             return enabled;
+        }
+    }
+
+    @Validated
+    public static final class Metrics {
+
+        private final @Valid Pushgateway pushgateway;
+
+        public Metrics(@Valid Pushgateway pushgateway) {
+            this.pushgateway = Objects.requireNonNull(pushgateway, "pushgateway");
+        }
+
+        public Pushgateway getPushgateway() {
+            return pushgateway;
+        }
+    }
+
+    @Validated
+    public static final class Pushgateway {
+
+        private final boolean enabled;
+        private final String baseUrl;
+        private final Duration pushRate;
+        private final String shutdownOperation;
+        private final String job;
+        private final @Valid GroupingKey groupingKey;
+
+        public Pushgateway(@NotNull Boolean enabled,
+                           @NotBlank String baseUrl,
+                           @NotNull Duration pushRate,
+                           @NotBlank String shutdownOperation,
+                           @NotBlank String job,
+                           @Valid GroupingKey groupingKey) {
+            this.enabled = Objects.requireNonNull(enabled, "enabled");
+            this.baseUrl = requireNonBlank(baseUrl, "baseUrl");
+            this.pushRate = Objects.requireNonNull(pushRate, "pushRate");
+            this.shutdownOperation = requireNonBlank(shutdownOperation, "shutdownOperation");
+            this.job = requireNonBlank(job, "job");
+            this.groupingKey = Objects.requireNonNull(groupingKey, "groupingKey");
+        }
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public String getBaseUrl() {
+            return baseUrl;
+        }
+
+        public Duration getPushRate() {
+            return pushRate;
+        }
+
+        public String getShutdownOperation() {
+            return shutdownOperation;
+        }
+
+        public String getJob() {
+            return job;
+        }
+
+        public GroupingKey getGroupingKey() {
+            return groupingKey;
+        }
+    }
+
+    @Validated
+    public static final class GroupingKey {
+
+        private final String instance;
+
+        public GroupingKey(@NotBlank String instance) {
+            this.instance = requireNonBlank(instance, "instance");
+        }
+
+        public String getInstance() {
+            return instance;
         }
     }
 

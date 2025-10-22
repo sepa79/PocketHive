@@ -119,6 +119,42 @@ class SwarmCreationMock1E2ETest {
 
     @DynamicPropertySource
     static void registerProperties(DynamicPropertyRegistry registry) {
+        registry.add(
+            "pockethive.control-plane.orchestrator.metrics.pushgateway.enabled",
+            () -> "true");
+        registry.add(
+            "pockethive.control-plane.orchestrator.metrics.pushgateway.base-url",
+            () -> "http://pushgateway:9091");
+        registry.add(
+            "pockethive.control-plane.orchestrator.metrics.pushgateway.push-rate",
+            () -> "PT1M");
+        registry.add(
+            "pockethive.control-plane.orchestrator.metrics.pushgateway.shutdown-operation",
+            () -> "DELETE");
+        registry.add(
+            "pockethive.control-plane.orchestrator.metrics.pushgateway.job",
+            () -> "swarm-job");
+        registry.add(
+            "pockethive.control-plane.orchestrator.metrics.pushgateway.grouping-key.instance",
+            () -> "controller-instance");
+        registry.add(
+            "POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_METRICS_PUSHGATEWAY_ENABLED",
+            () -> "true");
+        registry.add(
+            "POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_METRICS_PUSHGATEWAY_BASE_URL",
+            () -> "http://pushgateway:9091");
+        registry.add(
+            "POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_METRICS_PUSHGATEWAY_PUSH_RATE",
+            () -> "PT1M");
+        registry.add(
+            "POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_METRICS_PUSHGATEWAY_SHUTDOWN_OPERATION",
+            () -> "DELETE");
+        registry.add(
+            "POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_METRICS_PUSHGATEWAY_JOB",
+            () -> "swarm-job");
+        registry.add(
+            "POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_METRICS_PUSHGATEWAY_GROUPING_KEY_INSTANCE",
+            () -> "controller-instance");
         if (!RABBIT.isRunning()) {
             try {
                 RABBIT.start();

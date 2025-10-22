@@ -44,6 +44,21 @@ The Spring Boot `RabbitProperties` drive broker connectivity; the orchestrator
 reuses those values when launching swarm controllers. Disable the log appender
 by setting `pockethive.control-plane.orchestrator.rabbit.logging.enabled=false`.
 
+## Metrics pushgateway
+
+```
+pockethive.control-plane.orchestrator.metrics.pushgateway.enabled              # Boolean toggle for worker/exporter pushgateway integration
+pockethive.control-plane.orchestrator.metrics.pushgateway.base-url             # Pushgateway base URL
+pockethive.control-plane.orchestrator.metrics.pushgateway.push-rate            # ISO-8601 duration controlling push frequency
+pockethive.control-plane.orchestrator.metrics.pushgateway.shutdown-operation   # Pushgateway shutdown behavior
+pockethive.control-plane.orchestrator.metrics.pushgateway.job                  # Job label forwarded to workers
+pockethive.control-plane.orchestrator.metrics.pushgateway.grouping-key.instance # Grouping key instance label
+```
+
+All pushgateway values are forwarded verbatim to swarm controllers and worker
+containers. Omit the section only if metrics are entirely disabled for the
+deployment.
+
 ## Docker
 
 ```

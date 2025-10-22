@@ -2,6 +2,7 @@ package io.pockethive.orchestrator.app;
 
 import com.github.dockerjava.api.model.Bind;
 import io.pockethive.controlplane.spring.ControlPlaneContainerEnvironmentFactory;
+import io.pockethive.controlplane.spring.ControlPlaneContainerEnvironmentFactory.PushgatewaySettings;
 import io.pockethive.controlplane.spring.ControlPlaneProperties;
 import io.pockethive.docker.DockerContainerClient;
 import io.pockethive.orchestrator.config.OrchestratorProperties;
@@ -46,10 +47,19 @@ public class ContainerLifecycleManager {
     public Swarm startSwarm(String swarmId, String image, String instanceId) {
         String resolvedInstance = requireNonBlank(instanceId, "controller instance");
         String resolvedSwarmId = requireNonBlank(swarmId, "swarmId");
+        OrchestratorProperties.Pushgateway pushgateway = properties.getMetrics().getPushgateway();
+        PushgatewaySettings metrics = new PushgatewaySettings(
+            pushgateway.isEnabled(),
+            pushgateway.getBaseUrl(),
+            pushgateway.getPushRate(),
+            pushgateway.getShutdownOperation(),
+            pushgateway.getJob(),
+            pushgateway.getGroupingKey().getInstance());
         ControlPlaneContainerEnvironmentFactory.ControllerSettings controllerSettings =
             new ControlPlaneContainerEnvironmentFactory.ControllerSettings(
                 properties.getRabbit().getLogsExchange(),
                 properties.getRabbit().getLogging().isEnabled(),
+                metrics,
                 properties.getDocker().getSocketPath(),
                 "ph." + resolvedSwarmId,
                 "ph." + resolvedSwarmId + ".hive");

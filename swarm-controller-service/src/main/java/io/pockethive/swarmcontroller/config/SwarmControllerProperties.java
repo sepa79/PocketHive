@@ -2,6 +2,8 @@ package io.pockethive.swarmcontroller.config;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import java.time.Duration;
 import java.util.Objects;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.validation.annotation.Validated;
@@ -17,6 +19,7 @@ public class SwarmControllerProperties {
     private final String controlQueuePrefix;
     private final Traffic traffic;
     private final Rabbit rabbit;
+    private final Metrics metrics;
     private final Docker docker;
 
     public SwarmControllerProperties(@NotBlank String swarmId,
@@ -32,6 +35,7 @@ public class SwarmControllerProperties {
         SwarmController resolved = Objects.requireNonNull(swarmController, "swarmController");
         this.traffic = Objects.requireNonNull(resolved.traffic(), "traffic");
         this.rabbit = Objects.requireNonNull(resolved.rabbit(), "rabbit");
+        this.metrics = Objects.requireNonNull(resolved.metrics(), "metrics");
         this.docker = Objects.requireNonNull(resolved.docker(), "docker");
     }
 
@@ -61,6 +65,10 @@ public class SwarmControllerProperties {
 
     public Rabbit getRabbit() {
         return rabbit;
+    }
+
+    public Metrics getMetrics() {
+        return metrics;
     }
 
     public Docker getDocker() {
@@ -102,13 +110,16 @@ public class SwarmControllerProperties {
     public static final class SwarmController {
         private final Traffic traffic;
         private final Rabbit rabbit;
+        private final Metrics metrics;
         private final Docker docker;
 
         public SwarmController(@Valid Traffic traffic,
                                @Valid Rabbit rabbit,
+                               @Valid Metrics metrics,
                                @Valid Docker docker) {
             this.traffic = Objects.requireNonNull(traffic, "traffic");
             this.rabbit = Objects.requireNonNull(rabbit, "rabbit");
+            this.metrics = Objects.requireNonNull(metrics, "metrics");
             this.docker = Objects.requireNonNull(docker, "docker");
         }
 
@@ -118,6 +129,10 @@ public class SwarmControllerProperties {
 
         public Rabbit rabbit() {
             return rabbit;
+        }
+
+        public Metrics metrics() {
+            return metrics;
         }
 
         public Docker docker() {
@@ -190,6 +205,80 @@ public class SwarmControllerProperties {
 
         public boolean enabled() {
             return enabled;
+        }
+    }
+
+    @Validated
+    public static final class Metrics {
+        private final @Valid Pushgateway pushgateway;
+
+        public Metrics(@Valid Pushgateway pushgateway) {
+            this.pushgateway = Objects.requireNonNull(pushgateway, "pushgateway");
+        }
+
+        public Pushgateway pushgateway() {
+            return pushgateway;
+        }
+    }
+
+    @Validated
+    public static final class Pushgateway {
+        private final boolean enabled;
+        private final String baseUrl;
+        private final Duration pushRate;
+        private final String shutdownOperation;
+        private final String job;
+        private final @Valid GroupingKey groupingKey;
+
+        public Pushgateway(@NotNull Boolean enabled,
+                           @NotBlank String baseUrl,
+                           @NotNull Duration pushRate,
+                           @NotBlank String shutdownOperation,
+                           @NotBlank String job,
+                           @Valid GroupingKey groupingKey) {
+            this.enabled = Objects.requireNonNull(enabled, "enabled");
+            this.baseUrl = requireNonBlank(baseUrl, "baseUrl");
+            this.pushRate = Objects.requireNonNull(pushRate, "pushRate");
+            this.shutdownOperation = requireNonBlank(shutdownOperation, "shutdownOperation");
+            this.job = requireNonBlank(job, "job");
+            this.groupingKey = Objects.requireNonNull(groupingKey, "groupingKey");
+        }
+
+        public boolean enabled() {
+            return enabled;
+        }
+
+        public String baseUrl() {
+            return baseUrl;
+        }
+
+        public Duration pushRate() {
+            return pushRate;
+        }
+
+        public String shutdownOperation() {
+            return shutdownOperation;
+        }
+
+        public String job() {
+            return job;
+        }
+
+        public GroupingKey groupingKey() {
+            return groupingKey;
+        }
+    }
+
+    @Validated
+    public static final class GroupingKey {
+        private final String instance;
+
+        public GroupingKey(@NotBlank String instance) {
+            this.instance = requireNonBlank(instance, "instance");
+        }
+
+        public String instance() {
+            return instance;
         }
     }
 
