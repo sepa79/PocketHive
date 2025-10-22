@@ -42,7 +42,7 @@ public final class ControlPlaneContainerEnvironmentFactory {
             Boolean.toString(controlPlaneProperties.getWorker().isEnabled()));
         env.put("POCKETHIVE_CONTROL_PLANE_MANAGER_ROLE", requireSetting(managerRole, "pockethive.control-plane.manager.role"));
         env.put(
-            "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_CONTROL_QUEUE_PREFIX",
+            "POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE_PREFIX",
             resolveControlQueuePrefix(controlPlaneProperties.getExchange(), resolvedSwarmId));
         String trafficPrefix = settings.trafficQueuePrefix() != null && !settings.trafficQueuePrefix().isBlank()
             ? settings.trafficQueuePrefix()

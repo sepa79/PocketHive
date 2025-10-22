@@ -20,7 +20,7 @@ pockethive:
     manager:
       role: ${POCKETHIVE_CONTROL_PLANE_MANAGER_ROLE}
     swarm-controller:
-      control-queue-prefix: ${POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_CONTROL_QUEUE_PREFIX}
+      control-queue-prefix: ${POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE_PREFIX}
       traffic:
         queue-prefix: ${POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_TRAFFIC_QUEUE_PREFIX}
         hive-exchange: ${POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_TRAFFIC_HIVE_EXCHANGE}

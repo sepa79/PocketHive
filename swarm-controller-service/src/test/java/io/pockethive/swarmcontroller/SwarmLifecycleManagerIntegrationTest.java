@@ -49,7 +49,7 @@ class SwarmLifecycleManagerIntegrationTest {
     setRequiredSystemProperty("POCKETHIVE_CONTROL_PLANE_EXCHANGE", Topology.CONTROL_EXCHANGE);
     setRequiredSystemProperty("POCKETHIVE_CONTROL_PLANE_WORKER_ENABLED", Boolean.FALSE.toString());
     setRequiredSystemProperty("POCKETHIVE_CONTROL_PLANE_MANAGER_ROLE", "swarm-controller");
-    setRequiredSystemProperty("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_CONTROL_QUEUE_PREFIX", Topology.CONTROL_QUEUE);
+    setRequiredSystemProperty("POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE_PREFIX", Topology.CONTROL_QUEUE);
     var swarmQueuePrefix = "ph." + Topology.SWARM_ID;
     setRequiredSystemProperty("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_TRAFFIC_QUEUE_PREFIX", swarmQueuePrefix);
     setRequiredSystemProperty("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_TRAFFIC_HIVE_EXCHANGE", swarmQueuePrefix + ".hive");
@@ -79,7 +79,7 @@ class SwarmLifecycleManagerIntegrationTest {
     register(registry, "POCKETHIVE_CONTROL_PLANE_INSTANCE_ID", "pockethive.control-plane.instance-id", TEST_INSTANCE_ID);
     register(registry, "POCKETHIVE_CONTROL_PLANE_WORKER_ENABLED", "pockethive.control-plane.worker.enabled", Boolean.FALSE.toString());
     register(registry, "POCKETHIVE_CONTROL_PLANE_MANAGER_ROLE", "pockethive.control-plane.manager.role", "swarm-controller");
-    register(registry, "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_CONTROL_QUEUE_PREFIX",
+    register(registry, "POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE_PREFIX",
         "pockethive.control-plane.swarm-controller.control-queue-prefix",
         Topology.CONTROL_QUEUE);
     register(registry, "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_TRAFFIC_QUEUE_PREFIX",
