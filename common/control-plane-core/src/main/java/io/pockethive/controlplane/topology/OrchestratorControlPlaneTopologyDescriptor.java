@@ -1,6 +1,5 @@
 package io.pockethive.controlplane.topology;
 
-import io.pockethive.Topology;
 import io.pockethive.control.ConfirmationScope;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import java.util.Collection;
@@ -12,6 +11,16 @@ public final class OrchestratorControlPlaneTopologyDescriptor implements Control
 
     private static final String ROLE = "orchestrator";
 
+    private final String controlQueuePrefix;
+
+    public OrchestratorControlPlaneTopologyDescriptor(String controlQueuePrefix) {
+        this.controlQueuePrefix = requireText("controlQueuePrefix", controlQueuePrefix);
+    }
+
+    public OrchestratorControlPlaneTopologyDescriptor(ControlPlaneTopologySettings settings) {
+        this(settings.controlQueuePrefix());
+    }
+
     @Override
     public String role() {
         return ROLE;
@@ -20,7 +29,7 @@ public final class OrchestratorControlPlaneTopologyDescriptor implements Control
     @Override
     public Optional<ControlQueueDescriptor> controlQueue(String instanceId) {
         String id = requireInstanceId(instanceId);
-        String queueName = Topology.CONTROL_QUEUE + "." + ROLE + "." + id;
+        String queueName = controlQueuePrefix + "." + ROLE + "." + id;
         Set<String> readyErrorEvents = Set.of(
             lifecycleEventPattern("ready"),
             lifecycleEventPattern("error")
@@ -31,7 +40,7 @@ public final class OrchestratorControlPlaneTopologyDescriptor implements Control
     @Override
     public Collection<QueueDescriptor> additionalQueues(String instanceId) {
         String id = requireInstanceId(instanceId);
-        String queueName = Topology.CONTROL_QUEUE + ".orchestrator-status." + id;
+        String queueName = controlQueuePrefix + ".orchestrator-status." + id;
         Set<String> bindings = Set.of(
             controllerStatusPattern("status-full"),
             controllerStatusPattern("status-delta")
@@ -68,5 +77,16 @@ public final class OrchestratorControlPlaneTopologyDescriptor implements Control
             throw new IllegalArgumentException("instanceId must not be blank");
         }
         return instanceId;
+    }
+
+    private static String requireText(String name, String value) {
+        if (value == null) {
+            throw new IllegalArgumentException(name + " must not be null");
+        }
+        String trimmed = value.trim();
+        if (trimmed.isEmpty()) {
+            throw new IllegalArgumentException(name + " must not be blank");
+        }
+        return trimmed;
     }
 }

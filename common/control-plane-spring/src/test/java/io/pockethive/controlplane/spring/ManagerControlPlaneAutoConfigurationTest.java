@@ -30,6 +30,7 @@ class ManagerControlPlaneAutoConfigurationTest {
             "pockethive.control-plane.manager.role=orchestrator",
             "pockethive.control-plane.instance-id=orch-1",
             "pockethive.control-plane.swarm-id=swarm-beta",
+            "pockethive.control-plane.control-queue-prefix=ph.control.manager",
             "pockethive.control-plane.exchange=ph.control.manager");
 
     @Test
@@ -53,7 +54,7 @@ class ManagerControlPlaneAutoConfigurationTest {
                 .toList();
             assertThat(queues)
                 .extracting(Queue::getName)
-                .contains("ph.control.orchestrator.orch-1", "ph.control.orchestrator-status.orch-1");
+                .contains("ph.control.manager.orchestrator.orch-1", "ph.control.manager.orchestrator-status.orch-1");
         });
     }
 
@@ -64,7 +65,7 @@ class ManagerControlPlaneAutoConfigurationTest {
             Optional<Binding> statusBinding = declarables.getDeclarables().stream()
                 .filter(Binding.class::isInstance)
                 .map(Binding.class::cast)
-                .filter(binding -> "ph.control.orchestrator-status.orch-1".equals(binding.getDestination()))
+                .filter(binding -> "ph.control.manager.orchestrator-status.orch-1".equals(binding.getDestination()))
                 .findFirst();
 
             assertThat(statusBinding).isPresent();

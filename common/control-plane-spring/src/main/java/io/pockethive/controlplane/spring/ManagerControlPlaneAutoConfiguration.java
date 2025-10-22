@@ -6,7 +6,9 @@ import io.pockethive.controlplane.consumer.SelfFilter;
 import io.pockethive.controlplane.manager.ManagerControlPlane;
 import io.pockethive.controlplane.messaging.ControlPlanePublisher;
 import io.pockethive.controlplane.topology.ControlPlaneTopologyDescriptor;
+import io.pockethive.controlplane.topology.ControlPlaneTopologySettings;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import org.springframework.amqp.core.Declarables;
 import org.springframework.amqp.core.TopicExchange;
@@ -37,7 +39,8 @@ public class ManagerControlPlaneAutoConfiguration {
     @ConditionalOnMissingBean(name = "managerControlPlaneTopologyDescriptor")
     ControlPlaneTopologyDescriptor managerControlPlaneTopologyDescriptor() {
         String role = requireText(properties.getManager().getRole(), "pockethive.control-plane.manager.role");
-        return ControlPlaneTopologyDescriptorFactory.forManagerRole(role);
+        ControlPlaneTopologySettings settings = managerTopologySettings();
+        return ControlPlaneTopologyDescriptorFactory.forManagerRole(role, settings);
     }
 
     @Bean(name = "managerControlPlaneIdentity")
@@ -60,7 +63,7 @@ public class ManagerControlPlaneAutoConfiguration {
         if (!properties.isDeclareTopology() || !properties.getManager().isDeclareTopology()) {
             return new Declarables(List.of());
         }
-        return factory.create(descriptor, identity, controlPlaneExchange);
+        return factory.create(descriptor, identity, controlPlaneExchange, controlPlaneExchange);
     }
 
     @Bean
@@ -93,5 +96,12 @@ public class ManagerControlPlaneAutoConfiguration {
             throw new IllegalArgumentException(property + " must not be null or blank");
         }
         return value;
+    }
+
+    private ControlPlaneTopologySettings managerTopologySettings() {
+        String swarmId = requireText(properties.getSwarmId(), "pockethive.control-plane.swarm-id");
+        String controlQueuePrefix = requireText(properties.getControlQueuePrefix(),
+            "pockethive.control-plane.control-queue-prefix");
+        return new ControlPlaneTopologySettings(swarmId, controlQueuePrefix, Map.of());
     }
 }

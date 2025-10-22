@@ -12,10 +12,20 @@ supported routes. Resolve descriptors through `ControlPlaneTopologyDescriptorFac
 strings:
 
 ```java
+ControlPlaneTopologySettings workerSettings = new ControlPlaneTopologySettings(
+    "swarm-1",
+    "ph.control",
+    Map.of()
+);
 ControlPlaneTopologyDescriptor workerDescriptor =
-    ControlPlaneTopologyDescriptorFactory.forWorkerRole("processor");
+    ControlPlaneTopologyDescriptorFactory.forWorkerRole("processor", workerSettings);
+ControlPlaneTopologySettings managerSettings = new ControlPlaneTopologySettings(
+    "swarm-1",
+    "ph.control",
+    Map.of()
+);
 ControlPlaneTopologyDescriptor managerDescriptor =
-    ControlPlaneTopologyDescriptorFactory.forManagerRole("orchestrator");
+    ControlPlaneTopologyDescriptorFactory.forManagerRole("orchestrator", managerSettings);
 ```
 
 The descriptor validates role identifiers and exposes helpers for declaring the control queue and any

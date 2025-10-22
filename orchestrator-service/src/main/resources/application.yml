@@ -22,6 +22,7 @@ logging:
 pockethive:
   control-plane:
     exchange: ${POCKETHIVE_CONTROL_PLANE_EXCHANGE:ph.control}
+    control-queue-prefix: ${POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE_PREFIX:ph.control}
     swarm-id: ${POCKETHIVE_CONTROL_PLANE_SWARM_ID:hive}
     instance-id: ${POCKETHIVE_CONTROL_PLANE_INSTANCE_ID:orchestrator-local}
     manager:

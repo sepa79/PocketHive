@@ -1,6 +1,5 @@
 package io.pockethive.controlplane.spring;
 
-import io.pockethive.Topology;
 import io.pockethive.controlplane.ControlPlaneSignals;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.controlplane.topology.ControlPlaneRouteCatalog;
@@ -29,6 +28,7 @@ public final class WorkerControlPlaneProperties {
     private final String trafficExchange;
     private final String swarmId;
     private final String instanceId;
+    private final String controlQueuePrefix;
     private final Queues queues;
     private final Worker worker;
     private final SwarmController swarmController;
@@ -40,6 +40,7 @@ public final class WorkerControlPlaneProperties {
                                         String trafficExchange,
                                         String swarmId,
                                         String instanceId,
+                                        String controlQueuePrefix,
                                         Map<String, String> queues,
                                         @Valid Worker worker,
                                         @Valid SwarmController swarmController) {
@@ -49,10 +50,13 @@ public final class WorkerControlPlaneProperties {
         this.trafficExchange = resolveTrafficExchange(trafficExchange);
         this.swarmId = requireNonBlank(swarmId, "pockethive.control-plane.swarm-id");
         this.instanceId = requireNonBlank(instanceId, "pockethive.control-plane.instance-id");
+        this.controlQueuePrefix = requireNonBlank(controlQueuePrefix,
+            "pockethive.control-plane.control-queue-prefix");
         this.queues = new Queues(queues);
         this.worker = Objects.requireNonNull(worker, "worker must not be null");
         this.swarmController = Objects.requireNonNull(swarmController, "swarmController must not be null");
-        this.controlPlane = ControlPlane.forWorker(this.swarmId, this.worker.getRole(), this.instanceId);
+        this.controlPlane = ControlPlane.forWorker(this.swarmId, this.controlQueuePrefix,
+            this.worker.getRole(), this.instanceId);
     }
 
     public boolean isEnabled() {
@@ -81,6 +85,10 @@ public final class WorkerControlPlaneProperties {
 
     public Queues getQueues() {
         return queues;
+    }
+
+    public String getControlQueuePrefix() {
+        return controlQueuePrefix;
     }
 
     public Worker getWorker() {
@@ -127,12 +135,18 @@ public final class WorkerControlPlaneProperties {
 
     public static final class ControlPlane {
 
+        private final String controlQueuePrefix;
         private final String controlQueueName;
         private final ControlPlaneRouteCatalog routes;
 
-        private ControlPlane(String controlQueueName, ControlPlaneRouteCatalog routes) {
-            this.controlQueueName = controlQueueName;
+        private ControlPlane(String controlQueuePrefix, String controlQueueName, ControlPlaneRouteCatalog routes) {
+            this.controlQueuePrefix = requireNonBlank(controlQueuePrefix, "controlQueuePrefix");
+            this.controlQueueName = requireNonBlank(controlQueueName, "controlQueueName");
             this.routes = Objects.requireNonNull(routes, "routes must not be null");
+        }
+
+        public String getControlQueuePrefix() {
+            return controlQueuePrefix;
         }
 
         public String getControlQueueName() {
@@ -143,11 +157,16 @@ public final class WorkerControlPlaneProperties {
             return routes;
         }
 
-        private static ControlPlane forWorker(String swarmId, String role, String instanceId) {
+        private static ControlPlane forWorker(String swarmId,
+                                             String controlQueuePrefix,
+                                             String role,
+                                             String instanceId) {
             Objects.requireNonNull(swarmId, "swarmId must not be null");
+            Objects.requireNonNull(controlQueuePrefix, "controlQueuePrefix must not be null");
             Objects.requireNonNull(role, "role must not be null");
             Objects.requireNonNull(instanceId, "instanceId must not be null");
-            String queue = Topology.CONTROL_QUEUE + "." + swarmId.trim() + "." + role.trim() + "." + instanceId.trim();
+            String prefix = requireNonBlank(controlQueuePrefix, "controlQueuePrefix").trim();
+            String queue = prefix + "." + swarmId.trim() + "." + role.trim() + "." + instanceId.trim();
             ControlPlaneRouteCatalog catalog = new ControlPlaneRouteCatalog(
                 configRoutes(swarmId, role),
                 statusRoutes(swarmId, role),
@@ -156,7 +175,7 @@ public final class WorkerControlPlaneProperties {
                 Set.of(),
                 Set.of()
             );
-            return new ControlPlane(queue, catalog);
+            return new ControlPlane(prefix, queue, catalog);
         }
 
         private static Set<String> configRoutes(String swarmId, String role) {

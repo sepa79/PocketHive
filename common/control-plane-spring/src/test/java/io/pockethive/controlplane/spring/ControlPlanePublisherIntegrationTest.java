@@ -14,8 +14,10 @@ import io.pockethive.controlplane.messaging.ControlPlaneEmitter;
 import io.pockethive.controlplane.messaging.ControlPlanePublisher;
 import io.pockethive.controlplane.messaging.SignalMessage;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
+import io.pockethive.controlplane.topology.ControlPlaneTopologySettings;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
@@ -28,7 +30,9 @@ class ControlPlanePublisherIntegrationTest {
         .withUserConfiguration(ControlPlaneCommonAutoConfiguration.class)
         .withPropertyValues(
             "pockethive.control-plane.worker.enabled=false",
-            "pockethive.control-plane.instance-id=integration-test");
+            "pockethive.control-plane.instance-id=integration-test",
+            "pockethive.control-plane.swarm-id=integration-swarm",
+            "pockethive.control-plane.control-queue-prefix=ph.control.integration");
 
     @Test
     void publisherSendsSignalsAndEventsToConfiguredExchange() {
@@ -41,7 +45,10 @@ class ControlPlanePublisherIntegrationTest {
             TopicExchange exchange = context.getBean("controlPlaneExchange", TopicExchange.class);
 
             ControlPlaneIdentity identity = new ControlPlaneIdentity("swarm-A", "generator", "gen-1");
-            ControlPlaneEmitter emitter = ControlPlaneEmitter.generator(identity, publisher);
+            ControlPlaneProperties properties = context.getBean(ControlPlaneProperties.class);
+            ControlPlaneTopologySettings settings = new ControlPlaneTopologySettings(
+                properties.getSwarmId(), properties.getControlQueuePrefix(), Map.of());
+            ControlPlaneEmitter emitter = ControlPlaneEmitter.generator(identity, publisher, settings);
             ConfirmationScope scope = new ConfirmationScope("swarm-A", "generator", "gen-1");
 
             ControlPlaneEmitter.ReadyContext ready = ControlPlaneEmitter.ReadyContext.builder(

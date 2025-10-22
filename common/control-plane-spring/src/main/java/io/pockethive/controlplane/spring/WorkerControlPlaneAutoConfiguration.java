@@ -7,11 +7,17 @@ import io.pockethive.controlplane.messaging.ControlPlaneEmitter;
 import io.pockethive.controlplane.messaging.ControlPlanePublisher;
 import io.pockethive.controlplane.payload.RoleContext;
 import io.pockethive.controlplane.topology.ControlPlaneTopologyDescriptor;
+import io.pockethive.controlplane.topology.ControlPlaneTopologySettings;
 import io.pockethive.controlplane.topology.ControlQueueDescriptor;
+import io.pockethive.controlplane.topology.QueueDescriptor;
 import io.pockethive.controlplane.worker.WorkerControlPlane;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import org.springframework.amqp.core.Declarables;
+import org.springframework.amqp.core.ExchangeBuilder;
 import org.springframework.amqp.core.TopicExchange;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
@@ -41,7 +47,8 @@ public class WorkerControlPlaneAutoConfiguration {
     @ConditionalOnMissingBean(name = "workerControlPlaneTopologyDescriptor")
     ControlPlaneTopologyDescriptor workerControlPlaneTopologyDescriptor() {
         String role = requireText(properties.getWorker().getRole(), "pockethive.control-plane.worker.role");
-        return ControlPlaneTopologyDescriptorFactory.forWorkerRole(role);
+        ControlPlaneTopologySettings settings = workerTopologySettings(role);
+        return ControlPlaneTopologyDescriptorFactory.forWorkerRole(role, settings);
     }
 
     @Bean(name = "workerControlPlaneIdentity")
@@ -63,7 +70,11 @@ public class WorkerControlPlaneAutoConfiguration {
         if (!properties.isDeclareTopology() || !properties.getWorker().isDeclareTopology()) {
             return new Declarables(List.of());
         }
-        return factory.create(descriptor, identity, controlPlaneExchange);
+        TopicExchange trafficExchange = ExchangeBuilder
+            .topicExchange(properties.getTrafficExchange())
+            .durable(true)
+            .build();
+        return factory.create(descriptor, identity, controlPlaneExchange, trafficExchange);
     }
 
     @Bean
@@ -112,5 +123,18 @@ public class WorkerControlPlaneAutoConfiguration {
             throw new IllegalArgumentException(property + " must not be null or blank");
         }
         return value;
+    }
+
+    private ControlPlaneTopologySettings workerTopologySettings(String role) {
+        String swarmId = requireText(properties.getSwarmId(), "pockethive.control-plane.swarm-id");
+        String controlQueuePrefix = requireText(properties.getControlQueuePrefix(),
+            "pockethive.control-plane.control-queue-prefix");
+        Map<String, QueueDescriptor> trafficQueues = new LinkedHashMap<>();
+        properties.getQueues().names().forEach((queueRole, queueName) -> {
+            if (queueName != null && !queueName.isBlank()) {
+                trafficQueues.put(queueRole, new QueueDescriptor(queueName, Set.of()));
+            }
+        });
+        return new ControlPlaneTopologySettings(swarmId, controlQueuePrefix, trafficQueues);
     }
 }

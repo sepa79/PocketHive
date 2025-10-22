@@ -210,6 +210,7 @@ class SwarmControllerTest {
     private static ControlPlaneProperties controlPlaneProperties() {
         ControlPlaneProperties properties = new ControlPlaneProperties();
         properties.setExchange("ph.control");
+        properties.setControlQueuePrefix("ph.control.manager");
         properties.setSwarmId("default");
         properties.setInstanceId("orch-instance");
         properties.getManager().setRole("orchestrator");

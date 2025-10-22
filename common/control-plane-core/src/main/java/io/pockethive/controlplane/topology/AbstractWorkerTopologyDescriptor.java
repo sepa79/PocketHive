@@ -1,6 +1,5 @@
 package io.pockethive.controlplane.topology;
 
-import io.pockethive.Topology;
 import io.pockethive.controlplane.ControlPlaneSignals;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import java.util.Collection;
@@ -12,14 +11,17 @@ import java.util.Set;
 abstract class AbstractWorkerTopologyDescriptor implements ControlPlaneTopologyDescriptor {
 
     private final String role;
+    private final String swarmId;
+    private final String controlQueuePrefix;
     private final Optional<QueueDescriptor> trafficQueue;
 
-    protected AbstractWorkerTopologyDescriptor(String role) {
-        this(role, null);
-    }
-
-    protected AbstractWorkerTopologyDescriptor(String role, QueueDescriptor trafficQueue) {
+    protected AbstractWorkerTopologyDescriptor(String role,
+                                               String swarmId,
+                                               String controlQueuePrefix,
+                                               QueueDescriptor trafficQueue) {
         this.role = requireRole(role);
+        this.swarmId = requireText("swarmId", swarmId);
+        this.controlQueuePrefix = requireText("controlQueuePrefix", controlQueuePrefix);
         this.trafficQueue = Optional.ofNullable(trafficQueue);
     }
 
@@ -31,18 +33,18 @@ abstract class AbstractWorkerTopologyDescriptor implements ControlPlaneTopologyD
     @Override
     public Optional<ControlQueueDescriptor> controlQueue(String instanceId) {
         String id = requireInstanceId(instanceId);
-        String queueName = Topology.CONTROL_QUEUE + "." + Topology.SWARM_ID + "." + role + "." + id;
+        String queueName = controlQueuePrefix + "." + swarmId + "." + role + "." + id;
         Set<String> configSignals = Set.of(
             ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, "ALL", role, "ALL"),
-            ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, Topology.SWARM_ID, role, "ALL"),
-            ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, Topology.SWARM_ID, role, id),
-            ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, Topology.SWARM_ID, "ALL", "ALL")
+            ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, swarmId, role, "ALL"),
+            ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, swarmId, role, id),
+            ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, swarmId, "ALL", "ALL")
         );
         Set<String> statusSignals = Set.of(
             ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, "ALL", role, "ALL"),
-            ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, Topology.SWARM_ID, role, "ALL"),
-            ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, Topology.SWARM_ID, role, id),
-            ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, Topology.SWARM_ID, "ALL", "ALL")
+            ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, swarmId, role, "ALL"),
+            ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, swarmId, role, id),
+            ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, swarmId, "ALL", "ALL")
         );
         LinkedHashSet<String> allSignals = new LinkedHashSet<>(configSignals);
         allSignals.addAll(statusSignals);
@@ -59,15 +61,15 @@ abstract class AbstractWorkerTopologyDescriptor implements ControlPlaneTopologyD
     public ControlPlaneRouteCatalog routes() {
         Set<String> configRoutes = Set.of(
             ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, "ALL", role, "ALL"),
-            ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, Topology.SWARM_ID, role, "ALL"),
-            ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, Topology.SWARM_ID, role, ControlPlaneRouteCatalog.INSTANCE_TOKEN),
-            ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, Topology.SWARM_ID, "ALL", "ALL")
+            ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, swarmId, role, "ALL"),
+            ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, swarmId, role, ControlPlaneRouteCatalog.INSTANCE_TOKEN),
+            ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, swarmId, "ALL", "ALL")
         );
         Set<String> statusRoutes = Set.of(
             ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, "ALL", role, "ALL"),
-            ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, Topology.SWARM_ID, role, "ALL"),
-            ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, Topology.SWARM_ID, role, ControlPlaneRouteCatalog.INSTANCE_TOKEN),
-            ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, Topology.SWARM_ID, "ALL", "ALL")
+            ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, swarmId, role, "ALL"),
+            ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, swarmId, role, ControlPlaneRouteCatalog.INSTANCE_TOKEN),
+            ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, swarmId, "ALL", "ALL")
         );
         return new ControlPlaneRouteCatalog(configRoutes, statusRoutes, Set.of(), Set.of(), Set.of(), Set.of());
     }
@@ -84,5 +86,16 @@ abstract class AbstractWorkerTopologyDescriptor implements ControlPlaneTopologyD
             throw new IllegalArgumentException("instanceId must not be blank");
         }
         return instanceId;
+    }
+
+    private static String requireText(String name, String value) {
+        if (value == null) {
+            throw new IllegalArgumentException(name + " must not be null");
+        }
+        String trimmed = value.trim();
+        if (trimmed.isEmpty()) {
+            throw new IllegalArgumentException(name + " must not be blank");
+        }
+        return trimmed;
     }
 }

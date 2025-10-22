@@ -12,6 +12,7 @@ import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.controlplane.payload.JsonFixtureAssertions;
 import io.pockethive.controlplane.payload.RoleContext;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
+import io.pockethive.controlplane.topology.ControlPlaneTopologySettings;
 import java.time.Instant;
 import java.io.IOException;
 import java.util.Map;
@@ -26,12 +27,14 @@ class ControlPlaneEmitterTest {
     private CapturingPublisher publisher;
     private ControlPlaneIdentity identity;
     private ControlPlaneEmitter emitter;
+    private ControlPlaneTopologySettings settings;
 
     @BeforeEach
     void setUp() {
         publisher = new CapturingPublisher();
         identity = new ControlPlaneIdentity("swarm-A", "generator", "gen-1");
-        emitter = ControlPlaneEmitter.generator(identity, publisher);
+        settings = new ControlPlaneTopologySettings("swarm-A", "ph.control", Map.of());
+        emitter = ControlPlaneEmitter.generator(identity, publisher, settings);
     }
 
     @Test
@@ -125,7 +128,7 @@ class ControlPlaneEmitterTest {
     @Test
     void generatorFacadeRejectsMismatchedIdentity() {
         ControlPlaneIdentity wrong = new ControlPlaneIdentity("swarm-A", "processor", "gen-1");
-        assertThatThrownBy(() -> ControlPlaneEmitter.generator(wrong, publisher))
+        assertThatThrownBy(() -> ControlPlaneEmitter.generator(wrong, publisher, settings))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("Identity role mismatch");
     }

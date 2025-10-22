@@ -3,7 +3,6 @@ package io.pockethive.controlplane.spring;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.pockethive.Topology;
 import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.controlplane.messaging.ControlPlanePublisher;
 import io.pockethive.controlplane.topology.ControlPlaneRouteCatalog;
@@ -35,6 +34,7 @@ class WorkerControlPlaneAutoConfigurationTest {
             "pockethive.control-plane.worker.role=generator",
             "pockethive.control-plane.instance-id=gen-1",
             "pockethive.control-plane.swarm-id=swarm-alpha",
+            "pockethive.control-plane.control-queue-prefix=ph.control",
             "pockethive.control-plane.exchange=ph.control.worker",
             "pockethive.control-plane.traffic-exchange=ph.swarm-alpha.hive",
             "pockethive.control-plane.queues.generator=ph.swarm-alpha.gen",
@@ -65,7 +65,7 @@ class WorkerControlPlaneAutoConfigurationTest {
                 .map(Queue.class::cast)
                 .findFirst();
             assertThat(queue).isPresent();
-            String expectedQueue = Topology.CONTROL_QUEUE + "." + Topology.SWARM_ID + ".generator.gen-1";
+            String expectedQueue = "ph.control.swarm-alpha.generator.gen-1";
             assertThat(queue.get().getName()).isEqualTo(expectedQueue);
 
             String queueName = context.getBean("workerControlQueueName", String.class);
@@ -101,7 +101,7 @@ class WorkerControlPlaneAutoConfigurationTest {
                 Optional<Binding> trafficBinding = declarables.getDeclarables().stream()
                     .filter(Binding.class::isInstance)
                     .map(Binding.class::cast)
-                    .filter(binding -> Topology.GEN_QUEUE.equals(binding.getDestination()))
+                    .filter(binding -> "ph.swarm-alpha.gen".equals(binding.getDestination()))
                     .findFirst();
 
                 assertThat(trafficBinding).isEmpty();

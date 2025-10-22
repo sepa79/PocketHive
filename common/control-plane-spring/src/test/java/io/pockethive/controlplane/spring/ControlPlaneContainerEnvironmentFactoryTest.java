@@ -14,7 +14,10 @@ class ControlPlaneContainerEnvironmentFactoryTest {
     void controllerEnvironmentBuildsCompleteMap() {
         ControlPlaneProperties controlPlaneProperties = new ControlPlaneProperties();
         controlPlaneProperties.setExchange("ph.control");
+        controlPlaneProperties.setControlQueuePrefix("ph.control");
         controlPlaneProperties.getWorker().setEnabled(false);
+        controlPlaneProperties.setSwarmId("swarm-1");
+        controlPlaneProperties.setInstanceId("controller-a");
         ControlPlaneContainerEnvironmentFactory.ControllerSettings settings =
             new ControlPlaneContainerEnvironmentFactory.ControllerSettings(
                 "ph.logs",

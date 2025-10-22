@@ -14,6 +14,7 @@ class RabbitConfigTest {
     void buildsQueueNamesFromConfiguration() {
         ControlPlaneProperties controlPlane = new ControlPlaneProperties();
         controlPlane.setExchange("ph.control");
+        controlPlane.setControlQueuePrefix("ph.control.orchestrator");
         controlPlane.setSwarmId("swarm-alpha");
         controlPlane.setInstanceId("orch-1");
         controlPlane.getManager().setRole("orchestrator");

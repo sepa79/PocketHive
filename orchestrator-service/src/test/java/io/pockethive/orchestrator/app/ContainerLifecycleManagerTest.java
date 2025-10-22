@@ -294,6 +294,7 @@ class ContainerLifecycleManagerTest {
     private static ControlPlaneProperties controlPlaneProperties() {
         ControlPlaneProperties properties = new ControlPlaneProperties();
         properties.setExchange("ph.control");
+        properties.setControlQueuePrefix("ph.control.manager");
         properties.setSwarmId("orchestrator-swarm");
         properties.setInstanceId("orch-instance");
         properties.getManager().setRole("orchestrator");

@@ -1,6 +1,7 @@
 package io.pockethive.controlplane.spring;
 
 import io.pockethive.controlplane.topology.ControlPlaneTopologyDescriptor;
+import io.pockethive.controlplane.topology.ControlPlaneTopologySettings;
 import io.pockethive.controlplane.topology.GeneratorControlPlaneTopologyDescriptor;
 import io.pockethive.controlplane.topology.ModeratorControlPlaneTopologyDescriptor;
 import io.pockethive.controlplane.topology.OrchestratorControlPlaneTopologyDescriptor;
@@ -10,7 +11,8 @@ import io.pockethive.controlplane.topology.ScenarioManagerTopologyDescriptor;
 import io.pockethive.controlplane.topology.SwarmControllerControlPlaneTopologyDescriptor;
 import io.pockethive.controlplane.topology.TriggerControlPlaneTopologyDescriptor;
 import java.util.Map;
-import java.util.function.Supplier;
+import java.util.Objects;
+import java.util.function.Function;
 
 /**
  * Utility factory that maps role identifiers to their control-plane descriptor implementations.
@@ -20,7 +22,7 @@ public final class ControlPlaneTopologyDescriptorFactory {
     private ControlPlaneTopologyDescriptorFactory() {
     }
 
-    private static final Map<String, Supplier<ControlPlaneTopologyDescriptor>> WORKER_DESCRIPTORS = Map.of(
+    private static final Map<String, Function<ControlPlaneTopologySettings, ControlPlaneTopologyDescriptor>> WORKER_DESCRIPTORS = Map.of(
         "generator", GeneratorControlPlaneTopologyDescriptor::new,
         "moderator", ModeratorControlPlaneTopologyDescriptor::new,
         "processor", ProcessorControlPlaneTopologyDescriptor::new,
@@ -28,18 +30,18 @@ public final class ControlPlaneTopologyDescriptorFactory {
         "trigger", TriggerControlPlaneTopologyDescriptor::new
     );
 
-    private static final Map<String, Supplier<ControlPlaneTopologyDescriptor>> MANAGER_DESCRIPTORS = Map.of(
+    private static final Map<String, Function<ControlPlaneTopologySettings, ControlPlaneTopologyDescriptor>> MANAGER_DESCRIPTORS = Map.of(
         "orchestrator", OrchestratorControlPlaneTopologyDescriptor::new,
         "swarm-controller", SwarmControllerControlPlaneTopologyDescriptor::new,
-        "scenario-manager", ScenarioManagerTopologyDescriptor::new
+        "scenario-manager", settings -> new ScenarioManagerTopologyDescriptor()
     );
 
-    public static ControlPlaneTopologyDescriptor forWorkerRole(String role) {
-        return createDescriptor(role, WORKER_DESCRIPTORS, "worker");
+    public static ControlPlaneTopologyDescriptor forWorkerRole(String role, ControlPlaneTopologySettings settings) {
+        return createDescriptor(role, WORKER_DESCRIPTORS, "worker", settings);
     }
 
-    public static ControlPlaneTopologyDescriptor forManagerRole(String role) {
-        return createDescriptor(role, MANAGER_DESCRIPTORS, "manager");
+    public static ControlPlaneTopologyDescriptor forManagerRole(String role, ControlPlaneTopologySettings settings) {
+        return createDescriptor(role, MANAGER_DESCRIPTORS, "manager", settings);
     }
 
     public static boolean isWorkerRole(String role) {
@@ -62,17 +64,19 @@ public final class ControlPlaneTopologyDescriptorFactory {
     }
 
     private static ControlPlaneTopologyDescriptor createDescriptor(String role,
-                                                                   Map<String, Supplier<ControlPlaneTopologyDescriptor>> descriptors,
-                                                                   String type) {
+                                                                   Map<String, Function<ControlPlaneTopologySettings, ControlPlaneTopologyDescriptor>> descriptors,
+                                                                   String type,
+                                                                   ControlPlaneTopologySettings settings) {
         String normalised = normalise(role);
-        Supplier<ControlPlaneTopologyDescriptor> supplier = descriptors.get(normalised);
+        Function<ControlPlaneTopologySettings, ControlPlaneTopologyDescriptor> supplier = descriptors.get(normalised);
         if (supplier == null) {
             throw new IllegalArgumentException("Unsupported " + type + " role: " + role);
         }
-        return supplier.get();
+        ControlPlaneTopologySettings resolved = Objects.requireNonNull(settings, "settings");
+        return supplier.apply(resolved);
     }
 
-    private static boolean containsRole(String role, Map<String, Supplier<ControlPlaneTopologyDescriptor>> descriptors) {
+    private static boolean containsRole(String role, Map<String, ?> descriptors) {
         String normalised = normalise(role);
         return descriptors.containsKey(normalised);
     }

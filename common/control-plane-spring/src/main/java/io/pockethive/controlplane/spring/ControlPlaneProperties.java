@@ -1,19 +1,26 @@
 package io.pockethive.controlplane.spring;
 
-import io.pockethive.Topology;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
 import java.time.Duration;
 import java.util.Objects;
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.validation.annotation.Validated;
 
 /**
  * Configuration properties that drive the control-plane auto-configuration.
  */
+@Validated
 @ConfigurationProperties(prefix = "pockethive.control-plane")
 public class ControlPlaneProperties {
 
     private boolean enabled = true;
     private boolean declareTopology = true;
-    private String exchange = Topology.CONTROL_EXCHANGE;
+    @NotBlank
+    private String exchange;
+    @NotBlank
+    private String controlQueuePrefix;
+    @Valid
     private final IdentityProperties identity = new IdentityProperties();
     private final PublisherProperties publisher = new PublisherProperties();
     private final WorkerProperties worker = new WorkerProperties();
@@ -40,7 +47,16 @@ public class ControlPlaneProperties {
     }
 
     public void setExchange(String exchange) {
-        this.exchange = exchange;
+        this.exchange = requireText(exchange, "pockethive.control-plane.exchange");
+    }
+
+    public String getControlQueuePrefix() {
+        return controlQueuePrefix;
+    }
+
+    public void setControlQueuePrefix(String controlQueuePrefix) {
+        this.controlQueuePrefix = requireText(controlQueuePrefix,
+            "pockethive.control-plane.control-queue-prefix");
     }
 
     public PublisherProperties getPublisher() {
@@ -202,9 +218,13 @@ public class ControlPlaneProperties {
         }
     }
 
+    @Validated
     public final class IdentityProperties {
 
-        private String swarmId = Topology.SWARM_ID;
+        @NotBlank
+        private String swarmId;
+
+        @NotBlank
         private String instanceId;
 
         public String getSwarmId() {
@@ -212,7 +232,7 @@ public class ControlPlaneProperties {
         }
 
         public void setSwarmId(String swarmId) {
-            this.swarmId = swarmId;
+            this.swarmId = requireText(swarmId, "pockethive.control-plane.swarm-id");
         }
 
         public String getInstanceId() {
@@ -220,7 +240,14 @@ public class ControlPlaneProperties {
         }
 
         public void setInstanceId(String instanceId) {
-            this.instanceId = instanceId;
+            this.instanceId = requireText(instanceId, "pockethive.control-plane.instance-id");
         }
+    }
+
+    private static String requireText(String value, String property) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException(property + " must not be null or blank");
+        }
+        return value;
     }
 }

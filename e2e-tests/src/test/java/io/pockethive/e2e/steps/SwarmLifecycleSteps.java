@@ -56,6 +56,7 @@ import io.pockethive.e2e.support.WorkQueueConsumer;
 import io.pockethive.controlplane.spring.ControlPlaneTopologyDescriptorFactory;
 import io.pockethive.controlplane.topology.ControlPlaneRouteCatalog;
 import io.pockethive.controlplane.topology.ControlPlaneTopologyDescriptor;
+import io.pockethive.controlplane.topology.ControlPlaneTopologySettings;
 import io.pockethive.controlplane.topology.ControlQueueDescriptor;
 import io.pockethive.swarm.model.Bee;
 import io.pockethive.swarm.model.SwarmTemplate;
@@ -897,7 +898,9 @@ public class SwarmLifecycleSteps {
 
   private ControlPlaneTopologyDescriptor workerDescriptor(String role) {
     try {
-      return ControlPlaneTopologyDescriptorFactory.forWorkerRole(role);
+      ControlPlaneTopologySettings settings = new ControlPlaneTopologySettings(
+          swarmId, Topology.CONTROL_QUEUE, Map.of());
+      return ControlPlaneTopologyDescriptorFactory.forWorkerRole(role, settings);
     } catch (IllegalArgumentException ex) {
       throw new AssertionError("Unsupported worker role " + role, ex);
     }

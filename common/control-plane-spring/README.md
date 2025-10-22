@@ -21,8 +21,9 @@ listener infrastructure tuned for worker and manager services.
 ```yaml
 pockethive:
   control-plane:
-    exchange: ph.control                 # Control exchange (defaults to Topology.CONTROL_EXCHANGE)
-    swarm-id: default                    # Default swarm id when participant-specific value absent
+    exchange: ph.control                 # Control exchange (must be provided explicitly)
+    control-queue-prefix: ph.control     # Base prefix used for control queue names
+    swarm-id: default                    # Swarm identifier consumed by descriptors
     publisher:
       enabled: true                      # Publish control-plane traffic via AMQP
     worker:
