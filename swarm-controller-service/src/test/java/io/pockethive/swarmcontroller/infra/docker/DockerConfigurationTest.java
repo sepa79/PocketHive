@@ -4,7 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.github.dockerjava.core.DefaultDockerClientConfig;
 import io.pockethive.swarmcontroller.config.SwarmControllerProperties;
-import java.time.Duration;
 import org.junit.jupiter.api.Test;
 
 class DockerConfigurationTest {
@@ -51,8 +50,6 @@ class DockerConfigurationTest {
             new SwarmControllerProperties.Rabbit(
                 LOGS_EXCHANGE,
                 new SwarmControllerProperties.Logging(true)),
-            new SwarmControllerProperties.Metrics(
-                new SwarmControllerProperties.Pushgateway(false, null, Duration.ofMinutes(1), "DELETE")),
             docker));
   }
 }

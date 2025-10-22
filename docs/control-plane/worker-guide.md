@@ -70,7 +70,7 @@ control-plane publisher. The starter also exposes the Stage 1 `WorkerRuntime` an
 
 `WorkerControlPlaneAutoConfiguration` binds a dedicated `WorkerControlPlaneProperties` bean. It fails fast when
 any worker-facing control-plane keys are missing so misconfigurations surface at startup instead of being masked
-by defaults. Populate the swarm identity, queue names, logging exchange, and Pushgateway contract explicitly:
+by defaults. Populate the swarm identity, queue names, and logging exchange explicitly:
 
 ```yaml
 pockethive:
@@ -88,12 +88,6 @@ pockethive:
         logs-exchange: ph.logs
         logging:
           enabled: true
-      metrics:
-        pushgateway:
-          enabled: true
-          base-url: http://pushgateway:9091
-          push-rate: PT30S
-          shutdown-operation: DELETE
     worker:
       role: processor
       skip-self-signals: false
@@ -124,7 +118,6 @@ configuration to abort fast:
 | RabbitMQ connectivity | `SPRING_RABBITMQ_HOST`, `SPRING_RABBITMQ_PORT`, `SPRING_RABBITMQ_USERNAME`, `SPRING_RABBITMQ_PASSWORD`, `SPRING_RABBITMQ_VIRTUAL_HOST` |
 | Control-plane identity & routing | `POCKETHIVE_CONTROL_PLANE_EXCHANGE`, `POCKETHIVE_CONTROL_PLANE_TRAFFIC_EXCHANGE`, `POCKETHIVE_CONTROL_PLANE_SWARM_ID`, `POCKETHIVE_CONTROL_PLANE_INSTANCE_ID`, `POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE_PREFIX`, `POCKETHIVE_CONTROL_PLANE_QUEUES_GENERATOR`, `POCKETHIVE_CONTROL_PLANE_QUEUES_MODERATOR`, `POCKETHIVE_CONTROL_PLANE_QUEUES_FINAL`* |
 | Logging contract | `POCKETHIVE_LOGS_EXCHANGE`, `POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGGING_ENABLED`, `POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGS_EXCHANGE` |
-| Metrics (when enabled) | `POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_ENABLED`, `POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_BASE_URL`, `POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_PUSH_RATE`, `POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_SHUTDOWN_OPERATION`, `MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_ENABLED`, `MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_BASE_URL`, `MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_PUSH_RATE`, `MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_JOB`, `MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_GROUPING_KEY_INSTANCE` |
 
 \*Moderator-only roles ignore `POCKETHIVE_CONTROL_PLANE_QUEUES_FINAL`, and postprocessor-only roles ignore the
 generator/moderator queues. The Swarm Controller still injects all queue names so multi-role deployments receive a
@@ -156,8 +149,6 @@ services:
       POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGS_EXCHANGE: ph.logs
 ```
 
-When metrics pushing is enabled, include the Pushgateway variables from the table above. Outside of controlled Swarm
-deployments, keep these values in sync with the environment helper to avoid configuration drift.
 
 With the starter in place, inject the beans exported by the auto-configuration:
 

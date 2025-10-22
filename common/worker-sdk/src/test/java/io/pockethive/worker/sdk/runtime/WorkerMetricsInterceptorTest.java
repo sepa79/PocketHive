@@ -39,7 +39,13 @@ class WorkerMetricsInterceptorTest {
             "pockethive.control-plane.instance-id=metrics-test",
             "pockethive.control-plane.swarm-id=metrics-swarm",
             "pockethive.control-plane.exchange=metrics-swarm.control",
-            "pockethive.control-plane.control-queue-prefix=ph.control.metrics"
+            "pockethive.control-plane.control-queue-prefix=ph.control.metrics",
+            "management.prometheus.metrics.export.pushgateway.enabled=true",
+            "management.prometheus.metrics.export.pushgateway.base-url=http://pushgateway:9091",
+            "management.prometheus.metrics.export.pushgateway.push-rate=PT30S",
+            "management.prometheus.metrics.export.pushgateway.job=worker-metrics-test",
+            "management.prometheus.metrics.export.pushgateway.shutdown-operation=DELETE",
+            "management.prometheus.metrics.export.pushgateway.grouping-key.instance=metrics-worker"
         )
         .withUserConfiguration(TestConfiguration.class, PocketHiveWorkerSdkAutoConfiguration.class);
 

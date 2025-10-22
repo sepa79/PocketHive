@@ -1,7 +1,6 @@
 package io.pockethive.swarmcontroller;
 
 import io.pockethive.swarmcontroller.config.SwarmControllerProperties;
-import java.time.Duration;
 
 final class SwarmControllerTestProperties {
 
@@ -27,8 +26,6 @@ final class SwarmControllerTestProperties {
                 new SwarmControllerProperties.Rabbit(
                     LOGS_EXCHANGE,
                     new SwarmControllerProperties.Logging(true)),
-                new SwarmControllerProperties.Metrics(
-                    new SwarmControllerProperties.Pushgateway(false, null, Duration.ofMinutes(1), "DELETE")),
                 new SwarmControllerProperties.Docker(null, "/var/run/docker.sock")));
     }
 }

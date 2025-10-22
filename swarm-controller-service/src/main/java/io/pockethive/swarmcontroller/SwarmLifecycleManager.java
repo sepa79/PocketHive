@@ -126,7 +126,6 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
   private static WorkerSettings deriveWorkerSettings(SwarmControllerProperties properties) {
     Objects.requireNonNull(properties, "properties");
     SwarmControllerProperties.Traffic traffic = properties.getTraffic();
-    SwarmControllerProperties.Pushgateway pushgateway = properties.getMetrics().pushgateway();
     return new WorkerSettings(
         properties.getSwarmId(),
         properties.getControlExchange(),
@@ -134,11 +133,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
         traffic.queuePrefix(),
         traffic.hiveExchange(),
         properties.getRabbit().logsExchange(),
-        properties.getRabbit().logging().enabled(),
-        pushgateway.enabled(),
-        pushgateway.baseUrl(),
-        pushgateway.pushRate(),
-        pushgateway.shutdownOperation());
+        properties.getRabbit().logging().enabled());
   }
 
   /**

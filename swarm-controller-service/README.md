@@ -24,10 +24,6 @@ The controller is fully configured through environment-backed Spring properties.
 | `pockethive.control-plane.swarm-controller.traffic.hive-exchange` | Yes | Hive traffic exchange declared for swarm work fan-out. | `POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_TRAFFIC_HIVE_EXCHANGE` |
 | `pockethive.control-plane.swarm-controller.rabbit.logs-exchange` | Yes | Exchange that receives aggregated bee logs. | `POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGS_EXCHANGE` |
 | `pockethive.control-plane.swarm-controller.rabbit.logging.enabled` | Yes | Enables or disables log shipping through the logs exchange. | `POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGGING_ENABLED` |
-| `pockethive.control-plane.swarm-controller.metrics.pushgateway.enabled` | Yes | Flags whether Pushgateway publishing is active. | `POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_ENABLED` |
-| `pockethive.control-plane.swarm-controller.metrics.pushgateway.base-url` | No | Optional Pushgateway endpoint propagated into bee containers. | `POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_BASE_URL` |
-| `pockethive.control-plane.swarm-controller.metrics.pushgateway.push-rate` | Yes | Interval (ISO-8601 duration) between Pushgateway scrapes. | `POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_PUSH_RATE` |
-| `pockethive.control-plane.swarm-controller.metrics.pushgateway.shutdown-operation` | Yes | HTTP verb emitted when a bee shuts down (e.g. `DELETE`). | `POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_SHUTDOWN_OPERATION` |
 | `pockethive.control-plane.swarm-controller.docker.socket-path` | Yes | Docker socket path mounted into the controller container. | `POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_DOCKER_SOCKET_PATH` |
 | `pockethive.control-plane.swarm-controller.docker.host` | No | Overrides the derived `DOCKER_HOST` (useful for TCP daemons). | `POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_DOCKER_HOST` |
 | `logging.config` | No | Points to the Logback XML used at runtime. Defaults to `classpath:logback-spring.xml`. | `LOGGING_CONFIG` |
@@ -54,11 +50,6 @@ pockethive:
         logs-exchange: ${POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGS_EXCHANGE}
         logging:
           enabled: ${POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGGING_ENABLED}
-      metrics:
-        pushgateway:
-          enabled: ${POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_ENABLED}
-          push-rate: ${POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_PUSH_RATE}
-          shutdown-operation: ${POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_SHUTDOWN_OPERATION}
       docker:
         socket-path: ${POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_DOCKER_SOCKET_PATH}
 ```

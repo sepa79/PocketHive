@@ -13,6 +13,7 @@ import io.pockethive.controlplane.spring.WorkerControlPlaneProperties;
 import io.pockethive.controlplane.topology.ControlPlaneTopologyDescriptor;
 import io.pockethive.controlplane.worker.WorkerControlPlane;
 import io.pockethive.worker.sdk.config.PocketHiveWorker;
+import io.pockethive.worker.sdk.metrics.PrometheusPushGatewayProperties;
 import io.pockethive.worker.sdk.runtime.DefaultWorkerContextFactory;
 import io.pockethive.worker.sdk.runtime.DefaultWorkerRuntime;
 import io.pockethive.worker.sdk.runtime.WorkerContextFactory;
@@ -39,6 +40,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
@@ -48,6 +50,7 @@ import org.springframework.context.annotation.Import;
  * opt-in by depending on the Worker SDK starter.
  */
 @Configuration(proxyBeanMethods = false)
+@EnableConfigurationProperties(PrometheusPushGatewayProperties.class)
 @Import({
     ControlPlaneCommonAutoConfiguration.class,
     WorkerControlPlaneAutoConfiguration.class,
