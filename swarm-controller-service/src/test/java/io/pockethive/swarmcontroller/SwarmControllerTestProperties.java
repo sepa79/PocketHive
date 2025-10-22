@@ -13,9 +13,9 @@ final class SwarmControllerTestProperties {
         return new SwarmControllerProperties(
             Topology.SWARM_ID,
             Topology.CONTROL_EXCHANGE,
+            "ph.control",
             new SwarmControllerProperties.Manager("swarm-controller"),
             new SwarmControllerProperties.SwarmController(
-                "ph.control",
                 new SwarmControllerProperties.Traffic(
                     "ph." + Topology.SWARM_ID + ".hive",
                     "ph." + Topology.SWARM_ID),

@@ -19,7 +19,7 @@ The controller is fully configured through environment-backed Spring properties.
 | `pockethive.control-plane.instance-id` | Yes | Unique controller instance id; doubles as the control queue suffix. | `POCKETHIVE_CONTROL_PLANE_INSTANCE_ID` |
 | `pockethive.control-plane.worker.enabled` | Yes | Keeps the worker-side auto-configuration disabled for the controller JVM. | `POCKETHIVE_CONTROL_PLANE_WORKER_ENABLED` |
 | `pockethive.control-plane.manager.role` | Yes | Declares the manager role (`swarm-controller`) for routing and logging context. | `POCKETHIVE_CONTROL_PLANE_MANAGER_ROLE` |
-| `pockethive.control-plane.swarm-controller.control-queue-prefix` | Yes | Prefix for controller-specific control queues. | `POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE_PREFIX` |
+| `pockethive.control-plane.control-queue-prefix` | Yes | Prefix for controller-specific control queues. | `POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE_PREFIX` |
 | `pockethive.control-plane.swarm-controller.traffic.queue-prefix` | Yes | Base prefix for hive work queues that workers bind to. | `POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_TRAFFIC_QUEUE_PREFIX` |
 | `pockethive.control-plane.swarm-controller.traffic.hive-exchange` | Yes | Hive traffic exchange declared for swarm work fan-out. | `POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_TRAFFIC_HIVE_EXCHANGE` |
 | `pockethive.control-plane.swarm-controller.rabbit.logs-exchange` | Yes | Exchange that receives aggregated bee logs. | `POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGS_EXCHANGE` |
@@ -41,12 +41,12 @@ When the Orchestrator spins up a controller it injects raw environment reference
 pockethive:
   control-plane:
     exchange: ${POCKETHIVE_CONTROL_PLANE_EXCHANGE}
+    control-queue-prefix: ${POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE_PREFIX}
     swarm-id: ${POCKETHIVE_CONTROL_PLANE_SWARM_ID}
     instance-id: ${POCKETHIVE_CONTROL_PLANE_INSTANCE_ID}
     manager:
       role: ${POCKETHIVE_CONTROL_PLANE_MANAGER_ROLE}
     swarm-controller:
-      control-queue-prefix: ${POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE_PREFIX}
       traffic:
         queue-prefix: ${POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_TRAFFIC_QUEUE_PREFIX}
         hive-exchange: ${POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_TRAFFIC_HIVE_EXCHANGE}

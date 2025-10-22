@@ -80,7 +80,7 @@ class SwarmLifecycleManagerIntegrationTest {
     register(registry, "POCKETHIVE_CONTROL_PLANE_WORKER_ENABLED", "pockethive.control-plane.worker.enabled", Boolean.FALSE.toString());
     register(registry, "POCKETHIVE_CONTROL_PLANE_MANAGER_ROLE", "pockethive.control-plane.manager.role", "swarm-controller");
     register(registry, "POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE_PREFIX",
-        "pockethive.control-plane.swarm-controller.control-queue-prefix",
+        "pockethive.control-plane.control-queue-prefix",
         Topology.CONTROL_QUEUE);
     register(registry, "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_TRAFFIC_QUEUE_PREFIX",
         "pockethive.control-plane.swarm-controller.traffic.queue-prefix",
