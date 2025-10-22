@@ -56,7 +56,7 @@ public final class ControlPlaneContainerEnvironmentFactory {
         env.put(
             "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGGING_ENABLED",
             Boolean.toString(settings.loggingEnabled()));
-        applyPushgatewayControlPlaneSettings(env, settings.metrics());
+        applyPushgatewayExport(env, settings.metrics());
         env.put(
             "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_DOCKER_SOCKET_PATH",
             requireSetting(settings.dockerSocketPath(), "pockethive.control-plane.orchestrator.docker.socket-path"));
@@ -94,7 +94,6 @@ public final class ControlPlaneContainerEnvironmentFactory {
         env.put("POCKETHIVE_CONTROL_PLANE_QUEUES_GENERATOR", queuePrefix + ".gen");
         env.put("POCKETHIVE_CONTROL_PLANE_QUEUES_MODERATOR", queuePrefix + ".mod");
         env.put("POCKETHIVE_CONTROL_PLANE_QUEUES_FINAL", queuePrefix + ".final");
-        applyPushgatewayControlPlaneSettings(env, settings.metrics());
         applyPushgatewayExport(env, settings.metrics());
         return env;
     }
@@ -125,30 +124,6 @@ public final class ControlPlaneContainerEnvironmentFactory {
             throw new IllegalStateException("spring.rabbitmq.port must be a positive integer");
         }
         return Integer.toString(port);
-    }
-
-    private static void applyPushgatewayControlPlaneSettings(
-        Map<String, String> env,
-        PushgatewaySettings metrics) {
-        Objects.requireNonNull(metrics, "metrics");
-        env.put(
-            "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_ENABLED",
-            Boolean.toString(metrics.enabled()));
-        env.put(
-            "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_BASE_URL",
-            metrics.baseUrl());
-        env.put(
-            "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_PUSH_RATE",
-            metrics.pushRate().toString());
-        env.put(
-            "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_SHUTDOWN_OPERATION",
-            metrics.shutdownOperation());
-        env.put(
-            "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_JOB",
-            metrics.job());
-        env.put(
-            "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_GROUPING_KEY_INSTANCE",
-            metrics.groupingKeyInstance());
     }
 
     private static void applyPushgatewayExport(Map<String, String> env, PushgatewaySettings metrics) {

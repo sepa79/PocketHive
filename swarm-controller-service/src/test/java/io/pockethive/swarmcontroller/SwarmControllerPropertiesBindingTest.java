@@ -28,12 +28,6 @@ class SwarmControllerPropertiesBindingTest {
             "pockethive.control-plane.swarm-controller.traffic.queue-prefix=ph.swarm-a",
             "pockethive.control-plane.swarm-controller.traffic.hive-exchange=ph.swarm-a.hive",
             "pockethive.control-plane.swarm-controller.rabbit.logs-exchange=ph.logs",
-            "pockethive.control-plane.swarm-controller.metrics.pushgateway.enabled=true",
-            "pockethive.control-plane.swarm-controller.metrics.pushgateway.base-url=http://pushgateway:9091",
-            "pockethive.control-plane.swarm-controller.metrics.pushgateway.push-rate=PT30S",
-            "pockethive.control-plane.swarm-controller.metrics.pushgateway.shutdown-operation=DELETE",
-            "pockethive.control-plane.swarm-controller.metrics.pushgateway.job=swarm-job",
-            "pockethive.control-plane.swarm-controller.metrics.pushgateway.grouping-key.instance=controller-instance",
             "pockethive.control-plane.swarm-controller.docker.socket-path=/var/run/docker.sock")
         .run(
             context -> {
@@ -45,16 +39,6 @@ class SwarmControllerPropertiesBindingTest {
               assertThat(properties.hiveExchange()).isEqualTo("ph.swarm-a.hive");
               assertThat(properties.getRabbit().logsExchange()).isEqualTo("ph.logs");
               assertThat(properties.getRabbit().logging().enabled()).isFalse();
-              assertThat(properties.getMetrics().pushgateway().enabled()).isTrue();
-              assertThat(properties.getMetrics().pushgateway().baseUrl())
-                  .isEqualTo("http://pushgateway:9091");
-              assertThat(properties.getMetrics().pushgateway().pushRate())
-                  .isEqualTo(java.time.Duration.ofSeconds(30));
-              assertThat(properties.getMetrics().pushgateway().shutdownOperation())
-                  .isEqualTo("DELETE");
-              assertThat(properties.getMetrics().pushgateway().job()).isEqualTo("swarm-job");
-              assertThat(properties.getMetrics().pushgateway().groupingKey().instance())
-                  .isEqualTo("controller-instance");
               assertThat(properties.getDocker().socketPath()).isEqualTo("/var/run/docker.sock");
             });
   }
