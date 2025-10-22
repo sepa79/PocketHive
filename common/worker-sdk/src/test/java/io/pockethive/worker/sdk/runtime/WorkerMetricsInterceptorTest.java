@@ -37,7 +37,9 @@ class WorkerMetricsInterceptorTest {
             "pockethive.control-plane.worker.enabled=false",
             "pockethive.control-plane.manager.enabled=false",
             "pockethive.control-plane.instance-id=metrics-test",
-            "pockethive.control-plane.swarm-id=metrics-swarm"
+            "pockethive.control-plane.swarm-id=metrics-swarm",
+            "pockethive.control-plane.exchange=metrics-swarm.control",
+            "pockethive.control-plane.control-queue-prefix=ph.control.metrics"
         )
         .withUserConfiguration(TestConfiguration.class, PocketHiveWorkerSdkAutoConfiguration.class);
 
