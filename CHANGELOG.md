@@ -2,6 +2,33 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.13.0] - 2025-10-20
+Timestamp: 2025-10-20T00:00:00Z
+
+- Control plane & Spring bootstrapping: introduce `WorkerControlPlaneProperties`, the
+  `ControlPlaneContainerEnvironmentFactory`, and stricter descriptor settings so
+  workers, managers, and the orchestrator fail fast when required control-plane
+  queue prefixes, traffic exchanges, or RabbitMQ settings are missing and no
+  longer rely on baked-in topology defaults.
+- Worker SDK & services: retire the legacy topology constants, resolve queues
+  through the new property contract, and update worker runtime adapters, entry
+  points, and tests across generator, moderator, processor, postprocessor, and
+  trigger services to honour the injected control-plane environment.
+- Swarm controller & orchestrator: normalise control queue prefixes, verify the
+  controller queue exists at startup, and have the orchestrator build container
+  environments (including Docker socket, logging, and traffic wiring) via the
+  shared factory so swarms inherit the same contract as local manifests.
+- Metrics & ops: surface Prometheus Pushgateway settings through dedicated
+  properties, propagate them from the orchestrator to worker containers,
+  refresh docker-compose metrics defaults, and require RabbitMQ credentials in
+  entrypoint health checks to harden startup diagnostics.
+- Documentation & tests: expand the worker bootstrap guide, swarm controller
+  configuration reference, migration notes, and SDK guides around the explicit
+  environment contract while aligning examples, e2e tests, and orchestrator
+  scenarios with the property-driven topology.
+- Release: bump the PocketHive minor version to 0.13.0 so published artifacts
+  and tooling reference the latest build.
+
 ## [0.12.8] - 2025-10-18
 Timestamp: 2025-10-18T00:00:00Z
 
