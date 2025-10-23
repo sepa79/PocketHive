@@ -83,9 +83,12 @@ class ContainerLifecycleManagerTest {
         assertEquals("ph.sw1.hive", env.get("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_TRAFFIC_HIVE_EXCHANGE"));
         assertEquals("ph.logs", env.get("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGS_EXCHANGE"));
         assertEquals("false", env.get("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGGING_ENABLED"));
-        assertEquals("false", env.get("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_ENABLED"));
+        assertEquals("true", env.get("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_ENABLED"));
+        assertEquals("http://pushgateway:9091", env.get("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_BASE_URL"));
         assertEquals("PT1M", env.get("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_PUSH_RATE"));
         assertEquals("DELETE", env.get("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_SHUTDOWN_OPERATION"));
+        assertEquals("swarm-job", env.get("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_JOB"));
+        assertEquals("controller-instance", env.get("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_GROUPING_KEY_INSTANCE"));
         assertEquals("/var/run/docker.sock", env.get("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_DOCKER_SOCKET_PATH"));
         assertEquals("/var/run/docker.sock", env.get("DOCKER_SOCKET_PATH"));
         assertEquals("unix:///var/run/docker.sock", env.get("DOCKER_HOST"));
@@ -120,28 +123,6 @@ class ContainerLifecycleManagerTest {
         assertEquals(1, binds.length);
         assertEquals("/custom/docker.sock", binds[0].getPath());
         assertEquals("/custom/docker.sock", binds[0].getVolume().getPath());
-    }
-
-    @Test
-    void startSwarmPropagatesPushgatewaySettingsWhenConfigured() {
-        SwarmRegistry registry = new SwarmRegistry();
-        OrchestratorProperties properties = withPushgateway();
-        ControlPlaneProperties controlPlane = controlPlaneProperties();
-        when(docker.createAndStartContainer(eq("img"), anyMap(), anyString(), any()))
-            .thenReturn("cid");
-        ContainerLifecycleManager manager = new ContainerLifecycleManager(
-            docker, registry, amqp, properties, controlPlane, rabbitProperties());
-
-        manager.startSwarm("sw1", "img", "inst1");
-
-        ArgumentCaptor<Map<String, String>> envCaptor = ArgumentCaptor.forClass(Map.class);
-        verify(docker).createAndStartContainer(eq("img"), envCaptor.capture(), eq("inst1"), any());
-        Map<String, String> env = envCaptor.getValue();
-        assertEquals("http://push:9091", env.get("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_BASE_URL"));
-        assertEquals("true", env.get("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_ENABLED"));
-        assertEquals("PT15S", env.get("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_PUSH_RATE"));
-        assertEquals("DELETE", env.get("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_SHUTDOWN_OPERATION"));
-        assertEquals("sw1", env.get("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_JOB"));
     }
 
     @Test
@@ -254,7 +235,14 @@ class ContainerLifecycleManagerTest {
                 new OrchestratorProperties.Rabbit(
                     "ph.logs",
                     new OrchestratorProperties.Logging(Boolean.FALSE)),
-                new OrchestratorProperties.Pushgateway(Boolean.FALSE, null, Duration.ofMinutes(1), null),
+                new OrchestratorProperties.Metrics(
+                    new OrchestratorProperties.Pushgateway(
+                        true,
+                        "http://pushgateway:9091",
+                        Duration.ofMinutes(1),
+                        "DELETE",
+                        "swarm-job",
+                        new OrchestratorProperties.GroupingKey("controller-instance"))),
                 new OrchestratorProperties.Docker("/var/run/docker.sock"),
                 new OrchestratorProperties.ScenarioManager(
                     "http://scenario-manager:8080",
@@ -269,23 +257,15 @@ class ContainerLifecycleManagerTest {
                 new OrchestratorProperties.Rabbit(
                     "ph.logs",
                     new OrchestratorProperties.Logging(Boolean.FALSE)),
-                new OrchestratorProperties.Pushgateway(Boolean.FALSE, null, Duration.ofMinutes(1), null),
+                new OrchestratorProperties.Metrics(
+                    new OrchestratorProperties.Pushgateway(
+                        true,
+                        "http://pushgateway:9091",
+                        Duration.ofMinutes(1),
+                        "DELETE",
+                        "swarm-job",
+                        new OrchestratorProperties.GroupingKey("controller-instance"))),
                 new OrchestratorProperties.Docker(socketPath),
-                new OrchestratorProperties.ScenarioManager(
-                    "http://scenario-manager:8080",
-                    new OrchestratorProperties.Http(Duration.ofSeconds(5), Duration.ofSeconds(30)))));
-    }
-
-    private static OrchestratorProperties withPushgateway() {
-        return new OrchestratorProperties(
-            new OrchestratorProperties.Orchestrator(
-                "ph.control.orchestrator",
-                "ph.control.orchestrator-status",
-                new OrchestratorProperties.Rabbit(
-                    "ph.logs",
-                    new OrchestratorProperties.Logging(Boolean.FALSE)),
-                new OrchestratorProperties.Pushgateway(Boolean.TRUE, "http://push:9091", Duration.ofSeconds(15), "DELETE"),
-                new OrchestratorProperties.Docker("/var/run/docker.sock"),
                 new OrchestratorProperties.ScenarioManager(
                     "http://scenario-manager:8080",
                     new OrchestratorProperties.Http(Duration.ofSeconds(5), Duration.ofSeconds(30)))));

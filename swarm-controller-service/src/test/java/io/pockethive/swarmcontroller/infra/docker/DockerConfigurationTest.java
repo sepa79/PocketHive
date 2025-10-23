@@ -15,6 +15,15 @@ class DockerConfigurationTest {
   private static final String TRAFFIC_PREFIX = "ph." + SWARM_ID;
   private static final String HIVE_EXCHANGE = TRAFFIC_PREFIX + ".hive";
   private static final String LOGS_EXCHANGE = "ph.logs";
+  private static final SwarmControllerProperties.Metrics METRICS =
+      new SwarmControllerProperties.Metrics(
+          new SwarmControllerProperties.Pushgateway(
+              true,
+              "http://pushgateway:9091",
+              Duration.ofSeconds(30),
+              "DELETE",
+              "test-job",
+              new SwarmControllerProperties.GroupingKey("controller-instance")));
 
   @Test
   void dockerClientConfigHonorsConfiguredHost() {
@@ -51,8 +60,7 @@ class DockerConfigurationTest {
             new SwarmControllerProperties.Rabbit(
                 LOGS_EXCHANGE,
                 new SwarmControllerProperties.Logging(true)),
-            new SwarmControllerProperties.Metrics(
-                new SwarmControllerProperties.Pushgateway(false, null, Duration.ofMinutes(1), "DELETE")),
+            METRICS,
             docker));
   }
 }

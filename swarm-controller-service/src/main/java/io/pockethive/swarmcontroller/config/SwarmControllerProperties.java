@@ -227,15 +227,21 @@ public class SwarmControllerProperties {
         private final String baseUrl;
         private final Duration pushRate;
         private final String shutdownOperation;
+        private final String job;
+        private final @Valid GroupingKey groupingKey;
 
-        public Pushgateway(boolean enabled,
-                           String baseUrl,
+        public Pushgateway(@NotNull Boolean enabled,
+                           @NotBlank String baseUrl,
                            @NotNull Duration pushRate,
-                           @NotBlank String shutdownOperation) {
-            this.enabled = enabled;
-            this.baseUrl = baseUrl;
+                           @NotBlank String shutdownOperation,
+                           @NotBlank String job,
+                           @Valid GroupingKey groupingKey) {
+            this.enabled = Objects.requireNonNull(enabled, "enabled");
+            this.baseUrl = requireNonBlank(baseUrl, "baseUrl");
             this.pushRate = Objects.requireNonNull(pushRate, "pushRate");
             this.shutdownOperation = requireNonBlank(shutdownOperation, "shutdownOperation");
+            this.job = requireNonBlank(job, "job");
+            this.groupingKey = Objects.requireNonNull(groupingKey, "groupingKey");
         }
 
         public boolean enabled() {
@@ -254,8 +260,25 @@ public class SwarmControllerProperties {
             return shutdownOperation;
         }
 
-        public boolean hasBaseUrl() {
-            return baseUrl != null && !baseUrl.isBlank();
+        public String job() {
+            return job;
+        }
+
+        public GroupingKey groupingKey() {
+            return groupingKey;
+        }
+    }
+
+    @Validated
+    public static final class GroupingKey {
+        private final String instance;
+
+        public GroupingKey(@NotBlank String instance) {
+            this.instance = requireNonBlank(instance, "instance");
+        }
+
+        public String instance() {
+            return instance;
         }
     }
 

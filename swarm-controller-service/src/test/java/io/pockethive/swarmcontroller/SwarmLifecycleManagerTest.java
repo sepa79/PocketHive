@@ -31,7 +31,6 @@ import org.springframework.boot.autoconfigure.amqp.RabbitProperties;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
 
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -112,11 +111,6 @@ class SwarmLifecycleManagerTest {
     assertEquals(LOGS_EXCHANGE, env.get("POCKETHIVE_LOGS_EXCHANGE"));
     assertEquals(LOGS_EXCHANGE, env.get("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGS_EXCHANGE"));
     assertEquals("true", env.get("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGGING_ENABLED"));
-    assertEquals("false", env.get("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_ENABLED"));
-    assertEquals("PT1M", env.get("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_PUSH_RATE"));
-    assertEquals("DELETE", env.get("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_SHUTDOWN_OPERATION"));
-    assertThat(env).doesNotContainKey("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_BASE_URL");
-    assertThat(env).doesNotContainKey("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_BASE_URL");
     assertEquals("ctrl-net", env.get("CONTROL_NETWORK"));
     assertEquals(queue("qin"), env.get("POCKETHIVE_CONTROL_PLANE_QUEUES_MODERATOR"));
     assertEquals(queue("qout"), env.get("POCKETHIVE_CONTROL_PLANE_QUEUES_GENERATOR"));
@@ -218,53 +212,6 @@ class SwarmLifecycleManagerTest {
     assertThat(prepareLegacyCaptor.getAllValues())
         .extracting(Binding::getRoutingKey)
         .containsExactlyInAnyOrder("a", "b");
-  }
-
-  @Test
-  void preparePropagatesMinimalPushgatewayEnvWhenConfigured() throws Exception {
-    SwarmControllerProperties properties = new SwarmControllerProperties(
-        TEST_SWARM_ID,
-        CONTROL_EXCHANGE,
-        CONTROL_QUEUE_PREFIX_BASE,
-        new SwarmControllerProperties.Manager("swarm-controller"),
-        new SwarmControllerProperties.SwarmController(
-            new SwarmControllerProperties.Traffic(
-                HIVE_EXCHANGE,
-                TRAFFIC_PREFIX),
-            new SwarmControllerProperties.Rabbit(
-                LOGS_EXCHANGE,
-                new SwarmControllerProperties.Logging(true)),
-            new SwarmControllerProperties.Metrics(
-                new SwarmControllerProperties.Pushgateway(true, "http://push:9091", Duration.ofSeconds(12), "DELETE")),
-            new SwarmControllerProperties.Docker(null, "/var/run/docker.sock")));
-    RabbitProperties rabbitProperties = new RabbitProperties();
-    rabbitProperties.setHost("rabbitmq");
-    rabbitProperties.setPort(5672);
-    rabbitProperties.setUsername("guest");
-    rabbitProperties.setPassword("guest");
-    rabbitProperties.setVirtualHost("/");
-    SwarmLifecycleManager manager = new SwarmLifecycleManager(
-        amqp, mapper, docker, rabbit, rabbitProperties, "inst", properties);
-    SwarmPlan plan = new SwarmPlan("swarm", List.of(new Bee("gen", "img1", null, null)));
-    when(docker.createContainer(eq("img1"), anyMap(), anyString())).thenReturn("c1");
-
-    manager.prepare(mapper.writeValueAsString(plan));
-
-    ArgumentCaptor<Map<String, String>> envCaptor = ArgumentCaptor.forClass(Map.class);
-    ArgumentCaptor<String> nameCaptor = ArgumentCaptor.forClass(String.class);
-    verify(docker).createContainer(eq("img1"), envCaptor.capture(), nameCaptor.capture());
-    Map<String, String> env = envCaptor.getValue();
-    String beeName = nameCaptor.getValue();
-    assertEquals(CONTROL_QUEUE_PREFIX_BASE, env.get("POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE_PREFIX"));
-    assertEquals("http://push:9091", env.get("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_BASE_URL"));
-    assertEquals("http://push:9091", env.get("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_BASE_URL"));
-    assertEquals("true", env.get("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_ENABLED"));
-    assertEquals("PT12S", env.get("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_PUSH_RATE"));
-    assertEquals("DELETE", env.get("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_SHUTDOWN_OPERATION"));
-    assertEquals(TEST_SWARM_ID, env.get("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_JOB"));
-    assertEquals(beeName, env.get("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_GROUPING_KEY_INSTANCE"));
-    assertFalse(env.containsKey("MANAGEMENT_METRICS_TAGS_SWARM"));
-    assertFalse(env.containsKey("MANAGEMENT_METRICS_TAGS_INSTANCE"));
   }
 
   @Test

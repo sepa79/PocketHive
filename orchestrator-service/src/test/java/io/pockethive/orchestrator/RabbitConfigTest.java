@@ -26,7 +26,14 @@ class RabbitConfigTest {
                 new OrchestratorProperties.Rabbit(
                     "ph.logs",
                     new OrchestratorProperties.Logging(Boolean.FALSE)),
-                new OrchestratorProperties.Pushgateway(Boolean.FALSE, null, Duration.ofMinutes(1), null),
+                new OrchestratorProperties.Metrics(
+                    new OrchestratorProperties.Pushgateway(
+                        true,
+                        "http://pushgateway:9091",
+                        Duration.ofMinutes(1),
+                        "DELETE",
+                        "swarm-job",
+                        new OrchestratorProperties.GroupingKey("controller-instance"))),
                 new OrchestratorProperties.Docker("/var/run/docker.sock"),
                 new OrchestratorProperties.ScenarioManager(
                     "http://scenario-manager:8080",

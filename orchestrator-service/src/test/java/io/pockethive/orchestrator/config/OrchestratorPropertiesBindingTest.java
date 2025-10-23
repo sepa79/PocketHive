@@ -2,7 +2,6 @@ package io.pockethive.orchestrator.config;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.time.Duration;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.context.properties.ConfigurationPropertiesBindException;
@@ -21,10 +20,12 @@ class OrchestratorPropertiesBindingTest {
                 "pockethive.control-plane.orchestrator.status-queue-prefix=ph.control.orchestrator-status",
                 "pockethive.control-plane.orchestrator.rabbit.logs-exchange=ph.logs",
                 "pockethive.control-plane.orchestrator.rabbit.logging.enabled=true",
-                "pockethive.control-plane.orchestrator.pushgateway.enabled=true",
-                "pockethive.control-plane.orchestrator.pushgateway.base-url=http://pushgateway:9091",
-                "pockethive.control-plane.orchestrator.pushgateway.push-rate=PT15S",
-                "pockethive.control-plane.orchestrator.pushgateway.shutdown-operation=DELETE",
+                "pockethive.control-plane.orchestrator.metrics.pushgateway.enabled=true",
+                "pockethive.control-plane.orchestrator.metrics.pushgateway.base-url=http://pushgateway:9091",
+                "pockethive.control-plane.orchestrator.metrics.pushgateway.push-rate=PT1M",
+                "pockethive.control-plane.orchestrator.metrics.pushgateway.shutdown-operation=DELETE",
+                "pockethive.control-plane.orchestrator.metrics.pushgateway.job=swarm-job",
+                "pockethive.control-plane.orchestrator.metrics.pushgateway.grouping-key.instance=controller-instance",
                 "pockethive.control-plane.orchestrator.docker.socket-path=/var/run/docker.sock",
                 "pockethive.control-plane.orchestrator.scenario-manager.url=http://scenario-manager:8080",
                 "pockethive.control-plane.orchestrator.scenario-manager.http.connect-timeout=PT5S",
@@ -36,17 +37,23 @@ class OrchestratorPropertiesBindingTest {
                 assertThat(properties.getStatusQueuePrefix()).isEqualTo("ph.control.orchestrator-status");
                 assertThat(properties.getRabbit().getLogsExchange()).isEqualTo("ph.logs");
                 assertThat(properties.getRabbit().getLogging().isEnabled()).isTrue();
-                assertThat(properties.getPushgateway().isEnabled()).isTrue();
-                assertThat(properties.getPushgateway().getBaseUrl()).isEqualTo("http://pushgateway:9091");
-                assertThat(properties.getPushgateway().getPushRate()).isEqualTo(Duration.ofSeconds(15));
-                assertThat(properties.getPushgateway().getShutdownOperation()).isEqualTo("DELETE");
+                assertThat(properties.getMetrics().getPushgateway().isEnabled()).isTrue();
+                assertThat(properties.getMetrics().getPushgateway().getBaseUrl())
+                    .isEqualTo("http://pushgateway:9091");
+                assertThat(properties.getMetrics().getPushgateway().getPushRate())
+                    .isEqualTo(java.time.Duration.ofMinutes(1));
+                assertThat(properties.getMetrics().getPushgateway().getShutdownOperation())
+                    .isEqualTo("DELETE");
+                assertThat(properties.getMetrics().getPushgateway().getJob()).isEqualTo("swarm-job");
+                assertThat(properties.getMetrics().getPushgateway().getGroupingKey().getInstance())
+                    .isEqualTo("controller-instance");
                 assertThat(properties.getDocker().getSocketPath()).isEqualTo("/var/run/docker.sock");
                 assertThat(properties.getScenarioManager().getUrl())
                     .isEqualTo("http://scenario-manager:8080");
                 assertThat(properties.getScenarioManager().getHttp().getConnectTimeout())
-                    .isEqualTo(Duration.ofSeconds(5));
+                    .isEqualTo(java.time.Duration.ofSeconds(5));
                 assertThat(properties.getScenarioManager().getHttp().getReadTimeout())
-                    .isEqualTo(Duration.ofSeconds(30));
+                    .isEqualTo(java.time.Duration.ofSeconds(30));
             });
     }
 
@@ -57,8 +64,12 @@ class OrchestratorPropertiesBindingTest {
                 "pockethive.control-plane.orchestrator.status-queue-prefix=ph.control.orchestrator-status",
                 "pockethive.control-plane.orchestrator.rabbit.logs-exchange=ph.logs",
                 "pockethive.control-plane.orchestrator.rabbit.logging.enabled=false",
-                "pockethive.control-plane.orchestrator.pushgateway.enabled=false",
-                "pockethive.control-plane.orchestrator.pushgateway.push-rate=PT1M",
+                "pockethive.control-plane.orchestrator.metrics.pushgateway.enabled=true",
+                "pockethive.control-plane.orchestrator.metrics.pushgateway.base-url=http://pushgateway:9091",
+                "pockethive.control-plane.orchestrator.metrics.pushgateway.push-rate=PT1M",
+                "pockethive.control-plane.orchestrator.metrics.pushgateway.shutdown-operation=DELETE",
+                "pockethive.control-plane.orchestrator.metrics.pushgateway.job=swarm-job",
+                "pockethive.control-plane.orchestrator.metrics.pushgateway.grouping-key.instance=controller-instance",
                 "pockethive.control-plane.orchestrator.docker.socket-path=/var/run/docker.sock",
                 "pockethive.control-plane.orchestrator.scenario-manager.url=http://scenario-manager:8080",
                 "pockethive.control-plane.orchestrator.scenario-manager.http.connect-timeout=PT5S",

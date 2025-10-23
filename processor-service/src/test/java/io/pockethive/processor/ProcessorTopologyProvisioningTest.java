@@ -44,10 +44,7 @@ class ProcessorTopologyProvisioningTest {
             "pockethive.control-plane.queues.moderator=" + MODERATOR_QUEUE,
             "pockethive.control-plane.queues.final=" + WORKER_PROPERTIES.getQueues().get("final"),
             "pockethive.control-plane.swarm-controller.rabbit.logs-exchange=ph.logs",
-            "pockethive.control-plane.swarm-controller.rabbit.logging.enabled=false",
-            "pockethive.control-plane.swarm-controller.metrics.pushgateway.enabled=false",
-            "pockethive.control-plane.swarm-controller.metrics.pushgateway.push-rate=PT1M",
-            "pockethive.control-plane.swarm-controller.metrics.pushgateway.shutdown-operation=DELETE");
+            "pockethive.control-plane.swarm-controller.rabbit.logging.enabled=false");
 
     @Test
     void processorServiceDoesNotDeclareTrafficTopology() {

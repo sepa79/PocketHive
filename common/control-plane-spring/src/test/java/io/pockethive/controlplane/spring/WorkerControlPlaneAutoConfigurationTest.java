@@ -40,11 +40,7 @@ class WorkerControlPlaneAutoConfigurationTest {
             "pockethive.control-plane.queues.generator=ph.swarm-alpha.gen",
             "pockethive.control-plane.queues.moderator=ph.swarm-alpha.mod",
             "pockethive.control-plane.swarm-controller.rabbit.logs-exchange=ph.logs",
-            "pockethive.control-plane.swarm-controller.rabbit.logging.enabled=true",
-            "pockethive.control-plane.swarm-controller.metrics.pushgateway.enabled=true",
-            "pockethive.control-plane.swarm-controller.metrics.pushgateway.base-url=http://push:9091",
-            "pockethive.control-plane.swarm-controller.metrics.pushgateway.push-rate=PT30S",
-            "pockethive.control-plane.swarm-controller.metrics.pushgateway.shutdown-operation=DELETE");
+            "pockethive.control-plane.swarm-controller.rabbit.logging.enabled=true");
 
     @Test
     void registersWorkerInfrastructure() {

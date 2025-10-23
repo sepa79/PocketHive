@@ -12,8 +12,6 @@ import org.springframework.boot.autoconfigure.amqp.RabbitProperties;
  */
 public final class ControlPlaneContainerEnvironmentFactory {
 
-    private static final String DEFAULT_PUSHGATEWAY_SHUTDOWN_OPERATION = "DELETE";
-
     private ControlPlaneContainerEnvironmentFactory() {
     }
 
@@ -58,28 +56,10 @@ public final class ControlPlaneContainerEnvironmentFactory {
         env.put(
             "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGGING_ENABLED",
             Boolean.toString(settings.loggingEnabled()));
-        env.put(
-            "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_ENABLED",
-            Boolean.toString(settings.metricsEnabled()));
-        env.put(
-            "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_PUSH_RATE",
-            settings.metricsPushRate().toString());
-        env.put(
-            "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_SHUTDOWN_OPERATION",
-            resolvePushgatewayShutdownOperation(settings.metricsShutdownOperation()));
-        if (settings.metricsBaseUrl() != null && !settings.metricsBaseUrl().isBlank()) {
-            env.put("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_BASE_URL", settings.metricsBaseUrl());
-        }
+        applyPushgatewayControlPlaneSettings(env, settings.metrics());
         env.put(
             "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_DOCKER_SOCKET_PATH",
             requireSetting(settings.dockerSocketPath(), "pockethive.control-plane.orchestrator.docker.socket-path"));
-        applyPushgatewayExport(env,
-            settings.metricsEnabled(),
-            settings.metricsBaseUrl(),
-            settings.metricsPushRate().toString(),
-            settings.metricsShutdownOperation(),
-            resolvedSwarmId,
-            null);
         return env;
     }
 
@@ -114,25 +94,7 @@ public final class ControlPlaneContainerEnvironmentFactory {
         env.put("POCKETHIVE_CONTROL_PLANE_QUEUES_GENERATOR", queuePrefix + ".gen");
         env.put("POCKETHIVE_CONTROL_PLANE_QUEUES_MODERATOR", queuePrefix + ".mod");
         env.put("POCKETHIVE_CONTROL_PLANE_QUEUES_FINAL", queuePrefix + ".final");
-        env.put(
-            "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_ENABLED",
-            Boolean.toString(settings.metricsEnabled()));
-        env.put(
-            "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_PUSH_RATE",
-            settings.metricsPushRate().toString());
-        env.put(
-            "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_SHUTDOWN_OPERATION",
-            resolvePushgatewayShutdownOperation(settings.metricsShutdownOperation()));
-        if (settings.metricsBaseUrl() != null && !settings.metricsBaseUrl().isBlank()) {
-            env.put("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_BASE_URL", settings.metricsBaseUrl());
-        }
-        applyPushgatewayExport(env,
-            settings.metricsEnabled(),
-            settings.metricsBaseUrl(),
-            settings.metricsPushRate().toString(),
-            settings.metricsShutdownOperation(),
-            settings.swarmId(),
-            resolvedInstance);
+        applyPushgatewayExport(env, settings.metrics());
         return env;
     }
 
@@ -147,35 +109,6 @@ public final class ControlPlaneContainerEnvironmentFactory {
             requireSetting(rabbitProperties.getPassword(), "spring.rabbitmq.password"));
         env.put("SPRING_RABBITMQ_VIRTUAL_HOST",
             requireSetting(rabbitProperties.getVirtualHost(), "spring.rabbitmq.virtual-host"));
-    }
-
-    private static void applyPushgatewayExport(Map<String, String> env,
-                                               boolean enabled,
-                                               String baseUrl,
-                                               String pushRate,
-                                               String shutdownOperation,
-                                               String swarmId,
-                                               String instanceId) {
-        if (!enabled || baseUrl == null || baseUrl.isBlank()) {
-            return;
-        }
-        env.put("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_ENABLED", Boolean.toString(enabled));
-        env.put("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_BASE_URL", baseUrl);
-        env.put("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_PUSH_RATE", pushRate);
-        if (shutdownOperation != null && !shutdownOperation.isBlank()) {
-            env.put("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_SHUTDOWN_OPERATION", shutdownOperation);
-        }
-        env.put("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_JOB", swarmId);
-        if (instanceId != null) {
-            env.put("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_GROUPING_KEY_INSTANCE", instanceId);
-        }
-    }
-
-    private static String resolvePushgatewayShutdownOperation(String shutdownOperation) {
-        if (shutdownOperation == null || shutdownOperation.isBlank()) {
-            return DEFAULT_PUSHGATEWAY_SHUTDOWN_OPERATION;
-        }
-        return shutdownOperation;
     }
 
     private static String requireSetting(String value, String propertyName) {
@@ -193,6 +126,52 @@ public final class ControlPlaneContainerEnvironmentFactory {
         return Integer.toString(port);
     }
 
+    private static void applyPushgatewayControlPlaneSettings(
+        Map<String, String> env,
+        PushgatewaySettings metrics) {
+        Objects.requireNonNull(metrics, "metrics");
+        env.put(
+            "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_ENABLED",
+            Boolean.toString(metrics.enabled()));
+        env.put(
+            "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_BASE_URL",
+            metrics.baseUrl());
+        env.put(
+            "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_PUSH_RATE",
+            metrics.pushRate().toString());
+        env.put(
+            "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_SHUTDOWN_OPERATION",
+            metrics.shutdownOperation());
+        env.put(
+            "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_JOB",
+            metrics.job());
+        env.put(
+            "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_GROUPING_KEY_INSTANCE",
+            metrics.groupingKeyInstance());
+    }
+
+    private static void applyPushgatewayExport(Map<String, String> env, PushgatewaySettings metrics) {
+        Objects.requireNonNull(metrics, "metrics");
+        env.put(
+            "MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_ENABLED",
+            Boolean.toString(metrics.enabled()));
+        env.put(
+            "MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_BASE_URL",
+            metrics.baseUrl());
+        env.put(
+            "MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_PUSH_RATE",
+            metrics.pushRate().toString());
+        env.put(
+            "MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_SHUTDOWN_OPERATION",
+            metrics.shutdownOperation());
+        env.put(
+            "MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_JOB",
+            metrics.job());
+        env.put(
+            "MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_GROUPING_KEY_INSTANCE",
+            metrics.groupingKeyInstance());
+    }
+
     private static String requireArgument(String value, String description) {
         if (value == null || value.isBlank()) {
             throw new IllegalArgumentException(description + " must not be null or blank");
@@ -202,15 +181,12 @@ public final class ControlPlaneContainerEnvironmentFactory {
 
     public record ControllerSettings(String logsExchange,
                                      boolean loggingEnabled,
-                                     boolean metricsEnabled,
-                                     String metricsBaseUrl,
-                                     Duration metricsPushRate,
-                                     String metricsShutdownOperation,
+                                     PushgatewaySettings metrics,
                                      String dockerSocketPath,
                                      String trafficQueuePrefix,
                                      String trafficHiveExchange) {
         public ControllerSettings {
-            Objects.requireNonNull(metricsPushRate, "metricsPushRate");
+            Objects.requireNonNull(metrics, "metrics");
             requireArgument(logsExchange, "logsExchange");
             requireArgument(dockerSocketPath, "dockerSocketPath");
         }
@@ -223,18 +199,30 @@ public final class ControlPlaneContainerEnvironmentFactory {
                                  String hiveExchange,
                                  String logsExchange,
                                  boolean loggingEnabled,
-                                 boolean metricsEnabled,
-                                 String metricsBaseUrl,
-                                 Duration metricsPushRate,
-                                 String metricsShutdownOperation) {
+                                 PushgatewaySettings metrics) {
         public WorkerSettings {
-            Objects.requireNonNull(metricsPushRate, "metricsPushRate");
+            Objects.requireNonNull(metrics, "metrics");
             requireArgument(swarmId, "swarmId");
             requireArgument(controlExchange, "controlExchange");
             requireArgument(controlQueuePrefix, "controlQueuePrefix");
             requireArgument(trafficQueuePrefix, "trafficQueuePrefix");
             requireArgument(hiveExchange, "hiveExchange");
             requireArgument(logsExchange, "logsExchange");
+        }
+    }
+
+    public record PushgatewaySettings(boolean enabled,
+                                      String baseUrl,
+                                      Duration pushRate,
+                                      String shutdownOperation,
+                                      String job,
+                                      String groupingKeyInstance) {
+        public PushgatewaySettings {
+            Objects.requireNonNull(pushRate, "pushRate");
+            requireArgument(baseUrl, "metrics baseUrl");
+            requireArgument(shutdownOperation, "metrics shutdownOperation");
+            requireArgument(job, "metrics job");
+            requireArgument(groupingKeyInstance, "metrics groupingKeyInstance");
         }
     }
 }

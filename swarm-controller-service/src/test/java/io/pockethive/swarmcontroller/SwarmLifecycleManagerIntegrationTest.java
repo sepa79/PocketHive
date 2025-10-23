@@ -60,11 +60,13 @@ class SwarmLifecycleManagerIntegrationTest {
     setRequiredSystemProperty("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_TRAFFIC_HIVE_EXCHANGE", HIVE_EXCHANGE);
     setRequiredSystemProperty("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGS_EXCHANGE", LOGS_EXCHANGE);
     setRequiredSystemProperty("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGGING_ENABLED", Boolean.FALSE.toString());
-    setRequiredSystemProperty("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_ENABLED", Boolean.FALSE.toString());
-    setRequiredSystemProperty("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_PUSH_RATE",
-        java.time.Duration.ofMinutes(1).toString());
-    setRequiredSystemProperty("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_SHUTDOWN_OPERATION", "DELETE");
     setRequiredSystemProperty("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_DOCKER_SOCKET_PATH", "/var/run/docker.sock");
+    setRequiredSystemProperty("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_ENABLED", Boolean.FALSE.toString());
+    setRequiredSystemProperty("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_BASE_URL", "http://localhost:9091");
+    setRequiredSystemProperty("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_PUSH_RATE", "10s");
+    setRequiredSystemProperty("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_SHUTDOWN_OPERATION", "DELETE");
+    setRequiredSystemProperty("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_JOB", "swarm-controller");
+    setRequiredSystemProperty("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_GROUPING_KEY_INSTANCE", TEST_INSTANCE_ID);
   }
 
   @DynamicPropertySource
@@ -98,18 +100,27 @@ class SwarmLifecycleManagerIntegrationTest {
     register(registry, "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGGING_ENABLED",
         "pockethive.control-plane.swarm-controller.rabbit.logging.enabled",
         Boolean.FALSE.toString());
-    register(registry, "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_ENABLED",
-        "pockethive.control-plane.swarm-controller.metrics.pushgateway.enabled",
-        Boolean.FALSE.toString());
-    register(registry, "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_PUSH_RATE",
-        "pockethive.control-plane.swarm-controller.metrics.pushgateway.push-rate",
-        java.time.Duration.ofMinutes(1).toString());
-    register(registry, "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_SHUTDOWN_OPERATION",
-        "pockethive.control-plane.swarm-controller.metrics.pushgateway.shutdown-operation",
-        "DELETE");
     register(registry, "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_DOCKER_SOCKET_PATH",
         "pockethive.control-plane.swarm-controller.docker.socket-path",
         "/var/run/docker.sock");
+    register(registry, "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_ENABLED",
+        "pockethive.control-plane.swarm-controller.metrics.pushgateway.enabled",
+        Boolean.FALSE.toString());
+    register(registry, "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_BASE_URL",
+        "pockethive.control-plane.swarm-controller.metrics.pushgateway.base-url",
+        "http://localhost:9091");
+    register(registry, "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_PUSH_RATE",
+        "pockethive.control-plane.swarm-controller.metrics.pushgateway.push-rate",
+        "10s");
+    register(registry, "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_SHUTDOWN_OPERATION",
+        "pockethive.control-plane.swarm-controller.metrics.pushgateway.shutdown-operation",
+        "DELETE");
+    register(registry, "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_JOB",
+        "pockethive.control-plane.swarm-controller.metrics.pushgateway.job",
+        "swarm-controller");
+    register(registry, "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_GROUPING_KEY_INSTANCE",
+        "pockethive.control-plane.swarm-controller.metrics.pushgateway.grouping-key.instance",
+        TEST_INSTANCE_ID);
   }
 
   private static String queue(String suffix) {

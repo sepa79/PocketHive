@@ -33,9 +33,12 @@ class PocketHiveWorkerSdkAutoConfigurationQueueResolutionTest {
             "pockethive.control-plane.queues.out=swarm-alpha.out",
             "pockethive.control-plane.swarm-controller.rabbit.logs-exchange=swarm-alpha.logs",
             "pockethive.control-plane.swarm-controller.rabbit.logging.enabled=false",
-            "pockethive.control-plane.swarm-controller.metrics.pushgateway.enabled=false",
-            "pockethive.control-plane.swarm-controller.metrics.pushgateway.push-rate=PT30S",
-            "pockethive.control-plane.swarm-controller.metrics.pushgateway.shutdown-operation=DELETE"
+            "management.prometheus.metrics.export.pushgateway.enabled=true",
+            "management.prometheus.metrics.export.pushgateway.base-url=http://pushgateway:9091",
+            "management.prometheus.metrics.export.pushgateway.push-rate=PT30S",
+            "management.prometheus.metrics.export.pushgateway.job=worker-sdk-test",
+            "management.prometheus.metrics.export.pushgateway.shutdown-operation=DELETE",
+            "management.prometheus.metrics.export.pushgateway.grouping-key.instance=test-worker"
         )
         .withBean(ObjectMapper.class, ObjectMapper::new)
         .withUserConfiguration(TestWorkerConfiguration.class, PocketHiveWorkerSdkAutoConfiguration.class);

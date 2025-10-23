@@ -31,8 +31,8 @@ Eliminate all implicit configuration fallbacks across PocketHive by moving orche
    - Inject these properties into `SwarmLifecycleManager` and related infrastructure instead of using `Topology` or env/system lookups.
 2. **Enforce explicit identifiers**
    - Require container instance IDs and swarm identifiers to be provided via configuration (i.e. from Swarm-manager via env variables matching Spring properties from application.yml) or orchestrator/swarm-manager payloads. Only Orchestrator and SwarmManager might generate configration and pass them over, workers use values found via application.yml/spring.
-3. **Rework metrics/logging configuration**
-   - Drive Pushgateway and logging configuration through the new properties while keeping `application.yml` entries as explicit `${ENV}` bindings with no fallbacks; Orchestrator supplies these values via container environment variables when it launches the controller, so do not introduce literal defaults in YAML/logback configs.
+3. **Rework logging configuration**
+   - Keep logging properties as explicit `${ENV}` bindings with no fallbacks. Pushgateway settings now live exclusively in the worker SDK, so the swarm controller no longer requires metrics-specific configuration.
 4. **Adjust Docker integration**
    - Replace `resolveDockerHostOverride()` and similar helpers with property-based configuration that fails on missing values.
 5. **Refresh tests/docs**

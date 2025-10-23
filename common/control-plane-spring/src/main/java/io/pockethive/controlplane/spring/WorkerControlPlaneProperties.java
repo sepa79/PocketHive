@@ -15,7 +15,7 @@ import org.springframework.validation.annotation.Validated;
 
 /**
  * Minimal worker-facing control-plane configuration that binds the swarm/instance identity,
- * queue names, logging flags, and Pushgateway settings injected by the orchestrator.
+ * queue names and logging flags injected by the orchestrator.
  */
 @Validated
 @ConfigurationProperties(prefix = "pockethive.control-plane")
@@ -298,19 +298,13 @@ public final class WorkerControlPlaneProperties {
     @Validated
     public static final class SwarmController {
         private final Rabbit rabbit;
-        private final Metrics metrics;
 
-        public SwarmController(@Valid Rabbit rabbit, @Valid Metrics metrics) {
+        public SwarmController(@Valid Rabbit rabbit) {
             this.rabbit = Objects.requireNonNull(rabbit, "swarmController.rabbit must not be null");
-            this.metrics = Objects.requireNonNull(metrics, "swarmController.metrics must not be null");
         }
 
         public Rabbit getRabbit() {
             return rabbit;
-        }
-
-        public Metrics getMetrics() {
-            return metrics;
         }
 
         @Validated
@@ -346,55 +340,6 @@ public final class WorkerControlPlaneProperties {
             }
         }
 
-        @Validated
-        public static final class Metrics {
-            private final Pushgateway pushgateway;
-
-            public Metrics(@Valid Pushgateway pushgateway) {
-                this.pushgateway = Objects.requireNonNull(pushgateway,
-                    "pockethive.control-plane.swarm-controller.metrics.pushgateway must not be null");
-            }
-
-            public Pushgateway getPushgateway() {
-                return pushgateway;
-            }
-
-            @Validated
-            public static final class Pushgateway {
-                private final boolean enabled;
-                private final String baseUrl;
-                private final Duration pushRate;
-                private final String shutdownOperation;
-
-                public Pushgateway(Boolean enabled,
-                                   String baseUrl,
-                                   Duration pushRate,
-                                   String shutdownOperation) {
-                    this.enabled = Boolean.TRUE.equals(enabled);
-                    this.baseUrl = baseUrl;
-                    this.pushRate = Objects.requireNonNull(pushRate,
-                        "pockethive.control-plane.swarm-controller.metrics.pushgateway.push-rate must not be null");
-                    this.shutdownOperation = requireNonBlank(shutdownOperation,
-                        "pockethive.control-plane.swarm-controller.metrics.pushgateway.shutdown-operation");
-                }
-
-                public boolean isEnabled() {
-                    return enabled;
-                }
-
-                public String getBaseUrl() {
-                    return baseUrl;
-                }
-
-                public Duration getPushRate() {
-                    return pushRate;
-                }
-
-                public String getShutdownOperation() {
-                    return shutdownOperation;
-                }
-            }
-        }
     }
 
     private static String requireNonBlank(String value, String property) {

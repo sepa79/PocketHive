@@ -10,7 +10,6 @@ import io.pockethive.controlplane.spring.ControlPlaneTopologyDescriptorFactory;
 import io.pockethive.controlplane.topology.ControlPlaneTopologyDescriptor;
 import io.pockethive.controlplane.topology.ControlPlaneTopologySettings;
 import io.pockethive.controlplane.topology.QueueDescriptor;
-import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -50,16 +49,8 @@ public final class ControlPlaneTestFixtures {
             new WorkerControlPlaneProperties.SwarmController.Rabbit.Logging(false);
         WorkerControlPlaneProperties.SwarmController.Rabbit rabbit =
             new WorkerControlPlaneProperties.SwarmController.Rabbit("ph.logs", logging);
-        WorkerControlPlaneProperties.SwarmController.Metrics.Pushgateway pushgateway =
-            new WorkerControlPlaneProperties.SwarmController.Metrics.Pushgateway(
-                false,
-                null,
-                Duration.ofMinutes(1),
-                "DELETE");
         WorkerControlPlaneProperties.SwarmController swarmController =
-            new WorkerControlPlaneProperties.SwarmController(
-                rabbit,
-                new WorkerControlPlaneProperties.SwarmController.Metrics(pushgateway));
+            new WorkerControlPlaneProperties.SwarmController(rabbit);
 
         return new WorkerControlPlaneProperties(
             true,

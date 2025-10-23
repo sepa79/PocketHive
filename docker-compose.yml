@@ -1,3 +1,4 @@
+# defaulted in orchestrator, bees need it to start properly if launched directly
 x-metrics-env: &metrics-env
   MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_BASE_URL: http://pushgateway:9091
   MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_ENABLED: "true"
@@ -5,6 +6,7 @@ x-metrics-env: &metrics-env
   MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_PUSH_RATE: 10s
   MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_SHUTDOWN_OPERATION: DELETE
   MANAGEMENT_METRICS_TAGS_SWARM: swarm1
+
 services:
   rabbitmq:
     build:
@@ -28,6 +30,11 @@ services:
       dockerfile: orchestrator-service/Dockerfile
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+# all defaulted in application.yml, uncomment to override here
+#    environment:
+#      <<: *metrics-env
+#      POCKETHIVE_CONTROL_PLANE_EXCHANGE: ph.control
+#      POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE: ph.control
     depends_on:
       rabbitmq:
         condition: service_healthy

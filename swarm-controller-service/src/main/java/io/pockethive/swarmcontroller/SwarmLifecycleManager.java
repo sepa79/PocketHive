@@ -11,6 +11,7 @@ import io.pockethive.swarm.model.Work;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.controlplane.ControlPlaneSignals;
 import io.pockethive.controlplane.spring.ControlPlaneContainerEnvironmentFactory;
+import io.pockethive.controlplane.spring.ControlPlaneContainerEnvironmentFactory.PushgatewaySettings;
 import io.pockethive.controlplane.spring.ControlPlaneContainerEnvironmentFactory.WorkerSettings;
 import io.pockethive.swarmcontroller.config.SwarmControllerProperties;
 import org.slf4j.Logger;
@@ -127,6 +128,13 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
     Objects.requireNonNull(properties, "properties");
     SwarmControllerProperties.Traffic traffic = properties.getTraffic();
     SwarmControllerProperties.Pushgateway pushgateway = properties.getMetrics().pushgateway();
+    PushgatewaySettings metrics = new PushgatewaySettings(
+        pushgateway.enabled(),
+        pushgateway.baseUrl(),
+        pushgateway.pushRate(),
+        pushgateway.shutdownOperation(),
+        pushgateway.job(),
+        pushgateway.groupingKey().instance());
     return new WorkerSettings(
         properties.getSwarmId(),
         properties.getControlExchange(),
@@ -135,10 +143,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
         traffic.hiveExchange(),
         properties.getRabbit().logsExchange(),
         properties.getRabbit().logging().enabled(),
-        pushgateway.enabled(),
-        pushgateway.baseUrl(),
-        pushgateway.pushRate(),
-        pushgateway.shutdownOperation());
+        metrics);
   }
 
   /**

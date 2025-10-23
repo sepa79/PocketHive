@@ -3,7 +3,6 @@ package io.pockethive.controlplane.spring;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import java.time.Duration;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 
@@ -52,16 +51,8 @@ class WorkerControlPlanePropertiesTest {
             new WorkerControlPlaneProperties.SwarmController.Rabbit.Logging(false);
         WorkerControlPlaneProperties.SwarmController.Rabbit rabbit =
             new WorkerControlPlaneProperties.SwarmController.Rabbit("ph.logs", logging);
-        WorkerControlPlaneProperties.SwarmController.Metrics.Pushgateway pushgateway =
-            new WorkerControlPlaneProperties.SwarmController.Metrics.Pushgateway(
-                false,
-                "http://push:9091",
-                Duration.ofMinutes(1),
-                "DELETE");
         WorkerControlPlaneProperties.SwarmController swarmController =
-            new WorkerControlPlaneProperties.SwarmController(
-                rabbit,
-                new WorkerControlPlaneProperties.SwarmController.Metrics(pushgateway));
+            new WorkerControlPlaneProperties.SwarmController(rabbit);
         return new WorkerControlPlaneProperties(
             true,
             true,
