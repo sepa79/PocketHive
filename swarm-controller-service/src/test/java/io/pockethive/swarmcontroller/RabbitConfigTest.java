@@ -4,7 +4,7 @@ import static io.pockethive.swarmcontroller.SwarmControllerTestProperties.CONTRO
 import static io.pockethive.swarmcontroller.SwarmControllerTestProperties.CONTROL_QUEUE_PREFIX_BASE;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import io.pockethive.controlplane.spring.BeeIdentityProperties;
+import io.pockethive.controlplane.spring.ControlPlaneProperties;
 import io.pockethive.swarmcontroller.config.SwarmControllerProperties;
 import org.junit.jupiter.api.Test;
 
@@ -29,16 +29,16 @@ class RabbitConfigTest {
 
   @Test
   void instanceIdReturnsConfiguredBeeName() {
-    BeeIdentityProperties beeIdentityProperties = new BeeIdentityProperties();
-    beeIdentityProperties.setInstanceId("test-swarm-controller-bee");
-    assertThat(config.instanceId(beeIdentityProperties)).isEqualTo("test-swarm-controller-bee");
+    ControlPlaneProperties controlPlaneProperties = new ControlPlaneProperties();
+    controlPlaneProperties.setInstanceId("test-swarm-controller-bee");
+    assertThat(config.instanceId(controlPlaneProperties)).isEqualTo("test-swarm-controller-bee");
   }
 
   @Test
   void instanceIdFailsWhenBeeNameMissing() {
-    BeeIdentityProperties beeIdentityProperties = new BeeIdentityProperties();
-    assertThatThrownBy(() -> config.instanceId(beeIdentityProperties))
-        .isInstanceOf(IllegalStateException.class)
-        .hasMessageContaining(BeeIdentityProperties.INSTANCE_ID_PROPERTY);
+    ControlPlaneProperties controlPlaneProperties = new ControlPlaneProperties();
+    assertThatThrownBy(() -> controlPlaneProperties.setInstanceId("   "))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("pockethive.control-plane.instance-id");
   }
 }

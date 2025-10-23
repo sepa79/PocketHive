@@ -1,7 +1,7 @@
 package io.pockethive.swarmcontroller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.pockethive.controlplane.spring.BeeIdentityProperties;
+import io.pockethive.controlplane.spring.ControlPlaneProperties;
 import io.pockethive.swarmcontroller.config.SwarmControllerProperties;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
@@ -21,8 +21,8 @@ public class RabbitConfig {
   }
 
   @Bean
-  public String instanceId(BeeIdentityProperties beeIdentityProperties) {
-    return beeIdentityProperties.beeName();
+  public String instanceId(ControlPlaneProperties controlPlaneProperties) {
+    return controlPlaneProperties.getInstanceId();
   }
 
   @Bean(name = "swarmControllerControlQueueName")
