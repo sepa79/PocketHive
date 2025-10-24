@@ -72,14 +72,14 @@ class SwarmLifecycleManagerTest {
   void startDeclaresQueuesStopLeavesResourcesRemoveCleansUp() throws Exception {
     SwarmLifecycleManager manager = newManager();
     SwarmPlan plan = new SwarmPlan("swarm", List.of(
-        new Bee("gen", "img1", new Work("qin", "qout"),
-            Map.of("POCKETHIVE_CONTROL_PLANE_QUEUES_MODERATOR", "${in}", "POCKETHIVE_CONTROL_PLANE_QUEUES_GENERATOR", "${out}"))));
+        new Bee("generator", "img1", new Work("qin", "qout"), null)
+    ));
     when(docker.createContainer(eq("img1"), anyMap(), anyString())).thenReturn("c1");
     when(docker.resolveControlNetwork()).thenReturn("ctrl-net");
 
     manager.start(mapper.writeValueAsString(plan));
-    manager.updateHeartbeat("gen", "g1");
-    manager.markReady("gen", "g1");
+    manager.updateHeartbeat("generator", "g1");
+    manager.markReady("generator", "g1");
 
     verify(amqp).declareExchange(argThat((TopicExchange e) -> e.getName().equals(HIVE_EXCHANGE)));
     verify(amqp).declareQueue(argThat((Queue q) -> q.getName().equals(queue("qin"))));
@@ -112,8 +112,8 @@ class SwarmLifecycleManagerTest {
     assertEquals(LOGS_EXCHANGE, env.get("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGS_EXCHANGE"));
     assertEquals("true", env.get("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGGING_ENABLED"));
     assertEquals("ctrl-net", env.get("CONTROL_NETWORK"));
-    assertEquals(queue("qin"), env.get("POCKETHIVE_CONTROL_PLANE_QUEUES_MODERATOR"));
     assertEquals(queue("qout"), env.get("POCKETHIVE_CONTROL_PLANE_QUEUES_GENERATOR"));
+    assertThat(env).doesNotContainKey("POCKETHIVE_CONTROL_PLANE_QUEUES_MODERATOR");
     assertEquals(CONTROL_QUEUE_PREFIX_BASE, env.get("POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE_PREFIX"));
     assertEquals(assignedName, env.get("POCKETHIVE_CONTROL_PLANE_INSTANCE_ID"));
     assertEquals(assignedName, env.get("POCKETHIVE_CONTROL_PLANE_INSTANCE_ID"));
