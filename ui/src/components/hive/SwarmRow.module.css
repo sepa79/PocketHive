@@ -1,0 +1,85 @@
+.row {
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 0.5rem;
+  padding: 0.5rem;
+  background-color: transparent;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.left {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.chevronButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  transition: transform 0.2s ease-in-out;
+}
+
+.chevronIcon {
+  display: inline-block;
+  transform: rotate(-90deg);
+  transition: transform 0.2s ease-in-out;
+}
+
+.expanded .chevronIcon {
+  transform: rotate(0deg);
+}
+
+.swarmName {
+  font-weight: 500;
+  cursor: pointer;
+  color: #fff;
+  background: transparent;
+  border: none;
+  padding: 0;
+}
+
+.swarmName:disabled,
+.swarmName[aria-disabled='true'] {
+  cursor: default;
+  opacity: 0.7;
+}
+
+.removeButton {
+  font-size: 0.75rem;
+  color: rgb(252, 165, 165);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+
+.removeButton:hover {
+  color: rgb(254, 202, 202);
+}
+
+.content {
+  margin-top: 0.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.dropdown {
+  padding: 0.5rem;
+  border: 1px dashed rgba(255, 255, 255, 0.2);
+  border-radius: 0.375rem;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.875rem;
+}

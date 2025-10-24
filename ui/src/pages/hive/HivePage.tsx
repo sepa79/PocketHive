@@ -12,6 +12,7 @@ import {
 import type { Component } from '../../types/hive'
 import OrchestratorPanel from './OrchestratorPanel'
 import { fetchWiremockComponent } from '../../lib/wiremockClient'
+import SwarmRow from '../../components/hive/SwarmRow'
 
 export default function HivePage() {
   const [components, setComponents] = useState<Component[]>([])
@@ -20,6 +21,7 @@ export default function HivePage() {
   const [showCreate, setShowCreate] = useState(false)
   const [activeSwarm, setActiveSwarm] = useState<string | null>(null)
   const [swarmPendingRemoval, setSwarmPendingRemoval] = useState<string | null>(null)
+  const [expandedSwarmId, setExpandedSwarmId] = useState<string | null>(null)
 
   useEffect(() => {
     // We rely on the control-plane event stream (`ev.status-*`) to keep the
@@ -139,38 +141,32 @@ export default function HivePage() {
               .sort(([a], [b]) => a.localeCompare(b))
               .filter(([id]) => !activeSwarm || id === activeSwarm)
               .map(([id, comps]) => {
+                const normalizedId = id === 'default' ? 'default' : id
                 return (
-                  <div
+                  <SwarmRow
                     key={id}
-                    className="border border-white/20 rounded p-2"
-                    data-testid={`swarm-group-${id}`}
+                    swarmId={id}
+                    isDefault={id === 'default'}
+                    isActive={activeSwarm === normalizedId}
+                    expanded={expandedSwarmId === id}
+                    onActivate={(swarm) =>
+                      !activeSwarm &&
+                      setActiveSwarm(swarm === 'default' ? 'default' : swarm)
+                    }
+                    onRemove={(swarm) => setSwarmPendingRemoval(swarm)}
+                    onToggleExpand={(swarm) =>
+                      setExpandedSwarmId((current) =>
+                        current === swarm ? null : swarm,
+                      )
+                    }
+                    dataTestId={`swarm-group-${id}`}
                   >
-                    <div className="flex items-center mb-1 justify-between gap-2">
-                      <div
-                        className="font-medium cursor-pointer"
-                        onClick={() =>
-                          !activeSwarm &&
-                          setActiveSwarm(id === 'default' ? 'default' : id)
-                        }
-                      >
-                        {id}
-                      </div>
-                      {id !== 'default' && (
-                        <button
-                          type="button"
-                          className="text-xs text-red-300 hover:text-red-200"
-                          onClick={() => setSwarmPendingRemoval(id)}
-                        >
-                          Remove swarm
-                        </button>
-                      )}
-                    </div>
                     <ComponentList
                       components={comps}
                       onSelect={(c) => setSelected(c)}
                       selectedId={selected?.id}
                     />
-                  </div>
+                  </SwarmRow>
                 )
               })}
           </div>
