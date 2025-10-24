@@ -44,12 +44,14 @@ Client sends **`idempotencyKey`** (UUID v4) per new action (reuse on retry). Ser
 }
 ```
 
-**Response (409)** — when a swarm with `{swarmId}` already exists.
+**Response (409)** — when a swarm with `{swarmId}` already exists and the `idempotencyKey` is new.
 ```json
 {
   "message": "Swarm '<swarmId>' already exists"
 }
 ```
+
+> Retries that reuse the original `idempotencyKey` continue to return the 202 response with the stored correlation id even after the swarm has been provisioned.
 
 ## 3.1 Start swarm
 `POST /api/swarms/{swarmId}/start`
