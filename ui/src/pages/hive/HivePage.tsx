@@ -3,7 +3,6 @@ import ComponentList from './ComponentList'
 import ComponentDetail from './ComponentDetail'
 import TopologyView from './TopologyView'
 import SwarmCreateModal from './SwarmCreateModal'
-import SwarmRemoveModal from './SwarmRemoveModal'
 import {
   subscribeComponents,
   upsertSyntheticComponent,
@@ -20,7 +19,6 @@ export default function HivePage() {
   const [search, setSearch] = useState('')
   const [showCreate, setShowCreate] = useState(false)
   const [activeSwarm, setActiveSwarm] = useState<string | null>(null)
-  const [swarmPendingRemoval, setSwarmPendingRemoval] = useState<string | null>(null)
   const [expandedSwarmId, setExpandedSwarmId] = useState<string | null>(null)
 
   useEffect(() => {
@@ -153,7 +151,16 @@ export default function HivePage() {
                       !activeSwarm &&
                       setActiveSwarm(swarm === 'default' ? 'default' : swarm)
                     }
-                    onRemove={(swarm) => setSwarmPendingRemoval(swarm)}
+                    onRemove={(swarm) => {
+                      setExpandedSwarmId((current) =>
+                        current === swarm ? null : current,
+                      )
+                      setActiveSwarm((current) =>
+                        current === (swarm === 'default' ? 'default' : swarm)
+                          ? null
+                          : current,
+                      )
+                    }}
                     onToggleExpand={(swarm) =>
                       setExpandedSwarmId((current) =>
                         current === swarm ? null : swarm,
@@ -192,19 +199,6 @@ export default function HivePage() {
         )}
       </div>
       {showCreate && <SwarmCreateModal onClose={() => setShowCreate(false)} />}
-      {swarmPendingRemoval && (
-        <SwarmRemoveModal
-          swarmId={swarmPendingRemoval}
-          onClose={() => setSwarmPendingRemoval(null)}
-          onRemoved={() => {
-            const removed = swarmPendingRemoval
-            setSwarmPendingRemoval(null)
-            if (removed) {
-              setActiveSwarm((current) => (current === removed ? null : current))
-            }
-          }}
-        />
-      )}
     </div>
   )
 }
