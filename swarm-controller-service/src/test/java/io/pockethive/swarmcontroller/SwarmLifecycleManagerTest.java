@@ -160,8 +160,8 @@ class SwarmLifecycleManagerTest {
   void handlesMultipleBeesSharingRole() throws Exception {
     SwarmLifecycleManager manager = newManager();
     SwarmPlan plan = new SwarmPlan("swarm", List.of(
-        new Bee("gen", "img1", null, null),
-        new Bee("gen", "img2", null, null)));
+        new Bee("gen", "img1", new Work(null, null), null),
+        new Bee("gen", "img2", new Work(null, null), null)));
     when(docker.createContainer(eq("img1"), anyMap(), anyString())).thenReturn("c1");
     when(docker.createContainer(eq("img2"), anyMap(), anyString())).thenReturn("c2");
 
@@ -243,7 +243,7 @@ class SwarmLifecycleManagerTest {
     rabbitProperties.setPort(5672);
     SwarmLifecycleManager manager = new SwarmLifecycleManager(
         amqp, mapper, docker, rabbit, rabbitProperties, "inst", properties);
-    SwarmPlan plan = new SwarmPlan("swarm", List.of(new Bee("gen", "img1", null, null)));
+    SwarmPlan plan = new SwarmPlan("swarm", List.of(new Bee("gen", "img1", new Work(null, null), null)));
 
     assertThatThrownBy(() -> manager.prepare(mapper.writeValueAsString(plan)))
         .isInstanceOf(IllegalStateException.class)
@@ -287,7 +287,7 @@ class SwarmLifecycleManagerTest {
   @Test
   void startSendsConfigUpdatesWithoutRestartingContainers() throws Exception {
     SwarmLifecycleManager manager = newManager();
-    SwarmPlan plan = new SwarmPlan("swarm", List.of(new Bee("gen", "img1", null, null)));
+    SwarmPlan plan = new SwarmPlan("swarm", List.of(new Bee("gen", "img1", new Work(null, null), null)));
     when(docker.createContainer(eq("img1"), anyMap(), anyString())).thenReturn("c1");
 
     manager.prepare(mapper.writeValueAsString(plan));
@@ -312,8 +312,8 @@ class SwarmLifecycleManagerTest {
   void setSwarmEnabledDisablesWorkloadsAndUpdatesStatus() throws Exception {
     SwarmLifecycleManager manager = newManager();
     SwarmPlan plan = new SwarmPlan("swarm", List.of(
-        new Bee("gen", "img1", null, null),
-        new Bee("proc", "img2", null, null)));
+        new Bee("gen", "img1", new Work(null, null), null),
+        new Bee("proc", "img2", new Work(null, null), null)));
     when(docker.createContainer(eq("img1"), anyMap(), anyString())).thenReturn("c1");
     when(docker.createContainer(eq("img2"), anyMap(), anyString())).thenReturn("c2");
 
@@ -429,7 +429,7 @@ class SwarmLifecycleManagerTest {
   @Test
   void staleHeartbeatRequestsStatus() throws Exception {
     SwarmLifecycleManager manager = newManager();
-    SwarmPlan plan = new SwarmPlan("swarm", List.of(new Bee("gen", "img", null, null)));
+    SwarmPlan plan = new SwarmPlan("swarm", List.of(new Bee("gen", "img", new Work(null, null), null)));
     manager.prepare(mapper.writeValueAsString(plan));
     manager.updateHeartbeat("gen", "g1");
     manager.markReady("gen", "g1");
@@ -457,7 +457,7 @@ class SwarmLifecycleManagerTest {
   @Test
   void readyForWorkRequiresAllExpectedWorkers() throws Exception {
     SwarmLifecycleManager manager = newManager();
-    SwarmPlan plan = new SwarmPlan("swarm", List.of(new Bee("gen", "img", null, null)));
+    SwarmPlan plan = new SwarmPlan("swarm", List.of(new Bee("gen", "img", new Work(null, null), null)));
 
     manager.prepare(mapper.writeValueAsString(plan));
 
@@ -473,7 +473,7 @@ class SwarmLifecycleManagerTest {
   @Test
   void statusEmissionsLogAtDebug(CapturedOutput output) throws Exception {
     SwarmLifecycleManager manager = newManager();
-    SwarmPlan plan = new SwarmPlan("swarm", List.of(new Bee("gen", "img", null, null)));
+    SwarmPlan plan = new SwarmPlan("swarm", List.of(new Bee("gen", "img", new Work(null, null), null)));
     when(docker.createContainer(eq("img"), anyMap(), anyString())).thenReturn("c1");
 
     manager.prepare(mapper.writeValueAsString(plan));
