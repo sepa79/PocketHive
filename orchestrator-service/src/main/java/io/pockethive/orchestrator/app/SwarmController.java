@@ -20,14 +20,16 @@ import io.pockethive.controlplane.spring.ControlPlaneProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.core.AmqpTemplate;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
-import java.util.UUID;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.UUID;
 
 import io.pockethive.util.BeeNameGenerator;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
@@ -92,11 +94,31 @@ public class SwarmController {
      * returned so callers can poll RabbitMQ for confirmation events.
      */
     @PostMapping("/{swarmId}/create")
-    public ResponseEntity<ControlResponse> create(@PathVariable String swarmId, @RequestBody SwarmCreateRequest req) {
+    public ResponseEntity<?> create(@PathVariable String swarmId, @RequestBody SwarmCreateRequest req) {
         String path = "/api/swarms/" + swarmId + "/create";
         logRestRequest("POST", path, req);
         Duration timeout = Duration.ofMillis(120_000L);
-        ResponseEntity<ControlResponse> response = idempotentSend("swarm-create", swarmId, req.idempotencyKey(), timeout.toMillis(), corr -> {
+        ResponseEntity<?> response;
+        Optional<String> existingCorrelation = idempotency.findCorrelation(swarmId, "swarm-create", req.idempotencyKey());
+        if (existingCorrelation.isPresent()) {
+            String correlation = existingCorrelation.get();
+            ControlResponse existing = new ControlResponse(correlation, req.idempotencyKey(),
+                watchFor("swarm-create", swarmId), timeout.toMillis());
+            log.info("[CTRL] reuse signal={} swarm={} correlation={} idempotencyKey={}",
+                "swarm-create", swarmId, correlation, req.idempotencyKey());
+            response = ResponseEntity.accepted().body(existing);
+            logRestResponse("POST", path, response);
+            return response;
+        }
+
+        if (registry.find(swarmId).isPresent()) {
+            response = ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(new ErrorResponse("Swarm '%s' already exists".formatted(swarmId)));
+            logRestResponse("POST", path, response);
+            return response;
+        }
+
+        response = idempotentSend("swarm-create", swarmId, req.idempotencyKey(), timeout.toMillis(), corr -> {
             String templateId = req.templateId();
             SwarmTemplate template = fetchTemplate(templateId);
             String image = requireImage(template, templateId);
@@ -277,6 +299,8 @@ public class SwarmController {
     }
 
     public record ControlRequest(String idempotencyKey, String notes) {}
+
+    private record ErrorResponse(String message) {}
 
     /**
      * GET {@code /api/swarms/{swarmId}} — fetch a snapshot of swarm state for dashboards.

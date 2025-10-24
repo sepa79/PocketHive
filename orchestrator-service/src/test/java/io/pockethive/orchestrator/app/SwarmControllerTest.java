@@ -17,6 +17,7 @@ import io.pockethive.control.ControlSignal;
 import io.pockethive.controlplane.ControlPlaneSignals;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.controlplane.spring.ControlPlaneProperties;
+import io.pockethive.orchestrator.domain.IdempotencyStore;
 import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmCreateRequest;
 import io.pockethive.orchestrator.domain.SwarmCreateTracker;
@@ -37,6 +38,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.amqp.core.AmqpTemplate;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
@@ -191,15 +193,67 @@ class SwarmControllerTest {
         verifyNoInteractions(lifecycle);
     }
 
+    @Test
+    void createRejectsDuplicateSwarm() throws Exception {
+        SwarmRegistry registry = new SwarmRegistry();
+        registry.register(new Swarm("sw1", "inst", "c"));
+        SwarmController ctrl = controller(new SwarmCreateTracker(), registry, new SwarmPlanRegistry());
+
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(ctrl)
+            .setMessageConverters(new MappingJackson2HttpMessageConverter(mapper))
+            .build();
+
+        mvc.perform(post("/api/swarms/sw1/create")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"templateId\":\"tpl-1\",\"idempotencyKey\":\"idem\"}"))
+            .andExpect(status().isConflict())
+            .andExpect(result -> assertThat(result.getResponse().getContentAsString())
+                .contains("already exists"));
+
+        verifyNoInteractions(lifecycle);
+        verifyNoInteractions(scenarioClient);
+    }
+
+    @Test
+    void createReturnsExistingCorrelationWhenSwarmAlreadyExists() {
+        SwarmRegistry registry = new SwarmRegistry();
+        registry.register(new Swarm("sw1", "inst", "c"));
+        InMemoryIdempotencyStore store = new InMemoryIdempotencyStore();
+        store.record("sw1", "swarm-create", "idem", "corr-123");
+        SwarmController ctrl = controller(new SwarmCreateTracker(), registry, new SwarmPlanRegistry(), store);
+        SwarmCreateRequest req = new SwarmCreateRequest("tpl-1", "idem", null);
+
+        ResponseEntity<?> response = ctrl.create("sw1", req);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.ACCEPTED);
+        assertThat(response.getBody()).isInstanceOf(ControlResponse.class);
+        ControlResponse body = (ControlResponse) response.getBody();
+        assertThat(body.correlationId()).isEqualTo("corr-123");
+        assertThat(body.idempotencyKey()).isEqualTo("idem");
+        assertThat(body.watch().successTopic()).isEqualTo(
+            ControlPlaneRouting.event("ready.swarm-create",
+                new ConfirmationScope("sw1", "orchestrator", "ALL")));
+        verifyNoInteractions(lifecycle);
+        verifyNoInteractions(scenarioClient);
+    }
+
     private SwarmController controller(
         SwarmCreateTracker tracker,
         SwarmRegistry registry,
         SwarmPlanRegistry plans) {
+        return controller(tracker, registry, plans, new InMemoryIdempotencyStore());
+    }
+
+    private SwarmController controller(
+        SwarmCreateTracker tracker,
+        SwarmRegistry registry,
+        SwarmPlanRegistry plans,
+        IdempotencyStore store) {
         return new SwarmController(
             rabbit,
             lifecycle,
             tracker,
-            new InMemoryIdempotencyStore(),
+            store,
             registry,
             mapper,
             scenarioClient,
