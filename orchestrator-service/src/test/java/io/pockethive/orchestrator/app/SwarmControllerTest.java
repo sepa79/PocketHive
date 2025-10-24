@@ -191,6 +191,27 @@ class SwarmControllerTest {
         verifyNoInteractions(lifecycle);
     }
 
+    @Test
+    void createRejectsDuplicateSwarm() throws Exception {
+        SwarmRegistry registry = new SwarmRegistry();
+        registry.register(new Swarm("sw1", "inst", "c"));
+        SwarmController ctrl = controller(new SwarmCreateTracker(), registry, new SwarmPlanRegistry());
+
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(ctrl)
+            .setMessageConverters(new MappingJackson2HttpMessageConverter(mapper))
+            .build();
+
+        mvc.perform(post("/api/swarms/sw1/create")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"templateId\":\"tpl-1\",\"idempotencyKey\":\"idem\"}"))
+            .andExpect(status().isConflict())
+            .andExpect(result -> assertThat(result.getResponse().getContentAsString())
+                .contains("already exists"));
+
+        verifyNoInteractions(lifecycle);
+        verifyNoInteractions(scenarioClient);
+    }
+
     private SwarmController controller(
         SwarmCreateTracker tracker,
         SwarmRegistry registry,

@@ -20,6 +20,7 @@ import io.pockethive.controlplane.spring.ControlPlaneProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.core.AmqpTemplate;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -92,9 +93,15 @@ public class SwarmController {
      * returned so callers can poll RabbitMQ for confirmation events.
      */
     @PostMapping("/{swarmId}/create")
-    public ResponseEntity<ControlResponse> create(@PathVariable String swarmId, @RequestBody SwarmCreateRequest req) {
+    public ResponseEntity<?> create(@PathVariable String swarmId, @RequestBody SwarmCreateRequest req) {
         String path = "/api/swarms/" + swarmId + "/create";
         logRestRequest("POST", path, req);
+        if (registry.find(swarmId).isPresent()) {
+            ResponseEntity<ErrorResponse> conflict = ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(new ErrorResponse("Swarm '%s' already exists".formatted(swarmId)));
+            logRestResponse("POST", path, conflict);
+            return conflict;
+        }
         Duration timeout = Duration.ofMillis(120_000L);
         ResponseEntity<ControlResponse> response = idempotentSend("swarm-create", swarmId, req.idempotencyKey(), timeout.toMillis(), corr -> {
             String templateId = req.templateId();
@@ -277,6 +284,8 @@ public class SwarmController {
     }
 
     public record ControlRequest(String idempotencyKey, String notes) {}
+
+    private record ErrorResponse(String message) {}
 
     /**
      * GET {@code /api/swarms/{swarmId}} — fetch a snapshot of swarm state for dashboards.
