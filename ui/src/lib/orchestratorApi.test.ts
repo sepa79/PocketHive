@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, type Mock } from 'vitest'
+import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest'
 import type { Component } from '../types/hive'
 import {
   createSwarm,
@@ -17,6 +17,11 @@ vi.mock('./api', () => ({
 const { apiFetch } = await import('./api')
 
 describe('orchestratorApi', () => {
+  beforeEach(() => {
+    ;(apiFetch as unknown as Mock).mockClear()
+    ;(apiFetch as unknown as Mock).mockResolvedValue({ ok: true })
+  })
+
   it('posts swarm creation', async () => {
     await createSwarm('sw1', 'tpl')
     expect((apiFetch as unknown as Mock).mock.calls[0][0]).toBe('/orchestrator/swarms/sw1/create')
@@ -52,6 +57,26 @@ describe('orchestratorApi', () => {
     const body = JSON.parse(call[1]?.body as string)
     expect(typeof body.idempotencyKey).toBe('string')
     expect(body.idempotencyKey.length).toBeGreaterThan(0)
+  })
+
+  it('throws when swarm command fails', async () => {
+    ;(apiFetch as unknown as Mock).mockResolvedValueOnce({
+      ok: false,
+      text: async () => JSON.stringify({ message: 'boom' }),
+    })
+    await expect(startSwarm('sw1')).rejects.toThrow('boom')
+
+    ;(apiFetch as unknown as Mock).mockResolvedValueOnce({
+      ok: false,
+      text: async () => 'nope',
+    })
+    await expect(stopSwarm('sw1')).rejects.toThrow('nope')
+
+    ;(apiFetch as unknown as Mock).mockResolvedValueOnce({
+      ok: false,
+      text: async () => '',
+    })
+    await expect(removeSwarm('sw1')).rejects.toThrow('Failed to remove swarm')
   })
 
   it('posts swarm manager toggles with command target', async () => {

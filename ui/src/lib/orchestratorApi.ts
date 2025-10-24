@@ -9,6 +9,32 @@ interface SwarmManagersTogglePayload {
 
 type ApiError = Error & { status?: number }
 
+async function ensureOk(response: Response, fallback: string) {
+  if (response.ok) return
+  let message = ''
+  try {
+    const text = await response.text()
+    if (text) {
+      try {
+        const data = JSON.parse(text) as { message?: unknown }
+        if (data && typeof data === 'object' && typeof data.message === 'string') {
+          message = data.message
+        } else if (!message) {
+          message = text
+        }
+      } catch {
+        message = text
+      }
+    }
+  } catch {
+    // ignore body parsing errors
+  }
+
+  const error: ApiError = new Error(message || fallback)
+  error.status = response.status
+  throw error
+}
+
 export async function createSwarm(id: string, templateId: string) {
   const payload: Record<string, unknown> = {
     templateId,
@@ -52,29 +78,32 @@ export async function createSwarm(id: string, templateId: string) {
 
 export async function startSwarm(id: string) {
   const body = JSON.stringify({ idempotencyKey: crypto.randomUUID() })
-  await apiFetch(`/orchestrator/swarms/${id}/start`, {
+  const response = await apiFetch(`/orchestrator/swarms/${id}/start`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body,
   })
+  await ensureOk(response, 'Failed to start swarm')
 }
 
 export async function stopSwarm(id: string) {
   const body = JSON.stringify({ idempotencyKey: crypto.randomUUID() })
-  await apiFetch(`/orchestrator/swarms/${id}/stop`, {
+  const response = await apiFetch(`/orchestrator/swarms/${id}/stop`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body,
   })
+  await ensureOk(response, 'Failed to stop swarm')
 }
 
 export async function removeSwarm(id: string) {
   const body = JSON.stringify({ idempotencyKey: crypto.randomUUID() })
-  await apiFetch(`/orchestrator/swarms/${id}/remove`, {
+  const response = await apiFetch(`/orchestrator/swarms/${id}/remove`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body,
   })
+  await ensureOk(response, 'Failed to remove swarm')
 }
 
 async function setSwarmManagersEnabled(enabled: boolean) {

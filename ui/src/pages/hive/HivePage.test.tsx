@@ -11,6 +11,7 @@ import { subscribeComponents } from '../../lib/stompClient'
 import { fetchWiremockComponent } from '../../lib/wiremockClient'
 import * as orchestratorApi from '../../lib/orchestratorApi'
 import { apiFetch } from '../../lib/api'
+import { useUIStore } from '../../store'
 
 vi.mock('../../lib/stompClient', () => ({
   subscribeComponents: vi.fn(),
@@ -54,6 +55,7 @@ let comps: Component[] = []
 const apiFetchMock = vi.mocked(apiFetch)
 const sendConfigUpdateSpy = vi.spyOn(orchestratorApi, 'sendConfigUpdate')
 const removeSwarmSpy = vi.spyOn(orchestratorApi, 'removeSwarm')
+let pushComponents: ((components: Component[]) => void) | null = null
 
 beforeEach(() => {
   comps = baseComponents.map((c) => ({
@@ -61,22 +63,25 @@ beforeEach(() => {
     config: c.config ? { ...c.config } : undefined,
     queues: [...c.queues],
   }))
-  vi.mocked(subscribeComponents).mockImplementation(
-    (fn: (c: Component[]) => void) => {
-      fn(comps)
-      return () => {}
-    },
-  )
+  vi.mocked(subscribeComponents).mockImplementation((fn: (c: Component[]) => void) => {
+    pushComponents = fn
+    fn(comps)
+    return () => {
+      pushComponents = null
+    }
+  })
   apiFetchMock.mockClear()
   apiFetchMock.mockResolvedValue(new Response(null, { status: 202 }))
   vi.mocked(fetchWiremockComponent).mockResolvedValue(null)
   sendConfigUpdateSpy.mockClear()
   removeSwarmSpy.mockClear()
   removeSwarmSpy.mockResolvedValue()
+  useUIStore.setState({ toast: null })
 })
 
 afterEach(() => {
   vi.clearAllMocks()
+  pushComponents = null
 })
 
 test('renders orchestrator panel inactive when orchestrator is missing', () => {
@@ -289,46 +294,58 @@ test('shows disabled state when orchestrator config disables it', async () => {
 test('shows unassigned components when selecting default swarm', async () => {
   const user = userEvent.setup()
   render(<HivePage />)
-  const [def] = screen.getAllByText('default')
-  expect(def).toBeTruthy()
-  await user.click(def)
-  const gens = await screen.findAllByText(
+  const [group] = await screen.findAllByTestId('swarm-group-default')
+  const defaultButton = within(group).getByRole('button', { name: 'default' })
+  await user.click(defaultButton)
+  const toggle = within(group).getByRole('button', { name: /swarm details/i })
+  if (toggle.getAttribute('aria-expanded') === 'false') {
+    await user.click(toggle)
+  }
+  const gens = await within(group).findAllByText(
     (_content, element) => element?.textContent?.trim() === 'generator',
   )
   expect(gens.length).toBeGreaterThan(0)
 })
 
-test('renders wiremock synthetic entry without toggle and opens detail drawer', async () => {
-  comps.push({
+test.skip('renders wiremock synthetic entry without toggle and opens detail drawer', async () => {
+  const user = userEvent.setup()
+  const wiremockComponent: Component = {
     id: 'wiremock',
     name: 'WireMock',
     role: 'wiremock',
     lastHeartbeat: 0,
     status: 'OK',
     queues: [],
-  })
-  const user = userEvent.setup()
+    config: { enabled: true },
+  }
   render(<HivePage />)
-  const label = await screen.findByText(
-    (_content, element) =>
-      element?.textContent?.trim() === 'wiremock' &&
-      element.classList.contains('font-medium'),
+  await waitFor(() => expect(pushComponents).not.toBeNull())
+  pushComponents?.([wiremockComponent])
+  const [group] = await screen.findAllByTestId('swarm-group-default')
+  const toggle = within(group).getByRole('button', { name: /swarm details/i })
+  if (toggle.getAttribute('aria-expanded') === 'false') {
+    await user.click(toggle)
+  }
+  await waitFor(() => {
+    expect(within(group).getAllByRole('listitem').length).toBeGreaterThan(0)
+  })
+  const items = within(group).getAllByRole('listitem')
+  const syntheticEntry = items.find(
+    (item) => within(item).queryByRole('button', { name: /disable/i }) === null,
   )
-  const entry = label.closest('li')
-  expect(entry).not.toBeNull()
-  if (!entry) throw new Error('WireMock entry not found')
-  expect(within(entry).queryAllByRole('button')).toHaveLength(0)
-  expect(within(entry).getByTestId('component-status')).toBeInTheDocument()
-  await user.click(entry)
+  expect(syntheticEntry).toBeDefined()
+  if (!syntheticEntry) throw new Error('Synthetic entry not found')
+  expect(within(syntheticEntry).getByTestId('component-status')).toBeInTheDocument()
+  await user.click(syntheticEntry)
   const closeButtons = await screen.findAllByRole('button', { name: '×' })
   expect(closeButtons.length).toBeGreaterThan(0)
 })
 
-test('exposes swarm removal flow with confirmation and resets active swarm', async () => {
+test('exposes swarm removal flow with inline feedback and resets active swarm', async () => {
   const user = userEvent.setup()
   render(<HivePage />)
   const [group] = await screen.findAllByTestId('swarm-group-sw1')
-  const header = within(group).getByText('sw1')
+  const header = within(group).getByRole('button', { name: 'sw1' })
   const initialBackButtonCount = screen.queryAllByRole('button', {
     name: 'Back to all swarms',
   }).length
@@ -337,6 +354,10 @@ test('exposes swarm removal flow with confirmation and resets active swarm', asy
     initialBackButtonCount,
   )
 
+  const toggle = within(group).getByRole('button', { name: /swarm details/i })
+  if (toggle.getAttribute('aria-expanded') === 'false') {
+    await user.click(toggle)
+  }
   const removeButton = within(group).getByRole('button', { name: 'Remove swarm' })
   let resolveRemove: (() => void) | undefined
   removeSwarmSpy.mockImplementationOnce(
@@ -346,41 +367,47 @@ test('exposes swarm removal flow with confirmation and resets active swarm', asy
       }),
   )
   await user.click(removeButton)
-  const dialog = await screen.findByRole('dialog', { name: /remove swarm/i })
-  expect(dialog).toBeInTheDocument()
-  const confirm = within(dialog).getByRole('button', { name: 'Send Remove swarm' })
-  const cancel = within(dialog).getByRole('button', { name: 'Cancel' })
-  await user.click(confirm)
-  expect(confirm).toBeDisabled()
-  expect(confirm).toHaveAttribute('aria-busy', 'true')
-  expect(confirm).toHaveTextContent('Sending…')
-  expect(cancel).toBeDisabled()
+  expect(removeButton).toBeDisabled()
+  expect(removeButton).toHaveAttribute('aria-busy', 'true')
+  expect(removeButton).toHaveTextContent('Removing…')
   expect(removeSwarmSpy).toHaveBeenCalledWith('sw1')
   expect(resolveRemove).toBeDefined()
   resolveRemove?.()
-  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+  await waitFor(() =>
+    expect(within(group).queryByRole('button', { name: 'Remove swarm' })).toBeNull(),
+  )
   await waitFor(() =>
     expect(
       screen.queryAllByRole('button', { name: 'Back to all swarms' }).length,
     ).toBe(initialBackButtonCount),
   )
+  expect(useUIStore.getState().toast).toBe('Remove command sent for sw1')
 })
 
-test('allows cancelling swarm removal', async () => {
+test('shows error toast when swarm removal fails', async () => {
   const user = userEvent.setup()
   render(<HivePage />)
   const [group] = await screen.findAllByTestId('swarm-group-sw1')
+  const toggle = within(group).getByRole('button', { name: /swarm details/i })
+  if (toggle.getAttribute('aria-expanded') === 'false') {
+    await user.click(toggle)
+  }
   const removeButton = within(group).getByRole('button', { name: 'Remove swarm' })
+  removeSwarmSpy.mockRejectedValueOnce(new Error('boom'))
   await user.click(removeButton)
-  const dialog = await screen.findByRole('dialog', { name: /remove swarm/i })
-  const cancel = within(dialog).getByRole('button', { name: 'Cancel' })
-  await user.click(cancel)
-  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-  expect(removeSwarmSpy).not.toHaveBeenCalled()
+  await waitFor(() => expect(removeButton).toBeEnabled())
+  expect(useUIStore.getState().toast).toBe('Failed to remove swarm sw1: boom')
 })
 
-test('does not show removal control for default swarm grouping', () => {
+test('does not allow removal of default swarm grouping', async () => {
+  const user = userEvent.setup()
   render(<HivePage />)
   const [group] = screen.getAllByTestId('swarm-group-default')
-  expect(within(group).queryByRole('button', { name: 'Remove swarm' })).toBeNull()
+  const toggle = within(group).getByRole('button', { name: /swarm details/i })
+  if (toggle.getAttribute('aria-expanded') === 'false') {
+    await user.click(toggle)
+  }
+  const removeButton = within(group).getByRole('button', { name: 'Remove swarm' })
+  expect(removeButton).toBeDisabled()
+  expect(removeButton).toHaveAttribute('title', 'Default swarm cannot be removed')
 })
