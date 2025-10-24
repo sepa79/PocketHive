@@ -365,12 +365,17 @@ describe('swarm lifecycle', () => {
 
     cb({
       headers: {
-        destination: '/exchange/ph.control/ev.ready.swarm-remove.client-alpha.swarm-controller.inst',
+        destination:
+          '/exchange/ph.control/ev.ready.swarm-remove.client-alpha.swarm-controller.client-alpha-marshal-bee-fuzzy-hum-5678',
       },
       body: JSON.stringify({
         result: 'success',
         signal: 'swarm-remove',
-        scope: { swarmId: 'client-alpha', role: 'swarm-controller', instance: 'inst' },
+        scope: {
+          swarmId: 'client-alpha',
+          role: 'swarm-controller',
+          instance: 'client-alpha-marshal-bee-fuzzy-hum-5678',
+        },
       }),
     })
 
@@ -387,6 +392,66 @@ describe('swarm lifecycle', () => {
       body: JSON.stringify({ signal: 'swarm-remove', scope: { swarmId: 'sw2' } }),
     })
 
+    setClient(null)
+  })
+
+  it('removes swarm controllers whose instance ids omit the bee suffix', () => {
+    const publish = vi.fn()
+    let cb: (msg: { body: string; headers: Record<string, string> }) => void = () => {}
+    const subscribe = vi
+      .fn()
+      .mockImplementation((_dest: string, fn: (msg: { body: string; headers: Record<string, string> }) => void) => {
+        cb = fn
+        return { unsubscribe() {} }
+      })
+    setClient({ active: true, publish, subscribe } as unknown as Client)
+
+    const updates: Component[][] = []
+    const unsubscribe = subscribeComponents((list) => {
+      updates.push(list.map((component) => ({ ...component })))
+    })
+
+    const statusHeaders = {
+      destination: '/exchange/ph.control/ev.status.swarm-client-beta',
+    }
+    const now = new Date().toISOString()
+
+    cb({
+      headers: statusHeaders,
+      body: JSON.stringify({
+        event: 'status',
+        kind: 'status',
+        version: '1',
+        role: 'swarm-controller',
+        instance: 'client-beta-swarm-controller-instance-01',
+        messageId: 'm-1',
+        timestamp: now,
+      }),
+    })
+
+    const beforeRemoval = updates.at(-1)
+    expect(beforeRemoval?.some((component) => component.swarmId === 'client-beta')).toBe(true)
+
+    cb({
+      headers: {
+        destination:
+          '/exchange/ph.control/ev.ready.swarm-remove.client-beta.swarm-controller.client-beta-swarm-controller-instance-01',
+      },
+      body: JSON.stringify({
+        result: 'success',
+        signal: 'swarm-remove',
+        scope: {
+          swarmId: 'client-beta',
+          role: 'swarm-controller',
+          instance: 'client-beta-swarm-controller-instance-01',
+        },
+      }),
+    })
+
+    const afterRemoval = updates.at(-1)
+    expect(afterRemoval?.some((component) => component.swarmId === 'client-beta')).toBe(false)
+
+    unsubscribe()
     setClient(null)
   })
 })

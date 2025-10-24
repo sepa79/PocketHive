@@ -53,14 +53,17 @@ function deriveSwarmId(instanceId: string | undefined, role?: string): string | 
   if (!trimmed) return undefined
   const normalizedRole = role?.trim().toLowerCase()
   const aliases = normalizedRole ? ROLE_ALIASES[normalizedRole] ?? [normalizedRole] : []
+  const lowered = trimmed.toLowerCase()
   for (const alias of aliases) {
-    const needle = `-${alias}-bee-`
-    const idx = trimmed.indexOf(needle)
-    if (idx > 0) {
-      return trimmed.slice(0, idx)
+    const needles = [`-${alias}-bee-`, `-${alias}-`, `-${alias}`]
+    for (const needle of needles) {
+      const idx = lowered.indexOf(needle)
+      if (idx > 0) {
+        return trimmed.slice(0, idx)
+      }
     }
   }
-  const beeIdx = trimmed.indexOf('-bee-')
+  const beeIdx = lowered.indexOf('-bee-')
   if (beeIdx > 0) {
     return trimmed.slice(0, beeIdx)
   }
@@ -127,10 +130,20 @@ function handleSwarmRemoveConfirmation(raw: unknown): boolean {
   if (!scope) return false
   const swarmId = getString(scope['swarmId'])
   if (!swarmId) return false
-  Object.entries(components).forEach(([key, comp]) => {
+  const instanceId = getString(scope['instance'])
+  const shouldRemove = (comp: Component) => {
+    if (instanceId && comp.id === instanceId) return true
     const componentSwarmId = comp.swarmId ?? deriveSwarmId(comp.id, comp.role)
-    if (componentSwarmId === swarmId) {
+    return componentSwarmId === swarmId
+  }
+  Object.entries(components).forEach(([key, comp]) => {
+    if (shouldRemove(comp)) {
       delete components[key]
+    }
+  })
+  Object.entries(syntheticComponents).forEach(([key, comp]) => {
+    if (shouldRemove(comp)) {
+      delete syntheticComponents[key]
     }
   })
   notifyComponentListeners()
