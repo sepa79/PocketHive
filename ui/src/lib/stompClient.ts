@@ -97,9 +97,41 @@ function handleSwarmRemoveConfirmation(raw: unknown): boolean {
       delete components[key]
     }
   })
+  Object.entries(syntheticComponents).forEach(([key, comp]) => {
+    if (comp.swarmId === swarmId) {
+      delete syntheticComponents[key]
+    }
+  })
   notifyComponentListeners()
   emitTopology()
   return true
+}
+
+function deriveSwarmId(instance: string, role?: string | null): string | undefined {
+  const trimmedInstance = instance.trim()
+  if (!trimmedInstance) return undefined
+  const normalizedRole = role?.trim().toLowerCase()
+  const parts = trimmedInstance.split('-').filter((segment) => segment.length > 0)
+  if (parts.length === 0) return undefined
+  if (!normalizedRole) {
+    return parts.length > 1 ? parts[0] : undefined
+  }
+  const roleParts = normalizedRole.split('-')
+  const startsWithRole = roleParts.length <= parts.length
+    ? parts.slice(0, roleParts.length).join('-').toLowerCase() === normalizedRole
+    : false
+  if (startsWithRole) {
+    const remainder = parts.slice(roleParts.length).join('-')
+    return remainder || undefined
+  }
+  const endsWithRole = roleParts.length <= parts.length
+    ? parts.slice(-roleParts.length).join('-').toLowerCase() === normalizedRole
+    : false
+  if (endsWithRole) {
+    const remainder = parts.slice(0, -roleParts.length).join('-')
+    return remainder || undefined
+  }
+  return parts.length > 1 ? parts[0] : undefined
 }
 
 function enrichQueue(queue: QueueInfo): QueueInfo {
@@ -238,7 +270,7 @@ export function setClient(newClient: Client | null, destination = controlDestina
         const evt = raw as ControlEvent
         const eventQueueStats = evt.queueStats
         const id = evt.instance
-        const swarmId = id.split('-')[0]
+        const swarmId = deriveSwarmId(id, evt.role) ?? components[id]?.swarmId
         const comp: Component = components[id] || {
           id,
           name: id,

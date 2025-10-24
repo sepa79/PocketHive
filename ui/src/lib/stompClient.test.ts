@@ -338,6 +338,19 @@ describe('swarm lifecycle', () => {
         event: 'status',
         kind: 'status',
         version: '1',
+        role: 'swarm-manager',
+        instance: 'swarm-manager-sw1',
+        messageId: 'm-1.5',
+        timestamp: now,
+      }),
+    })
+
+    cb({
+      headers: statusHeadersSw1,
+      body: JSON.stringify({
+        event: 'status',
+        kind: 'status',
+        version: '1',
         role: 'processor',
         instance: 'sw1-processor',
         messageId: 'm-2',
@@ -360,6 +373,17 @@ describe('swarm lifecycle', () => {
 
     const beforeRemoval = updates.at(-1)
     expect(beforeRemoval?.some((component) => component.swarmId === 'sw1')).toBe(true)
+    const swarmManager = beforeRemoval?.find((component) => component.id === 'swarm-manager-sw1')
+    expect(swarmManager?.swarmId).toBe('sw1')
+
+    upsertSyntheticComponent({
+      id: 'synthetic-sw1',
+      name: 'Synthetic',
+      role: 'synthetic',
+      lastHeartbeat: Date.now(),
+      queues: [],
+      swarmId: 'sw1',
+    })
 
     cb({
       headers: {
@@ -375,6 +399,7 @@ describe('swarm lifecycle', () => {
     const afterRemoval = updates.at(-1)
     expect(afterRemoval?.some((component) => component.swarmId === 'sw1')).toBe(false)
     expect(afterRemoval?.some((component) => component.swarmId === 'sw2')).toBe(true)
+    expect(afterRemoval?.some((component) => component.id === 'synthetic-sw1')).toBe(false)
 
     unsubscribe()
 
