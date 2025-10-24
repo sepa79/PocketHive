@@ -36,6 +36,41 @@ interface QueueMetrics {
 const queueMetrics: Record<string, QueueMetrics> = {}
 const nodePositions: Record<string, { x: number; y: number }> = {}
 
+const ROLE_ALIASES: Record<string, string[]> = {
+  generator: ['seeder', 'generator'],
+  moderator: ['guardian', 'moderator'],
+  processor: ['worker', 'processor'],
+  postprocessor: ['forager', 'postprocessor'],
+  trigger: ['buzzer', 'trigger'],
+  'log-aggregator': ['scribe', 'log-aggregator'],
+  'swarm-controller': ['marshal', 'swarm-controller'],
+  orchestrator: ['queen', 'orchestrator'],
+}
+
+function deriveSwarmId(instanceId: string | undefined, role?: string): string | undefined {
+  if (!instanceId) return undefined
+  const trimmed = instanceId.trim()
+  if (!trimmed) return undefined
+  const normalizedRole = role?.trim().toLowerCase()
+  const aliases = normalizedRole ? ROLE_ALIASES[normalizedRole] ?? [normalizedRole] : []
+  for (const alias of aliases) {
+    const needle = `-${alias}-bee-`
+    const idx = trimmed.indexOf(needle)
+    if (idx > 0) {
+      return trimmed.slice(0, idx)
+    }
+  }
+  const beeIdx = trimmed.indexOf('-bee-')
+  if (beeIdx > 0) {
+    return trimmed.slice(0, beeIdx)
+  }
+  const dashIdx = trimmed.indexOf('-')
+  if (dashIdx > 0) {
+    return trimmed.slice(0, dashIdx)
+  }
+  return trimmed
+}
+
 function getMergedComponents(): Record<string, Component> {
   const merged: Record<string, Component> = { ...components }
   Object.entries(syntheticComponents).forEach(([id, comp]) => {
@@ -93,7 +128,8 @@ function handleSwarmRemoveConfirmation(raw: unknown): boolean {
   const swarmId = getString(scope['swarmId'])
   if (!swarmId) return false
   Object.entries(components).forEach(([key, comp]) => {
-    if (comp.swarmId === swarmId) {
+    const componentSwarmId = comp.swarmId ?? deriveSwarmId(comp.id, comp.role)
+    if (componentSwarmId === swarmId) {
       delete components[key]
     }
   })
@@ -238,7 +274,7 @@ export function setClient(newClient: Client | null, destination = controlDestina
         const evt = raw as ControlEvent
         const eventQueueStats = evt.queueStats
         const id = evt.instance
-        const swarmId = id.split('-')[0]
+        const swarmId = deriveSwarmId(id, evt.role)
         const comp: Component = components[id] || {
           id,
           name: id,
@@ -249,7 +285,8 @@ export function setClient(newClient: Client | null, destination = controlDestina
         }
         comp.name = id
         comp.role = evt.role
-        comp.swarmId = swarmId
+        if (swarmId) comp.swarmId = swarmId
+        else delete comp.swarmId
         comp.version = evt.version
         comp.lastHeartbeat = new Date(evt.timestamp).getTime()
         comp.status = evt.kind

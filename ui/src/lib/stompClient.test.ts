@@ -315,31 +315,33 @@ describe('swarm lifecycle', () => {
       updates.push(list.map((component) => ({ ...component })))
     })
 
-    const statusHeadersSw1 = { destination: '/exchange/ph.control/ev.status.swarm-sw1' }
+    const statusHeadersClientAlpha = {
+      destination: '/exchange/ph.control/ev.status.swarm-client-alpha',
+    }
     const statusHeadersSw2 = { destination: '/exchange/ph.control/ev.status.swarm-sw2' }
     const now = new Date().toISOString()
 
     cb({
-      headers: statusHeadersSw1,
+      headers: statusHeadersClientAlpha,
       body: JSON.stringify({
         event: 'status',
         kind: 'status',
         version: '1',
-        role: 'generator',
-        instance: 'sw1-generator',
+        role: 'processor',
+        instance: 'client-alpha-worker-bee-sunny-gleam-1234',
         messageId: 'm-1',
         timestamp: now,
       }),
     })
 
     cb({
-      headers: statusHeadersSw1,
+      headers: statusHeadersClientAlpha,
       body: JSON.stringify({
         event: 'status',
         kind: 'status',
         version: '1',
-        role: 'processor',
-        instance: 'sw1-processor',
+        role: 'swarm-controller',
+        instance: 'client-alpha-marshal-bee-fuzzy-hum-5678',
         messageId: 'm-2',
         timestamp: now,
       }),
@@ -352,28 +354,28 @@ describe('swarm lifecycle', () => {
         kind: 'status',
         version: '1',
         role: 'processor',
-        instance: 'sw2-processor',
+        instance: 'sw2-worker-bee-zippy-glow-9012',
         messageId: 'm-3',
         timestamp: now,
       }),
     })
 
     const beforeRemoval = updates.at(-1)
-    expect(beforeRemoval?.some((component) => component.swarmId === 'sw1')).toBe(true)
+    expect(beforeRemoval?.some((component) => component.swarmId === 'client-alpha')).toBe(true)
 
     cb({
       headers: {
-        destination: '/exchange/ph.control/ev.ready.swarm-remove.sw1.swarm-controller.inst',
+        destination: '/exchange/ph.control/ev.ready.swarm-remove.client-alpha.swarm-controller.inst',
       },
       body: JSON.stringify({
         result: 'success',
         signal: 'swarm-remove',
-        scope: { swarmId: 'sw1', role: 'swarm-controller', instance: 'inst' },
+        scope: { swarmId: 'client-alpha', role: 'swarm-controller', instance: 'inst' },
       }),
     })
 
     const afterRemoval = updates.at(-1)
-    expect(afterRemoval?.some((component) => component.swarmId === 'sw1')).toBe(false)
+    expect(afterRemoval?.some((component) => component.swarmId === 'client-alpha')).toBe(false)
     expect(afterRemoval?.some((component) => component.swarmId === 'sw2')).toBe(true)
 
     unsubscribe()
