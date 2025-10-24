@@ -135,28 +135,11 @@ public interface SwarmLifecycle {
   Map<String, QueueStats> snapshotQueueStats();
 
   /**
-   * Apply a scenario plan step before enabling workloads.
+   * Enable all workloads.
    * <p>
-   * <strong>When it runs:</strong> scenario runner uploads a JSON blob containing
-   * {@code schedule[]} entries and optional configuration overrides. Example payload:
-   * <pre>{@code
-   * {
-   *   "config": {"role": "generator", "enabled": false},
-   *   "schedule": [{"delayMs": 5000, "routingKey": "sig.inject.demo", "body": "{...}"}]
-   * }
-   * }</pre>
-   * Implementations should persist scheduled tasks and issue a disabled {@code config-update} so the
-   * swarm remains paused until {@link #enableAll()} runs.
-   */
-  void applyScenarioStep(String stepJson);
-
-  /**
-   * Enable all workloads, dispatching any queued scenario tasks.
-   * <p>
-   * Typically called after {@link #applyScenarioStep(String)}. Implementations should publish
-   * {@code config-update} commands with {@code enabled=true} and schedule follow-up control messages
-   * defined in the scenario.
-   */
+   * Implementations should publish a {@code config-update} command with {@code enabled=true} so
+   * workers resume processing messages.
+  */
   void enableAll();
 
   /**

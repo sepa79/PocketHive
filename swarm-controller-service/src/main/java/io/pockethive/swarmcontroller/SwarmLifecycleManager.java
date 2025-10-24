@@ -46,9 +46,6 @@ import java.util.OptionalLong;
 import java.util.Properties;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 
 import io.pockethive.docker.DockerContainerClient;
 
@@ -81,15 +78,11 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
   private final Map<String, List<String>> instancesByRole = new HashMap<>();
   private final Map<String, Long> lastSeen = new HashMap<>();
   private final Map<String, Boolean> enabled = new HashMap<>();
-  private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
-  private final List<ScenarioTask> scheduledTasks = new ArrayList<>();
   private List<String> startOrder = List.of();
   private SwarmStatus status = SwarmStatus.STOPPED;
   private String template;
 
   private static final long STATUS_TTL_MS = 15_000L;
-
-  private record ScenarioTask(long delayMs, String routingKey, String body) {}
 
   @Autowired
   public SwarmLifecycleManager(AmqpAdmin amqp,
@@ -545,47 +538,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
   }
 
   /**
-   * Consume a scenario runner payload and pre-schedule control signals.
-   * <p>
-   * The payload may include a {@code schedule[]} array with future control messages (for example
-   * {@code {"delayMs":1000,"routingKey":"sig.inject.demo","body":"{...}"}}). We store those in
-   * {@link #scheduledTasks} and emit a disabled {@code config-update} so workers apply the configuration
-   * without processing messages yet.
-   */
-  @Override
-  public synchronized void applyScenarioStep(String stepJson) {
-    try {
-      scheduledTasks.clear();
-      var root = mapper.readTree(stepJson);
-      var schedule = root.path("schedule");
-      if (schedule.isArray()) {
-        for (var n : schedule) {
-          long delay = n.path("delayMs").asLong(0);
-          String rk = n.path("routingKey").asText();
-          String body = n.path("body").toString();
-          scheduledTasks.add(new ScenarioTask(delay, rk, body));
-        }
-      }
-
-      var config = root.path("config");
-      var data = mapper.createObjectNode();
-      if (config.isObject()) {
-        data.setAll((com.fasterxml.jackson.databind.node.ObjectNode) config);
-      }
-      data.put("enabled", false);
-      publishConfigUpdate(data, "scenario step");
-      log.info("scenario step applied for swarm {}", swarmId);
-    } catch (Exception e) {
-      log.warn("scenario step", e);
-    }
-  }
-
-  /**
-   * Enable workloads and fire any delayed scenario commands.
-   * <p>
-   * After publishing a {@code config-update} with {@code enabled=true} we queue each
-   * {@link ScenarioTask} with the scheduler so control injections (like traffic bursts) happen relative
-   * to the enable moment.
+   * Enable workloads by publishing a {@code config-update}.
    */
   @Override
   public synchronized void enableAll() {
@@ -593,12 +546,6 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
     data.put("enabled", true);
     publishConfigUpdate(data, "enable");
     status = SwarmStatus.RUNNING;
-    for (ScenarioTask t : scheduledTasks) {
-      scheduler.schedule(() -> {
-        log.info("dispatching scheduled {} body {}", t.routingKey, t.body);
-        rabbit.convertAndSend(controlExchange, t.routingKey, t.body);
-      }, t.delayMs, TimeUnit.MILLISECONDS);
-    }
   }
 
   /**
