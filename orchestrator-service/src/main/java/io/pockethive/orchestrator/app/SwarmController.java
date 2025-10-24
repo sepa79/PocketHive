@@ -27,8 +27,9 @@ import org.springframework.web.bind.annotation.*;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
-import java.util.UUID;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.UUID;
 
 import io.pockethive.util.BeeNameGenerator;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
@@ -98,36 +99,41 @@ public class SwarmController {
         logRestRequest("POST", path, req);
         Duration timeout = Duration.ofMillis(120_000L);
         ResponseEntity<?> response;
-        response = idempotency.findCorrelation(swarmId, "swarm-create", req.idempotencyKey())
-            .map(corr -> {
-                ControlResponse existing = new ControlResponse(corr, req.idempotencyKey(),
-                    watchFor("swarm-create", swarmId), timeout.toMillis());
-                log.info("[CTRL] reuse signal={} swarm={} correlation={} idempotencyKey={}",
-                    "swarm-create", swarmId, corr, req.idempotencyKey());
-                return ResponseEntity.accepted().body(existing);
-            })
-            .orElseGet(() -> {
-                if (registry.find(swarmId).isPresent()) {
-                    return ResponseEntity.status(HttpStatus.CONFLICT)
-                        .body(new ErrorResponse("Swarm '%s' already exists".formatted(swarmId)));
-                }
-                return idempotentSend("swarm-create", swarmId, req.idempotencyKey(), timeout.toMillis(), corr -> {
-                    String templateId = req.templateId();
-                    SwarmTemplate template = fetchTemplate(templateId);
-                    String image = requireImage(template, templateId);
-                    List<Bee> bees = template.bees();
-                    String instanceId = BeeNameGenerator.generate("swarm-controller", swarmId);
-                    plans.register(instanceId, new SwarmPlan(swarmId, bees));
-                    Swarm swarm = lifecycle.startSwarm(swarmId, image, instanceId);
-                    creates.register(swarm.getInstanceId(), new Pending(
-                        swarmId,
-                        swarm.getInstanceId(),
-                        corr,
-                        req.idempotencyKey(),
-                        Phase.CONTROLLER,
-                        Instant.now().plus(timeout)));
-                });
-            });
+        Optional<String> existingCorrelation = idempotency.findCorrelation(swarmId, "swarm-create", req.idempotencyKey());
+        if (existingCorrelation.isPresent()) {
+            String correlation = existingCorrelation.get();
+            ControlResponse existing = new ControlResponse(correlation, req.idempotencyKey(),
+                watchFor("swarm-create", swarmId), timeout.toMillis());
+            log.info("[CTRL] reuse signal={} swarm={} correlation={} idempotencyKey={}",
+                "swarm-create", swarmId, correlation, req.idempotencyKey());
+            response = ResponseEntity.accepted().body(existing);
+            logRestResponse("POST", path, response);
+            return response;
+        }
+
+        if (registry.find(swarmId).isPresent()) {
+            response = ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(new ErrorResponse("Swarm '%s' already exists".formatted(swarmId)));
+            logRestResponse("POST", path, response);
+            return response;
+        }
+
+        response = idempotentSend("swarm-create", swarmId, req.idempotencyKey(), timeout.toMillis(), corr -> {
+            String templateId = req.templateId();
+            SwarmTemplate template = fetchTemplate(templateId);
+            String image = requireImage(template, templateId);
+            List<Bee> bees = template.bees();
+            String instanceId = BeeNameGenerator.generate("swarm-controller", swarmId);
+            plans.register(instanceId, new SwarmPlan(swarmId, bees));
+            Swarm swarm = lifecycle.startSwarm(swarmId, image, instanceId);
+            creates.register(swarm.getInstanceId(), new Pending(
+                swarmId,
+                swarm.getInstanceId(),
+                corr,
+                req.idempotencyKey(),
+                Phase.CONTROLLER,
+                Instant.now().plus(timeout)));
+        });
         logRestResponse("POST", path, response);
         return response;
     }
