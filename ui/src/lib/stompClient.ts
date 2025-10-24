@@ -69,6 +69,39 @@ function getBoolean(value: unknown): boolean | undefined {
   return undefined
 }
 
+interface LifecycleConfirmation {
+  signal: string
+  scope?: Record<string, unknown>
+}
+
+function isLifecycleConfirmation(raw: unknown): raw is LifecycleConfirmation {
+  if (!isRecord(raw)) return false
+  const { signal, scope } = raw as {
+    signal?: unknown
+    scope?: unknown
+  }
+  if (typeof signal !== 'string') return false
+  if (scope !== undefined && !isRecord(scope)) return false
+  return true
+}
+
+function handleSwarmRemoveConfirmation(raw: unknown): boolean {
+  if (!isLifecycleConfirmation(raw)) return false
+  if (raw.signal !== 'swarm-remove') return false
+  const scope = raw.scope
+  if (!scope) return false
+  const swarmId = getString(scope['swarmId'])
+  if (!swarmId) return false
+  Object.entries(components).forEach(([key, comp]) => {
+    if (comp.swarmId === swarmId) {
+      delete components[key]
+    }
+  })
+  notifyComponentListeners()
+  emitTopology()
+  return true
+}
+
 function enrichQueue(queue: QueueInfo): QueueInfo {
   const stats = queueMetrics[queue.name]
   if (!stats) {
@@ -200,6 +233,7 @@ export function setClient(newClient: Client | null, destination = controlDestina
       if (destination && !/\/exchange\/ph\.control\/ev\./.test(destination)) return
       try {
         const raw = JSON.parse(msg.body)
+        if (handleSwarmRemoveConfirmation(raw)) return
         if (!isControlEvent(raw)) return
         const evt = raw as ControlEvent
         const eventQueueStats = evt.queueStats
