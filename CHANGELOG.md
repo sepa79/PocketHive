@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.13.1] - 2025-10-24
+Timestamp: 2025-10-24T00:00:00Z
+
+- Control plane & swarm lifecycle: bind bee identities to the shared `ControlPlaneProperties` instance id, drop the unused
+  scenario-step APIs, require explicit work assignments, and drive worker queue environment variables from swarm templates so
+  queue-first preparations and metrics settings stay in sync across controller, workers, and tests.
+- Orchestrator & REST: guard against duplicate swarm creation, make create requests idempotent-friendly, tidy Optional
+  handling, and document the conflict semantics in the public REST contract.
+- UI & UX: add a full swarm removal flow, prune removed components when swarms become ready, and surface swarm creation
+  conflicts in the Hive dialogs with supporting unit tests.
+- Documentation & planning: publish the worker capability catalogue, capture the next-phase scenario plan while archiving old
+  roadmap material, and add a queue-first mock scenario to the scenario manager.
+- Observability & testing: refresh the pipeline Grafana dashboard, standardise the default credentials, propagate metrics fixes
+  throughout service configs, and extend the end-to-end suite for named queue suffix coverage.
+- Release: bump the PocketHive patch version to 0.13.1 so tooling and published artifacts reference the latest build.
+
 ## [0.13.0] - 2025-10-20
 Timestamp: 2025-10-20T00:00:00Z
 
