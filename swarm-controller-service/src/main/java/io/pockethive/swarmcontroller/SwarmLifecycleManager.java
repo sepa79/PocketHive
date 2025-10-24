@@ -42,9 +42,11 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.Properties;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.UUID;
 
 import io.pockethive.docker.DockerContainerClient;
@@ -132,7 +134,6 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
         properties.getSwarmId(),
         properties.getControlExchange(),
         properties.getControlQueuePrefixBase(),
-        traffic.queuePrefix(),
         traffic.hiveExchange(),
         properties.getRabbit().logsExchange(),
         properties.getRabbit().logging().enabled(),
@@ -176,6 +177,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
     try {
       this.template = templateJson;
       SwarmPlan plan = mapper.readValue(templateJson, SwarmPlan.class);
+      Map<String, String> queueEnvironment = queueEnvironment(plan);
       TopicExchange hive = new TopicExchange(properties.hiveExchange(), true, false);
       amqp.declareExchange(hive);
       log.info("declared hive exchange {}", properties.hiveExchange());
@@ -196,6 +198,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
             String beeName = BeeNameGenerator.generate(bee.role(), swarmId);
             Map<String, String> env = new LinkedHashMap<>(
                 ControlPlaneContainerEnvironmentFactory.workerEnvironment(beeName, workerSettings, rabbitProperties));
+            env.putAll(queueEnvironment);
             String net = docker.resolveControlNetwork();
             if (net != null && !net.isBlank()) {
               env.put("CONTROL_NETWORK", net);
@@ -419,6 +422,35 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
       snapshot.put(queueName, new QueueStats(depth, consumers, oldestAge));
     }
     return snapshot;
+  }
+
+  private Map<String, String> queueEnvironment(SwarmPlan plan) {
+    Map<String, String> env = new LinkedHashMap<>();
+    queueName(plan, "generator", Work::out)
+        .or(() -> queueName(plan, "moderator", Work::in))
+        .ifPresent(queue -> env.put("POCKETHIVE_CONTROL_PLANE_QUEUES_GENERATOR", queue));
+    queueName(plan, "moderator", Work::out)
+        .or(() -> queueName(plan, "processor", Work::in))
+        .ifPresent(queue -> env.put("POCKETHIVE_CONTROL_PLANE_QUEUES_MODERATOR", queue));
+    queueName(plan, "processor", Work::out)
+        .or(() -> queueName(plan, "postprocessor", Work::in))
+        .ifPresent(queue -> env.put("POCKETHIVE_CONTROL_PLANE_QUEUES_FINAL", queue));
+    return env;
+  }
+
+  private Optional<String> queueName(SwarmPlan plan, String role, Function<Work, String> extractor) {
+    return plan.bees().stream()
+        .filter(bee -> role.equalsIgnoreCase(bee.role()))
+        .map(Bee::work)
+        .filter(Objects::nonNull)
+        .map(extractor)
+        .filter(this::hasText)
+        .map(properties::queueName)
+        .findFirst();
+  }
+
+  private boolean hasText(String value) {
+    return value != null && !value.isBlank();
   }
 
   /**

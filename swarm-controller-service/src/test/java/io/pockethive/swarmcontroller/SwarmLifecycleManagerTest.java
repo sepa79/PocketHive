@@ -215,6 +215,27 @@ class SwarmLifecycleManagerTest {
   }
 
   @Test
+  void populatesQueueEnvironmentFromTemplateWorkAssignments() throws Exception {
+    SwarmLifecycleManager manager = newManager();
+    SwarmPlan plan = new SwarmPlan("swarm", List.of(
+        new Bee("generator", "img-gen", new Work("unused", "gen-out"), null),
+        new Bee("moderator", "img-mod", new Work("gen-out", "mod-out"), null),
+        new Bee("processor", "img-proc", new Work("mod-out", "final-out"), null),
+        new Bee("postprocessor", "img-post", new Work("final-out", null), null)));
+    when(docker.createContainer(anyString(), anyMap(), anyString()))
+        .thenReturn("c1", "c2", "c3", "c4");
+
+    manager.prepare(mapper.writeValueAsString(plan));
+
+    ArgumentCaptor<Map<String, String>> envCaptor = ArgumentCaptor.forClass(Map.class);
+    verify(docker, times(4)).createContainer(anyString(), envCaptor.capture(), anyString());
+    Map<String, String> env = envCaptor.getAllValues().get(0);
+    assertThat(env.get("POCKETHIVE_CONTROL_PLANE_QUEUES_GENERATOR")).isEqualTo(queue("gen-out"));
+    assertThat(env.get("POCKETHIVE_CONTROL_PLANE_QUEUES_MODERATOR")).isEqualTo(queue("mod-out"));
+    assertThat(env.get("POCKETHIVE_CONTROL_PLANE_QUEUES_FINAL")).isEqualTo(queue("final-out"));
+  }
+
+  @Test
   void prepareFailsWhenRabbitHostMissing() throws Exception {
     SwarmControllerProperties properties = SwarmControllerTestProperties.defaults();
     RabbitProperties rabbitProperties = new RabbitProperties();

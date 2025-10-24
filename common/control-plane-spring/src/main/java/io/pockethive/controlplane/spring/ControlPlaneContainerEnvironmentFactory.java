@@ -90,10 +90,6 @@ public final class ControlPlaneContainerEnvironmentFactory {
         env.put(
             "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGGING_ENABLED",
             Boolean.toString(settings.loggingEnabled()));
-        String queuePrefix = settings.trafficQueuePrefix();
-        env.put("POCKETHIVE_CONTROL_PLANE_QUEUES_GENERATOR", queuePrefix + ".gen");
-        env.put("POCKETHIVE_CONTROL_PLANE_QUEUES_MODERATOR", queuePrefix + ".mod");
-        env.put("POCKETHIVE_CONTROL_PLANE_QUEUES_FINAL", queuePrefix + ".final");
         applyPushgatewayExport(env, settings.metrics());
         return env;
     }
@@ -195,7 +191,6 @@ public final class ControlPlaneContainerEnvironmentFactory {
     public record WorkerSettings(String swarmId,
                                  String controlExchange,
                                  String controlQueuePrefix,
-                                 String trafficQueuePrefix,
                                  String hiveExchange,
                                  String logsExchange,
                                  boolean loggingEnabled,
@@ -205,7 +200,6 @@ public final class ControlPlaneContainerEnvironmentFactory {
             requireArgument(swarmId, "swarmId");
             requireArgument(controlExchange, "controlExchange");
             requireArgument(controlQueuePrefix, "controlQueuePrefix");
-            requireArgument(trafficQueuePrefix, "trafficQueuePrefix");
             requireArgument(hiveExchange, "hiveExchange");
             requireArgument(logsExchange, "logsExchange");
         }
