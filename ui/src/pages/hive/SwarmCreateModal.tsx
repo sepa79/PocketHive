@@ -11,6 +11,8 @@ interface ScenarioSummary {
   name: string
 }
 
+type ApiError = Error & { status?: number }
+
 export default function SwarmCreateModal({ onClose }: Props) {
   const [swarmId, setSwarmId] = useState('')
   const [scenarios, setScenarios] = useState<ScenarioSummary[]>([])
@@ -41,8 +43,13 @@ export default function SwarmCreateModal({ onClose }: Props) {
       setMessage('Swarm created')
       setSwarmId('')
       setScenarioId('')
-    } catch {
-      setMessage('Failed to create swarm')
+    } catch (error) {
+      const apiError = error as ApiError
+      if (apiError?.status === 409) {
+        setMessage(apiError.message || 'Swarm already exists')
+      } else {
+        setMessage('Failed to create swarm')
+      }
     }
   }
 

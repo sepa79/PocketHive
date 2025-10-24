@@ -7,6 +7,8 @@ interface SwarmManagersTogglePayload {
   enabled: boolean
 }
 
+type ApiError = Error & { status?: number }
+
 export async function createSwarm(id: string, templateId: string) {
   const payload: Record<string, unknown> = {
     templateId,
@@ -14,11 +16,38 @@ export async function createSwarm(id: string, templateId: string) {
   }
 
   const body = JSON.stringify(payload)
-  await apiFetch(`/orchestrator/swarms/${id}/create`, {
+  const response = await apiFetch(`/orchestrator/swarms/${id}/create`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body,
   })
+
+  if (!response.ok) {
+    let message = ''
+    try {
+      const text = await response.text()
+      if (text) {
+        try {
+          const data = JSON.parse(text) as { message?: unknown }
+          if (data && typeof data === 'object' && typeof data.message === 'string') {
+            message = data.message
+          }
+        } catch {
+          message = text
+        }
+      }
+    } catch {
+      // ignore body parsing errors
+    }
+
+    if (!message) {
+      message = response.status === 409 ? 'Swarm already exists' : 'Failed to create swarm'
+    }
+
+    const error: ApiError = new Error(message)
+    error.status = response.status
+    throw error
+  }
 }
 
 export async function startSwarm(id: string) {

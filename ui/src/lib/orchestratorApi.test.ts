@@ -11,7 +11,7 @@ import {
 } from './orchestratorApi'
 
 vi.mock('./api', () => ({
-  apiFetch: vi.fn().mockResolvedValue({}),
+  apiFetch: vi.fn().mockResolvedValue({ ok: true }),
 }))
 
 const { apiFetch } = await import('./api')

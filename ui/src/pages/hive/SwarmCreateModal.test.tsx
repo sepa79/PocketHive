@@ -20,6 +20,7 @@ afterEach(() => {
 
 test('loads available scenarios on mount', async () => {
   apiFetchSpy.mockResolvedValueOnce({
+    ok: true,
     json: async () => [
       { id: 'basic', name: 'Basic' },
       { id: 'advanced', name: 'Advanced' },
@@ -41,9 +42,10 @@ test('loads available scenarios on mount', async () => {
 test('submits selected scenario', async () => {
   apiFetchSpy
     .mockResolvedValueOnce({
+      ok: true,
       json: async () => [{ id: 'basic', name: 'Basic' }],
     } as unknown as Response)
-    .mockResolvedValueOnce({} as Response)
+    .mockResolvedValueOnce({ ok: true } as Response)
   render(<SwarmCreateModal onClose={() => {}} />)
 
   await screen.findByText('Basic')
@@ -62,8 +64,31 @@ test('submits selected scenario', async () => {
   expect(await screen.findByText('Swarm created')).toBeTruthy()
 })
 
+test('shows conflict message when swarm already exists', async () => {
+  apiFetchSpy
+    .mockResolvedValueOnce({
+      ok: true,
+      json: async () => [{ id: 'basic', name: 'Basic' }],
+    } as unknown as Response)
+    .mockResolvedValueOnce({
+      ok: false,
+      status: 409,
+      text: async () => "{\"message\": \"Swarm 'sw1' already exists\"}",
+    } as unknown as Response)
+
+  render(<SwarmCreateModal onClose={() => {}} />)
+
+  await screen.findByText('Basic')
+  fireEvent.change(screen.getByLabelText(/swarm id/i), { target: { value: 'sw1' } })
+  fireEvent.change(screen.getByLabelText(/scenario/i), { target: { value: 'basic' } })
+  fireEvent.click(screen.getByText('Create'))
+
+  expect(await screen.findByText("Swarm 'sw1' already exists")).toBeTruthy()
+})
+
 test('does not submit when scenario selection is cleared', async () => {
   apiFetchSpy.mockResolvedValueOnce({
+    ok: true,
     json: async () => [{ id: 'basic', name: 'Basic' }],
   } as unknown as Response)
   render(<SwarmCreateModal onClose={() => {}} />)
