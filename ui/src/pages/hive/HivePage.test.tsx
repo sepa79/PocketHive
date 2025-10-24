@@ -53,6 +53,7 @@ const baseComponents: Component[] = [
 let comps: Component[] = []
 const apiFetchMock = vi.mocked(apiFetch)
 const sendConfigUpdateSpy = vi.spyOn(orchestratorApi, 'sendConfigUpdate')
+const removeSwarmSpy = vi.spyOn(orchestratorApi, 'removeSwarm')
 
 beforeEach(() => {
   comps = baseComponents.map((c) => ({
@@ -70,6 +71,8 @@ beforeEach(() => {
   apiFetchMock.mockResolvedValue(new Response(null, { status: 202 }))
   vi.mocked(fetchWiremockComponent).mockResolvedValue(null)
   sendConfigUpdateSpy.mockClear()
+  removeSwarmSpy.mockClear()
+  removeSwarmSpy.mockResolvedValue()
 })
 
 afterEach(() => {
@@ -319,4 +322,65 @@ test('renders wiremock synthetic entry without toggle and opens detail drawer', 
   await user.click(entry)
   const closeButtons = await screen.findAllByRole('button', { name: '×' })
   expect(closeButtons.length).toBeGreaterThan(0)
+})
+
+test('exposes swarm removal flow with confirmation and resets active swarm', async () => {
+  const user = userEvent.setup()
+  render(<HivePage />)
+  const [group] = await screen.findAllByTestId('swarm-group-sw1')
+  const header = within(group).getByText('sw1')
+  const initialBackButtonCount = screen.queryAllByRole('button', {
+    name: 'Back to all swarms',
+  }).length
+  await user.click(header)
+  expect(screen.getAllByRole('button', { name: 'Back to all swarms' }).length).toBeGreaterThan(
+    initialBackButtonCount,
+  )
+
+  const removeButton = within(group).getByRole('button', { name: 'Remove swarm' })
+  let resolveRemove: (() => void) | undefined
+  removeSwarmSpy.mockImplementationOnce(
+    () =>
+      new Promise<void>((resolve) => {
+        resolveRemove = resolve
+      }),
+  )
+  await user.click(removeButton)
+  const dialog = await screen.findByRole('dialog', { name: /remove swarm/i })
+  expect(dialog).toBeInTheDocument()
+  const confirm = within(dialog).getByRole('button', { name: 'Send Remove swarm' })
+  const cancel = within(dialog).getByRole('button', { name: 'Cancel' })
+  await user.click(confirm)
+  expect(confirm).toBeDisabled()
+  expect(confirm).toHaveAttribute('aria-busy', 'true')
+  expect(confirm).toHaveTextContent('Sending…')
+  expect(cancel).toBeDisabled()
+  expect(removeSwarmSpy).toHaveBeenCalledWith('sw1')
+  expect(resolveRemove).toBeDefined()
+  resolveRemove?.()
+  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+  await waitFor(() =>
+    expect(
+      screen.queryAllByRole('button', { name: 'Back to all swarms' }).length,
+    ).toBe(initialBackButtonCount),
+  )
+})
+
+test('allows cancelling swarm removal', async () => {
+  const user = userEvent.setup()
+  render(<HivePage />)
+  const [group] = await screen.findAllByTestId('swarm-group-sw1')
+  const removeButton = within(group).getByRole('button', { name: 'Remove swarm' })
+  await user.click(removeButton)
+  const dialog = await screen.findByRole('dialog', { name: /remove swarm/i })
+  const cancel = within(dialog).getByRole('button', { name: 'Cancel' })
+  await user.click(cancel)
+  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+  expect(removeSwarmSpy).not.toHaveBeenCalled()
+})
+
+test('does not show removal control for default swarm grouping', () => {
+  render(<HivePage />)
+  const [group] = screen.getAllByTestId('swarm-group-default')
+  expect(within(group).queryByRole('button', { name: 'Remove swarm' })).toBeNull()
 })
