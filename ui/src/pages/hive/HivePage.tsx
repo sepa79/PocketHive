@@ -103,6 +103,13 @@ export default function HivePage() {
     return acc
   }, {})
 
+  const activeSwarmComponents = activeSwarm
+    ? grouped[activeSwarm] ?? []
+    : []
+
+  const shouldShowActiveSwarmList =
+    !selected && expandedSwarmId === null && Boolean(activeSwarm)
+
   return (
     <div className="flex h-full min-h-0 overflow-hidden">
       <div className="w-full md:w-1/3 xl:w-1/4 border-r border-white/10 p-4 flex flex-col">
@@ -168,14 +175,15 @@ export default function HivePage() {
                         )
                       }
                       dataTestId={`swarm-group-${id}`}
-                    />
-                    {isExpanded && (
-                      <ComponentList
-                        components={comps}
-                        onSelect={(c) => setSelected(c)}
-                        selectedId={selected?.id}
-                      />
-                    )}
+                    >
+                      {isExpanded && (
+                        <ComponentList
+                          components={comps}
+                          onSelect={(c) => setSelected(c)}
+                          selectedId={selected?.id}
+                        />
+                      )}
+                    </SwarmRow>
                   </div>
                 )
               })}
@@ -197,6 +205,14 @@ export default function HivePage() {
       <div className="hidden lg:flex w-1/3 xl:w-1/4 border-l border-white/10 overflow-hidden">
         {selected ? (
           <ComponentDetail component={selected} onClose={() => setSelected(null)} />
+        ) : shouldShowActiveSwarmList ? (
+          <div className="flex-1 p-4 overflow-y-auto">
+            <ComponentList
+              components={activeSwarmComponents}
+              onSelect={(component) => setSelected(component)}
+              selectedId={selected?.id}
+            />
+          </div>
         ) : (
           <div className="p-4 text-white/50 overflow-y-auto">Select a component</div>
         )}
