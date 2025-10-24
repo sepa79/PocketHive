@@ -128,9 +128,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
         pushgateway.enabled(),
         pushgateway.baseUrl(),
         pushgateway.pushRate(),
-        pushgateway.shutdownOperation(),
-        pushgateway.job(),
-        pushgateway.groupingKey().instance());
+        pushgateway.shutdownOperation());
     return new WorkerSettings(
         properties.getSwarmId(),
         properties.getControlExchange(),

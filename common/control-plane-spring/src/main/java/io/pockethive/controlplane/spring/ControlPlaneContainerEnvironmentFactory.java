@@ -138,12 +138,6 @@ public final class ControlPlaneContainerEnvironmentFactory {
         env.put(
             "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_SHUTDOWN_OPERATION",
             metrics.shutdownOperation());
-        env.put(
-            "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_JOB",
-            metrics.job());
-        env.put(
-            "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_GROUPING_KEY_INSTANCE",
-            metrics.groupingKeyInstance());
     }
 
     private static void applyPushgatewayExport(Map<String, String> env, PushgatewaySettings metrics) {
@@ -160,12 +154,6 @@ public final class ControlPlaneContainerEnvironmentFactory {
         env.put(
             "MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_SHUTDOWN_OPERATION",
             metrics.shutdownOperation());
-        env.put(
-            "MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_JOB",
-            metrics.job());
-        env.put(
-            "MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_GROUPING_KEY_INSTANCE",
-            metrics.groupingKeyInstance());
     }
 
     private static String requireArgument(String value, String description) {
@@ -208,15 +196,11 @@ public final class ControlPlaneContainerEnvironmentFactory {
     public record PushgatewaySettings(boolean enabled,
                                       String baseUrl,
                                       Duration pushRate,
-                                      String shutdownOperation,
-                                      String job,
-                                      String groupingKeyInstance) {
+                                      String shutdownOperation) {
         public PushgatewaySettings {
             Objects.requireNonNull(pushRate, "pushRate");
             requireArgument(baseUrl, "metrics baseUrl");
             requireArgument(shutdownOperation, "metrics shutdownOperation");
-            requireArgument(job, "metrics job");
-            requireArgument(groupingKeyInstance, "metrics groupingKeyInstance");
         }
     }
 }

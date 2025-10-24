@@ -52,9 +52,7 @@ public class ContainerLifecycleManager {
             pushgateway.isEnabled(),
             pushgateway.getBaseUrl(),
             pushgateway.getPushRate(),
-            pushgateway.getShutdownOperation(),
-            pushgateway.getJob(),
-            pushgateway.getGroupingKey().getInstance());
+            pushgateway.getShutdownOperation());
         ControlPlaneContainerEnvironmentFactory.ControllerSettings controllerSettings =
             new ControlPlaneContainerEnvironmentFactory.ControllerSettings(
                 properties.getRabbit().getLogsExchange(),

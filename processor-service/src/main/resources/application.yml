@@ -27,6 +27,9 @@ pockethive:
       role: processor
       skip-self-signals: false
       processor:
-        base-url: ${PH_BASE_URL:http://wiremock:8080}
+        base-url: http://wiremock:8080
     manager:
       enabled: false
+
+management.prometheus.metrics.export.pushgateway.job: ${POCKETHIVE_CONTROL_PLANE_SWARM_ID}
+management.prometheus.metrics.export.pushgateway.grouping-key.instance: ${POCKETHIVE_CONTROL_PLANE_INSTANCE_ID}

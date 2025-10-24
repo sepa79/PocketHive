@@ -33,3 +33,6 @@ pockethive:
           headers: {}
     manager:
       enabled: false
+
+management.prometheus.metrics.export.pushgateway.job: ${POCKETHIVE_CONTROL_PLANE_SWARM_ID}
+management.prometheus.metrics.export.pushgateway.grouping-key.instance: ${POCKETHIVE_CONTROL_PLANE_INSTANCE_ID}

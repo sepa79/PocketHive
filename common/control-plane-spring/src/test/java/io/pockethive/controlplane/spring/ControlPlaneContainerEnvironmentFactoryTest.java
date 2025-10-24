@@ -23,9 +23,7 @@ class ControlPlaneContainerEnvironmentFactoryTest {
                 true,
                 "http://pushgateway:9091",
                 Duration.ofSeconds(30),
-                "DELETE",
-                "swarm-job",
-                "controller-instance");
+                "DELETE");
         ControlPlaneContainerEnvironmentFactory.ControllerSettings settings =
             new ControlPlaneContainerEnvironmentFactory.ControllerSettings(
                 "ph.logs",
@@ -55,8 +53,6 @@ class ControlPlaneContainerEnvironmentFactoryTest {
         assertThat(env).containsEntry("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_BASE_URL", "http://pushgateway:9091");
         assertThat(env).containsEntry("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_PUSH_RATE", "PT30S");
         assertThat(env).containsEntry("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_SHUTDOWN_OPERATION", "DELETE");
-        assertThat(env).containsEntry("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_JOB", "swarm-job");
-        assertThat(env).containsEntry("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_GROUPING_KEY_INSTANCE", "controller-instance");
         assertThat(env).containsEntry("SPRING_RABBITMQ_HOST", "rabbitmq");
         assertThat(env).containsEntry("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_DOCKER_SOCKET_PATH", "/var/run/docker.sock");
     }
@@ -68,9 +64,7 @@ class ControlPlaneContainerEnvironmentFactoryTest {
                 true,
                 "http://pushgateway:9091",
                 Duration.ofSeconds(45),
-                "DELETE",
-                "swarm-job",
-                "worker-instance");
+                "DELETE");
         ControlPlaneContainerEnvironmentFactory.WorkerSettings settings =
             new ControlPlaneContainerEnvironmentFactory.WorkerSettings(
                 "swarm-1",
@@ -99,8 +93,6 @@ class ControlPlaneContainerEnvironmentFactoryTest {
         assertThat(env).containsEntry("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_BASE_URL", "http://pushgateway:9091");
         assertThat(env).containsEntry("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_PUSH_RATE", "PT45S");
         assertThat(env).containsEntry("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_SHUTDOWN_OPERATION", "DELETE");
-        assertThat(env).containsEntry("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_JOB", "swarm-job");
-        assertThat(env).containsEntry("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_GROUPING_KEY_INSTANCE", "worker-instance");
     }
 
     @Test
@@ -117,9 +109,7 @@ class ControlPlaneContainerEnvironmentFactoryTest {
                     true,
                     "http://pushgateway:9091",
                     Duration.ofSeconds(30),
-                    "DELETE",
-                    "swarm-job",
-                    "instance"));
+                    "DELETE"));
         RabbitProperties rabbitProperties = new RabbitProperties();
         rabbitProperties.setHost("");
 
