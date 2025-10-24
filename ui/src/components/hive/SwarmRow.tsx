@@ -44,6 +44,7 @@ export default function SwarmRow({
           <button
             type="button"
             aria-label={expanded ? 'Collapse swarm details' : 'Expand swarm details'}
+            aria-expanded={expanded}
             className={styles.chevronButton}
             onClick={handleToggleExpand}
           >
@@ -68,12 +69,12 @@ export default function SwarmRow({
           </button>
         )}
       </div>
-      <div className={styles.content}>
-        {children}
-        {expanded && (
+      {expanded && (
+        <div className={styles.content}>
+          {children}
           <div className={styles.dropdown}>Swarm controls coming soon.</div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   )
 }
