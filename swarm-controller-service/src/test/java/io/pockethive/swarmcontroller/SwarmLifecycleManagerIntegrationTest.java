@@ -29,7 +29,11 @@ import java.io.IOException;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+import org.mockito.ArgumentCaptor;
+
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
 
 @SpringBootTest(properties = {
     "pockethive.control-plane.swarm-controller.rabbit.logging.enabled=false",
@@ -171,6 +175,50 @@ class SwarmLifecycleManagerIntegrationTest {
       ch.exchangeDeclarePassive(HIVE_EXCHANGE);
       return null;
     });
+  }
+
+  @Test
+  void customQueueSuffixesPropagateToWorkerEnvironment() throws Exception {
+    reset(docker);
+    when(docker.createContainer(eq("pockethive-generator:latest"), anyMap(), anyString())).thenReturn("cg");
+    when(docker.createContainer(eq("pockethive-moderator:latest"), anyMap(), anyString())).thenReturn("cm");
+    when(docker.createContainer(eq("pockethive-processor:latest"), anyMap(), anyString())).thenReturn("cp");
+    when(docker.createContainer(eq("pockethive-postprocessor:latest"), anyMap(), anyString())).thenReturn("cpo");
+    when(docker.resolveControlNetwork()).thenReturn(null);
+
+    String plan = """
+        {"bees":[
+          {"role":"generator","image":"pockethive-generator:latest","work":{"out":"genQ"}},
+          {"role":"moderator","image":"pockethive-moderator:latest","work":{"in":"genQ","out":"modQ"}},
+          {"role":"processor","image":"pockethive-processor:latest","work":{"in":"modQ","out":"finalQ"}},
+          {"role":"postprocessor","image":"pockethive-postprocessor:latest","work":{"in":"finalQ"}}
+        ]}
+        """;
+
+    manager.start(plan);
+
+    ArgumentCaptor<Map<String, String>> envCaptor = ArgumentCaptor.forClass(Map.class);
+    verify(docker, times(4)).createContainer(anyString(), envCaptor.capture(), anyString());
+    for (Map<String, String> env : envCaptor.getAllValues()) {
+      assertEquals(queue("genQ"), env.get("POCKETHIVE_CONTROL_PLANE_QUEUES_GENERATOR"));
+      assertEquals(queue("modQ"), env.get("POCKETHIVE_CONTROL_PLANE_QUEUES_MODERATOR"));
+      assertEquals(queue("finalQ"), env.get("POCKETHIVE_CONTROL_PLANE_QUEUES_FINAL"));
+    }
+  }
+
+  @Test
+  void missingQueueSuffixesCauseSwarmCreationError() {
+    reset(docker);
+    String plan = """
+        {"bees":[
+          {"role":"generator","image":"pockethive-generator:latest","work":{}},
+          {"role":"moderator","image":"pockethive-moderator:latest","work":{"in":"genQ","out":"modQ"}}
+        ]}
+        """;
+
+    IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () -> manager.start(plan));
+    assertTrue(ex.getMessage().contains("work.out"));
+    verify(docker, never()).createContainer(anyString(), anyMap(), anyString());
   }
 
   @Test

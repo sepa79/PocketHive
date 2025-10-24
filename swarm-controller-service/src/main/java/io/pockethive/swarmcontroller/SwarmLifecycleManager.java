@@ -184,6 +184,8 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
       instancesByRole.clear();
       startOrder = computeStartOrder(plan);
 
+      QueueAssignments queueAssignments = QueueAssignments.fromPlan(plan.bees(), properties);
+
       Set<String> suffixes = new HashSet<>();
       if (plan.bees() != null) {
         for (Bee bee : plan.bees()) {
@@ -196,6 +198,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
             String beeName = BeeNameGenerator.generate(bee.role(), swarmId);
             Map<String, String> env = new LinkedHashMap<>(
                 ControlPlaneContainerEnvironmentFactory.workerEnvironment(beeName, workerSettings, rabbitProperties));
+            queueAssignments.apply(env);
             String net = docker.resolveControlNetwork();
             if (net != null && !net.isBlank()) {
               env.put("CONTROL_NETWORK", net);
@@ -782,6 +785,179 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
       }
     }
     return OptionalLong.empty();
+  }
+
+  private static final class QueueAssignments {
+    private final String generatorQueue;
+    private final String moderatorQueue;
+    private final String finalQueue;
+
+    private QueueAssignments(String generatorQueue, String moderatorQueue, String finalQueue) {
+      this.generatorQueue = generatorQueue;
+      this.moderatorQueue = moderatorQueue;
+      this.finalQueue = finalQueue;
+    }
+
+    static QueueAssignments fromPlan(List<Bee> bees, SwarmControllerProperties properties) {
+      QueueAssignmentBuilder builder = new QueueAssignmentBuilder(properties);
+      if (bees != null) {
+        for (Bee bee : bees) {
+          builder.register(bee);
+        }
+      }
+      return builder.build();
+    }
+
+    void apply(Map<String, String> env) {
+      if (generatorQueue != null) {
+        env.put("POCKETHIVE_CONTROL_PLANE_QUEUES_GENERATOR", generatorQueue);
+      }
+      if (moderatorQueue != null) {
+        env.put("POCKETHIVE_CONTROL_PLANE_QUEUES_MODERATOR", moderatorQueue);
+      }
+      if (finalQueue != null) {
+        env.put("POCKETHIVE_CONTROL_PLANE_QUEUES_FINAL", finalQueue);
+      }
+    }
+
+    private static final class QueueAssignmentBuilder {
+      private final SwarmControllerProperties properties;
+      private String generatorQueue;
+      private String moderatorQueue;
+      private String finalQueue;
+
+      private QueueAssignmentBuilder(SwarmControllerProperties properties) {
+        this.properties = Objects.requireNonNull(properties, "properties");
+      }
+
+      private QueueAssignments build() {
+        return new QueueAssignments(generatorQueue, moderatorQueue, finalQueue);
+      }
+
+      private void register(Bee bee) {
+        if (bee == null) {
+          return;
+        }
+        String role = bee.role();
+        if (role == null || role.isBlank()) {
+          return;
+        }
+        Work work = bee.work();
+        String normalisedRole = role.toLowerCase(Locale.ROOT);
+        switch (normalisedRole) {
+          case "generator" -> registerGenerator(bee, work);
+          case "moderator" -> registerModerator(bee, work);
+          case "processor" -> registerProcessor(bee, work);
+          case "postprocessor" -> registerPostprocessor(bee, work);
+          default -> {
+            // other roles do not participate in the default traffic topology
+          }
+        }
+      }
+
+      private void registerGenerator(Bee bee, Work work) {
+        if (work == null) {
+          return;
+        }
+        String suffix = requireSuffix(work.out(), bee, "work.out");
+        assignGeneratorQueue(suffix, bee);
+      }
+
+      private void registerModerator(Bee bee, Work work) {
+        if (work == null) {
+          return;
+        }
+        String inSuffix = requireSuffix(work.in(), bee, "work.in");
+        assignGeneratorQueue(inSuffix, bee);
+        String outSuffix = requireSuffix(work.out(), bee, "work.out");
+        assignModeratorQueue(outSuffix, bee);
+      }
+
+      private void registerProcessor(Bee bee, Work work) {
+        if (work == null) {
+          return;
+        }
+        String inSuffix = requireSuffix(work.in(), bee, "work.in");
+        assignModeratorQueue(inSuffix, bee);
+        String outSuffix = requireSuffix(work.out(), bee, "work.out");
+        assignFinalQueue(outSuffix, bee);
+      }
+
+      private void registerPostprocessor(Bee bee, Work work) {
+        if (work == null) {
+          return;
+        }
+        String inSuffix = requireSuffix(work.in(), bee, "work.in");
+        assignFinalQueue(inSuffix, bee);
+      }
+
+      private void assignGeneratorQueue(String suffix, Bee bee) {
+        String queue = toQueueName(suffix, bee, "generator");
+        if (generatorQueue == null) {
+          generatorQueue = queue;
+          return;
+        }
+        if (!generatorQueue.equals(queue)) {
+          throw conflictingQueue("generator", generatorQueue, queue, bee);
+        }
+      }
+
+      private void assignModeratorQueue(String suffix, Bee bee) {
+        String queue = toQueueName(suffix, bee, "moderator");
+        if (moderatorQueue == null) {
+          moderatorQueue = queue;
+          return;
+        }
+        if (!moderatorQueue.equals(queue)) {
+          throw conflictingQueue("moderator", moderatorQueue, queue, bee);
+        }
+      }
+
+      private void assignFinalQueue(String suffix, Bee bee) {
+        String queue = toQueueName(suffix, bee, "final");
+        if (finalQueue == null) {
+          finalQueue = queue;
+          return;
+        }
+        if (!finalQueue.equals(queue)) {
+          throw conflictingQueue("final", finalQueue, queue, bee);
+        }
+      }
+
+      private IllegalArgumentException conflictingQueue(String queueKey,
+                                                        String existing,
+                                                        String candidate,
+                                                        Bee bee) {
+        return new IllegalArgumentException(
+            "Swarm plan assigns conflicting %s queue: expected '%s' but found '%s' from role '%s'"
+                .formatted(queueKey, existing, candidate, roleName(bee)));
+      }
+
+      private String toQueueName(String suffix, Bee bee, String queueKey) {
+        try {
+          return properties.queueName(suffix);
+        } catch (IllegalArgumentException ex) {
+          throw new IllegalArgumentException(
+              "Bee role '%s' provided invalid %s queue suffix '%s'"
+                  .formatted(roleName(bee), queueKey, suffix), ex);
+        }
+      }
+
+      private String requireSuffix(String value, Bee bee, String field) {
+        String trimmed = value == null ? null : value.trim();
+        if (trimmed == null || trimmed.isEmpty()) {
+          throw new IllegalArgumentException(
+              "Bee role '%s' must define %s to resolve queue assignments"
+                  .formatted(roleName(bee), field));
+        }
+        return trimmed;
+      }
+
+      private String roleName(Bee bee) {
+        String role = bee.role();
+        return role == null || role.isBlank() ? "unknown" : role;
+      }
+    }
   }
 
   private static String snippet(String payload) {

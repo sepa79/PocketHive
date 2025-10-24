@@ -157,6 +157,42 @@ class SwarmLifecycleManagerTest {
   }
 
   @Test
+  void appliesQueueAssignmentsFromWorkDefinitions() throws Exception {
+    SwarmLifecycleManager manager = newManager();
+    SwarmPlan plan = new SwarmPlan("swarm", List.of(
+        new Bee("generator", "img-gen", new Work(null, "genQ"), null),
+        new Bee("moderator", "img-mod", new Work("genQ", "modQ"), null),
+        new Bee("processor", "img-proc", new Work("modQ", "finalQ"), null),
+        new Bee("postprocessor", "img-post", new Work("finalQ", null), null)));
+    when(docker.createContainer(eq("img-gen"), anyMap(), anyString())).thenReturn("cg");
+    when(docker.createContainer(eq("img-mod"), anyMap(), anyString())).thenReturn("cm");
+    when(docker.createContainer(eq("img-proc"), anyMap(), anyString())).thenReturn("cp");
+    when(docker.createContainer(eq("img-post"), anyMap(), anyString())).thenReturn("cpo");
+
+    manager.prepare(mapper.writeValueAsString(plan));
+
+    ArgumentCaptor<Map<String, String>> envCaptor = ArgumentCaptor.forClass(Map.class);
+    verify(docker, times(4)).createContainer(anyString(), envCaptor.capture(), anyString());
+    for (Map<String, String> env : envCaptor.getAllValues()) {
+      assertThat(env.get("POCKETHIVE_CONTROL_PLANE_QUEUES_GENERATOR")).isEqualTo(queue("genQ"));
+      assertThat(env.get("POCKETHIVE_CONTROL_PLANE_QUEUES_MODERATOR")).isEqualTo(queue("modQ"));
+      assertThat(env.get("POCKETHIVE_CONTROL_PLANE_QUEUES_FINAL")).isEqualTo(queue("finalQ"));
+    }
+  }
+
+  @Test
+  void missingQueueAssignmentsCauseException() throws Exception {
+    SwarmLifecycleManager manager = newManager();
+    SwarmPlan plan = new SwarmPlan("swarm", List.of(
+        new Bee("generator", "img", new Work(null, null), null)));
+
+    assertThatThrownBy(() -> manager.prepare(mapper.writeValueAsString(plan)))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("generator")
+        .hasMessageContaining("work.out");
+  }
+
+  @Test
   void handlesMultipleBeesSharingRole() throws Exception {
     SwarmLifecycleManager manager = newManager();
     SwarmPlan plan = new SwarmPlan("swarm", List.of(
