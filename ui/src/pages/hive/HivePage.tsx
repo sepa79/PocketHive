@@ -140,40 +140,43 @@ export default function HivePage() {
               .filter(([id]) => !activeSwarm || id === activeSwarm)
               .map(([id, comps]) => {
                 const normalizedId = id === 'default' ? 'default' : id
+                const isExpanded = expandedSwarmId === id
                 return (
-                  <SwarmRow
-                    key={id}
-                    swarmId={id}
-                    isDefault={id === 'default'}
-                    isActive={activeSwarm === normalizedId}
-                    expanded={expandedSwarmId === id}
-                    onActivate={(swarm) =>
-                      !activeSwarm &&
-                      setActiveSwarm(swarm === 'default' ? 'default' : swarm)
-                    }
-                    onRemove={(swarm) => {
-                      setExpandedSwarmId((current) =>
-                        current === swarm ? null : current,
-                      )
-                      setActiveSwarm((current) =>
-                        current === (swarm === 'default' ? 'default' : swarm)
-                          ? null
-                          : current,
-                      )
-                    }}
-                    onToggleExpand={(swarm) =>
-                      setExpandedSwarmId((current) =>
-                        current === swarm ? null : swarm,
-                      )
-                    }
-                    dataTestId={`swarm-group-${id}`}
-                  >
-                    <ComponentList
-                      components={comps}
-                      onSelect={(c) => setSelected(c)}
-                      selectedId={selected?.id}
+                  <div key={id} className="space-y-2">
+                    <SwarmRow
+                      swarmId={id}
+                      isDefault={id === 'default'}
+                      isActive={activeSwarm === normalizedId}
+                      expanded={isExpanded}
+                      onActivate={(swarm) =>
+                        !activeSwarm &&
+                        setActiveSwarm(swarm === 'default' ? 'default' : swarm)
+                      }
+                      onRemove={(swarm) => {
+                        setExpandedSwarmId((current) =>
+                          current === swarm ? null : current,
+                        )
+                        setActiveSwarm((current) =>
+                          current === (swarm === 'default' ? 'default' : swarm)
+                            ? null
+                            : current,
+                        )
+                      }}
+                      onToggleExpand={(swarm) =>
+                        setExpandedSwarmId((current) =>
+                          current === swarm ? null : swarm,
+                        )
+                      }
+                      dataTestId={`swarm-group-${id}`}
                     />
-                  </SwarmRow>
+                    {isExpanded && (
+                      <ComponentList
+                        components={comps}
+                        onSelect={(c) => setSelected(c)}
+                        selectedId={selected?.id}
+                      />
+                    )}
+                  </div>
                 )
               })}
           </div>
