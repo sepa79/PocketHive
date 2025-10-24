@@ -39,6 +39,15 @@ export async function stopSwarm(id: string) {
   })
 }
 
+export async function removeSwarm(id: string) {
+  const body = JSON.stringify({ idempotencyKey: crypto.randomUUID() })
+  await apiFetch(`/orchestrator/swarms/${id}/remove`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body,
+  })
+}
+
 async function setSwarmManagersEnabled(enabled: boolean) {
   const payload: SwarmManagersTogglePayload = {
     idempotencyKey: crypto.randomUUID(),

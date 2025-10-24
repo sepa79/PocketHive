@@ -298,4 +298,93 @@ describe('swarm lifecycle', () => {
     removeSyntheticComponent('wiremock')
     setClient(null)
   })
+
+  it('drops swarm components when a swarm-remove ready confirmation arrives', () => {
+    const publish = vi.fn()
+    let cb: (msg: { body: string; headers: Record<string, string> }) => void = () => {}
+    const subscribe = vi
+      .fn()
+      .mockImplementation((_dest: string, fn: (msg: { body: string; headers: Record<string, string> }) => void) => {
+        cb = fn
+        return { unsubscribe() {} }
+      })
+    setClient({ active: true, publish, subscribe } as unknown as Client)
+
+    const updates: Component[][] = []
+    const unsubscribe = subscribeComponents((list) => {
+      updates.push(list.map((component) => ({ ...component })))
+    })
+
+    const statusHeadersSw1 = { destination: '/exchange/ph.control/ev.status.swarm-sw1' }
+    const statusHeadersSw2 = { destination: '/exchange/ph.control/ev.status.swarm-sw2' }
+    const now = new Date().toISOString()
+
+    cb({
+      headers: statusHeadersSw1,
+      body: JSON.stringify({
+        event: 'status',
+        kind: 'status',
+        version: '1',
+        role: 'generator',
+        instance: 'sw1-generator',
+        messageId: 'm-1',
+        timestamp: now,
+      }),
+    })
+
+    cb({
+      headers: statusHeadersSw1,
+      body: JSON.stringify({
+        event: 'status',
+        kind: 'status',
+        version: '1',
+        role: 'processor',
+        instance: 'sw1-processor',
+        messageId: 'm-2',
+        timestamp: now,
+      }),
+    })
+
+    cb({
+      headers: statusHeadersSw2,
+      body: JSON.stringify({
+        event: 'status',
+        kind: 'status',
+        version: '1',
+        role: 'processor',
+        instance: 'sw2-processor',
+        messageId: 'm-3',
+        timestamp: now,
+      }),
+    })
+
+    const beforeRemoval = updates.at(-1)
+    expect(beforeRemoval?.some((component) => component.swarmId === 'sw1')).toBe(true)
+
+    cb({
+      headers: {
+        destination: '/exchange/ph.control/ev.ready.swarm-remove.sw1.swarm-controller.inst',
+      },
+      body: JSON.stringify({
+        result: 'success',
+        signal: 'swarm-remove',
+        scope: { swarmId: 'sw1', role: 'swarm-controller', instance: 'inst' },
+      }),
+    })
+
+    const afterRemoval = updates.at(-1)
+    expect(afterRemoval?.some((component) => component.swarmId === 'sw1')).toBe(false)
+    expect(afterRemoval?.some((component) => component.swarmId === 'sw2')).toBe(true)
+
+    unsubscribe()
+
+    cb({
+      headers: {
+        destination: '/exchange/ph.control/ev.ready.swarm-remove.sw2.swarm-controller.inst',
+      },
+      body: JSON.stringify({ signal: 'swarm-remove', scope: { swarmId: 'sw2' } }),
+    })
+
+    setClient(null)
+  })
 })

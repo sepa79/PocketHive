@@ -1,6 +1,14 @@
 import { describe, it, expect, vi, type Mock } from 'vitest'
 import type { Component } from '../types/hive'
-import { createSwarm, startSwarm, stopSwarm, sendConfigUpdate, enableSwarmManagers, disableSwarmManagers } from './orchestratorApi'
+import {
+  createSwarm,
+  startSwarm,
+  stopSwarm,
+  removeSwarm,
+  sendConfigUpdate,
+  enableSwarmManagers,
+  disableSwarmManagers,
+} from './orchestratorApi'
 
 vi.mock('./api', () => ({
   apiFetch: vi.fn().mockResolvedValue({}),
@@ -34,6 +42,16 @@ describe('orchestratorApi', () => {
     const call = (apiFetch as unknown as Mock).mock.calls.pop()!
     expect(call[0]).toBe('/orchestrator/swarms/sw1/stop')
     expect(call[1]?.method).toBe('POST')
+  })
+
+  it('posts swarm remove', async () => {
+    await removeSwarm('sw1')
+    const call = (apiFetch as unknown as Mock).mock.calls.pop()!
+    expect(call[0]).toBe('/orchestrator/swarms/sw1/remove')
+    expect(call[1]?.method).toBe('POST')
+    const body = JSON.parse(call[1]?.body as string)
+    expect(typeof body.idempotencyKey).toBe('string')
+    expect(body.idempotencyKey.length).toBeGreaterThan(0)
   })
 
   it('posts swarm manager toggles with command target', async () => {
