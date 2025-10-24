@@ -636,7 +636,58 @@ public class SwarmLifecycleSteps {
   }
 
   private String finalQueueName() {
-    return "ph." + swarmId + ".final";
+    String suffix = finalQueueSuffix();
+    return queueNameForSuffix(suffix);
+  }
+
+  private String finalQueueSuffix() {
+    ensureTemplate();
+
+    Bee postprocessor = findBeeOptional("postprocessor");
+    if (postprocessor != null && postprocessor.work() != null) {
+      String inbound = trimmed(postprocessor.work().in());
+      if (inbound != null) {
+        return inbound;
+      }
+    }
+
+    Bee processor = findBeeOptional("processor");
+    if (processor != null && processor.work() != null) {
+      String outbound = trimmed(processor.work().out());
+      if (outbound != null) {
+        return outbound;
+      }
+    }
+
+    LinkedHashSet<String> produced = new LinkedHashSet<>();
+    LinkedHashSet<String> consumed = new LinkedHashSet<>();
+    if (template != null && template.bees() != null) {
+      for (Bee bee : template.bees()) {
+        if (bee == null || bee.work() == null) {
+          continue;
+        }
+        String inbound = trimmed(bee.work().in());
+        if (inbound != null) {
+          consumed.add(inbound);
+        }
+        String outbound = trimmed(bee.work().out());
+        if (outbound != null) {
+          produced.add(outbound);
+        }
+      }
+    }
+
+    for (String candidate : produced) {
+      if (!consumed.contains(candidate)) {
+        return candidate;
+      }
+    }
+
+    if (!produced.isEmpty()) {
+      return produced.iterator().next();
+    }
+
+    return "final";
   }
 
   private String hiveExchangeName() {
@@ -916,6 +967,16 @@ public class SwarmLifecycleSteps {
         .orElseThrow(() -> new AssertionError("No bee with role " + role + " in template"));
   }
 
+  private Bee findBeeOptional(String role) {
+    if (template == null || template.bees() == null || role == null || role.isBlank()) {
+      return null;
+    }
+    return template.bees().stream()
+        .filter(bee -> bee != null && bee.role() != null && role.equalsIgnoreCase(bee.role()))
+        .findFirst()
+        .orElse(null);
+  }
+
   private String queueNameForSuffix(String suffix) {
     if (suffix == null || suffix.isBlank()) {
       return null;
@@ -925,6 +986,14 @@ public class SwarmLifecycleSteps {
       return trimmed;
     }
     return "ph." + swarmId + "." + trimmed;
+  }
+
+  private String trimmed(String value) {
+    if (value == null) {
+      return null;
+    }
+    String trimmed = value.trim();
+    return trimmed.isEmpty() ? null : trimmed;
   }
 
   private List<String> queueList(String queue) {

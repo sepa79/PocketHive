@@ -38,13 +38,16 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.Properties;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.UUID;
 
 import io.pockethive.docker.DockerContainerClient;
@@ -132,7 +135,6 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
         properties.getSwarmId(),
         properties.getControlExchange(),
         properties.getControlQueuePrefixBase(),
-        traffic.queuePrefix(),
         traffic.hiveExchange(),
         properties.getRabbit().logsExchange(),
         properties.getRabbit().logging().enabled(),
@@ -176,6 +178,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
     try {
       this.template = templateJson;
       SwarmPlan plan = mapper.readValue(templateJson, SwarmPlan.class);
+      Map<String, String> queueEnvironment = queueEnvironment(plan);
       TopicExchange hive = new TopicExchange(properties.hiveExchange(), true, false);
       amqp.declareExchange(hive);
       log.info("declared hive exchange {}", properties.hiveExchange());
@@ -184,66 +187,71 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
       instancesByRole.clear();
       startOrder = computeStartOrder(plan);
 
-      Set<String> suffixes = new HashSet<>();
-      if (plan.bees() != null) {
-        for (Bee bee : plan.bees()) {
-          expectedReady.merge(bee.role(), 1, Integer::sum);
-          if (bee.work() != null) {
-            if (bee.work().in() != null) suffixes.add(bee.work().in());
-            if (bee.work().out() != null) suffixes.add(bee.work().out());
+      List<Bee> bees = plan.bees() == null ? List.of() : plan.bees();
+      Set<String> suffixes = new LinkedHashSet<>();
+      List<Bee> runnableBees = new ArrayList<>();
+      for (Bee bee : bees) {
+        expectedReady.merge(bee.role(), 1, Integer::sum);
+        Work work = bee.work();
+        if (work != null) {
+          if (hasText(work.in())) {
+            suffixes.add(work.in());
           }
-          if (bee.image() != null) {
-            String beeName = BeeNameGenerator.generate(bee.role(), swarmId);
-            Map<String, String> env = new LinkedHashMap<>(
-                ControlPlaneContainerEnvironmentFactory.workerEnvironment(beeName, workerSettings, rabbitProperties));
-            String net = docker.resolveControlNetwork();
-            if (net != null && !net.isBlank()) {
-              env.put("CONTROL_NETWORK", net);
-            }
-            if (bee.env() != null) {
-              for (Map.Entry<String, String> e : bee.env().entrySet()) {
-                String value = e.getValue();
-                if (bee.work() != null) {
-                  if (bee.work().in() != null)
-                    value = value.replace("${in}", properties.queueName(bee.work().in()));
-                  if (bee.work().out() != null)
-                    value = value.replace("${out}", properties.queueName(bee.work().out()));
-                }
-                env.put(e.getKey(), value);
-              }
-            }
-            log.info("creating container {} for role {} using image {}", beeName, bee.role(), bee.image());
-            log.info("container env for {}: {}", beeName, env);
-            String containerId = docker.createContainer(bee.image(), env, beeName);
-            log.info("starting container {} ({}) for role {}", containerId, beeName, bee.role());
-            docker.startContainer(containerId);
-            containers.computeIfAbsent(bee.role(), r -> new ArrayList<>()).add(containerId);
+          if (hasText(work.out())) {
+            suffixes.add(work.out());
           }
+        }
+        if (bee.image() != null) {
+          runnableBees.add(bee);
         }
       }
 
-      for (String suffix : suffixes) {
-        String queueName = properties.queueName(suffix);
-        boolean queueMissing = amqp.getQueueProperties(queueName) == null;
-        if (queueMissing) {
-          declaredQueues.remove(suffix);
-        }
-        Binding legacyBinding = new Binding(queueName, Binding.DestinationType.QUEUE,
-            hive.getName(), suffix, null);
-        amqp.removeBinding(legacyBinding);
+      declareQueues(hive, suffixes);
 
-        Queue queue = QueueBuilder.durable(queueName).build();
-        if (queueMissing || !declaredQueues.contains(suffix)) {
-          amqp.declareQueue(queue);
-          log.info("declared queue {}", queueName);
+      for (Bee bee : runnableBees) {
+        String beeName = BeeNameGenerator.generate(bee.role(), swarmId);
+        Map<String, String> env = new LinkedHashMap<>(
+            ControlPlaneContainerEnvironmentFactory.workerEnvironment(beeName, workerSettings, rabbitProperties));
+        env.putAll(queueEnvironment);
+        String net = docker.resolveControlNetwork();
+        if (hasText(net)) {
+          env.put("CONTROL_NETWORK", net);
         }
-
-        Binding desiredBinding = BindingBuilder.bind(queue).to(hive).with(queueName);
-        amqp.declareBinding(desiredBinding);
-        declaredQueues.add(suffix);
+        if (bee.env() != null) {
+          env.putAll(bee.env());
+        }
+        log.info("creating container {} for role {} using image {}", beeName, bee.role(), bee.image());
+        log.info("container env for {}: {}", beeName, env);
+        String containerId = docker.createContainer(bee.image(), env, beeName);
+        log.info("starting container {} ({}) for role {}", containerId, beeName, bee.role());
+        docker.startContainer(containerId);
+        containers.computeIfAbsent(bee.role(), r -> new ArrayList<>()).add(containerId);
       }
     } catch (JsonProcessingException e) {
       log.warn("Invalid template payload", e);
+    }
+  }
+
+  private void declareQueues(TopicExchange hive, Set<String> suffixes) {
+    for (String suffix : suffixes) {
+      String queueName = properties.queueName(suffix);
+      boolean queueMissing = amqp.getQueueProperties(queueName) == null;
+      if (queueMissing) {
+        declaredQueues.remove(suffix);
+      }
+      Binding legacyBinding = new Binding(queueName, Binding.DestinationType.QUEUE,
+          hive.getName(), suffix, null);
+      amqp.removeBinding(legacyBinding);
+
+      Queue queue = QueueBuilder.durable(queueName).build();
+      if (queueMissing || !declaredQueues.contains(suffix)) {
+        amqp.declareQueue(queue);
+        log.info("declared queue {}", queueName);
+      }
+
+      Binding desiredBinding = BindingBuilder.bind(queue).to(hive).with(queueName);
+      amqp.declareBinding(desiredBinding);
+      declaredQueues.add(suffix);
     }
   }
 
@@ -419,6 +427,38 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
       snapshot.put(queueName, new QueueStats(depth, consumers, oldestAge));
     }
     return snapshot;
+  }
+
+  private Map<String, String> queueEnvironment(SwarmPlan plan) {
+    Map<String, String> env = new LinkedHashMap<>();
+    queueName(plan, "generator", Work::out)
+        .or(() -> queueName(plan, "moderator", Work::in))
+        .ifPresent(queue -> env.put("POCKETHIVE_CONTROL_PLANE_QUEUES_GENERATOR", queue));
+    queueName(plan, "moderator", Work::out)
+        .or(() -> queueName(plan, "processor", Work::in))
+        .ifPresent(queue -> env.put("POCKETHIVE_CONTROL_PLANE_QUEUES_MODERATOR", queue));
+    queueName(plan, "processor", Work::out)
+        .or(() -> queueName(plan, "postprocessor", Work::in))
+        .ifPresent(queue -> env.put("POCKETHIVE_CONTROL_PLANE_QUEUES_FINAL", queue));
+    return env;
+  }
+
+  private Optional<String> queueName(SwarmPlan plan, String role, Function<Work, String> extractor) {
+    if (plan.bees() == null) {
+      return Optional.empty();
+    }
+    return plan.bees().stream()
+        .filter(bee -> role.equalsIgnoreCase(bee.role()))
+        .map(Bee::work)
+        .filter(Objects::nonNull)
+        .map(extractor)
+        .filter(this::hasText)
+        .map(properties::queueName)
+        .findFirst();
+  }
+
+  private boolean hasText(String value) {
+    return value != null && !value.isBlank();
   }
 
   /**
