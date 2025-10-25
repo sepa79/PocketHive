@@ -22,6 +22,7 @@ export default function HivePage() {
   const [showCreate, setShowCreate] = useState(false)
   const [activeSwarm, setActiveSwarm] = useState<string | null>(null)
   const [expandedSwarmId, setExpandedSwarmId] = useState<string | null>(null)
+  const [contextSwarmId, setContextSwarmId] = useState<string | null>(null)
   const [now, setNow] = useState(() => Date.now())
 
   useEffect(() => {
@@ -75,6 +76,12 @@ export default function HivePage() {
   }, [activeSwarm])
 
   useEffect(() => {
+    if (activeSwarm) {
+      setContextSwarmId(activeSwarm)
+    }
+  }, [activeSwarm])
+
+  useEffect(() => {
     const id = window.setInterval(() => setNow(Date.now()), 1000)
     return () => window.clearInterval(id)
   }, [])
@@ -111,10 +118,6 @@ export default function HivePage() {
     return acc
   }, {})
 
-  const activeSwarmComponents: Component[] = activeSwarm
-    ? grouped[activeSwarm] ?? []
-    : []
-
   const swarmHealth = useMemo(() => {
     return Object.fromEntries(
       Object.entries(grouped).map(([id, comps]) => [
@@ -124,10 +127,14 @@ export default function HivePage() {
     )
   }, [grouped, now])
 
-  const shouldShowActiveSwarmList =
-    !selected && expandedSwarmId === null && Boolean(activeSwarm)
+  const shouldShowSwarmList =
+    !selected && expandedSwarmId === null && Boolean(contextSwarmId)
 
   const selectedId = selected?.id
+
+  const contextSwarmComponents: Component[] = contextSwarmId
+    ? grouped[contextSwarmId] ?? []
+    : []
 
   return (
     <div className="flex h-full min-h-0 overflow-hidden">
@@ -167,6 +174,7 @@ export default function HivePage() {
                       isDefault={id === 'default'}
                       isActive={activeSwarm === normalizedId}
                       expanded={isExpanded}
+                      isSelected={contextSwarmId === id}
                       onFocusChange={(swarm, nextActive) =>
                         setActiveSwarm((current) => {
                           const normalized = swarm === 'default' ? 'default' : swarm
@@ -176,11 +184,27 @@ export default function HivePage() {
                           return current === normalized ? null : current
                         })
                       }
+                      onSelect={(swarm) => {
+                        const normalized = swarm === 'default' ? 'default' : swarm
+                        setContextSwarmId(normalized)
+                        setSelected(null)
+                      }}
                       onRemove={(swarm) => {
                         setExpandedSwarmId((current) =>
                           current === swarm ? null : current,
                         )
                         setActiveSwarm((current) =>
+                          current === (swarm === 'default' ? 'default' : swarm)
+                            ? null
+                            : current,
+                        )
+                        setSelected((current) => {
+                          if (!current) return current
+                          const currentSwarm = normalizeSwarmId(current)
+                          const removedSwarm = swarm === 'default' ? 'default' : swarm
+                          return currentSwarm === removedSwarm ? null : current
+                        })
+                        setContextSwarmId((current) =>
                           current === (swarm === 'default' ? 'default' : swarm)
                             ? null
                             : current,
@@ -225,10 +249,10 @@ export default function HivePage() {
       <div className="hidden lg:flex w-1/3 xl:w-1/4 border-l border-white/10 overflow-hidden">
         {selected ? (
           <ComponentDetail component={selected} onClose={() => setSelected(null)} />
-        ) : shouldShowActiveSwarmList ? (
+        ) : shouldShowSwarmList ? (
           <div className="flex-1 p-4 overflow-y-auto">
             <ComponentList
-              components={activeSwarmComponents}
+              components={contextSwarmComponents}
               onSelect={(component) => setSelected(component)}
               selectedId={selectedId}
             />

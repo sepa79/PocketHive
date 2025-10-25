@@ -1,4 +1,9 @@
-import { useState, type PropsWithChildren, type MouseEvent as ReactMouseEvent } from 'react'
+import {
+  useState,
+  type PropsWithChildren,
+  type MouseEvent as ReactMouseEvent,
+  type KeyboardEvent,
+} from 'react'
 import styles from './SwarmRow.module.css'
 import {
   startSwarm,
@@ -16,7 +21,9 @@ export type SwarmRowProps = PropsWithChildren<{
   isDefault?: boolean
   isActive?: boolean
   expanded?: boolean
+  isSelected?: boolean
   onFocusChange?: (swarmId: string, nextActive: boolean) => void
+  onSelect?: (swarmId: string) => void
   onRemove?: (swarmId: string) => void
   onToggleExpand?: (swarmId: string) => void
   dataTestId?: string
@@ -30,6 +37,7 @@ export default function SwarmRow({
   isDefault = false,
   isActive = false,
   expanded = false,
+  isSelected = false,
   onRemove,
   onToggleExpand,
   dataTestId,
@@ -38,9 +46,12 @@ export default function SwarmRow({
   statusKey = 0,
   children,
   onFocusChange,
+  onSelect,
 }: SwarmRowProps) {
   const [pendingAction, setPendingAction] = useState<SwarmAction | null>(null)
   const setToast = useUIStore((state) => state.setToast)
+
+  const interactive = Boolean(onSelect)
 
   const handleToggleExpand = (event: ReactMouseEvent<HTMLButtonElement>) => {
     event.stopPropagation()
@@ -51,6 +62,18 @@ export default function SwarmRow({
     event.stopPropagation()
     if (!onFocusChange) return
     onFocusChange(swarmId, !isActive)
+  }
+
+  const handleSelect = () => {
+    onSelect?.(swarmId)
+  }
+
+  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (!interactive) return
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault()
+      handleSelect()
+    }
   }
 
   const rowClassName = [styles.row, expanded ? styles.expanded : '']
@@ -106,7 +129,13 @@ export default function SwarmRow({
       data-testid={dataTestId}
       data-active={isActive ? 'true' : 'false'}
       data-expanded={expanded ? 'true' : 'false'}
-      data-interactive={'false'}
+      data-selected={isSelected ? 'true' : 'false'}
+      data-interactive={interactive ? 'true' : 'false'}
+      role={interactive ? 'button' : undefined}
+      tabIndex={interactive ? 0 : undefined}
+      aria-pressed={interactive ? (isSelected ? 'true' : 'false') : undefined}
+      onClick={interactive ? handleSelect : undefined}
+      onKeyDown={handleKeyDown}
     >
       <div className={styles.header}>
         <div className={styles.meta}>
