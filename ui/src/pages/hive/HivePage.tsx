@@ -153,14 +153,6 @@ export default function HivePage() {
               onSelect={(component) => setSelected(component)}
               selectedId={selectedId}
             />
-            {activeSwarm && (
-              <button
-                className="text-xs underline"
-                onClick={() => setActiveSwarm(null)}
-              >
-                Back to all swarms
-              </button>
-            )}
             {Object.entries(grouped)
               .sort(([a], [b]) => a.localeCompare(b))
               .filter(([id]) => !activeSwarm || id === activeSwarm)
@@ -175,9 +167,14 @@ export default function HivePage() {
                       isDefault={id === 'default'}
                       isActive={activeSwarm === normalizedId}
                       expanded={isExpanded}
-                      onActivate={(swarm) =>
-                        !activeSwarm &&
-                        setActiveSwarm(swarm === 'default' ? 'default' : swarm)
+                      onFocusChange={(swarm, nextActive) =>
+                        setActiveSwarm((current) => {
+                          const normalized = swarm === 'default' ? 'default' : swarm
+                          if (nextActive) {
+                            return normalized
+                          }
+                          return current === normalized ? null : current
+                        })
                       }
                       onRemove={(swarm) => {
                         setExpandedSwarmId((current) =>

@@ -1,9 +1,4 @@
-import {
-  useState,
-  type PropsWithChildren,
-  type KeyboardEvent as ReactKeyboardEvent,
-  type MouseEvent as ReactMouseEvent,
-} from 'react'
+import { useState, type PropsWithChildren, type MouseEvent as ReactMouseEvent } from 'react'
 import styles from './SwarmRow.module.css'
 import {
   startSwarm,
@@ -12,7 +7,7 @@ import {
 } from '../../lib/orchestratorApi'
 import { useUIStore } from '../../store'
 import { type HealthVisualState } from '../../pages/hive/visualState'
-import { Play, Square, ZoomIn } from 'lucide-react'
+import { Play, Square, ZoomIn, ZoomOut } from 'lucide-react'
 
 type SwarmAction = 'start' | 'stop' | 'remove'
 
@@ -21,7 +16,7 @@ export type SwarmRowProps = PropsWithChildren<{
   isDefault?: boolean
   isActive?: boolean
   expanded?: boolean
-  onActivate?: (swarmId: string) => void
+  onFocusChange?: (swarmId: string, nextActive: boolean) => void
   onRemove?: (swarmId: string) => void
   onToggleExpand?: (swarmId: string) => void
   dataTestId?: string
@@ -35,7 +30,6 @@ export default function SwarmRow({
   isDefault = false,
   isActive = false,
   expanded = false,
-  onActivate,
   onRemove,
   onToggleExpand,
   dataTestId,
@@ -43,34 +37,20 @@ export default function SwarmRow({
   healthTitle = 'Swarm status unavailable',
   statusKey = 0,
   children,
+  onFocusChange,
 }: SwarmRowProps) {
   const [pendingAction, setPendingAction] = useState<SwarmAction | null>(null)
   const setToast = useUIStore((state) => state.setToast)
 
-  const interactive = Boolean(onActivate)
-
-  const handleActivate = () => {
-    if (!interactive) return
-    if (!isActive) {
-      onActivate?.(swarmId)
-    }
-  }
-
-  const handleRowClick = () => {
-    handleActivate()
-  }
-
-  const handleKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
-    if (!interactive) return
-    if (event.key === 'Enter' || event.key === ' ') {
-      event.preventDefault()
-      handleActivate()
-    }
-  }
-
   const handleToggleExpand = (event: ReactMouseEvent<HTMLButtonElement>) => {
     event.stopPropagation()
     onToggleExpand?.(swarmId)
+  }
+
+  const handleFocusToggle = (event: ReactMouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation()
+    if (!onFocusChange) return
+    onFocusChange(swarmId, !isActive)
   }
 
   const rowClassName = [styles.row, expanded ? styles.expanded : '']
@@ -126,16 +106,7 @@ export default function SwarmRow({
       data-testid={dataTestId}
       data-active={isActive ? 'true' : 'false'}
       data-expanded={expanded ? 'true' : 'false'}
-      data-interactive={interactive ? 'true' : 'false'}
-      onClick={handleRowClick}
-      {...(interactive
-        ? {
-            role: 'button' as const,
-            tabIndex: 0,
-            onKeyDown: handleKeyDown,
-            'aria-pressed': isActive ? 'true' : 'false',
-          }
-        : {})}
+      data-interactive={'false'}
     >
       <div className={styles.header}>
         <div className={styles.meta}>
@@ -155,16 +126,21 @@ export default function SwarmRow({
             <button
               type="button"
               className={`${styles.iconButton} ${styles.zoomButton}`}
-              onClick={(event) => {
-                event.stopPropagation()
-                handleActivate()
-              }}
+              onClick={handleFocusToggle}
               aria-pressed={isActive ? 'true' : 'false'}
-              title={isActive ? 'Viewing this swarm' : 'Focus on this swarm'}
-              disabled={!interactive}
+              title={
+                isActive ? 'Exit focused view for this swarm' : 'Focus on this swarm'
+              }
+              disabled={!onFocusChange}
             >
-              <ZoomIn size={16} aria-hidden="true" />
-              <span className={styles.srOnly}>Focus swarm</span>
+              {isActive ? (
+                <ZoomOut size={16} aria-hidden="true" />
+              ) : (
+                <ZoomIn size={16} aria-hidden="true" />
+              )}
+              <span className={styles.srOnly}>
+                {isActive ? 'Exit focused swarm view' : 'Focus swarm'}
+              </span>
             </button>
             <button
               type="button"
