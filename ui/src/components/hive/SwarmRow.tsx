@@ -202,9 +202,13 @@ export default function SwarmRow({
               <span className={styles.srOnly}>Stop swarm</span>
             </button>
           </div>
-          <span className={styles.status} title={healthTitle} aria-label={healthTitle} role="img">
-            <span key={statusKey} className="hal-eye" data-state={healthState} aria-hidden="true" />
-          </span>
+          <span
+            key={statusKey}
+            className={`hal-eye ${styles.statusEye}`}
+            data-state={healthState}
+            title={healthTitle}
+            aria-hidden="true"
+          />
         </div>
       </div>
       {expanded && (
