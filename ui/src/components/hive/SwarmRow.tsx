@@ -6,6 +6,7 @@ import {
   removeSwarm,
 } from '../../lib/orchestratorApi'
 import { useUIStore } from '../../store'
+import { type HealthVisualState } from '../../pages/hive/visualState'
 
 type SwarmAction = 'start' | 'stop' | 'remove'
 
@@ -18,6 +19,9 @@ export type SwarmRowProps = PropsWithChildren<{
   onRemove?: (swarmId: string) => void
   onToggleExpand?: (swarmId: string) => void
   dataTestId?: string
+  healthState?: HealthVisualState
+  healthTitle?: string
+  statusKey?: number
 }>
 
 export default function SwarmRow({
@@ -29,6 +33,9 @@ export default function SwarmRow({
   onRemove,
   onToggleExpand,
   dataTestId,
+  healthState = 'missing',
+  healthTitle = 'Swarm status unavailable',
+  statusKey = 0,
   children,
 }: SwarmRowProps) {
   const [pendingAction, setPendingAction] = useState<SwarmAction | null>(null)
@@ -94,48 +101,55 @@ export default function SwarmRow({
   return (
     <div className={rowClassName} data-testid={dataTestId}>
       <div className={styles.header}>
-        <div className={styles.left}>
+        <div className={styles.meta}>
+          <div className={styles.left}>
+            <button
+              type="button"
+              aria-label={expanded ? 'Collapse swarm details' : 'Expand swarm details'}
+              aria-expanded={expanded}
+              className={styles.chevronButton}
+              onClick={handleToggleExpand}
+            >
+              <span className={styles.chevronIcon}>▾</span>
+            </button>
+            <button
+              type="button"
+              className={styles.swarmName}
+              onClick={handleActivate}
+              aria-disabled={isActive}
+            >
+              {swarmId}
+            </button>
+          </div>
+          <span className={styles.status} title={healthTitle} aria-label={healthTitle} role="img">
+            <span key={statusKey} className="hal-eye" data-state={healthState} aria-hidden="true" />
+          </span>
+        </div>
+        <div className={styles.actions} role="group" aria-label="Swarm controls">
           <button
             type="button"
-            aria-label={expanded ? 'Collapse swarm details' : 'Expand swarm details'}
-            aria-expanded={expanded}
-            className={styles.chevronButton}
-            onClick={handleToggleExpand}
+            className={buttonClasses('start')}
+            onClick={() => runAction('start')}
+            disabled={isBusy}
+            aria-busy={isStarting}
           >
-            <span className={styles.chevronIcon}>▾</span>
+            {isStarting ? 'Starting…' : 'Start swarm'}
           </button>
           <button
             type="button"
-            className={styles.swarmName}
-            onClick={handleActivate}
-            aria-disabled={isActive}
+            className={buttonClasses('stop')}
+            onClick={() => runAction('stop')}
+            disabled={isBusy}
+            aria-busy={isStopping}
           >
-            {swarmId}
+            {isStopping ? 'Stopping…' : 'Stop swarm'}
           </button>
         </div>
       </div>
       {expanded && (
         <div className={styles.content}>
           {children}
-          <div className={styles.controls} role="group" aria-label="Swarm controls">
-            <button
-              type="button"
-              className={`${styles.controlButton} ${styles.startButton}`}
-              onClick={() => runAction('start')}
-              disabled={isBusy}
-              aria-busy={isStarting}
-            >
-              {isStarting ? 'Starting…' : 'Start swarm'}
-            </button>
-            <button
-              type="button"
-              className={`${styles.controlButton} ${styles.stopButton}`}
-              onClick={() => runAction('stop')}
-              disabled={isBusy}
-              aria-busy={isStopping}
-            >
-              {isStopping ? 'Stopping…' : 'Stop swarm'}
-            </button>
+          <div className={styles.controls}>
             <button
               type="button"
               className={`${styles.controlButton} ${styles.removeButton}`}
@@ -151,4 +165,26 @@ export default function SwarmRow({
       )}
     </div>
   )
+}
+
+function buttonClasses(variant: Extract<SwarmAction, 'start' | 'stop'>) {
+  const base = [
+    styles.actionButton,
+    'rounded',
+    'px-3',
+    'py-1',
+    'text-sm',
+    'font-medium',
+    'transition',
+    'disabled:cursor-not-allowed',
+    'disabled:opacity-60',
+  ]
+
+  if (variant === 'start') {
+    base.push('border', 'border-emerald-400/40', 'bg-emerald-400/20', 'hover:bg-emerald-400/30', 'text-emerald-100')
+  } else {
+    base.push('border', 'border-rose-400/40', 'bg-rose-400/20', 'hover:bg-rose-400/30', 'text-rose-100')
+  }
+
+  return base.join(' ')
 }

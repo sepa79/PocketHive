@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import ComponentList from './ComponentList'
 import ComponentDetail from './ComponentDetail'
 import TopologyView from './TopologyView'
@@ -12,6 +12,8 @@ import type { Component } from '../../types/hive'
 import OrchestratorPanel from './OrchestratorPanel'
 import { fetchWiremockComponent } from '../../lib/wiremockClient'
 import SwarmRow from '../../components/hive/SwarmRow'
+import { componentHealth } from '../../lib/health'
+import { mapStatusToVisualState, type HealthVisualState } from './visualState'
 
 export default function HivePage() {
   const [components, setComponents] = useState<Component[]>([])
@@ -20,6 +22,7 @@ export default function HivePage() {
   const [showCreate, setShowCreate] = useState(false)
   const [activeSwarm, setActiveSwarm] = useState<string | null>(null)
   const [expandedSwarmId, setExpandedSwarmId] = useState<string | null>(null)
+  const [now, setNow] = useState(() => Date.now())
 
   useEffect(() => {
     // We rely on the control-plane event stream (`ev.status-*`) to keep the
@@ -71,6 +74,11 @@ export default function HivePage() {
     setSelected(null)
   }, [activeSwarm])
 
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(Date.now()), 1000)
+    return () => window.clearInterval(id)
+  }, [])
+
   const isOrchestrator = (comp: Component) =>
     comp.role.trim().toLowerCase() === 'orchestrator'
 
@@ -106,6 +114,15 @@ export default function HivePage() {
   const activeSwarmComponents: Component[] = activeSwarm
     ? grouped[activeSwarm] ?? []
     : []
+
+  const swarmHealth = useMemo(() => {
+    return Object.fromEntries(
+      Object.entries(grouped).map(([id, comps]) => [
+        id,
+        deriveSwarmHealth(id, comps, now),
+      ]),
+    )
+  }, [grouped, now])
 
   const shouldShowActiveSwarmList =
     !selected && expandedSwarmId === null && Boolean(activeSwarm)
@@ -150,6 +167,7 @@ export default function HivePage() {
               .map(([id, comps]) => {
                 const normalizedId = id === 'default' ? 'default' : id
                 const isExpanded = expandedSwarmId === id
+                const health = swarmHealth[id] ?? defaultSwarmHealth(id)
                 return (
                   <div key={id} className="space-y-2">
                     <SwarmRow
@@ -177,6 +195,9 @@ export default function HivePage() {
                         )
                       }
                       dataTestId={`swarm-group-${id}`}
+                      healthState={health.state}
+                      healthTitle={health.title}
+                      statusKey={health.pulseKey}
                     >
                       {isExpanded && (
                         <ComponentList
@@ -222,5 +243,127 @@ export default function HivePage() {
       {showCreate && <SwarmCreateModal onClose={() => setShowCreate(false)} />}
     </div>
   )
+}
+
+type SwarmHealthMeta = {
+  state: HealthVisualState
+  title: string
+  pulseKey: number
+}
+
+function deriveSwarmHealth(
+  swarmId: string,
+  components: Component[],
+  now: number,
+): SwarmHealthMeta {
+  if (components.length === 0) {
+    return {
+      state: 'missing',
+      title: `No components reporting for ${swarmId}`,
+      pulseKey: 0,
+    }
+  }
+
+  let derivedState: HealthVisualState | null = null
+  for (const component of components) {
+    const mapped = mapStatusToVisualState(component.status)
+    derivedState = pickHigherPriority(derivedState, mapped)
+    if (derivedState === 'alert') break
+  }
+
+  if (!derivedState || derivedState === 'ok') {
+    let aggregate: 'OK' | 'WARN' | 'ALERT' = 'OK'
+    for (const component of components) {
+      const health = componentHealth(component, now)
+      aggregate = combineHealth(aggregate, health)
+      if (aggregate === 'ALERT') break
+    }
+
+    if (aggregate === 'ALERT') {
+      derivedState = 'alert'
+    } else if (aggregate === 'WARN') {
+      derivedState = 'warn'
+    } else if (!derivedState) {
+      derivedState = 'ok'
+    }
+  }
+
+  const validHeartbeats = components
+    .map((component) =>
+      typeof component.lastHeartbeat === 'number'
+        ? component.lastHeartbeat
+        : Number.NEGATIVE_INFINITY,
+    )
+    .filter((heartbeat) => Number.isFinite(heartbeat))
+
+  const latestHeartbeat = validHeartbeats.length
+    ? Math.max(...validHeartbeats)
+    : Number.NaN
+
+  const secondsAgo = Number.isFinite(latestHeartbeat)
+    ? Math.max(0, Math.floor((now - latestHeartbeat) / 1000))
+    : null
+
+  const statusLabel = stateLabel(derivedState ?? 'missing')
+  const componentsLabel = components.length === 1 ? '1 component' : `${components.length} components`
+
+  const heartbeatLabel =
+    secondsAgo === null
+      ? 'latest heartbeat timing unavailable'
+      : `latest heartbeat ${secondsAgo}s ago`
+
+  return {
+    state: derivedState ?? 'missing',
+    title: `${statusLabel} · ${componentsLabel} · ${heartbeatLabel}`,
+    pulseKey: Number.isFinite(latestHeartbeat) ? latestHeartbeat : 0,
+  }
+}
+
+function defaultSwarmHealth(swarmId: string): SwarmHealthMeta {
+  return {
+    state: 'missing',
+    title: `No components reporting for ${swarmId}`,
+    pulseKey: 0,
+  }
+}
+
+function pickHigherPriority(
+  current: HealthVisualState | null,
+  next: HealthVisualState | null,
+): HealthVisualState | null {
+  if (!next) return current
+  if (!current) return next
+  const order: Record<HealthVisualState, number> = {
+    missing: 0,
+    disabled: 1,
+    ok: 2,
+    warn: 3,
+    alert: 4,
+  }
+  return order[next] >= order[current] ? next : current
+}
+
+function combineHealth(
+  current: 'OK' | 'WARN' | 'ALERT',
+  next: 'OK' | 'WARN' | 'ALERT',
+): 'OK' | 'WARN' | 'ALERT' {
+  if (current === 'ALERT' || next === 'ALERT') return 'ALERT'
+  if (current === 'WARN' || next === 'WARN') return 'WARN'
+  return 'OK'
+}
+
+function stateLabel(state: HealthVisualState): string {
+  switch (state) {
+    case 'alert':
+      return 'Alert'
+    case 'warn':
+      return 'Warning'
+    case 'disabled':
+      return 'Disabled'
+    case 'ok':
+      return 'Healthy'
+    default:
+      return 'Missing'
+  }
 }
 
