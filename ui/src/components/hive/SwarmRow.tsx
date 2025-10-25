@@ -1,4 +1,9 @@
-import { useState, type PropsWithChildren } from 'react'
+import {
+  useState,
+  type PropsWithChildren,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
+} from 'react'
 import styles from './SwarmRow.module.css'
 import {
   startSwarm,
@@ -7,6 +12,7 @@ import {
 } from '../../lib/orchestratorApi'
 import { useUIStore } from '../../store'
 import { type HealthVisualState } from '../../pages/hive/visualState'
+import { Play, Square, ZoomIn } from 'lucide-react'
 
 type SwarmAction = 'start' | 'stop' | 'remove'
 
@@ -41,19 +47,35 @@ export default function SwarmRow({
   const [pendingAction, setPendingAction] = useState<SwarmAction | null>(null)
   const setToast = useUIStore((state) => state.setToast)
 
+  const interactive = Boolean(onActivate)
+
   const handleActivate = () => {
+    if (!interactive) return
     if (!isActive) {
       onActivate?.(swarmId)
     }
   }
 
-  const handleToggleExpand = () => {
+  const handleRowClick = () => {
+    handleActivate()
+  }
+
+  const handleKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (!interactive) return
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault()
+      handleActivate()
+    }
+  }
+
+  const handleToggleExpand = (event: ReactMouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation()
     onToggleExpand?.(swarmId)
   }
 
-  const rowClassName = expanded
-    ? `${styles.row} ${styles.expanded}`
-    : styles.row
+  const rowClassName = [styles.row, expanded ? styles.expanded : '']
+    .filter(Boolean)
+    .join(' ')
 
   const runAction = async (action: SwarmAction) => {
     if (pendingAction) return
@@ -99,61 +121,106 @@ export default function SwarmRow({
   const isBusy = pendingAction !== null
 
   return (
-    <div className={rowClassName} data-testid={dataTestId}>
+    <div
+      className={rowClassName}
+      data-testid={dataTestId}
+      data-active={isActive ? 'true' : 'false'}
+      data-expanded={expanded ? 'true' : 'false'}
+      data-interactive={interactive ? 'true' : 'false'}
+      onClick={handleRowClick}
+      {...(interactive
+        ? {
+            role: 'button' as const,
+            tabIndex: 0,
+            onKeyDown: handleKeyDown,
+            'aria-pressed': isActive ? 'true' : 'false',
+          }
+        : {})}
+    >
       <div className={styles.header}>
         <div className={styles.meta}>
-          <div className={styles.left}>
+          <button
+            type="button"
+            aria-label={expanded ? 'Collapse swarm details' : 'Expand swarm details'}
+            aria-expanded={expanded}
+            className={styles.chevronButton}
+            onClick={handleToggleExpand}
+          >
+            <span className={styles.chevronIcon}>▾</span>
+          </button>
+          <span className={styles.swarmName}>{swarmId}</span>
+        </div>
+        <div className={styles.utility}>
+          <div className={styles.actions} role="group" aria-label="Swarm controls">
             <button
               type="button"
-              aria-label={expanded ? 'Collapse swarm details' : 'Expand swarm details'}
-              aria-expanded={expanded}
-              className={styles.chevronButton}
-              onClick={handleToggleExpand}
+              className={`${styles.iconButton} ${styles.zoomButton}`}
+              onClick={(event) => {
+                event.stopPropagation()
+                handleActivate()
+              }}
+              aria-pressed={isActive ? 'true' : 'false'}
+              title={isActive ? 'Viewing this swarm' : 'Focus on this swarm'}
+              disabled={!interactive}
             >
-              <span className={styles.chevronIcon}>▾</span>
+              <ZoomIn size={16} aria-hidden="true" />
+              <span className={styles.srOnly}>Focus swarm</span>
             </button>
             <button
               type="button"
-              className={styles.swarmName}
-              onClick={handleActivate}
-              aria-disabled={isActive}
+              className={`${styles.iconButton} ${styles.startButton}`}
+              onClick={(event) => {
+                event.stopPropagation()
+                runAction('start')
+              }}
+              disabled={isBusy}
+              aria-busy={isStarting}
+              title={isStarting ? 'Start command in progress' : 'Start swarm'}
+              data-pending={isStarting ? 'true' : 'false'}
             >
-              {swarmId}
+              <Play size={16} aria-hidden="true" />
+              <span className={styles.srOnly}>Start swarm</span>
+            </button>
+            <button
+              type="button"
+              className={`${styles.iconButton} ${styles.stopButton}`}
+              onClick={(event) => {
+                event.stopPropagation()
+                runAction('stop')
+              }}
+              disabled={isBusy}
+              aria-busy={isStopping}
+              title={isStopping ? 'Stop command in progress' : 'Stop swarm'}
+              data-pending={isStopping ? 'true' : 'false'}
+            >
+              <Square size={16} aria-hidden="true" />
+              <span className={styles.srOnly}>Stop swarm</span>
             </button>
           </div>
           <span className={styles.status} title={healthTitle} aria-label={healthTitle} role="img">
             <span key={statusKey} className="hal-eye" data-state={healthState} aria-hidden="true" />
           </span>
         </div>
-        <div className={styles.actions} role="group" aria-label="Swarm controls">
-          <button
-            type="button"
-            className={buttonClasses('start')}
-            onClick={() => runAction('start')}
-            disabled={isBusy}
-            aria-busy={isStarting}
-          >
-            {isStarting ? 'Starting…' : 'Start swarm'}
-          </button>
-          <button
-            type="button"
-            className={buttonClasses('stop')}
-            onClick={() => runAction('stop')}
-            disabled={isBusy}
-            aria-busy={isStopping}
-          >
-            {isStopping ? 'Stopping…' : 'Stop swarm'}
-          </button>
-        </div>
       </div>
       {expanded && (
-        <div className={styles.content}>
+        <div
+          className={styles.content}
+          onClick={(event) => event.stopPropagation()}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.stopPropagation()
+            }
+          }}
+        >
           {children}
           <div className={styles.controls}>
             <button
               type="button"
               className={`${styles.controlButton} ${styles.removeButton}`}
-              onClick={() => runAction('remove')}
+              onClick={(event) => {
+                event.stopPropagation()
+                runAction('remove')
+              }}
               disabled={isBusy || isDefault}
               aria-busy={isRemoving}
               title={isDefault ? 'Default swarm cannot be removed' : undefined}
@@ -165,26 +232,4 @@ export default function SwarmRow({
       )}
     </div>
   )
-}
-
-function buttonClasses(variant: Extract<SwarmAction, 'start' | 'stop'>) {
-  const base = [
-    styles.actionButton,
-    'rounded',
-    'px-3',
-    'py-1',
-    'text-sm',
-    'font-medium',
-    'transition',
-    'disabled:cursor-not-allowed',
-    'disabled:opacity-60',
-  ]
-
-  if (variant === 'start') {
-    base.push('border', 'border-emerald-400/40', 'bg-emerald-400/20', 'hover:bg-emerald-400/30', 'text-emerald-100')
-  } else {
-    base.push('border', 'border-rose-400/40', 'bg-rose-400/20', 'hover:bg-rose-400/30', 'text-rose-100')
-  }
-
-  return base.join(' ')
 }
