@@ -103,12 +103,14 @@ export default function HivePage() {
     return acc
   }, {})
 
-  const activeSwarmComponents = activeSwarm
+  const activeSwarmComponents: Component[] = activeSwarm
     ? grouped[activeSwarm] ?? []
     : []
 
   const shouldShowActiveSwarmList =
     !selected && expandedSwarmId === null && Boolean(activeSwarm)
+
+  const selectedId = selected?.id
 
   return (
     <div className="flex h-full min-h-0 overflow-hidden">
@@ -132,7 +134,7 @@ export default function HivePage() {
             <OrchestratorPanel
               orchestrator={orchestrator}
               onSelect={(component) => setSelected(component)}
-              selectedId={selected?.id}
+              selectedId={selectedId}
             />
             {activeSwarm && (
               <button
@@ -180,7 +182,7 @@ export default function HivePage() {
                         <ComponentList
                           components={comps}
                           onSelect={(c) => setSelected(c)}
-                          selectedId={selected?.id}
+                          selectedId={selectedId}
                         />
                       )}
                     </SwarmRow>
@@ -192,7 +194,7 @@ export default function HivePage() {
       </div>
       <div className="hidden md:flex flex-1 overflow-auto">
         <TopologyView
-          selectedId={selected?.id}
+          selectedId={selectedId}
           onSelect={(id) => {
             const comp = components.find((c) => c.id === id)
             if (comp) setSelected(comp)
@@ -210,7 +212,7 @@ export default function HivePage() {
             <ComponentList
               components={activeSwarmComponents}
               onSelect={(component) => setSelected(component)}
-              selectedId={selected?.id}
+              selectedId={selectedId}
             />
           </div>
         ) : (
