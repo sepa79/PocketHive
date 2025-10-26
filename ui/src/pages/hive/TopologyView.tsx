@@ -69,6 +69,25 @@ const shapeOrder: NodeShape[] = [
   'star',
 ]
 
+const workerColorPalette: Record<string, string> = {
+  orchestrator: '#38bdf8',
+  'swarm-controller': '#f97316',
+  generator: '#22d3ee',
+  processor: '#a855f7',
+  moderator: '#f472b6',
+  postprocessor: '#facc15',
+  trigger: '#34d399',
+  wiremock: '#f59e0b',
+}
+
+function getComponentFill(type?: string, enabled?: boolean): string {
+  if (enabled === false) {
+    return '#64748b'
+  }
+  const normalized = type?.toLowerCase() ?? ''
+  return workerColorPalette[normalized] ?? '#60a5fa'
+}
+
 interface ShapeNodeData {
   label: string
   shape: NodeShape
@@ -93,7 +112,7 @@ function formatMetaValue(value: unknown): string | null {
 
 function ShapeNode({ data, selected }: NodeProps<ShapeNodeData>) {
   const size = 10
-  const fill = data.enabled === false ? '#999999' : '#ffcc00'
+  const fill = getComponentFill(data.componentType, data.enabled)
   const isOrchestrator = data.componentType === 'orchestrator'
   const role = data.role || data.componentType
   const componentId =
@@ -184,6 +203,7 @@ interface SwarmGroupComponentData {
   shape: NodeShape
   enabled?: boolean
   queueCount: number
+  componentType?: string
 }
 
 interface SwarmGroupEdgeData {
@@ -245,7 +265,7 @@ function SwarmGroupNode({ data }: NodeProps<SwarmGroupNodeData>) {
 
   const renderShape = useCallback(
     (comp: SwarmGroupComponentData & { x: number; y: number }) => {
-      const fill = comp.enabled === false ? '#999999' : '#ffcc00'
+      const fill = getComponentFill(comp.componentType ?? comp.name, comp.enabled)
       const iconRadius = comp.id === data.controllerId ? 14 : 11
       const label = comp.name
         .split(/[-_]/)
@@ -628,6 +648,7 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
                 shape: getShape(member.type),
                 enabled: member.enabled,
                 queueCount: queueCounts[member.id] ?? 0,
+                componentType: member.type,
               })),
               edges: groupEdges,
               onDetails: handleDetails,
