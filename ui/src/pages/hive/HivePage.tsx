@@ -364,13 +364,13 @@ function deriveSwarmHealth(
 function defaultSwarmHealth(swarmId: string): SwarmHealthMeta {
   return {
     state: 'missing',
-    title: `No components reporting for ${swarmId}`,
+    title: `No components reporting for ${formatSwarmDisplayName(swarmId)}`,
     pulseKey: 0,
   }
 }
 
 function formatSwarmDisplayName(id: string): string {
-  return id === 'default' ? 'Default swarm' : id
+  return id === 'default' ? 'Services' : id
 }
 
 function formatComponentCount(count: number): string {

@@ -59,7 +59,9 @@ export default function SwarmRow({
     ? Math.max(0, Math.floor(componentCount))
     : 0
   const componentLabel = normalizedComponentCount === 1 ? '1 component' : `${normalizedComponentCount} components`
+  const displayName = isDefault ? 'Services' : swarmId
   const sanitizedId = useMemo(() => normalizeForId(`${swarmId}-content`), [swarmId])
+  const showLifecycleActions = !isDefault
 
   const handleToggleExpand = (event: ReactMouseEvent<HTMLButtonElement>) => {
     event.stopPropagation()
@@ -130,7 +132,7 @@ export default function SwarmRow({
   const isStopping = pendingAction === 'stop'
   const isRemoving = pendingAction === 'remove'
   const isBusy = pendingAction !== null
-  const rowLabel = interactive ? `Select swarm ${swarmId}` : undefined
+  const rowLabel = interactive ? `Select swarm ${displayName}` : undefined
 
   return (
     <div
@@ -160,11 +162,8 @@ export default function SwarmRow({
             <span className={styles.chevronIcon}>▾</span>
           </button>
           <div className={styles.metaColumn}>
-            <span className={styles.swarmName}>{swarmId}</span>
+            <span className={styles.swarmName}>{displayName}</span>
             <div className={styles.badgeRow}>
-              {isDefault ? (
-                <span className={`${styles.badge} ${styles.defaultBadge}`}>Default</span>
-              ) : null}
               <span className={`${styles.badge} ${styles.countBadge}`} data-testid="swarm-component-count">
                 {componentLabel}
               </span>
@@ -192,36 +191,40 @@ export default function SwarmRow({
                 {isActive ? 'Exit focused swarm view' : 'Focus swarm'}
               </span>
             </button>
-            <button
-              type="button"
-              className={`${styles.iconButton} ${styles.startButton}`}
-              onClick={(event) => {
-                event.stopPropagation()
-                runAction('start')
-              }}
-              disabled={isBusy}
-              aria-busy={isStarting}
-              title={isStarting ? 'Start command in progress' : 'Start swarm'}
-              data-pending={isStarting ? 'true' : 'false'}
-            >
-              <Play size={16} aria-hidden="true" />
-              <span className={styles.srOnly}>Start swarm</span>
-            </button>
-            <button
-              type="button"
-              className={`${styles.iconButton} ${styles.stopButton}`}
-              onClick={(event) => {
-                event.stopPropagation()
-                runAction('stop')
-              }}
-              disabled={isBusy}
-              aria-busy={isStopping}
-              title={isStopping ? 'Stop command in progress' : 'Stop swarm'}
-              data-pending={isStopping ? 'true' : 'false'}
-            >
-              <Square size={16} aria-hidden="true" />
-              <span className={styles.srOnly}>Stop swarm</span>
-            </button>
+            {showLifecycleActions ? (
+              <>
+                <button
+                  type="button"
+                  className={`${styles.iconButton} ${styles.startButton}`}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    runAction('start')
+                  }}
+                  disabled={isBusy}
+                  aria-busy={isStarting}
+                  title={isStarting ? 'Start command in progress' : 'Start swarm'}
+                  data-pending={isStarting ? 'true' : 'false'}
+                >
+                  <Play size={16} aria-hidden="true" />
+                  <span className={styles.srOnly}>Start swarm</span>
+                </button>
+                <button
+                  type="button"
+                  className={`${styles.iconButton} ${styles.stopButton}`}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    runAction('stop')
+                  }}
+                  disabled={isBusy}
+                  aria-busy={isStopping}
+                  title={isStopping ? 'Stop command in progress' : 'Stop swarm'}
+                  data-pending={isStopping ? 'true' : 'false'}
+                >
+                  <Square size={16} aria-hidden="true" />
+                  <span className={styles.srOnly}>Stop swarm</span>
+                </button>
+              </>
+            ) : null}
           </div>
           <span
             key={statusKey}
@@ -244,21 +247,22 @@ export default function SwarmRow({
           }}
         >
           {children}
-          <div className={styles.controls}>
-            <button
-              type="button"
-              className={`${styles.controlButton} ${styles.removeButton}`}
-              onClick={(event) => {
-                event.stopPropagation()
-                runAction('remove')
-              }}
-              disabled={isBusy || isDefault}
-              aria-busy={isRemoving}
-              title={isDefault ? 'Default swarm cannot be removed' : undefined}
-            >
-              {isRemoving ? 'Removing…' : 'Remove swarm'}
-            </button>
-          </div>
+          {!isDefault ? (
+            <div className={styles.controls}>
+              <button
+                type="button"
+                className={`${styles.controlButton} ${styles.removeButton}`}
+                onClick={(event) => {
+                  event.stopPropagation()
+                  runAction('remove')
+                }}
+                disabled={isBusy}
+                aria-busy={isRemoving}
+              >
+                {isRemoving ? 'Removing…' : 'Remove swarm'}
+              </button>
+            </div>
+          ) : null}
         </div>
       )}
     </div>

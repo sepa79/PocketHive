@@ -210,12 +210,12 @@ test('selecting a swarm card reveals its components in the context panel without
   const toggle = within(defaultGroup).getByRole('button', { name: /swarm details/i })
   expect(toggle).toHaveAttribute('aria-expanded', 'false')
 
-  const defaultLabel = within(defaultGroup).getByText('default')
+  const defaultLabel = within(defaultGroup).getByText('Services')
   await user.click(defaultLabel)
   await waitFor(() => expect(defaultGroup).toHaveAttribute('data-selected', 'true'))
 
   const contextPanel = await screen.findByTestId('swarm-context-panel')
-  expect(within(contextPanel).getByText('Default swarm')).toBeInTheDocument()
+  expect(within(contextPanel).getByText('Services')).toBeInTheDocument()
   expect(within(contextPanel).getByText('1 component')).toBeInTheDocument()
   expect(within(contextPanel).getByText('orphan')).toBeInTheDocument()
   expect(toggle).toHaveAttribute('aria-expanded', 'false')

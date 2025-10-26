@@ -89,12 +89,6 @@
   color: rgba(226, 232, 240, 0.9);
 }
 
-.defaultBadge {
-  border-color: rgba(52, 211, 153, 0.6);
-  color: rgba(209, 250, 229, 0.95);
-  background-color: rgba(16, 185, 129, 0.2);
-}
-
 .countBadge {
   border-color: rgba(125, 211, 252, 0.4);
   color: rgba(224, 242, 254, 0.95);
