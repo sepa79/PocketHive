@@ -135,26 +135,28 @@ export default function HivePage() {
   const contextSwarmComponents: Component[] = contextSwarmId
     ? grouped[contextSwarmId] ?? []
     : []
+  const contextSwarmLabel = contextSwarmId ? formatSwarmDisplayName(contextSwarmId) : ''
+  const contextComponentLabel = formatComponentCount(contextSwarmComponents.length)
 
   return (
     <div className="flex h-full min-h-0 overflow-hidden">
-      <div className="w-full md:w-1/3 xl:w-1/4 border-r border-white/10 p-4 flex flex-col">
-        <div className="flex items-center gap-2">
+      <div className="w-full lg:w-[360px] xl:w-[420px] border-r border-white/10 px-5 py-4 flex flex-col gap-4">
+        <div className="flex items-center gap-3">
           <input
-            className="flex-1 rounded bg-white/5 p-2 text-white"
+            className="flex-1 rounded-lg bg-white/5 px-3 py-2 text-white placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-sky-300/50"
             placeholder="Search components"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
           <button
-            className="rounded bg-white/20 hover:bg-white/30 px-2 py-1 text-sm"
+            className="rounded-lg border border-white/15 bg-white/10 px-3 py-2 text-sm font-medium text-white/90 transition hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-sky-300/50"
             onClick={() => setShowCreate(true)}
           >
             Create Swarm
           </button>
         </div>
-        <div className="mt-4 flex-1 overflow-y-auto">
-          <div className="space-y-4">
+        <div className="flex-1 overflow-y-auto pr-1">
+          <div className="space-y-4 pb-4">
             <OrchestratorPanel
               orchestrator={orchestrator}
               onSelect={(component) => setSelected(component)}
@@ -175,6 +177,7 @@ export default function HivePage() {
                       isActive={activeSwarm === normalizedId}
                       expanded={isExpanded}
                       isSelected={contextSwarmId === id}
+                      componentCount={comps.length}
                       onFocusChange={(swarm, nextActive) =>
                         setActiveSwarm((current) => {
                           const normalized = swarm === 'default' ? 'default' : swarm
@@ -246,19 +249,37 @@ export default function HivePage() {
             setActiveSwarm(id === 'default' ? 'default' : id)}
         />
       </div>
-      <div className="hidden lg:flex w-1/3 xl:w-1/4 border-l border-white/10 overflow-hidden">
+      <div className="hidden lg:flex w-[360px] xl:w-[420px] border-l border-white/10 bg-slate-950/40 backdrop-blur-sm">
         {selected ? (
           <ComponentDetail component={selected} onClose={() => setSelected(null)} />
         ) : shouldShowSwarmList ? (
-          <div className="flex-1 p-4 overflow-y-auto">
-            <ComponentList
-              components={contextSwarmComponents}
-              onSelect={(component) => setSelected(component)}
-              selectedId={selectedId}
-            />
+          <div className="flex-1 overflow-y-auto px-6 py-5" data-testid="swarm-context-panel">
+            <div className="flex items-center justify-between gap-4 border-b border-white/10 pb-4">
+              <div className="min-w-0">
+                <div className="text-xs uppercase tracking-wide text-white/40">Swarm</div>
+                <div className="mt-1 truncate text-sm font-semibold text-white/90">
+                  {contextSwarmLabel}
+                </div>
+              </div>
+              <span className="shrink-0 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-white/70">
+                {contextComponentLabel}
+              </span>
+            </div>
+            <div className="mt-4">
+              <ComponentList
+                components={contextSwarmComponents}
+                onSelect={(component) => setSelected(component)}
+                selectedId={selectedId}
+              />
+            </div>
           </div>
         ) : (
-          <div className="p-4 text-white/50 overflow-y-auto">Select a component</div>
+          <div
+            className="flex-1 overflow-y-auto px-6 py-5 text-white/50"
+            data-testid="swarm-context-placeholder"
+          >
+            Select a component
+          </div>
         )}
       </div>
       {showCreate && <SwarmCreateModal onClose={() => setShowCreate(false)} />}
@@ -346,6 +367,16 @@ function defaultSwarmHealth(swarmId: string): SwarmHealthMeta {
     title: `No components reporting for ${swarmId}`,
     pulseKey: 0,
   }
+}
+
+function formatSwarmDisplayName(id: string): string {
+  return id === 'default' ? 'Default swarm' : id
+}
+
+function formatComponentCount(count: number): string {
+  if (!Number.isFinite(count)) return '0 components'
+  const normalized = Math.max(0, Math.floor(count))
+  return normalized === 1 ? '1 component' : `${normalized} components`
 }
 
 function pickHigherPriority(

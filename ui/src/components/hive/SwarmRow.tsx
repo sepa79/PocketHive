@@ -1,4 +1,5 @@
 import {
+  useMemo,
   useState,
   type PropsWithChildren,
   type MouseEvent as ReactMouseEvent,
@@ -22,6 +23,7 @@ export type SwarmRowProps = PropsWithChildren<{
   isActive?: boolean
   expanded?: boolean
   isSelected?: boolean
+  componentCount?: number
   onFocusChange?: (swarmId: string, nextActive: boolean) => void
   onSelect?: (swarmId: string) => void
   onRemove?: (swarmId: string) => void
@@ -38,6 +40,7 @@ export default function SwarmRow({
   isActive = false,
   expanded = false,
   isSelected = false,
+  componentCount = 0,
   onRemove,
   onToggleExpand,
   dataTestId,
@@ -52,6 +55,11 @@ export default function SwarmRow({
   const setToast = useUIStore((state) => state.setToast)
 
   const interactive = Boolean(onSelect)
+  const normalizedComponentCount = Number.isFinite(componentCount)
+    ? Math.max(0, Math.floor(componentCount))
+    : 0
+  const componentLabel = normalizedComponentCount === 1 ? '1 component' : `${normalizedComponentCount} components`
+  const sanitizedId = useMemo(() => normalizeForId(`${swarmId}-content`), [swarmId])
 
   const handleToggleExpand = (event: ReactMouseEvent<HTMLButtonElement>) => {
     event.stopPropagation()
@@ -122,6 +130,7 @@ export default function SwarmRow({
   const isStopping = pendingAction === 'stop'
   const isRemoving = pendingAction === 'remove'
   const isBusy = pendingAction !== null
+  const rowLabel = interactive ? `Select swarm ${swarmId}` : undefined
 
   return (
     <div
@@ -134,6 +143,7 @@ export default function SwarmRow({
       role={interactive ? 'button' : undefined}
       tabIndex={interactive ? 0 : undefined}
       aria-pressed={interactive ? (isSelected ? 'true' : 'false') : undefined}
+      aria-label={rowLabel}
       onClick={interactive ? handleSelect : undefined}
       onKeyDown={handleKeyDown}
     >
@@ -145,10 +155,21 @@ export default function SwarmRow({
             aria-expanded={expanded}
             className={styles.chevronButton}
             onClick={handleToggleExpand}
+            aria-controls={sanitizedId}
           >
             <span className={styles.chevronIcon}>▾</span>
           </button>
-          <span className={styles.swarmName}>{swarmId}</span>
+          <div className={styles.metaColumn}>
+            <span className={styles.swarmName}>{swarmId}</span>
+            <div className={styles.badgeRow}>
+              {isDefault ? (
+                <span className={`${styles.badge} ${styles.defaultBadge}`}>Default</span>
+              ) : null}
+              <span className={`${styles.badge} ${styles.countBadge}`} data-testid="swarm-component-count">
+                {componentLabel}
+              </span>
+            </div>
+          </div>
         </div>
         <div className={styles.utility}>
           <div className={styles.actions} role="group" aria-label="Swarm controls">
@@ -214,6 +235,7 @@ export default function SwarmRow({
       {expanded && (
         <div
           className={styles.content}
+          id={sanitizedId}
           onClick={(event) => event.stopPropagation()}
           onKeyDown={(event) => {
             if (event.key === 'Enter' || event.key === ' ') {
@@ -241,4 +263,8 @@ export default function SwarmRow({
       )}
     </div>
   )
+}
+
+function normalizeForId(value: string) {
+  return value.replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '') || 'swarm-content'
 }
