@@ -2,7 +2,7 @@
   width: 100%;
   height: 100%;
   flex: 1 1 auto;
-  background: radial-gradient(circle at 50% 50%, rgba(24, 30, 44, 0.92), rgba(8, 10, 14, 0.98));
+  background: radial-gradient(circle at 50% 50%, rgba(44, 58, 84, 0.88), rgba(12, 16, 24, 0.96));
   position: relative;
 }
 
@@ -10,35 +10,36 @@
   position: absolute;
   bottom: 10px;
   left: 10px;
-  background: rgba(12, 16, 26, 0.88);
-  backdrop-filter: blur(4px);
+  background: linear-gradient(160deg, rgba(52, 66, 94, 0.85), rgba(30, 38, 56, 0.9));
+  backdrop-filter: blur(6px);
   color: #f8fafc;
-  padding: 4px 10px;
-  border-radius: 6px;
-  border: 1px solid rgba(148, 163, 184, 0.25);
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(148, 182, 216, 0.45);
   font-size: 0.75rem;
-  box-shadow: 0 6px 18px rgba(8, 12, 24, 0.35);
+  box-shadow: 0 10px 24px rgba(6, 12, 24, 0.4);
 }
 
 .reset-view {
   position: absolute;
   top: 10px;
   right: 10px;
-  background: rgba(12, 16, 26, 0.88);
-  backdrop-filter: blur(4px);
+  background: linear-gradient(160deg, rgba(52, 66, 94, 0.88), rgba(30, 38, 56, 0.9));
+  backdrop-filter: blur(6px);
   color: #f8fafc;
-  border: 1px solid rgba(148, 163, 184, 0.25);
-  padding: 4px 10px;
-  border-radius: 6px;
+  border: 1px solid rgba(148, 182, 216, 0.45);
+  padding: 6px 12px;
+  border-radius: 8px;
   cursor: pointer;
   font-size: 0.75rem;
-  box-shadow: 0 6px 18px rgba(8, 12, 24, 0.35);
-  transition: background 0.2s ease, border-color 0.2s ease;
+  box-shadow: 0 10px 24px rgba(6, 12, 24, 0.4);
+  transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .reset-view:hover {
-  background: rgba(30, 41, 59, 0.92);
-  border-color: rgba(148, 163, 184, 0.4);
+  background: linear-gradient(160deg, rgba(72, 92, 126, 0.92), rgba(42, 54, 78, 0.94));
+  border-color: rgba(180, 208, 240, 0.6);
+  box-shadow: 0 12px 28px rgba(10, 16, 30, 0.45);
 }
 
 .legend-item {
@@ -73,14 +74,14 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  background: linear-gradient(160deg, rgba(21, 26, 38, 0.95), rgba(13, 17, 27, 0.95));
-  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: linear-gradient(155deg, rgba(60, 76, 110, 0.88), rgba(32, 40, 60, 0.94));
+  border: 1px solid rgba(176, 202, 236, 0.55);
   border-radius: 12px;
-  box-shadow: 0 14px 30px rgba(2, 6, 23, 0.45);
+  box-shadow: 0 16px 30px rgba(12, 18, 34, 0.4);
   padding: 8px 12px;
   position: relative;
   font-size: 0.75rem;
-  color: #e2e8f0;
+  color: #ecf3ff;
 }
 
 .shape-node--orchestrator {
@@ -91,13 +92,13 @@
 }
 
 .shape-node.selected {
-  border-color: rgba(59, 130, 246, 0.75);
-  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3);
+  border-color: rgba(96, 165, 250, 0.9);
+  box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.35), 0 18px 36px rgba(12, 18, 34, 0.48);
 }
 
 .shape-node .shape-icon {
   flex-shrink: 0;
-  filter: drop-shadow(0 0 6px rgba(148, 163, 184, 0.4));
+  filter: drop-shadow(0 0 6px rgba(188, 208, 240, 0.45));
 }
 
 .shape-node .label {
@@ -114,7 +115,7 @@
 
 .shape-node__role {
   font-size: 0.65rem;
-  color: rgba(148, 163, 184, 0.85);
+  color: rgba(210, 226, 255, 0.85);
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
@@ -126,13 +127,13 @@
   column-gap: 8px;
   row-gap: 2px;
   font-size: 0.65rem;
-  color: rgba(203, 213, 225, 0.85);
+  color: rgba(224, 231, 255, 0.9);
 }
 
 .shape-node__meta-term {
   font-weight: 500;
   margin: 0;
-  color: rgba(148, 163, 184, 0.9);
+  color: rgba(206, 218, 240, 0.95);
 }
 
 .shape-node__meta-value {
@@ -146,22 +147,22 @@
   position: absolute;
   top: -6px;
   right: -6px;
-  background: #1f2937;
+  background: rgba(13, 110, 253, 0.9);
   color: #f8fafc;
   border-radius: 9999px;
   padding: 0 4px;
   font-size: 0.5rem;
   line-height: 1;
   pointer-events: none;
-  box-shadow: 0 6px 12px rgba(2, 6, 23, 0.55);
+  box-shadow: 0 6px 14px rgba(10, 26, 55, 0.5);
 }
 
 .shape-node .react-flow__handle {
   width: 8px;
   height: 8px;
-  background: #60a5fa;
-  border: 1px solid rgba(15, 23, 42, 0.6);
-  box-shadow: 0 0 0 2px rgba(148, 163, 184, 0.18);
+  background: #93c5fd;
+  border: 1px solid rgba(12, 18, 34, 0.6);
+  box-shadow: 0 0 0 2px rgba(188, 208, 240, 0.22);
 }
 
 .react-flow__node.dragging,
@@ -172,20 +173,20 @@
 .swarm-group {
   width: 220px;
   height: 240px;
-  background: linear-gradient(160deg, rgba(21, 27, 39, 0.92), rgba(12, 16, 26, 0.95));
-  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: linear-gradient(150deg, rgba(70, 88, 124, 0.88), rgba(38, 48, 70, 0.94));
+  border: 1px solid rgba(176, 202, 236, 0.55);
   border-radius: 16px;
-  box-shadow: 0 18px 36px rgba(2, 6, 23, 0.5);
+  box-shadow: 0 20px 38px rgba(12, 18, 34, 0.45);
   padding: 14px;
   display: flex;
   flex-direction: column;
   gap: 10px;
-  color: #e2e8f0;
+  color: #ecf3ff;
 }
 
 .swarm-group.selected {
-  border-color: rgba(59, 130, 246, 0.75);
-  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25), 0 22px 44px rgba(2, 6, 23, 0.55);
+  border-color: rgba(96, 165, 250, 0.9);
+  box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.35), 0 24px 46px rgba(12, 18, 34, 0.52);
 }
 
 .swarm-group__header {
