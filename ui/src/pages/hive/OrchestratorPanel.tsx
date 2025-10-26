@@ -8,11 +8,8 @@ import {
 import { Play, Square } from 'lucide-react'
 import type { Component } from '../../types/hive'
 import { heartbeatHealth } from '../../lib/health'
-import {
-  disableSwarmManagers,
-  enableSwarmManagers,
-  sendConfigUpdate,
-} from '../../lib/orchestratorApi'
+import { mapStatusToVisualState, type HealthVisualState } from './visualState'
+import { disableSwarmManagers, enableSwarmManagers } from '../../lib/orchestratorApi'
 
 interface Props {
   orchestrator?: Component | null
@@ -22,8 +19,6 @@ interface Props {
 
 type OrchestratorAction = 'start' | 'stop'
 
-type HealthVisualState = 'missing' | 'disabled' | 'ok' | 'warn' | 'alert'
-
 function displayNameFor(orchestrator?: Component | null) {
   if (!orchestrator) return 'Orchestrator'
   const trimmed = typeof orchestrator.name === 'string' ? orchestrator.name.trim() : ''
@@ -31,34 +26,10 @@ function displayNameFor(orchestrator?: Component | null) {
   return orchestrator.id
 }
 
-function buttonClasses(isDetected: boolean, variant: OrchestratorAction) {
-  const base = [
-    'rounded',
-    'px-3',
-    'py-1',
-    'text-sm',
-    'font-medium',
-    'transition',
-    'disabled:cursor-not-allowed',
-    'disabled:opacity-60',
-  ]
-
-  if (!isDetected) {
-    base.push('border border-white/10 bg-white/5 text-white/60')
-  } else if (variant === 'start') {
-    base.push('border border-emerald-400/40 bg-emerald-400/20 hover:bg-emerald-400/30 text-emerald-100')
-  } else {
-    base.push('border border-rose-400/40 bg-rose-400/20 hover:bg-rose-400/30 text-rose-100')
-  }
-
-  return base.join(' ')
-}
-
 export default function OrchestratorPanel({ orchestrator, onSelect, selectedId }: Props) {
   const [heartbeatKey, setHeartbeatKey] = useState(0)
   const [now, setNow] = useState(() => Date.now())
   const [pendingAction, setPendingAction] = useState<OrchestratorAction | null>(null)
-  const [updatingEnabled, setUpdatingEnabled] = useState(false)
   const [confirmingAction, setConfirmingAction] = useState(false)
   const isDetected = Boolean(orchestrator)
   const isSelected = Boolean(orchestrator && selectedId === orchestrator.id)
@@ -69,8 +40,6 @@ export default function OrchestratorPanel({ orchestrator, onSelect, selectedId }
     : typeof rawEnabled === 'boolean'
     ? (rawEnabled ? 'true' : 'false')
     : 'unknown'
-  const isEnabled = enabledState === 'true'
-
   const name = useMemo(() => displayNameFor(orchestrator), [orchestrator])
   const healthState: HealthVisualState = useMemo(() => {
     if (!isDetected || !orchestrator) return 'missing'
@@ -94,8 +63,6 @@ export default function OrchestratorPanel({ orchestrator, onSelect, selectedId }
     return formatted ?? '—'
   }, [rawConfig])
 
-  const enabledLabel =
-    enabledState === 'true' ? 'Enabled' : enabledState === 'false' ? 'Disabled' : 'Unknown'
   const interactive = Boolean(isDetected && orchestrator && onSelect)
   const cardClasses = [
     'rounded',
@@ -144,19 +111,6 @@ export default function OrchestratorPanel({ orchestrator, onSelect, selectedId }
     setNow(Date.now())
   }, [orchestrator, orchestrator?.lastHeartbeat, orchestrator?.status])
 
-  const toggleEnabled = async () => {
-    if (!isDetected || !orchestrator || updatingEnabled) return
-    const next = !isEnabled
-    try {
-      setUpdatingEnabled(true)
-      await sendConfigUpdate(orchestrator, { enabled: next })
-    } catch (error) {
-      console.error('Failed to update orchestrator config:', error)
-    } finally {
-      setUpdatingEnabled(false)
-    }
-  }
-
   const halTitle = useMemo(
     () => formatLastStatusTooltip(orchestrator, isDetected, now),
     [isDetected, now, orchestrator],
@@ -172,7 +126,7 @@ export default function OrchestratorPanel({ orchestrator, onSelect, selectedId }
       onClick={handleSelect}
       onKeyDown={handleKeyDown}
     >
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="text-xs uppercase tracking-wide text-white/50">Orchestrator</div>
           <div className="mt-1 flex flex-wrap items-center gap-2">
@@ -183,60 +137,46 @@ export default function OrchestratorPanel({ orchestrator, onSelect, selectedId }
             <span className="font-semibold text-white/80">{activeSwarmDisplay}</span>
           </div>
         </div>
-        <span
-          key={heartbeatKey}
-          className="hal-eye shrink-0"
-          data-state={healthState}
-          data-testid="orchestrator-health"
-          title={halTitle}
-          aria-hidden="true"
-        />
-      </div>
-      <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
-        <button
-          type="button"
-          data-enabled={enabledState}
-          data-testid="orchestrator-enabled"
-          className="shrink-0"
-          disabled={!isDetected || updatingEnabled}
-          onClick={(event: MouseEvent<HTMLButtonElement>) => {
-            event.stopPropagation()
-            toggleEnabled()
-          }}
-          aria-pressed={isEnabled}
-          aria-busy={updatingEnabled}
-        >
-          {isEnabled ? (
-            <Square className="h-3.5 w-3.5" aria-hidden="true" />
-          ) : (
-            <Play className="h-3.5 w-3.5" aria-hidden="true" />
-          )}
-          <span>{enabledLabel}</span>
-        </button>
-        <button
-          type="button"
-          className={buttonClasses(isDetected, 'start')}
-          disabled={!isDetected}
-          onClick={(event: MouseEvent<HTMLButtonElement>) => {
-            event.stopPropagation()
-            setConfirmingAction(false)
-            setPendingAction('start')
-          }}
-        >
-          Start all
-        </button>
-        <button
-          type="button"
-          className={buttonClasses(isDetected, 'stop')}
-          disabled={!isDetected}
-          onClick={(event: MouseEvent<HTMLButtonElement>) => {
-            event.stopPropagation()
-            setConfirmingAction(false)
-            setPendingAction('stop')
-          }}
-        >
-          Stop all
-        </button>
+        <div className="flex items-start gap-2">
+          <div className="flex items-center gap-1" role="group" aria-label="Orchestrator controls">
+            <button
+              type="button"
+              className="flex h-8 w-8 items-center justify-center rounded border border-white/15 bg-white/5 text-white/80 transition hover:border-emerald-300/40 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={!isDetected || Boolean(pendingAction)}
+              onClick={(event: MouseEvent<HTMLButtonElement>) => {
+                event.stopPropagation()
+                setConfirmingAction(false)
+                setPendingAction('start')
+              }}
+              aria-label="Send start command to all swarms"
+              aria-busy={pendingAction === 'start' && confirmingAction}
+            >
+              <Play className="h-3.5 w-3.5" aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              className="flex h-8 w-8 items-center justify-center rounded border border-white/15 bg-white/5 text-white/80 transition hover:border-rose-300/40 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={!isDetected || Boolean(pendingAction)}
+              onClick={(event: MouseEvent<HTMLButtonElement>) => {
+                event.stopPropagation()
+                setConfirmingAction(false)
+                setPendingAction('stop')
+              }}
+              aria-label="Send stop command to all swarms"
+              aria-busy={pendingAction === 'stop' && confirmingAction}
+            >
+              <Square className="h-3.5 w-3.5" aria-hidden="true" />
+            </button>
+          </div>
+          <span
+            key={heartbeatKey}
+            className="hal-eye shrink-0"
+            data-state={healthState}
+            data-testid="orchestrator-health"
+            title={halTitle}
+            aria-hidden="true"
+          />
+        </div>
       </div>
       {actionCopy && (
         <div
@@ -300,16 +240,6 @@ export default function OrchestratorPanel({ orchestrator, onSelect, selectedId }
       )}
     </div>
   )
-}
-
-function mapStatusToVisualState(status: unknown): HealthVisualState | null {
-  if (typeof status !== 'string') return null
-  const normalized = status.trim().toUpperCase()
-  if (!normalized) return null
-  if (['OK', 'HEALTHY', 'RUNNING', 'READY', 'STARTING'].includes(normalized)) return 'ok'
-  if (['WARN', 'WARNING', 'DEGRADED', 'LATE'].includes(normalized)) return 'warn'
-  if (['ALERT', 'ERROR', 'FAILED', 'STOPPED', 'DOWN', 'CRITICAL'].includes(normalized)) return 'alert'
-  return null
 }
 
 function extractActiveSwarmCount(config: Record<string, unknown>): string | null {

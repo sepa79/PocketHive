@@ -28,8 +28,8 @@ export function queueHealth(q: QueueInfo): HealthStatus {
   return 'OK'
 }
 
-export function componentHealth(c: Component): HealthStatus {
-  let h: HealthStatus = heartbeatHealth(c.lastHeartbeat)
+export function componentHealth(c: Component, now = Date.now()): HealthStatus {
+  let h: HealthStatus = heartbeatHealth(c.lastHeartbeat, now)
   for (const q of c.queues) {
     h = combine(h, queueHealth(q))
     if (h === 'ALERT') break

@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.13.2] - 2025-10-25
+Timestamp: 2025-10-25T00:00:00Z
+
+- UI & UX: rename the default swarm card to "Services," hide lifecycle and
+  removal controls for that special card, and align health metadata and tests so
+  the right panel reflects the new label consistently.
+- Release: bump the PocketHive patch version to 0.13.2 so tooling and published
+  artifacts reference the latest build.
+
 ## [0.13.1] - 2025-10-24
 Timestamp: 2025-10-24T00:00:00Z
 
