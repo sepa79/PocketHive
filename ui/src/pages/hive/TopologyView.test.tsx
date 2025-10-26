@@ -237,7 +237,7 @@ test('grouped swarm node renders and edges aggregate by swarm', () => {
   expect(externalEdge.style.stroke).toBe('#ff6666')
   expect(externalEdge.style.strokeWidth).toBeGreaterThan(2)
   const groupData = updatedGroup.data as {
-    components?: { id: string; queueCount: number }[]
+    components?: { id: string; queueCount: number; status?: string }[]
     edges?: { queue: string }[]
   }
   expect(groupData.components).toBeDefined()
