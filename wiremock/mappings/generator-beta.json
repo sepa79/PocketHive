@@ -4,10 +4,12 @@
     "url": "/api/test-beta"
   },
   "response": {
-    "proxyBaseUrl": "http://localhost:8080/__internal__/generator-beta",
-    "proxyUrlPrefixToRemove": "/api/test-beta",
-    "additionalProxyRequestHeaders": {
-      "X-Beta-Outcome": "{{#assign 'betaRoll'}}{{randomInt 1 10}}{{/assign}}{{#if (eq betaRoll 1)}}failure{{else}}success{{/if}}"
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "message": "default generator beta response"
     }
   }
 }
