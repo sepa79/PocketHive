@@ -1,0 +1,17 @@
+{
+  "schemaVersion": "1.0.0",
+  "capabilitiesVersion": "1.0.0",
+  "role": "postprocessor",
+  "displayName": "Post-processor Worker",
+  "summary": "Records hop latency metrics and finalises results at the end of the pipeline.",
+  "config": [
+    {
+      "name": "enabled",
+      "label": "Enabled",
+      "description": "Allow observability to continue while pausing hop aggregation.",
+      "type": "boolean"
+    }
+  ],
+  "actions": [],
+  "panels": []
+}

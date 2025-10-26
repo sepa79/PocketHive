@@ -6,6 +6,7 @@ This archive consolidates plans and documentation, removes duplication, and cent
 
 ## Structure
 - `contracts/orchestrator_controller_contract_v0/contract.md` — Single source of truth for messaging
+- `contracts/capabilities/manifest.schema.json` — Worker capabilities manifest schema consumed by Scenario Manager + UI
 - `ui_scenario_builder_mvp_plan/` — UI plan (no duplicated contract files)
 - `scenario_manager_extension_plan/` — Scenario Manager plan (no duplicated contract files)
 - `PHASED_PLAN.md` — Overall MVP roadmap

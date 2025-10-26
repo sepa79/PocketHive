@@ -59,6 +59,14 @@ Execute the unit test suite:
 npm test
 ```
 
+### Contracts
+
+Surface the canonical capabilities manifest schema path for tooling:
+
+```bash
+npm run schema:capabilities
+```
+
 ## Key Panels
 
 - **Hive** – manage swarms, browse components, view the topology graph and inspect component details.

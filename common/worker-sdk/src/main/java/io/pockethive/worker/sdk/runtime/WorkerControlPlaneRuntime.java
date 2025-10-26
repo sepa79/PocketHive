@@ -13,6 +13,8 @@ import io.pockethive.controlplane.worker.WorkerControlPlane;
 import io.pockethive.controlplane.worker.WorkerSignalListener;
 import io.pockethive.controlplane.worker.WorkerStatusRequest;
 import io.pockethive.worker.sdk.api.StatusPublisher;
+import io.pockethive.worker.sdk.capabilities.WorkerCapabilitiesManifest;
+import io.pockethive.worker.sdk.capabilities.WorkerCapabilitiesManifestRepository;
 import io.pockethive.worker.sdk.config.PocketHiveWorker;
 import com.fasterxml.jackson.core.type.TypeReference;
 import java.util.ArrayList;
@@ -53,6 +55,7 @@ public final class WorkerControlPlaneRuntime {
     private final WorkerSignalListener signalListener = new WorkerSignalDispatcher();
     private final Map<String, List<Consumer<WorkerStateSnapshot>>> stateListeners = new ConcurrentHashMap<>();
     private final List<Consumer<WorkerStateSnapshot>> globalStateListeners = new CopyOnWriteArrayList<>();
+    private final WorkerCapabilitiesManifestRepository manifestRepository;
 
     public WorkerControlPlaneRuntime(
         WorkerControlPlane workerControlPlane,
@@ -60,6 +63,7 @@ public final class WorkerControlPlaneRuntime {
         ObjectMapper objectMapper,
         ControlPlaneEmitter emitter,
         ControlPlaneIdentity identity,
+        WorkerCapabilitiesManifestRepository manifestRepository,
         WorkerControlPlaneProperties.ControlPlane controlPlane
     ) {
         this.workerControlPlane = Objects.requireNonNull(workerControlPlane, "workerControlPlane");
@@ -67,12 +71,14 @@ public final class WorkerControlPlaneRuntime {
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper");
         this.emitter = Objects.requireNonNull(emitter, "emitter");
         this.identity = Objects.requireNonNull(identity, "identity");
+        this.manifestRepository = Objects.requireNonNull(manifestRepository, "manifestRepository");
         WorkerControlPlaneProperties.ControlPlane resolvedControlPlane =
             Objects.requireNonNull(controlPlane, "controlPlane");
         this.controlQueueName = resolvedControlPlane.getControlQueueName();
         this.controlRoutes = resolveControlRoutes(resolvedControlPlane.getRoutes(), identity);
         // Ensure workers discovered during runtime bootstrap receive a status publisher.
         stateStore.all().forEach(this::ensureStatusPublisher);
+        stateStore.all().forEach(this::ensureCapabilitiesManifest);
     }
 
     /**
@@ -510,6 +516,7 @@ public final class WorkerControlPlaneRuntime {
             return;
         }
         StatusSnapshot snapshotData = collectSnapshot(states, snapshot);
+        CapabilitiesBatch capabilitiesBatch = snapshot ? collectCapabilities(states) : CapabilitiesBatch.empty();
         Consumer<io.pockethive.observability.StatusEnvelopeBuilder> customiser = builder -> {
             builder.role(identity.role())
                 .instance(identity.instanceId())
@@ -530,6 +537,9 @@ public final class WorkerControlPlaneRuntime {
             builder.tps(snapshotData.processedTotal());
             builder.data("workers", snapshotData.workers());
             builder.data("snapshot", snapshot);
+            if (!capabilitiesBatch.isEmpty()) {
+                builder.data("capabilities", capabilitiesBatch.payload());
+            }
         };
         ControlPlaneEmitter.StatusContext statusContext = ControlPlaneEmitter.StatusContext.of(customiser);
         if (snapshot) {
@@ -579,6 +589,28 @@ public final class WorkerControlPlaneRuntime {
         return new StatusSnapshot(processedTotal, allEnabled, workers, workIn, workOut);
     }
 
+    private CapabilitiesBatch collectCapabilities(Collection<WorkerState> states) {
+        Map<String, Map<String, Object>> payloadByRole = new LinkedHashMap<>();
+        List<WorkerState> toMark = new ArrayList<>();
+        for (WorkerState state : states) {
+            ensureCapabilitiesManifest(state);
+            if (!state.shouldPublishCapabilitiesManifest()) {
+                continue;
+            }
+            WorkerCapabilitiesManifest manifest = state.capabilitiesManifest().orElse(null);
+            if (manifest == null) {
+                continue;
+            }
+            payloadByRole.putIfAbsent(manifest.role(), manifest.payload());
+            toMark.add(state);
+        }
+        if (payloadByRole.isEmpty()) {
+            return CapabilitiesBatch.empty();
+        }
+        toMark.forEach(WorkerState::markCapabilitiesManifestPublished);
+        return new CapabilitiesBatch(Map.copyOf(payloadByRole));
+    }
+
     private WorkerStatusPublisher ensureStatusPublisher(WorkerState state) {
         StatusPublisher publisher = state.statusPublisher();
         if (publisher instanceof WorkerStatusPublisher workerStatusPublisher) {
@@ -587,6 +619,13 @@ public final class WorkerControlPlaneRuntime {
         WorkerStatusPublisher created = new WorkerStatusPublisher(state, this::emitStatusSnapshot, this::emitStatusDelta);
         state.setStatusPublisher(created);
         return created;
+    }
+
+    private void ensureCapabilitiesManifest(WorkerState state) {
+        if (state.capabilitiesManifest().isPresent()) {
+            return;
+        }
+        manifestRepository.findByRole(state.definition().role()).ifPresent(state::setCapabilitiesManifest);
     }
 
     private void notifyStateListeners(WorkerState state) {
@@ -642,6 +681,17 @@ public final class WorkerControlPlaneRuntime {
                                   List<Map<String, Object>> workers,
                                   Set<String> workIn,
                                   Set<String> workOut) {
+    }
+
+    private record CapabilitiesBatch(Map<String, Map<String, Object>> payload) {
+
+        static CapabilitiesBatch empty() {
+            return new CapabilitiesBatch(Map.of());
+        }
+
+        boolean isEmpty() {
+            return payload.isEmpty();
+        }
     }
 
     /**

@@ -27,6 +27,7 @@ import io.pockethive.worker.sdk.runtime.WorkerStateStore;
 import io.pockethive.worker.sdk.runtime.WorkerStatusScheduler;
 import io.pockethive.worker.sdk.runtime.WorkerStatusSchedulerProperties;
 import io.pockethive.worker.sdk.runtime.WorkerInvocationInterceptor;
+import io.pockethive.worker.sdk.capabilities.WorkerCapabilitiesManifestRepository;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -107,6 +108,15 @@ public class PocketHiveWorkerSdkAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
+    WorkerCapabilitiesManifestRepository workerCapabilitiesManifestRepository(
+        ObjectProvider<ObjectMapper> objectMapperProvider
+    ) {
+        ObjectMapper mapper = objectMapperProvider.getIfAvailable(() -> new ObjectMapper().findAndRegisterModules());
+        return new WorkerCapabilitiesManifestRepository(mapper);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
     WorkerContextFactory workerContextFactory(
         ConfigurableListableBeanFactory beanFactory,
         ObjectProvider<MeterRegistry> meterRegistry,
@@ -141,7 +151,8 @@ public class PocketHiveWorkerSdkAutoConfiguration {
         @Qualifier("workerControlPlaneIdentity") ControlPlaneIdentity identity,
         @Qualifier("workerControlPlaneEmitter") ControlPlaneEmitter controlPlaneEmitter,
         WorkerControlPlaneProperties workerControlPlaneProperties,
-        ObjectProvider<ObjectMapper> objectMapperProvider
+        ObjectProvider<ObjectMapper> objectMapperProvider,
+        WorkerCapabilitiesManifestRepository manifestRepository
     ) {
         ObjectMapper mapper = objectMapperProvider.getIfAvailable(() -> new ObjectMapper().findAndRegisterModules());
         WorkerControlPlaneProperties.ControlPlane controlPlane = Objects
@@ -149,7 +160,7 @@ public class PocketHiveWorkerSdkAutoConfiguration {
             .getControlPlane();
         Objects.requireNonNull(controlPlane, "workerControlPlaneProperties.controlPlane must not be null");
         return new WorkerControlPlaneRuntime(workerControlPlane, workerStateStore, mapper, controlPlaneEmitter, identity,
-            controlPlane);
+            manifestRepository, controlPlane);
     }
 
     @Bean

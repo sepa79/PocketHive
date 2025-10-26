@@ -1,0 +1,86 @@
+{
+  "schemaVersion": "1.0.0",
+  "capabilitiesVersion": "1.0.0",
+  "role": "generator",
+  "displayName": "Generator Worker",
+  "summary": "Emits synthetic HTTP traffic into the swarm using the configured request template.",
+  "config": [
+    {
+      "name": "enabled",
+      "label": "Enabled",
+      "description": "Toggle traffic generation without redeploying the worker.",
+      "type": "boolean"
+    },
+    {
+      "name": "ratePerSec",
+      "label": "Requests per second",
+      "description": "Nominal request rate the generator should target.",
+      "type": "number",
+      "validation": {
+        "minimum": 0
+      },
+      "ui": {
+        "component": "slider",
+        "order": 10
+      }
+    },
+    {
+      "name": "singleRequest",
+      "label": "Single request",
+      "description": "Emit one request per trigger instead of a continuous stream.",
+      "type": "boolean"
+    },
+    {
+      "name": "path",
+      "label": "Request path",
+      "description": "Relative HTTP path used when building generated requests.",
+      "type": "string",
+      "validation": {
+        "pattern": "^/.*$"
+      },
+      "ui": {
+        "placeholder": "/api/orders",
+        "order": 20
+      }
+    },
+    {
+      "name": "method",
+      "label": "HTTP method",
+      "description": "Verb applied to generated requests.",
+      "type": "enum",
+      "options": [
+        { "value": "GET", "label": "GET" },
+        { "value": "POST", "label": "POST" },
+        { "value": "PUT", "label": "PUT" },
+        { "value": "PATCH", "label": "PATCH" },
+        { "value": "DELETE", "label": "DELETE" }
+      ],
+      "ui": {
+        "order": 30
+      }
+    },
+    {
+      "name": "body",
+      "label": "Request body",
+      "description": "Payload forwarded with generated requests.",
+      "type": "text",
+      "ui": {
+        "multiline": true,
+        "monospace": true,
+        "order": 40
+      }
+    },
+    {
+      "name": "headers",
+      "label": "HTTP headers",
+      "description": "Additional headers appended to generated requests.",
+      "type": "json",
+      "ui": {
+        "monospace": true,
+        "order": 50
+      }
+    }
+  ],
+  "actions": [],
+  "panels": []
+}

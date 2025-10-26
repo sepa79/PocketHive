@@ -9,7 +9,8 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "schema:capabilities": "node -e \"console.log(require('path').resolve(__dirname, '../docs/pockethive_scenario_builder_mvp/contracts/capabilities/manifest.schema.json'))\""
   },
   "dependencies": {
     "@stomp/stompjs": "^7.1.1",
