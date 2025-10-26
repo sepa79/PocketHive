@@ -2,32 +2,37 @@
   width: 100%;
   height: 100%;
   flex: 1 1 auto;
-  background: linear-gradient(135deg, #f0f4ff 0%, #ffe6f9 100%);
+  background: radial-gradient(circle at 45% 45%, rgba(12, 16, 26, 0.94) 0%, rgba(7, 10, 18, 0.98) 60%, rgba(4, 6, 13, 0.99) 100%);
   position: relative;
 }
 
 .topology-legend {
   position: absolute;
-  bottom: 10px;
-  left: 10px;
-  background: rgba(0, 0, 0, 0.6);
-  color: #fff;
-  padding: 4px 8px;
-  border-radius: 4px;
+  bottom: 12px;
+  left: 12px;
+  background: rgba(15, 23, 42, 0.82);
+  color: #f8fafc;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.45);
+  box-shadow: 0 10px 30px rgba(2, 6, 23, 0.35);
   font-size: 0.75rem;
+  backdrop-filter: blur(8px);
 }
 
 .reset-view {
   position: absolute;
   top: 10px;
   right: 10px;
-  background: rgba(0, 0, 0, 0.6);
-  color: #fff;
-  border: none;
-  padding: 4px 8px;
-  border-radius: 4px;
+  background: rgba(15, 23, 42, 0.82);
+  color: #f8fafc;
+  border: 1px solid rgba(148, 163, 184, 0.45);
+  padding: 6px 12px;
+  border-radius: 9999px;
   cursor: pointer;
   font-size: 0.75rem;
+  box-shadow: 0 10px 30px rgba(2, 6, 23, 0.35);
+  backdrop-filter: blur(8px);
 }
 
 .legend-item {
@@ -61,26 +66,28 @@
 .shape-node {
   display: flex;
   align-items: center;
-  gap: 4px;
-  background: #fff;
-  border: 1px solid #d4d4d8;
-  border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-  padding: 6px 10px;
+  gap: 8px;
+  background: linear-gradient(140deg, rgba(30, 41, 59, 0.92) 0%, rgba(15, 23, 42, 0.9) 100%);
+  border: 1px solid rgba(148, 163, 184, 0.55);
+  border-radius: 12px;
+  box-shadow: 0 18px 40px rgba(2, 6, 23, 0.45);
+  padding: 10px 14px;
   position: relative;
-  font-size: 0.75rem;
-  color: #111827;
+  font-size: 0.8rem;
+  color: #f8fafc;
+  backdrop-filter: blur(6px);
 }
 
 .shape-node--orchestrator {
   align-items: flex-start;
-  gap: 8px;
-  padding: 8px 12px;
-  min-width: 200px;
+  gap: 10px;
+  padding: 12px 16px;
+  min-width: 220px;
 }
 
 .shape-node.selected {
-  border-color: #3b82f6;
+  border-color: rgba(96, 165, 250, 0.85);
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.35), 0 18px 40px rgba(2, 6, 23, 0.55);
 }
 
 .shape-node .shape-icon {
@@ -90,6 +97,7 @@
 .shape-node .label {
   pointer-events: none;
   font-weight: 600;
+  color: #f1f5f9;
 }
 
 .shape-node__content {
@@ -99,8 +107,8 @@
 }
 
 .shape-node__role {
-  font-size: 0.65rem;
-  color: #4b5563;
+  font-size: 0.7rem;
+  color: #cbd5f5;
 }
 
 .shape-node__meta {
@@ -109,8 +117,8 @@
   grid-template-columns: auto 1fr;
   column-gap: 8px;
   row-gap: 2px;
-  font-size: 0.65rem;
-  color: #374151;
+  font-size: 0.7rem;
+  color: #e2e8f0;
 }
 
 .shape-node__meta-term {
@@ -122,14 +130,15 @@
   font-weight: 600;
   margin: 0;
   text-align: right;
+  color: #bae6fd;
 }
 
 .shape-node .badge {
   position: absolute;
   top: -6px;
   right: -6px;
-  background: #333;
-  color: #fff;
+  background: linear-gradient(135deg, #38bdf8 0%, #2563eb 100%);
+  color: #0f172a;
   border-radius: 9999px;
   padding: 0 4px;
   font-size: 0.5rem;
@@ -140,7 +149,7 @@
 .shape-node .react-flow__handle {
   width: 8px;
   height: 8px;
-  background: #b1b1b7;
+  background: #94a3b8;
   border: none;
 }
 
@@ -150,49 +159,51 @@
 }
 
 .swarm-group {
-  width: 220px;
-  height: 240px;
-  background: rgba(255, 255, 255, 0.95);
-  border: 2px solid #d4d4d8;
-  border-radius: 12px;
-  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.15);
-  padding: 12px;
+  width: 240px;
+  height: 250px;
+  background: linear-gradient(160deg, rgba(30, 41, 59, 0.94) 0%, rgba(15, 23, 42, 0.92) 100%);
+  border: 1px solid rgba(148, 163, 184, 0.55);
+  border-radius: 14px;
+  box-shadow: 0 25px 45px rgba(2, 6, 23, 0.5);
+  padding: 16px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 12px;
+  backdrop-filter: blur(10px);
 }
 
 .swarm-group.selected {
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25);
+  border-color: rgba(96, 165, 250, 0.85);
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.35), 0 25px 45px rgba(2, 6, 23, 0.6);
 }
 
 .swarm-group__header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: 10px;
 }
 
 .swarm-group__title {
   font-weight: 600;
-  font-size: 0.9rem;
-  color: #111827;
+  font-size: 0.95rem;
+  color: #f8fafc;
 }
 
 .swarm-group__details {
   border: none;
-  background: #2563eb;
-  color: #fff;
+  background: linear-gradient(135deg, #38bdf8 0%, #2563eb 100%);
+  color: #0f172a;
   border-radius: 9999px;
-  padding: 2px 8px;
+  padding: 4px 10px;
   font-size: 0.7rem;
   cursor: pointer;
-  transition: background 0.2s ease;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
 .swarm-group__details:hover {
-  background: #1d4ed8;
+  transform: translateY(-1px);
+  box-shadow: 0 8px 16px rgba(56, 189, 248, 0.35);
 }
 
 .swarm-group__svg {
@@ -202,28 +213,28 @@
 }
 
 .swarm-group__edge {
-  opacity: 0.85;
+  opacity: 0.9;
 }
 
 .swarm-group__selection {
-  fill: rgba(59, 130, 246, 0.15);
-  stroke: #3b82f6;
+  fill: rgba(56, 189, 248, 0.15);
+  stroke: #38bdf8;
   stroke-width: 2;
 }
 
 .swarm-group__icon-label {
-  font-size: 0.55rem;
+  font-size: 0.6rem;
   font-weight: 600;
-  fill: #111827;
+  fill: #f8fafc;
   pointer-events: none;
 }
 
 .swarm-group__badge {
-  fill: #1f2937;
+  fill: rgba(56, 189, 248, 0.9);
 }
 
 .swarm-group__badge-text {
-  font-size: 0.45rem;
-  fill: #fff;
+  font-size: 0.5rem;
+  fill: #0f172a;
   pointer-events: none;
 }
