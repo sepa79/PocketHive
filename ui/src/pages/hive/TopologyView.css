@@ -45,24 +45,6 @@
   flex-shrink: 0;
 }
 
-.node-badge {
-  position: relative;
-  width: 12px;
-  height: 12px;
-}
-
-.node-badge .badge {
-  position: absolute;
-  top: -4px;
-  right: -4px;
-  background: #333;
-  color: #fff;
-  border-radius: 9999px;
-  padding: 0 2px;
-  font-size: 0.5rem;
-  line-height: 1;
-}
-
 .shape-node {
   display: flex;
   align-items: center;
@@ -133,19 +115,6 @@
   color: #bae6fd;
 }
 
-.shape-node .badge {
-  position: absolute;
-  top: -6px;
-  right: -6px;
-  background: linear-gradient(135deg, #38bdf8 0%, #2563eb 100%);
-  color: #0f172a;
-  border-radius: 9999px;
-  padding: 0 4px;
-  font-size: 0.5rem;
-  line-height: 1;
-  pointer-events: none;
-}
-
 .shape-node .react-flow__handle {
   width: 8px;
   height: 8px;
@@ -191,19 +160,13 @@
 }
 
 .swarm-group__details {
-  border: none;
-  background: linear-gradient(135deg, #38bdf8 0%, #2563eb 100%);
-  color: #0f172a;
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  background: rgba(37, 99, 235, 0.85);
+  color: #f8fafc;
   border-radius: 9999px;
   padding: 4px 10px;
   font-size: 0.7rem;
   cursor: pointer;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
-
-.swarm-group__details:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 8px 16px rgba(56, 189, 248, 0.35);
 }
 
 .swarm-group__svg {
@@ -226,15 +189,5 @@
   font-size: 0.6rem;
   font-weight: 600;
   fill: #f8fafc;
-  pointer-events: none;
-}
-
-.swarm-group__badge {
-  fill: rgba(56, 189, 248, 0.9);
-}
-
-.swarm-group__badge-text {
-  font-size: 0.5rem;
-  fill: #0f172a;
   pointer-events: none;
 }
