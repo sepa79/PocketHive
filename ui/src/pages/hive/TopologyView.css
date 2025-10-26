@@ -89,6 +89,25 @@
   flex-shrink: 0;
 }
 
+.shape-node__icon-wrapper {
+  position: relative;
+  display: inline-flex;
+}
+
+.shape-node__health {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  display: inline-flex;
+  pointer-events: none;
+}
+
+.shape-node__health .hal-eye {
+  width: 18px;
+  height: 18px;
+  pointer-events: none;
+}
+
 .shape-icon__strike {
   stroke: rgba(248, 113, 113, 0.95);
   stroke-width: 2;
@@ -225,9 +244,33 @@
   pointer-events: none;
 }
 
-.legend-icon--defunct {
-  stroke: rgba(248, 113, 113, 0.95);
-  fill: rgba(248, 113, 113, 0.1);
-  stroke-width: 2;
-  border-radius: 4px;
+.swarm-group__health {
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.swarm-group__health .hal-eye {
+  width: 18px;
+  height: 18px;
+}
+
+.legend-item--health {
+  gap: 8px;
+}
+
+.legend-health {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+}
+
+.legend-health .hal-eye {
+  width: 20px;
+  height: 20px;
 }

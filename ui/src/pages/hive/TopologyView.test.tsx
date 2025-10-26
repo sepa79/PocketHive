@@ -296,6 +296,11 @@ test('defunct statuses decorate components and swarm icons', async () => {
     }),
   )
   expect(shapeContainer.querySelectorAll('.shape-icon__strike').length).toBeGreaterThan(0)
+  expect(
+    shapeContainer.querySelector(
+      '.shape-node__health .hal-eye[data-state="alert"]',
+    ),
+  ).not.toBeNull()
   unmountShape()
   const swarmNode = props.nodes.find((node) => node.id === 'sw1-swarm-controller')
   const swarmData = swarmNode?.data as
@@ -319,6 +324,11 @@ test('defunct statuses decorate components and swarm icons', async () => {
   )
   expect(swarmContainer.querySelectorAll('.swarm-group__icon--defunct').length).toBeGreaterThan(0)
   expect(swarmContainer.querySelectorAll('.swarm-group__icon-strike').length).toBeGreaterThan(0)
+  expect(
+    swarmContainer.querySelector(
+      '.swarm-group__health .hal-eye[data-state="alert"]',
+    ),
+  ).not.toBeNull()
   unmountSwarm()
 })
 

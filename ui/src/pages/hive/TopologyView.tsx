@@ -120,6 +120,7 @@ function ShapeNode({ data, selected }: NodeProps<ShapeNodeData>) {
   const fill = getComponentFill(data.componentType, data.enabled)
   const isDefunct = isDefunctStatus(data.status)
   const strokeColor = isDefunct ? '#f87171' : 'black'
+  const visualState = mapStatusToVisualState(data.status)
   const isOrchestrator = data.componentType === 'orchestrator'
   const role = data.role || data.componentType
   const componentId =
@@ -153,69 +154,81 @@ function ShapeNode({ data, selected }: NodeProps<ShapeNodeData>) {
   const nodeClassName = `shape-node${selected ? ' selected' : ''}${
     isOrchestrator ? ' shape-node--orchestrator' : ''
   }${isDefunct ? ' shape-node--defunct' : ''}`
+  const statusTitle = data.status
+    ? `Status: ${data.status}`
+    : visualState
+      ? `Status: ${visualState}`
+      : undefined
   return (
     <div className={nodeClassName}>
       <Handle type="target" position={Position.Left} />
-      <svg
-        className={`shape-icon${isDefunct ? ' shape-icon--defunct' : ''}`}
-        width={2 * size}
-        height={2 * size}
-      >
-        {data.shape === 'square' && (
-          <rect
-            x={0}
-            y={0}
-            width={2 * size}
-            height={2 * size}
-            fill={fill}
-            stroke={strokeColor}
-          />
-        )}
-        {data.shape === 'triangle' && (
-          <polygon
-            points={`${size},0 ${2 * size},${2 * size} 0,${2 * size}`}
-            fill={fill}
-            stroke={strokeColor}
-          />
-        )}
-        {data.shape === 'diamond' && (
-          <polygon
-            points={`${size},0 ${2 * size},${size} ${size},${2 * size} 0,${size}`}
-            fill={fill}
-            stroke={strokeColor}
-          />
-        )}
-        {data.shape === 'pentagon' && (
-          <polygon points={polygonPoints(5, size)} fill={fill} stroke={strokeColor} />
-        )}
-        {data.shape === 'hexagon' && (
-          <polygon points={polygonPoints(6, size)} fill={fill} stroke={strokeColor} />
-        )}
-        {data.shape === 'star' && (
-          <polygon points={starPoints(size)} fill={fill} stroke={strokeColor} />
-        )}
-        {data.shape === 'circle' && (
-          <circle cx={size} cy={size} r={size} fill={fill} stroke={strokeColor} />
-        )}
-        {isDefunct && (
-          <>
-            <line
-              className="shape-icon__strike"
-              x1={2}
-              y1={2}
-              x2={2 * size - 2}
-              y2={2 * size - 2}
+      <div className="shape-node__icon-wrapper">
+        <svg
+          className={`shape-icon${isDefunct ? ' shape-icon--defunct' : ''}`}
+          width={2 * size}
+          height={2 * size}
+        >
+          {data.shape === 'square' && (
+            <rect
+              x={0}
+              y={0}
+              width={2 * size}
+              height={2 * size}
+              fill={fill}
+              stroke={strokeColor}
             />
-            <line
-              className="shape-icon__strike"
-              x1={2}
-              y1={2 * size - 2}
-              x2={2 * size - 2}
-              y2={2}
+          )}
+          {data.shape === 'triangle' && (
+            <polygon
+              points={`${size},0 ${2 * size},${2 * size} 0,${2 * size}`}
+              fill={fill}
+              stroke={strokeColor}
             />
-          </>
+          )}
+          {data.shape === 'diamond' && (
+            <polygon
+              points={`${size},0 ${2 * size},${size} ${size},${2 * size} 0,${size}`}
+              fill={fill}
+              stroke={strokeColor}
+            />
+          )}
+          {data.shape === 'pentagon' && (
+            <polygon points={polygonPoints(5, size)} fill={fill} stroke={strokeColor} />
+          )}
+          {data.shape === 'hexagon' && (
+            <polygon points={polygonPoints(6, size)} fill={fill} stroke={strokeColor} />
+          )}
+          {data.shape === 'star' && (
+            <polygon points={starPoints(size)} fill={fill} stroke={strokeColor} />
+          )}
+          {data.shape === 'circle' && (
+            <circle cx={size} cy={size} r={size} fill={fill} stroke={strokeColor} />
+          )}
+          {isDefunct && (
+            <>
+              <line
+                className="shape-icon__strike"
+                x1={2}
+                y1={2}
+                x2={2 * size - 2}
+                y2={2 * size - 2}
+              />
+              <line
+                className="shape-icon__strike"
+                x1={2}
+                y1={2 * size - 2}
+                x2={2 * size - 2}
+                y2={2}
+              />
+            </>
+          )}
+        </svg>
+        {visualState && (
+          <span className="shape-node__health" title={statusTitle}>
+            <span className="hal-eye" data-state={visualState} />
+          </span>
         )}
-      </svg>
+      </div>
       <div className="shape-node__content">
         <span className="label">{displayLabel}</span>
         {role && <span className="shape-node__role">{role}</span>}
@@ -307,6 +320,7 @@ function SwarmGroupNode({ data }: NodeProps<SwarmGroupNodeData>) {
       const fill = getComponentFill(comp.componentType ?? comp.name, comp.enabled)
       const isDefunct = isDefunctStatus(comp.status)
       const strokeColor = isDefunct ? '#f87171' : 'black'
+      const visualState = mapStatusToVisualState(comp.status)
       const iconRadius = comp.id === data.controllerId ? 14 : 11
       const label = comp.name
         .split(/[-_]/)
@@ -421,6 +435,26 @@ function SwarmGroupNode({ data }: NodeProps<SwarmGroupNodeData>) {
           >
             {label || '?'}
           </text>
+          {visualState && (
+            <foreignObject
+              x={comp.x + iconRadius - 10}
+              y={comp.y - iconRadius - 12}
+              width={20}
+              height={20}
+              pointerEvents="none"
+            >
+              <div
+                className="swarm-group__health"
+                title={
+                  comp.status
+                    ? `${comp.name} status: ${comp.status}`
+                    : `${comp.name} status: ${visualState}`
+                }
+              >
+                <span className="hal-eye" data-state={visualState} />
+              </div>
+            </foreignObject>
+          )}
         </g>
       )
     },
@@ -887,12 +921,22 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
           </svg>
           <span>queue (deep)</span>
         </div>
-        <div className="legend-item">
-          <svg width="14" height="14" className="legend-icon legend-icon--defunct">
-            <rect x="2" y="2" width="10" height="10" rx="2" ry="2" />
-            <line x1="3" y1="3" x2="11" y2="11" />
-            <line x1="3" y1="11" x2="11" y2="3" />
-          </svg>
+        <div className="legend-item legend-item--health">
+          <span className="legend-health" title="component healthy">
+            <span className="hal-eye" data-state="ok" />
+          </span>
+          <span>component healthy</span>
+        </div>
+        <div className="legend-item legend-item--health">
+          <span className="legend-health" title="component degraded">
+            <span className="hal-eye" data-state="warn" />
+          </span>
+          <span>component degraded</span>
+        </div>
+        <div className="legend-item legend-item--health">
+          <span className="legend-health" title="component offline/defunct">
+            <span className="hal-eye" data-state="alert" />
+          </span>
           <span>component offline/defunct</span>
         </div>
       </div>
