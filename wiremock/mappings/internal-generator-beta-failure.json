@@ -1,0 +1,15 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "/__internal__/generator-beta/failure"
+  },
+  "response": {
+    "status": 429,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "message": "beta generator simulated failure"
+    }
+  }
+}
