@@ -8,6 +8,7 @@ import io.pockethive.controlplane.messaging.ControlPlaneEmitter;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.controlplane.worker.WorkerControlPlane;
 import io.pockethive.observability.StatusEnvelopeBuilder;
+import io.pockethive.worker.sdk.capabilities.WorkerCapabilitiesManifest;
 import io.pockethive.worker.sdk.capabilities.WorkerCapabilitiesManifestRepository;
 import io.pockethive.worker.sdk.config.WorkerType;
 import io.pockethive.worker.sdk.testing.ControlPlaneTestFixtures;
@@ -24,8 +25,10 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class WorkerControlPlaneRuntimeTest {
@@ -40,10 +43,12 @@ class WorkerControlPlaneRuntimeTest {
     private WorkerDefinition definition;
     private WorkerControlPlane controlPlane;
     private WorkerControlPlaneRuntime runtime;
-    private WorkerCapabilitiesManifestRepository manifestRepository;
 
     @Mock
     private ControlPlaneEmitter emitter;
+
+    @Mock
+    private WorkerCapabilitiesManifestRepository manifestRepository;
 
     @BeforeEach
     void setUp() {
@@ -62,7 +67,21 @@ class WorkerControlPlaneRuntimeTest {
         controlPlane = WorkerControlPlane.builder(MAPPER)
             .identity(IDENTITY)
             .build();
-        manifestRepository = new WorkerCapabilitiesManifestRepository(MAPPER);
+        WorkerCapabilitiesManifest manifest = new WorkerCapabilitiesManifest(
+            "1.0.0",
+            "1.0.0",
+            "generator",
+            Map.of(
+                "schemaVersion", "1.0.0",
+                "capabilitiesVersion", "1.0.0",
+                "role", "generator"
+            )
+        );
+        when(manifestRepository.findByRole(anyString()))
+            .thenAnswer(invocation -> {
+                String role = invocation.getArgument(0, String.class);
+                return "generator".equalsIgnoreCase(role) ? Optional.of(manifest) : Optional.empty();
+            });
         runtime = new WorkerControlPlaneRuntime(controlPlane, stateStore, MAPPER, emitter, IDENTITY,
             manifestRepository, PROPERTIES.getControlPlane());
         reset(emitter);
