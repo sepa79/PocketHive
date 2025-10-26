@@ -1,7 +1,12 @@
 {
   "request": {
     "method": "POST",
-    "url": "/__internal__/generator-beta/failure"
+    "url": "/__internal__/generator-beta",
+    "headers": {
+      "X-Beta-Outcome": {
+        "equalTo": "failure"
+      }
+    }
   },
   "response": {
     "status": 429,
