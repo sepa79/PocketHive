@@ -2,7 +2,7 @@
   width: 100%;
   height: 100%;
   flex: 1 1 auto;
-  background: radial-gradient(circle at 45% 45%, rgba(84, 104, 144, 0.82) 0%, rgba(30, 38, 56, 0.94) 55%, rgba(16, 20, 30, 0.98) 100%);
+  background: radial-gradient(circle at 45% 45%, rgba(12, 16, 26, 0.94) 0%, rgba(7, 10, 18, 0.98) 60%, rgba(4, 6, 13, 0.99) 100%);
   position: relative;
 }
 
