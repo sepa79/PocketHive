@@ -1,0 +1,108 @@
+{
+  "schemaVersion": "1.0.0",
+  "capabilitiesVersion": "1.0.0",
+  "role": "trigger",
+  "displayName": "Trigger Worker",
+  "summary": "Executes shell commands or REST calls on a schedule to kick off work.",
+  "config": [
+    {
+      "name": "enabled",
+      "label": "Enabled",
+      "description": "Temporarily disable the trigger without removing it from the swarm.",
+      "type": "boolean"
+    },
+    {
+      "name": "intervalMs",
+      "label": "Interval (ms)",
+      "description": "Delay between trigger executions reported to orchestrators.",
+      "type": "integer",
+      "validation": {
+        "minimum": 0
+      },
+      "ui": {
+        "component": "slider",
+        "order": 10
+      }
+    },
+    {
+      "name": "singleRequest",
+      "label": "Single request",
+      "description": "Run the trigger exactly once per schedule instead of streaming.",
+      "type": "boolean"
+    },
+    {
+      "name": "actionType",
+      "label": "Action type",
+      "description": "Switch between shell and REST execution modes.",
+      "type": "enum",
+      "options": [
+        { "value": "none", "label": "None" },
+        { "value": "shell", "label": "Shell" },
+        { "value": "rest", "label": "REST" }
+      ],
+      "ui": {
+        "order": 20
+      }
+    },
+    {
+      "name": "command",
+      "label": "Shell command",
+      "description": "Command executed when the action type is shell.",
+      "type": "text",
+      "ui": {
+        "monospace": true,
+        "multiline": true,
+        "order": 30
+      }
+    },
+    {
+      "name": "url",
+      "label": "Request URL",
+      "description": "Absolute URL for REST triggers.",
+      "type": "string",
+      "ui": {
+        "placeholder": "https://service/api",
+        "order": 40
+      }
+    },
+    {
+      "name": "method",
+      "label": "HTTP method",
+      "description": "Verb applied to REST trigger requests.",
+      "type": "enum",
+      "options": [
+        { "value": "GET", "label": "GET" },
+        { "value": "POST", "label": "POST" },
+        { "value": "PUT", "label": "PUT" },
+        { "value": "PATCH", "label": "PATCH" },
+        { "value": "DELETE", "label": "DELETE" }
+      ],
+      "ui": {
+        "order": 50
+      }
+    },
+    {
+      "name": "body",
+      "label": "Request body",
+      "description": "Payload forwarded for REST trigger requests.",
+      "type": "text",
+      "ui": {
+        "monospace": true,
+        "multiline": true,
+        "order": 60
+      }
+    },
+    {
+      "name": "headers",
+      "label": "HTTP headers",
+      "description": "Additional headers included with REST trigger requests.",
+      "type": "json",
+      "ui": {
+        "monospace": true,
+        "order": 70
+      }
+    }
+  ],
+  "actions": [],
+  "panels": []
+}

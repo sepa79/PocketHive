@@ -1,6 +1,7 @@
 package io.pockethive.worker.sdk.runtime;
 
 import io.pockethive.worker.sdk.api.StatusPublisher;
+import io.pockethive.worker.sdk.capabilities.WorkerCapabilitiesManifest;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -23,6 +24,8 @@ public final class WorkerState {
     private final AtomicReference<Boolean> enabledRef = new AtomicReference<>();
     private final AtomicReference<StatusPublisher> statusPublisherRef = new AtomicReference<>(StatusPublisher.NO_OP);
     private final AtomicReference<Map<String, Object>> statusDataRef = new AtomicReference<>(Map.of());
+    private final AtomicReference<WorkerCapabilitiesManifest> manifestRef = new AtomicReference<>();
+    private final AtomicReference<String> publishedManifestVersionRef = new AtomicReference<>();
     private final LongAdder processedMessages = new LongAdder();
     private final Set<String> workInRoutes = ConcurrentHashMap.newKeySet();
     private final Set<String> workOutRoutes = ConcurrentHashMap.newKeySet();
@@ -60,6 +63,34 @@ public final class WorkerState {
 
     Map<String, Object> statusData() {
         return statusDataRef.get();
+    }
+
+    void setCapabilitiesManifest(WorkerCapabilitiesManifest manifest) {
+        Objects.requireNonNull(manifest, "manifest");
+        WorkerCapabilitiesManifest previous = manifestRef.getAndSet(manifest);
+        if (previous == null || !previous.capabilitiesVersion().equals(manifest.capabilitiesVersion())) {
+            publishedManifestVersionRef.set(null);
+        }
+    }
+
+    Optional<WorkerCapabilitiesManifest> capabilitiesManifest() {
+        return Optional.ofNullable(manifestRef.get());
+    }
+
+    boolean shouldPublishCapabilitiesManifest() {
+        WorkerCapabilitiesManifest manifest = manifestRef.get();
+        if (manifest == null) {
+            return false;
+        }
+        String published = publishedManifestVersionRef.get();
+        return published == null || !published.equals(manifest.capabilitiesVersion());
+    }
+
+    void markCapabilitiesManifestPublished() {
+        WorkerCapabilitiesManifest manifest = manifestRef.get();
+        if (manifest != null) {
+            publishedManifestVersionRef.set(manifest.capabilitiesVersion());
+        }
     }
 
     void updateConfig(Object config, Map<String, Object> rawData, Boolean enabled) {
