@@ -72,8 +72,27 @@
   box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.35), 0 18px 40px rgba(2, 6, 23, 0.55);
 }
 
+.shape-node--defunct {
+  border-color: rgba(248, 113, 113, 0.9);
+  box-shadow: 0 0 0 2px rgba(248, 113, 113, 0.4), 0 18px 40px rgba(2, 6, 23, 0.55);
+}
+
+.shape-node--defunct .label {
+  color: #fecaca;
+}
+
+.shape-node--defunct .shape-node__role {
+  color: #fda4af;
+}
+
 .shape-node .shape-icon {
   flex-shrink: 0;
+}
+
+.shape-icon__strike {
+  stroke: rgba(248, 113, 113, 0.95);
+  stroke-width: 2;
+  stroke-linecap: round;
 }
 
 .shape-node .label {
@@ -185,9 +204,30 @@
   stroke-width: 2;
 }
 
+.swarm-group__icon--defunct {
+  filter: drop-shadow(0 0 6px rgba(248, 113, 113, 0.45));
+}
+
+.swarm-group__icon-label--defunct {
+  fill: #fecaca;
+}
+
+.swarm-group__icon-strike {
+  stroke: rgba(248, 113, 113, 0.95);
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
 .swarm-group__icon-label {
   font-size: 0.6rem;
   font-weight: 600;
   fill: #f8fafc;
   pointer-events: none;
+}
+
+.legend-icon--defunct {
+  stroke: rgba(248, 113, 113, 0.95);
+  fill: rgba(248, 113, 113, 0.1);
+  stroke-width: 2;
+  border-radius: 4px;
 }

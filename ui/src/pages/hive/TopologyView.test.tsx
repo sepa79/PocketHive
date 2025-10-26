@@ -120,12 +120,18 @@ beforeEach(() => {
   if (orchestrator) {
     orchestrator.name = 'hive-orchestrator'
     orchestrator.role = 'orchestrator'
+    orchestrator.status = 'status-full'
   }
   const wiremock = components.find((component) => component.id === 'wiremock')
   if (wiremock) {
     wiremock.name = 'WireMock'
     wiremock.role = 'wiremock'
   }
+  components.forEach((component) => {
+    if (component.id !== 'hive-orchestrator') {
+      delete component.status
+    }
+  })
 })
 
 vi.mock('@xyflow/react', () => {
@@ -238,6 +244,7 @@ test('grouped swarm node renders and edges aggregate by swarm', () => {
   expect(groupData.components).toHaveLength(3)
   const generator = groupData.components?.find((c) => c.id === 'sw1-generator')
   expect(generator?.queueCount).toBe(2)
+  expect(generator?.status).toBeUndefined()
   expect(groupData.edges?.some((edge) => edge.queue === 'internal-q')).toBe(true)
   const orchestrator = newProps.nodes.find((n) => n.id === 'hive-orchestrator')
   expect(orchestrator?.type).toBe('shape')
@@ -255,6 +262,64 @@ test('grouped swarm node renders and edges aggregate by swarm', () => {
   expect(orchestratorData?.componentType).toBe('orchestrator')
   expect(orchestratorData?.status).toBe('status-full')
   expect(orchestratorData?.meta?.swarmCount).toBe(4)
+})
+
+test('defunct statuses decorate components and swarm icons', async () => {
+  const standalone = components.find((component) => component.id === 'c')
+  if (standalone) {
+    standalone.status = 'DOWN'
+  }
+  const processor = components.find((component) => component.id === 'sw1-processor')
+  if (processor) {
+    processor.status = 'FAILED'
+  }
+  render(<TopologyView />)
+  await act(async () => {
+    await Promise.resolve()
+  })
+  const props = (globalThis as unknown as { __RF_PROPS__: RFProps }).__RF_PROPS__
+  const standaloneData = props.nodes.find((node) => node.id === 'c')?.data as
+    | { status?: string }
+    | undefined
+  expect(standaloneData?.status).toBe('DOWN')
+  const ShapeComponent = props.nodeTypes?.shape
+  expect(ShapeComponent).toBeDefined()
+  const { container: shapeContainer, unmount: unmountShape } = render(
+    React.createElement(ShapeComponent as React.ComponentType<NodeComponentProps>, {
+      id: 'c',
+      data: props.nodes.find((node) => node.id === 'c')?.data ?? {},
+      selected: false,
+      dragging: false,
+      isConnectable: false,
+      xPos: 0,
+      yPos: 0,
+    }),
+  )
+  expect(shapeContainer.querySelectorAll('.shape-icon__strike').length).toBeGreaterThan(0)
+  unmountShape()
+  const swarmNode = props.nodes.find((node) => node.id === 'sw1-swarm-controller')
+  const swarmData = swarmNode?.data as
+    | {
+        components?: { id: string; status?: string }[]
+      }
+    | undefined
+  expect(swarmData?.components?.some((comp) => comp.id === 'sw1-processor' && comp.status === 'FAILED')).toBe(true)
+  const SwarmComponent = props.nodeTypes?.swarmGroup
+  expect(SwarmComponent).toBeDefined()
+  const { container: swarmContainer, unmount: unmountSwarm } = render(
+    React.createElement(SwarmComponent as React.ComponentType<NodeComponentProps>, {
+      id: 'sw1-swarm-controller',
+      data: swarmNode?.data ?? {},
+      selected: false,
+      dragging: false,
+      isConnectable: false,
+      xPos: 0,
+      yPos: 0,
+    }),
+  )
+  expect(swarmContainer.querySelectorAll('.swarm-group__icon--defunct').length).toBeGreaterThan(0)
+  expect(swarmContainer.querySelectorAll('.swarm-group__icon-strike').length).toBeGreaterThan(0)
+  unmountSwarm()
 })
 
 test('orchestrator card renders instance name, role and active swarm count only', () => {

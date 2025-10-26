@@ -22,6 +22,7 @@ import {
   type Topology,
 } from '../../lib/stompClient'
 import type { Component } from '../../types/hive'
+import { mapStatusToVisualState } from './visualState'
 import './TopologyView.css'
 
 interface GraphNode {
@@ -101,6 +102,11 @@ interface ShapeNodeData {
   [key: string]: unknown
 }
 
+function isDefunctStatus(status?: string): boolean {
+  const visual = mapStatusToVisualState(status)
+  return visual === 'alert'
+}
+
 function formatMetaValue(value: unknown): string | null {
   if (value === undefined || value === null) return null
   if (typeof value === 'boolean') return value ? 'Yes' : 'No'
@@ -112,6 +118,8 @@ function formatMetaValue(value: unknown): string | null {
 function ShapeNode({ data, selected }: NodeProps<ShapeNodeData>) {
   const size = 10
   const fill = getComponentFill(data.componentType, data.enabled)
+  const isDefunct = isDefunctStatus(data.status)
+  const strokeColor = isDefunct ? '#f87171' : 'black'
   const isOrchestrator = data.componentType === 'orchestrator'
   const role = data.role || data.componentType
   const componentId =
@@ -142,39 +150,71 @@ function ShapeNode({ data, selected }: NodeProps<ShapeNodeData>) {
     }
     return [{ key: 'Active swarms', value: formattedSwarmCount }]
   }, [data.meta, isOrchestrator])
+  const nodeClassName = `shape-node${selected ? ' selected' : ''}${
+    isOrchestrator ? ' shape-node--orchestrator' : ''
+  }${isDefunct ? ' shape-node--defunct' : ''}`
   return (
-    <div
-      className={`shape-node${selected ? ' selected' : ''}${
-        isOrchestrator ? ' shape-node--orchestrator' : ''
-      }`}
-    >
+    <div className={nodeClassName}>
       <Handle type="target" position={Position.Left} />
-      <svg className="shape-icon" width={2 * size} height={2 * size}>
+      <svg
+        className={`shape-icon${isDefunct ? ' shape-icon--defunct' : ''}`}
+        width={2 * size}
+        height={2 * size}
+      >
         {data.shape === 'square' && (
-          <rect x={0} y={0} width={2 * size} height={2 * size} fill={fill} stroke="black" />
+          <rect
+            x={0}
+            y={0}
+            width={2 * size}
+            height={2 * size}
+            fill={fill}
+            stroke={strokeColor}
+          />
         )}
         {data.shape === 'triangle' && (
           <polygon
             points={`${size},0 ${2 * size},${2 * size} 0,${2 * size}`}
             fill={fill}
-            stroke="black"
+            stroke={strokeColor}
           />
         )}
         {data.shape === 'diamond' && (
           <polygon
             points={`${size},0 ${2 * size},${size} ${size},${2 * size} 0,${size}`}
             fill={fill}
-            stroke="black"
+            stroke={strokeColor}
           />
         )}
         {data.shape === 'pentagon' && (
-          <polygon points={polygonPoints(5, size)} fill={fill} stroke="black" />
+          <polygon points={polygonPoints(5, size)} fill={fill} stroke={strokeColor} />
         )}
         {data.shape === 'hexagon' && (
-          <polygon points={polygonPoints(6, size)} fill={fill} stroke="black" />
+          <polygon points={polygonPoints(6, size)} fill={fill} stroke={strokeColor} />
         )}
-        {data.shape === 'star' && <polygon points={starPoints(size)} fill={fill} stroke="black" />}
-        {data.shape === 'circle' && <circle cx={size} cy={size} r={size} fill={fill} stroke="black" />}
+        {data.shape === 'star' && (
+          <polygon points={starPoints(size)} fill={fill} stroke={strokeColor} />
+        )}
+        {data.shape === 'circle' && (
+          <circle cx={size} cy={size} r={size} fill={fill} stroke={strokeColor} />
+        )}
+        {isDefunct && (
+          <>
+            <line
+              className="shape-icon__strike"
+              x1={2}
+              y1={2}
+              x2={2 * size - 2}
+              y2={2 * size - 2}
+            />
+            <line
+              className="shape-icon__strike"
+              x1={2}
+              y1={2 * size - 2}
+              x2={2 * size - 2}
+              y2={2}
+            />
+          </>
+        )}
       </svg>
       <div className="shape-node__content">
         <span className="label">{displayLabel}</span>
@@ -201,6 +241,8 @@ interface SwarmGroupComponentData {
   shape: NodeShape
   enabled?: boolean
   componentType?: string
+  status?: string
+  queueCount?: number
 }
 
 interface SwarmGroupEdgeData {
@@ -263,6 +305,8 @@ function SwarmGroupNode({ data }: NodeProps<SwarmGroupNodeData>) {
   const renderShape = useCallback(
     (comp: SwarmGroupComponentData & { x: number; y: number }) => {
       const fill = getComponentFill(comp.componentType ?? comp.name, comp.enabled)
+      const isDefunct = isDefunctStatus(comp.status)
+      const strokeColor = isDefunct ? '#f87171' : 'black'
       const iconRadius = comp.id === data.controllerId ? 14 : 11
       const label = comp.name
         .split(/[-_]/)
@@ -271,7 +315,10 @@ function SwarmGroupNode({ data }: NodeProps<SwarmGroupNodeData>) {
         .join('')
         .slice(0, 2)
       return (
-        <g key={comp.id}>
+        <g
+          key={comp.id}
+          className={`swarm-group__icon${isDefunct ? ' swarm-group__icon--defunct' : ''}`}
+        >
           {comp.id === data.selectedId && (
             <circle
               className="swarm-group__selection"
@@ -287,21 +334,21 @@ function SwarmGroupNode({ data }: NodeProps<SwarmGroupNodeData>) {
               width={iconRadius * 2}
               height={iconRadius * 2}
               fill={fill}
-              stroke="black"
+              stroke={strokeColor}
             />
           )}
           {comp.shape === 'triangle' && (
             <polygon
               points={`${comp.x},${comp.y - iconRadius} ${comp.x + iconRadius},${comp.y + iconRadius} ${comp.x - iconRadius},${comp.y + iconRadius}`}
               fill={fill}
-              stroke="black"
+              stroke={strokeColor}
             />
           )}
           {comp.shape === 'diamond' && (
             <polygon
               points={`${comp.x},${comp.y - iconRadius} ${comp.x + iconRadius},${comp.y} ${comp.x},${comp.y + iconRadius} ${comp.x - iconRadius},${comp.y}`}
               fill={fill}
-              stroke="black"
+              stroke={strokeColor}
             />
           )}
           {comp.shape === 'pentagon' && (
@@ -314,7 +361,7 @@ function SwarmGroupNode({ data }: NodeProps<SwarmGroupNodeData>) {
                 })
                 .join(' ')}
               fill={fill}
-              stroke="black"
+              stroke={strokeColor}
             />
           )}
           {comp.shape === 'hexagon' && (
@@ -327,7 +374,7 @@ function SwarmGroupNode({ data }: NodeProps<SwarmGroupNodeData>) {
                 })
                 .join(' ')}
               fill={fill}
-              stroke="black"
+              stroke={strokeColor}
             />
           )}
           {comp.shape === 'star' && (
@@ -340,17 +387,37 @@ function SwarmGroupNode({ data }: NodeProps<SwarmGroupNodeData>) {
                 })
                 .join(' ')}
               fill={fill}
-              stroke="black"
+              stroke={strokeColor}
             />
           )}
           {comp.shape === 'circle' && (
-            <circle cx={comp.x} cy={comp.y} r={iconRadius} fill={fill} stroke="black" />
+            <circle cx={comp.x} cy={comp.y} r={iconRadius} fill={fill} stroke={strokeColor} />
+          )}
+          {isDefunct && (
+            <>
+              <line
+                className="swarm-group__icon-strike"
+                x1={comp.x - iconRadius + 2}
+                y1={comp.y - iconRadius + 2}
+                x2={comp.x + iconRadius - 2}
+                y2={comp.y + iconRadius - 2}
+              />
+              <line
+                className="swarm-group__icon-strike"
+                x1={comp.x - iconRadius + 2}
+                y1={comp.y + iconRadius - 2}
+                x2={comp.x + iconRadius - 2}
+                y2={comp.y - iconRadius + 2}
+              />
+            </>
           )}
           <text
             x={comp.x}
             y={comp.y + 3}
             textAnchor="middle"
-            className="swarm-group__icon-label"
+            className={`swarm-group__icon-label${
+              isDefunct ? ' swarm-group__icon-label--defunct' : ''
+            }`}
           >
             {label || '?'}
           </text>
@@ -621,6 +688,8 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
                 shape: getShape(member.type),
                 enabled: member.enabled,
                 componentType: member.type,
+                status: componentsById[member.id]?.status,
+                queueCount: componentsById[member.id]?.queues?.length,
               })),
               edges: groupEdges,
               onDetails: handleDetails,
@@ -817,6 +886,14 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
             <line x1="1" y1="3" x2="29" y2="3" stroke="#ff6666" strokeWidth="4" />
           </svg>
           <span>queue (deep)</span>
+        </div>
+        <div className="legend-item">
+          <svg width="14" height="14" className="legend-icon legend-icon--defunct">
+            <rect x="2" y="2" width="10" height="10" rx="2" ry="2" />
+            <line x1="3" y1="3" x2="11" y2="11" />
+            <line x1="3" y1="11" x2="11" y2="3" />
+          </svg>
+          <span>component offline/defunct</span>
         </div>
       </div>
     </div>
