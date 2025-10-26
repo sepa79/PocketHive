@@ -1,0 +1,15 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "/api/test-beta"
+  },
+  "response": {
+    "status": "{{#assign 'betaRoll'}}{{randomInt 1 10}}{{/assign}}{{#if (eq betaRoll 1)}}429{{else}}200{{/if}}",
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "message": "{{#if (eq betaRoll 1)}}beta generator simulated failure{{else}}default generator beta response{{/if}}"
+    }
+  }
+}
