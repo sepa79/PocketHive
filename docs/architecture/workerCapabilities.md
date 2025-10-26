@@ -58,3 +58,37 @@ against the same definitions.
 - Record component image digests or semantic versions inside the aggregated catalogue to aid provenance checks and drift detection.
 - When drift is detected between runtime and static catalogues, fail CI or alert operators so new manifests are published before
   promoting the change to production.
+
+## Implementation plan
+
+### Phase 1 — Export capabilities via `status-full`
+
+1. **Lock the manifest contract** – Finalise the JSON schema (including `schemaVersion`, `capabilitiesVersion`, `role`,
+   `config`, `actions`, `panels`) inside the existing scenario-builder contract pack so backend and frontend validate against the
+   same definition. Add schema-version governance rules and linters to keep the contract authoritative during releases.
+2. **Extend worker SDK to emit manifests automatically** – Teach the SDK to assemble each bee’s manifest (e.g., by loading
+   embedded resources or SDK-provided defaults) and attach it to the first `status-full` heartbeat without requiring worker code
+   edits. Add capability-version bump enforcement to SDK build tooling so releases fail if manifests drift without version
+   increments.
+3. **Persist runtime capabilities in the control plane** – Update swarm controllers to store the manifest received in
+   `status-full` and forward it upstream, keeping per-instance revisions keyed by role/capabilitiesVersion. Enhance the
+   Orchestrator to maintain the runtime catalogue and reject scenarios that reference unknown capability versions during plan
+   submission.
+4. **Expose the live catalogue** – Provide Scenario Manager endpoints to serve the aggregated runtime manifests so the Hive UI and
+   other clients can render forms/actions using live data while surfacing drift warnings when runtime and offline packs diverge.
+5. **Observability and drift detection** – Instrument comparisons between runtime manifests and the latest offline bundle, raising
+   alerts when new panels or fields appear so operators know to refresh catalogues before promotion.
+
+### Phase 2 — Export capabilities via static files
+
+1. **Author and validate per-bee manifest files** – Store `capabilities.<role>.json` next to each worker’s source code, with CI
+   checks ensuring the file exists and `capabilitiesVersion` bumps accompany any observable change.
+2. **Build and distribute the offline catalogue** – Add a contract-build step that collects all manifests into a signed bundle
+   (for example, `contracts/capabilities/catalogue-v{n}.json`) published alongside Scenario Manager images or to a CDN for UI use.
+3. **Scenario Editor consumption** – Make the Scenario Editor load the aggregated catalogue on startup (or version switch), fall
+   back to generic rendering when panels are unknown, and warn when a scenario references unavailable capability versions in the
+   mounted pack.
+4. **Governance and provenance** – Record worker image digests or semantic versions inside the catalogue to aid provenance checks,
+   and hook drift alerts into CI so new manifests are published before promotion.
+5. **Synchronise offline and runtime sources** – Schedule periodic reconciliation jobs that compare the offline bundle to the
+   runtime catalogue, driving notifications or automated rebuilds to keep authoring and execution states aligned.
