@@ -805,29 +805,30 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
       <div className="topology-legend">
         {types.map((t) => {
           const shape = getShape(t)
+          const fill = getComponentFill(t)
           return (
             <div key={t} className="legend-item">
               <svg width="12" height="12" className="legend-icon">
                 {shape === 'square' && (
-                  <rect x="1" y="1" width="10" height="10" fill="#ffcc00" stroke="black" />
+                  <rect x="1" y="1" width="10" height="10" fill={fill} stroke="black" />
                 )}
                 {shape === 'triangle' && (
-                  <polygon points="6,1 11,11 1,11" fill="#ffcc00" stroke="black" />
+                  <polygon points="6,1 11,11 1,11" fill={fill} stroke="black" />
                 )}
                 {shape === 'diamond' && (
-                  <polygon points="6,1 11,6 6,11 1,6" fill="#ffcc00" stroke="black" />
+                  <polygon points="6,1 11,6 6,11 1,6" fill={fill} stroke="black" />
                 )}
                 {shape === 'pentagon' && (
-                  <polygon points={polygonPoints(5, 5)} fill="#ffcc00" stroke="black" />
+                  <polygon points={polygonPoints(5, 5)} fill={fill} stroke="black" />
                 )}
                 {shape === 'hexagon' && (
-                  <polygon points={polygonPoints(6, 5)} fill="#ffcc00" stroke="black" />
+                  <polygon points={polygonPoints(6, 5)} fill={fill} stroke="black" />
                 )}
                 {shape === 'star' && (
-                  <polygon points={starPoints(5)} fill="#ffcc00" stroke="black" />
+                  <polygon points={starPoints(5)} fill={fill} stroke="black" />
                 )}
                 {shape === 'circle' && (
-                  <circle cx="6" cy="6" r="5" fill="#ffcc00" stroke="black" />
+                  <circle cx="6" cy="6" r="5" fill={fill} stroke="black" />
                 )}
               </svg>
               <span>{t}</span>
