@@ -92,7 +92,6 @@ interface ShapeNodeData {
   label: string
   shape: NodeShape
   enabled?: boolean
-  queueCount: number
   swarmId?: string
   componentType?: string
   componentId?: string
@@ -191,7 +190,6 @@ function ShapeNode({ data, selected }: NodeProps<ShapeNodeData>) {
           </dl>
         )}
       </div>
-      {data.queueCount > 0 && <span className="badge">{data.queueCount}</span>}
       <Handle type="source" position={Position.Right} />
     </div>
   )
@@ -202,7 +200,6 @@ interface SwarmGroupComponentData {
   name: string
   shape: NodeShape
   enabled?: boolean
-  queueCount: number
   componentType?: string
 }
 
@@ -273,7 +270,6 @@ function SwarmGroupNode({ data }: NodeProps<SwarmGroupNodeData>) {
         .map((part) => part[0]?.toUpperCase() ?? '')
         .join('')
         .slice(0, 2)
-      const badgeValue = comp.queueCount > 99 ? '99+' : comp.queueCount.toString()
       return (
         <g key={comp.id}>
           {comp.id === data.selectedId && (
@@ -358,24 +354,6 @@ function SwarmGroupNode({ data }: NodeProps<SwarmGroupNodeData>) {
           >
             {label || '?'}
           </text>
-          {comp.queueCount > 0 && (
-            <g>
-              <circle
-                cx={comp.x + iconRadius * 0.85}
-                cy={comp.y - iconRadius * 0.85}
-                r={7}
-                className="swarm-group__badge"
-              />
-              <text
-                x={comp.x + iconRadius * 0.85}
-                y={comp.y - iconRadius * 0.85 + 2}
-                textAnchor="middle"
-                className="swarm-group__badge-text"
-              >
-                {badgeValue}
-              </text>
-            </g>
-          )}
         </g>
       )
     },
@@ -468,7 +446,6 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
   const [data, setData] = useState<GraphData>({ nodes: [], links: [] })
   const shapeMapRef = useRef<Record<string, NodeShape>>({ sut: 'circle' })
   const [queueDepths, setQueueDepths] = useState<Record<string, number>>({})
-  const [queueCounts, setQueueCounts] = useState<Record<string, number>>({})
   const [componentsById, setComponentsById] = useState<Record<string, Component>>({})
   const flowRef = useRef<ReactFlowInstance<FlowNode, Edge> | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -477,11 +454,9 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
   useEffect(() => {
     const unsub = subscribeComponents((comps: Component[]) => {
       const depths: Record<string, number> = {}
-      const counts: Record<string, number> = {}
       const map: Record<string, Component> = {}
       comps.forEach((c) => {
         map[c.id] = c
-        counts[c.id] = c.queues.length
         c.queues.forEach((q) => {
           if (typeof q.depth === 'number') {
             const d = depths[q.name]
@@ -490,7 +465,6 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
         })
       })
       setQueueDepths(depths)
-      setQueueCounts(counts)
       setComponentsById(map)
     })
     return () => unsub()
@@ -606,7 +580,6 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
               label,
               shape: getShape(node.type),
               enabled: node.enabled,
-              queueCount: queueCounts[node.id] ?? 0,
               swarmId: node.swarmId,
               componentType: node.type,
               componentId: node.id,
@@ -647,7 +620,6 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
                 name: member.type,
                 shape: getShape(member.type),
                 enabled: member.enabled,
-                queueCount: queueCounts[member.id] ?? 0,
                 componentType: member.type,
               })),
               edges: groupEdges,
@@ -679,7 +651,6 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
             label,
             shape: getShape(node.type),
             enabled: node.enabled,
-            queueCount: queueCounts[node.id] ?? 0,
             swarmId: node.swarmId,
             componentType: node.type,
             componentId: node.id,
@@ -692,7 +663,7 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
         }
       }) as FlowNode[]
     })
-  }, [componentsById, data.links, data.nodes, queueCounts, queueDepths, handleDetails, selectedId, swarmId])
+  }, [componentsById, data.links, data.nodes, queueDepths, handleDetails, selectedId, swarmId])
 
   const nodeById = useMemo(() => {
     const map = new Map<string, GraphNode>()
@@ -846,15 +817,6 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
             <line x1="1" y1="3" x2="29" y2="3" stroke="#ff6666" strokeWidth="4" />
           </svg>
           <span>queue (deep)</span>
-        </div>
-        <div className="legend-item">
-          <div className="legend-icon node-badge">
-            <svg width="12" height="12">
-              <circle cx="6" cy="6" r="5" fill="#ffcc00" stroke="black" />
-            </svg>
-            <span className="badge">n</span>
-          </div>
-          <span>#queues</span>
         </div>
       </div>
     </div>
