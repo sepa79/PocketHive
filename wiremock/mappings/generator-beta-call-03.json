@@ -1,7 +1,7 @@
 {
   "scenarioName": "generator-beta-every-fifth-fails",
-  "requiredScenarioState": "Started",
-  "newScenarioState": "GeneratorBetaCall2",
+  "requiredScenarioState": "GeneratorBetaCall3",
+  "newScenarioState": "GeneratorBetaCall4",
   "request": {
     "method": "POST",
     "url": "/api/test-beta"

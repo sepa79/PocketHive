@@ -1,18 +1,18 @@
 {
   "scenarioName": "generator-beta-every-fifth-fails",
-  "requiredScenarioState": "Started",
-  "newScenarioState": "GeneratorBetaCall2",
+  "requiredScenarioState": "GeneratorBetaCall5",
+  "newScenarioState": "Started",
   "request": {
     "method": "POST",
     "url": "/api/test-beta"
   },
   "response": {
-    "status": 200,
+    "status": 429,
     "headers": {
       "Content-Type": "application/json"
     },
     "jsonBody": {
-      "message": "default generator beta response"
+      "message": "simulated generator beta failure"
     }
   }
 }
