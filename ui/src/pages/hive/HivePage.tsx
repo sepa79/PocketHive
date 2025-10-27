@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import ComponentList from './ComponentList'
 import ComponentDetail from './ComponentDetail'
 import TopologyView from './TopologyView'
@@ -11,9 +11,11 @@ import {
 import type { Component } from '../../types/hive'
 import OrchestratorPanel from './OrchestratorPanel'
 import { fetchWiremockComponent } from '../../lib/wiremockClient'
+import { fetchRuntimeCapabilities } from '../../lib/orchestratorApi'
 import SwarmRow from '../../components/hive/SwarmRow'
 import { componentHealth } from '../../lib/health'
 import { mapStatusToVisualState, type HealthVisualState } from './visualState'
+import { useRuntimeCapabilitiesStore, useUIStore } from '../../store'
 
 export default function HivePage() {
   const [components, setComponents] = useState<Component[]>([])
@@ -24,6 +26,18 @@ export default function HivePage() {
   const [expandedSwarmId, setExpandedSwarmId] = useState<string | null>(null)
   const [contextSwarmId, setContextSwarmId] = useState<string | null>(null)
   const [now, setNow] = useState(() => Date.now())
+  const replaceCatalogue = useRuntimeCapabilitiesStore((state) => state.replaceCatalogue)
+  const setToast = useUIStore((state) => state.setToast)
+  const refreshRuntimeCapabilities = useCallback(async () => {
+    try {
+      const catalogue = await fetchRuntimeCapabilities()
+      replaceCatalogue(catalogue)
+    } catch (error) {
+      setToast('Failed to load runtime capabilities')
+    }
+  }, [replaceCatalogue, setToast])
+  const lastOrchestratorStatus = useRef<string | null>(null)
+  const lastOrchestratorId = useRef<string | null>(null)
 
   useEffect(() => {
     // We rely on the control-plane event stream (`ev.status-*`) to keep the
@@ -31,6 +45,10 @@ export default function HivePage() {
     const unsub = subscribeComponents(setComponents)
     return () => unsub()
   }, [])
+
+  useEffect(() => {
+    void refreshRuntimeCapabilities()
+  }, [refreshRuntimeCapabilities])
 
   useEffect(() => {
     let cancelled = false
@@ -90,6 +108,20 @@ export default function HivePage() {
     comp.role.trim().toLowerCase() === 'orchestrator'
 
   const orchestrator = components.find((c) => isOrchestrator(c)) ?? null
+
+  useEffect(() => {
+    const status = orchestrator?.status ?? null
+    const normalizedStatus = typeof status === 'string' ? status.toLowerCase() : null
+    const identifier = orchestrator?.id ?? null
+    const shouldRefresh =
+      normalizedStatus === 'status-full' &&
+      (lastOrchestratorStatus.current !== 'status-full' || lastOrchestratorId.current !== identifier)
+    if (shouldRefresh) {
+      void refreshRuntimeCapabilities()
+    }
+    lastOrchestratorStatus.current = normalizedStatus
+    lastOrchestratorId.current = identifier
+  }, [orchestrator?.id, orchestrator?.status, refreshRuntimeCapabilities])
 
   const normalizeSwarmId = (comp: Component) => {
     const value = comp.swarmId?.trim()

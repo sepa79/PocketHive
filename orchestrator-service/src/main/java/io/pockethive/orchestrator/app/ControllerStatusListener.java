@@ -2,6 +2,7 @@ package io.pockethive.orchestrator.app;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.pockethive.orchestrator.domain.RuntimeCapabilitiesCatalogue;
 import io.pockethive.orchestrator.domain.SwarmHealth;
 import io.pockethive.orchestrator.domain.SwarmRegistry;
 import org.slf4j.Logger;
@@ -27,10 +28,14 @@ public class ControllerStatusListener {
 
     private final SwarmRegistry registry;
     private final ObjectMapper mapper;
+    private final RuntimeCapabilitiesCatalogue runtimeCapabilities;
 
-    public ControllerStatusListener(SwarmRegistry registry, ObjectMapper mapper) {
+    public ControllerStatusListener(SwarmRegistry registry,
+                                    RuntimeCapabilitiesCatalogue runtimeCapabilities,
+                                    ObjectMapper mapper) {
         this.registry = registry;
         this.mapper = mapper.findAndRegisterModules();
+        this.runtimeCapabilities = runtimeCapabilities;
     }
 
     @RabbitListener(queues = "#{controllerStatusQueue.name}")
@@ -79,6 +84,8 @@ public class ControllerStatusListener {
                 if (!updatedController && data.has("controllerEnabled")) {
                     registry.updateControllerEnabled(swarmId, data.path("controllerEnabled").asBoolean());
                 }
+
+                runtimeCapabilities.update(swarmId, data.path("runtimeCapabilities"));
             }
         } catch (Exception e) {
             log.warn("status parse", e);

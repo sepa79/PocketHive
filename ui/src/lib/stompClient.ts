@@ -2,7 +2,7 @@ import { Client, type StompSubscription } from '@stomp/stompjs'
 import type { Component, QueueInfo } from '../types/hive'
 import { isControlEvent, type ControlEvent } from '../types/control'
 import { logIn, logError } from './logs'
-import { useUIStore } from '../store'
+import { useRuntimeCapabilitiesStore, useUIStore } from '../store'
 
 export type ComponentListener = (components: Component[]) => void
 export interface TopologyNode {
@@ -256,12 +256,17 @@ export function setClient(newClient: Client | null, destination = controlDestina
         const cfg = { ...(comp.config || {}) }
         let workerEnabled: boolean | undefined
         const data = evt.data
+        let runtimeCapabilitiesPayload: unknown
         if (data && typeof data === 'object') {
           const { workers, ...rest } = data as Record<string, unknown> & {
             workers?: unknown
           }
           Object.entries(rest).forEach(([key, value]) => {
             if (key === 'enabled') return
+            if (key === 'runtimeCapabilities') {
+              runtimeCapabilitiesPayload = value
+              return
+            }
             cfg[key] = value
           })
           if (Array.isArray(workers)) {
@@ -302,6 +307,10 @@ export function setClient(newClient: Client | null, destination = controlDestina
             : undefined
         if (typeof aggregateEnabled === 'boolean') cfg.enabled = aggregateEnabled
         if (Object.keys(cfg).length > 0) comp.config = cfg
+        if (runtimeCapabilitiesPayload !== undefined && evt.role?.toLowerCase?.() === 'swarm-controller') {
+          const { applyControllerSnapshot } = useRuntimeCapabilitiesStore.getState()
+          applyControllerSnapshot(swarmId, runtimeCapabilitiesPayload)
+        }
         if (evt.queues) {
           const q: QueueInfo[] = []
           q.push(...(evt.queues.work?.in?.map((n) => ({ name: n, role: 'consumer' as const })) ?? []))

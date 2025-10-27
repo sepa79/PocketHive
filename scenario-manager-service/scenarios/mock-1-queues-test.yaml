@@ -6,21 +6,25 @@ template:
   bees:
     - role: generator
       image: pockethive-generator:latest
+      capabilitiesVersion: "1.0.0"
       env:
         POCKETHIVE_CONTROL_PLANE_WORKER_GENERATOR_RATE_PER_SEC: "5"
       work:
         out: genQ
     - role: moderator
       image: pockethive-moderator:latest
+      capabilitiesVersion: "1.0.0"
       work:
         in: genQ
         out: modQ
     - role: processor
       image: pockethive-processor:latest
+      capabilitiesVersion: "1.0.0"
       work:
         in: modQ
         out: finalQ
     - role: postprocessor
       image: pockethive-postprocessor:latest
+      capabilitiesVersion: "1.0.0"
       work:
         in: finalQ

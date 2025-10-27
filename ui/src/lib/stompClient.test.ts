@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Client } from '@stomp/stompjs'
 import {
   setClient,
@@ -8,7 +8,7 @@ import {
   removeSyntheticComponent,
 } from './stompClient'
 import { subscribeLogs, type LogEntry, resetLogs } from './logs'
-import { useUIStore } from '../store'
+import { useRuntimeCapabilitiesStore, useUIStore } from '../store'
 import type { Component } from '../types/hive'
 
 /**
@@ -17,6 +17,10 @@ import type { Component } from '../types/hive'
 
 
 describe('swarm lifecycle', () => {
+  beforeEach(() => {
+    useRuntimeCapabilitiesStore.setState({ catalogue: {} })
+  })
+
   it('logs error events and sets toast', () => {
     resetLogs()
     useUIStore.setState({ toast: null })
@@ -215,6 +219,49 @@ describe('swarm lifecycle', () => {
     expect(controller?.config).not.toHaveProperty('batchSize')
 
     unsubscribe()
+    setClient(null)
+  })
+
+  it('updates runtime capabilities store when controller publishes snapshot', () => {
+    const publish = vi.fn()
+    let cb: (msg: { body: string; headers: Record<string, string> }) => void = () => {}
+    const subscribe = vi
+      .fn()
+      .mockImplementation((_dest: string, fn: (msg: { body: string; headers: Record<string, string> }) => void) => {
+        cb = fn
+        return { unsubscribe() {} }
+      })
+    setClient({ active: true, publish, subscribe } as unknown as Client)
+
+    const baseHeaders = { destination: '/exchange/ph.control/ev.status.swarm-sw1' }
+    cb({
+      headers: baseHeaders,
+      body: JSON.stringify({
+        event: 'status',
+        kind: 'status-full',
+        version: '1',
+        role: 'swarm-controller',
+        instance: 'sw1-swarm-controller',
+        messageId: 'm-rc',
+        timestamp: new Date().toISOString(),
+        data: {
+          runtimeCapabilities: {
+            generator: {
+              '1.2.3': {
+                manifest: { capabilitiesVersion: '1.2.3', panels: [] },
+                instances: ['sw1-generator'],
+              },
+            },
+          },
+        },
+      }),
+    })
+
+    const catalogue = useRuntimeCapabilitiesStore.getState().catalogue
+    expect(catalogue['sw1']).toBeDefined()
+    expect(catalogue['sw1']?.generator?.['1.2.3']).toBeDefined()
+    expect(catalogue['sw1']?.generator?.['1.2.3']?.manifest).toHaveProperty('capabilitiesVersion', '1.2.3')
+
     setClient(null)
   })
 

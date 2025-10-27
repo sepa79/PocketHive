@@ -199,6 +199,7 @@ interface SwarmGroupComponentData {
   id: string
   name: string
   shape: NodeShape
+  queueCount: number
   enabled?: boolean
   componentType?: string
 }
@@ -619,6 +620,7 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
                 id: member.id,
                 name: member.type,
                 shape: getShape(member.type),
+                queueCount: componentsById[member.id]?.queues?.length ?? 0,
                 enabled: member.enabled,
                 componentType: member.type,
               })),

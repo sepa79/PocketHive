@@ -1,5 +1,6 @@
 package io.pockethive.swarmcontroller;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.control.CommandState;
@@ -39,6 +40,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.atomic.AtomicReference;
 
 @Component
@@ -54,6 +56,7 @@ public class SwarmSignalListener {
   private final String swarmId;
   private final String role;
   private final String controlExchange;
+  private final CapabilitiesRegistry capabilitiesRegistry;
   private static final long STATUS_INTERVAL_MS = 5000L;
   private static final long MAX_STALENESS_MS = 15_000L;
   private volatile boolean controllerEnabled = false;
@@ -64,7 +67,8 @@ public class SwarmSignalListener {
                              RabbitTemplate rabbit,
                              @Qualifier("instanceId") String instanceId,
                              ObjectMapper mapper,
-                             SwarmControllerProperties properties) {
+                             SwarmControllerProperties properties,
+                             CapabilitiesRegistry capabilitiesRegistry) {
     this.lifecycle = lifecycle;
     this.rabbit = rabbit;
     this.instanceId = instanceId;
@@ -73,6 +77,7 @@ public class SwarmSignalListener {
     this.swarmId = properties.getSwarmId();
     this.role = properties.getRole();
     this.controlExchange = properties.getControlExchange();
+    this.capabilitiesRegistry = Objects.requireNonNull(capabilitiesRegistry, "capabilitiesRegistry");
     this.controlPlane = ManagerControlPlane.builder(
         new AmqpControlPlanePublisher(rabbit, controlExchange),
         this.mapper)
@@ -156,6 +161,8 @@ public class SwarmSignalListener {
       }
       lifecycle.updateHeartbeat(role, instance);
 
+      captureCapabilities(eventKey.type(), role, instance, node.path("data"));
+
       JsonNode enabledNode = node.path("enabled");
       boolean enabled = !enabledNode.isMissingNode() && !enabledNode.isNull()
           ? enabledNode.asBoolean()
@@ -169,6 +176,29 @@ public class SwarmSignalListener {
       }
     } catch (Exception e) {
       log.warn("status parse", e);
+    }
+  }
+
+  private void captureCapabilities(String type, String role, String instance, JsonNode dataNode) {
+    if (type == null || !type.startsWith("status-full")) {
+      return;
+    }
+    if (dataNode == null || dataNode.isMissingNode()) {
+      return;
+    }
+    JsonNode capabilitiesNode = dataNode.path("capabilities");
+    if (capabilitiesNode.isMissingNode() || capabilitiesNode.isNull()) {
+      return;
+    }
+    JsonNode manifestNode = capabilitiesNode.path(role);
+    if (manifestNode.isMissingNode() || manifestNode.isNull() || !manifestNode.isObject()) {
+      return;
+    }
+    try {
+      Map<String, Object> manifest = mapper.convertValue(manifestNode, new TypeReference<>() { });
+      capabilitiesRegistry.record(role, instance, manifest);
+    } catch (IllegalArgumentException ex) {
+      log.debug("Ignoring capabilities manifest for role {} instance {}", role, instance, ex);
     }
   }
 
@@ -727,6 +757,7 @@ public class SwarmSignalListener {
         .data("swarmStatus", status.name())
         .data("controllerEnabled", controllerEnabled)
         .data("workloadsEnabled", workloadsEnabled)
+        .data("runtimeCapabilities", capabilitiesRegistry.runtimeCapabilitiesView())
         .queueStats(toQueueStatsPayload(queueSnapshot))
         .controlIn(controlQueue)
         .controlRoutes(controllerControlRoutes())

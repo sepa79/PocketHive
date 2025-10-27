@@ -3,6 +3,7 @@ import type { Component } from '../../types/hive'
 import QueuesPanel from './QueuesPanel'
 import { heartbeatHealth, colorForHealth } from '../../lib/health'
 import WiremockPanel from './WiremockPanel'
+import WorkerCapabilitiesPanel from './WorkerCapabilitiesPanel'
 
 interface Props {
   component: Component
@@ -62,40 +63,7 @@ function renderContent(component: Component): JSX.Element {
     case 'wiremock':
       return <WiremockPanel component={component} />
     default:
-      return <WorkerCapabilitiesPlaceholder component={component} />
-  }
-}
-
-function WorkerCapabilitiesPlaceholder({ component }: { component: Component }): JSX.Element {
-  const preview = extractConfigPreview(component.config)
-  return (
-    <div className="space-y-3">
-      <p>
-        Worker configuration options will be derived from the published capabilities manifest.
-        Default UI inputs have been removed so manifests can drive the experience.
-      </p>
-      {preview ? (
-        <div>
-          <div className="mb-1 text-xs uppercase tracking-wide text-white/50">Current config</div>
-          <pre className="max-h-64 overflow-auto rounded bg-black/30 p-3 text-xs text-white/80">
-            {preview}
-          </pre>
-        </div>
-      ) : (
-        <p>No additional runtime config is currently set for this component.</p>
-      )}
-    </div>
-  )
-}
-
-function extractConfigPreview(config: Record<string, unknown> | undefined): string | null {
-  if (!config || typeof config !== 'object') return null
-  const entries = Object.entries(config).filter(([key]) => key !== 'enabled')
-  if (entries.length === 0) return null
-  try {
-    return JSON.stringify(Object.fromEntries(entries), null, 2)
-  } catch {
-    return null
+      return <WorkerCapabilitiesPanel component={component} />
   }
 }
 

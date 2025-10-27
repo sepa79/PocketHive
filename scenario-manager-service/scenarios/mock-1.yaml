@@ -6,19 +6,23 @@ template:
   bees:
     - role: generator
       image: pockethive-generator:latest
+      capabilitiesVersion: "1.0.0"
       work:
         out: gen
     - role: moderator
       image: pockethive-moderator:latest
+      capabilitiesVersion: "1.0.0"
       work:
         in: gen
         out: mod
     - role: processor
       image: pockethive-processor:latest
+      capabilitiesVersion: "1.0.0"
       work:
         in: mod
         out: final
     - role: postprocessor
       image: pockethive-postprocessor:latest
+      capabilitiesVersion: "1.0.0"
       work:
         in: final

@@ -33,3 +33,5 @@ export const useUIStore = create<UIState>((set) => ({
   buzzSize: 30,
   setBuzzSize: (size: number) => set({ buzzSize: Math.max(10, Math.min(90, size)) }),
 }))
+
+export * from './runtimeCapabilities'

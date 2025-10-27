@@ -9,6 +9,7 @@ import io.pockethive.orchestrator.domain.SwarmCreateTracker;
 import io.pockethive.orchestrator.domain.SwarmCreateTracker.Pending;
 import io.pockethive.orchestrator.domain.SwarmCreateTracker.Phase;
 import io.pockethive.orchestrator.domain.IdempotencyStore;
+import io.pockethive.orchestrator.domain.RuntimeCapabilitiesCatalogue;
 import io.pockethive.orchestrator.domain.SwarmHealth;
 import io.pockethive.orchestrator.domain.SwarmPlanRegistry;
 import io.pockethive.orchestrator.domain.SwarmRegistry;
@@ -26,9 +27,14 @@ import org.springframework.web.bind.annotation.*;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import io.pockethive.util.BeeNameGenerator;
@@ -52,6 +58,7 @@ public class SwarmController {
     private final SwarmCreateTracker creates;
     private final IdempotencyStore idempotency;
     private final SwarmRegistry registry;
+    private final RuntimeCapabilitiesCatalogue runtimeCapabilities;
     private final SwarmPlanRegistry plans;
     private final ScenarioClient scenarios;
     private final ObjectMapper json;
@@ -62,6 +69,7 @@ public class SwarmController {
                            SwarmCreateTracker creates,
                            IdempotencyStore idempotency,
                            SwarmRegistry registry,
+                           RuntimeCapabilitiesCatalogue runtimeCapabilities,
                            ObjectMapper json,
                            ScenarioClient scenarios,
                            SwarmPlanRegistry plans,
@@ -71,6 +79,7 @@ public class SwarmController {
         this.creates = creates;
         this.idempotency = idempotency;
         this.registry = registry;
+        this.runtimeCapabilities = runtimeCapabilities;
         this.json = json;
         this.scenarios = scenarios;
         this.plans = plans;
@@ -118,11 +127,18 @@ public class SwarmController {
             return response;
         }
 
+        String templateId = req.templateId();
+        SwarmTemplate template = fetchTemplate(templateId);
+        Optional<ResponseEntity<?>> capabilityFailure = validateRuntimeCapabilities(swarmId, template);
+        if (capabilityFailure.isPresent()) {
+            response = capabilityFailure.get();
+            logRestResponse("POST", path, response);
+            return response;
+        }
+        String image = requireImage(template, templateId);
+        List<Bee> bees = template.bees();
+
         response = idempotentSend("swarm-create", swarmId, req.idempotencyKey(), timeout.toMillis(), corr -> {
-            String templateId = req.templateId();
-            SwarmTemplate template = fetchTemplate(templateId);
-            String image = requireImage(template, templateId);
-            List<Bee> bees = template.bees();
             String instanceId = BeeNameGenerator.generate("swarm-controller", swarmId);
             plans.register(instanceId, new SwarmPlan(swarmId, bees));
             Swarm swarm = lifecycle.startSwarm(swarmId, image, instanceId);
@@ -296,6 +312,52 @@ public class SwarmController {
             throw new IllegalStateException("Template %s missing swarm-controller image".formatted(templateId));
         }
         return image;
+    }
+
+    private Optional<ResponseEntity<?>> validateRuntimeCapabilities(String swarmId, SwarmTemplate template) {
+        if (template == null || template.bees() == null) {
+            return Optional.empty();
+        }
+        Map<String, Set<String>> requiredVersions = new LinkedHashMap<>();
+        List<String> missing = new ArrayList<>();
+        for (Bee bee : template.bees()) {
+            if (bee == null) {
+                continue;
+            }
+            String role = bee.role();
+            String version = bee.capabilitiesVersion();
+            if (role == null || role.isBlank()) {
+                continue;
+            }
+            if (version == null || version.isBlank()) {
+                missing.add(role);
+                continue;
+            }
+            requiredVersions.computeIfAbsent(role, r -> new LinkedHashSet<>()).add(version);
+        }
+        if (!missing.isEmpty()) {
+            String message = "Template for swarm '%s' is missing capabilitiesVersion for roles: %s"
+                .formatted(swarmId, String.join(", ", missing));
+            return Optional.of(ResponseEntity.badRequest().body(new ErrorResponse(message)));
+        }
+        List<String> unknown = new ArrayList<>();
+        requiredVersions.forEach((role, versions) -> {
+            for (String version : versions) {
+                if (!runtimeCapabilities.hasVersion(role, version)) {
+                    Set<String> known = runtimeCapabilities.knownVersions(role);
+                    String detail = role + "@" + version;
+                    if (!known.isEmpty()) {
+                        detail = detail + " (known: " + String.join(", ", known) + ")";
+                    }
+                    unknown.add(detail);
+                }
+            }
+        });
+        if (!unknown.isEmpty()) {
+            String message = "Runtime capabilities not available for " + String.join(", ", unknown);
+            return Optional.of(ResponseEntity.status(HttpStatus.CONFLICT).body(new ErrorResponse(message)));
+        }
+        return Optional.empty();
     }
 
     public record ControlRequest(String idempotencyKey, String notes) {}

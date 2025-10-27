@@ -1,6 +1,7 @@
 package io.pockethive.orchestrator.app;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.pockethive.orchestrator.domain.RuntimeCapabilitiesCatalogue;
 import io.pockethive.orchestrator.domain.SwarmHealth;
 import io.pockethive.orchestrator.domain.SwarmRegistry;
 import org.junit.jupiter.api.Test;
@@ -19,9 +20,11 @@ class ControllerStatusListenerTest {
     @Mock
     SwarmRegistry registry;
 
+    private final RuntimeCapabilitiesCatalogue catalogue = new RuntimeCapabilitiesCatalogue();
+
     @Test
     void updatesRegistry() {
-        ControllerStatusListener listener = new ControllerStatusListener(registry, new ObjectMapper());
+        ControllerStatusListener listener = new ControllerStatusListener(registry, catalogue, new ObjectMapper());
         String json = "{\"swarmId\":\"sw1\",\"data\":{\"swarmStatus\":\"RUNNING\",\"state\":{\"workloads\":{\"enabled\":true},\"controller\":{\"enabled\":false}}}}";
         listener.handle(json, "ev.status-delta.swarm-controller.inst1");
         verify(registry).refresh("sw1", SwarmHealth.RUNNING);
@@ -31,7 +34,7 @@ class ControllerStatusListenerTest {
 
     @Test
     void updatesRegistryFromTopLevelFlags() {
-        ControllerStatusListener listener = new ControllerStatusListener(registry, new ObjectMapper());
+        ControllerStatusListener listener = new ControllerStatusListener(registry, catalogue, new ObjectMapper());
         String json = "{\"swarmId\":\"sw1\",\"data\":{\"swarmStatus\":\"STOPPED\",\"workloadsEnabled\":false,\"controllerEnabled\":true}}";
         listener.handle(json, "ev.status-delta.swarm-controller.inst1");
         verify(registry).refresh("sw1", SwarmHealth.DEGRADED);
@@ -40,8 +43,16 @@ class ControllerStatusListenerTest {
     }
 
     @Test
+    void capturesRuntimeCapabilities() {
+        ControllerStatusListener listener = new ControllerStatusListener(registry, catalogue, new ObjectMapper());
+        String json = "{\"swarmId\":\"sw1\",\"data\":{\"swarmStatus\":\"RUNNING\",\"runtimeCapabilities\":{\"generator\":{\"1.0.0\":{\"manifest\":{\"capabilitiesVersion\":\"1.0.0\"},\"instances\":[\"gen-1\"]}}}}}";
+        listener.handle(json, "ev.status-full.swarm-controller.inst1");
+        assertThat(catalogue.hasVersion("generator", "1.0.0")).isTrue();
+    }
+
+    @Test
     void statusLogsEmitAtDebug(CapturedOutput output) {
-        ControllerStatusListener listener = new ControllerStatusListener(registry, new ObjectMapper());
+        ControllerStatusListener listener = new ControllerStatusListener(registry, catalogue, new ObjectMapper());
 
         listener.handle("{}", "ev.status-delta.swarm-controller.inst1");
 
@@ -50,7 +61,7 @@ class ControllerStatusListenerTest {
 
     @Test
     void handleRejectsBlankRoutingKey() {
-        ControllerStatusListener listener = new ControllerStatusListener(registry, new ObjectMapper());
+        ControllerStatusListener listener = new ControllerStatusListener(registry, catalogue, new ObjectMapper());
 
         assertThatThrownBy(() -> listener.handle("{}", "  "))
             .isInstanceOf(IllegalArgumentException.class)
@@ -59,7 +70,7 @@ class ControllerStatusListenerTest {
 
     @Test
     void handleRejectsNullRoutingKey() {
-        ControllerStatusListener listener = new ControllerStatusListener(registry, new ObjectMapper());
+        ControllerStatusListener listener = new ControllerStatusListener(registry, catalogue, new ObjectMapper());
 
         assertThatThrownBy(() -> listener.handle("{}", null))
             .isInstanceOf(IllegalArgumentException.class)
@@ -68,7 +79,7 @@ class ControllerStatusListenerTest {
 
     @Test
     void handleRejectsBlankPayload() {
-        ControllerStatusListener listener = new ControllerStatusListener(registry, new ObjectMapper());
+        ControllerStatusListener listener = new ControllerStatusListener(registry, catalogue, new ObjectMapper());
 
         assertThatThrownBy(() -> listener.handle(" ", "ev.status-delta.swarm-controller.inst1"))
             .isInstanceOf(IllegalArgumentException.class)

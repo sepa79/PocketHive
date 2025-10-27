@@ -1,5 +1,9 @@
 import { apiFetch } from './api'
 import type { Component } from '../types/hive'
+import type {
+  RuntimeCapabilitiesCatalogue,
+  RuntimeCapabilitiesCatalogueResponse,
+} from '../types/capabilities'
 
 interface SwarmManagersTogglePayload {
   idempotencyKey: string
@@ -140,4 +144,14 @@ export async function sendConfigUpdate(component: Component, config: unknown) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   })
+}
+
+export async function fetchRuntimeCapabilities(): Promise<RuntimeCapabilitiesCatalogue> {
+  const response = await apiFetch('/orchestrator/api/capabilities/runtime')
+  await ensureOk(response, 'Failed to load runtime capabilities')
+  const data = (await response.json()) as RuntimeCapabilitiesCatalogueResponse | null
+  if (!data || typeof data !== 'object' || data.catalogue === undefined || data.catalogue === null) {
+    return {}
+  }
+  return data.catalogue
 }

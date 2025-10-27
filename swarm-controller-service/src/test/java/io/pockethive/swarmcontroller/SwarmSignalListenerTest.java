@@ -46,9 +46,10 @@ class SwarmSignalListenerTest {
   RabbitTemplate rabbit;
 
   ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
+  CapabilitiesRegistry capabilities;
 
   private SwarmSignalListener newListener(SwarmLifecycle lifecycle, RabbitTemplate rabbit, String instanceId, ObjectMapper mapper) {
-    return new SwarmSignalListener(lifecycle, rabbit, instanceId, mapper, SwarmControllerTestProperties.defaults());
+    return new SwarmSignalListener(lifecycle, rabbit, instanceId, mapper, SwarmControllerTestProperties.defaults(), capabilities);
   }
 
   private static final Map<String, QueueStats> DEFAULT_QUEUE_STATS =
@@ -64,6 +65,7 @@ class SwarmSignalListenerTest {
   @BeforeEach
   void setup() {
     stubLifecycleDefaults();
+    capabilities = new CapabilitiesRegistry();
   }
 
   private String signal(String sig, String id, String corr) {
@@ -116,6 +118,12 @@ class SwarmSignalListenerTest {
     return ControlPlaneRouting.event(type, new ConfirmationScope(TEST_SWARM_ID, role, instance));
   }
 
+  private String statusFullPayload(String role, String capabilitiesVersion) {
+    return """
+        {"swarmId":"%s","data":{"capabilities":{"%s":{"capabilitiesVersion":"%s","role":"%s"}},"enabled":true}}
+        """.formatted(TEST_SWARM_ID, role, capabilitiesVersion, role);
+  }
+
   @Test
   void statusSignalsLogAtDebug(CapturedOutput output) {
     SwarmSignalListener listener = newListener(lifecycle, rabbit, "inst-log", mapper);
@@ -131,6 +139,42 @@ class SwarmSignalListenerTest {
         .doesNotContain("[CTRL] RECV rk=" + statusEvent("status-delta", "swarm-controller", "inst-log"))
         .doesNotContain("[CTRL] RECV rk=" + statusRequestSignal("swarm-controller", "inst-log"))
         .doesNotContain("Status request received");
+  }
+
+  @Test
+  void statusFullCapturesCapabilities() {
+    SwarmSignalListener listener = newListener(lifecycle, rabbit, "inst-cap", mapper);
+    reset(rabbit);
+
+    listener.handle(statusFullPayload("generator", "1.2.3"), statusEvent("status-full", "generator", "gen-1"));
+
+    Map<String, Map<String, Map<String, Object>>> view = capabilities.runtimeCapabilitiesView();
+    assertThat(view).containsKey("generator");
+    assertThat(view.get("generator").get("1.2.3").get("manifest")).isInstanceOf(Map.class);
+    assertThat(capabilities.versionsForRole("generator")).contains("1.2.3");
+  }
+
+  @Test
+  void statusRequestPublishesRuntimeCapabilities() throws Exception {
+    SwarmSignalListener listener = newListener(lifecycle, rabbit, "inst-cap", mapper);
+    reset(rabbit);
+
+    listener.handle(statusFullPayload("generator", "2.0.0"), statusEvent("status-full", "generator", "gen-1"));
+
+    reset(rabbit);
+
+    listener.handle(signal(ControlPlaneSignals.STATUS_REQUEST, "idem-cap", "corr-cap"),
+        statusRequestSignal("swarm-controller", "inst-cap"));
+
+    ArgumentCaptor<String> payloadCaptor = ArgumentCaptor.forClass(String.class);
+    verify(rabbit).convertAndSend(eq(CONTROL_EXCHANGE),
+        eq(ControlPlaneRouting.event("status-full", new ConfirmationScope(TEST_SWARM_ID, "swarm-controller", "inst-cap"))),
+        payloadCaptor.capture());
+    JsonNode json = mapper.readTree(payloadCaptor.getValue());
+    JsonNode runtimeNode = json.path("data").path("runtimeCapabilities");
+    assertThat(runtimeNode.path("generator").path("2.0.0").path("instances")).anyMatch(n -> n.asText().equals("gen-1"));
+    assertThat(runtimeNode.path("generator").path("2.0.0").path("manifest").path("capabilitiesVersion").asText())
+        .isEqualTo("2.0.0");
   }
 
   @Test

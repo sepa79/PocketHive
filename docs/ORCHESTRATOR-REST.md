@@ -21,6 +21,7 @@ Client sends **`idempotencyKey`** (UUID v4) per new action (reuse on retry). Ser
 - On controller handshake `ev.ready.swarm-controller.<swarmId>.swarm-controller.<controllerInstance>`, emit **`ev.ready.swarm-create.<swarmId>.orchestrator.ALL`** (echo ids).
 - On failure, emit **`ev.error.swarm-create.<swarmId>.orchestrator.ALL`**.
 - Requires a `templateId` referencing the scenario template to instantiate.
+- Every bee in the selected template must declare a `capabilitiesVersion` that exists in the runtime catalogue (see §5). Missing versions return 400; unknown versions return 409.
 
 **Request**
 ```json
@@ -48,6 +49,20 @@ Client sends **`idempotencyKey`** (UUID v4) per new action (reuse on retry). Ser
 ```json
 {
   "message": "Swarm '<swarmId>' already exists"
+}
+```
+
+**Response (400)** — when the template omits a `capabilitiesVersion` for any bee role.
+```json
+{
+  "message": "Template for swarm '<swarmId>' is missing capabilitiesVersion for roles: generator"
+}
+```
+
+**Response (409)** — when the runtime catalogue does not contain the requested version for one or more roles.
+```json
+{
+  "message": "Runtime capabilities not available for generator@2.0.0 (known: 1.0.0)"
 }
 ```
 
@@ -302,3 +317,30 @@ Client sends **`idempotencyKey`** (UUID v4) per new action (reuse on retry). Ser
 **Notes**
 - The Orchestrator reuses the same `correlationId` for every fan-out signal so confirmations map cleanly to the bulk action.
 - Controllers acknowledge even when already at the requested `enabled` state (idempotent success) and continue servicing control-plane requests while paused.
+
+## 5. Runtime capabilities catalogue
+
+`GET /api/capabilities/runtime`
+
+**Behavior**
+- Returns the orchestrator's current view of runtime capabilities manifests observed from active swarms.
+- Payload is grouped by swarm id → role → capabilities version with metadata and reporting instances.
+
+**Response (200)**
+```json
+{
+  "catalogue": {
+    "swarm-1": {
+      "generator": {
+        "1.0.0": {
+          "manifest": { "capabilitiesVersion": "1.0.0", "foo": "bar" },
+          "instances": ["generator-1"],
+          "updatedAt": "2024-04-02T12:34:56Z"
+        }
+      }
+    }
+  }
+}
+```
+
+> Callers should treat unknown roles/versions as unavailable and coordinate with the swarm-controller to publish a fresh `status-full` if needed.

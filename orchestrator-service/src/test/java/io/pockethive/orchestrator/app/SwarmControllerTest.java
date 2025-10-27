@@ -18,6 +18,7 @@ import io.pockethive.controlplane.ControlPlaneSignals;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.controlplane.spring.ControlPlaneProperties;
 import io.pockethive.orchestrator.domain.IdempotencyStore;
+import io.pockethive.orchestrator.domain.RuntimeCapabilitiesCatalogue;
 import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmCreateRequest;
 import io.pockethive.orchestrator.domain.SwarmCreateTracker;
@@ -90,7 +91,7 @@ class SwarmControllerTest {
         SwarmCreateTracker tracker = new SwarmCreateTracker();
         SwarmPlanRegistry plans = new SwarmPlanRegistry();
         SwarmTemplate template = new SwarmTemplate("ctrl-image", List.of(
-            new Bee("generator", "img", new Work(null, "out"), java.util.Map.of())
+            new Bee("generator", "img", new Work(null, "out"), java.util.Map.of(), "1.0.0")
         ));
         when(scenarioClient.fetchTemplate("tpl-1")).thenReturn(template);
         AtomicReference<String> capturedInstance = new AtomicReference<>();
@@ -99,7 +100,9 @@ class SwarmControllerTest {
             capturedInstance.set(instanceId);
             return new Swarm("sw1", instanceId, "c1");
         });
-        SwarmController ctrl = controller(tracker, new SwarmRegistry(), plans);
+        RuntimeCapabilitiesCatalogue runtimeCatalogue = new RuntimeCapabilitiesCatalogue();
+        runtimeCatalogue.update("sw-runtime", mapper.readTree("{\"generator\":{\"1.0.0\":{\"manifest\":{\"capabilitiesVersion\":\"1.0.0\"},\"instances\":[\"gen-1\"]}}}"));
+        SwarmController ctrl = controller(tracker, new SwarmRegistry(), plans, runtimeCatalogue, new InMemoryIdempotencyStore());
         SwarmCreateRequest req = new SwarmCreateRequest("tpl-1", "idem", null);
 
         ctrl.create("sw1", req);
@@ -111,6 +114,44 @@ class SwarmControllerTest {
         assertThat(pending.correlationId()).isNotBlank();
         assertThat(plans.find(instanceId)).isPresent();
         verify(scenarioClient).fetchTemplate("tpl-1");
+    }
+
+    @Test
+    void createRejectsWhenCapabilitiesVersionMissing() throws Exception {
+        SwarmCreateTracker tracker = new SwarmCreateTracker();
+        SwarmPlanRegistry plans = new SwarmPlanRegistry();
+        SwarmTemplate template = new SwarmTemplate("ctrl-image", List.of(
+            new Bee("generator", "img", new Work(null, "out"), java.util.Map.of())
+        ));
+        when(scenarioClient.fetchTemplate("tpl-missing-cap")).thenReturn(template);
+        SwarmController ctrl = controller(tracker, new SwarmRegistry(), plans);
+        SwarmCreateRequest req = new SwarmCreateRequest("tpl-missing-cap", "idem", null);
+
+        ResponseEntity<?> resp = ctrl.create("sw1", req);
+
+        assertThat(resp.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(resp.getBody().toString()).contains("capabilitiesVersion");
+        verifyNoInteractions(lifecycle);
+    }
+
+    @Test
+    void createRejectsWhenCapabilitiesVersionUnknown() throws Exception {
+        SwarmCreateTracker tracker = new SwarmCreateTracker();
+        SwarmPlanRegistry plans = new SwarmPlanRegistry();
+        SwarmTemplate template = new SwarmTemplate("ctrl-image", List.of(
+            new Bee("generator", "img", new Work(null, "out"), java.util.Map.of(), "2.0.0")
+        ));
+        when(scenarioClient.fetchTemplate("tpl-unknown")).thenReturn(template);
+        RuntimeCapabilitiesCatalogue runtimeCatalogue = new RuntimeCapabilitiesCatalogue();
+        runtimeCatalogue.update("sw-runtime", mapper.readTree("{\"generator\":{\"1.0.0\":{\"manifest\":{\"capabilitiesVersion\":\"1.0.0\"},\"instances\":[\"gen-1\"]}}}"));
+        SwarmController ctrl = controller(tracker, new SwarmRegistry(), plans, runtimeCatalogue, new InMemoryIdempotencyStore());
+        SwarmCreateRequest req = new SwarmCreateRequest("tpl-unknown", "idem", null);
+
+        ResponseEntity<?> resp = ctrl.create("sw1", req);
+
+        assertThat(resp.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(resp.getBody().toString()).contains("Runtime capabilities not available");
+        verifyNoInteractions(lifecycle);
     }
 
     @Test
@@ -241,7 +282,7 @@ class SwarmControllerTest {
         SwarmCreateTracker tracker,
         SwarmRegistry registry,
         SwarmPlanRegistry plans) {
-        return controller(tracker, registry, plans, new InMemoryIdempotencyStore());
+        return controller(tracker, registry, plans, new RuntimeCapabilitiesCatalogue(), new InMemoryIdempotencyStore());
     }
 
     private SwarmController controller(
@@ -249,12 +290,22 @@ class SwarmControllerTest {
         SwarmRegistry registry,
         SwarmPlanRegistry plans,
         IdempotencyStore store) {
+        return controller(tracker, registry, plans, new RuntimeCapabilitiesCatalogue(), store);
+    }
+
+    private SwarmController controller(
+        SwarmCreateTracker tracker,
+        SwarmRegistry registry,
+        SwarmPlanRegistry plans,
+        RuntimeCapabilitiesCatalogue runtimeCapabilities,
+        IdempotencyStore store) {
         return new SwarmController(
             rabbit,
             lifecycle,
             tracker,
             store,
             registry,
+            runtimeCapabilities,
             mapper,
             scenarioClient,
             plans,
