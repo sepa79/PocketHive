@@ -1,0 +1,9 @@
+schemaVersion: "1.0"
+capabilitiesVersion: "1.0"
+role: swarm-controller
+image:
+  name: pockethive-swarm-controller
+  tag: latest
+config: []
+actions: []
+panels: []

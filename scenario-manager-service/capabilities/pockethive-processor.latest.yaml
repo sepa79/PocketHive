@@ -1,0 +1,15 @@
+schemaVersion: "1.0"
+capabilitiesVersion: "1.0"
+role: processor
+image:
+  name: pockethive-processor
+  tag: latest
+config:
+  - name: enabled
+    type: boolean
+    default: false
+  - name: baseUrl
+    type: string
+    default: ""
+actions: []
+panels: []

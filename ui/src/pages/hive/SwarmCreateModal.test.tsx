@@ -19,20 +19,32 @@ afterEach(() => {
 })
 
 test('loads available scenarios on mount', async () => {
-  apiFetchSpy.mockResolvedValueOnce({
-    ok: true,
-    json: async () => [
-      { id: 'basic', name: 'Basic' },
-      { id: 'advanced', name: 'Advanced' },
-    ],
-  } as unknown as Response)
+  apiFetchSpy
+    .mockResolvedValueOnce({
+      ok: true,
+      json: async () => [
+        { id: 'basic', name: 'Basic', bees: [] },
+        { id: 'advanced', name: 'Advanced', bees: [] },
+      ],
+    } as unknown as Response)
+    .mockResolvedValueOnce({
+      ok: true,
+      json: async () => [],
+    } as unknown as Response)
+
   render(<SwarmCreateModal onClose={() => {}} />)
 
   await screen.findByText('Basic')
   await screen.findByText('Advanced')
 
   expect(apiFetchSpy).toHaveBeenCalledWith(
-    '/scenario-manager/scenarios',
+    '/scenario-manager/api/templates',
+    expect.objectContaining({
+      headers: expect.objectContaining({ Accept: 'application/json' }),
+    }),
+  )
+  expect(apiFetchSpy).toHaveBeenCalledWith(
+    '/scenario-manager/api/capabilities?all=true',
     expect.objectContaining({
       headers: expect.objectContaining({ Accept: 'application/json' }),
     }),
@@ -43,7 +55,11 @@ test('submits selected scenario', async () => {
   apiFetchSpy
     .mockResolvedValueOnce({
       ok: true,
-      json: async () => [{ id: 'basic', name: 'Basic' }],
+      json: async () => [{ id: 'basic', name: 'Basic', bees: [] }],
+    } as unknown as Response)
+    .mockResolvedValueOnce({
+      ok: true,
+      json: async () => [],
     } as unknown as Response)
     .mockResolvedValueOnce({ ok: true } as Response)
   render(<SwarmCreateModal onClose={() => {}} />)
@@ -52,8 +68,10 @@ test('submits selected scenario', async () => {
   fireEvent.change(screen.getByLabelText(/swarm id/i), { target: { value: 'sw1' } })
   fireEvent.change(screen.getByLabelText(/scenario/i), { target: { value: 'basic' } })
   fireEvent.click(screen.getByText('Create'))
-  await waitFor(() => expect(apiFetchSpy.mock.calls.length).toBeGreaterThanOrEqual(2))
-  const createCall = apiFetchSpy.mock.calls[1]
+  await waitFor(() =>
+    expect(apiFetchSpy.mock.calls.some((call) => call[0] === '/orchestrator/swarms/sw1/create')).toBe(true),
+  )
+  const createCall = apiFetchSpy.mock.calls.find((call) => call[0] === '/orchestrator/swarms/sw1/create')
   expect(createCall?.[0]).toBe('/orchestrator/swarms/sw1/create')
   expect(createCall?.[1]).toMatchObject({ method: 'POST' })
   const body = createCall?.[1]?.body
@@ -68,7 +86,11 @@ test('shows conflict message when swarm already exists', async () => {
   apiFetchSpy
     .mockResolvedValueOnce({
       ok: true,
-      json: async () => [{ id: 'basic', name: 'Basic' }],
+      json: async () => [{ id: 'basic', name: 'Basic', bees: [] }],
+    } as unknown as Response)
+    .mockResolvedValueOnce({
+      ok: true,
+      json: async () => [],
     } as unknown as Response)
     .mockResolvedValueOnce({
       ok: false,
@@ -87,10 +109,15 @@ test('shows conflict message when swarm already exists', async () => {
 })
 
 test('does not submit when scenario selection is cleared', async () => {
-  apiFetchSpy.mockResolvedValueOnce({
-    ok: true,
-    json: async () => [{ id: 'basic', name: 'Basic' }],
-  } as unknown as Response)
+  apiFetchSpy
+    .mockResolvedValueOnce({
+      ok: true,
+      json: async () => [{ id: 'basic', name: 'Basic', bees: [] }],
+    } as unknown as Response)
+    .mockResolvedValueOnce({
+      ok: true,
+      json: async () => [],
+    } as unknown as Response)
   render(<SwarmCreateModal onClose={() => {}} />)
 
   await screen.findByText('Basic')
@@ -99,6 +126,62 @@ test('does not submit when scenario selection is cleared', async () => {
   fireEvent.change(screen.getByLabelText(/scenario/i), { target: { value: '' } })
   fireEvent.click(screen.getByText('Create'))
 
-  await waitFor(() => expect(apiFetchSpy.mock.calls.length).toBe(1))
+  await waitFor(() => expect(apiFetchSpy.mock.calls.length).toBe(2))
   await screen.findByText(/swarm id and scenario required/i)
+})
+
+test('renders manifest details when available', async () => {
+  apiFetchSpy
+    .mockResolvedValueOnce({
+      ok: true,
+      json: async () => [
+        {
+          id: 'basic',
+          name: 'Basic',
+          bees: [{ role: 'generator', image: 'ghcr.io/pockethive/generator:1.0.0' }],
+        },
+      ],
+    } as unknown as Response)
+    .mockResolvedValueOnce({
+      ok: true,
+      json: async () => [
+        {
+          schemaVersion: '1.0',
+          capabilitiesVersion: '1',
+          role: 'generator',
+          image: {
+            name: 'ghcr.io/pockethive/generator',
+            tag: '1.0.0',
+            digest: null,
+          },
+          config: [
+            {
+              name: 'rate',
+              type: 'int',
+              default: 100,
+            },
+          ],
+          actions: [
+            {
+              id: 'warmup',
+              label: 'Warm Up',
+              params: [],
+            },
+          ],
+          panels: [
+            {
+              id: 'metrics',
+            },
+          ],
+        },
+      ],
+    } as unknown as Response)
+
+  render(<SwarmCreateModal onClose={() => {}} />)
+
+  fireEvent.change(await screen.findByLabelText(/scenario/i), { target: { value: 'basic' } })
+
+  expect(await screen.findByDisplayValue('100')).toBeTruthy()
+  expect(screen.getByText('Warm Up')).toBeTruthy()
+  expect(screen.getByText('metrics')).toBeTruthy()
 })

@@ -20,9 +20,11 @@ public class ScenarioController {
     private static final Logger log = LoggerFactory.getLogger(ScenarioController.class);
     private static final ObjectMapper LOG_MAPPER = new ObjectMapper();
     private final ScenarioService service;
+    private final AvailableScenarioRegistry availableScenarios;
 
-    public ScenarioController(ScenarioService service) {
+    public ScenarioController(ScenarioService service, AvailableScenarioRegistry availableScenarios) {
         this.service = service;
+        this.availableScenarios = availableScenarios;
     }
 
     @PostMapping(
@@ -39,10 +41,20 @@ public class ScenarioController {
     }
 
     @GetMapping(produces = MediaType.APPLICATION_JSON_VALUE)
-    public List<ScenarioSummary> list() {
-        log.info("[REST] GET /scenarios");
-        List<ScenarioSummary> summaries = service.list();
+    public List<ScenarioSummary> list(@RequestParam(name = "includeDefunct", defaultValue = "false") boolean includeDefunct) {
+        log.info("[REST] GET /scenarios includeDefunct={}", includeDefunct);
+        List<ScenarioSummary> summaries = includeDefunct
+                ? service.listAllSummaries()
+                : availableScenarios.list();
         log.info("[REST] GET /scenarios -> {} items body={}", summaries.size(), safeJson(summaries));
+        return summaries;
+    }
+
+    @GetMapping(value = "/defunct", produces = MediaType.APPLICATION_JSON_VALUE)
+    public List<ScenarioSummary> defunct() {
+        log.info("[REST] GET /scenarios/defunct");
+        List<ScenarioSummary> summaries = service.listDefunctSummaries();
+        log.info("[REST] GET /scenarios/defunct -> {} items body={}", summaries.size(), safeJson(summaries));
         return summaries;
     }
 
@@ -73,6 +85,14 @@ public class ScenarioController {
         service.delete(id);
         log.info("[REST] DELETE /scenarios/{} -> status=204", id);
         return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/reload")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void reload() throws IOException {
+        log.info("[REST] POST /scenarios/reload");
+        service.reload();
+        log.info("[REST] POST /scenarios/reload -> status=204");
     }
 
     @ExceptionHandler(IllegalArgumentException.class)
