@@ -1,94 +1,136 @@
-# Worker capability catalogue
+# Worker Capability Catalogue (Simplified, Scenario‑Manager–Centric)
 
-This document captures how PocketHive should describe worker capabilities so that the Hive UI and the Scenario Editor can render
-configuration forms and actions without hard-coded role-specific logic.
+This spec defines how PocketHive exposes worker **capabilities** without embedding any capability code in workers.  
+**Only the Scenario Manager (SM)** holds and serves capability data, loaded from files and matched to **container images**.
 
-## Goals
+---
 
-- Provide a single, versioned contract that tells clients which configuration fields, actions, and rich panels a bee supports.
-- Allow the Scenario Editor to function before any swarm is provisioned by consuming file-based metadata.
-- Keep runtime behaviour authoritative by letting bees emit their live capabilities once they boot, so drift can be detected.
+## 1) Goals
 
-## Manifest shape
+- **Single source of truth:** Scenario Manager owns a file-based capability catalogue.
+- **No worker code:** Bees do not emit capabilities; they stay dumb runtime artifacts.
+- **Easy authoring:** Hive UI and Scenario Editor fetch capabilities from SM alongside swarm templates.
+- **Deterministic execution:** Plans reference images; SM resolves images → capabilities.
 
-Every bee publishes a machine-readable manifest, for example `capabilities.<role>.json`, that follows a shared schema:
+---
 
-- `schemaVersion`: identifies the contract pack version that defines the manifest structure.
-- `capabilitiesVersion`: tracks the bee's own capability revision; bump when a field/action changes.
-- `role`: the canonical component role (generator, trigger, etc.).
-- `config`: array of fields with name, type, default, validation, and optional UI hints.
-- `actions`: array of invokable operations with identifiers, human labels, required params, and the API endpoint/verb.
-- `panels`: optional declarations that map to specialised UI modules (e.g., `wiremockMetrics`). Unknown panels fall back to the
-  generic renderer built from `config`/`actions`.
+## 2) Scope & Ownership
 
-The manifest schema itself lives alongside other scenario-builder contracts (blocks, tracks) so frontend and backend validate
-against the same definitions.
+- **Owner:** Scenario Manager (the service and its build pipeline).
+- **Consumers:** Hive UI + Scenario Editor (authoring), Orchestrator (validation), optional CLI.
+- **Out of scope:** Workers/Bees do not publish, embed, or negotiate capabilities.
 
-## Authoring workflow
+---
 
-1. **Check in manifests with the bee source** — Each worker repository or submodule stores its manifest next to the component code.
-   CI should fail if a release occurs without a manifest or when capabilities change without a version bump.
-2. **Aggregate for distribution** — A contract-build step collects all per-bee manifests into a signed catalogue artifact,
-   for example `contracts/capabilities/catalogue-v{n}.json`. This bundle ships with the Scenario Manager image and can be published
-   to a CDN for UI consumption.
-3. **Expose through Scenario Manager** — Scenario Manager serves the catalogue via `/capabilities` endpoints so both the Hive UI and
-   the Scenario Editor fetch the same authoritative dataset during authoring.
+## 3) Capability Catalogue (Files → Bundle)
 
-## Scenario Editor behaviour
+### 3.1 File format (per image)
+One JSON (or YAML) **manifest per image**:
 
-- Loads the aggregated catalogue on start (or when the user switches component versions) to render configuration forms and
-  available actions without contacting live workers.
-- Warns authors when a scenario references `capabilitiesVersion` values that are not present in the currently mounted catalogue.
-- Allows rich panels when `panels` entries match registered UI modules; otherwise the generic renderer is used.
+```json
+{
+  "schemaVersion": "1.0",
+  "capabilitiesVersion": "3",
+  "image": {
+    "name": "ghcr.io/pockethive/generator",
+    "tag": "1.12.0",
+    "digest": "sha256:abcd..."   // optional but preferred if known
+  },
+  "role": "generator",
+  "config": [
+    { "name": "rate", "type": "int", "default": 100, "min": 1, "max": 100000, "ui": {"step": 10, "unit": "msg/s"} },
+    { "name": "payloadTemplate", "type": "string", "default": "", "multiline": true }
+  ],
+  "actions": [
+    { "id": "warmup", "label": "Warm Up", "params": [] },
+    { "id": "flush", "label": "Flush Buffers", "params": [] }
+  ],
+  "panels": [
+    { "id": "wiremockMetrics" },
+    { "id": "rateGraph" }
+  ]
+}
+```
 
-## Runtime reconciliation
+**Notes**
+- `image` is the **match key** at runtime (prefer `digest` > `name+tag`).
+- `config`/`actions` are **semantic contracts**, not URLs; UI builds forms and buttons from them.
+- `panels` are optional hints for rich UI; fallback renderer uses `config`/`actions` only.
 
-1. When a bee boots, its first `status-full` heartbeat includes the same manifest payload.
-2. Swarm controllers persist the latest per-instance manifest and forward it to the Orchestrator.
-3. The Orchestrator maintains a runtime catalogue keyed by role and version. Scenario Manager periodically compares this runtime
-   state against the static bundle and surfaces drift (e.g., new optional fields) so operators know to refresh the offline pack.
-4. During plan submission, the Orchestrator rejects scenarios that reference capabilities absent from the runtime catalogue,
-   keeping authoring and execution aligned.
+### 3.2 Bundle
+- During SM build, all per-image manifests are **validated** and **packed** into:
+  - `contracts/capabilities/catalogue-v{N}.json` (signed; versioned)
+- CI fails if:
+  - a listed template image lacks a manifest, or
+  - schema validation fails.
 
-## Versioning and governance
+---
 
-- Treat the manifest schema as part of the scenario-builder contract pack. Update the schema first, then roll out backend/frontend
-  consumers.
-- Require `capabilitiesVersion` bumps for any change observable by clients. This keeps caches and catalogues coherent.
-- Record component image digests or semantic versions inside the aggregated catalogue to aid provenance checks and drift detection.
-- When drift is detected between runtime and static catalogues, fail CI or alert operators so new manifests are published before
-  promoting the change to production.
+## 4) Scenario Manager API
 
-## Implementation plan
+UI already calls SM for swarm templates; it should fetch capabilities in the same pass.
 
-### Phase 1 — Export capabilities via `status-full`
+### 4.1 Endpoints
+- `GET /api/templates`  
+  Returns authoring templates (as today), including each component’s image reference.
 
-1. **Lock the manifest contract** – Finalise the JSON schema (including `schemaVersion`, `capabilitiesVersion`, `role`,
-   `config`, `actions`, `panels`) inside the existing scenario-builder contract pack so backend and frontend validate against the
-   same definition. Add schema-version governance rules and linters to keep the contract authoritative during releases.
-2. **Extend worker SDK to emit manifests automatically** – Teach the SDK to assemble each bee’s manifest (e.g., by loading
-   embedded resources or SDK-provided defaults) and attach it to the first `status-full` heartbeat without requiring worker code
-   edits. Add capability-version bump enforcement to SDK build tooling so releases fail if manifests drift without version
-   increments.
-3. **Persist runtime capabilities in the control plane** – Update swarm controllers to store the manifest received in
-   `status-full` and forward it upstream, keeping per-instance revisions keyed by role/capabilitiesVersion. Enhance the
-   Orchestrator to maintain the runtime catalogue and reject scenarios that reference unknown capability versions during plan
-   submission.
-4. **Expose the live catalogue** – Provide Scenario Manager endpoints to serve the aggregated runtime manifests so the Hive UI and
-   other clients can render forms/actions using live data while surfacing drift warnings when runtime and offline packs diverge.
-5. **Observability and drift detection** – Instrument comparisons between runtime manifests and the latest offline bundle, raising
-   alerts when new panels or fields appear so operators know to refresh catalogues before promotion.
+- `GET /api/capabilities`  
+  - **Query:** `imageDigest` (preferred) or `imageName` + `tag`  
+  - **Bulk mode:** `?all=true` to return the entire catalogue for local caching.
+  - **Response:** the manifest(s) matching the provided image(s).
 
-### Phase 2 — Export capabilities via static files
+- `GET /api/capabilities/catalogue`  
+  Returns the signed `catalogue-v{N}.json` and metadata: `{ catalogueVersion, schemaVersion, publishedAt }`.
 
-1. **Author and validate per-bee manifest files** – Store `capabilities.<role>.json` next to each worker’s source code, with CI
-   checks ensuring the file exists and `capabilitiesVersion` bumps accompany any observable change.
-2. **Build and distribute the offline catalogue** – Add a contract-build step that collects all manifests into a signed bundle
-   (for example, `contracts/capabilities/catalogue-v{n}.json`) published alongside Scenario Manager images or to a CDN for UI use.
-3. **Scenario Editor consumption** – Make the Scenario Editor load the aggregated catalogue on startup (or version switch), fall
-   back to generic rendering when panels are unknown, and warn when a scenario references unavailable capability versions in the
-   mounted pack.
-4. **Governance and provenance** – Record worker image digests or semantic versions inside the catalogue to aid provenance checks,
-   and hook drift alerts into CI so new manifests are published before promotion.
-5. **Synchronise offline and runtime sources** – Schedule periodic reconciliation jobs that compare the offline bundle to the
-   runtime catalogue, driving notifications or automated rebuilds to keep authoring and execution states aligned.
+*(Exact paths can be adapted to current SM routing; the contract is “templates + capabilities served by SM”.)*
+
+---
+
+## 5) Authoring & UI Behaviour
+
+- On project load (or template change), UI:
+  1) `GET /api/templates`
+  2) Extracts the **images** referenced in the template
+  3) `GET /api/capabilities?images=...` (or `?all=true` if caching)
+- UI renders:
+  - **Generic forms** from `config`
+  - **Action buttons** from `actions`
+  - **Rich panels** only when `panels.id` matches a registered UI module; otherwise ignore panels
+- If an image in the template has **no matching manifest**, UI:
+  - warns the author,
+  - blocks publishing (soft or hard per environment setting).
+
+---
+
+## 6) Orchestrator & Runtime
+
+- Bees do **not** emit manifests at boot. Runtime remains simpler and deterministic.
+
+---
+
+## 7) Versioning & Governance
+
+- **Schema:** `schemaVersion` changes only when the manifest structure changes.
+- **Capabilities:** `capabilitiesVersion` must bump on any user-visible change to `config`, `actions`, or `panels`.
+- **Catalogue:** `catalogueVersion` increments when SM publishes a new bundle.
+- **Provenance:** Prefer image **digests** in templates; if tags are used, SM resolves them to digests when possible.
+
+---
+
+## 8) Drift & Integrity
+
+- **Build-time guardrails (preferred):**
+  - SM build checks that **every** image referenced by shipped templates has a manifest.
+  - Optional: SM resolves tags → digests and writes them back to the catalogue for immutability.
+- **Runtime observability (lightweight):**
+  - SM exposes `/api/capabilities/catalogue` with `publishedAt` and `catalogueVersion` so UIs can cache/compare.
+- **No component-side drift reporting** is required in this simplified model.
+
+---
+
+## 9) Security & Trust
+
+- Sign the catalogue artifact; verify signature on SM start.
+- Optionally pin images by **digest** in templates to prevent “tag drift.”
+
+---
