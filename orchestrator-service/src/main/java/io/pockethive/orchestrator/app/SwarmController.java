@@ -342,8 +342,9 @@ public class SwarmController {
         }
         List<String> unknown = new ArrayList<>();
         requiredVersions.forEach((role, versions) -> {
+            boolean roleKnown = runtimeCapabilities.isRoleKnown(role);
             for (String version : versions) {
-                if (!runtimeCapabilities.hasVersion(role, version)) {
+                if (roleKnown && !runtimeCapabilities.hasVersion(role, version)) {
                     Set<String> known = runtimeCapabilities.knownVersions(role);
                     String detail = role + "@" + version;
                     if (!known.isEmpty()) {

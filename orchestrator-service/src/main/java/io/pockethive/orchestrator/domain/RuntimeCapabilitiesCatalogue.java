@@ -78,6 +78,13 @@ public class RuntimeCapabilitiesCatalogue {
             .anyMatch(byVersion -> byVersion.containsKey(version));
     }
 
+    public boolean isRoleKnown(String role) {
+        if (role == null || role.isBlank()) {
+            return false;
+        }
+        return bySwarm.values().stream().anyMatch(roleMap -> roleMap.containsKey(role));
+    }
+
     public Map<String, Object> view() {
         Map<String, Object> view = new LinkedHashMap<>();
         bySwarm.forEach((swarmId, roles) -> {

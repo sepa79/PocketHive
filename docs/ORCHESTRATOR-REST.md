@@ -66,6 +66,10 @@ Client sends **`idempotencyKey`** (UUID v4) per new action (reuse on retry). Ser
 }
 ```
 
+> The first swarm submission for a role with no recorded runtime capabilities is allowed so operators can bootstrap a
+> fresh environment. Once a role has reported at least one manifest, subsequent submissions must reference a version
+> present in the catalogue or the orchestrator returns the 409 response above.
+
 > Retries that reuse the original `idempotencyKey` continue to return the 202 response with the stored correlation id even after the swarm has been provisioned.
 
 ## 3.1 Start swarm

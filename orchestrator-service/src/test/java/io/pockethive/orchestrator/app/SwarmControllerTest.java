@@ -135,6 +135,26 @@ class SwarmControllerTest {
     }
 
     @Test
+    void createAllowsWhenRoleHasNoKnownCapabilitiesYet() throws Exception {
+        SwarmCreateTracker tracker = new SwarmCreateTracker();
+        SwarmPlanRegistry plans = new SwarmPlanRegistry();
+        SwarmTemplate template = new SwarmTemplate("ctrl-image", List.of(
+            new Bee("generator", "img", new Work(null, "out"), java.util.Map.of(), "1.0.0")
+        ));
+        when(scenarioClient.fetchTemplate("tpl-bootstrap")).thenReturn(template);
+        when(lifecycle.startSwarm(eq("sw1"), eq("ctrl-image"), anyString()))
+            .thenAnswer(inv -> new Swarm("sw1", inv.getArgument(2), "c1"));
+        RuntimeCapabilitiesCatalogue runtimeCatalogue = new RuntimeCapabilitiesCatalogue();
+        SwarmController ctrl = controller(tracker, new SwarmRegistry(), plans, runtimeCatalogue, new InMemoryIdempotencyStore());
+        SwarmCreateRequest req = new SwarmCreateRequest("tpl-bootstrap", "idem", null);
+
+        ResponseEntity<?> resp = ctrl.create("sw1", req);
+
+        assertThat(resp.getStatusCode()).isEqualTo(HttpStatus.ACCEPTED);
+        verify(lifecycle).startSwarm(eq("sw1"), eq("ctrl-image"), anyString());
+    }
+
+    @Test
     void createRejectsWhenCapabilitiesVersionUnknown() throws Exception {
         SwarmCreateTracker tracker = new SwarmCreateTracker();
         SwarmPlanRegistry plans = new SwarmPlanRegistry();
