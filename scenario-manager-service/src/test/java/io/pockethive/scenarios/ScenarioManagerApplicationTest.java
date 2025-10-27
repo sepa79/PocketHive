@@ -17,6 +17,7 @@ class ScenarioManagerApplicationTest {
     @DynamicPropertySource
     static void properties(DynamicPropertyRegistry registry) {
         registry.add("scenarios.dir", () -> tempDir.toString());
+        registry.add("capabilities.dir", () -> tempDir.resolve("capabilities").toString());
         registry.add("rabbitmq.logging.enabled", () -> "false");
     }
 

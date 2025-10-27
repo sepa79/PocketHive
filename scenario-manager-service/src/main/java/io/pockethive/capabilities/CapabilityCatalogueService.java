@@ -111,6 +111,26 @@ public class CapabilityCatalogueService {
         return manifests;
     }
 
+    public Optional<CapabilityManifest> findByImageReference(String imageReference) {
+        ImageReference reference = parseImageReference(imageReference);
+        if (reference == null) {
+            return Optional.empty();
+        }
+
+        if (reference.digest() != null) {
+            Optional<CapabilityManifest> byDigest = findByDigest(reference.digest());
+            if (byDigest.isPresent()) {
+                return byDigest;
+            }
+        }
+
+        if (reference.name() != null && reference.tag() != null) {
+            return findByNameAndTag(reference.name(), reference.tag());
+        }
+
+        return Optional.empty();
+    }
+
     private CapabilityManifest readManifest(Path path) throws IOException {
         String fileName = path.getFileName().toString().toLowerCase(Locale.ROOT);
         ObjectMapper mapper = (fileName.endsWith(".yaml") || fileName.endsWith(".yml")) ? yamlMapper : jsonMapper;
@@ -200,7 +220,41 @@ public class CapabilityCatalogueService {
         return new ImageCoordinate(normalizedName, normalizedTag);
     }
 
+    private ImageReference parseImageReference(String reference) {
+        if (isBlank(reference)) {
+            return null;
+        }
+
+        String trimmed = reference.trim();
+        String digest = null;
+        String remainder = trimmed;
+
+        int digestSep = trimmed.indexOf('@');
+        if (digestSep >= 0) {
+            digest = normalizeDigest(trimmed.substring(digestSep + 1));
+            remainder = trimmed.substring(0, digestSep);
+        }
+
+        remainder = remainder.trim();
+        String namePart = remainder;
+        String tag = null;
+
+        if (!remainder.isEmpty()) {
+            int lastColon = remainder.lastIndexOf(':');
+            int lastSlash = remainder.lastIndexOf('/');
+            if (lastColon > lastSlash) {
+                tag = normalizeTag(remainder.substring(lastColon + 1));
+                namePart = remainder.substring(0, lastColon);
+            }
+        }
+
+        String name = normalizeName(namePart);
+        return new ImageReference(name, tag, digest);
+    }
+
     private record ManifestCoordinates(String digest, ImageCoordinate nameTag) { }
 
     private record ImageCoordinate(String name, String tag) { }
+
+    private record ImageReference(String name, String tag, String digest) { }
 }

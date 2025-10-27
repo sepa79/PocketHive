@@ -31,6 +31,7 @@ class ScenarioControllerSmokeTest {
     @DynamicPropertySource
     static void properties(DynamicPropertyRegistry registry) {
         registry.add("scenarios.dir", () -> TEMP_DIR.toString());
+        registry.add("capabilities.dir", () -> TEMP_DIR.resolve("capabilities").toString());
         registry.add("server.port", () -> PORT);
     }
 
