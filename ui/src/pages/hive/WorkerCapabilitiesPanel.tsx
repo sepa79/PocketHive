@@ -539,33 +539,36 @@ function extractConfigPreview(config: Record<string, unknown> | undefined): stri
 }
 
 function isCapabilityField(value: unknown): value is CapabilityField {
-  return (
-    isPlainObject(value) &&
-    typeof (value as CapabilityField).name === 'string' &&
-    typeof (value as CapabilityField).type === 'string'
-  )
+  if (!isPlainObject(value)) return false
+  const name = value['name']
+  const type = value['type']
+  return typeof name === 'string' && typeof type === 'string'
 }
 
 function isCapabilityAction(value: unknown): value is CapabilityAction {
+  if (!isPlainObject(value)) return false
+  const id = value['id']
+  const label = value['label']
+  const method = value['method']
+  const endpoint = value['endpoint']
   return (
-    isPlainObject(value) &&
-    typeof (value as CapabilityAction).id === 'string' &&
-    typeof (value as CapabilityAction).label === 'string' &&
-    typeof (value as CapabilityAction).method === 'string' &&
-    typeof (value as CapabilityAction).endpoint === 'string'
+    typeof id === 'string' &&
+    typeof label === 'string' &&
+    typeof method === 'string' &&
+    typeof endpoint === 'string'
   )
 }
 
 function isCapabilityPanel(value: unknown): value is CapabilityPanel {
-  return isPlainObject(value) && typeof (value as CapabilityPanel).type === 'string'
+  if (!isPlainObject(value)) return false
+  return typeof value['type'] === 'string'
 }
 
 function isCapabilityActionParam(value: unknown): value is CapabilityActionParameter {
-  return (
-    isPlainObject(value) &&
-    typeof (value as CapabilityActionParameter).name === 'string' &&
-    typeof (value as CapabilityActionParameter).type === 'string'
-  )
+  if (!isPlainObject(value)) return false
+  const name = value['name']
+  const type = value['type']
+  return typeof name === 'string' && typeof type === 'string'
 }
 
 function isCapabilityOptionValue(value: unknown): value is CapabilityOptionValue {
