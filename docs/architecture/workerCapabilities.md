@@ -22,8 +22,7 @@ Every bee publishes a machine-readable manifest, for example `capabilities.<role
   generic renderer built from `config`/`actions`.
 
 The manifest schema itself lives alongside other scenario-builder contracts (blocks, tracks) so frontend and backend validate
-against the same definitions. See `docs/pockethive_scenario_builder_mvp/contracts/capabilities/manifest.schema.json` for the
-canonical copy that services package and the UI consumes during authoring.
+against the same definitions.
 
 ## Authoring workflow
 
