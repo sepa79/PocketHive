@@ -261,10 +261,10 @@ class SwarmCreationMock1E2ETest {
         SwarmPlan publishedPlan = objectMapper.convertValue(controlSignal.args(), SwarmPlan.class);
         assertThat(publishedPlan.id()).isEqualTo(swarmId);
         assertThat(publishedPlan.bees()).containsExactly(
-            new Bee("generator", "pockethive-generator:latest", new Work(null, "gen"), java.util.Map.of()),
-            new Bee("moderator", "pockethive-moderator:latest", new Work("gen", "mod"), java.util.Map.of()),
-            new Bee("processor", "pockethive-processor:latest", new Work("mod", "final"), java.util.Map.of()),
-            new Bee("postprocessor", "pockethive-postprocessor:latest", new Work("final", null), java.util.Map.of())
+            new Bee("generator", "pockethive-generator:latest", new Work(null, "gen"), java.util.Map.of(), "1.0.0"),
+            new Bee("moderator", "pockethive-moderator:latest", new Work("gen", "mod"), java.util.Map.of(), "1.0.0"),
+            new Bee("processor", "pockethive-processor:latest", new Work("mod", "final"), java.util.Map.of(), "1.0.0"),
+            new Bee("postprocessor", "pockethive-postprocessor:latest", new Work("final", null), java.util.Map.of(), "1.0.0")
         );
 
         Message readyMessage = awaitMessage(captureName, Duration.ofSeconds(5));
