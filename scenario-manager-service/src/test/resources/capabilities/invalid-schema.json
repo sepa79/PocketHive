@@ -1,0 +1,9 @@
+{
+  "schemaVersion": "2.0",
+  "capabilitiesVersion": "3",
+  "image": {
+    "name": "ghcr.io/pockethive/generator",
+    "tag": "1.12.0"
+  },
+  "role": "generator"
+}

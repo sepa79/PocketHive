@@ -1,0 +1,10 @@
+{
+  "schemaVersion": "1.0",
+  "capabilitiesVersion": "4",
+  "image": {
+    "name": "ghcr.io/pockethive/alternate",
+    "tag": "9.9.9",
+    "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+  },
+  "role": "alternate"
+}

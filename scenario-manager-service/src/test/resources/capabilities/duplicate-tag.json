@@ -1,0 +1,10 @@
+{
+  "schemaVersion": "1.0",
+  "capabilitiesVersion": "5",
+  "image": {
+    "name": "ghcr.io/pockethive/processor",
+    "tag": "2.0.0",
+    "digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+  },
+  "role": "processor"
+}

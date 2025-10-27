@@ -1,0 +1,35 @@
+{
+  "schemaVersion": "1.0",
+  "capabilitiesVersion": "3",
+  "image": {
+    "name": "ghcr.io/pockethive/generator",
+    "tag": "1.12.0",
+    "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+  },
+  "role": "generator",
+  "config": [
+    {
+      "name": "rate",
+      "type": "int",
+      "default": 100,
+      "min": 1,
+      "max": 100000,
+      "ui": {
+        "step": 10,
+        "unit": "msg/s"
+      }
+    }
+  ],
+  "actions": [
+    {
+      "id": "warmup",
+      "label": "Warm Up",
+      "params": []
+    }
+  ],
+  "panels": [
+    {
+      "id": "rateGraph"
+    }
+  ]
+}
