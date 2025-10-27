@@ -8,8 +8,6 @@ import io.pockethive.controlplane.messaging.ControlPlaneEmitter;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.controlplane.worker.WorkerControlPlane;
 import io.pockethive.observability.StatusEnvelopeBuilder;
-import io.pockethive.worker.sdk.capabilities.WorkerCapabilitiesManifest;
-import io.pockethive.worker.sdk.capabilities.WorkerCapabilitiesManifestRepository;
 import io.pockethive.worker.sdk.config.WorkerType;
 import io.pockethive.worker.sdk.testing.ControlPlaneTestFixtures;
 import io.pockethive.controlplane.spring.WorkerControlPlaneProperties;
@@ -25,10 +23,8 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class WorkerControlPlaneRuntimeTest {
@@ -47,9 +43,6 @@ class WorkerControlPlaneRuntimeTest {
     @Mock
     private ControlPlaneEmitter emitter;
 
-    @Mock
-    private WorkerCapabilitiesManifestRepository manifestRepository;
-
     @BeforeEach
     void setUp() {
         stateStore = new WorkerStateStore();
@@ -67,23 +60,8 @@ class WorkerControlPlaneRuntimeTest {
         controlPlane = WorkerControlPlane.builder(MAPPER)
             .identity(IDENTITY)
             .build();
-        WorkerCapabilitiesManifest manifest = new WorkerCapabilitiesManifest(
-            "1.0.0",
-            "1.0.0",
-            "generator",
-            Map.of(
-                "schemaVersion", "1.0.0",
-                "capabilitiesVersion", "1.0.0",
-                "role", "generator"
-            )
-        );
-        when(manifestRepository.findByRole(anyString()))
-            .thenAnswer(invocation -> {
-                String role = invocation.getArgument(0, String.class);
-                return "generator".equalsIgnoreCase(role) ? Optional.of(manifest) : Optional.empty();
-            });
         runtime = new WorkerControlPlaneRuntime(controlPlane, stateStore, MAPPER, emitter, IDENTITY,
-            manifestRepository, PROPERTIES.getControlPlane());
+            PROPERTIES.getControlPlane());
         reset(emitter);
     }
 
@@ -109,13 +87,6 @@ class WorkerControlPlaneRuntimeTest {
         Map<String, Object> snapshot = buildSnapshot(captor.getValue());
         @SuppressWarnings("unchecked")
         Map<String, Object> data = (Map<String, Object>) snapshot.get("data");
-        assertThat(data).containsKey("capabilities");
-        @SuppressWarnings("unchecked")
-        Map<String, Object> capabilities = (Map<String, Object>) data.get("capabilities");
-        assertThat(capabilities).containsKey("generator");
-        @SuppressWarnings("unchecked")
-        Map<String, Object> generatorManifest = (Map<String, Object>) capabilities.get("generator");
-        assertThat(generatorManifest.get("capabilitiesVersion")).isEqualTo("1.0.0");
         @SuppressWarnings("unchecked")
         java.util.List<Map<String, Object>> workers = (java.util.List<Map<String, Object>>) data.get("workers");
         assertThat(workers).singleElement().satisfies(worker ->
@@ -513,10 +484,6 @@ class WorkerControlPlaneRuntimeTest {
         @SuppressWarnings("unchecked")
         Map<String, Object> initialData = (Map<String, Object>) initialSnapshot.get("data");
         assertThat(initialData).isNotNull();
-        assertThat(initialData).containsKey("capabilities");
-        @SuppressWarnings("unchecked")
-        Map<String, Object> initialCapabilities = (Map<String, Object>) initialData.get("capabilities");
-        assertThat(initialCapabilities).containsKey("generator");
         @SuppressWarnings("unchecked")
         java.util.List<Map<String, Object>> initialWorkers =
             (java.util.List<Map<String, Object>>) initialData.get("workers");
@@ -556,30 +523,11 @@ class WorkerControlPlaneRuntimeTest {
         @SuppressWarnings("unchecked")
         Map<String, Object> updatedData = (Map<String, Object>) updatedSnapshot.get("data");
         assertThat(updatedData).isNotNull();
-        assertThat(updatedData).doesNotContainKey("capabilities");
         @SuppressWarnings("unchecked")
         java.util.List<Map<String, Object>> updatedWorkers =
             (java.util.List<Map<String, Object>>) updatedData.get("workers");
         assertThat(updatedWorkers).hasSize(1);
         assertThat(updatedWorkers.get(0).get("enabled")).isEqualTo(true);
-    }
-
-    @Test
-    void statusDeltaOmitsCapabilitiesAfterInitialPublish() throws Exception {
-        runtime.emitStatusSnapshot();
-        reset(emitter);
-
-        runtime.emitStatusDelta();
-
-        ArgumentCaptor<ControlPlaneEmitter.StatusContext> deltaCaptor =
-            ArgumentCaptor.forClass(ControlPlaneEmitter.StatusContext.class);
-        verify(emitter).emitStatusDelta(deltaCaptor.capture());
-
-        Map<String, Object> deltaSnapshot = buildSnapshot(deltaCaptor.getValue());
-        @SuppressWarnings("unchecked")
-        Map<String, Object> deltaData = (Map<String, Object>) deltaSnapshot.get("data");
-        assertThat(deltaData).isNotNull();
-        assertThat(deltaData).doesNotContainKey("capabilities");
     }
 
     private Map<String, Object> buildSnapshot(ControlPlaneEmitter.StatusContext context) throws Exception {

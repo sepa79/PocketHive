@@ -6,8 +6,6 @@ import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import io.pockethive.worker.sdk.capabilities.WorkerCapabilitiesManifest;
-
 class WorkerStateTest {
 
     @Test
@@ -102,63 +100,6 @@ class WorkerStateTest {
 
         assertThat(state.inboundRoutes()).containsExactlyInAnyOrder("in.runtime", "additional-in");
         assertThat(state.outboundRoutes()).containsExactlyInAnyOrder("out.runtime", "additional-out");
-    }
-
-    @Test
-    void capabilitiesManifestPublicationStateResetsOnVersionChange() {
-        WorkerDefinition definition = new WorkerDefinition(
-            "testWorker",
-            Object.class,
-            WorkerType.MESSAGE,
-            "test-role",
-            null,
-            null,
-            null,
-            TestConfig.class
-        );
-        WorkerState state = new WorkerState(definition);
-        WorkerCapabilitiesManifest manifest = new WorkerCapabilitiesManifest(
-            "1.0.0",
-            "1.0.0",
-            "test-role",
-            Map.of(
-                "schemaVersion", "1.0.0",
-                "capabilitiesVersion", "1.0.0",
-                "role", "test-role"
-            )
-        );
-
-        state.setCapabilitiesManifest(manifest);
-        assertThat(state.shouldPublishCapabilitiesManifest()).isTrue();
-
-        state.markCapabilitiesManifestPublished();
-        assertThat(state.shouldPublishCapabilitiesManifest()).isFalse();
-
-        WorkerCapabilitiesManifest unchanged = new WorkerCapabilitiesManifest(
-            "1.0.0",
-            "1.0.0",
-            "test-role",
-            Map.of(
-                "schemaVersion", "1.0.0",
-                "capabilitiesVersion", "1.0.0",
-                "role", "test-role"
-            )
-        );
-        state.setCapabilitiesManifest(unchanged);
-        assertThat(state.shouldPublishCapabilitiesManifest()).isFalse();
-
-        WorkerCapabilitiesManifest bumped = new WorkerCapabilitiesManifest(
-            "1.0.0",
-            "1.1.0",
-            "test-role",
-            Map.of(
-                "schemaVersion", "1.0.0",
-                "capabilitiesVersion", "1.1.0",
-                "role", "test-role"
-            )
-        );
-        state.setCapabilitiesManifest(bumped);
-        assertThat(state.shouldPublishCapabilitiesManifest()).isTrue();
     }
 
     private record TestConfig(boolean enabled, double ratePerSec) {
