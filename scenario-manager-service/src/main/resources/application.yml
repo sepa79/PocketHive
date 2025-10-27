@@ -21,3 +21,12 @@ pockethive:
   logs:
     queue: ${POCKETHIVE_LOGS_QUEUE:ph.logs.agg}
     exchange: ${POCKETHIVE_LOGS_EXCHANGE:ph.logs}
+  scenario-manager:
+    orchestrator:
+      base-url: ${POCKETHIVE_SCENARIO_MANAGER_ORCHESTRATOR_BASE_URL:http://orchestrator-service:8080}
+      connect-timeout: ${POCKETHIVE_SCENARIO_MANAGER_ORCHESTRATOR_CONNECT_TIMEOUT:2s}
+      read-timeout: ${POCKETHIVE_SCENARIO_MANAGER_ORCHESTRATOR_READ_TIMEOUT:5s}
+    capabilities:
+      cache-ttl: ${POCKETHIVE_SCENARIO_MANAGER_CAPABILITIES_CACHE_TTL:5s}
+      offline-pack-path: ${POCKETHIVE_SCENARIO_MANAGER_CAPABILITIES_OFFLINE_PACK:}
+      offline-swarm-id: ${POCKETHIVE_SCENARIO_MANAGER_CAPABILITIES_OFFLINE_SWARM_ID:offline-pack}

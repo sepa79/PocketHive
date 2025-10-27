@@ -33,10 +33,29 @@ class ScenarioControllerTest {
 
     @Test
     void crudOperations() throws Exception {
-        String body = "{\"id\":\"1\",\"name\":\"Test\"}";
+        String body = """
+                {
+                  "id": "1",
+                  "name": "Test",
+                  "template": {
+                    "image": "controller",
+                    "bees": [
+                      {
+                        "role": "generator",
+                        "image": "generator",
+                        "capabilitiesVersion": "2.0.0",
+                        "work": {
+                          "out": "gen"
+                        }
+                      }
+                    ]
+                  }
+                }
+                """;
         mvc.perform(post("/scenarios").contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.id").value("1"));
+                .andExpect(jsonPath("$.id").value("1"))
+                .andExpect(jsonPath("$.template.bees[0].capabilitiesVersion").value("2.0.0"));
 
         mvc.perform(get("/scenarios").accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
@@ -45,7 +64,8 @@ class ScenarioControllerTest {
 
         mvc.perform(get("/scenarios/1").accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.name").value("Test"));
+                .andExpect(jsonPath("$.name").value("Test"))
+                .andExpect(jsonPath("$.template.bees[0].capabilitiesVersion").value("2.0.0"));
 
         mvc.perform(put("/scenarios/1").contentType(MediaType.APPLICATION_JSON)
                         .content("{\"id\":\"1\",\"name\":\"Updated\"}"))
