@@ -1,0 +1,12 @@
+schemaVersion: "1.0"
+capabilitiesVersion: "1.0"
+role: moderator
+image:
+  name: pockethive-moderator
+  tag: latest
+config:
+  - name: enabled
+    type: boolean
+    default: false
+actions: []
+panels: []
