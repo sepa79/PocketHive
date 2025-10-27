@@ -45,7 +45,9 @@ public class CapabilityService implements InitializingBean {
             Jackson2ObjectMapperBuilder mapperBuilder,
             @Value("${scenario-manager.capabilities.path:capabilities}") String directory) {
         this.jsonMapper = mapperBuilder.build();
-        this.yamlMapper = mapperBuilder.factory(new YAMLFactory()).build();
+        ObjectMapper yamlMapper = new ObjectMapper(new YAMLFactory());
+        mapperBuilder.configure(yamlMapper);
+        this.yamlMapper = yamlMapper;
         this.capabilitiesDirectory = Path.of(directory);
     }
 
