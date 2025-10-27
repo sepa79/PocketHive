@@ -47,5 +47,6 @@ RUN apk add --no-cache curl
 COPY --from=build /app/scenario-manager-service/target/*-exec.jar app.jar
 COPY scenario-manager-service/entrypoint.sh /app/entrypoint.sh
 COPY scenario-manager-service/scenarios /app/scenarios
+COPY scenario-manager-service/capabilities /app/capabilities
 RUN chmod +x /app/entrypoint.sh
 ENTRYPOINT ["/app/entrypoint.sh"]
