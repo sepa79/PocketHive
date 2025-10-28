@@ -136,16 +136,6 @@ export default function ComponentDetail({ component, onClose }: Props) {
           <span className={`h-3 w-3 rounded-full ${colorForHealth(health)}`} />
           {/* status refresh no longer supported */}
         </h2>
-        <label className="flex items-center gap-2 text-xs text-white/70">
-          <span>{isEditing ? 'Unlocked' : 'Locked'}</span>
-          <input
-            type="checkbox"
-            className="h-4 w-4 accent-blue-500"
-            checked={isEditing}
-            aria-label={isEditing ? 'Disable editing' : 'Enable editing'}
-            onChange={(event) => setIsEditing(event.target.checked)}
-          />
-        </label>
       </div>
       <div className="text-sm text-white/60 mb-3">{role}</div>
       <div className="space-y-1 text-sm mb-4">
@@ -162,6 +152,25 @@ export default function ComponentDetail({ component, onClose }: Props) {
             : '—'}
         </div>
       </div>
+      {!isWiremock && configEntries.length > 0 && (
+        <div className="mb-2 flex items-center justify-between text-xs text-white/60">
+          <span className="uppercase tracking-wide text-white/50">Configuration</span>
+          <label className="flex items-center gap-3 cursor-pointer select-none">
+            <span className="text-white/70">{isEditing ? 'Unlocked' : 'Locked'}</span>
+            <span className="relative inline-flex h-5 w-9 items-center">
+              <input
+                type="checkbox"
+                className="peer sr-only"
+                checked={isEditing}
+                aria-label={isEditing ? 'Disable editing' : 'Enable editing'}
+                onChange={(event) => setIsEditing(event.target.checked)}
+              />
+              <span className="h-5 w-9 rounded-full bg-white/25 transition-colors peer-checked:bg-blue-500" />
+              <span className="absolute left-1 top-1 h-3 w-3 rounded-full bg-white transition-transform duration-200 peer-checked:translate-x-4" />
+            </span>
+          </label>
+        </div>
+      )}
       <div className={containerClass}>{renderedContent}</div>
       {!isWiremock && configEntries.length > 0 && (
         <button
