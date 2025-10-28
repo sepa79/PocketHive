@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type JSX } from 'react'
+import { useEffect, useMemo, useRef, useState, type JSX } from 'react'
 import type { Component } from '../../types/hive'
 import { sendConfigUpdate } from '../../lib/orchestratorApi'
 import QueuesPanel from './QueuesPanel'
@@ -17,18 +17,26 @@ type ConfigFormValue = string | boolean | undefined
 
 export default function ComponentDetail({ component, onClose }: Props) {
   const [toast, setToast] = useState<string | null>(null)
+  const [isEditing, setIsEditing] = useState(false)
   const [form, setForm] = useState<Record<string, ConfigFormValue>>({})
   const { ensureCapabilities, getManifestForRole } = useCapabilities()
   const manifest = useMemo(
     () => getManifestForRole(component.role),
     [component.role, getManifestForRole],
   )
+  const previousComponentIdRef = useRef(component.id)
 
   useEffect(() => {
     void ensureCapabilities()
   }, [ensureCapabilities])
 
   useEffect(() => {
+    const previousId = previousComponentIdRef.current
+    const idChanged = component.id !== previousId
+    if (isEditing && !idChanged) {
+      return
+    }
+    previousComponentIdRef.current = component.id
     if (!manifest) {
       setForm({})
       return
@@ -39,7 +47,7 @@ export default function ComponentDetail({ component, onClose }: Props) {
       next[entry.name] = computeInitialValue(entry, cfg)
     })
     setForm(next)
-  }, [component.id, component.config, manifest])
+  }, [component.id, component.config, manifest, isEditing])
 
   const handleSubmit = async () => {
     if (!manifest) {
@@ -60,6 +68,7 @@ export default function ComponentDetail({ component, onClose }: Props) {
     try {
       await sendConfigUpdate(component, cfg)
       displayToast(setToast, 'Config update sent')
+      setIsEditing(false)
     } catch {
       displayToast(setToast, 'Config update failed')
     }
@@ -92,6 +101,7 @@ export default function ComponentDetail({ component, onClose }: Props) {
             key={entry.name}
             entry={entry}
             value={form[entry.name]}
+            disabled={!isEditing}
             onChange={(value) =>
               setForm((prev) => ({
                 ...prev,
@@ -111,14 +121,22 @@ export default function ComponentDetail({ component, onClose }: Props) {
 
   return (
     <div className="flex-1 p-4 overflow-y-auto relative">
-      <button className="absolute top-2 right-2" onClick={onClose}>
+      <button
+        className="absolute top-2 right-2"
+        onClick={() => {
+          setIsEditing(false)
+          onClose()
+        }}
+      >
         ×
       </button>
-      <h2 className="text-xl mb-1 flex items-center gap-2">
-        {component.id}
-        <span className={`h-3 w-3 rounded-full ${colorForHealth(health)}`} />
-        {/* status refresh no longer supported */}
-      </h2>
+      <div className="flex items-center justify-between mb-1">
+        <h2 className="text-xl flex items-center gap-2">
+          {component.id}
+          <span className={`h-3 w-3 rounded-full ${colorForHealth(health)}`} />
+          {/* status refresh no longer supported */}
+        </h2>
+      </div>
       <div className="text-sm text-white/60 mb-3">{role}</div>
       <div className="space-y-1 text-sm mb-4">
         <div>Version: {component.version ?? '—'}</div>
@@ -134,11 +152,31 @@ export default function ComponentDetail({ component, onClose }: Props) {
             : '—'}
         </div>
       </div>
+      {!isWiremock && configEntries.length > 0 && (
+        <div className="mb-2 flex items-center justify-between text-xs text-white/60">
+          <span className="uppercase tracking-wide text-white/50">Configuration</span>
+          <label className="flex items-center gap-3 cursor-pointer select-none">
+            <span className="text-white/70">{isEditing ? 'Unlocked' : 'Locked'}</span>
+            <span className="relative inline-flex h-5 w-9 items-center">
+              <input
+                type="checkbox"
+                className="peer sr-only"
+                checked={isEditing}
+                aria-label={isEditing ? 'Disable editing' : 'Enable editing'}
+                onChange={(event) => setIsEditing(event.target.checked)}
+              />
+              <span className="h-5 w-9 rounded-full bg-white/25 transition-colors peer-checked:bg-blue-500" />
+              <span className="absolute left-1 top-1 h-3 w-3 rounded-full bg-white transition-transform duration-200 peer-checked:translate-x-4" />
+            </span>
+          </label>
+        </div>
+      )}
       <div className={containerClass}>{renderedContent}</div>
       {!isWiremock && configEntries.length > 0 && (
         <button
-          className="mb-4 rounded bg-blue-600 px-3 py-1 text-sm"
+          className="mb-4 rounded bg-blue-600 px-3 py-1 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
           onClick={handleSubmit}
+          disabled={!isEditing}
         >
           Confirm
         </button>
@@ -169,13 +207,14 @@ export default function ComponentDetail({ component, onClose }: Props) {
 interface ConfigEntryRowProps {
   entry: CapabilityConfigEntry
   value: ConfigFormValue
+  disabled: boolean
   onChange: (value: string | boolean) => void
 }
 
-function ConfigEntryRow({ entry, value, onChange }: ConfigEntryRowProps) {
+function ConfigEntryRow({ entry, value, disabled, onChange }: ConfigEntryRowProps) {
   const unit = extractUnit(entry)
   const labelSuffix = `${entry.type || 'string'}${unit ? ` • ${unit}` : ''}`
-  const content = renderConfigInput(entry, value, onChange)
+  const content = renderConfigInput(entry, value, disabled, onChange)
   return (
     <label className="block space-y-1">
       <span className="block text-white/70">
@@ -204,6 +243,7 @@ function ConfigEntryRow({ entry, value, onChange }: ConfigEntryRowProps) {
 function renderConfigInput(
   entry: CapabilityConfigEntry,
   rawValue: ConfigFormValue,
+  disabled: boolean,
   onChange: (value: string | boolean) => void,
 ): JSX.Element {
   const normalizedType = (entry.type || '').toLowerCase()
@@ -215,6 +255,7 @@ function renderConfigInput(
           type="checkbox"
           className="h-4 w-4 accent-blue-500"
           checked={checked}
+          disabled={disabled}
           onChange={(event) => onChange(event.target.checked)}
         />
         <span className="text-white/60 text-xs">Enabled</span>
@@ -229,6 +270,7 @@ function renderConfigInput(
         className="w-full rounded bg-white/10 px-2 py-1 text-white"
         value={value}
         rows={normalizedType === 'json' ? 4 : 3}
+        disabled={disabled}
         onChange={(event) => onChange(event.target.value)}
       />
     )
@@ -241,6 +283,7 @@ function renderConfigInput(
       className="w-full rounded bg-white/10 px-2 py-1 text-white"
       type={inputType}
       value={value}
+      disabled={disabled}
       onChange={(event) => onChange(event.target.value)}
       min={typeof entry.min === 'number' ? entry.min : undefined}
       max={typeof entry.max === 'number' ? entry.max : undefined}
