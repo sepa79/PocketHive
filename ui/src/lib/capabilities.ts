@@ -242,6 +242,25 @@ function parseImageReference(image: string): ImageReference | null {
   return { name, tag, digest }
 }
 
+export function formatCapabilityValue(value: unknown): string {
+  if (value === null || value === undefined) return ''
+  if (typeof value === 'string') return value
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value)
+  try {
+    return JSON.stringify(value, null, 2)
+  } catch {
+    return ''
+  }
+}
+
+export function inferCapabilityInputType(type: string | undefined): 'number' | 'text' {
+  const normalized = type?.trim().toLowerCase() ?? ''
+  if (normalized === 'int' || normalized === 'integer' || normalized === 'number') {
+    return 'number'
+  }
+  return 'text'
+}
+
 export function buildRoleAppearanceMap(manifests: CapabilityManifest[]): RoleAppearanceMap {
   const map: RoleAppearanceMap = {}
   manifests.forEach((manifest) => {

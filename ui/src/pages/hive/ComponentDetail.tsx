@@ -6,6 +6,7 @@ import { heartbeatHealth, colorForHealth } from '../../lib/health'
 import WiremockPanel from './WiremockPanel'
 import { useCapabilities } from '../../contexts/CapabilitiesContext'
 import type { CapabilityConfigEntry } from '../../types/capabilities'
+import { formatCapabilityValue, inferCapabilityInputType } from '../../lib/capabilities'
 
 interface Props {
   component: Component
@@ -233,7 +234,7 @@ function renderConfigInput(
     )
   }
 
-  const inputType = inferInputType(normalizedType)
+  const inputType = inferCapabilityInputType(entry.type)
   const step = extractStep(entry)
   return (
     <input
@@ -246,11 +247,6 @@ function renderConfigInput(
       step={step}
     />
   )
-}
-
-function inferInputType(type: string) {
-  if (type === 'int' || type === 'integer' || type === 'number') return 'number'
-  return 'text'
 }
 
 function computeInitialValue(
@@ -291,18 +287,7 @@ function formatValueForInput(entry: CapabilityConfigEntry, value: unknown): Conf
     if (typeof value === 'string') return value
     return ''
   }
-  return stringifyValue(value)
-}
-
-function stringifyValue(value: unknown): string {
-  if (value === undefined || value === null) return ''
-  if (typeof value === 'string') return value
-  if (typeof value === 'number' || typeof value === 'boolean') return String(value)
-  try {
-    return JSON.stringify(value, null, 2)
-  } catch {
-    return ''
-  }
+  return formatCapabilityValue(value)
 }
 
 function coerceBoolean(value: unknown): boolean {

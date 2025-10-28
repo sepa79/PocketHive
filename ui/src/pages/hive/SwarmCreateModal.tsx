@@ -6,7 +6,11 @@ import type {
   CapabilityConfigEntry,
   CapabilityManifest,
 } from '../../types/capabilities'
-import { findManifestForImage } from '../../lib/capabilities'
+import {
+  findManifestForImage,
+  formatCapabilityValue,
+  inferCapabilityInputType,
+} from '../../lib/capabilities'
 import { useCapabilities } from '../../contexts/CapabilitiesContext'
 
 interface Props {
@@ -300,7 +304,7 @@ function normalizeBee(entry: unknown): ScenarioBee | null {
 }
 
 function renderConfigControl(entry: CapabilityConfigEntry) {
-  const value = formatDefaultValue(entry.default)
+  const value = formatCapabilityValue(entry.default)
   const normalizedType = entry.type ? entry.type.toLowerCase() : ''
   if (entry.multiline || normalizedType === 'text' || normalizedType === 'json') {
     return (
@@ -313,7 +317,7 @@ function renderConfigControl(entry: CapabilityConfigEntry) {
     )
   }
 
-  const inputType = inferInputType(entry.type)
+  const inputType = inferCapabilityInputType(entry.type)
   return (
     <input
       className="w-full rounded bg-white/10 px-2 py-1 text-white"
@@ -324,24 +328,6 @@ function renderConfigControl(entry: CapabilityConfigEntry) {
       max={entry.max}
     />
   )
-}
-
-function formatDefaultValue(value: unknown): string {
-  if (value === null || value === undefined) return ''
-  if (typeof value === 'string') return value
-  if (typeof value === 'number' || typeof value === 'boolean') return String(value)
-  try {
-    return JSON.stringify(value, null, 2)
-  } catch {
-    return ''
-  }
-}
-
-function inferInputType(type: string | undefined) {
-  const normalized = type?.toLowerCase() ?? ''
-  if (normalized === 'int' || normalized === 'integer' || normalized === 'number') return 'number'
-  if (normalized === 'boolean' || normalized === 'bool') return 'text'
-  return 'text'
 }
 
 function formatActionTooltip(action: CapabilityAction) {
