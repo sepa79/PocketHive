@@ -56,6 +56,7 @@ public class SwarmController {
     private final ScenarioClient scenarios;
     private final ObjectMapper json;
     private final String controlExchange;
+    private static final String CREATE_LOCK_KEY = "__create-lock__";
 
     public SwarmController(AmqpTemplate rabbit,
                            ContainerLifecycleManager lifecycle,
@@ -118,22 +119,44 @@ public class SwarmController {
             return response;
         }
 
-        response = idempotentSend("swarm-create", swarmId, req.idempotencyKey(), timeout.toMillis(), corr -> {
-            String templateId = req.templateId();
-            SwarmTemplate template = fetchTemplate(templateId);
-            String image = requireImage(template, templateId);
-            List<Bee> bees = template.bees();
-            String instanceId = BeeNameGenerator.generate("swarm-controller", swarmId);
-            plans.register(instanceId, new SwarmPlan(swarmId, bees));
-            Swarm swarm = lifecycle.startSwarm(swarmId, image, instanceId);
-            creates.register(swarm.getInstanceId(), new Pending(
-                swarmId,
-                swarm.getInstanceId(),
-                corr,
-                req.idempotencyKey(),
-                Phase.CONTROLLER,
-                Instant.now().plus(timeout)));
-        });
+        String lockCorrelation = UUID.randomUUID().toString();
+        Optional<String> lockOwner = idempotency.reserve(swarmId, "swarm-create", CREATE_LOCK_KEY, lockCorrelation);
+        if (lockOwner.isPresent()) {
+            String corr = lockOwner.get();
+            idempotency.reserve(swarmId, "swarm-create", req.idempotencyKey(), corr);
+            ControlResponse existing = new ControlResponse(corr, req.idempotencyKey(),
+                watchFor("swarm-create", swarmId), timeout.toMillis());
+            log.info("[CTRL] follow swarm-create swarm={} correlation={} idempotencyKey={}", swarmId, corr, req.idempotencyKey());
+            response = ResponseEntity.accepted().body(existing);
+            logRestResponse("POST", path, response);
+            return response;
+        }
+
+        try {
+            response = idempotentSend("swarm-create", swarmId, req.idempotencyKey(), timeout.toMillis(), lockCorrelation, corr -> {
+                try {
+                    String templateId = req.templateId();
+                    SwarmTemplate template = fetchTemplate(templateId);
+                    String image = requireImage(template, templateId);
+                    List<Bee> bees = template.bees();
+                    String instanceId = BeeNameGenerator.generate("swarm-controller", swarmId);
+                    plans.register(instanceId, new SwarmPlan(swarmId, bees));
+                    Swarm swarm = lifecycle.startSwarm(swarmId, image, instanceId);
+                    creates.register(swarm.getInstanceId(), new Pending(
+                        swarmId,
+                        swarm.getInstanceId(),
+                        corr,
+                        req.idempotencyKey(),
+                        Phase.CONTROLLER,
+                        Instant.now().plus(timeout)));
+                } finally {
+                    idempotency.rollback(swarmId, "swarm-create", CREATE_LOCK_KEY, lockCorrelation);
+                }
+            });
+        } catch (RuntimeException e) {
+            idempotency.rollback(swarmId, "swarm-create", CREATE_LOCK_KEY, lockCorrelation);
+            throw e;
+        }
         logRestResponse("POST", path, response);
         return response;
     }
@@ -221,9 +244,14 @@ public class SwarmController {
      */
     private ResponseEntity<ControlResponse> idempotentSend(String signal, String swarmId, String idempotencyKey,
                                                            long timeoutMs, java.util.function.Consumer<String> action) {
-        String newCorrelation = UUID.randomUUID().toString();
-        Optional<String> existing = idempotency.reserve(swarmId, signal, idempotencyKey, newCorrelation);
-        if (existing.isPresent()) {
+        return idempotentSend(signal, swarmId, idempotencyKey, timeoutMs, UUID.randomUUID().toString(), action);
+    }
+
+    private ResponseEntity<ControlResponse> idempotentSend(String signal, String swarmId, String idempotencyKey,
+                                                           long timeoutMs, String correlation,
+                                                           java.util.function.Consumer<String> action) {
+        Optional<String> existing = idempotency.reserve(swarmId, signal, idempotencyKey, correlation);
+        if (existing.isPresent() && !existing.get().equals(correlation)) {
             String corr = existing.get();
             ControlResponse resp = new ControlResponse(corr, idempotencyKey,
                 watchFor(signal, swarmId), timeoutMs);
@@ -232,16 +260,16 @@ public class SwarmController {
         }
 
         try {
-            action.accept(newCorrelation);
+            action.accept(correlation);
         } catch (RuntimeException e) {
-            idempotency.rollback(swarmId, signal, idempotencyKey, newCorrelation);
+            idempotency.rollback(swarmId, signal, idempotencyKey, correlation);
             throw e;
         }
 
-        ControlResponse resp = new ControlResponse(newCorrelation, idempotencyKey,
+        ControlResponse resp = new ControlResponse(correlation, idempotencyKey,
             watchFor(signal, swarmId), timeoutMs);
         log.info("[CTRL] issue signal={} swarm={} correlation={} idempotencyKey={} timeoutMs={}",
-            signal, swarmId, newCorrelation, idempotencyKey, timeoutMs);
+            signal, swarmId, correlation, idempotencyKey, timeoutMs);
         return ResponseEntity.accepted().body(resp);
     }
 

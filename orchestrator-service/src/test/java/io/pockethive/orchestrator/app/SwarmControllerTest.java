@@ -175,6 +175,52 @@ class SwarmControllerTest {
     }
 
     @Test
+    void concurrentCreateRequestsWithDifferentKeysShareLeaderCorrelation() throws Exception {
+        SwarmCreateTracker tracker = new SwarmCreateTracker();
+        SwarmPlanRegistry plans = new SwarmPlanRegistry();
+        SwarmRegistry registry = new SwarmRegistry();
+        SwarmTemplate template = new SwarmTemplate("ctrl-image", List.of(
+            new Bee("generator", "img", new Work(null, "out"), java.util.Map.of())
+        ));
+        when(scenarioClient.fetchTemplate("tpl-1")).thenReturn(template);
+        when(lifecycle.startSwarm(eq("sw1"), eq("ctrl-image"), anyString()))
+            .thenAnswer(invocation -> new Swarm("sw1", invocation.getArgument(2), "corr"));
+        InMemoryIdempotencyStore store = new InMemoryIdempotencyStore();
+        SwarmController ctrl = controller(tracker, registry, plans, store);
+        SwarmCreateRequest leaderRequest = new SwarmCreateRequest("tpl-1", "idem-1", null);
+        SwarmCreateRequest followerRequest = new SwarmCreateRequest("tpl-1", "idem-2", null);
+
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        Future<ResponseEntity<?>> leader = executor.submit(() -> {
+            start.await();
+            return ctrl.create("sw1", leaderRequest);
+        });
+        Future<ResponseEntity<?>> follower = executor.submit(() -> {
+            start.await();
+            return ctrl.create("sw1", followerRequest);
+        });
+
+        start.countDown();
+        ResponseEntity<?> leaderResponse = leader.get(5, TimeUnit.SECONDS);
+        ResponseEntity<?> followerResponse = follower.get(5, TimeUnit.SECONDS);
+        executor.shutdownNow();
+
+        verify(lifecycle, times(1)).startSwarm(eq("sw1"), eq("ctrl-image"), anyString());
+        verify(scenarioClient, times(1)).fetchTemplate("tpl-1");
+        assertThat(leaderResponse.getBody()).isInstanceOf(ControlResponse.class);
+        assertThat(followerResponse.getBody()).isInstanceOf(ControlResponse.class);
+        ControlResponse leaderBody = (ControlResponse) leaderResponse.getBody();
+        ControlResponse followerBody = (ControlResponse) followerResponse.getBody();
+        assertThat(leaderBody.correlationId()).isEqualTo(followerBody.correlationId());
+        assertThat(store.findCorrelation("sw1", "swarm-create", "idem-1").orElseThrow())
+            .isEqualTo(leaderBody.correlationId());
+        assertThat(store.findCorrelation("sw1", "swarm-create", "idem-2").orElseThrow())
+            .isEqualTo(leaderBody.correlationId());
+        assertThat(store.findCorrelation("sw1", "swarm-create", "__create-lock__")).isEmpty();
+    }
+
+    @Test
     void exposesSwarmView() {
         SwarmRegistry registry = new SwarmRegistry();
         registry.register(new Swarm("sw1", "inst", "c"));
