@@ -7,7 +7,9 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
+import org.springframework.stereotype.Component;
 
+@Component
 public class PatternConfigValidator {
 
   private static final double EPSILON = 1e-6;
