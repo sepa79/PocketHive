@@ -10,6 +10,10 @@ import type { Component } from '../../types/hive'
 import type { WiremockComponentConfig } from '../../lib/wiremockClient'
 import { fetchWiremockComponent } from '../../lib/wiremockClient'
 import { upsertSyntheticComponent } from '../../lib/stompClient'
+import { CapabilitiesContext, type CapabilitiesContextValue } from '../../contexts/CapabilitiesContext'
+import { buildManifestIndex } from '../../lib/capabilities'
+import type { CapabilityManifest } from '../../types/capabilities'
+import { sendConfigUpdate } from '../../lib/orchestratorApi'
 
 vi.mock('../../lib/orchestratorApi', () => ({
   sendConfigUpdate: vi.fn(),
@@ -55,6 +59,8 @@ const wiremockComponent: Component = {
   status: 'OK',
   config: wiremockConfig,
 }
+
+const sendConfigUpdateMock = vi.mocked(sendConfigUpdate)
 
 describe('ComponentDetail wiremock panel', () => {
   beforeEach(() => {
@@ -136,6 +142,83 @@ describe('ComponentDetail wiremock panel', () => {
         expect.objectContaining({
           id: 'wiremock',
           config: expect.objectContaining({ requestCount: 100 }),
+        }),
+      )
+    })
+  })
+})
+
+describe('ComponentDetail dynamic config', () => {
+  afterEach(() => {
+    cleanup()
+    vi.clearAllMocks()
+  })
+
+  it('renders capability-driven config inputs and submits typed payloads', async () => {
+    const manifest: CapabilityManifest = {
+      schemaVersion: '1.0',
+      capabilitiesVersion: '1.0',
+      role: 'generator',
+      image: { name: 'gen', tag: 'latest', digest: null },
+      config: [
+        { name: 'enabled', type: 'boolean', default: false },
+        { name: 'ratePerSec', type: 'number', default: 1 },
+        { name: 'message.path', type: 'string', default: '/' },
+        { name: 'message.method', type: 'string', default: 'GET' },
+      ],
+      actions: [],
+      panels: [],
+    }
+
+    const providerValue: CapabilitiesContextValue = {
+      manifests: [manifest],
+      manifestIndex: buildManifestIndex([manifest]),
+      ensureCapabilities: vi.fn().mockResolvedValue([manifest]),
+      refreshCapabilities: vi.fn().mockResolvedValue([manifest]),
+      getManifestForRole: vi.fn().mockReturnValue(manifest),
+    }
+
+    const component: Component = {
+      id: 'gen-1',
+      name: 'gen-1',
+      role: 'generator',
+      lastHeartbeat: baseTimestamp,
+      queues: [],
+      config: {
+        enabled: true,
+        ratePerSec: 5,
+        message: { path: '/foo', method: 'GET' },
+      },
+    }
+
+    const user = userEvent.setup()
+    sendConfigUpdateMock.mockResolvedValue()
+
+    render(
+      <CapabilitiesContext.Provider value={providerValue}>
+        <ComponentDetail component={component} onClose={() => {}} />
+      </CapabilitiesContext.Provider>,
+    )
+
+    await waitFor(() => expect(providerValue.ensureCapabilities).toHaveBeenCalled())
+
+    const rateInput = await screen.findByDisplayValue('5')
+    await user.clear(rateInput)
+    await user.type(rateInput, '10')
+
+    const pathInput = screen.getByDisplayValue('/foo')
+    await user.clear(pathInput)
+    await user.type(pathInput, '/new')
+
+    await user.click(screen.getByRole('button', { name: 'Confirm' }))
+
+    await waitFor(() => {
+      expect(sendConfigUpdateMock).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'gen-1' }),
+        expect.objectContaining({
+          enabled: true,
+          ratePerSec: 10,
+          message: expect.objectContaining({ path: '/new', method: 'GET' }),
         }),
       )
     })

@@ -21,14 +21,10 @@ import {
   updateNodePosition,
   type Topology,
 } from '../../lib/stompClient'
-import { apiFetch } from '../../lib/api'
-import {
-  normalizeManifests,
-  buildRoleAppearanceMap,
-  type RoleAppearanceMap,
-} from '../../lib/capabilities'
+import { buildRoleAppearanceMap, type RoleAppearanceMap } from '../../lib/capabilities'
 import type { Component } from '../../types/hive'
 import './TopologyView.css'
+import { useCapabilities } from '../../contexts/CapabilitiesContext'
 
 interface GraphNode {
   id: string
@@ -474,40 +470,21 @@ function starPoints(r: number) {
 
 export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSelect }: Props) {
   const [data, setData] = useState<GraphData>({ nodes: [], links: [] })
-  const [roleAppearances, setRoleAppearances] = useState<RoleAppearanceMap>({})
   const shapeMapRef = useRef<Record<string, NodeShape>>({ sut: 'circle' })
   const [queueDepths, setQueueDepths] = useState<Record<string, number>>({})
   const [componentsById, setComponentsById] = useState<Record<string, Component>>({})
   const flowRef = useRef<ReactFlowInstance<FlowNode, Edge> | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const [rfNodes, setRfNodes] = useState<FlowNode[]>([])
+  const { manifests, ensureCapabilities } = useCapabilities()
 
   useEffect(() => {
-    let cancelled = false
-    const load = async () => {
-      try {
-        const response = await apiFetch('/scenario-manager/api/capabilities?all=true', {
-          headers: { Accept: 'application/json' },
-        })
-        if (!response.ok) {
-          if (!cancelled) setRoleAppearances({})
-          return
-        }
-        const payload = await response.json()
-        if (cancelled) return
-        const manifests = normalizeManifests(payload)
-        setRoleAppearances(buildRoleAppearanceMap(manifests))
-      } catch {
-        if (!cancelled) {
-          setRoleAppearances({})
-        }
-      }
-    }
-    void load()
-    return () => {
-      cancelled = true
-    }
-  }, [])
+    void ensureCapabilities()
+  }, [ensureCapabilities])
+
+  const roleAppearances = useMemo<RoleAppearanceMap>(() => {
+    return buildRoleAppearanceMap(manifests)
+  }, [manifests])
 
   useEffect(() => {
     const unsub = subscribeComponents((comps: Component[]) => {

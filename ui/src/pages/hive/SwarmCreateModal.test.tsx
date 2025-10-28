@@ -5,6 +5,7 @@ import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/re
 import SwarmCreateModal from './SwarmCreateModal'
 import { vi, test, expect, afterEach, beforeEach, type MockInstance } from 'vitest'
 import * as apiModule from '../../lib/api'
+import { CapabilitiesProvider } from '../../contexts/CapabilitiesContext'
 
 let apiFetchSpy: MockInstance<typeof apiModule.apiFetch>
 
@@ -32,7 +33,11 @@ test('loads available scenarios on mount', async () => {
       json: async () => [],
     } as unknown as Response)
 
-  render(<SwarmCreateModal onClose={() => {}} />)
+  render(
+    <CapabilitiesProvider>
+      <SwarmCreateModal onClose={() => {}} />
+    </CapabilitiesProvider>,
+  )
 
   await screen.findByText('Basic')
   await screen.findByText('Advanced')
@@ -62,7 +67,11 @@ test('submits selected scenario', async () => {
       json: async () => [],
     } as unknown as Response)
     .mockResolvedValueOnce({ ok: true } as Response)
-  render(<SwarmCreateModal onClose={() => {}} />)
+  render(
+    <CapabilitiesProvider>
+      <SwarmCreateModal onClose={() => {}} />
+    </CapabilitiesProvider>,
+  )
 
   await screen.findByText('Basic')
   fireEvent.change(screen.getByLabelText(/swarm id/i), { target: { value: 'sw1' } })
@@ -98,7 +107,11 @@ test('shows conflict message when swarm already exists', async () => {
       text: async () => "{\"message\": \"Swarm 'sw1' already exists\"}",
     } as unknown as Response)
 
-  render(<SwarmCreateModal onClose={() => {}} />)
+  render(
+    <CapabilitiesProvider>
+      <SwarmCreateModal onClose={() => {}} />
+    </CapabilitiesProvider>,
+  )
 
   await screen.findByText('Basic')
   fireEvent.change(screen.getByLabelText(/swarm id/i), { target: { value: 'sw1' } })
@@ -118,7 +131,11 @@ test('does not submit when scenario selection is cleared', async () => {
       ok: true,
       json: async () => [],
     } as unknown as Response)
-  render(<SwarmCreateModal onClose={() => {}} />)
+  render(
+    <CapabilitiesProvider>
+      <SwarmCreateModal onClose={() => {}} />
+    </CapabilitiesProvider>,
+  )
 
   await screen.findByText('Basic')
   fireEvent.change(screen.getByLabelText(/swarm id/i), { target: { value: 'sw1' } })
@@ -177,7 +194,11 @@ test('renders manifest details when available', async () => {
       ],
     } as unknown as Response)
 
-  render(<SwarmCreateModal onClose={() => {}} />)
+  render(
+    <CapabilitiesProvider>
+      <SwarmCreateModal onClose={() => {}} />
+    </CapabilitiesProvider>,
+  )
 
   fireEvent.change(await screen.findByLabelText(/scenario/i), { target: { value: 'basic' } })
 
