@@ -476,7 +476,14 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
   const flowRef = useRef<ReactFlowInstance<FlowNode, Edge> | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const [rfNodes, setRfNodes] = useState<FlowNode[]>([])
+  const draggingIdsRef = useRef<Set<string>>(new Set())
   const { manifests, ensureCapabilities } = useCapabilities()
+
+  useEffect(() => {
+    return () => {
+      draggingIdsRef.current.clear()
+    }
+  }, [])
 
   useEffect(() => {
     void ensureCapabilities()
@@ -625,6 +632,8 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
   useEffect(() => {
     setRfNodes((prev) => {
       const prevPositions = new Map(prev.map((node) => [node.id, node.position]))
+      const prevNodesById = new Map(prev.map((node) => [node.id, node]))
+      const dragging = draggingIdsRef.current
       if (!swarmId) {
         const controllers = new Map<string, GraphNode>()
         data.nodes.forEach((node) => {
@@ -642,6 +651,13 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
             list.push(node)
             grouped.set(normalized, list)
             return
+          }
+          if (dragging.has(node.id)) {
+            const existing = prevNodesById.get(node.id)
+            if (existing) {
+              nodes.push(existing)
+              return
+            }
           }
           const previous = prevPositions.get(node.id)
           const position = {
@@ -685,6 +701,13 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
               queue: link.queue,
               depth: queueDepths[link.queue] ?? 0,
             }))
+          if (dragging.has(controller.id)) {
+            const existing = prevNodesById.get(controller.id)
+            if (existing) {
+              nodes.push(existing)
+              return
+            }
+          }
           const previous = prevPositions.get(controller.id)
           const position = {
             x: controller.x ?? previous?.x ?? 0,
@@ -693,35 +716,39 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
           nodes.push({
             id: controller.id,
             position,
-              data: {
-                label: swarmKey,
-                swarmId: swarmKey,
-                controllerId: controller.id,
-                components: members.map((member) => {
-                  const componentData = componentsById[member.id]
-                  const roleLabel = getRoleLabel(componentData?.role, member.type)
-                  return {
-                    id: member.id,
-                    name: roleLabel,
-                    shape: getShape(member.type),
-                    enabled: member.enabled,
-                    componentType: member.type,
-                    fill: getFill(member.type, member.enabled),
-                    abbreviation: getRoleAbbreviation(member.type),
-                    queueCount: componentData?.queues?.length ?? 0,
-                  }
-                }),
-                edges: groupEdges,
-                onDetails: handleDetails,
-                selectedId,
-              },
-              type: 'swarmGroup',
+            data: {
+              label: swarmKey,
+              swarmId: swarmKey,
+              controllerId: controller.id,
+              components: members.map((member) => {
+                const componentData = componentsById[member.id]
+                const roleLabel = getRoleLabel(componentData?.role, member.type)
+                return {
+                  id: member.id,
+                  name: roleLabel,
+                  shape: getShape(member.type),
+                  enabled: member.enabled,
+                  componentType: member.type,
+                  fill: getFill(member.type, member.enabled),
+                  abbreviation: getRoleAbbreviation(member.type),
+                  queueCount: componentData?.queues?.length ?? 0,
+                }
+              }),
+              edges: groupEdges,
+              onDetails: handleDetails,
+              selectedId,
+            },
+            type: 'swarmGroup',
             selectable: false,
           })
         })
         return nodes
       }
       return data.nodes.map((node) => {
+        if (dragging.has(node.id)) {
+          const existing = prevNodesById.get(node.id)
+          if (existing) return existing
+        }
         const previous = prevPositions.get(node.id)
         const position = {
           x: node.x ?? previous?.x ?? 0,
@@ -857,10 +884,16 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
           onInit={(inst: ReactFlowInstance<FlowNode, Edge>) =>
             (flowRef.current = inst)
           }
+          onNodeDragStart={(_e: unknown, node: FlowNode) => {
+            draggingIdsRef.current.add(node.id)
+          }}
           onNodeDragStop={(
             _e: unknown,
             node: FlowNode,
-          ) => updateNodePosition(node.id, node.position.x, node.position.y)}
+          ) => {
+            updateNodePosition(node.id, node.position.x, node.position.y)
+            draggingIdsRef.current.delete(node.id)
+          }}
           onNodeClick={(
             _e: unknown,
             node: FlowNode,
