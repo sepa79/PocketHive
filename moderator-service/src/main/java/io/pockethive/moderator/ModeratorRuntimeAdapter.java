@@ -96,7 +96,8 @@ class ModeratorRuntimeAdapter implements ApplicationListener<ContextRefreshedEve
 
   @RabbitListener(
       id = LISTENER_ID,
-      queues = "${pockethive.control-plane.queues.generator}")
+      queues = "${pockethive.control-plane.queues.generator}",
+      containerFactory = "moderatorManualAckListenerContainerFactory")
   public void onWork(Message message, Channel channel) {
     delegate.onWork(message, channel);
   }

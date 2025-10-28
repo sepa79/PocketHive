@@ -11,7 +11,7 @@ import org.springframework.context.annotation.Configuration;
 class ModeratorRabbitConfiguration {
 
   @Bean
-  SimpleRabbitListenerContainerFactory rabbitListenerContainerFactory(
+  SimpleRabbitListenerContainerFactory moderatorManualAckListenerContainerFactory(
       SimpleRabbitListenerContainerFactoryConfigurer configurer,
       ConnectionFactory connectionFactory,
       ModeratorDefaults defaults) {
