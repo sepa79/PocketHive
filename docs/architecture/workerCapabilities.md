@@ -7,7 +7,7 @@ This spec defines how PocketHive exposes worker **capabilities** without embeddi
 
 ## 1) Goals
 
-- **Single source of truth:** Scenario Manager owns a file-based capability catalogue.
+- **Single source of truth:** Scenario Manager owns file-based capabilities per worker, and on runtime builds a catalogue of it in memory.
 - **No worker code:** Bees do not emit capabilities; they stay dumb runtime artifacts.
 - **Easy authoring:** Hive UI and Scenario Editor fetch capabilities from SM alongside swarm templates.
 - **Deterministic execution:** Plans reference images; SM resolves images → capabilities.
