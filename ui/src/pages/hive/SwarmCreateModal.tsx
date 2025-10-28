@@ -6,12 +6,7 @@ import type {
   CapabilityConfigEntry,
   CapabilityManifest,
 } from '../../types/capabilities'
-import {
-  buildManifestIndex,
-  findManifestForImage,
-  normalizeManifests,
-  type ManifestIndex,
-} from '../../lib/capabilities'
+import { buildManifestIndex, findManifestForImage, normalizeManifests } from '../../lib/capabilities'
 
 interface Props {
   onClose: () => void
