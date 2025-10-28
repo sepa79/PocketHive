@@ -9,7 +9,7 @@ import java.util.List;
 import java.util.Objects;
 import org.springframework.stereotype.Component;
 
-@Component
+@Component("patternConfigValidator")
 public class PatternConfigValidator {
 
   private static final double EPSILON = 1e-6;
