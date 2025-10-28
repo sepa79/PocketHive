@@ -2,6 +2,28 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.13.3] - 2025-10-28
+Timestamp: 2025-10-28T00:00:00Z
+
+- Capabilities & scenario management: add a capability catalogue service with
+  YAML/JSON manifest loading, ship curated manifests for each PocketHive worker,
+  expose REST endpoints for capability discovery and scenario templates, wire in
+  catalogue-aware scenario validation, and publish an updated multi-generator
+  mock scenario alongside health/logging coverage.
+- Hive UI & UX: introduce a shared capabilities context, render component
+  configuration forms from the catalogue with edit toggles, persist dragged node
+  positions, streamline the default bee list, and refresh topology styling to
+  match the capabilities-driven layout with updated unit tests.
+- Orchestrator & idempotency: introduce reservation semantics across component,
+  swarm, and swarm manager controllers, extend the in-memory idempotency store,
+  and guard swarm creation with per-swarm locks so duplicate requests are
+  rejected atomically.
+- Documentation & architecture: publish the traffic-shaping guide, moderator
+  pattern notes, and updated worker capability references detailing the new
+  catalogue workflow.
+- Release: bump the PocketHive patch version to 0.13.3 so tooling and published
+  artifacts reference the latest build.
+
 ## [0.13.2] - 2025-10-25
 Timestamp: 2025-10-25T00:00:00Z
 
