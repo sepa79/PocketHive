@@ -14,7 +14,8 @@ public record CapabilityManifest(
         String role,
         List<ConfigEntry> config,
         List<Action> actions,
-        List<Panel> panels
+        List<Panel> panels,
+        Ui ui
 ) {
     public CapabilityManifest {
         config = config == null ? List.of() : List.copyOf(config);
@@ -58,4 +59,7 @@ public record CapabilityManifest(
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record Panel(String id, JsonNode options) { }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record Ui(String label, String color, String shape, String abbreviation) { }
 }

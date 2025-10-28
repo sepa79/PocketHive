@@ -4,6 +4,11 @@ role: generator
 image:
   name: pockethive-generator
   tag: latest
+ui:
+  label: "Generator"
+  color: "#22d3ee"
+  shape: "triangle"
+  abbreviation: "GE"
 config:
   - name: enabled
     type: boolean

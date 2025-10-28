@@ -4,6 +4,11 @@ role: postprocessor
 image:
   name: pockethive-postprocessor
   tag: latest
+ui:
+  label: "Postprocessor"
+  color: "#facc15"
+  shape: "hexagon"
+  abbreviation: "PP"
 config:
   - name: enabled
     type: boolean

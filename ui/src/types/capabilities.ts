@@ -14,6 +14,23 @@ export interface CapabilityConfigEntry {
   ui?: unknown
 }
 
+export type CapabilityShape =
+  | 'circle'
+  | 'square'
+  | 'triangle'
+  | 'diamond'
+  | 'pentagon'
+  | 'hexagon'
+  | 'star'
+
+export interface CapabilityUi {
+  label?: string
+  color?: string
+  abbreviation?: string
+  shape?: CapabilityShape
+  [key: string]: unknown
+}
+
 export interface CapabilityActionParameter {
   name: string
   type: string
@@ -41,4 +58,5 @@ export interface CapabilityManifest {
   config: CapabilityConfigEntry[]
   actions: CapabilityAction[]
   panels: CapabilityPanel[]
+  ui?: CapabilityUi
 }
