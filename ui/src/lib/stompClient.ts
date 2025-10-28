@@ -1,10 +1,8 @@
 import { Client, type StompSubscription } from '@stomp/stompjs'
-import type { CapabilityManifest } from '../types/capabilities'
 import type { Component, QueueInfo } from '../types/hive'
 import { isControlEvent, type ControlEvent } from '../types/control'
 import { logIn, logError } from './logs'
 import { useUIStore } from '../store'
-import { normalizeManifests } from './capabilities'
 
 export type ComponentListener = (components: Component[]) => void
 export interface TopologyNode {
@@ -69,27 +67,6 @@ function getBoolean(value: unknown): boolean | undefined {
     if (normalized === 'false') return false
   }
   return undefined
-}
-
-function normalizeCapability(value: unknown): CapabilityManifest | null {
-  if (value === null || value === undefined) return null
-  if (Array.isArray(value)) {
-    const [first] = normalizeManifests(value)
-    return first ?? null
-  }
-  const [first] = normalizeManifests([value])
-  return first ?? null
-}
-
-function applyCapabilities(component: Component, value: unknown) {
-  if (value === null) {
-    component.capabilities = null
-    return
-  }
-  const manifest = normalizeCapability(value)
-  if (manifest) {
-    component.capabilities = manifest
-  }
 }
 
 interface LifecycleConfirmation {
@@ -277,12 +254,7 @@ export function setClient(newClient: Client | null, destination = controlDestina
         comp.lastHeartbeat = new Date(evt.timestamp).getTime()
         comp.status = evt.kind
         const cfg: Record<string, unknown> = { ...(comp.config || {}) }
-        delete cfg.capabilities
         let workerEnabled: boolean | undefined
-        const eventCapabilities = (evt as { capabilities?: unknown }).capabilities
-        if (eventCapabilities !== undefined) {
-          applyCapabilities(comp, eventCapabilities)
-        }
         const data = evt.data
         if (data && typeof data === 'object') {
           const { workers, ...rest } = data as Record<string, unknown> & {
@@ -290,10 +262,6 @@ export function setClient(newClient: Client | null, destination = controlDestina
           }
           Object.entries(rest).forEach(([key, value]) => {
             if (key === 'enabled') return
-            if (key === 'capabilities') {
-              applyCapabilities(comp, value)
-              return
-            }
             cfg[key] = value
           })
           if (Array.isArray(workers)) {
@@ -310,30 +278,22 @@ export function setClient(newClient: Client | null, destination = controlDestina
                 const configSection = selected['config']
                 if (isRecord(configSection)) {
                   Object.entries(configSection).forEach(([key, value]) => {
-                    if (key === 'capabilities') {
-                      applyCapabilities(comp, value)
-                      return
-                    }
                     cfg[key] = value
                   })
                 }
                 const dataSection = selected['data']
                 if (isRecord(dataSection)) {
                   Object.entries(dataSection).forEach(([key, value]) => {
-                    if (key === 'capabilities') {
-                      applyCapabilities(comp, value)
-                      return
-                    }
                     cfg[key] = value
                   })
                 }
                 const workerEnabledCandidate = getBoolean(selected['enabled'])
                 if (typeof workerEnabledCandidate === 'boolean') {
-                workerEnabled = workerEnabledCandidate
+                  workerEnabled = workerEnabledCandidate
+                }
               }
             }
           }
-        }
         const aggregateEnabled =
           typeof workerEnabled === 'boolean'
             ? workerEnabled
