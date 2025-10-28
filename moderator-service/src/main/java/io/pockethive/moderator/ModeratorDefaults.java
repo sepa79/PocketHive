@@ -27,6 +27,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
@@ -52,11 +53,7 @@ class ModeratorDefaults {
       "jitter", "ph/mod/run-001"
   ));
   private int prefetch = 5;
-  private final PatternConfigValidator validator;
-
-  ModeratorDefaults(PatternConfigValidator validator) {
-    this.validator = validator;
-  }
+  private PatternConfigValidator validator;
 
   public boolean isEnabled() {
     return enabled;
@@ -133,8 +130,14 @@ class ModeratorDefaults {
     this.prefetch = prefetch;
   }
 
+  @Autowired
+  void setValidator(PatternConfigValidator validator) {
+    this.validator = Objects.requireNonNull(validator, "validator");
+  }
+
   ModeratorWorkerConfig asConfig() {
     Objects.requireNonNull(pattern, "pattern field");
+    PatternConfigValidator patternValidator = Objects.requireNonNull(validator, "validator");
     ModeratorWorkerConfig config = new ModeratorWorkerConfig(
         enabled,
         time,
@@ -145,7 +148,7 @@ class ModeratorDefaults {
         jitter,
         seeds
     );
-    validator.validate(config);
+    patternValidator.validate(config);
     return config;
   }
 

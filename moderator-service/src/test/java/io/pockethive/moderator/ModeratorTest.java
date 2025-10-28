@@ -51,7 +51,8 @@ class ModeratorTest {
 
     @BeforeEach
     void setUp() {
-        defaults = new ModeratorDefaults(new PatternConfigValidator());
+        defaults = new ModeratorDefaults();
+        defaults.setValidator(new PatternConfigValidator());
         defaults.setEnabled(true);
         clock = new MutableClock(Instant.parse("2025-01-01T00:00:00Z"), ZoneId.of("UTC"));
         sleeper = duration -> clock.advance(duration);

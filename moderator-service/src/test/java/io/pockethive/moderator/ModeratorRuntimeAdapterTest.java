@@ -99,7 +99,8 @@ class ModeratorRuntimeAdapterTest {
   @BeforeEach
   void setUp() {
     validator = new PatternConfigValidator();
-    defaults = new ModeratorDefaults(validator);
+    defaults = new ModeratorDefaults();
+    defaults.setValidator(validator);
     defaults.setEnabled(true);
     identity = new ControlPlaneIdentity(
         WORKER_PROPERTIES.getSwarmId(),
@@ -321,7 +322,8 @@ class ModeratorRuntimeAdapterTest {
         .thenReturn(Optional.of(definition));
     stubListenerContainerStopped();
 
-    ModeratorDefaults invalidDefaults = new ModeratorDefaults(validator);
+    ModeratorDefaults invalidDefaults = new ModeratorDefaults();
+    invalidDefaults.setValidator(validator);
     invalidDefaults.setEnabled(true);
     invalidDefaults.setPattern(new PatternConfig(
         Duration.ofHours(24),

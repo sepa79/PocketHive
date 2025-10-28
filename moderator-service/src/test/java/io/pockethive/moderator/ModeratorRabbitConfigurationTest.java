@@ -67,7 +67,8 @@ class ModeratorRabbitConfigurationTest {
 
     @Bean
     ModeratorDefaults moderatorDefaults(PatternConfigValidator validator) {
-      ModeratorDefaults defaults = new ModeratorDefaults(validator);
+      ModeratorDefaults defaults = new ModeratorDefaults();
+      defaults.setValidator(validator);
       defaults.setPrefetch(7);
       return defaults;
     }
