@@ -221,23 +221,28 @@ public class SwarmController {
      */
     private ResponseEntity<ControlResponse> idempotentSend(String signal, String swarmId, String idempotencyKey,
                                                            long timeoutMs, java.util.function.Consumer<String> action) {
-        return idempotency.findCorrelation(swarmId, signal, idempotencyKey)
-            .map(corr -> {
-                ControlResponse resp = new ControlResponse(corr, idempotencyKey,
-                    watchFor(signal, swarmId), timeoutMs);
-                log.info("[CTRL] reuse signal={} swarm={} correlation={} idempotencyKey={}", signal, swarmId, corr, idempotencyKey);
-                return ResponseEntity.accepted().body(resp);
-            })
-            .orElseGet(() -> {
-                String corr = UUID.randomUUID().toString();
-                action.accept(corr);
-                idempotency.record(swarmId, signal, idempotencyKey, corr);
-                ControlResponse resp = new ControlResponse(corr, idempotencyKey,
-                    watchFor(signal, swarmId), timeoutMs);
-                log.info("[CTRL] issue signal={} swarm={} correlation={} idempotencyKey={} timeoutMs={}",
-                    signal, swarmId, corr, idempotencyKey, timeoutMs);
-                return ResponseEntity.accepted().body(resp);
-            });
+        String newCorrelation = UUID.randomUUID().toString();
+        Optional<String> existing = idempotency.reserve(swarmId, signal, idempotencyKey, newCorrelation);
+        if (existing.isPresent()) {
+            String corr = existing.get();
+            ControlResponse resp = new ControlResponse(corr, idempotencyKey,
+                watchFor(signal, swarmId), timeoutMs);
+            log.info("[CTRL] reuse signal={} swarm={} correlation={} idempotencyKey={}", signal, swarmId, corr, idempotencyKey);
+            return ResponseEntity.accepted().body(resp);
+        }
+
+        try {
+            action.accept(newCorrelation);
+        } catch (RuntimeException e) {
+            idempotency.rollback(swarmId, signal, idempotencyKey, newCorrelation);
+            throw e;
+        }
+
+        ControlResponse resp = new ControlResponse(newCorrelation, idempotencyKey,
+            watchFor(signal, swarmId), timeoutMs);
+        log.info("[CTRL] issue signal={} swarm={} correlation={} idempotencyKey={} timeoutMs={}",
+            signal, swarmId, newCorrelation, idempotencyKey, timeoutMs);
+        return ResponseEntity.accepted().body(resp);
     }
 
     /**

@@ -24,5 +24,21 @@ public class InMemoryIdempotencyStore implements IdempotencyStore {
         store.putIfAbsent(new Key(swarmId, signal, idempotencyKey), correlationId);
     }
 
+    @Override
+    public Optional<String> reserve(String swarmId, String signal, String idempotencyKey, String newCorrelationId) {
+        Key key = new Key(swarmId, signal, idempotencyKey);
+        String correlation = store.computeIfAbsent(key, ignored -> newCorrelationId);
+        if (correlation.equals(newCorrelationId)) {
+            return Optional.empty();
+        }
+        return Optional.of(correlation);
+    }
+
+    @Override
+    public void rollback(String swarmId, String signal, String idempotencyKey, String correlationId) {
+        Key key = new Key(swarmId, signal, idempotencyKey);
+        store.computeIfPresent(key, (ignored, existing) -> existing.equals(correlationId) ? null : existing);
+    }
+
     private record Key(String swarmId, String signal, String idempotencyKey) {}
 }
