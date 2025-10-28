@@ -21,6 +21,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -57,24 +58,29 @@ public class ComponentController {
         String swarmId = request.swarmId();
         String scope = scope(role, instance, swarmId);
         String swarmSegment = segmentOrAll(swarmId);
-        ResponseEntity<ControlResponse> response = idempotency.findCorrelation(scope, ControlPlaneSignals.CONFIG_UPDATE, request.idempotencyKey())
-            .map(correlation -> {
-                log.info("[CTRL] reuse config-update role={} instance={} correlation={} idempotencyKey={} scope={}",
-                    role, instance, correlation, request.idempotencyKey(), scope);
-                return accepted(correlation, request.idempotencyKey(), swarmSegment, role, instance);
-            })
-            .orElseGet(() -> {
-                String correlation = UUID.randomUUID().toString();
-                ControlSignal payload = ControlSignal.forInstance(ControlPlaneSignals.CONFIG_UPDATE, swarmId, role, instance,
-                    correlation, request.idempotencyKey(),
-                    commandTargetFrom(request), argsFrom(request));
-                String jsonPayload = toJson(payload);
+        String newCorrelation = UUID.randomUUID().toString();
+        Optional<String> existing = idempotency.reserve(scope, ControlPlaneSignals.CONFIG_UPDATE, request.idempotencyKey(), newCorrelation);
+        ResponseEntity<ControlResponse> response;
+        if (existing.isPresent()) {
+            String correlation = existing.get();
+            log.info("[CTRL] reuse config-update role={} instance={} correlation={} idempotencyKey={} scope={}",
+                role, instance, correlation, request.idempotencyKey(), scope);
+            response = accepted(correlation, request.idempotencyKey(), swarmSegment, role, instance);
+        } else {
+            ControlSignal payload = ControlSignal.forInstance(ControlPlaneSignals.CONFIG_UPDATE, swarmId, role, instance,
+                newCorrelation, request.idempotencyKey(),
+                commandTargetFrom(request), argsFrom(request));
+            String jsonPayload = toJson(payload);
+            try {
                 sendControl(routingKey(swarmSegment, role, instance), jsonPayload, ControlPlaneSignals.CONFIG_UPDATE);
-                idempotency.record(scope, ControlPlaneSignals.CONFIG_UPDATE, request.idempotencyKey(), correlation);
-                log.info("[CTRL] issue config-update role={} instance={} correlation={} idempotencyKey={} scope={}",
-                    role, instance, correlation, request.idempotencyKey(), scope);
-                return accepted(correlation, request.idempotencyKey(), swarmSegment, role, instance);
-            });
+            } catch (RuntimeException e) {
+                idempotency.rollback(scope, ControlPlaneSignals.CONFIG_UPDATE, request.idempotencyKey(), newCorrelation);
+                throw e;
+            }
+            log.info("[CTRL] issue config-update role={} instance={} correlation={} idempotencyKey={} scope={}",
+                role, instance, newCorrelation, request.idempotencyKey(), scope);
+            response = accepted(newCorrelation, request.idempotencyKey(), swarmSegment, role, instance);
+        }
         logRestResponse("POST", path, response);
         return response;
     }

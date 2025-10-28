@@ -15,6 +15,11 @@ import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.controlplane.spring.ControlPlaneProperties;
 import io.pockethive.orchestrator.infra.InMemoryIdempotencyStore;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -82,6 +87,39 @@ class ComponentControllerTest {
         assertThat(first.getBody()).isNotNull();
         assertThat(second.getBody()).isNotNull();
         assertThat(first.getBody().correlationId()).isEqualTo(second.getBody().correlationId());
+    }
+
+    @Test
+    void concurrentConfigUpdatesReuseCorrelation() throws Exception {
+        ComponentController controller = new ComponentController(
+            rabbit,
+            new InMemoryIdempotencyStore(),
+            mapper,
+            controlPlaneProperties());
+        ComponentController.ConfigUpdateRequest request =
+            new ComponentController.ConfigUpdateRequest("idem", Map.of(), null, "sw1", CommandTarget.SWARM);
+
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        Future<ResponseEntity<ControlResponse>> first = executor.submit(() -> {
+            start.await();
+            return controller.updateConfig("processor", "p1", request);
+        });
+        Future<ResponseEntity<ControlResponse>> second = executor.submit(() -> {
+            start.await();
+            return controller.updateConfig("processor", "p1", request);
+        });
+
+        start.countDown();
+        ResponseEntity<ControlResponse> response1 = first.get(5, TimeUnit.SECONDS);
+        ResponseEntity<ControlResponse> response2 = second.get(5, TimeUnit.SECONDS);
+        executor.shutdownNow();
+
+        verify(rabbit, times(1)).convertAndSend(eq("ph.control"),
+            eq(ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, "sw1", "processor", "p1")), anyString());
+        assertThat(response1.getBody()).isNotNull();
+        assertThat(response2.getBody()).isNotNull();
+        assertThat(response1.getBody().correlationId()).isEqualTo(response2.getBody().correlationId());
     }
 
     private static ControlPlaneProperties controlPlaneProperties() {

@@ -25,6 +25,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -121,25 +122,30 @@ public class SwarmManagerController {
             String swarmId = swarm.getId();
             String swarmSegment = segmentOrAll(swarmId);
             String scope = swarmId;
-            idempotency.findCorrelation(scope, ControlPlaneSignals.CONFIG_UPDATE, request.idempotencyKey())
-                .ifPresentOrElse(correlation -> dispatches.add(new Dispatch(swarmSegment, swarm.getInstanceId(),
-                        accepted(correlation, request.idempotencyKey(), swarmSegment, swarm.getInstanceId()), true)),
-                    () -> {
-                        String correlation = UUID.randomUUID().toString();
-                        ControlSignal payload = ControlSignal.forInstance(
-                            ControlPlaneSignals.CONFIG_UPDATE,
-                            swarmId,
-                            "swarm-controller",
-                            swarm.getInstanceId(),
-                            correlation,
-                            request.idempotencyKey(),
-                            request.commandTarget(),
-                            argsFor(request));
-                        sendControl(routingKey(swarmSegment, swarm.getInstanceId()), toJson(payload), request.commandTarget());
-                        idempotency.record(scope, ControlPlaneSignals.CONFIG_UPDATE, request.idempotencyKey(), correlation);
-                        dispatches.add(new Dispatch(swarmSegment, swarm.getInstanceId(),
-                            accepted(correlation, request.idempotencyKey(), swarmSegment, swarm.getInstanceId()), false));
-                    });
+            String newCorrelation = UUID.randomUUID().toString();
+            Optional<String> existing = idempotency.reserve(scope, ControlPlaneSignals.CONFIG_UPDATE, request.idempotencyKey(), newCorrelation);
+            if (existing.isPresent()) {
+                dispatches.add(new Dispatch(swarmSegment, swarm.getInstanceId(),
+                    accepted(existing.get(), request.idempotencyKey(), swarmSegment, swarm.getInstanceId()), true));
+                continue;
+            }
+            ControlSignal payload = ControlSignal.forInstance(
+                ControlPlaneSignals.CONFIG_UPDATE,
+                swarmId,
+                "swarm-controller",
+                swarm.getInstanceId(),
+                newCorrelation,
+                request.idempotencyKey(),
+                request.commandTarget(),
+                argsFor(request));
+            try {
+                sendControl(routingKey(swarmSegment, swarm.getInstanceId()), toJson(payload), request.commandTarget());
+            } catch (RuntimeException e) {
+                idempotency.rollback(scope, ControlPlaneSignals.CONFIG_UPDATE, request.idempotencyKey(), newCorrelation);
+                throw e;
+            }
+            dispatches.add(new Dispatch(swarmSegment, swarm.getInstanceId(),
+                accepted(newCorrelation, request.idempotencyKey(), swarmSegment, swarm.getInstanceId()), false));
         }
         return new FanoutControlResponse(dispatches);
     }

@@ -1,6 +1,7 @@
 package io.pockethive.orchestrator.app;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -42,9 +43,9 @@ class SwarmManagerControllerTest {
         SwarmRegistry registry = new SwarmRegistry();
         registry.register(new Swarm("sw1", "ctrl-a", "c1"));
         registry.register(new Swarm("sw2", "ctrl-b", "c2"));
-        when(idempotency.findCorrelation(eq("sw1"), eq(ControlPlaneSignals.CONFIG_UPDATE), eq("idem-1")))
+        when(idempotency.reserve(eq("sw1"), eq(ControlPlaneSignals.CONFIG_UPDATE), eq("idem-1"), anyString()))
             .thenReturn(Optional.empty());
-        when(idempotency.findCorrelation(eq("sw2"), eq(ControlPlaneSignals.CONFIG_UPDATE), eq("idem-1")))
+        when(idempotency.reserve(eq("sw2"), eq(ControlPlaneSignals.CONFIG_UPDATE), eq("idem-1"), anyString()))
             .thenReturn(Optional.empty());
         SwarmManagerController controller = new SwarmManagerController(
             registry,
@@ -85,7 +86,7 @@ class SwarmManagerControllerTest {
     void toggleSingleControllerScope() throws Exception {
         SwarmRegistry registry = new SwarmRegistry();
         registry.register(new Swarm("sw9", "ctrl-z", "c9"));
-        when(idempotency.findCorrelation(eq("sw9"), eq(ControlPlaneSignals.CONFIG_UPDATE), eq("idem-2")))
+        when(idempotency.reserve(eq("sw9"), eq(ControlPlaneSignals.CONFIG_UPDATE), eq("idem-2"), anyString()))
             .thenReturn(Optional.empty());
         SwarmManagerController controller = new SwarmManagerController(
             registry,

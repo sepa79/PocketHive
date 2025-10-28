@@ -31,6 +31,11 @@ import io.pockethive.swarm.model.SwarmPlan;
 import io.pockethive.swarm.model.SwarmTemplate;
 import io.pockethive.swarm.model.Work;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -127,6 +132,92 @@ class SwarmControllerTest {
         verify(rabbit, times(1)).convertAndSend(eq("ph.control"),
             eq(ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_START, "sw1", "swarm-controller", "ALL")), captor.capture());
         assertThat(r1.getBody().correlationId()).isEqualTo(r2.getBody().correlationId());
+    }
+
+    @Test
+    void concurrentCreateRequestsReuseReservation() throws Exception {
+        SwarmCreateTracker tracker = new SwarmCreateTracker();
+        SwarmPlanRegistry plans = new SwarmPlanRegistry();
+        SwarmRegistry registry = new SwarmRegistry();
+        SwarmTemplate template = new SwarmTemplate("ctrl-image", List.of(
+            new Bee("generator", "img", new Work(null, "out"), java.util.Map.of())
+        ));
+        when(scenarioClient.fetchTemplate("tpl-1")).thenReturn(template);
+        when(lifecycle.startSwarm(eq("sw1"), eq("ctrl-image"), anyString()))
+            .thenAnswer(invocation -> new Swarm("sw1", invocation.getArgument(2), "corr"));
+        IdempotencyStore store = new InMemoryIdempotencyStore();
+        SwarmController ctrl = controller(tracker, registry, plans, store);
+        SwarmCreateRequest request = new SwarmCreateRequest("tpl-1", "idem", null);
+
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        Future<ResponseEntity<?>> first = executor.submit(() -> {
+            start.await();
+            return ctrl.create("sw1", request);
+        });
+        Future<ResponseEntity<?>> second = executor.submit(() -> {
+            start.await();
+            return ctrl.create("sw1", request);
+        });
+
+        start.countDown();
+        ResponseEntity<?> response1 = first.get(5, TimeUnit.SECONDS);
+        ResponseEntity<?> response2 = second.get(5, TimeUnit.SECONDS);
+        executor.shutdownNow();
+
+        verify(lifecycle, times(1)).startSwarm(eq("sw1"), eq("ctrl-image"), anyString());
+        verify(scenarioClient, times(1)).fetchTemplate("tpl-1");
+        assertThat(response1.getBody()).isInstanceOf(ControlResponse.class);
+        assertThat(response2.getBody()).isInstanceOf(ControlResponse.class);
+        ControlResponse body1 = (ControlResponse) response1.getBody();
+        ControlResponse body2 = (ControlResponse) response2.getBody();
+        assertThat(body1.correlationId()).isEqualTo(body2.correlationId());
+    }
+
+    @Test
+    void concurrentCreateRequestsWithDifferentKeysShareLeaderCorrelation() throws Exception {
+        SwarmCreateTracker tracker = new SwarmCreateTracker();
+        SwarmPlanRegistry plans = new SwarmPlanRegistry();
+        SwarmRegistry registry = new SwarmRegistry();
+        SwarmTemplate template = new SwarmTemplate("ctrl-image", List.of(
+            new Bee("generator", "img", new Work(null, "out"), java.util.Map.of())
+        ));
+        when(scenarioClient.fetchTemplate("tpl-1")).thenReturn(template);
+        when(lifecycle.startSwarm(eq("sw1"), eq("ctrl-image"), anyString()))
+            .thenAnswer(invocation -> new Swarm("sw1", invocation.getArgument(2), "corr"));
+        InMemoryIdempotencyStore store = new InMemoryIdempotencyStore();
+        SwarmController ctrl = controller(tracker, registry, plans, store);
+        SwarmCreateRequest leaderRequest = new SwarmCreateRequest("tpl-1", "idem-1", null);
+        SwarmCreateRequest followerRequest = new SwarmCreateRequest("tpl-1", "idem-2", null);
+
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        Future<ResponseEntity<?>> leader = executor.submit(() -> {
+            start.await();
+            return ctrl.create("sw1", leaderRequest);
+        });
+        Future<ResponseEntity<?>> follower = executor.submit(() -> {
+            start.await();
+            return ctrl.create("sw1", followerRequest);
+        });
+
+        start.countDown();
+        ResponseEntity<?> leaderResponse = leader.get(5, TimeUnit.SECONDS);
+        ResponseEntity<?> followerResponse = follower.get(5, TimeUnit.SECONDS);
+        executor.shutdownNow();
+
+        verify(lifecycle, times(1)).startSwarm(eq("sw1"), eq("ctrl-image"), anyString());
+        verify(scenarioClient, times(1)).fetchTemplate("tpl-1");
+        assertThat(leaderResponse.getBody()).isInstanceOf(ControlResponse.class);
+        assertThat(followerResponse.getBody()).isInstanceOf(ControlResponse.class);
+        ControlResponse leaderBody = (ControlResponse) leaderResponse.getBody();
+        ControlResponse followerBody = (ControlResponse) followerResponse.getBody();
+        assertThat(leaderBody.correlationId()).isEqualTo(followerBody.correlationId());
+        assertThat(store.findCorrelation("sw1", "swarm-create", "idem-1").orElseThrow())
+            .isEqualTo(leaderBody.correlationId());
+        assertThat(store.findCorrelation("sw1", "swarm-create", "idem-2").orElseThrow())
+            .isEqualTo(leaderBody.correlationId());
+        assertThat(store.findCorrelation("sw1", "swarm-create", "__create-lock__")).isEmpty();
     }
 
     @Test
