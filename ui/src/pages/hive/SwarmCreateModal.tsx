@@ -6,7 +6,8 @@ import type {
   CapabilityConfigEntry,
   CapabilityManifest,
 } from '../../types/capabilities'
-import { buildManifestIndex, findManifestForImage, normalizeManifests } from '../../lib/capabilities'
+import { findManifestForImage } from '../../lib/capabilities'
+import { useCapabilities } from '../../contexts/CapabilitiesContext'
 
 interface Props {
   onClose: () => void
@@ -30,37 +31,34 @@ type ApiError = Error & { status?: number }
 export default function SwarmCreateModal({ onClose }: Props) {
   const [swarmId, setSwarmId] = useState('')
   const [templates, setTemplates] = useState<ScenarioTemplate[]>([])
-  const [manifests, setManifests] = useState<CapabilityManifest[]>([])
   const [scenarioId, setScenarioId] = useState('')
   const [message, setMessage] = useState<string | null>(null)
+  const { manifestIndex, refreshCapabilities } = useCapabilities()
 
   useEffect(() => {
     let cancelled = false
 
     const load = async () => {
       try {
-        const [templatesResponse, capabilitiesResponse] = await Promise.all([
+        const [templatesResponse] = await Promise.all([
           apiFetch('/scenario-manager/api/templates', {
             headers: { Accept: 'application/json' },
           }),
-          apiFetch('/scenario-manager/api/capabilities?all=true', {
-            headers: { Accept: 'application/json' },
-          }),
-        ])
-
-        const [templatesData, manifestData] = await Promise.all([
-          templatesResponse.ok ? templatesResponse.json() : Promise.resolve(null),
-          capabilitiesResponse.ok ? capabilitiesResponse.json() : Promise.resolve(null),
+          refreshCapabilities(),
         ])
 
         if (cancelled) return
 
+        if (!templatesResponse.ok) {
+          setTemplates([])
+          return
+        }
+
+        const templatesData = await templatesResponse.json()
         setTemplates(normalizeTemplates(templatesData))
-        setManifests(normalizeManifests(manifestData))
       } catch {
         if (!cancelled) {
           setTemplates([])
-          setManifests([])
         }
       }
     }
@@ -70,7 +68,7 @@ export default function SwarmCreateModal({ onClose }: Props) {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [refreshCapabilities])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -96,8 +94,6 @@ export default function SwarmCreateModal({ onClose }: Props) {
       }
     }
   }
-
-  const manifestIndex = useMemo(() => buildManifestIndex(manifests), [manifests])
 
   const selectedTemplate = useMemo(
     () => templates.find((template) => template.id === scenarioId) ?? null,
