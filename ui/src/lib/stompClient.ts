@@ -276,10 +276,10 @@ export function setClient(newClient: Client | null, destination = controlDestina
         comp.version = evt.version
         comp.lastHeartbeat = new Date(evt.timestamp).getTime()
         comp.status = evt.kind
-        const cfg = { ...(comp.config || {}) }
-        delete (cfg as Record<string, unknown>).capabilities
+        const cfg: Record<string, unknown> = { ...(comp.config || {}) }
+        delete cfg.capabilities
         let workerEnabled: boolean | undefined
-        const eventCapabilities = (evt as Record<string, unknown>)['capabilities']
+        const eventCapabilities = (evt as { capabilities?: unknown }).capabilities
         if (eventCapabilities !== undefined) {
           applyCapabilities(comp, eventCapabilities)
         }
@@ -344,8 +344,8 @@ export function setClient(newClient: Client | null, destination = controlDestina
         const cfgKeys = Object.keys(cfg)
         if (cfgKeys.length > 0) {
           comp.config = cfg
-        } else if ('config' in comp) {
-          delete (comp as Record<string, unknown>).config
+        } else {
+          delete comp.config
         }
         if (evt.queues) {
           const q: QueueInfo[] = []
