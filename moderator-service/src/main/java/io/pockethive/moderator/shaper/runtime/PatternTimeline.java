@@ -82,19 +82,33 @@ public final class PatternTimeline {
     Duration profileElapsed = toProfileElapsed(now);
     Instant profileInstant = runStart.plus(profileElapsed);
     double patternMillis = resolvePatternMillis(profileElapsed, profileInstant);
-    double raw = rawMultiplierAt(patternMillis);
-    double normalizedValue = raw * normalizationConstant;
-    double finalValue = applyGlobalMutators(normalizedValue, patternMillis);
-    return new TimelineSample(finalValue, normalizationConstant);
+    StepEvaluation evaluation = evaluate(patternMillis);
+    double normalizedValue = evaluation.raw() * normalizationConstant;
+    double finalValue = applyGlobalMutators(normalizedValue, evaluation.patternMillis());
+    return new TimelineSample(
+        finalValue,
+        normalizationConstant,
+        evaluation.patternMillis(),
+        evaluation.segment().id,
+        profileElapsed);
   }
 
   public TimelineSample sample(Duration profileElapsed) {
     Instant profileInstant = runStart.plus(profileElapsed);
     double patternMillis = resolvePatternMillis(profileElapsed, profileInstant);
-    double raw = rawMultiplierAt(patternMillis);
-    double normalizedValue = raw * normalizationConstant;
-    double finalValue = applyGlobalMutators(normalizedValue, patternMillis);
-    return new TimelineSample(finalValue, normalizationConstant);
+    StepEvaluation evaluation = evaluate(patternMillis);
+    double normalizedValue = evaluation.raw() * normalizationConstant;
+    double finalValue = applyGlobalMutators(normalizedValue, evaluation.patternMillis());
+    return new TimelineSample(
+        finalValue,
+        normalizationConstant,
+        evaluation.patternMillis(),
+        evaluation.segment().id,
+        profileElapsed);
+  }
+
+  public double patternDurationMillis() {
+    return patternDurationMillis;
   }
 
   public double normalizationConstant() {
@@ -188,16 +202,22 @@ public final class PatternTimeline {
     return Math.min(profileMillis, max);
   }
 
-  private double rawMultiplierAt(double patternMillis) {
+  private StepEvaluation evaluate(double patternMillis) {
     double target = Math.min(Math.max(patternMillis, 0d), Math.nextAfter(patternDurationMillis, Double.NEGATIVE_INFINITY));
+    StepSegment chosen = steps.get(steps.size() - 1);
     for (int i = 0; i < steps.size(); i++) {
       StepSegment segment = steps.get(i);
       boolean last = i == steps.size() - 1;
       if (segment.contains(target, last)) {
-        return segment.valueAt(target);
+        chosen = segment;
+        break;
       }
     }
-    return steps.get(steps.size() - 1).valueAt(target);
+    return new StepEvaluation(chosen, target, chosen.valueAt(target));
+  }
+
+  private double rawMultiplierAt(double patternMillis) {
+    return evaluate(patternMillis).raw();
   }
 
   private double applyGlobalMutators(double value, double patternMillis) {
@@ -361,7 +381,21 @@ public final class PatternTimeline {
     }
   }
 
-  public record TimelineSample(double multiplier, double normalizationConstant) {}
+  public record TimelineSample(double multiplier,
+                               double normalizationConstant,
+                               double patternPositionMillis,
+                               String stepId,
+                               Duration profileElapsed) {
+
+    public double patternFraction(double durationMillis) {
+      if (durationMillis <= 0d) {
+        return 0d;
+      }
+      return Math.max(0d, Math.min(1d, patternPositionMillis / durationMillis));
+    }
+  }
+
+  private record StepEvaluation(StepSegment segment, double patternMillis, double raw) {}
 
   private record Seeds(String defaultSeed, Map<String, String> overrides) {
 

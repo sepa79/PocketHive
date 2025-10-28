@@ -13,6 +13,7 @@ import io.pockethive.moderator.shaper.config.StepRangeConfig;
 import io.pockethive.moderator.shaper.config.StepRangeUnit;
 import io.pockethive.moderator.shaper.config.TransitionConfig;
 import io.pockethive.moderator.shaper.config.TransitionType;
+import io.pockethive.moderator.shaper.runtime.PatternAckPacer;
 import io.pockethive.worker.sdk.api.StatusPublisher;
 import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pockethive.worker.sdk.api.WorkResult;
@@ -21,10 +22,14 @@ import io.pockethive.worker.sdk.api.WorkerInfo;
 import io.pockethive.worker.sdk.testing.ControlPlaneTestFixtures;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
+import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -35,6 +40,10 @@ class ModeratorTest {
 
     private ModeratorDefaults defaults;
     private ModeratorWorkerImpl worker;
+    private MutableClock clock;
+    private PatternAckPacer.Sleeper sleeper;
+    private CapturingStatusPublisher statusPublisher;
+    private SimpleMeterRegistry meterRegistry;
     private static final WorkerControlPlaneProperties WORKER_PROPERTIES =
         ControlPlaneTestFixtures.workerProperties("swarm", "moderator", "instance");
     private static final String IN_QUEUE = WORKER_PROPERTIES.getQueues().get("generator");
@@ -43,8 +52,12 @@ class ModeratorTest {
     @BeforeEach
     void setUp() {
         defaults = new ModeratorDefaults(new PatternConfigValidator());
-        defaults.setEnabled(false);
-        worker = new ModeratorWorkerImpl(defaults);
+        defaults.setEnabled(true);
+        clock = new MutableClock(Instant.parse("2025-01-01T00:00:00Z"), ZoneId.of("UTC"));
+        sleeper = duration -> clock.advance(duration);
+        statusPublisher = new CapturingStatusPublisher();
+        meterRegistry = new SimpleMeterRegistry();
+        worker = new ModeratorWorkerImpl(defaults, clock, sleeper);
     }
 
     @Test
@@ -52,6 +65,7 @@ class ModeratorTest {
         WorkMessage message = WorkMessage.builder()
                 .body("test".getBytes(StandardCharsets.UTF_8))
                 .header("original", "true")
+                .header("x-ph-in-queue-depth", 37)
                 .build();
 
         assertThat(defaults.getPattern()).isNotNull();
@@ -73,6 +87,9 @@ class ModeratorTest {
         assertThat(new String(forwarded.body(), StandardCharsets.UTF_8)).isEqualTo("test");
         assertThat(forwarded.headers()).containsEntry("original", "true");
         assertThat(forwarded.headers()).containsEntry("x-ph-service", "moderator");
+        assertThat(statusPublisher.lastData).containsEntry("enabled", true);
+        assertThat(meterRegistry.get("moderator.target_rps").gauge().value()).isGreaterThan(0d);
+        assertThat(meterRegistry.get("moderator.actual_rps_out.count").counter().count()).isEqualTo(1d);
     }
 
     @Test
@@ -86,6 +103,28 @@ class ModeratorTest {
 
         WorkMessage forwarded = ((WorkResult.Message) result).value();
         assertThat(forwarded.headers()).containsEntry("x-ph-service", "moderator");
+    }
+
+    @Test
+    void disablingWorkerHaltsEmissions() {
+        ModeratorWorkerConfig disabledConfig = new ModeratorWorkerConfig(
+                false,
+                defaults.getTime(),
+                defaults.getRun(),
+                defaults.getPattern(),
+                defaults.getNormalization(),
+                defaults.getGlobalMutators(),
+                defaults.getJitter(),
+                defaults.getSeeds()
+        );
+
+        WorkMessage message = WorkMessage.text("payload").build();
+
+        WorkResult result = worker.onMessage(message, new TestWorkerContext(disabledConfig));
+
+        assertThat(result).isEqualTo(WorkResult.none());
+        assertThat(statusPublisher.lastData).containsEntry("enabled", false);
+        assertThat(meterRegistry.get("moderator.target_rps").gauge().value()).isZero();
     }
 
     @Test
@@ -119,7 +158,7 @@ class ModeratorTest {
                 .hasMessageContaining("cover");
     }
 
-    private static final class TestWorkerContext implements WorkerContext {
+    private final class TestWorkerContext implements WorkerContext {
 
         private final ModeratorWorkerConfig config;
         private final WorkerInfo info = new WorkerInfo(
@@ -148,7 +187,7 @@ class ModeratorTest {
 
         @Override
         public StatusPublisher statusPublisher() {
-            return StatusPublisher.NO_OP;
+            return statusPublisher;
         }
 
         @Override
@@ -158,7 +197,7 @@ class ModeratorTest {
 
         @Override
         public io.micrometer.core.instrument.MeterRegistry meterRegistry() {
-            return new SimpleMeterRegistry();
+            return meterRegistry;
         }
 
         @Override
@@ -169,6 +208,77 @@ class ModeratorTest {
         @Override
         public io.pockethive.observability.ObservabilityContext observabilityContext() {
             return new io.pockethive.observability.ObservabilityContext();
+        }
+    }
+
+    private static final class MutableClock extends Clock {
+
+        private Instant current;
+        private final ZoneId zone;
+
+        private MutableClock(Instant start, ZoneId zone) {
+            this.current = start;
+            this.zone = zone;
+        }
+
+        private void advance(Duration duration) {
+            if (duration == null || duration.isNegative()) {
+                return;
+            }
+            current = current.plus(duration);
+        }
+
+        @Override
+        public ZoneId getZone() {
+            return zone;
+        }
+
+        @Override
+        public Clock withZone(ZoneId zone) {
+            return new MutableClock(current, zone);
+        }
+
+        @Override
+        public Instant instant() {
+            return current;
+        }
+    }
+
+    private static final class CapturingStatusPublisher implements StatusPublisher {
+
+        private final Map<String, Object> lastData = new ConcurrentHashMap<>();
+        private String inRoute;
+        private String outRoute;
+
+        @Override
+        public StatusPublisher workIn(String route) {
+            this.inRoute = route;
+            return this;
+        }
+
+        @Override
+        public StatusPublisher workOut(String route) {
+            this.outRoute = route;
+            return this;
+        }
+
+        @Override
+        public void update(java.util.function.Consumer<MutableStatus> consumer) {
+            consumer.accept(new Mutable(lastData));
+        }
+
+        private static final class Mutable implements MutableStatus {
+            private final Map<String, Object> target;
+
+            private Mutable(Map<String, Object> target) {
+                this.target = target;
+            }
+
+            @Override
+            public MutableStatus data(String key, Object value) {
+                target.put(key, value);
+                return this;
+            }
         }
     }
 }
