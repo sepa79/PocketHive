@@ -4,6 +4,11 @@ role: swarm-controller
 image:
   name: pockethive-swarm-controller
   tag: latest
+ui:
+  label: "Swarm Controller"
+  color: "#f97316"
+  shape: "square"
+  abbreviation: "SC"
 config: []
 actions: []
 panels: []

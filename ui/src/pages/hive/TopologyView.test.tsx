@@ -1,10 +1,16 @@
 /**
  * @vitest-environment jsdom
  */
+import { vi, test, expect, beforeEach } from 'vitest'
+const apiFetchMock = vi.fn()
+
+vi.mock('../../lib/api', () => ({
+  apiFetch: apiFetchMock,
+}))
+
 import { render, act, within } from '@testing-library/react'
 import TopologyView from './TopologyView'
 import React, { type ReactNode } from 'react'
-import { vi, test, expect, beforeEach } from 'vitest'
 
 interface Node {
   id: string
@@ -116,6 +122,11 @@ const components = [
 const updateNodePosition = vi.fn<(id: string, x: number, y: number) => void>()
 
 beforeEach(() => {
+  apiFetchMock.mockReset()
+  apiFetchMock.mockResolvedValue({
+    ok: true,
+    json: async () => [],
+  } as unknown as Response)
   const orchestrator = components.find((component) => component.id === 'hive-orchestrator')
   if (orchestrator) {
     orchestrator.name = 'hive-orchestrator'

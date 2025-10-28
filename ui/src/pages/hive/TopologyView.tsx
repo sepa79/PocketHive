@@ -21,6 +21,12 @@ import {
   updateNodePosition,
   type Topology,
 } from '../../lib/stompClient'
+import { apiFetch } from '../../lib/api'
+import {
+  normalizeManifests,
+  buildRoleAppearanceMap,
+  type RoleAppearanceMap,
+} from '../../lib/capabilities'
 import type { Component } from '../../types/hive'
 import './TopologyView.css'
 
@@ -69,23 +75,25 @@ const shapeOrder: NodeShape[] = [
   'star',
 ]
 
-const workerColorPalette: Record<string, string> = {
-  orchestrator: '#38bdf8',
-  'swarm-controller': '#f97316',
-  generator: '#22d3ee',
-  processor: '#a855f7',
-  moderator: '#f472b6',
-  postprocessor: '#facc15',
-  trigger: '#34d399',
-  wiremock: '#f59e0b',
+const DEFAULT_COLOR = '#60a5fa'
+const DISABLED_COLOR = '#64748b'
+
+function normalizeRoleKey(value?: string): string {
+  return typeof value === 'string' ? value.trim().toLowerCase() : ''
 }
 
-function getComponentFill(type?: string, enabled?: boolean): string {
-  if (enabled === false) {
-    return '#64748b'
+function fallbackColorForRole(role: string): string {
+  const key = normalizeRoleKey(role)
+  if (!key) return DEFAULT_COLOR
+  let hash = 0
+  for (let i = 0; i < key.length; i++) {
+    hash = (hash << 5) - hash + key.charCodeAt(i)
+    hash |= 0
   }
-  const normalized = type?.toLowerCase() ?? ''
-  return workerColorPalette[normalized] ?? '#60a5fa'
+  const hue = Math.abs(hash) % 360
+  const saturation = 65
+  const lightness = 55
+  return `hsl(${hue}, ${saturation}%, ${lightness}%)`
 }
 
 interface ShapeNodeData {
@@ -98,6 +106,7 @@ interface ShapeNodeData {
   status?: string
   meta?: Record<string, unknown>
   role?: string
+  fill?: string
   [key: string]: unknown
 }
 
@@ -109,9 +118,24 @@ function formatMetaValue(value: unknown): string | null {
   return null
 }
 
+function abbreviateName(name: string | undefined): string {
+  if (!name) return ''
+  return name
+    .split(/[-_\s]+/)
+    .filter((part) => part.length > 0)
+    .map((part) => part[0]?.toUpperCase() ?? '')
+    .join('')
+    .slice(0, 2)
+}
+
 function ShapeNode({ data, selected }: NodeProps<ShapeNodeData>) {
   const size = 10
-  const fill = getComponentFill(data.componentType, data.enabled)
+  const fill =
+    data.enabled === false
+      ? DISABLED_COLOR
+      : typeof data.fill === 'string' && data.fill.trim().length > 0
+      ? data.fill
+      : DEFAULT_COLOR
   const isOrchestrator = data.componentType === 'orchestrator'
   const role = data.role || data.componentType
   const componentId =
@@ -201,6 +225,9 @@ interface SwarmGroupComponentData {
   shape: NodeShape
   enabled?: boolean
   componentType?: string
+  fill?: string
+  abbreviation?: string
+  queueCount?: number
 }
 
 interface SwarmGroupEdgeData {
@@ -262,14 +289,17 @@ function SwarmGroupNode({ data }: NodeProps<SwarmGroupNodeData>) {
 
   const renderShape = useCallback(
     (comp: SwarmGroupComponentData & { x: number; y: number }) => {
-      const fill = getComponentFill(comp.componentType ?? comp.name, comp.enabled)
+      const fill =
+        comp.enabled === false
+          ? DISABLED_COLOR
+          : typeof comp.fill === 'string' && comp.fill.trim().length > 0
+          ? comp.fill
+          : DEFAULT_COLOR
       const iconRadius = comp.id === data.controllerId ? 14 : 11
-      const label = comp.name
-        .split(/[-_]/)
-        .filter((part) => part.length > 0)
-        .map((part) => part[0]?.toUpperCase() ?? '')
-        .join('')
-        .slice(0, 2)
+      const abbreviation =
+        typeof comp.abbreviation === 'string' && comp.abbreviation.trim().length > 0
+          ? comp.abbreviation.trim()
+          : abbreviateName(comp.name)
       return (
         <g key={comp.id}>
           {comp.id === data.selectedId && (
@@ -352,7 +382,7 @@ function SwarmGroupNode({ data }: NodeProps<SwarmGroupNodeData>) {
             textAnchor="middle"
             className="swarm-group__icon-label"
           >
-            {label || '?'}
+            {abbreviation || '?'}
           </text>
         </g>
       )
@@ -444,12 +474,40 @@ function starPoints(r: number) {
 
 export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSelect }: Props) {
   const [data, setData] = useState<GraphData>({ nodes: [], links: [] })
+  const [roleAppearances, setRoleAppearances] = useState<RoleAppearanceMap>({})
   const shapeMapRef = useRef<Record<string, NodeShape>>({ sut: 'circle' })
   const [queueDepths, setQueueDepths] = useState<Record<string, number>>({})
   const [componentsById, setComponentsById] = useState<Record<string, Component>>({})
   const flowRef = useRef<ReactFlowInstance<FlowNode, Edge> | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const [rfNodes, setRfNodes] = useState<FlowNode[]>([])
+
+  useEffect(() => {
+    let cancelled = false
+    const load = async () => {
+      try {
+        const response = await apiFetch('/scenario-manager/api/capabilities?all=true', {
+          headers: { Accept: 'application/json' },
+        })
+        if (!response.ok) {
+          if (!cancelled) setRoleAppearances({})
+          return
+        }
+        const payload = await response.json()
+        if (cancelled) return
+        const manifests = normalizeManifests(payload)
+        setRoleAppearances(buildRoleAppearanceMap(manifests))
+      } catch {
+        if (!cancelled) {
+          setRoleAppearances({})
+        }
+      }
+    }
+    void load()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   useEffect(() => {
     const unsub = subscribeComponents((comps: Component[]) => {
@@ -524,15 +582,61 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
     return () => window.removeEventListener('resize', update)
   }, [])
 
-  const getShape = (type: string): NodeShape => {
-    const map = shapeMapRef.current
-    if (!map[type]) {
-      const used = new Set(Object.values(map))
-      const next = shapeOrder.find((s) => !used.has(s)) ?? 'circle'
-      map[type] = next
-    }
-    return map[type]
-  }
+  const getFill = useCallback(
+    (type?: string, enabled?: boolean) => {
+      if (enabled === false) return DISABLED_COLOR
+      const key = normalizeRoleKey(type)
+      if (!key) return DEFAULT_COLOR
+      const appearance = roleAppearances[key]
+      const color = appearance?.color?.trim()
+      return color && color.length > 0 ? color : fallbackColorForRole(key)
+    },
+    [roleAppearances],
+  )
+
+  const getRoleLabel = useCallback(
+    (componentRole: string | undefined, type: string) => {
+      const key = normalizeRoleKey(type)
+      const appearanceLabel = roleAppearances[key]?.label?.trim()
+      if (appearanceLabel && appearanceLabel.length > 0) {
+        return appearanceLabel
+      }
+      const normalizedComponent = componentRole?.trim()
+      if (normalizedComponent && normalizedComponent.length > 0) {
+        return normalizedComponent
+      }
+      return type
+    },
+    [roleAppearances],
+  )
+
+  const getRoleAbbreviation = useCallback(
+    (type: string) => {
+      const key = normalizeRoleKey(type)
+      const abbreviation = roleAppearances[key]?.abbreviation?.trim()
+      return abbreviation && abbreviation.length > 0 ? abbreviation : ''
+    },
+    [roleAppearances],
+  )
+
+  const getShape = useCallback(
+    (type: string): NodeShape => {
+      const key = normalizeRoleKey(type)
+      const map = shapeMapRef.current
+      const preferred = roleAppearances[key]?.shape
+      if (preferred) {
+        map[key] = preferred
+        return preferred
+      }
+      if (!map[key]) {
+        const used = new Set(Object.values(map))
+        const next = shapeOrder.find((s) => !used.has(s)) ?? 'circle'
+        map[key] = next
+      }
+      return map[key]
+    },
+    [roleAppearances],
+  )
 
   const handleDetails = useCallback(
     (targetSwarm: string) => {
@@ -568,7 +672,7 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
             y: node.y ?? previous?.y ?? 0,
           }
           const component = componentsById[node.id]
-          const role = component?.role?.trim() || node.type
+          const role = getRoleLabel(component?.role, node.type)
           const label =
             component?.name?.trim() ||
             component?.id?.trim() ||
@@ -586,6 +690,7 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
               status: component?.status,
               meta: component?.config,
               role,
+              fill: getFill(node.type, node.enabled),
             },
             type: 'shape',
             selected: selectedId === node.id,
@@ -611,22 +716,29 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
           nodes.push({
             id: controller.id,
             position,
-            data: {
-              label: swarmKey,
-              swarmId: swarmKey,
-              controllerId: controller.id,
-              components: members.map((member) => ({
-                id: member.id,
-                name: member.type,
-                shape: getShape(member.type),
-                enabled: member.enabled,
-                componentType: member.type,
-              })),
-              edges: groupEdges,
-              onDetails: handleDetails,
-              selectedId,
-            },
-            type: 'swarmGroup',
+              data: {
+                label: swarmKey,
+                swarmId: swarmKey,
+                controllerId: controller.id,
+                components: members.map((member) => {
+                  const componentData = componentsById[member.id]
+                  const roleLabel = getRoleLabel(componentData?.role, member.type)
+                  return {
+                    id: member.id,
+                    name: roleLabel,
+                    shape: getShape(member.type),
+                    enabled: member.enabled,
+                    componentType: member.type,
+                    fill: getFill(member.type, member.enabled),
+                    abbreviation: getRoleAbbreviation(member.type),
+                    queueCount: componentData?.queues?.length ?? 0,
+                  }
+                }),
+                edges: groupEdges,
+                onDetails: handleDetails,
+                selectedId,
+              },
+              type: 'swarmGroup',
             selectable: false,
           })
         })
@@ -639,7 +751,7 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
           y: node.y ?? previous?.y ?? 0,
         }
         const component = componentsById[node.id]
-        const role = component?.role?.trim() || node.type
+        const role = getRoleLabel(component?.role, node.type)
         const label =
           component?.name?.trim() ||
           component?.id?.trim() ||
@@ -657,13 +769,26 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
             status: component?.status,
             meta: component?.config,
             role,
+            fill: getFill(node.type, node.enabled),
           },
           type: 'shape',
           selected: selectedId === node.id,
         }
       }) as FlowNode[]
     })
-  }, [componentsById, data.links, data.nodes, queueDepths, handleDetails, selectedId, swarmId])
+  }, [
+    componentsById,
+    data.links,
+    data.nodes,
+    queueDepths,
+    handleDetails,
+    selectedId,
+    swarmId,
+    getFill,
+    getRoleAbbreviation,
+    getRoleLabel,
+    getShape,
+  ])
 
   const nodeById = useMemo(() => {
     const map = new Map<string, GraphNode>()
@@ -776,7 +901,8 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
       <div className="topology-legend">
         {types.map((t) => {
           const shape = getShape(t)
-          const fill = getComponentFill(t)
+          const fill = getFill(t)
+          const displayLabel = roleAppearances[normalizeRoleKey(t)]?.label ?? t
           return (
             <div key={t} className="legend-item">
               <svg width="12" height="12" className="legend-icon">
@@ -802,7 +928,7 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
                   <circle cx="6" cy="6" r="5" fill={fill} stroke="black" />
                 )}
               </svg>
-              <span>{t}</span>
+              <span>{displayLabel}</span>
             </div>
           )
         })}

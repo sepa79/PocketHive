@@ -57,7 +57,7 @@ class CapabilityCatalogueControllerTest {
     void capabilityLookupByDigestReturnsManifest() throws Exception {
         CapabilityManifest manifest = new CapabilityManifest(
                 "1.0", "2.0", new CapabilityManifest.Image("image/name", "latest", "sha256:abc"),
-                "role", List.of(), List.of(), List.of());
+                "role", List.of(), List.of(), List.of(), null);
         given(catalogue.findByDigest("sha256:abc")).willReturn(Optional.of(manifest));
 
         mvc.perform(get("/api/capabilities").param("imageDigest", "sha256:abc"))
@@ -77,7 +77,7 @@ class CapabilityCatalogueControllerTest {
     void capabilityLookupReturnsAllWhenRequested() throws Exception {
         CapabilityManifest manifest = new CapabilityManifest(
                 "1.0", "2.0", new CapabilityManifest.Image("image/name", "latest", "sha256:def"),
-                "role", List.of(), List.of(), List.of());
+                "role", List.of(), List.of(), List.of(), null);
         given(catalogue.allManifests()).willReturn(List.of(manifest));
 
         mvc.perform(get("/api/capabilities").param("all", "true"))

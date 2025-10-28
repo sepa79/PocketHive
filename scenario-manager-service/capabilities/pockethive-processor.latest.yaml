@@ -4,6 +4,11 @@ role: processor
 image:
   name: pockethive-processor
   tag: latest
+ui:
+  label: "Processor"
+  color: "#a855f7"
+  shape: "diamond"
+  abbreviation: "PR"
 config:
   - name: enabled
     type: boolean

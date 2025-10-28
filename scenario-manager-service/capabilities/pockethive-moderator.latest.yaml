@@ -4,6 +4,11 @@ role: moderator
 image:
   name: pockethive-moderator
   tag: latest
+ui:
+  label: "Moderator"
+  color: "#f472b6"
+  shape: "pentagon"
+  abbreviation: "MO"
 config:
   - name: enabled
     type: boolean
