@@ -27,6 +27,8 @@ pockethive:
       skip-self-signals: false
       moderator:
         enabled: false
+        # Manual ACK listener uses a single consumer with configurable prefetch (1..10).
+        prefetch: 5
         time:
           mode: warp
           warp-factor: 1

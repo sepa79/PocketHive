@@ -1,5 +1,6 @@
 package io.pockethive.moderator;
 
+import com.rabbitmq.client.Channel;
 import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.moderator.shaper.config.PatternConfigValidator;
 import io.pockethive.worker.sdk.config.WorkerType;
@@ -60,6 +61,29 @@ class ModeratorRuntimeAdapter implements ApplicationListener<ContextRefreshedEve
             () -> patternValidator.validate(moderatorDefaults.asConfig()),
             config -> patternValidator.validate(config).enabled())
         .dispatcher(message -> runtime.dispatch(workerDefinition.beanName(), message))
+        .manualAckStrategy((amqpMessage, channelRef, deliveryTag, acknowledgment, workerCall) -> {
+          boolean processed = workerCall.getAsBoolean();
+          if (!processed) {
+            return;
+          }
+          try {
+            long tag = deliveryTag;
+            if (tag < 0L) {
+              log.warn("Cannot acknowledge moderator message; delivery tag missing");
+              return;
+            }
+            if (acknowledgeWithHandle(acknowledgment)) {
+              return;
+            }
+            if (channelRef == null) {
+              log.warn("Cannot acknowledge moderator message; channel handle missing");
+              return;
+            }
+            channelRef.basicAck(tag, false);
+          } catch (Exception ex) {
+            throw new IllegalStateException("Failed to acknowledge moderator message", ex);
+          }
+        })
         .rabbitTemplate(template)
         .dispatchErrorHandler(ex -> log.warn("Moderator worker invocation failed", ex))
         .build();
@@ -73,12 +97,30 @@ class ModeratorRuntimeAdapter implements ApplicationListener<ContextRefreshedEve
   @RabbitListener(
       id = LISTENER_ID,
       queues = "${pockethive.control-plane.queues.generator}")
-  public void onWork(Message message) {
-    delegate.onWork(message);
+  public void onWork(Message message, Channel channel) {
+    delegate.onWork(message, channel);
+  }
+
+  void onWork(Message message, Channel channel, Object acknowledgment) {
+    delegate.onWork(message, channel, acknowledgment);
   }
 
   @Override
   public void onApplicationEvent(ContextRefreshedEvent event) {
     delegate.onApplicationEvent(event);
+  }
+
+  private static boolean acknowledgeWithHandle(Object acknowledgment) {
+    if (acknowledgment == null) {
+      return false;
+    }
+    try {
+      acknowledgment.getClass().getMethod("acknowledge").invoke(acknowledgment);
+      return true;
+    } catch (NoSuchMethodException | IllegalAccessException ignored) {
+      return false;
+    } catch (Exception ex) {
+      throw new IllegalStateException("Failed to acknowledge moderator message via handle", ex);
+    }
   }
 }

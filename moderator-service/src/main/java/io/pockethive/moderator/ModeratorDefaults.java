@@ -51,6 +51,7 @@ class ModeratorDefaults {
       "noise", "ph/mod/noise-01",
       "jitter", "ph/mod/run-001"
   ));
+  private int prefetch = 5;
   private final PatternConfigValidator validator;
 
   ModeratorDefaults(PatternConfigValidator validator) {
@@ -119,6 +120,17 @@ class ModeratorDefaults {
 
   public void setSeeds(SeedsConfig seeds) {
     this.seeds = seeds;
+  }
+
+  public int getPrefetch() {
+    return prefetch;
+  }
+
+  public void setPrefetch(int prefetch) {
+    if (prefetch < 1 || prefetch > 10) {
+      throw new IllegalArgumentException("Prefetch must be between 1 and 10 inclusive");
+    }
+    this.prefetch = prefetch;
   }
 
   ModeratorWorkerConfig asConfig() {

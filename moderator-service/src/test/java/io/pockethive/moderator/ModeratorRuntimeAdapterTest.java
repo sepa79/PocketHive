@@ -1,8 +1,10 @@
 package io.pockethive.moderator;
 
+import com.rabbitmq.client.Channel;
 import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.controlplane.spring.WorkerControlPlaneProperties;
 import io.pockethive.moderator.shaper.config.PatternConfig;
+import io.pockethive.moderator.shaper.config.PatternConfigValidator;
 import io.pockethive.moderator.shaper.config.RepeatAlignment;
 import io.pockethive.moderator.shaper.config.RepeatConfig;
 import io.pockethive.moderator.shaper.config.RepeatUntil;
@@ -12,7 +14,6 @@ import io.pockethive.moderator.shaper.config.StepRangeConfig;
 import io.pockethive.moderator.shaper.config.StepRangeUnit;
 import io.pockethive.moderator.shaper.config.TransitionConfig;
 import io.pockethive.moderator.shaper.config.TransitionType;
-import io.pockethive.moderator.shaper.config.PatternConfigValidator;
 import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pockethive.worker.sdk.api.WorkResult;
 import io.pockethive.worker.sdk.autoconfigure.WorkerControlQueueListener;
@@ -33,6 +34,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.amqp.core.Message;
@@ -45,14 +47,19 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
-import static org.mockito.Mockito.lenient;
 
 @ExtendWith(MockitoExtension.class)
 class ModeratorRuntimeAdapterTest {
@@ -74,6 +81,9 @@ class ModeratorRuntimeAdapterTest {
 
   @Mock
   private MessageListenerContainer listenerContainer;
+
+  @Mock
+  private Channel channel;
 
   private ModeratorDefaults defaults;
   private PatternConfigValidator validator;
@@ -140,13 +150,87 @@ class ModeratorRuntimeAdapterTest {
     verify(controlPlaneRuntime).emitStatusSnapshot();
 
     Message inbound = new RabbitWorkMessageConverter().toMessage(WorkMessage.text("body").build());
-    adapter.onWork(inbound);
+    inbound.getMessageProperties().setDeliveryTag(321L);
+    adapter.onWork(inbound, channel, null);
 
     verify(workerRuntime).dispatch(eq("moderatorWorker"), any(WorkMessage.class));
     ArgumentCaptor<Message> messageCaptor = ArgumentCaptor.forClass(Message.class);
     verify(rabbitTemplate).send(eq(definition.exchange()), eq(definition.outQueue()), messageCaptor.capture());
     assertThat(new String(messageCaptor.getValue().getBody(), StandardCharsets.UTF_8))
         .isEqualTo("forwarded");
+    verify(channel).basicAck(inbound.getMessageProperties().getDeliveryTag(), false);
+  }
+
+  @Test
+  void onWorkAcknowledgesViaSpringHandleWhenProvided() throws Exception {
+    when(workerRegistry.findByRoleAndType("moderator", WorkerType.MESSAGE))
+        .thenReturn(Optional.of(definition));
+    stubListenerContainerStopped();
+    doReturn(WorkResult.none())
+        .when(workerRuntime)
+        .dispatch(eq("moderatorWorker"), any(WorkMessage.class));
+
+    ModeratorRuntimeAdapter adapter = new ModeratorRuntimeAdapter(
+        workerRuntime,
+        workerRegistry,
+        controlPlaneRuntime,
+        rabbitTemplate,
+        listenerRegistry,
+        identity,
+        defaults,
+        validator
+    );
+
+    adapter.initialiseStateListener();
+
+    Message inbound = new RabbitWorkMessageConverter().toMessage(WorkMessage.text("body").build());
+    TestAcknowledgment acknowledgment = new TestAcknowledgment();
+
+    adapter.onWork(inbound, null, acknowledgment);
+
+    InOrder inOrder = inOrder(workerRuntime);
+    inOrder.verify(workerRuntime).dispatch(eq("moderatorWorker"), any(WorkMessage.class));
+    assertThat(acknowledgment.acknowledged).isTrue();
+    verifyNoInteractions(channel);
+  }
+
+  private static final class TestAcknowledgment {
+
+    private boolean acknowledged;
+
+    public void acknowledge() {
+      this.acknowledged = true;
+    }
+  }
+
+  @Test
+  void manualAckNotIssuedWhenDispatchFails() throws Exception {
+    when(workerRegistry.findByRoleAndType("moderator", WorkerType.MESSAGE))
+        .thenReturn(Optional.of(definition));
+    stubListenerContainerStopped();
+    RuntimeException failure = new RuntimeException("boom");
+    doThrow(failure)
+        .when(workerRuntime)
+        .dispatch(eq("moderatorWorker"), any(WorkMessage.class));
+
+    ModeratorRuntimeAdapter adapter = new ModeratorRuntimeAdapter(
+        workerRuntime,
+        workerRegistry,
+        controlPlaneRuntime,
+        rabbitTemplate,
+        listenerRegistry,
+        identity,
+        defaults,
+        validator
+    );
+
+    adapter.initialiseStateListener();
+
+    Message inbound = new RabbitWorkMessageConverter().toMessage(WorkMessage.text("body").build());
+    inbound.getMessageProperties().setDeliveryTag(654L);
+    adapter.onWork(inbound, channel, null);
+
+    verify(channel, never()).basicAck(anyLong(), anyBoolean());
   }
 
   @Test
@@ -228,7 +312,7 @@ class ModeratorRuntimeAdapterTest {
     doThrow(new RuntimeException("boom")).when(workerRuntime)
         .dispatch(eq("moderatorWorker"), any(WorkMessage.class));
 
-    assertThatCode(() -> adapter.onWork(inbound)).doesNotThrowAnyException();
+    assertThatCode(() -> adapter.onWork(inbound, channel, null)).doesNotThrowAnyException();
   }
 
   @Test

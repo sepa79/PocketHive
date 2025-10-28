@@ -6,6 +6,7 @@ import io.pockethive.worker.sdk.api.WorkResult;
 import io.pockethive.worker.sdk.config.WorkerType;
 import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
+import com.rabbitmq.client.Channel;
 import java.nio.charset.StandardCharsets;
 import java.util.Optional;
 import java.util.function.Consumer;
@@ -29,6 +30,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
@@ -325,6 +328,102 @@ class RabbitMessageWorkerAdapterTest {
             .isInstanceOf(IllegalStateException.class)
             .hasMessageContaining("message result publisher");
         verify(rabbitTemplate, never()).send(anyString(), anyString(), any(Message.class));
+    }
+
+    @Test
+    void manualAckStrategyAcksOnlyAfterSuccessfulDispatch() throws Exception {
+        RabbitMessageWorkerAdapter.ManualAckStrategy strategy = (message, channel, deliveryTag, acknowledgment, workerCall) -> {
+            boolean processed = workerCall.getAsBoolean();
+            if (processed) {
+                channel.basicAck(deliveryTag, false);
+            }
+        };
+        RabbitMessageWorkerAdapter adapter = builder()
+            .manualAckStrategy(strategy)
+            .build();
+        RabbitWorkMessageConverter converter = new RabbitWorkMessageConverter();
+        Message inbound = converter.toMessage(WorkMessage.text("payload").build());
+        inbound.getMessageProperties().setDeliveryTag(123L);
+
+        when(dispatcher.dispatch(any(WorkMessage.class))).thenReturn(WorkResult.none());
+
+        Channel channel = mock(Channel.class);
+        adapter.onWork(inbound, channel);
+
+        InOrder inOrder = Mockito.inOrder(dispatcher, channel);
+        inOrder.verify(dispatcher).dispatch(any(WorkMessage.class));
+        inOrder.verify(channel).basicAck(inbound.getMessageProperties().getDeliveryTag(), false);
+    }
+
+    @Test
+    void manualAckStrategySkipsAckWhenDispatchFails() throws Exception {
+        RabbitMessageWorkerAdapter.ManualAckStrategy strategy = (message, channel, deliveryTag, acknowledgment, workerCall) -> {
+            boolean processed = workerCall.getAsBoolean();
+            if (processed) {
+                channel.basicAck(deliveryTag, false);
+            }
+        };
+        RabbitMessageWorkerAdapter adapter = builder()
+            .manualAckStrategy(strategy)
+            .build();
+        RabbitWorkMessageConverter converter = new RabbitWorkMessageConverter();
+        Message inbound = converter.toMessage(WorkMessage.text("payload").build());
+        inbound.getMessageProperties().setDeliveryTag(456L);
+        RuntimeException failure = new RuntimeException("boom");
+        doThrow(failure).when(dispatcher).dispatch(any(WorkMessage.class));
+
+        Channel channel = mock(Channel.class);
+        adapter.onWork(inbound, channel);
+
+        verify(channel, never()).basicAck(anyLong(), anyBoolean());
+        verify(errorHandler).accept(failure);
+    }
+
+    @Test
+    void manualAckStrategyUsesAcknowledgmentWhenProvided() throws Exception {
+        TestAcknowledgment acknowledgment = new TestAcknowledgment();
+        RabbitMessageWorkerAdapter.ManualAckStrategy strategy = (message, channel, deliveryTag, ack, workerCall) -> {
+            boolean processed = workerCall.getAsBoolean();
+            if (processed) {
+                ((TestAcknowledgment) ack).acknowledge();
+            }
+        };
+        RabbitMessageWorkerAdapter adapter = builder()
+            .manualAckStrategy(strategy)
+            .build();
+        RabbitWorkMessageConverter converter = new RabbitWorkMessageConverter();
+        Message inbound = converter.toMessage(WorkMessage.text("payload").build());
+
+        when(dispatcher.dispatch(any(WorkMessage.class))).thenReturn(WorkResult.none());
+
+        adapter.onWork(inbound, null, acknowledgment);
+
+        assertThat(acknowledgment.acknowledged).isTrue();
+    }
+
+    @Test
+    void acknowledgesAutomaticallyWhenNoStrategyButAcknowledgmentProvided() throws Exception {
+        RabbitMessageWorkerAdapter adapter = builder().build();
+        RabbitWorkMessageConverter converter = new RabbitWorkMessageConverter();
+        Message inbound = converter.toMessage(WorkMessage.text("payload").build());
+        TestAcknowledgment acknowledgment = new TestAcknowledgment();
+
+        when(dispatcher.dispatch(any(WorkMessage.class))).thenReturn(WorkResult.none());
+
+        adapter.onWork(inbound, null, acknowledgment);
+
+        InOrder inOrder = Mockito.inOrder(dispatcher);
+        inOrder.verify(dispatcher).dispatch(any(WorkMessage.class));
+        assertThat(acknowledgment.acknowledged).isTrue();
+    }
+
+    private static final class TestAcknowledgment {
+
+        private boolean acknowledged;
+
+        public void acknowledge() {
+            this.acknowledged = true;
+        }
     }
 
     private RabbitMessageWorkerAdapter.Builder baseBuilder() {
