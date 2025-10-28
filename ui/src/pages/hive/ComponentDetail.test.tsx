@@ -1,15 +1,17 @@
 /**
  * @vitest-environment jsdom
  */
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import '@testing-library/jest-dom/vitest'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import ComponentDetail from './ComponentDetail'
+import type { CapabilityManifest } from '../../types/capabilities'
 import type { Component } from '../../types/hive'
 import type { WiremockComponentConfig } from '../../lib/wiremockClient'
 import { fetchWiremockComponent } from '../../lib/wiremockClient'
 import { upsertSyntheticComponent } from '../../lib/stompClient'
+import { sendConfigUpdate } from '../../lib/orchestratorApi'
 
 vi.mock('../../lib/orchestratorApi', () => ({
   sendConfigUpdate: vi.fn(),
@@ -56,9 +58,65 @@ const wiremockComponent: Component = {
   config: wiremockConfig,
 }
 
+const generatorManifest: CapabilityManifest = {
+  schemaVersion: '1.0',
+  capabilitiesVersion: '1.0',
+  image: { name: 'pockethive-generator', tag: 'latest', digest: null },
+  role: 'generator',
+  config: [
+    { name: 'enabled', type: 'boolean', default: true, ui: { label: 'Enabled' } },
+    {
+      name: 'ratePerSec',
+      type: 'number',
+      default: 5,
+      min: 0,
+      max: 1000,
+      ui: { label: 'Rate (msg/s)' },
+    },
+    {
+      name: 'message.body',
+      type: 'json',
+      default: { sample: true },
+      multiline: true,
+      ui: { label: 'Body JSON' },
+    },
+  ],
+  actions: [
+    {
+      id: 'single',
+      label: 'Single fire',
+      params: [
+        { name: 'count', type: 'int', default: 1, required: true, ui: { label: 'Count to send' } },
+      ],
+    },
+  ],
+  panels: [],
+  ui: { label: 'Generator' },
+}
+
+function createGeneratorComponent(): Component {
+  return {
+    id: 'generator-1',
+    name: 'generator-1',
+    role: 'generator',
+    lastHeartbeat: baseTimestamp - 2000,
+    uptimeSec: 300,
+    version: '1.0.0',
+    env: 'dev',
+    queues: [],
+    config: {
+      enabled: true,
+      ratePerSec: 5,
+      message: { body: { sample: true } },
+    },
+    capabilities: generatorManifest,
+  }
+}
+
 describe('ComponentDetail wiremock panel', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.mocked(sendConfigUpdate).mockResolvedValue(undefined)
     vi.mocked(fetchWiremockComponent).mockResolvedValue({
       ...wiremockComponent,
       config: { ...wiremockConfig, lastUpdatedTs: baseTimestamp },
@@ -139,5 +197,68 @@ describe('ComponentDetail wiremock panel', () => {
         }),
       )
     })
+  })
+})
+
+describe('ComponentDetail manifest-driven panel', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(sendConfigUpdate).mockResolvedValue(undefined)
+  })
+
+  afterEach(() => {
+    cleanup()
+  })
+
+  it('renders manifest-defined config fields and submits payload', async () => {
+    const user = userEvent.setup()
+    const component = createGeneratorComponent()
+    render(<ComponentDetail component={component} onClose={() => {}} />)
+
+    const enabledToggle = screen.getByLabelText(/Enabled/) as HTMLInputElement
+    expect(enabledToggle).toBeChecked()
+    await user.click(enabledToggle)
+
+    const rateInput = screen.getByLabelText(/Rate \(msg\/s\)/) as HTMLInputElement
+    expect(rateInput).toHaveValue(5)
+    await user.clear(rateInput)
+    await user.type(rateInput, '12')
+
+    const bodyInput = screen.getByLabelText(/Body JSON/) as HTMLTextAreaElement
+    fireEvent.change(bodyInput, { target: { value: '{"hello":"world"}' } })
+
+    const confirmButton = screen.getByRole('button', { name: 'Confirm' })
+    await user.click(confirmButton)
+
+    await waitFor(() => {
+      expect(sendConfigUpdate).toHaveBeenCalledTimes(1)
+    })
+
+    const [, payload] = vi.mocked(sendConfigUpdate).mock.calls[0]
+    expect(payload).toEqual({
+      enabled: false,
+      ratePerSec: 12,
+      message: { body: { hello: 'world' } },
+    })
+  })
+
+  it('sends manifest-defined actions with parameters', async () => {
+    const user = userEvent.setup()
+    const component = createGeneratorComponent()
+    render(<ComponentDetail component={component} onClose={() => {}} />)
+
+    const countInput = screen.getByLabelText(/Count to send/) as HTMLInputElement
+    await user.clear(countInput)
+    await user.type(countInput, '3')
+
+    const actionButton = screen.getByRole('button', { name: 'Run Single fire' })
+    await user.click(actionButton)
+
+    await waitFor(() => {
+      expect(sendConfigUpdate).toHaveBeenCalledTimes(1)
+    })
+
+    const [, payload] = vi.mocked(sendConfigUpdate).mock.calls[0]
+    expect(payload).toEqual({ action: { id: 'single', params: { count: 3 } } })
   })
 })

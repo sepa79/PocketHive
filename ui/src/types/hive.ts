@@ -1,3 +1,5 @@
+import type { CapabilityManifest } from './capabilities'
+
 export type HealthStatus = 'OK' | 'WARN' | 'ALERT'
 
 export interface QueueInfo {
@@ -20,5 +22,6 @@ export interface Component {
   status?: string
   queues: QueueInfo[]
   config?: Record<string, unknown>
+  capabilities?: CapabilityManifest | null
 }
 
