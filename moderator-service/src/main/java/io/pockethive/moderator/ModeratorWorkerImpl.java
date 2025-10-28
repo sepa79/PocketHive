@@ -22,8 +22,9 @@ import org.springframework.stereotype.Component;
  * engineers can extend it with validation or routing logic. Flip the
  * {@code pockethive.control-plane.worker.moderator.enabled}
  * flag in {@code application.yml} (or push a runtime override) to pause moderation during load
- * testing. The worker keeps publishing status updates so you can confirm its enabled/disabled state
- * from Grafana.</p>
+ * testing. The rich shaper configuration (time warp, repeat pattern, steps, mutators and seeds)
+ * is exposed under the same prefix and validated by {@link ModeratorWorkerConfig}. The worker keeps
+ * publishing status updates so you can confirm its enabled/disabled state from Grafana.</p>
  */
 @Component("moderatorWorker")
 @PocketHiveWorker(

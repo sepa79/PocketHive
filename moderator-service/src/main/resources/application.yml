@@ -25,6 +25,110 @@ pockethive:
     worker:
       role: moderator
       skip-self-signals: false
+      moderator:
+        enabled: false
+        time:
+          mode: warp
+          warp-factor: 1
+          tz: Europe/London
+        run:
+          total-time: 30d
+        pattern:
+          duration: 24h
+          base-rate-rps: 1000
+          repeat:
+            enabled: true
+            until: total_time
+            align: from_start
+          steps:
+            - id: overnight
+              range:
+                unit: percent
+                start-pct: 0
+                end-pct: 20
+              mode: flat
+              params:
+                factor: 0.3
+              mutators:
+                - type: noise
+                  settings:
+                    pct: 2
+                    seed: ph/mod/noise-01
+              transition:
+                type: smooth
+                percent: 5
+            - id: ramp-up
+              range:
+                unit: percent
+                start-pct: 20
+                end-pct: 45
+              mode: ramp
+              params:
+                from: 0.3
+                to: 1.1
+              mutators:
+                - type: burst
+                  settings:
+                    liftPct: 25
+                    durationMs:
+                      min: 5000
+                      max: 15000
+                    everyMs:
+                      min: 300000
+                      max: 600000
+                    jitterStartMs: 500
+                    seed: ph/mod/burst-01
+              transition:
+                type: linear
+                percent: 5
+            - id: peak
+              range:
+                unit: percent
+                start-pct: 45
+                end-pct: 75
+              mode: flat
+              params:
+                factor: 1.2
+              mutators:
+                - type: cap
+                  settings:
+                    min: 0.2
+                    max: 1.5
+              transition:
+                type: smooth
+                percent: 5
+            - id: taper
+              range:
+                unit: percent
+                start-pct: 75
+                end-pct: 100
+              mode: ramp
+              params:
+                from: 1.0
+                to: 0.4
+              mutators: []
+              transition:
+                type: none
+        normalization:
+          enabled: true
+          tolerance-pct: 5
+        global-mutators:
+          - type: spike
+            settings:
+              at: "12:00"
+              width: 5m
+              liftPct: 40
+        jitter:
+          type: sequence
+          max: 50ms
+          seed: ph/mod/run-001
+          period: 1s
+        seeds:
+          default-seed: ph/mod/default-seed
+          overrides:
+            burst: ph/mod/burst-01
+            noise: ph/mod/noise-01
+            jitter: ph/mod/run-001
     manager:
       enabled: false
 

@@ -1,6 +1,7 @@
 package io.pockethive.moderator;
 
 import io.pockethive.controlplane.ControlPlaneIdentity;
+import io.pockethive.moderator.shaper.config.PatternConfigValidator;
 import io.pockethive.worker.sdk.config.WorkerType;
 import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
@@ -33,7 +34,8 @@ class ModeratorRuntimeAdapter implements ApplicationListener<ContextRefreshedEve
                           RabbitTemplate rabbitTemplate,
                           RabbitListenerEndpointRegistry listenerRegistry,
                           ControlPlaneIdentity identity,
-                          ModeratorDefaults defaults) {
+                          ModeratorDefaults defaults,
+                          PatternConfigValidator validator) {
     WorkerRuntime runtime = Objects.requireNonNull(workerRuntime, "workerRuntime");
     WorkerRegistry registry = Objects.requireNonNull(workerRegistry, "workerRegistry");
     WorkerControlPlaneRuntime controlRuntime = Objects.requireNonNull(controlPlaneRuntime, "controlPlaneRuntime");
@@ -41,6 +43,7 @@ class ModeratorRuntimeAdapter implements ApplicationListener<ContextRefreshedEve
     RabbitListenerEndpointRegistry endpointRegistry = Objects.requireNonNull(listenerRegistry, "listenerRegistry");
     ControlPlaneIdentity controlIdentity = Objects.requireNonNull(identity, "identity");
     ModeratorDefaults moderatorDefaults = Objects.requireNonNull(defaults, "defaults");
+    PatternConfigValidator patternValidator = Objects.requireNonNull(validator, "patternValidator");
 
     WorkerDefinition workerDefinition = registry.findByRoleAndType("moderator", WorkerType.MESSAGE)
         .orElseThrow(() -> new IllegalStateException("Moderator worker definition not found"));
@@ -53,7 +56,9 @@ class ModeratorRuntimeAdapter implements ApplicationListener<ContextRefreshedEve
         .controlPlaneRuntime(controlRuntime)
         .listenerRegistry(endpointRegistry)
         .identity(controlIdentity)
-        .withConfigDefaults(ModeratorWorkerConfig.class, moderatorDefaults::asConfig, ModeratorWorkerConfig::enabled)
+        .withConfigDefaults(ModeratorWorkerConfig.class,
+            () -> patternValidator.validate(moderatorDefaults.asConfig()),
+            config -> patternValidator.validate(config).enabled())
         .dispatcher(message -> runtime.dispatch(workerDefinition.beanName(), message))
         .rabbitTemplate(template)
         .dispatchErrorHandler(ex -> log.warn("Moderator worker invocation failed", ex))

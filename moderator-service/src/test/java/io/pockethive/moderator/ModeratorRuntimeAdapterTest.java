@@ -2,6 +2,17 @@ package io.pockethive.moderator;
 
 import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.controlplane.spring.WorkerControlPlaneProperties;
+import io.pockethive.moderator.shaper.config.PatternConfig;
+import io.pockethive.moderator.shaper.config.RepeatAlignment;
+import io.pockethive.moderator.shaper.config.RepeatConfig;
+import io.pockethive.moderator.shaper.config.RepeatUntil;
+import io.pockethive.moderator.shaper.config.StepConfig;
+import io.pockethive.moderator.shaper.config.StepMode;
+import io.pockethive.moderator.shaper.config.StepRangeConfig;
+import io.pockethive.moderator.shaper.config.StepRangeUnit;
+import io.pockethive.moderator.shaper.config.TransitionConfig;
+import io.pockethive.moderator.shaper.config.TransitionType;
+import io.pockethive.moderator.shaper.config.PatternConfigValidator;
 import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pockethive.worker.sdk.api.WorkResult;
 import io.pockethive.worker.sdk.autoconfigure.WorkerControlQueueListener;
@@ -11,7 +22,11 @@ import io.pockethive.worker.sdk.runtime.WorkerDefinition;
 import io.pockethive.worker.sdk.runtime.WorkerRegistry;
 import io.pockethive.worker.sdk.runtime.WorkerRuntime;
 import io.pockethive.worker.sdk.transport.rabbit.RabbitWorkMessageConverter;
+import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.function.Consumer;
 import org.junit.jupiter.api.BeforeEach;
@@ -37,6 +52,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.lenient;
 
 @ExtendWith(MockitoExtension.class)
 class ModeratorRuntimeAdapterTest {
@@ -60,6 +76,7 @@ class ModeratorRuntimeAdapterTest {
   private MessageListenerContainer listenerContainer;
 
   private ModeratorDefaults defaults;
+  private PatternConfigValidator validator;
   private WorkerDefinition definition;
   private ControlPlaneIdentity identity;
 
@@ -71,7 +88,8 @@ class ModeratorRuntimeAdapterTest {
 
   @BeforeEach
   void setUp() {
-    defaults = new ModeratorDefaults();
+    validator = new PatternConfigValidator();
+    defaults = new ModeratorDefaults(validator);
     defaults.setEnabled(true);
     identity = new ControlPlaneIdentity(
         WORKER_PROPERTIES.getSwarmId(),
@@ -91,8 +109,8 @@ class ModeratorRuntimeAdapterTest {
   }
 
   private void stubListenerContainerStopped() {
-    when(listenerRegistry.getListenerContainer("moderatorWorkerListener")).thenReturn(listenerContainer);
-    when(listenerContainer.isRunning()).thenReturn(false);
+    lenient().when(listenerRegistry.getListenerContainer("moderatorWorkerListener")).thenReturn(listenerContainer);
+    lenient().when(listenerContainer.isRunning()).thenReturn(false);
   }
 
   @Test
@@ -111,13 +129,14 @@ class ModeratorRuntimeAdapterTest {
         rabbitTemplate,
         listenerRegistry,
         identity,
-        defaults
+        defaults,
+        validator
     );
 
     adapter.initialiseStateListener();
     ArgumentCaptor<Object> defaultConfigCaptor = ArgumentCaptor.forClass(Object.class);
     verify(controlPlaneRuntime).registerDefaultConfig(eq("moderatorWorker"), defaultConfigCaptor.capture());
-    assertThat(defaultConfigCaptor.getValue()).isEqualTo(new ModeratorWorkerConfig(true));
+    assertThat(defaultConfigCaptor.getValue()).isEqualTo(defaults.asConfig());
     verify(controlPlaneRuntime).emitStatusSnapshot();
 
     Message inbound = new RabbitWorkMessageConverter().toMessage(WorkMessage.text("body").build());
@@ -158,13 +177,14 @@ class ModeratorRuntimeAdapterTest {
         rabbitTemplate,
         listenerRegistry,
         identity,
-        defaults
+        defaults,
+        validator
     );
 
     adapter.initialiseStateListener();
     ArgumentCaptor<Object> defaultConfigCaptor = ArgumentCaptor.forClass(Object.class);
     verify(controlPlaneRuntime).registerDefaultConfig(eq("moderatorWorker"), defaultConfigCaptor.capture());
-    assertThat(defaultConfigCaptor.getValue()).isEqualTo(new ModeratorWorkerConfig(true));
+    assertThat(defaultConfigCaptor.getValue()).isEqualTo(defaults.asConfig());
     ArgumentCaptor<Consumer<WorkerControlPlaneRuntime.WorkerStateSnapshot>> listenerCaptor = ArgumentCaptor.forClass(Consumer.class);
     verify(controlPlaneRuntime).registerStateListener(eq("moderatorWorker"), listenerCaptor.capture());
     verify(listenerContainer, times(1)).start();
@@ -172,7 +192,17 @@ class ModeratorRuntimeAdapterTest {
 
     WorkerControlPlaneRuntime.WorkerStateSnapshot snapshot = mock(WorkerControlPlaneRuntime.WorkerStateSnapshot.class);
     when(snapshot.enabled()).thenReturn(Optional.empty());
-    when(snapshot.config(ModeratorWorkerConfig.class)).thenReturn(Optional.of(new ModeratorWorkerConfig(false)));
+    ModeratorWorkerConfig currentConfig = defaults.asConfig();
+    when(snapshot.config(ModeratorWorkerConfig.class)).thenReturn(Optional.of(new ModeratorWorkerConfig(
+        false,
+        currentConfig.time(),
+        currentConfig.run(),
+        currentConfig.pattern(),
+        currentConfig.normalization(),
+        currentConfig.globalMutators(),
+        currentConfig.jitter(),
+        currentConfig.seeds()
+    )));
     when(listenerContainer.isRunning()).thenReturn(true);
 
     listenerCaptor.getValue().accept(snapshot);
@@ -190,7 +220,8 @@ class ModeratorRuntimeAdapterTest {
         rabbitTemplate,
         listenerRegistry,
         identity,
-        defaults
+        defaults,
+        validator
     );
 
     Message inbound = new RabbitWorkMessageConverter().toMessage(WorkMessage.text("payload").build());
@@ -198,6 +229,54 @@ class ModeratorRuntimeAdapterTest {
         .dispatch(eq("moderatorWorker"), any(WorkMessage.class));
 
     assertThatCode(() -> adapter.onWork(inbound)).doesNotThrowAnyException();
+  }
+
+  @Test
+  void initialiseStateListenerRejectsInvalidDefaults() {
+    when(workerRegistry.findByRoleAndType("moderator", WorkerType.MESSAGE))
+        .thenReturn(Optional.of(definition));
+    stubListenerContainerStopped();
+
+    ModeratorDefaults invalidDefaults = new ModeratorDefaults(validator);
+    invalidDefaults.setEnabled(true);
+    invalidDefaults.setPattern(new PatternConfig(
+        Duration.ofHours(24),
+        BigDecimal.valueOf(1000),
+        new RepeatConfig(true, RepeatUntil.TOTAL_TIME, null, RepeatAlignment.FROM_START),
+        List.of(
+            new StepConfig(
+                "early",
+                new StepRangeConfig(StepRangeUnit.PERCENT, null, null, BigDecimal.ZERO, BigDecimal.valueOf(40)),
+                StepMode.FLAT,
+                Map.of(),
+                List.of(),
+                TransitionConfig.none()
+            ),
+            new StepConfig(
+                "late",
+                new StepRangeConfig(StepRangeUnit.PERCENT, null, null, BigDecimal.valueOf(60), BigDecimal.valueOf(100)),
+                StepMode.FLAT,
+                Map.of(),
+                List.of(),
+                TransitionConfig.none()
+            )
+        )
+    ));
+
+    ModeratorRuntimeAdapter adapter = new ModeratorRuntimeAdapter(
+        workerRuntime,
+        workerRegistry,
+        controlPlaneRuntime,
+        rabbitTemplate,
+        listenerRegistry,
+        identity,
+        invalidDefaults,
+        validator
+    );
+
+    assertThatThrownBy(adapter::initialiseStateListener)
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("cover");
   }
 
 }
