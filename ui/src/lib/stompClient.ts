@@ -3,6 +3,8 @@ import type { Component, QueueInfo } from '../types/hive'
 import { isControlEvent, type ControlEvent } from '../types/control'
 import { logIn, logError } from './logs'
 import { useUIStore } from '../store'
+import { normalizeManifests } from './capabilities'
+import type { CapabilityManifest } from '../types/capabilities'
 
 export type ComponentListener = (components: Component[]) => void
 export interface TopologyNode {
@@ -254,6 +256,14 @@ export function setClient(newClient: Client | null, destination = controlDestina
         comp.lastHeartbeat = new Date(evt.timestamp).getTime()
         comp.status = evt.kind
         const cfg: Record<string, unknown> = { ...(comp.config || {}) }
+        const hadExistingCapabilities = Object.prototype.hasOwnProperty.call(cfg, 'capabilities')
+        const previousCapabilitiesRaw = hadExistingCapabilities ? cfg['capabilities'] : undefined
+        const previousNormalizedCapabilities =
+          comp.capabilities !== undefined
+            ? comp.capabilities
+            : hadExistingCapabilities
+            ? toCapabilityManifest(previousCapabilitiesRaw)
+            : undefined
         let workerEnabled: boolean | undefined
         const data = evt.data
         if (data && typeof data === 'object') {
@@ -301,6 +311,16 @@ export function setClient(newClient: Client | null, destination = controlDestina
             ? evt.enabled
             : undefined
         if (typeof aggregateEnabled === 'boolean') cfg.enabled = aggregateEnabled
+        if (Object.prototype.hasOwnProperty.call(cfg, 'capabilities')) {
+          comp.capabilities = toCapabilityManifest(cfg['capabilities'])
+        } else if (hadExistingCapabilities) {
+          cfg['capabilities'] = previousCapabilitiesRaw
+          if (previousNormalizedCapabilities !== undefined) {
+            comp.capabilities = previousNormalizedCapabilities
+          }
+        } else if (previousNormalizedCapabilities !== undefined) {
+          comp.capabilities = previousNormalizedCapabilities
+        }
         const cfgKeys = Object.keys(cfg)
         if (cfgKeys.length > 0) {
           comp.config = cfg
@@ -360,5 +380,13 @@ export function removeSyntheticComponent(id: string) {
 export function updateNodePosition(id: string, x: number, y: number) {
   nodePositions[id] = { x, y }
   emitTopology()
+}
+
+function toCapabilityManifest(raw: unknown): CapabilityManifest | null {
+  if (raw === undefined) return null
+  if (raw === null) return null
+  const list = Array.isArray(raw) ? raw : [raw]
+  const [manifest] = normalizeManifests(list)
+  return manifest ?? null
 }
 

@@ -10,6 +10,8 @@ import {
 import { subscribeLogs, type LogEntry, resetLogs } from './logs'
 import { useUIStore } from '../store'
 import type { Component } from '../types/hive'
+import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import ComponentDetail from '../pages/hive/ComponentDetail'
 
 /**
  * @vitest-environment jsdom
@@ -214,6 +216,99 @@ describe('swarm lifecycle', () => {
     })
     expect(controller?.config).not.toHaveProperty('batchSize')
 
+    unsubscribe()
+    setClient(null)
+  })
+
+  it('preserves scenario-manager capability manifests across status updates', async () => {
+    const publish = vi.fn()
+    let cb: (msg: { body: string; headers: Record<string, string> }) => void = () => {}
+    const subscribe = vi
+      .fn()
+      .mockImplementation((_dest: string, fn: (msg: { body: string; headers: Record<string, string> }) => void) => {
+        cb = fn
+        return { unsubscribe() {} }
+      })
+    setClient({ active: true, publish, subscribe } as unknown as Client)
+
+    const updates: Component[][] = []
+    const unsubscribe = subscribeComponents((list) => {
+      updates.push(
+        list.map((comp) => ({
+          ...comp,
+          config: comp.config ? { ...comp.config } : undefined,
+          capabilities: comp.capabilities ? { ...comp.capabilities } : comp.capabilities,
+        })),
+      )
+    })
+
+    const manifest = {
+      schemaVersion: '1.0',
+      capabilitiesVersion: '1.0',
+      role: 'generator',
+      image: { name: 'pockethive-generator', tag: 'latest', digest: null },
+      config: [
+        { name: 'enabled', type: 'boolean', default: true, ui: { label: 'Enabled' } },
+        { name: 'ratePerSec', type: 'int', default: 5, ui: { label: 'Rate' } },
+      ],
+      actions: [],
+      panels: [],
+      ui: { label: 'Generator' },
+    }
+
+    const headers = { destination: '/exchange/ph.control/ev.status.swarm-sw1' }
+    const timestamp = new Date().toISOString()
+
+    cb({
+      headers,
+      body: JSON.stringify({
+        event: 'status',
+        kind: 'status',
+        version: '1',
+        role: 'generator',
+        instance: 'generator-sw1',
+        messageId: 'm-1',
+        timestamp,
+        enabled: true,
+        data: {
+          capabilities: [manifest],
+          ratePerSec: 5,
+        },
+      }),
+    })
+
+    cb({
+      headers,
+      body: JSON.stringify({
+        event: 'status',
+        kind: 'status',
+        version: '1',
+        role: 'generator',
+        instance: 'generator-sw1',
+        messageId: 'm-2',
+        timestamp,
+        data: {
+          processedTotal: 42,
+        },
+      }),
+    })
+
+    const latest = updates.at(-1)
+    expect(latest).toBeTruthy()
+    const generator = latest?.find((comp) => comp.id === 'generator-sw1')
+    expect(generator).toBeTruthy()
+    expect(generator?.capabilities?.role).toBe('generator')
+    expect(generator?.config?.capabilities).toBeDefined()
+
+    render(<ComponentDetail component={generator!} onClose={() => {}} />)
+    await waitFor(() => {
+      expect(screen.queryByText(/Capability manifest not available/i)).toBeNull()
+    })
+    await waitFor(() => {
+      expect(screen.getByLabelText(/Enabled/i)).toBeDefined()
+    })
+
+    cleanup()
     unsubscribe()
     setClient(null)
   })
