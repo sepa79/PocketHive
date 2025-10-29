@@ -1,5 +1,6 @@
 package io.pockethive.worker.sdk.runtime;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.control.CommandState;
 import io.pockethive.control.CommandTarget;
@@ -143,6 +144,7 @@ public final class WorkerControlPlaneRuntime {
         Boolean enabled = resolveEnabled(rawConfig, null);
         if (state.seedConfig(defaultConfig, rawConfig, enabled)) {
             ensureStatusPublisher(state);
+            logInitialConfig(state);
             notifyStateListeners(state);
         }
     }
@@ -220,6 +222,8 @@ public final class WorkerControlPlaneRuntime {
             Map<String, Object> filteredUpdate = withoutNullValues(patch.values());
             Map<String, Object> mergedConfig = mergeWithExisting(state.rawConfig(), filteredUpdate, patch.resetRequested());
             Boolean enabled = resolveEnabled(mergedConfig, command.enabled());
+            Map<String, Object> previousConfig = state.rawConfig();
+            Boolean previousEnabled = state.enabled().orElse(null);
             try {
                 Object typedConfig = null;
                 Map<String, Object> rawDataForState = null;
@@ -230,6 +234,11 @@ public final class WorkerControlPlaneRuntime {
                 state.updateConfig(typedConfig, rawDataForState, enabled);
                 emitConfigReady(signal, state, rawDataForState == null ? Map.of() : rawDataForState, enabled);
                 notifyStateListeners(state);
+                Map<String, Object> finalConfig = state.rawConfig();
+                Boolean finalEnabled = state.enabled().orElse(null);
+                if (shouldLogConfigUpdate(patch, command, previousConfig, finalConfig, previousEnabled, finalEnabled)) {
+                    logConfigUpdate(signal, state, previousConfig, finalConfig, previousEnabled, finalEnabled);
+                }
             } catch (Exception ex) {
                 emitConfigError(signal, state, ex);
                 log.warn("Failed to apply config update for worker {}", state.definition().beanName(), ex);
@@ -438,6 +447,126 @@ public final class WorkerControlPlaneRuntime {
         }
         merged.putAll(updates);
         return Map.copyOf(merged);
+    }
+
+    private boolean shouldLogConfigUpdate(
+        WorkerConfigPatch patch,
+        WorkerConfigCommand command,
+        Map<String, Object> previousConfig,
+        Map<String, Object> finalConfig,
+        Boolean previousEnabled,
+        Boolean finalEnabled
+    ) {
+        if (patch.hasPayload() || command.enabled() != null) {
+            return true;
+        }
+        if (!Objects.equals(previousEnabled, finalEnabled)) {
+            return true;
+        }
+        return !Objects.equals(previousConfig, finalConfig);
+    }
+
+    private void logInitialConfig(WorkerState state) {
+        Map<String, Object> config = state.rawConfig();
+        String prettyConfig = prettyPrint(config.isEmpty() ? Map.of() : config);
+        Boolean enabled = state.enabled().orElse(null);
+        log.info(
+            "Initial config for worker {} (role={} instance={}):\n  enabled: {}\n  config:\n{}",
+            state.definition().beanName(),
+            identity.role(),
+            identity.instanceId(),
+            formatEnabledValue(enabled),
+            prettyConfig
+        );
+    }
+
+    private void logConfigUpdate(
+        ControlSignal signal,
+        WorkerState state,
+        Map<String, Object> previousConfig,
+        Map<String, Object> finalConfig,
+        Boolean previousEnabled,
+        Boolean finalEnabled
+    ) {
+        Map<String, Object> changes = describeConfigChanges(previousConfig, finalConfig);
+        String prettyChanges = prettyPrint(changes);
+        String prettyFinal = prettyPrint(finalConfig.isEmpty() ? Map.of() : finalConfig);
+        log.info(
+            "Applied config update for worker {} (signal={} role={} instance={}):\n  enabled: {}\n  changes:\n{}\n  finalConfig:\n{}",
+            state.definition().beanName(),
+            signal.signal(),
+            signal.role(),
+            signal.instance(),
+            formatEnabledChange(previousEnabled, finalEnabled),
+            prettyChanges,
+            prettyFinal
+        );
+    }
+
+    private Map<String, Object> describeConfigChanges(
+        Map<String, Object> previousConfig,
+        Map<String, Object> finalConfig
+    ) {
+        Map<String, Object> previous = previousConfig == null ? Map.of() : previousConfig;
+        Map<String, Object> current = finalConfig == null ? Map.of() : finalConfig;
+        Map<String, Object> added = new LinkedHashMap<>();
+        Map<String, Object> updated = new LinkedHashMap<>();
+        List<String> removed = new ArrayList<>();
+        Set<String> keys = new LinkedHashSet<>();
+        keys.addAll(previous.keySet());
+        keys.addAll(current.keySet());
+        for (String key : keys) {
+            boolean inPrevious = previous.containsKey(key);
+            boolean inCurrent = current.containsKey(key);
+            if (!inPrevious && inCurrent) {
+                added.put(key, current.get(key));
+            } else if (inPrevious && inCurrent) {
+                Object before = previous.get(key);
+                Object after = current.get(key);
+                if (!Objects.equals(before, after)) {
+                    updated.put(key, after);
+                }
+            } else if (inPrevious) {
+                removed.add(key);
+            }
+        }
+        Map<String, Object> changes = new LinkedHashMap<>();
+        if (!added.isEmpty()) {
+            changes.put("added", added);
+        }
+        if (!updated.isEmpty()) {
+            changes.put("updated", updated);
+        }
+        if (!removed.isEmpty()) {
+            changes.put("removed", removed);
+        }
+        if (changes.isEmpty()) {
+            return Map.of("note", "no config fields changed");
+        }
+        return changes;
+    }
+
+    private String prettyPrint(Object value) {
+        if (value == null) {
+            return "null";
+        }
+        try {
+            return objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(value);
+        } catch (JsonProcessingException ex) {
+            log.warn("Unable to pretty print config value", ex);
+            return String.valueOf(value);
+        }
+    }
+
+    private String formatEnabledChange(Boolean previousEnabled, Boolean finalEnabled) {
+        if (Objects.equals(previousEnabled, finalEnabled)) {
+            return formatEnabledValue(finalEnabled) + " (unchanged)";
+        }
+        return formatEnabledValue(finalEnabled) + " (was " + formatEnabledValue(previousEnabled) + ")";
+    }
+
+    private String formatEnabledValue(Boolean value) {
+        return value == null ? "unspecified" : value.toString();
     }
 
     private record WorkerConfigPatch(Map<String, Object> values, boolean targeted, boolean resetRequested) {
