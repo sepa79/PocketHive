@@ -34,6 +34,7 @@ interface QueueMetrics {
   oldestAgeSec?: number
 }
 const queueMetrics: Record<string, QueueMetrics> = {}
+const IGNORED_SWARM_IDS = new Set(['default', 'hive'])
 const nodePositions: Record<string, { x: number; y: number }> = {}
 
 function getMergedComponents(): Record<string, Component> {
@@ -42,6 +43,23 @@ function getMergedComponents(): Record<string, Component> {
     merged[id] = comp
   })
   return merged
+}
+
+function getProcessorBaseUrl(config?: Record<string, unknown>): string | undefined {
+  if (!config) return undefined
+  const value = config['baseUrl']
+  if (typeof value !== 'string') return undefined
+  const trimmed = value.trim()
+  return trimmed.length > 0 ? trimmed : undefined
+}
+
+function processorTargetsWiremock(component: Component): boolean {
+  if (component.id === 'wiremock') return false
+  const role = component.role?.trim().toLowerCase()
+  if (role !== 'processor') return false
+  const targetUrl = getProcessorBaseUrl(component.config)
+  if (!targetUrl) return false
+  return targetUrl.toLowerCase().includes('wiremock')
 }
 
 function notifyComponentListeners() {
@@ -158,9 +176,30 @@ function buildTopology(allComponents: Record<string, Component> = getMergedCompo
   const processorTarget = allComponents['processor']
   if (processorTarget) {
     edges.push({ from: 'processor', to: 'sut', queue: 'sut' })
-    if (allComponents['wiremock']) {
-      edges.push({ from: 'processor', to: 'wiremock', queue: 'sut' })
-    }
+  }
+  if (allComponents['wiremock']) {
+    Object.values(allComponents).forEach((component) => {
+      if (!processorTargetsWiremock(component)) return
+      edges.push({ from: component.id, to: 'wiremock', queue: 'sut' })
+    })
+  }
+  const orchestrators = Object.values(allComponents).filter((component) => {
+    const role = component.role?.trim().toLowerCase()
+    return role === 'orchestrator'
+  })
+  if (orchestrators.length > 0) {
+    const controllers = Object.values(allComponents).filter((component) => {
+      const role = component.role?.trim().toLowerCase()
+      if (role !== 'swarm-controller') return false
+      const swarmId = component.swarmId?.trim().toLowerCase()
+      if (!swarmId) return false
+      return !IGNORED_SWARM_IDS.has(swarmId)
+    })
+    orchestrators.forEach((orchestrator) => {
+      controllers.forEach((controller) => {
+        edges.push({ from: orchestrator.id, to: controller.id, queue: 'swarm-control' })
+      })
+    })
   }
   const seen = new Set<string>()
   const uniq = edges.filter((e) => {
@@ -339,7 +378,8 @@ export function subscribeTopology(fn: TopologyListener) {
 }
 
 export function upsertSyntheticComponent(component: Component) {
-  syntheticComponents[component.id] = component
+  const normalized: Component = { ...component }
+  syntheticComponents[component.id] = normalized
   applyQueueMetrics()
   notifyComponentListeners()
   emitTopology()
