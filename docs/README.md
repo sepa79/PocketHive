@@ -12,6 +12,7 @@ Welcome to the PocketHive documentation hub. Use these resources to understand t
 
 ## Usage
 - [Usage Guide](USAGE.md)
+- Prometheus helpers for the UI live in `ui/src/lib/prometheus.ts` and provide typed range/query helpers plus React Query hooks.
 
 ## Services
 - [Orchestrator](../orchestrator-service/README.md)
