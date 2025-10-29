@@ -26,6 +26,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.SplittableRandom;
@@ -33,6 +34,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.within;
 
 class PatternAckPacerTest {
 
@@ -90,6 +92,44 @@ class PatternAckPacerTest {
     assertThat(result.jitterDuration().toNanos()).isEqualTo(expectedNanos);
   }
 
+  @Test
+  void scenarioSimpleStepsAdvancesThroughPhases() throws Exception {
+    ModeratorWorkerConfig config = simpleStepsScenarioConfig();
+    PatternAckPacer pacer = new PatternAckPacer(config, clock, sleeper);
+
+    Instant start = clock.instant();
+    List<Duration> offsets = List.of(
+        Duration.ofSeconds(30),
+        Duration.ofSeconds(105),
+        Duration.ofSeconds(135),
+        Duration.ofSeconds(195));
+
+    List<PatternAckPacer.AwaitResult> results = new ArrayList<>();
+    for (Duration offset : offsets) {
+      advanceTo(start.plus(offset));
+      results.add(pacer.awaitReady());
+    }
+
+    assertThat(results)
+        .extracting(result -> result.sample().stepId())
+        .containsExactly("flat", "ramp", "sinus", "duty");
+
+    double normalization = results.get(0).sample().normalizationConstant();
+    assertThat(normalization).isCloseTo(1.25d, within(1e-6));
+
+    double[] rawMultipliers = {0.6d, 0.9d, 1.25d, 1.2d};
+    double baseRate = config.pattern().baseRateRps().doubleValue();
+
+    for (int i = 0; i < results.size(); i++) {
+      PatternAckPacer.AwaitResult result = results.get(i);
+      double expectedMultiplier = rawMultipliers[i] * normalization;
+      assertThat(result.sample().multiplier()).isCloseTo(expectedMultiplier, within(1e-6));
+      double expectedTarget = expectedMultiplier * baseRate;
+      assertThat(result.targetRps()).isCloseTo(expectedTarget, within(1e-6));
+      assertThat(result.targetRps()).isNotCloseTo(baseRate, within(1e-6));
+    }
+  }
+
   private ModeratorWorkerConfig config(JitterConfig jitter) {
     TimeConfig time = new TimeConfig(TimeMode.REALTIME, BigDecimal.ONE, ZoneId.of("UTC"));
     RunConfig run = new RunConfig(Duration.ofSeconds(30));
@@ -123,6 +163,101 @@ class PatternAckPacerTest {
         SeedsConfig.empty());
   }
 
+  private ModeratorWorkerConfig simpleStepsScenarioConfig() {
+    TimeConfig time = new TimeConfig(TimeMode.WARP, BigDecimal.ONE, ZoneId.of("UTC"));
+    RunConfig run = new RunConfig(Duration.ofHours(1));
+    RepeatConfig repeat = new RepeatConfig(true, RepeatUntil.TOTAL_TIME, null, RepeatAlignment.FROM_START);
+
+    StepRangeConfig flatRange = new StepRangeConfig(
+        StepRangeUnit.PERCENT,
+        null,
+        null,
+        BigDecimal.ZERO,
+        BigDecimal.valueOf(25));
+    StepConfig flat = new StepConfig(
+        "flat",
+        flatRange,
+        StepMode.FLAT,
+        Map.of("factor", BigDecimal.valueOf(0.6)),
+        List.of(),
+        TransitionConfig.none());
+
+    StepRangeConfig rampRange = new StepRangeConfig(
+        StepRangeUnit.PERCENT,
+        null,
+        null,
+        BigDecimal.valueOf(25),
+        BigDecimal.valueOf(50));
+    StepConfig ramp = new StepConfig(
+        "ramp",
+        rampRange,
+        StepMode.RAMP,
+        Map.of(
+            "from", BigDecimal.valueOf(0.6),
+            "to", BigDecimal.ONE),
+        List.of(),
+        TransitionConfig.none());
+
+    StepRangeConfig sinusRange = new StepRangeConfig(
+        StepRangeUnit.PERCENT,
+        null,
+        null,
+        BigDecimal.valueOf(50),
+        BigDecimal.valueOf(75));
+    StepConfig sinus = new StepConfig(
+        "sinus",
+        sinusRange,
+        StepMode.SINUS,
+        Map.of(
+            "center", BigDecimal.ONE,
+            "amplitude", BigDecimal.valueOf(0.25),
+            "cycles", BigDecimal.ONE,
+            "phase", BigDecimal.ZERO),
+        List.of(),
+        TransitionConfig.none());
+
+    StepRangeConfig dutyRange = new StepRangeConfig(
+        StepRangeUnit.PERCENT,
+        null,
+        null,
+        BigDecimal.valueOf(75),
+        BigDecimal.valueOf(100));
+    StepConfig duty = new StepConfig(
+        "duty",
+        dutyRange,
+        StepMode.DUTY,
+        Map.of(
+            "onMs", BigDecimal.valueOf(30_000),
+            "offMs", BigDecimal.valueOf(30_000),
+            "high", BigDecimal.valueOf(1.2),
+            "low", BigDecimal.valueOf(0.4)),
+        List.of(),
+        TransitionConfig.none());
+
+    PatternConfig pattern = new PatternConfig(
+        Duration.ofMinutes(4),
+        BigDecimal.valueOf(50),
+        repeat,
+        List.of(flat, ramp, sinus, duty));
+
+    return new ModeratorWorkerConfig(
+        true,
+        time,
+        run,
+        pattern,
+        new NormalizationConfig(true, BigDecimal.valueOf(5)),
+        List.of(),
+        JitterConfig.disabled(),
+        new SeedsConfig("scenario/mod/default", Map.of()));
+  }
+
+  private void advanceTo(Instant target) {
+    Instant now = clock.instant();
+    if (target.isAfter(now)) {
+      clock.advance(Duration.between(now, target));
+    }
+  }
+
   private double nextDraw(String seed) {
     long value = toSeed(seed);
     return new SplittableRandom(value).nextDouble();
@@ -148,7 +283,7 @@ class PatternAckPacerTest {
       this.zone = zone;
     }
 
-    private void advance(Duration duration) {
+    void advance(Duration duration) {
       if (duration == null || duration.isNegative()) {
         return;
       }
