@@ -9,6 +9,7 @@ import io.pockethive.orchestrator.config.OrchestratorProperties;
 import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmRegistry;
 import io.pockethive.orchestrator.domain.SwarmStatus;
+import io.pockethive.orchestrator.domain.SwarmTemplateMetadata;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -45,6 +46,10 @@ public class ContainerLifecycleManager {
     }
 
     public Swarm startSwarm(String swarmId, String image, String instanceId) {
+        return startSwarm(swarmId, image, instanceId, null);
+    }
+
+    public Swarm startSwarm(String swarmId, String image, String instanceId, SwarmTemplateMetadata templateMetadata) {
         String resolvedInstance = requireNonBlank(instanceId, "controller instance");
         String resolvedSwarmId = requireNonBlank(swarmId, "swarmId");
         OrchestratorProperties.Pushgateway pushgateway = properties.getMetrics().getPushgateway();
@@ -85,6 +90,9 @@ public class ContainerLifecycleManager {
             hostConfig -> hostConfig.withBinds(Bind.parse(dockerSocket + ":" + dockerSocket)));
         log.info("controller container {} ({}) started for swarm {}", containerId, resolvedInstance, resolvedSwarmId);
         Swarm swarm = new Swarm(resolvedSwarmId, resolvedInstance, containerId);
+        if (templateMetadata != null) {
+            swarm.attachTemplate(templateMetadata);
+        }
         registry.register(swarm);
         registry.updateStatus(resolvedSwarmId, SwarmStatus.CREATING);
         return swarm;

@@ -1,6 +1,9 @@
 package io.pockethive.orchestrator.domain;
 
+import io.pockethive.swarm.model.Bee;
 import java.time.Instant;
+import java.util.List;
+import java.util.Optional;
 
 public class Swarm {
     private final String id;
@@ -12,6 +15,7 @@ public class Swarm {
     private final Instant createdAt;
     private boolean workEnabled;
     private boolean controllerEnabled;
+    private SwarmTemplateMetadata templateMetadata;
 
     public Swarm(String id, String instanceId, String containerId) {
         this.id = id;
@@ -75,6 +79,26 @@ public class Swarm {
 
     public void setControllerEnabled(boolean controllerEnabled) {
         this.controllerEnabled = controllerEnabled;
+    }
+
+    public void attachTemplate(SwarmTemplateMetadata metadata) {
+        this.templateMetadata = metadata;
+    }
+
+    public Optional<SwarmTemplateMetadata> templateMetadata() {
+        return Optional.ofNullable(templateMetadata);
+    }
+
+    public Optional<String> templateId() {
+        return templateMetadata().map(SwarmTemplateMetadata::templateId);
+    }
+
+    public Optional<String> controllerImage() {
+        return templateMetadata().map(SwarmTemplateMetadata::controllerImage);
+    }
+
+    public List<Bee> bees() {
+        return templateMetadata == null ? List.of() : templateMetadata.bees();
     }
 
     void expire(Instant now, java.time.Duration degradedAfter, java.time.Duration failedAfter) {

@@ -13,6 +13,7 @@ import io.pockethive.orchestrator.domain.SwarmHealth;
 import io.pockethive.orchestrator.domain.SwarmPlanRegistry;
 import io.pockethive.orchestrator.domain.SwarmRegistry;
 import io.pockethive.orchestrator.domain.SwarmStatus;
+import io.pockethive.orchestrator.domain.SwarmTemplateMetadata;
 import io.pockethive.swarm.model.Bee;
 import io.pockethive.swarm.model.SwarmPlan;
 import io.pockethive.swarm.model.SwarmTemplate;
@@ -153,7 +154,11 @@ public class SwarmController {
                 List<Bee> bees = template.bees();
                 String instanceId = BeeNameGenerator.generate("swarm-controller", swarmId);
                 plans.register(instanceId, new SwarmPlan(swarmId, bees));
-                Swarm swarm = lifecycle.startSwarm(swarmId, image, instanceId);
+                Swarm swarm = lifecycle.startSwarm(
+                    swarmId,
+                    image,
+                    instanceId,
+                    new SwarmTemplateMetadata(templateId, image, bees));
                 creates.register(swarm.getInstanceId(), new Pending(
                     swarmId,
                     swarm.getInstanceId(),
