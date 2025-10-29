@@ -30,6 +30,7 @@ import io.pockethive.swarm.model.Bee;
 import io.pockethive.swarm.model.SwarmPlan;
 import io.pockethive.swarm.model.SwarmTemplate;
 import io.pockethive.swarm.model.Work;
+import java.time.Instant;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -218,6 +219,35 @@ class SwarmControllerTest {
         assertThat(store.findCorrelation("sw1", "swarm-create", "idem-2").orElseThrow())
             .isEqualTo(leaderBody.correlationId());
         assertThat(store.findCorrelation("sw1", "swarm-create", "__create-lock__")).isEmpty();
+    }
+
+    @Test
+    void followerAfterControllerPendingReusesLeaderCorrelation() {
+        SwarmCreateTracker tracker = new SwarmCreateTracker();
+        SwarmPlanRegistry plans = new SwarmPlanRegistry();
+        SwarmRegistry registry = new SwarmRegistry();
+        InMemoryIdempotencyStore store = new InMemoryIdempotencyStore();
+        tracker.register("leader-inst", new SwarmCreateTracker.Pending(
+            "sw1",
+            "leader-inst",
+            "corr-leader",
+            "idem-leader",
+            Phase.CONTROLLER,
+            Instant.now().plusSeconds(60)));
+        SwarmController ctrl = controller(tracker, registry, plans, store);
+        SwarmCreateRequest followerRequest = new SwarmCreateRequest("tpl-1", "idem-follower", null);
+
+        ResponseEntity<?> response = ctrl.create("sw1", followerRequest);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.ACCEPTED);
+        assertThat(response.getBody()).isInstanceOf(ControlResponse.class);
+        ControlResponse body = (ControlResponse) response.getBody();
+        assertThat(body.correlationId()).isEqualTo("corr-leader");
+        assertThat(store.findCorrelation("sw1", "swarm-create", "idem-follower").orElseThrow())
+            .isEqualTo("corr-leader");
+        assertThat(store.findCorrelation("sw1", "swarm-create", "__create-lock__")).isEmpty();
+        verifyNoInteractions(lifecycle);
+        verifyNoInteractions(scenarioClient);
     }
 
     @Test

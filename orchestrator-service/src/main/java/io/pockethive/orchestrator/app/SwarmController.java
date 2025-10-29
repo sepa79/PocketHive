@@ -132,30 +132,38 @@ public class SwarmController {
             return response;
         }
 
+        Optional<Pending> controllerPending = creates.controllerPending(swarmId);
+        if (controllerPending.isPresent()) {
+            Pending pending = controllerPending.get();
+            idempotency.rollback(swarmId, "swarm-create", CREATE_LOCK_KEY, lockCorrelation);
+            idempotency.reserve(swarmId, "swarm-create", req.idempotencyKey(), pending.correlationId());
+            ControlResponse existing = new ControlResponse(pending.correlationId(), req.idempotencyKey(),
+                watchFor("swarm-create", swarmId), timeout.toMillis());
+            log.info("[CTRL] follow swarm-create swarm={} correlation={} idempotencyKey={}", swarmId, pending.correlationId(), req.idempotencyKey());
+            response = ResponseEntity.accepted().body(existing);
+            logRestResponse("POST", path, response);
+            return response;
+        }
+
         try {
             response = idempotentSend("swarm-create", swarmId, req.idempotencyKey(), timeout.toMillis(), lockCorrelation, corr -> {
-                try {
-                    String templateId = req.templateId();
-                    SwarmTemplate template = fetchTemplate(templateId);
-                    String image = requireImage(template, templateId);
-                    List<Bee> bees = template.bees();
-                    String instanceId = BeeNameGenerator.generate("swarm-controller", swarmId);
-                    plans.register(instanceId, new SwarmPlan(swarmId, bees));
-                    Swarm swarm = lifecycle.startSwarm(swarmId, image, instanceId);
-                    creates.register(swarm.getInstanceId(), new Pending(
-                        swarmId,
-                        swarm.getInstanceId(),
-                        corr,
-                        req.idempotencyKey(),
-                        Phase.CONTROLLER,
-                        Instant.now().plus(timeout)));
-                } finally {
-                    idempotency.rollback(swarmId, "swarm-create", CREATE_LOCK_KEY, lockCorrelation);
-                }
+                String templateId = req.templateId();
+                SwarmTemplate template = fetchTemplate(templateId);
+                String image = requireImage(template, templateId);
+                List<Bee> bees = template.bees();
+                String instanceId = BeeNameGenerator.generate("swarm-controller", swarmId);
+                plans.register(instanceId, new SwarmPlan(swarmId, bees));
+                Swarm swarm = lifecycle.startSwarm(swarmId, image, instanceId);
+                creates.register(swarm.getInstanceId(), new Pending(
+                    swarmId,
+                    swarm.getInstanceId(),
+                    corr,
+                    req.idempotencyKey(),
+                    Phase.CONTROLLER,
+                    Instant.now().plus(timeout)));
             });
-        } catch (RuntimeException e) {
+        } finally {
             idempotency.rollback(swarmId, "swarm-create", CREATE_LOCK_KEY, lockCorrelation);
-            throw e;
         }
         logRestResponse("POST", path, response);
         return response;
