@@ -48,6 +48,15 @@ public class SwarmCreateTracker {
         controllers.put(instanceId, info);
     }
 
+    public Optional<Pending> controllerPending(String swarmId) {
+        if (swarmId == null || swarmId.isBlank()) {
+            return Optional.empty();
+        }
+        return controllers.values().stream()
+            .filter(pending -> pending != null && swarmId.equals(pending.swarmId()))
+            .findFirst();
+    }
+
     public Optional<Pending> remove(String instanceId) {
         return Optional.ofNullable(controllers.remove(instanceId));
     }
