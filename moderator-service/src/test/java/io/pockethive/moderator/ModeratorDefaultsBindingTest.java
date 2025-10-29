@@ -10,9 +10,11 @@ import io.pockethive.moderator.shaper.config.StepConfig;
 import io.pockethive.moderator.shaper.config.StepMode;
 import io.pockethive.moderator.shaper.config.StepRangeConfig;
 import io.pockethive.moderator.shaper.config.StepRangeUnit;
+import io.pockethive.moderator.shaper.config.TimeMode;
 import io.pockethive.moderator.shaper.config.TransitionType;
 import java.math.BigDecimal;
 import java.time.Duration;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Locale;
 import org.junit.jupiter.api.Test;
@@ -89,6 +91,12 @@ public class ModeratorDefaultsBindingTest {
           ModeratorWorkerConfig config = defaults.asConfig();
 
           assertThat(config.enabled()).isTrue();
+
+          assertThat(config.time().mode()).isEqualTo(TimeMode.WARP);
+          assertThat(config.time().warpFactor()).isEqualByComparingTo("1");
+          assertThat(config.time().tz()).isEqualTo(ZoneId.of("UTC"));
+
+          assertThat(config.run().totalTime()).isEqualTo(Duration.ofHours(1));
 
           PatternConfig pattern = config.pattern();
           assertThat(pattern.duration()).isEqualTo(Duration.ofMinutes(4));
