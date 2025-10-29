@@ -74,8 +74,22 @@ const shapeOrder: NodeShape[] = [
 const DEFAULT_COLOR = '#60a5fa'
 const DISABLED_COLOR = '#64748b'
 
-const FALLBACK_HORIZONTAL_SPACING = 260
-const FALLBACK_VERTICAL_SPACING = 200
+const FALLBACK_HORIZONTAL_SPACING = 280
+const FALLBACK_VERTICAL_SPACING = 220
+
+function average(values: number[]): number | undefined {
+  if (!values.length) return undefined
+  const total = values.reduce((sum, value) => sum + value, 0)
+  return total / values.length
+}
+
+function compareNodes(a: GraphNode, b: GraphNode) {
+  const typeCompare = (a.type || '').localeCompare(b.type || '')
+  if (typeCompare !== 0) {
+    return typeCompare
+  }
+  return (a.id || '').localeCompare(b.id || '')
+}
 
 function normalizeRoleKey(value?: string): string {
   return typeof value === 'string' ? value.trim().toLowerCase() : ''
@@ -488,16 +502,29 @@ function applyFallbackPositions(nodes: GraphNode[], links: GraphLink[]): GraphNo
 
   const nodeMap = new Map(nodes.map((node) => [node.id, node]))
   const adjacency = new Map<string, string[]>()
+  const reverseAdjacency = new Map<string, string[]>()
   const indegree = new Map<string, number>()
 
   links.forEach((link) => {
     if (!nodeMap.has(link.source) || !nodeMap.has(link.target)) {
       return
     }
-    const list = adjacency.get(link.source) ?? []
-    list.push(link.target)
-    adjacency.set(link.source, list)
+    const children = adjacency.get(link.source) ?? []
+    children.push(link.target)
+    adjacency.set(link.source, children)
+    const parents = reverseAdjacency.get(link.target) ?? []
+    parents.push(link.source)
+    reverseAdjacency.set(link.target, parents)
     indegree.set(link.target, (indegree.get(link.target) ?? 0) + 1)
+  })
+
+  nodes.forEach((node) => {
+    if (!adjacency.has(node.id)) {
+      adjacency.set(node.id, [])
+    }
+    if (!reverseAdjacency.has(node.id)) {
+      reverseAdjacency.set(node.id, [])
+    }
   })
 
   const queue: string[] = []
@@ -566,23 +593,86 @@ function applyFallbackPositions(nodes: GraphNode[], links: GraphLink[]): GraphNo
   const totalWidth = (orderedLevels.length - 1) * FALLBACK_HORIZONTAL_SPACING
   const offsetX = totalWidth / 2
 
+  const columns = orderedLevels.map((lvl) => {
+    const members = groups.get(lvl) ?? []
+    return [...members]
+  })
+
+  const rowOrder = new Map<string, number>()
+
+  columns.forEach((column, columnIndex) => {
+    const baseSorted = [...column].sort(compareNodes)
+    if (columnIndex === 0) {
+      baseSorted.forEach((node, index) => {
+        rowOrder.set(node.id, index)
+      })
+      columns[columnIndex] = baseSorted
+      return
+    }
+    const sorted = [...column].sort((a, b) => {
+      const parentsA = reverseAdjacency.get(a.id) ?? []
+      const parentsB = reverseAdjacency.get(b.id) ?? []
+      const scoreA = average(
+        parentsA
+          .map((id) => rowOrder.get(id))
+          .filter((value): value is number => value !== undefined),
+      )
+      const scoreB = average(
+        parentsB
+          .map((id) => rowOrder.get(id))
+          .filter((value): value is number => value !== undefined),
+      )
+      if (scoreA !== undefined && scoreB !== undefined && scoreA !== scoreB) {
+        return scoreA - scoreB
+      }
+      if (scoreA !== undefined && scoreB === undefined) return -1
+      if (scoreA === undefined && scoreB !== undefined) return 1
+      return compareNodes(a, b)
+    })
+    sorted.forEach((node, index) => {
+      rowOrder.set(node.id, index)
+    })
+    columns[columnIndex] = sorted
+  })
+
+  for (let columnIndex = columns.length - 2; columnIndex >= 0; columnIndex -= 1) {
+    const column = columns[columnIndex]
+    const sorted = [...column].sort((a, b) => {
+      const childrenA = adjacency.get(a.id) ?? []
+      const childrenB = adjacency.get(b.id) ?? []
+      const scoreA = average(
+        childrenA
+          .map((id) => rowOrder.get(id))
+          .filter((value): value is number => value !== undefined),
+      )
+      const scoreB = average(
+        childrenB
+          .map((id) => rowOrder.get(id))
+          .filter((value): value is number => value !== undefined),
+      )
+      if (scoreA !== undefined && scoreB !== undefined && scoreA !== scoreB) {
+        return scoreA - scoreB
+      }
+      if (scoreA !== undefined && scoreB === undefined) return -1
+      if (scoreA === undefined && scoreB !== undefined) return 1
+      return compareNodes(a, b)
+    })
+    sorted.forEach((node, index) => {
+      rowOrder.set(node.id, index)
+    })
+    columns[columnIndex] = sorted
+  }
+
   const fallbackPositions = new Map<string, { x: number; y: number }>()
 
   orderedLevels.forEach((lvl) => {
-    const members = groups.get(lvl)
-    if (!members) return
-    const sortedMembers = [...members].sort((a, b) => {
-      const typeCompare = (a.type || '').localeCompare(b.type || '')
-      if (typeCompare !== 0) {
-        return typeCompare
-      }
-      return (a.id || '').localeCompare(b.id || '')
-    })
     const columnIndex = levelIndexMap.get(lvl) ?? 0
     const columnX = columnIndex * FALLBACK_HORIZONTAL_SPACING - offsetX
-    const columnHeight = (sortedMembers.length - 1) * FALLBACK_VERTICAL_SPACING
+    const members = columns[columnIndex]
+    if (!members || members.length === 0) return
+    const columnHeight = (members.length - 1) * FALLBACK_VERTICAL_SPACING
     const offsetY = columnHeight / 2
-    sortedMembers.forEach((member, rowIndex) => {
+    members.forEach((member, rowIndex) => {
       const y = rowIndex * FALLBACK_VERTICAL_SPACING - offsetY
       fallbackPositions.set(member.id, { x: columnX, y })
     })
@@ -612,6 +702,7 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
   const containerRef = useRef<HTMLDivElement>(null)
   const [rfNodes, setRfNodes] = useState<FlowNode[]>([])
   const draggingIdsRef = useRef<Set<string>>(new Set())
+  const pendingFitRef = useRef(false)
   const { manifests, ensureCapabilities } = useCapabilities()
 
   const fitViewToNodes = useCallback(() => {
@@ -708,6 +799,7 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
         .filter((edge) => ids.has(edge.from) && ids.has(edge.to))
         .map((edge) => ({ source: edge.from, target: edge.to, queue: edge.queue }))
       setData({ nodes: positionedNodes, links })
+      pendingFitRef.current = true
     })
     return () => unsub()
   }, [swarmId])
@@ -1032,11 +1124,25 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
     [],
   )
 
+  const layoutSignature = useMemo(() => {
+    return rfNodes
+      .map((node) => `${node.id}:${Math.round(node.position.x)}:${Math.round(node.position.y)}`)
+      .join('|')
+  }, [rfNodes])
+
   useEffect(() => {
-    if (rfNodes.length) {
-      fitViewToNodes()
+    if (!rfNodes.length) {
+      return
     }
-  }, [fitViewToNodes, rfNodes.length])
+    if (!pendingFitRef.current) {
+      return
+    }
+    if (draggingIdsRef.current.size > 0) {
+      return
+    }
+    pendingFitRef.current = false
+    fitViewToNodes()
+  }, [fitViewToNodes, layoutSignature, rfNodes.length])
 
   const types = Array.from(new Set(data.nodes.map((n) => n.type)))
 
@@ -1049,6 +1155,7 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
           nodeTypes={{ shape: ShapeNode, swarmGroup: SwarmGroupNode }}
           onInit={(inst: ReactFlowInstance<FlowNode, Edge>) => {
             flowRef.current = inst
+            pendingFitRef.current = true
             fitViewToNodes()
           }}
           onNodeDragStart={(_e: unknown, node: FlowNode) => {
