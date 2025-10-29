@@ -362,6 +362,78 @@ describe('swarm lifecycle', () => {
     setClient(null)
   })
 
+  it('connects orchestrators to swarm controllers in the topology output', () => {
+    const publish = vi.fn()
+    let cb: (msg: { body: string; headers: Record<string, string> }) => void = () => {}
+    const subscribe = vi
+      .fn()
+      .mockImplementation((_dest: string, fn: (msg: { body: string; headers: Record<string, string> }) => void) => {
+        cb = fn
+        return { unsubscribe() {} }
+      })
+    setClient({ active: true, publish, subscribe } as unknown as Client)
+
+    const topologies: { edges: { from: string; to: string; queue: string }[] }[] = []
+    const unsubscribeTopology = subscribeTopology((topology) => {
+      topologies.push({ edges: topology.edges.map((edge) => ({ ...edge })) })
+    })
+
+    cb({
+      headers: { destination: '/exchange/ph.control/ev.status.swarm-hive' },
+      body: JSON.stringify({
+        event: 'status',
+        kind: 'status',
+        version: '1',
+        role: 'orchestrator',
+        instance: 'hive-orchestrator',
+        messageId: 'orch-1',
+        timestamp: new Date().toISOString(),
+        queues: {
+          control: {
+            out: ['ph.swarm.configure'],
+          },
+        },
+      }),
+    })
+
+    cb({
+      headers: { destination: '/exchange/ph.control/ev.status.swarm-sw1' },
+      body: JSON.stringify({
+        event: 'status',
+        kind: 'status',
+        version: '1',
+        role: 'swarm-controller',
+        instance: 'sw1-swarm-controller',
+        messageId: 'sw1-1',
+        timestamp: new Date().toISOString(),
+      }),
+    })
+
+    cb({
+      headers: { destination: '/exchange/ph.control/ev.status.swarm-default' },
+      body: JSON.stringify({
+        event: 'status',
+        kind: 'status',
+        version: '1',
+        role: 'swarm-controller',
+        instance: 'default-swarm-controller',
+        messageId: 'default-1',
+        timestamp: new Date().toISOString(),
+      }),
+    })
+
+    const latest = topologies.at(-1)
+    expect(latest?.edges).toContainEqual({
+      from: 'hive-orchestrator',
+      to: 'sw1-swarm-controller',
+      queue: 'swarm-control',
+    })
+    expect(latest?.edges?.some((edge) => edge.to === 'default-swarm-controller')).toBe(false)
+
+    unsubscribeTopology()
+    setClient(null)
+  })
+
   it('drops swarm components when a swarm-remove ready confirmation arrives', () => {
     const publish = vi.fn()
     let cb: (msg: { body: string; headers: Record<string, string> }) => void = () => {}

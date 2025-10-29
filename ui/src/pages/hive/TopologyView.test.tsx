@@ -70,6 +70,7 @@ const data = {
     { from: 'sw1-generator', to: 'sw1-processor', queue: 'internal-q' },
     { from: 'sw1-generator', to: 'c', queue: 'external-q' },
     { from: 'sw1-processor', to: 'wiremock', queue: 'wiremock-q' },
+    { from: 'hive-orchestrator', to: 'sw1-swarm-controller', queue: 'swarm-control' },
   ] as unknown[],
 }
 let listener: (t: { nodes: Node[]; edges: unknown[] }) => void
@@ -250,6 +251,11 @@ test('grouped swarm node renders and edges aggregate by swarm', () => {
   const wiremockEdge = newProps.edges.find((e) => e.id.includes('wiremock-q'))!
   expect(wiremockEdge.source).toBe('sw1-swarm-controller')
   expect(wiremockEdge.target).toBe('wiremock')
+  const orchestratorEdge = newProps.edges.find(
+    (e) => e.id.includes('swarm-control') && e.source === 'hive-orchestrator',
+  )
+  expect(orchestratorEdge).toBeDefined()
+  expect(orchestratorEdge?.target).toBe('sw1-swarm-controller')
   const groupData = updatedGroup.data as {
     components?: { id: string; queueCount: number }[]
     edges?: { queue: string }[]
@@ -318,6 +324,9 @@ test('wiremock node renders label and triggers selection', () => {
   const wiremockNode = props.nodes.find((node) => node.id === 'wiremock') as RFNode | undefined
   expect(wiremockNode).toBeDefined()
   expect((wiremockNode?.data as { label?: string })?.label).toBe('WireMock')
+  const card = document.querySelector('[data-node-id="wiremock"] .shape-node') as HTMLElement | null
+  expect(card).not.toBeNull()
+  within(card as HTMLElement).getByText('System Under Test')
   props.onNodeClick?.({}, wiremockNode as RFNode)
   expect(onSelect).toHaveBeenCalledWith('wiremock')
 })

@@ -591,6 +591,10 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
   const getRoleLabel = useCallback(
     (componentRole: string | undefined, type: string) => {
       const key = normalizeRoleKey(type)
+      const componentKey = normalizeRoleKey(componentRole)
+      if (key === 'wiremock' || componentKey === 'wiremock') {
+        return 'System Under Test'
+      }
       const appearanceLabel = roleAppearances[key]?.label?.trim()
       if (appearanceLabel && appearanceLabel.length > 0) {
         return appearanceLabel

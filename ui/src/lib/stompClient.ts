@@ -34,6 +34,7 @@ interface QueueMetrics {
   oldestAgeSec?: number
 }
 const queueMetrics: Record<string, QueueMetrics> = {}
+const IGNORED_SWARM_IDS = new Set(['default', 'hive'])
 const nodePositions: Record<string, { x: number; y: number }> = {}
 
 function getMergedComponents(): Record<string, Component> {
@@ -180,6 +181,24 @@ function buildTopology(allComponents: Record<string, Component> = getMergedCompo
     Object.values(allComponents).forEach((component) => {
       if (!processorTargetsWiremock(component)) return
       edges.push({ from: component.id, to: 'wiremock', queue: 'sut' })
+    })
+  }
+  const orchestrators = Object.values(allComponents).filter((component) => {
+    const role = component.role?.trim().toLowerCase()
+    return role === 'orchestrator'
+  })
+  if (orchestrators.length > 0) {
+    const controllers = Object.values(allComponents).filter((component) => {
+      const role = component.role?.trim().toLowerCase()
+      if (role !== 'swarm-controller') return false
+      const swarmId = component.swarmId?.trim().toLowerCase()
+      if (!swarmId) return false
+      return !IGNORED_SWARM_IDS.has(swarmId)
+    })
+    orchestrators.forEach((orchestrator) => {
+      controllers.forEach((controller) => {
+        edges.push({ from: orchestrator.id, to: controller.id, queue: 'swarm-control' })
+      })
     })
   }
   const seen = new Set<string>()
