@@ -47,10 +47,12 @@ class GeneratorTest {
         true,
         10.0,
         false,
-        "/custom",
-        "put",
-        "{\"value\":42}",
-        Map.of("X-Custom", "yes")
+        new GeneratorWorkerConfig.Message(
+            "/custom",
+            "put",
+            "{\"value\":42}",
+            Map.of("X-Custom", "yes")
+        )
     );
 
     WorkResult result = worker.generate(new TestWorkerContext(config));

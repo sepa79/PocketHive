@@ -60,20 +60,21 @@ class GeneratorWorkerImpl implements GeneratorWorker {
   /**
    * Builds a {@link WorkMessage} ready for the moderator queue. The method pulls generator
    * settings from the {@link WorkerContext} (control-plane overrides) or falls back to
-   * {@link GeneratorDefaults}. Expect keys like {@code path}, {@code method}, {@code body}, and
-   * {@code headers}—they mirror the fields in {@link GeneratorWorkerConfig}. A sample override
-   * payload looks like:
+   * {@link GeneratorDefaults}. Expect a nested {@code message} object with keys like
+   * {@code path}, {@code method}, {@code body}, and {@code headers}—they mirror the fields in
+   * {@link GeneratorWorkerConfig}. A sample override payload looks like:
    *
    * <pre>{@code
    * {
    *   "enabled": true,
    *   "ratePerSec": 1.5,
    *   "singleRequest": false,
-   *   "path": "/api/orders",
-   *   "method": "POST",
-   *   "body": "{\"event\":\"demo\"}",
-   *   "headers": {"x-demo": "true"}
-   * }
+   *   "message": {
+   *     "path": "/api/orders",
+   *     "method": "POST",
+   *     "body": "{\"event\":\"demo\"}",
+   *     "headers": {"x-demo": "true"}
+   *   }
    * }
    * </pre>
    *
@@ -105,8 +106,8 @@ class GeneratorWorkerImpl implements GeneratorWorker {
     context.statusPublisher()
         .workOut(outboundQueue)
         .update(status -> status
-            .data("path", config.path())
-            .data("method", config.method())
+            .data("path", config.message().path())
+            .data("method", config.message().method())
             .data("ratePerSec", config.ratePerSec())
             .data("enabled", config.enabled())
             .data("singleRequest", config.singleRequest()));
@@ -117,10 +118,11 @@ class GeneratorWorkerImpl implements GeneratorWorker {
     String messageId = UUID.randomUUID().toString();
     Map<String, Object> payload = new LinkedHashMap<>();
     payload.put("id", messageId);
-    payload.put("path", config.path());
-    payload.put("method", config.method());
-    payload.put("headers", config.headers());
-    payload.put("body", config.body());
+    GeneratorWorkerConfig.Message message = config.message();
+    payload.put("path", message.path());
+    payload.put("method", message.method());
+    payload.put("headers", message.headers());
+    payload.put("body", message.body());
     payload.put("createdAt", Instant.now().toString());
 
     return WorkMessage.json(payload)

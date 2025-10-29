@@ -157,10 +157,7 @@ class GeneratorRuntimeAdapter {
           resolvedEnabled,
           incoming.ratePerSec(),
           incoming.singleRequest(),
-          incoming.path(),
-          incoming.method(),
-          incoming.body(),
-          incoming.headers()
+          incoming.message()
       );
       this.config = updated;
       this.enabled = resolvedEnabled;
