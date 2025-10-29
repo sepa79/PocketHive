@@ -14,6 +14,7 @@ export interface Component {
   role: string
   swarmId?: string
   version?: string
+  image?: string | null
   uptimeSec?: number
   lastHeartbeat: number
   env?: string

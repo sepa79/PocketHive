@@ -19,10 +19,10 @@ export default function ComponentDetail({ component, onClose }: Props) {
   const [toast, setToast] = useState<string | null>(null)
   const [isEditing, setIsEditing] = useState(false)
   const [form, setForm] = useState<Record<string, ConfigFormValue>>({})
-  const { ensureCapabilities, getManifestForRole } = useCapabilities()
+  const { ensureCapabilities, getManifestForImage } = useCapabilities()
   const manifest = useMemo(
-    () => getManifestForRole(component.role),
-    [component.role, getManifestForRole],
+    () => getManifestForImage(component.image ?? null),
+    [component.image, getManifestForImage],
   )
   const previousComponentIdRef = useRef(component.id)
 

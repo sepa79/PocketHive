@@ -2,7 +2,10 @@
  * @vitest-environment jsdom
  */
 import { vi, test, expect, beforeEach } from 'vitest'
-const apiFetchMock = vi.hoisted(() => vi.fn()) as ReturnType<typeof vi.fn>
+
+const { apiFetchMock } = vi.hoisted(() => ({
+  apiFetchMock: vi.fn(),
+}))
 
 vi.mock('../../lib/api', () => ({
   apiFetch: apiFetchMock,

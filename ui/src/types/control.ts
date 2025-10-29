@@ -8,6 +8,7 @@ export interface ControlEvent {
   messageId: string;
   timestamp: string;
   enabled?: boolean;
+  image?: string;
   traffic?: string;
   publishes?: string[];
   queues?: {

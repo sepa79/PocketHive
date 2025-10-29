@@ -171,13 +171,14 @@ describe('ComponentDetail dynamic config', () => {
       manifestIndex: buildManifestIndex([manifest]),
       ensureCapabilities: vi.fn().mockResolvedValue([manifest]),
       refreshCapabilities: vi.fn().mockResolvedValue([manifest]),
-      getManifestForRole: vi.fn().mockReturnValue(manifest),
+      getManifestForImage: vi.fn().mockReturnValue(manifest),
     }
 
     const component: Component = {
       id: 'gen-1',
       name: 'gen-1',
       role: 'generator',
+      image: 'gen:latest',
       lastHeartbeat: baseTimestamp,
       queues: [],
       config: {
@@ -198,11 +199,11 @@ describe('ComponentDetail dynamic config', () => {
 
     await waitFor(() => expect(providerValue.ensureCapabilities).toHaveBeenCalled())
 
-    await user.click(screen.getByLabelText('Enable editing'))
+    const editToggle = screen.getByRole('checkbox', { name: 'Enable editing' })
+    await user.click(editToggle)
 
-    const rateInput = (await screen.findByDisplayValue('5')) as HTMLInputElement
-    await user.click(rateInput)
-    await user.keyboard('{Control>}a{/Control}{Backspace}')
+    const rateInput = await screen.findByDisplayValue('5')
+    await user.clear(rateInput)
     await user.type(rateInput, '10')
 
     const pathInput = screen.getByDisplayValue('/foo') as HTMLInputElement

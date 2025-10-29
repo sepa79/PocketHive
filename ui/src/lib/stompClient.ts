@@ -290,6 +290,9 @@ export function setClient(newClient: Client | null, destination = controlDestina
         comp.role = evt.role
         comp.swarmId = swarmId
         comp.version = evt.version
+        if (typeof evt.image === 'string' && evt.image.trim().length > 0) {
+          comp.image = evt.image.trim()
+        }
         comp.lastHeartbeat = new Date(evt.timestamp).getTime()
         comp.status = evt.kind
         const cfg = { ...(comp.config || {}) }
