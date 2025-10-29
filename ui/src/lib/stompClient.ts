@@ -44,6 +44,35 @@ function getMergedComponents(): Record<string, Component> {
   return merged
 }
 
+function getProcessorBaseUrl(config?: Record<string, unknown>): string | undefined {
+  if (!config) return undefined
+  const value = config['baseUrl']
+  if (typeof value !== 'string') return undefined
+  const trimmed = value.trim()
+  return trimmed.length > 0 ? trimmed : undefined
+}
+
+function determineWiremockSwarmId(
+  allComponents: Record<string, Component>,
+  fallback?: string,
+): string | undefined {
+  const target = Object.values(allComponents).find((component) => {
+    if (component.id === 'wiremock') return false
+    const role = component.role?.trim().toLowerCase()
+    if (role !== 'processor') return false
+    const targetUrl = getProcessorBaseUrl(component.config)
+    if (!targetUrl) return false
+    return targetUrl.toLowerCase().includes('wiremock')
+  })
+
+  if (!target) return fallback
+
+  const swarmId = target.swarmId?.trim()
+  if (swarmId && swarmId.length > 0) return swarmId
+  const [derived] = target.id.split('-')
+  return derived || fallback
+}
+
 function notifyComponentListeners() {
   const merged = Object.values(getMergedComponents())
   listeners.forEach((l) => l(merged))
@@ -339,7 +368,17 @@ export function subscribeTopology(fn: TopologyListener) {
 }
 
 export function upsertSyntheticComponent(component: Component) {
-  syntheticComponents[component.id] = component
+  const normalized: Component = { ...component }
+  if (normalized.id === 'wiremock') {
+    const merged = { ...getMergedComponents(), [normalized.id]: normalized }
+    const swarmId = determineWiremockSwarmId(merged, normalized.swarmId)
+    if (swarmId) {
+      normalized.swarmId = swarmId
+    } else {
+      delete normalized.swarmId
+    }
+  }
+  syntheticComponents[component.id] = normalized
   applyQueueMetrics()
   notifyComponentListeners()
   emitTopology()

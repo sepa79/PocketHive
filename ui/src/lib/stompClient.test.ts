@@ -299,6 +299,56 @@ describe('swarm lifecycle', () => {
     setClient(null)
   })
 
+  it('links the synthetic wiremock component to swarms targeting wiremock outputs', () => {
+    const publish = vi.fn()
+    let cb: (msg: { body: string; headers: Record<string, string> }) => void = () => {}
+    const subscribe = vi
+      .fn()
+      .mockImplementation((_dest: string, fn: (msg: { body: string; headers: Record<string, string> }) => void) => {
+        cb = fn
+        return { unsubscribe() {} }
+      })
+    setClient({ active: true, publish, subscribe } as unknown as Client)
+
+    const updates: Component[][] = []
+    const unsubscribe = subscribeComponents((list) => {
+      updates.push(list.map((component) => ({ ...component })))
+    })
+
+    cb({
+      headers: { destination: '/exchange/ph.control/ev.status.swarm-sw1' },
+      body: JSON.stringify({
+        event: 'status',
+        kind: 'status',
+        version: '1',
+        role: 'processor',
+        instance: 'sw1-processor',
+        messageId: 'm-processor',
+        timestamp: new Date().toISOString(),
+        data: { baseUrl: 'http://wiremock:8080' },
+      }),
+    })
+
+    const component: Component = {
+      id: 'wiremock',
+      name: 'WireMock',
+      role: 'wiremock',
+      lastHeartbeat: Date.now(),
+      queues: [],
+      config: { healthStatus: 'UP' },
+    }
+
+    upsertSyntheticComponent(component)
+
+    const latest = updates.at(-1)
+    const wiremock = latest?.find((entry) => entry.id === 'wiremock')
+    expect(wiremock?.swarmId).toBe('sw1')
+
+    unsubscribe()
+    removeSyntheticComponent('wiremock')
+    setClient(null)
+  })
+
   it('drops swarm components when a swarm-remove ready confirmation arrives', () => {
     const publish = vi.fn()
     let cb: (msg: { body: string; headers: Record<string, string> }) => void = () => {}
