@@ -298,31 +298,29 @@ export function usePrometheusRangeQuery(
     queryOptions,
   } = options
 
-  const range = useMemo(() => {
-    const endDate = end ?? new Date()
-    const startDate = new Date(endDate.getTime() - lookbackMs)
-    return { start: startDate, end: endDate }
-  }, [end, lookbackMs])
   const labelMatcherKey = useMemo(() => JSON.stringify(labelMatchers ?? {}), [labelMatchers])
+  const endKey = end ? end.getTime() : 'now'
 
   return useQuery<PrometheusRangeQueryResult, Error>({
     queryKey: [
       'prometheus',
       'range',
       query,
-      range.start.getTime(),
-      range.end.getTime(),
+      endKey,
+      lookbackMs,
       stepSeconds,
       labelMatcherKey,
     ],
-    queryFn: () =>
-      prometheusRangeQuery({
+    queryFn: () => {
+      const endDate = end ?? new Date()
+      return prometheusRangeQuery({
         query,
-        start: range.start,
-        end: range.end,
+        start: new Date(endDate.getTime() - lookbackMs),
+        end: endDate,
         stepSeconds,
         labelMatchers,
-      }),
+      })
+    },
     refetchInterval: 10_000,
     enabled,
     ...queryOptions,

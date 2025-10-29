@@ -1,3 +1,4 @@
+import { renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { MockInstance } from 'vitest'
 
@@ -5,9 +6,17 @@ vi.mock('./api', () => ({
   apiFetch: vi.fn(),
 }))
 
+vi.mock('@tanstack/react-query', () => ({
+  useQuery: vi.fn(),
+}))
+
 const { setConfig } = await import('./config')
 const apiModule = await import('./api')
-const { prometheusInstantQuery, prometheusRangeQuery, prometheusSeries } = await import('./prometheus')
+const queryModule = await import('@tanstack/react-query')
+const prometheusModule = await import('./prometheus')
+const { prometheusInstantQuery, prometheusRangeQuery, prometheusSeries, usePrometheusRangeQuery } = prometheusModule
+const useQueryMock = vi.mocked(queryModule.useQuery)
+const apiFetchMock = vi.mocked(apiModule.apiFetch)
 
 describe('prometheus helpers', () => {
   let apiFetchSpy: MockInstance<typeof apiModule.apiFetch>
@@ -141,5 +150,63 @@ describe('prometheus helpers', () => {
       { cache: 'no-store' },
     )
     expect(result.series).toHaveLength(2)
+  })
+})
+
+describe('usePrometheusRangeQuery', () => {
+  beforeEach(() => {
+    useQueryMock.mockReset()
+    apiFetchMock.mockReset()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('updates the time window for each execution when end is undefined', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2024-01-01T00:00:00Z'))
+
+    let capturedOptions: any
+    useQueryMock.mockImplementation((options) => {
+      capturedOptions = options
+      return { data: undefined } as never
+    })
+
+    apiFetchMock.mockImplementation(
+      () =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify({
+              status: 'success',
+              data: { resultType: 'matrix', result: [] },
+            }),
+          ) as unknown as Response,
+        ),
+    )
+
+    setConfig({ prometheus: 'http://prom.test/' })
+
+    const { unmount } = renderHook(() => usePrometheusRangeQuery('ph_metric_total'))
+
+    expect(capturedOptions).toBeTruthy()
+
+    await capturedOptions.queryFn()
+
+    expect(apiFetchMock).toHaveBeenCalledTimes(1)
+    const firstUrl = new URL(apiFetchMock.mock.calls[0][0] as string)
+    expect(firstUrl.searchParams.get('end')).toBe('1704067200')
+    expect(firstUrl.searchParams.get('start')).toBe('1704065400')
+
+    vi.setSystemTime(new Date('2024-01-01T00:05:00Z'))
+
+    await capturedOptions.queryFn()
+
+    expect(apiFetchMock).toHaveBeenCalledTimes(2)
+    const secondUrl = new URL(apiFetchMock.mock.calls[1][0] as string)
+    expect(secondUrl.searchParams.get('end')).toBe('1704067500')
+    expect(secondUrl.searchParams.get('start')).toBe('1704065700')
+
+    unmount()
   })
 })
