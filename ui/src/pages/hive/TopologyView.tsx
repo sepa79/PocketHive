@@ -74,6 +74,9 @@ const shapeOrder: NodeShape[] = [
 const DEFAULT_COLOR = '#60a5fa'
 const DISABLED_COLOR = '#64748b'
 
+const FALLBACK_HORIZONTAL_SPACING = 280
+const FALLBACK_VERTICAL_SPACING = 220
+
 function normalizeRoleKey(value?: string): string {
   return typeof value === 'string' ? value.trim().toLowerCase() : ''
 }
@@ -478,6 +481,31 @@ function starPoints(r: number) {
   return pts.join(' ')
 }
 
+function applyFallbackPositions(nodes: GraphNode[]): GraphNode[] {
+  if (nodes.length === 0) {
+    return nodes
+  }
+  const spacingX = FALLBACK_HORIZONTAL_SPACING
+  const spacingY = FALLBACK_VERTICAL_SPACING
+  const columns = Math.max(1, Math.ceil(Math.sqrt(nodes.length)))
+  const rows = Math.ceil(nodes.length / columns)
+  const offsetX = ((columns - 1) * spacingX) / 2
+  const offsetY = ((rows - 1) * spacingY) / 2
+  return nodes.map((node, index) => {
+    const col = index % columns
+    const row = Math.floor(index / columns)
+    const fallbackX = col * spacingX - offsetX
+    const fallbackY = row * spacingY - offsetY
+    const hasX = typeof node.x === 'number' && Number.isFinite(node.x)
+    const hasY = typeof node.y === 'number' && Number.isFinite(node.y)
+    return {
+      ...node,
+      x: hasX ? node.x : fallbackX,
+      y: hasY ? node.y : fallbackY,
+    }
+  })
+}
+
 export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSelect }: Props) {
   const [data, setData] = useState<GraphData>({ nodes: [], links: [] })
   const shapeMapRef = useRef<Record<string, NodeShape>>({ sut: 'circle' })
@@ -542,22 +570,24 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
         ;(adjacency.get(id) ?? []).forEach((next) => q.push(next))
       }
       const connectedNodes = order
-        .map((id) => topo.nodes.find((n) => n.id === id)!)
-        .map((n, idx) => ({ ...n, x: n.x ?? idx * 80, y: n.y ?? 0 }))
+        .map((id) => topo.nodes.find((n) => n.id === id))
+        .filter((n): n is GraphNode => Boolean(n))
+        .map((n) => ({ ...n }))
       const unconnectedNodes = topo.nodes
         .filter((n) => !visited.has(n.id))
-        .map((n, idx) => ({ ...n, x: n.x ?? idx * 80, y: n.y ?? 80 }))
+        .map((n) => ({ ...n }))
       let nodes = [...connectedNodes, ...unconnectedNodes]
       if (swarmId) {
         nodes = nodes.filter((n) =>
           swarmId === 'default' ? !n.swarmId : n.swarmId === swarmId,
         )
       }
-      const ids = new Set(nodes.map((n) => n.id))
+      const positionedNodes = applyFallbackPositions(nodes)
+      const ids = new Set(positionedNodes.map((n) => n.id))
       const links = topo.edges
         .filter((e) => ids.has(e.from) && ids.has(e.to))
         .map((e) => ({ source: e.from, target: e.to, queue: e.queue }))
-      setData({ nodes, links })
+      setData({ nodes: positionedNodes, links })
     })
     return () => unsub()
   }, [swarmId])
