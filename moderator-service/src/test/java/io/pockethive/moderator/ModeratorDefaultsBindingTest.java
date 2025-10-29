@@ -16,15 +16,17 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Locale;
 import org.junit.jupiter.api.Test;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 class ModeratorDefaultsBindingTest {
 
   private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
-      .withBean(PatternConfigValidator.class)
-      .withBean(ModeratorDefaults.class);
+      .withUserConfiguration(TestConfiguration.class);
 
   @Test
   void bindsScenarioPropertiesIntoModeratorConfig() {
@@ -81,6 +83,8 @@ class ModeratorDefaultsBindingTest {
             "pockethive.control-plane.worker.moderator.seeds.default-seed=scenario/mod/default"
         )
         .run(context -> {
+          assertThat(context).hasNotFailed();
+
           ModeratorDefaults defaults = context.getBean(ModeratorDefaults.class);
           ModeratorWorkerConfig config = defaults.asConfig();
 
@@ -128,7 +132,19 @@ class ModeratorDefaultsBindingTest {
           assertParamEquals(duty, "high", "1.2");
           assertParamEquals(duty, "low", "0.4");
           assertThat(duty.transition().type()).isEqualTo(TransitionType.NONE);
+
+          assertThat(config.seeds().defaultSeed()).isEqualTo("scenario/mod/default");
         });
+  }
+
+  @Configuration(proxyBeanMethods = false)
+  @EnableConfigurationProperties(ModeratorDefaults.class)
+  static class TestConfiguration {
+
+    @Bean
+    PatternConfigValidator patternConfigValidator() {
+      return new PatternConfigValidator();
+    }
   }
 
   private static void assertStep(StepConfig step,
