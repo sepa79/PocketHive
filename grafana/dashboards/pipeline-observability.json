@@ -5,7 +5,10 @@
   "refresh": "10s",
   "schemaVersion": 39,
   "style": "dark",
-  "tags": ["pockethive", "pipeline"],
+  "tags": [
+    "pockethive",
+    "pipeline"
+  ],
   "time": {
     "from": "now-30m",
     "to": "now"
@@ -20,14 +23,14 @@
           "value": "$__all"
         },
         "datasource": "Prometheus",
-        "definition": "label_values(ph_hop_latency_ms_sum, ph_swarm)",
+        "definition": "label_values(ph_processor_calls_total, ph_swarm)",
         "hide": 0,
         "includeAll": true,
         "label": "Swarm",
         "multi": true,
         "name": "swarm",
         "options": [],
-        "query": "label_values(ph_hop_latency_ms_sum, ph_swarm)",
+        "query": "label_values(ph_processor_calls_total, ph_swarm)",
         "refresh": 2,
         "regex": "",
         "skipUrlSync": false,
@@ -39,7 +42,7 @@
   "timezone": "",
   "title": "PocketHive Pipeline Observability",
   "uid": "pockethive-pipeline",
-  "version": 1,
+  "version": 2,
   "panels": [
     {
       "datasource": "Prometheus",
@@ -59,11 +62,11 @@
               },
               {
                 "color": "red",
-                "value": 500
+                "value": 50
               }
             ]
           },
-          "unit": "ms"
+          "unit": "ops"
         },
         "overrides": []
       },
@@ -88,122 +91,12 @@
       },
       "targets": [
         {
-          "expr": "sum by (ph_instance, ph_swarm) (rate(ph_hop_latency_ms_sum{ph_role=\"postprocessor\",ph_swarm=~\"$swarm\"}[5m])) / clamp_min(sum by (ph_instance, ph_swarm) (rate(ph_hop_latency_ms_count{ph_role=\"postprocessor\",ph_swarm=~\"$swarm\"}[5m])), 1e-09)",
+          "expr": "sum by (ph_instance, ph_swarm) (rate(ph_processor_calls_total{ph_role=\"postprocessor\",ph_swarm=~\"$swarm\"}[5m]))",
           "legendFormat": "{{ph_instance}} ({{ph_swarm}})",
           "refId": "A"
         }
       ],
-      "title": "Latest Hop Latency (avg ms)",
-      "type": "timeseries"
-    },
-    {
-      "datasource": "Prometheus",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "decimals": 2,
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 1500
-              }
-            ]
-          },
-          "unit": "ms"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 9,
-        "w": 12,
-        "x": 12,
-        "y": 0
-      },
-      "id": 2,
-      "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "targets": [
-        {
-          "expr": "sum by (ph_instance, ph_swarm) (rate(ph_total_latency_ms_sum{ph_role=\"postprocessor\",ph_swarm=~\"$swarm\"}[5m])) / clamp_min(sum by (ph_instance, ph_swarm) (rate(ph_total_latency_ms_count{ph_role=\"postprocessor\",ph_swarm=~\"$swarm\"}[5m])), 1e-09)",
-          "legendFormat": "{{ph_instance}} ({{ph_swarm}})",
-          "refId": "A"
-        }
-      ],
-      "title": "End-to-end Latency (avg ms)",
-      "type": "timeseries"
-    },
-    {
-      "datasource": "Prometheus",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "decimals": 2,
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 5
-              }
-            ]
-          },
-          "unit": "none"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 9,
-        "w": 12,
-        "x": 0,
-        "y": 9
-      },
-      "id": 3,
-      "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "targets": [
-        {
-          "expr": "sum by (ph_instance, ph_swarm) (rate(ph_hops_sum{ph_role=\"postprocessor\",ph_swarm=~\"$swarm\"}[5m])) / clamp_min(sum by (ph_instance, ph_swarm) (rate(ph_hops_count{ph_role=\"postprocessor\",ph_swarm=~\"$swarm\"}[5m])), 1e-09)",
-          "legendFormat": "{{ph_instance}} ({{ph_swarm}})",
-          "refId": "A"
-        }
-      ],
-      "title": "Hop Count (avg per message)",
+      "title": "Processor Calls (events/s)",
       "type": "timeseries"
     },
     {
@@ -236,9 +129,9 @@
         "h": 9,
         "w": 12,
         "x": 12,
-        "y": 9
+        "y": 0
       },
-      "id": 4,
+      "id": 2,
       "options": {
         "legend": {
           "calcs": [],
@@ -279,61 +172,6 @@
               },
               {
                 "color": "red",
-                "value": 50
-              }
-            ]
-          },
-          "unit": "ops"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 9,
-        "w": 12,
-        "x": 0,
-        "y": 18
-      },
-      "id": 5,
-      "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "targets": [
-        {
-          "expr": "sum by (ph_instance, ph_swarm) (rate(ph_processor_calls_total{ph_role=\"postprocessor\",ph_swarm=~\"$swarm\"}[5m]))",
-          "legendFormat": "{{ph_instance}} ({{ph_swarm}})",
-          "refId": "A"
-        }
-      ],
-      "title": "Processor Calls (events/s)",
-      "type": "timeseries"
-    },
-    {
-      "datasource": "Prometheus",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "decimals": 2,
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
                 "value": 2000
               }
             ]
@@ -345,10 +183,10 @@
       "gridPos": {
         "h": 9,
         "w": 12,
-        "x": 12,
-        "y": 18
+        "x": 0,
+        "y": 9
       },
-      "id": 6,
+      "id": 3,
       "options": {
         "legend": {
           "calcs": [],
@@ -381,65 +219,6 @@
           "decimals": 2,
           "mappings": [],
           "thresholds": {
-            "mode": "percentage",
-            "steps": [
-              {
-                "color": "red",
-                "value": null
-              },
-              {
-                "color": "orange",
-                "value": 0.8
-              },
-              {
-                "color": "green",
-                "value": 0.95
-              }
-            ]
-          },
-          "unit": "percentunit"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 9,
-        "w": 12,
-        "x": 0,
-        "y": 27
-      },
-      "id": 7,
-      "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "targets": [
-        {
-          "expr": "ph_processor_success_ratio{ph_role=\"postprocessor\",ph_swarm=~\"$swarm\"}",
-          "legendFormat": "{{ph_instance}} ({{ph_swarm}})",
-          "refId": "A"
-        }
-      ],
-      "title": "Processor Success Ratio",
-      "type": "timeseries"
-    },
-    {
-      "datasource": "Prometheus",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "decimals": 2,
-          "mappings": [],
-          "thresholds": {
             "mode": "absolute",
             "steps": [
               {
@@ -460,9 +239,9 @@
         "h": 9,
         "w": 12,
         "x": 12,
-        "y": 27
+        "y": 9
       },
-      "id": 8,
+      "id": 4,
       "options": {
         "legend": {
           "calcs": [],
@@ -483,6 +262,61 @@
         }
       ],
       "title": "Processor Average Latency (lifetime ms)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "decimals": 0,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1000
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 18
+      },
+      "id": 5,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "expr": "ph_swarm_queue_depth{swarm=~\"$swarm\"}",
+          "legendFormat": "{{queue}} ({{swarm}})",
+          "refId": "A"
+        }
+      ],
+      "title": "ph_swarm_queue_depth (messages)",
       "type": "timeseries"
     }
   ]
