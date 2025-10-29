@@ -14,6 +14,9 @@ import io.pockethive.controlplane.spring.ControlPlaneContainerEnvironmentFactory
 import io.pockethive.controlplane.spring.ControlPlaneContainerEnvironmentFactory.PushgatewaySettings;
 import io.pockethive.controlplane.spring.ControlPlaneContainerEnvironmentFactory.WorkerSettings;
 import io.pockethive.swarmcontroller.config.SwarmControllerProperties;
+import io.micrometer.core.instrument.Gauge;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Tags;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.core.AmqpAdmin;
@@ -49,6 +52,10 @@ import java.util.Properties;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 import io.pockethive.docker.DockerContainerClient;
 
@@ -74,6 +81,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
   private final String role;
   private final String swarmId;
   private final String controlExchange;
+  private final MeterRegistry meterRegistry;
   private final WorkerSettings workerSettings;
   private final Map<String, List<String>> containers = new HashMap<>();
   private final Set<String> declaredQueues = new HashSet<>();
@@ -81,6 +89,12 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
   private final Map<String, List<String>> instancesByRole = new HashMap<>();
   private final Map<String, Long> lastSeen = new HashMap<>();
   private final Map<String, Boolean> enabled = new HashMap<>();
+  private final ConcurrentMap<String, AtomicLong> queueDepthValues = new ConcurrentHashMap<>();
+  private final ConcurrentMap<String, Gauge> queueDepthGauges = new ConcurrentHashMap<>();
+  private final ConcurrentMap<String, AtomicInteger> queueConsumerValues = new ConcurrentHashMap<>();
+  private final ConcurrentMap<String, Gauge> queueConsumerGauges = new ConcurrentHashMap<>();
+  private final ConcurrentMap<String, AtomicLong> queueOldestValues = new ConcurrentHashMap<>();
+  private final ConcurrentMap<String, Gauge> queueOldestGauges = new ConcurrentHashMap<>();
   private List<String> startOrder = List.of();
   private SwarmStatus status = SwarmStatus.STOPPED;
   private String template;
@@ -94,8 +108,9 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
                                RabbitTemplate rabbit,
                                RabbitProperties rabbitProperties,
                                @Qualifier("instanceId") String instanceId,
-                               SwarmControllerProperties properties) {
-    this(amqp, mapper, docker, rabbit, rabbitProperties, instanceId, properties,
+                               SwarmControllerProperties properties,
+                               MeterRegistry meterRegistry) {
+    this(amqp, mapper, docker, rabbit, rabbitProperties, instanceId, properties, meterRegistry,
         deriveWorkerSettings(properties));
   }
 
@@ -106,6 +121,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
                         RabbitProperties rabbitProperties,
                         String instanceId,
                         SwarmControllerProperties properties,
+                        MeterRegistry meterRegistry,
                         WorkerSettings workerSettings) {
     this.amqp = amqp;
     this.mapper = mapper;
@@ -117,6 +133,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
     this.role = properties.getRole();
     this.swarmId = properties.getSwarmId();
     this.controlExchange = properties.getControlExchange();
+    this.meterRegistry = Objects.requireNonNull(meterRegistry, "meterRegistry");
     this.workerSettings = Objects.requireNonNull(workerSettings, "workerSettings");
   }
 
@@ -326,6 +343,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
       String queueName = properties.queueName(suffix);
       log.info("deleting queue {}", queueName);
       amqp.deleteQueue(queueName);
+      unregisterQueueMetrics(queueName);
     }
     amqp.deleteExchange(properties.hiveExchange());
     declaredQueues.clear();
@@ -413,7 +431,9 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
       String queueName = properties.queueName(suffix);
       Properties properties = amqp.getQueueProperties(queueName);
       if (properties == null) {
-        snapshot.put(queueName, QueueStats.empty());
+        QueueStats stats = QueueStats.empty();
+        snapshot.put(queueName, stats);
+        updateQueueMetrics(queueName, stats);
         continue;
       }
       long depth = coerceLong(properties.get(RabbitAdmin.QUEUE_MESSAGE_COUNT));
@@ -422,9 +442,83 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
           properties.get("x-queue-oldest-age-seconds"),
           properties.get("message_stats.age"),
           properties.get("oldest_message_age_seconds"));
-      snapshot.put(queueName, new QueueStats(depth, consumers, oldestAge));
+      QueueStats stats = new QueueStats(depth, consumers, oldestAge);
+      snapshot.put(queueName, stats);
+      updateQueueMetrics(queueName, stats);
     }
     return snapshot;
+  }
+
+  private void updateQueueMetrics(String queueName, QueueStats stats) {
+    AtomicLong depthValue = queueDepthValues.computeIfAbsent(queueName, this::registerDepthGauge);
+    depthValue.set(stats.depth());
+
+    AtomicInteger consumerValue =
+        queueConsumerValues.computeIfAbsent(queueName, this::registerConsumerGauge);
+    consumerValue.set(stats.consumers());
+
+    long oldestValue = stats.oldestAgeSec().orElse(-1L);
+    AtomicLong oldestGaugeValue =
+        queueOldestValues.computeIfAbsent(queueName, this::registerOldestGauge);
+    oldestGaugeValue.set(oldestValue);
+  }
+
+  private AtomicLong registerDepthGauge(String queueName) {
+    AtomicLong holder = new AtomicLong();
+    Gauge gauge = Gauge.builder("ph_swarm_queue_depth", holder, AtomicLong::doubleValue)
+        .description("Depth of a PocketHive swarm queue")
+        .tags(queueTags(queueName))
+        .register(meterRegistry);
+    queueDepthGauges.put(queueName, gauge);
+    return holder;
+  }
+
+  private AtomicInteger registerConsumerGauge(String queueName) {
+    AtomicInteger holder = new AtomicInteger();
+    Gauge gauge = Gauge.builder("ph_swarm_queue_consumers", holder, AtomicInteger::doubleValue)
+        .description("Active consumer count for a PocketHive swarm queue")
+        .tags(queueTags(queueName))
+        .register(meterRegistry);
+    queueConsumerGauges.put(queueName, gauge);
+    return holder;
+  }
+
+  private AtomicLong registerOldestGauge(String queueName) {
+    AtomicLong holder = new AtomicLong(-1L);
+    Gauge gauge = Gauge.builder("ph_swarm_queue_oldest_age_seconds", holder, AtomicLong::doubleValue)
+        .description("Age in seconds of the oldest message visible on a PocketHive swarm queue")
+        .tags(queueTags(queueName))
+        .register(meterRegistry);
+    queueOldestGauges.put(queueName, gauge);
+    return holder;
+  }
+
+  private Tags queueTags(String queueName) {
+    return Tags.of("swarm", swarmId, "queue", queueName);
+  }
+
+  private void unregisterQueueMetrics(String queueName) {
+    AtomicLong depthValue = queueDepthValues.remove(queueName);
+    if (depthValue != null) {
+      Gauge gauge = queueDepthGauges.remove(queueName);
+      if (gauge != null) {
+        meterRegistry.remove(gauge);
+      }
+    }
+    AtomicInteger consumerValue = queueConsumerValues.remove(queueName);
+    if (consumerValue != null) {
+      Gauge gauge = queueConsumerGauges.remove(queueName);
+      if (gauge != null) {
+        meterRegistry.remove(gauge);
+      }
+    }
+    AtomicLong oldestValue = queueOldestValues.remove(queueName);
+    if (oldestValue != null) {
+      Gauge gauge = queueOldestGauges.remove(queueName);
+      if (gauge != null) {
+        meterRegistry.remove(gauge);
+      }
+    }
   }
 
   private Map<String, String> queueEnvironment(SwarmPlan plan) {
