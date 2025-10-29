@@ -11,7 +11,8 @@ We must transform a constant-rate input stream (from Generator) into realistic t
 ---
 
 ## 2) Top-Level Design
-- **Ack‑Pacer:** Moderator consumes with small prefetch, computes a **target rate r(t)** from a configurable **Pattern**, sleeps until the next token, then **publish→ACK**.
+- **Mode Selector (single-operation):** Operator chooses exactly one shaping mode per run. `pass-through` drains IN→OUT immediately. `flat` applies a constant target rate using `ratioPerSecond`. `pattern` enables the full pattern engine described below.
+- **Ack‑Pacer:** Moderator consumes with small prefetch, computes a **target rate r(t)** from a configurable **Pattern** (when `mode=pattern`) or constant (when `mode=flat`), sleeps until the next token, then **publish→ACK**. In `pass-through` mode the pacer is bypassed and messages ACK immediately after publish.
 - **Pattern = Steps + Transitions + Repeat:** A single cycle with a configurable **duration** is built from **steps** (each with its own shaping mode and mutators). The pattern can **repeat** to cover the whole run. Time can be expressed as **clock times** (HH:MM, with TZ) or **percent of pattern**.
 - **Warp:** A linear time mapping that lets the pattern play faster/slower. `warpFactor: 1 = realtime; 2 = 2× faster; 12 = 12× faster (24h plays in 2h)`.
 - **Determinism:** All jitter/burst randomness uses a **seeded PRNG** advanced once per decision; no message/header inspection.
@@ -21,12 +22,16 @@ We must transform a constant-rate input stream (from Generator) into realistic t
 ## 3) Pattern Model
 ### 3.1 Time
 ```yaml
+mode:
+  type: pattern         # 'pass-through' | 'flat' | 'pattern'
+  config:
+    ratioPerSecond: 250 # required only when type='flat'
 time:
   mode: warp            # 'realtime' or 'warp'
   warpFactor: 1         # 1=realtime; 2=2x faster; 12=12x faster (24h -> 2h); etc.
   tz: Europe/London     # used for clock-based steps and calendar alignment
 ```
-> Warp scales **how fast** we move through the pattern. It does **not** change baseRateRps.
+> `pass-through` mode drains the queue with no pacing. `flat` uses a constant `ratioPerSecond`. `pattern` enables the full pattern configuration. Warp scales **how fast** we move through the pattern. It does **not** change baseRateRps.
 
 ### 3.2 Run & Pattern
 ```yaml
@@ -107,10 +112,10 @@ globalMutators:
 ---
 
 ## 4) Target Rate and Pacing
-- Final **multiplier**: `multiplier(t) = k * f_raw(t) * g(t)`  
-  where `f_raw` is step+mutator+transition, `k` is normalization constant, `g` is global mutator product (or 1).
-- **Target rate:** `r(t) = baseRateRps * multiplier(t)`.
-- **Token bucket:** `tokens += ∫ r(t) dt` (profile time). If `tokens ≥ 1`, publish→ACK and decrement.
+- Final **multiplier**: `multiplier(t) = k * f_raw(t) * g(t)`
+  where `f_raw` is step+mutator+transition, `k` is normalization constant, `g` is global mutator product (or 1). Applicable only when `mode=pattern`.
+- **Target rate:** `r(t) = baseRateRps * multiplier(t)` for `mode=pattern`, or `r(t) = ratioPerSecond` when `mode=flat`.
+- **Token bucket:** `tokens += ∫ r(t) dt` (profile time). If `tokens ≥ 1`, publish→ACK and decrement. The bucket is bypassed in `pass-through` mode; publishing and ACKing happen immediately.
 
 **Jitter (message‑agnostic):**
 ```yaml
