@@ -230,7 +230,7 @@ describe('swarm lifecycle', () => {
       role: 'wiremock',
       lastHeartbeat: Date.now(),
       queues: [],
-      config: { healthStatus: 'UP', requestCount: 5 },
+      config: { healthStatus: 'UP' },
     }
 
     upsertSyntheticComponent(component)
