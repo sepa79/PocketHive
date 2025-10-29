@@ -1,5 +1,8 @@
 package io.pockethive.moderator;
 
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.pockethive.controlplane.spring.WorkerControlPlaneProperties;
 import io.pockethive.moderator.shaper.config.PatternConfig;
@@ -32,6 +35,7 @@ import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.slf4j.LoggerFactory;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -106,8 +110,8 @@ class ModeratorTest {
         assertThat(forwarded.headers()).containsEntry("x-ph-service", "moderator");
     }
 
-    @Test
-    void disablingWorkerHaltsEmissions() {
+  @Test
+  void disablingWorkerHaltsEmissions() {
         ModeratorWorkerConfig disabledConfig = new ModeratorWorkerConfig(
                 false,
                 defaults.getTime(),
@@ -126,7 +130,57 @@ class ModeratorTest {
         assertThat(result).isEqualTo(WorkResult.none());
         assertThat(statusPublisher.lastData).containsEntry("enabled", false);
         assertThat(meterRegistry.get("moderator.target_rps").gauge().value()).isZero();
+  }
+
+  @Test
+  void logsWhenPacerConfigChanges() {
+    Logger logger = (Logger) LoggerFactory.getLogger(ModeratorWorkerImpl.class);
+    ListAppender<ILoggingEvent> appender = new ListAppender<>();
+    appender.start();
+    logger.addAppender(appender);
+    try {
+      ModeratorWorkerConfig baseConfig = defaults.asConfig();
+      WorkMessage message = WorkMessage.text("payload").build();
+
+      worker.onMessage(message, new TestWorkerContext(baseConfig));
+
+      assertThat(appender.list)
+          .anySatisfy(event -> assertThat(event.getFormattedMessage())
+              .contains("Moderator pacer refreshed")
+              .contains("stepCount=" + baseConfig.pattern().steps().size()));
+
+      int initialLogs = appender.list.size();
+
+      worker.onMessage(message, new TestWorkerContext(baseConfig));
+      assertThat(appender.list).hasSize(initialLogs);
+
+      PatternConfig updatedPattern = new PatternConfig(
+          baseConfig.pattern().duration(),
+          baseConfig.pattern().baseRateRps().multiply(BigDecimal.valueOf(2)),
+          baseConfig.pattern().repeat(),
+          baseConfig.pattern().steps());
+      ModeratorWorkerConfig updatedConfig = new ModeratorWorkerConfig(
+          true,
+          baseConfig.time(),
+          baseConfig.run(),
+          updatedPattern,
+          baseConfig.normalization(),
+          baseConfig.globalMutators(),
+          baseConfig.jitter(),
+          baseConfig.seeds());
+
+      worker.onMessage(message, new TestWorkerContext(updatedConfig));
+
+      assertThat(appender.list.size()).isGreaterThan(initialLogs);
+      assertThat(appender.list)
+          .anySatisfy(event -> assertThat(event.getFormattedMessage())
+              .contains("baseRateRps=" + updatedPattern.baseRateRps())
+              .contains("stepCount=" + updatedPattern.steps().size()));
+    } finally {
+      logger.detachAppender(appender);
+      appender.stop();
     }
+  }
 
     @Test
     void rejectsGappedPatternDuringBinding() {

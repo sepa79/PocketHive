@@ -15,12 +15,15 @@ import java.time.Instant;
 import java.util.Map;
 import java.util.Objects;
 import java.util.SplittableRandom;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Deterministic token bucket that uses the {@link PatternTimeline} multiplier to pace acknowledgements.
  */
 public final class PatternAckPacer {
 
+  private static final Logger log = LoggerFactory.getLogger(PatternAckPacer.class);
   private static final double MILLIS_PER_NANO = 1e-6;
   private static final double NANOS_PER_SECOND = 1_000_000_000d;
   private static final Duration MIN_SLEEP = Duration.ofMillis(1);
@@ -40,6 +43,7 @@ public final class PatternAckPacer {
   private PatternTimeline.TimelineSample lastSample;
   private Duration lastProfileElapsed;
   private double tokens;
+  private String lastLoggedStepId;
 
   public PatternAckPacer(ModeratorWorkerConfig config, Clock clock) {
     this(config, clock, defaultSleeper());
@@ -85,6 +89,7 @@ public final class PatternAckPacer {
         Instant readyAt = clock.instant();
         double targetRps = baseRateRps * sample.multiplier();
         double bucketLevel = Math.max(tokens, 0d);
+        logStepTick(sample, targetRps);
         return new AwaitResult(sample, targetRps, bucketLevel, waited, jitterDelay, readyAt);
       }
 
@@ -122,6 +127,20 @@ public final class PatternAckPacer {
       return Duration.ZERO;
     }
     return Duration.ofNanos(nanos);
+  }
+
+  private void logStepTick(PatternTimeline.TimelineSample sample, double targetRps) {
+    String stepId = sample.stepId();
+    if (Objects.equals(stepId, lastLoggedStepId)) {
+      return;
+    }
+    lastLoggedStepId = stepId;
+    String resolvedStep = (stepId == null || stepId.isBlank()) ? "<none>" : stepId;
+    log.info(
+        "Pattern step transition: stepId={}, multiplier={}, targetRps={}",
+        resolvedStep,
+        sample.multiplier(),
+        targetRps);
   }
 
   private Duration applyJitter(PatternTimeline.TimelineSample sample) {

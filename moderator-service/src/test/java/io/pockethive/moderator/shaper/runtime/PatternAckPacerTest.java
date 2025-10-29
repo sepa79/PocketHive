@@ -1,5 +1,8 @@
 package io.pockethive.moderator.shaper.runtime;
 
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import io.pockethive.moderator.ModeratorWorkerConfig;
 import io.pockethive.moderator.shaper.config.JitterConfig;
 import io.pockethive.moderator.shaper.config.JitterType;
@@ -32,6 +35,7 @@ import java.util.Map;
 import java.util.SplittableRandom;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.slf4j.LoggerFactory;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.within;
@@ -45,6 +49,45 @@ class PatternAckPacerTest {
   void setUp() {
     clock = new MutableClock(Instant.parse("2025-01-01T00:00:00Z"), ZoneId.of("UTC"));
     sleeper = duration -> clock.advance(duration);
+  }
+
+  @Test
+  void logsStepTransitionsOnFirstTick() throws Exception {
+    Logger logger = (Logger) LoggerFactory.getLogger(PatternAckPacer.class);
+    ListAppender<ILoggingEvent> appender = new ListAppender<>();
+    appender.start();
+    logger.addAppender(appender);
+    try {
+      ModeratorWorkerConfig config = simpleStepsScenarioConfig();
+      PatternAckPacer pacer = new PatternAckPacer(config, clock, sleeper);
+
+      Instant start = clock.instant();
+      List<Duration> offsets = List.of(
+          Duration.ofSeconds(30),
+          Duration.ofSeconds(105),
+          Duration.ofSeconds(135),
+          Duration.ofSeconds(195));
+
+      for (Duration offset : offsets) {
+        advanceTo(start.plus(offset));
+        pacer.awaitReady();
+      }
+
+      assertThat(appender.list).hasSizeGreaterThanOrEqualTo(4);
+      List<String> messages = appender.list.stream()
+          .map(ILoggingEvent::getFormattedMessage)
+          .toList();
+      assertThat(messages).anySatisfy(msg -> assertThat(msg)
+          .contains("stepId=flat")
+          .contains("multiplier=")
+          .contains("targetRps="));
+      assertThat(messages).anySatisfy(msg -> assertThat(msg).contains("stepId=ramp"));
+      assertThat(messages).anySatisfy(msg -> assertThat(msg).contains("stepId=sinus"));
+      assertThat(messages).anySatisfy(msg -> assertThat(msg).contains("stepId=duty"));
+    } finally {
+      logger.detachAppender(appender);
+      appender.stop();
+    }
   }
 
   @Test

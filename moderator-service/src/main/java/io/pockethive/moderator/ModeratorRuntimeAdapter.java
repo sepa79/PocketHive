@@ -11,6 +11,8 @@ import io.pockethive.worker.sdk.runtime.WorkerRuntime;
 import io.pockethive.worker.sdk.transport.rabbit.RabbitMessageWorkerAdapter;
 import jakarta.annotation.PostConstruct;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.function.Supplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.core.Message;
@@ -49,6 +51,9 @@ class ModeratorRuntimeAdapter implements ApplicationListener<ContextRefreshedEve
     WorkerDefinition workerDefinition = registry.findByRoleAndType("moderator", WorkerType.MESSAGE)
         .orElseThrow(() -> new IllegalStateException("Moderator worker definition not found"));
 
+    Supplier<ModeratorWorkerConfig> defaultsSupplier =
+        () -> patternValidator.validate(moderatorDefaults.asConfig());
+
     this.delegate = RabbitMessageWorkerAdapter.builder()
         .logger(log)
         .listenerId(LISTENER_ID)
@@ -58,8 +63,28 @@ class ModeratorRuntimeAdapter implements ApplicationListener<ContextRefreshedEve
         .listenerRegistry(endpointRegistry)
         .identity(controlIdentity)
         .withConfigDefaults(ModeratorWorkerConfig.class,
-            () -> patternValidator.validate(moderatorDefaults.asConfig()),
+            defaultsSupplier,
             config -> patternValidator.validate(config).enabled())
+        .desiredStateResolver(snapshot -> {
+          Optional<ModeratorWorkerConfig> typedConfig =
+              snapshot.config(ModeratorWorkerConfig.class).map(patternValidator::validate);
+          String baseRate = typedConfig
+              .map(cfg -> cfg.pattern().baseRateRps().toPlainString())
+              .orElse("n/a");
+          String stepCount = typedConfig
+              .map(cfg -> Integer.toString(cfg.pattern().steps().size()))
+              .orElse("n/a");
+          log.info(
+              "Moderator control snapshot received: enabled={}, baseRateRps={}, stepCount={}, rawKeys={}",
+              snapshot.enabled().orElse(null),
+              baseRate,
+              stepCount,
+              snapshot.rawConfig().keySet());
+          return snapshot.enabled()
+              .orElseGet(() -> typedConfig
+                  .map(ModeratorWorkerConfig::enabled)
+                  .orElseGet(() -> defaultsSupplier.get().enabled()));
+        })
         .dispatcher(message -> runtime.dispatch(workerDefinition.beanName(), message))
         .manualAckStrategy((amqpMessage, channelRef, deliveryTag, acknowledgment, workerCall) -> {
           boolean processed = workerCall.getAsBoolean();
