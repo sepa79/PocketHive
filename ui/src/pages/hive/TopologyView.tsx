@@ -74,8 +74,8 @@ const shapeOrder: NodeShape[] = [
 const DEFAULT_COLOR = '#60a5fa'
 const DISABLED_COLOR = '#64748b'
 
-const FALLBACK_HORIZONTAL_SPACING = 280
-const FALLBACK_VERTICAL_SPACING = 220
+const FALLBACK_HORIZONTAL_SPACING = 260
+const FALLBACK_VERTICAL_SPACING = 200
 
 function normalizeRoleKey(value?: string): string {
   return typeof value === 'string' ? value.trim().toLowerCase() : ''
@@ -481,27 +481,124 @@ function starPoints(r: number) {
   return pts.join(' ')
 }
 
-function applyFallbackPositions(nodes: GraphNode[]): GraphNode[] {
+function applyFallbackPositions(nodes: GraphNode[], links: GraphLink[]): GraphNode[] {
   if (nodes.length === 0) {
     return nodes
   }
-  const spacingX = FALLBACK_HORIZONTAL_SPACING
-  const spacingY = FALLBACK_VERTICAL_SPACING
-  const columns = Math.max(1, Math.ceil(Math.sqrt(nodes.length)))
-  const rows = Math.ceil(nodes.length / columns)
-  const offsetX = ((columns - 1) * spacingX) / 2
-  const offsetY = ((rows - 1) * spacingY) / 2
-  return nodes.map((node, index) => {
-    const col = index % columns
-    const row = Math.floor(index / columns)
-    const fallbackX = col * spacingX - offsetX
-    const fallbackY = row * spacingY - offsetY
+
+  const nodeMap = new Map(nodes.map((node) => [node.id, node]))
+  const adjacency = new Map<string, string[]>()
+  const indegree = new Map<string, number>()
+
+  links.forEach((link) => {
+    if (!nodeMap.has(link.source) || !nodeMap.has(link.target)) {
+      return
+    }
+    const list = adjacency.get(link.source) ?? []
+    list.push(link.target)
+    adjacency.set(link.source, list)
+    indegree.set(link.target, (indegree.get(link.target) ?? 0) + 1)
+  })
+
+  const queue: string[] = []
+  const remaining = new Map(indegree)
+  const level = new Map<string, number>()
+
+  nodes.forEach((node) => {
+    if ((remaining.get(node.id) ?? 0) === 0) {
+      queue.push(node.id)
+      level.set(node.id, 0)
+    }
+  })
+
+  if (queue.length === 0) {
+    nodes.forEach((node) => {
+      queue.push(node.id)
+      if (!level.has(node.id)) {
+        level.set(node.id, 0)
+      }
+    })
+  }
+
+  while (queue.length) {
+    const id = queue.shift()!
+    const currentLevel = level.get(id) ?? 0
+    const neighbors = adjacency.get(id) ?? []
+    neighbors.forEach((next) => {
+      const candidate = currentLevel + 1
+      const existingLevel = level.get(next)
+      if (existingLevel === undefined || candidate > existingLevel) {
+        level.set(next, candidate)
+      }
+      const nextRemaining = (remaining.get(next) ?? 0) - 1
+      remaining.set(next, nextRemaining)
+      if (nextRemaining === 0) {
+        queue.push(next)
+      }
+    })
+  }
+
+  let maxLevel = 0
+  level.forEach((value) => {
+    if (value > maxLevel) {
+      maxLevel = value
+    }
+  })
+
+  const unassigned = nodes.filter((node) => !level.has(node.id))
+  unassigned.forEach((node, index) => {
+    const nextLevel = maxLevel + 1 + index
+    level.set(node.id, nextLevel)
+    maxLevel = nextLevel
+  })
+
+  const groups = new Map<number, GraphNode[]>()
+  nodes.forEach((node) => {
+    const nodeLevel = level.get(node.id) ?? 0
+    const list = groups.get(nodeLevel) ?? []
+    list.push(node)
+    groups.set(nodeLevel, list)
+  })
+
+  const orderedLevels = Array.from(groups.keys()).sort((a, b) => a - b)
+  const levelIndexMap = new Map<number, number>()
+  orderedLevels.forEach((lvl, idx) => levelIndexMap.set(lvl, idx))
+  const totalWidth = (orderedLevels.length - 1) * FALLBACK_HORIZONTAL_SPACING
+  const offsetX = totalWidth / 2
+
+  const fallbackPositions = new Map<string, { x: number; y: number }>()
+
+  orderedLevels.forEach((lvl) => {
+    const members = groups.get(lvl)
+    if (!members) return
+    const sortedMembers = [...members].sort((a, b) => {
+      const typeCompare = (a.type || '').localeCompare(b.type || '')
+      if (typeCompare !== 0) {
+        return typeCompare
+      }
+      return (a.id || '').localeCompare(b.id || '')
+    })
+    const columnIndex = levelIndexMap.get(lvl) ?? 0
+    const columnX = columnIndex * FALLBACK_HORIZONTAL_SPACING - offsetX
+    const columnHeight = (sortedMembers.length - 1) * FALLBACK_VERTICAL_SPACING
+    const offsetY = columnHeight / 2
+    sortedMembers.forEach((member, rowIndex) => {
+      const y = rowIndex * FALLBACK_VERTICAL_SPACING - offsetY
+      fallbackPositions.set(member.id, { x: columnX, y })
+    })
+  })
+
+  return nodes.map((node) => {
+    const fallback = fallbackPositions.get(node.id)
     const hasX = typeof node.x === 'number' && Number.isFinite(node.x)
     const hasY = typeof node.y === 'number' && Number.isFinite(node.y)
+    if (!fallback) {
+      return node
+    }
     return {
       ...node,
-      x: hasX ? node.x : fallbackX,
-      y: hasY ? node.y : fallbackY,
+      x: hasX ? node.x : fallback.x,
+      y: hasY ? node.y : fallback.y,
     }
   })
 }
@@ -516,6 +613,18 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
   const [rfNodes, setRfNodes] = useState<FlowNode[]>([])
   const draggingIdsRef = useRef<Set<string>>(new Set())
   const { manifests, ensureCapabilities } = useCapabilities()
+
+  const fitViewToNodes = useCallback(() => {
+    const instance = flowRef.current
+    if (!instance) return
+    const nodes = instance.getNodes?.() ?? []
+    if (!nodes.length) return
+    instance.fitView({ padding: 0.2, includeHiddenNodes: false })
+    const zoom = instance.getZoom?.()
+    if (typeof zoom === 'number' && zoom < 0.9) {
+      instance.zoomTo?.(0.9)
+    }
+  }, [])
 
   useEffect(() => {
     return () => {
@@ -582,11 +691,22 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
           swarmId === 'default' ? !n.swarmId : n.swarmId === swarmId,
         )
       }
-      const positionedNodes = applyFallbackPositions(nodes)
+      const nodeSet = new Set(nodes.map((n) => n.id))
+      const relevantLinks = topo.edges.filter(
+        (edge) => nodeSet.has(edge.from) && nodeSet.has(edge.to),
+      )
+      const positionedNodes = applyFallbackPositions(
+        nodes,
+        relevantLinks.map((edge) => ({
+          source: edge.from,
+          target: edge.to,
+          queue: edge.queue,
+        })),
+      )
       const ids = new Set(positionedNodes.map((n) => n.id))
-      const links = topo.edges
-        .filter((e) => ids.has(e.from) && ids.has(e.to))
-        .map((e) => ({ source: e.from, target: e.to, queue: e.queue }))
+      const links = relevantLinks
+        .filter((edge) => ids.has(edge.from) && ids.has(edge.to))
+        .map((edge) => ({ source: edge.from, target: edge.to, queue: edge.queue }))
       setData({ nodes: positionedNodes, links })
     })
     return () => unsub()
@@ -595,7 +715,7 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
   useEffect(() => {
     const el = containerRef.current
     if (!el) return
-    const update = () => flowRef.current?.fitView({ padding: 20 })
+    const update = () => fitViewToNodes()
     update()
     if (typeof ResizeObserver !== 'undefined') {
       const ro = new ResizeObserver(update)
@@ -604,7 +724,7 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
     }
     window.addEventListener('resize', update)
     return () => window.removeEventListener('resize', update)
-  }, [])
+  }, [fitViewToNodes])
 
   const getFill = useCallback(
     (type?: string, enabled?: boolean) => {
@@ -913,8 +1033,10 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
   )
 
   useEffect(() => {
-    if (rfNodes.length) flowRef.current?.fitView({ padding: 20 })
-  }, [rfNodes.length])
+    if (rfNodes.length) {
+      fitViewToNodes()
+    }
+  }, [fitViewToNodes, rfNodes.length])
 
   const types = Array.from(new Set(data.nodes.map((n) => n.type)))
 
@@ -925,9 +1047,10 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
           edges={edges}
           onNodesChange={onNodesChange}
           nodeTypes={{ shape: ShapeNode, swarmGroup: SwarmGroupNode }}
-          onInit={(inst: ReactFlowInstance<FlowNode, Edge>) =>
-            (flowRef.current = inst)
-          }
+          onInit={(inst: ReactFlowInstance<FlowNode, Edge>) => {
+            flowRef.current = inst
+            fitViewToNodes()
+          }}
           onNodeDragStart={(_e: unknown, node: FlowNode) => {
             draggingIdsRef.current.add(node.id)
           }}
@@ -949,7 +1072,7 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
         >
           <Background />
         </ReactFlow>
-      <button className="reset-view" onClick={() => flowRef.current?.fitView({ padding: 20 })}>
+      <button className="reset-view" onClick={fitViewToNodes}>
         Reset View
       </button>
       <div className="topology-legend">
