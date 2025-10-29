@@ -9,6 +9,7 @@ import static io.pockethive.swarmcontroller.SwarmControllerTestProperties.LOGS_E
 import static io.pockethive.swarmcontroller.SwarmControllerTestProperties.TRAFFIC_PREFIX;
 import static io.pockethive.swarmcontroller.SwarmControllerTestProperties.TEST_SWARM_ID;
 
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.pockethive.controlplane.ControlPlaneSignals;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.docker.DockerContainerClient;
@@ -16,6 +17,7 @@ import io.pockethive.swarm.model.Bee;
 import io.pockethive.swarm.model.SwarmPlan;
 import io.pockethive.swarm.model.Work;
 import io.pockethive.swarmcontroller.config.SwarmControllerProperties;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -63,6 +65,15 @@ class SwarmLifecycleManagerTest {
   RabbitTemplate rabbit;
 
   ObjectMapper mapper = new ObjectMapper();
+  private SimpleMeterRegistry meterRegistry;
+
+  @AfterEach
+  void tearDown() {
+    if (meterRegistry != null) {
+      meterRegistry.close();
+      meterRegistry = null;
+    }
+  }
 
   private static String queue(String suffix) {
     return TRAFFIC_PREFIX + "." + suffix;
@@ -241,13 +252,18 @@ class SwarmLifecycleManagerTest {
     RabbitProperties rabbitProperties = new RabbitProperties();
     rabbitProperties.setHost("");
     rabbitProperties.setPort(5672);
-    SwarmLifecycleManager manager = new SwarmLifecycleManager(
-        amqp, mapper, docker, rabbit, rabbitProperties, "inst", properties);
-    SwarmPlan plan = new SwarmPlan("swarm", List.of(new Bee("gen", "img1", new Work(null, null), null)));
+    SimpleMeterRegistry registry = new SimpleMeterRegistry();
+    try {
+      SwarmLifecycleManager manager = new SwarmLifecycleManager(
+          amqp, mapper, docker, rabbit, rabbitProperties, "inst", properties, registry);
+      SwarmPlan plan = new SwarmPlan("swarm", List.of(new Bee("gen", "img1", new Work(null, null), null)));
 
-    assertThatThrownBy(() -> manager.prepare(mapper.writeValueAsString(plan)))
-        .isInstanceOf(IllegalStateException.class)
-        .hasMessageContaining("spring.rabbitmq.host");
+      assertThatThrownBy(() -> manager.prepare(mapper.writeValueAsString(plan)))
+          .isInstanceOf(IllegalStateException.class)
+          .hasMessageContaining("spring.rabbitmq.host");
+    } finally {
+      registry.close();
+    }
   }
 
   @Test
@@ -523,6 +539,59 @@ class SwarmLifecycleManagerTest {
     assertThat(qout.depth()).isZero();
     assertThat(qout.consumers()).isZero();
     assertThat(qout.oldestAgeSec()).isEqualTo(OptionalLong.empty());
+
+    assertThat(meterRegistry.find("ph_swarm_queue_depth")
+        .tags("queue", queue("qin"), "swarm", TEST_SWARM_ID)
+        .gauge()).isNotNull();
+    assertThat(meterRegistry.find("ph_swarm_queue_depth")
+        .tags("queue", queue("qin"), "swarm", TEST_SWARM_ID)
+        .gauge().value()).isEqualTo(5.0);
+    assertThat(meterRegistry.find("ph_swarm_queue_depth")
+        .tags("queue", queue("qout"), "swarm", TEST_SWARM_ID)
+        .gauge().value()).isEqualTo(0.0);
+    assertThat(meterRegistry.find("ph_swarm_queue_consumers")
+        .tags("queue", queue("qin"), "swarm", TEST_SWARM_ID)
+        .gauge().value()).isEqualTo(2.0);
+    assertThat(meterRegistry.find("ph_swarm_queue_consumers")
+        .tags("queue", queue("qout"), "swarm", TEST_SWARM_ID)
+        .gauge().value()).isEqualTo(0.0);
+    assertThat(meterRegistry.find("ph_swarm_queue_oldest_age_seconds")
+        .tags("queue", queue("qin"), "swarm", TEST_SWARM_ID)
+        .gauge().value()).isEqualTo(17.0);
+    assertThat(meterRegistry.find("ph_swarm_queue_oldest_age_seconds")
+        .tags("queue", queue("qout"), "swarm", TEST_SWARM_ID)
+        .gauge().value()).isEqualTo(-1.0);
+  }
+
+  @Test
+  void removeUnregistersQueueMetrics() throws Exception {
+    SwarmLifecycleManager manager = newManager();
+    SwarmPlan plan = new SwarmPlan("swarm", List.of(new Bee("gen", null, new Work("qin", "qout"), null)));
+
+    Properties metrics = new Properties();
+    metrics.put(RabbitAdmin.QUEUE_MESSAGE_COUNT, 3);
+    metrics.put(RabbitAdmin.QUEUE_CONSUMER_COUNT, 1);
+    when(amqp.getQueueProperties(queue("qin"))).thenReturn(metrics);
+    when(amqp.getQueueProperties(queue("qout"))).thenReturn(new Properties());
+
+    manager.prepare(mapper.writeValueAsString(plan));
+
+    manager.snapshotQueueStats();
+    assertThat(meterRegistry.find("ph_swarm_queue_depth")
+        .tags("queue", queue("qin"), "swarm", TEST_SWARM_ID)
+        .gauge()).isNotNull();
+
+    manager.remove();
+
+    assertThat(meterRegistry.find("ph_swarm_queue_depth")
+        .tags("queue", queue("qin"), "swarm", TEST_SWARM_ID)
+        .gauge()).isNull();
+    assertThat(meterRegistry.find("ph_swarm_queue_consumers")
+        .tags("queue", queue("qin"), "swarm", TEST_SWARM_ID)
+        .gauge()).isNull();
+    assertThat(meterRegistry.find("ph_swarm_queue_oldest_age_seconds")
+        .tags("queue", queue("qin"), "swarm", TEST_SWARM_ID)
+        .gauge()).isNull();
   }
 
   private static List<String> expectedControllerRoutes(String instanceId) {
@@ -547,7 +616,15 @@ class SwarmLifecycleManagerTest {
     rabbitProperties.setUsername("guest");
     rabbitProperties.setPassword("guest");
     rabbitProperties.setVirtualHost("/");
+    meterRegistry = new SimpleMeterRegistry();
     return new SwarmLifecycleManager(
-        amqp, mapper, docker, rabbit, rabbitProperties, "inst", SwarmControllerTestProperties.defaults());
+        amqp,
+        mapper,
+        docker,
+        rabbit,
+        rabbitProperties,
+        "inst",
+        SwarmControllerTestProperties.defaults(),
+        meterRegistry);
   }
 }
