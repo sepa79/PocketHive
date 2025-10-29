@@ -272,6 +272,7 @@ describe('swarm lifecycle', () => {
         instance: 'processor',
         messageId: 'm-processor',
         timestamp: new Date().toISOString(),
+        data: { baseUrl: 'http://wiremock:8080' },
       }),
     })
 
@@ -314,6 +315,13 @@ describe('swarm lifecycle', () => {
     const unsubscribe = subscribeComponents((list) => {
       updates.push(list.map((component) => ({ ...component })))
     })
+    const topologies: { nodes: string[]; edges: { from: string; to: string; queue: string }[] }[] = []
+    const unsubscribeTopology = subscribeTopology((topology) => {
+      topologies.push({
+        nodes: topology.nodes.map((node) => node.id),
+        edges: topology.edges.map((edge) => ({ ...edge })),
+      })
+    })
 
     cb({
       headers: { destination: '/exchange/ph.control/ev.status.swarm-sw1' },
@@ -342,9 +350,14 @@ describe('swarm lifecycle', () => {
 
     const latest = updates.at(-1)
     const wiremock = latest?.find((entry) => entry.id === 'wiremock')
-    expect(wiremock?.swarmId).toBe('sw1')
+    expect(wiremock?.swarmId).toBeUndefined()
+
+    const latestTopology = topologies.at(-1)
+    expect(latestTopology?.nodes).toContain('wiremock')
+    expect(latestTopology?.edges).toContainEqual({ from: 'sw1-processor', to: 'wiremock', queue: 'sut' })
 
     unsubscribe()
+    unsubscribeTopology()
     removeSyntheticComponent('wiremock')
     setClient(null)
   })

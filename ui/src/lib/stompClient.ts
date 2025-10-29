@@ -52,25 +52,13 @@ function getProcessorBaseUrl(config?: Record<string, unknown>): string | undefin
   return trimmed.length > 0 ? trimmed : undefined
 }
 
-function determineWiremockSwarmId(
-  allComponents: Record<string, Component>,
-  fallback?: string,
-): string | undefined {
-  const target = Object.values(allComponents).find((component) => {
-    if (component.id === 'wiremock') return false
-    const role = component.role?.trim().toLowerCase()
-    if (role !== 'processor') return false
-    const targetUrl = getProcessorBaseUrl(component.config)
-    if (!targetUrl) return false
-    return targetUrl.toLowerCase().includes('wiremock')
-  })
-
-  if (!target) return fallback
-
-  const swarmId = target.swarmId?.trim()
-  if (swarmId && swarmId.length > 0) return swarmId
-  const [derived] = target.id.split('-')
-  return derived || fallback
+function processorTargetsWiremock(component: Component): boolean {
+  if (component.id === 'wiremock') return false
+  const role = component.role?.trim().toLowerCase()
+  if (role !== 'processor') return false
+  const targetUrl = getProcessorBaseUrl(component.config)
+  if (!targetUrl) return false
+  return targetUrl.toLowerCase().includes('wiremock')
 }
 
 function notifyComponentListeners() {
@@ -187,9 +175,12 @@ function buildTopology(allComponents: Record<string, Component> = getMergedCompo
   const processorTarget = allComponents['processor']
   if (processorTarget) {
     edges.push({ from: 'processor', to: 'sut', queue: 'sut' })
-    if (allComponents['wiremock']) {
-      edges.push({ from: 'processor', to: 'wiremock', queue: 'sut' })
-    }
+  }
+  if (allComponents['wiremock']) {
+    Object.values(allComponents).forEach((component) => {
+      if (!processorTargetsWiremock(component)) return
+      edges.push({ from: component.id, to: 'wiremock', queue: 'sut' })
+    })
   }
   const seen = new Set<string>()
   const uniq = edges.filter((e) => {
@@ -369,15 +360,6 @@ export function subscribeTopology(fn: TopologyListener) {
 
 export function upsertSyntheticComponent(component: Component) {
   const normalized: Component = { ...component }
-  if (normalized.id === 'wiremock') {
-    const merged = { ...getMergedComponents(), [normalized.id]: normalized }
-    const swarmId = determineWiremockSwarmId(merged, normalized.swarmId)
-    if (swarmId) {
-      normalized.swarmId = swarmId
-    } else {
-      delete normalized.swarmId
-    }
-  }
   syntheticComponents[component.id] = normalized
   applyQueueMetrics()
   notifyComponentListeners()
