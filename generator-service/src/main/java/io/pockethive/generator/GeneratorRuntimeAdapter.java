@@ -88,6 +88,9 @@ class GeneratorRuntimeAdapter {
       states.put(definition.beanName(), state);
       controlPlaneRuntime.registerStateListener(definition.beanName(), snapshot -> state.update(snapshot, defaults));
     }
+    if (!generatorWorkers.isEmpty()) {
+      log.info("Generator work listener started (instance={})", identity.instanceId());
+    }
   }
 
   private void invokeWorker(WorkerDefinition definition) {
