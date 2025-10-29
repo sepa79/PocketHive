@@ -33,7 +33,6 @@ const baseTimestamp = Date.now()
 const wiremockConfig: WiremockComponentConfig = {
   healthStatus: 'OK',
   version: '3.0.0',
-  requestCount: 42,
   stubCount: 5,
   unmatchedCount: 1,
   recentRequests: [
@@ -87,8 +86,6 @@ describe('ComponentDetail wiremock panel', () => {
     expect(within(panel).getAllByText('OK').length).toBeGreaterThan(0)
     expect(within(panel).getByText('Stub count')).toBeInTheDocument()
     expect(within(panel).getByText('5')).toBeInTheDocument()
-    expect(within(panel).getByText('Total requests')).toBeInTheDocument()
-    expect(within(panel).getByText('42')).toBeInTheDocument()
     expect(within(panel).getByText('Unmatched total')).toBeInTheDocument()
     expect(within(panel).getByText('1')).toBeInTheDocument()
     expect(within(panel).getByText('Last heartbeat')).toBeInTheDocument()
@@ -119,7 +116,6 @@ describe('ComponentDetail wiremock panel', () => {
   it('allows triggering a refresh of wiremock metrics', async () => {
     const updatedConfig: WiremockComponentConfig = {
       ...wiremockConfig,
-      requestCount: 100,
       lastUpdatedTs: baseTimestamp,
     }
     vi.mocked(fetchWiremockComponent).mockResolvedValueOnce({
@@ -141,7 +137,7 @@ describe('ComponentDetail wiremock panel', () => {
       expect(upsertSyntheticComponent).toHaveBeenCalledWith(
         expect.objectContaining({
           id: 'wiremock',
-          config: expect.objectContaining({ requestCount: 100 }),
+          config: expect.objectContaining({ lastUpdatedTs: baseTimestamp }),
         }),
       )
     })
@@ -202,12 +198,16 @@ describe('ComponentDetail dynamic config', () => {
 
     await waitFor(() => expect(providerValue.ensureCapabilities).toHaveBeenCalled())
 
-    const rateInput = await screen.findByDisplayValue('5')
-    await user.clear(rateInput)
+    await user.click(screen.getByLabelText('Enable editing'))
+
+    const rateInput = (await screen.findByDisplayValue('5')) as HTMLInputElement
+    await user.click(rateInput)
+    await user.keyboard('{Control>}a{/Control}{Backspace}')
     await user.type(rateInput, '10')
 
-    const pathInput = screen.getByDisplayValue('/foo')
-    await user.clear(pathInput)
+    const pathInput = screen.getByDisplayValue('/foo') as HTMLInputElement
+    await user.click(pathInput)
+    await user.keyboard('{Control>}a{/Control}{Backspace}')
     await user.type(pathInput, '/new')
 
     await user.click(screen.getByRole('button', { name: 'Confirm' }))
