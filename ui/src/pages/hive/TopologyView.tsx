@@ -388,6 +388,11 @@ function SwarmGroupNode({ data }: NodeProps<SwarmGroupNodeData>) {
 
   return (
     <div className={`swarm-group${hasSelected ? ' selected' : ''}`}>
+      <Handle
+        type="target"
+        position={Position.Left}
+        className="swarm-group__handle swarm-group__handle--target"
+      />
       <div className="swarm-group__header">
         <span className="swarm-group__title">{data.label}</span>
         <button
@@ -427,6 +432,11 @@ function SwarmGroupNode({ data }: NodeProps<SwarmGroupNodeData>) {
         })}
         {placements.map((comp) => renderShape(comp))}
       </svg>
+      <Handle
+        type="source"
+        position={Position.Right}
+        className="swarm-group__handle swarm-group__handle--source"
+      />
     </div>
   )
 }
