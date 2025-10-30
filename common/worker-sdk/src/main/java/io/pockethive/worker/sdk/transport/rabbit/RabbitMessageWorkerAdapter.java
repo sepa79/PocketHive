@@ -1,5 +1,6 @@
 package io.pockethive.worker.sdk.transport.rabbit;
 
+import com.rabbitmq.client.Channel;
 import io.pockethive.observability.ObservabilityContext;
 import io.pockethive.observability.ObservabilityContextUtil;
 import io.pockethive.worker.sdk.api.WorkMessage;
@@ -9,6 +10,7 @@ import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime.WorkerStateSna
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -64,6 +66,7 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
     private final String outboundQueue;
     private final String outboundExchange;
     private final Consumer<Exception> dispatchErrorHandler;
+    private final ManualAckStrategy manualAckStrategy;
     private final RabbitWorkMessageConverter messageConverter = new RabbitWorkMessageConverter();
     private volatile boolean desiredEnabled;
 
@@ -84,6 +87,7 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
         this.outboundQueue = builder.outboundQueue;
         this.outboundExchange = builder.outboundExchange;
         this.dispatchErrorHandler = builder.dispatchErrorHandler;
+        this.manualAckStrategy = builder.manualAckStrategy;
     }
 
     /**
@@ -130,6 +134,55 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
      */
     public void onWork(Message message) {
         WorkMessage workMessage = messageConverter.fromMessage(message);
+        dispatchWork(workMessage);
+    }
+
+    /**
+     * Variant of {@link #onWork(Message)} that supports manual acknowledgements. When a
+     * {@link ManualAckStrategy} is configured the dispatcher is invoked through the supplied
+     * strategy which is responsible for acknowledging the inbound message based on the dispatcher
+     * outcome. When no strategy is present the adapter falls back to the default auto-ack flow for
+     * backward compatibility.
+     *
+     * @param message inbound AMQP message delivered by Spring AMQP
+     * @param channel RabbitMQ channel associated with the delivery (may be {@code null})
+     */
+    public void onWork(Message message, Channel channel) {
+        onWork(message, channel, null);
+    }
+
+    /**
+     * Variant of {@link #onWork(Message)} that supports manual acknowledgements. When a
+     * {@link ManualAckStrategy} is configured the dispatcher is invoked through the supplied
+     * strategy which is responsible for acknowledging the inbound message based on the dispatcher
+     * outcome. When no strategy is present the adapter falls back to the default auto-ack flow for
+     * backward compatibility.
+     *
+     * @param message inbound AMQP message delivered by Spring AMQP
+     * @param channel RabbitMQ channel associated with the delivery (may be {@code null})
+     * @param acknowledgment optional acknowledgment handle supplied by Spring (may be {@code null})
+     */
+    public void onWork(Message message, Channel channel, Object acknowledgment) {
+        WorkMessage workMessage = messageConverter.fromMessage(message);
+        if (manualAckStrategy == null) {
+            boolean processed = dispatchWork(workMessage);
+            if (processed && acknowledgment != null) {
+                acknowledgeSafely(acknowledgment);
+            }
+            return;
+        }
+        try {
+            Long deliveryTag = message.getMessageProperties() == null
+                ? null
+                : message.getMessageProperties().getDeliveryTag();
+            long tag = deliveryTag != null ? deliveryTag : -1L;
+            manualAckStrategy.handle(message, channel, tag, acknowledgment, () -> dispatchWork(workMessage));
+        } catch (Exception ex) {
+            dispatchErrorHandler.accept(ex);
+        }
+    }
+
+    private boolean dispatchWork(WorkMessage workMessage) {
         try {
             WorkResult result = dispatcher.dispatch(workMessage);
             if (result == null) {
@@ -143,8 +196,10 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
                 throw new IllegalStateException("Worker " + workerDefinition.beanName()
                     + " returned unsupported WorkResult type: " + result.getClass().getName());
             }
+            return true;
         } catch (Exception ex) {
             dispatchErrorHandler.accept(ex);
+            return false;
         }
     }
 
@@ -233,6 +288,7 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
         private String outboundQueue;
         private String outboundExchange;
         private Consumer<Exception> dispatchErrorHandler;
+        private ManualAckStrategy manualAckStrategy;
 
         private Builder() {
         }
@@ -458,6 +514,19 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
         }
 
         /**
+         * Configures the optional manual acknowledgement strategy. When set, the adapter expects
+         * callers to invoke {@link RabbitMessageWorkerAdapter#onWork(Message, Channel, Object)}
+         * so the strategy can orchestrate dispatcher execution and acknowledgment.
+         *
+         * @param manualAckStrategy strategy invoked for manual acknowledgement handling
+         * @return this builder instance
+         */
+        public Builder manualAckStrategy(ManualAckStrategy manualAckStrategy) {
+            this.manualAckStrategy = Objects.requireNonNull(manualAckStrategy, "manualAckStrategy");
+            return this;
+        }
+
+        /**
          * Validates the builder configuration and creates a {@link RabbitMessageWorkerAdapter} instance.
          *
          * @return a fully configured adapter ready for use by a worker runtime
@@ -533,5 +602,30 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
     @FunctionalInterface
     public interface MessageResultPublisher {
         void publish(WorkResult.Message result, Message message);
+    }
+
+    /**
+     * Strategy invoked when manual acknowledgement is required. Implementations should execute the
+     * provided worker invocation and acknowledge the message using the supplied {@link Channel},
+     * delivery tag or acknowledgment handle only when the invocation reports success.
+    */
+    @FunctionalInterface
+    public interface ManualAckStrategy {
+
+        void handle(Message message, Channel channel, long deliveryTag, Object acknowledgment,
+            BooleanSupplier workerInvocation)
+            throws Exception;
+    }
+
+    private void acknowledgeSafely(Object acknowledgment) {
+        try {
+            var method = acknowledgment.getClass().getMethod("acknowledge");
+            method.invoke(acknowledgment);
+        } catch (NoSuchMethodException | IllegalAccessException ignored) {
+            // Ignore and allow manual strategy/channel path to attempt acknowledgement instead.
+        } catch (Exception ackEx) {
+            dispatchErrorHandler.accept(new IllegalStateException(
+                "Failed to acknowledge message via provided handle", ackEx));
+        }
     }
 }

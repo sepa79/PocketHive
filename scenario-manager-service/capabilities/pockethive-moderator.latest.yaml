@@ -13,5 +13,76 @@ config:
   - name: enabled
     type: boolean
     default: false
+  - name: time
+    type: json
+    default:
+      mode: warp
+      warpFactor: 1
+      tz: Europe/London
+  - name: run
+    type: json
+    default:
+      totalTime: 30d
+  - name: pattern
+    type: json
+    default:
+      duration: 24h
+      baseRateRps: 1000
+      repeat:
+        enabled: true
+        until: total_time
+        align: from_start
+      steps:
+        - id: overnight
+          range:
+            unit: percent
+            startPct: 0
+            endPct: 20
+          mode: flat
+        - id: ramp-up
+          range:
+            unit: percent
+            startPct: 20
+            endPct: 45
+          mode: ramp
+        - id: peak
+          range:
+            unit: percent
+            startPct: 45
+            endPct: 75
+          mode: flat
+        - id: taper
+          range:
+            unit: percent
+            startPct: 75
+            endPct: 100
+          mode: ramp
+  - name: normalization
+    type: json
+    default:
+      enabled: true
+      tolerancePct: 5
+  - name: globalMutators
+    type: json
+    default:
+      - type: spike
+        at: "12:00"
+        width: 5m
+        liftPct: 40
+  - name: jitter
+    type: json
+    default:
+      type: sequence
+      max: 50ms
+      seed: ph/mod/run-001
+      period: 1s
+  - name: seeds
+    type: json
+    default:
+      defaultSeed: ph/mod/default-seed
+      overrides:
+        burst: ph/mod/burst-01
+        noise: ph/mod/noise-01
+        jitter: ph/mod/run-001
 actions: []
 panels: []
