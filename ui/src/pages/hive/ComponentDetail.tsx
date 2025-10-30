@@ -21,7 +21,7 @@ export default function ComponentDetail({ component, onClose }: Props) {
   const [isEditing, setIsEditing] = useState(false)
   const [form, setForm] = useState<Record<string, ConfigFormValue>>({})
   const { ensureCapabilities, getManifestForImage } = useCapabilities()
-  const { ensureSwarms, getBeeImage } = useSwarmMetadata()
+  const { ensureSwarms, getBeeImage, getControllerImage } = useSwarmMetadata()
   const resolvedImage = useMemo(() => {
     if (component.image) {
       return component.image
@@ -30,8 +30,18 @@ export default function ComponentDetail({ component, onClose }: Props) {
     if (!swarmKey) {
       return null
     }
+    const normalizedRole = component.role?.trim().toLowerCase()
+    if (normalizedRole === 'swarm-controller') {
+      return getControllerImage(swarmKey)
+    }
     return getBeeImage(swarmKey, component.role)
-  }, [component.image, component.role, component.swarmId, getBeeImage])
+  }, [
+    component.image,
+    component.role,
+    component.swarmId,
+    getBeeImage,
+    getControllerImage,
+  ])
   const manifest = useMemo(
     () => getManifestForImage(resolvedImage),
     [resolvedImage, getManifestForImage],
