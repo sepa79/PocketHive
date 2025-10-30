@@ -1,5 +1,6 @@
 import { apiFetch } from './api'
 import type { Component } from '../types/hive'
+import type { SwarmSummary, BeeSummary } from '../types/orchestrator'
 
 interface SwarmManagersTogglePayload {
   idempotencyKey: string
@@ -104,6 +105,91 @@ export async function removeSwarm(id: string) {
     body,
   })
   await ensureOk(response, 'Failed to remove swarm')
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
+}
+
+function asString(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim()
+  return trimmed.length > 0 ? trimmed : null
+}
+
+function normalizeBee(input: unknown): BeeSummary | null {
+  if (!isRecord(input)) return null
+  const record = input as Record<string, unknown>
+  const role = asString(record['role'])
+  if (!role) return null
+  const image = asString(record['image'])
+  return { role, image }
+}
+
+function normalizeSwarmSummary(input: unknown): SwarmSummary | null {
+  if (!isRecord(input)) return null
+  const record = input as Record<string, unknown>
+  const id = asString(record['id'])
+  const status = asString(record['status'])
+  if (!id || !status) return null
+  const beesValue = Array.isArray(record['bees']) ? (record['bees'] as unknown[]) : []
+  const bees = beesValue
+    .map((entry) => normalizeBee(entry))
+    .filter((entry): entry is BeeSummary => Boolean(entry))
+
+  return {
+    id,
+    status,
+    health: asString(record['health']),
+    heartbeat: asString(record['heartbeat']),
+    workEnabled: record['workEnabled'] === true,
+    controllerEnabled: record['controllerEnabled'] === true,
+    templateId: asString(record['templateId']),
+    controllerImage: asString(record['controllerImage']),
+    bees,
+  }
+}
+
+async function parseSwarmSummaries(response: Response): Promise<SwarmSummary[]> {
+  try {
+    const payload = await response.json()
+    if (!Array.isArray(payload)) {
+      return []
+    }
+    return payload
+      .map((entry) => normalizeSwarmSummary(entry))
+      .filter((entry): entry is SwarmSummary => Boolean(entry))
+  } catch {
+    return []
+  }
+}
+
+async function parseSwarmSummary(response: Response): Promise<SwarmSummary | null> {
+  try {
+    const payload = await response.json()
+    return normalizeSwarmSummary(payload)
+  } catch {
+    return null
+  }
+}
+
+export async function listSwarms(): Promise<SwarmSummary[]> {
+  const response = await apiFetch('/orchestrator/swarms', {
+    headers: { Accept: 'application/json' },
+  })
+  await ensureOk(response, 'Failed to load swarm metadata')
+  return parseSwarmSummaries(response)
+}
+
+export async function getSwarm(id: string): Promise<SwarmSummary | null> {
+  const response = await apiFetch(`/orchestrator/swarms/${id}`, {
+    headers: { Accept: 'application/json' },
+  })
+  if (response.status === 404) {
+    return null
+  }
+  await ensureOk(response, 'Failed to load swarm metadata')
+  return parseSwarmSummary(response)
 }
 
 async function setSwarmManagersEnabled(enabled: boolean) {

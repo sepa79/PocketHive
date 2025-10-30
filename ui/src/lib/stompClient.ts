@@ -28,6 +28,7 @@ let topoListeners: TopologyListener[] = []
 let controlDestination = '/exchange/ph.control/#'
 const components: Record<string, Component> = {}
 const syntheticComponents: Record<string, Component> = {}
+let swarmMetadataRefreshHandler: ((swarmId: string) => void) | null = null
 interface QueueMetrics {
   depth: number
   consumers: number
@@ -117,6 +118,9 @@ function handleSwarmRemoveConfirmation(raw: unknown): boolean {
   })
   notifyComponentListeners()
   emitTopology()
+  if (swarmMetadataRefreshHandler) {
+    swarmMetadataRefreshHandler(swarmId)
+  }
   return true
 }
 
@@ -362,6 +366,12 @@ export function setClient(newClient: Client | null, destination = controlDestina
       }
     })
   }
+}
+
+export function setSwarmMetadataRefreshHandler(
+  handler: ((swarmId: string) => void) | null,
+) {
+  swarmMetadataRefreshHandler = handler
 }
 
 export function subscribeComponents(fn: ComponentListener) {

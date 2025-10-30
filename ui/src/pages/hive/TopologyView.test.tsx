@@ -221,6 +221,7 @@ vi.mock('../../lib/stompClient', () => {
       }
       listener({ nodes: data.nodes, edges: data.edges })
     },
+    setSwarmMetadataRefreshHandler: vi.fn(),
   }
 })
 
