@@ -8,10 +8,15 @@ import {
   sendConfigUpdate,
   enableSwarmManagers,
   disableSwarmManagers,
+  listSwarms,
+  getSwarm,
 } from './orchestratorApi'
 
 vi.mock('./api', () => ({
-  apiFetch: vi.fn().mockResolvedValue({ ok: true }),
+  apiFetch: vi.fn().mockResolvedValue({
+    ok: true,
+    json: async () => [],
+  }),
 }))
 
 const { apiFetch } = await import('./api')
@@ -19,7 +24,10 @@ const { apiFetch } = await import('./api')
 describe('orchestratorApi', () => {
   beforeEach(() => {
     ;(apiFetch as unknown as Mock).mockClear()
-    ;(apiFetch as unknown as Mock).mockResolvedValue({ ok: true })
+    ;(apiFetch as unknown as Mock).mockResolvedValue({
+      ok: true,
+      json: async () => [],
+    })
   })
 
   it('posts swarm creation', async () => {
@@ -119,5 +127,91 @@ describe('orchestratorApi', () => {
     expect(body.idempotencyKey).toBeDefined()
     expect(body.patch).toEqual({ enabled: true })
     expect(body.swarmId).toBe('sw1')
+  })
+
+  it('fetches and normalizes swarm summaries', async () => {
+    ;(apiFetch as unknown as Mock).mockResolvedValueOnce({
+      ok: true,
+      json: async () => [
+        {
+          id: 'sw1',
+          status: 'RUNNING',
+          health: 'HEALTHY',
+          heartbeat: '2024-01-01T00:00:00Z',
+          workEnabled: true,
+          controllerEnabled: false,
+          templateId: 'tpl-1',
+          controllerImage: 'ctrl:latest',
+          bees: [
+            { role: 'generator', image: 'gen:1' },
+            { role: ' processor ', image: 'proc:1' },
+            { role: '', image: 'ignored' },
+          ],
+        },
+        { id: 'missing-status' },
+      ],
+    })
+
+    const swarms = await listSwarms()
+    expect((apiFetch as unknown as Mock).mock.calls[0][0]).toBe('/orchestrator/swarms')
+    expect(swarms).toHaveLength(1)
+    expect(swarms[0]).toMatchObject({
+      id: 'sw1',
+      status: 'RUNNING',
+      health: 'HEALTHY',
+      heartbeat: '2024-01-01T00:00:00Z',
+      workEnabled: true,
+      controllerEnabled: false,
+      templateId: 'tpl-1',
+      controllerImage: 'ctrl:latest',
+    })
+    expect(swarms[0].bees).toEqual([
+      { role: 'generator', image: 'gen:1' },
+      { role: 'processor', image: 'proc:1' },
+    ])
+  })
+
+  it('returns null when swarm is not found', async () => {
+    ;(apiFetch as unknown as Mock).mockResolvedValueOnce({
+      ok: false,
+      status: 404,
+      json: async () => ({}),
+    })
+
+    const result = await getSwarm('unknown')
+    expect((apiFetch as unknown as Mock).mock.calls[0][0]).toBe('/orchestrator/swarms/unknown')
+    expect(result).toBeNull()
+  })
+
+  it('fetches an individual swarm summary', async () => {
+    ;(apiFetch as unknown as Mock).mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        id: 'sw1',
+        status: 'RUNNING',
+        health: null,
+        heartbeat: null,
+        workEnabled: false,
+        controllerEnabled: true,
+        templateId: null,
+        controllerImage: 'ctrl:1',
+        bees: [{ role: 'generator', image: 'gen:1' }],
+      }),
+    })
+
+    const result = await getSwarm('sw1')
+    expect((apiFetch as unknown as Mock).mock.calls[0][0]).toBe('/orchestrator/swarms/sw1')
+    expect(result).toEqual({
+      id: 'sw1',
+      status: 'RUNNING',
+      health: null,
+      heartbeat: null,
+      workEnabled: false,
+      controllerEnabled: true,
+      templateId: null,
+      controllerImage: 'ctrl:1',
+      bees: [{ role: 'generator', image: 'gen:1' }],
+    })
   })
 })

@@ -14,6 +14,7 @@ import { fetchWiremockComponent } from '../../lib/wiremockClient'
 import SwarmRow from '../../components/hive/SwarmRow'
 import { componentHealth } from '../../lib/health'
 import { mapStatusToVisualState, type HealthVisualState } from './visualState'
+import { useSwarmMetadata } from '../../contexts/SwarmMetadataContext'
 
 export default function HivePage() {
   const [components, setComponents] = useState<Component[]>([])
@@ -24,6 +25,7 @@ export default function HivePage() {
   const [expandedSwarmId, setExpandedSwarmId] = useState<string | null>(null)
   const [contextSwarmId, setContextSwarmId] = useState<string | null>(null)
   const [now, setNow] = useState(() => Date.now())
+  const { ensureSwarms } = useSwarmMetadata()
 
   useEffect(() => {
     // We rely on the control-plane event stream (`ev.status-*`) to keep the
@@ -31,6 +33,10 @@ export default function HivePage() {
     const unsub = subscribeComponents(setComponents)
     return () => unsub()
   }, [])
+
+  useEffect(() => {
+    void ensureSwarms()
+  }, [ensureSwarms])
 
   useEffect(() => {
     let cancelled = false

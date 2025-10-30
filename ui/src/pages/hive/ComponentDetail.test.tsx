@@ -14,6 +14,10 @@ import { CapabilitiesContext, type CapabilitiesContextValue } from '../../contex
 import { buildManifestIndex } from '../../lib/capabilities'
 import type { CapabilityManifest } from '../../types/capabilities'
 import { sendConfigUpdate } from '../../lib/orchestratorApi'
+import {
+  SwarmMetadataContext,
+  type SwarmMetadataContextValue,
+} from '../../contexts/SwarmMetadataContext'
 
 vi.mock('../../lib/orchestratorApi', () => ({
   sendConfigUpdate: vi.fn(),
@@ -22,6 +26,7 @@ vi.mock('../../lib/orchestratorApi', () => ({
 vi.mock('../../lib/stompClient', () => ({
   upsertSyntheticComponent: vi.fn(),
   removeSyntheticComponent: vi.fn(),
+  setSwarmMetadataRefreshHandler: vi.fn(),
 }))
 
 vi.mock('../../lib/wiremockClient', () => ({
@@ -195,13 +200,25 @@ describe('ComponentDetail dynamic config', () => {
     const user = userEvent.setup()
     sendConfigUpdateMock.mockResolvedValue()
 
+    const swarmValue: SwarmMetadataContextValue = {
+      swarms: [],
+      ensureSwarms: vi.fn().mockResolvedValue([]),
+      refreshSwarms: vi.fn().mockResolvedValue([]),
+      getBeeImage: vi.fn().mockReturnValue(null),
+      getControllerImage: vi.fn().mockReturnValue(null),
+      findSwarm: vi.fn().mockReturnValue(null),
+    }
+
     render(
-      <CapabilitiesContext.Provider value={providerValue}>
-        <ComponentDetail component={component} onClose={() => {}} />
-      </CapabilitiesContext.Provider>,
+      <SwarmMetadataContext.Provider value={swarmValue}>
+        <CapabilitiesContext.Provider value={providerValue}>
+          <ComponentDetail component={component} onClose={() => {}} />
+        </CapabilitiesContext.Provider>
+      </SwarmMetadataContext.Provider>,
     )
 
     await waitFor(() => expect(providerValue.ensureCapabilities).toHaveBeenCalled())
+    await waitFor(() => expect(swarmValue.ensureSwarms).toHaveBeenCalled())
 
     const editToggle = screen.getByRole('checkbox', { name: 'Enable editing' })
     await user.click(editToggle)

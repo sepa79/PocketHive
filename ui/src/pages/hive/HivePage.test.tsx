@@ -16,6 +16,7 @@ vi.mock('../../lib/stompClient', () => ({
   subscribeComponents: vi.fn(),
   upsertSyntheticComponent: vi.fn(),
   removeSyntheticComponent: vi.fn(),
+  setSwarmMetadataRefreshHandler: vi.fn(),
 }))
 
 vi.mock('../../lib/wiremockClient', () => ({

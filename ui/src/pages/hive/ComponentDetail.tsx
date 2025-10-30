@@ -7,6 +7,7 @@ import WiremockPanel from './WiremockPanel'
 import { useCapabilities } from '../../contexts/CapabilitiesContext'
 import type { CapabilityConfigEntry } from '../../types/capabilities'
 import { formatCapabilityValue, inferCapabilityInputType } from '../../lib/capabilities'
+import { useSwarmMetadata } from '../../contexts/SwarmMetadataContext'
 
 interface Props {
   component: Component
@@ -20,15 +21,26 @@ export default function ComponentDetail({ component, onClose }: Props) {
   const [isEditing, setIsEditing] = useState(false)
   const [form, setForm] = useState<Record<string, ConfigFormValue>>({})
   const { ensureCapabilities, getManifestForImage } = useCapabilities()
+  const { ensureSwarms, getBeeImage } = useSwarmMetadata()
+  const resolvedImage = useMemo(() => {
+    if (component.image) {
+      return component.image
+    }
+    return getBeeImage(component.swarmId ?? null, component.role)
+  }, [component.image, component.role, component.swarmId, getBeeImage])
   const manifest = useMemo(
-    () => getManifestForImage(component.image ?? null),
-    [component.image, getManifestForImage],
+    () => getManifestForImage(resolvedImage),
+    [resolvedImage, getManifestForImage],
   )
   const previousComponentIdRef = useRef(component.id)
 
   useEffect(() => {
     void ensureCapabilities()
   }, [ensureCapabilities])
+
+  useEffect(() => {
+    void ensureSwarms()
+  }, [ensureSwarms])
 
   useEffect(() => {
     const previousId = previousComponentIdRef.current
