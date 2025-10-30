@@ -219,8 +219,11 @@ describe('ComponentDetail dynamic config', () => {
     const editToggle = screen.getByRole('checkbox', { name: 'Enable editing' })
     await user.click(editToggle)
 
-    const rateInput = await screen.findByDisplayValue('5')
-    await user.clear(rateInput)
+    await user.click(screen.getByLabelText('Enable editing'))
+
+    const rateInput = (await screen.findByDisplayValue('5')) as HTMLInputElement
+    await user.click(rateInput)
+    await user.keyboard('{Control>}a{/Control}{Backspace}')
     await user.type(rateInput, '10')
 
     const pathInput = screen.getByDisplayValue('/foo') as HTMLInputElement
