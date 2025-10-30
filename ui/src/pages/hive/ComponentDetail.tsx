@@ -7,6 +7,7 @@ import WiremockPanel from './WiremockPanel'
 import { useCapabilities } from '../../contexts/CapabilitiesContext'
 import type { CapabilityConfigEntry } from '../../types/capabilities'
 import { formatCapabilityValue, inferCapabilityInputType } from '../../lib/capabilities'
+import { useSwarmMetadata } from '../../contexts/SwarmMetadataContext'
 
 interface Props {
   component: Component
@@ -19,16 +20,41 @@ export default function ComponentDetail({ component, onClose }: Props) {
   const [toast, setToast] = useState<string | null>(null)
   const [isEditing, setIsEditing] = useState(false)
   const [form, setForm] = useState<Record<string, ConfigFormValue>>({})
-  const { ensureCapabilities, getManifestForRole } = useCapabilities()
+  const { ensureCapabilities, getManifestForImage } = useCapabilities()
+  const { ensureSwarms, getBeeImage, getControllerImage } = useSwarmMetadata()
+  const resolvedImage = useMemo(() => {
+    if (component.image) {
+      return component.image
+    }
+    const swarmKey = component.swarmId?.trim()
+    if (!swarmKey) {
+      return null
+    }
+    const normalizedRole = component.role?.trim().toLowerCase()
+    if (normalizedRole === 'swarm-controller') {
+      return getControllerImage(swarmKey)
+    }
+    return getBeeImage(swarmKey, component.role)
+  }, [
+    component.image,
+    component.role,
+    component.swarmId,
+    getBeeImage,
+    getControllerImage,
+  ])
   const manifest = useMemo(
-    () => getManifestForRole(component.role),
-    [component.role, getManifestForRole],
+    () => getManifestForImage(resolvedImage),
+    [resolvedImage, getManifestForImage],
   )
   const previousComponentIdRef = useRef(component.id)
 
   useEffect(() => {
     void ensureCapabilities()
   }, [ensureCapabilities])
+
+  useEffect(() => {
+    void ensureSwarms()
+  }, [ensureSwarms])
 
   useEffect(() => {
     const previousId = previousComponentIdRef.current

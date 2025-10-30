@@ -28,6 +28,7 @@ let topoListeners: TopologyListener[] = []
 let controlDestination = '/exchange/ph.control/#'
 const components: Record<string, Component> = {}
 const syntheticComponents: Record<string, Component> = {}
+let swarmMetadataRefreshHandler: ((swarmId: string) => void) | null = null
 interface QueueMetrics {
   depth: number
   consumers: number
@@ -103,20 +104,27 @@ function isLifecycleConfirmation(raw: unknown): raw is LifecycleConfirmation {
   return true
 }
 
-function handleSwarmRemoveConfirmation(raw: unknown): boolean {
+function handleLifecycleConfirmation(raw: unknown): boolean {
   if (!isLifecycleConfirmation(raw)) return false
-  if (raw.signal !== 'swarm-remove') return false
+  if (raw.signal !== 'swarm-remove' && raw.signal !== 'swarm-create') return false
   const scope = raw.scope
   if (!scope) return false
   const swarmId = getString(scope['swarmId'])
   if (!swarmId) return false
-  Object.entries(components).forEach(([key, comp]) => {
-    if (comp.swarmId === swarmId) {
-      delete components[key]
-    }
-  })
-  notifyComponentListeners()
-  emitTopology()
+
+  if (raw.signal === 'swarm-remove') {
+    Object.entries(components).forEach(([key, comp]) => {
+      if (comp.swarmId === swarmId) {
+        delete components[key]
+      }
+    })
+    notifyComponentListeners()
+    emitTopology()
+  }
+
+  if (swarmMetadataRefreshHandler) {
+    swarmMetadataRefreshHandler(swarmId)
+  }
   return true
 }
 
@@ -272,12 +280,13 @@ export function setClient(newClient: Client | null, destination = controlDestina
       if (destination && !/\/exchange\/ph\.control\/ev\./.test(destination)) return
       try {
         const raw = JSON.parse(msg.body)
-        if (handleSwarmRemoveConfirmation(raw)) return
+        if (handleLifecycleConfirmation(raw)) return
         if (!isControlEvent(raw)) return
         const evt = raw as ControlEvent
         const eventQueueStats = evt.queueStats
         const id = evt.instance
-        const swarmId = id.split('-')[0]
+        const swarmId = evt.swarmId.trim()
+        if (!swarmId) return
         const comp: Component = components[id] || {
           id,
           name: id,
@@ -290,6 +299,9 @@ export function setClient(newClient: Client | null, destination = controlDestina
         comp.role = evt.role
         comp.swarmId = swarmId
         comp.version = evt.version
+        if (typeof evt.image === 'string' && evt.image.trim().length > 0) {
+          comp.image = evt.image.trim()
+        }
         comp.lastHeartbeat = new Date(evt.timestamp).getTime()
         comp.status = evt.kind
         const cfg = { ...(comp.config || {}) }
@@ -359,6 +371,12 @@ export function setClient(newClient: Client | null, destination = controlDestina
       }
     })
   }
+}
+
+export function setSwarmMetadataRefreshHandler(
+  handler: ((swarmId: string) => void) | null,
+) {
+  swarmMetadataRefreshHandler = handler
 }
 
 export function subscribeComponents(fn: ComponentListener) {

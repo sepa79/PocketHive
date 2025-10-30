@@ -11,6 +11,7 @@ import {
 import { apiFetch } from '../lib/api'
 import {
   buildManifestIndex,
+  findManifestForImage,
   normalizeManifests,
   type ManifestIndex,
 } from '../lib/capabilities'
@@ -21,7 +22,7 @@ export interface CapabilitiesContextValue {
   manifestIndex: ManifestIndex
   ensureCapabilities: () => Promise<CapabilityManifest[]>
   refreshCapabilities: () => Promise<CapabilityManifest[]>
-  getManifestForRole: (role: string | null | undefined) => CapabilityManifest | null
+  getManifestForImage: (image: string | null | undefined) => CapabilityManifest | null
 }
 
 const defaultManifestIndex = buildManifestIndex([])
@@ -31,7 +32,7 @@ const defaultValue: CapabilitiesContextValue = {
   manifestIndex: defaultManifestIndex,
   ensureCapabilities: async () => [],
   refreshCapabilities: async () => [],
-  getManifestForRole: () => null,
+  getManifestForImage: () => null,
 }
 
 export const CapabilitiesContext = createContext<CapabilitiesContextValue>(defaultValue)
@@ -104,24 +105,12 @@ export function CapabilitiesProvider({ children }: Props) {
 
   const manifestIndex = useMemo(() => buildManifestIndex(manifests), [manifests])
 
-  const roleManifestMap = useMemo(() => {
-    const map = new Map<string, CapabilityManifest>()
-    manifests.forEach((manifest) => {
-      const key = typeof manifest.role === 'string' ? manifest.role.trim().toLowerCase() : ''
-      if (!key || map.has(key)) return
-      map.set(key, manifest)
-    })
-    return map
-  }, [manifests])
-
-  const getManifestForRole = useCallback(
-    (role: string | null | undefined) => {
-      if (!role) return null
-      const normalized = role.trim().toLowerCase()
-      if (!normalized) return null
-      return roleManifestMap.get(normalized) ?? null
+  const getManifestForImage = useCallback(
+    (image: string | null | undefined) => {
+      if (!image) return null
+      return findManifestForImage(image, manifestIndex)
     },
-    [roleManifestMap],
+    [manifestIndex],
   )
 
   const value = useMemo<CapabilitiesContextValue>(
@@ -130,9 +119,9 @@ export function CapabilitiesProvider({ children }: Props) {
       manifestIndex,
       ensureCapabilities,
       refreshCapabilities,
-      getManifestForRole,
+      getManifestForImage,
     }),
-    [manifests, manifestIndex, ensureCapabilities, refreshCapabilities, getManifestForRole],
+    [manifests, manifestIndex, ensureCapabilities, refreshCapabilities, getManifestForImage],
   )
 
   return <CapabilitiesContext.Provider value={value}>{children}</CapabilitiesContext.Provider>

@@ -6,6 +6,7 @@ import {
   subscribeTopology,
   upsertSyntheticComponent,
   removeSyntheticComponent,
+  setSwarmMetadataRefreshHandler,
 } from './stompClient'
 import { subscribeLogs, type LogEntry, resetLogs } from './logs'
 import { useUIStore } from '../store'
@@ -73,6 +74,7 @@ describe('swarm lifecycle', () => {
         version: '1',
         role: 'processor',
         instance: 'processor-sw1',
+        swarmId: 'sw1',
         messageId: 'm-1',
         timestamp: new Date().toISOString(),
         queues: {
@@ -91,6 +93,7 @@ describe('swarm lifecycle', () => {
         version: '1',
         role: 'swarm-controller',
         instance: 'controller-sw1',
+        swarmId: 'sw1',
         messageId: 'm-2',
         timestamp: new Date().toISOString(),
         queueStats: {
@@ -107,6 +110,7 @@ describe('swarm lifecycle', () => {
     expect(latest).toBeTruthy()
     const processor = latest?.find((comp) => comp.id === 'processor-sw1')
     expect(processor).toBeTruthy()
+    expect(processor?.swarmId).toBe('sw1')
     expect(processor?.queues[0]).toMatchObject({
       name: 'ph.sw1.jobs',
       role: 'producer',
@@ -147,6 +151,7 @@ describe('swarm lifecycle', () => {
         version: '1',
         role: 'generator',
         instance: 'generator-sw1',
+        swarmId: 'sw1',
         messageId: 'm-1',
         timestamp: new Date().toISOString(),
         enabled: true,
@@ -172,6 +177,7 @@ describe('swarm lifecycle', () => {
 
     const generator = latest.find((comp) => comp.id === 'generator-sw1')
     expect(generator).toBeTruthy()
+    expect(generator?.swarmId).toBe('sw1')
     expect(generator?.config).toBeTruthy()
     expect(generator?.config).not.toHaveProperty('workers')
     expect(generator?.config).toMatchObject({
@@ -190,6 +196,7 @@ describe('swarm lifecycle', () => {
         version: '1',
         role: 'swarm-controller',
         instance: 'swarm-controller-sw1',
+        swarmId: 'sw1',
         messageId: 'm-2',
         timestamp: new Date().toISOString(),
         enabled: false,
@@ -208,6 +215,7 @@ describe('swarm lifecycle', () => {
 
     const controller = latest.find((comp) => comp.id === 'swarm-controller-sw1')
     expect(controller).toBeTruthy()
+    expect(controller?.swarmId).toBe('sw1')
     expect(controller?.config).toMatchObject({
       heartbeatIntervalSec: 15,
       enabled: false,
@@ -270,6 +278,7 @@ describe('swarm lifecycle', () => {
         version: '1',
         role: 'processor',
         instance: 'processor',
+        swarmId: 'default',
         messageId: 'm-processor',
         timestamp: new Date().toISOString(),
         data: { baseUrl: 'http://wiremock:8080' },
@@ -294,6 +303,10 @@ describe('swarm lifecycle', () => {
     expect(latest?.edges).toContainEqual({ from: 'processor', to: 'wiremock', queue: 'sut' })
     expect(latest?.edges).toContainEqual({ from: 'processor', to: 'sut', queue: 'sut' })
     expect(latest?.nodes.some((node) => (node as { id: string }).id === 'wiremock')).toBe(true)
+    const processorNode = latest?.nodes.find(
+      (node) => (node as { id: string }).id === 'processor',
+    ) as { id: string; swarmId?: string } | undefined
+    expect(processorNode?.swarmId).toBe('default')
 
     unsubscribeTopo()
     removeSyntheticComponent('wiremock')
@@ -462,6 +475,7 @@ describe('swarm lifecycle', () => {
         version: '1',
         role: 'generator',
         instance: 'sw1-generator',
+        swarmId: 'sw1',
         messageId: 'm-1',
         timestamp: now,
       }),
@@ -475,6 +489,7 @@ describe('swarm lifecycle', () => {
         version: '1',
         role: 'processor',
         instance: 'sw1-processor',
+        swarmId: 'sw1',
         messageId: 'm-2',
         timestamp: now,
       }),
@@ -488,6 +503,7 @@ describe('swarm lifecycle', () => {
         version: '1',
         role: 'processor',
         instance: 'sw2-processor',
+        swarmId: 'sw2',
         messageId: 'm-3',
         timestamp: now,
       }),

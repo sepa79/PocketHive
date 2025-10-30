@@ -16,6 +16,7 @@ vi.mock('../../lib/stompClient', () => ({
   subscribeComponents: vi.fn(),
   upsertSyntheticComponent: vi.fn(),
   removeSyntheticComponent: vi.fn(),
+  setSwarmMetadataRefreshHandler: vi.fn(),
 }))
 
 vi.mock('../../lib/wiremockClient', () => ({
@@ -199,24 +200,31 @@ test('selecting a swarm card reveals its components in the context panel without
   const user = userEvent.setup()
   render(<HivePage />)
 
-  let defaultGroup: HTMLElement | null = null
-  await waitFor(() => {
-    defaultGroup = document.querySelector('[data-testid="swarm-group-default"]') as HTMLElement | null
-    expect(defaultGroup).not.toBeNull()
-  })
-  if (!defaultGroup) {
-    throw new Error('Default swarm group not found')
-  }
-  const toggle = within(defaultGroup).getByRole('button', { name: /swarm details/i })
+  const swarmGroup = await screen.findByTestId('swarm-group-sw1')
+  const toggle = within(swarmGroup).getByRole('button', { name: /swarm details/i })
   expect(toggle).toHaveAttribute('aria-expanded', 'false')
 
-  const defaultLabel = within(defaultGroup).getByText('Services')
-  await user.click(defaultLabel)
-  await waitFor(() => expect(defaultGroup).toHaveAttribute('data-selected', 'true'))
+  const label = within(swarmGroup).getByText('sw1')
+  await user.click(label)
+  await waitFor(() => expect(swarmGroup).toHaveAttribute('data-selected', 'true'))
 
   const contextPanel = await screen.findByTestId('swarm-context-panel')
-  expect(within(contextPanel).getByText('Services')).toBeInTheDocument()
-  expect(within(contextPanel).getByText('1 component')).toBeInTheDocument()
-  expect(within(contextPanel).getByText('orphan')).toBeInTheDocument()
+  expect(within(contextPanel).getByText('sw1')).toBeInTheDocument()
+  expect(within(contextPanel).getByText('2 components')).toBeInTheDocument()
+  expect(within(contextPanel).getByText('sw1-queen')).toBeInTheDocument()
+  expect(within(contextPanel).getByText('sw1-helper')).toBeInTheDocument()
   expect(toggle).toHaveAttribute('aria-expanded', 'false')
+})
+
+test('renders unassigned components in a dedicated bucket', async () => {
+  render(<HivePage />)
+
+  await waitFor(() => {
+    const defaultGroup = document.querySelector('[data-testid="swarm-group-default"]')
+    expect(defaultGroup).toBeNull()
+  })
+
+  const unassigned = await screen.findByTestId('swarm-group-unassigned')
+  expect(within(unassigned).getByText('Unassigned components')).toBeInTheDocument()
+  expect(within(unassigned).getByText('orphan')).toBeInTheDocument()
 })

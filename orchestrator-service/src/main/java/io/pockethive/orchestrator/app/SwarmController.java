@@ -13,6 +13,7 @@ import io.pockethive.orchestrator.domain.SwarmHealth;
 import io.pockethive.orchestrator.domain.SwarmPlanRegistry;
 import io.pockethive.orchestrator.domain.SwarmRegistry;
 import io.pockethive.orchestrator.domain.SwarmStatus;
+import io.pockethive.orchestrator.domain.SwarmTemplateMetadata;
 import io.pockethive.swarm.model.Bee;
 import io.pockethive.swarm.model.SwarmPlan;
 import io.pockethive.swarm.model.SwarmTemplate;
@@ -26,6 +27,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -153,7 +155,11 @@ public class SwarmController {
                 List<Bee> bees = template.bees();
                 String instanceId = BeeNameGenerator.generate("swarm-controller", swarmId);
                 plans.register(instanceId, new SwarmPlan(swarmId, bees));
-                Swarm swarm = lifecycle.startSwarm(swarmId, image, instanceId);
+                Swarm swarm = lifecycle.startSwarm(
+                    swarmId,
+                    image,
+                    instanceId,
+                    new SwarmTemplateMetadata(templateId, image, bees));
                 creates.register(swarm.getInstanceId(), new Pending(
                     swarmId,
                     swarm.getInstanceId(),
@@ -344,43 +350,80 @@ public class SwarmController {
     private record ErrorResponse(String message) {}
 
     /**
-     * GET {@code /api/swarms/{swarmId}} — fetch a snapshot of swarm state for dashboards.
+     * GET {@code /api/swarms} — list all known swarms with their launch metadata.
      * <p>
-     * Returns {@link SwarmView} with status, health, heartbeat, and toggle booleans. Example response:
+     * Returns {@link SwarmSummary} for each registered swarm so dashboards can reconnect after a UI
+     * refresh. Example payload:
      * <pre>{@code
-     * {
-     *   "id": "demo",
-     *   "status": "RUNNING",
-     *   "health": "HEALTHY",
-     *   "heartbeat": "2024-03-15T12:00:00Z",
-     *   "workEnabled": true,
-     *   "controllerEnabled": true
-     * }
+     * [
+     *   {
+     *     "id": "demo",
+     *     "status": "RUNNING",
+     *     "templateId": "baseline-demo",
+     *     "controllerImage": "ghcr.io/pockethive/swarm-controller:1.2.3",
+     *     "bees": [ { "role": "generator", "image": "ghcr.io/..." } ]
+     *   }
+     * ]
      * }</pre>
      */
+    @GetMapping
+    public ResponseEntity<List<SwarmSummary>> list() {
+        String path = "/api/swarms";
+        logRestRequest("GET", path, null);
+        List<SwarmSummary> payload = registry.all().stream()
+            .sorted(Comparator.comparing(Swarm::getId))
+            .map(this::toSummary)
+            .toList();
+        ResponseEntity<List<SwarmSummary>> response = ResponseEntity.ok(payload);
+        logRestResponse("GET", path, response);
+        return response;
+    }
+
+    /**
+     * GET {@code /api/swarms/{swarmId}} — fetch a snapshot of swarm state and launch metadata.
+     */
     @GetMapping("/{swarmId}")
-    public ResponseEntity<SwarmView> view(@PathVariable String swarmId) {
+    public ResponseEntity<SwarmSummary> view(@PathVariable String swarmId) {
         String path = "/api/swarms/" + swarmId;
         logRestRequest("GET", path, null);
-        ResponseEntity<SwarmView> response = registry.find(swarmId)
-            .map(s -> ResponseEntity.ok(new SwarmView(
-                s.getId(),
-                s.getStatus(),
-                s.getHealth(),
-                s.getHeartbeat(),
-                s.isWorkEnabled(),
-                s.isControllerEnabled())))
+        ResponseEntity<SwarmSummary> response = registry.find(swarmId)
+            .map(s -> ResponseEntity.ok(toSummary(s)))
             .orElse(ResponseEntity.notFound().build());
         logRestResponse("GET", path, response);
         return response;
     }
 
-    public record SwarmView(String id,
-                             SwarmStatus status,
-                             SwarmHealth health,
-                             java.time.Instant heartbeat,
-                             boolean workEnabled,
-                             boolean controllerEnabled) {}
+    private SwarmSummary toSummary(Swarm swarm) {
+        List<BeeSummary> bees = swarm.bees().stream()
+            .map(b -> new BeeSummary(b.role(), b.image()))
+            .toList();
+        return new SwarmSummary(
+            swarm.getId(),
+            swarm.getStatus(),
+            swarm.getHealth(),
+            swarm.getHeartbeat(),
+            swarm.isWorkEnabled(),
+            swarm.isControllerEnabled(),
+            swarm.templateId().orElse(null),
+            swarm.controllerImage().orElse(null),
+            bees);
+    }
+
+    public record SwarmSummary(String id,
+                               SwarmStatus status,
+                               SwarmHealth health,
+                               java.time.Instant heartbeat,
+                               boolean workEnabled,
+                               boolean controllerEnabled,
+                               String templateId,
+                               String controllerImage,
+                               List<BeeSummary> bees) {
+        public SwarmSummary {
+            bees = bees == null ? List.of() : List.copyOf(bees);
+        }
+    }
+
+    public record BeeSummary(String role, String image) {}
 
     /**
      * Serialize control signals for RabbitMQ publishing.

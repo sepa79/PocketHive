@@ -4,6 +4,7 @@ import Home from './pages/Home'
 import HivePage from './pages/hive/HivePage'
 import Nectar from './pages/Nectar'
 import { CapabilitiesProvider } from './contexts/CapabilitiesContext'
+import { SwarmMetadataProvider } from './contexts/SwarmMetadataContext'
 
 export default function App() {
   return (
@@ -13,9 +14,11 @@ export default function App() {
         <Route
           path="hive"
           element={
-            <CapabilitiesProvider>
-              <HivePage />
-            </CapabilitiesProvider>
+            <SwarmMetadataProvider>
+              <CapabilitiesProvider>
+                <HivePage />
+              </CapabilitiesProvider>
+            </SwarmMetadataProvider>
           }
         />
         <Route path="nectar" element={<Nectar />} />

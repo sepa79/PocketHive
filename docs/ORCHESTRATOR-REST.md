@@ -13,6 +13,38 @@ Client sends **`idempotencyKey`** (UUID v4) per new action (reuse on retry). Ser
 }
 ```
 
+## 2. Swarm discovery
+
+### 2.1 List swarms
+`GET /api/swarms`
+
+**Response (200)**
+```json
+[
+  {
+    "id": "demo",
+    "status": "RUNNING",
+    "health": "HEALTHY",
+    "heartbeat": "2024-03-15T12:00:00Z",
+    "workEnabled": true,
+    "controllerEnabled": true,
+    "templateId": "baseline-demo",
+    "controllerImage": "ghcr.io/pockethive/swarm-controller:1.2.3",
+    "bees": [
+      { "role": "generator", "image": "ghcr.io/pockethive/generator:1.2.3" },
+      { "role": "moderator", "image": "ghcr.io/pockethive/moderator:1.2.3" }
+    ]
+  }
+]
+```
+
+> Swarms are sorted lexicographically by `id` for deterministic UI rendering.
+
+### 2.2 Fetch swarm
+`GET /api/swarms/{swarmId}`
+
+**Response (200)** — same shape as the list entry above. Returns `404` when the swarm id is unknown.
+
 ## 3.0 Create swarm
 `POST /api/swarms/{swarmId}/create`
 

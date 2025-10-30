@@ -17,7 +17,11 @@ import io.pockethive.orchestrator.config.OrchestratorProperties;
 import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmRegistry;
 import io.pockethive.orchestrator.domain.SwarmStatus;
+import io.pockethive.orchestrator.domain.SwarmTemplateMetadata;
+import io.pockethive.swarm.model.Bee;
+import io.pockethive.swarm.model.Work;
 import java.time.Duration;
+import java.util.List;
 import java.util.Map;
 import java.util.function.UnaryOperator;
 import org.junit.jupiter.api.Test;
@@ -188,6 +192,10 @@ class ContainerLifecycleManagerTest {
     void removeSwarmTearsDownContainerAndQueues() {
         SwarmRegistry registry = new SwarmRegistry();
         Swarm swarm = new Swarm("sw1", "inst1", "cid");
+        swarm.attachTemplate(new SwarmTemplateMetadata(
+            "tpl-1",
+            "ctrl-image",
+            List.of(new Bee("generator", "gen-image", new Work(null, "out"), Map.of()))));
         registry.register(swarm);
         OrchestratorProperties properties = defaultProperties();
         ControlPlaneProperties controlPlane = controlPlaneProperties();
@@ -201,6 +209,7 @@ class ContainerLifecycleManagerTest {
         verify(amqp).deleteQueue("ph." + swarm.getId() + ".mod");
         verify(amqp).deleteQueue("ph." + swarm.getId() + ".final");
         assertTrue(registry.find(swarm.getId()).isEmpty());
+        assertTrue(swarm.templateMetadata().isEmpty());
     }
 
     @Test

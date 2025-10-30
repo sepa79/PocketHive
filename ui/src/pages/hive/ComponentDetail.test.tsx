@@ -14,6 +14,10 @@ import { CapabilitiesContext, type CapabilitiesContextValue } from '../../contex
 import { buildManifestIndex } from '../../lib/capabilities'
 import type { CapabilityManifest } from '../../types/capabilities'
 import { sendConfigUpdate } from '../../lib/orchestratorApi'
+import {
+  SwarmMetadataContext,
+  type SwarmMetadataContextValue,
+} from '../../contexts/SwarmMetadataContext'
 
 vi.mock('../../lib/orchestratorApi', () => ({
   sendConfigUpdate: vi.fn(),
@@ -22,6 +26,7 @@ vi.mock('../../lib/orchestratorApi', () => ({
 vi.mock('../../lib/stompClient', () => ({
   upsertSyntheticComponent: vi.fn(),
   removeSyntheticComponent: vi.fn(),
+  setSwarmMetadataRefreshHandler: vi.fn(),
 }))
 
 vi.mock('../../lib/wiremockClient', () => ({
@@ -171,13 +176,14 @@ describe('ComponentDetail dynamic config', () => {
       manifestIndex: buildManifestIndex([manifest]),
       ensureCapabilities: vi.fn().mockResolvedValue([manifest]),
       refreshCapabilities: vi.fn().mockResolvedValue([manifest]),
-      getManifestForRole: vi.fn().mockReturnValue(manifest),
+      getManifestForImage: vi.fn().mockReturnValue(manifest),
     }
 
     const component: Component = {
       id: 'gen-1',
       name: 'gen-1',
       role: 'generator',
+      image: 'gen:latest',
       lastHeartbeat: baseTimestamp,
       queues: [],
       config: {
@@ -190,13 +196,28 @@ describe('ComponentDetail dynamic config', () => {
     const user = userEvent.setup()
     sendConfigUpdateMock.mockResolvedValue()
 
+    const swarmValue: SwarmMetadataContextValue = {
+      swarms: [],
+      ensureSwarms: vi.fn().mockResolvedValue([]),
+      refreshSwarms: vi.fn().mockResolvedValue([]),
+      getBeeImage: vi.fn().mockReturnValue(null),
+      getControllerImage: vi.fn().mockReturnValue(null),
+      findSwarm: vi.fn().mockReturnValue(null),
+    }
+
     render(
-      <CapabilitiesContext.Provider value={providerValue}>
-        <ComponentDetail component={component} onClose={() => {}} />
-      </CapabilitiesContext.Provider>,
+      <SwarmMetadataContext.Provider value={swarmValue}>
+        <CapabilitiesContext.Provider value={providerValue}>
+          <ComponentDetail component={component} onClose={() => {}} />
+        </CapabilitiesContext.Provider>
+      </SwarmMetadataContext.Provider>,
     )
 
     await waitFor(() => expect(providerValue.ensureCapabilities).toHaveBeenCalled())
+    await waitFor(() => expect(swarmValue.ensureSwarms).toHaveBeenCalled())
+
+    const editToggle = screen.getByRole('checkbox', { name: 'Enable editing' })
+    await user.click(editToggle)
 
     await user.click(screen.getByLabelText('Enable editing'))
 
@@ -222,5 +243,103 @@ describe('ComponentDetail dynamic config', () => {
         }),
       )
     })
+  })
+
+  it('skips swarm metadata lookup when swarm id is absent', async () => {
+    const providerValue: CapabilitiesContextValue = {
+      manifests: [],
+      manifestIndex: buildManifestIndex([]),
+      ensureCapabilities: vi.fn().mockResolvedValue([]),
+      refreshCapabilities: vi.fn().mockResolvedValue([]),
+      getManifestForImage: vi.fn().mockReturnValue(null),
+    }
+
+    const component: Component = {
+      id: 'proc-1',
+      name: 'proc-1',
+      role: 'processor',
+      lastHeartbeat: baseTimestamp,
+      queues: [],
+      config: {},
+    }
+
+    const swarmValue: SwarmMetadataContextValue = {
+      swarms: [],
+      ensureSwarms: vi.fn().mockResolvedValue([]),
+      refreshSwarms: vi.fn().mockResolvedValue([]),
+      getBeeImage: vi.fn().mockReturnValue('image-from-swarm'),
+      getControllerImage: vi.fn().mockReturnValue(null),
+      findSwarm: vi.fn().mockReturnValue(null),
+    }
+
+    render(
+      <SwarmMetadataContext.Provider value={swarmValue}>
+        <CapabilitiesContext.Provider value={providerValue}>
+          <ComponentDetail component={component} onClose={() => {}} />
+        </CapabilitiesContext.Provider>
+      </SwarmMetadataContext.Provider>,
+    )
+
+    await waitFor(() => expect(providerValue.ensureCapabilities).toHaveBeenCalled())
+    await waitFor(() => expect(swarmValue.ensureSwarms).toHaveBeenCalled())
+    expect(swarmValue.getBeeImage).not.toHaveBeenCalled()
+  })
+
+  it('uses controller image metadata to resolve manifests when worker image is missing', async () => {
+    const manifest: CapabilityManifest = {
+      schemaVersion: '1.0',
+      capabilitiesVersion: '1.0',
+      role: 'swarm-controller',
+      image: { name: 'controller', tag: 'latest', digest: null },
+      config: [],
+      actions: [],
+      panels: [],
+    }
+
+    const providerValue: CapabilitiesContextValue = {
+      manifests: [manifest],
+      manifestIndex: buildManifestIndex([manifest]),
+      ensureCapabilities: vi.fn().mockResolvedValue([manifest]),
+      refreshCapabilities: vi.fn().mockResolvedValue([manifest]),
+      getManifestForImage: vi.fn().mockImplementation((image) =>
+        image === 'controller-image' ? manifest : null,
+      ),
+    }
+
+    const component: Component = {
+      id: 'controller-1',
+      name: 'controller-1',
+      role: 'swarm-controller',
+      swarmId: 'swarm-a',
+      lastHeartbeat: baseTimestamp,
+      queues: [],
+      config: {},
+    }
+
+    const swarmValue: SwarmMetadataContextValue = {
+      swarms: [],
+      ensureSwarms: vi.fn().mockResolvedValue([]),
+      refreshSwarms: vi.fn().mockResolvedValue([]),
+      getBeeImage: vi.fn().mockReturnValue('bee-image'),
+      getControllerImage: vi.fn().mockReturnValue('controller-image'),
+      findSwarm: vi.fn().mockReturnValue(null),
+    }
+
+    render(
+      <SwarmMetadataContext.Provider value={swarmValue}>
+        <CapabilitiesContext.Provider value={providerValue}>
+          <ComponentDetail component={component} onClose={() => {}} />
+        </CapabilitiesContext.Provider>
+      </SwarmMetadataContext.Provider>,
+    )
+
+    await waitFor(() => expect(providerValue.ensureCapabilities).toHaveBeenCalled())
+    await waitFor(() => expect(swarmValue.ensureSwarms).toHaveBeenCalled())
+
+    expect(providerValue.getManifestForImage).toHaveBeenCalledWith('controller-image')
+    expect(swarmValue.getBeeImage).not.toHaveBeenCalled()
+    expect(
+      screen.getByText('No configurable options'),
+    ).toBeInTheDocument()
   })
 })
