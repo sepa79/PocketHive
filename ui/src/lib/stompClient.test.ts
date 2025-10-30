@@ -6,6 +6,7 @@ import {
   subscribeTopology,
   upsertSyntheticComponent,
   removeSyntheticComponent,
+  setSwarmMetadataRefreshHandler,
 } from './stompClient'
 import { subscribeLogs, type LogEntry, resetLogs } from './logs'
 import { useUIStore } from '../store'
@@ -308,6 +309,38 @@ describe('swarm lifecycle', () => {
 
     unsubscribeTopo()
     removeSyntheticComponent('wiremock')
+    setClient(null)
+  })
+
+  it('refreshes swarm metadata when a swarm-create ready confirmation arrives', () => {
+    const publish = vi.fn()
+    let cb: (msg: { body: string; headers: Record<string, string> }) => void = () => {}
+    const subscribe = vi
+      .fn()
+      .mockImplementation((_dest: string, fn: (msg: { body: string; headers: Record<string, string> }) => void) => {
+        cb = fn
+        return { unsubscribe() {} }
+      })
+    setClient({ active: true, publish, subscribe } as unknown as Client)
+
+    const refresh = vi.fn()
+    setSwarmMetadataRefreshHandler(refresh)
+
+    cb({
+      headers: {
+        destination: '/exchange/ph.control/ev.ready.swarm-create.sw-new.swarm-controller.instance',
+      },
+      body: JSON.stringify({
+        result: 'success',
+        signal: 'swarm-create',
+        scope: { swarmId: '  sw-new  ' },
+      }),
+    })
+
+    expect(refresh).toHaveBeenCalledTimes(1)
+    expect(refresh).toHaveBeenCalledWith('sw-new')
+
+    setSwarmMetadataRefreshHandler(null)
     setClient(null)
   })
 

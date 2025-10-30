@@ -86,20 +86,24 @@ function isLifecycleConfirmation(raw: unknown): raw is LifecycleConfirmation {
   return true
 }
 
-function handleSwarmRemoveConfirmation(raw: unknown): boolean {
+function handleLifecycleConfirmation(raw: unknown): boolean {
   if (!isLifecycleConfirmation(raw)) return false
-  if (raw.signal !== 'swarm-remove') return false
+  if (raw.signal !== 'swarm-remove' && raw.signal !== 'swarm-create') return false
   const scope = raw.scope
   if (!scope) return false
   const swarmId = getString(scope['swarmId'])
   if (!swarmId) return false
-  Object.entries(components).forEach(([key, comp]) => {
-    if (comp.swarmId === swarmId) {
-      delete components[key]
-    }
-  })
-  notifyComponentListeners()
-  emitTopology()
+
+  if (raw.signal === 'swarm-remove') {
+    Object.entries(components).forEach(([key, comp]) => {
+      if (comp.swarmId === swarmId) {
+        delete components[key]
+      }
+    })
+    notifyComponentListeners()
+    emitTopology()
+  }
+
   if (swarmMetadataRefreshHandler) {
     swarmMetadataRefreshHandler(swarmId)
   }
@@ -237,7 +241,7 @@ export function setClient(newClient: Client | null, destination = controlDestina
       if (destination && !/\/exchange\/ph\.control\/ev\./.test(destination)) return
       try {
         const raw = JSON.parse(msg.body)
-        if (handleSwarmRemoveConfirmation(raw)) return
+        if (handleLifecycleConfirmation(raw)) return
         if (!isControlEvent(raw)) return
         const evt = raw as ControlEvent
         const eventQueueStats = evt.queueStats
