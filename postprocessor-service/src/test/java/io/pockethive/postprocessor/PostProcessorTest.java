@@ -19,7 +19,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -73,7 +72,7 @@ class PostProcessorTest {
         var totalSummary = registry.find("ph_total_latency_ms").summary();
         var hopCountSummary = registry.find("ph_hops").summary();
         var errorsCounter = registry.find("ph_errors_total").counter();
-        var processorLatency = registry.find("ph_processor_latency_ms").timer();
+        var processorLatency = registry.find("ph_processor_latency_ms").summary();
         var processorCalls = registry.find("ph_processor_calls_total").counter();
         var processorSuccessCalls = registry.find("ph_processor_calls_success_total").counter();
         var processorSuccessRatio = registry.find("ph_processor_success_ratio").gauge();
@@ -90,7 +89,7 @@ class PostProcessorTest {
         assertThat(errorsCounter.count()).isEqualTo(1.0);
         assertThat(processorLatency).isNotNull();
         assertThat(processorLatency.count()).isEqualTo(1);
-        assertThat(processorLatency.totalTime(TimeUnit.MILLISECONDS)).isEqualTo(12.0);
+        assertThat(processorLatency.totalAmount()).isEqualTo(12.0);
         assertThat(processorLatency.takeSnapshot().histogramCounts()).isNotEmpty();
         assertThat(processorCalls).isNotNull();
         assertThat(processorCalls.count()).isEqualTo(1.0);
@@ -130,7 +129,7 @@ class PostProcessorTest {
         assertThat(workerContext.statusData().get("processorAvgLatencyMs")).isEqualTo(30.0d);
 
         MeterRegistry registry = workerContext.meterRegistry();
-        var processorLatency = registry.find("ph_processor_latency_ms").timer();
+        var processorLatency = registry.find("ph_processor_latency_ms").summary();
         var processorCalls = registry.find("ph_processor_calls_total").counter();
         var processorSuccessCalls = registry.find("ph_processor_calls_success_total").counter();
         var processorSuccessRatio = registry.find("ph_processor_success_ratio").gauge();
@@ -138,7 +137,7 @@ class PostProcessorTest {
 
         assertThat(processorLatency).isNotNull();
         assertThat(processorLatency.count()).isEqualTo(1);
-        assertThat(processorLatency.totalTime(TimeUnit.MILLISECONDS)).isEqualTo(30.0);
+        assertThat(processorLatency.totalAmount()).isEqualTo(30.0);
         assertThat(processorLatency.takeSnapshot().histogramCounts()).isNotEmpty();
         assertThat(processorCalls).isNotNull();
         assertThat(processorCalls.count()).isEqualTo(1.0);

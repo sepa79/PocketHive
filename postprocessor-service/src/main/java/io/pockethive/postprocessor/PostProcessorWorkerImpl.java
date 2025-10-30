@@ -4,7 +4,6 @@ import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.DistributionSummary;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
-import io.micrometer.core.instrument.Timer;
 import io.pockethive.observability.Hop;
 import io.pockethive.observability.ObservabilityContext;
 import io.pockethive.worker.sdk.api.MessageWorker;
@@ -19,7 +18,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.atomic.DoubleAccumulator;
 import java.util.concurrent.atomic.LongAdder;
@@ -308,7 +306,7 @@ class PostProcessorWorkerImpl implements MessageWorker {
     private final DistributionSummary totalLatency;
     private final DistributionSummary hopCount;
     private final Counter errorCounter;
-    private final Timer processorLatency;
+    private final DistributionSummary processorLatency;
     private final Counter processorCalls;
     private final Counter processorSuccessCalls;
     private final LongAdder processorTransactionCount = new LongAdder();
@@ -342,24 +340,25 @@ class PostProcessorWorkerImpl implements MessageWorker {
           .tag("ph_instance", instance)
           .tag("ph_swarm", swarm)
           .register(registry);
-      this.processorLatency = Timer.builder("ph_processor_latency_ms")
+      this.processorLatency = DistributionSummary.builder("ph_processor_latency_ms")
           .tag("ph_role", role)
           .tag("ph_instance", instance)
           .tag("ph_swarm", swarm)
+          .baseUnit("milliseconds")
           .publishPercentileHistogram(true)
           .serviceLevelObjectives(
-              Duration.ofMillis(1),
-              Duration.ofMillis(5),
-              Duration.ofMillis(10),
-              Duration.ofMillis(50),
-              Duration.ofMillis(100),
-              Duration.ofMillis(250),
-              Duration.ofMillis(500),
-              Duration.ofSeconds(1),
-              Duration.ofSeconds(5),
-              Duration.ofSeconds(10))
-          .minimumExpectedValue(Duration.ofMillis(1))
-          .maximumExpectedValue(Duration.ofSeconds(60))
+              Duration.ofMillis(1).toMillis(),
+              Duration.ofMillis(5).toMillis(),
+              Duration.ofMillis(10).toMillis(),
+              Duration.ofMillis(50).toMillis(),
+              Duration.ofMillis(100).toMillis(),
+              Duration.ofMillis(250).toMillis(),
+              Duration.ofMillis(500).toMillis(),
+              Duration.ofSeconds(1).toMillis(),
+              Duration.ofSeconds(5).toMillis(),
+              Duration.ofSeconds(10).toMillis())
+          .minimumExpectedValue((double) Duration.ofMillis(1).toMillis())
+          .maximumExpectedValue((double) Duration.ofSeconds(60).toMillis())
           .register(registry);
       this.processorCalls = Counter.builder("ph_processor_calls_total")
           .tag("ph_role", role)
@@ -436,7 +435,7 @@ class PostProcessorWorkerImpl implements MessageWorker {
       }
       Long duration = processorStats.durationMs();
       if (duration != null) {
-        processorLatency.record(duration, TimeUnit.MILLISECONDS);
+        processorLatency.record(duration);
         processorLatencyTotal.accumulate(duration);
         processorLatencySamples.increment();
         if (!counted) {
