@@ -4,6 +4,7 @@ export interface ControlEvent {
   version: string;
   role: 'generator' | 'moderator' | 'processor' | 'postprocessor' | 'trigger' | 'swarm-controller';
   instance: string;
+  swarmId: string;
   location?: string;
   messageId: string;
   timestamp: string;
@@ -43,6 +44,9 @@ export function isControlEvent(raw: unknown): raw is ControlEvent {
     (evt.queueStats === null || typeof evt.queueStats !== 'object')
   )
     return false
+  if (typeof evt.swarmId !== 'string') return false
+  const swarmId = evt.swarmId.trim()
+  if (swarmId.length === 0) return false
   return (
     typeof evt.event === 'string' &&
     typeof evt.kind === 'string' &&
