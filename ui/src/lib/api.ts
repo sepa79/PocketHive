@@ -1,18 +1,36 @@
 import { logIn, logOut } from './logs'
 
-export async function apiFetch(input: RequestInfo, init: RequestInit = {}): Promise<Response> {
+export interface ApiFetchInit extends RequestInit {
+  omitCorrelationId?: boolean
+}
+
+function normaliseHeaders(headers?: HeadersInit): Record<string, string> {
+  if (!headers) {
+    return {}
+  }
+  if (headers instanceof Headers) {
+    return Object.fromEntries(headers.entries())
+  }
+  if (Array.isArray(headers)) {
+    return Object.fromEntries(headers)
+  }
+  return { ...headers }
+}
+
+export async function apiFetch(input: RequestInfo, init: ApiFetchInit = {}): Promise<Response> {
+  const { omitCorrelationId, headers: initHeaders, body, ...rest } = init
   const correlationId = crypto.randomUUID()
-  const headers: Record<string, string> = {
-    ...(init.headers as Record<string, string> | undefined),
-    'x-correlation-id': correlationId,
+  const headers = normaliseHeaders(initHeaders)
+  if (!omitCorrelationId) {
+    headers['x-correlation-id'] = correlationId
   }
-  const body = init.body ? (typeof init.body === 'string' ? init.body : String(init.body)) : ''
+  const requestBody = body ? (typeof body === 'string' ? body : String(body)) : ''
   if (typeof input === 'string' || input instanceof URL) {
-    logOut(input.toString(), body, 'ui', 'rest', correlationId)
+    logOut(input.toString(), requestBody, 'ui', 'rest', correlationId)
   } else {
-    logOut(input.url, body, 'ui', 'rest', correlationId)
+    logOut(input.url, requestBody, 'ui', 'rest', correlationId)
   }
-  const response = await fetch(input, { ...init, headers })
+  const response = await fetch(input, { ...rest, headers, body })
   let text = ''
   try {
     text = await response.clone().text()
