@@ -2,6 +2,7 @@ package io.pockethive.orchestrator.app;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.times;
@@ -101,7 +102,7 @@ class SwarmControllerTest {
         ));
         when(scenarioClient.fetchTemplate("tpl-1")).thenReturn(template);
         AtomicReference<String> capturedInstance = new AtomicReference<>();
-        when(lifecycle.startSwarm(eq("sw1"), eq("ctrl-image"), anyString())).thenAnswer(inv -> {
+        when(lifecycle.startSwarm(eq("sw1"), eq("ctrl-image"), anyString(), any(SwarmTemplateMetadata.class))).thenAnswer(inv -> {
             String instanceId = inv.getArgument(2);
             capturedInstance.set(instanceId);
             return new Swarm("sw1", instanceId, "c1");
@@ -145,7 +146,7 @@ class SwarmControllerTest {
             new Bee("generator", "img", new Work(null, "out"), java.util.Map.of())
         ));
         when(scenarioClient.fetchTemplate("tpl-1")).thenReturn(template);
-        when(lifecycle.startSwarm(eq("sw1"), eq("ctrl-image"), anyString()))
+        when(lifecycle.startSwarm(eq("sw1"), eq("ctrl-image"), anyString(), any(SwarmTemplateMetadata.class)))
             .thenAnswer(invocation -> new Swarm("sw1", invocation.getArgument(2), "corr"));
         IdempotencyStore store = new InMemoryIdempotencyStore();
         SwarmController ctrl = controller(tracker, registry, plans, store);
@@ -167,7 +168,7 @@ class SwarmControllerTest {
         ResponseEntity<?> response2 = second.get(5, TimeUnit.SECONDS);
         executor.shutdownNow();
 
-        verify(lifecycle, times(1)).startSwarm(eq("sw1"), eq("ctrl-image"), anyString());
+        verify(lifecycle, times(1)).startSwarm(eq("sw1"), eq("ctrl-image"), anyString(), any(SwarmTemplateMetadata.class));
         verify(scenarioClient, times(1)).fetchTemplate("tpl-1");
         assertThat(response1.getBody()).isInstanceOf(ControlResponse.class);
         assertThat(response2.getBody()).isInstanceOf(ControlResponse.class);
@@ -185,7 +186,7 @@ class SwarmControllerTest {
             new Bee("generator", "img", new Work(null, "out"), java.util.Map.of())
         ));
         when(scenarioClient.fetchTemplate("tpl-1")).thenReturn(template);
-        when(lifecycle.startSwarm(eq("sw1"), eq("ctrl-image"), anyString()))
+        when(lifecycle.startSwarm(eq("sw1"), eq("ctrl-image"), anyString(), any(SwarmTemplateMetadata.class)))
             .thenAnswer(invocation -> new Swarm("sw1", invocation.getArgument(2), "corr"));
         InMemoryIdempotencyStore store = new InMemoryIdempotencyStore();
         SwarmController ctrl = controller(tracker, registry, plans, store);
@@ -208,7 +209,7 @@ class SwarmControllerTest {
         ResponseEntity<?> followerResponse = follower.get(5, TimeUnit.SECONDS);
         executor.shutdownNow();
 
-        verify(lifecycle, times(1)).startSwarm(eq("sw1"), eq("ctrl-image"), anyString());
+        verify(lifecycle, times(1)).startSwarm(eq("sw1"), eq("ctrl-image"), anyString(), any(SwarmTemplateMetadata.class));
         verify(scenarioClient, times(1)).fetchTemplate("tpl-1");
         assertThat(leaderResponse.getBody()).isInstanceOf(ControlResponse.class);
         assertThat(followerResponse.getBody()).isInstanceOf(ControlResponse.class);
