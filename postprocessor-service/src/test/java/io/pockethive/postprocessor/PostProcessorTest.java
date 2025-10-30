@@ -90,6 +90,7 @@ class PostProcessorTest {
         assertThat(processorLatency).isNotNull();
         assertThat(processorLatency.count()).isEqualTo(1);
         assertThat(processorLatency.totalAmount()).isEqualTo(12.0);
+        assertThat(processorLatency.takeSnapshot().histogramCounts()).isNotEmpty();
         assertThat(processorCalls).isNotNull();
         assertThat(processorCalls.count()).isEqualTo(1.0);
         assertThat(processorSuccessCalls).isNotNull();
@@ -137,6 +138,7 @@ class PostProcessorTest {
         assertThat(processorLatency).isNotNull();
         assertThat(processorLatency.count()).isEqualTo(1);
         assertThat(processorLatency.totalAmount()).isEqualTo(30.0);
+        assertThat(processorLatency.takeSnapshot().histogramCounts()).isNotEmpty();
         assertThat(processorCalls).isNotNull();
         assertThat(processorCalls.count()).isEqualTo(1.0);
         assertThat(processorSuccessCalls).isNotNull();
