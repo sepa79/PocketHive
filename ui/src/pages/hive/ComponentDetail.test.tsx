@@ -281,4 +281,62 @@ describe('ComponentDetail dynamic config', () => {
     await waitFor(() => expect(swarmValue.ensureSwarms).toHaveBeenCalled())
     expect(swarmValue.getBeeImage).not.toHaveBeenCalled()
   })
+
+  it('uses controller image metadata to resolve manifests when worker image is missing', async () => {
+    const manifest: CapabilityManifest = {
+      schemaVersion: '1.0',
+      capabilitiesVersion: '1.0',
+      role: 'swarm-controller',
+      image: { name: 'controller', tag: 'latest', digest: null },
+      config: [],
+      actions: [],
+      panels: [],
+    }
+
+    const providerValue: CapabilitiesContextValue = {
+      manifests: [manifest],
+      manifestIndex: buildManifestIndex([manifest]),
+      ensureCapabilities: vi.fn().mockResolvedValue([manifest]),
+      refreshCapabilities: vi.fn().mockResolvedValue([manifest]),
+      getManifestForImage: vi.fn().mockImplementation((image) =>
+        image === 'controller-image' ? manifest : null,
+      ),
+    }
+
+    const component: Component = {
+      id: 'controller-1',
+      name: 'controller-1',
+      role: 'swarm-controller',
+      swarmId: 'swarm-a',
+      lastHeartbeat: baseTimestamp,
+      queues: [],
+      config: {},
+    }
+
+    const swarmValue: SwarmMetadataContextValue = {
+      swarms: [],
+      ensureSwarms: vi.fn().mockResolvedValue([]),
+      refreshSwarms: vi.fn().mockResolvedValue([]),
+      getBeeImage: vi.fn().mockReturnValue('bee-image'),
+      getControllerImage: vi.fn().mockReturnValue('controller-image'),
+      findSwarm: vi.fn().mockReturnValue(null),
+    }
+
+    render(
+      <SwarmMetadataContext.Provider value={swarmValue}>
+        <CapabilitiesContext.Provider value={providerValue}>
+          <ComponentDetail component={component} onClose={() => {}} />
+        </CapabilitiesContext.Provider>
+      </SwarmMetadataContext.Provider>,
+    )
+
+    await waitFor(() => expect(providerValue.ensureCapabilities).toHaveBeenCalled())
+    await waitFor(() => expect(swarmValue.ensureSwarms).toHaveBeenCalled())
+
+    expect(providerValue.getManifestForImage).toHaveBeenCalledWith('controller-image')
+    expect(swarmValue.getBeeImage).not.toHaveBeenCalled()
+    expect(
+      screen.getByText('No configurable options'),
+    ).toBeInTheDocument()
+  })
 })
