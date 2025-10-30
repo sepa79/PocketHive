@@ -12,8 +12,8 @@ describe('apiFetch', () => {
     const fetchMock = vi.fn().mockResolvedValue({
       clone: () => ({ text: () => Promise.resolve('ok') }),
       text: () => Promise.resolve('ok'),
-    }) as unknown as typeof fetch
-    global.fetch = fetchMock
+    })
+    global.fetch = fetchMock as unknown as typeof fetch
     let entries: LogEntry[] = []
     const unsubscribe = subscribeLogs((l) => {
       entries = l
@@ -37,8 +37,8 @@ describe('apiFetch', () => {
     const fetchMock = vi.fn().mockResolvedValue({
       clone: () => ({ text: () => Promise.resolve('ok') }),
       text: () => Promise.resolve('ok'),
-    }) as unknown as typeof fetch
-    global.fetch = fetchMock
+    })
+    global.fetch = fetchMock as unknown as typeof fetch
     let entries: LogEntry[] = []
     const unsubscribe = subscribeLogs((l) => {
       entries = l
