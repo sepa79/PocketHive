@@ -25,6 +25,7 @@ import io.pockethive.orchestrator.domain.SwarmCreateTracker.Phase;
 import io.pockethive.orchestrator.domain.SwarmPlanRegistry;
 import io.pockethive.orchestrator.domain.SwarmRegistry;
 import io.pockethive.orchestrator.domain.SwarmStatus;
+import io.pockethive.orchestrator.domain.SwarmTemplateMetadata;
 import io.pockethive.orchestrator.infra.InMemoryIdempotencyStore;
 import io.pockethive.swarm.model.Bee;
 import io.pockethive.swarm.model.SwarmPlan;
@@ -251,15 +252,51 @@ class SwarmControllerTest {
     }
 
     @Test
-    void exposesSwarmView() {
+    void exposesSwarmSummaryWithTemplateMetadata() {
         SwarmRegistry registry = new SwarmRegistry();
-        registry.register(new Swarm("sw1", "inst", "c"));
+        Swarm swarm = new Swarm("sw1", "inst", "c");
+        swarm.attachTemplate(new SwarmTemplateMetadata(
+            "tpl-1",
+            "ctrl-image",
+            List.of(new Bee("generator", "gen-image", new Work(null, "out"), java.util.Map.of()))));
+        registry.register(swarm);
         SwarmController ctrl = controller(new SwarmCreateTracker(), registry, new SwarmPlanRegistry());
 
-        ResponseEntity<SwarmController.SwarmView> resp = ctrl.view("sw1");
-        assertThat(resp.getBody().id()).isEqualTo("sw1");
-        assertThat(resp.getBody().workEnabled()).isTrue();
-        assertThat(resp.getBody().controllerEnabled()).isFalse();
+        ResponseEntity<SwarmController.SwarmSummary> resp = ctrl.view("sw1");
+        SwarmController.SwarmSummary body = resp.getBody();
+        assertThat(body.id()).isEqualTo("sw1");
+        assertThat(body.workEnabled()).isTrue();
+        assertThat(body.controllerEnabled()).isFalse();
+        assertThat(body.templateId()).isEqualTo("tpl-1");
+        assertThat(body.controllerImage()).isEqualTo("ctrl-image");
+        assertThat(body.bees()).containsExactly(new SwarmController.BeeSummary("generator", "gen-image"));
+    }
+
+    @Test
+    void listReturnsSortedSwarmsWithMetadata() {
+        SwarmRegistry registry = new SwarmRegistry();
+        Swarm alpha = new Swarm("alpha", "inst-a", "c1");
+        alpha.attachTemplate(new SwarmTemplateMetadata(
+            "tpl-alpha",
+            "ctrl-alpha",
+            List.of(new Bee("generator", "gen-alpha", new Work(null, "out"), java.util.Map.of()))));
+        Swarm bravo = new Swarm("bravo", "inst-b", "c2");
+        bravo.attachTemplate(new SwarmTemplateMetadata(
+            "tpl-bravo",
+            "ctrl-bravo",
+            List.of(new Bee("moderator", "mod-bravo", new Work("in", "out"), java.util.Map.of()))));
+        registry.register(bravo);
+        registry.register(alpha);
+        SwarmController ctrl = controller(new SwarmCreateTracker(), registry, new SwarmPlanRegistry());
+
+        ResponseEntity<List<SwarmController.SwarmSummary>> resp = ctrl.list();
+        List<SwarmController.SwarmSummary> body = resp.getBody();
+
+        assertThat(body).extracting(SwarmController.SwarmSummary::id).containsExactly("alpha", "bravo");
+        assertThat(body.get(0).templateId()).isEqualTo("tpl-alpha");
+        assertThat(body.get(0).bees()).containsExactly(new SwarmController.BeeSummary("generator", "gen-alpha"));
+        assertThat(body.get(1).templateId()).isEqualTo("tpl-bravo");
+        assertThat(body.get(1).bees()).containsExactly(new SwarmController.BeeSummary("moderator", "mod-bravo"));
     }
 
     @Test

@@ -85,6 +85,10 @@ public class Swarm {
         this.templateMetadata = metadata;
     }
 
+    public void clearTemplate() {
+        this.templateMetadata = null;
+    }
+
     public Optional<SwarmTemplateMetadata> templateMetadata() {
         return Optional.ofNullable(templateMetadata);
     }
