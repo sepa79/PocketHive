@@ -20,8 +20,6 @@ export interface WiremockScenarioSummary {
 export interface WiremockComponentConfig extends Record<string, unknown> {
   healthStatus: string
   version?: string
-  requestCount?: number
-  requestCountError?: boolean
   stubCount?: number
   stubCountError?: boolean
   unmatchedCount?: number
@@ -147,9 +145,8 @@ export async function fetchWiremockComponent(limit = 25): Promise<Component | nu
   const configUrl = getConfig().wiremock
   const base =
     typeof configUrl === 'string' && configUrl.length > 0 ? configUrl.replace(/\/+$/, '') : '/wiremock/__admin'
-  const [health, count, recent, unmatched, mappings, scenarios] = await Promise.all([
+  const [health, recent, unmatched, mappings, scenarios] = await Promise.all([
     fetchJson(`${base}/health`),
-    fetchJson(`${base}/requests/count`),
     fetchJson(`${base}/requests?limit=${limit}`),
     fetchJson(`${base}/requests/unmatched`),
     fetchJson(`${base}/mappings`),
@@ -158,11 +155,8 @@ export async function fetchWiremockComponent(limit = 25): Promise<Component | nu
 
   const healthStatus = extractHealthStatus(health || undefined)
   const version = extractVersion(health || undefined)
-  const totalRequests = isRecord(count) && typeof count['count'] === 'number' ? count['count'] : undefined
   const recentRequestsRaw =
     isRecord(recent) && Array.isArray(recent['requests']) ? recent['requests'] : []
-  const recentMeta = isRecord(recent) && isRecord(recent['meta']) ? (recent['meta'] as Record<string, unknown>) : undefined
-  const recentTotal = recentMeta && typeof recentMeta['total'] === 'number' ? recentMeta['total'] : undefined
   const unmatchedRequestsRaw =
     isRecord(unmatched) && Array.isArray(unmatched['requests']) ? unmatched['requests'] : []
 
@@ -204,14 +198,6 @@ export async function fetchWiremockComponent(limit = 25): Promise<Component | nu
     scenariosError: scenarios === null,
     adminUrl: `${base}/`,
     lastUpdatedTs: Date.now(),
-  }
-
-  if (typeof totalRequests === 'number') {
-    config.requestCount = totalRequests
-  } else if (typeof recentTotal === 'number') {
-    config.requestCount = recentTotal
-  } else if (count === null) {
-    config.requestCountError = true
   }
 
   if (typeof stubCount === 'number') {

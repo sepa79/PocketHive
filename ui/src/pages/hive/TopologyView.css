@@ -139,6 +139,7 @@
   flex-direction: column;
   gap: 12px;
   backdrop-filter: blur(10px);
+  position: relative;
 }
 
 .swarm-group.selected {
@@ -190,4 +191,23 @@
   font-weight: 600;
   fill: #f8fafc;
   pointer-events: none;
+}
+
+.swarm-group__handle {
+  width: 10px;
+  height: 10px;
+  border-radius: 9999px;
+  border: none;
+  background: #94a3b8;
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.swarm-group__handle--target {
+  left: -5px;
+}
+
+.swarm-group__handle--source {
+  right: -5px;
 }
