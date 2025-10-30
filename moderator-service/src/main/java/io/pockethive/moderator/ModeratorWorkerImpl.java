@@ -36,6 +36,7 @@ import org.springframework.stereotype.Component;
 class ModeratorWorkerImpl implements MessageWorker {
 
   private final ModeratorDefaults defaults;
+  private final OperationModeLimiter modeLimiter = new OperationModeLimiter();
 
   @Autowired
   ModeratorWorkerImpl(ModeratorDefaults defaults) {
@@ -46,8 +47,11 @@ class ModeratorWorkerImpl implements MessageWorker {
    * Accepts a message from the generator queue, records the moderator's enabled flag in the worker
    * status stream, and forwards the payload to the moderator queue. Configuration arrives via
    * {@code pockethive.control-plane.worker.moderator.enabled} (boolean) and can be overridden live
-   * through the control plane. A
-   * simple JSON override looks like {@code {"enabled": true}}.
+   * through the control plane. Operation modes are selected with
+   * {@code pockethive.control-plane.worker.moderator.mode.type} and support
+   * {@code pass-through}, {@code rate-per-sec}, and {@code sine}. A
+   * simple JSON override looks like {@code {"enabled": true}} or
+   * {@code {"mode": {"type": "rate-per-sec", "ratePerSec": {"value": 5}}}}.
    *
    * <p>The moderator does not alter the payload body; it only ensures the outbound message carries
    * a {@code x-ph-service} header whose value is the worker role (for example {@code "moderator"}).
@@ -66,16 +70,36 @@ class ModeratorWorkerImpl implements MessageWorker {
   public WorkResult onMessage(WorkMessage in, WorkerContext context) {
     ModeratorWorkerConfig config = context.config(ModeratorWorkerConfig.class)
         .orElseGet(defaults::asConfig);
+    ModeratorOperationMode mode = config.operationMode();
     String inboundQueue = context.info().inQueue();
     String outboundQueue = context.info().outQueue();
     context.statusPublisher()
         .workIn(inboundQueue)
         .workOut(outboundQueue)
-        .update(status -> status
-            .data("enabled", config.enabled()));
+        .update(status -> {
+          status.data("enabled", config.enabled());
+          status.data("mode", formatMode(mode.type()));
+          if (mode instanceof ModeratorOperationMode.RatePerSec ratePerSec) {
+            status.data("ratePerSec", ratePerSec.ratePerSec());
+          } else if (mode instanceof ModeratorOperationMode.Sine sine) {
+            status.data("minRatePerSec", sine.minRatePerSec());
+            status.data("maxRatePerSec", sine.maxRatePerSec());
+            status.data("periodSeconds", sine.periodSeconds());
+            status.data("phaseOffsetSeconds", sine.phaseOffsetSeconds());
+          }
+        });
+    modeLimiter.await(mode);
     WorkMessage out = in.toBuilder()
         .header("x-ph-service", context.info().role())
         .build();
     return WorkResult.message(out);
+  }
+
+  private static String formatMode(ModeratorOperationMode.Type type) {
+    return switch (type) {
+      case PASS_THROUGH -> "pass-through";
+      case RATE_PER_SEC -> "rate-per-sec";
+      case SINE -> "sine";
+    };
   }
 }

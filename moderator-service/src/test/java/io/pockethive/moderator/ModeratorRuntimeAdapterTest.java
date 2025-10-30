@@ -117,7 +117,8 @@ class ModeratorRuntimeAdapterTest {
     adapter.initialiseStateListener();
     ArgumentCaptor<Object> defaultConfigCaptor = ArgumentCaptor.forClass(Object.class);
     verify(controlPlaneRuntime).registerDefaultConfig(eq("moderatorWorker"), defaultConfigCaptor.capture());
-    assertThat(defaultConfigCaptor.getValue()).isEqualTo(new ModeratorWorkerConfig(true));
+    assertThat(defaultConfigCaptor.getValue()).isEqualTo(
+        new ModeratorWorkerConfig(true, ModeratorWorkerConfig.Mode.passThrough()));
     verify(controlPlaneRuntime).emitStatusSnapshot();
 
     Message inbound = new RabbitWorkMessageConverter().toMessage(WorkMessage.text("body").build());
@@ -164,7 +165,8 @@ class ModeratorRuntimeAdapterTest {
     adapter.initialiseStateListener();
     ArgumentCaptor<Object> defaultConfigCaptor = ArgumentCaptor.forClass(Object.class);
     verify(controlPlaneRuntime).registerDefaultConfig(eq("moderatorWorker"), defaultConfigCaptor.capture());
-    assertThat(defaultConfigCaptor.getValue()).isEqualTo(new ModeratorWorkerConfig(true));
+    assertThat(defaultConfigCaptor.getValue()).isEqualTo(
+        new ModeratorWorkerConfig(true, ModeratorWorkerConfig.Mode.passThrough()));
     ArgumentCaptor<Consumer<WorkerControlPlaneRuntime.WorkerStateSnapshot>> listenerCaptor = ArgumentCaptor.forClass(Consumer.class);
     verify(controlPlaneRuntime).registerStateListener(eq("moderatorWorker"), listenerCaptor.capture());
     verify(listenerContainer, times(1)).start();
@@ -172,7 +174,8 @@ class ModeratorRuntimeAdapterTest {
 
     WorkerControlPlaneRuntime.WorkerStateSnapshot snapshot = mock(WorkerControlPlaneRuntime.WorkerStateSnapshot.class);
     when(snapshot.enabled()).thenReturn(Optional.empty());
-    when(snapshot.config(ModeratorWorkerConfig.class)).thenReturn(Optional.of(new ModeratorWorkerConfig(false)));
+    when(snapshot.config(ModeratorWorkerConfig.class)).thenReturn(Optional.of(
+        new ModeratorWorkerConfig(false, ModeratorWorkerConfig.Mode.passThrough())));
     when(listenerContainer.isRunning()).thenReturn(true);
 
     listenerCaptor.getValue().accept(snapshot);

@@ -38,7 +38,8 @@ class ModeratorTest {
                 .header("original", "true")
                 .build();
 
-        WorkResult result = worker.onMessage(message, new TestWorkerContext(new ModeratorWorkerConfig(true)));
+        WorkResult result = worker.onMessage(message, new TestWorkerContext(
+            new ModeratorWorkerConfig(true, ModeratorWorkerConfig.Mode.passThrough())));
 
         assertThat(result).isInstanceOf(WorkResult.Message.class);
         WorkMessage forwarded = ((WorkResult.Message) result).value();
