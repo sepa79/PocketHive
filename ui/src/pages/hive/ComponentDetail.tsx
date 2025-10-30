@@ -26,7 +26,11 @@ export default function ComponentDetail({ component, onClose }: Props) {
     if (component.image) {
       return component.image
     }
-    return getBeeImage(component.swarmId ?? null, component.role)
+    const swarmKey = component.swarmId?.trim()
+    if (!swarmKey) {
+      return null
+    }
+    return getBeeImage(swarmKey, component.role)
   }, [component.image, component.role, component.swarmId, getBeeImage])
   const manifest = useMemo(
     () => getManifestForImage(resolvedImage),
