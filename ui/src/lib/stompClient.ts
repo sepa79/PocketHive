@@ -281,7 +281,8 @@ export function setClient(newClient: Client | null, destination = controlDestina
         const evt = raw as ControlEvent
         const eventQueueStats = evt.queueStats
         const id = evt.instance
-        const swarmId = id.split('-')[0]
+        const swarmId = evt.swarmId.trim()
+        if (!swarmId) return
         const comp: Component = components[id] || {
           id,
           name: id,
