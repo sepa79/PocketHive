@@ -65,6 +65,8 @@ class PostProcessorWorkerImpl implements MessageWorker {
 
   private final PostProcessorDefaults defaults;
   private final AtomicReference<PostProcessorMetrics> metricsRef = new AtomicReference<>();
+  private final AtomicReference<DetailedTransactionMetrics> detailedMetricsRef =
+      new AtomicReference<>();
 
   @Autowired
   PostProcessorWorkerImpl(PostProcessorDefaults defaults) {
@@ -113,6 +115,14 @@ class PostProcessorWorkerImpl implements MessageWorker {
 
     PostProcessorMetrics metrics = metrics(context);
     metrics.record(measurements, error, processorStats);
+    if (config.publishAllMetrics()) {
+      detailedMetrics(context)
+          .record(
+              measurements.hopDurations(),
+              measurements.totalMs(),
+              observability.getHops(),
+              processorStats);
+    }
 
     String inboundQueue = context.info().inQueue();
     StatusPublisher publisher = context.statusPublisher().workIn(inboundQueue);
@@ -330,6 +340,21 @@ class PostProcessorWorkerImpl implements MessageWorker {
     }
   }
 
+  private DetailedTransactionMetrics detailedMetrics(WorkerContext context) {
+    DetailedTransactionMetrics current = detailedMetricsRef.get();
+    if (current != null) {
+      return current;
+    }
+    synchronized (detailedMetricsRef) {
+      current = detailedMetricsRef.get();
+      if (current == null) {
+        current = new DetailedTransactionMetrics(context.meterRegistry(), context);
+        detailedMetricsRef.set(current);
+      }
+      return current;
+    }
+  }
+
   private record LatencyMeasurements(List<Long> hopDurations, long totalMs) {
     static LatencyMeasurements zero() {
       return new LatencyMeasurements(List.of(), 0L);
@@ -496,7 +521,7 @@ class PostProcessorWorkerImpl implements MessageWorker {
     }
   }
 
-  private record ProcessorCallStats(Long durationMs, Boolean success, Integer statusCode) {
+  record ProcessorCallStats(Long durationMs, Boolean success, Integer statusCode) {
     static ProcessorCallStats empty() {
       return new ProcessorCallStats(null, null, null);
     }

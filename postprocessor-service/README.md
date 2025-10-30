@@ -14,9 +14,9 @@ traffic exchange (`pockethive.control-plane.traffic-exchange`) and queue aliases
 
 ### Detailed metrics mode
 
-Operators can opt-in to an expanded status payload that includes per-hop details and processor call
-metadata by setting `pockethive.control-plane.worker.postprocessor.publish-all-metrics` to `true`.
-The flag defaults to `false` so existing deployments continue emitting the lightweight summary.
+Operators can opt-in to an expanded metrics stream by setting
+`pockethive.control-plane.worker.postprocessor.publish-all-metrics` to `true`. The flag defaults to
+`false` so existing deployments continue emitting the lightweight summary only.
 
 ```yaml
 pockethive:
@@ -27,6 +27,9 @@ pockethive:
         publish-all-metrics: true
 ```
 
-When enabled, the worker publishes hop duration lists, hop metadata, and processor call statistics
-alongside the usual summary metrics so the runtime can emit a full snapshot for observability tooling.
+When enabled, the worker still enriches the status snapshot with hop durations, hop metadata, and
+processor call statistics. In addition, every processed message is written to dedicated Prometheus
+gauges (for example `ph_transaction_hop_duration_ms`, `ph_transaction_total_latency_ms`, and
+`ph_transaction_processor_*`) so operators can plot high-resolution timelines directly from scraped
+metrics.
 
