@@ -7,31 +7,41 @@ public record GeneratorWorkerConfig(
     boolean enabled,
     double ratePerSec,
     boolean singleRequest,
-    String path,
-    String method,
-    String body,
-    Map<String, String> headers
+    Message message
 ) {
 
   public GeneratorWorkerConfig {
     ratePerSec = Double.isNaN(ratePerSec) || ratePerSec < 0 ? 0.0 : ratePerSec;
-    path = normalizePath(path);
-    method = normalizeMethod(method);
-    body = body == null ? "" : body;
-    headers = headers == null ? Map.of() : Map.copyOf(headers);
+    message = message == null ? Message.defaults() : message;
   }
 
-  private static String normalizePath(String value) {
-    if (value == null || value.isBlank()) {
-      return "/";
-    }
-    return value.trim();
-  }
+  public record Message(String path, String method, String body, Map<String, String> headers) {
 
-  private static String normalizeMethod(String value) {
-    if (value == null || value.isBlank()) {
-      return "GET";
+    private static final Message DEFAULT = new Message("/", "GET", "", Map.of());
+
+    public Message {
+      path = normalizePath(path);
+      method = normalizeMethod(method);
+      body = body == null ? "" : body;
+      headers = headers == null ? Map.of() : Map.copyOf(headers);
     }
-    return value.trim().toUpperCase(Locale.ROOT);
+
+    private static String normalizePath(String value) {
+      if (value == null || value.isBlank()) {
+        return "/";
+      }
+      return value.trim();
+    }
+
+    private static String normalizeMethod(String value) {
+      if (value == null || value.isBlank()) {
+        return "GET";
+      }
+      return value.trim().toUpperCase(Locale.ROOT);
+    }
+
+    static Message defaults() {
+      return DEFAULT;
+    }
   }
 }

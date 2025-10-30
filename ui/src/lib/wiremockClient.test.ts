@@ -26,7 +26,6 @@ describe('fetchWiremockComponent', () => {
   it('returns a populated component snapshot when metrics are available', async () => {
     const responses = new Map<string, Response>([
       ['http://localhost:8080/__admin/health', jsonResponse({ status: 'OK', version: '3.1.0' })],
-      ['http://localhost:8080/__admin/requests/count', jsonResponse({ count: 42 })],
       [
         'http://localhost:8080/__admin/requests?limit=25',
         jsonResponse({
@@ -71,7 +70,6 @@ describe('fetchWiremockComponent', () => {
       expect.objectContaining({
         healthStatus: 'OK',
         version: '3.1.0',
-        requestCount: 42,
         stubCount: 5,
         unmatchedCount: 1,
         scenarios: [expect.objectContaining({ name: 'Scenario', state: 'Started' })],
@@ -90,8 +88,6 @@ describe('fetchWiremockComponent', () => {
     expect(component.status).toBe('ALERT')
     const config = component.config as WiremockComponentConfig
     expect(config.healthStatus).toBe('UNKNOWN')
-    expect(config.requestCount).toBeUndefined()
-    expect(config.requestCountError).toBe(true)
     expect(config.stubCount).toBeUndefined()
     expect(config.stubCountError).toBe(true)
     expect(config.recentRequests).toEqual([])
@@ -105,7 +101,6 @@ describe('fetchWiremockComponent', () => {
   it('falls back to request meta totals and loggedDateString when counts are unavailable', async () => {
     const responses = new Map<string, Response>([
       ['http://localhost:8080/__admin/health', jsonResponse({ status: 'OK' })],
-      ['http://localhost:8080/__admin/requests/count', new Response(null, { status: 404 })],
       [
         'http://localhost:8080/__admin/requests?limit=25',
         jsonResponse({
@@ -136,8 +131,6 @@ describe('fetchWiremockComponent', () => {
     expect(component).not.toBeNull()
     if (!component) throw new Error('component missing')
     const config = component.config as WiremockComponentConfig
-    expect(config.requestCount).toBe(96)
-    expect(config.requestCountError).toBeUndefined()
     expect(config.recentRequests[0]).toEqual(
       expect.objectContaining({
         id: 'req-1',

@@ -83,9 +83,6 @@ export default function WiremockPanel({ component }: Props) {
 
   const healthLabel = config.healthStatus || component.status || 'UNKNOWN'
   const versionLabel = config.version ?? '—'
-  const requestCountLabel = config.requestCountError
-    ? '—'
-    : formatNumber(config.requestCount)
   const stubCountLabel = config.stubCountError ? '—' : formatNumber(config.stubCount)
   const unmatchedLabel = formatNumber(config.unmatchedCount)
   const heartbeatLabel = formatRelative(component.lastHeartbeat)
@@ -122,7 +119,6 @@ export default function WiremockPanel({ component }: Props) {
       <div className="grid gap-3 sm:grid-cols-2">
         <WiremockStat label="Health" value={healthLabel} />
         <WiremockStat label="Version" value={versionLabel} />
-        <WiremockStat label="Total requests" value={requestCountLabel} error={config.requestCountError} />
         <WiremockStat label="Stub count" value={stubCountLabel} error={config.stubCountError} />
         <WiremockStat
           label="Unmatched total"

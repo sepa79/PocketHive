@@ -1,6 +1,5 @@
 package io.pockethive.generator;
 
-import java.util.Map;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
@@ -37,33 +36,12 @@ class GeneratorDefaults {
         enabled,
         ratePerSec,
         false,
-        resolvePath(),
-        resolveMethod(),
-        resolveBody(),
-        resolveHeaders()
+        new GeneratorWorkerConfig.Message(
+            messageConfig.getPath(),
+            messageConfig.getMethod(),
+            messageConfig.getBody(),
+            messageConfig.getHeaders()
+        )
     );
-  }
-
-  private String resolvePath() {
-    String path = messageConfig.getPath();
-    return (path == null || path.isBlank()) ? "/" : path.trim();
-  }
-
-  private String resolveMethod() {
-    String method = messageConfig.getMethod();
-    return (method == null || method.isBlank()) ? "GET" : method.trim();
-  }
-
-  private String resolveBody() {
-    String body = messageConfig.getBody();
-    return body == null ? "" : body;
-  }
-
-  private Map<String, String> resolveHeaders() {
-    Map<String, String> headers = messageConfig.getHeaders();
-    if (headers == null || headers.isEmpty()) {
-      return Map.of();
-    }
-    return Map.copyOf(headers);
   }
 }
