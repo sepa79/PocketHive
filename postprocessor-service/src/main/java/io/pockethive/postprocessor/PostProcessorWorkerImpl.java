@@ -7,6 +7,7 @@ import io.micrometer.core.instrument.MeterRegistry;
 import io.pockethive.observability.Hop;
 import io.pockethive.observability.ObservabilityContext;
 import io.pockethive.worker.sdk.api.MessageWorker;
+import io.pockethive.worker.sdk.api.StatusPublisher;
 import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pockethive.worker.sdk.api.WorkResult;
 import io.pockethive.worker.sdk.api.WorkerContext;
