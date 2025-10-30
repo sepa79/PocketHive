@@ -60,7 +60,7 @@ describe('prometheus helpers', () => {
 
     expect(apiFetchSpy).toHaveBeenCalledWith(
       'http://prom.test/api/v1/query_range?query=ph_metric_total&step=30&start=1&end=31',
-      { cache: 'no-store' },
+      { cache: 'no-store', omitCorrelationId: true },
     )
     expect(result.series).toHaveLength(1)
     expect(result.series[0].samples).toEqual([
@@ -147,7 +147,7 @@ describe('prometheus helpers', () => {
     const result = await prometheusSeries({ metric: 'ph_metric_total', start: 0, end: 60 })
     expect(apiFetchSpy).toHaveBeenCalledWith(
       'http://prom.test/api/v1/series?match%5B%5D=ph_metric_total&start=0&end=60',
-      { cache: 'no-store' },
+      { cache: 'no-store', omitCorrelationId: true },
     )
     expect(result.series).toHaveLength(2)
   })

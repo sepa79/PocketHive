@@ -194,7 +194,7 @@ function normaliseSample(value: [number | string, string]): PrometheusSample {
 
 async function readPrometheus<T>(path: string, params: Record<string, string | number | undefined>): Promise<PrometheusResponse<T>> {
   const url = buildPrometheusUrl(path, params)
-  const response = await apiFetch(url, { cache: 'no-store' })
+  const response = await apiFetch(url, { cache: 'no-store', omitCorrelationId: true })
   if (!response.ok) {
     throw new Error(`Prometheus request failed with status ${response.status}`)
   }
