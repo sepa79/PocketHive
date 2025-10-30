@@ -10,7 +10,7 @@ vi.mock('../../lib/prometheus', () => ({
 }))
 
 vi.mock('./TimeseriesChart', () => ({
-  TimeseriesChart: (props: unknown): ReactElement => timeseriesStub(props),
+  TimeseriesChart: (): ReactElement => timeseriesStub(),
 }))
 
 const { usePrometheusRangeQuery } = await import('../../lib/prometheus')
