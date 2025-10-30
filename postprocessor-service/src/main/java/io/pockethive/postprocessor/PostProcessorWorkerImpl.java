@@ -344,7 +344,6 @@ class PostProcessorWorkerImpl implements MessageWorker {
           .tag("ph_role", role)
           .tag("ph_instance", instance)
           .tag("ph_swarm", swarm)
-          .baseUnit("milliseconds")
           .publishPercentileHistogram(true)
           .serviceLevelObjectives(
               Duration.ofMillis(1).toMillis(),
