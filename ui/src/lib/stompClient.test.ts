@@ -6,7 +6,6 @@ import {
   subscribeTopology,
   upsertSyntheticComponent,
   removeSyntheticComponent,
-  setSwarmMetadataRefreshHandler,
 } from './stompClient'
 import { subscribeLogs, type LogEntry, resetLogs } from './logs'
 import { useUIStore } from '../store'
