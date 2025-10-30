@@ -4,6 +4,7 @@ import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
+import io.pockethive.moderator.shaper.config.StepConfig;
 import io.pockethive.moderator.shaper.runtime.PatternAckPacer;
 import io.pockethive.worker.sdk.api.MessageWorker;
 import io.pockethive.worker.sdk.api.WorkMessage;
@@ -15,12 +16,16 @@ import io.pockethive.worker.sdk.config.WorkerType;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * The moderator service is the steady gatekeeper that vets messages coming out of the generator
@@ -49,6 +54,7 @@ import org.springframework.stereotype.Component;
 )
 class ModeratorWorkerImpl implements MessageWorker {
 
+  private static final Logger log = LoggerFactory.getLogger(ModeratorWorkerImpl.class);
   private final ModeratorDefaults defaults;
   private final Clock clock;
   private final PatternAckPacer.Sleeper sleeper;
@@ -135,7 +141,23 @@ class ModeratorWorkerImpl implements MessageWorker {
     }
     PatternAckPacer pacer = new PatternAckPacer(config, clock, sleeper);
     pacerRef.set(new PacerState(config, pacer));
+    logPacerInstallation(config, pacer);
     return pacer;
+  }
+
+  private void logPacerInstallation(ModeratorWorkerConfig config, PatternAckPacer pacer) {
+    List<StepConfig> steps = config.pattern().steps();
+    int stepCount = steps.size();
+    String stepIds = steps.isEmpty()
+        ? ""
+        : steps.stream().map(StepConfig::id).collect(Collectors.joining(","));
+    log.info(
+        "Moderator pacer refreshed: enabled={}, baseRateRps={}, stepCount={}, stepIds={}, patternDurationMillis={}",
+        config.enabled(),
+        config.pattern().baseRateRps(),
+        stepCount,
+        stepIds,
+        pacer.patternDurationMillis());
   }
 
   private MeterBundle metrics(WorkerContext context) {

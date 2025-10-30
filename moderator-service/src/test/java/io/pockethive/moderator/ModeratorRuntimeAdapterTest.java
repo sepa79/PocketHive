@@ -1,5 +1,8 @@
 package io.pockethive.moderator;
 
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import com.rabbitmq.client.Channel;
 import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.controlplane.spring.WorkerControlPlaneProperties;
@@ -41,6 +44,7 @@ import org.springframework.amqp.core.Message;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.amqp.rabbit.listener.MessageListenerContainer;
 import org.springframework.amqp.rabbit.listener.RabbitListenerEndpointRegistry;
+import org.slf4j.LoggerFactory;
 
 import io.pockethive.worker.sdk.testing.ControlPlaneTestFixtures;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -292,6 +296,53 @@ class ModeratorRuntimeAdapterTest {
 
     listenerCaptor.getValue().accept(snapshot);
     verify(listenerContainer).stop();
+  }
+
+  @Test
+  void logsControlSnapshotsWhenListenerInvoked() {
+    when(workerRegistry.findByRoleAndType("moderator", WorkerType.MESSAGE))
+        .thenReturn(Optional.of(definition));
+    stubListenerContainerStopped();
+
+    Logger logger = (Logger) LoggerFactory.getLogger(ModeratorRuntimeAdapter.class);
+    ListAppender<ILoggingEvent> appender = new ListAppender<>();
+    appender.start();
+    logger.addAppender(appender);
+    try {
+      ModeratorRuntimeAdapter adapter = new ModeratorRuntimeAdapter(
+          workerRuntime,
+          workerRegistry,
+          controlPlaneRuntime,
+          rabbitTemplate,
+          listenerRegistry,
+          identity,
+          defaults,
+          validator
+      );
+
+      adapter.initialiseStateListener();
+
+      ArgumentCaptor<Consumer<WorkerControlPlaneRuntime.WorkerStateSnapshot>> listenerCaptor =
+          ArgumentCaptor.forClass(Consumer.class);
+      verify(controlPlaneRuntime).registerStateListener(eq("moderatorWorker"), listenerCaptor.capture());
+
+      WorkerControlPlaneRuntime.WorkerStateSnapshot snapshot =
+          mock(WorkerControlPlaneRuntime.WorkerStateSnapshot.class);
+      ModeratorWorkerConfig config = defaults.asConfig();
+      when(snapshot.enabled()).thenReturn(Optional.of(true));
+      when(snapshot.config(ModeratorWorkerConfig.class)).thenReturn(Optional.of(config));
+      when(snapshot.rawConfig()).thenReturn(Map.of("enabled", true));
+
+      listenerCaptor.getValue().accept(snapshot);
+
+      assertThat(appender.list)
+          .anySatisfy(event -> assertThat(event.getFormattedMessage())
+              .contains("control snapshot received")
+              .contains("stepCount=" + config.pattern().steps().size()));
+    } finally {
+      logger.detachAppender(appender);
+      appender.stop();
+    }
   }
 
   @Test
