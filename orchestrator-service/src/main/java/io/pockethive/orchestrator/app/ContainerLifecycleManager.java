@@ -120,6 +120,7 @@ public class ContainerLifecycleManager {
             amqp.deleteQueue("ph." + swarmId + ".mod");
             amqp.deleteQueue("ph." + swarmId + ".final");
             registry.updateStatus(swarmId, SwarmStatus.REMOVED);
+            swarm.clearTemplate();
             registry.remove(swarmId);
         });
     }
