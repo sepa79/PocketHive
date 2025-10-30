@@ -106,7 +106,7 @@ class PostProcessorRuntimeAdapterTest {
     adapter.initialiseStateListener();
     ArgumentCaptor<Object> defaultConfigCaptor = ArgumentCaptor.forClass(Object.class);
     verify(controlPlaneRuntime).registerDefaultConfig(eq("postProcessorWorker"), defaultConfigCaptor.capture());
-    assertThat(defaultConfigCaptor.getValue()).isEqualTo(new PostProcessorWorkerConfig(true));
+    assertThat(defaultConfigCaptor.getValue()).isEqualTo(new PostProcessorWorkerConfig(true, false));
     verify(controlPlaneRuntime).emitStatusSnapshot();
 
     Message inbound = new RabbitWorkMessageConverter().toMessage(WorkMessage.text("payload").build());
@@ -151,7 +151,7 @@ class PostProcessorRuntimeAdapterTest {
     adapter.initialiseStateListener();
     ArgumentCaptor<Object> defaultConfigCaptor = ArgumentCaptor.forClass(Object.class);
     verify(controlPlaneRuntime).registerDefaultConfig(eq("postProcessorWorker"), defaultConfigCaptor.capture());
-    assertThat(defaultConfigCaptor.getValue()).isEqualTo(new PostProcessorWorkerConfig(true));
+    assertThat(defaultConfigCaptor.getValue()).isEqualTo(new PostProcessorWorkerConfig(true, false));
     ArgumentCaptor<Consumer<WorkerControlPlaneRuntime.WorkerStateSnapshot>> listenerCaptor = ArgumentCaptor.forClass(Consumer.class);
     verify(controlPlaneRuntime).registerStateListener(eq("postProcessorWorker"), listenerCaptor.capture());
     verify(listenerContainer, times(1)).start();

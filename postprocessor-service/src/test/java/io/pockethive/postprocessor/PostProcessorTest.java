@@ -53,12 +53,13 @@ class PostProcessorTest {
                 .build();
 
         TestWorkerContext workerContext =
-                new TestWorkerContext(new PostProcessorWorkerConfig(true), context);
+                new TestWorkerContext(new PostProcessorWorkerConfig(true, false), context);
 
         WorkResult result = worker.onMessage(message, workerContext);
 
         assertThat(result).isEqualTo(WorkResult.none());
         assertThat(workerContext.statusData().get("enabled")).isEqualTo(true);
+        assertThat(workerContext.statusData().get("publishAllMetrics")).isEqualTo(false);
         assertThat(workerContext.statusData().get("errors")).isEqualTo(1.0d);
         assertThat(workerContext.statusData().get("hopLatencyMs")).isEqualTo(0L);
         assertThat(workerContext.statusData().get("totalLatencyMs")).isEqualTo(15L);
@@ -66,6 +67,8 @@ class PostProcessorTest {
         assertThat(workerContext.statusData().get("processorTransactions")).isEqualTo(1L);
         assertThat(workerContext.statusData().get("processorSuccessRatio")).isEqualTo(1.0d);
         assertThat(workerContext.statusData().get("processorAvgLatencyMs")).isEqualTo(12.0d);
+        assertThat(workerContext.statusData()).doesNotContainKeys("hopDurationsMs", "hopTimeline", "processorCall");
+        assertThat(workerContext.capturingPublisher().fullSnapshotEmitted()).isFalse();
 
         MeterRegistry registry = workerContext.meterRegistry();
         var hopSummary = registry.find("ph_hop_latency_ms").summary();
@@ -120,7 +123,7 @@ class PostProcessorTest {
                 .build();
 
         TestWorkerContext workerContext =
-                new TestWorkerContext(new PostProcessorWorkerConfig(true), context);
+                new TestWorkerContext(new PostProcessorWorkerConfig(true, false), context);
 
         worker.onMessage(message, workerContext);
 
@@ -168,7 +171,7 @@ class PostProcessorTest {
                 .build();
 
         TestWorkerContext workerContext =
-                new TestWorkerContext(new PostProcessorWorkerConfig(true), context);
+                new TestWorkerContext(new PostProcessorWorkerConfig(true, false), context);
 
         worker.onMessage(message, workerContext);
 
@@ -204,6 +207,51 @@ class PostProcessorTest {
         worker.onMessage(message, workerContext);
 
         assertThat(workerContext.statusData().get("enabled")).isEqualTo(false);
+        assertThat(workerContext.statusData().get("publishAllMetrics")).isEqualTo(false);
+    }
+
+    @Test
+    void onMessagePublishesFullSnapshotWhenPublishAllMetricsEnabled() {
+        PostProcessorDefaults defaults = new PostProcessorDefaults();
+        defaults.setEnabled(true);
+        defaults.setPublishAllMetrics(true);
+        PostProcessorWorkerImpl worker = new PostProcessorWorkerImpl(defaults);
+        ObservabilityContext context = new ObservabilityContext();
+        List<Hop> hops = new ArrayList<>();
+        hops.add(new Hop("generator", "gen-1", START, START.plusMillis(5)));
+        hops.add(new Hop("processor", "proc-1", START.plusMillis(5), START.plusMillis(15)));
+        context.setHops(hops);
+        context.setTraceId("trace-456");
+
+        WorkMessage message = WorkMessage.text("payload")
+                .header("x-ph-processor-duration-ms", "42")
+                .header("x-ph-processor-success", "true")
+                .header("x-ph-processor-status", "200")
+                .observabilityContext(context)
+                .build();
+
+        TestWorkerContext workerContext =
+                new TestWorkerContext(new PostProcessorWorkerConfig(true, true), context);
+
+        worker.onMessage(message, workerContext);
+
+        Map<String, Object> status = workerContext.statusData();
+        assertThat(status.get("publishAllMetrics")).isEqualTo(true);
+        assertThat(status).containsEntry("hopDurationsMs", List.of(5L, 10L, 0L));
+        assertThat(status).containsKey("hopTimeline");
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> timeline = (List<Map<String, Object>>) status.get("hopTimeline");
+        assertThat(timeline).hasSize(3);
+        assertThat(timeline.get(0)).containsEntry("service", "generator");
+        assertThat(timeline.get(1)).containsEntry("service", "processor");
+        assertThat(timeline.get(2)).containsEntry("service", "postprocessor");
+        assertThat(status).containsKey("processorCall");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> processorCall = (Map<String, Object>) status.get("processorCall");
+        assertThat(processorCall).containsEntry("durationMs", 42L);
+        assertThat(processorCall).containsEntry("success", true);
+        assertThat(processorCall).containsEntry("statusCode", 200);
+        assertThat(workerContext.capturingPublisher().fullSnapshotEmitted()).isTrue();
     }
 
     private static final class TestWorkerContext implements WorkerContext {
@@ -265,6 +313,10 @@ class PostProcessorTest {
         Map<String, Object> statusData() {
             return Map.copyOf(statusPublisher.data);
         }
+
+        CapturingStatusPublisher capturingPublisher() {
+            return statusPublisher;
+        }
     }
 
     private static final class CapturingStatusPublisher implements StatusPublisher {
@@ -276,10 +328,20 @@ class PostProcessorTest {
                 return this;
             }
         };
+        private boolean fullSnapshotEmitted;
 
         @Override
         public void update(java.util.function.Consumer<MutableStatus> consumer) {
             Objects.requireNonNull(consumer, "consumer").accept(mutableStatus);
+        }
+
+        @Override
+        public void emitFull() {
+            fullSnapshotEmitted = true;
+        }
+
+        boolean fullSnapshotEmitted() {
+            return fullSnapshotEmitted;
         }
     }
 }

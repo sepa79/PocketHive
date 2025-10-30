@@ -8,6 +8,7 @@ import org.springframework.stereotype.Component;
 class PostProcessorDefaults {
 
   private boolean enabled = false;
+  private boolean publishAllMetrics = false;
 
   public boolean isEnabled() {
     return enabled;
@@ -17,7 +18,15 @@ class PostProcessorDefaults {
     this.enabled = enabled;
   }
 
+  public boolean isPublishAllMetrics() {
+    return publishAllMetrics;
+  }
+
+  public void setPublishAllMetrics(boolean publishAllMetrics) {
+    this.publishAllMetrics = publishAllMetrics;
+  }
+
   PostProcessorWorkerConfig asConfig() {
-    return new PostProcessorWorkerConfig(enabled);
+    return new PostProcessorWorkerConfig(enabled, publishAllMetrics);
   }
 }

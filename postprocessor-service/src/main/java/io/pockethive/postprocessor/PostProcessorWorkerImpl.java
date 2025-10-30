@@ -15,6 +15,7 @@ import io.pockethive.worker.sdk.config.WorkerType;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -113,17 +114,28 @@ class PostProcessorWorkerImpl implements MessageWorker {
     metrics.record(measurements, error, processorStats);
 
     String inboundQueue = context.info().inQueue();
-    context.statusPublisher()
-        .workIn(inboundQueue)
-        .update(status -> status
-            .data("enabled", config.enabled())
-            .data("errors", metrics.errorsCount())
-            .data("hopLatencyMs", measurements.latestHopMs())
-            .data("totalLatencyMs", measurements.totalMs())
-            .data("hopCount", measurements.hopCount())
-            .data("processorTransactions", metrics.processorTransactions())
-            .data("processorSuccessRatio", metrics.processorSuccessRatio())
-            .data("processorAvgLatencyMs", metrics.processorAverageLatencyMs()));
+    StatusPublisher publisher = context.statusPublisher().workIn(inboundQueue);
+    publisher.update(status -> {
+      status
+          .data("enabled", config.enabled())
+          .data("publishAllMetrics", config.publishAllMetrics())
+          .data("errors", metrics.errorsCount())
+          .data("hopLatencyMs", measurements.latestHopMs())
+          .data("totalLatencyMs", measurements.totalMs())
+          .data("hopCount", measurements.hopCount())
+          .data("processorTransactions", metrics.processorTransactions())
+          .data("processorSuccessRatio", metrics.processorSuccessRatio())
+          .data("processorAvgLatencyMs", metrics.processorAverageLatencyMs());
+      if (config.publishAllMetrics()) {
+        status
+            .data("hopDurationsMs", measurements.hopDurations())
+            .data("hopTimeline", describeHops(observability.getHops()))
+            .data("processorCall", describeProcessorCall(processorStats));
+      }
+    });
+    if (config.publishAllMetrics()) {
+      publisher.emitFull();
+    }
 
     return WorkResult.none();
   }
@@ -189,6 +201,39 @@ class PostProcessorWorkerImpl implements MessageWorker {
         Objects.requireNonNull(first.getReceivedAt(), "first hop missing receivedAt"),
         Objects.requireNonNull(last.getProcessedAt(), "last hop missing processedAt"));
     return new LatencyMeasurements(List.copyOf(hopDurations), totalMs);
+  }
+
+  private List<Map<String, Object>> describeHops(List<Hop> hops) {
+    if (hops == null || hops.isEmpty()) {
+      return List.of();
+    }
+    List<Map<String, Object>> description = new ArrayList<>(hops.size());
+    for (Hop hop : hops) {
+      Map<String, Object> values = new LinkedHashMap<>();
+      values.put("service", hop.getService());
+      values.put("instance", hop.getInstance());
+      values.put("receivedAt", hop.getReceivedAt());
+      values.put("processedAt", hop.getProcessedAt());
+      description.add(Map.copyOf(values));
+    }
+    return List.copyOf(description);
+  }
+
+  private Map<String, Object> describeProcessorCall(ProcessorCallStats stats) {
+    if (stats == null || !stats.hasValues()) {
+      return Map.of();
+    }
+    Map<String, Object> values = new LinkedHashMap<>();
+    if (stats.durationMs() != null) {
+      values.put("durationMs", stats.durationMs());
+    }
+    if (stats.success() != null) {
+      values.put("success", stats.success());
+    }
+    if (stats.statusCode() != null) {
+      values.put("statusCode", stats.statusCode());
+    }
+    return Map.copyOf(values);
   }
 
   private long durationMillis(Hop hop) {
