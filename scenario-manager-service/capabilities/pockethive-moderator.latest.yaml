@@ -1,5 +1,5 @@
 schemaVersion: "1.0"
-capabilitiesVersion: "1.0"
+capabilitiesVersion: "1.1"
 role: moderator
 image:
   name: pockethive-moderator
@@ -13,5 +13,47 @@ config:
   - name: enabled
     type: boolean
     default: false
+  - name: mode.type
+    type: string
+    default: "PASS_THROUGH"
+    ui:
+      placeholder: "PASS_THROUGH | RATE_PER_SEC | SINE"
+  - name: mode.ratePerSec.value
+    type: number
+    default: 0
+    min: 0
+    max: 100000
+    ui:
+      step: 0.1
+      unit: msg/s
+  - name: mode.sine.minRatePerSec
+    type: number
+    default: 0
+    min: 0
+    max: 100000
+    ui:
+      step: 0.1
+      unit: msg/s
+  - name: mode.sine.maxRatePerSec
+    type: number
+    default: 0
+    min: 0
+    max: 100000
+    ui:
+      step: 0.1
+      unit: msg/s
+  - name: mode.sine.periodSeconds
+    type: number
+    default: 60
+    min: 1
+    ui:
+      step: 1
+      unit: s
+  - name: mode.sine.phaseOffsetSeconds
+    type: number
+    default: 0
+    ui:
+      step: 1
+      unit: s
 actions: []
 panels: []

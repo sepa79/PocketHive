@@ -225,6 +225,69 @@ describe('swarm lifecycle', () => {
     setClient(null)
   })
 
+  it('preserves nested config values when worker status exposes scalar fields', () => {
+    const publish = vi.fn()
+    let cb: (msg: { body: string; headers: Record<string, string> }) => void = () => {}
+    const subscribe = vi
+      .fn()
+      .mockImplementation((_dest: string, fn: (msg: { body: string; headers: Record<string, string> }) => void) => {
+        cb = fn
+        return { unsubscribe() {} }
+      })
+    setClient({ active: true, publish, subscribe } as unknown as Client)
+
+    let latest: Component[] = []
+    const unsubscribe = subscribeComponents((list) => {
+      latest = list.map((comp) => ({
+        ...comp,
+        config: comp.config ? { ...comp.config } : undefined,
+      }))
+    })
+
+    cb({
+      headers: { destination: '/exchange/ph.control/ev.status.swarm-sw1' },
+      body: JSON.stringify({
+        event: 'status',
+        kind: 'status',
+        version: '1',
+        role: 'moderator',
+        instance: 'moderator-sw1',
+        swarmId: 'sw1',
+        messageId: 'm-1',
+        timestamp: new Date().toISOString(),
+        data: {
+          mode: 'rate-per-sec',
+          workers: [
+            {
+              role: 'moderator',
+              enabled: true,
+              config: {
+                mode: {
+                  type: 'ratePerSec',
+                  ratePerSec: { value: 5 },
+                  sine: { min: 1, max: 10, periodSec: 60 },
+                },
+              },
+              data: {
+                mode: 'rate-per-sec',
+              },
+            },
+          ],
+        },
+      }),
+    })
+
+    const moderator = latest.find((comp) => comp.id === 'moderator-sw1')
+    expect(moderator?.config?.mode).toEqual({
+      type: 'ratePerSec',
+      ratePerSec: { value: 5 },
+      sine: { min: 1, max: 10, periodSec: 60 },
+    })
+
+    unsubscribe()
+    setClient(null)
+  })
+
   it('notifies listeners when synthetic components are upserted', () => {
     const snapshots: Component[][] = []
     const unsubscribe = subscribeComponents((list) => {
@@ -343,6 +406,7 @@ describe('swarm lifecycle', () => {
         version: '1',
         role: 'processor',
         instance: 'sw1-processor',
+        swarmId: 'sw1',
         messageId: 'm-processor',
         timestamp: new Date().toISOString(),
         data: { baseUrl: 'http://wiremock:8080' },
@@ -398,6 +462,7 @@ describe('swarm lifecycle', () => {
         version: '1',
         role: 'orchestrator',
         instance: 'hive-orchestrator',
+        swarmId: 'hive',
         messageId: 'orch-1',
         timestamp: new Date().toISOString(),
         queues: {
@@ -416,6 +481,7 @@ describe('swarm lifecycle', () => {
         version: '1',
         role: 'swarm-controller',
         instance: 'sw1-swarm-controller',
+        swarmId: 'sw1',
         messageId: 'sw1-1',
         timestamp: new Date().toISOString(),
       }),
@@ -429,6 +495,7 @@ describe('swarm lifecycle', () => {
         version: '1',
         role: 'swarm-controller',
         instance: 'default-swarm-controller',
+        swarmId: 'default',
         messageId: 'default-1',
         timestamp: new Date().toISOString(),
       }),
