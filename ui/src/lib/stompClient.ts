@@ -311,10 +311,6 @@ export function setClient(newClient: Client | null, destination = controlDestina
           const { workers, ...rest } = data as Record<string, unknown> & {
             workers?: unknown
           }
-          Object.entries(rest).forEach(([key, value]) => {
-            if (key === 'enabled') return
-            cfg[key] = value
-          })
           if (Array.isArray(workers)) {
             const normalizedRole = evt.role?.toLowerCase?.()
             const workerEntries = workers.filter(isRecord)
@@ -335,6 +331,7 @@ export function setClient(newClient: Client | null, destination = controlDestina
               const dataSection = selected['data']
               if (isRecord(dataSection)) {
                 Object.entries(dataSection).forEach(([key, value]) => {
+                  if (key in cfg) return
                   cfg[key] = value
                 })
               }
@@ -344,6 +341,10 @@ export function setClient(newClient: Client | null, destination = controlDestina
               }
             }
           }
+          Object.entries(rest).forEach(([key, value]) => {
+            if (key === 'enabled' || key in cfg) return
+            cfg[key] = value
+          })
         }
         const aggregateEnabled =
           typeof workerEnabled === 'boolean'
