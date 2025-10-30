@@ -44,9 +44,9 @@ interface Props {
 }
 
 function normalizeSwarmId(value: string | null | undefined): string | null {
-  if (value == null) return 'default'
+  if (value == null) return null
   const trimmed = value.trim()
-  if (!trimmed) return 'default'
+  if (!trimmed) return null
   return trimmed
 }
 

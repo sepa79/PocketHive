@@ -16,6 +16,8 @@ import { componentHealth } from '../../lib/health'
 import { mapStatusToVisualState, type HealthVisualState } from './visualState'
 import { useSwarmMetadata } from '../../contexts/SwarmMetadataContext'
 
+const UNASSIGNED_SWARM_ID = '__unassigned__'
+
 export default function HivePage() {
   const [components, setComponents] = useState<Component[]>([])
   const [selected, setSelected] = useState<Component | null>(null)
@@ -97,9 +99,9 @@ export default function HivePage() {
 
   const orchestrator = components.find((c) => isOrchestrator(c)) ?? null
 
-  const normalizeSwarmId = (comp: Component) => {
+  const normalizeSwarmId = (comp: Component): string | null => {
     const value = comp.swarmId?.trim()
-    if (!value) return 'default'
+    if (!value) return null
     return value
   }
 
@@ -113,25 +115,40 @@ export default function HivePage() {
     const swarmKey = normalizeSwarmId(c)
     const matchesSwarm =
       !activeSwarm ||
-      (activeSwarm === 'default' ? swarmKey === 'default' : swarmKey === activeSwarm)
+      (activeSwarm === 'default'
+        ? swarmKey === 'default'
+        : activeSwarm === UNASSIGNED_SWARM_ID
+        ? swarmKey === null
+        : swarmKey === activeSwarm)
     return matchesSearch && matchesSwarm
   })
 
   const grouped = filtered.reduce<Record<string, Component[]>>((acc, c) => {
     const swarm = normalizeSwarmId(c)
-    acc[swarm] = acc[swarm] || []
-    acc[swarm].push(c)
+    const key = swarm ?? UNASSIGNED_SWARM_ID
+    acc[key] = acc[key] || []
+    acc[key].push(c)
     return acc
   }, {})
 
+  const assignedEntries = useMemo(
+    () => Object.entries(grouped).filter(([id]) => id !== UNASSIGNED_SWARM_ID),
+    [grouped],
+  )
+
+  const sortedAssignedEntries = useMemo(
+    () => [...assignedEntries].sort(([a], [b]) => a.localeCompare(b)),
+    [assignedEntries],
+  )
+
   const swarmHealth = useMemo(() => {
     return Object.fromEntries(
-      Object.entries(grouped).map(([id, comps]) => [
+      assignedEntries.map(([id, comps]) => [
         id,
         deriveSwarmHealth(id, comps, now),
       ]),
     )
-  }, [grouped, now])
+  }, [assignedEntries, now])
 
   const shouldShowSwarmList =
     !selected && expandedSwarmId === null && Boolean(contextSwarmId)
@@ -168,8 +185,7 @@ export default function HivePage() {
               onSelect={(component) => setSelected(component)}
               selectedId={selectedId}
             />
-            {Object.entries(grouped)
-              .sort(([a], [b]) => a.localeCompare(b))
+            {sortedAssignedEntries
               .filter(([id]) => !activeSwarm || id === activeSwarm)
               .map(([id, comps]) => {
                 const normalizedId = id === 'default' ? 'default' : id
@@ -240,6 +256,20 @@ export default function HivePage() {
                   </div>
                 )
               })}
+            {!activeSwarm && (grouped[UNASSIGNED_SWARM_ID]?.length ?? 0) > 0 && (
+              <div className="space-y-2" data-testid="swarm-group-unassigned">
+                <div className="rounded-lg border border-white/15 bg-white/5 px-4 py-3 text-sm text-white/70">
+                  <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-white/50">
+                    Unassigned components
+                  </div>
+                  <ComponentList
+                    components={grouped[UNASSIGNED_SWARM_ID]}
+                    onSelect={(component) => setSelected(component)}
+                    selectedId={selectedId}
+                  />
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -251,8 +281,7 @@ export default function HivePage() {
             if (comp) setSelected(comp)
           }}
           swarmId={activeSwarm ?? undefined}
-          onSwarmSelect={(id) =>
-            setActiveSwarm(id === 'default' ? 'default' : id)}
+          onSwarmSelect={(id) => setActiveSwarm(id)}
         />
       </div>
       <div className="hidden lg:flex w-[360px] xl:w-[420px] border-l border-white/10 bg-slate-950/40 backdrop-blur-sm">
@@ -376,7 +405,9 @@ function defaultSwarmHealth(swarmId: string): SwarmHealthMeta {
 }
 
 function formatSwarmDisplayName(id: string): string {
-  return id === 'default' ? 'Services' : id
+  if (id === 'default') return 'Services'
+  if (id === UNASSIGNED_SWARM_ID) return 'Unassigned components'
+  return id
 }
 
 function formatComponentCount(count: number): string {

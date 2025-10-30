@@ -72,6 +72,8 @@ describe('SwarmMetadataContext', () => {
     expect(context!.getBeeImage('sw1', 'generator')).toBe('gen:1')
     expect(context!.getBeeImage('sw1', 'GENERATOR')).toBe('gen:1')
     expect(context!.getBeeImage(null, 'processor')).toBeNull()
+    expect(context!.getBeeImage('', 'generator')).toBeNull()
     expect(context!.getControllerImage('sw1')).toBe('ctrl:1')
+    expect(context!.findSwarm('')).toBeNull()
   })
 })

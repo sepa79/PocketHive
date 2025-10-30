@@ -244,4 +244,44 @@ describe('ComponentDetail dynamic config', () => {
       )
     })
   })
+
+  it('skips swarm metadata lookup when swarm id is absent', async () => {
+    const providerValue: CapabilitiesContextValue = {
+      manifests: [],
+      manifestIndex: buildManifestIndex([]),
+      ensureCapabilities: vi.fn().mockResolvedValue([]),
+      refreshCapabilities: vi.fn().mockResolvedValue([]),
+      getManifestForImage: vi.fn().mockReturnValue(null),
+    }
+
+    const component: Component = {
+      id: 'proc-1',
+      name: 'proc-1',
+      role: 'processor',
+      lastHeartbeat: baseTimestamp,
+      queues: [],
+      config: {},
+    }
+
+    const swarmValue: SwarmMetadataContextValue = {
+      swarms: [],
+      ensureSwarms: vi.fn().mockResolvedValue([]),
+      refreshSwarms: vi.fn().mockResolvedValue([]),
+      getBeeImage: vi.fn().mockReturnValue('image-from-swarm'),
+      getControllerImage: vi.fn().mockReturnValue(null),
+      findSwarm: vi.fn().mockReturnValue(null),
+    }
+
+    render(
+      <SwarmMetadataContext.Provider value={swarmValue}>
+        <CapabilitiesContext.Provider value={providerValue}>
+          <ComponentDetail component={component} onClose={() => {}} />
+        </CapabilitiesContext.Provider>
+      </SwarmMetadataContext.Provider>,
+    )
+
+    await waitFor(() => expect(providerValue.ensureCapabilities).toHaveBeenCalled())
+    await waitFor(() => expect(swarmValue.ensureSwarms).toHaveBeenCalled())
+    expect(swarmValue.getBeeImage).not.toHaveBeenCalled()
+  })
 })
