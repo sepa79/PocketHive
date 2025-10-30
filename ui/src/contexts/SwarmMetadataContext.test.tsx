@@ -29,9 +29,13 @@ function Capture({ onValue }: { onValue: (value: SwarmMetadataContextValue) => v
 }
 
 describe('SwarmMetadataContext', () => {
-  beforeEach(() => {
-    listSwarmsMock.mockReset()
-    listSwarmsMock.mockResolvedValue([
+beforeEach(() => {
+  listSwarmsMock.mockReset()
+  setRefreshMock.mockClear()
+})
+
+  it('loads swarm metadata, resolves images, and refreshes via lifecycle handler', async () => {
+    const initialPayload = [
       {
         id: 'sw1',
         status: 'RUNNING',
@@ -46,11 +50,27 @@ describe('SwarmMetadataContext', () => {
           { role: 'processor', image: null },
         ],
       },
-    ])
-    setRefreshMock.mockClear()
-  })
+    ]
 
-  it('loads swarm metadata and resolves bee images', async () => {
+    const refreshedPayload = [
+      ...initialPayload,
+      {
+        id: 'sw2',
+        status: 'RUNNING',
+        health: 'HEALTHY',
+        heartbeat: '2024-01-01T00:01:00Z',
+        workEnabled: true,
+        controllerEnabled: true,
+        templateId: 'tpl-2',
+        controllerImage: 'ctrl:2',
+        bees: [{ role: 'moderator', image: 'mod:2' }],
+      },
+    ]
+
+    listSwarmsMock.mockResolvedValueOnce(initialPayload)
+    listSwarmsMock.mockResolvedValueOnce(refreshedPayload)
+    listSwarmsMock.mockResolvedValue(refreshedPayload)
+
     let context: SwarmMetadataContextValue | null = null
 
     render(
@@ -75,5 +95,19 @@ describe('SwarmMetadataContext', () => {
     expect(context!.getBeeImage('', 'generator')).toBeNull()
     expect(context!.getControllerImage('sw1')).toBe('ctrl:1')
     expect(context!.findSwarm('')).toBeNull()
+
+    const handler = setRefreshMock.mock.calls.at(-1)?.[0]
+    expect(handler).toBeTypeOf('function')
+
+    await act(async () => {
+      handler?.(' sw2 ')
+      await Promise.resolve()
+    })
+
+    expect(listSwarmsMock).toHaveBeenCalledTimes(2)
+    expect(context!.swarms).toEqual(refreshedPayload)
+    expect(context!.getControllerImage('sw2')).toBe('ctrl:2')
+    const ids = context!.swarms.map((swarm) => swarm.id)
+    expect(new Set(ids).size).toBe(ids.length)
   })
 })
