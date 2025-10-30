@@ -262,7 +262,7 @@ class PostProcessorTest {
         assertThat(workerContext.capturingPublisher().fullSnapshotEmitted()).isTrue();
 
         MeterRegistry registry = workerContext.meterRegistry();
-        List<Gauge> hopGauges = registry.find("ph_transaction_hop_duration_ms").gauges();
+        List<Gauge> hopGauges = new ArrayList<>(registry.find("ph_transaction_hop_duration_ms").gauges());
         assertThat(hopGauges).hasSize(3);
         assertThat(hopGauges.stream().map(Gauge::value).collect(toList()))
                 .containsExactlyInAnyOrder(5.0, 10.0, 0.0);
@@ -271,20 +271,20 @@ class PostProcessorTest {
         assertThat(hopGauges.stream().map(g -> g.getId().getTag("transaction_seq")).distinct().collect(toList()))
                 .containsExactly("1");
 
-        List<Gauge> totalGauges = registry.find("ph_transaction_total_latency_ms").gauges();
+        List<Gauge> totalGauges = new ArrayList<>(registry.find("ph_transaction_total_latency_ms").gauges());
         assertThat(totalGauges).hasSize(1);
         assertThat(totalGauges.get(0).value()).isEqualTo(15.0);
         assertThat(totalGauges.get(0).getId().getTag("transaction_seq")).isEqualTo("1");
 
-        List<Gauge> processorDuration = registry.find("ph_transaction_processor_duration_ms").gauges();
+        List<Gauge> processorDuration = new ArrayList<>(registry.find("ph_transaction_processor_duration_ms").gauges());
         assertThat(processorDuration).hasSize(1);
         assertThat(processorDuration.get(0).value()).isEqualTo(42.0);
 
-        List<Gauge> processorSuccess = registry.find("ph_transaction_processor_success").gauges();
+        List<Gauge> processorSuccess = new ArrayList<>(registry.find("ph_transaction_processor_success").gauges());
         assertThat(processorSuccess).hasSize(1);
         assertThat(processorSuccess.get(0).value()).isEqualTo(1.0);
 
-        List<Gauge> processorStatus = registry.find("ph_transaction_processor_status").gauges();
+        List<Gauge> processorStatus = new ArrayList<>(registry.find("ph_transaction_processor_status").gauges());
         assertThat(processorStatus).hasSize(1);
         assertThat(processorStatus.get(0).value()).isEqualTo(200.0);
     }

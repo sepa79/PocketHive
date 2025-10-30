@@ -10,6 +10,7 @@ import io.pockethive.worker.sdk.api.StatusPublisher;
 import io.pockethive.worker.sdk.api.WorkerContext;
 import io.pockethive.worker.sdk.api.WorkerInfo;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -48,29 +49,29 @@ class DetailedTransactionMetricsTest {
         List.of(new Hop("moderator", "mod-1", Instant.EPOCH, Instant.EPOCH.plusMillis(4))),
         new PostProcessorWorkerImpl.ProcessorCallStats(1L, false, 500));
 
-    List<Gauge> hopGauges = registry.find("ph_transaction_hop_duration_ms").gauges();
+    List<Gauge> hopGauges = new ArrayList<>(registry.find("ph_transaction_hop_duration_ms").gauges());
     assertThat(hopGauges).hasSize(2);
     assertThat(hopGauges.stream().map(Gauge::value).collect(toList()))
         .containsExactlyInAnyOrder(3.0, 4.0);
     assertThat(hopGauges.stream().map(g -> g.getId().getTag("transaction_seq")).collect(toList()))
         .containsExactlyInAnyOrder("2", "3");
 
-    List<Gauge> totalGauges = registry.find("ph_transaction_total_latency_ms").gauges();
+    List<Gauge> totalGauges = new ArrayList<>(registry.find("ph_transaction_total_latency_ms").gauges());
     assertThat(totalGauges).hasSize(2);
     assertThat(totalGauges.stream().map(Gauge::value).collect(toList()))
         .containsExactlyInAnyOrder(3.0, 4.0);
 
-    List<Gauge> processorDuration = registry.find("ph_transaction_processor_duration_ms").gauges();
+    List<Gauge> processorDuration = new ArrayList<>(registry.find("ph_transaction_processor_duration_ms").gauges());
     assertThat(processorDuration).hasSize(2);
     assertThat(processorDuration.stream().map(Gauge::value).collect(toList()))
         .containsExactlyInAnyOrder(2.0, 1.0);
 
-    List<Gauge> processorSuccess = registry.find("ph_transaction_processor_success").gauges();
+    List<Gauge> processorSuccess = new ArrayList<>(registry.find("ph_transaction_processor_success").gauges());
     assertThat(processorSuccess).hasSize(2);
     assertThat(processorSuccess.stream().map(Gauge::value).collect(toList()))
         .containsExactlyInAnyOrder(1.0, 0.0);
 
-    List<Gauge> processorStatus = registry.find("ph_transaction_processor_status").gauges();
+    List<Gauge> processorStatus = new ArrayList<>(registry.find("ph_transaction_processor_status").gauges());
     assertThat(processorStatus).hasSize(2);
     assertThat(processorStatus.stream().map(Gauge::value).collect(toList()))
         .containsExactlyInAnyOrder(200.0, 500.0);
