@@ -9,7 +9,7 @@ x-metrics-env: &metrics-env
 
 services:
   rabbitmq:
-    image: ${DOCKER_REGISTRY:-}pockethive/rabbitmq:${POCKETHIVE_VERSION:-latest}
+    image: ${DOCKER_REGISTRY:-}rabbitmq:${POCKETHIVE_VERSION:-latest}
     build:
       context: .
       dockerfile: Dockerfile.rabbit
@@ -26,7 +26,7 @@ services:
       start_period: 30s
 
   orchestrator:
-    image: ${DOCKER_REGISTRY:-}pockethive/orchestrator:${POCKETHIVE_VERSION:-latest}
+    image: ${DOCKER_REGISTRY:-}orchestrator:${POCKETHIVE_VERSION:-latest}
     build:
       context: .
       dockerfile: orchestrator-service/Dockerfile
@@ -45,7 +45,7 @@ services:
 
   swarm-controller:
     profiles: ["bees"]
-    image: ${DOCKER_REGISTRY:-}pockethive/swarm-controller:${POCKETHIVE_VERSION:-latest}
+    image: ${DOCKER_REGISTRY:-}swarm-controller:${POCKETHIVE_VERSION:-latest}
     build:
       context: .
       dockerfile: swarm-controller-service/Dockerfile
@@ -61,7 +61,7 @@ services:
 
   generator:
     profiles: ["bees"]
-    image: ${DOCKER_REGISTRY:-}pockethive/generator:${POCKETHIVE_VERSION:-latest}
+    image: ${DOCKER_REGISTRY:-}generator:${POCKETHIVE_VERSION:-latest}
     build:
       context: .
       dockerfile: generator-service/Dockerfile
@@ -79,7 +79,7 @@ services:
 
   moderator:
     profiles: ["bees"]
-    image: ${DOCKER_REGISTRY:-}pockethive/moderator:${POCKETHIVE_VERSION:-latest}
+    image: ${DOCKER_REGISTRY:-}moderator:${POCKETHIVE_VERSION:-latest}
     build:
       context: .
       dockerfile: moderator-service/Dockerfile
@@ -97,7 +97,7 @@ services:
 
   processor:
     profiles: ["bees"]
-    image: ${DOCKER_REGISTRY:-}pockethive/processor:${POCKETHIVE_VERSION:-latest}
+    image: ${DOCKER_REGISTRY:-}processor:${POCKETHIVE_VERSION:-latest}
     build:
       context: .
       dockerfile: processor-service/Dockerfile
@@ -115,7 +115,7 @@ services:
 
   postprocessor:
     profiles: ["bees"]
-    image: ${DOCKER_REGISTRY:-}pockethive/postprocessor:${POCKETHIVE_VERSION:-latest}
+    image: ${DOCKER_REGISTRY:-}postprocessor:${POCKETHIVE_VERSION:-latest}
     build:
       context: .
       dockerfile: postprocessor-service/Dockerfile
@@ -133,7 +133,7 @@ services:
 
   trigger:
     profiles: ["bees"]
-    image: ${DOCKER_REGISTRY:-}pockethive/trigger:${POCKETHIVE_VERSION:-latest}
+    image: ${DOCKER_REGISTRY:-}trigger:${POCKETHIVE_VERSION:-latest}
     build:
       context: .
       dockerfile: trigger-service/Dockerfile
@@ -150,7 +150,7 @@ services:
         condition: service_healthy
 
   scenario-manager:
-    image: ${DOCKER_REGISTRY:-}pockethive/scenario-manager:${POCKETHIVE_VERSION:-latest}
+    image: ${DOCKER_REGISTRY:-}scenario-manager:${POCKETHIVE_VERSION:-latest}
     build:
       context: .
       dockerfile: scenario-manager-service/Dockerfile
@@ -173,7 +173,7 @@ services:
         condition: service_healthy
 
   log-aggregator:
-    image: ${DOCKER_REGISTRY:-}pockethive/log-aggregator:${POCKETHIVE_VERSION:-latest}
+    image: ${DOCKER_REGISTRY:-}log-aggregator:${POCKETHIVE_VERSION:-latest}
     build:
       context: .
       dockerfile: log-aggregator-service/Dockerfile
@@ -195,12 +195,12 @@ services:
       interval: 5s
       timeout: 10s
       retries: 10
-      start_period: 4m
+      start_period: 30s
     ports:
       - "1080:8080"
 
   ui:
-    image: ${DOCKER_REGISTRY:-}pockethive/ui:${POCKETHIVE_VERSION:-latest}
+    image: ${DOCKER_REGISTRY:-}ui:${POCKETHIVE_VERSION:-latest}
     build:
       context: .
       dockerfile: ui/Dockerfile
@@ -231,6 +231,8 @@ services:
     environment:
       GF_SECURITY_ADMIN_USER: pockethive
       GF_SECURITY_ADMIN_PASSWORD: pockethive
+      GF_SERVER_ROOT_URL: http://localhost:8088/grafana/
+      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
     volumes:
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
       - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
