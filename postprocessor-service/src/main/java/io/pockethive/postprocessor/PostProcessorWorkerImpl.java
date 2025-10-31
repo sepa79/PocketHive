@@ -7,6 +7,7 @@ import io.micrometer.core.instrument.MeterRegistry;
 import io.pockethive.observability.Hop;
 import io.pockethive.observability.ObservabilityContext;
 import io.pockethive.worker.sdk.api.MessageWorker;
+import io.pockethive.worker.sdk.api.StatusPublisher;
 import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pockethive.worker.sdk.api.WorkResult;
 import io.pockethive.worker.sdk.api.WorkerContext;
@@ -15,6 +16,7 @@ import io.pockethive.worker.sdk.config.WorkerType;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -63,6 +65,8 @@ class PostProcessorWorkerImpl implements MessageWorker {
 
   private final PostProcessorDefaults defaults;
   private final AtomicReference<PostProcessorMetrics> metricsRef = new AtomicReference<>();
+  private final AtomicReference<DetailedTransactionMetrics> detailedMetricsRef =
+      new AtomicReference<>();
 
   @Autowired
   PostProcessorWorkerImpl(PostProcessorDefaults defaults) {
@@ -111,19 +115,38 @@ class PostProcessorWorkerImpl implements MessageWorker {
 
     PostProcessorMetrics metrics = metrics(context);
     metrics.record(measurements, error, processorStats);
+    if (config.publishAllMetrics()) {
+      detailedMetrics(context)
+          .record(
+              measurements.hopDurations(),
+              measurements.totalMs(),
+              observability.getHops(),
+              processorStats);
+    }
 
     String inboundQueue = context.info().inQueue();
-    context.statusPublisher()
-        .workIn(inboundQueue)
-        .update(status -> status
-            .data("enabled", config.enabled())
-            .data("errors", metrics.errorsCount())
-            .data("hopLatencyMs", measurements.latestHopMs())
-            .data("totalLatencyMs", measurements.totalMs())
-            .data("hopCount", measurements.hopCount())
-            .data("processorTransactions", metrics.processorTransactions())
-            .data("processorSuccessRatio", metrics.processorSuccessRatio())
-            .data("processorAvgLatencyMs", metrics.processorAverageLatencyMs()));
+    StatusPublisher publisher = context.statusPublisher().workIn(inboundQueue);
+    publisher.update(status -> {
+      status
+          .data("enabled", config.enabled())
+          .data("publishAllMetrics", config.publishAllMetrics())
+          .data("errors", metrics.errorsCount())
+          .data("hopLatencyMs", measurements.latestHopMs())
+          .data("totalLatencyMs", measurements.totalMs())
+          .data("hopCount", measurements.hopCount())
+          .data("processorTransactions", metrics.processorTransactions())
+          .data("processorSuccessRatio", metrics.processorSuccessRatio())
+          .data("processorAvgLatencyMs", metrics.processorAverageLatencyMs());
+      if (config.publishAllMetrics()) {
+        status
+            .data("hopDurationsMs", measurements.hopDurations())
+            .data("hopTimeline", describeHops(observability.getHops()))
+            .data("processorCall", describeProcessorCall(processorStats));
+      }
+    });
+    if (config.publishAllMetrics()) {
+      publisher.emitFull();
+    }
 
     return WorkResult.none();
   }
@@ -189,6 +212,39 @@ class PostProcessorWorkerImpl implements MessageWorker {
         Objects.requireNonNull(first.getReceivedAt(), "first hop missing receivedAt"),
         Objects.requireNonNull(last.getProcessedAt(), "last hop missing processedAt"));
     return new LatencyMeasurements(List.copyOf(hopDurations), totalMs);
+  }
+
+  private List<Map<String, Object>> describeHops(List<Hop> hops) {
+    if (hops == null || hops.isEmpty()) {
+      return List.of();
+    }
+    List<Map<String, Object>> description = new ArrayList<>(hops.size());
+    for (Hop hop : hops) {
+      Map<String, Object> values = new LinkedHashMap<>();
+      values.put("service", hop.getService());
+      values.put("instance", hop.getInstance());
+      values.put("receivedAt", hop.getReceivedAt());
+      values.put("processedAt", hop.getProcessedAt());
+      description.add(Map.copyOf(values));
+    }
+    return List.copyOf(description);
+  }
+
+  private Map<String, Object> describeProcessorCall(ProcessorCallStats stats) {
+    if (stats == null || !stats.hasValues()) {
+      return Map.of();
+    }
+    Map<String, Object> values = new LinkedHashMap<>();
+    if (stats.durationMs() != null) {
+      values.put("durationMs", stats.durationMs());
+    }
+    if (stats.success() != null) {
+      values.put("success", stats.success());
+    }
+    if (stats.statusCode() != null) {
+      values.put("statusCode", stats.statusCode());
+    }
+    return Map.copyOf(values);
   }
 
   private long durationMillis(Hop hop) {
@@ -279,6 +335,21 @@ class PostProcessorWorkerImpl implements MessageWorker {
       if (current == null) {
         current = new PostProcessorMetrics(context.meterRegistry(), context);
         metricsRef.set(current);
+      }
+      return current;
+    }
+  }
+
+  private DetailedTransactionMetrics detailedMetrics(WorkerContext context) {
+    DetailedTransactionMetrics current = detailedMetricsRef.get();
+    if (current != null) {
+      return current;
+    }
+    synchronized (detailedMetricsRef) {
+      current = detailedMetricsRef.get();
+      if (current == null) {
+        current = new DetailedTransactionMetrics(context.meterRegistry(), context);
+        detailedMetricsRef.set(current);
       }
       return current;
     }
@@ -450,7 +521,7 @@ class PostProcessorWorkerImpl implements MessageWorker {
     }
   }
 
-  private record ProcessorCallStats(Long durationMs, Boolean success, Integer statusCode) {
+  record ProcessorCallStats(Long durationMs, Boolean success, Integer statusCode) {
     static ProcessorCallStats empty() {
       return new ProcessorCallStats(null, null, null);
     }

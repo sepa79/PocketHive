@@ -13,5 +13,8 @@ config:
   - name: enabled
     type: boolean
     default: false
+  - name: publish-all-metrics
+    type: boolean
+    default: false
 actions: []
 panels: []
