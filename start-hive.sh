@@ -8,6 +8,8 @@ CORE_SERVICES=(rabbitmq log-aggregator scenario-manager orchestrator ui promethe
 BEE_SERVICES=(swarm-controller generator moderator processor postprocessor trigger)
 ALL_STAGES=(clean build-core build-bees start)
 
+declare -A STAGE_TIMES
+
 usage() {
   cat <<USAGE
 Usage: $(basename "$0") [stage ...]
@@ -40,6 +42,11 @@ stage_header() {
   local label="$1"
   echo
   echo "=== ${label} ==="
+}
+
+format_duration() {
+  local seconds=$1
+  printf "%dm %ds" $((seconds / 60)) $((seconds % 60))
 }
 
 run_clean() {
@@ -116,23 +123,41 @@ resolve_stages() {
 }
 
 run_stage() {
-  case "$1" in
+  local stage="$1"
+  local start_time=$(date +%s)
+  
+  case "$stage" in
     clean) run_clean ;;
     build-core) run_build_core ;;
     build-bees) run_build_bees ;;
     start) run_start ;;
-    *) echo "Unknown stage: $1" >&2; exit 1 ;;
+    *) echo "Unknown stage: $stage" >&2; exit 1 ;;
   esac
+  
+  local end_time=$(date +%s)
+  STAGE_TIMES["$stage"]=$((end_time - start_time))
 }
 
 main() {
   require_tools
   resolve_stages "$@"
 
+  local total_start=$(date +%s)
+  
   for stage in "${SELECTED_STAGES[@]}"; do
     run_stage "$stage"
   done
 
+  local total_end=$(date +%s)
+  local total_time=$((total_end - total_start))
+
+  echo
+  echo "=== Timing Summary ==="
+  for stage in "${SELECTED_STAGES[@]}"; do
+    printf "  %-12s %s\n" "$stage:" "$(format_duration ${STAGE_TIMES[$stage]})"
+  done
+  echo "  ────────────────────"
+  printf "  %-12s %s\n" "Total:" "$(format_duration $total_time)"
   echo
   echo "PocketHive stack setup complete."
 }

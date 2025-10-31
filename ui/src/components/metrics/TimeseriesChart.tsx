@@ -67,41 +67,44 @@ export function TimeseriesChart({ data, height = 240, unit }: TimeseriesChartPro
   }, [data])
 
   return (
-    <VictoryChart
-      theme={chartTheme}
-      height={height}
-      padding={{ top: 16, bottom: 40, left: 64, right: 24 }}
-      scale={{ x: 'time', y: 'linear' }}
-      containerComponent={
-        <VictoryVoronoiContainer
-          labels={({ datum }) => {
-            const value = typeof datum.y === 'number' ? datum.y.toFixed(2) : 'N/A'
-            const suffix = unit ? ` ${unit}` : ''
-            return `${datum.series}\n${value}${suffix}`
-          }}
-          labelComponent={
-            <VictoryTooltip
-              flyoutStyle={{
-                fill: 'rgba(15, 23, 42, 0.9)',
-                stroke: 'rgba(148, 163, 184, 0.4)',
-                strokeWidth: 1,
-              }}
-              style={{ fill: '#e2e8f0', fontSize: 10 }}
-            />
-          }
-        />
-      }
-    >
-      <VictoryAxis tickFormat={(tick) => formatTime.format(new Date(tick))} />
-      <VictoryAxis dependentAxis tickFormat={(tick) => `${tick}`} />
-      {processed.map((series) => (
-        <VictoryLine
-          key={series.id}
-          data={series.points}
-          style={{ data: { stroke: series.color, strokeWidth: 2 } }}
-          interpolation="monotoneX"
-        />
-      ))}
-    </VictoryChart>
+    <div style={{ position: 'relative', overflow: 'visible' }}>
+      <VictoryChart
+        theme={chartTheme}
+        height={height}
+        padding={{ top: 16, bottom: 40, left: 64, right: 24 }}
+        scale={{ x: 'time', y: 'linear' }}
+        containerComponent={
+          <VictoryVoronoiContainer
+            labels={({ datum }) => {
+              const value = typeof datum.y === 'number' ? datum.y.toFixed(2) : 'N/A'
+              const suffix = unit ? ` ${unit}` : ''
+              return `${datum.series}\n${value}${suffix}`
+            }}
+            labelComponent={
+              <VictoryTooltip
+                constrainToVisibleArea
+                flyoutStyle={{
+                  fill: 'rgba(15, 23, 42, 0.95)',
+                  stroke: 'rgba(148, 163, 184, 0.4)',
+                  strokeWidth: 1,
+                }}
+                style={{ fill: '#e2e8f0', fontSize: 10 }}
+              />
+            }
+          />
+        }
+      >
+        <VictoryAxis tickFormat={(tick) => formatTime.format(new Date(tick))} />
+        <VictoryAxis dependentAxis tickFormat={(tick) => `${tick}`} />
+        {processed.map((series) => (
+          <VictoryLine
+            key={series.id}
+            data={series.points}
+            style={{ data: { stroke: series.color, strokeWidth: 2 } }}
+            interpolation="monotoneX"
+          />
+        ))}
+      </VictoryChart>
+    </div>
   )
 }

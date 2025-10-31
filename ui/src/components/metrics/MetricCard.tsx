@@ -58,7 +58,7 @@ export function MetricCard({
         subtitle={definition.description}
         actions={toolbarActions}
       />
-      <div className="flex-1">
+      <div className="flex-1 overflow-visible">
         {isPending ? (
           <div className="flex h-full items-center justify-center text-sm text-neutral-400">
             Loading metrics…
