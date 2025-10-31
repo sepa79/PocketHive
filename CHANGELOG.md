@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.13.4] - 2025-10-31
+Timestamp: 2025-10-31T13:02:46Z
+
+- UI: Fix tooltip visibility on Nectar page graphs by adding overflow-visible styling to chart containers and wrapping VictoryChart with positioned div to allow tooltips to escape card boundaries.
+- Build & deployment: Add configurable Docker registry support with DOCKER_REGISTRY and POCKETHIVE_VERSION environment variables, enable image tagging for external registries, and introduce push stage to start-hive.sh for publishing images.
+- CI/CD: Create GitHub Actions workflows for automatic Docker image publishing to GitHub Container Registry (GHCR) on push to main, tags, and releases with matrix-based parallel builds and build caching.
+- Observability: Add execution timing to start-hive.sh with per-stage duration tracking and summary display showing time spent on clean, build-core, build-bees, push, and start stages.
+- Metrics: Add publish-all-metrics mode to postprocessor worker for per-transaction metric emission, fix gauge collection handling in detailed metrics tests, and emit processor latency histogram buckets for percentile graph support.
+- Moderator: Preserve moderator config structure when merging control-plane data and update moderator capabilities for operation mode configuration.
+- Tests: Fix SwarmController tests for startSwarm overload, remove unused imports from stompClient test, address TypeScript build regressions, and preserve mock typing in API helper specs.
+- UI: Refresh swarm metadata after swarm-create confirmations, handle unassigned swarm metadata in Hive UI, use swarmId from control events, use controller metadata for capability fallback, and allow Prometheus fetches to skip correlation header.
+- Documentation: Create GHCR setup guide with authentication, publishing, and troubleshooting instructions, and add .env.example for registry configuration.
+- Release: Bump PocketHive patch version to 0.13.4 so tooling and published artifacts reference the latest build.
+
 ## [0.13.3] - 2025-10-28
 Timestamp: 2025-10-28T00:00:00Z
 

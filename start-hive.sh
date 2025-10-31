@@ -6,9 +6,13 @@ cd "${SCRIPT_DIR}"
 
 CORE_SERVICES=(rabbitmq log-aggregator scenario-manager orchestrator ui prometheus grafana loki wiremock)
 BEE_SERVICES=(swarm-controller generator moderator processor postprocessor trigger)
-ALL_STAGES=(clean build-core build-bees start)
+ALL_STAGES=(clean build-core build-bees start push)
 
 declare -A STAGE_TIMES
+
+# Registry configuration
+DOCKER_REGISTRY="${DOCKER_REGISTRY:-}"
+POCKETHIVE_VERSION="${POCKETHIVE_VERSION:-latest}"
 
 usage() {
   cat <<USAGE
@@ -18,12 +22,18 @@ Stages:
   clean        Stop the compose stack and remove stray swarm containers.
   build-core   Build core PocketHive service images (RabbitMQ, UI, etc.).
   build-bees   Build swarm controller and bee images.
+  push         Push images to configured registry.
   start        Launch the PocketHive stack via docker compose up -d.
 
+Environment Variables:
+  DOCKER_REGISTRY       Registry prefix (e.g., 'myregistry.io/' or 'localhost:5000/')
+  POCKETHIVE_VERSION    Image tag version (default: latest)
+
 Examples:
-  $(basename "$0")            Run all stages in order.
-  $(basename "$0") clean start  Only clean the stack and start it (skip builds).
-  $(basename "$0") build-bees   Build the bee images only.
+  $(basename "$0")                                    Run all stages in order.
+  $(basename "$0") clean start                        Only clean and start (skip builds).
+  $(basename "$0") build-bees                         Build bee images only.
+  DOCKER_REGISTRY=myregistry.io/ $(basename "$0") push  Push to external registry.
 USAGE
 }
 
@@ -79,6 +89,17 @@ run_build_bees() {
   docker compose --profile bees build "${BEE_SERVICES[@]}"
 }
 
+run_push() {
+  stage_header "Pushing images to registry"
+  if [[ -z "$DOCKER_REGISTRY" ]]; then
+    echo "DOCKER_REGISTRY not set. Skipping push." >&2
+    return 0
+  fi
+  echo "Pushing to registry: ${DOCKER_REGISTRY}"
+  docker compose push "${CORE_SERVICES[@]}"
+  docker compose --profile bees push "${BEE_SERVICES[@]}"
+}
+
 run_start() {
   stage_header "Starting PocketHive stack"
   docker compose up -d
@@ -101,7 +122,7 @@ resolve_stages() {
         SELECTED_STAGES=("${ALL_STAGES[@]}")
         return
         ;;
-      clean|build-core|build-bees|start)
+      clean|build-core|build-bees|push|start)
         args+=("$1")
         ;;
       *)
@@ -130,6 +151,7 @@ run_stage() {
     clean) run_clean ;;
     build-core) run_build_core ;;
     build-bees) run_build_bees ;;
+    push) run_push ;;
     start) run_start ;;
     *) echo "Unknown stage: $stage" >&2; exit 1 ;;
   esac

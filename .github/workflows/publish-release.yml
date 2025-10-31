@@ -1,0 +1,74 @@
+name: Publish Release
+
+on:
+  release:
+    types: [published]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ${{ github.repository_owner }}/pockethive
+
+jobs:
+  publish-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    
+    strategy:
+      matrix:
+        service:
+          - name: rabbitmq
+            dockerfile: Dockerfile.rabbit
+          - name: orchestrator
+            dockerfile: orchestrator-service/Dockerfile
+          - name: swarm-controller
+            dockerfile: swarm-controller-service/Dockerfile
+          - name: generator
+            dockerfile: generator-service/Dockerfile
+          - name: moderator
+            dockerfile: moderator-service/Dockerfile
+          - name: processor
+            dockerfile: processor-service/Dockerfile
+          - name: postprocessor
+            dockerfile: postprocessor-service/Dockerfile
+          - name: trigger
+            dockerfile: trigger-service/Dockerfile
+          - name: scenario-manager
+            dockerfile: scenario-manager-service/Dockerfile
+          - name: log-aggregator
+            dockerfile: log-aggregator-service/Dockerfile
+          - name: ui
+            dockerfile: ui/Dockerfile
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Extract version
+        id: version
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+      
+      - name: Build and push ${{ matrix.service.name }}
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ${{ matrix.service.dockerfile }}
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.service.name }}:${{ steps.version.outputs.version }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.service.name }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
