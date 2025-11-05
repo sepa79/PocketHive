@@ -1,7 +1,7 @@
 # PocketHive Worker SDK Quick Start
 
 This guide shows how to adopt the simplified Worker SDK introduced in the Stage 1–3 refactor. Pair it with the
-[Stage 0 design](worker-sdk-stage0-design.md) and [Stage 1 runtime walkthrough](worker-sdk-stage1-runtime.md) when you need
+Stage 0 design notes and Stage 1 runtime walkthrough in the documentation archive when you need
 deeper architectural context.
 
 ## 0. Start from the in-repo template (optional)
@@ -182,4 +182,4 @@ includes a trace id, hop list, and swarm id, making it safe to append hop metada
 Use these hooks to emit custom metrics and propagate trace metadata as shown in the
 [processor worker](../../processor-service/src/main/java/io/pockethive/processor/ProcessorWorkerImpl.java).
 
-For the full roadmap and design rationale, review the [Worker SDK simplification plan](worker-sdk-simplification-plan.md).
+For the full roadmap and design rationale, review the Worker SDK simplification plan in the documentation archive.

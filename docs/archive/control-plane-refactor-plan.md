@@ -61,10 +61,10 @@ The shared control-plane descriptors, emitters, and Spring Boot starters are now
 - `ControlPlaneTopologyDescriptorFactory` resolves worker/manager descriptors that encapsulate queue and routing
   topology for each role.
 - `ControlPlaneEmitter` exposes ready/error/status helpers that emit typed payloads through a `ControlPlanePublisher`.
-- The optional [`worker-sdk`](../common/worker-sdk/README.md) module bundles the auto-configuration for both worker and
+- The optional [`worker-sdk`](../../common/worker-sdk/README.md) module bundles the auto-configuration for both worker and
   manager roles plus `ControlPlaneTestFixtures` for unit tests.
 - Developer documentation, including bootstrap walkthroughs and migration checklists, lives in
-  [`docs/control-plane/worker-guide.md`](control-plane/worker-guide.md).
+  [`docs/control-plane/worker-guide.md`](../control-plane/worker-guide.md).
 
 ### Migration quick-start
 
@@ -74,6 +74,6 @@ The shared control-plane descriptors, emitters, and Spring Boot starters are now
 4. Adopt `ControlPlaneTestFixtures` in new tests to ensure canonical identities and descriptors.
 5. Coordinate pilot migrations (starting with a single worker) before rolling out to all services.
 
-Sample usage snippets are available in the [worker bootstrap guide](control-plane/worker-guide.md) and in the
-[`PocketHiveWorkerSdkAutoConfiguration`](../common/worker-sdk/src/main/java/io/pockethive/worker/sdk/autoconfigure/PocketHiveWorkerSdkAutoConfiguration.java)
+Sample usage snippets are available in the [worker bootstrap guide](../control-plane/worker-guide.md) and in the
+  [`PocketHiveWorkerSdkAutoConfiguration`](../../common/worker-sdk/src/main/java/io/pockethive/worker/sdk/autoconfigure/PocketHiveWorkerSdkAutoConfiguration.java)
 source.

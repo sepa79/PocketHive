@@ -2,7 +2,7 @@
 
 The Worker SDK packages the Spring Boot auto-configuration, runtime loop, and testing helpers required to bootstrap PocketHive control-plane participants. It combines the shared topology descriptors, emitters, runtime dispatch, and AMQP infrastructure from the `control-plane-*` modules so new workers can be scaffolded with minimal ceremony.
 
-To understand the evolution of the SDK, see the [simplification roadmap](../../docs/sdk/worker-sdk-simplification-plan.md) and the [Stage 1 runtime notes](../../docs/sdk/worker-sdk-stage1-runtime.md).
+To understand the evolution of the SDK, consult the simplification roadmap and the Stage 1 runtime notes in the documentation archive.
 
 ## Modules
 
@@ -103,7 +103,7 @@ Transports interact with the runtime through `WorkerRuntime.dispatch(beanName, W
 
 ### `WorkerControlPlaneRuntime`
 
-The control-plane runtime bridges the SDK with the control-plane topic. It applies config updates, maintains per-worker state, publishes ready/status events, and exposes listeners. Stage 2 and Stage 3 capabilities (config hydration, status deltas, observability scaffolding) are described in [worker-sdk-stage1-runtime.md](../../docs/sdk/worker-sdk-stage1-runtime.md) and extended in the [quick start](../../docs/sdk/worker-sdk-quickstart.md).
+The control-plane runtime bridges the SDK with the control-plane topic. It applies config updates, maintains per-worker state, publishes ready/status events, and exposes listeners. Stage 2 and Stage 3 capabilities (config hydration, status deltas, observability scaffolding) are detailed in the Stage 1 runtime notes within the documentation archive and extended in the [quick start](../../docs/sdk/worker-sdk-quickstart.md).
 
 ## Putting it together
 

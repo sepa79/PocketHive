@@ -44,7 +44,6 @@ pockethive/
 │   ├── scenarios/              # Example scenarios (reference)
 │   └── capabilities/           # Worker capabilities (reference)
 └── docs/
-    ├── PORTAINER_DEPLOYMENT.md # Portainer guide
     ├── GHCR_SETUP.md          # Registry setup
     └── USAGE.md               # Usage guide
 ```
@@ -72,7 +71,6 @@ docker compose up -d
 3. **Upload**: Select `docker-compose.yml`
 4. **Deploy**
 
-See `docs/PORTAINER_DEPLOYMENT.md` for detailed instructions.
 
 ### Method 3: Portainer from Git
 

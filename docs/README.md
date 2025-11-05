@@ -6,9 +6,7 @@ Welcome to the PocketHive documentation hub. Use these resources to understand t
 - [System Architecture](ARCHITECTURE.md)
 
 ## Roadmap
-- [Project Roadmap](ROADMAP.md)
 - [Release Notes](../CHANGELOG.md)
-- [Original MVP Roadmap](../MVP_ROADMAP.md)
 
 ## Usage
 - [Usage Guide](USAGE.md)
@@ -29,8 +27,6 @@ Welcome to the PocketHive documentation hub. Use these resources to understand t
 
 ## SDK
 - [Worker SDK Quick Start](sdk/worker-sdk-quickstart.md)
-- [Worker SDK Simplification Plan](sdk/worker-sdk-simplification-plan.md)
-- [Worker SDK Stage 1 Runtime](sdk/worker-sdk-stage1-runtime.md)
 
 ## Contributing
 - [Contributor Guide](../CONTRIBUTING.md)

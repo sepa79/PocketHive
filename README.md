@@ -243,14 +243,13 @@ When accessing PocketHive from another machine, keep using the UI origin and the
 2. Copy `pockethive-deployment-<version>.tar.gz` to target environment
 3. Extract: `tar xzf pockethive-deployment-<version>.tar.gz`
 4. Deploy: `cd pockethive && ./start.sh`
-5. Or use Portainer - see [Portainer Deployment Guide](docs/PORTAINER_DEPLOYMENT.md)
+5. Or import the Compose stack into Portainer via **Stacks → Add Stack** using `docker-compose.yml`
 
 ---
 
 ## Documentation
 - [Docs index](docs/README.md)
 - [Architecture reference](docs/ARCHITECTURE.md)
-- [Roadmap](docs/ROADMAP.md)
 - [Usage guide](docs/USAGE.md)
 - [Contributor guide](CONTRIBUTING.md)
 

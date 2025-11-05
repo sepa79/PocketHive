@@ -16,4 +16,4 @@ This living roadmap tracks major PocketHive milestones.
 
 ---
 
-For the original MVP plan, see [MVP_ROADMAP.md](../MVP_ROADMAP.md).
+For the original MVP plan, see the `MVP_ROADMAP.md` document in this archive.
