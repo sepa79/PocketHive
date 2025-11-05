@@ -226,6 +226,18 @@ Keep configuration **explicit**—favor declaring values over hidden defaults.
    - Alternatively run `docker compose up -d` directly to start the stack with your existing images.
 3. Open <http://localhost:8088>. Only the Orchestrator (Queen) runs initially. Create and start swarms from the Hive view by selecting a scenario.
 
+### Service Proxies
+The UI container fronted by Nginx proxies several internal services so browsers never talk to container hostnames directly. Useful routes:
+
+- `/orchestrator/*` → Orchestrator REST API
+- `/scenario-manager/*` → Scenario Manager REST API
+- `/rabbitmq/` → RabbitMQ management UI (STOMP WebSocket available at `/ws`)
+- `/prometheus/` → Prometheus console
+- `/grafana/` → Grafana dashboards
+- `/wiremock/` → WireMock admin endpoints
+
+When accessing PocketHive from another machine, keep using the UI origin and these prefixed paths; the reverse proxy handles service discovery inside the compose network.
+
 ### External Deployment (Portainer/Production)
 1. Create deployment package: `./package-deployment.sh` (or `package-deployment.bat` on Windows)
 2. Copy `pockethive-deployment-<version>.tar.gz` to target environment

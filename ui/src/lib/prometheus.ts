@@ -130,7 +130,20 @@ const RESERVED_WORDS = new Set([
 
 function buildPrometheusUrl(path: string, params: Record<string, string | number | undefined>): string {
   const base = getConfig().prometheus
-  const url = new URL(path.replace(/^\//, ''), base)
+  const hasScheme = /^[a-zA-Z][a-zA-Z\d+\-.]*:\/\//.test(base)
+  let baseUrl: URL
+  if (hasScheme) {
+    baseUrl = new URL(base)
+  } else {
+    if (typeof window === 'undefined' || !window.location?.origin) {
+      throw new Error('Cannot resolve relative Prometheus base URL without window.location.origin')
+    }
+    baseUrl = new URL(base, window.location.origin)
+  }
+  if (!baseUrl.pathname.endsWith('/')) {
+    baseUrl.pathname = `${baseUrl.pathname}/`
+  }
+  const url = new URL(path.replace(/^\//, ''), baseUrl)
   Object.entries(params).forEach(([key, value]) => {
     if (value === undefined || value === null || value === '') {
       return

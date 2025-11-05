@@ -1,0 +1,26 @@
+id: local-rest-with-named-queues
+name: Local REST - Named Queues Test
+description: Uses local images. Sample scenario that ships the REST generator with a 5 msg/s default rate limit and uses custom queue names.
+template:
+  image: swarm-controller:latest
+  bees:
+    - role: generator
+      image: generator:latest
+      env:
+        POCKETHIVE_CONTROL_PLANE_WORKER_GENERATOR_RATE_PER_SEC: "5"
+      work:
+        out: genQ
+    - role: moderator
+      image: moderator:latest
+      work:
+        in: genQ
+        out: modQ
+    - role: processor
+      image: processor:latest
+      work:
+        in: modQ
+        out: finalQ
+    - role: postprocessor
+      image: postprocessor:latest
+      work:
+        in: finalQ

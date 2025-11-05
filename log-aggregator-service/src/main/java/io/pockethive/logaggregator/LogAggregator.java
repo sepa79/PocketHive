@@ -6,17 +6,27 @@ import org.slf4j.LoggerFactory;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.web.client.RestTemplateBuilder;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.RestClientException;
+import org.springframework.web.client.RestTemplate;
 
 import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.time.Instant;
 import java.nio.charset.StandardCharsets;
-import java.util.*;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
 @Component
@@ -25,7 +35,7 @@ public class LogAggregator {
   private static final Logger log = LoggerFactory.getLogger(LogAggregator.class);
   private final ObjectMapper mapper = new ObjectMapper();
   private final Queue<LogEntry> buffer = new ConcurrentLinkedQueue<>();
-  private final HttpClient http = HttpClient.newHttpClient();
+  private final RestTemplate restTemplate;
   private final URI lokiUri;
   private final int maxRetries;
   private final long backoffMs;
@@ -35,11 +45,16 @@ public class LogAggregator {
       @Value("${pockethive.loki.url}") String lokiBase,
       @Value("${pockethive.loki.maxRetries}") int maxRetries,
       @Value("${pockethive.loki.backoffMs}") long backoffMs,
-      @Value("${pockethive.loki.batchSize}") int batchSize) {
+      @Value("${pockethive.loki.batchSize}") int batchSize,
+      RestTemplateBuilder restTemplateBuilder) {
     this.lokiUri = URI.create(lokiBase + "/loki/api/v1/push");
     this.maxRetries = maxRetries;
     this.backoffMs = backoffMs;
     this.batchSize = batchSize;
+    this.restTemplate = restTemplateBuilder
+        .setConnectTimeout(Duration.ofSeconds(5))
+        .setReadTimeout(Duration.ofSeconds(10))
+        .build();
   }
 
   @RabbitListener(queues = "${pockethive.logs.queue}")
@@ -105,17 +120,19 @@ public class LogAggregator {
   private void send(Map<String,Object> payload){
     try{
       String json = mapper.writeValueAsString(payload);
+      HttpHeaders headers = new HttpHeaders();
+      headers.setContentType(MediaType.APPLICATION_JSON);
+      HttpEntity<String> entity = new HttpEntity<>(json, headers);
+
       for(int attempt=1; attempt<=maxRetries; attempt++){
         try{
-          HttpRequest req = HttpRequest.newBuilder()
-              .uri(lokiUri)
-              .header("Content-Type","application/json")
-              .POST(HttpRequest.BodyPublishers.ofString(json))
-              .build();
-          HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
-          if(resp.statusCode()/100==2) return;
-          throw new RuntimeException("HTTP "+resp.statusCode()+": "+resp.body());
-        }catch(Exception e){
+          ResponseEntity<String> response = restTemplate.postForEntity(lokiUri, entity, String.class);
+          if(response.getStatusCode().is2xxSuccessful()) {
+            return;
+          }
+          throw new RestClientException("HTTP " + response.getStatusCodeValue() + ": "
+              + Objects.toString(response.getBody(), ""));
+        }catch(RestClientException e){
           if(attempt==maxRetries){
             log.error("Failed to push logs to Loki", e);
           }else{

@@ -2,7 +2,7 @@ schemaVersion: "1.0"
 capabilitiesVersion: "1.0"
 role: swarm-controller
 image:
-  name: pockethive-swarm-controller
+  name: swarm-controller
   tag: latest
 ui:
   label: "Swarm Controller"

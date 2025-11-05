@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.13.5] - 2025-11-04
+Timestamp: 2025-11-04T20:30:00Z
+
+- Docker Compose & deployment: add persistent named volumes for RabbitMQ, Prometheus, Grafana, and Loki, align both compose bundles to shared paths, expose RabbitMQ AMQP/management ports, and update Loki config plus entrypoint to chown `/var/lib/loki` on start.
+- Observability & logging: switch the log-aggregator HTTP client to a Spring `RestTemplate`, ensuring Loki pushes work in tests, and adjust push payload retries with clearer error handling.
+- UI & routing: fix Prometheus URL construction so relative `/prometheus` proxies resolve correctly from any host and add Loki pushgateway path defaults to start scripts.
+- Infrastructure: documented the UI reverse proxy routes (orchestrator, scenario manager, RabbitMQ, Prometheus, Grafana, WireMock) so remote users can reach services via the UI origin.
+- Tests & scenarios: refresh orchestrator and end-to-end tests to use the new `local-rest`/`local-rest-with-named-queues` templates, update expected worker image names and config, align RabbitMQ management base URL, and unblock scenario lookups.
+- Tooling & scripts: add management API defaults to `start-e2e-tests` scripts, ensure Loki data directories exist with correct ownership, and keep Portainer compose routing consistent with local development.
+- Release: bump PocketHive patch version to 0.13.5 so tooling and published artifacts reference the latest build.
+
 ## [0.13.4] - 2025-10-31
 Timestamp: 2025-10-31T13:02:46Z
 
@@ -583,4 +594,3 @@ Timestamp: 2025-08-28T23:51:09Z
 Timestamp: 2025-08-28T23:07:54Z
 
 - Initial repository setup.
-

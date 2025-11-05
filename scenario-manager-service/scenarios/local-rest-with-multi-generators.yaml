@@ -1,11 +1,11 @@
-id: mock-rest-with-multi-generators
-name: MockRest-WithMultiGenerators
-description: Sample REST scenario that ships two generator bees with distinct payloads, rate limits, and an expected 10% beta generator failure rate.
+id: local-rest-with-multi-generators
+name: Local REST - Multi Generators
+description: Uses local images. Sample REST scenario that ships two generator bees with distinct payloads, rate limits, and an expected 10% beta generator failure rate.
 template:
-  image: pockethive-swarm-controller:latest
+  image: swarm-controller:latest
   bees:
     - role: generator
-      image: pockethive-generator:latest
+      image: generator:latest
       env:
         POCKETHIVE_CONTROL_PLANE_WORKER_GENERATOR_RATE_PER_SEC: "30"
         POCKETHIVE_CONTROL_PLANE_WORKER_GENERATOR_MESSAGE_PATH: "/api/test-alpha"
@@ -14,7 +14,7 @@ template:
       work:
         out: gen
     - role: generator
-      image: pockethive-generator:latest
+      image: generator:latest
       env:
         POCKETHIVE_CONTROL_PLANE_WORKER_GENERATOR_RATE_PER_SEC: "70"
         POCKETHIVE_CONTROL_PLANE_WORKER_GENERATOR_MESSAGE_PATH: "/api/test-beta"
@@ -23,16 +23,16 @@ template:
       work:
         out: gen
     - role: moderator
-      image: pockethive-moderator:latest
+      image: moderator:latest
       work:
         in: gen
         out: mod
     - role: processor
-      image: pockethive-processor:latest
+      image: processor:latest
       work:
         in: mod
         out: final
     - role: postprocessor
-      image: pockethive-postprocessor:latest
+      image: postprocessor:latest
       work:
         in: final

@@ -2,7 +2,7 @@ schemaVersion: "1.0"
 capabilitiesVersion: "1.1"
 role: moderator
 image:
-  name: pockethive-moderator
+  name: moderator
   tag: latest
 ui:
   label: "Moderator"

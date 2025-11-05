@@ -2,7 +2,7 @@ schemaVersion: "1.0"
 capabilitiesVersion: "1.0"
 role: processor
 image:
-  name: pockethive-processor
+  name: processor
   tag: latest
 ui:
   label: "Processor"

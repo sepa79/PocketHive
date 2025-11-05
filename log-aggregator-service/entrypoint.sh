@@ -10,8 +10,8 @@ log() {
   printf '%s %s\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$1"
 }
 
-log "waiting for RabbitMQ queue '$QUEUE' on '$HOST'"
-while ! curl -fsS -u "$USER:$PASS" "http://$HOST:15672/api/queues/%2f/$QUEUE" >/dev/null; do
+log "waiting for RabbitMQ queue '$QUEUE' on '$HOST' (management /rabbitmq)"
+while ! curl -fsS -u "$USER:$PASS" "http://$HOST:15672/rabbitmq/api/queues/%2f/$QUEUE" >/dev/null; do
   log "queue not found, retrying in 5s"
   sleep 5
 done

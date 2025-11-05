@@ -4,10 +4,15 @@ version: '3.8'
 # Orchestrator will dynamically create bee containers (swarms)
 
 services:
+#--------------------------------------
+# Off the Shelf Services
+#--------------------------------------
   rabbitmq:
     image: ghcr.io/sepa79/pockethive/rabbitmq:latest
     ports:
       - "5672:5672"
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
     healthcheck:
       test: ["CMD-SHELL", "nc -z 127.0.0.1 5672"]
       interval: 5s
@@ -17,11 +22,71 @@ services:
 
   loki:
     image: grafana/loki:2.9.1
-    command: -config.file=/etc/loki/config.yml
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+          set -e
+          chown -R 10001:10001 /var/lib/loki
+          exec su -s /bin/sh loki -c "/usr/bin/loki -config.file=/etc/loki/config.yml"
+    user: "0"
     volumes:
       - /opt/pockethive/loki/config.yml:/etc/loki/config.yml:ro
-      - loki-data:/loki
+      - loki-data:/var/lib/loki
 
+  prometheus:
+    image: prom/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    volumes:
+      - /opt/pockethive/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+
+  grafana:
+    image: grafana/grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: pockethive
+      GF_SECURITY_ADMIN_PASSWORD: pockethive
+      GF_SERVER_ROOT_URL: http://localhost:8088/grafana/
+      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
+    volumes:
+      - /opt/pockethive/grafana/provisioning:/etc/grafana/provisioning:ro
+      - /opt/pockethive/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      - prometheus
+      - loki
+
+  pushgateway:
+    image: prom/pushgateway:v1.9.0
+    ports:
+      - "9091:9091"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:9091/-/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  wiremock:
+    image: wiremock/wiremock:3.13.1
+    command:
+      - "--verbose"
+      - "--disable-banner"
+      - "--async-response-enabled"
+      - "--global-response-templating"
+      - "--max-request-journal-entries=1000"
+      - "--enable-stub-cors"
+    ports:
+      - "8080:8080"
+    volumes:
+      - /opt/pockethive/wiremock/mappings:/home/wiremock/mappings:ro
+      - /opt/pockethive/wiremock/__files:/home/wiremock/__files:ro
+
+#------------------------------
+# PocketHive Services
+#------------------------------
   log-aggregator:
     image: ghcr.io/sepa79/pockethive/log-aggregator:latest
     environment:
@@ -74,58 +139,11 @@ services:
       retries: 6
       start_period: 5s
 
-  prometheus:
-    image: prom/prometheus
-    command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
-      - '--storage.tsdb.path=/prometheus'
-    volumes:
-      - /opt/pockethive/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - prometheus-data:/prometheus
-
-  grafana:
-    image: grafana/grafana
-    environment:
-      GF_SECURITY_ADMIN_USER: pockethive
-      GF_SECURITY_ADMIN_PASSWORD: pockethive
-      GF_SERVER_ROOT_URL: http://localhost:8088/grafana/
-      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
-    volumes:
-      - /opt/pockethive/grafana/provisioning:/etc/grafana/provisioning:ro
-      - /opt/pockethive/grafana/dashboards:/var/lib/grafana/dashboards:ro
-      - grafana-data:/var/lib/grafana
-    depends_on:
-      - prometheus
-      - loki
-
-  pushgateway:
-    image: prom/pushgateway:v1.9.0
-    ports:
-      - "9091:9091"
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:9091/-/ready"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 5s
-
-  wiremock:
-    image: wiremock/wiremock:3.13.1
-    command:
-      - "--verbose"
-      - "--disable-banner"
-      - "--async-response-enabled"
-      - "--global-response-templating"
-      - "--max-request-journal-entries=1000"
-      - "--enable-stub-cors"
-    ports:
-      - "8080:8080"
-    volumes:
-      - /opt/pockethive/wiremock/mappings:/home/wiremock/mappings:ro
-      - /opt/pockethive/wiremock/__files:/home/wiremock/__files:ro
-
+#--------------------------------------
+# Data Volumes
+#--------------------------------------
 volumes:
+  rabbitmq-data:
   loki-data:
   prometheus-data:
   grafana-data:
-  wiremock-data:

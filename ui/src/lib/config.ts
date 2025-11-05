@@ -19,9 +19,9 @@ const readOnlyPasscode =
   import.meta.env.VITE_STOMP_READONLY_PASSCODE || import.meta.env.VITE_STOMP_PASSCODE || 'ph-observer'
 
 const config: UIConfig = {
-  rabbitmq: `http://${host}:15672/`,
-  prometheus: `http://${host}:9090/`,
-  grafana: `http://${host}:3000/`,
+  rabbitmq: `/rabbitmq`,
+  prometheus: `/prometheus`,
+  grafana: `/grafana`,
   wiremock: `http://${host}:8080/__admin/`,
   stompUrl: `/ws`,
   stompUser: readOnlyUser,

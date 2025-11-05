@@ -81,6 +81,15 @@ echo - 15672 - RabbitMQ Management
 echo - 3000 - Grafana ^(pockethive/pockethive^)
 echo - 9090 - Prometheus
 echo - 8080 - WireMock
+echo.
+echo ## Persistent Data
+echo.
+echo Docker named volumes keep state for RabbitMQ, Prometheus, Grafana, and Loki:
+echo - rabbitmq-data
+echo - prometheus-data
+echo - grafana-data
+echo - loki-data
+echo Use "docker compose down -v" to remove them for a clean reset.
 ) > "%DEPLOY_DIR%\DEPLOY.md"
 
 rem Create start.bat

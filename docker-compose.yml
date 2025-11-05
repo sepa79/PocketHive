@@ -8,22 +8,176 @@ x-metrics-env: &metrics-env
   MANAGEMENT_METRICS_TAGS_SWARM: swarm1
 
 services:
+#--------------------------------------
+# Off the Shelf Services
+#--------------------------------------
   rabbitmq:
     image: ${DOCKER_REGISTRY:-}rabbitmq:${POCKETHIVE_VERSION:-latest}
     build:
       context: .
       dockerfile: Dockerfile.rabbit
     environment: {}
+    # exposed so that e2e tests can run outside of the docker network
     ports:
       - "5672:5672"
       - "15672:15672"
       - "15674:15674"
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
     healthcheck:
       test: ["CMD-SHELL", "nc -z 127.0.0.1 5672"]
       interval: 5s
       timeout: 10s
       retries: 24
       start_period: 30s
+
+  prometheus:
+    image: prom/prometheus:latest
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --web.external-url=http://localhost:8088/prometheus/
+      - --web.route-prefix=/prometheus
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    # ports:
+    #   - "9090:9090"
+
+  grafana:
+    image: grafana/grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: pockethive
+      GF_SECURITY_ADMIN_PASSWORD: pockethive
+    volumes:
+      - ./grafana/grafana.ini:/etc/grafana/grafana.ini:ro
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    # expose:
+    #   - "3000:3000"
+    depends_on:
+      - prometheus
+      - loki
+
+  loki:
+    image: grafana/loki:latest
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+          set -e
+          chown -R 10001:10001 /var/lib/loki
+          exec su -s /bin/sh loki -c "/usr/bin/loki -config.file=/etc/loki/config.yml"
+    user: "0"
+    # ports:
+    #   - "3100:3100"
+    volumes:
+      - ./loki/config.yml:/etc/loki/config.yml:ro
+      - loki-data:/var/lib/loki
+
+  pushgateway:
+    image: prom/pushgateway:latest
+    # expose:
+    #   - "9091"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:9091/-/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  wiremock:
+    image: wiremock/wiremock:latest
+    command:
+      [
+        "--verbose",                          # useful logs for debugging
+        "--disable-banner",                   # cleaner output
+        "--async-response-enabled",           # enable async responses (better throughput)
+        "--global-response-templating",       # allows templating across all stubs
+        "--record-mappings",                  # auto-record mappings (if needed for tests)
+        # "--no-request-journal",             # disable detailed journaling for perf (optional, see note below)
+        "--max-request-journal-entries=1000", # avoid memory blowup, keep it reasonable
+        "--enable-stub-cors",                # allow cross-origin access
+      ]
+    environment:
+      LANG: en_US.UTF-8
+      JAVA_OPTS: >-
+        -XX:+UseG1GC
+        -XX:+ParallelRefProcEnabled
+        -XX:MaxRAMPercentage=75
+        -XX:+HeapDumpOnOutOfMemoryError
+        -Djava.net.preferIPv4Stack=true
+        -Djava.awt.headless=true
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./wiremock/mappings:/home/wiremock/mappings
+      - ./wiremock/__files:/home/wiremock/__files
+
+  # promtail:
+  #   # disabled: logs are shipped via RabbitMQ and aggregated to Loki
+  #   image: grafana/promtail:2.9.1
+  #   command: -config.file=/etc/promtail/config.yml
+  #   ports:
+  #     - "9080:9080"
+  #   volumes:
+  #     - ./promtail/config.yml:/etc/promtail/config.yml:ro
+  #     - /var/lib/docker/containers:/var/lib/docker/containers:ro
+  #     - /var/run/docker.sock:/var/run/docker.sock:ro
+  #   depends_on:
+  #     - loki
+
+#--------------------------------------
+# PocketHive Services
+#--------------------------------------
+
+  ui:
+    image: ${DOCKER_REGISTRY:-}ui:${POCKETHIVE_VERSION:-latest}
+    build:
+      context: .
+      dockerfile: ui/Dockerfile
+      args:
+        VITE_STOMP_READONLY_USER: ${VITE_STOMP_READONLY_USER:-ph-observer}
+        VITE_STOMP_READONLY_PASSCODE: ${VITE_STOMP_READONLY_PASSCODE:-ph-observer}
+    depends_on:
+      scenario-manager:
+        condition: service_healthy
+    ports:
+      - "8088:8088"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8088/healthz | grep -q ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 5s
+
+  log-aggregator:
+    image: ${DOCKER_REGISTRY:-}log-aggregator:${POCKETHIVE_VERSION:-latest}
+    build:
+      context: .
+      dockerfile: log-aggregator-service/Dockerfile
+    environment:
+      <<: *metrics-env
+      RABBITMQ_HOST: rabbitmq
+      POCKETHIVE_LOGS_EXCHANGE: ph.logs
+      POCKETHIVE_LOGS_QUEUE: ph.logs.agg
+      POCKETHIVE_LOKI_URL: http://loki:3100
+      MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_GROUPING_KEY_INSTANCE: log-aggregator
+      MANAGEMENT_METRICS_TAGS_INSTANCE: log-aggregator
+    depends_on:
+      rabbitmq:
+        condition: service_started
+      loki:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/actuator/health | grep -q UP"]
+      interval: 5s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    ports:
+      - "1080:8080"
 
   orchestrator:
     image: ${DOCKER_REGISTRY:-}orchestrator:${POCKETHIVE_VERSION:-latest}
@@ -42,6 +196,34 @@ services:
         condition: service_healthy
       log-aggregator:
         condition: service_healthy
+
+
+  scenario-manager:
+    image: ${DOCKER_REGISTRY:-}scenario-manager:${POCKETHIVE_VERSION:-latest}
+    build:
+      context: .
+      dockerfile: scenario-manager-service/Dockerfile
+    environment:
+      <<: *metrics-env
+      RABBITMQ_HOST: rabbitmq
+      POCKETHIVE_LOGS_QUEUE: ph.logs.agg
+      MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_GROUPING_KEY_INSTANCE: scenario-manager
+      MANAGEMENT_METRICS_TAGS_INSTANCE: scenario-manager
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/actuator/health | grep -q UP"]
+      interval: 5s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    ports:
+      - "1081:8080"
+    depends_on:
+      log-aggregator:
+        condition: service_healthy
+
+#------------------------------------------
+# PocketHive Services - dynamic swarm bees
+#------------------------------------------
 
   swarm-controller:
     profiles: ["bees"]
@@ -149,155 +331,11 @@ services:
       log-aggregator:
         condition: service_healthy
 
-  scenario-manager:
-    image: ${DOCKER_REGISTRY:-}scenario-manager:${POCKETHIVE_VERSION:-latest}
-    build:
-      context: .
-      dockerfile: scenario-manager-service/Dockerfile
-    environment:
-      <<: *metrics-env
-      RABBITMQ_HOST: rabbitmq
-      POCKETHIVE_LOGS_QUEUE: ph.logs.agg
-      MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_GROUPING_KEY_INSTANCE: scenario-manager
-      MANAGEMENT_METRICS_TAGS_INSTANCE: scenario-manager
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/actuator/health | grep -q UP"]
-      interval: 5s
-      timeout: 10s
-      retries: 10
-      start_period: 30s
-    ports:
-      - "1081:8080"
-    depends_on:
-      log-aggregator:
-        condition: service_healthy
-
-  log-aggregator:
-    image: ${DOCKER_REGISTRY:-}log-aggregator:${POCKETHIVE_VERSION:-latest}
-    build:
-      context: .
-      dockerfile: log-aggregator-service/Dockerfile
-    environment:
-      <<: *metrics-env
-      RABBITMQ_HOST: rabbitmq
-      POCKETHIVE_LOGS_EXCHANGE: ph.logs
-      POCKETHIVE_LOGS_QUEUE: ph.logs.agg
-      POCKETHIVE_LOKI_URL: http://loki:3100
-      MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_GROUPING_KEY_INSTANCE: log-aggregator
-      MANAGEMENT_METRICS_TAGS_INSTANCE: log-aggregator
-    depends_on:
-      rabbitmq:
-        condition: service_started
-      loki:
-        condition: service_started
-    healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/actuator/health | grep -q UP"]
-      interval: 5s
-      timeout: 10s
-      retries: 10
-      start_period: 30s
-    ports:
-      - "1080:8080"
-
-  ui:
-    image: ${DOCKER_REGISTRY:-}ui:${POCKETHIVE_VERSION:-latest}
-    build:
-      context: .
-      dockerfile: ui/Dockerfile
-      args:
-        VITE_STOMP_READONLY_USER: ${VITE_STOMP_READONLY_USER:-ph-observer}
-        VITE_STOMP_READONLY_PASSCODE: ${VITE_STOMP_READONLY_PASSCODE:-ph-observer}
-    depends_on:
-      scenario-manager:
-        condition: service_healthy
-    ports:
-      - "8088:80"
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/healthz | grep -q ok"]
-      interval: 10s
-      timeout: 5s
-      retries: 6
-      start_period: 5s
-
-  prometheus:
-    image: prom/prometheus
-    volumes:
-      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-    ports:
-      - "9090:9090"
-
-  grafana:
-    image: grafana/grafana
-    environment:
-      GF_SECURITY_ADMIN_USER: pockethive
-      GF_SECURITY_ADMIN_PASSWORD: pockethive
-      GF_SERVER_ROOT_URL: http://localhost:8088/grafana/
-      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
-    volumes:
-      - ./grafana/provisioning:/etc/grafana/provisioning:ro
-      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
-    ports:
-      - "3000:3000"
-    depends_on:
-      - prometheus
-      - loki
-
-  loki:
-    image: grafana/loki:2.9.1
-    command: -config.file=/etc/loki/config.yml
-    ports:
-      - "3100:3100"
-    volumes:
-      - ./loki/config.yml:/etc/loki/config.yml:ro
-
-  pushgateway:
-    image: prom/pushgateway:v1.9.0
-    expose:
-      - "9091"
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:9091/-/ready"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 5s
-
-  wiremock:
-    image: wiremock/wiremock:3.13.1
-    command:
-      [
-        "--verbose",                          # useful logs for debugging
-        "--disable-banner",                   # cleaner output
-        "--async-response-enabled",           # enable async responses (better throughput)
-        "--global-response-templating",       # allows templating across all stubs
-        "--record-mappings",                  # auto-record mappings (if needed for tests)
-        # "--no-request-journal",             # disable detailed journaling for perf (optional, see note below)
-        "--max-request-journal-entries=1000", # avoid memory blowup, keep it reasonable
-        "--enable-stub-cors",                # allow cross-origin access
-      ]
-    environment:
-      LANG: en_US.UTF-8
-      JAVA_OPTS: >-
-        -XX:+UseG1GC
-        -XX:+ParallelRefProcEnabled
-        -XX:MaxRAMPercentage=75
-        -XX:+HeapDumpOnOutOfMemoryError
-        -Djava.net.preferIPv4Stack=true
-        -Djava.awt.headless=true
-    ports:
-      - "8080:8080"
-    volumes:
-      - ./wiremock/mappings:/home/wiremock/mappings
-      - ./wiremock/__files:/home/wiremock/__files
-
-  # promtail:
-  #   # disabled: logs are shipped via RabbitMQ and aggregated to Loki
-  #   image: grafana/promtail:2.9.1
-  #   command: -config.file=/etc/promtail/config.yml
-  #   ports:
-  #     - "9080:9080"
-  #   volumes:
-  #     - ./promtail/config.yml:/etc/promtail/config.yml:ro
-  #     - /var/lib/docker/containers:/var/lib/docker/containers:ro
-  #     - /var/run/docker.sock:/var/run/docker.sock:ro
-  #   depends_on:
-  #     - loki
+#------------------------------------------
+# Volumes
+#------------------------------------------
+volumes:
+  rabbitmq-data:
+  prometheus-data:
+  grafana-data:
+  loki-data:

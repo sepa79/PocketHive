@@ -259,8 +259,8 @@ public class SwarmLifecycleSteps {
     });
   }
 
-  @And("the mock-1 worker statuses reflect the swarm topology")
-  public void theMock1WorkerStatusesReflectTheSwarmTopology() {
+  @And("the swarm worker statuses reflect the swarm topology")
+  public void theSwarmWorkerStatusesReflectTheSwarmTopology() {
     captureWorkerStatuses();
     for (String role : workerRoles()) {
       assertWorkerTopology(role);
@@ -393,7 +393,7 @@ public class SwarmLifecycleSteps {
     }
     ensureTemplate();
     List<String> roles = workerRoles();
-    SwarmAssertions.await("status-full events for mock-1 workers", () -> {
+    SwarmAssertions.await("status-full events for swarm workers", () -> {
       List<ControlPlaneEvents.StatusEnvelope> statuses = controlPlaneEvents.statusesForSwarm(swarmId);
       for (String role : roles) {
         boolean present = statuses.stream()

@@ -84,6 +84,18 @@ cat > "${DEPLOY_DIR}/DEPLOY.md" << 'EOF'
 The docker-compose.yml uses absolute paths to `/opt/pockethive/*` for configuration files.
 Ensure the package is extracted to `/opt/pockethive/` for volumes to mount correctly
 
+## Persistent Data
+
+Docker named volumes retain stateful data between restarts:
+
+- `rabbitmq-data` (RabbitMQ queues and configuration)
+- `prometheus-data` (Prometheus TSDB)
+- `grafana-data` (Grafana database and plugins)
+- `loki-data` (Loki indexes and chunks)
+
+They are created automatically on the first `docker compose up`. Remove them explicitly
+with `docker compose down -v` if you need a clean slate.
+
 ## Portainer Deployment
 
 See `docs/PORTAINER_DEPLOYMENT.md` for detailed Portainer instructions.

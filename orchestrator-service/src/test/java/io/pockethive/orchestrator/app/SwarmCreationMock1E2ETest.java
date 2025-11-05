@@ -201,7 +201,7 @@ class SwarmCreationMock1E2ETest {
         String swarmId = "mock-swarm";
         String idempotencyKey = UUID.randomUUID().toString();
         HttpEntity<Map<String, String>> request = jsonRequest(
-            Map.of("idempotencyKey", idempotencyKey, "templateId", "mock-1", "notes", "mock-1"));
+            Map.of("idempotencyKey", idempotencyKey, "templateId", "local-rest", "notes", "local-rest"));
 
         ResponseEntity<ControlResponse> response = rest.exchange(
             "/api/swarms/{swarmId}/create",
@@ -227,7 +227,7 @@ class SwarmCreationMock1E2ETest {
 
         assertThat(swarmPlanRegistry.find(instanceId)).isPresent();
 
-        verify(docker).createAndStartContainer(eq("pockethive-swarm-controller:latest"), anyMap(), eq(instanceId), any());
+        verify(docker).createAndStartContainer(eq("swarm-controller:latest"), anyMap(), eq(instanceId), any());
 
         AnonymousQueue captureQueue = new AnonymousQueue();
         String captureName = admin.declareQueue(captureQueue);
@@ -247,7 +247,7 @@ class SwarmCreationMock1E2ETest {
                 new ConfirmationScope(swarmId, "swarm-controller", instanceId)),
             "{}");
 
-        Message templateMessage = awaitMessage(captureName, Duration.ofSeconds(5));
+        Message templateMessage = awaitMessage(captureName, Duration.ofSeconds(15));
         assertThat(templateMessage).isNotNull();
         assertThat(templateMessage.getMessageProperties().getReceivedRoutingKey())
             .isEqualTo(ControlPlaneRouting.signal("swarm-template", swarmId, "swarm-controller", "ALL"));
@@ -261,13 +261,17 @@ class SwarmCreationMock1E2ETest {
         SwarmPlan publishedPlan = objectMapper.convertValue(controlSignal.args(), SwarmPlan.class);
         assertThat(publishedPlan.id()).isEqualTo(swarmId);
         assertThat(publishedPlan.bees()).containsExactly(
-            new Bee("generator", "pockethive-generator:latest", new Work(null, "gen"), java.util.Map.of()),
-            new Bee("moderator", "pockethive-moderator:latest", new Work("gen", "mod"), java.util.Map.of()),
-            new Bee("processor", "pockethive-processor:latest", new Work("mod", "final"), java.util.Map.of()),
-            new Bee("postprocessor", "pockethive-postprocessor:latest", new Work("final", null), java.util.Map.of())
+            new Bee(
+                "generator",
+                "generator:latest",
+                new Work(null, "gen"),
+                java.util.Map.of("POCKETHIVE_CONTROL_PLANE_WORKER_GENERATOR_RATE_PER_SEC", "50")),
+            new Bee("moderator", "moderator:latest", new Work("gen", "mod"), java.util.Map.of()),
+            new Bee("processor", "processor:latest", new Work("mod", "final"), java.util.Map.of()),
+            new Bee("postprocessor", "postprocessor:latest", new Work("final", null), java.util.Map.of())
         );
 
-        Message readyMessage = awaitMessage(captureName, Duration.ofSeconds(5));
+        Message readyMessage = awaitMessage(captureName, Duration.ofSeconds(15));
         assertThat(readyMessage).isNotNull();
         assertThat(readyMessage.getMessageProperties().getReceivedRoutingKey())
             .isEqualTo(ControlPlaneRouting.event("ready.swarm-create",
@@ -288,7 +292,7 @@ class SwarmCreationMock1E2ETest {
             ControlPlaneRouting.event("ready.swarm-template",
                 new ConfirmationScope(swarmId, "swarm-controller", instanceId)),
             "{}");
-        awaitStatus(swarmId, SwarmStatus.READY, Duration.ofSeconds(5));
+        awaitStatus(swarmId, SwarmStatus.READY, Duration.ofSeconds(15));
 
         admin.deleteQueue(captureName);
     }

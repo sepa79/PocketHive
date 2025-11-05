@@ -2,7 +2,7 @@ schemaVersion: "1.0"
 capabilitiesVersion: "1.0"
 role: postprocessor
 image:
-  name: pockethive-postprocessor
+  name: postprocessor
   tag: latest
 ui:
   label: "Postprocessor"
