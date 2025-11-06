@@ -70,8 +70,6 @@ public final class RabbitWorkInput implements WorkInput, ApplicationListener<Con
             return;
         }
         adapter.initialiseStateListener();
-        controlPlaneRuntime.emitStatusSnapshot();
-        adapter.startListener();
         running = true;
         if (log.isInfoEnabled()) {
             log.info("{} work input started (instance={})", displayName, identity.instanceId());
