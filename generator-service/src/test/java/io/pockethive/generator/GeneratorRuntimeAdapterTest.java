@@ -4,8 +4,10 @@ import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.controlplane.spring.WorkerControlPlaneProperties;
 import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pockethive.worker.sdk.api.WorkResult;
-import io.pockethive.worker.sdk.autoconfigure.WorkerControlQueueListener;
-import io.pockethive.worker.sdk.config.WorkerType;
+import io.pockethive.worker.sdk.config.WorkerInputType;
+import io.pockethive.worker.sdk.input.WorkInput;
+import io.pockethive.worker.sdk.input.WorkInputRegistry;
+import io.pockethive.worker.sdk.input.SchedulerWorkInput;
 import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
 import io.pockethive.worker.sdk.runtime.WorkerRegistry;
@@ -25,7 +27,6 @@ import org.springframework.amqp.rabbit.core.RabbitTemplate;
 
 import io.pockethive.worker.sdk.testing.ControlPlaneTestFixtures;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doReturn;
@@ -47,6 +48,9 @@ class GeneratorRuntimeAdapterTest {
 
   @Mock
   private RabbitTemplate rabbitTemplate;
+
+  @Mock
+  private WorkInputRegistry workInputRegistry;
 
   private GeneratorDefaults defaults;
   private WorkerDefinition definition;
@@ -74,7 +78,7 @@ class GeneratorRuntimeAdapterTest {
     definition = new WorkerDefinition(
         "generatorWorker",
         GeneratorWorkerImpl.class,
-        WorkerType.GENERATOR,
+        WorkerInputType.SCHEDULER,
         "generator",
         null,
         OUT_QUEUE,
@@ -85,7 +89,8 @@ class GeneratorRuntimeAdapterTest {
 
   @Test
   void tickDispatchesUsingDefaultRate() throws Exception {
-    when(workerRegistry.all()).thenReturn(List.of(definition));
+    when(workerRegistry.streamByRoleAndInput("generator", WorkerInputType.SCHEDULER))
+        .thenAnswer(invocation -> java.util.stream.Stream.of(definition));
     doReturn(WorkResult.message(WorkMessage.text("payload").build()))
         .when(workerRuntime)
         .dispatch(eq("generatorWorker"), any(WorkMessage.class));
@@ -96,12 +101,18 @@ class GeneratorRuntimeAdapterTest {
         controlPlaneRuntime,
         rabbitTemplate,
         identity,
-        defaults
+        defaults,
+        workInputRegistry
     );
-
-    adapter.emitInitialStatus();
+    adapter.start();
     adapter.tick();
-    verify(workerRuntime, times(2)).dispatch(eq("generatorWorker"), any(WorkMessage.class));
+    ArgumentCaptor<WorkMessage> workMessageCaptor = ArgumentCaptor.forClass(WorkMessage.class);
+    verify(workerRuntime, times(2)).dispatch(eq("generatorWorker"), workMessageCaptor.capture());
+    assertThat(workMessageCaptor.getAllValues())
+        .allSatisfy(message -> {
+          assertThat(message.headers()).containsEntry("swarmId", identity.swarmId());
+          assertThat(message.headers()).containsEntry("instanceId", identity.instanceId());
+        });
     ArgumentCaptor<Message> messageCaptor = ArgumentCaptor.forClass(Message.class);
     verify(rabbitTemplate, times(2)).send(eq(definition.exchange()), eq(definition.outQueue()), messageCaptor.capture());
     assertThat(messageCaptor.getAllValues())
@@ -110,33 +121,24 @@ class GeneratorRuntimeAdapterTest {
   }
 
   @Test
-  void controlQueueListenerDelegatesToControlPlaneRuntime() {
-    WorkerControlQueueListener listener = new WorkerControlQueueListener(controlPlaneRuntime);
-
-    listener.onControl("{}", "generator.control", null);
-    verify(controlPlaneRuntime).handle("{}", "generator.control");
-
-    assertThatThrownBy(() -> listener.onControl(" ", "generator.control", null))
-        .isInstanceOf(IllegalArgumentException.class)
-        .hasMessageContaining("payload");
-
-    assertThatThrownBy(() -> listener.onControl("{}", " ", null))
-        .isInstanceOf(IllegalArgumentException.class)
-        .hasMessageContaining("routing key");
-  }
-
-  @Test
   void registersStateListenerForEachGeneratorWorker() {
-    when(workerRegistry.all()).thenReturn(List.of(definition));
-    new GeneratorRuntimeAdapter(
+    when(workerRegistry.streamByRoleAndInput("generator", WorkerInputType.SCHEDULER))
+        .thenAnswer(invocation -> java.util.stream.Stream.of(definition));
+    GeneratorRuntimeAdapter adapter = new GeneratorRuntimeAdapter(
         workerRuntime,
         workerRegistry,
         controlPlaneRuntime,
         rabbitTemplate,
         identity,
-        defaults
+        defaults,
+        workInputRegistry
     );
 
+    adapter.start();
+
+    ArgumentCaptor<WorkInput> workInputCaptor = ArgumentCaptor.forClass(WorkInput.class);
+    verify(workInputRegistry).register(eq(definition), workInputCaptor.capture());
+    assertThat(workInputCaptor.getValue()).isInstanceOf(SchedulerWorkInput.class);
     ArgumentCaptor<String> beanCaptor = ArgumentCaptor.forClass(String.class);
     InOrder inOrder = Mockito.inOrder(controlPlaneRuntime);
     inOrder.verify(controlPlaneRuntime).registerDefaultConfig(eq("generatorWorker"), any());

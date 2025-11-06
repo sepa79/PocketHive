@@ -5,14 +5,13 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.micrometer.observation.ObservationRegistry;
-import io.pockethive.worker.sdk.api.GeneratorWorker;
-import io.pockethive.worker.sdk.api.MessageWorker;
 import io.pockethive.worker.sdk.api.StatusPublisher;
+import io.pockethive.worker.sdk.api.PocketHiveWorkerFunction;
 import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pockethive.worker.sdk.api.WorkResult;
 import io.pockethive.worker.sdk.api.WorkerContext;
 import io.pockethive.worker.sdk.api.WorkerInfo;
-import io.pockethive.worker.sdk.config.WorkerType;
+import io.pockethive.worker.sdk.config.WorkerInputType;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -24,7 +23,7 @@ class WorkerInvocationTest {
     private static final WorkerDefinition DEFINITION = new WorkerDefinition(
         "testWorker",
         TestMessageWorker.class,
-        WorkerType.MESSAGE,
+        WorkerInputType.RABBIT,
         "role",
         "in.queue",
         "out.queue",
@@ -38,7 +37,6 @@ class WorkerInvocationTest {
         state.setStatusPublisher(new WorkerStatusPublisher(state, () -> { }, () -> { }));
         state.updateConfig(null, java.util.Map.of(), Boolean.FALSE);
         WorkerInvocation invocation = new WorkerInvocation(
-            WorkerType.MESSAGE,
             new TestMessageWorker(),
             contextFactory(),
             DEFINITION,
@@ -58,7 +56,6 @@ class WorkerInvocationTest {
         state.setStatusPublisher(new WorkerStatusPublisher(state, () -> { }, () -> { }));
         state.updateConfig(null, java.util.Map.of(), Boolean.TRUE);
         WorkerInvocation invocation = new WorkerInvocation(
-            WorkerType.MESSAGE,
             new TestMessageWorker(),
             contextFactory(),
             DEFINITION,
@@ -76,7 +73,6 @@ class WorkerInvocationTest {
         WorkerState state = new WorkerState(DEFINITION);
         state.setStatusPublisher(new WorkerStatusPublisher(state, () -> { }, () -> { }));
         WorkerInvocation invocation = new WorkerInvocation(
-            WorkerType.MESSAGE,
             new TestMessageWorker(),
             contextFactory(),
             DEFINITION,
@@ -110,7 +106,6 @@ class WorkerInvocationTest {
             return chain.proceed(ctx);
         };
         WorkerInvocation invocation = new WorkerInvocation(
-            WorkerType.MESSAGE,
             worker,
             contextFactory(),
             DEFINITION,
@@ -176,18 +171,13 @@ class WorkerInvocationTest {
         };
     }
 
-    private static final class TestMessageWorker implements MessageWorker, GeneratorWorker {
+    private static final class TestMessageWorker implements PocketHiveWorkerFunction {
 
         private WorkMessage lastMessage;
 
         @Override
         public WorkResult onMessage(WorkMessage in, WorkerContext context) {
             this.lastMessage = in;
-            return WorkResult.none();
-        }
-
-        @Override
-        public WorkResult generate(WorkerContext context) {
             return WorkResult.none();
         }
 

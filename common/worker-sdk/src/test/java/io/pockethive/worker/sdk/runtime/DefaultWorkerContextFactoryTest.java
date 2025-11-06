@@ -9,7 +9,7 @@ import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.observability.ObservabilityContext;
 import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pockethive.worker.sdk.api.WorkerContext;
-import io.pockethive.worker.sdk.config.WorkerType;
+import io.pockethive.worker.sdk.config.WorkerInputType;
 import org.junit.jupiter.api.Test;
 
 class DefaultWorkerContextFactoryTest {
@@ -17,7 +17,7 @@ class DefaultWorkerContextFactoryTest {
     private static final WorkerDefinition DEFINITION = new WorkerDefinition(
         "testWorker",
         Object.class,
-        WorkerType.MESSAGE,
+        WorkerInputType.RABBIT,
         "role",
         "in.queue",
         "out.queue",

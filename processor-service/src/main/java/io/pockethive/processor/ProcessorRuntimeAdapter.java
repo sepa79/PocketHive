@@ -1,13 +1,15 @@
 package io.pockethive.processor;
 
 import io.pockethive.controlplane.ControlPlaneIdentity;
-import io.pockethive.worker.sdk.config.WorkerType;
+import io.pockethive.worker.sdk.config.WorkerInputType;
+import io.pockethive.worker.sdk.input.WorkInputRegistry;
+import io.pockethive.worker.sdk.input.rabbit.RabbitWorkInput;
 import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
 import io.pockethive.worker.sdk.runtime.WorkerRegistry;
 import io.pockethive.worker.sdk.runtime.WorkerRuntime;
-import io.pockethive.worker.sdk.transport.rabbit.RabbitMessageWorkerAdapter;
 import jakarta.annotation.PostConstruct;
+import jakarta.annotation.PreDestroy;
 import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -21,7 +23,7 @@ import org.springframework.stereotype.Component;
 
 /**
  * Bridges the Spring Boot runtime with the PocketHive worker SDK for the processor service while delegating
- * shared plumbing and outbound routing to {@link RabbitMessageWorkerAdapter}.
+ * shared plumbing and outbound routing to {@link RabbitWorkInput}.
  */
 @Component
 class ProcessorRuntimeAdapter implements ApplicationListener<ContextRefreshedEvent> {
@@ -29,7 +31,7 @@ class ProcessorRuntimeAdapter implements ApplicationListener<ContextRefreshedEve
   private static final Logger log = LoggerFactory.getLogger(ProcessorRuntimeAdapter.class);
   private static final String LISTENER_ID = "processorWorkerListener";
 
-  private final RabbitMessageWorkerAdapter delegate;
+  private final RabbitWorkInput workInput;
 
   ProcessorRuntimeAdapter(WorkerRuntime workerRuntime,
                           WorkerRegistry workerRegistry,
@@ -37,7 +39,8 @@ class ProcessorRuntimeAdapter implements ApplicationListener<ContextRefreshedEve
                           RabbitTemplate rabbitTemplate,
                           RabbitListenerEndpointRegistry listenerRegistry,
                           ControlPlaneIdentity identity,
-                          ProcessorDefaults defaults) {
+                          ProcessorDefaults defaults,
+                          WorkInputRegistry inputRegistry) {
     WorkerRuntime runtime = Objects.requireNonNull(workerRuntime, "workerRuntime");
     WorkerRegistry registry = Objects.requireNonNull(workerRegistry, "workerRegistry");
     WorkerControlPlaneRuntime controlRuntime = Objects.requireNonNull(controlPlaneRuntime, "controlPlaneRuntime");
@@ -45,10 +48,11 @@ class ProcessorRuntimeAdapter implements ApplicationListener<ContextRefreshedEve
     RabbitListenerEndpointRegistry endpointRegistry = Objects.requireNonNull(listenerRegistry, "listenerRegistry");
     ControlPlaneIdentity controlIdentity = Objects.requireNonNull(identity, "identity");
     ProcessorDefaults processorDefaults = Objects.requireNonNull(defaults, "defaults");
+    WorkInputRegistry registryRef = Objects.requireNonNull(inputRegistry, "inputRegistry");
 
-    WorkerDefinition workerDefinition = registry.findByRoleAndType("processor", WorkerType.MESSAGE)
+    WorkerDefinition workerDefinition = registry.findByRoleAndInput("processor", WorkerInputType.RABBIT)
         .orElseThrow(() -> new IllegalStateException("Processor worker definition not found"));
-    this.delegate = RabbitMessageWorkerAdapter.builder()
+    this.workInput = RabbitWorkInput.builder()
         .logger(log)
         .listenerId(LISTENER_ID)
         .displayName("Processor")
@@ -60,23 +64,37 @@ class ProcessorRuntimeAdapter implements ApplicationListener<ContextRefreshedEve
         .dispatcher(message -> runtime.dispatch(workerDefinition.beanName(), message))
         .rabbitTemplate(template)
         .dispatchErrorHandler(ex -> log.warn("Processor worker invocation failed", ex))
-        .build();
-  }
-
-  @PostConstruct
-  void initialiseStateListener() {
-    delegate.initialiseStateListener();
+        .build()
+        .register(registryRef);
   }
 
   @RabbitListener(
       id = LISTENER_ID,
       queues = "${pockethive.control-plane.queues.moderator}")
   public void onWork(Message message) {
-    delegate.onWork(message);
+    workInput.onWork(message);
   }
 
   @Override
   public void onApplicationEvent(ContextRefreshedEvent event) {
-    delegate.onApplicationEvent(event);
+    workInput.onApplicationEvent(event);
+  }
+
+  @PostConstruct
+  void onStart() {
+    start();
+  }
+
+  void start() {
+    workInput.start();
+  }
+
+  @PreDestroy
+  void onStop() {
+    stop();
+  }
+
+  void stop() {
+    workInput.stop();
   }
 }

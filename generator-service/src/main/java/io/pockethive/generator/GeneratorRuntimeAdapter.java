@@ -1,112 +1,114 @@
 package io.pockethive.generator;
 
 import io.pockethive.controlplane.ControlPlaneIdentity;
-import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pockethive.worker.sdk.api.WorkResult;
-import io.pockethive.worker.sdk.config.WorkerType;
+import io.pockethive.worker.sdk.config.WorkerInputType;
+import io.pockethive.worker.sdk.input.WorkInputRegistry;
+import io.pockethive.worker.sdk.input.SchedulerStates;
+import io.pockethive.worker.sdk.input.SchedulerWorkInput;
 import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
 import io.pockethive.worker.sdk.runtime.WorkerRegistry;
 import io.pockethive.worker.sdk.runtime.WorkerRuntime;
 import io.pockethive.worker.sdk.transport.rabbit.RabbitWorkMessageConverter;
+import java.time.Clock;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicBoolean;
 import jakarta.annotation.PostConstruct;
+import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+import org.springframework.beans.factory.annotation.Autowired;
 
 @Component
 class GeneratorRuntimeAdapter {
 
   private static final Logger log = LoggerFactory.getLogger(GeneratorRuntimeAdapter.class);
 
-  private final WorkerRuntime workerRuntime;
-  private final WorkerRegistry workerRegistry;
-  private final WorkerControlPlaneRuntime controlPlaneRuntime;
   private final RabbitTemplate rabbitTemplate;
-  private final ControlPlaneIdentity identity;
-  private final GeneratorDefaults defaults;
   private final RabbitWorkMessageConverter messageConverter = new RabbitWorkMessageConverter();
-  private final Map<String, GeneratorState> states = new ConcurrentHashMap<>();
-  private final List<WorkerDefinition> generatorWorkers;
+  private final List<SchedulerWorkInput<GeneratorWorkerConfig>> workInputs = new ArrayList<>();
+  private final Clock clock;
+
+  @Autowired
+  GeneratorRuntimeAdapter(WorkerRuntime workerRuntime,
+                          WorkerRegistry workerRegistry,
+                          WorkerControlPlaneRuntime controlPlaneRuntime,
+                          RabbitTemplate rabbitTemplate,
+                          ControlPlaneIdentity identity,
+                          GeneratorDefaults defaults,
+                          WorkInputRegistry inputRegistry) {
+    this(workerRuntime, workerRegistry, controlPlaneRuntime, rabbitTemplate, identity, defaults, inputRegistry, Clock.systemUTC());
+  }
 
   GeneratorRuntimeAdapter(WorkerRuntime workerRuntime,
                           WorkerRegistry workerRegistry,
                           WorkerControlPlaneRuntime controlPlaneRuntime,
                           RabbitTemplate rabbitTemplate,
                           ControlPlaneIdentity identity,
-                          GeneratorDefaults defaults) {
-    this.workerRuntime = Objects.requireNonNull(workerRuntime, "workerRuntime");
-    this.workerRegistry = Objects.requireNonNull(workerRegistry, "workerRegistry");
-    this.controlPlaneRuntime = Objects.requireNonNull(controlPlaneRuntime, "controlPlaneRuntime");
+                          GeneratorDefaults defaults,
+                          WorkInputRegistry inputRegistry,
+                          Clock clock) {
+    Objects.requireNonNull(workerRuntime, "workerRuntime");
+    WorkerRegistry registry = Objects.requireNonNull(workerRegistry, "workerRegistry");
+    WorkerControlPlaneRuntime controlRuntime = Objects.requireNonNull(controlPlaneRuntime, "controlPlaneRuntime");
     this.rabbitTemplate = Objects.requireNonNull(rabbitTemplate, "rabbitTemplate");
-    this.identity = Objects.requireNonNull(identity, "identity");
-    this.defaults = Objects.requireNonNull(defaults, "defaults");
-    this.generatorWorkers = workerRegistry.all().stream()
-        .filter(definition -> definition.workerType() == WorkerType.GENERATOR)
-        .toList();
-    initialiseStateListeners();
-  }
+    ControlPlaneIdentity controlIdentity = Objects.requireNonNull(identity, "identity");
+    GeneratorDefaults generatorDefaults = Objects.requireNonNull(defaults, "defaults");
+    Objects.requireNonNull(inputRegistry, "inputRegistry");
+    this.clock = Objects.requireNonNull(clock, "clock");
 
-  @PostConstruct
-  void emitInitialStatus() {
-    controlPlaneRuntime.emitStatusSnapshot();
+    registry.streamByRoleAndInput("generator", WorkerInputType.SCHEDULER)
+        .forEach(definition -> {
+          Logger stateLogger = LoggerFactory.getLogger(definition.beanType());
+          SchedulerWorkInput<GeneratorWorkerConfig> input = SchedulerWorkInput.<GeneratorWorkerConfig>builder()
+              .workerDefinition(definition)
+              .controlPlaneRuntime(controlRuntime)
+              .workerRuntime(workerRuntime)
+              .identity(controlIdentity)
+              .schedulerState(SchedulerStates.ratePerSecond(
+                  GeneratorWorkerConfig.class,
+                  generatorDefaults::asConfig,
+                  stateLogger))
+              .resultHandler((result, workerDefinition) -> handleResult(workerDefinition, result))
+              .dispatchErrorHandler(ex -> log.warn("Generator worker {} invocation failed", definition.beanName(), ex))
+              .logger(log)
+              .build();
+          workInputs.add(input);
+          inputRegistry.register(definition, input);
+        });
   }
 
   @Scheduled(fixedRate = 1000)
   public void tick() {
-    for (WorkerDefinition definition : generatorWorkers) {
-      GeneratorState state = states.get(definition.beanName());
-      if (state == null) {
-        continue;
-      }
-      if (!state.isEnabled()) {
-        continue;
-      }
-      int quota = state.nextQuota();
-      for (int i = 0; i < quota; i++) {
-        invokeWorker(definition);
-      }
-      if (state.consumeSingleRequest()) {
-        invokeWorker(definition);
-      }
-    }
+    long now = clock.millis();
+    workInputs.forEach(input -> input.tick(now));
   }
 
-  private void initialiseStateListeners() {
-    for (WorkerDefinition definition : generatorWorkers) {
-      GeneratorWorkerConfig initialConfig = defaults.asConfig();
-      controlPlaneRuntime.registerDefaultConfig(definition.beanName(), initialConfig);
-      GeneratorState state = new GeneratorState(initialConfig);
-      states.put(definition.beanName(), state);
-      controlPlaneRuntime.registerStateListener(definition.beanName(), snapshot -> state.update(snapshot, defaults));
-    }
-    if (!generatorWorkers.isEmpty()) {
-      log.info("Generator work listener started (instance={})", identity.instanceId());
-    }
+  @PostConstruct
+  void onStart() {
+    start();
   }
 
-  private void invokeWorker(WorkerDefinition definition) {
-    WorkMessage seed = WorkMessage.builder()
-        .header("swarmId", identity.swarmId())
-        .header("instanceId", identity.instanceId())
-        .build();
-    try {
-      WorkResult result = workerRuntime.dispatch(definition.beanName(), seed);
-      publishResult(definition, result);
-    } catch (Exception ex) {
-      log.warn("Generator worker {} invocation failed", definition.beanName(), ex);
-    }
+  void start() {
+    workInputs.forEach(SchedulerWorkInput::start);
   }
 
-  private void publishResult(WorkerDefinition definition, WorkResult result) {
+  @PreDestroy
+  void onStop() {
+    stop();
+  }
+
+  void stop() {
+    workInputs.forEach(SchedulerWorkInput::stop);
+  }
+
+  private void handleResult(WorkerDefinition definition, WorkResult result) {
     if (!(result instanceof WorkResult.Message messageResult)) {
       return;
     }
@@ -119,7 +121,8 @@ class GeneratorRuntimeAdapter {
   private String resolveOutbound(WorkerDefinition definition) {
     String out = definition.outQueue();
     if (out == null || out.isBlank()) {
-      throw new IllegalStateException("Generator worker " + definition.beanName() + " has no outbound queue configured");
+      throw new IllegalStateException(
+          "Generator worker " + definition.beanName() + " has no outbound queue configured");
     }
     return out;
   }
@@ -131,60 +134,5 @@ class GeneratorRuntimeAdapter {
           "Generator worker " + definition.beanName() + " has no exchange configured");
     }
     return exchange;
-  }
-
-  private static final class GeneratorState {
-
-    private volatile GeneratorWorkerConfig config;
-    private volatile boolean enabled;
-    private final AtomicBoolean singleRequestPending = new AtomicBoolean(false);
-    private double carryOver;
-
-    GeneratorState(GeneratorWorkerConfig initial) {
-      this.config = initial;
-      this.enabled = initial.enabled();
-      this.carryOver = 0.0;
-    }
-
-    synchronized void update(WorkerControlPlaneRuntime.WorkerStateSnapshot snapshot, GeneratorDefaults defaults) {
-      GeneratorWorkerConfig incoming = snapshot.config(GeneratorWorkerConfig.class)
-          .orElseGet(defaults::asConfig);
-      GeneratorWorkerConfig previous = this.config;
-      boolean resolvedEnabled = snapshot.enabled().orElseGet(() -> previous == null
-          ? incoming.enabled()
-          : previous.enabled());
-      GeneratorWorkerConfig updated = new GeneratorWorkerConfig(
-          resolvedEnabled,
-          incoming.ratePerSec(),
-          incoming.singleRequest(),
-          incoming.message()
-      );
-      this.config = updated;
-      this.enabled = resolvedEnabled;
-      if (previous == null || !previous.equals(updated)) {
-        if (updated.singleRequest()) {
-          singleRequestPending.set(true);
-        }
-      }
-      if (!resolvedEnabled) {
-        carryOver = 0.0;
-      }
-    }
-
-    synchronized int nextQuota() {
-      double rate = Math.max(0.0, config.ratePerSec());
-      double planned = rate + carryOver;
-      int whole = (int) Math.floor(planned);
-      carryOver = planned - whole;
-      return whole;
-    }
-
-    boolean consumeSingleRequest() {
-      return singleRequestPending.getAndSet(false);
-    }
-
-    boolean isEnabled() {
-      return enabled;
-    }
   }
 }

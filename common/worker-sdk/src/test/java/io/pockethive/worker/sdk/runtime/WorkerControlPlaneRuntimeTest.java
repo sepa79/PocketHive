@@ -8,7 +8,7 @@ import io.pockethive.controlplane.messaging.ControlPlaneEmitter;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.controlplane.worker.WorkerControlPlane;
 import io.pockethive.observability.StatusEnvelopeBuilder;
-import io.pockethive.worker.sdk.config.WorkerType;
+import io.pockethive.worker.sdk.config.WorkerInputType;
 import io.pockethive.worker.sdk.testing.ControlPlaneTestFixtures;
 import io.pockethive.controlplane.spring.WorkerControlPlaneProperties;
 import java.util.Map;
@@ -49,7 +49,7 @@ class WorkerControlPlaneRuntimeTest {
         definition = new WorkerDefinition(
             "testWorker",
             TestWorker.class,
-            WorkerType.GENERATOR,
+            WorkerInputType.SCHEDULER,
             "generator",
             null,
             "out.queue",
@@ -221,7 +221,7 @@ class WorkerControlPlaneRuntimeTest {
         WorkerDefinition otherDefinition = new WorkerDefinition(
             "secondaryWorker",
             TestWorker.class,
-            WorkerType.GENERATOR,
+            WorkerInputType.SCHEDULER,
             "generator",
             null,
             "out.queue",

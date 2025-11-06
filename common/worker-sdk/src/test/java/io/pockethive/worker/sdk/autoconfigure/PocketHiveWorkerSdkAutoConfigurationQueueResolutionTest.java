@@ -3,12 +3,11 @@ package io.pockethive.worker.sdk.autoconfigure;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.pockethive.worker.sdk.api.MessageWorker;
 import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pockethive.worker.sdk.api.WorkResult;
 import io.pockethive.worker.sdk.api.WorkerContext;
 import io.pockethive.worker.sdk.config.PocketHiveWorker;
-import io.pockethive.worker.sdk.config.WorkerType;
+import io.pockethive.worker.sdk.api.PocketHiveWorkerFunction;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
 import io.pockethive.worker.sdk.runtime.WorkerRegistry;
 import java.util.Optional;
@@ -79,8 +78,8 @@ class PocketHiveWorkerSdkAutoConfigurationQueueResolutionTest {
         }
     }
 
-    @PocketHiveWorker(role = "processor", type = WorkerType.MESSAGE, inQueue = "in", outQueue = "out")
-    static class AliasWorker implements MessageWorker {
+    @PocketHiveWorker(role = "processor", inQueue = "in", outQueue = "out")
+    static class AliasWorker implements PocketHiveWorkerFunction {
 
         @Override
         public WorkResult onMessage(WorkMessage in, WorkerContext context) {
@@ -88,8 +87,8 @@ class PocketHiveWorkerSdkAutoConfigurationQueueResolutionTest {
         }
     }
 
-    @PocketHiveWorker(role = "processor", type = WorkerType.MESSAGE, inQueue = "control", outQueue = "out")
-    static class ControlQueueWorker implements MessageWorker {
+    @PocketHiveWorker(role = "processor", inQueue = "control", outQueue = "out")
+    static class ControlQueueWorker implements PocketHiveWorkerFunction {
 
         @Override
         public WorkResult onMessage(WorkMessage in, WorkerContext context) {

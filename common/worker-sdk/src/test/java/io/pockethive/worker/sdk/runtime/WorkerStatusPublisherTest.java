@@ -2,7 +2,7 @@ package io.pockethive.worker.sdk.runtime;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import io.pockethive.worker.sdk.config.WorkerType;
+import io.pockethive.worker.sdk.config.WorkerInputType;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.jupiter.api.Test;
 
@@ -11,7 +11,7 @@ class WorkerStatusPublisherTest {
     private static final WorkerDefinition DEFINITION = new WorkerDefinition(
         "testWorker",
         Object.class,
-        WorkerType.MESSAGE,
+        WorkerInputType.RABBIT,
         "role",
         "in.queue",
         "out.queue",

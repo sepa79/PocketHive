@@ -6,13 +6,12 @@ import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.pockethive.observability.Hop;
 import io.pockethive.observability.ObservabilityContext;
-import io.pockethive.worker.sdk.api.MessageWorker;
+import io.pockethive.worker.sdk.api.PocketHiveWorkerFunction;
 import io.pockethive.worker.sdk.api.StatusPublisher;
 import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pockethive.worker.sdk.api.WorkResult;
 import io.pockethive.worker.sdk.api.WorkerContext;
 import io.pockethive.worker.sdk.config.PocketHiveWorker;
-import io.pockethive.worker.sdk.config.WorkerType;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -52,11 +51,10 @@ import org.springframework.stereotype.Component;
 @Component("postProcessorWorker")
 @PocketHiveWorker(
     role = "postprocessor",
-    type = WorkerType.MESSAGE,
     inQueue = "final",
     config = PostProcessorWorkerConfig.class
 )
-class PostProcessorWorkerImpl implements MessageWorker {
+class PostProcessorWorkerImpl implements PocketHiveWorkerFunction {
 
   private static final String ERROR_HEADER = "x-ph-error";
   private static final String PROCESSOR_DURATION_HEADER = "x-ph-processor-duration-ms";

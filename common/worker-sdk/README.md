@@ -21,24 +21,28 @@ Add the dependency to a worker service to automatically register the control-pla
 
 ## Runtime APIs
 
-### `GeneratorWorker`
+### `PocketHiveWorkerFunction`
 
-Generator workers periodically emit messages without a triggering inbound queue. The runtime calls `generate(WorkerContext)` on a schedule that honours per-worker quotas derived from control-plane config. Implementations build a `WorkMessage` and return it wrapped in `WorkResult.message(...)`.
+All workers implement `PocketHiveWorkerFunction`, exposing a single
+`onMessage(WorkMessage, WorkerContext)` method. The inbound `WorkMessage` may be a seed emitted by
+the scheduler input (for generator/trigger scenarios) or a real payload delivered by a transport
+adapter such as RabbitMQ. Return `WorkResult.message(...)` to emit downstream work or
+`WorkResult.none()` to suppress publishing.
 
 ```java
 @Component("generatorWorker")
 @PocketHiveWorker(
     role = "generator",
-    type = WorkerType.GENERATOR,
-    outQueue = "ph.swarm-alpha.gen", // align with pockethive.control-plane.queues.generator
+    input = WorkerInputType.SCHEDULER,
+    outQueue = "ph.swarm-alpha.gen",
     config = GeneratorWorkerConfig.class
 )
-class GeneratorWorkerImpl implements GeneratorWorker {
+class GeneratorWorkerImpl implements PocketHiveWorkerFunction {
 
   private final GeneratorDefaults defaults;
 
   @Override
-  public WorkResult generate(WorkerContext context) {
+  public WorkResult onMessage(WorkMessage seed, WorkerContext context) {
     GeneratorWorkerConfig config = context.config(GeneratorWorkerConfig.class)
         .orElseGet(defaults::asConfig);
     String outQueue = context.info().outQueue();
@@ -50,36 +54,23 @@ class GeneratorWorkerImpl implements GeneratorWorker {
 }
 ```
 
-The full implementation lives in [`generator-service`](../../generator-service/src/main/java/io/pockethive/generator/GeneratorWorkerImpl.java).
-
-> The concrete queue names in the annotation examples are illustrative. Configure the values via
-> `pockethive.control-plane.queues.*` (or the corresponding environment variables) and keep the
-> annotation in sync with that configuration.
-
-### `MessageWorker`
-
-Message workers react to inbound queues. The runtime maps RabbitMQ deliveries into `WorkMessage` instances and invokes `onMessage(WorkMessage, WorkerContext)`. The return value controls whether a response is published downstream.
-
 ```java
 @Component("processorWorker")
 @PocketHiveWorker(
     role = "processor",
-    type = WorkerType.MESSAGE,
-    inQueue = "ph.swarm-alpha.mod",   // matches pockethive.control-plane.queues.moderator
-    outQueue = "ph.swarm-alpha.final", // matches pockethive.control-plane.queues.final
+    inQueue = "ph.swarm-alpha.mod",
+    outQueue = "ph.swarm-alpha.final",
     config = ProcessorWorkerConfig.class
 )
-class ProcessorWorkerImpl implements MessageWorker {
+class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
 
   @Override
   public WorkResult onMessage(WorkMessage in, WorkerContext context) {
     ProcessorWorkerConfig config = context.config(ProcessorWorkerConfig.class)
         .orElseGet(defaults::asConfig);
-    String inQueue = context.info().inQueue();
-    String outQueue = context.info().outQueue();
     context.statusPublisher()
-        .workIn(inQueue)
-        .workOut(outQueue)
+        .workIn(context.info().inQueue())
+        .workOut(context.info().outQueue())
         .update(status -> status.data("baseUrl", config.baseUrl()));
     WorkMessage enriched = invokeHttpAndEnrich(in, context, config);
     return WorkResult.message(enriched);
@@ -87,7 +78,11 @@ class ProcessorWorkerImpl implements MessageWorker {
 }
 ```
 
-See [`processor-service`](../../processor-service/src/main/java/io/pockethive/processor/ProcessorWorkerImpl.java) for the full example, including metrics and observability integration.
+The full implementations live in the `generator-service` and `processor-service` modules.
+
+> The concrete queue names in the annotation examples are illustrative. Configure the values via
+> `pockethive.control-plane.queues.*` (or the corresponding environment variables) and keep the
+> annotation in sync with that configuration.
 
 ### `WorkMessage`
 
@@ -108,8 +103,8 @@ The control-plane runtime bridges the SDK with the control-plane topic. It appli
 ## Putting it together
 
 1. Add the `worker-sdk` dependency to your service.
-2. Annotate business beans with `@PocketHiveWorker`, selecting the worker type and queues.
-3. Implement `GeneratorWorker` or `MessageWorker` interfaces and return `WorkResult` instances.
+2. Annotate business beans with `@PocketHiveWorker`, selecting the appropriate input binding (Rabbit by default) and queues.
+3. Implement `PocketHiveWorkerFunction` and return `WorkResult` instances.
 4. Inject `WorkerRuntime` and `WorkerControlPlaneRuntime` into your transport adapter to dispatch messages and surface control-plane state (see the `*RuntimeAdapter` classes in each migrated service).
 5. Use `WorkerContext` for config, metrics, observability, and status reporting.
 

@@ -2,7 +2,7 @@ package io.pockethive.worker.sdk.runtime;
 
 import io.pockethive.worker.sdk.api.WorkerContext;
 import io.pockethive.worker.sdk.config.PocketHiveWorker;
-import io.pockethive.worker.sdk.config.WorkerType;
+import io.pockethive.worker.sdk.config.WorkerInputType;
 import java.util.Objects;
 
 /**
@@ -12,7 +12,7 @@ import java.util.Objects;
 public record WorkerDefinition(
     String beanName,
     Class<?> beanType,
-    WorkerType workerType,
+    WorkerInputType input,
     String role,
     String inQueue,
     String outQueue,
@@ -25,7 +25,7 @@ public record WorkerDefinition(
      *
      * @param beanName   Spring bean name
      * @param beanType   underlying class of the bean
-     * @param workerType worker shape declared on the annotation
+     * @param input      input binding declared on the annotation
      * @param role       control-plane role identifier
      * @param inQueue    optional inbound queue name
      * @param outQueue   optional outbound queue name
@@ -35,7 +35,7 @@ public record WorkerDefinition(
     public WorkerDefinition {
         beanName = requireText(beanName, "beanName");
         beanType = Objects.requireNonNull(beanType, "beanType");
-        workerType = Objects.requireNonNull(workerType, "workerType");
+        input = Objects.requireNonNull(input, "input");
         role = requireText(role, "role");
         inQueue = normalize(inQueue);
         outQueue = normalize(outQueue);

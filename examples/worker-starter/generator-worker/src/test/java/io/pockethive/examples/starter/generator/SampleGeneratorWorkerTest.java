@@ -25,7 +25,7 @@ class SampleGeneratorWorkerTest {
     SampleGeneratorConfig config = new SampleGeneratorConfig(true, 1.0, "demo message");
     WorkerContext context = new TestWorkerContext(config);
 
-    WorkResult result = worker.generate(context);
+    WorkResult result = worker.onMessage(WorkMessage.builder().build(), context);
 
     assertThat(result).isInstanceOf(WorkResult.Message.class);
     WorkMessage message = ((WorkResult.Message) result).value();
@@ -37,7 +37,7 @@ class SampleGeneratorWorkerTest {
     SampleGeneratorConfig config = new SampleGeneratorConfig(false, 1.0, "demo message");
     WorkerContext context = new TestWorkerContext(config);
 
-    WorkResult result = worker.generate(context);
+    WorkResult result = worker.onMessage(WorkMessage.builder().build(), context);
 
     assertThat(result).isSameAs(WorkResult.none());
   }

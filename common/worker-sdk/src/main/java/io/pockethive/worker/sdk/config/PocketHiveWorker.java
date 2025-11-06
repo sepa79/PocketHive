@@ -23,17 +23,17 @@ public @interface PocketHiveWorker {
     String role();
 
     /**
-     * Worker shape supported by the runtime.
+     * Input binding that feeds messages to the worker runtime.
      */
-    WorkerType type();
+    WorkerInputType input() default WorkerInputType.RABBIT;
 
     /**
-     * Optional inbound queue name for {@link WorkerType#MESSAGE} workers.
+     * Optional inbound queue name. Typically used by message-driven workers.
      */
     String inQueue() default "";
 
     /**
-     * Optional outbound queue name for {@link WorkerType#GENERATOR} and {@link WorkerType#MESSAGE} workers.
+     * Optional outbound queue name for workers that emit downstream traffic.
      */
     String outQueue() default "";
 

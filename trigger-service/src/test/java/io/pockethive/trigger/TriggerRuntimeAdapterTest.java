@@ -4,7 +4,10 @@ import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pockethive.worker.sdk.api.WorkResult;
 import io.pockethive.worker.sdk.autoconfigure.WorkerControlQueueListener;
-import io.pockethive.worker.sdk.config.WorkerType;
+import io.pockethive.worker.sdk.config.WorkerInputType;
+import io.pockethive.worker.sdk.input.WorkInput;
+import io.pockethive.worker.sdk.input.WorkInputRegistry;
+import io.pockethive.worker.sdk.input.SchedulerWorkInput;
 import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
 import io.pockethive.worker.sdk.runtime.WorkerRegistry;
@@ -51,6 +54,9 @@ class TriggerRuntimeAdapterTest {
   @Mock
   private WorkerControlPlaneRuntime controlPlaneRuntime;
 
+  @Mock
+  private WorkInputRegistry workInputRegistry;
+
   private TriggerDefaults defaults;
   private WorkerDefinition definition;
   private ControlPlaneIdentity identity;
@@ -66,7 +72,7 @@ class TriggerRuntimeAdapterTest {
     definition = new WorkerDefinition(
         "triggerWorker",
         TriggerWorkerImpl.class,
-        WorkerType.GENERATOR,
+        WorkerInputType.SCHEDULER,
         "trigger",
         null,
         null,
@@ -77,7 +83,7 @@ class TriggerRuntimeAdapterTest {
 
   @Test
   void tickDispatchesAndEmitsStatus() throws Exception {
-    when(workerRegistry.streamByRoleAndType("trigger", WorkerType.GENERATOR))
+    when(workerRegistry.streamByRoleAndInput("trigger", WorkerInputType.SCHEDULER))
         .thenAnswer(invocation -> Stream.of(definition));
     doReturn(WorkResult.none()).when(workerRuntime).dispatch(eq("triggerWorker"), any(WorkMessage.class));
     TriggerRuntimeAdapter adapter = new TriggerRuntimeAdapter(
@@ -86,14 +92,21 @@ class TriggerRuntimeAdapterTest {
         controlPlaneRuntime,
         identity,
         defaults,
-        Clock.fixed(java.time.Instant.ofEpochMilli(1_000), java.time.ZoneOffset.UTC)
+        Clock.fixed(java.time.Instant.ofEpochMilli(1_000), java.time.ZoneOffset.UTC),
+        workInputRegistry
     );
-
-    adapter.emitInitialStatus();
+    adapter.start();
     adapter.tick();
 
-    verify(workerRuntime, times(1)).dispatch(eq("triggerWorker"), any(WorkMessage.class));
+    ArgumentCaptor<WorkMessage> workMessageCaptor = ArgumentCaptor.forClass(WorkMessage.class);
+    verify(workerRuntime, times(1)).dispatch(eq("triggerWorker"), workMessageCaptor.capture());
+    WorkMessage dispatched = workMessageCaptor.getValue();
+    assertThat(dispatched.headers()).containsEntry("swarmId", identity.swarmId());
+    assertThat(dispatched.headers()).containsEntry("instanceId", identity.instanceId());
     verify(controlPlaneRuntime).emitStatusSnapshot();
+    ArgumentCaptor<WorkInput> workInputCaptor = ArgumentCaptor.forClass(WorkInput.class);
+    verify(workInputRegistry).register(eq(definition), workInputCaptor.capture());
+    assertThat(workInputCaptor.getValue()).isInstanceOf(SchedulerWorkInput.class);
   }
 
   @Test
@@ -113,15 +126,21 @@ class TriggerRuntimeAdapterTest {
 
   @Test
   void registersStateListenerForTriggerWorker() {
-    when(workerRegistry.streamByRoleAndType("trigger", WorkerType.GENERATOR))
+    when(workerRegistry.streamByRoleAndInput("trigger", WorkerInputType.SCHEDULER))
         .thenAnswer(invocation -> Stream.of(definition));
-    new TriggerRuntimeAdapter(
+    TriggerRuntimeAdapter adapter = new TriggerRuntimeAdapter(
         workerRuntime,
         workerRegistry,
         controlPlaneRuntime,
         identity,
-        defaults
+        defaults,
+        workInputRegistry
     );
+
+    adapter.start();
+    ArgumentCaptor<WorkInput> workInputCaptor = ArgumentCaptor.forClass(WorkInput.class);
+    verify(workInputRegistry).register(eq(definition), workInputCaptor.capture());
+    assertThat(workInputCaptor.getValue()).isInstanceOf(SchedulerWorkInput.class);
 
     ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
     InOrder inOrder = Mockito.inOrder(controlPlaneRuntime);
@@ -132,7 +151,7 @@ class TriggerRuntimeAdapterTest {
 
   @Test
   void singleRequestRespectsIntervalBeforeNextDispatch() throws Exception {
-    when(workerRegistry.streamByRoleAndType("trigger", WorkerType.GENERATOR))
+    when(workerRegistry.streamByRoleAndInput("trigger", WorkerInputType.SCHEDULER))
         .thenAnswer(invocation -> Stream.of(definition));
     MutableClock clock = new MutableClock(10_000L);
     defaults.setIntervalMs(60_000L);
@@ -152,8 +171,11 @@ class TriggerRuntimeAdapterTest {
         controlPlaneRuntime,
         identity,
         defaults,
-        clock
+        clock,
+        workInputRegistry
     );
+    adapter.start();
+    adapter.start();
 
     Consumer<WorkerControlPlaneRuntime.WorkerStateSnapshot> listener = listenerRef.get();
     assertThat(listener).as("control-plane listener should be registered").isNotNull();

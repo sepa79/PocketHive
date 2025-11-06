@@ -13,6 +13,9 @@ import io.pockethive.controlplane.spring.WorkerControlPlaneProperties;
 import io.pockethive.controlplane.topology.ControlPlaneTopologyDescriptor;
 import io.pockethive.controlplane.worker.WorkerControlPlane;
 import io.pockethive.worker.sdk.config.PocketHiveWorker;
+import io.pockethive.worker.sdk.input.WorkInputLifecycle;
+import io.pockethive.worker.sdk.input.WorkInputRegistry;
+import io.pockethive.worker.sdk.input.WorkInputRegistryInitializer;
 import io.pockethive.worker.sdk.metrics.PrometheusPushGatewayProperties;
 import io.pockethive.worker.sdk.runtime.DefaultWorkerContextFactory;
 import io.pockethive.worker.sdk.runtime.DefaultWorkerRuntime;
@@ -86,7 +89,7 @@ public class PocketHiveWorkerSdkAutoConfiguration {
             definitions.add(new WorkerDefinition(
                 beanName,
                 beanType,
-                annotation.type(),
+                annotation.input(),
                 annotation.role(),
                 resolveQueue(annotation.inQueue(), queueAliases),
                 resolveQueue(annotation.outQueue(), queueAliases),
@@ -95,6 +98,29 @@ public class PocketHiveWorkerSdkAutoConfiguration {
             ));
         }
         return new WorkerRegistry(definitions);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    WorkInputRegistry workInputRegistry() {
+        return new WorkInputRegistry();
+    }
+
+    @Bean
+    @ConditionalOnBean({WorkerRegistry.class, WorkInputRegistry.class})
+    @ConditionalOnMissingBean
+    WorkInputRegistryInitializer workInputRegistryInitializer(
+        WorkerRegistry workerRegistry,
+        WorkInputRegistry workInputRegistry
+    ) {
+        return new WorkInputRegistryInitializer(workerRegistry, workInputRegistry);
+    }
+
+    @Bean
+    @ConditionalOnBean(WorkInputRegistry.class)
+    @ConditionalOnMissingBean
+    WorkInputLifecycle workInputLifecycle(WorkInputRegistry workInputRegistry) {
+        return new WorkInputLifecycle(workInputRegistry);
     }
 
     @Bean

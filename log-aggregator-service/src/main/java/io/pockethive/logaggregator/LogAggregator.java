@@ -11,7 +11,24 @@ import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
 import org.springframework.scheduling.annotation.EnableScheduling;
+=======
+>>>>>>> theirs
+=======
+import org.springframework.scheduling.annotation.EnableScheduling;
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+import org.springframework.scheduling.annotation.EnableScheduling;
+>>>>>>> theirs
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClientException;
@@ -30,7 +47,24 @@ import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
 @Component
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
 @EnableScheduling
+=======
+>>>>>>> theirs
+=======
+@EnableScheduling
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+@EnableScheduling
+>>>>>>> theirs
 public class LogAggregator {
   private static final Logger log = LoggerFactory.getLogger(LogAggregator.class);
   private final ObjectMapper mapper = new ObjectMapper();

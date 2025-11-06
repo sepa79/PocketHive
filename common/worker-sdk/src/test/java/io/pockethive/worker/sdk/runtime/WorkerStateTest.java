@@ -1,6 +1,6 @@
 package io.pockethive.worker.sdk.runtime;
 
-import io.pockethive.worker.sdk.config.WorkerType;
+import io.pockethive.worker.sdk.config.WorkerInputType;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 
@@ -13,7 +13,7 @@ class WorkerStateTest {
         WorkerDefinition definition = new WorkerDefinition(
             "testWorker",
             Object.class,
-            WorkerType.GENERATOR,
+            WorkerInputType.SCHEDULER,
             "test-role",
             null,
             null,
@@ -38,7 +38,7 @@ class WorkerStateTest {
         WorkerDefinition definition = new WorkerDefinition(
             "testWorker",
             Object.class,
-            WorkerType.GENERATOR,
+            WorkerInputType.SCHEDULER,
             "test-role",
             null,
             null,
@@ -59,7 +59,7 @@ class WorkerStateTest {
         WorkerDefinition definition = new WorkerDefinition(
             "testWorker",
             Object.class,
-            WorkerType.GENERATOR,
+            WorkerInputType.SCHEDULER,
             "test-role",
             null,
             null,
@@ -83,7 +83,7 @@ class WorkerStateTest {
         WorkerDefinition definition = new WorkerDefinition(
             "testWorker",
             Object.class,
-            WorkerType.MESSAGE,
+            WorkerInputType.RABBIT,
             "test-role",
             " in.runtime ",
             "out.runtime",

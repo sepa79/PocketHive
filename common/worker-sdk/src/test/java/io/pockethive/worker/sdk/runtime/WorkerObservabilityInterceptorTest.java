@@ -10,7 +10,7 @@ import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pockethive.worker.sdk.api.WorkResult;
 import io.pockethive.worker.sdk.api.WorkerContext;
 import io.pockethive.worker.sdk.api.WorkerInfo;
-import io.pockethive.worker.sdk.config.WorkerType;
+import io.pockethive.worker.sdk.config.WorkerInputType;
 import java.util.Optional;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -21,7 +21,7 @@ class WorkerObservabilityInterceptorTest {
     private static final WorkerDefinition DEFINITION = new WorkerDefinition(
         "testWorker",
         Object.class,
-        WorkerType.MESSAGE,
+        WorkerInputType.RABBIT,
         "role",
         "in.queue",
         "out.queue",

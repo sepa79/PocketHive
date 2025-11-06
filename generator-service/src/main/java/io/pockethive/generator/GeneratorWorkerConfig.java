@@ -1,5 +1,6 @@
 package io.pockethive.generator;
 
+import io.pockethive.worker.sdk.input.SchedulerStates;
 import java.util.Locale;
 import java.util.Map;
 
@@ -8,7 +9,7 @@ public record GeneratorWorkerConfig(
     double ratePerSec,
     boolean singleRequest,
     Message message
-) {
+) implements SchedulerStates.RateConfig {
 
   public GeneratorWorkerConfig {
     ratePerSec = Double.isNaN(ratePerSec) || ratePerSec < 0 ? 0.0 : ratePerSec;

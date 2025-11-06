@@ -1,11 +1,10 @@
 package io.pockethive.examples.starter.generator;
 
-import io.pockethive.worker.sdk.api.GeneratorWorker;
+import io.pockethive.worker.sdk.api.PocketHiveWorkerFunction;
 import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pockethive.worker.sdk.api.WorkResult;
 import io.pockethive.worker.sdk.api.WorkerContext;
 import io.pockethive.worker.sdk.config.PocketHiveWorker;
-import io.pockethive.worker.sdk.config.WorkerType;
 import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
@@ -18,17 +17,17 @@ import org.springframework.stereotype.Component;
 @Component("sampleGeneratorWorker")
 @PocketHiveWorker(
     role = "generator",
-    type = WorkerType.GENERATOR,
     outQueue = "generator",
     config = SampleGeneratorConfig.class
 )
-class SampleGeneratorWorker implements GeneratorWorker {
+class SampleGeneratorWorker implements PocketHiveWorkerFunction {
 
   private static final SampleGeneratorConfig FALLBACK_CONFIG =
       new SampleGeneratorConfig(true, 1.0, "Hello from the generator");
 
   @Override
-  public WorkResult generate(WorkerContext context) {
+  @Override
+  public WorkResult onMessage(WorkMessage seed, WorkerContext context) {
     SampleGeneratorConfig config = context.config(SampleGeneratorConfig.class)
         .orElse(FALLBACK_CONFIG);
 

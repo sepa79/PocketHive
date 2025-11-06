@@ -12,7 +12,7 @@ import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pockethive.worker.sdk.api.WorkResult;
 import io.pockethive.worker.sdk.api.WorkerContext;
 import io.pockethive.worker.sdk.api.WorkerInfo;
-import io.pockethive.worker.sdk.config.WorkerType;
+import io.pockethive.worker.sdk.config.WorkerInputType;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
@@ -24,7 +24,7 @@ class WorkerMetricsInterceptorTest {
     private static final WorkerDefinition DEFINITION = new WorkerDefinition(
         "metricsWorker",
         Object.class,
-        WorkerType.MESSAGE,
+        WorkerInputType.RABBIT,
         "metrics-role",
         "in.metrics",
         "out.metrics",

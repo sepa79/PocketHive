@@ -6,12 +6,12 @@ import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.pockethive.controlplane.spring.WorkerControlPlaneProperties;
 import io.pockethive.observability.Hop;
 import io.pockethive.observability.ObservabilityContext;
-import io.pockethive.worker.sdk.api.MessageWorker;
 import io.pockethive.worker.sdk.api.StatusPublisher;
 import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pockethive.worker.sdk.api.WorkResult;
 import io.pockethive.worker.sdk.api.WorkerContext;
 import io.pockethive.worker.sdk.api.WorkerInfo;
+import io.pockethive.worker.sdk.api.PocketHiveWorkerFunction;
 import io.pockethive.worker.sdk.testing.ControlPlaneTestFixtures;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -299,7 +299,7 @@ class PostProcessorTest {
             null);
         private final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
         private final CapturingStatusPublisher statusPublisher = new CapturingStatusPublisher();
-        private final Logger logger = LoggerFactory.getLogger(MessageWorker.class);
+        private final Logger logger = LoggerFactory.getLogger(PocketHiveWorkerFunction.class);
         private final ObservabilityContext observabilityContext;
 
         private TestWorkerContext(PostProcessorWorkerConfig config, ObservabilityContext observabilityContext) {

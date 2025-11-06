@@ -1,44 +1,41 @@
 package io.pockethive.trigger;
 
 import io.pockethive.controlplane.ControlPlaneIdentity;
-import io.pockethive.worker.sdk.api.WorkMessage;
-import io.pockethive.worker.sdk.api.WorkResult;
-import io.pockethive.worker.sdk.config.WorkerType;
+import io.pockethive.worker.sdk.config.WorkerInputType;
+import io.pockethive.worker.sdk.input.WorkInputRegistry;
+import io.pockethive.worker.sdk.input.SchedulerWorkInput;
 import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
 import io.pockethive.worker.sdk.runtime.WorkerRegistry;
 import io.pockethive.worker.sdk.runtime.WorkerRuntime;
-import java.time.Clock;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicBoolean;
 import jakarta.annotation.PostConstruct;
+import jakarta.annotation.PreDestroy;
+import java.time.Clock;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+import org.springframework.beans.factory.annotation.Autowired;
 
 @Component
 class TriggerRuntimeAdapter {
 
   private static final Logger log = LoggerFactory.getLogger(TriggerRuntimeAdapter.class);
 
-  private final WorkerRuntime workerRuntime;
-  private final WorkerControlPlaneRuntime controlPlaneRuntime;
-  private final ControlPlaneIdentity identity;
-  private final TriggerDefaults defaults;
   private final Clock clock;
-  private final Map<String, TriggerState> states = new ConcurrentHashMap<>();
-  private final List<WorkerDefinition> triggerWorkers;
+  private final List<SchedulerWorkInput<TriggerWorkerConfig>> workInputs = new ArrayList<>();
 
+  @Autowired
   TriggerRuntimeAdapter(WorkerRuntime workerRuntime,
                         WorkerRegistry workerRegistry,
                         WorkerControlPlaneRuntime controlPlaneRuntime,
                         ControlPlaneIdentity identity,
-                        TriggerDefaults defaults) {
-    this(workerRuntime, workerRegistry, controlPlaneRuntime, identity, defaults, Clock.systemUTC());
+                        TriggerDefaults defaults,
+                        WorkInputRegistry inputRegistry) {
+    this(workerRuntime, workerRegistry, controlPlaneRuntime, identity, defaults, Clock.systemUTC(), inputRegistry);
   }
 
   TriggerRuntimeAdapter(WorkerRuntime workerRuntime,
@@ -46,133 +43,52 @@ class TriggerRuntimeAdapter {
                         WorkerControlPlaneRuntime controlPlaneRuntime,
                         ControlPlaneIdentity identity,
                         TriggerDefaults defaults,
-                        Clock clock) {
-    this.workerRuntime = Objects.requireNonNull(workerRuntime, "workerRuntime");
-    this.controlPlaneRuntime = Objects.requireNonNull(controlPlaneRuntime, "controlPlaneRuntime");
-    this.identity = Objects.requireNonNull(identity, "identity");
-    this.defaults = Objects.requireNonNull(defaults, "defaults");
-    this.clock = Objects.requireNonNull(clock, "clock");
+                        Clock clock,
+                        WorkInputRegistry inputRegistry) {
+    Objects.requireNonNull(workerRuntime, "workerRuntime");
     WorkerRegistry registry = Objects.requireNonNull(workerRegistry, "workerRegistry");
-    this.triggerWorkers = registry.streamByRoleAndType("trigger", WorkerType.GENERATOR)
-        .toList();
-    initialiseStateListeners();
-  }
-
-  @PostConstruct
-  void emitInitialStatus() {
-    controlPlaneRuntime.emitStatusSnapshot();
+    WorkerControlPlaneRuntime controlRuntime = Objects.requireNonNull(controlPlaneRuntime, "controlPlaneRuntime");
+    ControlPlaneIdentity controlIdentity = Objects.requireNonNull(identity, "identity");
+    TriggerDefaults triggerDefaults = Objects.requireNonNull(defaults, "defaults");
+    this.clock = Objects.requireNonNull(clock, "clock");
+    Objects.requireNonNull(inputRegistry, "inputRegistry");
+    registry.streamByRoleAndInput("trigger", WorkerInputType.SCHEDULER)
+        .forEach(definition -> {
+          SchedulerWorkInput<TriggerWorkerConfig> input = SchedulerWorkInput.<TriggerWorkerConfig>builder()
+              .workerDefinition(definition)
+              .controlPlaneRuntime(controlRuntime)
+              .workerRuntime(workerRuntime)
+              .identity(controlIdentity)
+              .schedulerState(new TriggerSchedulerState(triggerDefaults))
+              .dispatchErrorHandler(ex -> log.warn("Trigger worker {} invocation failed", definition.beanName(), ex))
+              .logger(log)
+              .build();
+          workInputs.add(input);
+          inputRegistry.register(definition, input);
+        });
   }
 
   @Scheduled(fixedRate = 1000)
   public void tick() {
     long now = clock.millis();
-    for (WorkerDefinition definition : triggerWorkers) {
-      TriggerState state = states.get(definition.beanName());
-      if (state == null) {
-        continue;
-      }
-      if (state.consumeSingleRequest()) {
-        state.recordInvocation(now);
-        invokeWorker(definition);
-        continue;
-      }
-      if (!state.isEnabled()) {
-        continue;
-      }
-      if (state.shouldInvoke(now)) {
-        invokeWorker(definition);
-      }
-    }
+    workInputs.forEach(input -> input.tick(now));
   }
 
-  private void initialiseStateListeners() {
-    for (WorkerDefinition definition : triggerWorkers) {
-      TriggerWorkerConfig initialConfig = defaults.asConfig();
-      controlPlaneRuntime.registerDefaultConfig(definition.beanName(), initialConfig);
-      TriggerState state = new TriggerState(initialConfig);
-      states.put(definition.beanName(), state);
-      controlPlaneRuntime.registerStateListener(definition.beanName(), snapshot -> state.update(snapshot, defaults));
-    }
+  @PostConstruct
+  void onStart() {
+    start();
   }
 
-  private void invokeWorker(WorkerDefinition definition) {
-    WorkMessage seed = WorkMessage.builder()
-        .header("swarmId", identity.swarmId())
-        .header("instanceId", identity.instanceId())
-        .build();
-    try {
-      WorkResult result = workerRuntime.dispatch(definition.beanName(), seed);
-      if (!(result instanceof WorkResult.None)) {
-        log.debug("Trigger worker {} returned result {}", definition.beanName(), result.getClass().getSimpleName());
-      }
-    } catch (Exception ex) {
-      log.warn("Trigger worker {} invocation failed", definition.beanName(), ex);
-    }
+  void start() {
+    workInputs.forEach(SchedulerWorkInput::start);
   }
 
-  private static final class TriggerState {
+  @PreDestroy
+  void onStop() {
+    stop();
+  }
 
-    private volatile TriggerWorkerConfig config;
-    private volatile boolean enabled;
-    private volatile long lastInvocation;
-    private final AtomicBoolean singleRequestPending = new AtomicBoolean(false);
-
-    private TriggerState(TriggerWorkerConfig initial) {
-      this.config = Objects.requireNonNull(initial, "initial");
-      this.enabled = initial.enabled();
-      this.lastInvocation = 0L;
-    }
-
-    synchronized void update(WorkerControlPlaneRuntime.WorkerStateSnapshot snapshot, TriggerDefaults defaults) {
-      Objects.requireNonNull(snapshot, "snapshot");
-      TriggerWorkerConfig incoming = snapshot.config(TriggerWorkerConfig.class)
-          .orElseGet(defaults::asConfig);
-      TriggerWorkerConfig previous = this.config;
-      boolean resolvedEnabled = snapshot.enabled().orElseGet(() -> previous == null
-          ? incoming.enabled()
-          : previous.enabled());
-      TriggerWorkerConfig updated = new TriggerWorkerConfig(
-          resolvedEnabled,
-          incoming.intervalMs(),
-          incoming.singleRequest(),
-          incoming.actionType(),
-          incoming.command(),
-          incoming.url(),
-          incoming.method(),
-          incoming.body(),
-          incoming.headers()
-      );
-      this.config = updated;
-      this.enabled = resolvedEnabled;
-      if (previous == null || !previous.equals(updated)) {
-        if (updated.singleRequest()) {
-          singleRequestPending.set(true);
-        }
-        if (!resolvedEnabled) {
-          lastInvocation = 0L;
-        }
-      }
-    }
-
-    synchronized boolean shouldInvoke(long now) {
-      long interval = Math.max(0L, config.intervalMs());
-      if (now - lastInvocation >= interval) {
-        lastInvocation = now;
-        return true;
-      }
-      return false;
-    }
-
-    boolean consumeSingleRequest() {
-      return singleRequestPending.getAndSet(false);
-    }
-
-    synchronized void recordInvocation(long now) {
-      lastInvocation = now;
-    }
-
-    boolean isEnabled() {
-      return enabled;
-    }
+  void stop() {
+    workInputs.forEach(SchedulerWorkInput::stop);
   }
 }

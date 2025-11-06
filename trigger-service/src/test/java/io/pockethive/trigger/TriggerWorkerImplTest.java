@@ -2,6 +2,7 @@ package io.pockethive.trigger;
 
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.pockethive.worker.sdk.api.StatusPublisher;
+import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pockethive.worker.sdk.api.WorkResult;
 import io.pockethive.worker.sdk.api.WorkerContext;
 import io.pockethive.worker.sdk.api.WorkerInfo;
@@ -74,7 +75,7 @@ class TriggerWorkerImplTest {
     );
     WorkerContext context = new TestWorkerContext(config, logger);
 
-    WorkResult result = worker.generate(context);
+    WorkResult result = worker.onMessage(WorkMessage.builder().build(), context);
 
     assertThat(result).isEqualTo(WorkResult.none());
     ArgumentCaptor<HttpRequest> requestCaptor = ArgumentCaptor.forClass(HttpRequest.class);
@@ -87,7 +88,7 @@ class TriggerWorkerImplTest {
   @Test
   void fallsBackToDefaultsWhenConfigMissing() {
     WorkerContext context = new TestWorkerContext(null, logger);
-    WorkResult result = worker.generate(context);
+    WorkResult result = worker.onMessage(WorkMessage.builder().build(), context);
     assertThat(result).isEqualTo(WorkResult.none());
   }
 

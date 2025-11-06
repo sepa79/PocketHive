@@ -5,7 +5,7 @@ import io.pockethive.observability.ObservabilityContext;
 import io.pockethive.observability.ObservabilityContextUtil;
 import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pockethive.worker.sdk.api.WorkResult;
-import io.pockethive.worker.sdk.config.WorkerType;
+import io.pockethive.worker.sdk.config.WorkerInputType;
 import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
 import io.pockethive.worker.sdk.runtime.WorkerRegistry;
@@ -54,7 +54,7 @@ class SampleGeneratorRuntimeAdapter {
     this.identity = identity;
     this.defaults = defaults;
     this.definition = workerRegistry
-        .findByRoleAndType("generator", WorkerType.GENERATOR)
+        .findByRoleAndInput("generator", WorkerInputType.SCHEDULER)
         .orElseThrow();
     this.state.set(defaults.asConfig());
     controlPlaneRuntime.registerStateListener(definition.beanName(), snapshot -> {

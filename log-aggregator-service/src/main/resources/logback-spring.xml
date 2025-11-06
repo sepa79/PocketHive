@@ -35,13 +35,29 @@
         </encoder>
       </appender>
 
+<<<<<<< ours
+<<<<<<< ours
       <root level="INFO">
+=======
+      <root level="DEBUG">
+>>>>>>> theirs
+=======
+      <root level="DEBUG">
+>>>>>>> theirs
         <appender-ref ref="CONSOLE"/>
         <appender-ref ref="RABBIT"/>
       </root>
     </then>
     <else>
+<<<<<<< ours
+<<<<<<< ours
       <root level="INFO">
+=======
+      <root level="DEBUG">
+>>>>>>> theirs
+=======
+      <root level="DEBUG">
+>>>>>>> theirs
         <appender-ref ref="CONSOLE"/>
       </root>
     </else>

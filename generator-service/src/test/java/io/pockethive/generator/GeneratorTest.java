@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.pockethive.controlplane.spring.WorkerControlPlaneProperties;
 import io.pockethive.worker.sdk.api.StatusPublisher;
+import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pockethive.worker.sdk.api.WorkResult;
 import io.pockethive.worker.sdk.api.WorkerContext;
 import io.pockethive.worker.sdk.api.WorkerInfo;
@@ -55,7 +56,7 @@ class GeneratorTest {
         )
     );
 
-    WorkResult result = worker.generate(new TestWorkerContext(config));
+    WorkResult result = worker.onMessage(seedMessage(), new TestWorkerContext(config));
 
     assertThat(result).isInstanceOf(WorkResult.Message.class);
     JsonNode payload = MAPPER.readTree(((WorkResult.Message) result).value().asString());
@@ -70,7 +71,7 @@ class GeneratorTest {
 
   @Test
   void generateFallsBackToDefaultsWhenConfigMissing() throws Exception {
-    WorkResult result = worker.generate(new TestWorkerContext(null));
+    WorkResult result = worker.onMessage(seedMessage(), new TestWorkerContext(null));
 
     assertThat(result).isInstanceOf(WorkResult.Message.class);
     JsonNode payload = MAPPER.readTree(((WorkResult.Message) result).value().asString());
@@ -131,5 +132,9 @@ class GeneratorTest {
     public io.pockethive.observability.ObservabilityContext observabilityContext() {
       return new io.pockethive.observability.ObservabilityContext();
     }
+  }
+
+  private static WorkMessage seedMessage() {
+    return WorkMessage.builder().build();
   }
 }

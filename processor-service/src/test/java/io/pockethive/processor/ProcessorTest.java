@@ -8,14 +8,15 @@ import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.controlplane.spring.WorkerControlPlaneProperties;
 import io.pockethive.observability.ObservabilityContext;
 import io.pockethive.observability.ObservabilityContextUtil;
-import io.pockethive.worker.sdk.api.MessageWorker;
 import io.pockethive.worker.sdk.api.StatusPublisher;
+import io.pockethive.worker.sdk.api.PocketHiveWorkerFunction;
 import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pockethive.worker.sdk.api.WorkResult;
 import io.pockethive.worker.sdk.api.WorkerContext;
 import io.pockethive.worker.sdk.api.WorkerInfo;
 import io.pockethive.worker.sdk.autoconfigure.WorkerControlQueueListener;
-import io.pockethive.worker.sdk.config.WorkerType;
+import io.pockethive.worker.sdk.config.WorkerInputType;
+import io.pockethive.worker.sdk.input.WorkInputRegistry;
 import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
 import io.pockethive.worker.sdk.runtime.WorkerInvocationContext;
@@ -231,6 +232,7 @@ class ProcessorTest {
         WorkerControlPlaneRuntime controlPlaneRuntime = mock(WorkerControlPlaneRuntime.class);
         RabbitTemplate rabbitTemplate = mock(RabbitTemplate.class);
         RabbitListenerEndpointRegistry listenerRegistry = mock(RabbitListenerEndpointRegistry.class);
+        WorkInputRegistry workInputRegistry = mock(WorkInputRegistry.class);
         MessageListenerContainer container = mock(MessageListenerContainer.class);
         when(listenerRegistry.getListenerContainer("processorWorkerListener")).thenReturn(container);
         when(container.isRunning()).thenReturn(false);
@@ -238,14 +240,14 @@ class ProcessorTest {
         WorkerDefinition definition = new WorkerDefinition(
                 "processorWorker",
                 ProcessorWorkerImpl.class,
-                WorkerType.MESSAGE,
+                WorkerInputType.RABBIT,
                 "processor",
                 MODERATOR_QUEUE,
                 FINAL_QUEUE,
                 TRAFFIC_EXCHANGE,
                 ProcessorWorkerConfig.class
         );
-        when(workerRegistry.findByRoleAndType("processor", WorkerType.MESSAGE))
+        when(workerRegistry.findByRoleAndInput("processor", WorkerInputType.RABBIT))
                 .thenReturn(Optional.of(definition));
 
         ControlPlaneIdentity identity = new ControlPlaneIdentity(
@@ -262,10 +264,11 @@ class ProcessorTest {
                 rabbitTemplate,
                 listenerRegistry,
                 identity,
-                defaults
+                defaults,
+                workInputRegistry
         );
 
-        adapter.initialiseStateListener();
+        adapter.start();
 
         WorkMessage outbound = WorkMessage.text("processed").build();
         when(workerRuntime.dispatch(eq("processorWorker"), any(WorkMessage.class)))
@@ -288,6 +291,7 @@ class ProcessorTest {
         WorkerControlPlaneRuntime controlPlaneRuntime = mock(WorkerControlPlaneRuntime.class);
         RabbitTemplate rabbitTemplate = mock(RabbitTemplate.class);
         RabbitListenerEndpointRegistry listenerRegistry = mock(RabbitListenerEndpointRegistry.class);
+        WorkInputRegistry workInputRegistry = mock(WorkInputRegistry.class);
         MessageListenerContainer container = mock(MessageListenerContainer.class);
         when(listenerRegistry.getListenerContainer("processorWorkerListener")).thenReturn(container);
         when(container.isRunning()).thenReturn(false);
@@ -295,14 +299,14 @@ class ProcessorTest {
         WorkerDefinition definition = new WorkerDefinition(
                 "processorWorker",
                 ProcessorWorkerImpl.class,
-                WorkerType.MESSAGE,
+                WorkerInputType.RABBIT,
                 "processor",
                 MODERATOR_QUEUE,
                 FINAL_QUEUE,
                 TRAFFIC_EXCHANGE,
                 ProcessorWorkerConfig.class
         );
-        when(workerRegistry.findByRoleAndType("processor", WorkerType.MESSAGE))
+        when(workerRegistry.findByRoleAndInput("processor", WorkerInputType.RABBIT))
                 .thenReturn(Optional.of(definition));
 
         ControlPlaneIdentity identity = new ControlPlaneIdentity(
@@ -319,10 +323,9 @@ class ProcessorTest {
                 rabbitTemplate,
                 listenerRegistry,
                 identity,
-                defaults
+                defaults,
+                workInputRegistry
         );
-
-        adapter.initialiseStateListener();
 
         WorkerControlQueueListener listener = new WorkerControlQueueListener(controlPlaneRuntime);
 
@@ -356,7 +359,7 @@ class ProcessorTest {
         return new WorkerDefinition(
                 "processorWorker",
                 ProcessorWorkerImpl.class,
-                WorkerType.MESSAGE,
+                WorkerInputType.RABBIT,
                 "processor",
                 MODERATOR_QUEUE,
                 FINAL_QUEUE,
@@ -434,7 +437,7 @@ class ProcessorTest {
 
         @Override
         public org.slf4j.Logger logger() {
-            return org.slf4j.LoggerFactory.getLogger(MessageWorker.class);
+            return org.slf4j.LoggerFactory.getLogger(PocketHiveWorkerFunction.class);
         }
 
         @Override

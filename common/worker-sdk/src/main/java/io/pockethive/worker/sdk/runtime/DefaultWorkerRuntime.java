@@ -42,7 +42,6 @@ public final class DefaultWorkerRuntime implements WorkerRuntime {
             Object bean = beanResolver.apply(definition.beanType());
             WorkerState state = workerStateStore.getOrCreate(definition);
             WorkerInvocation invocation = new WorkerInvocation(
-                definition.workerType(),
                 bean,
                 contextFactory,
                 definition,

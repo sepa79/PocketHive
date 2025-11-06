@@ -48,14 +48,14 @@ See the [control-plane worker guide](../control-plane/worker-guide.md#configurat
 
 ## 2. Annotate worker beans
 
-Annotate each business implementation with `@PocketHiveWorker`. Choose the worker type (`GENERATOR` or `MESSAGE`) and
-provide routing metadata. Optional `config` classes participate in Stage 2 control-plane hydration.
+Annotate each business implementation with `@PocketHiveWorker`. Select the appropriate input binding (`RABBIT` by
+default, `SCHEDULER` for timer-driven workers) and provide routing metadata. Optional `config` classes participate in
+Stage 2 control-plane hydration.
 
 ```java
 @Component("processorWorker")
 @PocketHiveWorker(
     role = "processor",
-    type = WorkerType.MESSAGE,
     inQueue = "moderator",
     outQueue = "final",
     config = ProcessorWorkerConfig.class
@@ -65,19 +65,17 @@ class ProcessorWorkerImpl implements MessageWorker {
 }
 ```
 
-Generator workers follow the same pattern but implement `GeneratorWorker` and omit `inQueue`.
+Generator workers follow the same pattern but typically specify `input = WorkerInputType.SCHEDULER` and omit `inQueue`.
 
 > **Status topology note**
 > The Worker SDK automatically mirrors the descriptor queues into the control-plane status payload via `statusPublisher().workIn(...)` and `statusPublisher().workOut(...)`. The legacy `inQueue` field in status events has been removed; consumers should rely on the richer `queues.work`/`queues.control` block instead.
 
-## 3. Implement the worker interfaces
+## 3. Implement the worker interface
 
-The Stage 1 runtime discovers annotated beans and invokes the corresponding business interface:
-
-- `GeneratorWorker.generate(WorkerContext)` emits a single `WorkMessage` per invocation. Stage 2 control-plane updates
-  determine how often `GeneratorRuntimeAdapter` schedules the call.
-- `MessageWorker.onMessage(WorkMessage, WorkerContext)` receives inbound messages converted by the SDK transport and
-  returns a `WorkResult` to publish downstream.
+The runtime discovers annotated beans that implement `PocketHiveWorkerFunction` and invokes
+`onMessage(WorkMessage, WorkerContext)` for each input message. Scheduler-driven inputs (such as the
+generator/trigger schedulers) emit synthetic seed messages, so the `message` parameter is always non-null even when no
+payload is supplied. The return value determines whether a downstream payload should be published.
 
 Use the `WorkerContext` to:
 
@@ -111,7 +109,7 @@ class ProcessorRuntimeAdapter implements ApplicationListener<ContextRefreshedEve
                           ControlPlaneIdentity identity,
                           ProcessorDefaults defaults) {
     WorkerDefinition definition = workerRegistry
-        .findByRoleAndType("processor", WorkerType.MESSAGE)
+        .findByRoleAndInput("processor", WorkerInputType.RABBIT)
         .orElseThrow();
 
     delegate = RabbitMessageWorkerAdapter.builder()

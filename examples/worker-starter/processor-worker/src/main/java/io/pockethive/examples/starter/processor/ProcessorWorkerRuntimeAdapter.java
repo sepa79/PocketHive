@@ -1,7 +1,7 @@
 package io.pockethive.examples.starter.processor;
 
 import io.pockethive.controlplane.ControlPlaneIdentity;
-import io.pockethive.worker.sdk.config.WorkerType;
+import io.pockethive.worker.sdk.config.WorkerInputType;
 import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
 import io.pockethive.worker.sdk.runtime.WorkerRegistry;
@@ -36,7 +36,7 @@ class ProcessorWorkerRuntimeAdapter implements ApplicationListener<ContextRefres
                                 ControlPlaneIdentity identity) {
 
     WorkerDefinition definition = workerRegistry
-        .findByRoleAndType("processor", WorkerType.MESSAGE)
+        .findByRoleAndInput("processor", WorkerInputType.RABBIT)
         .orElseThrow();
 
     this.delegate = RabbitMessageWorkerAdapter.builder()

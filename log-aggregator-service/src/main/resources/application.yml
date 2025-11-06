@@ -33,6 +33,21 @@ pockethive:
   logs:
     queue: ${POCKETHIVE_LOGS_QUEUE:ph.logs.agg}
     exchange: ${POCKETHIVE_LOGS_EXCHANGE:ph.logs}
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+=======
+    maxInboundMessageBytes: ${POCKETHIVE_LOGS_MAX_INBOUND_BYTES:104857600}
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+    maxInboundMessageBytes: ${POCKETHIVE_LOGS_MAX_INBOUND_BYTES:104857600}
+>>>>>>> theirs
+=======
+    maxInboundMessageBytes: ${POCKETHIVE_LOGS_MAX_INBOUND_BYTES:104857600}
+>>>>>>> theirs
   loki:
     url: ${POCKETHIVE_LOKI_URL:http://loki:3100}
     maxRetries: ${POCKETHIVE_LOKI_MAX_RETRIES:3}

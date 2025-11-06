@@ -1,11 +1,11 @@
 package io.pockethive.generator;
 
-import io.pockethive.worker.sdk.api.GeneratorWorker;
+import io.pockethive.worker.sdk.api.PocketHiveWorkerFunction;
 import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pockethive.worker.sdk.api.WorkResult;
 import io.pockethive.worker.sdk.api.WorkerContext;
 import io.pockethive.worker.sdk.config.PocketHiveWorker;
-import io.pockethive.worker.sdk.config.WorkerType;
+import io.pockethive.worker.sdk.config.WorkerInputType;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -44,11 +44,11 @@ import org.springframework.stereotype.Component;
 @Component("generatorWorker")
 @PocketHiveWorker(
     role = "generator",
-    type = WorkerType.GENERATOR,
+    input = WorkerInputType.SCHEDULER,
     outQueue = "generator",
     config = GeneratorWorkerConfig.class
 )
-class GeneratorWorkerImpl implements GeneratorWorker {
+class GeneratorWorkerImpl implements PocketHiveWorkerFunction {
 
   private final GeneratorDefaults defaults;
 
@@ -99,7 +99,7 @@ class GeneratorWorkerImpl implements GeneratorWorker {
    *     the configured generator queue.
    */
   @Override
-  public WorkResult generate(WorkerContext context) {
+  public WorkResult onMessage(WorkMessage seed, WorkerContext context) {
     GeneratorWorkerConfig config = context.config(GeneratorWorkerConfig.class)
         .orElseGet(defaults::asConfig);
     String outboundQueue = context.info().outQueue();

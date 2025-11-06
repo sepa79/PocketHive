@@ -1,11 +1,10 @@
 package io.pockethive.moderator;
 
-import io.pockethive.worker.sdk.api.MessageWorker;
+import io.pockethive.worker.sdk.api.PocketHiveWorkerFunction;
 import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pockethive.worker.sdk.api.WorkResult;
 import io.pockethive.worker.sdk.api.WorkerContext;
 import io.pockethive.worker.sdk.config.PocketHiveWorker;
-import io.pockethive.worker.sdk.config.WorkerType;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
@@ -18,7 +17,7 @@ import org.springframework.stereotype.Component;
  * Deploy it near the generator for low latency; smaller teams often co-locate the two services in
  * the same pod.
  *
- * <p>Moderation is intentionally lightweight today—just pass-through with metadata—but junior
+ * <p>Moderation is intentionally lightweight today—just pass-through with metadata—but
  * engineers can extend it with validation or routing logic. Flip the
  * {@code pockethive.control-plane.worker.moderator.enabled}
  * flag in {@code application.yml} (or push a runtime override) to pause moderation during load
@@ -28,12 +27,11 @@ import org.springframework.stereotype.Component;
 @Component("moderatorWorker")
 @PocketHiveWorker(
     role = "moderator",
-    type = WorkerType.MESSAGE,
     inQueue = "generator",
     outQueue = "moderator",
     config = ModeratorWorkerConfig.class
 )
-class ModeratorWorkerImpl implements MessageWorker {
+class ModeratorWorkerImpl implements PocketHiveWorkerFunction {
 
   private final ModeratorDefaults defaults;
   private final OperationModeLimiter modeLimiter = new OperationModeLimiter();

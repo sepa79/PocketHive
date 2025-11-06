@@ -3,7 +3,7 @@ package io.pockethive.worker.sdk.transport.rabbit;
 import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pockethive.worker.sdk.api.WorkResult;
-import io.pockethive.worker.sdk.config.WorkerType;
+import io.pockethive.worker.sdk.config.WorkerInputType;
 import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
 import java.nio.charset.StandardCharsets;
@@ -74,7 +74,7 @@ class RabbitMessageWorkerAdapterTest {
         workerDefinition = new WorkerDefinition(
             "processorWorker",
             Object.class,
-            WorkerType.MESSAGE,
+            WorkerInputType.RABBIT,
             "processor",
             "processor.in",
             "processor.out",
@@ -220,7 +220,7 @@ class RabbitMessageWorkerAdapterTest {
         workerDefinition = new WorkerDefinition(
             "processorWorker",
             Object.class,
-            WorkerType.MESSAGE,
+            WorkerInputType.RABBIT,
             "processor",
             "processor.in",
             null,
@@ -238,7 +238,7 @@ class RabbitMessageWorkerAdapterTest {
         workerDefinition = new WorkerDefinition(
             "processorWorker",
             Object.class,
-            WorkerType.MESSAGE,
+            WorkerInputType.RABBIT,
             "processor",
             "processor.in",
             "processor.out",
@@ -256,7 +256,7 @@ class RabbitMessageWorkerAdapterTest {
         workerDefinition = new WorkerDefinition(
             "processorWorker",
             Object.class,
-            WorkerType.MESSAGE,
+            WorkerInputType.RABBIT,
             "processor",
             "processor.in",
             null,
@@ -272,7 +272,7 @@ class RabbitMessageWorkerAdapterTest {
         workerDefinition = new WorkerDefinition(
             "processorWorker",
             Object.class,
-            WorkerType.MESSAGE,
+            WorkerInputType.RABBIT,
             "processor",
             "processor.in",
             null,
@@ -302,7 +302,7 @@ class RabbitMessageWorkerAdapterTest {
         workerDefinition = new WorkerDefinition(
             "processorWorker",
             Object.class,
-            WorkerType.MESSAGE,
+            WorkerInputType.RABBIT,
             "processor",
             "processor.in",
             "processor.out",

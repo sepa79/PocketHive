@@ -5,12 +5,15 @@ import io.pockethive.controlplane.spring.WorkerControlPlaneProperties;
 import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pockethive.worker.sdk.api.WorkResult;
 import io.pockethive.worker.sdk.autoconfigure.WorkerControlQueueListener;
-import io.pockethive.worker.sdk.config.WorkerType;
+import io.pockethive.worker.sdk.config.WorkerInputType;
 import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
 import io.pockethive.worker.sdk.runtime.WorkerRegistry;
 import io.pockethive.worker.sdk.runtime.WorkerRuntime;
 import io.pockethive.worker.sdk.transport.rabbit.RabbitWorkMessageConverter;
+import io.pockethive.worker.sdk.input.WorkInput;
+import io.pockethive.worker.sdk.input.WorkInputRegistry;
+import io.pockethive.worker.sdk.input.rabbit.RabbitWorkInput;
 import java.nio.charset.StandardCharsets;
 import java.util.Optional;
 import java.util.function.Consumer;
@@ -59,6 +62,9 @@ class ModeratorRuntimeAdapterTest {
   @Mock
   private MessageListenerContainer listenerContainer;
 
+  @Mock
+  private WorkInputRegistry workInputRegistry;
+
   private ModeratorDefaults defaults;
   private WorkerDefinition definition;
   private ControlPlaneIdentity identity;
@@ -81,7 +87,7 @@ class ModeratorRuntimeAdapterTest {
     definition = new WorkerDefinition(
         "moderatorWorker",
         ModeratorWorkerImpl.class,
-        WorkerType.MESSAGE,
+        WorkerInputType.RABBIT,
         "moderator",
         IN_QUEUE,
         OUT_QUEUE,
@@ -97,7 +103,7 @@ class ModeratorRuntimeAdapterTest {
 
   @Test
   void onWorkDispatchesToWorkerAndPublishesResult() throws Exception {
-    when(workerRegistry.findByRoleAndType("moderator", WorkerType.MESSAGE))
+    when(workerRegistry.findByRoleAndInput("moderator", WorkerInputType.RABBIT))
         .thenReturn(Optional.of(definition));
     stubListenerContainerStopped();
     doReturn(WorkResult.message(WorkMessage.text("forwarded").build()))
@@ -111,10 +117,13 @@ class ModeratorRuntimeAdapterTest {
         rabbitTemplate,
         listenerRegistry,
         identity,
-        defaults
+        defaults,
+        workInputRegistry
     );
-
-    adapter.initialiseStateListener();
+    adapter.start();
+    ArgumentCaptor<WorkInput> workInputCaptor = ArgumentCaptor.forClass(WorkInput.class);
+    verify(workInputRegistry).register(eq(definition), workInputCaptor.capture());
+    assertThat(workInputCaptor.getValue()).isInstanceOf(RabbitWorkInput.class);
     ArgumentCaptor<Object> defaultConfigCaptor = ArgumentCaptor.forClass(Object.class);
     verify(controlPlaneRuntime).registerDefaultConfig(eq("moderatorWorker"), defaultConfigCaptor.capture());
     assertThat(defaultConfigCaptor.getValue()).isEqualTo(
@@ -149,7 +158,7 @@ class ModeratorRuntimeAdapterTest {
 
   @Test
   void registersListenerAndAppliesDesiredState() {
-    when(workerRegistry.findByRoleAndType("moderator", WorkerType.MESSAGE))
+    when(workerRegistry.findByRoleAndInput("moderator", WorkerInputType.RABBIT))
         .thenReturn(Optional.of(definition));
     stubListenerContainerStopped();
     ModeratorRuntimeAdapter adapter = new ModeratorRuntimeAdapter(
@@ -159,10 +168,14 @@ class ModeratorRuntimeAdapterTest {
         rabbitTemplate,
         listenerRegistry,
         identity,
-        defaults
+        defaults,
+        workInputRegistry
     );
 
-    adapter.initialiseStateListener();
+    adapter.start();
+    ArgumentCaptor<WorkInput> registrar = ArgumentCaptor.forClass(WorkInput.class);
+    verify(workInputRegistry).register(eq(definition), registrar.capture());
+    assertThat(registrar.getValue()).isInstanceOf(RabbitWorkInput.class);
     ArgumentCaptor<Object> defaultConfigCaptor = ArgumentCaptor.forClass(Object.class);
     verify(controlPlaneRuntime).registerDefaultConfig(eq("moderatorWorker"), defaultConfigCaptor.capture());
     assertThat(defaultConfigCaptor.getValue()).isEqualTo(
@@ -184,7 +197,7 @@ class ModeratorRuntimeAdapterTest {
 
   @Test
   void onWorkDelegatesErrorsToDispatchHandler() throws Exception {
-    when(workerRegistry.findByRoleAndType("moderator", WorkerType.MESSAGE))
+    when(workerRegistry.findByRoleAndInput("moderator", WorkerInputType.RABBIT))
         .thenReturn(Optional.of(definition));
     ModeratorRuntimeAdapter adapter = new ModeratorRuntimeAdapter(
         workerRuntime,
@@ -193,8 +206,10 @@ class ModeratorRuntimeAdapterTest {
         rabbitTemplate,
         listenerRegistry,
         identity,
-        defaults
+        defaults,
+        workInputRegistry
     );
+    adapter.start();
 
     Message inbound = new RabbitWorkMessageConverter().toMessage(WorkMessage.text("payload").build());
     doThrow(new RuntimeException("boom")).when(workerRuntime)

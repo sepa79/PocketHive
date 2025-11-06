@@ -5,7 +5,8 @@ import io.pockethive.controlplane.spring.WorkerControlPlaneProperties;
 import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pockethive.worker.sdk.api.WorkResult;
 import io.pockethive.worker.sdk.autoconfigure.WorkerControlQueueListener;
-import io.pockethive.worker.sdk.config.WorkerType;
+import io.pockethive.worker.sdk.config.WorkerInputType;
+import io.pockethive.worker.sdk.input.WorkInput;
 import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
 import io.pockethive.worker.sdk.runtime.WorkerRegistry;
@@ -24,6 +25,7 @@ import org.springframework.amqp.rabbit.listener.MessageListenerContainer;
 import org.springframework.amqp.rabbit.listener.RabbitListenerEndpointRegistry;
 
 import io.pockethive.worker.sdk.testing.ControlPlaneTestFixtures;
+import io.pockethive.worker.sdk.input.WorkInputRegistry;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -54,6 +56,9 @@ class PostProcessorRuntimeAdapterTest {
   @Mock
   private MessageListenerContainer listenerContainer;
 
+  @Mock
+  private WorkInputRegistry workInputRegistry;
+
   private PostProcessorDefaults defaults;
   private WorkerDefinition definition;
   private ControlPlaneIdentity identity;
@@ -62,6 +67,11 @@ class PostProcessorRuntimeAdapterTest {
       ControlPlaneTestFixtures.workerProperties("swarm-alpha", "postprocessor", "instance-1");
   private static final String IN_QUEUE = WORKER_PROPERTIES.getQueues().get("final");
   private static final String EXCHANGE = WORKER_PROPERTIES.getTrafficExchange();
+
+  private void stubListenerContainerStopped() {
+    when(listenerRegistry.getListenerContainer("postProcessorWorkerListener")).thenReturn(listenerContainer);
+    when(listenerContainer.isRunning()).thenReturn(false);
+  }
 
   @BeforeEach
   void setUp() {
@@ -75,7 +85,7 @@ class PostProcessorRuntimeAdapterTest {
     definition = new WorkerDefinition(
         "postProcessorWorker",
         PostProcessorWorkerImpl.class,
-        WorkerType.MESSAGE,
+        WorkerInputType.RABBIT,
         "postprocessor",
         IN_QUEUE,
         null,
@@ -86,11 +96,9 @@ class PostProcessorRuntimeAdapterTest {
 
   @Test
   void onWorkDispatchesToWorker() throws Exception {
-    when(workerRegistry.findByRoleAndType("postprocessor", WorkerType.MESSAGE))
+    when(workerRegistry.findByRoleAndInput("postprocessor", WorkerInputType.RABBIT))
         .thenReturn(Optional.of(definition));
-    when(listenerRegistry.getListenerContainer("postProcessorWorkerListener"))
-        .thenReturn(listenerContainer);
-    when(listenerContainer.isRunning()).thenReturn(false);
+    stubListenerContainerStopped();
 
     doReturn(WorkResult.none()).when(workerRuntime).dispatch(eq("postProcessorWorker"), any(WorkMessage.class));
 
@@ -100,10 +108,13 @@ class PostProcessorRuntimeAdapterTest {
         controlPlaneRuntime,
         listenerRegistry,
         identity,
-        defaults
+        defaults,
+        workInputRegistry
     );
-
-    adapter.initialiseStateListener();
+    adapter.start();
+    ArgumentCaptor<WorkInput> workInputCaptor = ArgumentCaptor.forClass(WorkInput.class);
+    verify(workInputRegistry).register(eq(definition), workInputCaptor.capture());
+    assertThat(workInputCaptor.getValue()).isNotNull();
     ArgumentCaptor<Object> defaultConfigCaptor = ArgumentCaptor.forClass(Object.class);
     verify(controlPlaneRuntime).registerDefaultConfig(eq("postProcessorWorker"), defaultConfigCaptor.capture());
     assertThat(defaultConfigCaptor.getValue()).isEqualTo(new PostProcessorWorkerConfig(true, false));
@@ -133,11 +144,9 @@ class PostProcessorRuntimeAdapterTest {
 
   @Test
   void registersStateListenerAndAppliesDesiredState() {
-    when(workerRegistry.findByRoleAndType("postprocessor", WorkerType.MESSAGE))
+    when(workerRegistry.findByRoleAndInput("postprocessor", WorkerInputType.RABBIT))
         .thenReturn(Optional.of(definition));
-    when(listenerRegistry.getListenerContainer("postProcessorWorkerListener"))
-        .thenReturn(listenerContainer);
-    when(listenerContainer.isRunning()).thenReturn(false);
+    stubListenerContainerStopped();
 
     PostProcessorRuntimeAdapter adapter = new PostProcessorRuntimeAdapter(
         workerRuntime,
@@ -145,10 +154,11 @@ class PostProcessorRuntimeAdapterTest {
         controlPlaneRuntime,
         listenerRegistry,
         identity,
-        defaults
+        defaults,
+        workInputRegistry
     );
-
-    adapter.initialiseStateListener();
+    adapter.start();
+    verify(workInputRegistry).register(eq(definition), any(WorkInput.class));
     ArgumentCaptor<Object> defaultConfigCaptor = ArgumentCaptor.forClass(Object.class);
     verify(controlPlaneRuntime).registerDefaultConfig(eq("postProcessorWorker"), defaultConfigCaptor.capture());
     assertThat(defaultConfigCaptor.getValue()).isEqualTo(new PostProcessorWorkerConfig(true, false));
@@ -168,16 +178,19 @@ class PostProcessorRuntimeAdapterTest {
 
   @Test
   void onWorkDelegatesErrorsToDispatchHandler() throws Exception {
-    when(workerRegistry.findByRoleAndType("postprocessor", WorkerType.MESSAGE))
+    when(workerRegistry.findByRoleAndInput("postprocessor", WorkerInputType.RABBIT))
         .thenReturn(Optional.of(definition));
+    stubListenerContainerStopped();
     PostProcessorRuntimeAdapter adapter = new PostProcessorRuntimeAdapter(
         workerRuntime,
         workerRegistry,
         controlPlaneRuntime,
         listenerRegistry,
         identity,
-        defaults
+        defaults,
+        workInputRegistry
     );
+    adapter.start();
 
     Message inbound = new RabbitWorkMessageConverter().toMessage(WorkMessage.text("payload").build());
     doThrow(new RuntimeException("boom")).when(workerRuntime)

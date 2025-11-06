@@ -3,12 +3,11 @@ package io.pockethive.processor;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import io.pockethive.worker.sdk.api.MessageWorker;
+import io.pockethive.worker.sdk.api.PocketHiveWorkerFunction;
 import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pockethive.worker.sdk.api.WorkResult;
 import io.pockethive.worker.sdk.api.WorkerContext;
 import io.pockethive.worker.sdk.config.PocketHiveWorker;
-import io.pockethive.worker.sdk.config.WorkerType;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -55,12 +54,11 @@ import org.springframework.stereotype.Component;
 @Component("processorWorker")
 @PocketHiveWorker(
     role = "processor",
-    type = WorkerType.MESSAGE,
     inQueue = "moderator",
     outQueue = "final",
     config = ProcessorWorkerConfig.class
 )
-class ProcessorWorkerImpl implements MessageWorker {
+class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
 
   private static final ObjectMapper MAPPER = new ObjectMapper();
   private static final String HEADER_DURATION = "x-ph-processor-duration-ms";

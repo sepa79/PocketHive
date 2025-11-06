@@ -1,6 +1,6 @@
 package io.pockethive.worker.sdk.runtime;
 
-import io.pockethive.worker.sdk.config.WorkerType;
+import io.pockethive.worker.sdk.config.WorkerInputType;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
@@ -13,7 +13,7 @@ class WorkerRegistryTest {
     private static final WorkerDefinition GENERATOR_TRIGGER = new WorkerDefinition(
         "triggerWorker",
         Object.class,
-        WorkerType.GENERATOR,
+        WorkerInputType.SCHEDULER,
         "trigger",
         null,
         null,
@@ -24,7 +24,7 @@ class WorkerRegistryTest {
     private static final WorkerDefinition MESSAGE_PROCESSOR = new WorkerDefinition(
         "processorWorker",
         Object.class,
-        WorkerType.MESSAGE,
+        WorkerInputType.RABBIT,
         "processor",
         "in",
         "out",
@@ -35,7 +35,7 @@ class WorkerRegistryTest {
     private static final WorkerDefinition MESSAGE_TRIGGER = new WorkerDefinition(
         "triggerMessageWorker",
         Object.class,
-        WorkerType.MESSAGE,
+        WorkerInputType.RABBIT,
         "trigger",
         null,
         null,
@@ -50,15 +50,15 @@ class WorkerRegistryTest {
     ));
 
     @Test
-    void findByRoleAndTypeReturnsMatchingDefinition() {
-        Optional<WorkerDefinition> result = registry.findByRoleAndType("processor", WorkerType.MESSAGE);
+    void findByRoleAndInputReturnsMatchingDefinition() {
+        Optional<WorkerDefinition> result = registry.findByRoleAndInput("processor", WorkerInputType.RABBIT);
 
         assertThat(result).contains(MESSAGE_PROCESSOR);
     }
 
     @Test
-    void findByRoleAndTypeReturnsEmptyWhenNoMatch() {
-        Optional<WorkerDefinition> result = registry.findByRoleAndType("missing", WorkerType.MESSAGE);
+    void findByRoleAndInputReturnsEmptyWhenNoMatch() {
+        Optional<WorkerDefinition> result = registry.findByRoleAndInput("missing", WorkerInputType.RABBIT);
 
         assertThat(result).isEmpty();
     }
@@ -70,8 +70,8 @@ class WorkerRegistryTest {
     }
 
     @Test
-    void streamByRoleAndTypeFiltersDefinitions() {
-        assertThat(registry.streamByRoleAndType("trigger", WorkerType.GENERATOR).toList())
+    void streamByRoleAndInputFiltersDefinitions() {
+        assertThat(registry.streamByRoleAndInput("trigger", WorkerInputType.SCHEDULER).toList())
             .containsExactly(GENERATOR_TRIGGER);
     }
 
@@ -83,9 +83,9 @@ class WorkerRegistryTest {
     }
 
     @Test
-    void streamByRoleAndTypeRejectsNullType() {
-        assertThatThrownBy(() -> registry.streamByRoleAndType("trigger", null))
+    void streamByRoleAndInputRejectsNullType() {
+        assertThatThrownBy(() -> registry.streamByRoleAndInput("trigger", null))
             .isInstanceOf(NullPointerException.class)
-            .hasMessageContaining("type");
+            .hasMessageContaining("input");
     }
 }

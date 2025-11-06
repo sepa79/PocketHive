@@ -37,13 +37,13 @@
         </encoder>
       </appender>
 
-      <root level="INFO">
+      <root level="DEBUG">
         <appender-ref ref="CONSOLE"/>
         <appender-ref ref="RABBIT"/>
       </root>
     </then>
     <else>
-      <root level="INFO">
+      <root level="DEBUG">
         <appender-ref ref="CONSOLE"/>
       </root>
     </else>

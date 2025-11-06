@@ -5,7 +5,9 @@ import io.pockethive.controlplane.spring.WorkerControlPlaneProperties;
 import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pockethive.worker.sdk.api.WorkResult;
 import io.pockethive.worker.sdk.autoconfigure.WorkerControlQueueListener;
-import io.pockethive.worker.sdk.config.WorkerType;
+import io.pockethive.worker.sdk.config.WorkerInputType;
+import io.pockethive.worker.sdk.input.WorkInput;
+import io.pockethive.worker.sdk.input.WorkInputRegistry;
 import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
 import io.pockethive.worker.sdk.runtime.WorkerRegistry;
@@ -59,6 +61,9 @@ class ProcessorRuntimeAdapterTest {
   @Mock
   private MessageListenerContainer listenerContainer;
 
+  @Mock
+  private WorkInputRegistry workInputRegistry;
+
   private ProcessorDefaults defaults;
   private WorkerDefinition definition;
   private ControlPlaneIdentity identity;
@@ -82,7 +87,7 @@ class ProcessorRuntimeAdapterTest {
     definition = new WorkerDefinition(
         "processorWorker",
         ProcessorWorkerImpl.class,
-        WorkerType.MESSAGE,
+        WorkerInputType.RABBIT,
         "processor",
         IN_QUEUE,
         OUT_QUEUE,
@@ -91,10 +96,16 @@ class ProcessorRuntimeAdapterTest {
     );
   }
 
+  private void stubListenerContainerStopped() {
+    when(listenerRegistry.getListenerContainer("processorWorkerListener")).thenReturn(listenerContainer);
+    when(listenerContainer.isRunning()).thenReturn(false);
+  }
+
   @Test
   void onWorkDispatchesToWorkerAndPublishesResult() throws Exception {
-    when(workerRegistry.findByRoleAndType("processor", WorkerType.MESSAGE))
+    when(workerRegistry.findByRoleAndInput("processor", WorkerInputType.RABBIT))
         .thenReturn(Optional.of(definition));
+    stubListenerContainerStopped();
     doReturn(WorkResult.message(WorkMessage.text("processed").build()))
         .when(workerRuntime)
         .dispatch(eq("processorWorker"), any(WorkMessage.class));
@@ -106,10 +117,14 @@ class ProcessorRuntimeAdapterTest {
         rabbitTemplate,
         listenerRegistry,
         identity,
-        defaults
+        defaults,
+        workInputRegistry
     );
 
-    adapter.initialiseStateListener();
+    adapter.start();
+    ArgumentCaptor<WorkInput> workInputCaptor = ArgumentCaptor.forClass(WorkInput.class);
+    verify(workInputRegistry).register(eq(definition), workInputCaptor.capture());
+    assertThat(workInputCaptor.getValue()).as("work input should be registered").isNotNull();
     ArgumentCaptor<Object> defaultConfigCaptor = ArgumentCaptor.forClass(Object.class);
     verify(controlPlaneRuntime).registerDefaultConfig(eq("processorWorker"), defaultConfigCaptor.capture());
     assertThat(defaultConfigCaptor.getValue())
@@ -144,10 +159,9 @@ class ProcessorRuntimeAdapterTest {
 
   @Test
   void registersListenerAppliesDesiredStateAndEmitsSnapshot() {
-    when(workerRegistry.findByRoleAndType("processor", WorkerType.MESSAGE))
+    when(workerRegistry.findByRoleAndInput("processor", WorkerInputType.RABBIT))
         .thenReturn(Optional.of(definition));
-    when(listenerRegistry.getListenerContainer("processorWorkerListener")).thenReturn(listenerContainer);
-    when(listenerContainer.isRunning()).thenReturn(false);
+    stubListenerContainerStopped();
 
     ProcessorRuntimeAdapter adapter = new ProcessorRuntimeAdapter(
         workerRuntime,
@@ -156,10 +170,11 @@ class ProcessorRuntimeAdapterTest {
         rabbitTemplate,
         listenerRegistry,
         identity,
-        defaults
+        defaults,
+        workInputRegistry
     );
-
-    adapter.initialiseStateListener();
+    adapter.start();
+    verify(workInputRegistry).register(eq(definition), any(WorkInput.class));
 
     ArgumentCaptor<Object> defaultConfigCaptor = ArgumentCaptor.forClass(Object.class);
     verify(controlPlaneRuntime).registerDefaultConfig(eq("processorWorker"), defaultConfigCaptor.capture());
@@ -184,14 +199,14 @@ class ProcessorRuntimeAdapterTest {
     WorkerDefinition missingOutbound = new WorkerDefinition(
         "processorWorker",
         ProcessorWorkerImpl.class,
-        WorkerType.MESSAGE,
+        WorkerInputType.RABBIT,
         "processor",
         IN_QUEUE,
         null,
         EXCHANGE,
         ProcessorWorkerConfig.class
     );
-    when(workerRegistry.findByRoleAndType("processor", WorkerType.MESSAGE))
+    when(workerRegistry.findByRoleAndInput("processor", WorkerInputType.RABBIT))
         .thenReturn(Optional.of(missingOutbound));
 
     assertThatThrownBy(() -> new ProcessorRuntimeAdapter(
@@ -201,7 +216,8 @@ class ProcessorRuntimeAdapterTest {
         rabbitTemplate,
         listenerRegistry,
         identity,
-        defaults
+        defaults,
+        workInputRegistry
     ))
         .isInstanceOf(IllegalStateException.class)
         .hasMessageContaining("outbound queue");
@@ -209,8 +225,9 @@ class ProcessorRuntimeAdapterTest {
 
   @Test
   void onWorkDelegatesErrorsToDispatchHandler() throws Exception {
-    when(workerRegistry.findByRoleAndType("processor", WorkerType.MESSAGE))
+    when(workerRegistry.findByRoleAndInput("processor", WorkerInputType.RABBIT))
         .thenReturn(Optional.of(definition));
+    stubListenerContainerStopped();
     ProcessorRuntimeAdapter adapter = new ProcessorRuntimeAdapter(
         workerRuntime,
         workerRegistry,
@@ -218,8 +235,10 @@ class ProcessorRuntimeAdapterTest {
         rabbitTemplate,
         listenerRegistry,
         identity,
-        defaults
+        defaults,
+        workInputRegistry
     );
+    adapter.start();
 
     Message inbound = new RabbitWorkMessageConverter().toMessage(WorkMessage.text("payload").build());
     doThrow(new RuntimeException("boom")).when(workerRuntime)
