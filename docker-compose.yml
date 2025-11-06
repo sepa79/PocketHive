@@ -54,8 +54,8 @@ services:
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
       - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
       - grafana-data:/var/lib/grafana
-    # expose:
-    #   - "3000:3000"
+    ports:
+      - "3333:3000"
     depends_on:
       - prometheus
       - loki
