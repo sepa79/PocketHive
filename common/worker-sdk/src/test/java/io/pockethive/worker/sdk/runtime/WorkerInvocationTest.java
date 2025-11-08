@@ -45,7 +45,7 @@ class WorkerInvocationTest {
     void dispatchFailsWhenWorkerDisabled() {
         WorkerState state = new WorkerState(DEFINITION);
         state.setStatusPublisher(new WorkerStatusPublisher(state, () -> { }, () -> { }));
-        state.updateConfig(null, java.util.Map.of(), Boolean.FALSE);
+        state.updateConfig(null, false, Boolean.FALSE);
         WorkerInvocation invocation = new WorkerInvocation(
             new TestMessageWorker(),
             contextFactory(),
@@ -64,7 +64,7 @@ class WorkerInvocationTest {
     void dispatchSucceedsWhenWorkerEnabled() throws Exception {
         WorkerState state = new WorkerState(DEFINITION);
         state.setStatusPublisher(new WorkerStatusPublisher(state, () -> { }, () -> { }));
-        state.updateConfig(null, java.util.Map.of(), Boolean.TRUE);
+        state.updateConfig(null, false, Boolean.TRUE);
         WorkerInvocation invocation = new WorkerInvocation(
             new TestMessageWorker(),
             contextFactory(),
@@ -142,6 +142,11 @@ class WorkerInvocationTest {
             @Override
             public WorkerInfo info() {
                 return info;
+            }
+
+            @Override
+            public boolean enabled() {
+                return true;
             }
 
             @Override

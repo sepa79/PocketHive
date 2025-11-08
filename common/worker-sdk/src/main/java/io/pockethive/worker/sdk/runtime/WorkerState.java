@@ -19,7 +19,6 @@ public final class WorkerState {
 
     private final WorkerDefinition definition;
     private final AtomicReference<Object> configRef = new AtomicReference<>();
-    private final AtomicReference<Map<String, Object>> rawConfigRef = new AtomicReference<>(Map.of());
     private final AtomicReference<Boolean> enabledRef = new AtomicReference<>();
     private final AtomicReference<StatusPublisher> statusPublisherRef = new AtomicReference<>(StatusPublisher.NO_OP);
     private final AtomicReference<Map<String, Object>> statusDataRef = new AtomicReference<>(Map.of());
@@ -62,43 +61,32 @@ public final class WorkerState {
         return statusDataRef.get();
     }
 
-    void updateConfig(Object config, Map<String, Object> rawData, Boolean enabled) {
-        if (rawData != null) {
-            Map<String, Object> copy = rawData.isEmpty() ? Map.of() : Map.copyOf(rawData);
-            rawConfigRef.set(copy);
-            if (copy.isEmpty()) {
-                configRef.set(null);
-            } else if (config != null) {
+    void updateConfig(Object config, boolean replaceConfig, Boolean enabled) {
+        if (replaceConfig) {
+            if (config != null) {
                 configRef.set(config);
+            } else {
+                configRef.set(null);
             }
-        } else if (config != null) {
-            configRef.set(config);
         }
         if (enabled != null) {
             enabledRef.set(enabled);
         }
     }
 
-    boolean seedConfig(Object config, Map<String, Object> rawData, Boolean enabled) {
+    boolean seedConfig(Object config, Boolean enabled) {
         synchronized (this) {
-            if (configRef.get() != null || !rawConfigRef.get().isEmpty() || enabledRef.get() != null) {
+            if (configRef.get() != null || enabledRef.get() != null) {
                 return false;
             }
             if (config != null) {
                 configRef.set(config);
-            }
-            if (rawData != null && !rawData.isEmpty()) {
-                rawConfigRef.set(Map.copyOf(rawData));
             }
             if (enabled != null) {
                 enabledRef.set(enabled);
             }
             return true;
         }
-    }
-
-    Map<String, Object> rawConfig() {
-        return rawConfigRef.get();
     }
 
     Optional<Boolean> enabled() {

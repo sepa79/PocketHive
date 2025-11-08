@@ -94,7 +94,7 @@ public final class WorkerControlPlaneRuntime {
     public Map<String, Object> workerRawConfig(String workerBeanName) {
         Objects.requireNonNull(workerBeanName, "workerBeanName");
         return stateStore.find(workerBeanName)
-            .map(state -> state.rawConfig().isEmpty() ? Map.<String, Object>of() : state.rawConfig())
+            .map(this::snapshotRawConfig)
             .orElse(Map.of());
     }
 
@@ -126,7 +126,7 @@ public final class WorkerControlPlaneRuntime {
         WorkerState state = stateStore.find(workerBeanName).orElse(null);
         stateListeners.computeIfAbsent(workerBeanName, key -> new CopyOnWriteArrayList<>()).add(listener);
         if (state != null) {
-            safeInvoke(listener, new WorkerStateSnapshot(state));
+            safeInvoke(listener, new WorkerStateSnapshot(state, snapshotRawConfig(state)));
         }
     }
 
@@ -143,12 +143,12 @@ public final class WorkerControlPlaneRuntime {
             log.warn("Unable to seed default config for unknown worker {}", workerBeanName);
             return;
         }
-        Map<String, Object> rawConfig = convertDefaultConfig(defaultConfig);
+        Map<String, Object> rawConfig = toRawConfig(defaultConfig);
         Boolean enabled = resolveEnabled(rawConfig, null);
         Object typedConfig = ensureTypedDefault(state.definition(), defaultConfig, rawConfig);
-        if (state.seedConfig(typedConfig, rawConfig, enabled)) {
+        if (state.seedConfig(typedConfig, enabled)) {
             ensureStatusPublisher(state);
-            logInitialConfig(state);
+            logInitialConfig(state, rawConfig);
             notifyStateListeners(state);
         }
     }
@@ -160,7 +160,7 @@ public final class WorkerControlPlaneRuntime {
     public void registerGlobalStateListener(Consumer<WorkerStateSnapshot> listener) {
         Objects.requireNonNull(listener, "listener");
         globalStateListeners.add(listener);
-        stateStore.all().forEach(state -> safeInvoke(listener, new WorkerStateSnapshot(state)));
+        stateStore.all().forEach(state -> safeInvoke(listener, new WorkerStateSnapshot(state, snapshotRawConfig(state))));
     }
 
     /**
@@ -224,21 +224,21 @@ public final class WorkerControlPlaneRuntime {
             ensureStatusPublisher(state);
             WorkerConfigPatch patch = workerConfigFor(state, sanitized);
             Map<String, Object> filteredUpdate = withoutNullValues(patch.values());
-            Map<String, Object> mergedConfig = mergeWithExisting(state.rawConfig(), filteredUpdate, patch.resetRequested());
+            Map<String, Object> previousConfig = snapshotRawConfig(state);
+            Map<String, Object> mergedConfig = mergeWithExisting(previousConfig, filteredUpdate, patch.resetRequested());
             Boolean enabled = resolveEnabled(mergedConfig, command.enabled());
-            Map<String, Object> previousConfig = state.rawConfig();
             Boolean previousEnabled = state.enabled().orElse(null);
             try {
+                boolean replaceConfig = patch.hasPayload();
                 Object typedConfig = null;
-                Map<String, Object> rawDataForState = null;
-                if (patch.hasPayload()) {
-                    typedConfig = convertConfig(state.definition(), mergedConfig);
-                    rawDataForState = mergedConfig;
+                if (replaceConfig) {
+                    typedConfig = mergedConfig.isEmpty() ? null : convertConfig(state.definition(), mergedConfig);
                 }
-                state.updateConfig(typedConfig, rawDataForState, enabled);
-                emitConfigReady(signal, state, rawDataForState == null ? Map.of() : rawDataForState, enabled);
+                state.updateConfig(typedConfig, replaceConfig, enabled);
+                Map<String, Object> appliedConfig = replaceConfig ? mergedConfig : Map.of();
+                emitConfigReady(signal, state, appliedConfig, enabled);
                 notifyStateListeners(state);
-                Map<String, Object> finalConfig = state.rawConfig();
+                Map<String, Object> finalConfig = replaceConfig ? mergedConfig : previousConfig;
                 Boolean finalEnabled = state.enabled().orElse(null);
                 if (shouldLogConfigUpdate(patch, command, previousConfig, finalConfig, previousEnabled, finalEnabled)) {
                     logConfigUpdate(signal, state, previousConfig, finalConfig, previousEnabled, finalEnabled);
@@ -257,22 +257,11 @@ public final class WorkerControlPlaneRuntime {
             return null;
         }
         try {
-            Map<String, Object> relaxed = withRelaxedKeys(rawConfig);
-            return objectMapper.convertValue(relaxed, configType);
+            return objectMapper.convertValue(rawConfig, configType);
         } catch (IllegalArgumentException ex) {
             String message = "Unable to convert control-plane config for worker '%s' to type %s".formatted(
                 definition.beanName(), configType.getSimpleName());
             throw new IllegalArgumentException(message, ex);
-        }
-    }
-
-    private Map<String, Object> convertDefaultConfig(Object defaultConfig) {
-        try {
-            Map<String, Object> converted = objectMapper.convertValue(defaultConfig, DEFAULT_CONFIG_TYPE);
-            return converted == null ? Map.of() : Map.copyOf(converted);
-        } catch (IllegalArgumentException ex) {
-            log.warn("Unable to convert default config of type {}", defaultConfig.getClass().getName(), ex);
-            return Map.of();
         }
     }
 
@@ -468,6 +457,37 @@ public final class WorkerControlPlaneRuntime {
         return Map.copyOf(merged);
     }
 
+    private Map<String, Object> toRawConfig(Object value) {
+        if (value == null) {
+            return Map.of();
+        }
+        if (value instanceof Map<?, ?> map) {
+            return map.isEmpty() ? Map.of() : copyMap(map);
+        }
+        return serializeConfig(value);
+    }
+
+    private Map<String, Object> snapshotRawConfig(WorkerState state) {
+        Class<?> configType = state.definition().configType();
+        if (configType == Void.class) {
+            return Map.of();
+        }
+        return state.config(configType).map(this::serializeConfig).orElse(Map.of());
+    }
+
+    private Map<String, Object> serializeConfig(Object config) {
+        if (config == null) {
+            return Map.of();
+        }
+        try {
+            Map<String, Object> converted = objectMapper.convertValue(config, DEFAULT_CONFIG_TYPE);
+            return converted == null ? Map.of() : Map.copyOf(converted);
+        } catch (IllegalArgumentException ex) {
+            log.warn("Unable to serialise config of type {}", config.getClass().getName(), ex);
+            return Map.of();
+        }
+    }
+
     private boolean shouldLogConfigUpdate(
         WorkerConfigPatch patch,
         WorkerConfigCommand command,
@@ -485,8 +505,7 @@ public final class WorkerControlPlaneRuntime {
         return !Objects.equals(previousConfig, finalConfig);
     }
 
-    private void logInitialConfig(WorkerState state) {
-        Map<String, Object> config = state.rawConfig();
+    private void logInitialConfig(WorkerState state, Map<String, Object> config) {
         String prettyConfig = prettyPrint(config.isEmpty() ? Map.of() : config);
         Boolean enabled = state.enabled().orElse(null);
         log.info(
@@ -575,61 +594,6 @@ public final class WorkerControlPlaneRuntime {
             log.warn("Unable to pretty print config value", ex);
             return String.valueOf(value);
         }
-    }
-
-    @SuppressWarnings("unchecked")
-    private Map<String, Object> withRelaxedKeys(Map<String, Object> source) {
-        if (source == null || source.isEmpty()) {
-            return Map.of();
-        }
-        Map<String, Object> target = new LinkedHashMap<>();
-        source.forEach((key, value) -> {
-            Object normalizedValue = normalizeValue(value);
-            target.put(key, normalizedValue);
-            String camel = toCamelCase(key);
-            if (!camel.equals(key) && !target.containsKey(camel)) {
-                target.put(camel, normalizedValue);
-            }
-        });
-        return target;
-    }
-
-    private Object normalizeValue(Object value) {
-        if (value instanceof Map<?, ?> map) {
-            Map<String, Object> typed = new LinkedHashMap<>();
-            map.forEach((k, v) -> {
-                if (k instanceof String key) {
-                    typed.put(key, v);
-                }
-            });
-            return withRelaxedKeys(typed);
-        }
-        if (value instanceof List<?> list) {
-            return list.stream().map(this::normalizeValue).toList();
-        }
-        return value;
-    }
-
-    private String toCamelCase(String key) {
-        if (key == null || key.isBlank()) {
-            return key;
-        }
-        StringBuilder builder = new StringBuilder();
-        boolean upperNext = false;
-        for (int i = 0; i < key.length(); i++) {
-            char ch = key.charAt(i);
-            if (ch == '-' || ch == '_' || ch == '.') {
-                upperNext = true;
-                continue;
-            }
-            if (upperNext) {
-                builder.append(Character.toUpperCase(ch));
-                upperNext = false;
-            } else {
-                builder.append(ch);
-            }
-        }
-        return builder.toString();
     }
 
     private String formatEnabledChange(Boolean previousEnabled, Boolean finalEnabled) {
@@ -791,7 +755,7 @@ public final class WorkerControlPlaneRuntime {
                     .toList();
                 workerEntry.put("capabilities", capabilities);
             }
-            Map<String, Object> config = state.rawConfig();
+            Map<String, Object> config = snapshotRawConfig(state);
             if (!config.isEmpty()) {
                 workerEntry.put("config", config);
             }
@@ -818,7 +782,7 @@ public final class WorkerControlPlaneRuntime {
         if (state == null) {
             return;
         }
-        WorkerStateSnapshot snapshot = new WorkerStateSnapshot(state);
+        WorkerStateSnapshot snapshot = new WorkerStateSnapshot(state, snapshotRawConfig(state));
         List<Consumer<WorkerStateSnapshot>> listeners = stateListeners.getOrDefault(state.definition().beanName(), Collections.emptyList());
         listeners.forEach(listener -> safeInvoke(listener, snapshot));
         globalStateListeners.forEach(listener -> safeInvoke(listener, snapshot));
@@ -875,9 +839,11 @@ public final class WorkerControlPlaneRuntime {
     public static final class WorkerStateSnapshot {
 
         private final WorkerState state;
+        private final Map<String, Object> rawConfig;
 
-        private WorkerStateSnapshot(WorkerState state) {
+        private WorkerStateSnapshot(WorkerState state, Map<String, Object> rawConfig) {
             this.state = Objects.requireNonNull(state, "state");
+            this.rawConfig = rawConfig == null || rawConfig.isEmpty() ? Map.of() : Map.copyOf(rawConfig);
         }
 
         /**
@@ -898,7 +864,7 @@ public final class WorkerControlPlaneRuntime {
          * Returns the raw configuration map received from the control plane.
          */
         public Map<String, Object> rawConfig() {
-            return state.rawConfig();
+            return rawConfig;
         }
 
         /**

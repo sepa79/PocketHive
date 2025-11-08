@@ -67,10 +67,7 @@ public final class RabbitWorkInputFactory implements WorkInputFactory {
             .identity(identity)
             .defaultEnabledSupplier(() -> defaults.enabled())
             .defaultConfigSupplier(() -> defaults.rawConfig().isEmpty() ? null : defaults.rawConfig())
-            .desiredStateResolver(snapshot ->
-                snapshot.enabled().orElseGet(() -> snapshot.rawConfig().containsKey("enabled")
-                    ? parseEnabled(snapshot.rawConfig().get("enabled")).orElse(defaults.enabled())
-                    : defaults.enabled()))
+            .desiredStateResolver(snapshot -> snapshot.enabled().orElse(defaults.enabled()))
             .rabbitTemplate(rabbitTemplate)
             .dispatcher(message -> workerRuntime.dispatch(definition.beanName(), message))
             .messageResultPublisher((result, outbound) -> { })
@@ -85,13 +82,6 @@ public final class RabbitWorkInputFactory implements WorkInputFactory {
         boolean enabled = match.map(PocketHiveWorkerProperties::isEnabled).orElse(true);
         Map<String, Object> config = match.map(PocketHiveWorkerProperties::rawConfig).orElse(Map.of());
         return new WorkerDefaults(enabled, config);
-    }
-
-    private static Optional<Boolean> parseEnabled(Object value) {
-        if (value instanceof Boolean bool) {
-            return Optional.of(bool);
-        }
-        return Optional.empty();
     }
 
     private record WorkerDefaults(boolean enabled, Map<String, Object> rawConfig) {
