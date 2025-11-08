@@ -39,6 +39,6 @@ class SampleGeneratorDefaults {
   }
 
   SampleGeneratorConfig asConfig() {
-    return new SampleGeneratorConfig(enabled, ratePerSecond, message);
+    return new SampleGeneratorConfig(ratePerSecond, message);
   }
 }

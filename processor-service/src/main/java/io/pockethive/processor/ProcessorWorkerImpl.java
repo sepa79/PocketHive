@@ -243,7 +243,7 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
         .workOut(outboundQueue)
         .update(status -> status
             .data("baseUrl", config.baseUrl())
-            .data("enabled", config.enabled())
+            .data("enabled", context.enabled())
             .data("transactions", totalCalls.sum())
             .data("successRatio", successRatio())
             .data("avgLatencyMs", averageLatencyMs()));

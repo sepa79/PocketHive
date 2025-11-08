@@ -23,7 +23,7 @@ import org.springframework.stereotype.Component;
 class SampleGeneratorWorker implements PocketHiveWorkerFunction {
 
   private static final SampleGeneratorConfig FALLBACK_CONFIG =
-      new SampleGeneratorConfig(true, 1.0, "Hello from the generator");
+      new SampleGeneratorConfig(1.0, "Hello from the generator");
 
   @Override
   @Override
@@ -37,11 +37,11 @@ class SampleGeneratorWorker implements PocketHiveWorkerFunction {
     context.statusPublisher()
         .workOut(outQueue)
         .update(status -> status
-            .data("enabled", config.enabled())
+            .data("enabled", context.enabled())
             .data("ratePerSecond", config.ratePerSecond())
             .data("message", config.message()));
 
-    if (!config.enabled()) {
+    if (!context.enabled()) {
       return WorkResult.none();
     }
 

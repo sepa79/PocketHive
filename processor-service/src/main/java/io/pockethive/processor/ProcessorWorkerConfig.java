@@ -1,6 +1,6 @@
 package io.pockethive.processor;
 
-public record ProcessorWorkerConfig(boolean enabled, String baseUrl) {
+public record ProcessorWorkerConfig(String baseUrl) {
 
   public ProcessorWorkerConfig {
     baseUrl = normalize(baseUrl);

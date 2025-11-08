@@ -50,7 +50,6 @@ class GeneratorTest {
   @Test
   void generateUsesProvidedConfig() throws Exception {
     GeneratorWorkerConfig config = new GeneratorWorkerConfig(
-        true,
         10.0,
         false,
         new GeneratorWorkerConfig.Message(
@@ -103,6 +102,11 @@ class GeneratorTest {
     @Override
     public WorkerInfo info() {
       return info;
+    }
+
+    @Override
+    public boolean enabled() {
+      return true;
     }
 
     @Override

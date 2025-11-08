@@ -22,6 +22,12 @@ public interface WorkerContext {
     WorkerInfo info();
 
     /**
+     * Indicates whether the control-plane has this worker enabled. Defaults to {@code true} when no
+     * explicit command has been received yet.
+     */
+    boolean enabled();
+
+    /**
      * Resolves the latest typed configuration supplied by the control plane.
      *
      * @param type configuration class to look up

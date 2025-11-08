@@ -10,7 +10,7 @@ import org.springframework.stereotype.Component;
 class ProcessorWorkerProperties extends PocketHiveWorkerProperties<ProcessorWorkerConfig> {
 
   private static final ProcessorWorkerConfig FALLBACK =
-      new ProcessorWorkerConfig(true, "http://localhost:8082");
+      new ProcessorWorkerConfig("http://localhost:8082");
 
   private final ObjectMapper mapper;
 

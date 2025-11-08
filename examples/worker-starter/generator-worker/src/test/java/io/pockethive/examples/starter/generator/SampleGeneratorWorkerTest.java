@@ -22,8 +22,8 @@ class SampleGeneratorWorkerTest {
 
   @Test
   void shouldEmitConfiguredMessage() {
-    SampleGeneratorConfig config = new SampleGeneratorConfig(true, 1.0, "demo message");
-    WorkerContext context = new TestWorkerContext(config);
+    SampleGeneratorConfig config = new SampleGeneratorConfig(1.0, "demo message");
+    WorkerContext context = new TestWorkerContext(config, true);
 
     WorkResult result = worker.onMessage(WorkMessage.builder().build(), context);
 
@@ -34,29 +34,41 @@ class SampleGeneratorWorkerTest {
 
   @Test
   void disabledConfigReturnsNone() {
-    SampleGeneratorConfig config = new SampleGeneratorConfig(false, 1.0, "demo message");
-    WorkerContext context = new TestWorkerContext(config);
+    SampleGeneratorConfig config = new SampleGeneratorConfig(1.0, "demo message");
+    WorkerContext context = new TestWorkerContext(config, false);
 
     WorkResult result = worker.onMessage(WorkMessage.builder().build(), context);
 
     assertThat(result).isSameAs(WorkResult.none());
   }
 
-  private static final class TestWorkerContext implements WorkerContext {
+    private static final class TestWorkerContext implements WorkerContext {
 
     private final SampleGeneratorConfig config;
+    private final boolean enabled;
     private final MeterRegistry meterRegistry = new SimpleMeterRegistry();
     private final ObservationRegistry observationRegistry = ObservationRegistry.create();
     private final ObservabilityContext observability = new ObservabilityContext();
     private final Logger logger = LoggerFactory.getLogger(TestWorkerContext.class);
 
-    private TestWorkerContext(SampleGeneratorConfig config) {
+    private TestWorkerContext(SampleGeneratorConfig config, boolean enabled) {
       this.config = config;
+      this.enabled = enabled;
     }
 
     @Override
     public WorkerInfo info() {
       return new WorkerInfo("generator", "sample-swarm", "generator-1", null, "ph.generator.out");
+    }
+
+    @Override
+    public boolean enabled() {
+      return enabled;
+    }
+
+    @Override
+    public boolean enabled() {
+      return true;
     }
 
     @Override

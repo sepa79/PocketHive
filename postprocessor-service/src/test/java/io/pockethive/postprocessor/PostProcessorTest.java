@@ -55,7 +55,7 @@ class PostProcessorTest {
                 .build();
 
         TestWorkerContext workerContext =
-                new TestWorkerContext(new PostProcessorWorkerConfig(true, false), context);
+                new TestWorkerContext(new PostProcessorWorkerConfig(false), context);
 
         WorkResult result = worker.onMessage(message, workerContext);
 
@@ -130,7 +130,7 @@ class PostProcessorTest {
                 .build();
 
         TestWorkerContext workerContext =
-                new TestWorkerContext(new PostProcessorWorkerConfig(true, false), context);
+                new TestWorkerContext(new PostProcessorWorkerConfig(false), context);
 
         worker.onMessage(message, workerContext);
 
@@ -177,7 +177,7 @@ class PostProcessorTest {
                 .build();
 
         TestWorkerContext workerContext =
-                new TestWorkerContext(new PostProcessorWorkerConfig(true, false), context);
+                new TestWorkerContext(new PostProcessorWorkerConfig(false), context);
 
         worker.onMessage(message, workerContext);
 
@@ -234,7 +234,7 @@ class PostProcessorTest {
                 .build();
 
         TestWorkerContext workerContext =
-                new TestWorkerContext(new PostProcessorWorkerConfig(true, true), context);
+                new TestWorkerContext(new PostProcessorWorkerConfig(true), context);
 
         worker.onMessage(message, workerContext);
 
@@ -305,6 +305,11 @@ class PostProcessorTest {
         @Override
         public WorkerInfo info() {
             return info;
+        }
+
+        @Override
+        public boolean enabled() {
+            return true;
         }
 
         @Override

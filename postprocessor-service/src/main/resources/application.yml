@@ -18,6 +18,7 @@ pockethive:
       autowire: true
   workers:
     postprocessor:
+      enabled: true
       config:
         publishAllMetrics: false
   control-plane:

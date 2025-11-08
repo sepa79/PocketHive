@@ -132,7 +132,7 @@ class PostProcessorWorkerImpl implements PocketHiveWorkerFunction {
     StatusPublisher publisher = context.statusPublisher().workIn(inboundQueue);
     publisher.update(status -> {
       status
-          .data("enabled", config.enabled())
+          .data("enabled", context.enabled())
           .data("publishAllMetrics", config.publishAllMetrics())
           .data("errors", metrics.errorsCount())
           .data("hopLatencyMs", measurements.latestHopMs())

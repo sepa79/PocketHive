@@ -17,6 +17,7 @@ pockethive:
       autowire: true
   workers:
     trigger:
+      enabled: true
       config:
         interval-ms: 1000
         single-request: false

@@ -92,7 +92,7 @@ class RabbitMessageWorkerAdapterTest {
             Set.of(WorkerCapability.MESSAGE_DRIVEN)
         );
         identity = new ControlPlaneIdentity("swarm-1", "processor", "instance-1");
-        defaults = new DummyConfig(true);
+        defaults = new DummyConfig();
     }
 
     @Test
@@ -114,7 +114,7 @@ class RabbitMessageWorkerAdapterTest {
 
         WorkerControlPlaneRuntime.WorkerStateSnapshot snapshot = mock(WorkerControlPlaneRuntime.WorkerStateSnapshot.class);
         when(snapshot.enabled()).thenReturn(Optional.empty());
-        when(snapshot.config(DummyConfig.class)).thenReturn(Optional.of(new DummyConfig(false)));
+        when(snapshot.config(DummyConfig.class)).thenReturn(Optional.of(new DummyConfig()));
         when(listenerContainer.isRunning()).thenReturn(true);
 
         listenerCaptor.getValue().accept(snapshot);
@@ -371,7 +371,7 @@ class RabbitMessageWorkerAdapterTest {
             .controlPlaneRuntime(controlPlaneRuntime)
             .listenerRegistry(listenerRegistry)
             .identity(identity)
-            .withConfigDefaults(DummyConfig.class, () -> defaults, DummyConfig::enabled)
+            .withConfigDefaults(DummyConfig.class, () -> defaults, cfg -> true)
             .dispatcher(dispatcher)
             .dispatchErrorHandler(errorHandler);
     }
@@ -384,6 +384,6 @@ class RabbitMessageWorkerAdapterTest {
         return baseBuilder();
     }
 
-    private record DummyConfig(boolean enabled) {
+    private record DummyConfig() {
     }
 }

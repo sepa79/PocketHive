@@ -81,6 +81,11 @@ class ModeratorTest {
         }
 
         @Override
+        public boolean enabled() {
+            return true;
+        }
+
+        @Override
         public <C> Optional<C> config(Class<C> type) {
             if (config != null && type.isAssignableFrom(ModeratorWorkerConfig.class)) {
                 return Optional.of(type.cast(config));

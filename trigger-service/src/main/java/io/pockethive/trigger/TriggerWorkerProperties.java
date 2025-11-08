@@ -11,7 +11,6 @@ import org.springframework.stereotype.Component;
 class TriggerWorkerProperties extends PocketHiveWorkerProperties<TriggerWorkerConfig> {
 
   private static final TriggerWorkerConfig FALLBACK = new TriggerWorkerConfig(
-      false,
       1000L,
       false,
       "none",

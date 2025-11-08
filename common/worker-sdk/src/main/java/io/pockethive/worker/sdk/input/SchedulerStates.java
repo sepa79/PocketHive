@@ -22,8 +22,6 @@ public final class SchedulerStates {
      */
     public interface RateConfig {
 
-        boolean enabled();
-
         double ratePerSec();
 
         boolean singleRequest();
@@ -42,7 +40,7 @@ public final class SchedulerStates {
         Class<C> configType,
         Supplier<C> defaults
     ) {
-        return ratePerSecond(configType, defaults, LoggerFactory.getLogger(RatePerSecondState.class));
+        return ratePerSecond(configType, defaults, LoggerFactory.getLogger(RatePerSecondState.class), () -> true);
     }
 
     /**
@@ -53,7 +51,16 @@ public final class SchedulerStates {
         Supplier<C> defaults,
         Logger log
     ) {
-        return new RatePerSecondState<>(configType, defaults, log);
+        return ratePerSecond(configType, defaults, log, () -> true);
+    }
+
+    public static <C extends RateConfig> SchedulerState<C> ratePerSecond(
+        Class<C> configType,
+        Supplier<C> defaults,
+        Logger log,
+        java.util.function.BooleanSupplier defaultEnabled
+    ) {
+        return new RatePerSecondState<>(configType, defaults, log, defaultEnabled);
     }
 
     private static final class RatePerSecondState<C extends RateConfig> implements SchedulerState<C> {
@@ -62,19 +69,21 @@ public final class SchedulerStates {
         private final Supplier<C> defaults;
         private final Logger log;
         private final AtomicBoolean singleRequestPending = new AtomicBoolean(false);
+        private final java.util.function.BooleanSupplier defaultEnabledSupplier;
 
         private volatile C config;
         private volatile boolean enabled;
         private double carryOver;
 
-        private RatePerSecondState(Class<C> configType, Supplier<C> defaults, Logger log) {
+        private RatePerSecondState(Class<C> configType, Supplier<C> defaults, Logger log, java.util.function.BooleanSupplier defaultEnabledSupplier) {
             this.configType = Objects.requireNonNull(configType, "configType");
             Objects.requireNonNull(defaults, "defaults");
             this.defaults = () -> Objects.requireNonNull(defaults.get(), "defaults supplier returned null");
             this.log = log != null ? log : LoggerFactory.getLogger(RatePerSecondState.class);
+            this.defaultEnabledSupplier = defaultEnabledSupplier == null ? () -> true : defaultEnabledSupplier;
             C initial = this.defaults.get();
             this.config = initial;
-            this.enabled = initial.enabled();
+            this.enabled = this.defaultEnabledSupplier.getAsBoolean();
             this.carryOver = 0.0;
             if (log.isDebugEnabled()) {
                 log.debug("{} scheduler initialised: enabled={}, ratePerSec={}, singleRequest={}",
@@ -92,8 +101,7 @@ public final class SchedulerStates {
             Objects.requireNonNull(snapshot, "snapshot");
             C incoming = snapshot.config(configType).orElseGet(defaults);
             C previous = this.config;
-            boolean resolvedEnabled = snapshot.enabled()
-                .orElseGet(() -> previous == null ? incoming.enabled() : enabled);
+            boolean resolvedEnabled = snapshot.enabled().orElseGet(defaultEnabledSupplier);
             this.config = incoming;
             boolean configChanged = !Objects.equals(previous, incoming);
             boolean enabledChanged = resolvedEnabled != this.enabled;

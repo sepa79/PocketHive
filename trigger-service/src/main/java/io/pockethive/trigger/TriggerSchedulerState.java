@@ -12,6 +12,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 final class TriggerSchedulerState implements SchedulerState<TriggerWorkerConfig> {
 
   private final TriggerWorkerProperties properties;
+  private final boolean defaultEnabled;
   private final AtomicBoolean singleRequestPending = new AtomicBoolean(false);
 
   private volatile TriggerWorkerConfig config;
@@ -22,7 +23,8 @@ final class TriggerSchedulerState implements SchedulerState<TriggerWorkerConfig>
     this.properties = Objects.requireNonNull(properties, "properties");
     TriggerWorkerConfig initial = properties.defaultConfig();
     this.config = initial;
-    this.enabled = initial.enabled();
+    this.defaultEnabled = properties.isEnabled();
+    this.enabled = defaultEnabled;
     this.lastInvocation = 0L;
   }
 
@@ -36,11 +38,8 @@ final class TriggerSchedulerState implements SchedulerState<TriggerWorkerConfig>
     Objects.requireNonNull(snapshot, "snapshot");
     TriggerWorkerConfig incoming = snapshot.config(TriggerWorkerConfig.class)
         .orElseGet(properties::defaultConfig);
-    TriggerWorkerConfig previous = this.config;
-    boolean resolvedEnabled = snapshot.enabled()
-        .orElseGet(() -> previous == null ? incoming.enabled() : previous.enabled());
+    boolean resolvedEnabled = snapshot.enabled().orElse(defaultEnabled);
     TriggerWorkerConfig updated = new TriggerWorkerConfig(
-        resolvedEnabled,
         incoming.intervalMs(),
         incoming.singleRequest(),
         incoming.actionType(),
@@ -52,13 +51,11 @@ final class TriggerSchedulerState implements SchedulerState<TriggerWorkerConfig>
     );
     this.config = updated;
     this.enabled = resolvedEnabled;
-    if (previous == null || !previous.equals(updated)) {
-      if (updated.singleRequest()) {
+    if (incoming.singleRequest()) {
         singleRequestPending.set(true);
-      }
-      if (!resolvedEnabled) {
-        lastInvocation = 0L;
-      }
+    }
+    if (!resolvedEnabled) {
+      lastInvocation = 0L;
     }
   }
 

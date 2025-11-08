@@ -4,7 +4,7 @@ import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonValue;
 import java.util.Locale;
 
-public record ModeratorWorkerConfig(boolean enabled, Mode mode) {
+public record ModeratorWorkerConfig(Mode mode) {
 
   public ModeratorWorkerConfig {
     mode = mode == null ? Mode.passThrough() : mode;

@@ -113,7 +113,7 @@ class GeneratorWorkerImpl implements PocketHiveWorkerFunction {
             .data("path", config.message().path())
             .data("method", config.message().method())
             .data("ratePerSec", config.ratePerSec())
-            .data("enabled", config.enabled())
+            .data("enabled", context.enabled())
             .data("singleRequest", config.singleRequest()));
     return WorkResult.message(buildMessage(config, context));
   }

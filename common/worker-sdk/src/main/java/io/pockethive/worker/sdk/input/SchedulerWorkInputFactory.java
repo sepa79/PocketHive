@@ -14,6 +14,7 @@ import java.lang.reflect.Constructor;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.BooleanSupplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -58,7 +59,8 @@ public final class SchedulerWorkInputFactory implements WorkInputFactory {
         SchedulerState<RateConfig> schedulerState = SchedulerStates.ratePerSecond(
             typedConfigType,
             () -> fetchDefaultConfig(definition, typedConfigType),
-            logger
+            logger,
+            defaultEnabledSupplier(definition)
         );
         SchedulerInputProperties scheduling = config instanceof SchedulerInputProperties props
             ? props
@@ -103,6 +105,15 @@ public final class SchedulerWorkInputFactory implements WorkInputFactory {
             throw new IllegalStateException(
                 "Unable to convert worker defaults to " + configType.getSimpleName(), ex);
         }
+    }
+
+    private BooleanSupplier defaultEnabledSupplier(WorkerDefinition definition) {
+        boolean fallback = workerProperties.stream()
+            .filter(props -> definition.role().equalsIgnoreCase(props.role()))
+            .findFirst()
+            .map(PocketHiveWorkerProperties::isEnabled)
+            .orElse(true);
+        return () -> fallback;
     }
 
     private static <C extends RateConfig> C instantiateConfig(Class<C> configType) {

@@ -66,7 +66,6 @@ class TriggerWorkerImplTest {
   @Test
   void generateUsesConfigFromContext() throws Exception {
     TriggerWorkerConfig config = new TriggerWorkerConfig(
-        true,
         1000L,
         false,
         "rest",
@@ -108,6 +107,11 @@ class TriggerWorkerImplTest {
     @Override
     public WorkerInfo info() {
       return new WorkerInfo("trigger", "swarm", "instance", null, null);
+    }
+
+    @Override
+    public boolean enabled() {
+      return true;
     }
 
     @Override

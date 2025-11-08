@@ -5,7 +5,6 @@ import java.util.Locale;
 import java.util.Map;
 
 public record GeneratorWorkerConfig(
-    boolean enabled,
     double ratePerSec,
     boolean singleRequest,
     Message message

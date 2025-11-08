@@ -81,7 +81,7 @@ class ModeratorWorkerImpl implements PocketHiveWorkerFunction {
         .workIn(inboundQueue)
         .workOut(outboundQueue)
         .update(status -> {
-          status.data("enabled", config.enabled());
+          status.data("enabled", context.enabled());
           status.data("mode", formatMode(mode.type()));
           if (mode instanceof ModeratorOperationMode.RatePerSec ratePerSec) {
             status.data("ratePerSec", ratePerSec.ratePerSec());

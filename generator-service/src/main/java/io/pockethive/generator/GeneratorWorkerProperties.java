@@ -11,7 +11,6 @@ import org.springframework.stereotype.Component;
 class GeneratorWorkerProperties extends PocketHiveWorkerProperties<GeneratorWorkerConfig> {
 
   private static final GeneratorWorkerConfig FALLBACK = new GeneratorWorkerConfig(
-      true,
       0.0,
       false,
       new GeneratorWorkerConfig.Message("/api/test", "POST", "", Map.of())

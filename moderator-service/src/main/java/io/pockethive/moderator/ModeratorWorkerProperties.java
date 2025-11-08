@@ -10,7 +10,7 @@ import org.springframework.stereotype.Component;
 class ModeratorWorkerProperties extends PocketHiveWorkerProperties<ModeratorWorkerConfig> {
 
   private static final ModeratorWorkerConfig FALLBACK =
-      new ModeratorWorkerConfig(false, ModeratorWorkerConfig.Mode.passThrough());
+      new ModeratorWorkerConfig(ModeratorWorkerConfig.Mode.passThrough());
 
   private final ObjectMapper mapper;
 

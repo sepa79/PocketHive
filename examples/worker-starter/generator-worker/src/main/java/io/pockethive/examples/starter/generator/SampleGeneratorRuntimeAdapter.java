@@ -40,6 +40,7 @@ class SampleGeneratorRuntimeAdapter {
   private final SampleGeneratorDefaults defaults;
   private final RabbitWorkMessageConverter messageConverter = new RabbitWorkMessageConverter();
   private final AtomicReference<SampleGeneratorConfig> state = new AtomicReference<>();
+  private volatile boolean enabled;
   private double carryOver;
 
   SampleGeneratorRuntimeAdapter(WorkerRuntime workerRuntime,
@@ -57,11 +58,13 @@ class SampleGeneratorRuntimeAdapter {
         .findByRoleAndInput("generator", WorkerInputType.SCHEDULER)
         .orElseThrow();
     this.state.set(defaults.asConfig());
+    this.enabled = defaults.isEnabled();
     controlPlaneRuntime.registerStateListener(definition.beanName(), snapshot -> {
       SampleGeneratorConfig incoming = snapshot.config(SampleGeneratorConfig.class)
           .orElseGet(defaults::asConfig);
-      boolean enabled = snapshot.enabled().orElse(incoming.enabled());
-      state.set(new SampleGeneratorConfig(enabled, incoming.ratePerSecond(), incoming.message()));
+      boolean resolvedEnabled = snapshot.enabled().orElse(defaults.isEnabled());
+      this.enabled = resolvedEnabled;
+      state.set(new SampleGeneratorConfig(incoming.ratePerSecond(), incoming.message()));
     });
   }
 
@@ -73,7 +76,7 @@ class SampleGeneratorRuntimeAdapter {
   @Scheduled(fixedRate = 1000)
   void tick() {
     SampleGeneratorConfig config = state.get();
-    if (config == null || !config.enabled()) {
+    if (config == null || !enabled) {
       return;
     }
     int quota = nextQuota(config.ratePerSecond());

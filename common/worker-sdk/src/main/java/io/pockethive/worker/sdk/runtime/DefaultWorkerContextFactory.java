@@ -136,6 +136,11 @@ public final class DefaultWorkerContextFactory implements WorkerContextFactory {
         }
 
         @Override
+        public boolean enabled() {
+            return state.enabled().orElse(true);
+        }
+
+        @Override
         public <C> Optional<C> config(Class<C> type) {
             Objects.requireNonNull(type, "type");
             Optional<C> fromState = state.config(type);

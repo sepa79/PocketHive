@@ -9,7 +9,7 @@ import org.springframework.stereotype.Component;
 @ConfigurationProperties(prefix = "pockethive.workers.postprocessor")
 class PostProcessorWorkerProperties extends PocketHiveWorkerProperties<PostProcessorWorkerConfig> {
 
-  private static final PostProcessorWorkerConfig FALLBACK = new PostProcessorWorkerConfig(true, false);
+  private static final PostProcessorWorkerConfig FALLBACK = new PostProcessorWorkerConfig(false);
 
   private final ObjectMapper mapper;
 

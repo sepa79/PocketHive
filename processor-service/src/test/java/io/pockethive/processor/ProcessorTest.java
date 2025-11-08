@@ -67,7 +67,7 @@ class ProcessorTest {
         HttpClient httpClient = mock(HttpClient.class);
         Clock clock = Clock.fixed(Instant.parse("2024-01-01T00:00:00Z"), ZoneOffset.UTC);
         ProcessorWorkerImpl worker = new ProcessorWorkerImpl(properties, httpClient, clock);
-        ProcessorWorkerConfig config = new ProcessorWorkerConfig(true, "http://sut/");
+        ProcessorWorkerConfig config = new ProcessorWorkerConfig("http://sut/");
         TestWorkerContext context = new TestWorkerContext(config);
 
         AtomicReference<HttpRequest> requestRef = new AtomicReference<>();
@@ -127,7 +127,7 @@ class ProcessorTest {
         HttpClient httpClient = mock(HttpClient.class);
         SequenceClock clock = new SequenceClock(0, 50, 100, 250);
         ProcessorWorkerImpl worker = new ProcessorWorkerImpl(properties, httpClient, clock);
-        ProcessorWorkerConfig config = new ProcessorWorkerConfig(true, "http://sut/");
+        ProcessorWorkerConfig config = new ProcessorWorkerConfig("http://sut/");
         TestWorkerContext context = new TestWorkerContext(config);
 
         AtomicInteger invocation = new AtomicInteger();
@@ -198,7 +198,7 @@ class ProcessorTest {
         HttpClient httpClient = mock(HttpClient.class);
         Clock clock = Clock.systemUTC();
         ProcessorWorkerImpl worker = new ProcessorWorkerImpl(properties, httpClient, clock);
-        ProcessorWorkerConfig config = new ProcessorWorkerConfig(true, " ");
+        ProcessorWorkerConfig config = new ProcessorWorkerConfig(" ");
         TestWorkerContext context = new TestWorkerContext(config);
 
         WorkMessage inbound = WorkMessage.json(Map.of("path", "/noop" )).build();
@@ -298,6 +298,11 @@ class ProcessorTest {
         @Override
         public WorkerInfo info() {
             return info;
+        }
+
+        @Override
+        public boolean enabled() {
+            return true;
         }
 
         @Override
