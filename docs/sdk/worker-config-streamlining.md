@@ -20,10 +20,10 @@ the runtime with those POJOs. The previous `convertDefaultConfig`/map-based path
 Ready/error/log logging now lives in `ControlPlaneNotifier`, so `handleConfigUpdate` just
 config-merges, updates state, and lets the notifier publish confirmations + logs.
 
-## 5. Delete Legacy Helpers (TODO)
-Once the merger + notifier are in place:
-- Drop the relaxed-key conversion and pretty-print/diff helpers from `WorkerControlPlaneRuntime`.
-- Remove any remaining raw-map plumbing in favour of the typed config + serializer on demand.
+## 5. Delete Legacy Helpers ✔️
+`WorkerControlPlaneRuntime` no longer carries relaxed-key maps or logging helpers; raw maps are
+serialized via `ConfigMerger` only when needed. The runtime now exclusively manages typed config
+state, so this cleanup step is complete.
 
 These steps will leave the runtime lean and make config flows predictable, while still letting
 framework code emit the necessary control-plane confirmations and status updates.
