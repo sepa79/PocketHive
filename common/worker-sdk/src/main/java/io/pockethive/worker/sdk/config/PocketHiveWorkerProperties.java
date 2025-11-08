@@ -85,7 +85,7 @@ public abstract class PocketHiveWorkerProperties<T> {
         if (configType == Void.class) {
             return Optional.empty();
         }
-        Map<String, Object> raw = rawConfig();
+        Map<String, Object> raw = sanitizedConfig();
         if (raw.isEmpty()) {
             return Optional.empty();
         }
@@ -96,6 +96,19 @@ public abstract class PocketHiveWorkerProperties<T> {
                 .formatted(role, configType.getSimpleName());
             throw new IllegalStateException(message, ex);
         }
+    }
+
+    private Map<String, Object> sanitizedConfig() {
+        Map<String, Object> raw = rawConfig();
+        if (raw.isEmpty()) {
+            return raw;
+        }
+        if (!raw.containsKey("enabled")) {
+            return raw;
+        }
+        Map<String, Object> copy = new LinkedHashMap<>(raw);
+        copy.remove("enabled");
+        return copy;
     }
 
     private static String normaliseRole(String role) {

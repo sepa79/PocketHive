@@ -113,8 +113,7 @@ class RabbitMessageWorkerAdapterTest {
         verify(listenerContainer).start();
 
         WorkerControlPlaneRuntime.WorkerStateSnapshot snapshot = mock(WorkerControlPlaneRuntime.WorkerStateSnapshot.class);
-        when(snapshot.enabled()).thenReturn(Optional.empty());
-        when(snapshot.config(DummyConfig.class)).thenReturn(Optional.of(new DummyConfig()));
+        when(snapshot.enabled()).thenReturn(Optional.of(false));
         when(listenerContainer.isRunning()).thenReturn(true);
 
         listenerCaptor.getValue().accept(snapshot);

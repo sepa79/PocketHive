@@ -18,7 +18,7 @@ pockethive:
       autowire: true
   workers:
     generator:
-      enabled: true
+      enabled: false
       config:
         ratePerSec: 0.0
         singleRequest: false

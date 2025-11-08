@@ -207,7 +207,7 @@ class PostProcessorTest {
         WorkMessage message = WorkMessage.text("payload")
                 .build();
 
-        TestWorkerContext workerContext = new TestWorkerContext(null, context);
+        TestWorkerContext workerContext = new TestWorkerContext(null, context, false);
 
         worker.onMessage(message, workerContext);
 
@@ -296,10 +296,20 @@ class PostProcessorTest {
         private final CapturingStatusPublisher statusPublisher = new CapturingStatusPublisher();
         private final Logger logger = LoggerFactory.getLogger(PocketHiveWorkerFunction.class);
         private final ObservabilityContext observabilityContext;
+        private final boolean enabled;
 
         private TestWorkerContext(PostProcessorWorkerConfig config, ObservabilityContext observabilityContext) {
+            this(config, observabilityContext, true);
+        }
+
+        private TestWorkerContext(
+            PostProcessorWorkerConfig config,
+            ObservabilityContext observabilityContext,
+            boolean enabled
+        ) {
             this.config = config;
             this.observabilityContext = Objects.requireNonNull(observabilityContext, "observabilityContext");
+            this.enabled = enabled;
         }
 
         @Override
@@ -309,7 +319,7 @@ class PostProcessorTest {
 
         @Override
         public boolean enabled() {
-            return true;
+            return enabled;
         }
 
         @Override

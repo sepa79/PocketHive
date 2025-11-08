@@ -1,25 +1,22 @@
 package io.pockethive.moderator;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.pockethive.worker.sdk.config.PocketHiveWorkerProperties;
+import io.pockethive.worker.sdk.config.CanonicalWorkerProperties;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
 @Component
 @ConfigurationProperties(prefix = "pockethive.workers.moderator")
-class ModeratorWorkerProperties extends PocketHiveWorkerProperties<ModeratorWorkerConfig> {
+class ModeratorWorkerProperties extends CanonicalWorkerProperties<ModeratorWorkerConfig> {
 
   private static final ModeratorWorkerConfig FALLBACK =
       new ModeratorWorkerConfig(ModeratorWorkerConfig.Mode.passThrough());
 
-  private final ObjectMapper mapper;
-
   ModeratorWorkerProperties(ObjectMapper mapper) {
-    super("moderator", ModeratorWorkerConfig.class);
-    this.mapper = mapper;
+    super("moderator", ModeratorWorkerConfig.class, mapper);
   }
 
   ModeratorWorkerConfig defaultConfig() {
-    return toConfig(mapper).orElse(FALLBACK);
+    return toConfig(objectMapper()).orElse(FALLBACK);
   }
 }

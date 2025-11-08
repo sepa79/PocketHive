@@ -18,7 +18,7 @@ pockethive:
       autowire: true
   workers:
     moderator:
-      enabled: true
+      enabled: false
       config:
         mode:
           type: pass-through
