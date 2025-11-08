@@ -1,7 +1,12 @@
 package io.pockethive.worker.sdk.runtime;
 
+import io.pockethive.worker.sdk.config.WorkInputConfig;
+import io.pockethive.worker.sdk.config.WorkOutputConfig;
+import io.pockethive.worker.sdk.config.WorkerCapability;
 import io.pockethive.worker.sdk.config.WorkerInputType;
+import io.pockethive.worker.sdk.config.WorkerOutputType;
 import java.util.Map;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -18,7 +23,12 @@ class WorkerStateTest {
             null,
             null,
             null,
-            TestConfig.class
+            TestConfig.class,
+            WorkInputConfig.class,
+            WorkOutputConfig.class,
+            WorkerOutputType.NONE,
+            "Test worker",
+            Set.of(WorkerCapability.SCHEDULER)
         );
         WorkerState state = new WorkerState(definition);
         TestConfig defaults = new TestConfig(true, 5.0);
@@ -43,7 +53,12 @@ class WorkerStateTest {
             null,
             null,
             null,
-            TestConfig.class
+            TestConfig.class,
+            WorkInputConfig.class,
+            WorkOutputConfig.class,
+            WorkerOutputType.NONE,
+            "Test worker",
+            Set.of(WorkerCapability.SCHEDULER)
         );
         WorkerState state = new WorkerState(definition);
         Map<String, Object> rawDefaults = Map.of("enabled", true, "ratePerSec", 5.0);
@@ -64,7 +79,12 @@ class WorkerStateTest {
             null,
             null,
             null,
-            TestConfig.class
+            TestConfig.class,
+            WorkInputConfig.class,
+            WorkOutputConfig.class,
+            WorkerOutputType.NONE,
+            "Test worker",
+            Set.of(WorkerCapability.SCHEDULER)
         );
         WorkerState state = new WorkerState(definition);
         TestConfig defaults = new TestConfig(true, 5.0);
@@ -88,7 +108,12 @@ class WorkerStateTest {
             " in.runtime ",
             "out.runtime",
             null,
-            TestConfig.class
+            TestConfig.class,
+            WorkInputConfig.class,
+            WorkOutputConfig.class,
+            WorkerOutputType.RABBITMQ,
+            "Test worker",
+            Set.of(WorkerCapability.MESSAGE_DRIVEN)
         );
         WorkerState state = new WorkerState(definition);
 

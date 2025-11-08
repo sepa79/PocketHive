@@ -22,6 +22,7 @@
   <logger name="com.rabbitmq" level="WARN" additivity="false">
     <appender-ref ref="CONSOLE"/>
   </logger>
+  <logger name="io.pockethive" level="DEBUG"/>
 
   <if condition='!"false".equalsIgnoreCase(property("rabbitLoggingEnabled"))'>
     <then>
@@ -37,13 +38,13 @@
         </encoder>
       </appender>
 
-      <root level="DEBUG">
+      <root level="INFO">
         <appender-ref ref="CONSOLE"/>
         <appender-ref ref="RABBIT"/>
       </root>
     </then>
     <else>
-      <root level="DEBUG">
+      <root level="INFO">
         <appender-ref ref="CONSOLE"/>
       </root>
     </else>

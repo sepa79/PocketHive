@@ -1,5 +1,6 @@
 package io.pockethive.moderator;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.pockethive.controlplane.spring.WorkerControlPlaneProperties;
 import io.pockethive.worker.sdk.api.StatusPublisher;
@@ -17,7 +18,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class ModeratorTest {
 
-    private ModeratorDefaults defaults;
+    private ModeratorWorkerProperties properties;
     private ModeratorWorkerImpl worker;
     private static final WorkerControlPlaneProperties WORKER_PROPERTIES =
         ControlPlaneTestFixtures.workerProperties("swarm", "moderator", "instance");
@@ -26,9 +27,9 @@ class ModeratorTest {
 
     @BeforeEach
     void setUp() {
-        defaults = new ModeratorDefaults();
-        defaults.setEnabled(false);
-        worker = new ModeratorWorkerImpl(defaults);
+        properties = new ModeratorWorkerProperties(new ObjectMapper());
+        properties.setEnabled(false);
+        worker = new ModeratorWorkerImpl(properties);
     }
 
     @Test

@@ -8,6 +8,9 @@ import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pockethive.worker.sdk.api.WorkResult;
 import io.pockethive.worker.sdk.api.WorkerContext;
 import io.pockethive.worker.sdk.config.PocketHiveWorker;
+import io.pockethive.worker.sdk.config.WorkerCapability;
+import io.pockethive.worker.sdk.config.WorkerInputType;
+import io.pockethive.worker.sdk.config.WorkerOutputType;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -33,7 +36,7 @@ import org.springframework.stereotype.Component;
  * <ul>
  *   <li>If control plane overrides exist they are surfaced through
  *       {@link WorkerContext#config(Class)}; otherwise we fall back to
- *       {@link ProcessorDefaults#asConfig()} which points to {@code http://localhost:8082} and
+ *       {@link ProcessorWorkerProperties#defaultConfig()} which points to {@code http://localhost:8082} and
  *       enables the worker by default.</li>
  *   <li>The resolved {@link ProcessorWorkerConfig#baseUrl() baseUrl} becomes the target for HTTP
  *       enrichment. You can override it through control-plane config payloads such as
@@ -54,8 +57,11 @@ import org.springframework.stereotype.Component;
 @Component("processorWorker")
 @PocketHiveWorker(
     role = "processor",
+    input = WorkerInputType.RABBIT,
     inQueue = "moderator",
     outQueue = "final",
+    output = WorkerOutputType.RABBITMQ,
+    capabilities = {WorkerCapability.MESSAGE_DRIVEN, WorkerCapability.HTTP},
     config = ProcessorWorkerConfig.class
 )
 class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
@@ -65,7 +71,7 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
   private static final String HEADER_SUCCESS = "x-ph-processor-success";
   private static final String HEADER_STATUS = "x-ph-processor-status";
 
-  private final ProcessorDefaults defaults;
+  private final ProcessorWorkerProperties properties;
   private final HttpClient httpClient;
   private final Clock clock;
   private final LongAdder totalCalls = new LongAdder();
@@ -73,12 +79,12 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
   private final DoubleAccumulator totalLatencyMs = new DoubleAccumulator(Double::sum, 0.0);
 
   @Autowired
-  ProcessorWorkerImpl(ProcessorDefaults defaults) {
-    this(defaults, HttpClient.newHttpClient(), Clock.systemUTC());
+  ProcessorWorkerImpl(ProcessorWorkerProperties properties) {
+    this(properties, HttpClient.newHttpClient(), Clock.systemUTC());
   }
 
-  ProcessorWorkerImpl(ProcessorDefaults defaults, HttpClient httpClient, Clock clock) {
-    this.defaults = Objects.requireNonNull(defaults, "defaults");
+  ProcessorWorkerImpl(ProcessorWorkerProperties properties, HttpClient httpClient, Clock clock) {
+    this.properties = Objects.requireNonNull(properties, "properties");
     this.httpClient = Objects.requireNonNull(httpClient, "httpClient");
     this.clock = Objects.requireNonNull(clock, "clock");
   }
@@ -91,7 +97,7 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
    * <ol>
    *   <li><strong>Configuration resolution</strong> – We first look for a runtime override via
    *       {@link WorkerContext#config(Class)}. When none is present the worker falls back to
-   *       {@link ProcessorDefaults#asConfig()} (enabled with {@code baseUrl=http://localhost:8082}).
+   *       {@link ProcessorWorkerProperties#defaultConfig()} (enabled with {@code baseUrl=http://localhost:8082}).
    *       The active configuration is echoed to the control plane through
    *       {@link WorkerContext#statusPublisher()} for easy debugging.</li>
    *   <li><strong>HTTP invocation</strong> – Using {@link #invokeHttp(WorkMessage, ProcessorWorkerConfig, Logger)}
@@ -114,7 +120,7 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
   @Override
   public WorkResult onMessage(WorkMessage in, WorkerContext context) {
     ProcessorWorkerConfig config = context.config(ProcessorWorkerConfig.class)
-        .orElseGet(defaults::asConfig);
+        .orElseGet(properties::defaultConfig);
 
     Logger logger = context.logger();
     try {

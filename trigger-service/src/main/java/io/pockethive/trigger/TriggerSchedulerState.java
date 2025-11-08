@@ -11,16 +11,16 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 final class TriggerSchedulerState implements SchedulerState<TriggerWorkerConfig> {
 
-  private final TriggerDefaults defaults;
+  private final TriggerWorkerProperties properties;
   private final AtomicBoolean singleRequestPending = new AtomicBoolean(false);
 
   private volatile TriggerWorkerConfig config;
   private volatile boolean enabled;
   private volatile long lastInvocation;
 
-  TriggerSchedulerState(TriggerDefaults defaults) {
-    this.defaults = Objects.requireNonNull(defaults, "defaults");
-    TriggerWorkerConfig initial = defaults.asConfig();
+  TriggerSchedulerState(TriggerWorkerProperties properties) {
+    this.properties = Objects.requireNonNull(properties, "properties");
+    TriggerWorkerConfig initial = properties.defaultConfig();
     this.config = initial;
     this.enabled = initial.enabled();
     this.lastInvocation = 0L;
@@ -28,14 +28,14 @@ final class TriggerSchedulerState implements SchedulerState<TriggerWorkerConfig>
 
   @Override
   public synchronized TriggerWorkerConfig defaultConfig() {
-    return defaults.asConfig();
+    return properties.defaultConfig();
   }
 
   @Override
   public synchronized void update(WorkerControlPlaneRuntime.WorkerStateSnapshot snapshot) {
     Objects.requireNonNull(snapshot, "snapshot");
     TriggerWorkerConfig incoming = snapshot.config(TriggerWorkerConfig.class)
-        .orElseGet(defaults::asConfig);
+        .orElseGet(properties::defaultConfig);
     TriggerWorkerConfig previous = this.config;
     boolean resolvedEnabled = snapshot.enabled()
         .orElseGet(() -> previous == null ? incoming.enabled() : previous.enabled());

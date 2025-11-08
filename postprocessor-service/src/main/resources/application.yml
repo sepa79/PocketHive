@@ -13,6 +13,13 @@ logging:
   pattern.level: "%5p [%X{traceId}]"
 
 pockethive:
+  worker:
+    inputs:
+      autowire: true
+  workers:
+    postprocessor:
+      config:
+        publishAllMetrics: false
   control-plane:
     exchange: ${POCKETHIVE_CONTROL_PLANE_EXCHANGE}
     traffic-exchange: ${POCKETHIVE_CONTROL_PLANE_TRAFFIC_EXCHANGE}
@@ -24,8 +31,6 @@ pockethive:
     worker:
       role: postprocessor
       skip-self-signals: false
-      metrics:
-        enabled: true
     manager:
       enabled: false
 

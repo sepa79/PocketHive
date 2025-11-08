@@ -76,4 +76,8 @@ final class WorkerInvocation {
             "Worker '" + workerDefinition.beanName() + "' does not implement PocketHiveWorkerFunction"
         );
     }
+
+    WorkerDefinition definition() {
+        return workerDefinition;
+    }
 }

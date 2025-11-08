@@ -1,5 +1,6 @@
 package io.pockethive.postprocessor;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
@@ -36,9 +37,8 @@ class PostProcessorTest {
 
     @Test
     void onMessageRecordsLatencyAndErrorsAndUpdatesStatus() {
-        PostProcessorDefaults defaults = new PostProcessorDefaults();
-        defaults.setEnabled(true);
-        PostProcessorWorkerImpl worker = new PostProcessorWorkerImpl(defaults);
+        PostProcessorWorkerProperties properties = workerProperties(true, false);
+        PostProcessorWorkerImpl worker = new PostProcessorWorkerImpl(properties);
         ObservabilityContext context = new ObservabilityContext();
         List<Hop> hops = new ArrayList<>();
         hops.add(new Hop("generator", "gen-1", START, START.plusMillis(5)));
@@ -114,9 +114,8 @@ class PostProcessorTest {
 
     @Test
     void onMessageRecordsProcessorFailureMetrics() {
-        PostProcessorDefaults defaults = new PostProcessorDefaults();
-        defaults.setEnabled(true);
-        PostProcessorWorkerImpl worker = new PostProcessorWorkerImpl(defaults);
+        PostProcessorWorkerProperties properties = workerProperties(true, false);
+        PostProcessorWorkerImpl worker = new PostProcessorWorkerImpl(properties);
         ObservabilityContext context = new ObservabilityContext();
         List<Hop> hops = new ArrayList<>();
         hops.add(new Hop("generator", "gen-1", START, START.plusMillis(5)));
@@ -162,9 +161,8 @@ class PostProcessorTest {
 
     @Test
     void onMessageCompletesInFlightHopBeforeRecording() {
-        PostProcessorDefaults defaults = new PostProcessorDefaults();
-        defaults.setEnabled(true);
-        PostProcessorWorkerImpl worker = new PostProcessorWorkerImpl(defaults);
+        PostProcessorWorkerProperties properties = workerProperties(true, false);
+        PostProcessorWorkerImpl worker = new PostProcessorWorkerImpl(properties);
         ObservabilityContext context = new ObservabilityContext();
         List<Hop> hops = new ArrayList<>();
         hops.add(new Hop("generator", "gen-1", START, START.plusMillis(5)));
@@ -201,9 +199,8 @@ class PostProcessorTest {
 
     @Test
     void onMessageUsesDefaultsWhenNoConfigPresent() {
-        PostProcessorDefaults defaults = new PostProcessorDefaults();
-        defaults.setEnabled(false);
-        PostProcessorWorkerImpl worker = new PostProcessorWorkerImpl(defaults);
+        PostProcessorWorkerProperties properties = workerProperties(false, false);
+        PostProcessorWorkerImpl worker = new PostProcessorWorkerImpl(properties);
         ObservabilityContext context = new ObservabilityContext();
         context.setHops(List.of());
 
@@ -220,10 +217,8 @@ class PostProcessorTest {
 
     @Test
     void onMessagePublishesFullSnapshotWhenPublishAllMetricsEnabled() {
-        PostProcessorDefaults defaults = new PostProcessorDefaults();
-        defaults.setEnabled(true);
-        defaults.setPublishAllMetrics(true);
-        PostProcessorWorkerImpl worker = new PostProcessorWorkerImpl(defaults);
+        PostProcessorWorkerProperties properties = workerProperties(true, true);
+        PostProcessorWorkerImpl worker = new PostProcessorWorkerImpl(properties);
         ObservabilityContext context = new ObservabilityContext();
         List<Hop> hops = new ArrayList<>();
         hops.add(new Hop("generator", "gen-1", START, START.plusMillis(5)));
@@ -378,5 +373,14 @@ class PostProcessorTest {
         boolean fullSnapshotEmitted() {
             return fullSnapshotEmitted;
         }
+    }
+
+    private static PostProcessorWorkerProperties workerProperties(boolean enabled, boolean publishAllMetrics) {
+        PostProcessorWorkerProperties properties = new PostProcessorWorkerProperties(new ObjectMapper());
+        properties.setEnabled(enabled);
+        Map<String, Object> config = new LinkedHashMap<>();
+        config.put("publishAllMetrics", publishAllMetrics);
+        properties.setConfig(config);
+        return properties;
     }
 }

@@ -3,10 +3,14 @@ package io.pockethive.worker.sdk.input;
 import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pockethive.worker.sdk.api.WorkResult;
+import io.pockethive.worker.sdk.config.SchedulerInputProperties;
 import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
 import io.pockethive.worker.sdk.runtime.WorkerRuntime;
 import java.util.Objects;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
@@ -33,9 +37,12 @@ public final class SchedulerWorkInput<C> implements WorkInput {
     private final BiConsumer<WorkResult, WorkerDefinition> resultHandler;
     private final Consumer<Exception> dispatchErrorHandler;
     private final Logger log;
+    private final long initialDelayMs;
+    private final long tickIntervalMs;
 
     private volatile boolean running;
     private volatile boolean listenersRegistered;
+    private ScheduledExecutorService schedulerExecutor;
 
     private SchedulerWorkInput(Builder<C> builder) {
         this.workerDefinition = builder.workerDefinition;
@@ -47,6 +54,8 @@ public final class SchedulerWorkInput<C> implements WorkInput {
         this.resultHandler = builder.resultHandler;
         this.dispatchErrorHandler = builder.dispatchErrorHandler;
         this.log = builder.log;
+        this.initialDelayMs = builder.initialDelayMs;
+        this.tickIntervalMs = builder.tickIntervalMs;
     }
 
     /**
@@ -101,6 +110,23 @@ public final class SchedulerWorkInput<C> implements WorkInput {
         registerStateListeners();
         controlPlaneRuntime.emitStatusSnapshot();
         running = true;
+        schedulerExecutor = Executors.newSingleThreadScheduledExecutor(r -> {
+            Thread thread = new Thread(r, workerDefinition.beanName() + "-scheduler");
+            thread.setDaemon(true);
+            return thread;
+        });
+        schedulerExecutor.scheduleAtFixedRate(
+            () -> {
+                try {
+                    tick(System.currentTimeMillis());
+                } catch (Exception ex) {
+                    log.warn("{} scheduler tick failed", workerDefinition.beanName(), ex);
+                }
+            },
+            initialDelayMs,
+            tickIntervalMs,
+            TimeUnit.MILLISECONDS
+        );
         if (log.isInfoEnabled()) {
             log.info("{} scheduler input started (instance={})", workerDefinition.beanName(), identity.instanceId());
         }
@@ -109,6 +135,10 @@ public final class SchedulerWorkInput<C> implements WorkInput {
     @Override
     public synchronized void stop() {
         running = false;
+        if (schedulerExecutor != null) {
+            schedulerExecutor.shutdownNow();
+            schedulerExecutor = null;
+        }
         if (log.isInfoEnabled()) {
             log.info("{} scheduler input stopped (instance={})", workerDefinition.beanName(), identity.instanceId());
         }
@@ -119,7 +149,18 @@ public final class SchedulerWorkInput<C> implements WorkInput {
             return;
         }
         controlPlaneRuntime.registerDefaultConfig(workerDefinition.beanName(), schedulerState.defaultConfig());
-        controlPlaneRuntime.registerStateListener(workerDefinition.beanName(), schedulerState::update);
+        controlPlaneRuntime.registerStateListener(workerDefinition.beanName(), snapshot -> {
+            boolean previouslyEnabled = schedulerState.isEnabled();
+            schedulerState.update(snapshot);
+            boolean currentlyEnabled = schedulerState.isEnabled();
+            if (previouslyEnabled != currentlyEnabled && log.isInfoEnabled()) {
+                log.info(
+                    "{} work lifecycle {} (instance={})",
+                    workerDefinition.beanName(),
+                    currentlyEnabled ? "enabled" : "disabled",
+                    identity.instanceId());
+            }
+        });
         listenersRegistered = true;
     }
 
@@ -155,6 +196,8 @@ public final class SchedulerWorkInput<C> implements WorkInput {
         private BiConsumer<WorkResult, WorkerDefinition> resultHandler = SchedulerWorkInput::ignoreResult;
         private Consumer<Exception> dispatchErrorHandler = ex -> defaultLog.warn("Scheduler worker invocation failed", ex);
         private Logger log = defaultLog;
+        private long initialDelayMs = 0L;
+        private long tickIntervalMs = 1_000L;
 
         private Builder() {
         }
@@ -195,6 +238,13 @@ public final class SchedulerWorkInput<C> implements WorkInput {
             BiConsumer<WorkResult, WorkerDefinition> resultHandler
         ) {
             this.resultHandler = Objects.requireNonNull(resultHandler, "resultHandler");
+            return this;
+        }
+
+        public Builder<C> scheduling(SchedulerInputProperties properties) {
+            SchedulerInputProperties props = properties == null ? new SchedulerInputProperties() : properties;
+            this.initialDelayMs = Math.max(0L, props.getInitialDelayMs());
+            this.tickIntervalMs = Math.max(100L, props.getTickIntervalMs());
             return this;
         }
 

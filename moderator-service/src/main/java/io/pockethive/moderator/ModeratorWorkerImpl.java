@@ -5,6 +5,9 @@ import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pockethive.worker.sdk.api.WorkResult;
 import io.pockethive.worker.sdk.api.WorkerContext;
 import io.pockethive.worker.sdk.config.PocketHiveWorker;
+import io.pockethive.worker.sdk.config.WorkerCapability;
+import io.pockethive.worker.sdk.config.WorkerInputType;
+import io.pockethive.worker.sdk.config.WorkerOutputType;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
@@ -19,7 +22,7 @@ import org.springframework.stereotype.Component;
  *
  * <p>Moderation is intentionally lightweight today—just pass-through with metadata—but
  * engineers can extend it with validation or routing logic. Flip the
- * {@code pockethive.control-plane.worker.moderator.enabled}
+ * {@code pockethive.workers.moderator.enabled}
  * flag in {@code application.yml} (or push a runtime override) to pause moderation during load
  * testing. The worker keeps publishing status updates so you can confirm its enabled/disabled state
  * from Grafana.</p>
@@ -27,26 +30,29 @@ import org.springframework.stereotype.Component;
 @Component("moderatorWorker")
 @PocketHiveWorker(
     role = "moderator",
+    input = WorkerInputType.RABBIT,
     inQueue = "generator",
     outQueue = "moderator",
+    output = WorkerOutputType.RABBITMQ,
+    capabilities = {WorkerCapability.MESSAGE_DRIVEN},
     config = ModeratorWorkerConfig.class
 )
 class ModeratorWorkerImpl implements PocketHiveWorkerFunction {
 
-  private final ModeratorDefaults defaults;
+  private final ModeratorWorkerProperties properties;
   private final OperationModeLimiter modeLimiter = new OperationModeLimiter();
 
   @Autowired
-  ModeratorWorkerImpl(ModeratorDefaults defaults) {
-    this.defaults = defaults;
+  ModeratorWorkerImpl(ModeratorWorkerProperties properties) {
+    this.properties = properties;
   }
 
   /**
    * Accepts a message from the generator queue, records the moderator's enabled flag in the worker
    * status stream, and forwards the payload to the moderator queue. Configuration arrives via
-   * {@code pockethive.control-plane.worker.moderator.enabled} (boolean) and can be overridden live
+   * {@code pockethive.workers.moderator.enabled} (boolean) and can be overridden live
    * through the control plane. Operation modes are selected with
-   * {@code pockethive.control-plane.worker.moderator.mode.type} and support
+   * {@code pockethive.workers.moderator.config.mode.type} and support
    * {@code pass-through}, {@code rate-per-sec}, and {@code sine}. A
    * simple JSON override looks like {@code {"enabled": true}} or
    * {@code {"mode": {"type": "rate-per-sec", "ratePerSec": {"value": 5}}}}.
@@ -67,7 +73,7 @@ class ModeratorWorkerImpl implements PocketHiveWorkerFunction {
   @Override
   public WorkResult onMessage(WorkMessage in, WorkerContext context) {
     ModeratorWorkerConfig config = context.config(ModeratorWorkerConfig.class)
-        .orElseGet(defaults::asConfig);
+        .orElseGet(properties::defaultConfig);
     ModeratorOperationMode mode = config.operationMode();
     String inboundQueue = context.info().inQueue();
     String outboundQueue = context.info().outQueue();

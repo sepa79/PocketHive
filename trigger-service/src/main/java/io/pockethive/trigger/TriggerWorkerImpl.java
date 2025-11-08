@@ -5,6 +5,7 @@ import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pockethive.worker.sdk.api.WorkResult;
 import io.pockethive.worker.sdk.api.WorkerContext;
 import io.pockethive.worker.sdk.config.PocketHiveWorker;
+import io.pockethive.worker.sdk.config.SchedulerInputProperties;
 import io.pockethive.worker.sdk.config.WorkerInputType;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
@@ -48,20 +49,21 @@ import org.springframework.stereotype.Component;
 @PocketHiveWorker(
     role = "trigger",
     input = WorkerInputType.SCHEDULER,
-    config = TriggerWorkerConfig.class
+    config = TriggerWorkerConfig.class,
+    inputConfig = SchedulerInputProperties.class
 )
 class TriggerWorkerImpl implements PocketHiveWorkerFunction {
 
-  private final TriggerDefaults defaults;
+  private final TriggerWorkerProperties properties;
   private final HttpClient httpClient;
 
   @Autowired
-  TriggerWorkerImpl(TriggerDefaults defaults) {
-    this(defaults, HttpClient.newHttpClient());
+  TriggerWorkerImpl(TriggerWorkerProperties properties) {
+    this(properties, HttpClient.newHttpClient());
   }
 
-  TriggerWorkerImpl(TriggerDefaults defaults, HttpClient httpClient) {
-    this.defaults = Objects.requireNonNull(defaults, "defaults");
+  TriggerWorkerImpl(TriggerWorkerProperties properties, HttpClient httpClient) {
+    this.properties = Objects.requireNonNull(properties, "properties");
     this.httpClient = Objects.requireNonNull(httpClient, "httpClient");
   }
 
@@ -93,7 +95,7 @@ class TriggerWorkerImpl implements PocketHiveWorkerFunction {
   @Override
   public WorkResult onMessage(WorkMessage seed, WorkerContext context) {
     TriggerWorkerConfig config = context.config(TriggerWorkerConfig.class)
-        .orElseGet(defaults::asConfig);
+        .orElseGet(properties::defaultConfig);
 
     context.statusPublisher()
         .update(status -> status

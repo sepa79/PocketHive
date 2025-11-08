@@ -23,6 +23,16 @@ public @interface PocketHiveWorker {
     String role();
 
     /**
+     * Optional human-friendly description added to status payloads/UI.
+     */
+    String description() default "";
+
+    /**
+     * Capabilities exposed by the worker so scenario-manager/UI can reason about it.
+     */
+    WorkerCapability[] capabilities() default {};
+
+    /**
      * Input binding that feeds messages to the worker runtime.
      */
     WorkerInputType input() default WorkerInputType.RABBIT;
@@ -36,6 +46,21 @@ public @interface PocketHiveWorker {
      * Optional outbound queue name for workers that emit downstream traffic.
      */
     String outQueue() default "";
+
+    /**
+     * Declares which output transport should be wired for this worker.
+     */
+    WorkerOutputType output() default WorkerOutputType.NONE;
+
+    /**
+     * Optional infrastructure configuration type that overrides the default input config binding.
+     */
+    Class<? extends WorkInputConfig> inputConfig() default WorkInputConfig.class;
+
+    /**
+     * Optional infrastructure configuration type that overrides the default output config binding.
+     */
+    Class<? extends WorkOutputConfig> outputConfig() default WorkOutputConfig.class;
 
     /**
      * Optional configuration class resolved from the Spring context when the control plane does not supply

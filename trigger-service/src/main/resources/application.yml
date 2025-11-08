@@ -12,6 +12,20 @@ logging:
   pattern.level: "%5p [%X{traceId}]"
 
 pockethive:
+  worker:
+    inputs:
+      autowire: true
+  workers:
+    trigger:
+      config:
+        interval-ms: 1000
+        single-request: false
+        action-type: none
+        command: ""
+        url: ""
+        method: GET
+        body: ""
+        headers: {}
   control-plane:
     exchange: ${POCKETHIVE_CONTROL_PLANE_EXCHANGE}
     traffic-exchange: ${POCKETHIVE_CONTROL_PLANE_TRAFFIC_EXCHANGE}
@@ -25,13 +39,5 @@ pockethive:
     worker:
       role: trigger
       skip-self-signals: false
-      trigger:
-        interval-ms: 60000
-        action-type: shell
-        command: echo hello
-        url: http://wiremock
-        method: GET
-        body: ""
-        headers: {}
     manager:
       enabled: false

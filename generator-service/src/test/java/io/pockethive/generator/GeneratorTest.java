@@ -10,6 +10,7 @@ import io.pockethive.worker.sdk.api.WorkResult;
 import io.pockethive.worker.sdk.api.WorkerContext;
 import io.pockethive.worker.sdk.api.WorkerInfo;
 import io.pockethive.worker.sdk.testing.ControlPlaneTestFixtures;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
@@ -26,20 +27,24 @@ class GeneratorTest {
   private static final String IN_QUEUE = WORKER_PROPERTIES.getQueues().get("generator");
   private static final String OUT_QUEUE = WORKER_PROPERTIES.getQueues().get("moderator");
 
-  private GeneratorDefaults defaults;
+  private GeneratorWorkerProperties properties;
   private GeneratorWorkerImpl worker;
 
   @BeforeEach
   void setUp() {
-    MessageConfig messageConfig = new MessageConfig();
-    messageConfig.setPath("/default");
-    messageConfig.setMethod("POST");
-    messageConfig.setBody("{}");
-    messageConfig.setHeaders(Map.of("X-Test", "true"));
-    defaults = new GeneratorDefaults(messageConfig);
-    defaults.setRatePerSec(3.0);
-    defaults.setEnabled(true);
-    worker = new GeneratorWorkerImpl(defaults);
+    properties = new GeneratorWorkerProperties(new ObjectMapper());
+    properties.setEnabled(true);
+    Map<String, Object> message = new LinkedHashMap<>();
+    message.put("path", "/default");
+    message.put("method", "POST");
+    message.put("body", "{}");
+    message.put("headers", Map.of("X-Test", "true"));
+    Map<String, Object> config = new LinkedHashMap<>();
+    config.put("ratePerSec", 3.0);
+    config.put("singleRequest", false);
+    config.put("message", message);
+    properties.setConfig(config);
+    worker = new GeneratorWorkerImpl(properties);
   }
 
   @Test

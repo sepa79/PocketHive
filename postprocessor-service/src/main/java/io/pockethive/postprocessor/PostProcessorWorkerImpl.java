@@ -12,6 +12,9 @@ import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pockethive.worker.sdk.api.WorkResult;
 import io.pockethive.worker.sdk.api.WorkerContext;
 import io.pockethive.worker.sdk.config.PocketHiveWorker;
+import io.pockethive.worker.sdk.config.WorkerCapability;
+import io.pockethive.worker.sdk.config.WorkerInputType;
+import io.pockethive.worker.sdk.config.WorkerOutputType;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -51,7 +54,10 @@ import org.springframework.stereotype.Component;
 @Component("postProcessorWorker")
 @PocketHiveWorker(
     role = "postprocessor",
+    input = WorkerInputType.RABBIT,
     inQueue = "final",
+    output = WorkerOutputType.NONE,
+    capabilities = {WorkerCapability.MESSAGE_DRIVEN},
     config = PostProcessorWorkerConfig.class
 )
 class PostProcessorWorkerImpl implements PocketHiveWorkerFunction {
@@ -61,14 +67,14 @@ class PostProcessorWorkerImpl implements PocketHiveWorkerFunction {
   private static final String PROCESSOR_SUCCESS_HEADER = "x-ph-processor-success";
   private static final String PROCESSOR_STATUS_HEADER = "x-ph-processor-status";
 
-  private final PostProcessorDefaults defaults;
+  private final PostProcessorWorkerProperties properties;
   private final AtomicReference<PostProcessorMetrics> metricsRef = new AtomicReference<>();
   private final AtomicReference<DetailedTransactionMetrics> detailedMetricsRef =
       new AtomicReference<>();
 
   @Autowired
-  PostProcessorWorkerImpl(PostProcessorDefaults defaults) {
-    this.defaults = Objects.requireNonNull(defaults, "defaults");
+  PostProcessorWorkerImpl(PostProcessorWorkerProperties properties) {
+    this.properties = Objects.requireNonNull(properties, "properties");
   }
 
   /**
@@ -102,7 +108,7 @@ class PostProcessorWorkerImpl implements PocketHiveWorkerFunction {
   @Override
   public WorkResult onMessage(WorkMessage in, WorkerContext context) {
     PostProcessorWorkerConfig config = context.config(PostProcessorWorkerConfig.class)
-        .orElseGet(defaults::asConfig);
+        .orElseGet(properties::defaultConfig);
 
     ObservabilityContext observability =
         Objects.requireNonNull(context.observabilityContext(), "observabilityContext");

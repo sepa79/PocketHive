@@ -1,5 +1,9 @@
 package io.pockethive.moderator;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonValue;
+import java.util.Locale;
+
 public record ModeratorWorkerConfig(boolean enabled, Mode mode) {
 
   public ModeratorWorkerConfig {
@@ -37,7 +41,30 @@ public record ModeratorWorkerConfig(boolean enabled, Mode mode) {
     public enum Type {
       PASS_THROUGH,
       RATE_PER_SEC,
-      SINE
+      SINE;
+
+      @JsonCreator
+      public static Type fromString(String raw) {
+        if (raw == null) {
+          return PASS_THROUGH;
+        }
+        String normalized = raw.trim();
+        if (normalized.isEmpty()) {
+          return PASS_THROUGH;
+        }
+        normalized = normalized.replace('-', '_').replace(' ', '_');
+        try {
+          return Type.valueOf(normalized.toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException ex) {
+          throw new IllegalArgumentException(
+              "Unsupported moderator mode type '%s'".formatted(raw), ex);
+        }
+      }
+
+      @JsonValue
+      public String jsonValue() {
+        return name().toLowerCase(Locale.ROOT).replace('_', '-');
+      }
     }
 
     public record RatePerSec(double value) {

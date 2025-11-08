@@ -13,6 +13,19 @@ logging:
   pattern.level: "%5p [%X{traceId}]"
 
 pockethive:
+  worker:
+    inputs:
+      autowire: true
+  workers:
+    generator:
+      config:
+        ratePerSec: 0.0
+        singleRequest: false
+        message:
+          path: /api/test
+          method: POST
+          body: hello-world
+          headers: {}
   control-plane:
     exchange: ${POCKETHIVE_CONTROL_PLANE_EXCHANGE}
     traffic-exchange: ${POCKETHIVE_CONTROL_PLANE_TRAFFIC_EXCHANGE}
@@ -25,12 +38,6 @@ pockethive:
     worker:
       role: generator
       skip-self-signals: false
-      generator:
-        message:
-          path: /api/test
-          method: POST
-          body: hello-world
-          headers: {}
     manager:
       enabled: false
 

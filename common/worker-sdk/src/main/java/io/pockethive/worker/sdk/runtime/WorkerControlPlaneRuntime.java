@@ -15,6 +15,9 @@ import io.pockethive.controlplane.worker.WorkerSignalListener;
 import io.pockethive.controlplane.worker.WorkerStatusRequest;
 import io.pockethive.worker.sdk.api.StatusPublisher;
 import io.pockethive.worker.sdk.config.PocketHiveWorker;
+import io.pockethive.worker.sdk.config.WorkerCapability;
+import io.pockethive.worker.sdk.config.WorkerInputType;
+import io.pockethive.worker.sdk.config.WorkerOutputType;
 import com.fasterxml.jackson.core.type.TypeReference;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -142,7 +145,8 @@ public final class WorkerControlPlaneRuntime {
         }
         Map<String, Object> rawConfig = convertDefaultConfig(defaultConfig);
         Boolean enabled = resolveEnabled(rawConfig, null);
-        if (state.seedConfig(defaultConfig, rawConfig, enabled)) {
+        Object typedConfig = ensureTypedDefault(state.definition(), defaultConfig, rawConfig);
+        if (state.seedConfig(typedConfig, rawConfig, enabled)) {
             ensureStatusPublisher(state);
             logInitialConfig(state);
             notifyStateListeners(state);
@@ -253,7 +257,8 @@ public final class WorkerControlPlaneRuntime {
             return null;
         }
         try {
-            return objectMapper.convertValue(rawConfig, configType);
+            Map<String, Object> relaxed = withRelaxedKeys(rawConfig);
+            return objectMapper.convertValue(relaxed, configType);
         } catch (IllegalArgumentException ex) {
             String message = "Unable to convert control-plane config for worker '%s' to type %s".formatted(
                 definition.beanName(), configType.getSimpleName());
@@ -269,6 +274,20 @@ public final class WorkerControlPlaneRuntime {
             log.warn("Unable to convert default config of type {}", defaultConfig.getClass().getName(), ex);
             return Map.of();
         }
+    }
+
+    private Object ensureTypedDefault(WorkerDefinition definition, Object defaultConfig, Map<String, Object> rawConfig) {
+        Class<?> configType = definition.configType();
+        if (configType == Void.class) {
+            return null;
+        }
+        if (defaultConfig != null && configType.isInstance(defaultConfig)) {
+            return defaultConfig;
+        }
+        if (rawConfig == null || rawConfig.isEmpty()) {
+            return null;
+        }
+        return convertConfig(definition, rawConfig);
     }
 
     private void emitConfigReady(ControlSignal signal, WorkerState state, Map<String, Object> rawConfig, Boolean enabled) {
@@ -558,6 +577,61 @@ public final class WorkerControlPlaneRuntime {
         }
     }
 
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> withRelaxedKeys(Map<String, Object> source) {
+        if (source == null || source.isEmpty()) {
+            return Map.of();
+        }
+        Map<String, Object> target = new LinkedHashMap<>();
+        source.forEach((key, value) -> {
+            Object normalizedValue = normalizeValue(value);
+            target.put(key, normalizedValue);
+            String camel = toCamelCase(key);
+            if (!camel.equals(key) && !target.containsKey(camel)) {
+                target.put(camel, normalizedValue);
+            }
+        });
+        return target;
+    }
+
+    private Object normalizeValue(Object value) {
+        if (value instanceof Map<?, ?> map) {
+            Map<String, Object> typed = new LinkedHashMap<>();
+            map.forEach((k, v) -> {
+                if (k instanceof String key) {
+                    typed.put(key, v);
+                }
+            });
+            return withRelaxedKeys(typed);
+        }
+        if (value instanceof List<?> list) {
+            return list.stream().map(this::normalizeValue).toList();
+        }
+        return value;
+    }
+
+    private String toCamelCase(String key) {
+        if (key == null || key.isBlank()) {
+            return key;
+        }
+        StringBuilder builder = new StringBuilder();
+        boolean upperNext = false;
+        for (int i = 0; i < key.length(); i++) {
+            char ch = key.charAt(i);
+            if (ch == '-' || ch == '_' || ch == '.') {
+                upperNext = true;
+                continue;
+            }
+            if (upperNext) {
+                builder.append(Character.toUpperCase(ch));
+                upperNext = false;
+            } else {
+                builder.append(ch);
+            }
+        }
+        return builder.toString();
+    }
+
     private String formatEnabledChange(Boolean previousEnabled, Boolean finalEnabled) {
         if (Objects.equals(previousEnabled, finalEnabled)) {
             return formatEnabledValue(finalEnabled) + " (unchanged)";
@@ -693,8 +767,30 @@ public final class WorkerControlPlaneRuntime {
             Map<String, Object> workerEntry = new LinkedHashMap<>();
             workerEntry.put("worker", def.beanName());
             workerEntry.put("role", def.role());
+            workerEntry.put("input", def.input().name());
+            workerEntry.put("output", def.outputType().name());
             workerEntry.put(snapshotMode ? "processedTotal" : "processedDelta", processed);
             workerEntry.put("enabled", workerEnabled);
+            String description = def.description();
+            if (description != null) {
+                workerEntry.put("description", description);
+            }
+            if (def.inQueue() != null) {
+                workerEntry.put("inQueue", def.inQueue());
+            }
+            if (def.outQueue() != null) {
+                workerEntry.put("outQueue", def.outQueue());
+            }
+            if (def.exchange() != null) {
+                workerEntry.put("exchange", def.exchange());
+            }
+            if (!def.capabilities().isEmpty()) {
+                List<String> capabilities = def.capabilities().stream()
+                    .map(WorkerCapability::name)
+                    .sorted()
+                    .toList();
+                workerEntry.put("capabilities", capabilities);
+            }
             Map<String, Object> config = state.rawConfig();
             if (!config.isEmpty()) {
                 workerEntry.put("config", config);
@@ -817,6 +913,55 @@ public final class WorkerControlPlaneRuntime {
          */
         public Map<String, Object> statusData() {
             return state.statusData();
+        }
+
+        /**
+         * Returns the optional worker description declared on {@link PocketHiveWorker}.
+         */
+        public Optional<String> description() {
+            return Optional.ofNullable(state.definition().description());
+        }
+
+        /**
+         * Returns the declared worker capabilities.
+         */
+        public Set<WorkerCapability> capabilities() {
+            return state.definition().capabilities();
+        }
+
+        /**
+         * Returns the configured worker input type.
+         */
+        public WorkerInputType inputType() {
+            return state.definition().input();
+        }
+
+        /**
+         * Returns the configured worker output type.
+         */
+        public WorkerOutputType outputType() {
+            return state.definition().outputType();
+        }
+
+        /**
+         * Returns the inbound queue if declared on the worker definition.
+         */
+        public Optional<String> inboundQueue() {
+            return Optional.ofNullable(state.definition().inQueue());
+        }
+
+        /**
+         * Returns the outbound queue if declared on the worker definition.
+         */
+        public Optional<String> outboundQueue() {
+            return Optional.ofNullable(state.definition().outQueue());
+        }
+
+        /**
+         * Returns the outbound exchange if declared on the worker definition.
+         */
+        public Optional<String> exchange() {
+            return Optional.ofNullable(state.definition().exchange());
         }
 
         /**

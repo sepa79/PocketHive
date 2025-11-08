@@ -136,3 +136,35 @@
 3. Migrate one service (e.g., generator) to validate the flow end-to-end.
 4. Roll the change across other services, then remove runtime adapters entirely.
 5. Refresh docs (`docs/sdk/…`, service READMEs) to describe the new flow.
+
+## Implementation Tasks
+
+1. **Metadata & Annotation**
+   - [x] Extend `@PocketHiveWorker` with description, capabilities, output type, config overrides.
+   - [x] Define `WorkerCapabilities` enum + incorporate into `WorkerDefinition`.
+   - [x] Update `WorkerStatus` model and control-plane emissions to include description, IO, capabilities.
+
+2. **Configuration Infrastructure**
+   - [x] Introduce `PocketHiveWorkerProperties<T>` base class and bind `pockethive.workers.<role>` automatically. Services can extend the base, provide `role` + `configType`, and expose `@ConfigurationProperties("pockethive.workers.<role>")`. Defaults defined under `...enabled` / `...config.*` are auto-registered with the control plane for every worker sharing that role.
+   - [x] Create `WorkInputConfig` / `WorkOutputConfig` marker interfaces and default property classes (e.g., scheduler + RabbitMQ) plus binders to resolve `pockethive.inputs/outputs.<role>` into typed configs.
+   - [ ] Move enable/disable flags + infra knobs out of worker domain configs into the new input/output properties.
+
+3. **Output SPI**
+   - [x] Define the `WorkOutput` interface and `WorkOutputFactory`.
+   - [x] Implement default outputs (Rabbit, Noop) and register them (currently Noop by default; Rabbit factory wiring to follow).
+   - [x] Integrate with `WorkResult` handling so results automatically publish through the selected output.
+
+4. **Autoconfiguration**
+   - [x] Add `WorkInputFactory` SPI + initializer so auto-config can resolve per-worker inputs (currently defaulting to noop until concrete factories are wired).
+   - [x] Ensure lifecycle beans manage both inputs and outputs (registries + lifecycle hooks now exist for each, ready for wiring into factories).
+   - [x] Provide scheduler/Rabbit `WorkInputFactory` implementations (opt-in via `pockethive.worker.inputs.autowire=true` until runtime adapters are removed).
+   - [ ] Support custom inputs/outputs via factories contributed as Spring beans.
+
+5. **Service Migration**
+   - [ ] Convert generator service to the new model (remove runtime adapter, rely on autoconfig).
+   - [ ] Repeat for moderator, processor, postprocessor, trigger, swarm-controller, etc.
+   - [ ] Delete obsolete defaults classes and runtime adapters once migration is complete.
+
+6. **Documentation & Examples**
+   - [ ] Update SDK docs, architecture references, and service READMEs.
+   - [ ] Retire old example modules; plan refreshed examples after v2 stabilizes.

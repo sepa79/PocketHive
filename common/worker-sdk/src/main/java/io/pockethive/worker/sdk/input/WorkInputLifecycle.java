@@ -26,6 +26,9 @@ public final class WorkInputLifecycle implements SmartLifecycle {
             return;
         }
         registry.registrations().forEach(this::startInput);
+        if (log.isInfoEnabled()) {
+            log.info("Work input lifecycle started (workers={})", registry.registrations().size());
+        }
         running = true;
     }
 
@@ -35,6 +38,9 @@ public final class WorkInputLifecycle implements SmartLifecycle {
             return;
         }
         registry.registrations().forEach(this::stopInput);
+        if (log.isInfoEnabled()) {
+            log.info("Work input lifecycle stopped");
+        }
         running = false;
     }
 
@@ -65,7 +71,7 @@ public final class WorkInputLifecycle implements SmartLifecycle {
     private void startInput(WorkInputRegistry.Registration registration) {
         try {
             registration.input().start();
-            log.debug("Started work input for worker {}", registration.definition().beanName());
+            log.info("Started work input for worker {}", registration.definition().beanName());
         } catch (Exception ex) {
             log.warn("Failed to start work input for worker {}", registration.definition().beanName(), ex);
         }
@@ -74,7 +80,7 @@ public final class WorkInputLifecycle implements SmartLifecycle {
     private void stopInput(WorkInputRegistry.Registration registration) {
         try {
             registration.input().stop();
-            log.debug("Stopped work input for worker {}", registration.definition().beanName());
+            log.info("Stopped work input for worker {}", registration.definition().beanName());
         } catch (Exception ex) {
             log.warn("Failed to stop work input for worker {}", registration.definition().beanName(), ex);
         }

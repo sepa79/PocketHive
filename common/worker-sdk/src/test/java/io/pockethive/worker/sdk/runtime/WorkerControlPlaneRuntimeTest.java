@@ -8,11 +8,17 @@ import io.pockethive.controlplane.messaging.ControlPlaneEmitter;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.controlplane.worker.WorkerControlPlane;
 import io.pockethive.observability.StatusEnvelopeBuilder;
+import io.pockethive.worker.sdk.config.WorkInputConfig;
+import io.pockethive.worker.sdk.config.WorkOutputConfig;
+import io.pockethive.worker.sdk.config.WorkerCapability;
 import io.pockethive.worker.sdk.config.WorkerInputType;
+import io.pockethive.worker.sdk.config.WorkerOutputType;
 import io.pockethive.worker.sdk.testing.ControlPlaneTestFixtures;
 import io.pockethive.controlplane.spring.WorkerControlPlaneProperties;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.BeforeEach;
@@ -54,7 +60,12 @@ class WorkerControlPlaneRuntimeTest {
             null,
             "out.queue",
             "traffic.exchange",
-            TestConfig.class
+            TestConfig.class,
+            WorkInputConfig.class,
+            WorkOutputConfig.class,
+            WorkerOutputType.RABBITMQ,
+            "Test worker",
+            Set.of(WorkerCapability.SCHEDULER)
         );
         stateStore.getOrCreate(definition);
         controlPlane = WorkerControlPlane.builder(MAPPER)
@@ -226,7 +237,12 @@ class WorkerControlPlaneRuntimeTest {
             null,
             "out.queue",
             "traffic.exchange",
-            TestConfig.class
+            TestConfig.class,
+            WorkInputConfig.class,
+            WorkOutputConfig.class,
+            WorkerOutputType.RABBITMQ,
+            "Test worker",
+            Set.of(WorkerCapability.SCHEDULER)
         );
         stateStore.getOrCreate(otherDefinition);
         String routingKey = ControlPlaneRouting.signal("config-update", IDENTITY.swarmId(), IDENTITY.role(), IDENTITY.instanceId());
@@ -446,6 +462,13 @@ class WorkerControlPlaneRuntimeTest {
         WorkerControlPlaneRuntime.WorkerStateSnapshot initial = lastSnapshot.get();
         assertThat(initial).isNotNull();
         assertThat(initial.enabled()).isEmpty();
+        assertThat(initial.description()).contains("Test worker");
+        assertThat(initial.capabilities()).containsExactlyElementsOf(definition.capabilities());
+        assertThat(initial.inputType()).isEqualTo(definition.input());
+        assertThat(initial.outputType()).isEqualTo(definition.outputType());
+        assertThat(initial.inboundQueue()).isEmpty();
+        assertThat(initial.outboundQueue()).contains(definition.outQueue());
+        assertThat(initial.exchange()).contains(definition.exchange());
 
         Map<String, Object> args = Map.of(
             "data", Map.of("enabled", true)
@@ -528,6 +551,33 @@ class WorkerControlPlaneRuntimeTest {
             (java.util.List<Map<String, Object>>) updatedData.get("workers");
         assertThat(updatedWorkers).hasSize(1);
         assertThat(updatedWorkers.get(0).get("enabled")).isEqualTo(true);
+    }
+
+    @Test
+    void statusSnapshotIncludesWorkerMetadata() throws Exception {
+        runtime.emitStatusSnapshot();
+
+        ArgumentCaptor<ControlPlaneEmitter.StatusContext> statusCaptor =
+            ArgumentCaptor.forClass(ControlPlaneEmitter.StatusContext.class);
+        verify(emitter).emitStatusSnapshot(statusCaptor.capture());
+
+        Map<String, Object> snapshot = buildSnapshot(statusCaptor.getValue());
+        @SuppressWarnings("unchecked")
+        Map<String, Object> data = (Map<String, Object>) snapshot.get("data");
+        @SuppressWarnings("unchecked")
+        java.util.List<Map<String, Object>> workers =
+            (java.util.List<Map<String, Object>>) data.get("workers");
+        assertThat(workers).hasSize(1);
+        Map<String, Object> worker = workers.get(0);
+        assertThat(worker).containsEntry("description", "Test worker");
+        assertThat(worker).containsEntry("input", WorkerInputType.SCHEDULER.name());
+        assertThat(worker).containsEntry("output", WorkerOutputType.RABBITMQ.name());
+        assertThat(worker).containsEntry("outQueue", definition.outQueue());
+        assertThat(worker).containsEntry("exchange", definition.exchange());
+        assertThat(worker).doesNotContainKey("inQueue");
+        @SuppressWarnings("unchecked")
+        List<String> capabilities = (List<String>) worker.get("capabilities");
+        assertThat(capabilities).containsExactly("SCHEDULER");
     }
 
     private Map<String, Object> buildSnapshot(ControlPlaneEmitter.StatusContext context) throws Exception {

@@ -1,15 +1,14 @@
 package io.pockethive.worker.sdk.input;
 
+import io.pockethive.worker.sdk.config.WorkInputConfig;
+import io.pockethive.worker.sdk.runtime.WorkerDefinition;
+
 /**
- * Factory that creates {@link WorkInput} instances for a given worker definition. Implementations can
- * inject transport-specific dependencies (RabbitMQ, schedulers, HTTP clients, etc.) and wire them to the
- * provided dispatcher.
+ * SPI for creating {@link WorkInput} instances for a worker definition.
  */
-@FunctionalInterface
 public interface WorkInputFactory {
 
-    /**
-     * Builds a {@link WorkInput} using the supplied context.
-     */
-    WorkInput create(WorkInputContext context);
+    boolean supports(WorkerDefinition definition);
+
+    WorkInput create(WorkerDefinition definition, WorkInputConfig config);
 }

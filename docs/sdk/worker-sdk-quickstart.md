@@ -92,46 +92,52 @@ end-to-end implementations.
 
 Transport adapters inject the Stage 1 `WorkerRuntime` and Stage 2 `WorkerControlPlaneRuntime` beans. Message-based
 services should now compose the reusable [`RabbitMessageWorkerAdapter`](../../common/worker-sdk/src/main/java/io/pockethive/worker/sdk/transport/rabbit/RabbitMessageWorkerAdapter.java)
-instead of re-implementing listener toggling, Rabbit conversions, and control-plane validation.
+instead of re-implementing listener toggling, Rabbit conversions, and control-plane validation. Scheduler-driven
+workloads can plug into `SchedulerWorkInput` via lightweight factories:
 
 ```java
 @Component
-class ProcessorRuntimeAdapter implements ApplicationListener<ContextRefreshedEvent> {
+@ConditionalOnProperty(prefix = "pockethive.worker.inputs", name = "autowire", havingValue = "true")
+class TriggerWorkInputFactory implements WorkInputFactory {
 
-  private static final Logger log = LoggerFactory.getLogger(ProcessorRuntimeAdapter.class);
-  private final RabbitMessageWorkerAdapter delegate;
+  private final WorkerRuntime workerRuntime;
+  private final WorkerControlPlaneRuntime controlPlaneRuntime;
+  private final ControlPlaneIdentity identity;
+  private final TriggerWorkerProperties properties;
 
-  ProcessorRuntimeAdapter(WorkerRuntime workerRuntime,
-                          WorkerRegistry workerRegistry,
+  TriggerWorkInputFactory(WorkerRuntime workerRuntime,
                           WorkerControlPlaneRuntime controlPlaneRuntime,
-                          RabbitTemplate rabbitTemplate,
-                          RabbitListenerEndpointRegistry listenerRegistry,
                           ControlPlaneIdentity identity,
-                          ProcessorDefaults defaults) {
-    WorkerDefinition definition = workerRegistry
-        .findByRoleAndInput("processor", WorkerInputType.RABBIT)
-        .orElseThrow();
+                          TriggerWorkerProperties properties) {
+    this.workerRuntime = workerRuntime;
+    this.controlPlaneRuntime = controlPlaneRuntime;
+    this.identity = identity;
+    this.properties = properties;
+  }
 
-    delegate = RabbitMessageWorkerAdapter.builder()
-        .logger(log)
-        .listenerId("processorWorkerListener")
-        .displayName("Processor")
+  @Override
+  public boolean supports(WorkerDefinition definition) {
+    return definition.input() == WorkerInputType.SCHEDULER
+        && "trigger".equals(definition.role());
+  }
+
+  @Override
+  public WorkInput create(WorkerDefinition definition, WorkInputConfig config) {
+    SchedulerInputProperties scheduling = config instanceof SchedulerInputProperties props
+        ? props
+        : new SchedulerInputProperties();
+    TriggerSchedulerState schedulerState = new TriggerSchedulerState(properties);
+    Logger logger = LoggerFactory.getLogger(definition.beanType());
+    return SchedulerWorkInput.<TriggerWorkerConfig>builder()
         .workerDefinition(definition)
         .controlPlaneRuntime(controlPlaneRuntime)
-        .listenerRegistry(listenerRegistry)
+        .workerRuntime(workerRuntime)
         .identity(identity)
-        .withConfigDefaults(ProcessorWorkerConfig.class, defaults::asConfig, ProcessorWorkerConfig::enabled)
-        .dispatcher(message -> workerRuntime.dispatch(definition.beanName(), message))
-        .rabbitTemplate(rabbitTemplate)
+        .schedulerState(schedulerState)
+        .scheduling(scheduling)
+        .logger(logger)
         .build();
   }
-
-  @PostConstruct
-  void initialise() {
-    delegate.initialiseStateListener();
-  }
-
-  // Delegate @RabbitListener, control-plane, and scheduled hooks to the helper
 }
 ```
 
@@ -142,21 +148,17 @@ configuration.
 
 The helper registers control-plane listeners, converts AMQP messages via `RabbitWorkMessageConverter`, publishes
 `WorkResult.Message` payloads to the traffic exchange declared in `WorkerControlPlaneProperties`, and emits status
-snapshots/deltas so service adapters can focus on orchestration concerns rather than RabbitMQ plumbing. See the updated
-[`processor`](../../processor-service/src/main/java/io/pockethive/processor/ProcessorRuntimeAdapter.java),
-[`moderator`](../../moderator-service/src/main/java/io/pockethive/moderator/ModeratorRuntimeAdapter.java), and
-[`postprocessor`](../../postprocessor-service/src/main/java/io/pockethive/postprocessor/PostProcessorRuntimeAdapter.java)
-adapters for complete examples.
+snapshots/deltas so service adapters can focus on orchestration concerns rather than RabbitMQ plumbing. Scheduler-based
+workers can supply focused factories like the trigger example above, while message-driven workers that opt into auto-wiring
+(generator, moderator, processor, and postprocessor) rely on the SDK factories described in
+`docs/sdk/worker-autoconfig-plan.md`.
 
 > **Publisher configuration**
 > Provide either `.rabbitTemplate(...)` (for the default publishing behaviour) or a custom
 > `.messageResultPublisher(...)`. The builder fails fast when neither option is supplied so misconfigured workers do not
 > start.
 
-Generator/trigger style adapters remain available when you need scheduling or fan-in behaviour that differs from the
-message helper (for example, see the
-[`GeneratorRuntimeAdapter`](../../generator-service/src/main/java/io/pockethive/generator/GeneratorRuntimeAdapter.java)
-and [`TriggerRuntimeAdapter`](../../trigger-service/src/main/java/io/pockethive/trigger/TriggerRuntimeAdapter.java)).
+Legacy adapters remain available when you need bespoke behaviour that the shared factories cannot express.
 
 ## 5. Test with the SDK fixtures
 

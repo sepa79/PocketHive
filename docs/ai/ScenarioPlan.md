@@ -90,7 +90,7 @@ bees:
     instanceId: seeder-bee
     image: pockethive-generator:latest
     env:
-      POCKETHIVE_CONTROL_PLANE_WORKER_GENERATOR_RATE_PER_SEC: "5"
+      POCKETHIVE_WORKERS_GENERATOR_CONFIG_RATEPERSEC: "5"
     work:
       out: gen
 

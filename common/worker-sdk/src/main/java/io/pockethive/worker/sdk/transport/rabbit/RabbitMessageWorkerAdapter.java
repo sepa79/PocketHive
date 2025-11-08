@@ -200,7 +200,15 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
     }
 
     private void toggleListener(boolean enabled) {
+        boolean previous = this.desiredEnabled;
         this.desiredEnabled = enabled;
+        if (previous != enabled && log.isInfoEnabled()) {
+            log.info(
+                "{} work lifecycle {} (instance={})",
+                displayName,
+                enabled ? "enabled" : "disabled",
+                identity.instanceId());
+        }
         applyListenerState();
     }
 

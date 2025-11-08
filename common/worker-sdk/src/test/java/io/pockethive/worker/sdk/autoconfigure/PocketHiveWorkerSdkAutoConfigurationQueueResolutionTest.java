@@ -3,11 +3,14 @@ package io.pockethive.worker.sdk.autoconfigure;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.pockethive.worker.sdk.api.PocketHiveWorkerFunction;
 import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pockethive.worker.sdk.api.WorkResult;
 import io.pockethive.worker.sdk.api.WorkerContext;
 import io.pockethive.worker.sdk.config.PocketHiveWorker;
-import io.pockethive.worker.sdk.api.PocketHiveWorkerFunction;
+import io.pockethive.worker.sdk.config.WorkInputConfig;
+import io.pockethive.worker.sdk.input.WorkInput;
+import io.pockethive.worker.sdk.input.WorkInputFactory;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
 import io.pockethive.worker.sdk.runtime.WorkerRegistry;
 import java.util.Optional;
@@ -75,6 +78,21 @@ class PocketHiveWorkerSdkAutoConfigurationQueueResolutionTest {
         @Bean
         ControlQueueWorker controlQueueWorker() {
             return new ControlQueueWorker();
+        }
+
+        @Bean
+        WorkInputFactory testWorkInputFactory() {
+            return new WorkInputFactory() {
+                @Override
+                public boolean supports(WorkerDefinition definition) {
+                    return true;
+                }
+
+                @Override
+                public WorkInput create(WorkerDefinition definition, WorkInputConfig config) {
+                    return new WorkInput() {};
+                }
+            };
         }
     }
 

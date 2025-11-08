@@ -12,6 +12,7 @@ import java.util.function.Function;
 import java.util.function.Supplier;
 import org.slf4j.Logger;
 import org.springframework.amqp.core.Message;
+import org.springframework.amqp.core.MessageListener;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.amqp.rabbit.listener.RabbitListenerEndpointRegistry;
 import org.springframework.context.ApplicationListener;
@@ -22,7 +23,7 @@ import org.springframework.context.event.ContextRefreshedEvent;
  * lifecycle required by message-driven workers (initial state registration, listener start/stop, and
  * control-plane coordination) so individual services can be wired with minimal boilerplate.
  */
-public final class RabbitWorkInput implements WorkInput, ApplicationListener<ContextRefreshedEvent> {
+public final class RabbitWorkInput implements WorkInput, ApplicationListener<ContextRefreshedEvent>, MessageListener {
 
     private final RabbitMessageWorkerAdapter adapter;
     private final WorkerDefinition workerDefinition;
@@ -55,6 +56,11 @@ public final class RabbitWorkInput implements WorkInput, ApplicationListener<Con
      */
     public void onWork(Message message) {
         adapter.onWork(message);
+    }
+
+    @Override
+    public void onMessage(Message message) {
+        onWork(message);
     }
 
     /**

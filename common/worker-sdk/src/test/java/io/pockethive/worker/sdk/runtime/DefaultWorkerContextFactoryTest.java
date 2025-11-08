@@ -9,8 +9,13 @@ import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.observability.ObservabilityContext;
 import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pockethive.worker.sdk.api.WorkerContext;
+import io.pockethive.worker.sdk.config.WorkInputConfig;
+import io.pockethive.worker.sdk.config.WorkOutputConfig;
+import io.pockethive.worker.sdk.config.WorkerCapability;
 import io.pockethive.worker.sdk.config.WorkerInputType;
+import io.pockethive.worker.sdk.config.WorkerOutputType;
 import org.junit.jupiter.api.Test;
+import java.util.Set;
 
 class DefaultWorkerContextFactoryTest {
 
@@ -22,7 +27,12 @@ class DefaultWorkerContextFactoryTest {
         "in.queue",
         "out.queue",
         "exchange.hive",
-        Void.class
+        Void.class,
+        WorkInputConfig.class,
+        WorkOutputConfig.class,
+        WorkerOutputType.RABBITMQ,
+        "Test worker",
+        Set.of(WorkerCapability.MESSAGE_DRIVEN)
     );
 
     private final WorkerState state = new WorkerState(DEFINITION);

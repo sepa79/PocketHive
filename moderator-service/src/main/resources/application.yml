@@ -13,6 +13,21 @@ logging:
   pattern.level: "%5p [%X{traceId}]"
 
 pockethive:
+  worker:
+    inputs:
+      autowire: true
+  workers:
+    moderator:
+      config:
+        mode:
+          type: pass-through
+          ratePerSec:
+            value: 0.0
+          sine:
+            minRatePerSec: 0.0
+            maxRatePerSec: 0.0
+            periodSeconds: 60.0
+            phaseOffsetSeconds: 0.0
   control-plane:
     exchange: ${POCKETHIVE_CONTROL_PLANE_EXCHANGE}
     traffic-exchange: ${POCKETHIVE_CONTROL_PLANE_TRAFFIC_EXCHANGE}
