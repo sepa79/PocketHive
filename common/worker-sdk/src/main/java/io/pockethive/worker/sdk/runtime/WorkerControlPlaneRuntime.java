@@ -18,7 +18,6 @@ import io.pockethive.worker.sdk.config.PocketHiveWorker;
 import io.pockethive.worker.sdk.config.WorkerCapability;
 import io.pockethive.worker.sdk.config.WorkerInputType;
 import io.pockethive.worker.sdk.config.WorkerOutputType;
-import com.fasterxml.jackson.core.type.TypeReference;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -45,7 +44,6 @@ public final class WorkerControlPlaneRuntime {
 
     private static final Logger log = LoggerFactory.getLogger(WorkerControlPlaneRuntime.class);
     private static final String CONFIG_PHASE = "apply";
-    private static final TypeReference<Map<String, Object>> DEFAULT_CONFIG_TYPE = new TypeReference<>() {};
 
     private final WorkerControlPlane workerControlPlane;
     private final WorkerStateStore stateStore;
@@ -54,6 +52,7 @@ public final class WorkerControlPlaneRuntime {
     private final ControlPlaneIdentity identity;
     private final String controlQueueName;
     private final String[] controlRoutes;
+    private final ConfigMerger configMerger;
     private final WorkerSignalListener signalListener = new WorkerSignalDispatcher();
     private final Map<String, List<Consumer<WorkerStateSnapshot>>> stateListeners = new ConcurrentHashMap<>();
     private final List<Consumer<WorkerStateSnapshot>> globalStateListeners = new CopyOnWriteArrayList<>();
@@ -71,6 +70,7 @@ public final class WorkerControlPlaneRuntime {
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper");
         this.emitter = Objects.requireNonNull(emitter, "emitter");
         this.identity = Objects.requireNonNull(identity, "identity");
+        this.configMerger = new ConfigMerger(this.objectMapper);
         WorkerControlPlaneProperties.ControlPlane resolvedControlPlane =
             Objects.requireNonNull(controlPlane, "controlPlane");
         this.controlQueueName = resolvedControlPlane.getControlQueueName();
@@ -143,7 +143,7 @@ public final class WorkerControlPlaneRuntime {
             log.warn("Unable to seed default config for unknown worker {}", workerBeanName);
             return;
         }
-        Map<String, Object> rawConfig = toRawConfig(defaultConfig);
+        Map<String, Object> rawConfig = configMerger.toRawConfig(defaultConfig);
         Boolean enabled = resolveEnabled(rawConfig, null);
         Object typedConfig = ensureTypedDefault(state.definition(), defaultConfig, rawConfig);
         if (state.seedConfig(typedConfig, enabled)) {
@@ -224,24 +224,41 @@ public final class WorkerControlPlaneRuntime {
             ensureStatusPublisher(state);
             WorkerConfigPatch patch = workerConfigFor(state, sanitized);
             Map<String, Object> filteredUpdate = withoutNullValues(patch.values());
-            Map<String, Object> previousConfig = snapshotRawConfig(state);
-            Map<String, Object> mergedConfig = mergeWithExisting(previousConfig, filteredUpdate, patch.resetRequested());
-            Boolean enabled = resolveEnabled(mergedConfig, command.enabled());
             Boolean previousEnabled = state.enabled().orElse(null);
+            Object currentConfig = currentTypedConfig(state);
             try {
-                boolean replaceConfig = patch.hasPayload();
-                Object typedConfig = null;
-                if (replaceConfig) {
-                    typedConfig = mergedConfig.isEmpty() ? null : convertConfig(state.definition(), mergedConfig);
-                }
-                state.updateConfig(typedConfig, replaceConfig, enabled);
-                Map<String, Object> appliedConfig = replaceConfig ? mergedConfig : Map.of();
+                ConfigMerger.ConfigMergeResult mergeResult = configMerger.merge(
+                    state.definition(),
+                    currentConfig,
+                    filteredUpdate,
+                    patch.resetRequested()
+                );
+                Boolean enabled = resolveEnabled(mergeResult.rawConfig(), command.enabled());
+                state.updateConfig(mergeResult.typedConfig(), mergeResult.replaced(), enabled);
+                Map<String, Object> appliedConfig = mergeResult.replaced() ? mergeResult.rawConfig() : Map.of();
                 emitConfigReady(signal, state, appliedConfig, enabled);
                 notifyStateListeners(state);
-                Map<String, Object> finalConfig = replaceConfig ? mergedConfig : previousConfig;
+                Map<String, Object> finalConfig = mergeResult.replaced()
+                    ? mergeResult.rawConfig()
+                    : mergeResult.previousRaw();
                 Boolean finalEnabled = state.enabled().orElse(null);
-                if (shouldLogConfigUpdate(patch, command, previousConfig, finalConfig, previousEnabled, finalEnabled)) {
-                    logConfigUpdate(signal, state, previousConfig, finalConfig, previousEnabled, finalEnabled);
+                if (shouldLogConfigUpdate(
+                    patch,
+                    command,
+                    mergeResult.previousRaw(),
+                    finalConfig,
+                    previousEnabled,
+                    finalEnabled
+                )) {
+                    logConfigUpdate(
+                        signal,
+                        state,
+                        mergeResult.previousRaw(),
+                        finalConfig,
+                        previousEnabled,
+                        finalEnabled,
+                        mergeResult.diff()
+                    );
                 }
             } catch (Exception ex) {
                 emitConfigError(signal, state, ex);
@@ -250,21 +267,6 @@ public final class WorkerControlPlaneRuntime {
         }
         emitStatusSnapshot();
     }
-
-    private Object convertConfig(WorkerDefinition definition, Map<String, Object> rawConfig) {
-        Class<?> configType = definition.configType();
-        if (configType == Void.class || rawConfig.isEmpty()) {
-            return null;
-        }
-        try {
-            return objectMapper.convertValue(rawConfig, configType);
-        } catch (IllegalArgumentException ex) {
-            String message = "Unable to convert control-plane config for worker '%s' to type %s".formatted(
-                definition.beanName(), configType.getSimpleName());
-            throw new IllegalArgumentException(message, ex);
-        }
-    }
-
     private Object ensureTypedDefault(WorkerDefinition definition, Object defaultConfig, Map<String, Object> rawConfig) {
         Class<?> configType = definition.configType();
         if (configType == Void.class) {
@@ -276,7 +278,7 @@ public final class WorkerControlPlaneRuntime {
         if (rawConfig == null || rawConfig.isEmpty()) {
             return null;
         }
-        return convertConfig(definition, rawConfig);
+        return configMerger.toTypedConfig(definition, rawConfig);
     }
 
     private void emitConfigReady(ControlSignal signal, WorkerState state, Map<String, Object> rawConfig, Boolean enabled) {
@@ -438,54 +440,16 @@ public final class WorkerControlPlaneRuntime {
         return Map.copyOf(filtered);
     }
 
-    private Map<String, Object> mergeWithExisting(
-        Map<String, Object> existing,
-        Map<String, Object> updates,
-        boolean resetRequested
-    ) {
-        if (resetRequested) {
-            return Map.of();
-        }
-        if (updates.isEmpty()) {
-            return existing == null ? Map.of() : existing;
-        }
-        Map<String, Object> merged = new LinkedHashMap<>();
-        if (existing != null && !existing.isEmpty()) {
-            merged.putAll(existing);
-        }
-        merged.putAll(updates);
-        return Map.copyOf(merged);
-    }
-
-    private Map<String, Object> toRawConfig(Object value) {
-        if (value == null) {
-            return Map.of();
-        }
-        if (value instanceof Map<?, ?> map) {
-            return map.isEmpty() ? Map.of() : copyMap(map);
-        }
-        return serializeConfig(value);
-    }
-
     private Map<String, Object> snapshotRawConfig(WorkerState state) {
+        return configMerger.toRawConfig(currentTypedConfig(state));
+    }
+
+    private Object currentTypedConfig(WorkerState state) {
         Class<?> configType = state.definition().configType();
         if (configType == Void.class) {
-            return Map.of();
+            return null;
         }
-        return state.config(configType).map(this::serializeConfig).orElse(Map.of());
-    }
-
-    private Map<String, Object> serializeConfig(Object config) {
-        if (config == null) {
-            return Map.of();
-        }
-        try {
-            Map<String, Object> converted = objectMapper.convertValue(config, DEFAULT_CONFIG_TYPE);
-            return converted == null ? Map.of() : Map.copyOf(converted);
-        } catch (IllegalArgumentException ex) {
-            log.warn("Unable to serialise config of type {}", config.getClass().getName(), ex);
-            return Map.of();
-        }
+        return state.config(configType).orElse(null);
     }
 
     private boolean shouldLogConfigUpdate(
@@ -524,10 +488,10 @@ public final class WorkerControlPlaneRuntime {
         Map<String, Object> previousConfig,
         Map<String, Object> finalConfig,
         Boolean previousEnabled,
-        Boolean finalEnabled
+        Boolean finalEnabled,
+        Map<String, Object> diff
     ) {
-        Map<String, Object> changes = describeConfigChanges(previousConfig, finalConfig);
-        String prettyChanges = prettyPrint(changes);
+        String prettyChanges = prettyPrint(diff);
         String prettyFinal = prettyPrint(finalConfig.isEmpty() ? Map.of() : finalConfig);
         log.info(
             "Applied config update for worker {} (signal={} role={} instance={}):\n  enabled: {}\n  changes:\n{}\n  finalConfig:\n{}",
@@ -539,49 +503,6 @@ public final class WorkerControlPlaneRuntime {
             prettyChanges,
             prettyFinal
         );
-    }
-
-    private Map<String, Object> describeConfigChanges(
-        Map<String, Object> previousConfig,
-        Map<String, Object> finalConfig
-    ) {
-        Map<String, Object> previous = previousConfig == null ? Map.of() : previousConfig;
-        Map<String, Object> current = finalConfig == null ? Map.of() : finalConfig;
-        Map<String, Object> added = new LinkedHashMap<>();
-        Map<String, Object> updated = new LinkedHashMap<>();
-        List<String> removed = new ArrayList<>();
-        Set<String> keys = new LinkedHashSet<>();
-        keys.addAll(previous.keySet());
-        keys.addAll(current.keySet());
-        for (String key : keys) {
-            boolean inPrevious = previous.containsKey(key);
-            boolean inCurrent = current.containsKey(key);
-            if (!inPrevious && inCurrent) {
-                added.put(key, current.get(key));
-            } else if (inPrevious && inCurrent) {
-                Object before = previous.get(key);
-                Object after = current.get(key);
-                if (!Objects.equals(before, after)) {
-                    updated.put(key, after);
-                }
-            } else if (inPrevious) {
-                removed.add(key);
-            }
-        }
-        Map<String, Object> changes = new LinkedHashMap<>();
-        if (!added.isEmpty()) {
-            changes.put("added", added);
-        }
-        if (!updated.isEmpty()) {
-            changes.put("updated", updated);
-        }
-        if (!removed.isEmpty()) {
-            changes.put("removed", removed);
-        }
-        if (changes.isEmpty()) {
-            return Map.of("note", "no config fields changed");
-        }
-        return changes;
     }
 
     private String prettyPrint(Object value) {
