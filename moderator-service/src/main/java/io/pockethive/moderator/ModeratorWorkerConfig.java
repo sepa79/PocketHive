@@ -70,6 +70,16 @@ public record ModeratorWorkerConfig(Mode mode) {
     public record RatePerSec(double value) {
       static final RatePerSec DEFAULT = new RatePerSec(0.0);
 
+      @JsonCreator(mode = JsonCreator.Mode.DELEGATING)
+      public static RatePerSec from(double value) {
+        return new RatePerSec(value);
+      }
+
+      @JsonValue
+      public double jsonValue() {
+        return value;
+      }
+
       public RatePerSec {
         value = sanitiseRate(value);
       }

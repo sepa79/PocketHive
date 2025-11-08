@@ -147,7 +147,7 @@
 2. **Configuration Infrastructure**
    - [x] Introduce `PocketHiveWorkerProperties<T>` base class and bind `pockethive.workers.<role>` automatically. Services can extend the base, provide `role` + `configType`, and expose `@ConfigurationProperties("pockethive.workers.<role>")`. Defaults defined under `...enabled` / `...config.*` are auto-registered with the control plane for every worker sharing that role.
    - [x] Create `WorkInputConfig` / `WorkOutputConfig` marker interfaces and default property classes (e.g., scheduler + RabbitMQ) plus binders to resolve `pockethive.inputs/outputs.<role>` into typed configs.
-   - [ ] Move enable/disable flags + infra knobs out of worker domain configs into the new input/output properties.
+  - [x] Move enable/disable flags + infra knobs out of worker domain configs into the new input/output properties.
 
 3. **Output SPI**
    - [x] Define the `WorkOutput` interface and `WorkOutputFactory`.
@@ -158,11 +158,11 @@
    - [x] Add `WorkInputFactory` SPI + initializer so auto-config can resolve per-worker inputs (currently defaulting to noop until concrete factories are wired).
    - [x] Ensure lifecycle beans manage both inputs and outputs (registries + lifecycle hooks now exist for each, ready for wiring into factories).
    - [x] Provide scheduler/Rabbit `WorkInputFactory` implementations (opt-in via `pockethive.worker.inputs.autowire=true` until runtime adapters are removed).
- - [ ] Support custom inputs/outputs via factories contributed as Spring beans. _TBD: defer until after infra config split ships._
+ - [x] Support custom inputs/outputs via factories contributed as Spring beans (ordered lists + `Ordered` support for precedence).
 
 5. **Service Migration**
    _Deferred until Task 2 completes._
-   - [ ] Convert generator service to the new model (remove runtime adapter, rely on autoconfig).
+   - [x] Convert generator service to the new model (scheduler/outputs auto-wired; legacy scheduling config removed).
    - [ ] Repeat for moderator, processor, postprocessor, trigger, swarm-controller, etc.
    - [ ] Delete obsolete defaults classes and runtime adapters once migration is complete.
 

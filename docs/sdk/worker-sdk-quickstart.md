@@ -126,7 +126,7 @@ class TriggerWorkInputFactory implements WorkInputFactory {
     SchedulerInputProperties scheduling = config instanceof SchedulerInputProperties props
         ? props
         : new SchedulerInputProperties();
-    TriggerSchedulerState schedulerState = new TriggerSchedulerState(properties);
+    TriggerSchedulerState schedulerState = new TriggerSchedulerState(properties, scheduling.isEnabled());
     Logger logger = LoggerFactory.getLogger(definition.beanType());
     return SchedulerWorkInput.<TriggerWorkerConfig>builder()
         .workerDefinition(definition)

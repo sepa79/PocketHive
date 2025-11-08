@@ -28,7 +28,6 @@ class ModeratorTest {
     @BeforeEach
     void setUp() {
         properties = new ModeratorWorkerProperties(new ObjectMapper());
-        properties.setEnabled(false);
         worker = new ModeratorWorkerImpl(properties);
     }
 
@@ -40,7 +39,7 @@ class ModeratorTest {
                 .build();
 
         WorkResult result = worker.onMessage(message, new TestWorkerContext(
-            new ModeratorWorkerConfig(true, ModeratorWorkerConfig.Mode.passThrough())));
+            new ModeratorWorkerConfig(ModeratorWorkerConfig.Mode.passThrough())));
 
         assertThat(result).isInstanceOf(WorkResult.Message.class);
         WorkMessage forwarded = ((WorkResult.Message) result).value();

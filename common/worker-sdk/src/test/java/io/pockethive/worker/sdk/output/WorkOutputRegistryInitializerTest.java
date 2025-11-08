@@ -18,6 +18,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.boot.context.properties.source.MapConfigurationPropertySource;
+import org.springframework.core.Ordered;
 
 class WorkOutputRegistryInitializerTest {
 
@@ -75,5 +76,68 @@ class WorkOutputRegistryInitializerTest {
 
         assertThat(outputRegistry.get("noopWorker")).isInstanceOf(NoopWorkOutput.class);
         assertThat(outputRegistry.get("rabbitWorker")).isInstanceOf(RabbitWorkOutput.class);
+    }
+
+    @Test
+    void prefersHighestPriorityOutputFactory() {
+        WorkerDefinition definition = new WorkerDefinition(
+            "priorityWorker",
+            Object.class,
+            WorkerInputType.SCHEDULER,
+            "prio",
+            null,
+            null,
+            null,
+            Void.class,
+            WorkInputConfig.class,
+            WorkOutputConfig.class,
+            WorkerOutputType.NONE,
+            "",
+            Set.of()
+        );
+        WorkerRegistry workerRegistry = new WorkerRegistry(List.of(definition));
+        WorkOutputRegistry outputRegistry = new WorkOutputRegistry();
+        WorkOutputConfigBinder binder = new WorkOutputConfigBinder(new Binder(new MapConfigurationPropertySource(Map.of())));
+        WorkOutput preferredOutput = (result, def) -> { };
+        WorkOutputFactory preferred = new OrderedOutputFactory(Ordered.HIGHEST_PRECEDENCE) {
+            @Override
+            public WorkOutput create(WorkerDefinition def, WorkOutputConfig config) {
+                return preferredOutput;
+            }
+        };
+        WorkOutputFactory fallback = new OrderedOutputFactory(Ordered.LOWEST_PRECEDENCE);
+
+        WorkOutputRegistryInitializer initializer = new WorkOutputRegistryInitializer(
+            workerRegistry,
+            outputRegistry,
+            binder,
+            List.of(fallback, preferred)
+        );
+        initializer.afterSingletonsInstantiated();
+
+        assertThat(outputRegistry.get("priorityWorker")).isSameAs(preferredOutput);
+    }
+
+    private static class OrderedOutputFactory implements WorkOutputFactory, Ordered {
+        private final int order;
+
+        private OrderedOutputFactory(int order) {
+            this.order = order;
+        }
+
+        @Override
+        public boolean supports(WorkerDefinition definition) {
+            return true;
+        }
+
+        @Override
+        public WorkOutput create(WorkerDefinition definition, WorkOutputConfig config) {
+            return new NoopWorkOutput();
+        }
+
+        @Override
+        public int getOrder() {
+            return order;
+        }
     }
 }

@@ -2,6 +2,7 @@ package io.pockethive.worker.sdk.input.rabbit;
 
 import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.worker.sdk.config.PocketHiveWorkerProperties;
+import io.pockethive.worker.sdk.config.RabbitInputProperties;
 import io.pockethive.worker.sdk.config.WorkInputConfig;
 import io.pockethive.worker.sdk.config.WorkerInputType;
 import io.pockethive.worker.sdk.input.WorkInput;
@@ -17,11 +18,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.amqp.rabbit.listener.RabbitListenerEndpointRegistry;
+import org.springframework.core.Ordered;
 
 /**
  * Creates {@link RabbitWorkInput} instances for {@link WorkerInputType#RABBIT} workers.
  */
-public final class RabbitWorkInputFactory implements WorkInputFactory {
+public final class RabbitWorkInputFactory implements WorkInputFactory, Ordered {
 
     private final WorkerRuntime workerRuntime;
     private final WorkerControlPlaneRuntime controlPlaneRuntime;
@@ -57,6 +59,9 @@ public final class RabbitWorkInputFactory implements WorkInputFactory {
     public WorkInput create(WorkerDefinition definition, WorkInputConfig config) {
         Logger logger = LoggerFactory.getLogger(definition.beanType());
         WorkerDefaults defaults = resolveDefaults(definition);
+        RabbitInputProperties rabbitConfig = config instanceof RabbitInputProperties props
+            ? props
+            : new RabbitInputProperties();
         return RabbitWorkInput.builder()
             .logger(logger)
             .listenerId(definition.beanName() + "Listener")
@@ -65,9 +70,9 @@ public final class RabbitWorkInputFactory implements WorkInputFactory {
             .controlPlaneRuntime(controlPlaneRuntime)
             .listenerRegistry(listenerRegistry)
             .identity(identity)
-            .defaultEnabledSupplier(() -> defaults.enabled())
+            .defaultEnabledSupplier(rabbitConfig::isEnabled)
             .defaultConfigSupplier(() -> defaults.rawConfig().isEmpty() ? null : defaults.rawConfig())
-            .desiredStateResolver(snapshot -> snapshot.enabled().orElse(defaults.enabled()))
+            .desiredStateResolver(snapshot -> snapshot.enabled().orElse(rabbitConfig.isEnabled()))
             .rabbitTemplate(rabbitTemplate)
             .dispatcher(message -> workerRuntime.dispatch(definition.beanName(), message))
             .messageResultPublisher((result, outbound) -> { })
@@ -79,11 +84,15 @@ public final class RabbitWorkInputFactory implements WorkInputFactory {
         Optional<PocketHiveWorkerProperties<?>> match = workerProperties.stream()
             .filter(props -> props.role().equalsIgnoreCase(definition.role()))
             .findFirst();
-        boolean enabled = match.map(PocketHiveWorkerProperties::isEnabled).orElse(true);
         Map<String, Object> config = match.map(PocketHiveWorkerProperties::rawConfig).orElse(Map.of());
-        return new WorkerDefaults(enabled, config);
+        return new WorkerDefaults(config);
     }
 
-    private record WorkerDefaults(boolean enabled, Map<String, Object> rawConfig) {
+    private record WorkerDefaults(Map<String, Object> rawConfig) {
+    }
+
+    @Override
+    public int getOrder() {
+        return Ordered.LOWEST_PRECEDENCE;
     }
 }

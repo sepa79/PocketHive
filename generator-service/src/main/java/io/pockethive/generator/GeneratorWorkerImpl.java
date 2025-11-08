@@ -70,7 +70,6 @@ class GeneratorWorkerImpl implements PocketHiveWorkerFunction {
    *
    * <pre>{@code
    * {
-   *   "enabled": true,
    *   "ratePerSec": 1.5,
    *   "singleRequest": false,
    *   "message": {

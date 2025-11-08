@@ -41,7 +41,7 @@ final class PocketHiveWorkerDefaultsInitializer implements SmartInitializingSing
     }
 
     private void registerDefaults(PocketHiveWorkerProperties<?> props) {
-        if (!props.hasConfigOverrides() && !props.hasEnabledOverride()) {
+        if (!props.hasConfigOverrides()) {
             log.debug("No worker defaults configured for role '{}'", props.role());
             return;
         }

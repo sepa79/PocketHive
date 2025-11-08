@@ -19,11 +19,11 @@ final class TriggerSchedulerState implements SchedulerState<TriggerWorkerConfig>
   private volatile boolean enabled;
   private volatile long lastInvocation;
 
-  TriggerSchedulerState(TriggerWorkerProperties properties) {
+  TriggerSchedulerState(TriggerWorkerProperties properties, boolean defaultEnabled) {
     this.properties = Objects.requireNonNull(properties, "properties");
     TriggerWorkerConfig initial = properties.defaultConfig();
     this.config = initial;
-    this.defaultEnabled = properties.isEnabled();
+    this.defaultEnabled = defaultEnabled;
     this.enabled = defaultEnabled;
     this.lastInvocation = 0L;
   }

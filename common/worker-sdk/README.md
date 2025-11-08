@@ -94,7 +94,7 @@ Every invocation receives a `WorkerContext` that exposes topology metadata (`Wor
 
 ### `WorkerRuntime`
 
-Transports interact with the runtime through `WorkerRuntime.dispatch(beanName, WorkMessage)`. The `DefaultWorkerRuntime` is provided by auto-configuration and resolves worker beans, builds invocation contexts, runs interceptors, and translates results back to the transport-specific adapter. See the runtime adapters in the [trigger](../../trigger-service/src/main/java/io/pockethive/trigger/TriggerRuntimeAdapter.java) and [generator](../../generator-service/src/main/java/io/pockethive/generator/GeneratorRuntimeAdapter.java) services for integration patterns.
+Transports interact with the runtime through `WorkerRuntime.dispatch(beanName, WorkMessage)`. The `DefaultWorkerRuntime` is provided by auto-configuration and resolves worker beans, builds invocation contexts, runs interceptors, and translates results back to the transport-specific adapter. If you need a bespoke transport, check the runtime adapters in the [`examples/worker-starter`](../../examples/worker-starter) modules for integration patterns.
 
 ### `WorkerControlPlaneRuntime`
 
@@ -105,7 +105,7 @@ The control-plane runtime bridges the SDK with the control-plane topic. It appli
 1. Add the `worker-sdk` dependency to your service.
 2. Annotate business beans with `@PocketHiveWorker`, selecting the appropriate input binding (Rabbit by default) and queues.
 3. Implement `PocketHiveWorkerFunction` and return `WorkResult` instances.
-4. Inject `WorkerRuntime` and `WorkerControlPlaneRuntime` into your transport adapter to dispatch messages and surface control-plane state (see the `*RuntimeAdapter` classes in each migrated service).
+4. Inject `WorkerRuntime` and `WorkerControlPlaneRuntime` into your transport adapter to dispatch messages and surface control-plane state (see the adapter examples under `examples/worker-starter` if you need to build one manually).
 5. Use `WorkerContext` for config, metrics, observability, and status reporting.
 
 For a full walkthrough consult the [Worker SDK quick start](../../docs/sdk/worker-sdk-quickstart.md), which links to Stage 1–3 features and migration tips.

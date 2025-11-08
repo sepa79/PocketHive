@@ -14,14 +14,15 @@ import java.lang.reflect.Constructor;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.function.BooleanSupplier;
+import java.util.function.Supplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.core.Ordered;
 
 /**
  * Creates {@link SchedulerWorkInput} instances for workers that expose {@link RateConfig} semantics.
  */
-public final class SchedulerWorkInputFactory implements WorkInputFactory {
+public final class SchedulerWorkInputFactory implements WorkInputFactory, Ordered {
 
     private final WorkerRuntime workerRuntime;
     private final WorkerControlPlaneRuntime controlPlaneRuntime;
@@ -56,15 +57,15 @@ public final class SchedulerWorkInputFactory implements WorkInputFactory {
         Class<? extends RateConfig> configType = (Class<? extends RateConfig>) definition.configType();
         @SuppressWarnings("unchecked")
         Class<RateConfig> typedConfigType = (Class<RateConfig>) configType;
+        SchedulerInputProperties scheduling = config instanceof SchedulerInputProperties props
+            ? props
+            : new SchedulerInputProperties();
         SchedulerState<RateConfig> schedulerState = SchedulerStates.ratePerSecond(
             typedConfigType,
             () -> fetchDefaultConfig(definition, typedConfigType),
             logger,
-            defaultEnabledSupplier(definition)
+            scheduling::isEnabled
         );
-        SchedulerInputProperties scheduling = config instanceof SchedulerInputProperties props
-            ? props
-            : new SchedulerInputProperties();
         return SchedulerWorkInput.<RateConfig>builder()
             .workerDefinition(definition)
             .controlPlaneRuntime(controlPlaneRuntime)
@@ -107,15 +108,6 @@ public final class SchedulerWorkInputFactory implements WorkInputFactory {
         }
     }
 
-    private BooleanSupplier defaultEnabledSupplier(WorkerDefinition definition) {
-        boolean fallback = workerProperties.stream()
-            .filter(props -> definition.role().equalsIgnoreCase(props.role()))
-            .findFirst()
-            .map(PocketHiveWorkerProperties::isEnabled)
-            .orElse(true);
-        return () -> fallback;
-    }
-
     private static <C extends RateConfig> C instantiateConfig(Class<C> configType) {
         try {
             Constructor<C> ctor = configType.getDeclaredConstructor();
@@ -124,5 +116,10 @@ public final class SchedulerWorkInputFactory implements WorkInputFactory {
         } catch (Exception ex) {
             throw new IllegalStateException("Unable to instantiate scheduler config of type " + configType.getName(), ex);
         }
+    }
+
+    @Override
+    public int getOrder() {
+        return Ordered.LOWEST_PRECEDENCE;
     }
 }

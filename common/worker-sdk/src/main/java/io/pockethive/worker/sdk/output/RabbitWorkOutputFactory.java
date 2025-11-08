@@ -5,8 +5,9 @@ import io.pockethive.worker.sdk.config.WorkOutputConfig;
 import io.pockethive.worker.sdk.config.WorkerOutputType;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.core.Ordered;
 
-public final class RabbitWorkOutputFactory implements WorkOutputFactory {
+public final class RabbitWorkOutputFactory implements WorkOutputFactory, Ordered {
 
     private final RabbitTemplate rabbitTemplate;
 
@@ -26,5 +27,10 @@ public final class RabbitWorkOutputFactory implements WorkOutputFactory {
             throw new IllegalStateException("RabbitTemplate is required for RabbitMQ outputs");
         }
         return new RabbitWorkOutput(rabbitTemplate, properties);
+    }
+
+    @Override
+    public int getOrder() {
+        return Ordered.LOWEST_PRECEDENCE;
     }
 }

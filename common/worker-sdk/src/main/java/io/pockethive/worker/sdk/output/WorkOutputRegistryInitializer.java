@@ -4,12 +4,14 @@ import io.pockethive.worker.sdk.config.WorkOutputConfig;
 import io.pockethive.worker.sdk.config.WorkOutputConfigBinder;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
 import io.pockethive.worker.sdk.runtime.WorkerRegistry;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.SmartInitializingSingleton;
+import org.springframework.core.annotation.AnnotationAwareOrderComparator;
 
 public final class WorkOutputRegistryInitializer implements SmartInitializingSingleton {
 
@@ -28,7 +30,13 @@ public final class WorkOutputRegistryInitializer implements SmartInitializingSin
         this.workerRegistry = Objects.requireNonNull(workerRegistry, "workerRegistry");
         this.outputRegistry = Objects.requireNonNull(outputRegistry, "outputRegistry");
         this.configBinder = Objects.requireNonNull(configBinder, "configBinder");
-        this.factories = factories == null ? Collections.emptyList() : List.copyOf(factories);
+        if (factories == null || factories.isEmpty()) {
+            this.factories = Collections.emptyList();
+        } else {
+            List<WorkOutputFactory> sorted = new ArrayList<>(factories);
+            AnnotationAwareOrderComparator.sort(sorted);
+            this.factories = Collections.unmodifiableList(sorted);
+        }
     }
 
     @Override

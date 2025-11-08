@@ -373,7 +373,7 @@ public final class WorkerControlPlaneRuntime {
             }
             Object candidate = workersMap.get(beanName);
             if (candidate instanceof Map<?, ?> nested) {
-                Map<String, Object> copied = copyMap(nested);
+                Map<String, Object> copied = toStringMap(nested);
                 boolean resetRequested = copied.isEmpty();
                 return new WorkerConfigPatch(copied, true, resetRequested);
             }
@@ -383,7 +383,7 @@ public final class WorkerControlPlaneRuntime {
         }
         Object direct = sanitized.get(beanName);
         if (direct instanceof Map<?, ?> nested) {
-            Map<String, Object> copied = copyMap(nested);
+            Map<String, Object> copied = toStringMap(nested);
             boolean resetRequested = copied.isEmpty();
             return new WorkerConfigPatch(copied, true, resetRequested);
         }
@@ -449,7 +449,7 @@ public final class WorkerControlPlaneRuntime {
         }
     }
 
-    private Map<String, Object> copyMap(Map<?, ?> source) {
+    private Map<String, Object> toStringMap(Map<?, ?> source) {
         Map<String, Object> copy = new LinkedHashMap<>();
         source.forEach((key, value) -> {
             if (key != null) {

@@ -18,7 +18,7 @@ config:
     default: "PASS_THROUGH"
     ui:
       placeholder: "PASS_THROUGH | RATE_PER_SEC | SINE"
-  - name: mode.ratePerSec.value
+  - name: mode.ratePerSec
     type: number
     default: 0
     min: 0

@@ -48,7 +48,7 @@ class TriggerWorkInputFactory implements WorkInputFactory {
     SchedulerInputProperties scheduling = config instanceof SchedulerInputProperties props
         ? props
         : new SchedulerInputProperties();
-    TriggerSchedulerState schedulerState = new TriggerSchedulerState(properties);
+    TriggerSchedulerState schedulerState = new TriggerSchedulerState(properties, scheduling.isEnabled());
     return SchedulerWorkInput.<TriggerWorkerConfig>builder()
         .workerDefinition(definition)
         .controlPlaneRuntime(controlPlaneRuntime)

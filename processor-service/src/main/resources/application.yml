@@ -16,9 +16,11 @@ pockethive:
   worker:
     inputs:
       autowire: true
-  workers:
+  inputs:
     processor:
       enabled: false
+  workers:
+    processor:
       config:
         base-url: http://wiremock:8080
   control-plane:

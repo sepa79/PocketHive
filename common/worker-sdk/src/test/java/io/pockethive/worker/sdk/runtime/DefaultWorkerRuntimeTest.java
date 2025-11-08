@@ -79,6 +79,11 @@ class DefaultWorkerRuntimeTest {
             }
 
             @Override
+            public boolean enabled() {
+                return true;
+            }
+
+            @Override
             public <C> Optional<C> config(Class<C> type) {
                 return state.config(type);
             }

@@ -15,9 +15,11 @@ pockethive:
   worker:
     inputs:
       autowire: true
-  workers:
+  inputs:
     trigger:
       enabled: false
+  workers:
+    trigger:
       config:
         interval-ms: 1000
         single-request: false

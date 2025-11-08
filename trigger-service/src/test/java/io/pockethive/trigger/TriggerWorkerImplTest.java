@@ -44,7 +44,6 @@ class TriggerWorkerImplTest {
   void setUp() throws Exception {
     MockitoAnnotations.openMocks(this);
     properties = new TriggerWorkerProperties(new ObjectMapper());
-    properties.setEnabled(true);
     properties.setConfig(Map.of(
         "intervalMs", 500,
         "actionType", "rest",

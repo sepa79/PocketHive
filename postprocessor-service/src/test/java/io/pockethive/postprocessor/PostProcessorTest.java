@@ -37,7 +37,7 @@ class PostProcessorTest {
 
     @Test
     void onMessageRecordsLatencyAndErrorsAndUpdatesStatus() {
-        PostProcessorWorkerProperties properties = workerProperties(true, false);
+        PostProcessorWorkerProperties properties = workerProperties(false);
         PostProcessorWorkerImpl worker = new PostProcessorWorkerImpl(properties);
         ObservabilityContext context = new ObservabilityContext();
         List<Hop> hops = new ArrayList<>();
@@ -114,7 +114,7 @@ class PostProcessorTest {
 
     @Test
     void onMessageRecordsProcessorFailureMetrics() {
-        PostProcessorWorkerProperties properties = workerProperties(true, false);
+        PostProcessorWorkerProperties properties = workerProperties(false);
         PostProcessorWorkerImpl worker = new PostProcessorWorkerImpl(properties);
         ObservabilityContext context = new ObservabilityContext();
         List<Hop> hops = new ArrayList<>();
@@ -161,7 +161,7 @@ class PostProcessorTest {
 
     @Test
     void onMessageCompletesInFlightHopBeforeRecording() {
-        PostProcessorWorkerProperties properties = workerProperties(true, false);
+        PostProcessorWorkerProperties properties = workerProperties(false);
         PostProcessorWorkerImpl worker = new PostProcessorWorkerImpl(properties);
         ObservabilityContext context = new ObservabilityContext();
         List<Hop> hops = new ArrayList<>();
@@ -199,7 +199,7 @@ class PostProcessorTest {
 
     @Test
     void onMessageUsesDefaultsWhenNoConfigPresent() {
-        PostProcessorWorkerProperties properties = workerProperties(false, false);
+        PostProcessorWorkerProperties properties = workerProperties(false);
         PostProcessorWorkerImpl worker = new PostProcessorWorkerImpl(properties);
         ObservabilityContext context = new ObservabilityContext();
         context.setHops(List.of());
@@ -217,7 +217,7 @@ class PostProcessorTest {
 
     @Test
     void onMessagePublishesFullSnapshotWhenPublishAllMetricsEnabled() {
-        PostProcessorWorkerProperties properties = workerProperties(true, true);
+        PostProcessorWorkerProperties properties = workerProperties(true);
         PostProcessorWorkerImpl worker = new PostProcessorWorkerImpl(properties);
         ObservabilityContext context = new ObservabilityContext();
         List<Hop> hops = new ArrayList<>();
@@ -390,9 +390,8 @@ class PostProcessorTest {
         }
     }
 
-    private static PostProcessorWorkerProperties workerProperties(boolean enabled, boolean publishAllMetrics) {
+    private static PostProcessorWorkerProperties workerProperties(boolean publishAllMetrics) {
         PostProcessorWorkerProperties properties = new PostProcessorWorkerProperties(new ObjectMapper());
-        properties.setEnabled(enabled);
         Map<String, Object> config = new LinkedHashMap<>();
         config.put("publishAllMetrics", publishAllMetrics);
         properties.setConfig(config);

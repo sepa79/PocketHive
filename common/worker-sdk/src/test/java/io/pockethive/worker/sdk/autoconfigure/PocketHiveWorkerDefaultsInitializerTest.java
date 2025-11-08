@@ -57,7 +57,6 @@ class PocketHiveWorkerDefaultsInitializerTest {
     @Test
     void registersDefaultsForMatchingRole() {
         TestWorkerProperties props = new TestWorkerProperties();
-        props.setEnabled(true);
         props.setConfig(Map.of("value", "demo"));
         org.assertj.core.api.Assertions.assertThat(props.rawConfig()).containsEntry("value", "demo");
         PocketHiveWorkerDefaultsInitializer initializer = new PocketHiveWorkerDefaultsInitializer(
@@ -71,8 +70,7 @@ class PocketHiveWorkerDefaultsInitializerTest {
         ArgumentCaptor<Map<String, Object>> captor = ArgumentCaptor.forClass(Map.class);
         verify(controlPlaneRuntime).registerDefaultConfig(eq("testWorker"), captor.capture());
         org.assertj.core.api.Assertions.assertThat(captor.getValue())
-            .containsEntry("value", "demo")
-            .containsEntry("enabled", true);
+            .containsEntry("value", "demo");
     }
 
     @Test
@@ -106,6 +104,6 @@ class PocketHiveWorkerDefaultsInitializerTest {
         }
     }
 
-    private record TestWorkerConfig(boolean enabled, String value) {
+    private record TestWorkerConfig(String value) {
     }
 }

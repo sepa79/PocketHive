@@ -58,7 +58,7 @@ public final class SchedulerStates {
         Class<C> configType,
         Supplier<C> defaults,
         Logger log,
-        java.util.function.BooleanSupplier defaultEnabled
+        Supplier<Boolean> defaultEnabled
     ) {
         return new RatePerSecondState<>(configType, defaults, log, defaultEnabled);
     }
@@ -69,13 +69,13 @@ public final class SchedulerStates {
         private final Supplier<C> defaults;
         private final Logger log;
         private final AtomicBoolean singleRequestPending = new AtomicBoolean(false);
-        private final java.util.function.BooleanSupplier defaultEnabledSupplier;
+        private final Supplier<Boolean> defaultEnabledSupplier;
 
         private volatile C config;
         private volatile boolean enabled;
         private double carryOver;
 
-        private RatePerSecondState(Class<C> configType, Supplier<C> defaults, Logger log, java.util.function.BooleanSupplier defaultEnabledSupplier) {
+        private RatePerSecondState(Class<C> configType, Supplier<C> defaults, Logger log, Supplier<Boolean> defaultEnabledSupplier) {
             this.configType = Objects.requireNonNull(configType, "configType");
             Objects.requireNonNull(defaults, "defaults");
             this.defaults = () -> Objects.requireNonNull(defaults.get(), "defaults supplier returned null");
@@ -83,7 +83,7 @@ public final class SchedulerStates {
             this.defaultEnabledSupplier = defaultEnabledSupplier == null ? () -> true : defaultEnabledSupplier;
             C initial = this.defaults.get();
             this.config = initial;
-            this.enabled = this.defaultEnabledSupplier.getAsBoolean();
+            this.enabled = Boolean.TRUE.equals(this.defaultEnabledSupplier.get());
             this.carryOver = 0.0;
             if (log.isDebugEnabled()) {
                 log.debug("{} scheduler initialised: enabled={}, ratePerSec={}, singleRequest={}",
@@ -101,7 +101,7 @@ public final class SchedulerStates {
             Objects.requireNonNull(snapshot, "snapshot");
             C incoming = snapshot.config(configType).orElseGet(defaults);
             C previous = this.config;
-            boolean resolvedEnabled = snapshot.enabled().orElseGet(defaultEnabledSupplier);
+            boolean resolvedEnabled = snapshot.enabled().orElseGet(() -> Boolean.TRUE.equals(defaultEnabledSupplier.get()));
             this.config = incoming;
             boolean configChanged = !Objects.equals(previous, incoming);
             boolean enabledChanged = resolvedEnabled != this.enabled;

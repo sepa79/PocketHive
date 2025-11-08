@@ -5,9 +5,18 @@ package io.pockethive.worker.sdk.config;
  */
 public class SchedulerInputProperties implements WorkInputConfig {
 
+    private boolean enabled = false;
     private long initialDelayMs = 0L;
     private long tickIntervalMs = 1_000L;
     private int maxPendingTicks = 1;
+
+    public boolean isEnabled() {
+        return enabled;
+    }
+
+    public void setEnabled(boolean enabled) {
+        this.enabled = enabled;
+    }
 
     public long getInitialDelayMs() {
         return initialDelayMs;

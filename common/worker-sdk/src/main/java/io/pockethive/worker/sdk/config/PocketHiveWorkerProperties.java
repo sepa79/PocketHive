@@ -19,8 +19,6 @@ public abstract class PocketHiveWorkerProperties<T> {
 
     private final String role;
     private final Class<T> configType;
-    private boolean enabled = false;
-    private boolean enabledConfigured = false;
     /**
      * Worker-specific configuration payload bound from {@code pockethive.workers.<role>.config.*}.
      */
@@ -39,15 +37,6 @@ public abstract class PocketHiveWorkerProperties<T> {
         return configType;
     }
 
-    public boolean isEnabled() {
-        return enabled;
-    }
-
-    public void setEnabled(boolean enabled) {
-        this.enabled = enabled;
-        this.enabledConfigured = true;
-    }
-
     public Map<String, Object> getConfig() {
         return config;
     }
@@ -64,17 +53,14 @@ public abstract class PocketHiveWorkerProperties<T> {
      * Returns the merged raw configuration (worker-specific fields plus the {@code enabled} toggle) as an immutable map.
      */
     public Map<String, Object> rawConfig() {
-        Map<String, Object> merged = new LinkedHashMap<>(config);
-        merged.put("enabled", enabled);
-        return Map.copyOf(merged);
+        if (config.isEmpty()) {
+            return Map.of();
+        }
+        return Map.copyOf(config);
     }
 
     public boolean hasConfigOverrides() {
         return !config.isEmpty();
-    }
-
-    public boolean hasEnabledOverride() {
-        return enabledConfigured;
     }
 
     /**
@@ -85,7 +71,7 @@ public abstract class PocketHiveWorkerProperties<T> {
         if (configType == Void.class) {
             return Optional.empty();
         }
-        Map<String, Object> raw = sanitizedConfig();
+        Map<String, Object> raw = rawConfig();
         if (raw.isEmpty()) {
             return Optional.empty();
         }
@@ -96,19 +82,6 @@ public abstract class PocketHiveWorkerProperties<T> {
                 .formatted(role, configType.getSimpleName());
             throw new IllegalStateException(message, ex);
         }
-    }
-
-    private Map<String, Object> sanitizedConfig() {
-        Map<String, Object> raw = rawConfig();
-        if (raw.isEmpty()) {
-            return raw;
-        }
-        if (!raw.containsKey("enabled")) {
-            return raw;
-        }
-        Map<String, Object> copy = new LinkedHashMap<>(raw);
-        copy.remove("enabled");
-        return copy;
     }
 
     private static String normaliseRole(String role) {

@@ -6,10 +6,19 @@ package io.pockethive.worker.sdk.config;
  */
 public class RabbitInputProperties implements WorkInputConfig {
 
+    private boolean enabled = false;
     private int prefetch = 50;
     private int concurrentConsumers = 1;
     private boolean exclusive = false;
     private boolean autoStartup = true;
+
+    public boolean isEnabled() {
+        return enabled;
+    }
+
+    public void setEnabled(boolean enabled) {
+        this.enabled = enabled;
+    }
 
     public int getPrefetch() {
         return prefetch;

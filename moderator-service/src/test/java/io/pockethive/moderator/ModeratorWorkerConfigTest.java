@@ -8,7 +8,7 @@ class ModeratorWorkerConfigTest {
 
   @Test
   void defaultsToPassThroughWhenModeMissing() {
-    ModeratorWorkerConfig config = new ModeratorWorkerConfig(true, null);
+    ModeratorWorkerConfig config = new ModeratorWorkerConfig(null);
 
     assertThat(config.operationMode()).isInstanceOf(ModeratorOperationMode.PassThrough.class);
   }
@@ -20,7 +20,7 @@ class ModeratorWorkerConfigTest {
         new ModeratorWorkerConfig.Mode.RatePerSec(-10.0),
         new ModeratorWorkerConfig.Mode.Sine(0.0, 0.0, 60.0, 0.0));
 
-    ModeratorOperationMode operationMode = new ModeratorWorkerConfig(true, mode).operationMode();
+    ModeratorOperationMode operationMode = new ModeratorWorkerConfig(mode).operationMode();
 
     assertThat(operationMode)
         .isInstanceOf(ModeratorOperationMode.RatePerSec.class)
@@ -35,7 +35,7 @@ class ModeratorWorkerConfigTest {
         new ModeratorWorkerConfig.Mode.RatePerSec(0.0),
         new ModeratorWorkerConfig.Mode.Sine(5.0, 1.0, 0.0, Double.NaN));
 
-    ModeratorOperationMode operationMode = new ModeratorWorkerConfig(true, mode).operationMode();
+    ModeratorOperationMode operationMode = new ModeratorWorkerConfig(mode).operationMode();
 
     assertThat(operationMode)
         .isInstanceOf(ModeratorOperationMode.Sine.class)
@@ -47,4 +47,5 @@ class ModeratorWorkerConfigTest {
           assertThat(sine.phaseOffsetSeconds()).isEqualTo(0.0);
         });
   }
+
 }
