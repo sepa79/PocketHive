@@ -1,8 +1,6 @@
 package io.pockethive.worker.sdk.runtime;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.pockethive.control.CommandState;
 import io.pockethive.control.CommandTarget;
 import io.pockethive.control.ControlSignal;
 import io.pockethive.controlplane.ControlPlaneIdentity;
@@ -56,6 +54,7 @@ public final class WorkerControlPlaneRuntime {
     private final WorkerSignalListener signalListener = new WorkerSignalDispatcher();
     private final Map<String, List<Consumer<WorkerStateSnapshot>>> stateListeners = new ConcurrentHashMap<>();
     private final List<Consumer<WorkerStateSnapshot>> globalStateListeners = new CopyOnWriteArrayList<>();
+    private final ControlPlaneNotifier notifier;
 
     public WorkerControlPlaneRuntime(
         WorkerControlPlane workerControlPlane,
@@ -75,6 +74,13 @@ public final class WorkerControlPlaneRuntime {
             Objects.requireNonNull(controlPlane, "controlPlane");
         this.controlQueueName = resolvedControlPlane.getControlQueueName();
         this.controlRoutes = resolveControlRoutes(resolvedControlPlane.getRoutes(), identity);
+        this.notifier = new ControlPlaneNotifier(
+            log,
+            this.objectMapper,
+            emitter,
+            identity.role(),
+            identity.instanceId()
+        );
         // Ensure workers discovered during runtime bootstrap receive a status publisher.
         stateStore.all().forEach(this::ensureStatusPublisher);
     }
@@ -148,7 +154,7 @@ public final class WorkerControlPlaneRuntime {
         Object typedConfig = ensureTypedDefault(state.definition(), defaultConfig, rawConfig);
         if (state.seedConfig(typedConfig, enabled)) {
             ensureStatusPublisher(state);
-            logInitialConfig(state, rawConfig);
+            notifier.logInitialConfig(state, rawConfig, enabled);
             notifyStateListeners(state);
         }
     }
@@ -236,7 +242,14 @@ public final class WorkerControlPlaneRuntime {
                 Boolean enabled = resolveEnabled(mergeResult.rawConfig(), command.enabled());
                 state.updateConfig(mergeResult.typedConfig(), mergeResult.replaced(), enabled);
                 Map<String, Object> appliedConfig = mergeResult.replaced() ? mergeResult.rawConfig() : Map.of();
-                emitConfigReady(signal, state, appliedConfig, enabled);
+                if (hasCorrelation(signal)) {
+                    notifier.emitConfigReady(signal, state, appliedConfig, enabled);
+                } else {
+                    log.debug(
+                        "Skipping ready confirmation for signal {} due to missing correlation/idempotency",
+                        signal.signal()
+                    );
+                }
                 notifyStateListeners(state);
                 Map<String, Object> finalConfig = mergeResult.replaced()
                     ? mergeResult.rawConfig()
@@ -250,18 +263,25 @@ public final class WorkerControlPlaneRuntime {
                     previousEnabled,
                     finalEnabled
                 )) {
-                    logConfigUpdate(
+                    notifier.logConfigUpdate(
                         signal,
                         state,
-                        mergeResult.previousRaw(),
+                        mergeResult.diff(),
                         finalConfig,
                         previousEnabled,
-                        finalEnabled,
-                        mergeResult.diff()
+                        finalEnabled
                     );
                 }
             } catch (Exception ex) {
-                emitConfigError(signal, state, ex);
+                if (hasCorrelation(signal)) {
+                    notifier.emitConfigError(signal, state, ex);
+                } else {
+                    log.debug(
+                        "Skipping error confirmation for signal {} due to missing correlation/idempotency",
+                        signal.signal()
+                    );
+                }
+                notifyStateListeners(state);
                 log.warn("Failed to apply config update for worker {}", state.definition().beanName(), ex);
             }
         }
@@ -279,57 +299,6 @@ public final class WorkerControlPlaneRuntime {
             return null;
         }
         return configMerger.toTypedConfig(definition, rawConfig);
-    }
-
-    private void emitConfigReady(ControlSignal signal, WorkerState state, Map<String, Object> rawConfig, Boolean enabled) {
-        if (!hasCorrelation(signal)) {
-            log.debug("Skipping ready confirmation for signal {} due to missing correlation/idempotency", signal.signal());
-            return;
-        }
-        Map<String, Object> commandDetails = new LinkedHashMap<>();
-        if (!rawConfig.isEmpty()) {
-            commandDetails.put("config", rawConfig);
-        }
-        CommandState commandState = new CommandState("applied", enabled, commandDetails.isEmpty() ? null : commandDetails);
-        Map<String, Object> confirmationDetails = new LinkedHashMap<>();
-        confirmationDetails.put("worker", state.definition().beanName());
-        Map<String, Object> statusData = state.statusData();
-        if (!statusData.isEmpty()) {
-            confirmationDetails.put("data", statusData);
-        }
-        if (!rawConfig.isEmpty()) {
-            confirmationDetails.put("config", rawConfig);
-        }
-        ControlPlaneEmitter.ReadyContext.Builder ready = ControlPlaneEmitter.ReadyContext.builder(
-            signal.signal(), signal.correlationId(), signal.idempotencyKey(), commandState
-        );
-        if (!confirmationDetails.isEmpty()) {
-            ready.details(confirmationDetails);
-        }
-        emitter.emitReady(ready.build());
-    }
-
-    private void emitConfigError(ControlSignal signal, WorkerState state, Exception error) {
-        if (!hasCorrelation(signal)) {
-            log.debug("Skipping error confirmation for signal {} due to missing correlation/idempotency", signal.signal());
-            return;
-        }
-        String code = error.getClass().getSimpleName();
-        String message = error.getMessage() == null || error.getMessage().isBlank() ? code : error.getMessage();
-        CommandState commandState = new CommandState("failed", state.enabled().orElse(null), null);
-        Map<String, Object> details = new LinkedHashMap<>();
-        details.put("worker", state.definition().beanName());
-        details.put("exception", code);
-        Map<String, Object> statusData = state.statusData();
-        if (!statusData.isEmpty()) {
-            details.put("data", statusData);
-        }
-        ControlPlaneEmitter.ErrorContext.Builder builder = ControlPlaneEmitter.ErrorContext.builder(
-            signal.signal(), signal.correlationId(), signal.idempotencyKey(), commandState, CONFIG_PHASE, code, message
-        ).retryable(Boolean.FALSE);
-        builder.details(details);
-        emitter.emitError(builder.build());
-        notifyStateListeners(state);
     }
 
     private boolean hasCorrelation(ControlSignal signal) {
@@ -467,65 +436,6 @@ public final class WorkerControlPlaneRuntime {
             return true;
         }
         return !Objects.equals(previousConfig, finalConfig);
-    }
-
-    private void logInitialConfig(WorkerState state, Map<String, Object> config) {
-        String prettyConfig = prettyPrint(config.isEmpty() ? Map.of() : config);
-        Boolean enabled = state.enabled().orElse(null);
-        log.info(
-            "Initial config for worker {} (role={} instance={}):\n  enabled: {}\n  config:\n{}",
-            state.definition().beanName(),
-            identity.role(),
-            identity.instanceId(),
-            formatEnabledValue(enabled),
-            prettyConfig
-        );
-    }
-
-    private void logConfigUpdate(
-        ControlSignal signal,
-        WorkerState state,
-        Map<String, Object> previousConfig,
-        Map<String, Object> finalConfig,
-        Boolean previousEnabled,
-        Boolean finalEnabled,
-        Map<String, Object> diff
-    ) {
-        String prettyChanges = prettyPrint(diff);
-        String prettyFinal = prettyPrint(finalConfig.isEmpty() ? Map.of() : finalConfig);
-        log.info(
-            "Applied config update for worker {} (signal={} role={} instance={}):\n  enabled: {}\n  changes:\n{}\n  finalConfig:\n{}",
-            state.definition().beanName(),
-            signal.signal(),
-            signal.role(),
-            signal.instance(),
-            formatEnabledChange(previousEnabled, finalEnabled),
-            prettyChanges,
-            prettyFinal
-        );
-    }
-
-    private String prettyPrint(Object value) {
-        if (value == null) {
-            return "null";
-        }
-        try {
-            return objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(value);
-        } catch (JsonProcessingException ex) {
-            log.warn("Unable to pretty print config value", ex);
-            return String.valueOf(value);
-        }
-    }
-
-    private String formatEnabledChange(Boolean previousEnabled, Boolean finalEnabled) {
-        if (Objects.equals(previousEnabled, finalEnabled)) {
-            return formatEnabledValue(finalEnabled) + " (unchanged)";
-        }
-        return formatEnabledValue(finalEnabled) + " (was " + formatEnabledValue(previousEnabled) + ")";
-    }
-
-    private String formatEnabledValue(Boolean value) {
-        return value == null ? "unspecified" : value.toString();
     }
 
     private record WorkerConfigPatch(Map<String, Object> values, boolean targeted, boolean resetRequested) {
