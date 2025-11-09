@@ -55,9 +55,11 @@ class ProcessorTest {
     private static final ObjectMapper MAPPER = new ObjectMapper();
     private static final WorkerControlPlaneProperties WORKER_PROPERTIES =
         ControlPlaneTestFixtures.workerProperties("swarm", "processor", "instance");
-    private static final String MODERATOR_QUEUE = WORKER_PROPERTIES.getQueues().get("moderator");
-    private static final String FINAL_QUEUE = WORKER_PROPERTIES.getQueues().get("final");
-    private static final String TRAFFIC_EXCHANGE = WORKER_PROPERTIES.getTrafficExchange();
+    private static final Map<String, String> WORKER_QUEUES =
+        ControlPlaneTestFixtures.workerQueues("swarm");
+    private static final String MODERATOR_QUEUE = WORKER_QUEUES.get("moderator");
+    private static final String FINAL_QUEUE = WORKER_QUEUES.get("final");
+    private static final String TRAFFIC_EXCHANGE = ControlPlaneTestFixtures.hiveExchange("swarm");
 
     @Test
     void workerInvokesHttpAndPropagatesResponse() throws Exception {

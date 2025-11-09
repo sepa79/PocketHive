@@ -33,7 +33,9 @@ class PostProcessorTest {
     private static final Instant START = Instant.parse("2024-01-01T00:00:00Z");
     private static final WorkerControlPlaneProperties WORKER_PROPERTIES =
         ControlPlaneTestFixtures.workerProperties("swarm", "postprocessor", "instance");
-    private static final String FINAL_QUEUE = WORKER_PROPERTIES.getQueues().get("final");
+    private static final Map<String, String> WORKER_QUEUES =
+        ControlPlaneTestFixtures.workerQueues("swarm");
+    private static final String FINAL_QUEUE = WORKER_QUEUES.get("final");
 
     @Test
     void onMessageRecordsLatencyAndErrorsAndUpdatesStatus() {

@@ -17,20 +17,21 @@ pockethive:
     inputs:
       autowire: true
   inputs:
-    postprocessor:
+    rabbit:
       enabled: false
+      queue: ${POCKETHIVE_INPUT_RABBIT_QUEUE}
+  outputs:
+    rabbit:
+      exchange: ${POCKETHIVE_OUTPUT_RABBIT_EXCHANGE}
   workers:
     postprocessor:
       config:
         publishAllMetrics: false
   control-plane:
     exchange: ${POCKETHIVE_CONTROL_PLANE_EXCHANGE}
-    traffic-exchange: ${POCKETHIVE_CONTROL_PLANE_TRAFFIC_EXCHANGE}
     swarm-id: ${POCKETHIVE_CONTROL_PLANE_SWARM_ID}
     instance-id: ${POCKETHIVE_CONTROL_PLANE_INSTANCE_ID}
     control-queue-prefix: ${POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE_PREFIX}
-    queues:
-      final: ${POCKETHIVE_CONTROL_PLANE_QUEUES_FINAL}
     worker:
       role: postprocessor
       skip-self-signals: false

@@ -17,22 +17,22 @@ pockethive:
     inputs:
       autowire: true
   inputs:
-    processor:
+    rabbit:
       enabled: false
+      queue: ${POCKETHIVE_INPUT_RABBIT_QUEUE}
+  outputs:
+    rabbit:
+      exchange: ${POCKETHIVE_OUTPUT_RABBIT_EXCHANGE}
+      routingKey: ${POCKETHIVE_OUTPUT_RABBIT_ROUTING_KEY}
   workers:
     processor:
       config:
         base-url: http://wiremock:8080
   control-plane:
     exchange: ${POCKETHIVE_CONTROL_PLANE_EXCHANGE}
-    traffic-exchange: ${POCKETHIVE_CONTROL_PLANE_TRAFFIC_EXCHANGE}
     swarm-id: ${POCKETHIVE_CONTROL_PLANE_SWARM_ID}
     instance-id: ${POCKETHIVE_CONTROL_PLANE_INSTANCE_ID}
     control-queue-prefix: ${POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE_PREFIX}
-    queues:
-      generator: ${POCKETHIVE_CONTROL_PLANE_QUEUES_GENERATOR}
-      moderator: ${POCKETHIVE_CONTROL_PLANE_QUEUES_MODERATOR}
-      final: ${POCKETHIVE_CONTROL_PLANE_QUEUES_FINAL}
     worker:
       role: processor
       skip-self-signals: false

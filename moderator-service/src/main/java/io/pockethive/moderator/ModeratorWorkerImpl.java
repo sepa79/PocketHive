@@ -14,9 +14,10 @@ import org.springframework.stereotype.Component;
 /**
  * The moderator service is the steady gatekeeper that vets messages coming out of the generator
  * queue before they enter the main processing lane. In the default PocketHive swarm it sits
- * between the generator and moderator queues configured under
- * {@code pockethive.control-plane.queues}, enriching messages with the
- * {@code x-ph-service} header so downstream processors can tell who handed them the payload.
+ * between the generator queue configured via {@code pockethive.inputs.rabbit.queue} and the
+ * moderator routing key defined under {@code pockethive.outputs.rabbit.routing-key},
+ * enriching messages with the {@code x-ph-service} header so downstream processors can tell who
+ * handed them the payload.
  * Deploy it near the generator for low latency; smaller teams often co-locate the two services in
  * the same pod.
  *

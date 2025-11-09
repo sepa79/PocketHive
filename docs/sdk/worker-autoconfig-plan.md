@@ -52,7 +52,7 @@
   Spring-friendly `@ConfigurationProperties` implementations:
   - `SchedulerInputProperties`, `RabbitInputProperties`, etc.
   - `RabbitOutputProperties`, `HttpOutputProperties`, etc.
-- Bind them under `pockethive.inputs.<worker-role>` and
+- Bind them under `pockethive.inputs.<inputType>` and
   `pockethive.outputs.<worker-role>` by default; allow overrides per worker via
   annotation attributes.
 - Worker domain config becomes a separate bean, e.g.
@@ -146,7 +146,7 @@
 
 2. **Configuration Infrastructure**
    - [x] Introduce `PocketHiveWorkerProperties<T>` base class and bind `pockethive.workers.<role>` automatically. Services can extend the base, provide `role` + `configType`, and expose `@ConfigurationProperties("pockethive.workers.<role>")`. Defaults defined under `...enabled` / `...config.*` are auto-registered with the control plane for every worker sharing that role.
-   - [x] Create `WorkInputConfig` / `WorkOutputConfig` marker interfaces and default property classes (e.g., scheduler + RabbitMQ) plus binders to resolve `pockethive.inputs/outputs.<role>` into typed configs.
+  - [x] Create `WorkInputConfig` / `WorkOutputConfig` marker interfaces and default property classes (e.g., scheduler + RabbitMQ) plus binders to resolve `pockethive.inputs/outputs.<type>` into typed configs.
   - [x] Move enable/disable flags + infra knobs out of worker domain configs into the new input/output properties.
 
 3. **Output SPI**

@@ -193,7 +193,6 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
     try {
       this.template = templateJson;
       SwarmPlan plan = mapper.readValue(templateJson, SwarmPlan.class);
-      Map<String, String> queueEnvironment = queueEnvironment(plan);
       TopicExchange hive = new TopicExchange(properties.hiveExchange(), true, false);
       amqp.declareExchange(hive);
       log.info("declared hive exchange {}", properties.hiveExchange());
@@ -227,7 +226,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
         String beeName = BeeNameGenerator.generate(bee.role(), swarmId);
         Map<String, String> env = new LinkedHashMap<>(
             ControlPlaneContainerEnvironmentFactory.workerEnvironment(beeName, workerSettings, rabbitProperties));
-        env.putAll(queueEnvironment);
+        applyWorkIoEnvironment(bee, env);
         String net = docker.resolveControlNetwork();
         if (hasText(net)) {
           env.put("CONTROL_NETWORK", net);
@@ -521,18 +520,22 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
     }
   }
 
-  private Map<String, String> queueEnvironment(SwarmPlan plan) {
-    Map<String, String> env = new LinkedHashMap<>();
-    queueName(plan, "generator", Work::out)
-        .or(() -> queueName(plan, "moderator", Work::in))
-        .ifPresent(queue -> env.put("POCKETHIVE_CONTROL_PLANE_QUEUES_GENERATOR", queue));
-    queueName(plan, "moderator", Work::out)
-        .or(() -> queueName(plan, "processor", Work::in))
-        .ifPresent(queue -> env.put("POCKETHIVE_CONTROL_PLANE_QUEUES_MODERATOR", queue));
-    queueName(plan, "processor", Work::out)
-        .or(() -> queueName(plan, "postprocessor", Work::in))
-        .ifPresent(queue -> env.put("POCKETHIVE_CONTROL_PLANE_QUEUES_FINAL", queue));
-    return env;
+  private void applyWorkIoEnvironment(Bee bee, Map<String, String> env) {
+    Work work = bee.work();
+    if (work == null) {
+      return;
+    }
+    boolean hasInput = hasText(work.in());
+    boolean hasOutput = hasText(work.out());
+    if (hasInput) {
+      env.put("POCKETHIVE_INPUT_RABBIT_QUEUE", properties.queueName(work.in()));
+    }
+    if (hasOutput) {
+      env.put("POCKETHIVE_OUTPUT_RABBIT_ROUTING_KEY", properties.queueName(work.out()));
+    }
+    if (hasInput || hasOutput) {
+      env.put("POCKETHIVE_OUTPUT_RABBIT_EXCHANGE", properties.hiveExchange());
+    }
   }
 
   private Optional<String> queueName(SwarmPlan plan, String role, Function<Work, String> extractor) {

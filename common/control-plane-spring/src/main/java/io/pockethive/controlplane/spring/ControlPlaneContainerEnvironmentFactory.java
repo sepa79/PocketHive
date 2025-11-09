@@ -74,9 +74,6 @@ public final class ControlPlaneContainerEnvironmentFactory {
         env.put(
             "POCKETHIVE_CONTROL_PLANE_EXCHANGE",
             requireSetting(settings.controlExchange(), "pockethive.control-plane.exchange"));
-        env.put(
-            "POCKETHIVE_CONTROL_PLANE_TRAFFIC_EXCHANGE",
-            requireSetting(settings.hiveExchange(), "pockethive.control-plane.traffic-exchange"));
         populateRabbitEnv(env, rabbitProperties);
         env.put(
             "POCKETHIVE_LOGS_EXCHANGE",

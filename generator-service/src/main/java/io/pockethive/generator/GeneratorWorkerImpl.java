@@ -19,7 +19,8 @@ import org.springframework.stereotype.Component;
 /**
  * PocketHive's generator service is the "source" side of the default swarm pipeline. It runs
  * alongside the orchestrator in most deployments and continuously emits HTTP request work items
- * into the generator queue configured via {@code pockethive.control-plane.queues.generator}.
+ * into the generator routing key configured via {@code pockethive.outputs.rabbit.routing-key}
+ * (typically sourced from {@code POCKETHIVE_OUTPUT_RABBIT_ROUTING_KEY}).
  * Junior engineers can think of it as the friendly robot that drafts the first message so
  * downstream moderators, processors, and post-processors have
  * something to act on. The queue name and worker type are set by {@link PocketHiveWorker}

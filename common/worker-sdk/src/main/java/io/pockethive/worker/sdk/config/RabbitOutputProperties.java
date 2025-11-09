@@ -1,7 +1,7 @@
 package io.pockethive.worker.sdk.config;
 
 /**
- * RabbitMQ-specific output knobs surfaced via {@code pockethive.outputs.<role>.*}.
+ * RabbitMQ-specific output knobs bound from {@code pockethive.outputs.rabbit.*}.
  */
 public class RabbitOutputProperties implements WorkOutputConfig {
 

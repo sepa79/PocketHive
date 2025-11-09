@@ -14,9 +14,8 @@ import org.springframework.beans.factory.SmartInitializingSingleton;
 import org.springframework.core.annotation.AnnotationAwareOrderComparator;
 
 /**
- * Populates the {@link WorkInputRegistry} using the available {@link WorkInputFactory} beans. If no
- * factory supports a worker definition we default to a noop input so that consumers can opt in
- * incrementally.
+ * Populates the {@link WorkInputRegistry} using the available {@link WorkInputFactory} beans and
+ * fails fast when no factory supports a worker definition.
  */
 public final class WorkInputRegistryInitializer implements SmartInitializingSingleton {
 
@@ -69,6 +68,6 @@ public final class WorkInputRegistryInitializer implements SmartInitializingSing
     }
 
     private WorkInputConfig resolveConfig(WorkerDefinition definition) {
-        return configBinder.bind(definition.role(), definition.inputConfigType());
+        return configBinder.bind(definition.input(), definition.inputConfigType());
     }
 }

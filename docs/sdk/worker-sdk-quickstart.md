@@ -25,26 +25,29 @@ synchronisation.
 </dependency>
 ```
 
-Configure the control-plane identity, traffic exchange, and queue aliases using the shared properties. Queue aliases map the
-logical names you use in annotations/tests to the concrete RabbitMQ queues provisioned by the Swarm Controller.
+Configure the control-plane identity alongside the worker IO sections. Rabbit inputs/outputs now live under
+`pockethive.inputs.<type>` / `pockethive.outputs.<type>`, so workers read their queue/exchange bindings directly from
+application configuration instead of the old `pockethive.control-plane.queues.*` map.
 
 ```yaml
 pockethive:
   control-plane:
     exchange: ph.control
-    traffic-exchange: ph.swarm-1.hive
     swarm-id: swarm-1
     instance-id: processor-1
-    queues:
-      moderator: ph.swarm-1.mod
-      processor: ph.swarm-1.processor
-      final: ph.swarm-1.final
     worker:
       role: processor
+  inputs:
+    rabbit:
+      queue: ph.swarm-1.mod
+  outputs:
+    rabbit:
+      exchange: ph.swarm-1.hive
+      routing-key: ph.swarm-1.final
 ```
 
 See the [control-plane worker guide](../control-plane/worker-guide.md#configuration-properties) for the full
-`WorkerControlPlaneProperties` reference and additional environment contract details.
+`WorkerControlPlaneProperties` reference, including the environment variables that mirror the IO configuration.
 
 ## 2. Annotate worker beans
 

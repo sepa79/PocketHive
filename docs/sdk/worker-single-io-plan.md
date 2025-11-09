@@ -66,14 +66,14 @@
 
 ## Tracking Checklist
 
-- [ ] Docs updated (`ARCHITECTURE`, `ORCHESTRATOR-REST`, `control-plane/worker-guide`, SDK plans).
-- [ ] SDK enforces single worker per JVM and binds IO configs without role namespaces.
-- [ ] `WorkInputConfigBinder` / `WorkOutputConfigBinder` migrated to new prefixes.
-- [ ] Rabbit input/output properties expose queue/exchange/routing fields + validation.
-- [ ] Control-plane Spring module no longer expects `queues.*`.
-- [ ] Orchestrator + swarm-controller templates emit new env vars.
-- [ ] All worker services use the new YAML layout and pass tests.
-- [ ] Release notes + `docs/ai/TASK_TEMPLATE.md` updated to reflect the breaking change.
+- [x] Docs updated (`ARCHITECTURE`, `ORCHESTRATOR-REST`, `control-plane/worker-guide`, SDK plans).
+- [x] SDK enforces single worker per JVM and binds IO configs without role namespaces.
+- [x] `WorkInputConfigBinder` / `WorkOutputConfigBinder` migrated to new prefixes.
+- [x] Rabbit input/output properties expose queue/exchange/routing fields + validation.
+- [x] Control-plane Spring module no longer expects `queues.*`.
+- [x] Orchestrator + swarm-controller templates emit new env vars.
+- [x] All worker services use the new YAML layout and pass tests.
+- [x] Release notes + `docs/ai/TASK_TEMPLATE.md` updated to reflect the breaking change.
 
 ## Risks & Open Questions
 

@@ -1,8 +1,7 @@
 package io.pockethive.worker.sdk.config;
 
 /**
- * Default RabbitMQ work-input knobs that can be overridden per worker role under
- * {@code pockethive.inputs.<role>.*}.
+ * Default RabbitMQ work-input knobs bound from {@code pockethive.inputs.rabbit.*}.
  */
 public class RabbitInputProperties implements WorkInputConfig {
 
@@ -11,6 +10,8 @@ public class RabbitInputProperties implements WorkInputConfig {
     private int concurrentConsumers = 1;
     private boolean exclusive = false;
     private boolean autoStartup = true;
+    private String queue;
+    private String deadLetterQueue;
 
     public boolean isEnabled() {
         return enabled;
@@ -50,5 +51,29 @@ public class RabbitInputProperties implements WorkInputConfig {
 
     public void setAutoStartup(boolean autoStartup) {
         this.autoStartup = autoStartup;
+    }
+
+    public String getQueue() {
+        return queue;
+    }
+
+    public void setQueue(String queue) {
+        this.queue = normalise(queue);
+    }
+
+    public String getDeadLetterQueue() {
+        return deadLetterQueue;
+    }
+
+    public void setDeadLetterQueue(String deadLetterQueue) {
+        this.deadLetterQueue = normalise(deadLetterQueue);
+    }
+
+    private static String normalise(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
     }
 }

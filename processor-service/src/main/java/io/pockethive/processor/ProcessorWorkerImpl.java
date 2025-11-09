@@ -29,8 +29,8 @@ import org.springframework.stereotype.Component;
 /**
  * PocketHive message worker that performs the "processor" hop inside the default swarm pipeline.
  * <p>
- * The worker is wired into the moderator queue configured under
- * {@code pockethive.control-plane.queues.moderator} and receives
+ * The worker is wired into the moderator queue configured via {@code pockethive.inputs.rabbit.queue}
+ * (typically provided through {@code POCKETHIVE_INPUT_RABBIT_QUEUE}) and receives
  * {@link WorkMessage} payloads that typically originate from the orchestrator. For every incoming
  * message we resolve configuration from the {@link WorkerContext}:
  * <ul>
@@ -47,7 +47,8 @@ import org.springframework.stereotype.Component;
  * </ul>
  * Once configured, the worker performs an outbound HTTP call using the payload's {@code path},
  * {@code method}, {@code headers}, and {@code body} fields. Success and failure paths both emit a
- * {@link WorkResult} to the final queue, and the runtime's observability interceptor adds the hop
+ * {@link WorkResult} to the configured final routing key
+ * ({@code pockethive.outputs.rabbit.routing-key}), and the runtime's observability interceptor adds the hop
  * metadata so downstream services can trace the request.
  * <p>
  * The defaults above can be tweaked by editing {@code processor-service/src/main/resources}

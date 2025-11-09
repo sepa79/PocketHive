@@ -24,8 +24,10 @@ class GeneratorTest {
   private static final ObjectMapper MAPPER = new ObjectMapper();
   private static final WorkerControlPlaneProperties WORKER_PROPERTIES =
       ControlPlaneTestFixtures.workerProperties("swarm", "generator", "instance");
-  private static final String IN_QUEUE = WORKER_PROPERTIES.getQueues().get("generator");
-  private static final String OUT_QUEUE = WORKER_PROPERTIES.getQueues().get("moderator");
+  private static final Map<String, String> WORKER_QUEUES =
+      ControlPlaneTestFixtures.workerQueues("swarm");
+  private static final String IN_QUEUE = WORKER_QUEUES.get("generator");
+  private static final String OUT_QUEUE = WORKER_QUEUES.get("moderator");
 
   private GeneratorWorkerProperties properties;
   private GeneratorWorkerImpl worker;

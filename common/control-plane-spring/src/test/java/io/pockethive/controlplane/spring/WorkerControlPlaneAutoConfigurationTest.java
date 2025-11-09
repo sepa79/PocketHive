@@ -12,7 +12,6 @@ import io.pockethive.controlplane.worker.WorkerControlPlane;
 import java.util.Optional;
 import org.springframework.beans.factory.BeanCreationException;
 import org.junit.jupiter.api.Test;
-import org.springframework.amqp.core.Binding;
 import org.springframework.amqp.core.Declarables;
 import org.springframework.amqp.core.Queue;
 import org.springframework.amqp.core.TopicExchange;
@@ -36,9 +35,9 @@ class WorkerControlPlaneAutoConfigurationTest {
             "pockethive.control-plane.swarm-id=swarm-alpha",
             "pockethive.control-plane.control-queue-prefix=ph.control",
             "pockethive.control-plane.exchange=ph.control.worker",
-            "pockethive.control-plane.traffic-exchange=ph.swarm-alpha.hive",
-            "pockethive.control-plane.queues.generator=ph.swarm-alpha.gen",
-            "pockethive.control-plane.queues.moderator=ph.swarm-alpha.mod",
+            "pockethive.inputs.rabbit.queue=ph.swarm-alpha.gen",
+            "pockethive.outputs.rabbit.exchange=ph.swarm-alpha.hive",
+            "pockethive.outputs.rabbit.routing-key=ph.swarm-alpha.gen",
             "pockethive.control-plane.swarm-controller.rabbit.logs-exchange=ph.logs",
             "pockethive.control-plane.swarm-controller.rabbit.logging.enabled=true");
 
@@ -83,39 +82,6 @@ class WorkerControlPlaneAutoConfigurationTest {
             .run(context -> {
                 Declarables declarables = context.getBean("workerControlPlaneDeclarables", Declarables.class);
                 assertThat(declarables.getDeclarables()).isEmpty();
-            });
-    }
-
-    @Test
-    void doesNotBindTrafficQueuesToTrafficExchange() {
-        contextRunner
-            .withPropertyValues("pockethive.control-plane.worker.role=moderator")
-            .run(context -> {
-                Declarables declarables = context.getBean("workerControlPlaneDeclarables", Declarables.class);
-                assertThat(declarables.getDeclarables()).isNotEmpty();
-
-                Optional<Binding> trafficBinding = declarables.getDeclarables().stream()
-                    .filter(Binding.class::isInstance)
-                    .map(Binding.class::cast)
-                    .filter(binding -> "ph.swarm-alpha.gen".equals(binding.getDestination()))
-                    .findFirst();
-
-                assertThat(trafficBinding).isEmpty();
-            });
-    }
-
-    @Test
-    void failsWhenTrafficExchangeMissing() {
-        contextRunner
-            .withPropertyValues(
-                "pockethive.control-plane.traffic-exchange=${POCKETHIVE_CONTROL_PLANE_TRAFFIC_EXCHANGE}")
-            .run(context -> {
-                assertThat(context).hasFailed();
-                Throwable failure = context.getStartupFailure();
-                assertThat(failure).isInstanceOf(BeanCreationException.class);
-                assertThat(failure).hasRootCauseInstanceOf(IllegalArgumentException.class);
-                assertThat(failure).hasRootCauseMessage(
-                    "pockethive.control-plane.traffic-exchange must resolve to a concrete value, but was ${POCKETHIVE_CONTROL_PLANE_TRAFFIC_EXCHANGE}");
             });
     }
 

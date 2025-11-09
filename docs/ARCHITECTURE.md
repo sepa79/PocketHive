@@ -58,6 +58,22 @@ PocketHive splits the control plane into **managers** (orchestrator + swarm cont
 - Apply `sig.config-update.{swarmId}.{role}.{instance}` (`enabled: true|false`) to control **workload** state only while keeping control listeners responsive.
 - Runtime behaviour, worker interfaces, and adoption guidance are covered in the [Worker SDK quick start](sdk/worker-sdk-quickstart.md).
 
+Workers source their queue/exchange bindings from the IO sections, not from the control-plane block:
+
+```yaml
+pockethive:
+  inputs:
+    rabbit:
+      queue: ph.work.swarm-1.mod
+  outputs:
+    rabbit:
+      exchange: ph.swarm-1.hive
+      routing-key: ph.work.swarm-1.final
+```
+
+The Swarm Controller injects the same values into each container via `POCKETHIVE_INPUT_RABBIT_QUEUE` /
+`POCKETHIVE_OUTPUT_RABBIT_*`, and the Worker SDK fails fast when any required field is missing.
+
 ---
 
 ## 3. Exchanges & routing (wire contract)

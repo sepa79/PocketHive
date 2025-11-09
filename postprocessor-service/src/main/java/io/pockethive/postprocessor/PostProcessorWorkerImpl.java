@@ -30,7 +30,8 @@ import org.springframework.stereotype.Component;
 
 /**
  * The post-processor is the last hop in the PocketHive happy path. It listens to the queue
- * configured under {@code pockethive.control-plane.queues.final} and focuses on observability:
+ * configured via {@code pockethive.inputs.rabbit.queue} (the {@code final-out} suffix in the default swarm)
+ * and focuses on observability:
  * measuring end-to-end latency,
  * counting hops, and flagging any {@code x-ph-error} markers set by upstream workers. When teams
  * deploy PocketHive to staging or production they often scale the post-processor alongside their

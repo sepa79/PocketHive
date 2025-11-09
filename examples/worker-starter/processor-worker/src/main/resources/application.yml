@@ -7,16 +7,16 @@ pockethive:
     inputs:
       autowire: true
   inputs:
-    processor:
-      enabled: true
+    rabbit:
+      queue: ph.sample-swarm.mod
+  outputs:
+    rabbit:
+      exchange: ph.sample-swarm.hive
+      routingKey: ph.sample-swarm.final
   control-plane:
     exchange: ph.control
-    traffic-exchange: ph.sample-swarm.hive
     swarm-id: sample-swarm
     instance-id: ${POCKETHIVE_CONTROL_PLANE_INSTANCE_ID:processor-1}
-    queues:
-      moderator: ph.sample-swarm.mod
-      processor: ph.sample-swarm.processor
-      final: ph.sample-swarm.final
+    control-queue-prefix: ph.control
     worker:
       role: processor

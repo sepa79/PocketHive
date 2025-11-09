@@ -76,13 +76,9 @@ by defaults. Populate the swarm identity, queue names, and logging exchange expl
 pockethive:
   control-plane:
     exchange: ph.control
-    traffic-exchange: ph.swarm-1.hive
     swarm-id: swarm-1
     instance-id: processor-1
     control-queue-prefix: ph.control
-    queues:
-      processor: ph.swarm-1.processor
-      final: ph.swarm-1.final
     swarm-controller:
       rabbit:
         logs-exchange: ph.logs
@@ -93,6 +89,13 @@ pockethive:
       skip-self-signals: false
     manager:
       enabled: false # disable if the service is worker-only
+  inputs:
+    rabbit:
+      queue: ph.swarm-1.processor
+  outputs:
+    rabbit:
+      exchange: ph.swarm-1.hive
+      routing-key: ph.swarm-1.final
 ```
 
 Workers and managers automatically inherit `pockethive.control-plane.swarm-id`
@@ -100,10 +103,10 @@ and `pockethive.control-plane.instance-id`. Participant-specific overrides are
 no longer supported—set the shared properties once at the control-plane level.
 The `control-queue-prefix` should capture only the shared prefix (for example,
 `ph.control`); the Swarm ID and role/instance segments are appended automatically.
-The worker queues map can contain any role-specific bindings; the Swarm
-Controller injects the same map into every worker container via environment
-variables, and `WorkerControlPlaneProperties` enforces that each declared entry
-is non-empty.
+Rabbit inputs/outputs now live under `pockethive.inputs.rabbit` and
+`pockethive.outputs.rabbit`, keeping queue/exchange wiring separate from the control-plane block. The Swarm
+Controller injects the same queue/exchange/routing-key triplet into every worker container via environment
+variables, and `WorkerControlPlaneProperties` enforces that each declared entry is non-empty.
 
 For a detailed breakdown of the Swarm Controller's environment contract, including every required `pockethive.control-plane.*` and RabbitMQ property, see the [Swarm Controller configuration reference](../../swarm-controller-service/README.md#configuration-reference).
 
@@ -116,12 +119,13 @@ configuration to abort fast:
 | Category | Required variables |
 | --- | --- |
 | RabbitMQ connectivity | `SPRING_RABBITMQ_HOST`, `SPRING_RABBITMQ_PORT`, `SPRING_RABBITMQ_USERNAME`, `SPRING_RABBITMQ_PASSWORD`, `SPRING_RABBITMQ_VIRTUAL_HOST` |
-| Control-plane identity & routing | `POCKETHIVE_CONTROL_PLANE_EXCHANGE`, `POCKETHIVE_CONTROL_PLANE_TRAFFIC_EXCHANGE`, `POCKETHIVE_CONTROL_PLANE_SWARM_ID`, `POCKETHIVE_CONTROL_PLANE_INSTANCE_ID`, `POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE_PREFIX`, `POCKETHIVE_CONTROL_PLANE_QUEUES_GENERATOR`, `POCKETHIVE_CONTROL_PLANE_QUEUES_MODERATOR`, `POCKETHIVE_CONTROL_PLANE_QUEUES_FINAL`* |
+| Control-plane identity & routing | `POCKETHIVE_CONTROL_PLANE_EXCHANGE`, `POCKETHIVE_CONTROL_PLANE_SWARM_ID`, `POCKETHIVE_CONTROL_PLANE_INSTANCE_ID`, `POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE_PREFIX` |
+| Work IO configuration | `POCKETHIVE_INPUT_RABBIT_QUEUE`, `POCKETHIVE_OUTPUT_RABBIT_EXCHANGE`, `POCKETHIVE_OUTPUT_RABBIT_ROUTING_KEY`* |
 | Logging contract | `POCKETHIVE_LOGS_EXCHANGE`, `POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGGING_ENABLED`, `POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGS_EXCHANGE` |
 
-\*Moderator-only roles ignore `POCKETHIVE_CONTROL_PLANE_QUEUES_FINAL`, and postprocessor-only roles ignore the
-generator/moderator queues. The Swarm Controller still injects all queue names so multi-role deployments receive a
-consistent contract.
+\*Workers without Rabbit inputs can omit `POCKETHIVE_INPUT_RABBIT_QUEUE`. Generator and postprocessor roles that do not
+publish Rabbit messages can omit `POCKETHIVE_OUTPUT_RABBIT_ROUTING_KEY`. When present, the Swarm Controller derives these
+values from the swarm plan and injects them uniformly across containers to keep the contract consistent.
 
 Local overrides (e.g., docker-compose or Kubernetes manifests) must now provide the same keys when running workers
 outside the Swarm Controller. A minimal docker-compose excerpt looks like this:
@@ -137,13 +141,12 @@ services:
       SPRING_RABBITMQ_PASSWORD: guest
       SPRING_RABBITMQ_VIRTUAL_HOST: "/"
       POCKETHIVE_CONTROL_PLANE_EXCHANGE: ph.control
-      POCKETHIVE_CONTROL_PLANE_TRAFFIC_EXCHANGE: ph.dev.hive
       POCKETHIVE_CONTROL_PLANE_SWARM_ID: dev-swarm
       POCKETHIVE_CONTROL_PLANE_INSTANCE_ID: generator-dev
       POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE_PREFIX: ph.control
-      POCKETHIVE_CONTROL_PLANE_QUEUES_GENERATOR: ph.dev.gen
-      POCKETHIVE_CONTROL_PLANE_QUEUES_MODERATOR: ph.dev.mod
-      POCKETHIVE_CONTROL_PLANE_QUEUES_FINAL: ph.dev.final
+      POCKETHIVE_INPUT_RABBIT_QUEUE: ph.dev.mod
+      POCKETHIVE_OUTPUT_RABBIT_EXCHANGE: ph.dev.hive
+      POCKETHIVE_OUTPUT_RABBIT_ROUTING_KEY: ph.dev.gen
       POCKETHIVE_LOGS_EXCHANGE: ph.logs
       POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGGING_ENABLED: "true"
       POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGS_EXCHANGE: ph.logs

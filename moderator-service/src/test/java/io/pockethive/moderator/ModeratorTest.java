@@ -10,6 +10,7 @@ import io.pockethive.worker.sdk.api.WorkerContext;
 import io.pockethive.worker.sdk.api.WorkerInfo;
 import io.pockethive.worker.sdk.testing.ControlPlaneTestFixtures;
 import java.nio.charset.StandardCharsets;
+import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -22,8 +23,10 @@ class ModeratorTest {
     private ModeratorWorkerImpl worker;
     private static final WorkerControlPlaneProperties WORKER_PROPERTIES =
         ControlPlaneTestFixtures.workerProperties("swarm", "moderator", "instance");
-    private static final String IN_QUEUE = WORKER_PROPERTIES.getQueues().get("generator");
-    private static final String OUT_QUEUE = WORKER_PROPERTIES.getQueues().get("moderator");
+    private static final Map<String, String> WORKER_QUEUES =
+        ControlPlaneTestFixtures.workerQueues("swarm");
+    private static final String IN_QUEUE = WORKER_QUEUES.get("generator");
+    private static final String OUT_QUEUE = WORKER_QUEUES.get("moderator");
 
     @BeforeEach
     void setUp() {

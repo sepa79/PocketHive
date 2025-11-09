@@ -91,8 +91,8 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
 The full implementations live in the `generator-service` and `processor-service` modules.
 
 > The concrete queue names in the annotation examples are illustrative. Configure the values via
-> `pockethive.control-plane.queues.*` (or the corresponding environment variables) and keep the
-> annotation in sync with that configuration.
+> `pockethive.inputs.<type>` / `pockethive.outputs.<type>` (or the corresponding `POCKETHIVE_INPUT_RABBIT_QUEUE`
+> / `POCKETHIVE_OUTPUT_RABBIT_*` environment variables) and keep the annotation in sync with that configuration.
 
 ### `WorkMessage`
 

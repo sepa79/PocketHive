@@ -49,7 +49,7 @@ public final class WorkOutputRegistryInitializer implements SmartInitializingSin
             .filter(factory -> factory.supports(definition))
             .findFirst()
             .map(factory -> {
-                WorkOutputConfig config = configBinder.bind(definition.role(), definition.outputConfigType());
+                WorkOutputConfig config = configBinder.bind(definition.outputType(), definition.outputConfigType());
                 return factory.create(definition, config);
             })
             .orElseGet(NoopWorkOutput::new);

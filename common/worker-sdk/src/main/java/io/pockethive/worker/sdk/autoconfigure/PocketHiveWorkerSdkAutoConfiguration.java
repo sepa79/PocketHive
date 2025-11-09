@@ -29,6 +29,7 @@ import io.pockethive.worker.sdk.metrics.PrometheusPushGatewayProperties;
 import io.pockethive.worker.sdk.config.WorkOutputConfig;
 import io.pockethive.worker.sdk.config.WorkOutputConfigBinder;
 import io.pockethive.worker.sdk.config.WorkerCapability;
+import io.pockethive.worker.sdk.config.WorkerInputType;
 import io.pockethive.worker.sdk.runtime.DefaultWorkerContextFactory;
 import io.pockethive.worker.sdk.runtime.DefaultWorkerRuntime;
 import io.pockethive.worker.sdk.runtime.WorkerContextFactory;
@@ -52,9 +53,7 @@ import io.pockethive.worker.sdk.output.RabbitWorkOutputFactory;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import org.springframework.beans.factory.ObjectProvider;
@@ -100,12 +99,18 @@ public class PocketHiveWorkerSdkAutoConfiguration {
     @ConditionalOnMissingBean
     WorkerRegistry workerRegistry(
         ListableBeanFactory beanFactory,
-        ObjectProvider<WorkerControlPlaneProperties> workerProperties
+        ObjectProvider<WorkerControlPlaneProperties> workerProperties,
+        WorkInputConfigBinder workInputConfigBinder,
+        WorkOutputConfigBinder workOutputConfigBinder
     ) {
-        WorkerControlPlaneProperties properties = workerProperties.getIfAvailable();
-        Map<String, String> queueAliases = buildQueueAliasMap(properties);
         String[] beanNames = beanFactory.getBeanNamesForAnnotation(PocketHiveWorker.class);
-        String exchange = resolveExchange(properties);
+        if (beanNames.length == 0) {
+            throw new IllegalStateException("No @PocketHiveWorker beans were discovered in this service");
+        }
+        if (beanNames.length > 1) {
+            throw new IllegalStateException(
+                "Multiple @PocketHiveWorker beans are not supported. Found: %s".formatted(String.join(", ", beanNames)));
+        }
         List<WorkerDefinition> definitions = new ArrayList<>(beanNames.length);
         for (String beanName : beanNames) {
             PocketHiveWorker annotation = beanFactory.findAnnotationOnBean(beanName, PocketHiveWorker.class);
@@ -120,14 +125,17 @@ public class PocketHiveWorkerSdkAutoConfiguration {
             WorkerOutputType outputType = annotation.output();
             String description = annotation.description();
             Set<WorkerCapability> capabilities = resolveCapabilities(annotation);
+            WorkInputConfig inputConfig = workInputConfigBinder.bind(annotation.input(), inputConfigType);
+            WorkOutputConfig outputConfig = workOutputConfigBinder.bind(outputType, outputConfigType);
+            IoSettings io = resolveIo(annotation, inputConfig, outputConfig, workInputConfigBinder, workOutputConfigBinder);
             definitions.add(new WorkerDefinition(
                 beanName,
                 beanType,
                 annotation.input(),
                 annotation.role(),
-                resolveQueue(annotation.inQueue(), queueAliases),
-                resolveQueue(annotation.outQueue(), queueAliases),
-                exchange,
+                io.inQueue(),
+                io.outQueue(),
+                io.exchange(),
                 configType,
                 inputConfigType,
                 outputConfigType,
@@ -371,6 +379,55 @@ public class PocketHiveWorkerSdkAutoConfiguration {
         return Set.copyOf(set);
     }
 
+    private IoSettings resolveIo(
+        PocketHiveWorker annotation,
+        WorkInputConfig inputConfig,
+        WorkOutputConfig outputConfig,
+        WorkInputConfigBinder inputBinder,
+        WorkOutputConfigBinder outputBinder
+    ) {
+        String inQueue = normalise(annotation.inQueue());
+        if (annotation.input() == WorkerInputType.RABBIT) {
+            if (!(inputConfig instanceof RabbitInputProperties rabbit)) {
+                throw new IllegalStateException(
+                    "Rabbit inputs require " + RabbitInputProperties.class.getSimpleName() + " configuration");
+            }
+            String queue = normalise(rabbit.getQueue());
+            if (queue == null) {
+                throw new IllegalStateException(
+                    "Rabbit workers must configure an input queue via %s.queue".formatted(
+                        inputBinder.prefix(annotation.input())));
+            }
+            inQueue = queue;
+        }
+        String outQueue = normalise(annotation.outQueue());
+        String exchange = null;
+        if (annotation.output() == WorkerOutputType.RABBITMQ) {
+            if (!(outputConfig instanceof RabbitOutputProperties rabbit)) {
+                throw new IllegalStateException(
+                    "Rabbit outputs require " + RabbitOutputProperties.class.getSimpleName() + " configuration");
+            }
+            String routingKey = normalise(rabbit.getRoutingKey());
+            String configuredExchange = normalise(rabbit.getExchange());
+            if (routingKey == null) {
+                throw new IllegalStateException(
+                    "Rabbit workers must configure an output routing key via %s.routingKey".formatted(
+                        outputBinder.prefix(annotation.output())));
+            }
+            if (configuredExchange == null) {
+                throw new IllegalStateException(
+                    "Rabbit workers must configure an output exchange via %s.exchange".formatted(
+                        outputBinder.prefix(annotation.output())));
+            }
+            outQueue = routingKey;
+            exchange = configuredExchange;
+        }
+        return new IoSettings(inQueue, outQueue, exchange);
+    }
+
+    private record IoSettings(String inQueue, String outQueue, String exchange) {
+    }
+
     private static Class<? extends WorkInputConfig> resolveInputConfigType(PocketHiveWorker annotation) {
         Class<? extends WorkInputConfig> configured = annotation.inputConfig();
         if (configured != WorkInputConfig.class) {
@@ -392,48 +449,6 @@ public class PocketHiveWorkerSdkAutoConfiguration {
             case RABBITMQ -> RabbitOutputProperties.class;
             default -> WorkOutputConfig.class;
         };
-    }
-
-    private static Map<String, String> buildQueueAliasMap(
-        WorkerControlPlaneProperties properties
-    ) {
-        if (properties == null) {
-            return Map.of();
-        }
-        Map<String, String> aliases = new LinkedHashMap<>();
-        properties.getQueues().names().forEach((key, value) -> {
-            String alias = normalise(key);
-            if (alias != null) {
-                aliases.put(alias, value);
-            }
-        });
-        WorkerControlPlaneProperties.ControlPlane controlPlane = properties.getControlPlane();
-        if (controlPlane != null) {
-            String controlQueue = controlPlane.getControlQueueName();
-            if (controlQueue != null) {
-                String trimmed = controlQueue.trim();
-                if (!trimmed.isEmpty()) {
-                    aliases.putIfAbsent("control", trimmed);
-                }
-            }
-        }
-        return aliases;
-    }
-
-    private static String resolveExchange(WorkerControlPlaneProperties properties) {
-        if (properties == null) {
-            return null;
-        }
-        return normalise(properties.getTrafficExchange());
-    }
-
-    private static String resolveQueue(String queue, Map<String, String> aliases) {
-        String candidate = normalise(queue);
-        if (candidate == null) {
-            return null;
-        }
-        String resolved = aliases.get(candidate);
-        return resolved != null ? resolved : candidate;
     }
 
     private static String normalise(String value) {
