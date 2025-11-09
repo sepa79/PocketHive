@@ -3,6 +3,12 @@ spring:
     name: processor-worker-starter
 
 pockethive:
+  worker:
+    inputs:
+      autowire: true
+  inputs:
+    processor:
+      enabled: true
   control-plane:
     exchange: ph.control
     traffic-exchange: ph.sample-swarm.hive

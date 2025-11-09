@@ -22,14 +22,16 @@ import org.springframework.stereotype.Component;
 )
 class SampleGeneratorWorker implements PocketHiveWorkerFunction {
 
-  private static final SampleGeneratorConfig FALLBACK_CONFIG =
-      new SampleGeneratorConfig(1.0, "Hello from the generator");
+  private final SampleGeneratorProperties properties;
 
-  @Override
+  SampleGeneratorWorker(SampleGeneratorProperties properties) {
+    this.properties = properties;
+  }
+
   @Override
   public WorkResult onMessage(WorkMessage seed, WorkerContext context) {
     SampleGeneratorConfig config = context.config(SampleGeneratorConfig.class)
-        .orElse(FALLBACK_CONFIG);
+        .orElseGet(properties::defaultConfig);
 
     String outQueue = Optional.ofNullable(context.info().outQueue())
         .orElseThrow(() -> new IllegalStateException("Outbound queue not configured"));

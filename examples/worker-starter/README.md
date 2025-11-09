@@ -27,10 +27,8 @@ examples/worker-starter/
 Each module contains:
 
 - `GeneratorWorkerApplication` / `ProcessorWorkerApplication` bootstrapping Spring Boot and the Worker SDK.
-- `SampleGeneratorWorker` / `SampleProcessorWorker` illustrating Stage 1 contracts (`GeneratorWorker` and
-  `MessageWorker`).
-- Runtime adapters that show how to bridge the worker definition to RabbitMQ while listening for control-plane
-  updates.
+- `SampleGeneratorWorker` / `SampleProcessorWorker` illustrating the `PocketHiveWorkerFunction` contract.
+- Auto-wired scheduler/Rabbit inputs so you can study how the SDK dispatches work without any bespoke runtime adapters.
 - Minimal configuration defaults (`application.yml`) that bind the control-plane exchange, traffic exchange, swarm identity, and queue
   aliases used by the workers, plus focused unit tests exercising the behaviour.
 
@@ -65,7 +63,7 @@ When creating your own workers from this template:
 - [ ] Adjust the `@PocketHiveWorker` annotations (role, queue aliases, config classes) to reflect your topology.
 - [ ] Align `pockethive.control-plane.*` defaults in each module’s `application.yml` (control-plane exchange, traffic exchange, swarm identity, queue
       aliases) with the values provisioned by your Swarm Controller.
-- [ ] Replace the sample business logic and tests with your own, keeping the runtime adapters as references.
+- [ ] Replace the sample business logic and tests with your own. Inputs/outputs are auto-wired by the SDK, so you rarely need bespoke adapters.
 - [ ] Update the build scripts or Dockerfiles if you change module names or image packaging conventions.
 
 After copying, replace this README with project-specific documentation tailored to your workers.

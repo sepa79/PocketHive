@@ -55,7 +55,7 @@ class ModeratorWorkerImpl implements PocketHiveWorkerFunction {
    * {@code pockethive.workers.moderator.config.mode.type} and support
    * {@code pass-through}, {@code rate-per-sec}, and {@code sine}. A
    * simple JSON override looks like {@code {"enabled": true}} or
-   * {@code {"mode": {"type": "rate-per-sec", "ratePerSec": {"value": 5}}}}.
+   * {@code {"mode": {"type": "rate-per-sec", "ratePerSec": 5}}}.
    *
    * <p>The moderator does not alter the payload body; it only ensures the outbound message carries
    * a {@code x-ph-service} header whose value is the worker role (for example {@code "moderator"}).

@@ -61,7 +61,7 @@ We are ready to converge on a **single `onMessage()` contract** backed by plugga
 ### 7. Testing & Documentation
 - [x] Refresh unit/integration tests across services and the SDK to cover the new input abstraction.
 - [x] Add targeted tests for `SchedulerWorkInput` behaviour via generator/trigger adapter suites (rate, single-shot, enable toggles).
-- [ ] Update `docs/sdk/worker-sdk-quickstart.md`, service READMEs, and architectural references to describe the single interface + input bindings.
+- [x] Update `docs/sdk/worker-sdk-quickstart.md`, service READMEs, and architectural references to describe the single interface + input bindings.
 
 ### 8. Cleanup
 - Remove deprecated classes (`GeneratorWorker`, runtime adapters superseded by inputs, WorkerType enum).

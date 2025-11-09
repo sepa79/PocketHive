@@ -3,6 +3,7 @@ package io.pockethive.controlplane.consumer;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.control.ControlSignal;
 import io.pockethive.controlplane.ControlPlaneIdentity;
+import io.pockethive.controlplane.routing.ControlPlaneRouting;
 
 import java.io.IOException;
 import java.time.Clock;
@@ -86,7 +87,7 @@ public final class ControlPlaneConsumer {
         ControlSignal signal = envelope.signal();
         log.info(
             "Received control-plane signal '{}' via '{}' for identity {} (target='{}', swarm='{}', role='{}', instance='{}', origin='{}', correlationId='{}', idempotencyKey='{}')",
-            safe(signal.signal()),
+            resolveSignalName(envelope),
             envelope.routingKey(),
             describeIdentity(identity),
             safe(signal.commandTarget()),
@@ -97,6 +98,18 @@ public final class ControlPlaneConsumer {
             safe(signal.correlationId()),
             safe(signal.idempotencyKey())
         );
+    }
+
+    private String resolveSignalName(ControlSignalEnvelope envelope) {
+        ControlSignal signal = envelope.signal();
+        if (signal != null && hasText(signal.signal())) {
+            return signal.signal();
+        }
+        ControlPlaneRouting.RoutingKey routingKey = ControlPlaneRouting.parseSignal(envelope.routingKey());
+        if (routingKey != null && hasText(routingKey.type())) {
+            return routingKey.type();
+        }
+        return "n/a";
     }
 
     private static String describeIdentity(ControlPlaneIdentity identity) {
@@ -119,6 +132,10 @@ public final class ControlPlaneConsumer {
             return str.isBlank() ? "n/a" : str;
         }
         return value.toString();
+    }
+
+    private static boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 
     public static Builder builder(ObjectMapper objectMapper) {

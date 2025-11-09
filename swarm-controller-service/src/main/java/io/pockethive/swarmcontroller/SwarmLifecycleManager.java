@@ -587,8 +587,20 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
       }
       for (String inst : ready) {
         Long ts = lastSeen.get(e.getKey() + "." + inst);
-        if (ts == null || now - ts > STATUS_TTL_MS) {
-          requestStatus(e.getKey(), inst);
+        if (ts == null) {
+          log.info("Requesting status for {}.{} because no heartbeat was recorded yet", e.getKey(), inst);
+          requestStatus(e.getKey(), inst, "missing-heartbeat");
+          return false;
+        }
+        long age = now - ts;
+        if (age > STATUS_TTL_MS) {
+          log.info(
+              "Requesting status for {}.{} because heartbeat is stale (age={}ms, ttl={}ms)",
+              e.getKey(),
+              inst,
+              age,
+              STATUS_TTL_MS);
+          requestStatus(e.getKey(), inst, "stale-heartbeat");
           return false;
         }
       }
@@ -596,9 +608,9 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
     return !expectedReady.isEmpty();
   }
 
-  private void requestStatus(String role, String instance) {
+  private void requestStatus(String role, String instance, String reason) {
     String rk = ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, swarmId, role, instance);
-    log.debug("[CTRL] SEND rk={} inst={} payload={}", rk, instanceId, "{}");
+    log.info("[CTRL] SEND rk={} inst={} payload={} (reason={})", rk, instanceId, "{}", reason);
     rabbit.convertAndSend(controlExchange, rk, "{}");
   }
 

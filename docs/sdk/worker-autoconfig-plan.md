@@ -163,10 +163,13 @@
 5. **Service Migration**
    _Deferred until Task 2 completes._
    - [x] Convert generator service to the new model (scheduler/outputs auto-wired; legacy scheduling config removed).
-   - [ ] Repeat for moderator, processor, postprocessor, trigger, swarm-controller, etc.
-   - [ ] Delete obsolete defaults classes and runtime adapters once migration is complete.
+   - [x] Convert moderator service to the new model (depends solely on auto-wired Rabbit input/output; legacy scheduling config removed).
+   - [x] Convert processor service to the new model (scheduler enabled via `Application`; legacy `Scheduling` config removed).
+   - [x] Convert postprocessor service to the new model (relies on auto-wired inputs/outputs with scheduler baked into the application).
+   - [x] Convert trigger service to the new model (only built-in scheduler remains; redundant `Scheduling` config removed).
+   - [x] Delete obsolete defaults classes and runtime adapters once migration is complete.
 
 6. **Documentation & Examples**
    _Deferred until Task 2 completes._
-   - [ ] Update SDK docs, architecture references, and service READMEs.
+   - [x] Update SDK docs, architecture references, and service READMEs.
    - [ ] Retire old example modules; plan refreshed examples after v2 stabilizes.

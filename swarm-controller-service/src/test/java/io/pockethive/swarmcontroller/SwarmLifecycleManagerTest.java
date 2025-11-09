@@ -503,7 +503,9 @@ class SwarmLifecycleManagerTest {
 
     assertThat(output)
         .doesNotContain("[CTRL] SEND rk=ev.status-delta.swarm-controller.inst")
-        .doesNotContain("[CTRL] SEND rk=" + ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, TEST_SWARM_ID, "gen", "g1"));
+        .contains("Requesting status for gen.g1 because heartbeat is stale")
+        .contains("[CTRL] SEND rk=" + ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, TEST_SWARM_ID, "gen", "g1"))
+        .contains("reason=stale-heartbeat");
   }
 
   @Test

@@ -7,10 +7,10 @@ deeper architectural context.
 ## 0. Start from the in-repo template (optional)
 
 Clone the `examples/worker-starter` directory when you want a copy-ready project that already wires the
-Worker SDK, control-plane defaults, and runtime adapters for both generator and processor roles. The template lives
+Worker SDK, control-plane defaults, and auto-wired inputs/outputs for both generator and processor roles. The template lives
 inside the monorepo so it always tracks the latest PocketHive release—copy it to your own repository, then follow the
 remaining steps to customise the worker roles, routing metadata, and business logic. The starter already demonstrates
-how to source queue/exchange names from `application.yml` so workers boot entirely from configuration.
+how to source queue/exchange names from `application.yml` so workers boot entirely from configuration without bespoke adapters.
 
 ## 1. Add the dependency and starter
 
@@ -88,12 +88,14 @@ Refer to the migrated [generator](../../generator-service/src/main/java/io/pocke
 and [processor](../../processor-service/src/main/java/io/pockethive/processor/ProcessorWorkerImpl.java) services for
 end-to-end implementations.
 
-## 4. Dispatch work through the runtime adapters
+## 4. Let the SDK wire inputs and outputs
 
-Transport adapters inject the Stage 1 `WorkerRuntime` and Stage 2 `WorkerControlPlaneRuntime` beans. Message-based
-services should now compose the reusable [`RabbitMessageWorkerAdapter`](../../common/worker-sdk/src/main/java/io/pockethive/worker/sdk/transport/rabbit/RabbitMessageWorkerAdapter.java)
-instead of re-implementing listener toggling, Rabbit conversions, and control-plane validation. Scheduler-driven
-workloads can plug into `SchedulerWorkInput` via lightweight factories:
+Enable `pockethive.worker.inputs.autowire=true` (the default in every worker service) so the SDK provisions the correct
+`WorkInput` / `WorkOutput` pair for each annotated worker. Rabbit-driven workers automatically receive the shared
+`RabbitWorkInput`/`RabbitWorkOutput`, while scheduler-driven roles (generator, trigger) receive the built-in scheduler input.
+
+Custom inputs remain possible via `WorkInputFactory` beans. The trigger worker keeps a bespoke factory because it combines
+the scheduler with rate-limit state, but all other services rely on the SDK defaults:
 
 ```java
 @Component
@@ -141,24 +143,11 @@ class TriggerWorkInputFactory implements WorkInputFactory {
 }
 ```
 
-Subscribe your `@RabbitListener` endpoints to the same aliases exposed in configuration, for example
-`@RabbitListener(queues = "${pockethive.control-plane.queues.moderator}")`. The sample adapters in
-`examples/worker-starter` show how to delegate inbound delivery to the helper while keeping queue names in
-configuration.
-
-The helper registers control-plane listeners, converts AMQP messages via `RabbitWorkMessageConverter`, publishes
-`WorkResult.Message` payloads to the traffic exchange declared in `WorkerControlPlaneProperties`, and emits status
-snapshots/deltas so service adapters can focus on orchestration concerns rather than RabbitMQ plumbing. Scheduler-based
-workers can supply focused factories like the trigger example above, while message-driven workers that opt into auto-wiring
-(generator, moderator, processor, and postprocessor) rely on the SDK factories described in
+The auto-configured helper registers control-plane listeners, converts AMQP messages via `RabbitWorkMessageConverter`,
+publishes `WorkResult.Message` payloads to the traffic exchange declared in `WorkerControlPlaneProperties`, and emits status
+snapshots/deltas for every worker. Only workers with unusual transports need to provide factories like the trigger example
+above; generator, moderator, processor, and postprocessor all run on the shared factories described in
 `docs/sdk/worker-autoconfig-plan.md`.
-
-> **Publisher configuration**
-> Provide either `.rabbitTemplate(...)` (for the default publishing behaviour) or a custom
-> `.messageResultPublisher(...)`. The builder fails fast when neither option is supplied so misconfigured workers do not
-> start.
-
-Legacy adapters remain available when you need bespoke behaviour that the shared factories cannot express.
 
 ## 5. Test with the SDK fixtures
 

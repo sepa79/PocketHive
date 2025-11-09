@@ -24,8 +24,7 @@ pockethive:
       config:
         mode:
           type: pass-through
-          ratePerSec:
-            value: 0.0
+          ratePerSec: 0.0
           sine:
             minRatePerSec: 0.0
             maxRatePerSec: 0.0

@@ -29,6 +29,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.verify;
 
@@ -578,6 +579,19 @@ class WorkerControlPlaneRuntimeTest {
         @SuppressWarnings("unchecked")
         List<String> capabilities = (List<String>) worker.get("capabilities");
         assertThat(capabilities).containsExactly("SCHEDULER");
+    }
+
+    @Test
+    void statusRequestWithoutPayloadEmitsSnapshot() {
+        runtime.registerDefaultConfig(definition.beanName(), new TestConfig(true, 5.0));
+        reset(emitter);
+
+        String routingKey = ControlPlaneRouting.signal("status-request", IDENTITY.swarmId(), IDENTITY.role(), IDENTITY.instanceId());
+
+        boolean handled = runtime.handle("{}", routingKey);
+
+        assertThat(handled).isTrue();
+        verify(emitter).emitStatusSnapshot(any());
     }
 
     private Map<String, Object> buildSnapshot(ControlPlaneEmitter.StatusContext context) throws Exception {

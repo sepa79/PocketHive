@@ -5,6 +5,7 @@ import io.pockethive.control.CommandTarget;
 import io.pockethive.control.ControlSignal;
 import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.controlplane.messaging.ControlPlaneEmitter;
+import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.controlplane.topology.ControlPlaneRouteCatalog;
 import io.pockethive.controlplane.spring.WorkerControlPlaneProperties;
 import io.pockethive.controlplane.worker.WorkerConfigCommand;
@@ -208,7 +209,7 @@ public final class WorkerControlPlaneRuntime {
 
         @Override
         public void onStatusRequest(WorkerStatusRequest request) {
-            log.debug("Received status-request signal {} => emitting snapshot", request.signal());
+            log.debug("Received status-request signal {} => emitting snapshot", resolveSignalName(request));
             emitStatusSnapshot();
         }
 
@@ -286,6 +287,18 @@ public final class WorkerControlPlaneRuntime {
             }
         }
         emitStatusSnapshot();
+    }
+
+    private String resolveSignalName(WorkerStatusRequest request) {
+        ControlSignal signal = request.signal();
+        if (signal != null && signal.signal() != null && !signal.signal().isBlank()) {
+            return signal.signal();
+        }
+        ControlPlaneRouting.RoutingKey routingKey = ControlPlaneRouting.parseSignal(request.envelope().routingKey());
+        if (routingKey != null && routingKey.type() != null && !routingKey.type().isBlank()) {
+            return routingKey.type();
+        }
+        return "n/a";
     }
     private Object ensureTypedDefault(WorkerDefinition definition, Object defaultConfig, Map<String, Object> rawConfig) {
         Class<?> configType = definition.configType();

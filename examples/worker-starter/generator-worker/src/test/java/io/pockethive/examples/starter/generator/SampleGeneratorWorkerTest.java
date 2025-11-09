@@ -2,6 +2,7 @@ package io.pockethive.examples.starter.generator;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.micrometer.observation.ObservationRegistry;
@@ -18,7 +19,8 @@ import org.slf4j.LoggerFactory;
 
 class SampleGeneratorWorkerTest {
 
-  private final SampleGeneratorWorker worker = new SampleGeneratorWorker();
+  private final SampleGeneratorWorker worker =
+      new SampleGeneratorWorker(new SampleGeneratorProperties(new ObjectMapper()));
 
   @Test
   void shouldEmitConfiguredMessage() {
@@ -42,7 +44,7 @@ class SampleGeneratorWorkerTest {
     assertThat(result).isSameAs(WorkResult.none());
   }
 
-    private static final class TestWorkerContext implements WorkerContext {
+  private static final class TestWorkerContext implements WorkerContext {
 
     private final SampleGeneratorConfig config;
     private final boolean enabled;
@@ -64,11 +66,6 @@ class SampleGeneratorWorkerTest {
     @Override
     public boolean enabled() {
       return enabled;
-    }
-
-    @Override
-    public boolean enabled() {
-      return true;
     }
 
     @Override

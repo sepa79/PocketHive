@@ -14,22 +14,22 @@ public record ModeratorWorkerConfig(Mode mode) {
     return mode.toOperationMode();
   }
 
-  public record Mode(Type type, RatePerSec ratePerSec, Sine sine) {
+  public record Mode(Type type, double ratePerSec, Sine sine) {
 
     public Mode {
       type = type == null ? Type.PASS_THROUGH : type;
-      ratePerSec = ratePerSec == null ? RatePerSec.DEFAULT : ratePerSec;
+      ratePerSec = sanitiseRate(ratePerSec);
       sine = sine == null ? Sine.DEFAULT : sine;
     }
 
     static Mode passThrough() {
-      return new Mode(Type.PASS_THROUGH, RatePerSec.DEFAULT, Sine.DEFAULT);
+      return new Mode(Type.PASS_THROUGH, 0.0, Sine.DEFAULT);
     }
 
     ModeratorOperationMode toOperationMode() {
       return switch (type) {
         case PASS_THROUGH -> ModeratorOperationMode.passThrough();
-        case RATE_PER_SEC -> ModeratorOperationMode.ratePerSec(ratePerSec.value());
+        case RATE_PER_SEC -> ModeratorOperationMode.ratePerSec(ratePerSec);
         case SINE -> ModeratorOperationMode.sine(
             sine.minRatePerSec(),
             sine.maxRatePerSec(),
@@ -64,24 +64,6 @@ public record ModeratorWorkerConfig(Mode mode) {
       @JsonValue
       public String jsonValue() {
         return name().toLowerCase(Locale.ROOT).replace('_', '-');
-      }
-    }
-
-    public record RatePerSec(double value) {
-      static final RatePerSec DEFAULT = new RatePerSec(0.0);
-
-      @JsonCreator(mode = JsonCreator.Mode.DELEGATING)
-      public static RatePerSec from(double value) {
-        return new RatePerSec(value);
-      }
-
-      @JsonValue
-      public double jsonValue() {
-        return value;
-      }
-
-      public RatePerSec {
-        value = sanitiseRate(value);
       }
     }
 

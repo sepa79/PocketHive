@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+## [0.13.6] - 2025-11-09
+Timestamp: 2025-11-09T00:00:00Z
+
+- Control plane & status handling: teach `ControlPlaneConsumer`, `WorkerControlPlane`, and `WorkerControlPlaneRuntime` to resolve signal names from routing keys so status-request heartbeats log cleanly, ensure workers always emit snapshots on incoming probes, and add verbose swarm-controller logs explaining when/why status requests are broadcast (missing vs. stale heartbeats).
+- Worker scheduling: enable scheduler support directly in the moderator, processor, postprocessor, and trigger Spring Boot applications and drop the redundant `Scheduling` configuration stubs so all workers rely on the SDK lifecycle hooks.
+- SDK & samples: remove the legacy runtime adapters/defaults from the worker-starter generator/processor examples, rely on auto-wired inputs/outputs, and add typed `SampleGeneratorProperties` + updated tests to mirror the production services.
+- Documentation: update the SDK quick start, Worker SDK README, processor README, and worker plans to focus on auto-configured inputs/outputs, mark the unification/auto-config documentation tasks complete, and note that runtime adapters/default classes have been deleted.
+- Release: bump PocketHive to 0.13.6 so downstream builds and Docker images consume the latest SDK/runtime improvements.
+
 ## [0.13.5] - 2025-11-04
 Timestamp: 2025-11-04T20:30:00Z
 
