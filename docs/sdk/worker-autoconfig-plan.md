@@ -172,4 +172,3 @@
 6. **Documentation & Examples**
    _Deferred until Task 2 completes._
    - [x] Update SDK docs, architecture references, and service READMEs.
-   - [ ] Retire old example modules; plan refreshed examples after v2 stabilizes.
