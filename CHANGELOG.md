@@ -13,6 +13,7 @@ Timestamp: 2025-11-09T00:00:00Z
 - Worker scheduling: enable scheduler support directly in the moderator, processor, postprocessor, and trigger Spring Boot applications and drop the redundant `Scheduling` configuration stubs so all workers rely on the SDK lifecycle hooks.
 - SDK & samples: remove the legacy runtime adapters/defaults from the worker-starter generator/processor examples, rely on auto-wired inputs/outputs, and add typed `SampleGeneratorProperties` + updated tests to mirror the production services.
 - Worker IO: enforce single-worker JVMs inside the SDK, bind Rabbit inputs/outputs via `pockethive.inputs/outputs.<type>` (and the matching `POCKETHIVE_INPUT_RABBIT_QUEUE` / `POCKETHIVE_OUTPUT_RABBIT_*` env vars), delete the `pockethive.control-plane.queues.*` contract, refresh the worker docs/READMEs/examples, and update orchestrator/swarm-controller tests to rely on the new environment layout.
+- Scenarios: add `local-rest-two-moderators.yaml` (generator → moderator → processor → moderator → postprocessor) so the UI can launch a sample multi-moderator pipeline using the new IO contract.
 - Documentation: update the SDK quick start, Worker SDK README, processor README, and worker plans to focus on auto-configured inputs/outputs, mark the unification/auto-config documentation tasks complete, and note that runtime adapters/default classes have been deleted.
 - Release: bump PocketHive to 0.13.6 so downstream builds and Docker images consume the latest SDK/runtime improvements.
 
