@@ -2,6 +2,7 @@ package io.pockethive.examples.starter.generator;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.micrometer.observation.ObservationRegistry;
@@ -18,14 +19,15 @@ import org.slf4j.LoggerFactory;
 
 class SampleGeneratorWorkerTest {
 
-  private final SampleGeneratorWorker worker = new SampleGeneratorWorker();
+  private final SampleGeneratorWorker worker =
+      new SampleGeneratorWorker(new SampleGeneratorProperties(new ObjectMapper()));
 
   @Test
   void shouldEmitConfiguredMessage() {
-    SampleGeneratorConfig config = new SampleGeneratorConfig(true, 1.0, "demo message");
-    WorkerContext context = new TestWorkerContext(config);
+    SampleGeneratorConfig config = new SampleGeneratorConfig(1.0, "demo message");
+    WorkerContext context = new TestWorkerContext(config, true);
 
-    WorkResult result = worker.generate(context);
+    WorkResult result = worker.onMessage(WorkMessage.builder().build(), context);
 
     assertThat(result).isInstanceOf(WorkResult.Message.class);
     WorkMessage message = ((WorkResult.Message) result).value();
@@ -34,10 +36,10 @@ class SampleGeneratorWorkerTest {
 
   @Test
   void disabledConfigReturnsNone() {
-    SampleGeneratorConfig config = new SampleGeneratorConfig(false, 1.0, "demo message");
-    WorkerContext context = new TestWorkerContext(config);
+    SampleGeneratorConfig config = new SampleGeneratorConfig(1.0, "demo message");
+    WorkerContext context = new TestWorkerContext(config, false);
 
-    WorkResult result = worker.generate(context);
+    WorkResult result = worker.onMessage(WorkMessage.builder().build(), context);
 
     assertThat(result).isSameAs(WorkResult.none());
   }
@@ -45,18 +47,25 @@ class SampleGeneratorWorkerTest {
   private static final class TestWorkerContext implements WorkerContext {
 
     private final SampleGeneratorConfig config;
+    private final boolean enabled;
     private final MeterRegistry meterRegistry = new SimpleMeterRegistry();
     private final ObservationRegistry observationRegistry = ObservationRegistry.create();
     private final ObservabilityContext observability = new ObservabilityContext();
     private final Logger logger = LoggerFactory.getLogger(TestWorkerContext.class);
 
-    private TestWorkerContext(SampleGeneratorConfig config) {
+    private TestWorkerContext(SampleGeneratorConfig config, boolean enabled) {
       this.config = config;
+      this.enabled = enabled;
     }
 
     @Override
     public WorkerInfo info() {
       return new WorkerInfo("generator", "sample-swarm", "generator-1", null, "ph.generator.out");
+    }
+
+    @Override
+    public boolean enabled() {
+      return enabled;
     }
 
     @Override

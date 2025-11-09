@@ -48,9 +48,8 @@ services:
     environment:
       GF_SECURITY_ADMIN_USER: pockethive
       GF_SECURITY_ADMIN_PASSWORD: pockethive
-      GF_SERVER_ROOT_URL: http://localhost:8088/grafana/
-      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
     volumes:
+      - /opt/pockethive/grafana/grafana.ini:/etc/grafana/grafana.ini:ro
       - /opt/pockethive/grafana/provisioning:/etc/grafana/provisioning:ro
       - /opt/pockethive/grafana/dashboards:/var/lib/grafana/dashboards:ro
       - grafana-data:/var/lib/grafana

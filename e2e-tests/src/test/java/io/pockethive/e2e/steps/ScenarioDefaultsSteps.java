@@ -21,7 +21,7 @@ public class ScenarioDefaultsSteps {
 
   private static final String GENERATOR_ROLE = "generator";
   private static final String GENERATOR_RATE_ENV =
-      "POCKETHIVE_CONTROL_PLANE_WORKER_GENERATOR_RATE_PER_SEC";
+      "POCKETHIVE_WORKERS_GENERATOR_CONFIG_RATEPERSEC";
 
   private ScenarioManagerClient scenarioManagerClient;
   private ScenarioDetails scenarioDetails;

@@ -1,7 +1,11 @@
 package io.pockethive.worker.sdk.runtime;
 
-import io.pockethive.worker.sdk.config.WorkerType;
-import java.util.Map;
+import io.pockethive.worker.sdk.config.WorkInputConfig;
+import io.pockethive.worker.sdk.config.WorkOutputConfig;
+import io.pockethive.worker.sdk.config.WorkerCapability;
+import io.pockethive.worker.sdk.config.WorkerInputType;
+import io.pockethive.worker.sdk.config.WorkerOutputType;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -13,67 +17,76 @@ class WorkerStateTest {
         WorkerDefinition definition = new WorkerDefinition(
             "testWorker",
             Object.class,
-            WorkerType.GENERATOR,
+            WorkerInputType.SCHEDULER,
             "test-role",
             null,
             null,
             null,
-            TestConfig.class
+            TestConfig.class,
+            WorkInputConfig.class,
+            WorkOutputConfig.class,
+            WorkerOutputType.NONE,
+            "Test worker",
+            Set.of(WorkerCapability.SCHEDULER)
         );
         WorkerState state = new WorkerState(definition);
         TestConfig defaults = new TestConfig(true, 5.0);
-        Map<String, Object> rawDefaults = Map.of("enabled", true, "ratePerSec", 5.0);
 
-        boolean seeded = state.seedConfig(defaults, rawDefaults, true);
+        boolean seeded = state.seedConfig(defaults, true);
 
         assertThat(seeded).isTrue();
         assertThat(state.config(TestConfig.class)).contains(defaults);
-        assertThat(state.rawConfig()).isEqualTo(rawDefaults);
         assertThat(state.enabled()).contains(true);
-        assertThat(state.seedConfig(new TestConfig(false, 1.0), Map.of(), false)).isFalse();
+        assertThat(state.seedConfig(new TestConfig(false, 1.0), false)).isFalse();
     }
 
     @Test
-    void updateConfigWithEmptyMapClearsRawConfig() {
+    void updateConfigWithNullConfigClearsState() {
         WorkerDefinition definition = new WorkerDefinition(
             "testWorker",
             Object.class,
-            WorkerType.GENERATOR,
+            WorkerInputType.SCHEDULER,
             "test-role",
             null,
             null,
             null,
-            TestConfig.class
+            TestConfig.class,
+            WorkInputConfig.class,
+            WorkOutputConfig.class,
+            WorkerOutputType.NONE,
+            "Test worker",
+            Set.of(WorkerCapability.SCHEDULER)
         );
         WorkerState state = new WorkerState(definition);
-        Map<String, Object> rawDefaults = Map.of("enabled", true, "ratePerSec", 5.0);
-        state.seedConfig(new TestConfig(true, 5.0), rawDefaults, true);
+        state.seedConfig(new TestConfig(true, 5.0), true);
 
-        state.updateConfig(null, Map.of(), null);
-        assertThat(state.rawConfig()).isEmpty();
+        state.updateConfig(null, true, null);
         assertThat(state.config(TestConfig.class)).isEmpty();
     }
 
     @Test
-    void updateConfigWithNullRawDataPreservesExistingRawConfig() {
+    void updateConfigWithNullConfigPreservesExistingConfig() {
         WorkerDefinition definition = new WorkerDefinition(
             "testWorker",
             Object.class,
-            WorkerType.GENERATOR,
+            WorkerInputType.SCHEDULER,
             "test-role",
             null,
             null,
             null,
-            TestConfig.class
+            TestConfig.class,
+            WorkInputConfig.class,
+            WorkOutputConfig.class,
+            WorkerOutputType.NONE,
+            "Test worker",
+            Set.of(WorkerCapability.SCHEDULER)
         );
         WorkerState state = new WorkerState(definition);
         TestConfig defaults = new TestConfig(true, 5.0);
-        Map<String, Object> rawDefaults = Map.of("enabled", true, "ratePerSec", 5.0);
-        state.seedConfig(defaults, rawDefaults, true);
+        state.seedConfig(defaults, true);
 
-        state.updateConfig(null, null, Boolean.FALSE);
+        state.updateConfig(null, false, Boolean.FALSE);
 
-        assertThat(state.rawConfig()).isEqualTo(rawDefaults);
         assertThat(state.config(TestConfig.class)).contains(defaults);
         assertThat(state.enabled()).contains(false);
     }
@@ -83,12 +96,17 @@ class WorkerStateTest {
         WorkerDefinition definition = new WorkerDefinition(
             "testWorker",
             Object.class,
-            WorkerType.MESSAGE,
+            WorkerInputType.RABBIT,
             "test-role",
             " in.runtime ",
             "out.runtime",
             null,
-            TestConfig.class
+            TestConfig.class,
+            WorkInputConfig.class,
+            WorkOutputConfig.class,
+            WorkerOutputType.RABBITMQ,
+            "Test worker",
+            Set.of(WorkerCapability.MESSAGE_DRIVEN)
         );
         WorkerState state = new WorkerState(definition);
 

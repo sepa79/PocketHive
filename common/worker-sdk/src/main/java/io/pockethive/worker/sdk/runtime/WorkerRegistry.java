@@ -1,6 +1,6 @@
 package io.pockethive.worker.sdk.runtime;
 
-import io.pockethive.worker.sdk.config.WorkerType;
+import io.pockethive.worker.sdk.config.WorkerInputType;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -51,18 +51,18 @@ public final class WorkerRegistry {
     }
 
     /**
-     * Returns a stream of worker definitions matching the supplied role and worker type.
+     * Returns a stream of worker definitions matching the supplied role and input binding.
      */
-    public Stream<WorkerDefinition> streamByRoleAndType(String role, WorkerType type) {
-        Objects.requireNonNull(type, "type");
-        return streamByRole(role).filter(definition -> definition.workerType() == type);
+    public Stream<WorkerDefinition> streamByRoleAndInput(String role, WorkerInputType input) {
+        Objects.requireNonNull(input, "input");
+        return streamByRole(role).filter(definition -> definition.input() == input);
     }
 
     /**
-     * Finds the first worker definition matching the supplied role and worker type.
+     * Finds the first worker definition matching the supplied role and input binding.
      */
-    public Optional<WorkerDefinition> findByRoleAndType(String role, WorkerType type) {
-        return streamByRoleAndType(role, type).findFirst();
+    public Optional<WorkerDefinition> findByRoleAndInput(String role, WorkerInputType input) {
+        return streamByRoleAndInput(role, input).findFirst();
     }
 
     private static String requireText(String value, String field) {

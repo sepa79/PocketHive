@@ -20,6 +20,7 @@ import org.springframework.amqp.core.Declarables;
 import org.springframework.amqp.core.ExchangeBuilder;
 import org.springframework.amqp.core.TopicExchange;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -27,6 +28,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.ConfigurableEnvironment;
 
 /**
  * Auto-configuration that wires control-plane infrastructure for worker services.
@@ -38,9 +40,12 @@ import org.springframework.context.annotation.Configuration;
 public class WorkerControlPlaneAutoConfiguration {
 
     private final WorkerControlPlaneProperties properties;
+    private final Binder binder;
 
-    WorkerControlPlaneAutoConfiguration(WorkerControlPlaneProperties properties) {
+    WorkerControlPlaneAutoConfiguration(WorkerControlPlaneProperties properties,
+                                        ConfigurableEnvironment environment) {
         this.properties = Objects.requireNonNull(properties, "properties");
+        this.binder = Binder.get(environment);
     }
 
     @Bean(name = "workerControlPlaneTopologyDescriptor")
@@ -71,7 +76,7 @@ public class WorkerControlPlaneAutoConfiguration {
             return new Declarables(List.of());
         }
         TopicExchange trafficExchange = ExchangeBuilder
-            .topicExchange(properties.getTrafficExchange())
+            .topicExchange(resolveTrafficExchange())
             .durable(true)
             .build();
         return factory.create(descriptor, identity, controlPlaneExchange, trafficExchange);
@@ -130,11 +135,20 @@ public class WorkerControlPlaneAutoConfiguration {
         String controlQueuePrefix = requireText(properties.getControlQueuePrefix(),
             "pockethive.control-plane.control-queue-prefix");
         Map<String, QueueDescriptor> trafficQueues = new LinkedHashMap<>();
-        properties.getQueues().names().forEach((queueRole, queueName) -> {
-            if (queueName != null && !queueName.isBlank()) {
-                trafficQueues.put(queueRole, new QueueDescriptor(queueName, Set.of()));
-            }
-        });
+        String queue = resolveRabbitInputQueue();
+        if (queue != null) {
+            trafficQueues.put(role, new QueueDescriptor(queue, Set.of()));
+        }
         return new ControlPlaneTopologySettings(swarmId, controlQueuePrefix, trafficQueues);
+    }
+
+    private String resolveRabbitInputQueue() {
+        return binder.bind("pockethive.inputs.rabbit.queue", String.class).orElse(null);
+    }
+
+    private String resolveTrafficExchange() {
+        return binder.bind("pockethive.outputs.rabbit.exchange", String.class)
+            .orElseThrow(() -> new IllegalStateException(
+                "pockethive.outputs.rabbit.exchange must be configured to declare worker queues"));
     }
 }

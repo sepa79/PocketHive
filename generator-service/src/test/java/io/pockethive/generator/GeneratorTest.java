@@ -5,10 +5,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.pockethive.controlplane.spring.WorkerControlPlaneProperties;
 import io.pockethive.worker.sdk.api.StatusPublisher;
+import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pockethive.worker.sdk.api.WorkResult;
 import io.pockethive.worker.sdk.api.WorkerContext;
 import io.pockethive.worker.sdk.api.WorkerInfo;
 import io.pockethive.worker.sdk.testing.ControlPlaneTestFixtures;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
@@ -22,29 +24,33 @@ class GeneratorTest {
   private static final ObjectMapper MAPPER = new ObjectMapper();
   private static final WorkerControlPlaneProperties WORKER_PROPERTIES =
       ControlPlaneTestFixtures.workerProperties("swarm", "generator", "instance");
-  private static final String IN_QUEUE = WORKER_PROPERTIES.getQueues().get("generator");
-  private static final String OUT_QUEUE = WORKER_PROPERTIES.getQueues().get("moderator");
+  private static final Map<String, String> WORKER_QUEUES =
+      ControlPlaneTestFixtures.workerQueues("swarm");
+  private static final String IN_QUEUE = WORKER_QUEUES.get("generator");
+  private static final String OUT_QUEUE = WORKER_QUEUES.get("moderator");
 
-  private GeneratorDefaults defaults;
+  private GeneratorWorkerProperties properties;
   private GeneratorWorkerImpl worker;
 
   @BeforeEach
   void setUp() {
-    MessageConfig messageConfig = new MessageConfig();
-    messageConfig.setPath("/default");
-    messageConfig.setMethod("POST");
-    messageConfig.setBody("{}");
-    messageConfig.setHeaders(Map.of("X-Test", "true"));
-    defaults = new GeneratorDefaults(messageConfig);
-    defaults.setRatePerSec(3.0);
-    defaults.setEnabled(true);
-    worker = new GeneratorWorkerImpl(defaults);
+    properties = new GeneratorWorkerProperties(new ObjectMapper());
+    Map<String, Object> message = new LinkedHashMap<>();
+    message.put("path", "/default");
+    message.put("method", "POST");
+    message.put("body", "{}");
+    message.put("headers", Map.of("X-Test", "true"));
+    Map<String, Object> config = new LinkedHashMap<>();
+    config.put("ratePerSec", 3.0);
+    config.put("singleRequest", false);
+    config.put("message", message);
+    properties.setConfig(config);
+    worker = new GeneratorWorkerImpl(properties);
   }
 
   @Test
   void generateUsesProvidedConfig() throws Exception {
     GeneratorWorkerConfig config = new GeneratorWorkerConfig(
-        true,
         10.0,
         false,
         new GeneratorWorkerConfig.Message(
@@ -55,7 +61,7 @@ class GeneratorTest {
         )
     );
 
-    WorkResult result = worker.generate(new TestWorkerContext(config));
+    WorkResult result = worker.onMessage(seedMessage(), new TestWorkerContext(config));
 
     assertThat(result).isInstanceOf(WorkResult.Message.class);
     JsonNode payload = MAPPER.readTree(((WorkResult.Message) result).value().asString());
@@ -70,7 +76,7 @@ class GeneratorTest {
 
   @Test
   void generateFallsBackToDefaultsWhenConfigMissing() throws Exception {
-    WorkResult result = worker.generate(new TestWorkerContext(null));
+    WorkResult result = worker.onMessage(seedMessage(), new TestWorkerContext(null));
 
     assertThat(result).isInstanceOf(WorkResult.Message.class);
     JsonNode payload = MAPPER.readTree(((WorkResult.Message) result).value().asString());
@@ -97,6 +103,11 @@ class GeneratorTest {
     @Override
     public WorkerInfo info() {
       return info;
+    }
+
+    @Override
+    public boolean enabled() {
+      return true;
     }
 
     @Override
@@ -131,5 +142,9 @@ class GeneratorTest {
     public io.pockethive.observability.ObservabilityContext observabilityContext() {
       return new io.pockethive.observability.ObservabilityContext();
     }
+  }
+
+  private static WorkMessage seedMessage() {
+    return WorkMessage.builder().build();
   }
 }

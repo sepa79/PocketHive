@@ -1,6 +1,8 @@
 package io.pockethive.orchestrator.app;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
 import io.pockethive.orchestrator.domain.SwarmHealth;
 import io.pockethive.orchestrator.domain.SwarmRegistry;
 import org.junit.jupiter.api.Test;
@@ -13,6 +15,7 @@ import org.springframework.boot.test.system.OutputCaptureExtension;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.verify;
+import org.slf4j.LoggerFactory;
 
 @ExtendWith({MockitoExtension.class, OutputCaptureExtension.class})
 class ControllerStatusListenerTest {
@@ -42,10 +45,15 @@ class ControllerStatusListenerTest {
     @Test
     void statusLogsEmitAtDebug(CapturedOutput output) {
         ControllerStatusListener listener = new ControllerStatusListener(registry, new ObjectMapper());
-
-        listener.handle("{}", "ev.status-delta.swarm-controller.inst1");
-
-        assertThat(output).doesNotContain("[CTRL] RECV rk=ev.status-delta.swarm-controller.inst1");
+        Logger logger = (Logger) LoggerFactory.getLogger(ControllerStatusListener.class);
+        Level previous = logger.getLevel();
+        logger.setLevel(Level.INFO);
+        try {
+            listener.handle("{}", "ev.status-delta.swarm-controller.inst1");
+            assertThat(output).doesNotContain("[CTRL] RECV rk=ev.status-delta.swarm-controller.inst1");
+        } finally {
+            logger.setLevel(previous);
+        }
     }
 
     @Test

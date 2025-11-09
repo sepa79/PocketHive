@@ -1,11 +1,9 @@
 package io.pockethive.worker.sdk.runtime;
 
-import io.pockethive.worker.sdk.api.GeneratorWorker;
-import io.pockethive.worker.sdk.api.MessageWorker;
+import io.pockethive.worker.sdk.api.PocketHiveWorkerFunction;
 import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pockethive.worker.sdk.api.WorkResult;
 import io.pockethive.worker.sdk.api.WorkerContext;
-import io.pockethive.worker.sdk.config.WorkerType;
 import java.util.List;
 import java.util.Objects;
 
@@ -14,7 +12,6 @@ import java.util.Objects;
  */
 final class WorkerInvocation {
 
-    private final WorkerType workerType;
     private final Object workerBean;
     private final WorkerContextFactory contextFactory;
     private final WorkerDefinition workerDefinition;
@@ -22,14 +19,12 @@ final class WorkerInvocation {
     private final List<WorkerInvocationInterceptor> interceptors;
 
     WorkerInvocation(
-        WorkerType workerType,
         Object workerBean,
         WorkerContextFactory contextFactory,
         WorkerDefinition workerDefinition,
         WorkerState workerState,
         List<WorkerInvocationInterceptor> interceptors
     ) {
-        this.workerType = Objects.requireNonNull(workerType, "workerType");
         this.workerBean = Objects.requireNonNull(workerBean, "workerBean");
         this.contextFactory = Objects.requireNonNull(contextFactory, "contextFactory");
         this.workerDefinition = Objects.requireNonNull(workerDefinition, "workerDefinition");
@@ -74,9 +69,15 @@ final class WorkerInvocation {
     private WorkResult invokeWorker(WorkerInvocationContext invocationContext) throws Exception {
         WorkerContext context = invocationContext.workerContext();
         WorkMessage input = invocationContext.message();
-        return switch (workerType) {
-            case GENERATOR -> ((GeneratorWorker) workerBean).generate(context);
-            case MESSAGE -> ((MessageWorker) workerBean).onMessage(input, context);
-        };
+        if (workerBean instanceof PocketHiveWorkerFunction function) {
+            return function.onMessage(input, context);
+        }
+        throw new IllegalStateException(
+            "Worker '" + workerDefinition.beanName() + "' does not implement PocketHiveWorkerFunction"
+        );
+    }
+
+    WorkerDefinition definition() {
+        return workerDefinition;
     }
 }

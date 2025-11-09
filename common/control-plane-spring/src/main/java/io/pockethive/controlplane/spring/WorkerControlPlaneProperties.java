@@ -5,9 +5,6 @@ import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.controlplane.topology.ControlPlaneRouteCatalog;
 import jakarta.validation.Valid;
 import java.time.Duration;
-import java.util.Collections;
-import java.util.LinkedHashMap;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import org.springframework.boot.context.properties.ConfigurationProperties;
@@ -25,11 +22,9 @@ public final class WorkerControlPlaneProperties {
     private final boolean declareTopology;
 
     private final String exchange;
-    private final String trafficExchange;
     private final String swarmId;
     private final String instanceId;
     private final String controlQueuePrefix;
-    private final Queues queues;
     private final Worker worker;
     private final SwarmController swarmController;
     private final ControlPlane controlPlane;
@@ -37,22 +32,18 @@ public final class WorkerControlPlaneProperties {
     public WorkerControlPlaneProperties(Boolean enabled,
                                         Boolean declareTopology,
                                         String exchange,
-                                        String trafficExchange,
                                         String swarmId,
                                         String instanceId,
                                         String controlQueuePrefix,
-                                        Map<String, String> queues,
                                         @Valid Worker worker,
                                         @Valid SwarmController swarmController) {
         this.enabled = enabled == null || enabled;
         this.declareTopology = declareTopology == null || declareTopology;
         this.exchange = requireNonBlank(exchange, "pockethive.control-plane.exchange");
-        this.trafficExchange = resolveTrafficExchange(trafficExchange);
         this.swarmId = requireNonBlank(swarmId, "pockethive.control-plane.swarm-id");
         this.instanceId = requireNonBlank(instanceId, "pockethive.control-plane.instance-id");
         this.controlQueuePrefix = requireNonBlank(controlQueuePrefix,
             "pockethive.control-plane.control-queue-prefix");
-        this.queues = new Queues(queues);
         this.worker = Objects.requireNonNull(worker, "worker must not be null");
         this.swarmController = Objects.requireNonNull(swarmController, "swarmController must not be null");
         this.controlPlane = ControlPlane.forWorker(this.swarmId, this.controlQueuePrefix,
@@ -71,20 +62,12 @@ public final class WorkerControlPlaneProperties {
         return exchange;
     }
 
-    public String getTrafficExchange() {
-        return trafficExchange;
-    }
-
     public String getSwarmId() {
         return swarmId;
     }
 
     public String getInstanceId() {
         return instanceId;
-    }
-
-    public Queues getQueues() {
-        return queues;
     }
 
     public String getControlQueuePrefix() {
@@ -101,36 +84,6 @@ public final class WorkerControlPlaneProperties {
 
     public ControlPlane getControlPlane() {
         return controlPlane;
-    }
-
-    @Validated
-    public static final class Queues {
-
-        private final Map<String, String> names;
-
-        public Queues(Map<String, String> names) {
-            if (names == null || names.isEmpty()) {
-                throw new IllegalArgumentException("pockethive.control-plane.queues must define at least one queue");
-            }
-            Map<String, String> copy = new LinkedHashMap<>();
-            names.forEach((key, value) -> {
-                String queueKey = key == null ? "" : key.trim();
-                if (queueKey.isEmpty()) {
-                    throw new IllegalArgumentException("pockethive.control-plane.queues contains an unnamed entry");
-                }
-                copy.put(queueKey, requireNonBlank(value,
-                    "pockethive.control-plane.queues." + queueKey));
-            });
-            this.names = Collections.unmodifiableMap(copy);
-        }
-
-        public Map<String, String> names() {
-            return names;
-        }
-
-        public String get(String queueName) {
-            return names.get(queueName);
-        }
     }
 
     public static final class ControlPlane {
@@ -349,21 +302,4 @@ public final class WorkerControlPlaneProperties {
         return value;
     }
 
-    private static String resolveTrafficExchange(String value) {
-        if (value == null) {
-            throw new IllegalArgumentException(
-                "pockethive.control-plane.traffic-exchange must not be null or blank");
-        }
-        String trimmed = value.trim();
-        if (trimmed.isEmpty()) {
-            throw new IllegalArgumentException(
-                "pockethive.control-plane.traffic-exchange must not be null or blank");
-        }
-        if (trimmed.startsWith("${") && trimmed.endsWith("}")) {
-            throw new IllegalArgumentException(
-                "pockethive.control-plane.traffic-exchange must resolve to a concrete value, but was "
-                    + trimmed);
-        }
-        return trimmed;
-    }
 }

@@ -4,7 +4,6 @@ package io.pockethive.examples.starter.generator;
  * Typed configuration for the sample generator worker.
  */
 public record SampleGeneratorConfig(
-    boolean enabled,
     double ratePerSecond,
     String message
 ) {

@@ -84,11 +84,6 @@ class ControlPlaneContainerEnvironmentFactoryTest {
         assertThat(env).containsEntry("POCKETHIVE_CONTROL_PLANE_INSTANCE_ID", "bee-a");
         assertThat(env).containsEntry("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGS_EXCHANGE", "ph.logs");
         assertThat(env).containsEntry("POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE_PREFIX", "ph.control");
-        assertThat(env).containsEntry("POCKETHIVE_CONTROL_PLANE_TRAFFIC_EXCHANGE", "ph.swarm-1.hive");
-        assertThat(env).doesNotContainKeys(
-            "POCKETHIVE_CONTROL_PLANE_QUEUES_GENERATOR",
-            "POCKETHIVE_CONTROL_PLANE_QUEUES_MODERATOR",
-            "POCKETHIVE_CONTROL_PLANE_QUEUES_FINAL");
         assertThat(env).containsEntry("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_ENABLED", "true");
         assertThat(env).containsEntry("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_BASE_URL", "http://pushgateway:9091");
         assertThat(env).containsEntry("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_PUSH_RATE", "PT45S");

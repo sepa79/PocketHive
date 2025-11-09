@@ -1,10 +1,12 @@
 package io.pockethive.trigger;
 
-import io.pockethive.worker.sdk.api.GeneratorWorker;
+import io.pockethive.worker.sdk.api.PocketHiveWorkerFunction;
+import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pockethive.worker.sdk.api.WorkResult;
 import io.pockethive.worker.sdk.api.WorkerContext;
 import io.pockethive.worker.sdk.config.PocketHiveWorker;
-import io.pockethive.worker.sdk.config.WorkerType;
+import io.pockethive.worker.sdk.config.SchedulerInputProperties;
+import io.pockethive.worker.sdk.config.WorkerInputType;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.net.URI;
@@ -46,21 +48,22 @@ import org.springframework.stereotype.Component;
 @Component("triggerWorker")
 @PocketHiveWorker(
     role = "trigger",
-    type = WorkerType.GENERATOR,
-    config = TriggerWorkerConfig.class
+    input = WorkerInputType.SCHEDULER,
+    config = TriggerWorkerConfig.class,
+    inputConfig = SchedulerInputProperties.class
 )
-class TriggerWorkerImpl implements GeneratorWorker {
+class TriggerWorkerImpl implements PocketHiveWorkerFunction {
 
-  private final TriggerDefaults defaults;
+  private final TriggerWorkerProperties properties;
   private final HttpClient httpClient;
 
   @Autowired
-  TriggerWorkerImpl(TriggerDefaults defaults) {
-    this(defaults, HttpClient.newHttpClient());
+  TriggerWorkerImpl(TriggerWorkerProperties properties) {
+    this(properties, HttpClient.newHttpClient());
   }
 
-  TriggerWorkerImpl(TriggerDefaults defaults, HttpClient httpClient) {
-    this.defaults = Objects.requireNonNull(defaults, "defaults");
+  TriggerWorkerImpl(TriggerWorkerProperties properties, HttpClient httpClient) {
+    this.properties = Objects.requireNonNull(properties, "properties");
     this.httpClient = Objects.requireNonNull(httpClient, "httpClient");
   }
 
@@ -90,9 +93,9 @@ class TriggerWorkerImpl implements GeneratorWorker {
    *     enqueueing work.
    */
   @Override
-  public WorkResult generate(WorkerContext context) {
+  public WorkResult onMessage(WorkMessage seed, WorkerContext context) {
     TriggerWorkerConfig config = context.config(TriggerWorkerConfig.class)
-        .orElseGet(defaults::asConfig);
+        .orElseGet(properties::defaultConfig);
 
     context.statusPublisher()
         .update(status -> status

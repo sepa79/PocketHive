@@ -45,6 +45,11 @@ class SampleProcessorWorkerTest {
     }
 
     @Override
+    public boolean enabled() {
+      return true;
+    }
+
+    @Override
     public <C> Optional<C> config(Class<C> type) {
       return Optional.empty();
     }

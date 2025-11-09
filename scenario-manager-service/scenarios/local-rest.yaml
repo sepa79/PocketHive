@@ -7,7 +7,7 @@ template:
     - role: generator
       image: generator:latest
       env:
-        POCKETHIVE_CONTROL_PLANE_WORKER_GENERATOR_RATE_PER_SEC: "50"
+        POCKETHIVE_WORKERS_GENERATOR_CONFIG_RATEPERSEC: "50"
       work:
         out: gen
     - role: moderator

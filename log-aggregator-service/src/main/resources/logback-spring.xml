@@ -20,6 +20,10 @@
   <logger name="com.rabbitmq" level="WARN" additivity="false">
     <appender-ref ref="CONSOLE"/>
   </logger>
+  <logger name="sun.net.www" level="WARN" additivity="false">
+    <appender-ref ref="CONSOLE"/>
+  </logger>
+  <logger name="io.pockethive" level="DEBUG"/>
 
   <if condition='!"false".equalsIgnoreCase(property("RABBITMQ_LOGGING_ENABLED"))'>
     <then>
@@ -34,7 +38,6 @@
           <customFields>{"role":"${roleIdentifier}","swarmId":"${swarmIdentifier}","instanceId":"${instanceIdentifier}"}</customFields>
         </encoder>
       </appender>
-
       <root level="INFO">
         <appender-ref ref="CONSOLE"/>
         <appender-ref ref="RABBIT"/>

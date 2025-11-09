@@ -5,12 +5,13 @@ import io.pockethive.controlplane.messaging.ControlPlaneEmitter;
 import io.pockethive.controlplane.messaging.ControlPlanePublisher;
 import io.pockethive.controlplane.payload.RoleContext;
 import io.pockethive.controlplane.spring.ControlPlaneProperties;
-import io.pockethive.controlplane.spring.WorkerControlPlaneProperties;
 import io.pockethive.controlplane.spring.ControlPlaneTopologyDescriptorFactory;
+import io.pockethive.controlplane.spring.WorkerControlPlaneProperties;
 import io.pockethive.controlplane.topology.ControlPlaneTopologyDescriptor;
 import io.pockethive.controlplane.topology.ControlPlaneTopologySettings;
 import io.pockethive.controlplane.topology.QueueDescriptor;
 import java.util.LinkedHashMap;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -29,15 +30,6 @@ public final class ControlPlaneTestFixtures {
         String resolvedRole = requireText("role", role);
         String resolvedInstance = requireText("instanceId", instanceId);
 
-        Map<String, String> queueNames = new LinkedHashMap<>();
-        String trafficPrefix = "ph." + resolvedSwarm + ".";
-        queueNames.put("generator", trafficPrefix + "gen");
-        queueNames.put("moderator", trafficPrefix + "mod");
-        queueNames.put("processor", trafficPrefix + "processor");
-        queueNames.put("postprocessor", trafficPrefix + "post");
-        queueNames.put("trigger", trafficPrefix + "trigger");
-        queueNames.put("final", trafficPrefix + "final");
-        queueNames.putIfAbsent(resolvedRole, trafficPrefix + resolvedRole);
         WorkerControlPlaneProperties.Worker worker = new WorkerControlPlaneProperties.Worker(
             true,
             true,
@@ -56,13 +48,30 @@ public final class ControlPlaneTestFixtures {
             true,
             true,
             "ph.control",
-            trafficPrefix + "hive",
             resolvedSwarm,
             resolvedInstance,
             "ph.control",
-            queueNames,
             worker,
             swarmController);
+    }
+
+    public static Map<String, String> workerQueues(String swarmId) {
+        String resolvedSwarm = requireText("swarmId", swarmId);
+        Map<String, String> queues = new LinkedHashMap<>();
+        String prefix = "ph." + resolvedSwarm + ".";
+        DEFAULT_QUEUE_SUFFIXES.forEach((role, suffix) -> queues.put(role, prefix + suffix));
+        return Map.copyOf(queues);
+    }
+
+    public static String workerQueue(String swarmId, String queueRole) {
+        String resolvedSwarm = requireText("swarmId", swarmId);
+        String normalizedRole = requireText("queueRole", queueRole).trim().toLowerCase(Locale.ROOT);
+        String suffix = DEFAULT_QUEUE_SUFFIXES.getOrDefault(normalizedRole, normalizedRole);
+        return "ph." + resolvedSwarm + "." + suffix;
+    }
+
+    public static String hiveExchange(String swarmId) {
+        return "ph." + requireText("swarmId", swarmId) + ".hive";
     }
 
     public static ControlPlaneProperties managerProperties(String swarmId, String role, String instanceId) {
@@ -134,15 +143,27 @@ public final class ControlPlaneTestFixtures {
     }
 
     private static ControlPlaneTopologySettings workerTopologySettings(String swarmId, String role, String instanceId) {
-        WorkerControlPlaneProperties properties = workerProperties(swarmId, role, instanceId);
+        String resolvedSwarm = requireText("swarmId", swarmId);
+        String resolvedRole = requireText("role", role);
+        String resolvedInstance = requireText("instanceId", instanceId);
+        WorkerControlPlaneProperties properties = workerProperties(resolvedSwarm, resolvedRole, resolvedInstance);
         Map<String, QueueDescriptor> trafficQueues = new LinkedHashMap<>();
-        properties.getQueues().names().forEach((queueRole, queueName) ->
+        workerQueues(resolvedSwarm).forEach((queueRole, queueName) ->
             trafficQueues.put(queueRole, new QueueDescriptor(queueName, Set.of())));
         String controlQueue = properties.getControlPlane().getControlQueueName();
-        String suffix = "." + swarmId + "." + role + "." + instanceId;
+        String suffix = "." + resolvedSwarm + "." + resolvedRole + "." + resolvedInstance;
         String prefix = controlQueue.endsWith(suffix)
             ? controlQueue.substring(0, controlQueue.length() - suffix.length())
             : controlQueue;
         return new ControlPlaneTopologySettings(properties.getSwarmId(), prefix, trafficQueues);
     }
+
+    private static final Map<String, String> DEFAULT_QUEUE_SUFFIXES = Map.of(
+        "generator", "gen",
+        "moderator", "mod",
+        "processor", "processor",
+        "postprocessor", "post",
+        "trigger", "trigger",
+        "final", "final"
+    );
 }

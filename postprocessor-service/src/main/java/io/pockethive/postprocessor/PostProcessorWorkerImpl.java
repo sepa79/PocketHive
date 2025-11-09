@@ -6,13 +6,15 @@ import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.pockethive.observability.Hop;
 import io.pockethive.observability.ObservabilityContext;
-import io.pockethive.worker.sdk.api.MessageWorker;
+import io.pockethive.worker.sdk.api.PocketHiveWorkerFunction;
 import io.pockethive.worker.sdk.api.StatusPublisher;
 import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pockethive.worker.sdk.api.WorkResult;
 import io.pockethive.worker.sdk.api.WorkerContext;
 import io.pockethive.worker.sdk.config.PocketHiveWorker;
-import io.pockethive.worker.sdk.config.WorkerType;
+import io.pockethive.worker.sdk.config.WorkerCapability;
+import io.pockethive.worker.sdk.config.WorkerInputType;
+import io.pockethive.worker.sdk.config.WorkerOutputType;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -28,7 +30,8 @@ import org.springframework.stereotype.Component;
 
 /**
  * The post-processor is the last hop in the PocketHive happy path. It listens to the queue
- * configured under {@code pockethive.control-plane.queues.final} and focuses on observability:
+ * configured via {@code pockethive.inputs.rabbit.queue} (the {@code final-out} suffix in the default swarm)
+ * and focuses on observability:
  * measuring end-to-end latency,
  * counting hops, and flagging any {@code x-ph-error} markers set by upstream workers. When teams
  * deploy PocketHive to staging or production they often scale the post-processor alongside their
@@ -52,25 +55,27 @@ import org.springframework.stereotype.Component;
 @Component("postProcessorWorker")
 @PocketHiveWorker(
     role = "postprocessor",
-    type = WorkerType.MESSAGE,
+    input = WorkerInputType.RABBIT,
     inQueue = "final",
+    output = WorkerOutputType.NONE,
+    capabilities = {WorkerCapability.MESSAGE_DRIVEN},
     config = PostProcessorWorkerConfig.class
 )
-class PostProcessorWorkerImpl implements MessageWorker {
+class PostProcessorWorkerImpl implements PocketHiveWorkerFunction {
 
   private static final String ERROR_HEADER = "x-ph-error";
   private static final String PROCESSOR_DURATION_HEADER = "x-ph-processor-duration-ms";
   private static final String PROCESSOR_SUCCESS_HEADER = "x-ph-processor-success";
   private static final String PROCESSOR_STATUS_HEADER = "x-ph-processor-status";
 
-  private final PostProcessorDefaults defaults;
+  private final PostProcessorWorkerProperties properties;
   private final AtomicReference<PostProcessorMetrics> metricsRef = new AtomicReference<>();
   private final AtomicReference<DetailedTransactionMetrics> detailedMetricsRef =
       new AtomicReference<>();
 
   @Autowired
-  PostProcessorWorkerImpl(PostProcessorDefaults defaults) {
-    this.defaults = Objects.requireNonNull(defaults, "defaults");
+  PostProcessorWorkerImpl(PostProcessorWorkerProperties properties) {
+    this.properties = Objects.requireNonNull(properties, "properties");
   }
 
   /**
@@ -104,7 +109,7 @@ class PostProcessorWorkerImpl implements MessageWorker {
   @Override
   public WorkResult onMessage(WorkMessage in, WorkerContext context) {
     PostProcessorWorkerConfig config = context.config(PostProcessorWorkerConfig.class)
-        .orElseGet(defaults::asConfig);
+        .orElseGet(properties::defaultConfig);
 
     ObservabilityContext observability =
         Objects.requireNonNull(context.observabilityContext(), "observabilityContext");
@@ -128,7 +133,7 @@ class PostProcessorWorkerImpl implements MessageWorker {
     StatusPublisher publisher = context.statusPublisher().workIn(inboundQueue);
     publisher.update(status -> {
       status
-          .data("enabled", config.enabled())
+          .data("enabled", context.enabled())
           .data("publishAllMetrics", config.publishAllMetrics())
           .data("errors", metrics.errorsCount())
           .data("hopLatencyMs", measurements.latestHopMs())

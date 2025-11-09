@@ -6,9 +6,10 @@ cd "${SCRIPT_DIR}"
 
 CORE_SERVICES=(rabbitmq log-aggregator scenario-manager orchestrator ui prometheus grafana loki wiremock)
 BEE_SERVICES=(swarm-controller generator moderator processor postprocessor trigger)
-ALL_STAGES=(clean build-core build-bees start push)
+ALL_STAGES=(clean build-core build-bees start push restart)
 
 declare -A STAGE_TIMES
+SERVICE_ARGS=()
 
 # Registry configuration
 DOCKER_REGISTRY="${DOCKER_REGISTRY:-}"
@@ -24,6 +25,7 @@ Stages:
   build-bees   Build swarm controller and bee images.
   push         Push images to configured registry.
   start        Launch the PocketHive stack via docker compose up -d.
+  restart      Rebuild and restart only the services listed after '--'.
 
 Environment Variables:
   DOCKER_REGISTRY       Registry prefix (e.g., 'myregistry.io/' or 'localhost:5000/')
@@ -33,6 +35,7 @@ Examples:
   $(basename "$0")                                    Run all stages in order.
   $(basename "$0") clean start                        Only clean and start (skip builds).
   $(basename "$0") build-bees                         Build bee images only.
+  $(basename "$0") restart -- grafana ui              Rebuild + restart only Grafana and UI.
   DOCKER_REGISTRY=myregistry.io/ $(basename "$0") push  Push to external registry.
 USAGE
 }
@@ -105,6 +108,16 @@ run_start() {
   docker compose up -d
 }
 
+run_restart() {
+  if [[ ${#SERVICE_ARGS[@]} -eq 0 ]]; then
+    echo "restart stage requires service names after '--' (e.g. ./start-hive.sh restart -- grafana ui)" >&2
+    exit 1
+  fi
+  stage_header "Restarting services: ${SERVICE_ARGS[*]}"
+  docker compose build "${SERVICE_ARGS[@]}"
+  docker compose up -d "${SERVICE_ARGS[@]}"
+}
+
 resolve_stages() {
   if [[ $# -eq 0 ]]; then
     SELECTED_STAGES=("${ALL_STAGES[@]}")
@@ -122,8 +135,13 @@ resolve_stages() {
         SELECTED_STAGES=("${ALL_STAGES[@]}")
         return
         ;;
-      clean|build-core|build-bees|push|start)
+      clean|build-core|build-bees|push|start|restart)
         args+=("$1")
+        ;;
+      --)
+        shift
+        SERVICE_ARGS=("$@")
+        break
         ;;
       *)
         echo "Unknown stage: $1" >&2
@@ -153,6 +171,7 @@ run_stage() {
     build-bees) run_build_bees ;;
     push) run_push ;;
     start) run_start ;;
+    restart) run_restart ;;
     *) echo "Unknown stage: $stage" >&2; exit 1 ;;
   esac
   

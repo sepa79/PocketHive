@@ -6,9 +6,9 @@ See the [architecture reference](../docs/ARCHITECTURE.md) and [control-plane rul
 
 ## Configuration
 
-Post-processor deployments resolve routing exclusively from `pockethive.control-plane.*` properties. Provide the hive
-traffic exchange (`pockethive.control-plane.traffic-exchange`) and queue aliases (for example
-`pockethive.control-plane.queues.final`) in configuration and consult the
+Post-processor deployments resolve routing exclusively from `pockethive.inputs.rabbit` /
+`pockethive.outputs.rabbit`. Provide the final queue/exchange bindings (for example `pockethive.inputs.rabbit.queue`
+and `pockethive.outputs.rabbit.exchange`) in configuration and consult the
 [control-plane worker guide](../docs/control-plane/worker-guide.md#configuration-properties) plus the
 [Worker SDK quick start](../docs/sdk/worker-sdk-quickstart.md) for reference YAML.
 
@@ -32,4 +32,3 @@ processor call statistics. In addition, every processed message is written to de
 gauges (for example `ph_transaction_hop_duration_ms`, `ph_transaction_total_latency_ms`, and
 `ph_transaction_processor_*`) so operators can plot high-resolution timelines directly from scraped
 metrics.
-

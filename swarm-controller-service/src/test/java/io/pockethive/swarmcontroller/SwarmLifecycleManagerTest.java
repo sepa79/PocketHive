@@ -123,8 +123,9 @@ class SwarmLifecycleManagerTest {
     assertEquals(LOGS_EXCHANGE, env.get("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGS_EXCHANGE"));
     assertEquals("true", env.get("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGGING_ENABLED"));
     assertEquals("ctrl-net", env.get("CONTROL_NETWORK"));
-    assertEquals(queue("qout"), env.get("POCKETHIVE_CONTROL_PLANE_QUEUES_GENERATOR"));
-    assertThat(env).doesNotContainKey("POCKETHIVE_CONTROL_PLANE_QUEUES_MODERATOR");
+    assertEquals(queue("qout"), env.get("POCKETHIVE_OUTPUT_RABBIT_ROUTING_KEY"));
+    assertEquals(HIVE_EXCHANGE, env.get("POCKETHIVE_OUTPUT_RABBIT_EXCHANGE"));
+    assertThat(env.get("POCKETHIVE_INPUT_RABBIT_QUEUE")).isEqualTo(queue("qin"));
     assertEquals(CONTROL_QUEUE_PREFIX_BASE, env.get("POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE_PREFIX"));
     assertEquals(assignedName, env.get("POCKETHIVE_CONTROL_PLANE_INSTANCE_ID"));
     assertEquals(assignedName, env.get("POCKETHIVE_CONTROL_PLANE_INSTANCE_ID"));
@@ -229,7 +230,7 @@ class SwarmLifecycleManagerTest {
   void populatesQueueEnvironmentFromTemplateWorkAssignments() throws Exception {
     SwarmLifecycleManager manager = newManager();
     SwarmPlan plan = new SwarmPlan("swarm", List.of(
-        new Bee("generator", "img-gen", new Work("unused", "gen-out"), null),
+        new Bee("generator", "img-gen", new Work(null, "gen-out"), null),
         new Bee("moderator", "img-mod", new Work("gen-out", "mod-out"), null),
         new Bee("processor", "img-proc", new Work("mod-out", "final-out"), null),
         new Bee("postprocessor", "img-post", new Work("final-out", null), null)));
@@ -240,10 +241,25 @@ class SwarmLifecycleManagerTest {
 
     ArgumentCaptor<Map<String, String>> envCaptor = ArgumentCaptor.forClass(Map.class);
     verify(docker, times(4)).createContainer(anyString(), envCaptor.capture(), anyString());
-    Map<String, String> env = envCaptor.getAllValues().get(0);
-    assertThat(env.get("POCKETHIVE_CONTROL_PLANE_QUEUES_GENERATOR")).isEqualTo(queue("gen-out"));
-    assertThat(env.get("POCKETHIVE_CONTROL_PLANE_QUEUES_MODERATOR")).isEqualTo(queue("mod-out"));
-    assertThat(env.get("POCKETHIVE_CONTROL_PLANE_QUEUES_FINAL")).isEqualTo(queue("final-out"));
+    Map<String, String> generatorEnv = envCaptor.getAllValues().get(0);
+    assertThat(generatorEnv.get("POCKETHIVE_OUTPUT_RABBIT_ROUTING_KEY")).isEqualTo(queue("gen-out"));
+    assertThat(generatorEnv.get("POCKETHIVE_OUTPUT_RABBIT_EXCHANGE")).isEqualTo(HIVE_EXCHANGE);
+    assertThat(generatorEnv).doesNotContainKey("POCKETHIVE_INPUT_RABBIT_QUEUE");
+
+    Map<String, String> moderatorEnv = envCaptor.getAllValues().get(1);
+    assertThat(moderatorEnv.get("POCKETHIVE_INPUT_RABBIT_QUEUE")).isEqualTo(queue("gen-out"));
+    assertThat(moderatorEnv.get("POCKETHIVE_OUTPUT_RABBIT_ROUTING_KEY")).isEqualTo(queue("mod-out"));
+    assertThat(moderatorEnv.get("POCKETHIVE_OUTPUT_RABBIT_EXCHANGE")).isEqualTo(HIVE_EXCHANGE);
+
+    Map<String, String> processorEnv = envCaptor.getAllValues().get(2);
+    assertThat(processorEnv.get("POCKETHIVE_INPUT_RABBIT_QUEUE")).isEqualTo(queue("mod-out"));
+    assertThat(processorEnv.get("POCKETHIVE_OUTPUT_RABBIT_ROUTING_KEY")).isEqualTo(queue("final-out"));
+    assertThat(processorEnv.get("POCKETHIVE_OUTPUT_RABBIT_EXCHANGE")).isEqualTo(HIVE_EXCHANGE);
+
+    Map<String, String> postProcessorEnv = envCaptor.getAllValues().get(3);
+    assertThat(postProcessorEnv.get("POCKETHIVE_INPUT_RABBIT_QUEUE")).isEqualTo(queue("final-out"));
+    assertThat(postProcessorEnv).doesNotContainKey("POCKETHIVE_OUTPUT_RABBIT_ROUTING_KEY");
+    assertThat(postProcessorEnv.get("POCKETHIVE_OUTPUT_RABBIT_EXCHANGE")).isEqualTo(HIVE_EXCHANGE);
   }
 
   @Test
@@ -503,7 +519,9 @@ class SwarmLifecycleManagerTest {
 
     assertThat(output)
         .doesNotContain("[CTRL] SEND rk=ev.status-delta.swarm-controller.inst")
-        .doesNotContain("[CTRL] SEND rk=" + ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, TEST_SWARM_ID, "gen", "g1"));
+        .contains("Requesting status for gen.g1 because heartbeat is stale")
+        .contains("[CTRL] SEND rk=" + ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, TEST_SWARM_ID, "gen", "g1"))
+        .contains("reason=stale-heartbeat");
   }
 
   @Test

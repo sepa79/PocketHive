@@ -264,7 +264,7 @@ describe('swarm lifecycle', () => {
               config: {
                 mode: {
                   type: 'ratePerSec',
-                  ratePerSec: { value: 5 },
+                  ratePerSec: 5,
                   sine: { min: 1, max: 10, periodSec: 60 },
                 },
               },
@@ -280,7 +280,7 @@ describe('swarm lifecycle', () => {
     const moderator = latest.find((comp) => comp.id === 'moderator-sw1')
     expect(moderator?.config?.mode).toEqual({
       type: 'ratePerSec',
-      ratePerSec: { value: 5 },
+      ratePerSec: 5,
       sine: { min: 1, max: 10, periodSec: 60 },
     })
 

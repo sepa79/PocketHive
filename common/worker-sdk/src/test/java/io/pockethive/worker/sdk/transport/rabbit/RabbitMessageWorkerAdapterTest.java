@@ -3,11 +3,16 @@ package io.pockethive.worker.sdk.transport.rabbit;
 import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pockethive.worker.sdk.api.WorkResult;
-import io.pockethive.worker.sdk.config.WorkerType;
+import io.pockethive.worker.sdk.config.WorkInputConfig;
+import io.pockethive.worker.sdk.config.WorkOutputConfig;
+import io.pockethive.worker.sdk.config.WorkerCapability;
+import io.pockethive.worker.sdk.config.WorkerInputType;
+import io.pockethive.worker.sdk.config.WorkerOutputType;
 import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
 import java.nio.charset.StandardCharsets;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Consumer;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -74,15 +79,20 @@ class RabbitMessageWorkerAdapterTest {
         workerDefinition = new WorkerDefinition(
             "processorWorker",
             Object.class,
-            WorkerType.MESSAGE,
+            WorkerInputType.RABBIT,
             "processor",
             "processor.in",
             "processor.out",
             "ph.test.hive",
-            Object.class
+            Object.class,
+            WorkInputConfig.class,
+            WorkOutputConfig.class,
+            WorkerOutputType.RABBITMQ,
+            "Processor worker",
+            Set.of(WorkerCapability.MESSAGE_DRIVEN)
         );
         identity = new ControlPlaneIdentity("swarm-1", "processor", "instance-1");
-        defaults = new DummyConfig(true);
+        defaults = new DummyConfig();
     }
 
     @Test
@@ -103,8 +113,7 @@ class RabbitMessageWorkerAdapterTest {
         verify(listenerContainer).start();
 
         WorkerControlPlaneRuntime.WorkerStateSnapshot snapshot = mock(WorkerControlPlaneRuntime.WorkerStateSnapshot.class);
-        when(snapshot.enabled()).thenReturn(Optional.empty());
-        when(snapshot.config(DummyConfig.class)).thenReturn(Optional.of(new DummyConfig(false)));
+        when(snapshot.enabled()).thenReturn(Optional.of(false));
         when(listenerContainer.isRunning()).thenReturn(true);
 
         listenerCaptor.getValue().accept(snapshot);
@@ -220,12 +229,17 @@ class RabbitMessageWorkerAdapterTest {
         workerDefinition = new WorkerDefinition(
             "processorWorker",
             Object.class,
-            WorkerType.MESSAGE,
+            WorkerInputType.RABBIT,
             "processor",
             "processor.in",
             null,
             "ph.test.hive",
-            Object.class
+            Object.class,
+            WorkInputConfig.class,
+            WorkOutputConfig.class,
+            WorkerOutputType.RABBITMQ,
+            "Processor worker",
+            Set.of(WorkerCapability.MESSAGE_DRIVEN)
         );
 
         assertThatThrownBy(() -> builder().build())
@@ -238,12 +252,17 @@ class RabbitMessageWorkerAdapterTest {
         workerDefinition = new WorkerDefinition(
             "processorWorker",
             Object.class,
-            WorkerType.MESSAGE,
+            WorkerInputType.RABBIT,
             "processor",
             "processor.in",
             "processor.out",
             null,
-            Object.class
+            Object.class,
+            WorkInputConfig.class,
+            WorkOutputConfig.class,
+            WorkerOutputType.RABBITMQ,
+            "Processor worker",
+            Set.of(WorkerCapability.MESSAGE_DRIVEN)
         );
 
         assertThatThrownBy(() -> builder().build())
@@ -256,12 +275,17 @@ class RabbitMessageWorkerAdapterTest {
         workerDefinition = new WorkerDefinition(
             "processorWorker",
             Object.class,
-            WorkerType.MESSAGE,
+            WorkerInputType.RABBIT,
             "processor",
             "processor.in",
             null,
             "ph.test.hive",
-            Object.class
+            Object.class,
+            WorkInputConfig.class,
+            WorkOutputConfig.class,
+            WorkerOutputType.RABBITMQ,
+            "Processor worker",
+            Set.of(WorkerCapability.MESSAGE_DRIVEN)
         );
 
         assertThatCode(() -> builderWithoutTemplate().build()).doesNotThrowAnyException();
@@ -272,12 +296,17 @@ class RabbitMessageWorkerAdapterTest {
         workerDefinition = new WorkerDefinition(
             "processorWorker",
             Object.class,
-            WorkerType.MESSAGE,
+            WorkerInputType.RABBIT,
             "processor",
             "processor.in",
             null,
             null,
-            Object.class
+            Object.class,
+            WorkInputConfig.class,
+            WorkOutputConfig.class,
+            WorkerOutputType.RABBITMQ,
+            "Processor worker",
+            Set.of(WorkerCapability.MESSAGE_DRIVEN)
         );
 
         RabbitMessageWorkerAdapter adapter = builderWithoutTemplate().build();
@@ -302,12 +331,17 @@ class RabbitMessageWorkerAdapterTest {
         workerDefinition = new WorkerDefinition(
             "processorWorker",
             Object.class,
-            WorkerType.MESSAGE,
+            WorkerInputType.RABBIT,
             "processor",
             "processor.in",
             "processor.out",
             "ph.test.hive",
-            Object.class
+            Object.class,
+            WorkInputConfig.class,
+            WorkOutputConfig.class,
+            WorkerOutputType.RABBITMQ,
+            "Processor worker",
+            Set.of(WorkerCapability.MESSAGE_DRIVEN)
         );
 
         RabbitMessageWorkerAdapter adapter = builderWithoutTemplate().build();
@@ -336,7 +370,7 @@ class RabbitMessageWorkerAdapterTest {
             .controlPlaneRuntime(controlPlaneRuntime)
             .listenerRegistry(listenerRegistry)
             .identity(identity)
-            .withConfigDefaults(DummyConfig.class, () -> defaults, DummyConfig::enabled)
+            .withConfigDefaults(DummyConfig.class, () -> defaults, cfg -> true)
             .dispatcher(dispatcher)
             .dispatchErrorHandler(errorHandler);
     }
@@ -349,6 +383,6 @@ class RabbitMessageWorkerAdapterTest {
         return baseBuilder();
     }
 
-    private record DummyConfig(boolean enabled) {
+    private record DummyConfig() {
     }
 }

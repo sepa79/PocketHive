@@ -7,6 +7,7 @@ import io.pockethive.controlplane.consumer.ControlPlaneConsumer;
 import io.pockethive.controlplane.consumer.ControlSignalHandler;
 import io.pockethive.controlplane.consumer.DuplicateSignalGuard;
 import io.pockethive.controlplane.consumer.SelfFilter;
+import io.pockethive.controlplane.routing.ControlPlaneRouting;
 
 import java.time.Duration;
 import java.util.Objects;
@@ -35,16 +36,33 @@ public final class WorkerControlPlane {
             WorkerSignalListener.WorkerSignalContext context =
                 new WorkerSignalListener.WorkerSignalContext(envelope, envelope.payload());
             ControlSignal signal = envelope.signal();
-            if (signal == null || signal.signal() == null || signal.signal().isBlank()) {
+            String resolvedSignal = resolveSignalName(envelope);
+            if (resolvedSignal == null) {
                 listener.onUnsupported(context);
                 return;
             }
-            switch (signal.signal()) {
+            switch (resolvedSignal) {
                 case "config-update" -> listener.onConfigUpdate(WorkerConfigCommand.from(envelope, envelope.payload(), objectMapper));
                 case "status-request" -> listener.onStatusRequest(new WorkerStatusRequest(envelope, envelope.payload()));
                 default -> listener.onUnsupported(context);
             }
         };
+    }
+
+    private String resolveSignalName(io.pockethive.controlplane.consumer.ControlSignalEnvelope envelope) {
+        ControlSignal signal = envelope.signal();
+        if (signal != null && hasText(signal.signal())) {
+            return signal.signal();
+        }
+        ControlPlaneRouting.RoutingKey routingKey = ControlPlaneRouting.parseSignal(envelope.routingKey());
+        if (routingKey != null && hasText(routingKey.type())) {
+            return routingKey.type();
+        }
+        return null;
+    }
+
+    private static boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 
     public static Builder builder(ObjectMapper objectMapper) {
@@ -110,4 +128,3 @@ public final class WorkerControlPlane {
         }
     }
 }
-

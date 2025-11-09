@@ -265,7 +265,7 @@ class SwarmCreationMock1E2ETest {
                 "generator",
                 "generator:latest",
                 new Work(null, "gen"),
-                java.util.Map.of("POCKETHIVE_CONTROL_PLANE_WORKER_GENERATOR_RATE_PER_SEC", "50")),
+                java.util.Map.of("POCKETHIVE_WORKERS_GENERATOR_CONFIG_RATEPERSEC", "50")),
             new Bee("moderator", "moderator:latest", new Work("gen", "mod"), java.util.Map.of()),
             new Bee("processor", "processor:latest", new Work("mod", "final"), java.util.Map.of()),
             new Bee("postprocessor", "postprocessor:latest", new Work("final", null), java.util.Map.of())

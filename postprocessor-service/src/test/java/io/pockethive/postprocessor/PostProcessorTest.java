@@ -1,17 +1,18 @@
 package io.pockethive.postprocessor;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.pockethive.controlplane.spring.WorkerControlPlaneProperties;
 import io.pockethive.observability.Hop;
 import io.pockethive.observability.ObservabilityContext;
-import io.pockethive.worker.sdk.api.MessageWorker;
 import io.pockethive.worker.sdk.api.StatusPublisher;
 import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pockethive.worker.sdk.api.WorkResult;
 import io.pockethive.worker.sdk.api.WorkerContext;
 import io.pockethive.worker.sdk.api.WorkerInfo;
+import io.pockethive.worker.sdk.api.PocketHiveWorkerFunction;
 import io.pockethive.worker.sdk.testing.ControlPlaneTestFixtures;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -32,13 +33,14 @@ class PostProcessorTest {
     private static final Instant START = Instant.parse("2024-01-01T00:00:00Z");
     private static final WorkerControlPlaneProperties WORKER_PROPERTIES =
         ControlPlaneTestFixtures.workerProperties("swarm", "postprocessor", "instance");
-    private static final String FINAL_QUEUE = WORKER_PROPERTIES.getQueues().get("final");
+    private static final Map<String, String> WORKER_QUEUES =
+        ControlPlaneTestFixtures.workerQueues("swarm");
+    private static final String FINAL_QUEUE = WORKER_QUEUES.get("final");
 
     @Test
     void onMessageRecordsLatencyAndErrorsAndUpdatesStatus() {
-        PostProcessorDefaults defaults = new PostProcessorDefaults();
-        defaults.setEnabled(true);
-        PostProcessorWorkerImpl worker = new PostProcessorWorkerImpl(defaults);
+        PostProcessorWorkerProperties properties = workerProperties(false);
+        PostProcessorWorkerImpl worker = new PostProcessorWorkerImpl(properties);
         ObservabilityContext context = new ObservabilityContext();
         List<Hop> hops = new ArrayList<>();
         hops.add(new Hop("generator", "gen-1", START, START.plusMillis(5)));
@@ -55,7 +57,7 @@ class PostProcessorTest {
                 .build();
 
         TestWorkerContext workerContext =
-                new TestWorkerContext(new PostProcessorWorkerConfig(true, false), context);
+                new TestWorkerContext(new PostProcessorWorkerConfig(false), context);
 
         WorkResult result = worker.onMessage(message, workerContext);
 
@@ -114,9 +116,8 @@ class PostProcessorTest {
 
     @Test
     void onMessageRecordsProcessorFailureMetrics() {
-        PostProcessorDefaults defaults = new PostProcessorDefaults();
-        defaults.setEnabled(true);
-        PostProcessorWorkerImpl worker = new PostProcessorWorkerImpl(defaults);
+        PostProcessorWorkerProperties properties = workerProperties(false);
+        PostProcessorWorkerImpl worker = new PostProcessorWorkerImpl(properties);
         ObservabilityContext context = new ObservabilityContext();
         List<Hop> hops = new ArrayList<>();
         hops.add(new Hop("generator", "gen-1", START, START.plusMillis(5)));
@@ -131,7 +132,7 @@ class PostProcessorTest {
                 .build();
 
         TestWorkerContext workerContext =
-                new TestWorkerContext(new PostProcessorWorkerConfig(true, false), context);
+                new TestWorkerContext(new PostProcessorWorkerConfig(false), context);
 
         worker.onMessage(message, workerContext);
 
@@ -162,9 +163,8 @@ class PostProcessorTest {
 
     @Test
     void onMessageCompletesInFlightHopBeforeRecording() {
-        PostProcessorDefaults defaults = new PostProcessorDefaults();
-        defaults.setEnabled(true);
-        PostProcessorWorkerImpl worker = new PostProcessorWorkerImpl(defaults);
+        PostProcessorWorkerProperties properties = workerProperties(false);
+        PostProcessorWorkerImpl worker = new PostProcessorWorkerImpl(properties);
         ObservabilityContext context = new ObservabilityContext();
         List<Hop> hops = new ArrayList<>();
         hops.add(new Hop("generator", "gen-1", START, START.plusMillis(5)));
@@ -179,7 +179,7 @@ class PostProcessorTest {
                 .build();
 
         TestWorkerContext workerContext =
-                new TestWorkerContext(new PostProcessorWorkerConfig(true, false), context);
+                new TestWorkerContext(new PostProcessorWorkerConfig(false), context);
 
         worker.onMessage(message, workerContext);
 
@@ -201,16 +201,15 @@ class PostProcessorTest {
 
     @Test
     void onMessageUsesDefaultsWhenNoConfigPresent() {
-        PostProcessorDefaults defaults = new PostProcessorDefaults();
-        defaults.setEnabled(false);
-        PostProcessorWorkerImpl worker = new PostProcessorWorkerImpl(defaults);
+        PostProcessorWorkerProperties properties = workerProperties(false);
+        PostProcessorWorkerImpl worker = new PostProcessorWorkerImpl(properties);
         ObservabilityContext context = new ObservabilityContext();
         context.setHops(List.of());
 
         WorkMessage message = WorkMessage.text("payload")
                 .build();
 
-        TestWorkerContext workerContext = new TestWorkerContext(null, context);
+        TestWorkerContext workerContext = new TestWorkerContext(null, context, false);
 
         worker.onMessage(message, workerContext);
 
@@ -220,10 +219,8 @@ class PostProcessorTest {
 
     @Test
     void onMessagePublishesFullSnapshotWhenPublishAllMetricsEnabled() {
-        PostProcessorDefaults defaults = new PostProcessorDefaults();
-        defaults.setEnabled(true);
-        defaults.setPublishAllMetrics(true);
-        PostProcessorWorkerImpl worker = new PostProcessorWorkerImpl(defaults);
+        PostProcessorWorkerProperties properties = workerProperties(true);
+        PostProcessorWorkerImpl worker = new PostProcessorWorkerImpl(properties);
         ObservabilityContext context = new ObservabilityContext();
         List<Hop> hops = new ArrayList<>();
         hops.add(new Hop("generator", "gen-1", START, START.plusMillis(5)));
@@ -239,7 +236,7 @@ class PostProcessorTest {
                 .build();
 
         TestWorkerContext workerContext =
-                new TestWorkerContext(new PostProcessorWorkerConfig(true, true), context);
+                new TestWorkerContext(new PostProcessorWorkerConfig(true), context);
 
         worker.onMessage(message, workerContext);
 
@@ -299,17 +296,32 @@ class PostProcessorTest {
             null);
         private final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
         private final CapturingStatusPublisher statusPublisher = new CapturingStatusPublisher();
-        private final Logger logger = LoggerFactory.getLogger(MessageWorker.class);
+        private final Logger logger = LoggerFactory.getLogger(PocketHiveWorkerFunction.class);
         private final ObservabilityContext observabilityContext;
+        private final boolean enabled;
 
         private TestWorkerContext(PostProcessorWorkerConfig config, ObservabilityContext observabilityContext) {
+            this(config, observabilityContext, true);
+        }
+
+        private TestWorkerContext(
+            PostProcessorWorkerConfig config,
+            ObservabilityContext observabilityContext,
+            boolean enabled
+        ) {
             this.config = config;
             this.observabilityContext = Objects.requireNonNull(observabilityContext, "observabilityContext");
+            this.enabled = enabled;
         }
 
         @Override
         public WorkerInfo info() {
             return info;
+        }
+
+        @Override
+        public boolean enabled() {
+            return enabled;
         }
 
         @Override
@@ -378,5 +390,13 @@ class PostProcessorTest {
         boolean fullSnapshotEmitted() {
             return fullSnapshotEmitted;
         }
+    }
+
+    private static PostProcessorWorkerProperties workerProperties(boolean publishAllMetrics) {
+        PostProcessorWorkerProperties properties = new PostProcessorWorkerProperties(new ObjectMapper());
+        Map<String, Object> config = new LinkedHashMap<>();
+        config.put("publishAllMetrics", publishAllMetrics);
+        properties.setConfig(config);
+        return properties;
     }
 }

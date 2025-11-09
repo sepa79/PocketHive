@@ -4,26 +4,24 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
-import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.controlplane.spring.WorkerControlPlaneProperties;
 import io.pockethive.observability.ObservabilityContext;
 import io.pockethive.observability.ObservabilityContextUtil;
-import io.pockethive.worker.sdk.api.MessageWorker;
+import io.pockethive.worker.sdk.api.PocketHiveWorkerFunction;
 import io.pockethive.worker.sdk.api.StatusPublisher;
 import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pockethive.worker.sdk.api.WorkResult;
 import io.pockethive.worker.sdk.api.WorkerContext;
 import io.pockethive.worker.sdk.api.WorkerInfo;
-import io.pockethive.worker.sdk.autoconfigure.WorkerControlQueueListener;
-import io.pockethive.worker.sdk.config.WorkerType;
-import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime;
+import io.pockethive.worker.sdk.config.WorkInputConfig;
+import io.pockethive.worker.sdk.config.WorkOutputConfig;
+import io.pockethive.worker.sdk.config.WorkerCapability;
+import io.pockethive.worker.sdk.config.WorkerInputType;
+import io.pockethive.worker.sdk.config.WorkerOutputType;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
 import io.pockethive.worker.sdk.runtime.WorkerInvocationContext;
 import io.pockethive.worker.sdk.runtime.WorkerObservabilityInterceptor;
-import io.pockethive.worker.sdk.runtime.WorkerRegistry;
-import io.pockethive.worker.sdk.runtime.WorkerRuntime;
 import io.pockethive.worker.sdk.runtime.WorkerState;
-import io.pockethive.worker.sdk.transport.rabbit.RabbitWorkMessageConverter;
 import io.pockethive.worker.sdk.testing.ControlPlaneTestFixtures;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -39,20 +37,14 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import javax.net.ssl.SSLSession;
 import org.junit.jupiter.api.Test;
-import org.slf4j.MDC;
-import org.springframework.amqp.core.Message;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
-import org.springframework.amqp.rabbit.listener.MessageListenerContainer;
-import org.springframework.amqp.rabbit.listener.RabbitListenerEndpointRegistry;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -63,19 +55,20 @@ class ProcessorTest {
     private static final ObjectMapper MAPPER = new ObjectMapper();
     private static final WorkerControlPlaneProperties WORKER_PROPERTIES =
         ControlPlaneTestFixtures.workerProperties("swarm", "processor", "instance");
-    private static final String MODERATOR_QUEUE = WORKER_PROPERTIES.getQueues().get("moderator");
-    private static final String FINAL_QUEUE = WORKER_PROPERTIES.getQueues().get("final");
-    private static final String TRAFFIC_EXCHANGE = WORKER_PROPERTIES.getTrafficExchange();
+    private static final Map<String, String> WORKER_QUEUES =
+        ControlPlaneTestFixtures.workerQueues("swarm");
+    private static final String MODERATOR_QUEUE = WORKER_QUEUES.get("moderator");
+    private static final String FINAL_QUEUE = WORKER_QUEUES.get("final");
+    private static final String TRAFFIC_EXCHANGE = ControlPlaneTestFixtures.hiveExchange("swarm");
 
     @Test
     void workerInvokesHttpAndPropagatesResponse() throws Exception {
-        ProcessorDefaults defaults = new ProcessorDefaults();
-        defaults.setEnabled(true);
-        defaults.setBaseUrl("http://sut/");
+        ProcessorWorkerProperties properties = new ProcessorWorkerProperties(MAPPER);
+        properties.setConfig(Map.of("baseUrl", "http://sut/"));
         HttpClient httpClient = mock(HttpClient.class);
         Clock clock = Clock.fixed(Instant.parse("2024-01-01T00:00:00Z"), ZoneOffset.UTC);
-        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(defaults, httpClient, clock);
-        ProcessorWorkerConfig config = new ProcessorWorkerConfig(true, "http://sut/");
+        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(properties, httpClient, clock);
+        ProcessorWorkerConfig config = new ProcessorWorkerConfig("http://sut/");
         TestWorkerContext context = new TestWorkerContext(config);
 
         AtomicReference<HttpRequest> requestRef = new AtomicReference<>();
@@ -129,13 +122,12 @@ class ProcessorTest {
 
     @Test
     void workerTracksRollingMetricsAcrossCalls() throws Exception {
-        ProcessorDefaults defaults = new ProcessorDefaults();
-        defaults.setEnabled(true);
-        defaults.setBaseUrl("http://sut/");
+        ProcessorWorkerProperties properties = new ProcessorWorkerProperties(MAPPER);
+        properties.setConfig(Map.of("baseUrl", "http://sut/"));
         HttpClient httpClient = mock(HttpClient.class);
         SequenceClock clock = new SequenceClock(0, 50, 100, 250);
-        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(defaults, httpClient, clock);
-        ProcessorWorkerConfig config = new ProcessorWorkerConfig(true, "http://sut/");
+        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(properties, httpClient, clock);
+        ProcessorWorkerConfig config = new ProcessorWorkerConfig("http://sut/");
         TestWorkerContext context = new TestWorkerContext(config);
 
         AtomicInteger invocation = new AtomicInteger();
@@ -174,12 +166,11 @@ class ProcessorTest {
 
     @Test
     void workerFallsBackToDefaultsWhenConfigMissing() throws Exception {
-        ProcessorDefaults defaults = new ProcessorDefaults();
-        defaults.setEnabled(true);
-        defaults.setBaseUrl("http://defaults/");
+        ProcessorWorkerProperties properties = new ProcessorWorkerProperties(MAPPER);
+        properties.setConfig(Map.of("baseUrl", "http://defaults/"));
         HttpClient httpClient = mock(HttpClient.class);
         Clock clock = Clock.fixed(Instant.parse("2024-01-01T00:00:00Z"), ZoneOffset.UTC);
-        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(defaults, httpClient, clock);
+        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(properties, httpClient, clock);
         TestWorkerContext context = new TestWorkerContext(null);
 
         AtomicReference<HttpRequest> requestRef = new AtomicReference<>();
@@ -200,13 +191,12 @@ class ProcessorTest {
 
     @Test
     void workerReturnsErrorWhenBaseUrlMissing() throws Exception {
-        ProcessorDefaults defaults = new ProcessorDefaults();
-        defaults.setEnabled(true);
-        defaults.setBaseUrl("");
+        ProcessorWorkerProperties properties = new ProcessorWorkerProperties(MAPPER);
+        properties.setConfig(Map.of("baseUrl", ""));
         HttpClient httpClient = mock(HttpClient.class);
         Clock clock = Clock.systemUTC();
-        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(defaults, httpClient, clock);
-        ProcessorWorkerConfig config = new ProcessorWorkerConfig(true, " ");
+        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(properties, httpClient, clock);
+        ProcessorWorkerConfig config = new ProcessorWorkerConfig(" ");
         TestWorkerContext context = new TestWorkerContext(config);
 
         WorkMessage inbound = WorkMessage.json(Map.of("path", "/noop" )).build();
@@ -224,122 +214,6 @@ class ProcessorTest {
         verify(httpClient, never()).send(any(), any());
     }
 
-    @Test
-    void runtimeDispatchesWorkToWorkerAndPublishesResult() throws Exception {
-        WorkerRuntime workerRuntime = mock(WorkerRuntime.class);
-        WorkerRegistry workerRegistry = mock(WorkerRegistry.class);
-        WorkerControlPlaneRuntime controlPlaneRuntime = mock(WorkerControlPlaneRuntime.class);
-        RabbitTemplate rabbitTemplate = mock(RabbitTemplate.class);
-        RabbitListenerEndpointRegistry listenerRegistry = mock(RabbitListenerEndpointRegistry.class);
-        MessageListenerContainer container = mock(MessageListenerContainer.class);
-        when(listenerRegistry.getListenerContainer("processorWorkerListener")).thenReturn(container);
-        when(container.isRunning()).thenReturn(false);
-
-        WorkerDefinition definition = new WorkerDefinition(
-                "processorWorker",
-                ProcessorWorkerImpl.class,
-                WorkerType.MESSAGE,
-                "processor",
-                MODERATOR_QUEUE,
-                FINAL_QUEUE,
-                TRAFFIC_EXCHANGE,
-                ProcessorWorkerConfig.class
-        );
-        when(workerRegistry.findByRoleAndType("processor", WorkerType.MESSAGE))
-                .thenReturn(Optional.of(definition));
-
-        ControlPlaneIdentity identity = new ControlPlaneIdentity(
-                WORKER_PROPERTIES.getSwarmId(),
-                "processor",
-                WORKER_PROPERTIES.getInstanceId());
-        ProcessorDefaults defaults = new ProcessorDefaults();
-        defaults.setEnabled(true);
-        defaults.setBaseUrl("http://sut/");
-        ProcessorRuntimeAdapter adapter = new ProcessorRuntimeAdapter(
-                workerRuntime,
-                workerRegistry,
-                controlPlaneRuntime,
-                rabbitTemplate,
-                listenerRegistry,
-                identity,
-                defaults
-        );
-
-        adapter.initialiseStateListener();
-
-        WorkMessage outbound = WorkMessage.text("processed").build();
-        when(workerRuntime.dispatch(eq("processorWorker"), any(WorkMessage.class)))
-                .thenReturn(WorkResult.message(outbound));
-
-        RabbitWorkMessageConverter converter = new RabbitWorkMessageConverter();
-        Message inbound = converter.toMessage(WorkMessage.text("incoming").build());
-
-        adapter.onWork(inbound);
-
-        verify(workerRuntime).dispatch(eq("processorWorker"), any(WorkMessage.class));
-        verify(rabbitTemplate).send(eq(definition.exchange()), eq(definition.outQueue()), any(Message.class));
-        verify(controlPlaneRuntime).emitStatusSnapshot();
-    }
-
-    @Test
-    void runtimeDelegatesControlMessages() {
-        WorkerRuntime workerRuntime = mock(WorkerRuntime.class);
-        WorkerRegistry workerRegistry = mock(WorkerRegistry.class);
-        WorkerControlPlaneRuntime controlPlaneRuntime = mock(WorkerControlPlaneRuntime.class);
-        RabbitTemplate rabbitTemplate = mock(RabbitTemplate.class);
-        RabbitListenerEndpointRegistry listenerRegistry = mock(RabbitListenerEndpointRegistry.class);
-        MessageListenerContainer container = mock(MessageListenerContainer.class);
-        when(listenerRegistry.getListenerContainer("processorWorkerListener")).thenReturn(container);
-        when(container.isRunning()).thenReturn(false);
-
-        WorkerDefinition definition = new WorkerDefinition(
-                "processorWorker",
-                ProcessorWorkerImpl.class,
-                WorkerType.MESSAGE,
-                "processor",
-                MODERATOR_QUEUE,
-                FINAL_QUEUE,
-                TRAFFIC_EXCHANGE,
-                ProcessorWorkerConfig.class
-        );
-        when(workerRegistry.findByRoleAndType("processor", WorkerType.MESSAGE))
-                .thenReturn(Optional.of(definition));
-
-        ControlPlaneIdentity identity = new ControlPlaneIdentity(
-                WORKER_PROPERTIES.getSwarmId(),
-                "processor",
-                WORKER_PROPERTIES.getInstanceId());
-        ProcessorDefaults defaults = new ProcessorDefaults();
-        defaults.setEnabled(false);
-        defaults.setBaseUrl("");
-        ProcessorRuntimeAdapter adapter = new ProcessorRuntimeAdapter(
-                workerRuntime,
-                workerRegistry,
-                controlPlaneRuntime,
-                rabbitTemplate,
-                listenerRegistry,
-                identity,
-                defaults
-        );
-
-        adapter.initialiseStateListener();
-
-        WorkerControlQueueListener listener = new WorkerControlQueueListener(controlPlaneRuntime);
-
-        listener.onControl("{}", "processor.control", null);
-        verify(controlPlaneRuntime).handle("{}", "processor.control");
-
-        assertThatThrownBy(() -> listener.onControl(" ", "processor.control", null))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("payload");
-
-        assertThatThrownBy(() -> listener.onControl("{}", " ", null))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("routing key");
-
-        // ensure MDC was cleared during processing despite exceptions
-        assertThat(MDC.getCopyOfContextMap()).isNullOrEmpty();
-    }
 
     private WorkResult invokeThroughObservabilityInterceptor(ProcessorWorkerImpl worker,
                                                              TestWorkerContext context,
@@ -356,12 +230,17 @@ class ProcessorTest {
         return new WorkerDefinition(
                 "processorWorker",
                 ProcessorWorkerImpl.class,
-                WorkerType.MESSAGE,
+                WorkerInputType.RABBIT,
                 "processor",
                 MODERATOR_QUEUE,
                 FINAL_QUEUE,
                 TRAFFIC_EXCHANGE,
-                ProcessorWorkerConfig.class
+                ProcessorWorkerConfig.class,
+                WorkInputConfig.class,
+                WorkOutputConfig.class,
+                WorkerOutputType.RABBITMQ,
+                "Processor worker",
+                Set.of(WorkerCapability.MESSAGE_DRIVEN)
         );
     }
 
@@ -420,6 +299,11 @@ class ProcessorTest {
         }
 
         @Override
+        public boolean enabled() {
+            return true;
+        }
+
+        @Override
         public <C> Optional<C> config(Class<C> type) {
             if (config != null && type.isAssignableFrom(ProcessorWorkerConfig.class)) {
                 return Optional.of(type.cast(config));
@@ -434,7 +318,7 @@ class ProcessorTest {
 
         @Override
         public org.slf4j.Logger logger() {
-            return org.slf4j.LoggerFactory.getLogger(MessageWorker.class);
+            return org.slf4j.LoggerFactory.getLogger(PocketHiveWorkerFunction.class);
         }
 
         @Override

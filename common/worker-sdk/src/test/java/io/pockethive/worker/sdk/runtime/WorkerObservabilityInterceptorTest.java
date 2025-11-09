@@ -10,8 +10,13 @@ import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pockethive.worker.sdk.api.WorkResult;
 import io.pockethive.worker.sdk.api.WorkerContext;
 import io.pockethive.worker.sdk.api.WorkerInfo;
-import io.pockethive.worker.sdk.config.WorkerType;
+import io.pockethive.worker.sdk.config.WorkInputConfig;
+import io.pockethive.worker.sdk.config.WorkOutputConfig;
+import io.pockethive.worker.sdk.config.WorkerCapability;
+import io.pockethive.worker.sdk.config.WorkerInputType;
+import io.pockethive.worker.sdk.config.WorkerOutputType;
 import java.util.Optional;
+import java.util.Set;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.slf4j.MDC;
@@ -21,12 +26,17 @@ class WorkerObservabilityInterceptorTest {
     private static final WorkerDefinition DEFINITION = new WorkerDefinition(
         "testWorker",
         Object.class,
-        WorkerType.MESSAGE,
+        WorkerInputType.RABBIT,
         "role",
         "in.queue",
         "out.queue",
         "exchange.hive",
-        Void.class
+        Void.class,
+        WorkInputConfig.class,
+        WorkOutputConfig.class,
+        WorkerOutputType.RABBITMQ,
+        "Test worker",
+        Set.of(WorkerCapability.MESSAGE_DRIVEN)
     );
 
     @AfterEach
@@ -72,6 +82,11 @@ class WorkerObservabilityInterceptorTest {
             @Override
             public WorkerInfo info() {
                 return info;
+            }
+
+            @Override
+            public boolean enabled() {
+                return true;
             }
 
             @Override

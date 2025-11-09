@@ -1,12 +1,11 @@
 package io.pockethive.worker.sdk.runtime;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.pockethive.control.CommandState;
 import io.pockethive.control.CommandTarget;
 import io.pockethive.control.ControlSignal;
 import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.controlplane.messaging.ControlPlaneEmitter;
+import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.controlplane.topology.ControlPlaneRouteCatalog;
 import io.pockethive.controlplane.spring.WorkerControlPlaneProperties;
 import io.pockethive.controlplane.worker.WorkerConfigCommand;
@@ -15,7 +14,9 @@ import io.pockethive.controlplane.worker.WorkerSignalListener;
 import io.pockethive.controlplane.worker.WorkerStatusRequest;
 import io.pockethive.worker.sdk.api.StatusPublisher;
 import io.pockethive.worker.sdk.config.PocketHiveWorker;
-import com.fasterxml.jackson.core.type.TypeReference;
+import io.pockethive.worker.sdk.config.WorkerCapability;
+import io.pockethive.worker.sdk.config.WorkerInputType;
+import io.pockethive.worker.sdk.config.WorkerOutputType;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -42,7 +43,6 @@ public final class WorkerControlPlaneRuntime {
 
     private static final Logger log = LoggerFactory.getLogger(WorkerControlPlaneRuntime.class);
     private static final String CONFIG_PHASE = "apply";
-    private static final TypeReference<Map<String, Object>> DEFAULT_CONFIG_TYPE = new TypeReference<>() {};
 
     private final WorkerControlPlane workerControlPlane;
     private final WorkerStateStore stateStore;
@@ -51,9 +51,11 @@ public final class WorkerControlPlaneRuntime {
     private final ControlPlaneIdentity identity;
     private final String controlQueueName;
     private final String[] controlRoutes;
+    private final ConfigMerger configMerger;
     private final WorkerSignalListener signalListener = new WorkerSignalDispatcher();
     private final Map<String, List<Consumer<WorkerStateSnapshot>>> stateListeners = new ConcurrentHashMap<>();
     private final List<Consumer<WorkerStateSnapshot>> globalStateListeners = new CopyOnWriteArrayList<>();
+    private final ControlPlaneNotifier notifier;
 
     public WorkerControlPlaneRuntime(
         WorkerControlPlane workerControlPlane,
@@ -68,10 +70,18 @@ public final class WorkerControlPlaneRuntime {
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper");
         this.emitter = Objects.requireNonNull(emitter, "emitter");
         this.identity = Objects.requireNonNull(identity, "identity");
+        this.configMerger = new ConfigMerger(this.objectMapper);
         WorkerControlPlaneProperties.ControlPlane resolvedControlPlane =
             Objects.requireNonNull(controlPlane, "controlPlane");
         this.controlQueueName = resolvedControlPlane.getControlQueueName();
         this.controlRoutes = resolveControlRoutes(resolvedControlPlane.getRoutes(), identity);
+        this.notifier = new ControlPlaneNotifier(
+            log,
+            this.objectMapper,
+            emitter,
+            identity.role(),
+            identity.instanceId()
+        );
         // Ensure workers discovered during runtime bootstrap receive a status publisher.
         stateStore.all().forEach(this::ensureStatusPublisher);
     }
@@ -91,7 +101,7 @@ public final class WorkerControlPlaneRuntime {
     public Map<String, Object> workerRawConfig(String workerBeanName) {
         Objects.requireNonNull(workerBeanName, "workerBeanName");
         return stateStore.find(workerBeanName)
-            .map(state -> state.rawConfig().isEmpty() ? Map.<String, Object>of() : state.rawConfig())
+            .map(this::snapshotRawConfig)
             .orElse(Map.of());
     }
 
@@ -123,7 +133,7 @@ public final class WorkerControlPlaneRuntime {
         WorkerState state = stateStore.find(workerBeanName).orElse(null);
         stateListeners.computeIfAbsent(workerBeanName, key -> new CopyOnWriteArrayList<>()).add(listener);
         if (state != null) {
-            safeInvoke(listener, new WorkerStateSnapshot(state));
+            safeInvoke(listener, new WorkerStateSnapshot(state, snapshotRawConfig(state)));
         }
     }
 
@@ -140,11 +150,12 @@ public final class WorkerControlPlaneRuntime {
             log.warn("Unable to seed default config for unknown worker {}", workerBeanName);
             return;
         }
-        Map<String, Object> rawConfig = convertDefaultConfig(defaultConfig);
+        Map<String, Object> rawConfig = configMerger.toRawConfig(defaultConfig);
         Boolean enabled = resolveEnabled(rawConfig, null);
-        if (state.seedConfig(defaultConfig, rawConfig, enabled)) {
+        Object typedConfig = ensureTypedDefault(state.definition(), defaultConfig, rawConfig);
+        if (state.seedConfig(typedConfig, enabled)) {
             ensureStatusPublisher(state);
-            logInitialConfig(state);
+            notifier.logInitialConfig(state, rawConfig, enabled);
             notifyStateListeners(state);
         }
     }
@@ -156,7 +167,7 @@ public final class WorkerControlPlaneRuntime {
     public void registerGlobalStateListener(Consumer<WorkerStateSnapshot> listener) {
         Objects.requireNonNull(listener, "listener");
         globalStateListeners.add(listener);
-        stateStore.all().forEach(state -> safeInvoke(listener, new WorkerStateSnapshot(state)));
+        stateStore.all().forEach(state -> safeInvoke(listener, new WorkerStateSnapshot(state, snapshotRawConfig(state))));
     }
 
     /**
@@ -198,7 +209,7 @@ public final class WorkerControlPlaneRuntime {
 
         @Override
         public void onStatusRequest(WorkerStatusRequest request) {
-            log.debug("Received status-request signal {} => emitting snapshot", request.signal());
+            log.debug("Received status-request signal {} => emitting snapshot", resolveSignalName(request));
             emitStatusSnapshot();
         }
 
@@ -220,106 +231,87 @@ public final class WorkerControlPlaneRuntime {
             ensureStatusPublisher(state);
             WorkerConfigPatch patch = workerConfigFor(state, sanitized);
             Map<String, Object> filteredUpdate = withoutNullValues(patch.values());
-            Map<String, Object> mergedConfig = mergeWithExisting(state.rawConfig(), filteredUpdate, patch.resetRequested());
-            Boolean enabled = resolveEnabled(mergedConfig, command.enabled());
-            Map<String, Object> previousConfig = state.rawConfig();
             Boolean previousEnabled = state.enabled().orElse(null);
+            Object currentConfig = currentTypedConfig(state);
             try {
-                Object typedConfig = null;
-                Map<String, Object> rawDataForState = null;
-                if (patch.hasPayload()) {
-                    typedConfig = convertConfig(state.definition(), mergedConfig);
-                    rawDataForState = mergedConfig;
+                ConfigMerger.ConfigMergeResult mergeResult = configMerger.merge(
+                    state.definition(),
+                    currentConfig,
+                    filteredUpdate,
+                    patch.resetRequested()
+                );
+                Boolean enabled = resolveEnabled(mergeResult.rawConfig(), command.enabled());
+                state.updateConfig(mergeResult.typedConfig(), mergeResult.replaced(), enabled);
+                Map<String, Object> appliedConfig = mergeResult.replaced() ? mergeResult.rawConfig() : Map.of();
+                if (hasCorrelation(signal)) {
+                    notifier.emitConfigReady(signal, state, appliedConfig, enabled);
+                } else {
+                    log.debug(
+                        "Skipping ready confirmation for signal {} due to missing correlation/idempotency",
+                        signal.signal()
+                    );
                 }
-                state.updateConfig(typedConfig, rawDataForState, enabled);
-                emitConfigReady(signal, state, rawDataForState == null ? Map.of() : rawDataForState, enabled);
                 notifyStateListeners(state);
-                Map<String, Object> finalConfig = state.rawConfig();
+                Map<String, Object> finalConfig = mergeResult.replaced()
+                    ? mergeResult.rawConfig()
+                    : mergeResult.previousRaw();
                 Boolean finalEnabled = state.enabled().orElse(null);
-                if (shouldLogConfigUpdate(patch, command, previousConfig, finalConfig, previousEnabled, finalEnabled)) {
-                    logConfigUpdate(signal, state, previousConfig, finalConfig, previousEnabled, finalEnabled);
+                if (shouldLogConfigUpdate(
+                    patch,
+                    command,
+                    mergeResult.previousRaw(),
+                    finalConfig,
+                    previousEnabled,
+                    finalEnabled
+                )) {
+                    notifier.logConfigUpdate(
+                        signal,
+                        state,
+                        mergeResult.diff(),
+                        finalConfig,
+                        previousEnabled,
+                        finalEnabled
+                    );
                 }
             } catch (Exception ex) {
-                emitConfigError(signal, state, ex);
+                if (hasCorrelation(signal)) {
+                    notifier.emitConfigError(signal, state, ex);
+                } else {
+                    log.debug(
+                        "Skipping error confirmation for signal {} due to missing correlation/idempotency",
+                        signal.signal()
+                    );
+                }
+                notifyStateListeners(state);
                 log.warn("Failed to apply config update for worker {}", state.definition().beanName(), ex);
             }
         }
         emitStatusSnapshot();
     }
 
-    private Object convertConfig(WorkerDefinition definition, Map<String, Object> rawConfig) {
+    private String resolveSignalName(WorkerStatusRequest request) {
+        ControlSignal signal = request.signal();
+        if (signal != null && signal.signal() != null && !signal.signal().isBlank()) {
+            return signal.signal();
+        }
+        ControlPlaneRouting.RoutingKey routingKey = ControlPlaneRouting.parseSignal(request.envelope().routingKey());
+        if (routingKey != null && routingKey.type() != null && !routingKey.type().isBlank()) {
+            return routingKey.type();
+        }
+        return "n/a";
+    }
+    private Object ensureTypedDefault(WorkerDefinition definition, Object defaultConfig, Map<String, Object> rawConfig) {
         Class<?> configType = definition.configType();
-        if (configType == Void.class || rawConfig.isEmpty()) {
+        if (configType == Void.class) {
             return null;
         }
-        try {
-            return objectMapper.convertValue(rawConfig, configType);
-        } catch (IllegalArgumentException ex) {
-            String message = "Unable to convert control-plane config for worker '%s' to type %s".formatted(
-                definition.beanName(), configType.getSimpleName());
-            throw new IllegalArgumentException(message, ex);
+        if (defaultConfig != null && configType.isInstance(defaultConfig)) {
+            return defaultConfig;
         }
-    }
-
-    private Map<String, Object> convertDefaultConfig(Object defaultConfig) {
-        try {
-            Map<String, Object> converted = objectMapper.convertValue(defaultConfig, DEFAULT_CONFIG_TYPE);
-            return converted == null ? Map.of() : Map.copyOf(converted);
-        } catch (IllegalArgumentException ex) {
-            log.warn("Unable to convert default config of type {}", defaultConfig.getClass().getName(), ex);
-            return Map.of();
+        if (rawConfig == null || rawConfig.isEmpty()) {
+            return null;
         }
-    }
-
-    private void emitConfigReady(ControlSignal signal, WorkerState state, Map<String, Object> rawConfig, Boolean enabled) {
-        if (!hasCorrelation(signal)) {
-            log.debug("Skipping ready confirmation for signal {} due to missing correlation/idempotency", signal.signal());
-            return;
-        }
-        Map<String, Object> commandDetails = new LinkedHashMap<>();
-        if (!rawConfig.isEmpty()) {
-            commandDetails.put("config", rawConfig);
-        }
-        CommandState commandState = new CommandState("applied", enabled, commandDetails.isEmpty() ? null : commandDetails);
-        Map<String, Object> confirmationDetails = new LinkedHashMap<>();
-        confirmationDetails.put("worker", state.definition().beanName());
-        Map<String, Object> statusData = state.statusData();
-        if (!statusData.isEmpty()) {
-            confirmationDetails.put("data", statusData);
-        }
-        if (!rawConfig.isEmpty()) {
-            confirmationDetails.put("config", rawConfig);
-        }
-        ControlPlaneEmitter.ReadyContext.Builder ready = ControlPlaneEmitter.ReadyContext.builder(
-            signal.signal(), signal.correlationId(), signal.idempotencyKey(), commandState
-        );
-        if (!confirmationDetails.isEmpty()) {
-            ready.details(confirmationDetails);
-        }
-        emitter.emitReady(ready.build());
-    }
-
-    private void emitConfigError(ControlSignal signal, WorkerState state, Exception error) {
-        if (!hasCorrelation(signal)) {
-            log.debug("Skipping error confirmation for signal {} due to missing correlation/idempotency", signal.signal());
-            return;
-        }
-        String code = error.getClass().getSimpleName();
-        String message = error.getMessage() == null || error.getMessage().isBlank() ? code : error.getMessage();
-        CommandState commandState = new CommandState("failed", state.enabled().orElse(null), null);
-        Map<String, Object> details = new LinkedHashMap<>();
-        details.put("worker", state.definition().beanName());
-        details.put("exception", code);
-        Map<String, Object> statusData = state.statusData();
-        if (!statusData.isEmpty()) {
-            details.put("data", statusData);
-        }
-        ControlPlaneEmitter.ErrorContext.Builder builder = ControlPlaneEmitter.ErrorContext.builder(
-            signal.signal(), signal.correlationId(), signal.idempotencyKey(), commandState, CONFIG_PHASE, code, message
-        ).retryable(Boolean.FALSE);
-        builder.details(details);
-        emitter.emitError(builder.build());
-        notifyStateListeners(state);
+        return configMerger.toTypedConfig(definition, rawConfig);
     }
 
     private boolean hasCorrelation(ControlSignal signal) {
@@ -394,7 +386,7 @@ public final class WorkerControlPlaneRuntime {
             }
             Object candidate = workersMap.get(beanName);
             if (candidate instanceof Map<?, ?> nested) {
-                Map<String, Object> copied = copyMap(nested);
+                Map<String, Object> copied = toStringMap(nested);
                 boolean resetRequested = copied.isEmpty();
                 return new WorkerConfigPatch(copied, true, resetRequested);
             }
@@ -404,7 +396,7 @@ public final class WorkerControlPlaneRuntime {
         }
         Object direct = sanitized.get(beanName);
         if (direct instanceof Map<?, ?> nested) {
-            Map<String, Object> copied = copyMap(nested);
+            Map<String, Object> copied = toStringMap(nested);
             boolean resetRequested = copied.isEmpty();
             return new WorkerConfigPatch(copied, true, resetRequested);
         }
@@ -430,23 +422,16 @@ public final class WorkerControlPlaneRuntime {
         return Map.copyOf(filtered);
     }
 
-    private Map<String, Object> mergeWithExisting(
-        Map<String, Object> existing,
-        Map<String, Object> updates,
-        boolean resetRequested
-    ) {
-        if (resetRequested) {
-            return Map.of();
+    private Map<String, Object> snapshotRawConfig(WorkerState state) {
+        return configMerger.toRawConfig(currentTypedConfig(state));
+    }
+
+    private Object currentTypedConfig(WorkerState state) {
+        Class<?> configType = state.definition().configType();
+        if (configType == Void.class) {
+            return null;
         }
-        if (updates.isEmpty()) {
-            return existing == null ? Map.of() : existing;
-        }
-        Map<String, Object> merged = new LinkedHashMap<>();
-        if (existing != null && !existing.isEmpty()) {
-            merged.putAll(existing);
-        }
-        merged.putAll(updates);
-        return Map.copyOf(merged);
+        return state.config(configType).orElse(null);
     }
 
     private boolean shouldLogConfigUpdate(
@@ -466,109 +451,6 @@ public final class WorkerControlPlaneRuntime {
         return !Objects.equals(previousConfig, finalConfig);
     }
 
-    private void logInitialConfig(WorkerState state) {
-        Map<String, Object> config = state.rawConfig();
-        String prettyConfig = prettyPrint(config.isEmpty() ? Map.of() : config);
-        Boolean enabled = state.enabled().orElse(null);
-        log.info(
-            "Initial config for worker {} (role={} instance={}):\n  enabled: {}\n  config:\n{}",
-            state.definition().beanName(),
-            identity.role(),
-            identity.instanceId(),
-            formatEnabledValue(enabled),
-            prettyConfig
-        );
-    }
-
-    private void logConfigUpdate(
-        ControlSignal signal,
-        WorkerState state,
-        Map<String, Object> previousConfig,
-        Map<String, Object> finalConfig,
-        Boolean previousEnabled,
-        Boolean finalEnabled
-    ) {
-        Map<String, Object> changes = describeConfigChanges(previousConfig, finalConfig);
-        String prettyChanges = prettyPrint(changes);
-        String prettyFinal = prettyPrint(finalConfig.isEmpty() ? Map.of() : finalConfig);
-        log.info(
-            "Applied config update for worker {} (signal={} role={} instance={}):\n  enabled: {}\n  changes:\n{}\n  finalConfig:\n{}",
-            state.definition().beanName(),
-            signal.signal(),
-            signal.role(),
-            signal.instance(),
-            formatEnabledChange(previousEnabled, finalEnabled),
-            prettyChanges,
-            prettyFinal
-        );
-    }
-
-    private Map<String, Object> describeConfigChanges(
-        Map<String, Object> previousConfig,
-        Map<String, Object> finalConfig
-    ) {
-        Map<String, Object> previous = previousConfig == null ? Map.of() : previousConfig;
-        Map<String, Object> current = finalConfig == null ? Map.of() : finalConfig;
-        Map<String, Object> added = new LinkedHashMap<>();
-        Map<String, Object> updated = new LinkedHashMap<>();
-        List<String> removed = new ArrayList<>();
-        Set<String> keys = new LinkedHashSet<>();
-        keys.addAll(previous.keySet());
-        keys.addAll(current.keySet());
-        for (String key : keys) {
-            boolean inPrevious = previous.containsKey(key);
-            boolean inCurrent = current.containsKey(key);
-            if (!inPrevious && inCurrent) {
-                added.put(key, current.get(key));
-            } else if (inPrevious && inCurrent) {
-                Object before = previous.get(key);
-                Object after = current.get(key);
-                if (!Objects.equals(before, after)) {
-                    updated.put(key, after);
-                }
-            } else if (inPrevious) {
-                removed.add(key);
-            }
-        }
-        Map<String, Object> changes = new LinkedHashMap<>();
-        if (!added.isEmpty()) {
-            changes.put("added", added);
-        }
-        if (!updated.isEmpty()) {
-            changes.put("updated", updated);
-        }
-        if (!removed.isEmpty()) {
-            changes.put("removed", removed);
-        }
-        if (changes.isEmpty()) {
-            return Map.of("note", "no config fields changed");
-        }
-        return changes;
-    }
-
-    private String prettyPrint(Object value) {
-        if (value == null) {
-            return "null";
-        }
-        try {
-            return objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(value);
-        } catch (JsonProcessingException ex) {
-            log.warn("Unable to pretty print config value", ex);
-            return String.valueOf(value);
-        }
-    }
-
-    private String formatEnabledChange(Boolean previousEnabled, Boolean finalEnabled) {
-        if (Objects.equals(previousEnabled, finalEnabled)) {
-            return formatEnabledValue(finalEnabled) + " (unchanged)";
-        }
-        return formatEnabledValue(finalEnabled) + " (was " + formatEnabledValue(previousEnabled) + ")";
-    }
-
-    private String formatEnabledValue(Boolean value) {
-        return value == null ? "unspecified" : value.toString();
-    }
-
     private record WorkerConfigPatch(Map<String, Object> values, boolean targeted, boolean resetRequested) {
 
         static WorkerConfigPatch empty() {
@@ -580,7 +462,7 @@ public final class WorkerControlPlaneRuntime {
         }
     }
 
-    private Map<String, Object> copyMap(Map<?, ?> source) {
+    private Map<String, Object> toStringMap(Map<?, ?> source) {
         Map<String, Object> copy = new LinkedHashMap<>();
         source.forEach((key, value) -> {
             if (key != null) {
@@ -693,9 +575,31 @@ public final class WorkerControlPlaneRuntime {
             Map<String, Object> workerEntry = new LinkedHashMap<>();
             workerEntry.put("worker", def.beanName());
             workerEntry.put("role", def.role());
+            workerEntry.put("input", def.input().name());
+            workerEntry.put("output", def.outputType().name());
             workerEntry.put(snapshotMode ? "processedTotal" : "processedDelta", processed);
             workerEntry.put("enabled", workerEnabled);
-            Map<String, Object> config = state.rawConfig();
+            String description = def.description();
+            if (description != null) {
+                workerEntry.put("description", description);
+            }
+            if (def.inQueue() != null) {
+                workerEntry.put("inQueue", def.inQueue());
+            }
+            if (def.outQueue() != null) {
+                workerEntry.put("outQueue", def.outQueue());
+            }
+            if (def.exchange() != null) {
+                workerEntry.put("exchange", def.exchange());
+            }
+            if (!def.capabilities().isEmpty()) {
+                List<String> capabilities = def.capabilities().stream()
+                    .map(WorkerCapability::name)
+                    .sorted()
+                    .toList();
+                workerEntry.put("capabilities", capabilities);
+            }
+            Map<String, Object> config = snapshotRawConfig(state);
             if (!config.isEmpty()) {
                 workerEntry.put("config", config);
             }
@@ -722,7 +626,7 @@ public final class WorkerControlPlaneRuntime {
         if (state == null) {
             return;
         }
-        WorkerStateSnapshot snapshot = new WorkerStateSnapshot(state);
+        WorkerStateSnapshot snapshot = new WorkerStateSnapshot(state, snapshotRawConfig(state));
         List<Consumer<WorkerStateSnapshot>> listeners = stateListeners.getOrDefault(state.definition().beanName(), Collections.emptyList());
         listeners.forEach(listener -> safeInvoke(listener, snapshot));
         globalStateListeners.forEach(listener -> safeInvoke(listener, snapshot));
@@ -779,9 +683,11 @@ public final class WorkerControlPlaneRuntime {
     public static final class WorkerStateSnapshot {
 
         private final WorkerState state;
+        private final Map<String, Object> rawConfig;
 
-        private WorkerStateSnapshot(WorkerState state) {
+        private WorkerStateSnapshot(WorkerState state, Map<String, Object> rawConfig) {
             this.state = Objects.requireNonNull(state, "state");
+            this.rawConfig = rawConfig == null || rawConfig.isEmpty() ? Map.of() : Map.copyOf(rawConfig);
         }
 
         /**
@@ -802,7 +708,7 @@ public final class WorkerControlPlaneRuntime {
          * Returns the raw configuration map received from the control plane.
          */
         public Map<String, Object> rawConfig() {
-            return state.rawConfig();
+            return rawConfig;
         }
 
         /**
@@ -817,6 +723,55 @@ public final class WorkerControlPlaneRuntime {
          */
         public Map<String, Object> statusData() {
             return state.statusData();
+        }
+
+        /**
+         * Returns the optional worker description declared on {@link PocketHiveWorker}.
+         */
+        public Optional<String> description() {
+            return Optional.ofNullable(state.definition().description());
+        }
+
+        /**
+         * Returns the declared worker capabilities.
+         */
+        public Set<WorkerCapability> capabilities() {
+            return state.definition().capabilities();
+        }
+
+        /**
+         * Returns the configured worker input type.
+         */
+        public WorkerInputType inputType() {
+            return state.definition().input();
+        }
+
+        /**
+         * Returns the configured worker output type.
+         */
+        public WorkerOutputType outputType() {
+            return state.definition().outputType();
+        }
+
+        /**
+         * Returns the inbound queue if declared on the worker definition.
+         */
+        public Optional<String> inboundQueue() {
+            return Optional.ofNullable(state.definition().inQueue());
+        }
+
+        /**
+         * Returns the outbound queue if declared on the worker definition.
+         */
+        public Optional<String> outboundQueue() {
+            return Optional.ofNullable(state.definition().outQueue());
+        }
+
+        /**
+         * Returns the outbound exchange if declared on the worker definition.
+         */
+        public Optional<String> exchange() {
+            return Optional.ofNullable(state.definition().exchange());
         }
 
         /**

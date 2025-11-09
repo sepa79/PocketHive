@@ -4,7 +4,6 @@ import java.util.Locale;
 import java.util.Map;
 
 public record TriggerWorkerConfig(
-    boolean enabled,
     long intervalMs,
     boolean singleRequest,
     String actionType,

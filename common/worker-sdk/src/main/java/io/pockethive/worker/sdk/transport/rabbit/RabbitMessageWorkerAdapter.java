@@ -64,6 +64,7 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
     private final String outboundQueue;
     private final String outboundExchange;
     private final Consumer<Exception> dispatchErrorHandler;
+    private final java.util.concurrent.atomic.AtomicBoolean initialised = new java.util.concurrent.atomic.AtomicBoolean(false);
     private final RabbitWorkMessageConverter messageConverter = new RabbitWorkMessageConverter();
     private volatile boolean desiredEnabled;
 
@@ -104,6 +105,9 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
      * observe the current worker availability.
      */
     public void initialiseStateListener() {
+        if (!initialised.compareAndSet(false, true)) {
+            return;
+        }
         desiredEnabled = defaultEnabledSupplier.get();
         Object defaultConfig = defaultConfigSupplier.get();
         if (defaultConfig != null) {
@@ -115,6 +119,19 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
         });
         applyListenerState();
         controlPlaneRuntime.emitStatusSnapshot();
+    }
+    /**
+     * Starts the underlying listener container based on the latest desired state.
+     */
+    public void startListener() {
+        toggleListener(true);
+    }
+
+    /**
+     * Stops the underlying listener container.
+     */
+    public void stopListener() {
+        toggleListener(false);
     }
 
     /**
@@ -183,7 +200,15 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
     }
 
     private void toggleListener(boolean enabled) {
+        boolean previous = this.desiredEnabled;
         this.desiredEnabled = enabled;
+        if (previous != enabled && log.isInfoEnabled()) {
+            log.info(
+                "{} work lifecycle {} (instance={})",
+                displayName,
+                enabled ? "enabled" : "disabled",
+                identity.instanceId());
+        }
         applyListenerState();
     }
 

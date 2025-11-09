@@ -1,11 +1,10 @@
 package io.pockethive.examples.starter.generator;
 
-import io.pockethive.worker.sdk.api.GeneratorWorker;
+import io.pockethive.worker.sdk.api.PocketHiveWorkerFunction;
 import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pockethive.worker.sdk.api.WorkResult;
 import io.pockethive.worker.sdk.api.WorkerContext;
 import io.pockethive.worker.sdk.config.PocketHiveWorker;
-import io.pockethive.worker.sdk.config.WorkerType;
 import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
@@ -18,19 +17,21 @@ import org.springframework.stereotype.Component;
 @Component("sampleGeneratorWorker")
 @PocketHiveWorker(
     role = "generator",
-    type = WorkerType.GENERATOR,
     outQueue = "generator",
     config = SampleGeneratorConfig.class
 )
-class SampleGeneratorWorker implements GeneratorWorker {
+class SampleGeneratorWorker implements PocketHiveWorkerFunction {
 
-  private static final SampleGeneratorConfig FALLBACK_CONFIG =
-      new SampleGeneratorConfig(true, 1.0, "Hello from the generator");
+  private final SampleGeneratorProperties properties;
+
+  SampleGeneratorWorker(SampleGeneratorProperties properties) {
+    this.properties = properties;
+  }
 
   @Override
-  public WorkResult generate(WorkerContext context) {
+  public WorkResult onMessage(WorkMessage seed, WorkerContext context) {
     SampleGeneratorConfig config = context.config(SampleGeneratorConfig.class)
-        .orElse(FALLBACK_CONFIG);
+        .orElseGet(properties::defaultConfig);
 
     String outQueue = Optional.ofNullable(context.info().outQueue())
         .orElseThrow(() -> new IllegalStateException("Outbound queue not configured"));
@@ -38,11 +39,11 @@ class SampleGeneratorWorker implements GeneratorWorker {
     context.statusPublisher()
         .workOut(outQueue)
         .update(status -> status
-            .data("enabled", config.enabled())
+            .data("enabled", context.enabled())
             .data("ratePerSecond", config.ratePerSecond())
             .data("message", config.message()));
 
-    if (!config.enabled()) {
+    if (!context.enabled()) {
       return WorkResult.none();
     }
 

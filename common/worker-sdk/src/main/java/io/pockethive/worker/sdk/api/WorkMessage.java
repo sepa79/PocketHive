@@ -13,12 +13,13 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.observability.ObservabilityContext;
 import io.pockethive.observability.ObservabilityContextUtil;
+import io.pockethive.worker.sdk.api.PocketHiveWorkerFunction;
 
 /**
  * Immutable representation of a worker message payload plus metadata.
  * <p>
  * The runtime converts transport-specific envelopes to {@code WorkMessage} instances before handing them to
- * {@link MessageWorker} or {@link GeneratorWorker} implementations. Builders support text, JSON, and binary
+ * {@link PocketHiveWorkerFunction} implementations. Builders support text, JSON, and binary
  * bodies, as described in {@code docs/sdk/worker-sdk-quickstart.md}.
  */
 public final class WorkMessage {

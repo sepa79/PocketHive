@@ -9,6 +9,7 @@ import io.pockethive.controlplane.spring.WorkerControlPlaneProperties;
 import io.pockethive.worker.sdk.testing.ControlPlaneTestFixtures;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import org.springframework.amqp.core.Binding;
@@ -24,8 +25,11 @@ class ProcessorTopologyProvisioningTest {
 
     private static final WorkerControlPlaneProperties WORKER_PROPERTIES =
         ControlPlaneTestFixtures.workerProperties("swarm-alpha", "processor", "processor-1");
-    private static final String MODERATOR_QUEUE = WORKER_PROPERTIES.getQueues().get("moderator");
-    private static final String EXCHANGE = WORKER_PROPERTIES.getTrafficExchange();
+    private static final Map<String, String> WORKER_QUEUES =
+        ControlPlaneTestFixtures.workerQueues("swarm-alpha");
+    private static final String MODERATOR_QUEUE = WORKER_QUEUES.get("moderator");
+    private static final String FINAL_QUEUE = WORKER_QUEUES.get("final");
+    private static final String EXCHANGE = ControlPlaneTestFixtures.hiveExchange("swarm-alpha");
 
     private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
         .withConfiguration(AutoConfigurations.of(
@@ -39,10 +43,9 @@ class ProcessorTopologyProvisioningTest {
             "pockethive.control-plane.swarm-id=" + WORKER_PROPERTIES.getSwarmId(),
             "pockethive.control-plane.exchange=" + WORKER_PROPERTIES.getExchange(),
             "pockethive.control-plane.control-queue-prefix=" + WORKER_PROPERTIES.getControlQueuePrefix(),
-            "pockethive.control-plane.traffic-exchange=" + EXCHANGE,
-            "pockethive.control-plane.queues.processor=" + WORKER_PROPERTIES.getQueues().get("processor"),
-            "pockethive.control-plane.queues.moderator=" + MODERATOR_QUEUE,
-            "pockethive.control-plane.queues.final=" + WORKER_PROPERTIES.getQueues().get("final"),
+            "pockethive.inputs.rabbit.queue=" + MODERATOR_QUEUE,
+            "pockethive.outputs.rabbit.exchange=" + EXCHANGE,
+            "pockethive.outputs.rabbit.routing-key=" + FINAL_QUEUE,
             "pockethive.control-plane.swarm-controller.rabbit.logs-exchange=ph.logs",
             "pockethive.control-plane.swarm-controller.rabbit.logging.enabled=false");
 

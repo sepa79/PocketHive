@@ -3,20 +3,25 @@ spring:
     name: generator-worker-starter
 
 pockethive:
+  worker:
+    inputs:
+      autowire: true
+  inputs:
+    scheduler:
+      enabled: true
+  outputs:
+    rabbit:
+      exchange: ph.sample-swarm.hive
+      routingKey: ph.sample-swarm.mod
   control-plane:
     exchange: ph.control
-    traffic-exchange: ph.sample-swarm.hive
     swarm-id: sample-swarm
     instance-id: ${POCKETHIVE_CONTROL_PLANE_INSTANCE_ID:generator-1}
-    queues:
-      generator: ph.sample-swarm.gen
-      moderator: ph.sample-swarm.mod
-      final: ph.sample-swarm.final
+    control-queue-prefix: ph.control
     worker:
       role: generator
-
-starter:
-  generator:
-    enabled: true
-    rate-per-second: 1.0
-    message: "Hello from the generator"
+  workers:
+    generator:
+      config:
+        ratePerSecond: 1.0
+        message: "Hello from the generator"

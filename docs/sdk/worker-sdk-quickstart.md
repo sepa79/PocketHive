@@ -7,10 +7,10 @@ deeper architectural context.
 ## 0. Start from the in-repo template (optional)
 
 Clone the `examples/worker-starter` directory when you want a copy-ready project that already wires the
-Worker SDK, control-plane defaults, and runtime adapters for both generator and processor roles. The template lives
+Worker SDK, control-plane defaults, and auto-wired inputs/outputs for both generator and processor roles. The template lives
 inside the monorepo so it always tracks the latest PocketHive release—copy it to your own repository, then follow the
 remaining steps to customise the worker roles, routing metadata, and business logic. The starter already demonstrates
-how to source queue/exchange names from `application.yml` so workers boot entirely from configuration.
+how to source queue/exchange names from `application.yml` so workers boot entirely from configuration without bespoke adapters.
 
 ## 1. Add the dependency and starter
 
@@ -25,37 +25,40 @@ synchronisation.
 </dependency>
 ```
 
-Configure the control-plane identity, traffic exchange, and queue aliases using the shared properties. Queue aliases map the
-logical names you use in annotations/tests to the concrete RabbitMQ queues provisioned by the Swarm Controller.
+Configure the control-plane identity alongside the worker IO sections. Rabbit inputs/outputs now live under
+`pockethive.inputs.<type>` / `pockethive.outputs.<type>`, so workers read their queue/exchange bindings directly from
+application configuration instead of the old `pockethive.control-plane.queues.*` map.
 
 ```yaml
 pockethive:
   control-plane:
     exchange: ph.control
-    traffic-exchange: ph.swarm-1.hive
     swarm-id: swarm-1
     instance-id: processor-1
-    queues:
-      moderator: ph.swarm-1.mod
-      processor: ph.swarm-1.processor
-      final: ph.swarm-1.final
     worker:
       role: processor
+  inputs:
+    rabbit:
+      queue: ph.swarm-1.mod
+  outputs:
+    rabbit:
+      exchange: ph.swarm-1.hive
+      routing-key: ph.swarm-1.final
 ```
 
 See the [control-plane worker guide](../control-plane/worker-guide.md#configuration-properties) for the full
-`WorkerControlPlaneProperties` reference and additional environment contract details.
+`WorkerControlPlaneProperties` reference, including the environment variables that mirror the IO configuration.
 
 ## 2. Annotate worker beans
 
-Annotate each business implementation with `@PocketHiveWorker`. Choose the worker type (`GENERATOR` or `MESSAGE`) and
-provide routing metadata. Optional `config` classes participate in Stage 2 control-plane hydration.
+Annotate each business implementation with `@PocketHiveWorker`. Select the appropriate input binding (`RABBIT` by
+default, `SCHEDULER` for timer-driven workers) and provide routing metadata. Optional `config` classes participate in
+Stage 2 control-plane hydration.
 
 ```java
 @Component("processorWorker")
 @PocketHiveWorker(
     role = "processor",
-    type = WorkerType.MESSAGE,
     inQueue = "moderator",
     outQueue = "final",
     config = ProcessorWorkerConfig.class
@@ -65,19 +68,17 @@ class ProcessorWorkerImpl implements MessageWorker {
 }
 ```
 
-Generator workers follow the same pattern but implement `GeneratorWorker` and omit `inQueue`.
+Generator workers follow the same pattern but typically specify `input = WorkerInputType.SCHEDULER` and omit `inQueue`.
 
 > **Status topology note**
 > The Worker SDK automatically mirrors the descriptor queues into the control-plane status payload via `statusPublisher().workIn(...)` and `statusPublisher().workOut(...)`. The legacy `inQueue` field in status events has been removed; consumers should rely on the richer `queues.work`/`queues.control` block instead.
 
-## 3. Implement the worker interfaces
+## 3. Implement the worker interface
 
-The Stage 1 runtime discovers annotated beans and invokes the corresponding business interface:
-
-- `GeneratorWorker.generate(WorkerContext)` emits a single `WorkMessage` per invocation. Stage 2 control-plane updates
-  determine how often `GeneratorRuntimeAdapter` schedules the call.
-- `MessageWorker.onMessage(WorkMessage, WorkerContext)` receives inbound messages converted by the SDK transport and
-  returns a `WorkResult` to publish downstream.
+The runtime discovers annotated beans that implement `PocketHiveWorkerFunction` and invokes
+`onMessage(WorkMessage, WorkerContext)` for each input message. Scheduler-driven inputs (such as the
+generator/trigger schedulers) emit synthetic seed messages, so the `message` parameter is always non-null even when no
+payload is supplied. The return value determines whether a downstream payload should be published.
 
 Use the `WorkerContext` to:
 
@@ -90,75 +91,66 @@ Refer to the migrated [generator](../../generator-service/src/main/java/io/pocke
 and [processor](../../processor-service/src/main/java/io/pockethive/processor/ProcessorWorkerImpl.java) services for
 end-to-end implementations.
 
-## 4. Dispatch work through the runtime adapters
+## 4. Let the SDK wire inputs and outputs
 
-Transport adapters inject the Stage 1 `WorkerRuntime` and Stage 2 `WorkerControlPlaneRuntime` beans. Message-based
-services should now compose the reusable [`RabbitMessageWorkerAdapter`](../../common/worker-sdk/src/main/java/io/pockethive/worker/sdk/transport/rabbit/RabbitMessageWorkerAdapter.java)
-instead of re-implementing listener toggling, Rabbit conversions, and control-plane validation.
+Enable `pockethive.worker.inputs.autowire=true` (the default in every worker service) so the SDK provisions the correct
+`WorkInput` / `WorkOutput` pair for each annotated worker. Rabbit-driven workers automatically receive the shared
+`RabbitWorkInput`/`RabbitWorkOutput`, while scheduler-driven roles (generator, trigger) receive the built-in scheduler input.
+
+Custom inputs remain possible via `WorkInputFactory` beans. The trigger worker keeps a bespoke factory because it combines
+the scheduler with rate-limit state, but all other services rely on the SDK defaults:
 
 ```java
 @Component
-class ProcessorRuntimeAdapter implements ApplicationListener<ContextRefreshedEvent> {
+@ConditionalOnProperty(prefix = "pockethive.worker.inputs", name = "autowire", havingValue = "true")
+class TriggerWorkInputFactory implements WorkInputFactory {
 
-  private static final Logger log = LoggerFactory.getLogger(ProcessorRuntimeAdapter.class);
-  private final RabbitMessageWorkerAdapter delegate;
+  private final WorkerRuntime workerRuntime;
+  private final WorkerControlPlaneRuntime controlPlaneRuntime;
+  private final ControlPlaneIdentity identity;
+  private final TriggerWorkerProperties properties;
 
-  ProcessorRuntimeAdapter(WorkerRuntime workerRuntime,
-                          WorkerRegistry workerRegistry,
+  TriggerWorkInputFactory(WorkerRuntime workerRuntime,
                           WorkerControlPlaneRuntime controlPlaneRuntime,
-                          RabbitTemplate rabbitTemplate,
-                          RabbitListenerEndpointRegistry listenerRegistry,
                           ControlPlaneIdentity identity,
-                          ProcessorDefaults defaults) {
-    WorkerDefinition definition = workerRegistry
-        .findByRoleAndType("processor", WorkerType.MESSAGE)
-        .orElseThrow();
+                          TriggerWorkerProperties properties) {
+    this.workerRuntime = workerRuntime;
+    this.controlPlaneRuntime = controlPlaneRuntime;
+    this.identity = identity;
+    this.properties = properties;
+  }
 
-    delegate = RabbitMessageWorkerAdapter.builder()
-        .logger(log)
-        .listenerId("processorWorkerListener")
-        .displayName("Processor")
+  @Override
+  public boolean supports(WorkerDefinition definition) {
+    return definition.input() == WorkerInputType.SCHEDULER
+        && "trigger".equals(definition.role());
+  }
+
+  @Override
+  public WorkInput create(WorkerDefinition definition, WorkInputConfig config) {
+    SchedulerInputProperties scheduling = config instanceof SchedulerInputProperties props
+        ? props
+        : new SchedulerInputProperties();
+    TriggerSchedulerState schedulerState = new TriggerSchedulerState(properties, scheduling.isEnabled());
+    Logger logger = LoggerFactory.getLogger(definition.beanType());
+    return SchedulerWorkInput.<TriggerWorkerConfig>builder()
         .workerDefinition(definition)
         .controlPlaneRuntime(controlPlaneRuntime)
-        .listenerRegistry(listenerRegistry)
+        .workerRuntime(workerRuntime)
         .identity(identity)
-        .withConfigDefaults(ProcessorWorkerConfig.class, defaults::asConfig, ProcessorWorkerConfig::enabled)
-        .dispatcher(message -> workerRuntime.dispatch(definition.beanName(), message))
-        .rabbitTemplate(rabbitTemplate)
+        .schedulerState(schedulerState)
+        .scheduling(scheduling)
+        .logger(logger)
         .build();
   }
-
-  @PostConstruct
-  void initialise() {
-    delegate.initialiseStateListener();
-  }
-
-  // Delegate @RabbitListener, control-plane, and scheduled hooks to the helper
 }
 ```
 
-Subscribe your `@RabbitListener` endpoints to the same aliases exposed in configuration, for example
-`@RabbitListener(queues = "${pockethive.control-plane.queues.moderator}")`. The sample adapters in
-`examples/worker-starter` show how to delegate inbound delivery to the helper while keeping queue names in
-configuration.
-
-The helper registers control-plane listeners, converts AMQP messages via `RabbitWorkMessageConverter`, publishes
-`WorkResult.Message` payloads to the traffic exchange declared in `WorkerControlPlaneProperties`, and emits status
-snapshots/deltas so service adapters can focus on orchestration concerns rather than RabbitMQ plumbing. See the updated
-[`processor`](../../processor-service/src/main/java/io/pockethive/processor/ProcessorRuntimeAdapter.java),
-[`moderator`](../../moderator-service/src/main/java/io/pockethive/moderator/ModeratorRuntimeAdapter.java), and
-[`postprocessor`](../../postprocessor-service/src/main/java/io/pockethive/postprocessor/PostProcessorRuntimeAdapter.java)
-adapters for complete examples.
-
-> **Publisher configuration**
-> Provide either `.rabbitTemplate(...)` (for the default publishing behaviour) or a custom
-> `.messageResultPublisher(...)`. The builder fails fast when neither option is supplied so misconfigured workers do not
-> start.
-
-Generator/trigger style adapters remain available when you need scheduling or fan-in behaviour that differs from the
-message helper (for example, see the
-[`GeneratorRuntimeAdapter`](../../generator-service/src/main/java/io/pockethive/generator/GeneratorRuntimeAdapter.java)
-and [`TriggerRuntimeAdapter`](../../trigger-service/src/main/java/io/pockethive/trigger/TriggerRuntimeAdapter.java)).
+The auto-configured helper registers control-plane listeners, converts AMQP messages via `RabbitWorkMessageConverter`,
+publishes `WorkResult.Message` payloads to the traffic exchange declared in `WorkerControlPlaneProperties`, and emits status
+snapshots/deltas for every worker. Only workers with unusual transports need to provide factories like the trigger example
+above; generator, moderator, processor, and postprocessor all run on the shared factories described in
+`docs/sdk/worker-autoconfig-plan.md`.
 
 ## 5. Test with the SDK fixtures
 

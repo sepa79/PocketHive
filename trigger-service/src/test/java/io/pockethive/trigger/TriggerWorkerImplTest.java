@@ -1,7 +1,9 @@
 package io.pockethive.trigger;
 
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.worker.sdk.api.StatusPublisher;
+import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pockethive.worker.sdk.api.WorkResult;
 import io.pockethive.worker.sdk.api.WorkerContext;
 import io.pockethive.worker.sdk.api.WorkerInfo;
@@ -35,20 +37,21 @@ class TriggerWorkerImplTest {
   @Mock
   private HttpResponse<String> httpResponse;
 
-  private TriggerDefaults defaults;
+  private TriggerWorkerProperties properties;
   private TriggerWorkerImpl worker;
 
   @BeforeEach
   void setUp() throws Exception {
     MockitoAnnotations.openMocks(this);
-    defaults = new TriggerDefaults();
-    defaults.setEnabled(true);
-    defaults.setIntervalMs(500L);
-    defaults.setActionType("rest");
-    defaults.setUrl("https://example.com");
-    defaults.setMethod("POST");
-    defaults.setBody("{}\n");
-    defaults.setHeaders(Map.of("X-Test", "1"));
+    properties = new TriggerWorkerProperties(new ObjectMapper());
+    properties.setConfig(Map.of(
+        "intervalMs", 500,
+        "actionType", "rest",
+        "url", "https://example.com",
+        "method", "POST",
+        "body", "{}\n",
+        "headers", Map.of("X-Test", "1")
+    ));
 
     when(httpClient.send(any(HttpRequest.class), ArgumentMatchers.<HttpResponse.BodyHandler<String>>any()))
         .thenReturn(httpResponse);
@@ -56,13 +59,12 @@ class TriggerWorkerImplTest {
     when(httpResponse.body()).thenReturn("ok");
     when(httpResponse.headers()).thenReturn(HttpHeaders.of(Map.of(), (key, value) -> true));
 
-    worker = new TriggerWorkerImpl(defaults, httpClient);
+    worker = new TriggerWorkerImpl(properties, httpClient);
   }
 
   @Test
   void generateUsesConfigFromContext() throws Exception {
     TriggerWorkerConfig config = new TriggerWorkerConfig(
-        true,
         1000L,
         false,
         "rest",
@@ -74,7 +76,7 @@ class TriggerWorkerImplTest {
     );
     WorkerContext context = new TestWorkerContext(config, logger);
 
-    WorkResult result = worker.generate(context);
+    WorkResult result = worker.onMessage(WorkMessage.builder().build(), context);
 
     assertThat(result).isEqualTo(WorkResult.none());
     ArgumentCaptor<HttpRequest> requestCaptor = ArgumentCaptor.forClass(HttpRequest.class);
@@ -87,7 +89,7 @@ class TriggerWorkerImplTest {
   @Test
   void fallsBackToDefaultsWhenConfigMissing() {
     WorkerContext context = new TestWorkerContext(null, logger);
-    WorkResult result = worker.generate(context);
+    WorkResult result = worker.onMessage(WorkMessage.builder().build(), context);
     assertThat(result).isEqualTo(WorkResult.none());
   }
 
@@ -104,6 +106,11 @@ class TriggerWorkerImplTest {
     @Override
     public WorkerInfo info() {
       return new WorkerInfo("trigger", "swarm", "instance", null, null);
+    }
+
+    @Override
+    public boolean enabled() {
+      return true;
     }
 
     @Override

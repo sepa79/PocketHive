@@ -1,0 +1,33 @@
+id: local-rest-two-moderators
+name: Local REST - Double Moderator Chain
+description: Local images wired as generator → moderator A → moderator B → processor → postprocessor to demonstrate arbitrary IO chaining.
+template:
+  image: swarm-controller:latest
+  bees:
+    - role: generator
+      image: generator:latest
+      env:
+        POCKETHIVE_WORKERS_GENERATOR_CONFIG_RATEPERSEC: "5"
+      work:
+        out: gen-out
+    - role: moderator
+      instanceId: moderator-a
+      image: moderator:latest
+      work:
+        in: gen-out
+        out: moderator-a-out
+    - role: processor
+      image: processor:latest
+      work:
+        in: moderator-a-out
+        out: proc-out
+    - role: moderator
+      instanceId: moderator-b
+      image: moderator:latest
+      work:
+        in: proc-out
+        out: moderator-b-out
+    - role: postprocessor
+      image: postprocessor:latest
+      work:
+        in: moderator-b-out

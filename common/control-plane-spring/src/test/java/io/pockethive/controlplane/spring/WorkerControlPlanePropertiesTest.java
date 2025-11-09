@@ -3,31 +3,13 @@ package io.pockethive.controlplane.spring;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 class WorkerControlPlanePropertiesTest {
 
     @Test
-    void rejectsNullTrafficExchange() {
-        assertThatThrownBy(() -> buildProperties(null))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessage("pockethive.control-plane.traffic-exchange must not be null or blank");
-    }
-
-    @Test
-    void rejectsPlaceholderTrafficExchange() {
-        String placeholder = "${POCKETHIVE_CONTROL_PLANE_TRAFFIC_EXCHANGE}";
-        assertThatThrownBy(() -> buildProperties(placeholder))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessage(
-                "pockethive.control-plane.traffic-exchange must resolve to a concrete value, but was "
-                    + placeholder);
-    }
-
-    @Test
     void controlPlaneMetadataDerivedFromConfiguredIdentity() {
-        WorkerControlPlaneProperties properties = buildProperties("ph.swarm-alpha.hive");
+        WorkerControlPlaneProperties properties = buildProperties();
 
         WorkerControlPlaneProperties.ControlPlane controlPlane = properties.getControlPlane();
         assertThat(controlPlane.getControlQueueName())
@@ -38,8 +20,7 @@ class WorkerControlPlanePropertiesTest {
             .contains("sig.status-request.swarm-alpha.generator.{instance}");
     }
 
-    private static WorkerControlPlaneProperties buildProperties(String trafficExchange) {
-        Map<String, String> queues = Map.of("generator", "ph.swarm-alpha.generator");
+    private static WorkerControlPlaneProperties buildProperties() {
         WorkerControlPlaneProperties.Worker worker = new WorkerControlPlaneProperties.Worker(
             true,
             true,
@@ -57,11 +38,9 @@ class WorkerControlPlanePropertiesTest {
             true,
             true,
             "ph.control",
-            trafficExchange,
             "swarm-alpha",
             "worker-1",
             "ph.control",
-            queues,
             worker,
             swarmController);
     }

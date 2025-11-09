@@ -2,8 +2,14 @@ package io.pockethive.worker.sdk.runtime;
 
 import io.pockethive.worker.sdk.api.WorkerContext;
 import io.pockethive.worker.sdk.config.PocketHiveWorker;
-import io.pockethive.worker.sdk.config.WorkerType;
+import io.pockethive.worker.sdk.config.WorkInputConfig;
+import io.pockethive.worker.sdk.config.WorkOutputConfig;
+import io.pockethive.worker.sdk.config.WorkerCapability;
+import io.pockethive.worker.sdk.config.WorkerInputType;
+import io.pockethive.worker.sdk.config.WorkerOutputType;
 import java.util.Objects;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Captures metadata extracted from {@link PocketHiveWorker} annotations.
@@ -12,12 +18,17 @@ import java.util.Objects;
 public record WorkerDefinition(
     String beanName,
     Class<?> beanType,
-    WorkerType workerType,
+    WorkerInputType input,
     String role,
     String inQueue,
     String outQueue,
     String exchange,
-    Class<?> configType
+    Class<?> configType,
+    Class<? extends WorkInputConfig> inputConfigType,
+    Class<? extends WorkOutputConfig> outputConfigType,
+    WorkerOutputType outputType,
+    String description,
+    Set<WorkerCapability> capabilities
 ) {
 
     /**
@@ -25,22 +36,32 @@ public record WorkerDefinition(
      *
      * @param beanName   Spring bean name
      * @param beanType   underlying class of the bean
-     * @param workerType worker shape declared on the annotation
+     * @param input      input binding declared on the annotation
      * @param role       control-plane role identifier
      * @param inQueue    optional inbound queue name
      * @param outQueue   optional outbound queue name
      * @param exchange   optional exchange used for outbound traffic
-     * @param configType configuration class exposed to {@link WorkerContext#config(Class)}
+     * @param configType         worker-domain configuration exposed to {@link WorkerContext#config(Class)}
+     * @param inputConfigType    infrastructure input configuration class (scheduler, Rabbit, etc.)
+     * @param outputConfigType   infrastructure output configuration class
+     * @param outputType         output transport descriptor
+     * @param description        human readable description
+     * @param capabilities       worker capabilities consumed by scenario-manager/UI
      */
     public WorkerDefinition {
         beanName = requireText(beanName, "beanName");
         beanType = Objects.requireNonNull(beanType, "beanType");
-        workerType = Objects.requireNonNull(workerType, "workerType");
+        input = Objects.requireNonNull(input, "input");
         role = requireText(role, "role");
         inQueue = normalize(inQueue);
         outQueue = normalize(outQueue);
         exchange = normalize(exchange);
         configType = configType == null || configType == Void.class ? Void.class : configType;
+        inputConfigType = normalizeConfigClass(inputConfigType, WorkInputConfig.class);
+        outputConfigType = normalizeConfigClass(outputConfigType, WorkOutputConfig.class);
+        outputType = Objects.requireNonNull(outputType, "outputType");
+        description = normalize(description);
+        capabilities = normalizeCapabilities(capabilities);
     }
 
     private static String requireText(String value, String field) {
@@ -52,5 +73,19 @@ public record WorkerDefinition(
 
     private static String normalize(String value) {
         return value == null || value.isBlank() ? null : value;
+    }
+
+    private static <T> Class<? extends T> normalizeConfigClass(Class<? extends T> candidate, Class<T> fallback) {
+        if (candidate == null) {
+            return fallback;
+        }
+        return candidate;
+    }
+
+    private static Set<WorkerCapability> normalizeCapabilities(Set<WorkerCapability> values) {
+        if (values == null || values.isEmpty()) {
+            return Set.of();
+        }
+        return values.stream().filter(Objects::nonNull).collect(Collectors.toUnmodifiableSet());
     }
 }

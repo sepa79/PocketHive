@@ -2,6 +2,7 @@ package io.pockethive.worker.sdk.runtime;
 
 import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pockethive.worker.sdk.api.WorkResult;
+import io.pockethive.worker.sdk.output.WorkOutputRegistry;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -19,6 +20,7 @@ public final class DefaultWorkerRuntime implements WorkerRuntime {
     private final WorkerContextFactory contextFactory;
     private final WorkerStateStore workerStateStore;
     private final List<WorkerInvocationInterceptor> interceptors;
+    private final WorkOutputRegistry outputRegistry;
 
     private final Map<String, WorkerInvocation> invocations = new HashMap<>();
 
@@ -27,13 +29,15 @@ public final class DefaultWorkerRuntime implements WorkerRuntime {
         Function<Class<?>, Object> beanResolver,
         WorkerContextFactory contextFactory,
         WorkerStateStore workerStateStore,
-        List<WorkerInvocationInterceptor> interceptors
+        List<WorkerInvocationInterceptor> interceptors,
+        WorkOutputRegistry outputRegistry
     ) {
         this.registry = Objects.requireNonNull(registry, "registry");
         this.beanResolver = Objects.requireNonNull(beanResolver, "beanResolver");
         this.contextFactory = Objects.requireNonNull(contextFactory, "contextFactory");
         this.workerStateStore = Objects.requireNonNull(workerStateStore, "workerStateStore");
         this.interceptors = List.copyOf(interceptors);
+        this.outputRegistry = outputRegistry;
         initialiseInvocations();
     }
 
@@ -42,7 +46,6 @@ public final class DefaultWorkerRuntime implements WorkerRuntime {
             Object bean = beanResolver.apply(definition.beanType());
             WorkerState state = workerStateStore.getOrCreate(definition);
             WorkerInvocation invocation = new WorkerInvocation(
-                definition.workerType(),
                 bean,
                 contextFactory,
                 definition,
@@ -59,6 +62,10 @@ public final class DefaultWorkerRuntime implements WorkerRuntime {
         if (invocation == null) {
             throw new IllegalArgumentException("Unknown worker bean: " + workerBeanName);
         }
-        return invocation.invoke(message);
+        WorkResult result = invocation.invoke(message);
+        if (outputRegistry != null && result instanceof WorkResult.Message messageResult) {
+            outputRegistry.publish(invocation.definition(), messageResult);
+        }
+        return result;
     }
 }

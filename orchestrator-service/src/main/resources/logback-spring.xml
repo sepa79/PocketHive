@@ -51,6 +51,7 @@
   <logger name="com.rabbitmq" level="WARN" additivity="false">
     <appender-ref ref="CONSOLE"/>
   </logger>
+  <logger name="io.pockethive" level="DEBUG"/>
 
   <if condition='!"false".equalsIgnoreCase(property("rabbitLoggingEnabled"))'>
     <then>

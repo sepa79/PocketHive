@@ -1,11 +1,10 @@
 package io.pockethive.examples.starter.processor;
 
-import io.pockethive.worker.sdk.api.MessageWorker;
+import io.pockethive.worker.sdk.api.PocketHiveWorkerFunction;
 import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pockethive.worker.sdk.api.WorkResult;
 import io.pockethive.worker.sdk.api.WorkerContext;
 import io.pockethive.worker.sdk.config.PocketHiveWorker;
-import io.pockethive.worker.sdk.config.WorkerType;
 import java.util.Optional;
 import org.springframework.stereotype.Component;
 
@@ -15,11 +14,10 @@ import org.springframework.stereotype.Component;
 @Component("sampleProcessorWorker")
 @PocketHiveWorker(
     role = "processor",
-    type = WorkerType.MESSAGE,
     inQueue = "moderator",
     outQueue = "final"
 )
-class SampleProcessorWorker implements MessageWorker {
+class SampleProcessorWorker implements PocketHiveWorkerFunction {
 
   @Override
   public WorkResult onMessage(WorkMessage message, WorkerContext context) {

@@ -1,11 +1,13 @@
 package io.pockethive.generator;
 
-import io.pockethive.worker.sdk.api.GeneratorWorker;
+import io.pockethive.worker.sdk.api.PocketHiveWorkerFunction;
 import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pockethive.worker.sdk.api.WorkResult;
 import io.pockethive.worker.sdk.api.WorkerContext;
 import io.pockethive.worker.sdk.config.PocketHiveWorker;
-import io.pockethive.worker.sdk.config.WorkerType;
+import io.pockethive.worker.sdk.config.WorkerCapability;
+import io.pockethive.worker.sdk.config.WorkerInputType;
+import io.pockethive.worker.sdk.config.WorkerOutputType;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -17,7 +19,8 @@ import org.springframework.stereotype.Component;
 /**
  * PocketHive's generator service is the "source" side of the default swarm pipeline. It runs
  * alongside the orchestrator in most deployments and continuously emits HTTP request work items
- * into the generator queue configured via {@code pockethive.control-plane.queues.generator}.
+ * into the generator routing key configured via {@code pockethive.outputs.rabbit.routing-key}
+ * (typically sourced from {@code POCKETHIVE_OUTPUT_RABBIT_ROUTING_KEY}).
  * Junior engineers can think of it as the friendly robot that drafts the first message so
  * downstream moderators, processors, and post-processors have
  * something to act on. The queue name and worker type are set by {@link PocketHiveWorker}
@@ -25,9 +28,9 @@ import org.springframework.stereotype.Component;
  *
  * <p>When PocketHive boots the generator worker it resolves configuration in three stages:</p>
  * <ol>
- *   <li>Read {@code pockethive.control-plane.worker.generator.*} defaults from
- *       {@link GeneratorDefaults} (for example a
- *       {@code pockethive.control-plane.worker.generator.rate-per-sec} property in
+ *   <li>Read {@code pockethive.workers.generator.*} defaults from
+ *       {@link GeneratorWorkerProperties} (for example a
+ *       {@code pockethive.workers.generator.config.rate-per-sec} property in
  *       {@code application.yml}).</li>
  *   <li>Merge in any runtime overrides supplied by the control plane. Those show up in
  *       {@link WorkerContext#config(Class)}.</li>
@@ -44,29 +47,30 @@ import org.springframework.stereotype.Component;
 @Component("generatorWorker")
 @PocketHiveWorker(
     role = "generator",
-    type = WorkerType.GENERATOR,
+    input = WorkerInputType.SCHEDULER,
     outQueue = "generator",
+    output = WorkerOutputType.RABBITMQ,
+    capabilities = {WorkerCapability.SCHEDULER},
     config = GeneratorWorkerConfig.class
 )
-class GeneratorWorkerImpl implements GeneratorWorker {
+class GeneratorWorkerImpl implements PocketHiveWorkerFunction {
 
-  private final GeneratorDefaults defaults;
+  private final GeneratorWorkerProperties properties;
 
   @Autowired
-  GeneratorWorkerImpl(GeneratorDefaults defaults) {
-    this.defaults = defaults;
+  GeneratorWorkerImpl(GeneratorWorkerProperties properties) {
+    this.properties = properties;
   }
 
   /**
    * Builds a {@link WorkMessage} ready for the moderator queue. The method pulls generator
    * settings from the {@link WorkerContext} (control-plane overrides) or falls back to
-   * {@link GeneratorDefaults}. Expect a nested {@code message} object with keys like
+   * {@link GeneratorWorkerProperties}. Expect a nested {@code message} object with keys like
    * {@code path}, {@code method}, {@code body}, and {@code headers}—they mirror the fields in
    * {@link GeneratorWorkerConfig}. A sample override payload looks like:
    *
    * <pre>{@code
    * {
-   *   "enabled": true,
    *   "ratePerSec": 1.5,
    *   "singleRequest": false,
    *   "message": {
@@ -99,9 +103,9 @@ class GeneratorWorkerImpl implements GeneratorWorker {
    *     the configured generator queue.
    */
   @Override
-  public WorkResult generate(WorkerContext context) {
+  public WorkResult onMessage(WorkMessage seed, WorkerContext context) {
     GeneratorWorkerConfig config = context.config(GeneratorWorkerConfig.class)
-        .orElseGet(defaults::asConfig);
+        .orElseGet(properties::defaultConfig);
     String outboundQueue = context.info().outQueue();
     context.statusPublisher()
         .workOut(outboundQueue)
@@ -109,7 +113,7 @@ class GeneratorWorkerImpl implements GeneratorWorker {
             .data("path", config.message().path())
             .data("method", config.message().method())
             .data("ratePerSec", config.ratePerSec())
-            .data("enabled", config.enabled())
+            .data("enabled", context.enabled())
             .data("singleRequest", config.singleRequest()));
     return WorkResult.message(buildMessage(config, context));
   }

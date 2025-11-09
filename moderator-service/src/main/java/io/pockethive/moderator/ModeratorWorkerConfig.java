@@ -1,6 +1,10 @@
 package io.pockethive.moderator;
 
-public record ModeratorWorkerConfig(boolean enabled, Mode mode) {
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonValue;
+import java.util.Locale;
+
+public record ModeratorWorkerConfig(Mode mode) {
 
   public ModeratorWorkerConfig {
     mode = mode == null ? Mode.passThrough() : mode;
@@ -10,22 +14,22 @@ public record ModeratorWorkerConfig(boolean enabled, Mode mode) {
     return mode.toOperationMode();
   }
 
-  public record Mode(Type type, RatePerSec ratePerSec, Sine sine) {
+  public record Mode(Type type, double ratePerSec, Sine sine) {
 
     public Mode {
       type = type == null ? Type.PASS_THROUGH : type;
-      ratePerSec = ratePerSec == null ? RatePerSec.DEFAULT : ratePerSec;
+      ratePerSec = sanitiseRate(ratePerSec);
       sine = sine == null ? Sine.DEFAULT : sine;
     }
 
     static Mode passThrough() {
-      return new Mode(Type.PASS_THROUGH, RatePerSec.DEFAULT, Sine.DEFAULT);
+      return new Mode(Type.PASS_THROUGH, 0.0, Sine.DEFAULT);
     }
 
     ModeratorOperationMode toOperationMode() {
       return switch (type) {
         case PASS_THROUGH -> ModeratorOperationMode.passThrough();
-        case RATE_PER_SEC -> ModeratorOperationMode.ratePerSec(ratePerSec.value());
+        case RATE_PER_SEC -> ModeratorOperationMode.ratePerSec(ratePerSec);
         case SINE -> ModeratorOperationMode.sine(
             sine.minRatePerSec(),
             sine.maxRatePerSec(),
@@ -37,14 +41,29 @@ public record ModeratorWorkerConfig(boolean enabled, Mode mode) {
     public enum Type {
       PASS_THROUGH,
       RATE_PER_SEC,
-      SINE
-    }
+      SINE;
 
-    public record RatePerSec(double value) {
-      static final RatePerSec DEFAULT = new RatePerSec(0.0);
+      @JsonCreator
+      public static Type fromString(String raw) {
+        if (raw == null) {
+          return PASS_THROUGH;
+        }
+        String normalized = raw.trim();
+        if (normalized.isEmpty()) {
+          return PASS_THROUGH;
+        }
+        normalized = normalized.replace('-', '_').replace(' ', '_');
+        try {
+          return Type.valueOf(normalized.toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException ex) {
+          throw new IllegalArgumentException(
+              "Unsupported moderator mode type '%s'".formatted(raw), ex);
+        }
+      }
 
-      public RatePerSec {
-        value = sanitiseRate(value);
+      @JsonValue
+      public String jsonValue() {
+        return name().toLowerCase(Locale.ROOT).replace('_', '-');
       }
     }
 

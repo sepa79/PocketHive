@@ -3,12 +3,14 @@ package io.pockethive.processor;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import io.pockethive.worker.sdk.api.MessageWorker;
+import io.pockethive.worker.sdk.api.PocketHiveWorkerFunction;
 import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pockethive.worker.sdk.api.WorkResult;
 import io.pockethive.worker.sdk.api.WorkerContext;
 import io.pockethive.worker.sdk.config.PocketHiveWorker;
-import io.pockethive.worker.sdk.config.WorkerType;
+import io.pockethive.worker.sdk.config.WorkerCapability;
+import io.pockethive.worker.sdk.config.WorkerInputType;
+import io.pockethive.worker.sdk.config.WorkerOutputType;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -27,14 +29,14 @@ import org.springframework.stereotype.Component;
 /**
  * PocketHive message worker that performs the "processor" hop inside the default swarm pipeline.
  * <p>
- * The worker is wired into the moderator queue configured under
- * {@code pockethive.control-plane.queues.moderator} and receives
+ * The worker is wired into the moderator queue configured via {@code pockethive.inputs.rabbit.queue}
+ * (typically provided through {@code POCKETHIVE_INPUT_RABBIT_QUEUE}) and receives
  * {@link WorkMessage} payloads that typically originate from the orchestrator. For every incoming
  * message we resolve configuration from the {@link WorkerContext}:
  * <ul>
  *   <li>If control plane overrides exist they are surfaced through
  *       {@link WorkerContext#config(Class)}; otherwise we fall back to
- *       {@link ProcessorDefaults#asConfig()} which points to {@code http://localhost:8082} and
+ *       {@link ProcessorWorkerProperties#defaultConfig()} which points to {@code http://localhost:8082} and
  *       enables the worker by default.</li>
  *   <li>The resolved {@link ProcessorWorkerConfig#baseUrl() baseUrl} becomes the target for HTTP
  *       enrichment. You can override it through control-plane config payloads such as
@@ -45,7 +47,8 @@ import org.springframework.stereotype.Component;
  * </ul>
  * Once configured, the worker performs an outbound HTTP call using the payload's {@code path},
  * {@code method}, {@code headers}, and {@code body} fields. Success and failure paths both emit a
- * {@link WorkResult} to the final queue, and the runtime's observability interceptor adds the hop
+ * {@link WorkResult} to the configured final routing key
+ * ({@code pockethive.outputs.rabbit.routing-key}), and the runtime's observability interceptor adds the hop
  * metadata so downstream services can trace the request.
  * <p>
  * The defaults above can be tweaked by editing {@code processor-service/src/main/resources}
@@ -55,19 +58,21 @@ import org.springframework.stereotype.Component;
 @Component("processorWorker")
 @PocketHiveWorker(
     role = "processor",
-    type = WorkerType.MESSAGE,
+    input = WorkerInputType.RABBIT,
     inQueue = "moderator",
     outQueue = "final",
+    output = WorkerOutputType.RABBITMQ,
+    capabilities = {WorkerCapability.MESSAGE_DRIVEN, WorkerCapability.HTTP},
     config = ProcessorWorkerConfig.class
 )
-class ProcessorWorkerImpl implements MessageWorker {
+class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
 
   private static final ObjectMapper MAPPER = new ObjectMapper();
   private static final String HEADER_DURATION = "x-ph-processor-duration-ms";
   private static final String HEADER_SUCCESS = "x-ph-processor-success";
   private static final String HEADER_STATUS = "x-ph-processor-status";
 
-  private final ProcessorDefaults defaults;
+  private final ProcessorWorkerProperties properties;
   private final HttpClient httpClient;
   private final Clock clock;
   private final LongAdder totalCalls = new LongAdder();
@@ -75,12 +80,12 @@ class ProcessorWorkerImpl implements MessageWorker {
   private final DoubleAccumulator totalLatencyMs = new DoubleAccumulator(Double::sum, 0.0);
 
   @Autowired
-  ProcessorWorkerImpl(ProcessorDefaults defaults) {
-    this(defaults, HttpClient.newHttpClient(), Clock.systemUTC());
+  ProcessorWorkerImpl(ProcessorWorkerProperties properties) {
+    this(properties, HttpClient.newHttpClient(), Clock.systemUTC());
   }
 
-  ProcessorWorkerImpl(ProcessorDefaults defaults, HttpClient httpClient, Clock clock) {
-    this.defaults = Objects.requireNonNull(defaults, "defaults");
+  ProcessorWorkerImpl(ProcessorWorkerProperties properties, HttpClient httpClient, Clock clock) {
+    this.properties = Objects.requireNonNull(properties, "properties");
     this.httpClient = Objects.requireNonNull(httpClient, "httpClient");
     this.clock = Objects.requireNonNull(clock, "clock");
   }
@@ -93,7 +98,7 @@ class ProcessorWorkerImpl implements MessageWorker {
    * <ol>
    *   <li><strong>Configuration resolution</strong> – We first look for a runtime override via
    *       {@link WorkerContext#config(Class)}. When none is present the worker falls back to
-   *       {@link ProcessorDefaults#asConfig()} (enabled with {@code baseUrl=http://localhost:8082}).
+   *       {@link ProcessorWorkerProperties#defaultConfig()} (enabled with {@code baseUrl=http://localhost:8082}).
    *       The active configuration is echoed to the control plane through
    *       {@link WorkerContext#statusPublisher()} for easy debugging.</li>
    *   <li><strong>HTTP invocation</strong> – Using {@link #invokeHttp(WorkMessage, ProcessorWorkerConfig, Logger)}
@@ -116,7 +121,7 @@ class ProcessorWorkerImpl implements MessageWorker {
   @Override
   public WorkResult onMessage(WorkMessage in, WorkerContext context) {
     ProcessorWorkerConfig config = context.config(ProcessorWorkerConfig.class)
-        .orElseGet(defaults::asConfig);
+        .orElseGet(properties::defaultConfig);
 
     Logger logger = context.logger();
     try {
@@ -239,7 +244,7 @@ class ProcessorWorkerImpl implements MessageWorker {
         .workOut(outboundQueue)
         .update(status -> status
             .data("baseUrl", config.baseUrl())
-            .data("enabled", config.enabled())
+            .data("enabled", context.enabled())
             .data("transactions", totalCalls.sum())
             .data("successRatio", successRatio())
             .data("avgLatencyMs", averageLatencyMs()));

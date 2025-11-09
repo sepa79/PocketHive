@@ -13,12 +13,29 @@ import io.pockethive.controlplane.spring.WorkerControlPlaneProperties;
 import io.pockethive.controlplane.topology.ControlPlaneTopologyDescriptor;
 import io.pockethive.controlplane.worker.WorkerControlPlane;
 import io.pockethive.worker.sdk.config.PocketHiveWorker;
+import io.pockethive.worker.sdk.config.PocketHiveWorkerProperties;
+import io.pockethive.worker.sdk.config.RabbitInputProperties;
+import io.pockethive.worker.sdk.config.RabbitOutputProperties;
+import io.pockethive.worker.sdk.config.SchedulerInputProperties;
+import io.pockethive.worker.sdk.config.WorkInputConfig;
+import io.pockethive.worker.sdk.config.WorkInputConfigBinder;
+import io.pockethive.worker.sdk.input.WorkInputLifecycle;
+import io.pockethive.worker.sdk.input.WorkInputRegistry;
+import io.pockethive.worker.sdk.input.WorkInputRegistryInitializer;
+import io.pockethive.worker.sdk.input.rabbit.RabbitWorkInputFactory;
+import io.pockethive.worker.sdk.input.rabbit.RabbitWorkInputListenerConfigurer;
+import io.pockethive.worker.sdk.input.SchedulerWorkInputFactory;
 import io.pockethive.worker.sdk.metrics.PrometheusPushGatewayProperties;
+import io.pockethive.worker.sdk.config.WorkOutputConfig;
+import io.pockethive.worker.sdk.config.WorkOutputConfigBinder;
+import io.pockethive.worker.sdk.config.WorkerCapability;
+import io.pockethive.worker.sdk.config.WorkerInputType;
 import io.pockethive.worker.sdk.runtime.DefaultWorkerContextFactory;
 import io.pockethive.worker.sdk.runtime.DefaultWorkerRuntime;
 import io.pockethive.worker.sdk.runtime.WorkerContextFactory;
 import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
+import io.pockethive.worker.sdk.config.WorkerOutputType;
 import io.pockethive.worker.sdk.runtime.WorkerMetricsInterceptor;
 import io.pockethive.worker.sdk.runtime.WorkerObservabilityInterceptor;
 import io.pockethive.worker.sdk.runtime.WorkerRegistry;
@@ -27,11 +44,18 @@ import io.pockethive.worker.sdk.runtime.WorkerStateStore;
 import io.pockethive.worker.sdk.runtime.WorkerStatusScheduler;
 import io.pockethive.worker.sdk.runtime.WorkerStatusSchedulerProperties;
 import io.pockethive.worker.sdk.runtime.WorkerInvocationInterceptor;
+import io.pockethive.worker.sdk.output.NoopWorkOutputFactory;
+import io.pockethive.worker.sdk.output.WorkOutputFactory;
+import io.pockethive.worker.sdk.output.WorkOutputLifecycle;
+import io.pockethive.worker.sdk.output.WorkOutputRegistry;
+import io.pockethive.worker.sdk.output.WorkOutputRegistryInitializer;
+import io.pockethive.worker.sdk.output.RabbitWorkOutputFactory;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
+import java.util.Collections;
+import java.util.EnumSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.ListableBeanFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -39,11 +63,17 @@ import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.amqp.rabbit.annotation.RabbitListenerConfigurer;
+import org.springframework.amqp.rabbit.listener.RabbitListenerEndpointRegistry;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
+import org.springframework.core.env.ConfigurableEnvironment;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 
 /**
  * Aggregates the PocketHive control-plane auto-configuration so worker applications can
@@ -69,11 +99,18 @@ public class PocketHiveWorkerSdkAutoConfiguration {
     @ConditionalOnMissingBean
     WorkerRegistry workerRegistry(
         ListableBeanFactory beanFactory,
-        ObjectProvider<WorkerControlPlaneProperties> workerProperties
+        ObjectProvider<WorkerControlPlaneProperties> workerProperties,
+        WorkInputConfigBinder workInputConfigBinder,
+        WorkOutputConfigBinder workOutputConfigBinder
     ) {
-        WorkerControlPlaneProperties properties = workerProperties.getIfAvailable();
-        Map<String, String> queueAliases = buildQueueAliasMap(properties);
         String[] beanNames = beanFactory.getBeanNamesForAnnotation(PocketHiveWorker.class);
+        if (beanNames.length == 0) {
+            throw new IllegalStateException("No @PocketHiveWorker beans were discovered in this service");
+        }
+        if (beanNames.length > 1) {
+            throw new IllegalStateException(
+                "Multiple @PocketHiveWorker beans are not supported. Found: %s".formatted(String.join(", ", beanNames)));
+        }
         List<WorkerDefinition> definitions = new ArrayList<>(beanNames.length);
         for (String beanName : beanNames) {
             PocketHiveWorker annotation = beanFactory.findAnnotationOnBean(beanName, PocketHiveWorker.class);
@@ -83,18 +120,58 @@ public class PocketHiveWorkerSdkAutoConfiguration {
             Class<?> beanType = Objects.requireNonNull(beanFactory.getType(beanName),
                 () -> "Unable to resolve bean type for worker '" + beanName + "'");
             Class<?> configType = annotation.config();
+            Class<? extends WorkInputConfig> inputConfigType = resolveInputConfigType(annotation);
+            Class<? extends WorkOutputConfig> outputConfigType = resolveOutputConfigType(annotation);
+            WorkerOutputType outputType = annotation.output();
+            String description = annotation.description();
+            Set<WorkerCapability> capabilities = resolveCapabilities(annotation);
+            WorkInputConfig inputConfig = workInputConfigBinder.bind(annotation.input(), inputConfigType);
+            WorkOutputConfig outputConfig = workOutputConfigBinder.bind(outputType, outputConfigType);
+            IoSettings io = resolveIo(annotation, inputConfig, outputConfig, workInputConfigBinder, workOutputConfigBinder);
             definitions.add(new WorkerDefinition(
                 beanName,
                 beanType,
-                annotation.type(),
+                annotation.input(),
                 annotation.role(),
-                resolveQueue(annotation.inQueue(), queueAliases),
-                resolveQueue(annotation.outQueue(), queueAliases),
-                resolveExchange(properties),
-                configType
+                io.inQueue(),
+                io.outQueue(),
+                io.exchange(),
+                configType,
+                inputConfigType,
+                outputConfigType,
+                outputType,
+                description,
+                capabilities
             ));
         }
         return new WorkerRegistry(definitions);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    WorkInputRegistry workInputRegistry() {
+        return new WorkInputRegistry();
+    }
+
+    @Bean
+    @ConditionalOnBean({WorkerRegistry.class, WorkInputRegistry.class})
+    @ConditionalOnMissingBean
+    WorkInputRegistryInitializer workInputRegistryInitializer(
+        WorkerRegistry workerRegistry,
+        WorkInputRegistry workInputRegistry,
+        WorkInputConfigBinder workInputConfigBinder,
+        ObjectProvider<List<io.pockethive.worker.sdk.input.WorkInputFactory>> factoriesProvider
+    ) {
+        List<io.pockethive.worker.sdk.input.WorkInputFactory> factories =
+            factoriesProvider.getIfAvailable(Collections::emptyList);
+        return new WorkInputRegistryInitializer(workerRegistry, workInputRegistry, workInputConfigBinder, factories);
+    }
+
+    @Bean
+    @ConditionalOnBean(WorkInputRegistry.class)
+    @ConditionalOnMissingBean
+    WorkInputLifecycle workInputLifecycle(WorkInputRegistry workInputRegistry) {
+        return new WorkInputLifecycle(workInputRegistry);
     }
 
     @Bean
@@ -126,10 +203,12 @@ public class PocketHiveWorkerSdkAutoConfiguration {
         ConfigurableListableBeanFactory beanFactory,
         WorkerContextFactory workerContextFactory,
         WorkerStateStore workerStateStore,
-        ObjectProvider<WorkerInvocationInterceptor> interceptorProvider
+        ObjectProvider<WorkerInvocationInterceptor> interceptorProvider,
+        ObjectProvider<io.pockethive.worker.sdk.output.WorkOutputRegistry> outputRegistryProvider
     ) {
         List<WorkerInvocationInterceptor> interceptors = interceptorProvider.orderedStream().toList();
-        return new DefaultWorkerRuntime(workerRegistry, beanFactory::getBean, workerContextFactory, workerStateStore, interceptors);
+        io.pockethive.worker.sdk.output.WorkOutputRegistry outputs = outputRegistryProvider.getIfAvailable();
+        return new DefaultWorkerRuntime(workerRegistry, beanFactory::getBean, workerContextFactory, workerStateStore, interceptors, outputs);
     }
 
     @Bean
@@ -170,6 +249,107 @@ public class PocketHiveWorkerSdkAutoConfiguration {
     }
 
     @Bean
+    @ConditionalOnBean({WorkerControlPlaneRuntime.class, WorkerRegistry.class})
+    @ConditionalOnMissingBean
+    PocketHiveWorkerDefaultsInitializer pocketHiveWorkerDefaultsInitializer(
+        WorkerRegistry workerRegistry,
+        WorkerControlPlaneRuntime controlPlaneRuntime,
+        ObjectProvider<List<PocketHiveWorkerProperties<?>>> propertiesProvider
+    ) {
+        List<PocketHiveWorkerProperties<?>> properties = propertiesProvider.getIfAvailable(Collections::emptyList);
+        return new PocketHiveWorkerDefaultsInitializer(workerRegistry, controlPlaneRuntime, properties);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    WorkInputConfigBinder workInputConfigBinder(ConfigurableEnvironment environment) {
+        return new WorkInputConfigBinder(Binder.get(environment));
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    WorkOutputRegistry workOutputRegistry() {
+        return new WorkOutputRegistry();
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    WorkOutputConfigBinder workOutputConfigBinder(ConfigurableEnvironment environment) {
+        return new WorkOutputConfigBinder(Binder.get(environment));
+    }
+
+    @Bean
+    @ConditionalOnBean({WorkOutputRegistry.class, WorkerRegistry.class})
+    @ConditionalOnMissingBean
+    WorkOutputRegistryInitializer workOutputRegistryInitializer(
+        WorkerRegistry workerRegistry,
+        WorkOutputRegistry workOutputRegistry,
+        WorkOutputConfigBinder binder,
+        ObjectProvider<List<WorkOutputFactory>> factoriesProvider
+    ) {
+        List<WorkOutputFactory> factories = factoriesProvider.getIfAvailable(Collections::emptyList);
+        return new WorkOutputRegistryInitializer(workerRegistry, workOutputRegistry, binder, factories);
+    }
+
+    @Bean
+    @ConditionalOnBean(WorkOutputRegistry.class)
+    @ConditionalOnMissingBean
+    WorkOutputLifecycle workOutputLifecycle(WorkOutputRegistry workOutputRegistry) {
+        return new WorkOutputLifecycle(workOutputRegistry);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    WorkOutputFactory noopWorkOutputFactory() {
+        return new NoopWorkOutputFactory();
+    }
+
+    @Bean
+    @ConditionalOnBean(RabbitTemplate.class)
+    WorkOutputFactory rabbitWorkOutputFactory(RabbitTemplate rabbitTemplate) {
+        return new RabbitWorkOutputFactory(rabbitTemplate);
+    }
+
+    @Bean
+    @ConditionalOnBean({WorkerRuntime.class, WorkerControlPlaneRuntime.class})
+    @ConditionalOnProperty(prefix = "pockethive.worker.inputs", name = "autowire", havingValue = "true")
+    io.pockethive.worker.sdk.input.WorkInputFactory schedulerWorkInputFactory(
+        WorkerRuntime workerRuntime,
+        WorkerControlPlaneRuntime controlPlaneRuntime,
+        @Qualifier("workerControlPlaneIdentity") ControlPlaneIdentity identity,
+        ObjectMapper objectMapper,
+        ObjectProvider<List<PocketHiveWorkerProperties<?>>> propertiesProvider
+    ) {
+        List<PocketHiveWorkerProperties<?>> properties = propertiesProvider.getIfAvailable(Collections::emptyList);
+        return new SchedulerWorkInputFactory(workerRuntime, controlPlaneRuntime, identity, objectMapper, properties);
+    }
+
+    @Bean
+    @ConditionalOnBean({WorkerRuntime.class, WorkerControlPlaneRuntime.class, RabbitTemplate.class, RabbitListenerEndpointRegistry.class})
+    @ConditionalOnProperty(prefix = "pockethive.worker.inputs", name = "autowire", havingValue = "true")
+    io.pockethive.worker.sdk.input.WorkInputFactory rabbitWorkInputFactory(
+        WorkerRuntime workerRuntime,
+        WorkerControlPlaneRuntime controlPlaneRuntime,
+        @Qualifier("workerControlPlaneIdentity") ControlPlaneIdentity identity,
+        RabbitTemplate rabbitTemplate,
+        RabbitListenerEndpointRegistry listenerRegistry,
+        ObjectProvider<List<PocketHiveWorkerProperties<?>>> propertiesProvider
+    ) {
+        List<PocketHiveWorkerProperties<?>> properties = propertiesProvider.getIfAvailable(Collections::emptyList);
+        return new RabbitWorkInputFactory(workerRuntime, controlPlaneRuntime, identity, rabbitTemplate, listenerRegistry, properties);
+    }
+
+    @Bean
+    @ConditionalOnBean({WorkerRegistry.class, WorkInputRegistry.class})
+    @ConditionalOnProperty(prefix = "pockethive.worker.inputs", name = "autowire", havingValue = "true")
+    RabbitListenerConfigurer rabbitWorkInputListenerConfigurer(
+        WorkerRegistry workerRegistry,
+        WorkInputRegistry workInputRegistry
+    ) {
+        return new RabbitWorkInputListenerConfigurer(workerRegistry, workInputRegistry);
+    }
+
+    @Bean
     @ConditionalOnMissingBean
     WorkerInvocationInterceptor workerObservabilityInterceptor() {
         return new WorkerObservabilityInterceptor();
@@ -185,46 +365,90 @@ public class PocketHiveWorkerSdkAutoConfiguration {
         return new WorkerMetricsInterceptor(meterRegistry);
     }
 
-    private static Map<String, String> buildQueueAliasMap(
-        WorkerControlPlaneProperties properties
+    private static Set<WorkerCapability> resolveCapabilities(PocketHiveWorker annotation) {
+        WorkerCapability[] values = annotation.capabilities();
+        if (values == null || values.length == 0) {
+            return Set.of();
+        }
+        EnumSet<WorkerCapability> set = EnumSet.noneOf(WorkerCapability.class);
+        for (WorkerCapability capability : values) {
+            if (capability != null) {
+                set.add(capability);
+            }
+        }
+        return Set.copyOf(set);
+    }
+
+    private IoSettings resolveIo(
+        PocketHiveWorker annotation,
+        WorkInputConfig inputConfig,
+        WorkOutputConfig outputConfig,
+        WorkInputConfigBinder inputBinder,
+        WorkOutputConfigBinder outputBinder
     ) {
-        if (properties == null) {
-            return Map.of();
-        }
-        Map<String, String> aliases = new LinkedHashMap<>();
-        properties.getQueues().names().forEach((key, value) -> {
-            String alias = normalise(key);
-            if (alias != null) {
-                aliases.put(alias, value);
+        String inQueue = normalise(annotation.inQueue());
+        if (annotation.input() == WorkerInputType.RABBIT) {
+            if (!(inputConfig instanceof RabbitInputProperties rabbit)) {
+                throw new IllegalStateException(
+                    "Rabbit inputs require " + RabbitInputProperties.class.getSimpleName() + " configuration");
             }
-        });
-        WorkerControlPlaneProperties.ControlPlane controlPlane = properties.getControlPlane();
-        if (controlPlane != null) {
-            String controlQueue = controlPlane.getControlQueueName();
-            if (controlQueue != null) {
-                String trimmed = controlQueue.trim();
-                if (!trimmed.isEmpty()) {
-                    aliases.putIfAbsent("control", trimmed);
-                }
+            String queue = normalise(rabbit.getQueue());
+            if (queue == null) {
+                throw new IllegalStateException(
+                    "Rabbit workers must configure an input queue via %s.queue".formatted(
+                        inputBinder.prefix(annotation.input())));
             }
+            inQueue = queue;
         }
-        return aliases;
+        String outQueue = normalise(annotation.outQueue());
+        String exchange = null;
+        if (annotation.output() == WorkerOutputType.RABBITMQ) {
+            if (!(outputConfig instanceof RabbitOutputProperties rabbit)) {
+                throw new IllegalStateException(
+                    "Rabbit outputs require " + RabbitOutputProperties.class.getSimpleName() + " configuration");
+            }
+            String routingKey = normalise(rabbit.getRoutingKey());
+            String configuredExchange = normalise(rabbit.getExchange());
+            if (routingKey == null) {
+                throw new IllegalStateException(
+                    "Rabbit workers must configure an output routing key via %s.routingKey".formatted(
+                        outputBinder.prefix(annotation.output())));
+            }
+            if (configuredExchange == null) {
+                throw new IllegalStateException(
+                    "Rabbit workers must configure an output exchange via %s.exchange".formatted(
+                        outputBinder.prefix(annotation.output())));
+            }
+            outQueue = routingKey;
+            exchange = configuredExchange;
+        }
+        return new IoSettings(inQueue, outQueue, exchange);
     }
 
-    private static String resolveExchange(WorkerControlPlaneProperties properties) {
-        if (properties == null) {
-            return null;
-        }
-        return normalise(properties.getTrafficExchange());
+    private record IoSettings(String inQueue, String outQueue, String exchange) {
     }
 
-    private static String resolveQueue(String queue, Map<String, String> aliases) {
-        String candidate = normalise(queue);
-        if (candidate == null) {
-            return null;
+    private static Class<? extends WorkInputConfig> resolveInputConfigType(PocketHiveWorker annotation) {
+        Class<? extends WorkInputConfig> configured = annotation.inputConfig();
+        if (configured != WorkInputConfig.class) {
+            return configured;
         }
-        String resolved = aliases.get(candidate);
-        return resolved != null ? resolved : candidate;
+        return switch (annotation.input()) {
+            case SCHEDULER -> SchedulerInputProperties.class;
+            case RABBIT -> RabbitInputProperties.class;
+            default -> WorkInputConfig.class;
+        };
+    }
+
+    private static Class<? extends WorkOutputConfig> resolveOutputConfigType(PocketHiveWorker annotation) {
+        Class<? extends WorkOutputConfig> configured = annotation.outputConfig();
+        if (configured != WorkOutputConfig.class) {
+            return configured;
+        }
+        return switch (annotation.output()) {
+            case RABBITMQ -> RabbitOutputProperties.class;
+            default -> WorkOutputConfig.class;
+        };
     }
 
     private static String normalise(String value) {

@@ -22,6 +22,7 @@ const config: UIConfig = {
   rabbitmq: `/rabbitmq`,
   prometheus: `/prometheus`,
   grafana: `/grafana`,
+  // grafana: `http://${host}:3333`,
   wiremock: `http://${host}:8080/__admin/`,
   stompUrl: `/ws`,
   stompUser: readOnlyUser,
