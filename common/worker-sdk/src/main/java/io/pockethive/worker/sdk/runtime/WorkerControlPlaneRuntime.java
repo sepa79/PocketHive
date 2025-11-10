@@ -583,14 +583,15 @@ public final class WorkerControlPlaneRuntime {
             if (description != null) {
                 workerEntry.put("description", description);
             }
-            if (def.inQueue() != null) {
-                workerEntry.put("inQueue", def.inQueue());
+            WorkIoBindings io = def.io();
+            if (io.inboundQueue() != null) {
+                workerEntry.put("inQueue", io.inboundQueue());
             }
-            if (def.outQueue() != null) {
-                workerEntry.put("outQueue", def.outQueue());
+            if (io.outboundQueue() != null) {
+                workerEntry.put("outQueue", io.outboundQueue());
             }
-            if (def.exchange() != null) {
-                workerEntry.put("exchange", def.exchange());
+            if (io.outboundExchange() != null) {
+                workerEntry.put("exchange", io.outboundExchange());
             }
             if (!def.capabilities().isEmpty()) {
                 List<String> capabilities = def.capabilities().stream()
@@ -757,21 +758,21 @@ public final class WorkerControlPlaneRuntime {
          * Returns the inbound queue if declared on the worker definition.
          */
         public Optional<String> inboundQueue() {
-            return Optional.ofNullable(state.definition().inQueue());
+            return Optional.ofNullable(state.definition().io().inboundQueue());
         }
 
         /**
          * Returns the outbound queue if declared on the worker definition.
          */
         public Optional<String> outboundQueue() {
-            return Optional.ofNullable(state.definition().outQueue());
+            return Optional.ofNullable(state.definition().io().outboundQueue());
         }
 
         /**
          * Returns the outbound exchange if declared on the worker definition.
          */
         public Optional<String> exchange() {
-            return Optional.ofNullable(state.definition().exchange());
+            return Optional.ofNullable(state.definition().io().outboundExchange());
         }
 
         /**

@@ -7,6 +7,7 @@ import io.pockethive.worker.sdk.config.WorkerInputType;
 import io.pockethive.worker.sdk.config.WorkerOutputType;
 import io.pockethive.worker.sdk.input.WorkInput;
 import io.pockethive.worker.sdk.input.WorkInputRegistry;
+import io.pockethive.worker.sdk.runtime.WorkIoBindings;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
 import io.pockethive.worker.sdk.runtime.WorkerRegistry;
 import java.util.List;
@@ -42,9 +43,7 @@ class RabbitWorkInputListenerConfigurerTest {
             TestWorker.class,
             WorkerInputType.RABBIT,
             "moderator",
-            "ph.swarm.generator",
-            "ph.swarm.moderator",
-            "ph.control",
+            WorkIoBindings.of("ph.swarm.generator", "ph.swarm.moderator", "ph.control"),
             TestConfig.class,
             WorkInputConfig.class,
             WorkOutputConfig.class,

@@ -7,6 +7,7 @@ import io.pockethive.worker.sdk.config.WorkInputConfigBinder;
 import io.pockethive.worker.sdk.config.WorkerCapability;
 import io.pockethive.worker.sdk.config.WorkerInputType;
 import io.pockethive.worker.sdk.config.WorkerOutputType;
+import io.pockethive.worker.sdk.runtime.WorkIoBindings;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
 import io.pockethive.worker.sdk.runtime.WorkerRegistry;
 import java.util.List;
@@ -26,9 +27,7 @@ class WorkInputRegistryInitializerTest {
             Object.class,
             WorkerInputType.RABBIT,
             "test",
-            null,
-            null,
-            null,
+            WorkIoBindings.none(),
             Void.class,
             WorkInputConfig.class,
             WorkOutputConfigStub.class,
@@ -69,9 +68,7 @@ class WorkInputRegistryInitializerTest {
             Object.class,
             WorkerInputType.RABBIT,
             "test",
-            null,
-            null,
-            null,
+            WorkIoBindings.none(),
             Void.class,
             WorkInputConfig.class,
             WorkOutputConfigStub.class,

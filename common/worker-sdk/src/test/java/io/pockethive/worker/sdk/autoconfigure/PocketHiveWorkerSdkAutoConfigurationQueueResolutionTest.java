@@ -37,9 +37,9 @@ class PocketHiveWorkerSdkAutoConfigurationQueueResolutionTest {
             WorkerRegistry registry = context.getBean(WorkerRegistry.class);
             Optional<WorkerDefinition> definition = registry.find("processorWorker");
             assertThat(definition).isPresent();
-            assertThat(definition.get().inQueue()).isEqualTo("ph.swarm-alpha.mod");
-            assertThat(definition.get().outQueue()).isEqualTo("ph.swarm-alpha.final");
-            assertThat(definition.get().exchange()).isEqualTo("ph.swarm-alpha.hive");
+            assertThat(definition.get().io().inboundQueue()).isEqualTo("ph.swarm-alpha.mod");
+            assertThat(definition.get().io().outboundQueue()).isEqualTo("ph.swarm-alpha.final");
+            assertThat(definition.get().io().outboundExchange()).isEqualTo("ph.swarm-alpha.hive");
         });
     }
 
@@ -131,9 +131,7 @@ class PocketHiveWorkerSdkAutoConfigurationQueueResolutionTest {
     @PocketHiveWorker(
         role = "processor",
         input = WorkerInputType.RABBIT,
-        output = WorkerOutputType.RABBITMQ,
-        inQueue = "moderator",
-        outQueue = "final"
+        output = WorkerOutputType.RABBITMQ
     )
     static class ProcessorWorker implements PocketHiveWorkerFunction {
 

@@ -8,6 +8,7 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+- Worker SDK & workers: introduce `WorkIoBindings` so runtime uses swarm-plan IO config exclusively, remove all `inQueue/outQueue` defaults from service workers and starter samples, update SDK auto-config/listeners/outputs/status wiring plus tests to consume the plan-driven queues, and record the migration progress in `docs/sdk/remove-inqueue-outqueue-plan.md`.
 - Swarm Controller queue guard: surface the active `trafficPolicy.bufferGuard` block in the controller’s status payloads and capability manifest so Hive UI can inspect the plan-driven bracket/rate settings directly via the existing Capabilities endpoint.
 - Guard scenarios/documentation:
   - Update `local-rest-two-moderators` with guard-focused queue alias, tuned bracket, logging defaults, and WireMock latency notes.

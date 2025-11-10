@@ -48,7 +48,6 @@ import org.springframework.stereotype.Component;
 @PocketHiveWorker(
     role = "generator",
     input = WorkerInputType.SCHEDULER,
-    outQueue = "generator",
     output = WorkerOutputType.RABBITMQ,
     capabilities = {WorkerCapability.SCHEDULER},
     config = GeneratorWorkerConfig.class
@@ -106,9 +105,7 @@ class GeneratorWorkerImpl implements PocketHiveWorkerFunction {
   public WorkResult onMessage(WorkMessage seed, WorkerContext context) {
     GeneratorWorkerConfig config = context.config(GeneratorWorkerConfig.class)
         .orElseGet(properties::defaultConfig);
-    String outboundQueue = context.info().outQueue();
     context.statusPublisher()
-        .workOut(outboundQueue)
         .update(status -> status
             .data("path", config.message().path())
             .data("method", config.message().method())

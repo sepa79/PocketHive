@@ -20,9 +20,7 @@ public record WorkerDefinition(
     Class<?> beanType,
     WorkerInputType input,
     String role,
-    String inQueue,
-    String outQueue,
-    String exchange,
+    WorkIoBindings io,
     Class<?> configType,
     Class<? extends WorkInputConfig> inputConfigType,
     Class<? extends WorkOutputConfig> outputConfigType,
@@ -38,9 +36,7 @@ public record WorkerDefinition(
      * @param beanType   underlying class of the bean
      * @param input      input binding declared on the annotation
      * @param role       control-plane role identifier
-     * @param inQueue    optional inbound queue name
-     * @param outQueue   optional outbound queue name
-     * @param exchange   optional exchange used for outbound traffic
+     * @param io         resolved work-queue bindings
      * @param configType         worker-domain configuration exposed to {@link WorkerContext#config(Class)}
      * @param inputConfigType    infrastructure input configuration class (scheduler, Rabbit, etc.)
      * @param outputConfigType   infrastructure output configuration class
@@ -53,9 +49,7 @@ public record WorkerDefinition(
         beanType = Objects.requireNonNull(beanType, "beanType");
         input = Objects.requireNonNull(input, "input");
         role = requireText(role, "role");
-        inQueue = normalize(inQueue);
-        outQueue = normalize(outQueue);
-        exchange = normalize(exchange);
+        io = io == null ? WorkIoBindings.none() : io;
         configType = configType == null || configType == Void.class ? Void.class : configType;
         inputConfigType = normalizeConfigClass(inputConfigType, WorkInputConfig.class);
         outputConfigType = normalizeConfigClass(outputConfigType, WorkOutputConfig.class);
@@ -71,10 +65,6 @@ public record WorkerDefinition(
         return value;
     }
 
-    private static String normalize(String value) {
-        return value == null || value.isBlank() ? null : value;
-    }
-
     private static <T> Class<? extends T> normalizeConfigClass(Class<? extends T> candidate, Class<T> fallback) {
         if (candidate == null) {
             return fallback;
@@ -88,4 +78,9 @@ public record WorkerDefinition(
         }
         return values.stream().filter(Objects::nonNull).collect(Collectors.toUnmodifiableSet());
     }
+
+    private static String normalize(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
+    }
+
 }

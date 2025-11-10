@@ -35,7 +35,7 @@
 
 2. **SDK Enforcement**
    - Extend `PocketHiveWorkerSdkAutoConfiguration` to assert exactly one `@PocketHiveWorker` bean is present; emit a clear error otherwise.
-   - Remove queue alias resolution from `WorkerRegistry`. `WorkerDefinition.inQueue/outQueue` should be populated from the applicable IO configs (see next section).
+   - Remove queue alias resolution from `WorkerRegistry`. `WorkIoBindings` should be populated from the applicable IO configs (see next section).
    - Add validation to `RabbitWorkInputFactory`/`RabbitWorkOutputFactory` to ensure queue, exchange, and routing-key values are present when the worker declares Rabbit input/output. Raise `IllegalStateException` with actionable guidance if missing.
 
 3. **Config Binding Changes**

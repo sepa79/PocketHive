@@ -12,6 +12,7 @@ import io.pockethive.worker.sdk.config.WorkOutputConfig;
 import io.pockethive.worker.sdk.config.WorkerCapability;
 import io.pockethive.worker.sdk.config.WorkerInputType;
 import io.pockethive.worker.sdk.config.WorkerOutputType;
+import io.pockethive.worker.sdk.runtime.WorkIoBindings;
 import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
 import io.pockethive.worker.sdk.runtime.WorkerRegistry;
@@ -41,9 +42,7 @@ class PocketHiveWorkerDefaultsInitializerTest {
             Object.class,
             WorkerInputType.RABBIT,
             "test-role",
-            null,
-            null,
-            null,
+            WorkIoBindings.none(),
             TestWorkerConfig.class,
             WorkInputConfig.class,
             WorkOutputConfig.class,

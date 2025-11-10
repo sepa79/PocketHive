@@ -34,7 +34,6 @@ adapter such as RabbitMQ. Return `WorkResult.message(...)` to emit downstream wo
 @PocketHiveWorker(
     role = "generator",
     input = WorkerInputType.SCHEDULER,
-    outQueue = "ph.swarm-alpha.gen",
     config = GeneratorWorkerConfig.class
 )
 class GeneratorWorkerImpl implements PocketHiveWorkerFunction {
@@ -62,8 +61,6 @@ class GeneratorWorkerImpl implements PocketHiveWorkerFunction {
 @Component("processorWorker")
 @PocketHiveWorker(
     role = "processor",
-    inQueue = "ph.swarm-alpha.mod",
-    outQueue = "ph.swarm-alpha.final",
     config = ProcessorWorkerConfig.class
 )
 class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
@@ -79,8 +76,7 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
     ProcessorWorkerConfig config = context.config(ProcessorWorkerConfig.class)
         .orElseGet(properties::defaultConfig);
     context.statusPublisher()
-        .workIn(context.info().inQueue())
-        .workOut(context.info().outQueue())
+        .update(status -> status.data("queue", "ph.swarm-alpha.mod"))
         .update(status -> status.data("baseUrl", config.baseUrl()));
     WorkMessage enriched = invokeHttpAndEnrich(in, context, config);
     return WorkResult.message(enriched);
@@ -90,9 +86,9 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
 
 The full implementations live in the `generator-service` and `processor-service` modules.
 
-> The concrete queue names in the annotation examples are illustrative. Configure the values via
-> `pockethive.inputs.<type>` / `pockethive.outputs.<type>` (or the corresponding `POCKETHIVE_INPUT_RABBIT_QUEUE`
-> / `POCKETHIVE_OUTPUT_RABBIT_*` environment variables) and keep the annotation in sync with that configuration.
+> Queue names come from `pockethive.inputs.<type>` / `pockethive.outputs.<type>` (or the corresponding
+> `POCKETHIVE_INPUT_RABBIT_QUEUE` / `POCKETHIVE_OUTPUT_RABBIT_*` variables) which the Swarm Controller injects
+> from the active swarm plan. The annotation only declares the worker role/capabilities—no on-bean queue defaults remain.
 
 ### `WorkMessage`
 
@@ -113,7 +109,7 @@ The control-plane runtime bridges the SDK with the control-plane topic. It appli
 ## Putting it together
 
 1. Add the `worker-sdk` dependency to your service.
-2. Annotate business beans with `@PocketHiveWorker`, selecting the appropriate input binding (Rabbit by default) and queues.
+2. Annotate business beans with `@PocketHiveWorker`, selecting the appropriate input binding (Rabbit by default). Queue bindings are provided by the swarm plan via `pockethive.inputs/outputs.*`.
 3. Implement `PocketHiveWorkerFunction` and return `WorkResult` instances.
 4. Enable `pockethive.worker.inputs.autowire=true` (the default) so the SDK wires the Rabbit or scheduler inputs/outputs for each annotated worker. Only build custom `WorkInputFactory` implementations when you truly need a bespoke transport.
 5. Use `WorkerContext` for config, metrics, observability, and status reporting.

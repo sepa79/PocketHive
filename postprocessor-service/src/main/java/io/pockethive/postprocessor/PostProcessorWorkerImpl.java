@@ -56,7 +56,6 @@ import org.springframework.stereotype.Component;
 @PocketHiveWorker(
     role = "postprocessor",
     input = WorkerInputType.RABBIT,
-    inQueue = "final",
     output = WorkerOutputType.NONE,
     capabilities = {WorkerCapability.MESSAGE_DRIVEN},
     config = PostProcessorWorkerConfig.class
@@ -129,8 +128,7 @@ class PostProcessorWorkerImpl implements PocketHiveWorkerFunction {
               processorStats);
     }
 
-    String inboundQueue = context.info().inQueue();
-    StatusPublisher publisher = context.statusPublisher().workIn(inboundQueue);
+    StatusPublisher publisher = context.statusPublisher();
     publisher.update(status -> {
       status
           .data("enabled", context.enabled())

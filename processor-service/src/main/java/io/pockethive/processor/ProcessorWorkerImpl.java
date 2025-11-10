@@ -59,8 +59,6 @@ import org.springframework.stereotype.Component;
 @PocketHiveWorker(
     role = "processor",
     input = WorkerInputType.RABBIT,
-    inQueue = "moderator",
-    outQueue = "final",
     output = WorkerOutputType.RABBITMQ,
     capabilities = {WorkerCapability.MESSAGE_DRIVEN, WorkerCapability.HTTP},
     config = ProcessorWorkerConfig.class
@@ -237,11 +235,7 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
   }
 
   private void publishStatus(WorkerContext context, ProcessorWorkerConfig config) {
-    String inboundQueue = context.info().inQueue();
-    String outboundQueue = context.info().outQueue();
     context.statusPublisher()
-        .workIn(inboundQueue)
-        .workOut(outboundQueue)
         .update(status -> status
             .data("baseUrl", config.baseUrl())
             .data("enabled", context.enabled())
