@@ -61,6 +61,7 @@ class DockerConfigurationTest {
                 LOGS_EXCHANGE,
                 new SwarmControllerProperties.Logging(true)),
             METRICS,
-            docker));
+            docker,
+            new SwarmControllerProperties.Features(false)));
   }
 }

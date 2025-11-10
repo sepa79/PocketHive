@@ -4,7 +4,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.orchestrator.app.ScenarioClient;
 import io.pockethive.orchestrator.config.OrchestratorProperties;
 import io.pockethive.orchestrator.domain.ScenarioPlan;
-import io.pockethive.swarm.model.SwarmTemplate;
 import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -45,7 +44,7 @@ public class ScenarioManagerClient implements ScenarioClient {
     }
 
     @Override
-    public SwarmTemplate fetchTemplate(String templateId) throws Exception {
+    public ScenarioPlan fetchScenario(String templateId) throws Exception {
         String url = baseUrl + "/scenarios/" + templateId;
         log.info("fetching template {} from {}", templateId, url);
         HttpRequest req = HttpRequest.newBuilder()
@@ -58,8 +57,7 @@ public class ScenarioManagerClient implements ScenarioClient {
         if (resp.statusCode() != 200) {
             throw new IllegalStateException("template fetch status " + resp.statusCode());
         }
-        ScenarioPlan scenario = json.readValue(resp.body(), ScenarioPlan.class);
-        return scenario.template();
+        return json.readValue(resp.body(), ScenarioPlan.class);
     }
 
     private static Duration resolveTimeout(Duration candidate, Duration fallback) {

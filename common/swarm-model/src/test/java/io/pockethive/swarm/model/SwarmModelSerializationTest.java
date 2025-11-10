@@ -13,9 +13,20 @@ class SwarmModelSerializationTest {
 
     @Test
     void roundTripsSwarmPlanWithEnv() throws Exception {
+        BufferGuardPolicy guard = new BufferGuardPolicy(
+            true,
+            "genToMod",
+            200,
+            150,
+            260,
+            "5s",
+            3,
+            new BufferGuardPolicy.Adjustment(10, 15, 5, 5000),
+            new BufferGuardPolicy.Prefill(true, "2m", 20),
+            new BufferGuardPolicy.Backpressure("modToProc", 500, 300, 15));
         SwarmPlan plan = new SwarmPlan("swarm-1", List.of(
             new Bee("generator", "img", new Work("in", "out"), Map.of("K", "V"))
-        ));
+        ), new TrafficPolicy(guard));
 
         String json = mapper.writeValueAsString(plan);
         SwarmPlan restored = mapper.readValue(json, SwarmPlan.class);
@@ -27,6 +38,9 @@ class SwarmModelSerializationTest {
         assertEquals("img", bee.image());
         assertNotNull(bee.env());
         assertEquals("V", bee.env().get("K"));
+        assertNotNull(restored.trafficPolicy());
+        assertNotNull(restored.trafficPolicy().bufferGuard());
+        assertEquals("genToMod", restored.trafficPolicy().bufferGuard().queueAlias());
     }
 
     @Test

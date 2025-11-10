@@ -9,6 +9,10 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 - Swarm Controller queue guard: surface the active `trafficPolicy.bufferGuard` block in the controller’s status payloads and capability manifest so Hive UI can inspect the plan-driven bracket/rate settings directly via the existing Capabilities endpoint.
+- Guard scenarios/documentation:
+  - Update `local-rest-two-moderators` with guard-focused queue alias, tuned bracket, logging defaults, and WireMock latency notes.
+  - Add `local-rest-two-moderators-randomized` plus `/api/guarded-random` WireMock mappings to demo bursty/backpressure control.
+  - Extend `docs/USAGE.md` + `docs/observability.md` with guard launch/tuning instructions and a monitoring runbook.
 
 ## [0.13.6] - 2025-11-09
 Timestamp: 2025-11-09T00:00:00Z

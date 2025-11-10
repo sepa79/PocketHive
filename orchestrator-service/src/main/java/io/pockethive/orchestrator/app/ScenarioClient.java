@@ -1,10 +1,10 @@
 package io.pockethive.orchestrator.app;
 
-import io.pockethive.swarm.model.SwarmTemplate;
+import io.pockethive.orchestrator.domain.ScenarioPlan;
 
 /**
  * Client for retrieving swarm templates.
  */
 public interface ScenarioClient {
-    SwarmTemplate fetchTemplate(String templateId) throws Exception;
+    ScenarioPlan fetchScenario(String templateId) throws Exception;
 }

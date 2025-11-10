@@ -1,6 +1,7 @@
 package io.pockethive.scenarios;
 
 import io.pockethive.swarm.model.SwarmTemplate;
+import io.pockethive.swarm.model.TrafficPolicy;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 
@@ -12,14 +13,28 @@ public class Scenario {
     private String description;
     @Valid
     private SwarmTemplate template;
+    @Valid
+    private TrafficPolicy trafficPolicy;
 
     public Scenario() {}
 
-    public Scenario(String id, String name, String description, SwarmTemplate template) {
+    public Scenario(String id,
+                    String name,
+                    String description,
+                    SwarmTemplate template,
+                    TrafficPolicy trafficPolicy) {
         this.id = id;
         this.name = name;
         this.description = description;
         this.template = template;
+        this.trafficPolicy = trafficPolicy;
+    }
+
+    public Scenario(String id,
+                    String name,
+                    String description,
+                    SwarmTemplate template) {
+        this(id, name, description, template, null);
     }
 
     public String getId() {
@@ -52,5 +67,13 @@ public class Scenario {
 
     public void setTemplate(SwarmTemplate template) {
         this.template = template;
+    }
+
+    public TrafficPolicy getTrafficPolicy() {
+        return trafficPolicy;
+    }
+
+    public void setTrafficPolicy(TrafficPolicy trafficPolicy) {
+        this.trafficPolicy = trafficPolicy;
     }
 }

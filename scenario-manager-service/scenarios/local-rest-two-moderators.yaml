@@ -1,6 +1,6 @@
 id: local-rest-two-moderators
 name: Local REST - Double Moderator Chain
-description: Local images wired as generator → moderator A → processor → moderator B → postprocessor to demonstrate arbitrary IO chaining.
+description: Local images wired as generator → moderator A → processor → moderator B → postprocessor. Guard monitors `moderator-a-out` against a deterministic WireMock delay to showcase steady-state buffer control.
 trafficPolicy:
   bufferGuard:
     enabled: true
@@ -8,15 +8,15 @@ trafficPolicy:
     targetDepth: 200
     minDepth: 150
     maxDepth: 260
-    samplePeriod: 5s
+    samplePeriod: 5
     movingAverageWindow: 4
     adjust:
       maxIncreasePct: 10
-      maxDecreasePct: 15
+      maxDecreasePct: 20
       minRatePerSec: 1
       maxRatePerSec: 50
     prefill:
-      enabled: true
+      enabled: false
       lookahead: 2m
       liftPct: 25
     backpressure:
@@ -30,7 +30,7 @@ template:
     - role: generator
       image: generator:latest
       env:
-        POCKETHIVE_WORKERS_GENERATOR_CONFIG_RATEPERSEC: "40"
+        POCKETHIVE_WORKERS_GENERATOR_CONFIG_RATEPERSEC: "10"
         POCKETHIVE_WORKERS_GENERATOR_CONFIG_MESSAGE_PATH: "/api/guarded"
         POCKETHIVE_WORKERS_GENERATOR_CONFIG_MESSAGE_BODY: "guarded-request"
       work:
@@ -40,7 +40,7 @@ template:
       image: moderator:latest
       env:
         POCKETHIVE_WORKERS_MODERATOR_CONFIG_MODE_TYPE: rate-per-sec
-        POCKETHIVE_WORKERS_MODERATOR_CONFIG_MODE_RATEPERSEC: "25"
+        POCKETHIVE_WORKERS_MODERATOR_CONFIG_MODE_RATEPERSEC: "5"
       work:
         in: gen-out
         out: moderator-a-out

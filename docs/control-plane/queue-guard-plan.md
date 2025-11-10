@@ -99,6 +99,12 @@ trafficPolicy:
 - If scenario toggles guard off mid-run, gracefully exit and hand control back to static `ratePerSec`.
 - For multi-generator swarms, ensure overrides target the correct instance IDs provided in the scenario (align with `docs/ORCHESTRATOR-REST.md` contracts).
 
+### 4.4 Feature Flag vs Scenario Opt-in
+
+- Guard logic is globally gated by `POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_FEATURES_BUFFER_GUARD_ENABLED` (defaults to `true` via `application.yml`). Setting it to `false` disables **all** guard behaviour without touching scenarios—useful as an emergency kill-switch.
+- Individual swarms still opt in via `trafficPolicy.bufferGuard.enabled`. Even with the feature flag on, no guard controller spins up unless the active scenario sets this flag to `true`.
+- Document the relationship in operator runbooks so teams know they can leave the env var enabled everywhere and control guard usage entirely through scenarios.
+
 ## 5) Scenario & Tooling Updates
 
 1. **Scenario schemas** — Update scenario-manager validation + JSON schemas to include the `trafficPolicy.bufferGuard` section with defaults and docs.
@@ -130,3 +136,32 @@ Each phase ends with targeted tests (unit + integration). Phase B requires Rabbi
 2. Controller logs/metrics clearly show guard state and resulting `ratePerSec` overrides.
 3. Integration test demonstrates queue depth maintained within ±20% of target during steady state, and backpressure event results in coordinated slowdown and recovery.
 4. Documentation updated (architecture overview, scenario authoring, runbooks) referencing `trafficPolicy.bufferGuard`.
+
+## 9) Implementation Tasks (update as work completes)
+
+- ### Phase A – Config + Schema
+  - [x] Define `trafficPolicy.bufferGuard` schema (YAML + JSON) and publish docs/examples.
+  - [x] Update scenario-manager validation + linting to enforce the schema and defaults.
+  - [x] Add controller feature flag + config parsing with safe fallbacks.
+
+- ### Phase B – Telemetry + Control Loop
+  - [x] Implement queue-depth sampler and moving-average smoothing per queue alias.
+  - [x] Build buffer guard state machine, clamped `ratePerSec` adjustments, and control-plane override plumbing.
+  - [x] Expose guard metrics/logs (`buffer_guard_*`) and add dashboards/panels.
+
+- ### Phase C – Prefill & Backpressure
+  - [x] Wire Moderator spike schedule + guard lookahead for prefill behavior.
+  - [x] Integrate downstream queue monitoring + coordinated Moderator/Generator slowdown on backpressure.
+  - [x] Extend integration tests to cover spike prefill and backpressure recovery paths.
+
+- ### Phase D – Tooling & Docs
+  - [x] Add sample scenarios (e.g., `local-rest-two-moderators.yaml`) showcasing guard config.
+  - [ ] Update operator docs (`docs/USAGE.md`, scenario authoring guides) with tuning guidance.
+  - [ ] Document runbook steps + dashboards for monitoring guard performance.
+
+Mark the checkboxes as each task ships so stakeholders can see progress inline with the plan.
+
+## 10) Architecture & Exposure Follow-ups
+
+- [x] Extract the guard logic into a reusable component/class rather than embedding it directly in `SwarmLifecycleManager`.
+- [x] Move guard settings into the swarm-controller config/capabilities response so the UI can load them via the existing Capabilities endpoint (enforcing “plan data only, no fallback”).

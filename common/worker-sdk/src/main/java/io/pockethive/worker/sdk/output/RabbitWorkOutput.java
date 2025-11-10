@@ -29,9 +29,27 @@ public final class RabbitWorkOutput implements WorkOutput {
             throw new IllegalStateException("Cannot publish worker result without exchange and routing key");
         }
         MessageProperties props = new MessageProperties();
-        props.setContentType(MessageProperties.CONTENT_TYPE_BYTES);
         props.setDeliveryMode(properties.isPersistent() ? MessageDeliveryMode.PERSISTENT : MessageDeliveryMode.NON_PERSISTENT);
+        applyHeaders(result, props);
+        if (props.getContentType() == null) {
+            props.setContentType(MessageProperties.CONTENT_TYPE_BYTES);
+        }
         Message outbound = new Message(result.value().body(), props);
         rabbitTemplate.send(exchange, routingKey, outbound);
+    }
+
+    private void applyHeaders(WorkResult.Message result, MessageProperties props) {
+        var headers = result.value().headers();
+        if (headers == null || headers.isEmpty()) {
+            return;
+        }
+        headers.forEach(props::setHeader);
+        Object explicitContentType = headers.get("content-type");
+        if (explicitContentType == null) {
+            explicitContentType = headers.get("content_type");
+        }
+        if (explicitContentType != null) {
+            props.setContentType(explicitContentType.toString());
+        }
     }
 }

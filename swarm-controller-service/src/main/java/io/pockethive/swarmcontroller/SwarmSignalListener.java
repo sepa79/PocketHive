@@ -18,6 +18,7 @@ import io.pockethive.controlplane.messaging.EventMessage;
 import io.pockethive.controlplane.messaging.SignalMessage;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.controlplane.routing.ControlPlaneRouting.RoutingKey;
+import io.pockethive.swarm.model.TrafficPolicy;
 import io.pockethive.swarmcontroller.config.SwarmControllerProperties;
 import io.pockethive.swarmcontroller.SwarmMetrics;
 import io.pockethive.swarmcontroller.SwarmStatus;
@@ -713,7 +714,7 @@ public class SwarmSignalListener {
     String controlQueue = properties.controlQueueName(role, instanceId);
     ConfirmationScope scope = ConfirmationScope.forInstance(swarmId, role, instanceId);
     String rk = ControlPlaneRouting.event("status-full", scope);
-    String payload = new StatusEnvelopeBuilder()
+    StatusEnvelopeBuilder builder = new StatusEnvelopeBuilder()
         .kind("status-full")
         .role(role)
         .instance(instanceId)
@@ -730,8 +731,9 @@ public class SwarmSignalListener {
         .queueStats(toQueueStatsPayload(queueSnapshot))
         .controlIn(controlQueue)
         .controlRoutes(controllerControlRoutes())
-        .controlOut(rk)
-        .toJson();
+        .controlOut(rk);
+    appendTrafficPolicy(builder);
+    String payload = builder.toJson();
     sendControl(rk, payload, "status");
   }
 
@@ -744,7 +746,7 @@ public class SwarmSignalListener {
     String controlQueue = properties.controlQueueName(role, instanceId);
     ConfirmationScope scope = ConfirmationScope.forInstance(swarmId, role, instanceId);
     String rk = ControlPlaneRouting.event("status-delta", scope);
-    String payload = new StatusEnvelopeBuilder()
+    StatusEnvelopeBuilder builder = new StatusEnvelopeBuilder()
         .kind("status-delta")
         .role(role)
         .instance(instanceId)
@@ -761,8 +763,9 @@ public class SwarmSignalListener {
         .queueStats(toQueueStatsPayload(queueSnapshot))
         .controlIn(controlQueue)
         .controlRoutes(controllerControlRoutes())
-        .controlOut(rk)
-        .toJson();
+        .controlOut(rk);
+    appendTrafficPolicy(builder);
+    String payload = builder.toJson();
     sendControl(rk, payload, "status");
   }
 
@@ -786,6 +789,16 @@ public class SwarmSignalListener {
       payload.put(queueName, values);
     }
     return payload;
+  }
+
+  private void appendTrafficPolicy(StatusEnvelopeBuilder builder) {
+    if (builder == null) {
+      return;
+    }
+    TrafficPolicy policy = lifecycle.trafficPolicy();
+    if (policy != null) {
+      builder.data("trafficPolicy", policy);
+    }
   }
 
   private String determineState(SwarmMetrics m) {
