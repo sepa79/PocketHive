@@ -6,6 +6,10 @@ All notable changes to this project will be documented in this file.
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+- Swarm Controller queue guard: surface the active `trafficPolicy.bufferGuard` block in the controller’s status payloads and capability manifest so Hive UI can inspect the plan-driven bracket/rate settings directly via the existing Capabilities endpoint.
+
 ## [0.13.6] - 2025-11-09
 Timestamp: 2025-11-09T00:00:00Z
 

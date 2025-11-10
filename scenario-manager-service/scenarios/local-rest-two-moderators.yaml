@@ -1,18 +1,46 @@
 id: local-rest-two-moderators
 name: Local REST - Double Moderator Chain
-description: Local images wired as generator → moderator A → moderator B → processor → postprocessor to demonstrate arbitrary IO chaining.
+description: Local images wired as generator → moderator A → processor → moderator B → postprocessor to demonstrate arbitrary IO chaining.
+trafficPolicy:
+  bufferGuard:
+    enabled: true
+    queueAlias: gen-out
+    targetDepth: 200
+    minDepth: 150
+    maxDepth: 260
+    samplePeriod: 5s
+    movingAverageWindow: 4
+    adjust:
+      maxIncreasePct: 10
+      maxDecreasePct: 15
+      minRatePerSec: 1
+      maxRatePerSec: 50
+    prefill:
+      enabled: true
+      lookahead: 2m
+      liftPct: 25
+    backpressure:
+      queueAlias: moderator-a-out
+      highDepth: 500
+      recoveryDepth: 250
+      moderatorReductionPct: 20
 template:
   image: swarm-controller:latest
   bees:
     - role: generator
       image: generator:latest
       env:
-        POCKETHIVE_WORKERS_GENERATOR_CONFIG_RATEPERSEC: "5"
+        POCKETHIVE_WORKERS_GENERATOR_CONFIG_RATEPERSEC: "40"
+        POCKETHIVE_WORKERS_GENERATOR_CONFIG_MESSAGE_PATH: "/api/guarded"
+        POCKETHIVE_WORKERS_GENERATOR_CONFIG_MESSAGE_BODY: "guarded-request"
       work:
         out: gen-out
     - role: moderator
       instanceId: moderator-a
       image: moderator:latest
+      env:
+        POCKETHIVE_WORKERS_MODERATOR_CONFIG_MODE_TYPE: rate-per-sec
+        POCKETHIVE_WORKERS_MODERATOR_CONFIG_MODE_RATEPERSEC: "25"
       work:
         in: gen-out
         out: moderator-a-out
@@ -24,6 +52,12 @@ template:
     - role: moderator
       instanceId: moderator-b
       image: moderator:latest
+      env:
+        POCKETHIVE_WORKERS_MODERATOR_CONFIG_MODE_TYPE: sine
+        POCKETHIVE_WORKERS_MODERATOR_CONFIG_MODE_SINE_MINRATEPERSEC: "5"
+        POCKETHIVE_WORKERS_MODERATOR_CONFIG_MODE_SINE_MAXRATEPERSEC: "100"
+        POCKETHIVE_WORKERS_MODERATOR_CONFIG_MODE_SINE_PERIODSECONDS: "45"
+        POCKETHIVE_WORKERS_MODERATOR_CONFIG_MODE_SINE_PHASEOFFSETSECONDS: "0"
       work:
         in: proc-out
         out: moderator-b-out
