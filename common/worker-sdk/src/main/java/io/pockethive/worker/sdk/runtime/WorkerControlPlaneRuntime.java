@@ -772,7 +772,7 @@ public final class WorkerControlPlaneRuntime {
          * Returns the outbound exchange if declared on the worker definition.
          */
         public Optional<String> exchange() {
-            return Optional.ofNullable(state.definition().exchange());
+            return Optional.ofNullable(state.definition().io().outboundExchange());
         }
 
         /**

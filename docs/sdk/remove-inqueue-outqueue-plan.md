@@ -8,12 +8,12 @@
 
 ### SDK touch points & replacement sources (2025-02-03)
 
-| Area | Files | Why it uses `inQueue/outQueue` today | Future source of truth |
+| Area | Files | Why it used `inQueue/outQueue` | Future source of truth |
 | --- | --- | --- | --- |
-| Listener wiring | `common/worker-sdk/.../RabbitWorkInputListenerConfigurer.java` | Uses `WorkerDefinition.inQueue()` to decide which queue the listener container binds to. | Use `RabbitInputProperties.getQueue()` (`pockethive.inputs.rabbit.queue`, injected from `POCKETHIVE_INPUT_RABBIT_QUEUE`, which Swarm Controller sets from `SwarmPlan.bees[*].work.in`). |
-| Output routing | `common/worker-sdk/.../RabbitWorkOutput.java`, `RabbitMessageWorkerAdapter` | Falls back to `WorkerDefinition.outQueue()` (and `exchange`) when the worker properties don’t specify overrides. | Always read `RabbitOutputProperties.getRoutingKey()/getExchange` sourced from `pockethive.outputs.rabbit.*` (`POCKETHIVE_OUTPUT_RABBIT_*`, populated from `work.out`). |
-| Worker context exposure | `DefaultWorkerContextFactory`, `WorkerInfo` | Builds `WorkerInfo` from the definition so user code (`context.info().inQueue()`) sees the annotation defaults. | `WorkerInfo` should be hydrated from the resolved IO configs (`RabbitInputProperties.queue`, `RabbitOutputProperties.routingKey/exchange`) that already mirror the plan/env. |
-| Runtime state & status payloads | `WorkerState`, `WorkerControlPlaneRuntime` | Mirrors `definition.inQueue/outQueue` into the status document for UI consumers. | Emit `queues.work` from the resolved IO config / plan metadata; drop legacy `inQueue` key entirely per `docs/spec/control-events.schema.json`. |
+| Listener wiring | `common/worker-sdk/.../RabbitWorkInputListenerConfigurer.java` | Previously called `WorkerDefinition.inQueue()` to decide which queue the listener container binds to. | Use `RabbitInputProperties.getQueue()`/`WorkIoBindings.inboundQueue()` (set from `POCKETHIVE_INPUT_RABBIT_QUEUE`, which Swarm Controller maps from `SwarmPlan.bees[*].work.in`). |
+| Output routing | `common/worker-sdk/.../RabbitWorkOutput.java`, `RabbitMessageWorkerAdapter` | Fell back to `WorkerDefinition.outQueue()` (and `exchange`) when the worker properties didn’t specify overrides. | Always read `RabbitOutputProperties.getRoutingKey()/getExchange` or the derived `WorkIoBindings.outbound*` values sourced from `pockethive.outputs.rabbit.*` (`POCKETHIVE_OUTPUT_RABBIT_*`, populated from `work.out`). |
+| Worker context exposure | `DefaultWorkerContextFactory`, `WorkerInfo` | Previously used the definition queues so user code (`context.info().inQueue()`) saw annotation defaults. | `WorkerInfo` now hydrates from the resolved IO configs / `WorkIoBindings`, which already mirror the plan/env. |
+| Runtime state & status payloads | `WorkerState`, `WorkerControlPlaneRuntime` | Mirrored `definition.inQueue/outQueue` into the status document for UI consumers. | Emit `queues.work` from the resolved IO config / plan metadata via `WorkIoBindings`, dropping legacy fields per `docs/spec/control-events.schema.json`. |
 | Auto-configuration | `PocketHiveWorkerSdkAutoConfiguration` | Normalises `@PocketHiveWorker.inQueue/outQueue`, stashes them in `WorkerDefinition`, and only overrides them when `pockethive.inputs/outputs` are present. | Remove the annotation plumbing; fail fast unless the inputs/outputs configs (which already come from env -> plan) are set. |
 | Tests | `DefaultWorkerRuntimeTest`, `WorkerInvocationTest`, `PocketHiveWorkerSdkAutoConfigurationQueueResolutionTest`, `WorkerControlPlaneRuntimeTest`, etc. | Assert the current fallback behaviour. | Update tests to assert the IO configs/env vars are required; no references to annotation queues. |
 
@@ -30,8 +30,8 @@ The Swarm Controller already injects `POCKETHIVE_INPUT_RABBIT_QUEUE` / `POCKETHI
 - [ ] Ensure the orchestrator/control-plane emits those values into worker env/config (no missing fields) and fails fast when they’re absent instead of falling back to annotations.
 
 ## 3. Runtime Refactor
-- [x] Update `RabbitWorkInputListenerConfigurer` so it binds listeners using plan-provided queue names, not `definition.inQueue()`.
-- [x] Update `RabbitWorkOutput` to derive exchange/routing key from the plan/env (keeping explicit overrides), ignoring `definition.outQueue()/exchange`.
+- [x] Update `RabbitWorkInputListenerConfigurer` so it binds listeners using plan-provided queue names (via `WorkIoBindings.inboundQueue()`), not the annotation defaults.
+- [x] Update `RabbitWorkOutput` to derive exchange/routing key from the plan/env (keeping explicit overrides) via `WorkIoBindings`, rather than any annotation fallback.
 - [x] Teach `WorkerContext`/`WorkerInfo` to read `workIn/workOut` from the control-plane config; keep temporary compatibility shims until all workers run with plans.
 - [x] Adjust status publishers and `WorkerControlPlaneRuntime` to emit queue metadata from the new fields, mirroring what the UI expects.
 

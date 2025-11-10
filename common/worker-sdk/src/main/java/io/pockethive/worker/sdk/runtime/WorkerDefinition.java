@@ -83,27 +83,4 @@ public record WorkerDefinition(
         return value == null || value.isBlank() ? null : value.trim();
     }
 
-    /**
-     * @deprecated prefer {@link #io()} and {@link WorkIoBindings#inboundQueue()}.
-     */
-    @Deprecated(forRemoval = true)
-    public String inQueue() {
-        return io.inboundQueue();
-    }
-
-    /**
-     * @deprecated prefer {@link #io()} and {@link WorkIoBindings#outboundQueue()}.
-     */
-    @Deprecated(forRemoval = true)
-    public String outQueue() {
-        return io.outboundQueue();
-    }
-
-    /**
-     * @deprecated prefer {@link #io()} and {@link WorkIoBindings#outboundExchange()}.
-     */
-    @Deprecated(forRemoval = true)
-    public String exchange() {
-        return io.outboundExchange();
-    }
 }
