@@ -74,11 +74,7 @@ class ModeratorWorkerImpl implements PocketHiveWorkerFunction {
     ModeratorWorkerConfig config = context.config(ModeratorWorkerConfig.class)
         .orElseGet(properties::defaultConfig);
     ModeratorOperationMode mode = config.operationMode();
-    String inboundQueue = context.info().inQueue();
-    String outboundQueue = context.info().outQueue();
     context.statusPublisher()
-        .workIn(inboundQueue)
-        .workOut(outboundQueue)
         .update(status -> {
           status.data("enabled", context.enabled());
           status.data("mode", formatMode(mode.type()));

@@ -235,11 +235,7 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
   }
 
   private void publishStatus(WorkerContext context, ProcessorWorkerConfig config) {
-    String inboundQueue = context.info().inQueue();
-    String outboundQueue = context.info().outQueue();
     context.statusPublisher()
-        .workIn(inboundQueue)
-        .workOut(outboundQueue)
         .update(status -> status
             .data("baseUrl", config.baseUrl())
             .data("enabled", context.enabled())

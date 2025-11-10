@@ -105,9 +105,7 @@ class GeneratorWorkerImpl implements PocketHiveWorkerFunction {
   public WorkResult onMessage(WorkMessage seed, WorkerContext context) {
     GeneratorWorkerConfig config = context.config(GeneratorWorkerConfig.class)
         .orElseGet(properties::defaultConfig);
-    String outboundQueue = context.info().outQueue();
     context.statusPublisher()
-        .workOut(outboundQueue)
         .update(status -> status
             .data("path", config.message().path())
             .data("method", config.message().method())

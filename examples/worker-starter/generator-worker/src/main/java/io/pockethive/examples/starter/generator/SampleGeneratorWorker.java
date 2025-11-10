@@ -32,11 +32,7 @@ class SampleGeneratorWorker implements PocketHiveWorkerFunction {
     SampleGeneratorConfig config = context.config(SampleGeneratorConfig.class)
         .orElseGet(properties::defaultConfig);
 
-    String outQueue = Optional.ofNullable(context.info().outQueue())
-        .orElseThrow(() -> new IllegalStateException("Outbound queue not configured"));
-
     context.statusPublisher()
-        .workOut(outQueue)
         .update(status -> status
             .data("enabled", context.enabled())
             .data("ratePerSecond", config.ratePerSecond())

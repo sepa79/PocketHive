@@ -22,14 +22,7 @@ class SampleProcessorWorker implements PocketHiveWorkerFunction {
   public WorkResult onMessage(WorkMessage message, WorkerContext context) {
     String processedPayload = message.asString().toUpperCase();
 
-    String inQueue = Optional.ofNullable(context.info().inQueue())
-        .orElseThrow(() -> new IllegalStateException("Inbound queue not configured"));
-    String outQueue = Optional.ofNullable(context.info().outQueue())
-        .orElseThrow(() -> new IllegalStateException("Outbound queue not configured"));
-
     context.statusPublisher()
-        .workIn(inQueue)
-        .workOut(outQueue)
         .update(status -> status.data("processedPayload", processedPayload));
 
     WorkMessage outbound = message.toBuilder()

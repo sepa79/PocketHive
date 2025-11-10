@@ -128,8 +128,7 @@ class PostProcessorWorkerImpl implements PocketHiveWorkerFunction {
               processorStats);
     }
 
-    String inboundQueue = context.info().inQueue();
-    StatusPublisher publisher = context.statusPublisher().workIn(inboundQueue);
+    StatusPublisher publisher = context.statusPublisher();
     publisher.update(status -> {
       status
           .data("enabled", context.enabled())

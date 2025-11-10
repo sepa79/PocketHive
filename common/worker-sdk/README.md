@@ -76,8 +76,7 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
     ProcessorWorkerConfig config = context.config(ProcessorWorkerConfig.class)
         .orElseGet(properties::defaultConfig);
     context.statusPublisher()
-        .workIn(context.info().inQueue())
-        .workOut(context.info().outQueue())
+        .update(status -> status.data("queue", "ph.swarm-alpha.mod"))
         .update(status -> status.data("baseUrl", config.baseUrl()));
     WorkMessage enriched = invokeHttpAndEnrich(in, context, config);
     return WorkResult.message(enriched);
