@@ -119,6 +119,7 @@ public final class BufferGuardController {
       state.recordSample(depth, settings.movingAverageWindow());
       double average = state.averageDepth();
       double currentRate = state.currentRatePerSec;
+      double drainPerSec = state.updateDrain(depth, settings.samplePeriod());
       double nextRate = currentRate;
 
       if (average < minDepth) {
@@ -130,16 +131,9 @@ public final class BufferGuardController {
         double step = Math.max(1.0, currentRate * settings.adjust().maxDecreasePct() / 100.0);
         nextRate = clampRate(currentRate - step);
       } else {
-        double tolerance = computeTolerance(minDepth, maxDepth);
-        double delta = targetDepth - average;
-        if (Math.abs(delta) > tolerance) {
-          double ratio = Math.min(1.0, Math.abs(delta) / Math.max(1.0, targetDepth));
-          double pct = delta > 0
-              ? settings.adjust().maxIncreasePct()
-              : settings.adjust().maxDecreasePct();
-          double step = Math.max(1.0, currentRate * (pct * ratio) / 100.0);
-          nextRate = clampRate(delta > 0 ? currentRate + step : currentRate - step);
-        }
+        double desired = feedForwardRate(drainPerSec, average, targetDepth);
+        double limited = boundedStep(currentRate, desired);
+        nextRate = clampRate(limited);
       }
 
       BufferGuardSettings.Backpressure backpressure = settings.backpressure();
@@ -211,9 +205,24 @@ public final class BufferGuardController {
     return Math.max(min, Math.min(max, candidate));
   }
 
-  private double computeTolerance(int minDepth, int maxDepth) {
-    int span = Math.max(1, maxDepth - minDepth);
-    return Math.max(1.0, span * 0.1);
+  private double feedForwardRate(double drainPerSec, double depth, double targetDepth) {
+    double delta = targetDepth - depth;
+    double proportion = (settings.adjust().maxIncreasePct() + settings.adjust().maxDecreasePct()) / 200.0;
+    double windowSeconds = Math.max(1.0, settings.samplePeriod().toMillis() / 1000.0);
+    double correction = (delta / windowSeconds) * proportion;
+    return drainPerSec + correction;
+  }
+
+  private double boundedStep(double currentRate, double desiredRate) {
+    double maxIncrease = currentRate * settings.adjust().maxIncreasePct() / 100.0;
+    double maxDecrease = currentRate * settings.adjust().maxDecreasePct() / 100.0;
+    double delta = desiredRate - currentRate;
+    if (delta > 0) {
+      delta = Math.min(Math.max(1.0, maxIncrease), delta);
+    } else if (delta < 0) {
+      delta = Math.max(-Math.max(1.0, Math.abs(maxDecrease)), delta);
+    }
+    return currentRate + delta;
   }
 
   private void registerGauges() {
@@ -297,6 +306,8 @@ public final class BufferGuardController {
     private long prefillEnd;
     private boolean backpressureActive;
     private GuardMode mode;
+    private long lastDepth = -1;
+    private long lastSampleNanos = System.nanoTime();
 
     BufferGuardState(BufferGuardSettings settings) {
       this.settings = settings;
@@ -352,6 +363,18 @@ public final class BufferGuardController {
         return true;
       }
       return false;
+    }
+
+    double updateDrain(long depth, Duration samplePeriod) {
+      long now = System.nanoTime();
+      double elapsedSeconds = (now - lastSampleNanos) / 1_000_000_000.0;
+      if (elapsedSeconds < 0.001) {
+        elapsedSeconds = Math.max(0.001, samplePeriod.toMillis() / 1000.0);
+      }
+      double drain = lastDepth < 0 ? currentRatePerSec : (lastDepth - depth) / elapsedSeconds;
+      lastDepth = depth;
+      lastSampleNanos = now;
+      return drain;
     }
   }
 

@@ -695,6 +695,41 @@ class SwarmLifecycleManagerTest {
   }
 
   @Test
+  void bufferGuardReducesRateWhenDepthHighButWithinBracket() throws Exception {
+    SwarmLifecycleManager manager = newManager(true);
+    BufferGuardPolicy guard = new BufferGuardPolicy(
+        true,
+        "gen-out",
+        200,
+        150,
+        260,
+        "50ms",
+        5,
+        new BufferGuardPolicy.Adjustment(20, 10, 1, 100),
+        new BufferGuardPolicy.Prefill(false, null, null),
+        new BufferGuardPolicy.Backpressure(null, null, null, null));
+    SwarmPlan plan = new SwarmPlan("swarm", List.of(
+        new Bee("generator", "img1", new Work("qin", "gen-out"),
+            Map.of("POCKETHIVE_WORKERS_GENERATOR_CONFIG_RATEPERSEC", "80"))
+    ), new TrafficPolicy(guard));
+    when(docker.createContainer(eq("img1"), anyMap(), anyString())).thenReturn("c1");
+    when(docker.resolveControlNetwork()).thenReturn("ctrl-net");
+    AtomicLong depth = new AtomicLong(240);
+    when(amqp.getQueueProperties(eq(queue("gen-out")))).thenAnswer(inv -> queueProps(depth.get()));
+    when(amqp.getQueueProperties(eq(queue("qin")))).thenReturn(null);
+
+    manager.start(mapper.writeValueAsString(plan));
+
+    Gauge rateGauge = meterRegistry.find("ph_swarm_buffer_guard_rate_per_sec")
+        .tags("swarm", TEST_SWARM_ID, "queue", "buffer-guard")
+        .gauge();
+    assertThat(rateGauge).isNotNull();
+    assertThat(waitForRate(rateGauge, value -> value < 70.0)).isTrue();
+
+    manager.remove();
+  }
+
+  @Test
   void bufferGuardDropsRateOnBackpressure() throws Exception {
     SwarmLifecycleManager manager = newManager(true);
     BufferGuardPolicy guard = new BufferGuardPolicy(

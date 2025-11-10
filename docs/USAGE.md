@@ -62,6 +62,26 @@ Manual checks:
   3. Monitor guard gauges (`ph_swarm_buffer_guard_depth`, `*_target`, `*_rate_per_sec`, `*_state`) in Grafana or scrape Prometheus directly.
 - **Tuning tips:** Use `targetDepth` as the desired steady level, keep `minDepth`/`maxDepth` wide enough to avoid thrash, and start with adjustment percentages between 5‑20%. Set `backpressure.queueAlias` to the queue immediately downstream of the guard if you want automatic slowdown when processors fall behind.
 
+#### Guard configuration cheat‑sheet
+
+| Field | Description | Suggested Values |
+|-------|-------------|------------------|
+| `queueAlias` | Queue suffix to monitor (resolves via `traffic.queuePrefix`) | e.g. `moderator-a-out` |
+| `targetDepth` | Desired steady depth | Pick a midpoint the queue should hover around |
+| `minDepth` / `maxDepth` | Hysteresis bounds; guard only clamps when average depth crosses these | ~±20–30% around the target |
+| `samplePeriod` | How often the controller samples Rabbit (duration string) | 3–5 s for most swarms |
+| `movingAverageWindow` | Number of samples to average | 5–10 to smooth noise |
+| `adjust.maxIncreasePct` / `maxDecreasePct` | Max percentage per decision when filling/draining | Start with 5–15% |
+| `adjust.minRatePerSec` / `maxRatePerSec` | Hard bounds on the generator/moderator rate | Match the safe operating range for the producer |
+| `prefill.enabled` | When `true`, temporarily raises the target to pre-load the queue | `false` unless you need to warm up before a spike |
+| `prefill.lookahead` | Duration to stay in prefill mode | e.g. `30s`, `2m`; after this the guard returns to steady mode |
+| `prefill.liftPct` | Percentage to bump the target while prefill is active | 10–30% |
+| `backpressure.queueAlias` | Downstream queue to watch for high watermark events | `proc-out`, etc. |
+| `backpressure.highDepth` / `recoveryDepth` | Depth thresholds that enter/exit backpressure mode | Pick based on downstream capacity |
+| `backpressure.moderatorReductionPct` | How much to trim moderators when backpressure fires | 15–30% |
+
+> **Prefill usage:** When `prefill.enabled = true`, the guard enters a temporary **prefill** state for `lookahead`. During that window it raises the target depth by `liftPct` so the queue preloads ahead of a known spike. Once the lookahead duration expires the target snaps back to its baseline value.
+
 ### Scenario and swarm API
 - Create swarms via the Orchestrator REST API: `POST /api/swarms/{swarmId}/create` with JSON such as:
 

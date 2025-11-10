@@ -8,7 +8,7 @@ trafficPolicy:
     targetDepth: 200
     minDepth: 150
     maxDepth: 260
-    samplePeriod: 5
+    samplePeriod: 5s
     movingAverageWindow: 4
     adjust:
       maxIncreasePct: 10
@@ -40,7 +40,7 @@ template:
       image: moderator:latest
       env:
         POCKETHIVE_WORKERS_MODERATOR_CONFIG_MODE_TYPE: rate-per-sec
-        POCKETHIVE_WORKERS_MODERATOR_CONFIG_MODE_RATEPERSEC: "5"
+        POCKETHIVE_WORKERS_MODERATOR_CONFIG_MODE_RATEPERSEC: "4"
       work:
         in: gen-out
         out: moderator-a-out
