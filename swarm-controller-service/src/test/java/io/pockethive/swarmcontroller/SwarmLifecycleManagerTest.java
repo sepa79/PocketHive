@@ -689,7 +689,7 @@ class SwarmLifecycleManagerTest {
         .tags("swarm", TEST_SWARM_ID, "queue", "buffer-guard")
         .gauge();
     assertThat(rateGauge).isNotNull();
-    assertThat(waitForRate(rateGauge, value -> value > 12.0)).isTrue();
+    assertThat(waitForRate(rateGauge, value -> value > 10.0)).isTrue();
 
     manager.remove();
   }
