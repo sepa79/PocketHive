@@ -146,6 +146,48 @@ class ScenarioServiceTest {
         assertThat(service.find("broken")).isPresent();
     }
 
+    @Test
+    void loadsTrafficPolicyWhenPresent() throws IOException {
+        writeManifest("ctrl", "ctrl-image");
+        writeManifest("worker", "worker-image");
+        capabilities.reload();
+
+        writeScenario("guarded.yaml", """
+                id: guarded
+                name: Guarded Scenario
+                trafficPolicy:
+                  bufferGuard:
+                    enabled: true
+                    queueAlias: gen-out
+                    targetDepth: 120
+                    minDepth: 80
+                    maxDepth: 160
+                    samplePeriod: 5s
+                    movingAverageWindow: 3
+                    adjust:
+                      maxIncreasePct: 10
+                      maxDecreasePct: 15
+                      minRatePerSec: 1
+                      maxRatePerSec: 10
+                template:
+                  image: ctrl-image:latest
+                  bees:
+                    - role: worker
+                      image: worker-image:latest
+                      work:
+                        in: a
+                        out: b
+                """);
+
+        service.reload();
+
+        Scenario scenario = service.find("guarded").orElseThrow();
+        assertThat(scenario.getTrafficPolicy()).isNotNull();
+        assertThat(scenario.getTrafficPolicy().bufferGuard()).isNotNull();
+        assertThat(scenario.getTrafficPolicy().bufferGuard().queueAlias()).isEqualTo("gen-out");
+        assertThat(scenario.getTrafficPolicy().bufferGuard().adjust().maxIncreasePct()).isEqualTo(10);
+    }
+
     private void writeManifest(String prefix, String imageName) throws IOException {
         String manifest = """
                 {

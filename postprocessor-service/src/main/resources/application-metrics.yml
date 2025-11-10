@@ -1,0 +1,7 @@
+management:
+  metrics:
+    export:
+      simple:
+        enabled: true
+      prometheus:
+        enabled: false

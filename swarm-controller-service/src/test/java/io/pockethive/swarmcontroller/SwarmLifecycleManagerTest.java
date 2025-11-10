@@ -9,12 +9,15 @@ import static io.pockethive.swarmcontroller.SwarmControllerTestProperties.LOGS_E
 import static io.pockethive.swarmcontroller.SwarmControllerTestProperties.TRAFFIC_PREFIX;
 import static io.pockethive.swarmcontroller.SwarmControllerTestProperties.TEST_SWARM_ID;
 
+import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.pockethive.controlplane.ControlPlaneSignals;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.docker.DockerContainerClient;
 import io.pockethive.swarm.model.Bee;
+import io.pockethive.swarm.model.BufferGuardPolicy;
 import io.pockethive.swarm.model.SwarmPlan;
+import io.pockethive.swarm.model.TrafficPolicy;
 import io.pockethive.swarm.model.Work;
 import io.pockethive.swarmcontroller.config.SwarmControllerProperties;
 import org.junit.jupiter.api.AfterEach;
@@ -38,6 +41,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.OptionalLong;
 import java.util.Properties;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.DoublePredicate;
 import org.mockito.ArgumentCaptor;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.Level;
@@ -612,6 +617,157 @@ class SwarmLifecycleManagerTest {
         .gauge()).isNull();
   }
 
+  private Properties queueProps(long depth) {
+    Properties props = new Properties();
+    props.put(RabbitAdmin.QUEUE_MESSAGE_COUNT, depth);
+    props.put(RabbitAdmin.QUEUE_CONSUMER_COUNT, 1);
+    return props;
+  }
+
+  @Test
+  void bufferGuardRaisesGeneratorRateWhenQueueLow() throws Exception {
+    SwarmLifecycleManager manager = newManager(true);
+    BufferGuardPolicy guard = new BufferGuardPolicy(
+        true,
+        "gen-out",
+        200,
+        150,
+        260,
+        "50ms",
+        3,
+        new BufferGuardPolicy.Adjustment(20, 10, 1, 100),
+        new BufferGuardPolicy.Prefill(false, null, null),
+        new BufferGuardPolicy.Backpressure(null, null, null, null));
+    SwarmPlan plan = new SwarmPlan("swarm", List.of(
+        new Bee("generator", "img1", new Work("qin", "gen-out"),
+            Map.of("POCKETHIVE_WORKERS_GENERATOR_CONFIG_RATEPERSEC", "5"))
+    ), new TrafficPolicy(guard));
+    when(docker.createContainer(eq("img1"), anyMap(), anyString())).thenReturn("c1");
+    when(docker.resolveControlNetwork()).thenReturn("ctrl-net");
+    AtomicLong depth = new AtomicLong(50);
+    when(amqp.getQueueProperties(eq(queue("gen-out")))).thenAnswer(inv -> queueProps(depth.get()));
+    when(amqp.getQueueProperties(eq(queue("qin")))).thenReturn(null);
+
+    manager.start(mapper.writeValueAsString(plan));
+
+    Gauge rateGauge = meterRegistry.find("ph_swarm_buffer_guard_rate_per_sec")
+        .tags("swarm", TEST_SWARM_ID, "queue", "buffer-guard")
+        .gauge();
+    assertThat(rateGauge).isNotNull();
+    assertThat(waitForRate(rateGauge, value -> value > 5.0)).isTrue();
+
+    manager.remove();
+  }
+
+  @Test
+  void bufferGuardTargetsDepthWhileWithinBracket() throws Exception {
+    SwarmLifecycleManager manager = newManager(true);
+    BufferGuardPolicy guard = new BufferGuardPolicy(
+        true,
+        "gen-out",
+        200,
+        150,
+        260,
+        "50ms",
+        5,
+        new BufferGuardPolicy.Adjustment(20, 10, 1, 100),
+        new BufferGuardPolicy.Prefill(false, null, null),
+        new BufferGuardPolicy.Backpressure(null, null, null, null));
+    SwarmPlan plan = new SwarmPlan("swarm", List.of(
+        new Bee("generator", "img1", new Work("qin", "gen-out"),
+            Map.of("POCKETHIVE_WORKERS_GENERATOR_CONFIG_RATEPERSEC", "10"))
+    ), new TrafficPolicy(guard));
+    when(docker.createContainer(eq("img1"), anyMap(), anyString())).thenReturn("c1");
+    when(docker.resolveControlNetwork()).thenReturn("ctrl-net");
+    AtomicLong depth = new AtomicLong(180);
+    when(amqp.getQueueProperties(eq(queue("gen-out")))).thenAnswer(inv -> queueProps(depth.get()));
+    when(amqp.getQueueProperties(eq(queue("qin")))).thenReturn(null);
+
+    manager.start(mapper.writeValueAsString(plan));
+
+    Gauge rateGauge = meterRegistry.find("ph_swarm_buffer_guard_rate_per_sec")
+        .tags("swarm", TEST_SWARM_ID, "queue", "buffer-guard")
+        .gauge();
+    assertThat(rateGauge).isNotNull();
+    assertThat(waitForRate(rateGauge, value -> value > 10.0)).isTrue();
+
+    manager.remove();
+  }
+
+  @Test
+  void bufferGuardReducesRateWhenDepthHighButWithinBracket() throws Exception {
+    SwarmLifecycleManager manager = newManager(true);
+    BufferGuardPolicy guard = new BufferGuardPolicy(
+        true,
+        "gen-out",
+        200,
+        150,
+        260,
+        "50ms",
+        5,
+        new BufferGuardPolicy.Adjustment(20, 10, 1, 100),
+        new BufferGuardPolicy.Prefill(false, null, null),
+        new BufferGuardPolicy.Backpressure(null, null, null, null));
+    SwarmPlan plan = new SwarmPlan("swarm", List.of(
+        new Bee("generator", "img1", new Work("qin", "gen-out"),
+            Map.of("POCKETHIVE_WORKERS_GENERATOR_CONFIG_RATEPERSEC", "80"))
+    ), new TrafficPolicy(guard));
+    when(docker.createContainer(eq("img1"), anyMap(), anyString())).thenReturn("c1");
+    when(docker.resolveControlNetwork()).thenReturn("ctrl-net");
+    AtomicLong depth = new AtomicLong(240);
+    when(amqp.getQueueProperties(eq(queue("gen-out")))).thenAnswer(inv -> queueProps(depth.get()));
+    when(amqp.getQueueProperties(eq(queue("qin")))).thenReturn(null);
+
+    manager.start(mapper.writeValueAsString(plan));
+
+    Gauge rateGauge = meterRegistry.find("ph_swarm_buffer_guard_rate_per_sec")
+        .tags("swarm", TEST_SWARM_ID, "queue", "buffer-guard")
+        .gauge();
+    assertThat(rateGauge).isNotNull();
+    assertThat(waitForRate(rateGauge, value -> value < 70.0)).isTrue();
+
+    manager.remove();
+  }
+
+  @Test
+  void bufferGuardDropsRateOnBackpressure() throws Exception {
+    SwarmLifecycleManager manager = newManager(true);
+    BufferGuardPolicy guard = new BufferGuardPolicy(
+        true,
+        "gen-out",
+        200,
+        150,
+        260,
+        "50ms",
+        3,
+        new BufferGuardPolicy.Adjustment(20, 10, 1, 100),
+        new BufferGuardPolicy.Prefill(false, null, null),
+        new BufferGuardPolicy.Backpressure("proc-out", 500, 250, 15));
+    SwarmPlan plan = new SwarmPlan("swarm", List.of(
+        new Bee("generator", "img1", new Work("qin", "gen-out"),
+            Map.of("POCKETHIVE_WORKERS_GENERATOR_CONFIG_RATEPERSEC", "20")),
+        new Bee("processor", "img2", new Work("gen-out", "proc-out"), null)
+    ), new TrafficPolicy(guard));
+    when(docker.createContainer(eq("img1"), anyMap(), anyString())).thenReturn("c1");
+    when(docker.createContainer(eq("img2"), anyMap(), anyString())).thenReturn("c2");
+    when(docker.resolveControlNetwork()).thenReturn("ctrl-net");
+    AtomicLong upstreamDepth = new AtomicLong(220);
+    AtomicLong downstreamDepth = new AtomicLong(800);
+    when(amqp.getQueueProperties(eq(queue("gen-out")))).thenAnswer(inv -> queueProps(upstreamDepth.get()));
+    when(amqp.getQueueProperties(eq(queue("proc-out")))).thenAnswer(inv -> queueProps(downstreamDepth.get()));
+    when(amqp.getQueueProperties(eq(queue("qin")))).thenReturn(null);
+
+    manager.start(mapper.writeValueAsString(plan));
+
+    Gauge rateGauge = meterRegistry.find("ph_swarm_buffer_guard_rate_per_sec")
+        .tags("swarm", TEST_SWARM_ID, "queue", "buffer-guard")
+        .gauge();
+    assertThat(rateGauge).isNotNull();
+    assertThat(waitForRate(rateGauge, value -> Math.abs(value - 1.0) < 0.0001)).isTrue();
+
+    manager.remove();
+  }
+
   private static List<String> expectedControllerRoutes(String instanceId) {
     return List.of(
         ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, "ALL", "swarm-controller", "ALL"),
@@ -628,6 +784,10 @@ class SwarmLifecycleManagerTest {
   }
 
   private SwarmLifecycleManager newManager() {
+    return newManager(false);
+  }
+
+  private SwarmLifecycleManager newManager(boolean bufferGuardEnabled) {
     RabbitProperties rabbitProperties = new RabbitProperties();
     rabbitProperties.setHost("rabbitmq");
     rabbitProperties.setPort(5672);
@@ -642,7 +802,19 @@ class SwarmLifecycleManagerTest {
         rabbit,
         rabbitProperties,
         "inst",
-        SwarmControllerTestProperties.defaults(),
+        SwarmControllerTestProperties.defaults(bufferGuardEnabled),
         meterRegistry);
+  }
+
+  private boolean waitForRate(Gauge gauge, DoublePredicate predicate) throws InterruptedException {
+    long deadline = System.currentTimeMillis() + 3_000;
+    while (System.currentTimeMillis() < deadline) {
+      double value = gauge.value();
+      if (Double.isFinite(value) && predicate.test(value)) {
+        return true;
+      }
+      Thread.sleep(50);
+    }
+    return false;
   }
 }

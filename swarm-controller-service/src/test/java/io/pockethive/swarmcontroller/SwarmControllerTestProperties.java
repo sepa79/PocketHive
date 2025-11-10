@@ -22,6 +22,10 @@ final class SwarmControllerTestProperties {
     }
 
     static SwarmControllerProperties defaults() {
+        return defaults(false);
+    }
+
+    static SwarmControllerProperties defaults(boolean bufferGuardEnabled) {
         return new SwarmControllerProperties(
             TEST_SWARM_ID,
             CONTROL_EXCHANGE,
@@ -40,6 +44,7 @@ final class SwarmControllerTestProperties {
                         METRICS_SHUTDOWN_OPERATION,
                         METRICS_JOB,
                         new SwarmControllerProperties.GroupingKey(METRICS_GROUPING_INSTANCE))),
-                new SwarmControllerProperties.Docker(null, "/var/run/docker.sock")));
+                new SwarmControllerProperties.Docker(null, "/var/run/docker.sock"),
+                new SwarmControllerProperties.Features(bufferGuardEnabled)));
     }
 }

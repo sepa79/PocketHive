@@ -342,7 +342,11 @@ export function setClient(newClient: Client | null, destination = controlDestina
             }
           }
           Object.entries(rest).forEach(([key, value]) => {
-            if (key === 'enabled' || key in cfg) return
+            if (key === 'enabled') {
+              return
+            }
+            // Allow status payloads to refresh dynamic metadata (swarm counts, guard configs, etc.)
+            // by always writing the latest value instead of keeping the first snapshot.
             cfg[key] = value
           })
         }
@@ -415,4 +419,3 @@ export function updateNodePosition(id: string, x: number, y: number) {
   nodePositions[id] = { x, y }
   emitTopology()
 }
-

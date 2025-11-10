@@ -6,7 +6,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.control.CommandTarget;
 import io.pockethive.control.ControlSignal;
 import io.pockethive.swarm.model.Bee;
+import io.pockethive.swarm.model.BufferGuardPolicy;
 import io.pockethive.swarm.model.SwarmPlan;
+import io.pockethive.swarm.model.TrafficPolicy;
 import io.pockethive.swarm.model.Work;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.controlplane.ControlPlaneSignals;
@@ -14,6 +16,8 @@ import io.pockethive.controlplane.spring.ControlPlaneContainerEnvironmentFactory
 import io.pockethive.controlplane.spring.ControlPlaneContainerEnvironmentFactory.PushgatewaySettings;
 import io.pockethive.controlplane.spring.ControlPlaneContainerEnvironmentFactory.WorkerSettings;
 import io.pockethive.swarmcontroller.config.SwarmControllerProperties;
+import io.pockethive.swarmcontroller.guard.BufferGuardController;
+import io.pockethive.swarmcontroller.guard.BufferGuardSettings;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Tags;
@@ -35,6 +39,7 @@ import org.springframework.stereotype.Component;
 import io.pockethive.observability.StatusEnvelopeBuilder;
 import io.pockethive.util.BeeNameGenerator;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -47,6 +52,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.OptionalDouble;
 import java.util.OptionalLong;
 import java.util.Properties;
 import java.util.Set;
@@ -96,10 +102,27 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
   private final ConcurrentMap<String, AtomicLong> queueOldestValues = new ConcurrentHashMap<>();
   private final ConcurrentMap<String, Gauge> queueOldestGauges = new ConcurrentHashMap<>();
   private List<String> startOrder = List.of();
+  private Optional<BufferGuardSettings> bufferGuardSettings = Optional.empty();
+  private BufferGuardController bufferGuardController;
+  private TrafficPolicy trafficPolicy;
   private SwarmStatus status = SwarmStatus.STOPPED;
   private String template;
 
   private static final long STATUS_TTL_MS = 15_000L;
+  private static final int DEFAULT_BUFFER_TARGET = 200;
+  private static final int DEFAULT_BUFFER_MIN = 150;
+  private static final int DEFAULT_BUFFER_MAX = 260;
+  private static final Duration DEFAULT_SAMPLE_PERIOD = Duration.ofSeconds(5);
+  private static final int DEFAULT_MOVING_AVERAGE_WINDOW = 4;
+  private static final int DEFAULT_MAX_INCREASE_PCT = 10;
+  private static final int DEFAULT_MAX_DECREASE_PCT = 15;
+  private static final int DEFAULT_MIN_RATE = 1;
+  private static final int DEFAULT_MAX_RATE = 50;
+  private static final Duration DEFAULT_PREFILL_LOOKAHEAD = Duration.ofMinutes(2);
+  private static final int DEFAULT_PREFILL_LIFT = 20;
+  private static final int DEFAULT_BACKPRESSURE_HIGH = 500;
+  private static final int DEFAULT_BACKPRESSURE_RECOVERY = 250;
+  private static final int DEFAULT_BACKPRESSURE_MODERATOR = 15;
 
   @Autowired
   public SwarmLifecycleManager(AmqpAdmin amqp,
@@ -193,6 +216,9 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
     try {
       this.template = templateJson;
       SwarmPlan plan = mapper.readValue(templateJson, SwarmPlan.class);
+      this.trafficPolicy = plan.trafficPolicy();
+      Optional<BufferGuardSettings> resolvedGuard = resolveBufferGuard(plan);
+      configureBufferGuard(resolvedGuard);
       TopicExchange hive = new TopicExchange(properties.hiveExchange(), true, false);
       amqp.declareExchange(hive);
       log.info("declared hive exchange {}", properties.hiveExchange());
@@ -327,7 +353,9 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
   @Override
   public void remove() {
     log.info("Removing swarm {}", swarmId);
+    stopBufferGuard();
     setSwarmEnabled(false);
+    trafficPolicy = null;
     List<String> order = new ArrayList<>(startOrder);
     java.util.Collections.reverse(order);
     for (String role : order) {
@@ -538,6 +566,34 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
     }
   }
 
+  private void configureBufferGuard(Optional<BufferGuardSettings> resolvedGuard) {
+    stopBufferGuard();
+    bufferGuardSettings = resolvedGuard;
+    resolvedGuard.ifPresent(this::startBufferGuard);
+  }
+
+  private void startBufferGuard(BufferGuardSettings settings) {
+    bufferGuardController = new BufferGuardController(
+        settings,
+        amqp,
+        meterRegistry,
+        queueTags("buffer-guard"),
+        rate -> sendBufferGuardRate(settings.targetRole(), rate));
+    bufferGuardController.start();
+    log.info("Buffer guard enabled for queue {} targeting role {} (target depth {})",
+        settings.queueAlias(),
+        settings.targetRole(),
+        settings.targetDepth());
+  }
+
+  private void stopBufferGuard() {
+    if (bufferGuardController != null) {
+      bufferGuardController.stop();
+      bufferGuardController = null;
+    }
+    bufferGuardSettings = Optional.empty();
+  }
+
   private Optional<String> queueName(SwarmPlan plan, String role, Function<Work, String> extractor) {
     if (plan.bees() == null) {
       return Optional.empty();
@@ -550,6 +606,195 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
         .filter(this::hasText)
         .map(properties::queueName)
         .findFirst();
+  }
+
+  private void sendBufferGuardRate(String targetRole, double rate) {
+    var data = mapper.createObjectNode();
+    data.put("commandTarget", "ROLE");
+    data.put("role", targetRole);
+    data.put("ratePerSec", rate);
+    publishConfigUpdate(data, "buffer-guard");
+  }
+
+  private Optional<BufferGuardSettings> resolveBufferGuard(SwarmPlan plan) {
+    if (!properties.getFeatures().bufferGuardEnabled()) {
+      TrafficPolicy policy = plan.trafficPolicy();
+      if (policy != null && policy.bufferGuard() != null && Boolean.TRUE.equals(policy.bufferGuard().enabled())) {
+        log.info("Buffer guard config supplied but feature disabled; ignoring for swarm {}", swarmId);
+      }
+      return Optional.empty();
+    }
+    TrafficPolicy policy = plan.trafficPolicy();
+    if (policy == null) {
+      return Optional.empty();
+    }
+    BufferGuardPolicy guard = policy.bufferGuard();
+    if (guard == null || !Boolean.TRUE.equals(guard.enabled())) {
+      return Optional.empty();
+    }
+    String queueAlias = guard.queueAlias();
+    if (!hasText(queueAlias)) {
+      log.warn("Buffer guard enabled but queueAlias missing; guard configuration ignored");
+      return Optional.empty();
+    }
+    String queueName;
+    try {
+      queueName = properties.queueName(queueAlias);
+    } catch (IllegalArgumentException ex) {
+      log.warn("Buffer guard queue alias '{}' invalid: {}", queueAlias, ex.getMessage());
+      return Optional.empty();
+    }
+
+    if (plan.bees() == null) {
+      log.warn("Buffer guard requires at least one bee to determine target role");
+      return Optional.empty();
+    }
+    String targetRole = plan.bees().stream()
+        .filter(bee -> bee.work() != null && queueAlias.equalsIgnoreCase(bee.work().out()))
+        .map(Bee::role)
+        .findFirst()
+        .orElse(null);
+    if (!hasText(targetRole)) {
+      log.warn("Buffer guard could not find a producer role for queue '{}'", queueAlias);
+      return Optional.empty();
+    }
+
+    int targetDepth = defaultInt(guard.targetDepth(), DEFAULT_BUFFER_TARGET);
+    int minDepth = defaultInt(guard.minDepth(), DEFAULT_BUFFER_MIN);
+    int maxDepth = defaultInt(guard.maxDepth(), DEFAULT_BUFFER_MAX);
+    Duration samplePeriod = parseDuration(guard.samplePeriod(), DEFAULT_SAMPLE_PERIOD);
+    int movingAverageWindow = defaultInt(guard.movingAverageWindow(), DEFAULT_MOVING_AVERAGE_WINDOW);
+
+    BufferGuardPolicy.Adjustment adjustPolicy = guard.adjust();
+    BufferGuardSettings.Adjustment adjustment = new BufferGuardSettings.Adjustment(
+        defaultInt(adjustPolicy != null ? adjustPolicy.maxIncreasePct() : null, DEFAULT_MAX_INCREASE_PCT),
+        defaultInt(adjustPolicy != null ? adjustPolicy.maxDecreasePct() : null, DEFAULT_MAX_DECREASE_PCT),
+        defaultInt(adjustPolicy != null ? adjustPolicy.minRatePerSec() : null, DEFAULT_MIN_RATE),
+        defaultInt(adjustPolicy != null ? adjustPolicy.maxRatePerSec() : null, DEFAULT_MAX_RATE));
+
+    BufferGuardPolicy.Prefill prefillPolicy = guard.prefill();
+    boolean prefillEnabled = prefillPolicy != null && Boolean.TRUE.equals(prefillPolicy.enabled());
+    Duration lookahead = parseDuration(prefillPolicy != null ? prefillPolicy.lookahead() : null, DEFAULT_PREFILL_LOOKAHEAD);
+    int liftPct = Math.max(0, defaultInt(prefillPolicy != null ? prefillPolicy.liftPct() : null, DEFAULT_PREFILL_LIFT));
+    BufferGuardSettings.Prefill prefill = new BufferGuardSettings.Prefill(prefillEnabled, lookahead, liftPct);
+
+    BufferGuardPolicy.Backpressure bpPolicy = guard.backpressure();
+    String downstreamAlias = bpPolicy != null ? bpPolicy.queueAlias() : null;
+    String downstreamQueue = null;
+    if (hasText(downstreamAlias)) {
+      try {
+        downstreamQueue = properties.queueName(downstreamAlias);
+      } catch (IllegalArgumentException ex) {
+        log.warn("Backpressure queue alias '{}' invalid: {}", downstreamAlias, ex.getMessage());
+        downstreamQueue = null;
+      }
+    }
+    int highDepth = defaultInt(bpPolicy != null ? bpPolicy.highDepth() : null, DEFAULT_BACKPRESSURE_HIGH);
+    int recoveryDepth = defaultInt(bpPolicy != null ? bpPolicy.recoveryDepth() : null, DEFAULT_BACKPRESSURE_RECOVERY);
+    if (recoveryDepth > highDepth) {
+      recoveryDepth = highDepth;
+    }
+    BufferGuardSettings.Backpressure backpressure = new BufferGuardSettings.Backpressure(
+        downstreamAlias,
+        downstreamQueue,
+        highDepth,
+        recoveryDepth,
+        defaultInt(bpPolicy != null ? bpPolicy.moderatorReductionPct() : null, DEFAULT_BACKPRESSURE_MODERATOR));
+
+    double initialRate = clampRate(
+        resolveInitialRate(plan, targetRole).orElse(adjustment.minRatePerSec()),
+        adjustment);
+
+    return Optional.of(new BufferGuardSettings(
+        queueAlias,
+        queueName,
+        targetRole,
+        clampRate(initialRate, adjustment),
+        targetDepth,
+        minDepth,
+        maxDepth,
+        samplePeriod,
+        movingAverageWindow,
+        adjustment,
+        prefill,
+        backpressure));
+  }
+
+  private double clampRate(double candidate, BufferGuardSettings.Adjustment adjustment) {
+    double min = Math.max(0d, adjustment.minRatePerSec());
+    double max = Math.max(min, adjustment.maxRatePerSec());
+    if (!Double.isFinite(candidate)) {
+      return min;
+    }
+    return Math.max(min, Math.min(max, candidate));
+  }
+
+  private int defaultInt(Integer candidate, int fallback) {
+    return candidate != null ? candidate : fallback;
+  }
+
+  private Duration parseDuration(String candidate, Duration fallback) {
+    if (!hasText(candidate)) {
+      return fallback;
+    }
+    String text = candidate.trim().toLowerCase(Locale.ROOT);
+    try {
+      if (text.endsWith("ms")) {
+        long amount = Long.parseLong(text.substring(0, text.length() - 2));
+        return Duration.ofMillis(amount);
+      }
+      if (text.endsWith("s")) {
+        long amount = Long.parseLong(text.substring(0, text.length() - 1));
+        return Duration.ofSeconds(amount);
+      }
+      if (text.endsWith("m")) {
+        long amount = Long.parseLong(text.substring(0, text.length() - 1));
+        return Duration.ofMinutes(amount);
+      }
+      if (text.endsWith("h")) {
+        long amount = Long.parseLong(text.substring(0, text.length() - 1));
+        return Duration.ofHours(amount);
+      }
+      return Duration.parse(text.toUpperCase(Locale.ROOT));
+    } catch (Exception ex) {
+      log.warn("Unable to parse duration '{}' ({}); using fallback {}", candidate, ex.getMessage(), fallback);
+      return fallback;
+    }
+  }
+
+  private OptionalDouble resolveInitialRate(SwarmPlan plan, String role) {
+    if (plan.bees() == null) {
+      return OptionalDouble.empty();
+    }
+    return plan.bees().stream()
+        .filter(bee -> role.equalsIgnoreCase(bee.role()))
+        .map(Bee::env)
+        .filter(Objects::nonNull)
+        .map(this::extractRatePerSec)
+        .filter(OptionalDouble::isPresent)
+        .mapToDouble(OptionalDouble::getAsDouble)
+        .findFirst();
+  }
+
+  private OptionalDouble extractRatePerSec(Map<String, String> env) {
+    if (env == null || env.isEmpty()) {
+      return OptionalDouble.empty();
+    }
+    for (Map.Entry<String, String> entry : env.entrySet()) {
+      String key = entry.getKey();
+      if (key == null) {
+        continue;
+      }
+      String normalized = key.trim().toLowerCase(Locale.ROOT);
+      if (normalized.endsWith("ratepersec")) {
+        try {
+          return OptionalDouble.of(Double.parseDouble(entry.getValue()));
+        } catch (NumberFormatException ignored) {
+          return OptionalDouble.empty();
+        }
+      }
+    }
+    return OptionalDouble.empty();
   }
 
   private boolean hasText(String value) {
@@ -579,6 +824,11 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
       return true;
     }
     return isFullyReady();
+  }
+
+  @Override
+  public TrafficPolicy trafficPolicy() {
+    return trafficPolicy;
   }
 
   private boolean isFullyReady() {

@@ -19,6 +19,7 @@ import io.pockethive.controlplane.ControlPlaneSignals;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.controlplane.spring.ControlPlaneProperties;
 import io.pockethive.orchestrator.domain.IdempotencyStore;
+import io.pockethive.orchestrator.domain.ScenarioPlan;
 import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmCreateRequest;
 import io.pockethive.orchestrator.domain.SwarmCreateTracker;
@@ -100,7 +101,7 @@ class SwarmControllerTest {
         SwarmTemplate template = new SwarmTemplate("ctrl-image", List.of(
             new Bee("generator", "img", new Work(null, "out"), java.util.Map.of())
         ));
-        when(scenarioClient.fetchTemplate("tpl-1")).thenReturn(template);
+        when(scenarioClient.fetchScenario("tpl-1")).thenReturn(new ScenarioPlan(template, null));
         AtomicReference<String> capturedInstance = new AtomicReference<>();
         when(lifecycle.startSwarm(eq("sw1"), eq("ctrl-image"), anyString(), any(SwarmTemplateMetadata.class))).thenAnswer(inv -> {
             String instanceId = inv.getArgument(2);
@@ -118,7 +119,7 @@ class SwarmControllerTest {
         assertThat(pending.phase()).isEqualTo(Phase.CONTROLLER);
         assertThat(pending.correlationId()).isNotBlank();
         assertThat(plans.find(instanceId)).isPresent();
-        verify(scenarioClient).fetchTemplate("tpl-1");
+        verify(scenarioClient).fetchScenario("tpl-1");
     }
 
     @Test
@@ -145,7 +146,7 @@ class SwarmControllerTest {
         SwarmTemplate template = new SwarmTemplate("ctrl-image", List.of(
             new Bee("generator", "img", new Work(null, "out"), java.util.Map.of())
         ));
-        when(scenarioClient.fetchTemplate("tpl-1")).thenReturn(template);
+        when(scenarioClient.fetchScenario("tpl-1")).thenReturn(new ScenarioPlan(template, null));
         when(lifecycle.startSwarm(eq("sw1"), eq("ctrl-image"), anyString(), any(SwarmTemplateMetadata.class)))
             .thenAnswer(invocation -> new Swarm("sw1", invocation.getArgument(2), "corr"));
         IdempotencyStore store = new InMemoryIdempotencyStore();
@@ -169,7 +170,7 @@ class SwarmControllerTest {
         executor.shutdownNow();
 
         verify(lifecycle, times(1)).startSwarm(eq("sw1"), eq("ctrl-image"), anyString(), any(SwarmTemplateMetadata.class));
-        verify(scenarioClient, times(1)).fetchTemplate("tpl-1");
+        verify(scenarioClient, times(1)).fetchScenario("tpl-1");
         assertThat(response1.getBody()).isInstanceOf(ControlResponse.class);
         assertThat(response2.getBody()).isInstanceOf(ControlResponse.class);
         ControlResponse body1 = (ControlResponse) response1.getBody();
@@ -185,7 +186,7 @@ class SwarmControllerTest {
         SwarmTemplate template = new SwarmTemplate("ctrl-image", List.of(
             new Bee("generator", "img", new Work(null, "out"), java.util.Map.of())
         ));
-        when(scenarioClient.fetchTemplate("tpl-1")).thenReturn(template);
+        when(scenarioClient.fetchScenario("tpl-1")).thenReturn(new ScenarioPlan(template, null));
         when(lifecycle.startSwarm(eq("sw1"), eq("ctrl-image"), anyString(), any(SwarmTemplateMetadata.class)))
             .thenAnswer(invocation -> new Swarm("sw1", invocation.getArgument(2), "corr"));
         InMemoryIdempotencyStore store = new InMemoryIdempotencyStore();
@@ -210,7 +211,7 @@ class SwarmControllerTest {
         executor.shutdownNow();
 
         verify(lifecycle, times(1)).startSwarm(eq("sw1"), eq("ctrl-image"), anyString(), any(SwarmTemplateMetadata.class));
-        verify(scenarioClient, times(1)).fetchTemplate("tpl-1");
+        verify(scenarioClient, times(1)).fetchScenario("tpl-1");
         assertThat(leaderResponse.getBody()).isInstanceOf(ControlResponse.class);
         assertThat(followerResponse.getBody()).isInstanceOf(ControlResponse.class);
         ControlResponse leaderBody = (ControlResponse) leaderResponse.getBody();
@@ -304,7 +305,7 @@ class SwarmControllerTest {
     void createFailsWhenTemplateLookupFails() throws Exception {
         SwarmCreateTracker tracker = new SwarmCreateTracker();
         SwarmPlanRegistry plans = new SwarmPlanRegistry();
-        when(scenarioClient.fetchTemplate("tpl-missing")).thenThrow(new RuntimeException("boom"));
+        when(scenarioClient.fetchScenario("tpl-missing")).thenThrow(new RuntimeException("boom"));
         SwarmController ctrl = controller(tracker, new SwarmRegistry(), plans);
         SwarmCreateRequest req = new SwarmCreateRequest("tpl-missing", "idem", null);
 

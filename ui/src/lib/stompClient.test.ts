@@ -288,6 +288,63 @@ describe('swarm lifecycle', () => {
     setClient(null)
   })
 
+  it('updates scalar metadata from subsequent status deltas', () => {
+    const publish = vi.fn()
+    let cb: (msg: { body: string; headers: Record<string, string> }) => void = () => {}
+    const subscribe = vi
+      .fn()
+      .mockImplementation((_dest: string, fn: (msg: { body: string; headers: Record<string, string> }) => void) => {
+        cb = fn
+        return { unsubscribe() {} }
+      })
+    setClient({ active: true, publish, subscribe } as unknown as Client)
+
+    let latest: Component[] = []
+    const unsubscribe = subscribeComponents((list) => {
+      latest = list.map((comp) => ({
+        ...comp,
+        config: comp.config ? { ...comp.config } : undefined,
+      }))
+    })
+
+    const headers = { destination: '/exchange/ph.control/ev.status.orchestrator' }
+    cb({
+      headers,
+      body: JSON.stringify({
+        event: 'status',
+        kind: 'status',
+        version: '1',
+        role: 'orchestrator',
+        instance: 'orch',
+        swarmId: 'hive',
+        messageId: 'm0',
+        timestamp: new Date().toISOString(),
+        data: { swarmCount: 0 },
+      }),
+    })
+
+    cb({
+      headers,
+      body: JSON.stringify({
+        event: 'status',
+        kind: 'status',
+        version: '1',
+        role: 'orchestrator',
+        instance: 'orch',
+        swarmId: 'hive',
+        messageId: 'm1',
+        timestamp: new Date().toISOString(),
+        data: { swarmCount: 4 },
+      }),
+    })
+
+    const orchestrator = latest.find((comp) => comp.id === 'orch')
+    expect(orchestrator?.config?.swarmCount).toBe(4)
+
+    unsubscribe()
+    setClient(null)
+  })
+
   it('notifies listeners when synthetic components are upserted', () => {
     const snapshots: Component[][] = []
     const unsubscribe = subscribeComponents((list) => {

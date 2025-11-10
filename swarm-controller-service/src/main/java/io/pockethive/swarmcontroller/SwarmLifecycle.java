@@ -1,6 +1,7 @@
 package io.pockethive.swarmcontroller;
 
 import io.pockethive.swarm.model.SwarmPlan;
+import io.pockethive.swarm.model.TrafficPolicy;
 
 import java.util.Map;
 
@@ -161,4 +162,14 @@ public interface SwarmLifecycle {
    * {@code ready.swarm-template} confirmation without racing the control-plane queue declarations.
    */
   boolean isReadyForWork();
+
+  /**
+   * Returns the traffic policy from the currently prepared plan, if any.
+   * <p>
+   * Default implementations return {@code null}; concrete lifecycle managers can override to surface
+   * config details for status payloads and UI capabilities.
+   */
+  default TrafficPolicy trafficPolicy() {
+    return null;
+  }
 }

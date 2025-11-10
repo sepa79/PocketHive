@@ -21,6 +21,7 @@ public class SwarmControllerProperties {
     private final Rabbit rabbit;
     private final Metrics metrics;
     private final Docker docker;
+    private final Features features;
 
     public SwarmControllerProperties(@NotBlank String swarmId,
                                      @NotBlank String exchange,
@@ -37,6 +38,7 @@ public class SwarmControllerProperties {
         this.rabbit = Objects.requireNonNull(resolved.rabbit(), "rabbit");
         this.metrics = Objects.requireNonNull(resolved.metrics(), "metrics");
         this.docker = Objects.requireNonNull(resolved.docker(), "docker");
+        this.features = Objects.requireNonNull(resolved.features(), "features");
     }
 
     public String getSwarmId() {
@@ -73,6 +75,10 @@ public class SwarmControllerProperties {
 
     public Docker getDocker() {
         return docker;
+    }
+
+    public Features getFeatures() {
+        return features;
     }
 
     public String hiveExchange() {
@@ -112,15 +118,18 @@ public class SwarmControllerProperties {
         private final Rabbit rabbit;
         private final Metrics metrics;
         private final Docker docker;
+        private final Features features;
 
         public SwarmController(@Valid Traffic traffic,
                                @Valid Rabbit rabbit,
                                @Valid Metrics metrics,
-                               @Valid Docker docker) {
+                               @Valid Docker docker,
+                               @Valid Features features) {
             this.traffic = Objects.requireNonNull(traffic, "traffic");
             this.rabbit = Objects.requireNonNull(rabbit, "rabbit");
             this.metrics = Objects.requireNonNull(metrics, "metrics");
             this.docker = Objects.requireNonNull(docker, "docker");
+            this.features = features != null ? features : new Features(null);
         }
 
         public Traffic traffic() {
@@ -137,6 +146,10 @@ public class SwarmControllerProperties {
 
         public Docker docker() {
             return docker;
+        }
+
+        public Features features() {
+            return features;
         }
     }
 
@@ -302,6 +315,19 @@ public class SwarmControllerProperties {
 
         public boolean hasHost() {
             return host != null && !host.isBlank();
+        }
+    }
+
+    @Validated
+    public static final class Features {
+        private final boolean bufferGuardEnabled;
+
+        public Features(Boolean bufferGuardEnabled) {
+            this.bufferGuardEnabled = Boolean.TRUE.equals(bufferGuardEnabled);
+        }
+
+        public boolean bufferGuardEnabled() {
+            return bufferGuardEnabled;
         }
     }
 

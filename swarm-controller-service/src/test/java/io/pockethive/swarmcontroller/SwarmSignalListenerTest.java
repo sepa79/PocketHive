@@ -11,6 +11,8 @@ import io.pockethive.control.ControlSignal;
 import io.pockethive.controlplane.ControlPlaneSignals;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.docker.DockerDaemonUnavailableException;
+import io.pockethive.swarm.model.BufferGuardPolicy;
+import io.pockethive.swarm.model.TrafficPolicy;
 import io.pockethive.swarmcontroller.SwarmStatus;
 import io.pockethive.swarmcontroller.SwarmMetrics;
 import org.junit.jupiter.api.Test;
@@ -59,6 +61,7 @@ class SwarmSignalListenerTest {
     lenient().when(lifecycle.getMetrics()).thenReturn(new SwarmMetrics(0,0,0,0, java.time.Instant.now()));
     lenient().when(lifecycle.snapshotQueueStats()).thenReturn(DEFAULT_QUEUE_STATS);
     lenient().when(lifecycle.isReadyForWork()).thenReturn(true);
+    lenient().when(lifecycle.trafficPolicy()).thenReturn(null);
   }
 
   @BeforeEach
@@ -553,6 +556,34 @@ class SwarmSignalListenerTest {
     assertThat(statusNode.path("data").path("workloadsEnabled").asBoolean()).isFalse();
     assertThat(statusNode.path("data").path("swarmStatus").asText()).isEqualTo("STOPPED");
     assertQueueStats(statusNode);
+  }
+
+  @Test
+  void statusEventsIncludeTrafficPolicyWhenPresent() throws Exception {
+    BufferGuardPolicy guard = new BufferGuardPolicy(
+        true,
+        "gen-out",
+        200,
+        150,
+        260,
+        "5s",
+        3,
+        null,
+        null,
+        null);
+    TrafficPolicy policy = new TrafficPolicy(guard);
+    when(lifecycle.trafficPolicy()).thenReturn(policy);
+
+    newListener(lifecycle, rabbit, "inst", mapper);
+
+    ArgumentCaptor<String> payload = ArgumentCaptor.forClass(String.class);
+    verify(rabbit).convertAndSend(eq(CONTROL_EXCHANGE),
+        eq(statusEvent("status-full", "swarm-controller", "inst")), payload.capture());
+    JsonNode node = mapper.readTree(payload.getValue());
+    JsonNode bufferGuard = node.path("data").path("trafficPolicy").path("bufferGuard");
+    assertThat(bufferGuard.isMissingNode()).isFalse();
+    assertThat(bufferGuard.path("queueAlias").asText()).isEqualTo("gen-out");
+    assertThat(bufferGuard.path("targetDepth").asInt()).isEqualTo(200);
   }
 
   @Test

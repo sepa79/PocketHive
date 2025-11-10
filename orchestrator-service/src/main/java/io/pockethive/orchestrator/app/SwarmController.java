@@ -3,6 +3,7 @@ package io.pockethive.orchestrator.app;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.control.ControlSignal;
+import io.pockethive.orchestrator.domain.ScenarioPlan;
 import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmCreateRequest;
 import io.pockethive.orchestrator.domain.SwarmCreateTracker;
@@ -17,6 +18,7 @@ import io.pockethive.orchestrator.domain.SwarmTemplateMetadata;
 import io.pockethive.swarm.model.Bee;
 import io.pockethive.swarm.model.SwarmPlan;
 import io.pockethive.swarm.model.SwarmTemplate;
+import io.pockethive.swarm.model.TrafficPolicy;
 import io.pockethive.controlplane.spring.ControlPlaneProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -150,11 +152,13 @@ public class SwarmController {
         try {
             response = idempotentSend("swarm-create", swarmId, req.idempotencyKey(), timeout.toMillis(), lockCorrelation, corr -> {
                 String templateId = req.templateId();
-                SwarmTemplate template = fetchTemplate(templateId);
+                ScenarioPlan planDescriptor = fetchScenario(templateId);
+                SwarmTemplate template = planDescriptor.template();
+                TrafficPolicy trafficPolicy = planDescriptor.trafficPolicy();
                 String image = requireImage(template, templateId);
                 List<Bee> bees = template.bees();
                 String instanceId = BeeNameGenerator.generate("swarm-controller", swarmId);
-                plans.register(instanceId, new SwarmPlan(swarmId, bees));
+                plans.register(instanceId, new SwarmPlan(swarmId, bees, trafficPolicy));
                 Swarm swarm = lifecycle.startSwarm(
                     swarmId,
                     image,
@@ -319,13 +323,13 @@ public class SwarmController {
      * When a template cannot be resolved we raise an {@link IllegalStateException} so the API returns
      * HTTP 500 and the UI can surface a friendly error. Logs include the template id for quick lookup.
      */
-    private SwarmTemplate fetchTemplate(String templateId) {
+    private ScenarioPlan fetchScenario(String templateId) {
         try {
-            SwarmTemplate template = scenarios.fetchTemplate(templateId);
-            if (template == null) {
+            ScenarioPlan plan = scenarios.fetchScenario(templateId);
+            if (plan == null || plan.template() == null) {
                 throw new IllegalStateException("Template %s was not found".formatted(templateId));
             }
-            return template;
+            return plan;
         } catch (Exception e) {
             log.warn("failed to fetch template {}", templateId, e);
             throw new IllegalStateException("Failed to fetch template %s".formatted(templateId), e);
