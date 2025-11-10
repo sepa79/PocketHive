@@ -131,9 +131,7 @@ class PocketHiveWorkerSdkAutoConfigurationQueueResolutionTest {
     @PocketHiveWorker(
         role = "processor",
         input = WorkerInputType.RABBIT,
-        output = WorkerOutputType.RABBITMQ,
-        inQueue = "moderator",
-        outQueue = "final"
+        output = WorkerOutputType.RABBITMQ
     )
     static class ProcessorWorker implements PocketHiveWorkerFunction {
 

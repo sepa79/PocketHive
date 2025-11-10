@@ -38,16 +38,6 @@ public @interface PocketHiveWorker {
     WorkerInputType input() default WorkerInputType.RABBIT;
 
     /**
-     * Optional inbound queue name. Typically used by message-driven workers.
-     */
-    String inQueue() default "";
-
-    /**
-     * Optional outbound queue name for workers that emit downstream traffic.
-     */
-    String outQueue() default "";
-
-    /**
      * Declares which output transport should be wired for this worker.
      */
     WorkerOutputType output() default WorkerOutputType.NONE;

@@ -203,9 +203,7 @@ class WorkerMetricsInterceptorTest {
     @PocketHiveWorker(
         role = "metrics-role",
         input = WorkerInputType.RABBIT,
-        output = WorkerOutputType.RABBITMQ,
-        inQueue = "metrics-in",
-        outQueue = "metrics-out"
+        output = WorkerOutputType.RABBITMQ
     )
     static class TestWorker implements PocketHiveWorkerFunction {
 

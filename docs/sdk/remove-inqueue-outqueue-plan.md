@@ -36,9 +36,9 @@ The Swarm Controller already injects `POCKETHIVE_INPUT_RABBIT_QUEUE` / `POCKETHI
 - [x] Adjust status publishers and `WorkerControlPlaneRuntime` to emit queue metadata from the new fields, mirroring what the UI expects.
 
 ## 4. Deprecation & Removal
-- [ ] Mark `@PocketHiveWorker.inQueue/outQueue` as deprecated in the SDK, update docs/review checklist to forbid new uses, and add lint/tests to catch regressions.
-- [ ] Once all runtime pieces ignore the annotation values, remove the fields from `PocketHiveWorker`, `WorkerDefinition`, tests, and examples; fail fast if a worker lacks plan routing data instead of synthesizing defaults.
-- [ ] Refresh documentation (SDK quickstart, architecture, UI/operator guides) to spell out the “plan-driven routing only” rule.
+- [x] Remove `@PocketHiveWorker.inQueue/outQueue` from the SDK (annotation, docs, review checklist) and enforce lint/tests to catch regressions.
+- [x] Once all runtime pieces ignore the annotation values, remove the fields from `PocketHiveWorker`, `WorkerDefinition`, tests, and examples; fail fast if a worker lacks plan routing data instead of synthesizing defaults.
+- [x] Refresh documentation (SDK quickstart, architecture, UI/operator guides) to spell out the “plan-driven routing only” rule.
 
 ## 5. Verification & Rollout
 - [ ] Run local swarm/e2e tests with multiple scenarios to verify listener wiring, message routing, and status dashboards still work with only plan data.

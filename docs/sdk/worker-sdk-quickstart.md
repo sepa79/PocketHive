@@ -52,15 +52,15 @@ See the [control-plane worker guide](../control-plane/worker-guide.md#configurat
 ## 2. Annotate worker beans
 
 Annotate each business implementation with `@PocketHiveWorker`. Select the appropriate input binding (`RABBIT` by
-default, `SCHEDULER` for timer-driven workers) and provide routing metadata. Optional `config` classes participate in
+default, `SCHEDULER` for timer-driven workers). Queue metadata now flows solely from the control-plane plan via the
+`pockethive.inputs/outputs.*` configuration (or the matching environment variables), so the annotation only captures role,
+input type, capabilities, and optional config. Optional `config` classes participate in
 Stage 2 control-plane hydration.
 
 ```java
 @Component("processorWorker")
 @PocketHiveWorker(
     role = "processor",
-    inQueue = "moderator",
-    outQueue = "final",
     config = ProcessorWorkerConfig.class
 )
 class ProcessorWorkerImpl implements MessageWorker {
@@ -68,10 +68,10 @@ class ProcessorWorkerImpl implements MessageWorker {
 }
 ```
 
-Generator workers follow the same pattern but typically specify `input = WorkerInputType.SCHEDULER` and omit `inQueue`.
+Generator workers follow the same pattern but typically specify `input = WorkerInputType.SCHEDULER`. Their queues come from the same plan-driven IO configuration described above.
 
 > **Status topology note**
-> The Worker SDK automatically mirrors the descriptor queues into the control-plane status payload via `statusPublisher().workIn(...)` and `statusPublisher().workOut(...)`. The legacy `inQueue` field in status events has been removed; consumers should rely on the richer `queues.work`/`queues.control` block instead.
+> The Worker SDK automatically mirrors plan-provided queues into the control-plane status payload via `statusPublisher().workIn(...)` and `statusPublisher().workOut(...)`. The legacy `inQueue` field in status events has been removed; consumers should rely on the richer `queues.work`/`queues.control` block instead.
 
 ## 3. Implement the worker interface
 
