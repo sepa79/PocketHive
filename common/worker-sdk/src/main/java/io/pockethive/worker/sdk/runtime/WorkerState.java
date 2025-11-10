@@ -28,8 +28,9 @@ public final class WorkerState {
 
     WorkerState(WorkerDefinition definition) {
         this.definition = Objects.requireNonNull(definition, "definition");
-        addIfPresent(workInRoutes, definition.inQueue());
-        addIfPresent(workOutRoutes, definition.outQueue());
+        WorkIoBindings io = definition.io();
+        addIfPresent(workInRoutes, io.inboundQueue());
+        addIfPresent(workOutRoutes, io.outboundQueue());
     }
 
     WorkerDefinition definition() {

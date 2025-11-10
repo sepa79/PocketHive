@@ -35,9 +35,7 @@ class DefaultWorkerRuntimeTest {
             TestWorker.class,
             WorkerInputType.RABBIT,
             "role",
-            "in.queue",
-            "out.queue",
-            "exchange",
+            WorkIoBindings.of("in.queue", "out.queue", "exchange"),
             TestConfig.class,
             WorkInputConfig.class,
             WorkOutputConfig.class,
@@ -65,7 +63,8 @@ class DefaultWorkerRuntimeTest {
     }
 
     private static WorkerContext workerContext(WorkerDefinition definition, WorkerState state) {
-        WorkerInfo info = new WorkerInfo(definition.role(), "swarm", "instance", definition.inQueue(), definition.outQueue());
+        WorkIoBindings io = definition.io();
+        WorkerInfo info = new WorkerInfo(definition.role(), "swarm", "instance", io.inboundQueue(), io.outboundQueue());
         ObservabilityContext observabilityContext = new ObservabilityContext();
         observabilityContext.setTraceId("trace");
         observabilityContext.setSwarmId(info.swarmId());

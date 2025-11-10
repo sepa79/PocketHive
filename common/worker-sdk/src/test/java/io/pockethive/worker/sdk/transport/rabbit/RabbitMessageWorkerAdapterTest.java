@@ -8,6 +8,7 @@ import io.pockethive.worker.sdk.config.WorkOutputConfig;
 import io.pockethive.worker.sdk.config.WorkerCapability;
 import io.pockethive.worker.sdk.config.WorkerInputType;
 import io.pockethive.worker.sdk.config.WorkerOutputType;
+import io.pockethive.worker.sdk.runtime.WorkIoBindings;
 import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
 import java.nio.charset.StandardCharsets;
@@ -81,9 +82,7 @@ class RabbitMessageWorkerAdapterTest {
             Object.class,
             WorkerInputType.RABBIT,
             "processor",
-            "processor.in",
-            "processor.out",
-            "ph.test.hive",
+            WorkIoBindings.of("processor.in", "processor.out", "ph.test.hive"),
             Object.class,
             WorkInputConfig.class,
             WorkOutputConfig.class,
@@ -231,9 +230,7 @@ class RabbitMessageWorkerAdapterTest {
             Object.class,
             WorkerInputType.RABBIT,
             "processor",
-            "processor.in",
-            null,
-            "ph.test.hive",
+            WorkIoBindings.of("processor.in", null, "ph.test.hive"),
             Object.class,
             WorkInputConfig.class,
             WorkOutputConfig.class,
@@ -254,9 +251,7 @@ class RabbitMessageWorkerAdapterTest {
             Object.class,
             WorkerInputType.RABBIT,
             "processor",
-            "processor.in",
-            "processor.out",
-            null,
+            WorkIoBindings.of("processor.in", "processor.out", null),
             Object.class,
             WorkInputConfig.class,
             WorkOutputConfig.class,
@@ -277,9 +272,7 @@ class RabbitMessageWorkerAdapterTest {
             Object.class,
             WorkerInputType.RABBIT,
             "processor",
-            "processor.in",
-            null,
-            "ph.test.hive",
+            WorkIoBindings.of("processor.in", null, "ph.test.hive"),
             Object.class,
             WorkInputConfig.class,
             WorkOutputConfig.class,
@@ -298,9 +291,7 @@ class RabbitMessageWorkerAdapterTest {
             Object.class,
             WorkerInputType.RABBIT,
             "processor",
-            "processor.in",
-            null,
-            null,
+            WorkIoBindings.of("processor.in", null, null),
             Object.class,
             WorkInputConfig.class,
             WorkOutputConfig.class,
@@ -333,9 +324,7 @@ class RabbitMessageWorkerAdapterTest {
             Object.class,
             WorkerInputType.RABBIT,
             "processor",
-            "processor.in",
-            "processor.out",
-            "ph.test.hive",
+            WorkIoBindings.of("processor.in", "processor.out", "ph.test.hive"),
             Object.class,
             WorkInputConfig.class,
             WorkOutputConfig.class,

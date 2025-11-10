@@ -18,6 +18,7 @@ import io.pockethive.worker.sdk.config.WorkOutputConfig;
 import io.pockethive.worker.sdk.config.WorkerCapability;
 import io.pockethive.worker.sdk.config.WorkerInputType;
 import io.pockethive.worker.sdk.config.WorkerOutputType;
+import io.pockethive.worker.sdk.runtime.WorkIoBindings;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
 import io.pockethive.worker.sdk.runtime.WorkerInvocationContext;
 import io.pockethive.worker.sdk.runtime.WorkerObservabilityInterceptor;
@@ -232,9 +233,7 @@ class ProcessorTest {
                 ProcessorWorkerImpl.class,
                 WorkerInputType.RABBIT,
                 "processor",
-                MODERATOR_QUEUE,
-                FINAL_QUEUE,
-                TRAFFIC_EXCHANGE,
+                WorkIoBindings.of(MODERATOR_QUEUE, FINAL_QUEUE, TRAFFIC_EXCHANGE),
                 ProcessorWorkerConfig.class,
                 WorkInputConfig.class,
                 WorkOutputConfig.class,

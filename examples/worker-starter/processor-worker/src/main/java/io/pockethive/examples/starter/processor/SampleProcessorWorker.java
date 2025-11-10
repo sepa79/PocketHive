@@ -14,8 +14,7 @@ import org.springframework.stereotype.Component;
 @Component("sampleProcessorWorker")
 @PocketHiveWorker(
     role = "processor",
-    inQueue = "moderator",
-    outQueue = "final"
+    // Queue bindings supplied by the control plane via pockethive.inputs/outputs.*
 )
 class SampleProcessorWorker implements PocketHiveWorkerFunction {
 

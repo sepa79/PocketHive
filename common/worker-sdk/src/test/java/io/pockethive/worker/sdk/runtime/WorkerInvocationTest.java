@@ -30,9 +30,7 @@ class WorkerInvocationTest {
         TestMessageWorker.class,
         WorkerInputType.RABBIT,
         "role",
-        "in.queue",
-        "out.queue",
-        "exchange.hive",
+        WorkIoBindings.of("in.queue", "out.queue", "exchange.hive"),
         Void.class,
         WorkInputConfig.class,
         WorkOutputConfig.class,
@@ -135,8 +133,8 @@ class WorkerInvocationTest {
                 definition.role(),
                 "swarm",
                 definition.beanName(),
-                definition.inQueue(),
-                definition.outQueue()
+                definition.io().inboundQueue(),
+                definition.io().outboundQueue()
             );
 
             @Override

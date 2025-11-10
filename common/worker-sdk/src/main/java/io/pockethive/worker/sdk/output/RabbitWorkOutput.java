@@ -2,6 +2,7 @@ package io.pockethive.worker.sdk.output;
 
 import io.pockethive.worker.sdk.api.WorkResult;
 import io.pockethive.worker.sdk.config.RabbitOutputProperties;
+import io.pockethive.worker.sdk.runtime.WorkIoBindings;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.core.MessageDeliveryMode;
@@ -23,8 +24,9 @@ public final class RabbitWorkOutput implements WorkOutput {
 
     @Override
     public void publish(WorkResult.Message result, WorkerDefinition definition) {
-        String exchange = properties.getExchange() != null ? properties.getExchange() : definition.exchange();
-        String routingKey = properties.getRoutingKey() != null ? properties.getRoutingKey() : definition.outQueue();
+        WorkIoBindings io = definition.io();
+        String exchange = properties.getExchange() != null ? properties.getExchange() : io.outboundExchange();
+        String routingKey = properties.getRoutingKey() != null ? properties.getRoutingKey() : io.outboundQueue();
         if (exchange == null || routingKey == null) {
             throw new IllegalStateException("Cannot publish worker result without exchange and routing key");
         }

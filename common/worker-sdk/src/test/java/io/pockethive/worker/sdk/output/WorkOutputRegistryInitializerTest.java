@@ -9,6 +9,7 @@ import io.pockethive.worker.sdk.config.WorkOutputConfigBinder;
 import io.pockethive.worker.sdk.config.WorkerCapability;
 import io.pockethive.worker.sdk.config.WorkerInputType;
 import io.pockethive.worker.sdk.config.WorkerOutputType;
+import io.pockethive.worker.sdk.runtime.WorkIoBindings;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
 import io.pockethive.worker.sdk.runtime.WorkerRegistry;
 import java.util.List;
@@ -29,9 +30,7 @@ class WorkOutputRegistryInitializerTest {
             Object.class,
             WorkerInputType.SCHEDULER,
             "noop",
-            null,
-            null,
-            null,
+            WorkIoBindings.none(),
             Void.class,
             WorkInputConfig.class,
             WorkOutputConfig.class,
@@ -44,9 +43,7 @@ class WorkOutputRegistryInitializerTest {
             Object.class,
             WorkerInputType.RABBIT,
             "processor",
-            null,
-            "processor.out",
-            "exchange",
+            WorkIoBindings.of(null, "processor.out", "exchange"),
             Void.class,
             WorkInputConfig.class,
             RabbitOutputProperties.class,
@@ -85,9 +82,7 @@ class WorkOutputRegistryInitializerTest {
             Object.class,
             WorkerInputType.SCHEDULER,
             "prio",
-            null,
-            null,
-            null,
+            WorkIoBindings.none(),
             Void.class,
             WorkInputConfig.class,
             WorkOutputConfig.class,

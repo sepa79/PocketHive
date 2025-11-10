@@ -13,6 +13,7 @@ import io.pockethive.worker.sdk.config.WorkOutputConfig;
 import io.pockethive.worker.sdk.config.WorkerCapability;
 import io.pockethive.worker.sdk.config.WorkerInputType;
 import io.pockethive.worker.sdk.config.WorkerOutputType;
+import io.pockethive.worker.sdk.runtime.WorkIoBindings;
 import io.pockethive.worker.sdk.testing.ControlPlaneTestFixtures;
 import io.pockethive.controlplane.spring.WorkerControlPlaneProperties;
 import java.util.List;
@@ -58,9 +59,7 @@ class WorkerControlPlaneRuntimeTest {
             TestWorker.class,
             WorkerInputType.SCHEDULER,
             "generator",
-            null,
-            "out.queue",
-            "traffic.exchange",
+            WorkIoBindings.of(null, "out.queue", "traffic.exchange"),
             TestConfig.class,
             WorkInputConfig.class,
             WorkOutputConfig.class,
@@ -235,9 +234,7 @@ class WorkerControlPlaneRuntimeTest {
             TestWorker.class,
             WorkerInputType.SCHEDULER,
             "generator",
-            null,
-            "out.queue",
-            "traffic.exchange",
+            WorkIoBindings.of(null, "out.queue", "traffic.exchange"),
             TestConfig.class,
             WorkInputConfig.class,
             WorkOutputConfig.class,
@@ -468,8 +465,8 @@ class WorkerControlPlaneRuntimeTest {
         assertThat(initial.inputType()).isEqualTo(definition.input());
         assertThat(initial.outputType()).isEqualTo(definition.outputType());
         assertThat(initial.inboundQueue()).isEmpty();
-        assertThat(initial.outboundQueue()).contains(definition.outQueue());
-        assertThat(initial.exchange()).contains(definition.exchange());
+        assertThat(initial.outboundQueue()).contains(definition.io().outboundQueue());
+        assertThat(initial.exchange()).contains(definition.io().outboundExchange());
 
         Map<String, Object> args = Map.of(
             "data", Map.of("enabled", true)
@@ -573,8 +570,8 @@ class WorkerControlPlaneRuntimeTest {
         assertThat(worker).containsEntry("description", "Test worker");
         assertThat(worker).containsEntry("input", WorkerInputType.SCHEDULER.name());
         assertThat(worker).containsEntry("output", WorkerOutputType.RABBITMQ.name());
-        assertThat(worker).containsEntry("outQueue", definition.outQueue());
-        assertThat(worker).containsEntry("exchange", definition.exchange());
+        assertThat(worker).containsEntry("outQueue", definition.io().outboundQueue());
+        assertThat(worker).containsEntry("exchange", definition.io().outboundExchange());
         assertThat(worker).doesNotContainKey("inQueue");
         @SuppressWarnings("unchecked")
         List<String> capabilities = (List<String>) worker.get("capabilities");

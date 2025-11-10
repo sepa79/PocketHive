@@ -2,6 +2,7 @@ package io.pockethive.worker.sdk.input.rabbit;
 
 import io.pockethive.worker.sdk.config.WorkerInputType;
 import io.pockethive.worker.sdk.input.WorkInputRegistry;
+import io.pockethive.worker.sdk.runtime.WorkIoBindings;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
 import io.pockethive.worker.sdk.runtime.WorkerRegistry;
 import java.util.Objects;
@@ -35,7 +36,8 @@ public final class RabbitWorkInputListenerConfigurer implements RabbitListenerCo
     }
 
     private void registerEndpoint(RabbitListenerEndpointRegistrar registrar, WorkerDefinition definition) {
-        String queue = definition.inQueue();
+        WorkIoBindings io = definition.io();
+        String queue = io.inboundQueue();
         if (queue == null || queue.isBlank()) {
             log.warn("Skipping Rabbit listener registration for worker {} - inbound queue not configured", definition.beanName());
             return;

@@ -4,6 +4,7 @@ import io.pockethive.observability.ObservabilityContext;
 import io.pockethive.observability.ObservabilityContextUtil;
 import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pockethive.worker.sdk.api.WorkResult;
+import io.pockethive.worker.sdk.runtime.WorkIoBindings;
 import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime;
 import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime.WorkerStateSnapshot;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
@@ -492,11 +493,12 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
             Objects.requireNonNull(listenerId, "listenerId");
             Objects.requireNonNull(displayName, "displayName");
             Objects.requireNonNull(workerDefinition, "workerDefinition");
-            String resolvedOutbound = workerDefinition.outQueue();
+            WorkIoBindings io = workerDefinition.io();
+            String resolvedOutbound = io.outboundQueue();
             if (resolvedOutbound != null && !resolvedOutbound.isBlank()) {
                 this.outboundQueue = resolvedOutbound;
             }
-            String resolvedExchange = workerDefinition.exchange();
+            String resolvedExchange = io.outboundExchange();
             if (resolvedExchange != null && !resolvedExchange.isBlank()) {
                 this.outboundExchange = resolvedExchange;
             }
