@@ -18,7 +18,6 @@ pockethive:
       autowire: true
   inputs:
     rabbit:
-      enabled: false
       queue: ${POCKETHIVE_INPUT_RABBIT_QUEUE}
   outputs:
     rabbit:

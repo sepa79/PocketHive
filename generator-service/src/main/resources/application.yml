@@ -16,9 +16,6 @@ pockethive:
   worker:
     inputs:
       autowire: true
-  inputs:
-    scheduler:
-      enabled: false
   outputs:
     rabbit:
       exchange: ${POCKETHIVE_OUTPUT_RABBIT_EXCHANGE}
