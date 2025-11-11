@@ -31,7 +31,7 @@ import org.springframework.stereotype.Component;
 @Component("moderatorWorker")
 @PocketHiveWorker(
     role = "moderator",
-    input = WorkerInputType.RABBIT,
+    input = WorkerInputType.RABBITMQ,
     output = WorkerOutputType.RABBITMQ,
     capabilities = {WorkerCapability.MESSAGE_DRIVEN},
     config = ModeratorWorkerConfig.class

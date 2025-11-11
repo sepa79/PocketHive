@@ -41,7 +41,7 @@ class RabbitWorkInputListenerConfigurerTest {
         WorkerDefinition definition = new WorkerDefinition(
             "testWorker",
             TestWorker.class,
-            WorkerInputType.RABBIT,
+            WorkerInputType.RABBITMQ,
             "moderator",
             WorkIoBindings.of("ph.swarm.generator", "ph.swarm.moderator", "ph.control"),
             TestConfig.class,

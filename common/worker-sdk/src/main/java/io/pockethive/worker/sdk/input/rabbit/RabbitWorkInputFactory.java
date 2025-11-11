@@ -50,7 +50,7 @@ public final class RabbitWorkInputFactory implements WorkInputFactory, Ordered {
 
     @Override
     public boolean supports(WorkerDefinition definition) {
-        return definition.input() == WorkerInputType.RABBIT
+        return definition.input() == WorkerInputType.RABBITMQ
             && rabbitTemplate != null
             && listenerRegistry != null;
     }

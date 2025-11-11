@@ -386,7 +386,7 @@ public class PocketHiveWorkerSdkAutoConfiguration {
         WorkOutputConfigBinder outputBinder
     ) {
         String inQueue = null;
-        if (annotation.input() == WorkerInputType.RABBIT) {
+        if (annotation.input() == WorkerInputType.RABBITMQ) {
             if (!(inputConfig instanceof RabbitInputProperties rabbit)) {
                 throw new IllegalStateException(
                     "Rabbit inputs require " + RabbitInputProperties.class.getSimpleName() + " configuration");
@@ -431,7 +431,7 @@ public class PocketHiveWorkerSdkAutoConfiguration {
         }
         return switch (annotation.input()) {
             case SCHEDULER -> SchedulerInputProperties.class;
-            case RABBIT -> RabbitInputProperties.class;
+            case RABBITMQ -> RabbitInputProperties.class;
             default -> WorkInputConfig.class;
         };
     }

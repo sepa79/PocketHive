@@ -25,7 +25,7 @@ class WorkInputRegistryInitializerTest {
         WorkerDefinition definition = new WorkerDefinition(
             "testWorker",
             Object.class,
-            WorkerInputType.RABBIT,
+            WorkerInputType.RABBITMQ,
             "test",
             WorkIoBindings.none(),
             Void.class,
@@ -66,7 +66,7 @@ class WorkInputRegistryInitializerTest {
         WorkerDefinition definition = new WorkerDefinition(
             "orderedWorker",
             Object.class,
-            WorkerInputType.RABBIT,
+            WorkerInputType.RABBITMQ,
             "test",
             WorkIoBindings.none(),
             Void.class,

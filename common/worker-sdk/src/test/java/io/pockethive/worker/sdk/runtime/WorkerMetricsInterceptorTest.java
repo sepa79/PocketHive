@@ -38,7 +38,7 @@ class WorkerMetricsInterceptorTest {
     private static final WorkerDefinition DEFINITION = new WorkerDefinition(
         "metricsWorker",
         Object.class,
-        WorkerInputType.RABBIT,
+        WorkerInputType.RABBITMQ,
         "metrics-role",
         WorkIoBindings.of("in.metrics", "out.metrics", "exchange.hive"),
         Void.class,
@@ -202,7 +202,7 @@ class WorkerMetricsInterceptorTest {
 
     @PocketHiveWorker(
         role = "metrics-role",
-        input = WorkerInputType.RABBIT,
+        input = WorkerInputType.RABBITMQ,
         output = WorkerOutputType.RABBITMQ
     )
     static class TestWorker implements PocketHiveWorkerFunction {

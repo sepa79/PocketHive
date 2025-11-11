@@ -80,7 +80,7 @@ class RabbitMessageWorkerAdapterTest {
         workerDefinition = new WorkerDefinition(
             "processorWorker",
             Object.class,
-            WorkerInputType.RABBIT,
+            WorkerInputType.RABBITMQ,
             "processor",
             WorkIoBindings.of("processor.in", "processor.out", "ph.test.hive"),
             Object.class,
@@ -237,7 +237,7 @@ class RabbitMessageWorkerAdapterTest {
         workerDefinition = new WorkerDefinition(
             "processorWorker",
             Object.class,
-            WorkerInputType.RABBIT,
+            WorkerInputType.RABBITMQ,
             "processor",
             WorkIoBindings.of("processor.in", null, "ph.test.hive"),
             Object.class,
@@ -258,7 +258,7 @@ class RabbitMessageWorkerAdapterTest {
         workerDefinition = new WorkerDefinition(
             "processorWorker",
             Object.class,
-            WorkerInputType.RABBIT,
+            WorkerInputType.RABBITMQ,
             "processor",
             WorkIoBindings.of("processor.in", "processor.out", null),
             Object.class,
@@ -279,7 +279,7 @@ class RabbitMessageWorkerAdapterTest {
         workerDefinition = new WorkerDefinition(
             "processorWorker",
             Object.class,
-            WorkerInputType.RABBIT,
+            WorkerInputType.RABBITMQ,
             "processor",
             WorkIoBindings.of("processor.in", null, "ph.test.hive"),
             Object.class,
@@ -298,7 +298,7 @@ class RabbitMessageWorkerAdapterTest {
         workerDefinition = new WorkerDefinition(
             "processorWorker",
             Object.class,
-            WorkerInputType.RABBIT,
+            WorkerInputType.RABBITMQ,
             "processor",
             WorkIoBindings.of("processor.in", null, null),
             Object.class,
@@ -331,7 +331,7 @@ class RabbitMessageWorkerAdapterTest {
         workerDefinition = new WorkerDefinition(
             "processorWorker",
             Object.class,
-            WorkerInputType.RABBIT,
+            WorkerInputType.RABBITMQ,
             "processor",
             WorkIoBindings.of("processor.in", "processor.out", "ph.test.hive"),
             Object.class,

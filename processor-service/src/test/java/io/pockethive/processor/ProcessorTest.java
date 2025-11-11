@@ -231,7 +231,7 @@ class ProcessorTest {
         return new WorkerDefinition(
                 "processorWorker",
                 ProcessorWorkerImpl.class,
-                WorkerInputType.RABBIT,
+                WorkerInputType.RABBITMQ,
                 "processor",
                 WorkIoBindings.of(MODERATOR_QUEUE, FINAL_QUEUE, TRAFFIC_EXCHANGE),
                 ProcessorWorkerConfig.class,

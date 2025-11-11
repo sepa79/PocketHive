@@ -20,7 +20,7 @@ class WorkIOConfigBinderTest {
         ));
         WorkInputConfigBinder binder = new WorkInputConfigBinder(new Binder(source));
 
-        RabbitInputProperties config = binder.bind(WorkerInputType.RABBIT, RabbitInputProperties.class);
+        RabbitInputProperties config = binder.bind(WorkerInputType.RABBITMQ, RabbitInputProperties.class);
 
         assertThat(config.getPrefetch()).isEqualTo(25);
         assertThat(config.getConcurrentConsumers()).isEqualTo(3);
@@ -43,7 +43,7 @@ class WorkIOConfigBinderTest {
         source.put(ConfigurationPropertyName.of("pockethive.inputs.rabbit.prefetch"), "30");
         WorkInputConfigBinder binder = new WorkInputConfigBinder(new Binder(source));
 
-        assertThat(binder.prefix(WorkerInputType.RABBIT)).isEqualTo("pockethive.inputs.rabbit");
+        assertThat(binder.prefix(WorkerInputType.RABBITMQ)).isEqualTo("pockethive.inputs.rabbit");
     }
 
     @Test

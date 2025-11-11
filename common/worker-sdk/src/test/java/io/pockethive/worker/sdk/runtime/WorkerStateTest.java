@@ -90,7 +90,7 @@ class WorkerStateTest {
         WorkerDefinition definition = new WorkerDefinition(
             "testWorker",
             Object.class,
-            WorkerInputType.RABBIT,
+            WorkerInputType.RABBITMQ,
             "test-role",
             WorkIoBindings.of(" in.runtime ", "out.runtime", null),
             TestConfig.class,

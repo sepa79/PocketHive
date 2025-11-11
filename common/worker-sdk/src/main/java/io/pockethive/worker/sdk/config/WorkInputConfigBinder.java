@@ -32,7 +32,11 @@ public final class WorkInputConfigBinder {
 
     public String prefix(WorkerInputType inputType) {
         Objects.requireNonNull(inputType, "inputType");
-        return "pockethive.inputs." + inputType.name().toLowerCase(Locale.ROOT);
+        String suffix = switch (inputType) {
+            case RABBITMQ -> "rabbit";
+            default -> inputType.name().toLowerCase(Locale.ROOT);
+        };
+        return "pockethive.inputs." + suffix;
     }
 
     private static <C> C instantiate(Class<C> type) {

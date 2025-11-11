@@ -8,7 +8,7 @@ public enum WorkerInputType {
     /**
      * Input driven by RabbitMQ listeners.
      */
-    RABBIT,
+    RABBITMQ,
     /**
      * Input driven by a scheduler (generators, triggers, cron-like sources).
      */

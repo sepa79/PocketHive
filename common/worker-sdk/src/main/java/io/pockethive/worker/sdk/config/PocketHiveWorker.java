@@ -35,7 +35,7 @@ public @interface PocketHiveWorker {
     /**
      * Input binding that feeds messages to the worker runtime.
      */
-    WorkerInputType input() default WorkerInputType.RABBIT;
+    WorkerInputType input() default WorkerInputType.RABBITMQ;
 
     /**
      * Declares which output transport should be wired for this worker.

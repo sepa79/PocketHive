@@ -31,7 +31,7 @@ public final class RabbitWorkInputListenerConfigurer implements RabbitListenerCo
     @Override
     public void configureRabbitListeners(RabbitListenerEndpointRegistrar registrar) {
         workerRegistry.all().stream()
-            .filter(definition -> definition.input() == WorkerInputType.RABBIT)
+            .filter(definition -> definition.input() == WorkerInputType.RABBITMQ)
             .forEach(definition -> registerEndpoint(registrar, definition));
     }
 

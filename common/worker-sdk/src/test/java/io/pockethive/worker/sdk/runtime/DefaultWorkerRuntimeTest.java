@@ -33,7 +33,7 @@ class DefaultWorkerRuntimeTest {
         WorkerDefinition definition = new WorkerDefinition(
             "testWorker",
             TestWorker.class,
-            WorkerInputType.RABBIT,
+            WorkerInputType.RABBITMQ,
             "role",
             WorkIoBindings.of("in.queue", "out.queue", "exchange"),
             TestConfig.class,

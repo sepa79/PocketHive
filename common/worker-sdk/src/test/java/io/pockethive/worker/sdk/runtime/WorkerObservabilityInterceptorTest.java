@@ -26,7 +26,7 @@ class WorkerObservabilityInterceptorTest {
     private static final WorkerDefinition DEFINITION = new WorkerDefinition(
         "testWorker",
         Object.class,
-        WorkerInputType.RABBIT,
+        WorkerInputType.RABBITMQ,
         "role",
         WorkIoBindings.of("in.queue", "out.queue", "exchange.hive"),
         Void.class,

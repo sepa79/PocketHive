@@ -40,7 +40,7 @@ class PocketHiveWorkerDefaultsInitializerTest {
         definition = new WorkerDefinition(
             "testWorker",
             Object.class,
-            WorkerInputType.RABBIT,
+            WorkerInputType.RABBITMQ,
             "test-role",
             WorkIoBindings.none(),
             TestWorkerConfig.class,

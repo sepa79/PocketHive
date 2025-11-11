@@ -32,7 +32,7 @@ class WorkerRegistryTest {
     private static final WorkerDefinition MESSAGE_PROCESSOR = new WorkerDefinition(
         "processorWorker",
         Object.class,
-        WorkerInputType.RABBIT,
+        WorkerInputType.RABBITMQ,
         "processor",
         WorkIoBindings.of("in", "out", "exchange.hive"),
         Void.class,
@@ -46,7 +46,7 @@ class WorkerRegistryTest {
     private static final WorkerDefinition MESSAGE_TRIGGER = new WorkerDefinition(
         "triggerMessageWorker",
         Object.class,
-        WorkerInputType.RABBIT,
+        WorkerInputType.RABBITMQ,
         "trigger",
         WorkIoBindings.none(),
         Void.class,
@@ -65,14 +65,14 @@ class WorkerRegistryTest {
 
     @Test
     void findByRoleAndInputReturnsMatchingDefinition() {
-        Optional<WorkerDefinition> result = registry.findByRoleAndInput("processor", WorkerInputType.RABBIT);
+        Optional<WorkerDefinition> result = registry.findByRoleAndInput("processor", WorkerInputType.RABBITMQ);
 
         assertThat(result).contains(MESSAGE_PROCESSOR);
     }
 
     @Test
     void findByRoleAndInputReturnsEmptyWhenNoMatch() {
-        Optional<WorkerDefinition> result = registry.findByRoleAndInput("missing", WorkerInputType.RABBIT);
+        Optional<WorkerDefinition> result = registry.findByRoleAndInput("missing", WorkerInputType.RABBITMQ);
 
         assertThat(result).isEmpty();
     }

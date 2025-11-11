@@ -41,7 +41,7 @@ class WorkOutputRegistryInitializerTest {
         WorkerDefinition rabbitDefinition = new WorkerDefinition(
             "rabbitWorker",
             Object.class,
-            WorkerInputType.RABBIT,
+            WorkerInputType.RABBITMQ,
             "processor",
             WorkIoBindings.of(null, "processor.out", "exchange"),
             Void.class,
