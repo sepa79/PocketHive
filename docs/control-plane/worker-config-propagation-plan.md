@@ -14,7 +14,7 @@ Purpose: allow scenario definitions to provide full worker `config` sections tha
 
 3. **Swarm creation request**
    - [x] Include the effective config map in the `SwarmPlan` sent to the orchestrator (e.g., `plan.bees[*].configOverrides`).
-   - [ ] Ensure the AsyncAPI/REST contract documents the new field and that orchestration tests cover it.
+   - [x] Ensure the AsyncAPI/REST contract documents the new field and that orchestration tests cover it.
 
 4. **Swarm Controller bootstrap**
    - [x] When the controller brings up each worker container continue supplying required IO/env vars (`POCKETHIVE_INPUT_*`, etc.) as today.

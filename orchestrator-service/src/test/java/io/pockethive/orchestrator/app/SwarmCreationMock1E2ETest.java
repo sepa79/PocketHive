@@ -266,9 +266,13 @@ class SwarmCreationMock1E2ETest {
                 "generator:latest",
                 new Work(null, "gen"),
                 Map.of(),
-                Map.of("ratePerSec", 50)),
+                Map.of(
+                    "ratePerSec", 50,
+                    "message", Map.of("path", "/api/guarded", "body", "guarded-request")
+                )
+            ),
             new Bee("moderator", "moderator:latest", new Work("gen", "mod"), Map.of(), Map.of()),
-            new Bee("processor", "processor:latest", new Work("mod", "final"), Map.of(), Map.of()),
+            new Bee("processor", "processor:latest", new Work("mod", "final"), Map.of(), Map.of("baseUrl", "http://sut:8080")),
             new Bee("postprocessor", "postprocessor:latest", new Work("final", null), Map.of(), Map.of())
         );
 

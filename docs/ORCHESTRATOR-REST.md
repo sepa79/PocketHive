@@ -162,7 +162,29 @@ Client sends **`idempotencyKey`** (UUID v4) per new action (reuse on retry). Ser
 ```json
 {
   "idempotencyKey": "uuid-v4",
-  "swarmPlan": { /* SwarmPlan; components typically enabled=false */ },
+  "swarmPlan": {
+    "id": "demo",
+    "bees": [
+      {
+        "role": "generator",
+        "image": "ghcr.io/pockethive/generator:latest",
+        "work": { "out": "gen-out" },
+        "config": {
+          "ratePerSec": 10,
+          "message": { "path": "/api/guarded", "body": "warmup" }
+        }
+      },
+      {
+        "role": "processor",
+        "image": "ghcr.io/pockethive/processor:latest",
+        "work": { "in": "gen-out", "out": "final" },
+        "config": {
+          "baseUrl": "http://wiremock:8080",
+          "timeoutMillis": 2500
+        }
+      }
+    ]
+  },
   "notes": "optional"
 }
 ```
