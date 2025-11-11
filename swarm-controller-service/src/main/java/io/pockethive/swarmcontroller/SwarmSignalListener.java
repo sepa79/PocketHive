@@ -59,6 +59,7 @@ public class SwarmSignalListener {
   private static final long MAX_STALENESS_MS = 15_000L;
   private volatile boolean controllerEnabled = false;
   private final AtomicReference<PendingTemplate> pendingTemplate = new AtomicReference<>();
+  private final AtomicReference<PendingStart> pendingStart = new AtomicReference<>();
 
   @Autowired
   public SwarmSignalListener(SwarmLifecycle lifecycle,
@@ -166,6 +167,7 @@ public class SwarmSignalListener {
         boolean ready = lifecycle.markReady(role, instance);
         if (ready) {
           tryEmitPendingTemplateReady();
+          tryEmitPendingStartReady();
         }
       }
     } catch (Exception e) {
@@ -185,6 +187,8 @@ public class SwarmSignalListener {
       action.apply(serializeArgs(cs));
       if (ControlPlaneSignals.SWARM_TEMPLATE.equals(resolvedSignal)) {
         onTemplateSuccess(cs, resolvedSignal, swarmId);
+      } else if (ControlPlaneSignals.SWARM_START.equals(resolvedSignal)) {
+        onStartSuccess(cs, resolvedSignal, swarmId);
       } else {
         emitSuccess(cs, resolvedSignal, swarmId);
       }
@@ -219,6 +223,37 @@ public class SwarmSignalListener {
         return;
       }
       if (pendingTemplate.compareAndSet(pending, null)) {
+        emitSuccess(pending.signal(), pending.resolvedSignal(), pending.swarmIdFallback());
+        return;
+      }
+    }
+  }
+
+  private void onStartSuccess(ControlSignal cs, String resolvedSignal, String swarmId) {
+    if (!lifecycle.hasPendingConfigUpdates() && lifecycle.isReadyForWork()) {
+      pendingStart.set(null);
+      emitSuccess(cs, resolvedSignal, swarmId);
+      return;
+    }
+    PendingStart newPending = new PendingStart(cs, resolvedSignal, swarmId);
+    PendingStart previous = pendingStart.getAndSet(newPending);
+    if (previous != null) {
+      log.debug("Replacing pending swarm-start confirmation for correlation {} with {}",
+          previous.signal().correlationId(), cs.correlationId());
+    }
+    tryEmitPendingStartReady();
+  }
+
+  private void tryEmitPendingStartReady() {
+    while (true) {
+      PendingStart pending = pendingStart.get();
+      if (pending == null) {
+        return;
+      }
+      if (lifecycle.hasPendingConfigUpdates() || !lifecycle.isReadyForWork()) {
+        return;
+      }
+      if (pendingStart.compareAndSet(pending, null)) {
         emitSuccess(pending.signal(), pending.resolvedSignal(), pending.swarmIdFallback());
         return;
       }
@@ -406,6 +441,7 @@ public class SwarmSignalListener {
   @Scheduled(fixedRate = STATUS_INTERVAL_MS)
   public void status() {
     sendStatusDelta();
+    tryEmitPendingStartReady();
   }
 
   private void emitSuccess(ControlSignal cs, String resolvedSignal, String swarmIdFallback) {
@@ -641,6 +677,8 @@ public class SwarmSignalListener {
   }
 
   private record PendingTemplate(ControlSignal signal, String resolvedSignal, String swarmIdFallback) {}
+
+  private record PendingStart(ControlSignal signal, String resolvedSignal, String swarmIdFallback) {}
 
   private record TargetSpec(String role, String instance) {}
 

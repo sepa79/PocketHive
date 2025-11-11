@@ -14,6 +14,8 @@ All notable changes to this project will be documented in this file.
   - Update `local-rest-two-moderators` with guard-focused queue alias, tuned bracket, logging defaults, and WireMock latency notes.
   - Add `local-rest-two-moderators-randomized` plus `/api/guarded-random` WireMock mappings to demo bursty/backpressure control.
   - Extend `docs/USAGE.md` + `docs/observability.md` with guard launch/tuning instructions and a monitoring runbook.
+- Scenario config propagation: update scenario/orchestrator/e2e tests to assert `Bee.config` defaults instead of env overrides, mark the plan progress in `docs/control-plane/worker-config-propagation-plan.md`, and keep template outputs in sync with the new config block.
+- Swarm controller enablement: cache the desired enabled flag, resend targeted `config-update` commands on worker heartbeats until each instance reports the requested state, and add unit coverage so status snapshots flip to `enabled=true` as soon as the controller observes the heartbeat.
 
 ## [0.13.6] - 2025-11-09
 Timestamp: 2025-11-09T00:00:00Z

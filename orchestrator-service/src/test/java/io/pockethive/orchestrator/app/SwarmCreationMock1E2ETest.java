@@ -265,10 +265,11 @@ class SwarmCreationMock1E2ETest {
                 "generator",
                 "generator:latest",
                 new Work(null, "gen"),
-                java.util.Map.of("POCKETHIVE_WORKERS_GENERATOR_CONFIG_RATEPERSEC", "50")),
-            new Bee("moderator", "moderator:latest", new Work("gen", "mod"), java.util.Map.of()),
-            new Bee("processor", "processor:latest", new Work("mod", "final"), java.util.Map.of()),
-            new Bee("postprocessor", "postprocessor:latest", new Work("final", null), java.util.Map.of())
+                Map.of(),
+                Map.of("ratePerSec", 50)),
+            new Bee("moderator", "moderator:latest", new Work("gen", "mod"), Map.of(), Map.of()),
+            new Bee("processor", "processor:latest", new Work("mod", "final"), Map.of(), Map.of()),
+            new Bee("postprocessor", "postprocessor:latest", new Work("final", null), Map.of(), Map.of())
         );
 
         Message readyMessage = awaitMessage(captureName, Duration.ofSeconds(15));

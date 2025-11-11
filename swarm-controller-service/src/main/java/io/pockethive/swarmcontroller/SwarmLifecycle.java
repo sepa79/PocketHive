@@ -172,4 +172,11 @@ public interface SwarmLifecycle {
   default TrafficPolicy trafficPolicy() {
     return null;
   }
+
+  /**
+   * Indicates whether any bootstrap config payloads are still waiting to be published.
+   */
+  default boolean hasPendingConfigUpdates() {
+    return false;
+  }
 }
