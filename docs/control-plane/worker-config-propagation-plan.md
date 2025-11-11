@@ -17,24 +17,24 @@ Purpose: allow scenario definitions to provide full worker `config` sections tha
    - [ ] Ensure the AsyncAPI/REST contract documents the new field and that orchestration tests cover it.
 
 4. **Swarm Controller bootstrap**
-   - [ ] When the controller brings up each worker container continue supplying required IO/env vars (`POCKETHIVE_INPUT_*`, etc.) as today.
-   - [ ] For each worker role, send a `config-update` control-plane signal with the merged config map and wait for acknowledgement **before** emitting any `swarm-ready` or worker `ready` events so the SDK hydrates it immediately.
-   - [ ] Emit the `swarm-ready` signal only after every worker’s config update has succeeded; fail the swarm if any config payload is rejected.
+   - [x] When the controller brings up each worker container continue supplying required IO/env vars (`POCKETHIVE_INPUT_*`, etc.) as today.
+   - [x] For each worker role, send a `config-update` control-plane signal with the merged config map and wait for acknowledgement **before** emitting any `swarm-ready` or worker `ready` events so the SDK hydrates it immediately.
+   - [x] Emit the `swarm-ready` signal only after every worker’s config update has succeeded; fail the swarm if any config payload is rejected.
+   - [x] Surface `ev.error.config-update.*` during bootstrap: fail `swarm-template`/`swarm-start`, mark the swarm `FAILED`, and return the aggregated validation errors to the orchestrator/UI.
 
 5. **Worker SDK behavior**
-   - [ ] Workers already listen for `config-update` and expose `context.config(...)`; verify that startup updates hydrate before the first work message is dispatched.
-   - [ ] If a worker also has `pockethive.workers.<role>.config` defaults in its `application.yml`, ensure the control-plane payload overrides them deterministically, matching Stage 2 semantics.
+   - [x] Workers already listen for `config-update` and expose `context.config(...)`; verify that startup updates hydrate before the first work message is dispatched.
+   - [x] If a worker also has `pockethive.workers.<role>.config` defaults in its `application.yml`, ensure the control-plane payload overrides them deterministically, matching Stage 2 semantics.
 
 6. **Fallback / migration**
-   - [ ] Remove env-based config wiring once the control-plane-backed flow is live (no dual-write).
-   - [ ] Prefer control-plane payloads when both are present; log a warning if the env defaults differ from the supplied config block to catch drift.
+   - [x] Remove env-based config wiring once the control-plane-backed flow is live (no dual-write).
 
 7. **Documentation & tooling**
-   - [ ] Update `docs/USAGE.md`, worker READMEs, and scenario docs to show the new `workers.<role>.config` syntax.
-   - [ ] Describe the startup sequence so operators understand that configs now flow through control-plane messages instead of env vars.
+   - [x] Update `docs/USAGE.md`, worker READMEs, and scenario docs to show the new `workers.<role>.config` syntax.
+   - [x] Describe the startup sequence so operators understand that configs now flow through control-plane messages instead of env vars.
 
 ## Open items
 
-- Error handling: decide how the controller reports invalid config payloads (e.g., aggregate validation errors from workers).
 - Ordering: confirm whether config updates must finish before worker instances autoscale (so new replicas start with the same overrides).
 - UI exposure: ensure Hive UI reads the same config payload when showing worker settings to keep operators aligned with runtime values.
+- Restart semantics (TODO): define a control-plane handshake for restarts so workers can flag “just started” in their first status heartbeat, controllers know to replay the latest config, and orchestrators/controllers that restart themselves can request the same re-sync without losing overrides. This must distinguish genuine restarts from transient network stalls.

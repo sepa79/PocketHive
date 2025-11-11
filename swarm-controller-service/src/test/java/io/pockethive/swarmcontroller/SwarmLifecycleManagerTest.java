@@ -41,6 +41,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.OptionalLong;
 import java.util.Properties;
+import java.util.stream.IntStream;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.DoublePredicate;
 import org.mockito.ArgumentCaptor;
@@ -696,6 +697,46 @@ class SwarmLifecycleManagerTest {
     assertThat(waitForRate(rateGauge, value -> value > 5.0)).isTrue();
 
     manager.remove();
+  }
+
+  @Test
+  void startPublishesBootstrapConfigAndTracksPendingUntilReady() throws Exception {
+    SwarmLifecycleManager manager = newManager();
+    Map<String, Object> workerConfig = Map.of(
+        "workerOverrides", Map.of("custom", "value"));
+    SwarmPlan plan = new SwarmPlan("swarm", List.of(
+        new Bee("generator", "img1", new Work(null, null), null, workerConfig)
+    ));
+    when(docker.createContainer(eq("img1"), anyMap(), anyString())).thenReturn("c1");
+
+    manager.start(mapper.writeValueAsString(plan));
+
+    assertTrue(manager.hasPendingConfigUpdates());
+
+    ArgumentCaptor<String> nameCaptor = ArgumentCaptor.forClass(String.class);
+    verify(docker).createContainer(eq("img1"), anyMap(), nameCaptor.capture());
+    String instanceName = nameCaptor.getValue();
+
+    String expectedRoute = ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, TEST_SWARM_ID, "generator", instanceName);
+    ArgumentCaptor<String> routingCaptor = ArgumentCaptor.forClass(String.class);
+    ArgumentCaptor<String> payloadCaptor = ArgumentCaptor.forClass(String.class);
+    verify(rabbit, atLeastOnce()).convertAndSend(eq(CONTROL_EXCHANGE), routingCaptor.capture(), payloadCaptor.capture());
+    int index = IntStream.range(0, routingCaptor.getAllValues().size())
+        .filter(i -> routingCaptor.getAllValues().get(i).equals(expectedRoute))
+        .findFirst()
+        .orElseThrow(() -> new AssertionError("Bootstrap config update not published"));
+    JsonNode signal = mapper.readTree(payloadCaptor.getAllValues().get(index));
+    JsonNode data = signal.path("args").path("data");
+    assertThat(signal.path("commandTarget").asText()).isEqualTo("instance");
+    assertThat(signal.path("role").asText()).isEqualTo("generator");
+    assertThat(signal.path("instance").asText()).isEqualTo(instanceName);
+    assertThat(data.path("workerOverrides").path("custom").asText()).isEqualTo("value");
+
+    manager.updateHeartbeat("generator", instanceName);
+    assertTrue(manager.hasPendingConfigUpdates());
+
+    manager.markReady("generator", instanceName);
+    assertFalse(manager.hasPendingConfigUpdates());
   }
 
   @Test

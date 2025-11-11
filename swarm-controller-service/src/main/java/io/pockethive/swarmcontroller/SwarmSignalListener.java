@@ -114,6 +114,8 @@ public class SwarmSignalListener {
         return;
       } else if (routingKey.startsWith("ev.status-")) {
         handleStatusEvent(routingKey, body);
+      } else if (routingKey.startsWith("ev.error.config-update")) {
+        handleConfigUpdateErrorEvent(routingKey, body);
       }
     } finally {
       MDC.clear();
@@ -172,6 +174,48 @@ public class SwarmSignalListener {
       }
     } catch (Exception e) {
       log.warn("status parse", e);
+    }
+  }
+
+  private void handleConfigUpdateErrorEvent(String routingKey, String body) {
+    RoutingKey eventKey = ControlPlaneRouting.parseEvent(routingKey);
+    if (eventKey == null) {
+      log.warn("Received config-update error with unparseable routing key {}; payload snippet={}", routingKey, snippet(body));
+      return;
+    }
+    if (!isLocalSwarm(eventKey.swarmId())) {
+      log.debug("Ignoring config-update error for swarm {} on routing key {}", eventKey.swarmId(), routingKey);
+      return;
+    }
+    try {
+      ErrorConfirmation confirmation = mapper.readValue(body, ErrorConfirmation.class);
+      String role = defaultSegment(eventKey.role(), confirmation.scope() != null ? confirmation.scope().role() : null);
+      String instance = defaultSegment(eventKey.instance(), confirmation.scope() != null ? confirmation.scope().instance() : null);
+      String message = confirmation.message();
+      lifecycle.handleConfigUpdateError(role, instance, message)
+          .ifPresent(this::failPendingLifecycle);
+    } catch (Exception e) {
+      log.warn("config-update error parse", e);
+    }
+  }
+
+  private void failPendingLifecycle(String reason) {
+    boolean failed = false;
+    PendingTemplate template = pendingTemplate.getAndSet(null);
+    if (template != null) {
+      lifecycle.fail(reason);
+      emitError(template.signal(), new IllegalStateException(reason), template.resolvedSignal(), template.swarmIdFallback());
+      failed = true;
+    }
+    PendingStart start = pendingStart.getAndSet(null);
+    if (start != null) {
+      lifecycle.fail(reason);
+      emitError(start.signal(), new IllegalStateException(reason), start.resolvedSignal(), start.swarmIdFallback());
+      failed = true;
+    }
+    if (!failed) {
+      lifecycle.fail(reason);
+      log.warn("Config-update error received with no pending lifecycle command. reason={}", reason);
     }
   }
 

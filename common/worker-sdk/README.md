@@ -86,9 +86,9 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
 
 The full implementations live in the `generator-service` and `processor-service` modules.
 
-> Queue names come from `pockethive.inputs.<type>` / `pockethive.outputs.<type>` (or the corresponding
-> `POCKETHIVE_INPUT_RABBIT_QUEUE` / `POCKETHIVE_OUTPUT_RABBIT_*` variables) which the Swarm Controller injects
-> from the active swarm plan. The annotation only declares the worker role/capabilities—no on-bean queue defaults remain.
+> Queue names come from the swarm plan (`SwarmPlan.bees[*].work`) and are injected by the Swarm Controller—scenario authors update them through the
+> `workers.<role>.config` block instead of touching environment variables.
+> Local runs can still rely on `pockethive.inputs.<type>` / `pockethive.outputs.<type>` for wiring, but the controller ignores ad-hoc env overrides once a swarm launches.
 
 ### `WorkMessage`
 

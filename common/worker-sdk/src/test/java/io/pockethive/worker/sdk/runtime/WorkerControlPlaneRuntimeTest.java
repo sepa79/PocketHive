@@ -591,6 +591,40 @@ class WorkerControlPlaneRuntimeTest {
         verify(emitter).emitStatusSnapshot(any());
     }
 
+    @Test
+    void controlPlaneConfigOverridesSeededDefaults() throws Exception {
+        TestConfig defaults = new TestConfig(false, 3.0);
+        runtime.registerDefaultConfig(definition.beanName(), defaults);
+
+        Map<String, Object> args = Map.of(
+            "data", Map.of(
+                "enabled", true,
+                "ratePerSec", 11.0
+            )
+        );
+        ControlSignal signal = ControlSignal.forInstance(
+            "config-update",
+            IDENTITY.swarmId(),
+            IDENTITY.role(),
+            IDENTITY.instanceId(),
+            UUID.randomUUID().toString(),
+            UUID.randomUUID().toString(),
+            CommandTarget.INSTANCE,
+            args
+        );
+        String payload = MAPPER.writeValueAsString(signal);
+        String routingKey = ControlPlaneRouting.signal("config-update", IDENTITY.swarmId(), IDENTITY.role(), IDENTITY.instanceId());
+
+        boolean handled = runtime.handle(payload, routingKey);
+
+        assertThat(handled).isTrue();
+        assertThat(runtime.workerConfig(definition.beanName(), TestConfig.class))
+            .contains(new TestConfig(true, 11.0));
+        assertThat(runtime.workerEnabled(definition.beanName())).contains(true);
+        Map<String, Object> rawConfig = runtime.workerRawConfig(definition.beanName());
+        assertThat(rawConfig).containsEntry("ratePerSec", 11.0);
+    }
+
     private Map<String, Object> buildSnapshot(ControlPlaneEmitter.StatusContext context) throws Exception {
         StatusEnvelopeBuilder builder = new StatusEnvelopeBuilder();
         context.customiser().accept(builder);

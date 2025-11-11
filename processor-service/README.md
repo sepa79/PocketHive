@@ -6,10 +6,11 @@ See the [architecture reference](../docs/ARCHITECTURE.md) and [control-plane rul
 
 ## Configuration
 
-The processor worker consumes the hive traffic exchange and queue bindings exposed via
-`pockethive.inputs.rabbit` / `pockethive.outputs.rabbit`. Define the moderator queue, processor queue, and final routing
-key under those sections (or via the `POCKETHIVE_INPUT_RABBIT_QUEUE` / `POCKETHIVE_OUTPUT_RABBIT_*` environment
-variables). With
+The processor worker consumes the hive traffic exchange and queue bindings described in the active scenario
+(`SwarmPlan.bees[*].work`). When you set `workers.processor.config` inside a scenario, those values are merged into the
+plan and the Swarm Controller broadcasts them as `config-update` signals before the worker ever processes a message.
+Local development can still populate `pockethive.inputs.rabbit` / `pockethive.outputs.rabbit`, but production swarms rely
+exclusively on the scenario definition—environment overrides are ignored. With
 `pockethive.worker.inputs.autowire=true` (the default) the Worker SDK wires the Rabbit input/output automatically, so no
 service-specific runtime adapter is required. Refer to the
 [control-plane worker guide](../docs/control-plane/worker-guide.md#configuration-properties) and the

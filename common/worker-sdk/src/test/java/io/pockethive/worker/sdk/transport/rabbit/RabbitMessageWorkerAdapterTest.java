@@ -95,7 +95,7 @@ class RabbitMessageWorkerAdapterTest {
     }
 
     @Test
-    void initialiseStateListenerRegistersControlPlaneHookAndAppliesDefault() {
+    void initialiseStateListenerRegistersControlPlaneHookAndWaitsForEnablement() {
         when(listenerRegistry.getListenerContainer("listener")).thenReturn(listenerContainer);
         when(listenerContainer.isRunning()).thenReturn(false);
 
@@ -109,14 +109,23 @@ class RabbitMessageWorkerAdapterTest {
         inOrder.verify(controlPlaneRuntime).registerDefaultConfig(eq("processorWorker"), eq(defaults));
         inOrder.verify(controlPlaneRuntime).registerStateListener(eq("processorWorker"), listenerCaptor.capture());
         inOrder.verify(controlPlaneRuntime).emitStatusSnapshot();
-        verify(listenerContainer).start();
+        verify(listenerContainer, never()).start();
 
-        WorkerControlPlaneRuntime.WorkerStateSnapshot snapshot = mock(WorkerControlPlaneRuntime.WorkerStateSnapshot.class);
-        when(snapshot.enabled()).thenReturn(Optional.of(false));
+        WorkerControlPlaneRuntime.WorkerStateSnapshot disabledSnapshot = mock(WorkerControlPlaneRuntime.WorkerStateSnapshot.class);
+        when(disabledSnapshot.enabled()).thenReturn(Optional.of(false));
+        listenerCaptor.getValue().accept(disabledSnapshot);
+        verify(listenerContainer, never()).start();
+        verify(listenerContainer, never()).stop();
+
+        WorkerControlPlaneRuntime.WorkerStateSnapshot enabledSnapshot = mock(WorkerControlPlaneRuntime.WorkerStateSnapshot.class);
+        when(enabledSnapshot.enabled()).thenReturn(Optional.of(true));
+        listenerCaptor.getValue().accept(enabledSnapshot);
+        verify(listenerContainer).start();
         when(listenerContainer.isRunning()).thenReturn(true);
 
-        listenerCaptor.getValue().accept(snapshot);
-
+        WorkerControlPlaneRuntime.WorkerStateSnapshot snapshotDisabledAgain = mock(WorkerControlPlaneRuntime.WorkerStateSnapshot.class);
+        when(snapshotDisabledAgain.enabled()).thenReturn(Optional.of(false));
+        listenerCaptor.getValue().accept(snapshotDisabledAgain);
         verify(listenerContainer).stop();
     }
 
@@ -359,7 +368,9 @@ class RabbitMessageWorkerAdapterTest {
             .controlPlaneRuntime(controlPlaneRuntime)
             .listenerRegistry(listenerRegistry)
             .identity(identity)
-            .withConfigDefaults(DummyConfig.class, () -> defaults, cfg -> true)
+            .defaultEnabledSupplier(() -> false)
+            .defaultConfigSupplier(() -> defaults)
+            .desiredStateResolver(snapshot -> snapshot.enabled().orElse(false))
             .dispatcher(dispatcher)
             .dispatchErrorHandler(errorHandler);
     }
