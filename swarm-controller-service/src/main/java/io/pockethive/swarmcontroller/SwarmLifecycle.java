@@ -4,6 +4,7 @@ import io.pockethive.swarm.model.SwarmPlan;
 import io.pockethive.swarm.model.TrafficPolicy;
 
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * Contract describing the high-level lifecycle hooks the swarm controller exposes to the orchestrator.
@@ -171,5 +172,19 @@ public interface SwarmLifecycle {
    */
   default TrafficPolicy trafficPolicy() {
     return null;
+  }
+
+  default Optional<String> handleConfigUpdateError(String role, String instance, String error) {
+    return Optional.empty();
+  }
+
+  default void fail(String reason) {
+  }
+
+  /**
+   * Indicates whether any bootstrap config payloads are still waiting to be published.
+   */
+  default boolean hasPendingConfigUpdates() {
+    return false;
   }
 }

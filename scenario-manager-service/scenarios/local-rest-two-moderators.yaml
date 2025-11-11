@@ -29,18 +29,20 @@ template:
   bees:
     - role: generator
       image: generator:latest
-      env:
-        POCKETHIVE_WORKERS_GENERATOR_CONFIG_RATEPERSEC: "10"
-        POCKETHIVE_WORKERS_GENERATOR_CONFIG_MESSAGE_PATH: "/api/guarded"
-        POCKETHIVE_WORKERS_GENERATOR_CONFIG_MESSAGE_BODY: "guarded-request"
+      config:
+        ratePerSec: 10
+        message:
+          path: /api/guarded
+          body: guarded-request
       work:
         out: gen-out
     - role: moderator
       instanceId: moderator-a
       image: moderator:latest
-      env:
-        POCKETHIVE_WORKERS_MODERATOR_CONFIG_MODE_TYPE: rate-per-sec
-        POCKETHIVE_WORKERS_MODERATOR_CONFIG_MODE_RATEPERSEC: "4"
+      config:
+        mode:
+          type: rate-per-sec
+          ratePerSec: 4
       work:
         in: gen-out
         out: moderator-a-out
@@ -52,12 +54,14 @@ template:
     - role: moderator
       instanceId: moderator-b
       image: moderator:latest
-      env:
-        POCKETHIVE_WORKERS_MODERATOR_CONFIG_MODE_TYPE: sine
-        POCKETHIVE_WORKERS_MODERATOR_CONFIG_MODE_SINE_MINRATEPERSEC: "5"
-        POCKETHIVE_WORKERS_MODERATOR_CONFIG_MODE_SINE_MAXRATEPERSEC: "100"
-        POCKETHIVE_WORKERS_MODERATOR_CONFIG_MODE_SINE_PERIODSECONDS: "45"
-        POCKETHIVE_WORKERS_MODERATOR_CONFIG_MODE_SINE_PHASEOFFSETSECONDS: "0"
+      config:
+        mode:
+          type: sine
+          sine:
+            minRatePerSec: 5
+            maxRatePerSec: 100
+            periodSeconds: 45
+            phaseOffsetSeconds: 0
       work:
         in: proc-out
         out: moderator-b-out

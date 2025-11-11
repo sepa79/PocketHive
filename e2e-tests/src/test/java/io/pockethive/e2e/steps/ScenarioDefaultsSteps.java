@@ -20,8 +20,7 @@ import org.junit.jupiter.api.Assumptions;
 public class ScenarioDefaultsSteps {
 
   private static final String GENERATOR_ROLE = "generator";
-  private static final String GENERATOR_RATE_ENV =
-      "POCKETHIVE_WORKERS_GENERATOR_CONFIG_RATEPERSEC";
+  private static final String GENERATOR_RATE_CONFIG = "ratePerSec";
 
   private ScenarioManagerClient scenarioManagerClient;
   private ScenarioDetails scenarioDetails;
@@ -61,11 +60,15 @@ public class ScenarioDefaultsSteps {
         .findFirst()
         .orElseThrow(() -> new AssertionError("Scenario template did not define a generator bee"));
 
-    Map<String, String> env = generatorBee.env();
-    String configuredRate = env.get(GENERATOR_RATE_ENV);
+    Map<String, Object> config = generatorBee.config();
+    assertNotNull(config, "Generator bee config was not returned");
+    Object configuredRate = config.get(GENERATOR_RATE_CONFIG);
     assertNotNull(configuredRate, () ->
-        "Generator bee env did not include " + GENERATOR_RATE_ENV);
-    assertEquals(Integer.toString(ratePerSecond), configuredRate,
+        "Generator bee config did not include " + GENERATOR_RATE_CONFIG);
+    int actual = configuredRate instanceof Number number
+        ? number.intValue()
+        : Integer.parseInt(configuredRate.toString());
+    assertEquals(ratePerSecond, actual,
         "Generator default rate did not match expected value");
   }
 

@@ -6,8 +6,8 @@ template:
   bees:
     - role: generator
       image: generator:latest
-      env:
-        POCKETHIVE_WORKERS_GENERATOR_CONFIG_RATEPERSEC: "5"
+      config:
+        ratePerSec: 5
       work:
         out: genQ
     - role: moderator

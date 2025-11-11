@@ -6,20 +6,22 @@ template:
   bees:
     - role: generator
       image: generator:latest
-      env:
-        POCKETHIVE_WORKERS_GENERATOR_CONFIG_RATEPERSEC: "30"
-        POCKETHIVE_WORKERS_GENERATOR_CONFIG_MESSAGE_PATH: "/api/test-alpha"
-        POCKETHIVE_WORKERS_GENERATOR_CONFIG_MESSAGE_METHOD: "POST"
-        POCKETHIVE_WORKERS_GENERATOR_CONFIG_MESSAGE_BODY: "hello-from-generator-a"
+      config:
+        ratePerSec: 30
+        message:
+          path: /api/test-alpha
+          method: POST
+          body: hello-from-generator-a
       work:
         out: gen
     - role: generator
       image: generator:latest
-      env:
-        POCKETHIVE_WORKERS_GENERATOR_CONFIG_RATEPERSEC: "70"
-        POCKETHIVE_WORKERS_GENERATOR_CONFIG_MESSAGE_PATH: "/api/test-beta"
-        POCKETHIVE_WORKERS_GENERATOR_CONFIG_MESSAGE_METHOD: "POST"
-        POCKETHIVE_WORKERS_GENERATOR_CONFIG_MESSAGE_BODY: "hello-from-generator-b"
+      config:
+        ratePerSec: 70
+        message:
+          path: /api/test-beta
+          method: POST
+          body: hello-from-generator-b
       work:
         out: gen
     - role: moderator

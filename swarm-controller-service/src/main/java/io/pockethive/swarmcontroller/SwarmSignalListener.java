@@ -59,6 +59,7 @@ public class SwarmSignalListener {
   private static final long MAX_STALENESS_MS = 15_000L;
   private volatile boolean controllerEnabled = false;
   private final AtomicReference<PendingTemplate> pendingTemplate = new AtomicReference<>();
+  private final AtomicReference<PendingStart> pendingStart = new AtomicReference<>();
 
   @Autowired
   public SwarmSignalListener(SwarmLifecycle lifecycle,
@@ -113,6 +114,8 @@ public class SwarmSignalListener {
         return;
       } else if (routingKey.startsWith("ev.status-")) {
         handleStatusEvent(routingKey, body);
+      } else if (routingKey.startsWith("ev.error.config-update")) {
+        handleConfigUpdateErrorEvent(routingKey, body);
       }
     } finally {
       MDC.clear();
@@ -166,10 +169,53 @@ public class SwarmSignalListener {
         boolean ready = lifecycle.markReady(role, instance);
         if (ready) {
           tryEmitPendingTemplateReady();
+          tryEmitPendingStartReady();
         }
       }
     } catch (Exception e) {
       log.warn("status parse", e);
+    }
+  }
+
+  private void handleConfigUpdateErrorEvent(String routingKey, String body) {
+    RoutingKey eventKey = ControlPlaneRouting.parseEvent(routingKey);
+    if (eventKey == null) {
+      log.warn("Received config-update error with unparseable routing key {}; payload snippet={}", routingKey, snippet(body));
+      return;
+    }
+    if (!isLocalSwarm(eventKey.swarmId())) {
+      log.debug("Ignoring config-update error for swarm {} on routing key {}", eventKey.swarmId(), routingKey);
+      return;
+    }
+    try {
+      ErrorConfirmation confirmation = mapper.readValue(body, ErrorConfirmation.class);
+      String role = defaultSegment(eventKey.role(), confirmation.scope() != null ? confirmation.scope().role() : null);
+      String instance = defaultSegment(eventKey.instance(), confirmation.scope() != null ? confirmation.scope().instance() : null);
+      String message = confirmation.message();
+      lifecycle.handleConfigUpdateError(role, instance, message)
+          .ifPresent(this::failPendingLifecycle);
+    } catch (Exception e) {
+      log.warn("config-update error parse", e);
+    }
+  }
+
+  private void failPendingLifecycle(String reason) {
+    boolean failed = false;
+    PendingTemplate template = pendingTemplate.getAndSet(null);
+    if (template != null) {
+      lifecycle.fail(reason);
+      emitError(template.signal(), new IllegalStateException(reason), template.resolvedSignal(), template.swarmIdFallback());
+      failed = true;
+    }
+    PendingStart start = pendingStart.getAndSet(null);
+    if (start != null) {
+      lifecycle.fail(reason);
+      emitError(start.signal(), new IllegalStateException(reason), start.resolvedSignal(), start.swarmIdFallback());
+      failed = true;
+    }
+    if (!failed) {
+      lifecycle.fail(reason);
+      log.warn("Config-update error received with no pending lifecycle command. reason={}", reason);
     }
   }
 
@@ -185,6 +231,8 @@ public class SwarmSignalListener {
       action.apply(serializeArgs(cs));
       if (ControlPlaneSignals.SWARM_TEMPLATE.equals(resolvedSignal)) {
         onTemplateSuccess(cs, resolvedSignal, swarmId);
+      } else if (ControlPlaneSignals.SWARM_START.equals(resolvedSignal)) {
+        onStartSuccess(cs, resolvedSignal, swarmId);
       } else {
         emitSuccess(cs, resolvedSignal, swarmId);
       }
@@ -219,6 +267,37 @@ public class SwarmSignalListener {
         return;
       }
       if (pendingTemplate.compareAndSet(pending, null)) {
+        emitSuccess(pending.signal(), pending.resolvedSignal(), pending.swarmIdFallback());
+        return;
+      }
+    }
+  }
+
+  private void onStartSuccess(ControlSignal cs, String resolvedSignal, String swarmId) {
+    if (!lifecycle.hasPendingConfigUpdates() && lifecycle.isReadyForWork()) {
+      pendingStart.set(null);
+      emitSuccess(cs, resolvedSignal, swarmId);
+      return;
+    }
+    PendingStart newPending = new PendingStart(cs, resolvedSignal, swarmId);
+    PendingStart previous = pendingStart.getAndSet(newPending);
+    if (previous != null) {
+      log.debug("Replacing pending swarm-start confirmation for correlation {} with {}",
+          previous.signal().correlationId(), cs.correlationId());
+    }
+    tryEmitPendingStartReady();
+  }
+
+  private void tryEmitPendingStartReady() {
+    while (true) {
+      PendingStart pending = pendingStart.get();
+      if (pending == null) {
+        return;
+      }
+      if (lifecycle.hasPendingConfigUpdates() || !lifecycle.isReadyForWork()) {
+        return;
+      }
+      if (pendingStart.compareAndSet(pending, null)) {
         emitSuccess(pending.signal(), pending.resolvedSignal(), pending.swarmIdFallback());
         return;
       }
@@ -406,6 +485,7 @@ public class SwarmSignalListener {
   @Scheduled(fixedRate = STATUS_INTERVAL_MS)
   public void status() {
     sendStatusDelta();
+    tryEmitPendingStartReady();
   }
 
   private void emitSuccess(ControlSignal cs, String resolvedSignal, String swarmIdFallback) {
@@ -641,6 +721,8 @@ public class SwarmSignalListener {
   }
 
   private record PendingTemplate(ControlSignal signal, String resolvedSignal, String swarmIdFallback) {}
+
+  private record PendingStart(ControlSignal signal, String resolvedSignal, String swarmIdFallback) {}
 
   private record TargetSpec(String role, String instance) {}
 

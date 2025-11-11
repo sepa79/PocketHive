@@ -8,6 +8,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.control.ConfirmationScope;
 import io.pockethive.control.ControlSignal;
+import io.pockethive.control.ErrorConfirmation;
 import io.pockethive.controlplane.ControlPlaneSignals;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.docker.DockerDaemonUnavailableException;
@@ -27,6 +28,7 @@ import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -117,6 +119,27 @@ class SwarmSignalListenerTest {
 
   private String statusEvent(String type, String role, String instance) {
     return ControlPlaneRouting.event(type, new ConfirmationScope(TEST_SWARM_ID, role, instance));
+  }
+
+  private String workerConfigErrorEvent(String role, String instance) {
+    return ControlPlaneRouting.event("error.config-update", new ConfirmationScope(TEST_SWARM_ID, role, instance));
+  }
+
+  private String configErrorPayload(String role, String instance, String message) throws Exception {
+    ErrorConfirmation confirmation = new ErrorConfirmation(
+        Instant.now(),
+        "cfg-corr",
+        "cfg-id",
+        ControlPlaneSignals.CONFIG_UPDATE,
+        new ConfirmationScope(TEST_SWARM_ID, role, instance),
+        null,
+        "config-update",
+        "ValidationError",
+        message,
+        false,
+        null
+    );
+    return mapper.writeValueAsString(confirmation);
   }
 
   @Test
@@ -246,6 +269,44 @@ class SwarmSignalListenerTest {
     JsonNode node = mapper.readTree(payload.getValue());
     assertThat(node.path("correlationId").asText()).isEqualTo("c0");
     assertThat(node.path("idempotencyKey").asText()).isEqualTo("i0");
+  }
+
+  @Test
+  void configErrorFailsPendingTemplate() throws Exception {
+    when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
+    when(lifecycle.isReadyForWork()).thenReturn(false);
+    when(lifecycle.handleConfigUpdateError("generator", "gen-1", "boom")).thenReturn(java.util.Optional.of("boom"));
+    SwarmSignalListener listener = newListener(lifecycle, rabbit, "inst", mapper);
+
+    listener.handle(signal(ControlPlaneSignals.SWARM_TEMPLATE, "it", "ct"), controllerSignal(ControlPlaneSignals.SWARM_TEMPLATE));
+
+    reset(rabbit);
+    listener.handle(configErrorPayload("generator", "gen-1", "boom"), workerConfigErrorEvent("generator", "gen-1"));
+
+    verify(lifecycle).handleConfigUpdateError("generator", "gen-1", "boom");
+    verify(lifecycle, atLeastOnce()).fail("boom");
+    verify(rabbit).convertAndSend(eq(CONTROL_EXCHANGE),
+        eq(controllerErrorEvent(ControlPlaneSignals.SWARM_TEMPLATE, "inst")),
+        anyString());
+  }
+
+  @Test
+  void configErrorFailsPendingStart() throws Exception {
+    when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
+    when(lifecycle.hasPendingConfigUpdates()).thenReturn(true);
+    when(lifecycle.handleConfigUpdateError("generator", "gen-2", "bad config")).thenReturn(java.util.Optional.of("bad config"));
+    SwarmSignalListener listener = newListener(lifecycle, rabbit, "inst", mapper);
+
+    listener.handle(signal(ControlPlaneSignals.SWARM_START, "is", "cs"), controllerSignal(ControlPlaneSignals.SWARM_START));
+
+    reset(rabbit);
+    listener.handle(configErrorPayload("generator", "gen-2", "bad config"), workerConfigErrorEvent("generator", "gen-2"));
+
+    verify(lifecycle).handleConfigUpdateError("generator", "gen-2", "bad config");
+    verify(lifecycle, atLeastOnce()).fail("bad config");
+    verify(rabbit).convertAndSend(eq(CONTROL_EXCHANGE),
+        eq(controllerErrorEvent(ControlPlaneSignals.SWARM_START, "inst")),
+        anyString());
   }
 
   @Test

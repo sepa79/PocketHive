@@ -1,6 +1,6 @@
 id: local-rest
-name: Local REST - Simple REST Swarm
-description: Uses local images. Sample scenario that ships the REST generator with a 50 msg/s default rate limit.
+name: Local REST - Test Scenario
+description: Test-only scenario for SwarmCreationMock1E2ETest.
 template:
   image: swarm-controller:latest
   bees:
@@ -8,6 +8,9 @@ template:
       image: generator:latest
       config:
         ratePerSec: 50
+        message:
+          path: /api/guarded
+          body: guarded-request
       work:
         out: gen
     - role: moderator
@@ -17,6 +20,8 @@ template:
         out: mod
     - role: processor
       image: processor:latest
+      config:
+        baseUrl: http://sut:8080
       work:
         in: mod
         out: final

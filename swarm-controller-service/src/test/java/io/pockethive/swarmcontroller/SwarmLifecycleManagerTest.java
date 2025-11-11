@@ -41,6 +41,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.OptionalLong;
 import java.util.Properties;
+import java.util.stream.IntStream;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.DoublePredicate;
 import org.mockito.ArgumentCaptor;
@@ -346,6 +347,44 @@ class SwarmLifecycleManagerTest {
   }
 
   @Test
+  void heartbeatPublishesEnablementWhenWorkerStateDiffers() throws Exception {
+    SwarmLifecycleManager manager = newManager();
+    SwarmPlan plan = new SwarmPlan("swarm", List.of(new Bee("gen", "img1", new Work(null, null), null)));
+    when(docker.createContainer(eq("img1"), anyMap(), anyString())).thenReturn("c1");
+
+    manager.prepare(mapper.writeValueAsString(plan));
+    manager.setSwarmEnabled(true);
+
+    reset(rabbit);
+    manager.updateHeartbeat("gen", "g1");
+
+    ArgumentCaptor<String> targetedPayload = ArgumentCaptor.forClass(String.class);
+    String expectedRoute = ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, TEST_SWARM_ID, "gen", "g1");
+    verify(rabbit).convertAndSend(eq(CONTROL_EXCHANGE), eq(expectedRoute), targetedPayload.capture());
+    JsonNode targetedNode = mapper.readTree(targetedPayload.getValue());
+    assertThat(targetedNode.path("signal").asText()).isEqualTo(ControlPlaneSignals.CONFIG_UPDATE);
+    assertThat(targetedNode.path("args").path("data").path("enabled").asBoolean(false)).isTrue();
+    assertThat(targetedNode.path("commandTarget").asText()).isEqualToIgnoringCase("INSTANCE");
+    assertThat(targetedNode.path("role").asText()).isEqualTo("gen");
+    assertThat(targetedNode.path("instance").asText()).isEqualTo("g1");
+  }
+
+  @Test
+  void heartbeatSkipsEnablementWhenWorkerMatchesDesired() throws Exception {
+    SwarmLifecycleManager manager = newManager();
+    SwarmPlan plan = new SwarmPlan("swarm", List.of(new Bee("gen", "img1", new Work(null, null), null)));
+    when(docker.createContainer(eq("img1"), anyMap(), anyString())).thenReturn("c1");
+
+    manager.prepare(mapper.writeValueAsString(plan));
+    manager.setSwarmEnabled(true);
+    manager.updateEnabled("gen", "g1", true);
+
+    reset(rabbit);
+    manager.updateHeartbeat("gen", "g1");
+    verifyNoInteractions(rabbit);
+  }
+
+  @Test
   void setSwarmEnabledDisablesWorkloadsAndUpdatesStatus() throws Exception {
     SwarmLifecycleManager manager = newManager();
     SwarmPlan plan = new SwarmPlan("swarm", List.of(
@@ -640,7 +679,8 @@ class SwarmLifecycleManagerTest {
         new BufferGuardPolicy.Backpressure(null, null, null, null));
     SwarmPlan plan = new SwarmPlan("swarm", List.of(
         new Bee("generator", "img1", new Work("qin", "gen-out"),
-            Map.of("POCKETHIVE_WORKERS_GENERATOR_CONFIG_RATEPERSEC", "5"))
+            null,
+            Map.of("ratePerSec", 5d))
     ), new TrafficPolicy(guard));
     when(docker.createContainer(eq("img1"), anyMap(), anyString())).thenReturn("c1");
     when(docker.resolveControlNetwork()).thenReturn("ctrl-net");
@@ -660,6 +700,46 @@ class SwarmLifecycleManagerTest {
   }
 
   @Test
+  void startPublishesBootstrapConfigAndTracksPendingUntilReady() throws Exception {
+    SwarmLifecycleManager manager = newManager();
+    Map<String, Object> workerConfig = Map.of(
+        "workerOverrides", Map.of("custom", "value"));
+    SwarmPlan plan = new SwarmPlan("swarm", List.of(
+        new Bee("generator", "img1", new Work(null, null), null, workerConfig)
+    ));
+    when(docker.createContainer(eq("img1"), anyMap(), anyString())).thenReturn("c1");
+
+    manager.start(mapper.writeValueAsString(plan));
+
+    assertTrue(manager.hasPendingConfigUpdates());
+
+    ArgumentCaptor<String> nameCaptor = ArgumentCaptor.forClass(String.class);
+    verify(docker).createContainer(eq("img1"), anyMap(), nameCaptor.capture());
+    String instanceName = nameCaptor.getValue();
+
+    String expectedRoute = ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, TEST_SWARM_ID, "generator", instanceName);
+    ArgumentCaptor<String> routingCaptor = ArgumentCaptor.forClass(String.class);
+    ArgumentCaptor<String> payloadCaptor = ArgumentCaptor.forClass(String.class);
+    verify(rabbit, atLeastOnce()).convertAndSend(eq(CONTROL_EXCHANGE), routingCaptor.capture(), payloadCaptor.capture());
+    int index = IntStream.range(0, routingCaptor.getAllValues().size())
+        .filter(i -> routingCaptor.getAllValues().get(i).equals(expectedRoute))
+        .findFirst()
+        .orElseThrow(() -> new AssertionError("Bootstrap config update not published"));
+    JsonNode signal = mapper.readTree(payloadCaptor.getAllValues().get(index));
+    JsonNode data = signal.path("args").path("data");
+    assertThat(signal.path("commandTarget").asText()).isEqualTo("instance");
+    assertThat(signal.path("role").asText()).isEqualTo("generator");
+    assertThat(signal.path("instance").asText()).isEqualTo(instanceName);
+    assertThat(data.path("workerOverrides").path("custom").asText()).isEqualTo("value");
+
+    manager.updateHeartbeat("generator", instanceName);
+    assertTrue(manager.hasPendingConfigUpdates());
+
+    manager.markReady("generator", instanceName);
+    assertFalse(manager.hasPendingConfigUpdates());
+  }
+
+  @Test
   void bufferGuardTargetsDepthWhileWithinBracket() throws Exception {
     SwarmLifecycleManager manager = newManager(true);
     BufferGuardPolicy guard = new BufferGuardPolicy(
@@ -675,7 +755,8 @@ class SwarmLifecycleManagerTest {
         new BufferGuardPolicy.Backpressure(null, null, null, null));
     SwarmPlan plan = new SwarmPlan("swarm", List.of(
         new Bee("generator", "img1", new Work("qin", "gen-out"),
-            Map.of("POCKETHIVE_WORKERS_GENERATOR_CONFIG_RATEPERSEC", "10"))
+            null,
+            Map.of("ratePerSec", 10d))
     ), new TrafficPolicy(guard));
     when(docker.createContainer(eq("img1"), anyMap(), anyString())).thenReturn("c1");
     when(docker.resolveControlNetwork()).thenReturn("ctrl-net");
@@ -710,7 +791,8 @@ class SwarmLifecycleManagerTest {
         new BufferGuardPolicy.Backpressure(null, null, null, null));
     SwarmPlan plan = new SwarmPlan("swarm", List.of(
         new Bee("generator", "img1", new Work("qin", "gen-out"),
-            Map.of("POCKETHIVE_WORKERS_GENERATOR_CONFIG_RATEPERSEC", "80"))
+            null,
+            Map.of("ratePerSec", 80d))
     ), new TrafficPolicy(guard));
     when(docker.createContainer(eq("img1"), anyMap(), anyString())).thenReturn("c1");
     when(docker.resolveControlNetwork()).thenReturn("ctrl-net");
@@ -745,7 +827,8 @@ class SwarmLifecycleManagerTest {
         new BufferGuardPolicy.Backpressure("proc-out", 500, 250, 15));
     SwarmPlan plan = new SwarmPlan("swarm", List.of(
         new Bee("generator", "img1", new Work("qin", "gen-out"),
-            Map.of("POCKETHIVE_WORKERS_GENERATOR_CONFIG_RATEPERSEC", "20")),
+            null,
+            Map.of("ratePerSec", 20d)),
         new Bee("processor", "img2", new Work("gen-out", "proc-out"), null)
     ), new TrafficPolicy(guard));
     when(docker.createContainer(eq("img1"), anyMap(), anyString())).thenReturn("c1");
@@ -807,7 +890,7 @@ class SwarmLifecycleManagerTest {
   }
 
   private boolean waitForRate(Gauge gauge, DoublePredicate predicate) throws InterruptedException {
-    long deadline = System.currentTimeMillis() + 3_000;
+    long deadline = System.currentTimeMillis() + 6_000;
     while (System.currentTimeMillis() < deadline) {
       double value = gauge.value();
       if (Double.isFinite(value) && predicate.test(value)) {

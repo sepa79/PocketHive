@@ -265,10 +265,15 @@ class SwarmCreationMock1E2ETest {
                 "generator",
                 "generator:latest",
                 new Work(null, "gen"),
-                java.util.Map.of("POCKETHIVE_WORKERS_GENERATOR_CONFIG_RATEPERSEC", "50")),
-            new Bee("moderator", "moderator:latest", new Work("gen", "mod"), java.util.Map.of()),
-            new Bee("processor", "processor:latest", new Work("mod", "final"), java.util.Map.of()),
-            new Bee("postprocessor", "postprocessor:latest", new Work("final", null), java.util.Map.of())
+                Map.of(),
+                Map.of(
+                    "ratePerSec", 50,
+                    "message", Map.of("path", "/api/guarded", "body", "guarded-request")
+                )
+            ),
+            new Bee("moderator", "moderator:latest", new Work("gen", "mod"), Map.of(), Map.of()),
+            new Bee("processor", "processor:latest", new Work("mod", "final"), Map.of(), Map.of("baseUrl", "http://sut:8080")),
+            new Bee("postprocessor", "postprocessor:latest", new Work("final", null), Map.of(), Map.of())
         );
 
         Message readyMessage = awaitMessage(captureName, Duration.ofSeconds(15));
@@ -393,15 +398,11 @@ class SwarmCreationMock1E2ETest {
     }
 
     private static Path locateScenariosDirectory() {
-        Path current = Path.of("").toAbsolutePath().normalize();
-        while (current != null) {
-            Path candidate = current.resolve("scenario-manager-service").resolve("scenarios");
-            if (Files.isDirectory(candidate)) {
-                return candidate;
-            }
-            current = current.getParent();
+        Path candidate = Path.of("src", "test", "resources", "scenarios").toAbsolutePath().normalize();
+        if (Files.isDirectory(candidate)) {
+            return candidate;
         }
-        throw new IllegalStateException("Unable to locate scenario-manager-service/scenarios directory");
+        throw new IllegalStateException("Unable to locate test scenarios directory at " + candidate);
     }
 
     private static int findFreePort() {

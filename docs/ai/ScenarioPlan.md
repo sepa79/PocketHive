@@ -89,8 +89,8 @@ bees:
   - role: generator
     instanceId: seeder-bee
     image: pockethive-generator:latest
-    env:
-      POCKETHIVE_WORKERS_GENERATOR_CONFIG_RATEPERSEC: "5"
+    config:
+      ratePerSec: 5
     work:
       out: gen
 

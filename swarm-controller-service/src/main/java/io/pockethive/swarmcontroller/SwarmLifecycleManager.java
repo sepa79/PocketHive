@@ -60,8 +60,10 @@ import java.util.function.Function;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.Optional;
 
 import io.pockethive.docker.DockerContainerClient;
 
@@ -95,12 +97,14 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
   private final Map<String, List<String>> instancesByRole = new HashMap<>();
   private final Map<String, Long> lastSeen = new HashMap<>();
   private final Map<String, Boolean> enabled = new HashMap<>();
+  private volatile Boolean desiredEnablement = Boolean.FALSE;
   private final ConcurrentMap<String, AtomicLong> queueDepthValues = new ConcurrentHashMap<>();
   private final ConcurrentMap<String, Gauge> queueDepthGauges = new ConcurrentHashMap<>();
   private final ConcurrentMap<String, AtomicInteger> queueConsumerValues = new ConcurrentHashMap<>();
   private final ConcurrentMap<String, Gauge> queueConsumerGauges = new ConcurrentHashMap<>();
   private final ConcurrentMap<String, AtomicLong> queueOldestValues = new ConcurrentHashMap<>();
   private final ConcurrentMap<String, Gauge> queueOldestGauges = new ConcurrentHashMap<>();
+  private final ConcurrentMap<String, PendingConfig> pendingConfigUpdates = new ConcurrentHashMap<>();
   private List<String> startOrder = List.of();
   private Optional<BufferGuardSettings> bufferGuardSettings = Optional.empty();
   private BufferGuardController bufferGuardController;
@@ -109,6 +113,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
   private String template;
 
   private static final long STATUS_TTL_MS = 15_000L;
+  private static final long BOOTSTRAP_CONFIG_RESEND_DELAY_MS = 5_000L;
   private static final int DEFAULT_BUFFER_TARGET = 200;
   private static final int DEFAULT_BUFFER_MIN = 150;
   private static final int DEFAULT_BUFFER_MAX = 260;
@@ -225,6 +230,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
 
       expectedReady.clear();
       instancesByRole.clear();
+      pendingConfigUpdates.clear();
       startOrder = computeStartOrder(plan);
 
       List<Bee> bees = plan.bees() == null ? List.of() : plan.bees();
@@ -266,6 +272,10 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
         log.info("starting container {} ({}) for role {}", containerId, beeName, bee.role());
         docker.startContainer(containerId);
         containers.computeIfAbsent(bee.role(), r -> new ArrayList<>()).add(containerId);
+        if (bee.config() != null && !bee.config().isEmpty()) {
+          pendingConfigUpdates.put(beeName, new PendingConfig(bee.role(), Map.copyOf(bee.config())));
+          publishBootstrapConfigIfNecessary(bee.role(), beeName, true);
+        }
       }
     } catch (JsonProcessingException e) {
       log.warn("Invalid template payload", e);
@@ -365,6 +375,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
       }
     }
     containers.clear();
+    pendingConfigUpdates.clear();
 
     for (String suffix : declaredQueues) {
       String queueName = properties.queueName(suffix);
@@ -403,6 +414,8 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
 
   void updateHeartbeat(String role, String instance, long timestamp) {
     lastSeen.put(role + "." + instance, timestamp);
+    publishBootstrapConfigIfNecessary(role, instance);
+    publishEnablementIfNecessary(role, instance);
   }
 
   /**
@@ -768,30 +781,42 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
     }
     return plan.bees().stream()
         .filter(bee -> role.equalsIgnoreCase(bee.role()))
-        .map(Bee::env)
-        .filter(Objects::nonNull)
-        .map(this::extractRatePerSec)
+        .map(bee -> {
+          OptionalDouble fromConfig = extractRatePerSec(bee.config());
+          if (fromConfig.isPresent()) {
+            return fromConfig;
+          }
+          return extractRatePerSec(bee.env());
+        })
         .filter(OptionalDouble::isPresent)
         .mapToDouble(OptionalDouble::getAsDouble)
         .findFirst();
   }
 
-  private OptionalDouble extractRatePerSec(Map<String, String> env) {
-    if (env == null || env.isEmpty()) {
+  private OptionalDouble extractRatePerSec(Map<?, ?> source) {
+    if (source == null || source.isEmpty()) {
       return OptionalDouble.empty();
     }
-    for (Map.Entry<String, String> entry : env.entrySet()) {
-      String key = entry.getKey();
-      if (key == null) {
+    for (Map.Entry<?, ?> entry : source.entrySet()) {
+      Object keyObj = entry.getKey();
+      if (keyObj == null) {
         continue;
       }
-      String normalized = key.trim().toLowerCase(Locale.ROOT);
-      if (normalized.endsWith("ratepersec")) {
-        try {
-          return OptionalDouble.of(Double.parseDouble(entry.getValue()));
-        } catch (NumberFormatException ignored) {
-          return OptionalDouble.empty();
-        }
+      String normalized = keyObj.toString().trim().toLowerCase(Locale.ROOT);
+      if (!normalized.endsWith("ratepersec")) {
+        continue;
+      }
+      Object value = entry.getValue();
+      if (value == null) {
+        return OptionalDouble.empty();
+      }
+      if (value instanceof Number number) {
+        return OptionalDouble.of(number.doubleValue());
+      }
+      try {
+        return OptionalDouble.of(Double.parseDouble(value.toString()));
+      } catch (NumberFormatException ignored) {
+        return OptionalDouble.empty();
       }
     }
     return OptionalDouble.empty();
@@ -815,7 +840,15 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
       instancesByRole.get(role).add(instance);
       log.info("bee {} of role {} marked ready", instance, role);
     }
+    acknowledgeBootstrapConfig(instance);
     return isFullyReady();
+  }
+
+  private void acknowledgeBootstrapConfig(String instance) {
+    PendingConfig pending = pendingConfigUpdates.get(instance);
+    if (pending != null) {
+      pending.markAcknowledged();
+    }
   }
 
   @Override
@@ -829,6 +862,34 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
   @Override
   public TrafficPolicy trafficPolicy() {
     return trafficPolicy;
+  }
+
+  @Override
+  public synchronized Optional<String> handleConfigUpdateError(String role, String instance, String error) {
+    PendingConfig pending = pendingConfigUpdates.remove(instance);
+    if (pending == null) {
+      return Optional.empty();
+    }
+    String message = failureMessage(pending.role(), instance, error);
+    log.warn(message);
+    status = SwarmStatus.FAILED;
+    return Optional.of(message);
+  }
+
+  @Override
+  public synchronized void fail(String reason) {
+    log.warn("Marking swarm {} failed: {}", swarmId, reason);
+    status = SwarmStatus.FAILED;
+  }
+
+  @Override
+  public boolean hasPendingConfigUpdates() {
+    for (PendingConfig pending : pendingConfigUpdates.values()) {
+      if (pending.awaitingAck()) {
+        return true;
+      }
+    }
+    return false;
   }
 
   private boolean isFullyReady() {
@@ -954,6 +1015,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
    */
   @Override
   public synchronized void setSwarmEnabled(boolean enabledFlag) {
+    desiredEnablement = enabledFlag;
     if (enabledFlag) {
       enableAll();
     } else {
@@ -1048,6 +1110,59 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
     }
   }
 
+  private void publishBootstrapConfigIfNecessary(String role, String instance) {
+    publishBootstrapConfigIfNecessary(role, instance, false);
+  }
+
+  private void publishBootstrapConfigIfNecessary(String role, String instance, boolean force) {
+    PendingConfig pending = pendingConfigUpdates.get(instance);
+    if (pending == null) {
+      return;
+    }
+    Map<String, Object> values = pending.values();
+    if (values == null || values.isEmpty()) {
+      pending.markAcknowledged();
+      return;
+    }
+    long now = System.currentTimeMillis();
+    if (!pending.shouldPublish(force, now)) {
+      return;
+    }
+    com.fasterxml.jackson.databind.node.ObjectNode payload = mapper.createObjectNode();
+    var configNode = mapper.valueToTree(values);
+    if (configNode instanceof com.fasterxml.jackson.databind.node.ObjectNode objectNode) {
+      payload.setAll(objectNode);
+    } else {
+      payload.set("config", configNode);
+    }
+    payload.put("commandTarget", "INSTANCE");
+    payload.put("role", pending.role());
+    payload.put("instance", instance);
+    log.info("Publishing bootstrap config for role={} instance={}{}", pending.role(), instance,
+        force ? " (initial)" : " (retry)");
+    publishConfigUpdate(payload, "bootstrap-config");
+    pending.markPublished(now);
+  }
+
+  private void publishEnablementIfNecessary(String role, String instance) {
+    Boolean desired = desiredEnablement;
+    if (desired == null) {
+      return;
+    }
+    Boolean reported = enabled.get(role + "." + instance);
+    if (Objects.equals(reported, desired)) {
+      return;
+    }
+    var payload = mapper.createObjectNode();
+    payload.put("enabled", desired);
+    payload.put("commandTarget", "INSTANCE");
+    payload.put("role", role);
+    payload.put("instance", instance);
+    String context = desired ? "enable-instance" : "disable-instance";
+    log.info("Publishing {} for role={} instance={}", context, role, instance);
+    publishConfigUpdate(payload, context);
+  }
+
   private CommandTarget parseCommandTarget(String value, String context) {
     if (value == null || value.isBlank()) {
       return null;
@@ -1111,6 +1226,56 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
   }
 
   private record TargetSpec(String role, String instance) {}
+
+  private static final class PendingConfig {
+    private final String role;
+    private final Map<String, Object> values;
+    private final AtomicBoolean awaitingAck = new AtomicBoolean(true);
+    private volatile long lastPublishedAt = 0L;
+
+    private PendingConfig(String role, Map<String, Object> values) {
+      this.role = role;
+      this.values = values;
+    }
+
+    String role() {
+      return role;
+    }
+
+    Map<String, Object> values() {
+      return values;
+    }
+
+    boolean awaitingAck() {
+      return awaitingAck.get();
+    }
+
+    void markAcknowledged() {
+      awaitingAck.set(false);
+    }
+
+    boolean shouldPublish(boolean force, long now) {
+      if (!awaitingAck()) {
+        return false;
+      }
+      if (force) {
+        return true;
+      }
+      return now - lastPublishedAt >= BOOTSTRAP_CONFIG_RESEND_DELAY_MS;
+    }
+
+    void markPublished(long now) {
+      lastPublishedAt = now;
+    }
+  }
+
+  private String failureMessage(String role, String instance, String reason) {
+    String base = "Config update failed for role=" + role + " instance=" + instance;
+    if (reason == null || reason.isBlank()) {
+      return base;
+    }
+    return base + ": " + reason;
+  }
 
   private String asTextValue(Object value) {
     if (value instanceof String s) {
