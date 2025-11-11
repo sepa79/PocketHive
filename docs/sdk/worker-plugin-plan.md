@@ -48,28 +48,30 @@
 
 ### 2.4 Workstreams & Tasks
 
-#### Phase A – Host scaffolding
-1. Create the `worker-plugin-host` module (Spring Boot starter with no embedded workers).
-2. Implement `PluginClasspathLoader` with:
-   - Directory scan + manifest validation.
-   - Guard rails that reject zero or multiple plugins.
-   - Registration hooks so `PocketHiveWorkerSdkAutoConfiguration` can import plugin bean definitions.
-3. Add smoke tests that load a sample plugin jar and assert the worker lifecycle (start/stop, control-plane heartbeat).
+#### Phase A – Host scaffolding *(✅ completed on `worker-sdk-v3`)*
+1. [x] Create the `worker-plugin-host` module (Spring Boot starter with no embedded workers).
+2. [x] Implement `PluginClasspathLoader` with:
+   - [x] Directory scan + manifest validation.
+   - [x] Guard rails that reject zero or multiple plugins.
+   - [x] Registration hooks so `PocketHiveWorkerSdkAutoConfiguration` can import plugin bean definitions.
+3. [x] Add smoke tests that load a sample plugin jar and assert the worker lifecycle (start/stop, control-plane heartbeat).
+
+> Result: host boots sample plugin jar in tests, enforces single-plugin rule, and surfaces failures early. Ready to proceed to Phase B.
 
 #### Phase B – Configuration & packaging
-1. Finalize the plugin manifest schema (`role`, `version`, `capabilities`, `configPrefix`, optional `defaultConfig` path).
-2. Implement the config merge order (`plugin defaults` < `host overrides` < `control-plane overrides`) and document the precedence.
-3. Provide `./scripts/package-plugin.sh` (or Maven goal) that assembles the plugin jar, injects the manifest, and copies default configs into `config/defaults.yaml`.
+1. [ ] Finalize the plugin manifest schema (`role`, `version`, `capabilities`, `configPrefix`, optional `defaultConfig` path).
+2. [ ] Implement the config merge order (`plugin defaults` < `host overrides` < `control-plane overrides`) and document the precedence.
+3. [ ] Provide `./scripts/package-plugin.sh` (or Maven goal) that assembles the plugin jar, injects the manifest, and copies default configs into `config/defaults.yaml`.
 
 #### Phase C – Deployment & tooling
-1. Publish a host Dockerfile that layers the `worker-plugin-host` jar and mounts plugins from a volume/OCI artifact.
-2. Update orchestrator/swarm-controller templates so a swarm plan can reference `worker-plugin-host` + plugin artifact instead of per-worker images.
-3. Extend scenario-manager to express “host + plugin artifact” for local testing (still one worker per container).
+1. [ ] Publish a host Dockerfile that layers the `worker-plugin-host` jar and mounts plugins from a volume/OCI artifact.
+2. [ ] Update orchestrator/swarm-controller templates so a swarm plan can reference `worker-plugin-host` + plugin artifact instead of per-worker images.
+3. [ ] Extend scenario-manager to express “host + plugin artifact” for local testing (still one worker per container).
 
 #### Phase D – Observability & verification
-1. Expose health/actuator endpoints that report plugin `role`, `version`, git info, and checksum.
-2. Add host metrics: plugin load duration, config binding errors, heartbeat jitter.
-3. Document operator runbooks (upgrading a plugin, recovering from load failure) and run the control-plane tests defined in `docs/ci/control-plane-testing.md` with the host image.
+1. [ ] Expose health/actuator endpoints that report plugin `role`, `version`, git info, and checksum.
+2. [ ] Add host metrics: plugin load duration, config binding errors, heartbeat jitter.
+3. [ ] Document operator runbooks (upgrading a plugin, recovering from load failure) and run the control-plane tests defined in `docs/ci/control-plane-testing.md` with the host image.
 
 ### 2.5 Deliverables
 
