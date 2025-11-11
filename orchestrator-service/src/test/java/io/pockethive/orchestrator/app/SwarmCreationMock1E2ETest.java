@@ -398,15 +398,11 @@ class SwarmCreationMock1E2ETest {
     }
 
     private static Path locateScenariosDirectory() {
-        Path current = Path.of("").toAbsolutePath().normalize();
-        while (current != null) {
-            Path candidate = current.resolve("scenario-manager-service").resolve("scenarios");
-            if (Files.isDirectory(candidate)) {
-                return candidate;
-            }
-            current = current.getParent();
+        Path candidate = Path.of("src", "test", "resources", "scenarios").toAbsolutePath().normalize();
+        if (Files.isDirectory(candidate)) {
+            return candidate;
         }
-        throw new IllegalStateException("Unable to locate scenario-manager-service/scenarios directory");
+        throw new IllegalStateException("Unable to locate test scenarios directory at " + candidate);
     }
 
     private static int findFreePort() {

@@ -1,0 +1,31 @@
+id: local-rest
+name: Local REST - Test Scenario
+description: Test-only scenario for SwarmCreationMock1E2ETest.
+template:
+  image: swarm-controller:latest
+  bees:
+    - role: generator
+      image: generator:latest
+      config:
+        ratePerSec: 50
+        message:
+          path: /api/guarded
+          body: guarded-request
+      work:
+        out: gen
+    - role: moderator
+      image: moderator:latest
+      work:
+        in: gen
+        out: mod
+    - role: processor
+      image: processor:latest
+      config:
+        baseUrl: http://sut:8080
+      work:
+        in: mod
+        out: final
+    - role: postprocessor
+      image: postprocessor:latest
+      work:
+        in: final
