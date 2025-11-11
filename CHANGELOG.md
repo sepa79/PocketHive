@@ -6,7 +6,11 @@ All notable changes to this project will be documented in this file.
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [0.13.7] - 2025-11-11
+Timestamp: 2025-11-11T00:00:00Z
+
+- Scenario config propagation: document `SwarmPlan.bees[*].config` in `docs/ORCHESTRATOR-REST.md`, add test-only scenarios so `SwarmCreationMock1E2ETest` asserts the generator/processor override payloads, and mark the remaining plan steps as complete.
+- Swarm controller bootstrap: listen for `ev.error.config-update.*`, drop the pending lifecycle command, emit `ev.error.swarm-template`/`swarm-start`, and mark the swarm `FAILED` so invalid bootstrap configs fail fast instead of timing out.
 
 - Worker SDK & workers: introduce `WorkIoBindings` so runtime uses swarm-plan IO config exclusively, remove all `inQueue/outQueue` defaults from service workers and starter samples, update SDK auto-config/listeners/outputs/status wiring plus tests to consume the plan-driven queues, and record the migration progress in `docs/sdk/remove-inqueue-outqueue-plan.md`.
 - Swarm Controller queue guard: surface the active `trafficPolicy.bufferGuard` block in the controller’s status payloads and capability manifest so Hive UI can inspect the plan-driven bracket/rate settings directly via the existing Capabilities endpoint.
