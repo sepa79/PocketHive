@@ -6,13 +6,6 @@ x-metrics-env: &metrics-env
   MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_PUSH_RATE: 10s
   MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_SHUTDOWN_OPERATION: DELETE
   MANAGEMENT_METRICS_TAGS_SWARM: swarm1
-x-plugin-host-env: &plugin-host-env
-  POCKETHIVE_PLUGIN_HOST_DIR: ${POCKETHIVE_PLUGIN_DIR}
-x-plugin-manager-env: &plugin-manager-env
-  POCKETHIVE_PLUGIN_HOST_DIR: ${POCKETHIVE_PLUGIN_DIR}
-  POCKETHIVE_PLUGIN_DIR: ${POCKETHIVE_PLUGIN_TARGET_DIR:-/opt/pockethive/plugins}
-  POCKETHIVE_PLUGIN_TARGET_DIR: ${POCKETHIVE_PLUGIN_TARGET_DIR:-/opt/pockethive/plugins}
-
 services:
 #--------------------------------------
 # Off the Shelf Services
@@ -193,7 +186,7 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
-      <<: *plugin-host-env
+      POCKETHIVE_PLUGIN_DIR: ${POCKETHIVE_PLUGIN_DIR}
 # all defaulted in application.yml, uncomment to override here
 #    environment:
 #      <<: *metrics-env
@@ -212,7 +205,8 @@ services:
       context: .
       dockerfile: scenario-manager-service/Dockerfile
     environment:
-      <<: [*metrics-env, *plugin-manager-env]
+      <<: *metrics-env
+      POCKETHIVE_PLUGIN_DIR: ${POCKETHIVE_PLUGIN_DIR}
       RABBITMQ_HOST: rabbitmq
       POCKETHIVE_LOGS_QUEUE: ph.logs.agg
       MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_GROUPING_KEY_INSTANCE: scenario-manager
@@ -253,6 +247,7 @@ services:
       dockerfile: swarm-controller-service/Dockerfile
     environment:
       <<: *metrics-env
+      POCKETHIVE_PLUGIN_DIR: ${POCKETHIVE_PLUGIN_DIR}
       RABBITMQ_HOST: rabbitmq
       POCKETHIVE_CONTROL_PLANE_EXCHANGE: ph.control
       POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE: ph.control

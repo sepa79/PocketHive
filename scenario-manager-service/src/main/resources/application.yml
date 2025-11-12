@@ -25,5 +25,5 @@ pockethive:
 scenarios:
   dir: ${SCENARIOS_DIR:scenarios}
 plugins:
-  dir: ${POCKETHIVE_PLUGIN_HOST_DIR:${POCKETHIVE_PLUGIN_DIR:dist/plugins}}
-  target-dir: ${POCKETHIVE_PLUGIN_DIR:${POCKETHIVE_PLUGIN_TARGET_DIR:/opt/pockethive/plugins}}
+  dir: ${POCKETHIVE_PLUGIN_DIR:dist/plugins}
+  target-dir: /opt/pockethive/plugins

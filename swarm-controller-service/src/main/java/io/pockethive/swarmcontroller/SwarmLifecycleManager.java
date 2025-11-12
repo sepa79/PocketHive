@@ -320,7 +320,6 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
     String containerArtifact = resolveContainerArtifact(plugin);
     String pluginDir = directoryFor(containerArtifact, pluginHost.containerDir());
     env.put("POCKETHIVE_PLUGIN_DIR", pluginDir);
-    env.put("POCKETHIVE_PLUGIN_TARGET_DIR", pluginDir);
     env.put("POCKETHIVE_PLUGIN_ARTIFACT", containerArtifact);
   }
 

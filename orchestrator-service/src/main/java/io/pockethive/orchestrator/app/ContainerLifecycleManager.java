@@ -82,9 +82,7 @@ public class ContainerLifecycleManager {
         env.put("DOCKER_SOCKET_PATH", dockerSocket);
         env.put("DOCKER_HOST", "unix://" + dockerSocket);
         OrchestratorProperties.PluginHost pluginHost = properties.getPluginHost();
-        env.put("POCKETHIVE_PLUGIN_HOST_DIR", pluginHost.hostDir());
-        env.put("POCKETHIVE_PLUGIN_TARGET_DIR", pluginHost.containerDir());
-        env.put("POCKETHIVE_PLUGIN_DIR", pluginHost.containerDir());
+        env.put("POCKETHIVE_PLUGIN_DIR", pluginHost.hostDir());
         log.info("launching controller for swarm {} as instance {} using image {}", resolvedSwarmId, resolvedInstance, image);
         log.info("docker env: {}", env);
         String containerId = docker.createAndStartContainer(

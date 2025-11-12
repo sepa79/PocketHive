@@ -26,7 +26,7 @@
 - Java 21 across host and plugins (matches repo baseline).
 - Plugins packaged as shaded jars with `PocketHive-Plugin: true` and metadata (role, version, capabilities) under `META-INF/pockethive-plugin.yml`.
 - Host image derived from the existing worker-service base (Spring Boot + PocketHive Worker SDK starter).
-- Exactly one plugin jar is mounted under `POCKETHIVE_PLUGIN_DIR` (default `/opt/pockethive/plugins`). Multiple jars or missing metadata are treated as misconfiguration.
+- Exactly one plugin jar is mounted under `POCKETHIVE_PLUGIN_DIR` (default `dist/plugins` during local dev). Multiple jars or missing metadata are treated as misconfiguration.
 - No dynamic classloader sandboxing; plugins are trusted first-party code.
 - Deployment orchestrator continues to allocate one container per worker role, so no scheduling behavior changes are required for SDK v3.
 
@@ -67,7 +67,7 @@
 2. [x] Update orchestrator/swarm-controller templates so a swarm plan can reference `worker-plugin-host` + plugin artifact instead of per-worker images.
 3. [x] Extend scenario-manager to express “host + plugin artifact” for local testing (still one worker per container).
 
-> PF4J wiring status: `start-hive.sh` now packages `dist/hosts/worker-plugin-host.jar` before building images, docker-compose exports `POCKETHIVE_PLUGIN_HOST_DIR` (host) vs `POCKETHIVE_PLUGIN_DIR` (container), and the orchestrator/swarm-controller pipeline binds each `Bee.plugin.artifact` into the worker host container so PF4J loads the correct jar. Validate changes with `./mvnw -q -DskipTests -pl orchestrator-service,swarm-controller-service -am package`.
+> PF4J wiring status: `start-hive.sh` now packages `dist/hosts/worker-plugin-host.jar` before building images, docker-compose exposes the single `POCKETHIVE_PLUGIN_DIR` (host path) everywhere, and the orchestrator/swarm-controller pipeline binds each `Bee.plugin.artifact` into the worker host container so PF4J loads the correct jar. Validate changes with `./mvnw -q -DskipTests -pl orchestrator-service,swarm-controller-service -am package`.
 
 #### Phase D – Observability & verification
 1. [ ] Expose health/actuator endpoints that report plugin `role`, `version`, git info, and checksum.

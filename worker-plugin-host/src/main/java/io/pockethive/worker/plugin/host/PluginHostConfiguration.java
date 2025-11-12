@@ -1,11 +1,13 @@
 package io.pockethive.worker.plugin.host;
 
 import io.pockethive.worker.plugin.api.PocketHiveWorkerExtension;
+import io.pockethive.worker.sdk.config.PocketHiveWorker;
 import java.util.List;
+import java.util.ArrayList;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.DisposableBean;
-import org.springframework.boot.ApplicationRunner;
+import org.springframework.beans.factory.InitializingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.ApplicationContext;
@@ -13,6 +15,7 @@ import org.springframework.context.annotation.AnnotationConfigApplicationContext
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.DependsOn;
+import org.springframework.beans.factory.support.DefaultListableBeanFactory;
 
 @Configuration
 @EnableConfigurationProperties(PluginHostProperties.class)
@@ -53,7 +56,7 @@ class PluginHostConfiguration {
         return extensions.getFirst();
     }
 
-    static final class PluginManagerRunner implements ApplicationRunner, DisposableBean {
+    static final class PluginManagerRunner implements InitializingBean, DisposableBean {
 
         private final PocketHivePluginManager pluginManager;
         private final PluginHostProperties properties;
@@ -61,6 +64,8 @@ class PluginHostConfiguration {
         private final PocketHivePluginManifestValidator manifestValidator;
         private AnnotationConfigApplicationContext pluginContext;
         private PocketHiveWorkerExtension activeExtension;
+        private final List<ExportedBean> exportedBeans = new ArrayList<>();
+        private String activePluginId;
 
         PluginManagerRunner(PocketHivePluginManager pluginManager,
                             PluginHostProperties properties,
@@ -73,7 +78,7 @@ class PluginHostConfiguration {
         }
 
         @Override
-        public void run(org.springframework.boot.ApplicationArguments args) {
+        public void afterPropertiesSet() {
             pluginManager.loadPlugins();
             pluginManager.startPlugins();
             List<PocketHiveWorkerExtension> extensions = pluginManager.getExtensions(PocketHiveWorkerExtension.class);
@@ -92,6 +97,7 @@ class PluginHostConfiguration {
             PocketHiveWorkerExtension extension = extensions.getFirst();
             this.activeExtension = extension;
             String pluginId = pluginManager.whichPlugin(extension.getClass()).getPluginId();
+            this.activePluginId = pluginId;
             PocketHivePluginDescriptor descriptor = manifestValidator.validate(pluginId, extension.getClass().getClassLoader());
             log.info("Starting PocketHive worker plugin role={}" , extension.role());
             pluginContext = new AnnotationConfigApplicationContext();
@@ -101,6 +107,7 @@ class PluginHostConfiguration {
                 pluginContext.register(configClass);
             }
             pluginContext.refresh();
+            exportWorkerBeans(pluginId);
             extension.onStart();
         }
 
@@ -113,11 +120,45 @@ class PluginHostConfiguration {
                     log.warn("Error while stopping plugin {}", activeExtension.role(), ex);
                 }
             }
+            removeExportedBeans();
             if (pluginContext != null) {
                 pluginContext.close();
             }
             pluginManager.stopPlugins();
             pluginManager.unloadPlugins();
         }
+
+        private void exportWorkerBeans(String pluginId) {
+            var workers = pluginContext.getBeansWithAnnotation(PocketHiveWorker.class);
+            if (workers.isEmpty()) {
+                throw new IllegalStateException("Plugin " + pluginId + " does not define any @PocketHiveWorker beans");
+            }
+            if (!(hostContext instanceof org.springframework.context.ConfigurableApplicationContext configurableHost)) {
+                throw new IllegalStateException("Host application context is not configurable");
+            }
+            var hostFactory = (DefaultListableBeanFactory) configurableHost.getBeanFactory();
+            workers.forEach((beanName, bean) -> {
+                String exportedName = pluginId + ":" + beanName;
+                hostFactory.registerSingleton(exportedName, bean);
+                exportedBeans.add(new ExportedBean(exportedName, bean));
+                log.info("Registered PocketHive worker bean {} from plugin {}", exportedName, pluginId);
+            });
+        }
+
+        private void removeExportedBeans() {
+            if (!(hostContext instanceof org.springframework.context.ConfigurableApplicationContext configurableHost)) {
+                return;
+            }
+            var hostFactory = (DefaultListableBeanFactory) configurableHost.getBeanFactory();
+            for (ExportedBean exported : exportedBeans) {
+                if (hostFactory.containsSingleton(exported.name())) {
+                    hostFactory.destroySingleton(exported.name());
+                    log.info("Deregistered PocketHive worker bean {}", exported.name());
+                }
+            }
+            exportedBeans.clear();
+        }
+
+        private record ExportedBean(String name, Object bean) { }
     }
 }

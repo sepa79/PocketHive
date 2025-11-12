@@ -32,8 +32,8 @@ public class ScenarioService {
     private final Map<String, ScenarioRecord> scenarios = new ConcurrentHashMap<>();
 
     public ScenarioService(@Value("${scenarios.dir:scenarios}") String dir,
-                           @Value("${plugins.dir:${POCKETHIVE_PLUGIN_HOST_DIR:${POCKETHIVE_PLUGIN_DIR:dist/plugins}}}") String pluginsDir,
-                           @Value("${plugins.target-dir:${POCKETHIVE_PLUGIN_DIR:${POCKETHIVE_PLUGIN_TARGET_DIR:/opt/pockethive/plugins}}}") String pluginTargetDir,
+                           @Value("${plugins.dir:${POCKETHIVE_PLUGIN_DIR:dist/plugins}}") String pluginsDir,
+                           @Value("${plugins.target-dir:/opt/pockethive/plugins}") String pluginTargetDir,
                            CapabilityCatalogueService capabilities) throws IOException {
         this.storageDir = Paths.get(dir);
         Files.createDirectories(this.storageDir);
