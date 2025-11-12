@@ -6,7 +6,7 @@
 
 - **SDK v3 (current focus)** — Ship a worker host container that loads exactly one plugin jar at runtime. The container replaces per-worker images while keeping the control-plane contract, routing, and configuration untouched.
 - **SDK v4 (deferred)** — Build on the same host to support multiple plugins per JVM, per the earlier multi-worker vision, after SDK v3 soaks in staging/prod.
-- **Common principles** — Java 21 baseline, contracts defined in `docs/ARCHITECTURE.md` / `docs/ORCHESTRATOR-REST.md`, and the correlation/idempotency guidance in `docs/correlation-vs-idempotency.md` still apply. No cascading defaults or contract changes without updating the authoritative docs.
+- **Common principles** — Java 21 baseline, contracts defined in `docs/ARCHITECTURE.md` / `docs/ORCHESTRATOR-REST.md`, and the correlation/idempotency guidance in `docs/correlation-vs-idempotency.md` still apply. No cascading defaults or contract changes without updating the authoritative docs. PF4J + pf4j-spring provide the plugin runtime; custom classloader hacks are explicitly out of scope now.
 
 ## 2) SDK v3 — Single Worker Host
 
@@ -43,18 +43,19 @@
 
 1. **Plugin descriptor** — `META-INF/pockethive-plugin.yml` describes `role`, `version`, `capabilities`, and `configPrefix`.
 2. **Loader** — The host scans the plugin directory, instantiates one `URLClassLoader`, validates signatures/versions, and leaks no classes out of the plugin boundary.
-3. **Configuration** — Host reads `config/plugins/<role>.yaml` (or env) and merges `plugin defaults < host overrides < control-plane overrides` so the worker sees the same properties it expects today.
+3. **Configuration** — Host reads `config/plugins/<role>.yaml` (or env) and merges `plugin defaults < host overrides < control-plane overrides` so the worker sees the same properties it expects today. PF4J’s plugin metadata (via `plugin.properties`) sits alongside `META-INF/pockethive-plugin.yml` so both the framework and our control-plane know what’s loaded.
 4. **Control plane** — The existing `WorkerControlPlaneRuntime` is instantiated once per container and bound to the plugin-provided beans.
 
 ### 2.4 Workstreams & Tasks
 
 #### Phase A – Host scaffolding
 1. Create the `worker-plugin-host` module (Spring Boot starter with no embedded workers).
-2. Implement `PluginClasspathLoader` with:
-   - Directory scan + manifest validation.
-   - Guard rails that reject zero or multiple plugins.
-   - Registration hooks so `PocketHiveWorkerSdkAutoConfiguration` can import plugin bean definitions.
-3. Add smoke tests that load a sample plugin jar and assert the worker lifecycle (start/stop, control-plane heartbeat).
+2. Integrate PF4J + pf4j-spring:
+   - Wire a `SpringPluginManager` that scans the plugin directory, enforces “single plugin loaded,” and exposes extensions through PF4J.
+   - Define a `PocketHiveWorkerExtension` interface so plugins register their worker configuration explicitly.
+   - Keep `META-INF/pockethive-plugin.yml` in step with PF4J’s `plugin.properties`.
+3. Implement `PluginClasspathLoader` wrappers only for PF4J-provided classloaders (validation, metadata logging).
+4. Add smoke tests that load a sample plugin jar via PF4J and assert the worker lifecycle (start/stop, control-plane heartbeat).
 
 #### Phase B – Configuration & packaging
 1. Finalize the plugin manifest schema (`role`, `version`, `capabilities`, `configPrefix`, optional `defaultConfig` path).
@@ -73,7 +74,7 @@
 
 ### 2.5 Deliverables
 
-- `worker-plugin-host` module + Docker image that enforces one plugin per container.
+- `worker-plugin-host` module + Docker image that enforces one plugin per container, backed by PF4J + pf4j-spring for lifecycle/classloading.
 - Plugin manifest schema, packaging script, and sample plugin builds (e.g., generator/moderator) published to artifacts/examples.
 - Updated orchestrator/swarm-controller/scenario-manager docs reflecting the new deployment shape.
 - Operational documentation: host deployment guide + plugin authoring guide + this plan.
