@@ -2,13 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
-# Changelog
-
-All notable changes to this project will be documented in this file.
-
 ## [0.13.7] - 2025-11-11
 Timestamp: 2025-11-11T00:00:00Z
 
+- Control-plane role cleanup: collapse the generator/moderator/processor/postprocessor/trigger topology descriptors into a single `WorkerControlPlaneTopologyDescriptor`, introduce `ControlPlaneEmitter.worker(...)`, and update the Spring descriptor factory plus tests so any worker role (including plugins) shares the same routing/queue logic without hardcoded role lists.
 - Scenario config propagation: document `SwarmPlan.bees[*].config` in `docs/ORCHESTRATOR-REST.md`, add test-only scenarios so `SwarmCreationMock1E2ETest` asserts the generator/processor override payloads, and mark the remaining plan steps as complete.
 - Swarm controller bootstrap: listen for `ev.error.config-update.*`, drop the pending lifecycle command, emit `ev.error.swarm-template`/`swarm-start`, and mark the swarm `FAILED` so invalid bootstrap configs fail fast instead of timing out.
 - SDK naming cleanup: rename `WorkerInputType.RABBIT` to `WorkerInputType.RABBITMQ` so the input/output enums share the same RabbitMQ terminology.
