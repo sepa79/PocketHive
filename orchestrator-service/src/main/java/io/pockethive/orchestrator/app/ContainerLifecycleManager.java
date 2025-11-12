@@ -29,6 +29,7 @@ public class ContainerLifecycleManager {
     private final OrchestratorProperties properties;
     private final ControlPlaneProperties controlPlaneProperties;
     private final RabbitProperties rabbitProperties;
+    private static final String DEFAULT_PLUGIN_TARGET_DIR = "/opt/pockethive/plugins";
 
     public ContainerLifecycleManager(
         DockerContainerClient docker,
@@ -81,6 +82,10 @@ public class ContainerLifecycleManager {
         String dockerSocket = properties.getDocker().getSocketPath();
         env.put("DOCKER_SOCKET_PATH", dockerSocket);
         env.put("DOCKER_HOST", "unix://" + dockerSocket);
+        if (hasText(properties.getPluginDir())) {
+            env.put("POCKETHIVE_PLUGIN_DIR", properties.getPluginDir());
+            env.put("POCKETHIVE_PLUGIN_TARGET_DIR", DEFAULT_PLUGIN_TARGET_DIR);
+        }
         log.info("launching controller for swarm {} as instance {} using image {}", resolvedSwarmId, resolvedInstance, image);
         log.info("docker env: {}", env);
         String containerId = docker.createAndStartContainer(
@@ -130,5 +135,9 @@ public class ContainerLifecycleManager {
             throw new IllegalArgumentException(description + " must not be null or blank");
         }
         return value;
+    }
+
+    private static boolean hasText(String value) {
+        return value != null && !value.trim().isEmpty();
     }
 }

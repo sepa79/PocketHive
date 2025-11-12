@@ -167,7 +167,11 @@ Client sends **`idempotencyKey`** (UUID v4) per new action (reuse on retry). Ser
     "bees": [
       {
         "role": "generator",
-        "image": "ghcr.io/pockethive/generator:latest",
+        "image": "ghcr.io/pockethive/worker-plugin-host:latest",
+        "plugin": {
+          "artifact": "/var/pockethive/plugins/generator-service-0.13.7.jar",
+          "mountPath": "/opt/pockethive/plugins/plugin.jar"
+        },
         "work": { "out": "gen-out" },
         "config": {
           "ratePerSec": 10,
@@ -188,6 +192,8 @@ Client sends **`idempotencyKey`** (UUID v4) per new action (reuse on retry). Ser
   "notes": "optional"
 }
 ```
+
+> `plugin` is optional. When provided, `image` must be the shared `worker-plugin-host` container and `plugin.artifact` must point to the packaged worker jar on the swarm-controller host (absolute path or supported URI). The controller bind-mounts it into `plugin.mountPath` (defaults to `/opt/pockethive/plugins/plugin.jar`). Omit `plugin` to keep using legacy per-worker images.
 
 **Signal:** `sig.swarm-template.<swarmId>.swarm-controller.ALL` → **Success:** `ev.ready.swarm-template.<swarmId>.swarm-controller.<controllerInstance>` → **Error:** `ev.error.swarm-template.<swarmId>.swarm-controller.<controllerInstance>`
 

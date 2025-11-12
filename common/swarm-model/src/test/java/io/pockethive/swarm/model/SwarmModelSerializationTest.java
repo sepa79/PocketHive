@@ -25,7 +25,8 @@ class SwarmModelSerializationTest {
             new BufferGuardPolicy.Prefill(true, "2m", 20),
             new BufferGuardPolicy.Backpressure("modToProc", 500, 300, 15));
         SwarmPlan plan = new SwarmPlan("swarm-1", List.of(
-            new Bee("generator", "img", new Work("in", "out"), Map.of("K", "V"))
+            new Bee("generator", "img", new Work("in", "out"), Map.of("K", "V"), Map.of(),
+                new Bee.Plugin("file:///tmp/plugin.jar", "/opt/pockethive/plugins/custom.jar"))
         ), new TrafficPolicy(guard));
 
         String json = mapper.writeValueAsString(plan);
@@ -38,6 +39,9 @@ class SwarmModelSerializationTest {
         assertEquals("img", bee.image());
         assertNotNull(bee.env());
         assertEquals("V", bee.env().get("K"));
+        assertNotNull(bee.plugin());
+        assertEquals("file:///tmp/plugin.jar", bee.plugin().artifact());
+        assertEquals("/opt/pockethive/plugins/custom.jar", bee.plugin().mountPath());
         assertNotNull(restored.trafficPolicy());
         assertNotNull(restored.trafficPolicy().bufferGuard());
         assertEquals("genToMod", restored.trafficPolicy().bufferGuard().queueAlias());

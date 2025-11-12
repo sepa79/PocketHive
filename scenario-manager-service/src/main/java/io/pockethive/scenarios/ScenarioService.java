@@ -175,6 +175,9 @@ public class ScenarioService {
         if (template.bees() != null) {
             for (Bee bee : template.bees()) {
                 checkImageReference(scenarioId, "bee '" + bee.role() + "'", bee.image(), missingReferences);
+                if (bee.plugin() != null) {
+                    checkPluginArtifact(scenarioId, bee, missingReferences);
+                }
             }
         }
 
@@ -200,6 +203,45 @@ public class ScenarioService {
             logger.warn("Scenario '{}' missing capability manifest for {} image '{}'", scenarioId, component, imageReference);
             missingReferences.add(component + " -> " + imageReference);
         }
+    }
+
+    private void checkPluginArtifact(String scenarioId,
+                                     Bee bee,
+                                     List<String> missingReferences) {
+        String artifact = bee.plugin().artifact();
+        if (artifact == null || artifact.isBlank()) {
+            logger.warn("Scenario '{}' bee '{}' plugin artifact path is missing", scenarioId, bee.role());
+            missingReferences.add("bee '" + bee.role() + "' plugin artifact (missing path)");
+            return;
+        }
+        if (isRemoteArtifact(artifact)) {
+            return;
+        }
+        Path resolved = resolveArtifactPath(artifact);
+        if (!Files.exists(resolved)) {
+            logger.warn("Scenario '{}' bee '{}' plugin artifact not found at {}", scenarioId, bee.role(), resolved);
+            missingReferences.add("bee '" + bee.role() + "' plugin artifact -> " + resolved);
+        }
+    }
+
+    private boolean isRemoteArtifact(String artifact) {
+        String trimmed = artifact.trim().toLowerCase(Locale.ROOT);
+        return trimmed.startsWith("http://")
+            || trimmed.startsWith("https://")
+            || trimmed.startsWith("oci://");
+    }
+
+    private Path resolveArtifactPath(String artifact) {
+        Path candidate = Paths.get(artifact);
+        if (!candidate.isAbsolute()) {
+            Path repoRoot = storageDir.getParent();
+            if (repoRoot != null) {
+                candidate = repoRoot.resolve(artifact);
+            } else {
+                candidate = storageDir.resolve(artifact);
+            }
+        }
+        return candidate.normalize();
     }
 
     private Format detectFormat(Path path) {

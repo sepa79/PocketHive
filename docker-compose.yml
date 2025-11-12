@@ -6,6 +6,12 @@ x-metrics-env: &metrics-env
   MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_PUSH_RATE: 10s
   MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_SHUTDOWN_OPERATION: DELETE
   MANAGEMENT_METRICS_TAGS_SWARM: swarm1
+x-plugin-dir: &plugin-dir ${POCKETHIVE_PLUGIN_DIR}
+x-plugin-volume: &plugin-volume
+  - type: bind
+    source: *plugin-dir
+    target: /opt/pockethive/plugins
+    read_only: true
 
 services:
 #--------------------------------------
@@ -186,6 +192,8 @@ services:
       dockerfile: orchestrator-service/Dockerfile
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      POCKETHIVE_PLUGIN_DIR: *plugin-dir
 # all defaulted in application.yml, uncomment to override here
 #    environment:
 #      <<: *metrics-env
@@ -217,6 +225,7 @@ services:
       start_period: 30s
     ports:
       - "1081:8080"
+    volumes: *plugin-volume
     depends_on:
       log-aggregator:
         condition: service_healthy
@@ -237,6 +246,8 @@ services:
       POCKETHIVE_CONTROL_PLANE_EXCHANGE: ph.control
       POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE: ph.control
       POCKETHIVE_CONTROL_PLANE_SWARM_ID: swarm1
+      POCKETHIVE_PLUGIN_DIR: *plugin-dir
+      POCKETHIVE_PLUGIN_TARGET_DIR: /opt/pockethive/plugins
     depends_on:
       log-aggregator:
         condition: service_healthy

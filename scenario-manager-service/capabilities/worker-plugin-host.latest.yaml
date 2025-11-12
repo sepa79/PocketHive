@@ -1,0 +1,14 @@
+schemaVersion: "1.0"
+capabilitiesVersion: "1.0"
+role: plugin-host
+image:
+  name: worker-plugin-host
+  tag: latest
+ui:
+  label: "Plugin Host"
+  color: "#2563eb"
+  shape: "hexagon"
+  abbreviation: "PH"
+config: []
+actions: []
+panels: []

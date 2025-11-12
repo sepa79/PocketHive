@@ -1,0 +1,8 @@
+config:
+  ratePerSec: 0.0
+  singleRequest: false
+  message:
+    path: /api/test
+    method: POST
+    body: hello-world
+    headers: {}

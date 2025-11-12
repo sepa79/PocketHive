@@ -7,6 +7,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public class PluginHostProperties {
 
     private Path pluginDir = Path.of("/opt/pockethive/plugins");
+    private Path overridesDir = Path.of("config/plugins");
 
     public Path getPluginDir() {
         return pluginDir;
@@ -14,5 +15,13 @@ public class PluginHostProperties {
 
     public void setPluginDir(Path pluginDir) {
         this.pluginDir = pluginDir;
+    }
+
+    public Path getOverridesDir() {
+        return overridesDir;
+    }
+
+    public void setOverridesDir(Path overridesDir) {
+        this.overridesDir = overridesDir;
     }
 }

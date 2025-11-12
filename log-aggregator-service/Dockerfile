@@ -19,6 +19,7 @@ COPY trigger-service/pom.xml trigger-service/pom.xml
 COPY orchestrator-service/pom.xml orchestrator-service/pom.xml
 COPY swarm-controller-service/pom.xml swarm-controller-service/pom.xml
 COPY scenario-manager-service/pom.xml scenario-manager-service/pom.xml
+COPY worker-plugin-host/pom.xml worker-plugin-host/pom.xml
 COPY common/topology-core/src common/topology-core/src
 COPY common/docker-client/src common/docker-client/src
 COPY common/swarm-model/src common/swarm-model/src
@@ -36,6 +37,7 @@ COPY trigger-service/src trigger-service/src
 COPY orchestrator-service/src orchestrator-service/src
 COPY swarm-controller-service/src swarm-controller-service/src
 COPY scenario-manager-service/src scenario-manager-service/src
+COPY worker-plugin-host/src worker-plugin-host/src
 RUN mvn -q -B -DskipTests -pl log-aggregator-service -am package
 
 # ---- Runtime ----

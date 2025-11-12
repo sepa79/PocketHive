@@ -94,6 +94,8 @@ class ContainerLifecycleManagerTest {
         assertEquals("/var/run/docker.sock", env.get("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_DOCKER_SOCKET_PATH"));
         assertEquals("/var/run/docker.sock", env.get("DOCKER_SOCKET_PATH"));
         assertEquals("unix:///var/run/docker.sock", env.get("DOCKER_HOST"));
+        assertEquals("/host/plugins", env.get("POCKETHIVE_PLUGIN_DIR"));
+        assertEquals("/opt/pockethive/plugins", env.get("POCKETHIVE_PLUGIN_TARGET_DIR"));
         HostConfig customized = hostCaptor.getValue().apply(HostConfig.newHostConfig());
         Bind[] binds = customized.getBinds();
         assertNotNull(binds);
@@ -120,6 +122,8 @@ class ContainerLifecycleManagerTest {
         Map<String, String> env = envCaptor.getValue();
         assertEquals("/custom/docker.sock", env.get("DOCKER_SOCKET_PATH"));
         assertEquals("unix:///custom/docker.sock", env.get("DOCKER_HOST"));
+        assertEquals("/host/plugins", env.get("POCKETHIVE_PLUGIN_DIR"));
+        assertEquals("/opt/pockethive/plugins", env.get("POCKETHIVE_PLUGIN_TARGET_DIR"));
         Bind[] binds = hostCaptor.getValue().apply(HostConfig.newHostConfig()).getBinds();
         assertNotNull(binds);
         assertEquals(1, binds.length);
@@ -253,7 +257,8 @@ class ContainerLifecycleManagerTest {
                 new OrchestratorProperties.Docker("/var/run/docker.sock"),
                 new OrchestratorProperties.ScenarioManager(
                     "http://scenario-manager:8080",
-                    new OrchestratorProperties.Http(Duration.ofSeconds(5), Duration.ofSeconds(30)))));
+                    new OrchestratorProperties.Http(Duration.ofSeconds(5), Duration.ofSeconds(30))),
+                "/host/plugins"));
     }
 
     private static OrchestratorProperties withDockerSocket(String socketPath) {
@@ -275,7 +280,8 @@ class ContainerLifecycleManagerTest {
                 new OrchestratorProperties.Docker(socketPath),
                 new OrchestratorProperties.ScenarioManager(
                     "http://scenario-manager:8080",
-                    new OrchestratorProperties.Http(Duration.ofSeconds(5), Duration.ofSeconds(30)))));
+                    new OrchestratorProperties.Http(Duration.ofSeconds(5), Duration.ofSeconds(30))),
+                "/host/plugins"));
     }
 
     private static ControlPlaneProperties controlPlaneProperties() {

@@ -42,6 +42,10 @@ public class OrchestratorProperties {
         return orchestrator.scenarioManager();
     }
 
+    public String getPluginDir() {
+        return orchestrator.pluginDir();
+    }
+
     @Validated
     public static final class Orchestrator {
 
@@ -51,19 +55,22 @@ public class OrchestratorProperties {
         private final @Valid Metrics metrics;
         private final @Valid Docker docker;
         private final @Valid ScenarioManager scenarioManager;
+        private final String pluginDir;
 
         public Orchestrator(@NotBlank String controlQueuePrefix,
                              @NotBlank String statusQueuePrefix,
                              @Valid Rabbit rabbit,
                              @Valid Metrics metrics,
                              @Valid Docker docker,
-                             @Valid ScenarioManager scenarioManager) {
+                             @Valid ScenarioManager scenarioManager,
+                             String pluginDir) {
             this.controlQueuePrefix = requireNonBlank(controlQueuePrefix, "controlQueuePrefix");
             this.statusQueuePrefix = requireNonBlank(statusQueuePrefix, "statusQueuePrefix");
             this.rabbit = Objects.requireNonNull(rabbit, "rabbit");
             this.metrics = Objects.requireNonNull(metrics, "metrics");
             this.docker = Objects.requireNonNull(docker, "docker");
             this.scenarioManager = Objects.requireNonNull(scenarioManager, "scenarioManager");
+            this.pluginDir = pluginDir;
         }
 
         public String controlQueuePrefix() {
@@ -88,6 +95,10 @@ public class OrchestratorProperties {
 
         public ScenarioManager scenarioManager() {
             return scenarioManager;
+        }
+
+        public String pluginDir() {
+            return pluginDir;
         }
     }
 

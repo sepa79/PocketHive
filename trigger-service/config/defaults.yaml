@@ -1,0 +1,9 @@
+config:
+  intervalMs: 1000
+  singleRequest: false
+  actionType: none
+  command: ""
+  url: ""
+  method: GET
+  body: ""
+  headers: {}

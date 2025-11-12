@@ -1,0 +1,9 @@
+config:
+  mode:
+    type: pass-through
+    ratePerSec: 0.0
+    sine:
+      minRatePerSec: 0.0
+      maxRatePerSec: 0.0
+      periodSeconds: 60.0
+      phaseOffsetSeconds: 0.0

@@ -6,7 +6,9 @@ public record PluginDescriptor(
     String pluginClass,
     String role,
     String version,
-    List<String> capabilities
+    List<String> capabilities,
+    String configPrefix,
+    String defaultConfig
 ) {
     public PluginDescriptor {
         if (capabilities == null) {

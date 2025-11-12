@@ -188,6 +188,69 @@ class ScenarioServiceTest {
         assertThat(scenario.getTrafficPolicy().bufferGuard().adjust().maxIncreasePct()).isEqualTo(10);
     }
 
+    @Test
+    void scenarioWithMissingPluginArtifactIsDefunct() throws IOException {
+        writeManifest("ctrl", "ctrl-image");
+        writeManifest("worker", "worker-plugin-host");
+        capabilities.reload();
+
+        Path missing = tempDir.resolve("dist/plugins/missing.jar");
+        writeScenario("plugin-missing.yaml", """
+                id: plugin-missing
+                name: Missing Plugin Scenario
+                template:
+                  image: ctrl-image:latest
+                  bees:
+                    - role: worker
+                      image: worker-plugin-host:latest
+                      plugin:
+                        artifact: %s
+                        mountPath: /opt/pockethive/plugins/plugin.jar
+                      work:
+                        in: a
+                        out: b
+                """.formatted(missing.toString()));
+
+        service.reload();
+
+        assertThat(service.listAvailableSummaries()).isEmpty();
+        assertThat(service.listDefunctSummaries())
+            .extracting(ScenarioSummary::id)
+            .containsExactly("plugin-missing");
+    }
+
+    @Test
+    void scenarioWithPluginArtifactRemainsAvailable() throws IOException {
+        writeManifest("ctrl", "ctrl-image");
+        writeManifest("worker", "worker-plugin-host");
+        capabilities.reload();
+
+        Path pluginFile = Files.createDirectories(tempDir.resolve("dist/plugins"))
+            .resolve("worker.jar");
+        Files.writeString(pluginFile, "plugin");
+
+        writeScenario("plugin-ok.yaml", """
+                id: plugin-ok
+                name: Plugin Scenario
+                template:
+                  image: ctrl-image:latest
+                  bees:
+                    - role: worker
+                      image: worker-plugin-host:latest
+                      plugin:
+                        artifact: %s
+                      work:
+                        in: a
+                        out: b
+                """.formatted(pluginFile.toString()));
+
+        service.reload();
+
+        assertThat(service.listAvailableSummaries())
+            .extracting(ScenarioSummary::id)
+            .containsExactly("plugin-ok");
+    }
+
     private void writeManifest(String prefix, String imageName) throws IOException {
         String manifest = """
                 {

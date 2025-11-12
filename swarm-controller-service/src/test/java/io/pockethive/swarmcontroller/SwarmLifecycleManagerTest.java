@@ -2,6 +2,8 @@ package io.pockethive.swarmcontroller;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.github.dockerjava.api.model.Bind;
+import com.github.dockerjava.api.model.HostConfig;
 import static io.pockethive.swarmcontroller.SwarmControllerTestProperties.CONTROL_EXCHANGE;
 import static io.pockethive.swarmcontroller.SwarmControllerTestProperties.CONTROL_QUEUE_PREFIX_BASE;
 import static io.pockethive.swarmcontroller.SwarmControllerTestProperties.HIVE_EXCHANGE;
@@ -36,6 +38,8 @@ import org.springframework.boot.autoconfigure.amqp.RabbitProperties;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -44,6 +48,7 @@ import java.util.Properties;
 import java.util.stream.IntStream;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.DoublePredicate;
+import java.util.function.UnaryOperator;
 import org.mockito.ArgumentCaptor;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.Level;
@@ -91,7 +96,7 @@ class SwarmLifecycleManagerTest {
     SwarmPlan plan = new SwarmPlan("swarm", List.of(
         new Bee("generator", "img1", new Work("qin", "qout"), null)
     ));
-    when(docker.createContainer(eq("img1"), anyMap(), anyString())).thenReturn("c1");
+    when(docker.createContainer(eq("img1"), anyMap(), anyString(), any())).thenReturn("c1");
     when(docker.resolveControlNetwork()).thenReturn("ctrl-net");
 
     manager.start(mapper.writeValueAsString(plan));
@@ -115,7 +120,7 @@ class SwarmLifecycleManagerTest {
         .containsExactlyInAnyOrder("qin", "qout");
     ArgumentCaptor<Map<String,String>> envCap = ArgumentCaptor.forClass(Map.class);
     ArgumentCaptor<String> nameCap = ArgumentCaptor.forClass(String.class);
-    verify(docker).createContainer(eq("img1"), envCap.capture(), nameCap.capture());
+    verify(docker).createContainer(eq("img1"), envCap.capture(), nameCap.capture(), any());
     Map<String,String> env = envCap.getValue();
     String assignedName = nameCap.getValue();
     assertEquals(TEST_SWARM_ID, env.get("POCKETHIVE_CONTROL_PLANE_SWARM_ID"));
@@ -180,8 +185,8 @@ class SwarmLifecycleManagerTest {
     SwarmPlan plan = new SwarmPlan("swarm", List.of(
         new Bee("gen", "img1", new Work(null, null), null),
         new Bee("gen", "img2", new Work(null, null), null)));
-    when(docker.createContainer(eq("img1"), anyMap(), anyString())).thenReturn("c1");
-    when(docker.createContainer(eq("img2"), anyMap(), anyString())).thenReturn("c2");
+    when(docker.createContainer(eq("img1"), anyMap(), anyString(), any())).thenReturn("c1");
+    when(docker.createContainer(eq("img2"), anyMap(), anyString(), any())).thenReturn("c2");
 
     manager.start(mapper.writeValueAsString(plan));
     manager.updateHeartbeat("gen", "a");
@@ -202,13 +207,13 @@ class SwarmLifecycleManagerTest {
     SwarmPlan plan = new SwarmPlan("swarm", List.of(
         new Bee("gen", "img1", new Work("a", "b"),
             Map.of("CUSTOM_IN_QUEUE", "${in}", "CUSTOM_OUT_QUEUE", "${out}"))));
-    when(docker.createContainer(eq("img1"), anyMap(), anyString())).thenReturn("c1");
+    when(docker.createContainer(eq("img1"), anyMap(), anyString(), any())).thenReturn("c1");
 
     manager.prepare(mapper.writeValueAsString(plan));
 
     ArgumentCaptor<Map<String,String>> envCap2 = ArgumentCaptor.forClass(Map.class);
     ArgumentCaptor<String> nameCap2 = ArgumentCaptor.forClass(String.class);
-    verify(docker).createContainer(eq("img1"), envCap2.capture(), nameCap2.capture());
+    verify(docker).createContainer(eq("img1"), envCap2.capture(), nameCap2.capture(), any());
     Map<String,String> env = envCap2.getValue();
     assertEquals(nameCap2.getValue(), env.get("POCKETHIVE_CONTROL_PLANE_INSTANCE_ID"));
     assertEquals(nameCap2.getValue(), env.get("POCKETHIVE_CONTROL_PLANE_INSTANCE_ID"));
@@ -240,13 +245,13 @@ class SwarmLifecycleManagerTest {
         new Bee("moderator", "img-mod", new Work("gen-out", "mod-out"), null),
         new Bee("processor", "img-proc", new Work("mod-out", "final-out"), null),
         new Bee("postprocessor", "img-post", new Work("final-out", null), null)));
-    when(docker.createContainer(anyString(), anyMap(), anyString()))
+    when(docker.createContainer(anyString(), anyMap(), anyString(), any()))
         .thenReturn("c1", "c2", "c3", "c4");
 
     manager.prepare(mapper.writeValueAsString(plan));
 
     ArgumentCaptor<Map<String, String>> envCaptor = ArgumentCaptor.forClass(Map.class);
-    verify(docker, times(4)).createContainer(anyString(), envCaptor.capture(), anyString());
+    verify(docker, times(4)).createContainer(anyString(), envCaptor.capture(), anyString(), any());
     Map<String, String> generatorEnv = envCaptor.getAllValues().get(0);
     assertThat(generatorEnv.get("POCKETHIVE_OUTPUT_RABBIT_ROUTING_KEY")).isEqualTo(queue("gen-out"));
     assertThat(generatorEnv.get("POCKETHIVE_OUTPUT_RABBIT_EXCHANGE")).isEqualTo(HIVE_EXCHANGE);
@@ -326,7 +331,7 @@ class SwarmLifecycleManagerTest {
   void startSendsConfigUpdatesWithoutRestartingContainers() throws Exception {
     SwarmLifecycleManager manager = newManager();
     SwarmPlan plan = new SwarmPlan("swarm", List.of(new Bee("gen", "img1", new Work(null, null), null)));
-    when(docker.createContainer(eq("img1"), anyMap(), anyString())).thenReturn("c1");
+    when(docker.createContainer(eq("img1"), anyMap(), anyString(), any())).thenReturn("c1");
 
     manager.prepare(mapper.writeValueAsString(plan));
     manager.updateHeartbeat("gen", "g1");
@@ -350,7 +355,7 @@ class SwarmLifecycleManagerTest {
   void heartbeatPublishesEnablementWhenWorkerStateDiffers() throws Exception {
     SwarmLifecycleManager manager = newManager();
     SwarmPlan plan = new SwarmPlan("swarm", List.of(new Bee("gen", "img1", new Work(null, null), null)));
-    when(docker.createContainer(eq("img1"), anyMap(), anyString())).thenReturn("c1");
+    when(docker.createContainer(eq("img1"), anyMap(), anyString(), any())).thenReturn("c1");
 
     manager.prepare(mapper.writeValueAsString(plan));
     manager.setSwarmEnabled(true);
@@ -373,7 +378,7 @@ class SwarmLifecycleManagerTest {
   void heartbeatSkipsEnablementWhenWorkerMatchesDesired() throws Exception {
     SwarmLifecycleManager manager = newManager();
     SwarmPlan plan = new SwarmPlan("swarm", List.of(new Bee("gen", "img1", new Work(null, null), null)));
-    when(docker.createContainer(eq("img1"), anyMap(), anyString())).thenReturn("c1");
+    when(docker.createContainer(eq("img1"), anyMap(), anyString(), any())).thenReturn("c1");
 
     manager.prepare(mapper.writeValueAsString(plan));
     manager.setSwarmEnabled(true);
@@ -390,8 +395,8 @@ class SwarmLifecycleManagerTest {
     SwarmPlan plan = new SwarmPlan("swarm", List.of(
         new Bee("gen", "img1", new Work(null, null), null),
         new Bee("proc", "img2", new Work(null, null), null)));
-    when(docker.createContainer(eq("img1"), anyMap(), anyString())).thenReturn("c1");
-    when(docker.createContainer(eq("img2"), anyMap(), anyString())).thenReturn("c2");
+    when(docker.createContainer(eq("img1"), anyMap(), anyString(), any())).thenReturn("c1");
+    when(docker.createContainer(eq("img2"), anyMap(), anyString(), any())).thenReturn("c2");
 
     manager.prepare(mapper.writeValueAsString(plan));
     manager.markReady("gen", "g1");
@@ -421,9 +426,9 @@ class SwarmLifecycleManagerTest {
         new Bee("gen", "img1", new Work(null, "a"), null),
         new Bee("proc", "img2", new Work("a", "b"), null),
         new Bee("sink", "img3", new Work("b", null), null)));
-    when(docker.createContainer(eq("img1"), anyMap(), anyString())).thenReturn("c1");
-    when(docker.createContainer(eq("img2"), anyMap(), anyString())).thenReturn("c2");
-    when(docker.createContainer(eq("img3"), anyMap(), anyString())).thenReturn("c3");
+    when(docker.createContainer(eq("img1"), anyMap(), anyString(), any())).thenReturn("c1");
+    when(docker.createContainer(eq("img2"), anyMap(), anyString(), any())).thenReturn("c2");
+    when(docker.createContainer(eq("img3"), anyMap(), anyString(), any())).thenReturn("c3");
 
     manager.prepare(mapper.writeValueAsString(plan));
     manager.updateHeartbeat("gen", "g1");
@@ -550,7 +555,7 @@ class SwarmLifecycleManagerTest {
   void statusEmissionsLogAtDebug(CapturedOutput output) throws Exception {
     SwarmLifecycleManager manager = newManager();
     SwarmPlan plan = new SwarmPlan("swarm", List.of(new Bee("gen", "img", new Work(null, null), null)));
-    when(docker.createContainer(eq("img"), anyMap(), anyString())).thenReturn("c1");
+    when(docker.createContainer(eq("img"), anyMap(), anyString(), any())).thenReturn("c1");
 
     manager.prepare(mapper.writeValueAsString(plan));
     manager.updateHeartbeat("gen", "g1");
@@ -682,7 +687,7 @@ class SwarmLifecycleManagerTest {
             null,
             Map.of("ratePerSec", 5d))
     ), new TrafficPolicy(guard));
-    when(docker.createContainer(eq("img1"), anyMap(), anyString())).thenReturn("c1");
+    when(docker.createContainer(eq("img1"), anyMap(), anyString(), any())).thenReturn("c1");
     when(docker.resolveControlNetwork()).thenReturn("ctrl-net");
     AtomicLong depth = new AtomicLong(50);
     when(amqp.getQueueProperties(eq(queue("gen-out")))).thenAnswer(inv -> queueProps(depth.get()));
@@ -707,14 +712,14 @@ class SwarmLifecycleManagerTest {
     SwarmPlan plan = new SwarmPlan("swarm", List.of(
         new Bee("generator", "img1", new Work(null, null), null, workerConfig)
     ));
-    when(docker.createContainer(eq("img1"), anyMap(), anyString())).thenReturn("c1");
+    when(docker.createContainer(eq("img1"), anyMap(), anyString(), any())).thenReturn("c1");
 
     manager.start(mapper.writeValueAsString(plan));
 
     assertTrue(manager.hasPendingConfigUpdates());
 
     ArgumentCaptor<String> nameCaptor = ArgumentCaptor.forClass(String.class);
-    verify(docker).createContainer(eq("img1"), anyMap(), nameCaptor.capture());
+    verify(docker).createContainer(eq("img1"), anyMap(), nameCaptor.capture(), any());
     String instanceName = nameCaptor.getValue();
 
     String expectedRoute = ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, TEST_SWARM_ID, "generator", instanceName);
@@ -758,7 +763,7 @@ class SwarmLifecycleManagerTest {
             null,
             Map.of("ratePerSec", 10d))
     ), new TrafficPolicy(guard));
-    when(docker.createContainer(eq("img1"), anyMap(), anyString())).thenReturn("c1");
+    when(docker.createContainer(eq("img1"), anyMap(), anyString(), any())).thenReturn("c1");
     when(docker.resolveControlNetwork()).thenReturn("ctrl-net");
     AtomicLong depth = new AtomicLong(180);
     when(amqp.getQueueProperties(eq(queue("gen-out")))).thenAnswer(inv -> queueProps(depth.get()));
@@ -794,7 +799,7 @@ class SwarmLifecycleManagerTest {
             null,
             Map.of("ratePerSec", 80d))
     ), new TrafficPolicy(guard));
-    when(docker.createContainer(eq("img1"), anyMap(), anyString())).thenReturn("c1");
+    when(docker.createContainer(eq("img1"), anyMap(), anyString(), any())).thenReturn("c1");
     when(docker.resolveControlNetwork()).thenReturn("ctrl-net");
     AtomicLong depth = new AtomicLong(240);
     when(amqp.getQueueProperties(eq(queue("gen-out")))).thenAnswer(inv -> queueProps(depth.get()));
@@ -831,8 +836,8 @@ class SwarmLifecycleManagerTest {
             Map.of("ratePerSec", 20d)),
         new Bee("processor", "img2", new Work("gen-out", "proc-out"), null)
     ), new TrafficPolicy(guard));
-    when(docker.createContainer(eq("img1"), anyMap(), anyString())).thenReturn("c1");
-    when(docker.createContainer(eq("img2"), anyMap(), anyString())).thenReturn("c2");
+    when(docker.createContainer(eq("img1"), anyMap(), anyString(), any())).thenReturn("c1");
+    when(docker.createContainer(eq("img2"), anyMap(), anyString(), any())).thenReturn("c2");
     when(docker.resolveControlNetwork()).thenReturn("ctrl-net");
     AtomicLong upstreamDepth = new AtomicLong(220);
     AtomicLong downstreamDepth = new AtomicLong(800);
@@ -864,6 +869,30 @@ class SwarmLifecycleManagerTest {
         ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_START, TEST_SWARM_ID, "swarm-controller", "ALL"),
         ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_STOP, TEST_SWARM_ID, "swarm-controller", "ALL"),
         ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_REMOVE, TEST_SWARM_ID, "swarm-controller", "ALL"));
+  }
+
+  @Test
+  void prepareMountsPluginArtifact() throws Exception {
+    SwarmLifecycleManager manager = newManager();
+    Path pluginJar = Files.createTempFile("plugin-host", ".jar");
+    SwarmPlan plan = new SwarmPlan("swarm", List.of(
+        new Bee("generator", "worker-plugin-host:latest", new Work(null, null), null, null,
+            new Bee.Plugin(pluginJar.toString(), "/opt/pockethive/plugins/plugin.jar"))
+    ));
+    when(docker.createContainer(eq("worker-plugin-host:latest"), anyMap(), anyString(), any()))
+        .thenReturn("c1");
+
+    manager.prepare(mapper.writeValueAsString(plan));
+
+    ArgumentCaptor<UnaryOperator<HostConfig>> hostConfigCaptor = ArgumentCaptor.forClass(UnaryOperator.class);
+    verify(docker).createContainer(eq("worker-plugin-host:latest"), anyMap(), anyString(), hostConfigCaptor.capture());
+    HostConfig hostConfig = HostConfig.newHostConfig();
+    hostConfigCaptor.getValue().apply(hostConfig);
+    Bind[] binds = hostConfig.getBinds();
+    assertThat(binds).isNotNull();
+    assertThat(binds).hasSize(1);
+    assertThat(binds[0].getPath()).isEqualTo(pluginJar.toString());
+    assertThat(binds[0].getVolume().getPath()).isEqualTo("/opt/pockethive/plugins/plugin.jar");
   }
 
   private SwarmLifecycleManager newManager() {

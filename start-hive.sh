@@ -14,6 +14,11 @@ SERVICE_ARGS=()
 # Registry configuration
 DOCKER_REGISTRY="${DOCKER_REGISTRY:-}"
 POCKETHIVE_VERSION="${POCKETHIVE_VERSION:-latest}"
+POCKETHIVE_PLUGIN_DIR="${POCKETHIVE_PLUGIN_DIR:-$(pwd)/dist/plugins}"
+
+export DOCKER_REGISTRY
+export POCKETHIVE_VERSION
+export POCKETHIVE_PLUGIN_DIR
 
 usage() {
   cat <<USAGE
@@ -30,6 +35,7 @@ Stages:
 Environment Variables:
   DOCKER_REGISTRY       Registry prefix (e.g., 'myregistry.io/' or 'localhost:5000/')
   POCKETHIVE_VERSION    Image tag version (default: latest)
+  POCKETHIVE_PLUGIN_DIR Path to packaged worker plugin jars (default: ./dist/plugins)
 
 Examples:
   $(basename "$0")                                    Run all stages in order.

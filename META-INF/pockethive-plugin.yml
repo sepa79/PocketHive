@@ -1,0 +1,6 @@
+pluginClass: io.pockethive.generator.Application
+role: generator
+version: latest
+configPrefix: pockethive.workers.generator
+defaultConfig: config/defaults.yaml
+capabilities: []

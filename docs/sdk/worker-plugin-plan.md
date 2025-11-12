@@ -59,14 +59,20 @@
 > Result: host boots sample plugin jar in tests, enforces single-plugin rule, and surfaces failures early. Ready to proceed to Phase B.
 
 #### Phase B – Configuration & packaging
-1. [ ] Finalize the plugin manifest schema (`role`, `version`, `capabilities`, `configPrefix`, optional `defaultConfig` path).
-2. [ ] Implement the config merge order (`plugin defaults` < `host overrides` < `control-plane overrides`) and document the precedence.
-3. [ ] Provide `./scripts/package-plugin.sh` (or Maven goal) that assembles the plugin jar, injects the manifest, and copies default configs into `config/defaults.yaml`.
+1. [x] Finalize the plugin manifest schema (`META-INF/pockethive-plugin.yml`):
+   - `pluginClass` — fully-qualified Spring `@Configuration` to import.
+   - `role` / `version` / `capabilities[]` — surfaced via status + observability.
+   - `configPrefix` — e.g. `pockethive.workers.generator`; determines where defaults land in the property tree.
+   - `defaultConfig` — optional path inside the jar (defaulting to `config/defaults.yaml`). When present the host reads it via the plugin classloader.
+2. [x] Implement the config merge order (`plugin defaults` < `host overrides` < `control-plane overrides`) and document the precedence. Defaults and overrides are now injected as dedicated property sources (`pockethive-plugin-defaults-*`, `pockethive-plugin-overrides-*`) sourced from:
+   - Plugin jar resources (e.g. `config/defaults.yaml`).
+   - Host-side overrides under `pockethive.plugin-host.overrides-dir` (defaults to `config/plugins/<role>.{yml,yaml}`).
+3. [x] Provide `./scripts/package-plugin.sh` (bash helper) that builds the plugin module, writes the manifest, copies `config/defaults.yaml`, and updates the jar in-place. Usage supports supplying the module/jar, config prefix, version, default config path, and repeated `--capability` flags.
 
 #### Phase C – Deployment & tooling
-1. [ ] Publish a host Dockerfile that layers the `worker-plugin-host` jar and mounts plugins from a volume/OCI artifact.
-2. [ ] Update orchestrator/swarm-controller templates so a swarm plan can reference `worker-plugin-host` + plugin artifact instead of per-worker images.
-3. [ ] Extend scenario-manager to express “host + plugin artifact” for local testing (still one worker per container).
+1. [x] Publish a host Dockerfile that layers the `worker-plugin-host` jar and mounts plugins from a volume/OCI artifact. (See `worker-plugin-host/Dockerfile` — it exposes `/opt/pockethive/plugins` & `/app/config/plugins` as bind-mount targets and runs the Spring Boot host jar.)
+2. [x] Update orchestrator/swarm-controller templates so a swarm plan can reference `worker-plugin-host` + plugin artifact instead of per-worker images. (The `Bee` model now accepts an optional `plugin` block, and `SwarmLifecycleManager` bind-mounts the artifact into the container before booting it.)
+3. [x] Extend scenario-manager to express “host + plugin artifact” for local testing (still one worker per container). (Scenarios accept `plugin.artifact`, ScenarioService validates the path, and capability manifests include the new `worker-plugin-host` image.)
 
 #### Phase D – Observability & verification
 1. [ ] Expose health/actuator endpoints that report plugin `role`, `version`, git info, and checksum.

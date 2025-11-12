@@ -3,24 +3,30 @@ package io.pockethive.swarmcontroller;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.github.dockerjava.api.model.AccessMode;
+import com.github.dockerjava.api.model.Bind;
+import com.github.dockerjava.api.model.HostConfig;
+import com.github.dockerjava.api.model.Volume;
+import io.micrometer.core.instrument.Gauge;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Tags;
 import io.pockethive.control.CommandTarget;
 import io.pockethive.control.ControlSignal;
+import io.pockethive.controlplane.ControlPlaneSignals;
+import io.pockethive.controlplane.routing.ControlPlaneRouting;
+import io.pockethive.controlplane.spring.ControlPlaneContainerEnvironmentFactory;
+import io.pockethive.controlplane.spring.ControlPlaneContainerEnvironmentFactory.PushgatewaySettings;
+import io.pockethive.controlplane.spring.ControlPlaneContainerEnvironmentFactory.WorkerSettings;
+import io.pockethive.observability.StatusEnvelopeBuilder;
 import io.pockethive.swarm.model.Bee;
 import io.pockethive.swarm.model.BufferGuardPolicy;
 import io.pockethive.swarm.model.SwarmPlan;
 import io.pockethive.swarm.model.TrafficPolicy;
 import io.pockethive.swarm.model.Work;
-import io.pockethive.controlplane.routing.ControlPlaneRouting;
-import io.pockethive.controlplane.ControlPlaneSignals;
-import io.pockethive.controlplane.spring.ControlPlaneContainerEnvironmentFactory;
-import io.pockethive.controlplane.spring.ControlPlaneContainerEnvironmentFactory.PushgatewaySettings;
-import io.pockethive.controlplane.spring.ControlPlaneContainerEnvironmentFactory.WorkerSettings;
 import io.pockethive.swarmcontroller.config.SwarmControllerProperties;
 import io.pockethive.swarmcontroller.guard.BufferGuardController;
 import io.pockethive.swarmcontroller.guard.BufferGuardSettings;
-import io.micrometer.core.instrument.Gauge;
-import io.micrometer.core.instrument.MeterRegistry;
-import io.micrometer.core.instrument.Tags;
+import io.pockethive.util.BeeNameGenerator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.core.AmqpAdmin;
@@ -36,11 +42,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.amqp.RabbitProperties;
 import org.springframework.stereotype.Component;
 
-import io.pockethive.observability.StatusEnvelopeBuilder;
-import io.pockethive.util.BeeNameGenerator;
-
 import java.time.Duration;
 import java.time.Instant;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -51,12 +56,12 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.OptionalDouble;
 import java.util.OptionalLong;
 import java.util.Properties;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.function.UnaryOperator;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -106,6 +111,8 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
   private final ConcurrentMap<String, Gauge> queueOldestGauges = new ConcurrentHashMap<>();
   private final ConcurrentMap<String, PendingConfig> pendingConfigUpdates = new ConcurrentHashMap<>();
   private List<String> startOrder = List.of();
+  private final Path pluginHostDir;
+  private final Path pluginContainerDir;
   private Optional<BufferGuardSettings> bufferGuardSettings = Optional.empty();
   private BufferGuardController bufferGuardController;
   private TrafficPolicy trafficPolicy;
@@ -163,6 +170,10 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
     this.controlExchange = properties.getControlExchange();
     this.meterRegistry = Objects.requireNonNull(meterRegistry, "meterRegistry");
     this.workerSettings = Objects.requireNonNull(workerSettings, "workerSettings");
+    this.pluginHostDir = pathOrNull(System.getenv("POCKETHIVE_PLUGIN_DIR"));
+    this.pluginContainerDir = pathOrNull(
+        System.getenv("POCKETHIVE_PLUGIN_TARGET_DIR"),
+        Paths.get("/opt/pockethive/plugins"));
   }
 
   private static WorkerSettings deriveWorkerSettings(SwarmControllerProperties properties) {
@@ -268,7 +279,8 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
         }
         log.info("creating container {} for role {} using image {}", beeName, bee.role(), bee.image());
         log.info("container env for {}: {}", beeName, env);
-        String containerId = docker.createContainer(bee.image(), env, beeName);
+        UnaryOperator<HostConfig> hostCustomizer = pluginHostConfig(bee);
+        String containerId = docker.createContainer(bee.image(), env, beeName, hostCustomizer);
         log.info("starting container {} ({}) for role {}", containerId, beeName, bee.role());
         docker.startContainer(containerId);
         containers.computeIfAbsent(bee.role(), r -> new ArrayList<>()).add(containerId);
@@ -280,6 +292,65 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
     } catch (JsonProcessingException e) {
       log.warn("Invalid template payload", e);
     }
+  }
+
+  private UnaryOperator<HostConfig> pluginHostConfig(Bee bee) {
+    Bee.Plugin plugin = bee.plugin();
+    if (plugin == null) {
+      return null;
+    }
+    if (pluginHostDir == null || pluginContainerDir == null) {
+      log.warn("Plugin dir not configured; unable to mount plugin {} for role {}", plugin.artifact(), bee.role());
+      return null;
+    }
+    Path containerPath = resolveArtifactPath(plugin.artifact());
+    Path hostPath = resolveHostPath(containerPath);
+    String mountPath = plugin.mountPath();
+    log.info("mounting plugin {} from host {} into {} for role {}", plugin.artifact(), hostPath, mountPath, bee.role());
+    return hostConfig -> {
+      Bind pluginBind = new Bind(hostPath.toString(), new Volume(mountPath), AccessMode.ro);
+      Bind[] existing = hostConfig.getBinds();
+      if (existing == null || existing.length == 0) {
+        hostConfig.withBinds(pluginBind);
+      } else {
+        Bind[] merged = new Bind[existing.length + 1];
+        System.arraycopy(existing, 0, merged, 0, existing.length);
+        merged[existing.length] = pluginBind;
+        hostConfig.withBinds(merged);
+      }
+      return hostConfig;
+    };
+  }
+
+  private Path resolveArtifactPath(String artifact) {
+    if (artifact == null || artifact.isBlank()) {
+      throw new IllegalArgumentException("plugin artifact path must not be blank");
+    }
+    Path path = Paths.get(artifact);
+    if (!path.isAbsolute()) {
+      path = path.toAbsolutePath();
+    }
+    return path.normalize();
+  }
+
+  private Path resolveHostPath(Path containerPath) {
+    if (pluginContainerDir != null && containerPath.startsWith(pluginContainerDir)) {
+      Path relative = pluginContainerDir.relativize(containerPath);
+      return pluginHostDir.resolve(relative);
+    }
+    return containerPath;
+  }
+
+  private static Path pathOrNull(String raw) {
+    if (raw == null || raw.isBlank()) {
+      return null;
+    }
+    return Paths.get(raw).toAbsolutePath().normalize();
+  }
+
+  private static Path pathOrNull(String raw, Path defaultValue) {
+    Path path = pathOrNull(raw);
+    return path != null ? path : defaultValue;
   }
 
   private void declareQueues(TopicExchange hive, Set<String> suffixes) {

@@ -1,0 +1,2 @@
+config:
+  baseUrl: http://wiremock:8080
