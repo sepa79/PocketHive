@@ -12,13 +12,13 @@
 
 ### 2.1 Goals & Success Criteria
 
-1. **Single image, single worker**  
+1. [ ] **Single image, single worker**  
    Provide one Spring Boot host container that discovers one plugin jar and exposes its `@PocketHiveWorker` beans. The host fails fast if zero or multiple plugins are present.
-2. **Uniform configuration contract**  
+2. [ ] **Uniform configuration contract**  
    Preserve the current `application.yml` layout (`pockethive.inputs.*`, `pockethive.outputs.*`, `pockethive.workers.<role>`). Operators mount the same config files; the host binds them before the worker starts.
-3. **Control-plane parity**  
+3. [ ] **Control-plane parity**  
    The host registers exactly one control-plane identity per container so the controller still sees a topology identical to today (one role/instance per image).
-4. **Operational safety**  
+4. [ ] **Operational safety**  
    Plugin updates happen by replacing the jar and restarting the container. Observability surfaces (metrics/logs/health) must show plugin metadata so ops can trace what is running.
 
 ### 2.2 Constraints & Assumptions
@@ -49,35 +49,35 @@
 ### 2.4 Workstreams & Tasks
 
 #### Phase A – Host scaffolding
-1. Create the `worker-plugin-host` module (Spring Boot starter with no embedded workers).
-2. Integrate PF4J + pf4j-spring:
+1. [ ] Create the `worker-plugin-host` module (Spring Boot starter with no embedded workers).
+2. [ ] Integrate PF4J + pf4j-spring:
    - Wire a `SpringPluginManager` that scans the plugin directory, enforces “single plugin loaded,” and exposes extensions through PF4J.
    - Define a `PocketHiveWorkerExtension` interface so plugins register their worker configuration explicitly.
    - Keep `META-INF/pockethive-plugin.yml` in step with PF4J’s `plugin.properties`.
-3. Implement `PluginClasspathLoader` wrappers only for PF4J-provided classloaders (validation, metadata logging).
-4. Add smoke tests that load a sample plugin jar via PF4J and assert the worker lifecycle (start/stop, control-plane heartbeat).
+3. [ ] Implement `PluginClasspathLoader` wrappers only for PF4J-provided classloaders (validation, metadata logging).
+4. [ ] Add smoke tests that load a sample plugin jar via PF4J and assert the worker lifecycle (start/stop, control-plane heartbeat).
 
 #### Phase B – Configuration & packaging
-1. Finalize the plugin manifest schema (`role`, `version`, `capabilities`, `configPrefix`, optional `defaultConfig` path).
-2. Implement the config merge order (`plugin defaults` < `host overrides` < `control-plane overrides`) and document the precedence.
-3. Provide `./scripts/package-plugin.sh` (or Maven goal) that assembles the plugin jar, injects the manifest, and copies default configs into `config/defaults.yaml`.
+1. [ ] Finalize the plugin manifest schema (`role`, `version`, `capabilities`, `configPrefix`, optional `defaultConfig` path).
+2. [ ] Implement the config merge order (`plugin defaults` < `host overrides` < `control-plane overrides`) and document the precedence.
+3. [ ] Provide `./scripts/package-plugin.sh` (or Maven goal) that assembles the plugin jar, injects the manifest, and copies default configs into `config/defaults.yaml`.
 
 #### Phase C – Deployment & tooling
-1. Publish a host Dockerfile that layers the `worker-plugin-host` jar and mounts plugins from a volume/OCI artifact.
-2. Update orchestrator/swarm-controller templates so a swarm plan can reference `worker-plugin-host` + plugin artifact instead of per-worker images.
-3. Extend scenario-manager to express “host + plugin artifact” for local testing (still one worker per container).
+1. [ ] Publish a host Dockerfile that layers the `worker-plugin-host` jar and mounts plugins from a volume/OCI artifact.
+2. [ ] Update orchestrator/swarm-controller templates so a swarm plan can reference `worker-plugin-host` + plugin artifact instead of per-worker images.
+3. [ ] Extend scenario-manager to express “host + plugin artifact” for local testing (still one worker per container).
 
 #### Phase D – Observability & verification
-1. Expose health/actuator endpoints that report plugin `role`, `version`, git info, and checksum.
-2. Add host metrics: plugin load duration, config binding errors, heartbeat jitter.
-3. Document operator runbooks (upgrading a plugin, recovering from load failure) and run the control-plane tests defined in `docs/ci/control-plane-testing.md` with the host image.
+1. [ ] Expose health/actuator endpoints that report plugin `role`, `version`, git info, and checksum.
+2. [ ] Add host metrics: plugin load duration, config binding errors, heartbeat jitter.
+3. [ ] Document operator runbooks (upgrading a plugin, recovering from load failure) and run the control-plane tests defined in `docs/ci/control-plane-testing.md` with the host image.
 
 ### 2.5 Deliverables
 
-- `worker-plugin-host` module + Docker image that enforces one plugin per container, backed by PF4J + pf4j-spring for lifecycle/classloading.
-- Plugin manifest schema, packaging script, and sample plugin builds (e.g., generator/moderator) published to artifacts/examples.
-- Updated orchestrator/swarm-controller/scenario-manager docs reflecting the new deployment shape.
-- Operational documentation: host deployment guide + plugin authoring guide + this plan.
+- [ ] `worker-plugin-host` module + Docker image that enforces one plugin per container, backed by PF4J + pf4j-spring for lifecycle/classloading.
+- [ ] Plugin manifest schema, packaging script, and sample plugin builds (e.g., generator/moderator) published to artifacts/examples.
+- [ ] Updated orchestrator/swarm-controller/scenario-manager docs reflecting the new deployment shape.
+- [ ] Operational documentation: host deployment guide + plugin authoring guide + this plan.
 
 ### 2.6 Risks & Mitigations
 
@@ -116,6 +116,6 @@
 
 ## 4) Next Steps
 
-- Complete SDK v3 Phase A/B work, land the host module, and package one reference plugin.
-- Wire the host into one swarm scenario (e.g., generator) to validate deployment tooling end-to-end.
-- Collect operational feedback + metrics, then schedule the SDK v4 workstreams once SDK v3 meets the exit criteria above.
+- [ ] Complete SDK v3 Phase A/B work, land the host module, and package one reference plugin.
+- [ ] Wire the host into one swarm scenario (e.g., generator) to validate deployment tooling end-to-end.
+- [ ] Collect operational feedback + metrics, then schedule the SDK v4 workstreams once SDK v3 meets the exit criteria above.
