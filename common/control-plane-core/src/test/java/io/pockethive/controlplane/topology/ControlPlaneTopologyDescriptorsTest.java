@@ -29,7 +29,7 @@ class ControlPlaneTopologyDescriptorsTest {
 
     @Test
     void processorDescriptorMatchesRabbitConfig() {
-        ProcessorControlPlaneTopologyDescriptor descriptor = new ProcessorControlPlaneTopologyDescriptor(SETTINGS);
+        WorkerControlPlaneTopologyDescriptor descriptor = workerDescriptor("processor");
 
         ControlQueueDescriptor queue = requireQueue(descriptor);
         assertThat(queue.name())
@@ -49,11 +49,11 @@ class ControlPlaneTopologyDescriptorsTest {
     @Test
     void descriptorDslMatchesGoldenFixture() throws IOException {
         Map<String, Object> document = new LinkedHashMap<>();
-        document.put("processor", describe(new ProcessorControlPlaneTopologyDescriptor(SETTINGS)));
-        document.put("generator", describe(new GeneratorControlPlaneTopologyDescriptor(SETTINGS)));
-        document.put("trigger", describe(new TriggerControlPlaneTopologyDescriptor(SETTINGS)));
-        document.put("moderator", describe(new ModeratorControlPlaneTopologyDescriptor(SETTINGS)));
-        document.put("postprocessor", describe(new PostProcessorControlPlaneTopologyDescriptor(SETTINGS)));
+        document.put("processor", describe(workerDescriptor("processor")));
+        document.put("generator", describe(workerDescriptor("generator")));
+        document.put("trigger", describe(workerDescriptor("trigger")));
+        document.put("moderator", describe(workerDescriptor("moderator")));
+        document.put("postprocessor", describe(workerDescriptor("postprocessor")));
         document.put("swarmController", describe(new SwarmControllerControlPlaneTopologyDescriptor(SETTINGS)));
         document.put("orchestrator", describe(new OrchestratorControlPlaneTopologyDescriptor(SETTINGS)));
         document.put("scenarioManager", describe(new ScenarioManagerTopologyDescriptor()));
@@ -66,7 +66,7 @@ class ControlPlaneTopologyDescriptorsTest {
 
     @Test
     void generatorDescriptorMatchesRabbitConfig() {
-        GeneratorControlPlaneTopologyDescriptor descriptor = new GeneratorControlPlaneTopologyDescriptor(SETTINGS);
+        WorkerControlPlaneTopologyDescriptor descriptor = workerDescriptor("generator");
 
         ControlQueueDescriptor queue = requireQueue(descriptor);
         assertThat(queue.name())
@@ -79,7 +79,7 @@ class ControlPlaneTopologyDescriptorsTest {
 
     @Test
     void triggerDescriptorMatchesRabbitConfig() {
-        TriggerControlPlaneTopologyDescriptor descriptor = new TriggerControlPlaneTopologyDescriptor(SETTINGS);
+        WorkerControlPlaneTopologyDescriptor descriptor = workerDescriptor("trigger");
 
         ControlQueueDescriptor queue = requireQueue(descriptor);
         assertThat(queue.name())
@@ -92,7 +92,7 @@ class ControlPlaneTopologyDescriptorsTest {
 
     @Test
     void moderatorDescriptorMatchesRabbitConfig() {
-        ModeratorControlPlaneTopologyDescriptor descriptor = new ModeratorControlPlaneTopologyDescriptor(SETTINGS);
+        WorkerControlPlaneTopologyDescriptor descriptor = workerDescriptor("moderator");
 
         ControlQueueDescriptor queue = requireQueue(descriptor);
         assertThat(queue.name())
@@ -105,7 +105,7 @@ class ControlPlaneTopologyDescriptorsTest {
 
     @Test
     void postProcessorDescriptorMatchesRabbitConfig() {
-        PostProcessorControlPlaneTopologyDescriptor descriptor = new PostProcessorControlPlaneTopologyDescriptor(SETTINGS);
+        WorkerControlPlaneTopologyDescriptor descriptor = workerDescriptor("postprocessor");
 
         ControlQueueDescriptor queue = requireQueue(descriptor);
         assertThat(queue.name())
@@ -210,6 +210,10 @@ class ControlPlaneTopologyDescriptorsTest {
             "otherEvents", sorted(routes.otherEvents())
         ));
         return node;
+    }
+
+    private static WorkerControlPlaneTopologyDescriptor workerDescriptor(String role) {
+        return new WorkerControlPlaneTopologyDescriptor(role, SETTINGS);
     }
 
     private Map<String, Object> describe(ControlQueueDescriptor queue) {

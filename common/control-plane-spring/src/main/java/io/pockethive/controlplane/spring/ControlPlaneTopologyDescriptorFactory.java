@@ -2,14 +2,10 @@ package io.pockethive.controlplane.spring;
 
 import io.pockethive.controlplane.topology.ControlPlaneTopologyDescriptor;
 import io.pockethive.controlplane.topology.ControlPlaneTopologySettings;
-import io.pockethive.controlplane.topology.GeneratorControlPlaneTopologyDescriptor;
-import io.pockethive.controlplane.topology.ModeratorControlPlaneTopologyDescriptor;
 import io.pockethive.controlplane.topology.OrchestratorControlPlaneTopologyDescriptor;
-import io.pockethive.controlplane.topology.PostProcessorControlPlaneTopologyDescriptor;
-import io.pockethive.controlplane.topology.ProcessorControlPlaneTopologyDescriptor;
 import io.pockethive.controlplane.topology.ScenarioManagerTopologyDescriptor;
 import io.pockethive.controlplane.topology.SwarmControllerControlPlaneTopologyDescriptor;
-import io.pockethive.controlplane.topology.TriggerControlPlaneTopologyDescriptor;
+import io.pockethive.controlplane.topology.WorkerControlPlaneTopologyDescriptor;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.Function;
@@ -22,14 +18,6 @@ public final class ControlPlaneTopologyDescriptorFactory {
     private ControlPlaneTopologyDescriptorFactory() {
     }
 
-    private static final Map<String, Function<ControlPlaneTopologySettings, ControlPlaneTopologyDescriptor>> WORKER_DESCRIPTORS = Map.of(
-        "generator", GeneratorControlPlaneTopologyDescriptor::new,
-        "moderator", ModeratorControlPlaneTopologyDescriptor::new,
-        "processor", ProcessorControlPlaneTopologyDescriptor::new,
-        "postprocessor", PostProcessorControlPlaneTopologyDescriptor::new,
-        "trigger", TriggerControlPlaneTopologyDescriptor::new
-    );
-
     private static final Map<String, Function<ControlPlaneTopologySettings, ControlPlaneTopologyDescriptor>> MANAGER_DESCRIPTORS = Map.of(
         "orchestrator", OrchestratorControlPlaneTopologyDescriptor::new,
         "swarm-controller", SwarmControllerControlPlaneTopologyDescriptor::new,
@@ -37,7 +25,9 @@ public final class ControlPlaneTopologyDescriptorFactory {
     );
 
     public static ControlPlaneTopologyDescriptor forWorkerRole(String role, ControlPlaneTopologySettings settings) {
-        return createDescriptor(role, WORKER_DESCRIPTORS, "worker", settings);
+        String normalised = normalise(role);
+        ControlPlaneTopologySettings resolved = Objects.requireNonNull(settings, "settings");
+        return new WorkerControlPlaneTopologyDescriptor(normalised, resolved);
     }
 
     public static ControlPlaneTopologyDescriptor forManagerRole(String role, ControlPlaneTopologySettings settings) {
@@ -45,7 +35,7 @@ public final class ControlPlaneTopologyDescriptorFactory {
     }
 
     public static boolean isWorkerRole(String role) {
-        return containsRole(role, WORKER_DESCRIPTORS);
+        return !containsRole(role, MANAGER_DESCRIPTORS);
     }
 
     public static boolean isManagerRole(String role) {
