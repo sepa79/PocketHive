@@ -14,6 +14,7 @@ import java.util.Map;
 import java.util.UUID;
 import org.springframework.amqp.core.MessageProperties;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 /**
@@ -57,7 +58,7 @@ class GeneratorWorkerImpl implements PocketHiveWorkerFunction {
   private final GeneratorWorkerProperties properties;
 
   @Autowired
-  GeneratorWorkerImpl(GeneratorWorkerProperties properties) {
+  GeneratorWorkerImpl(@Qualifier("pockethive.workers.generator") GeneratorWorkerProperties properties) {
     this.properties = properties;
   }
 

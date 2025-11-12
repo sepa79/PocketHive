@@ -12,6 +12,6 @@ public class GeneratorWorkerPlugin implements PocketHiveWorkerExtension {
 
     @Override
     public Class<?>[] configurationClasses() {
-        return new Class<?>[]{Application.class};
+        return new Class<?>[]{GeneratorWorkerPluginConfiguration.class};
     }
 }

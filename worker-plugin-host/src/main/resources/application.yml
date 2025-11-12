@@ -1,6 +1,9 @@
 pockethive:
   plugin-host:
     plugins-dir: ${POCKETHIVE_PLUGIN_DIR:/opt/pockethive/plugins}
+  worker:
+    inputs:
+      autowire: ${POCKETHIVE_WORKER_INPUT_AUTOWIRE:true}
   outputs:
     rabbit:
       exchange: ${POCKETHIVE_OUTPUT_RABBIT_EXCHANGE}
