@@ -1,0 +1,50 @@
+id: soap-generator
+name: SOAP Generator Sample
+description: Custom-role example that repurposes the stock generator and processor with SOAP payload overrides.
+template:
+  image: swarm-controller:latest
+  bees:
+    - role: soap-generator
+      image: generator:latest
+      config:
+        pockethive:
+          control-plane:
+            worker:
+              role: soap-generator
+          workers:
+            generator:
+              config:
+                message:
+                  path: /soap
+                  method: POST
+                  body: |
+                    <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
+                                      xmlns:req="http://example.com/req/v1">
+                      <soapenv:Header>
+                        <req:ClientId>soap-sample</req:ClientId>
+                      </soapenv:Header>
+                      <soapenv:Body>
+                        <req:PingRequest>
+                          <req:payload>Hello from PocketHive</req:payload>
+                        </req:PingRequest>
+                      </soapenv:Body>
+                    </soapenv:Envelope>
+                  headers:
+                    content-type: text/xml
+        ratePerSec: 25
+      work:
+        out: soap-generator-out
+    - role: soap-processor
+      image: processor:latest
+      config:
+        pockethive:
+          control-plane:
+            worker:
+              role: soap-processor
+          workers:
+            processor:
+              config:
+                batchSize: 5
+      work:
+        in: soap-generator-out
+        out: soap-processor-out
