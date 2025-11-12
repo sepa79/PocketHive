@@ -48,7 +48,7 @@ class ControlPlanePublisherIntegrationTest {
             ControlPlaneProperties properties = context.getBean(ControlPlaneProperties.class);
             ControlPlaneTopologySettings settings = new ControlPlaneTopologySettings(
                 properties.getSwarmId(), properties.getControlQueuePrefix(), Map.of());
-            ControlPlaneEmitter emitter = ControlPlaneEmitter.generator(identity, publisher, settings);
+            ControlPlaneEmitter emitter = ControlPlaneEmitter.worker(identity, publisher, settings);
             ConfirmationScope scope = new ConfirmationScope("swarm-A", "generator", "gen-1");
 
             ControlPlaneEmitter.ReadyContext ready = ControlPlaneEmitter.ReadyContext.builder(

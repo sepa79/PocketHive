@@ -2,7 +2,6 @@ package io.pockethive.controlplane.messaging;
 
 import static io.pockethive.controlplane.payload.JsonFixtureAssertions.ANY_VALUE;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -34,7 +33,7 @@ class ControlPlaneEmitterTest {
         publisher = new CapturingPublisher();
         identity = new ControlPlaneIdentity("swarm-A", "generator", "gen-1");
         settings = new ControlPlaneTopologySettings("swarm-A", "ph.control", Map.of());
-        emitter = ControlPlaneEmitter.generator(identity, publisher, settings);
+        emitter = ControlPlaneEmitter.worker(identity, publisher, settings);
     }
 
     @Test
@@ -126,11 +125,15 @@ class ControlPlaneEmitterTest {
     }
 
     @Test
-    void generatorFacadeRejectsMismatchedIdentity() {
-        ControlPlaneIdentity wrong = new ControlPlaneIdentity("swarm-A", "processor", "gen-1");
-        assertThatThrownBy(() -> ControlPlaneEmitter.generator(wrong, publisher, settings))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("Identity role mismatch");
+    void workerFactoryAcceptsArbitraryRoles() {
+        ControlPlaneIdentity custom = new ControlPlaneIdentity("swarm-A", "custom-role", "worker-1");
+        ControlPlaneEmitter customEmitter = ControlPlaneEmitter.worker(custom, publisher, settings);
+
+        ControlPlaneEmitter.StatusContext context = ControlPlaneEmitter.StatusContext.of(builder -> builder.enabled(true));
+        customEmitter.emitStatusSnapshot(context);
+
+        EventMessage message = publisher.lastEvent;
+        assertThat(message.routingKey()).contains("custom-role");
     }
 
     private static String describeEvent(EventMessage message, Consumer<ObjectNode> payloadCustomiser) throws IOException {
