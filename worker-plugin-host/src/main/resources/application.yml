@@ -1,6 +1,16 @@
 pockethive:
   plugin-host:
     plugins-dir: ${POCKETHIVE_PLUGIN_DIR:/opt/pockethive/plugins}
+  control-plane:
+    exchange: ${POCKETHIVE_CONTROL_PLANE_EXCHANGE:ph.control}
+    swarm-id: ${POCKETHIVE_CONTROL_PLANE_SWARM_ID:hive}
+    instance-id: ${POCKETHIVE_CONTROL_PLANE_INSTANCE_ID:worker-plugin-host}
+    control-queue-prefix: ${POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE_PREFIX:ph.control}
+    worker:
+      role: ${POCKETHIVE_CONTROL_PLANE_WORKER_ROLE:generator}
+      skip-self-signals: ${POCKETHIVE_CONTROL_PLANE_WORKER_SKIP_SELF_SIGNALS:false}
+    manager:
+      enabled: false
 
 logging:
   level:

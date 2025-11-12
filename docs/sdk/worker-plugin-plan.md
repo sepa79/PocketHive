@@ -63,9 +63,11 @@
 3. [x] Provide `./scripts/package-plugin.sh` that assembles the plugin jar, validates manifests, and emits versioned artifacts in `dist/plugins`.
 
 #### Phase C – Deployment & tooling
-1. [ ] Publish a host Dockerfile that layers the `worker-plugin-host` jar and mounts plugins from a volume/OCI artifact.
-2. [ ] Update orchestrator/swarm-controller templates so a swarm plan can reference `worker-plugin-host` + plugin artifact instead of per-worker images.
-3. [ ] Extend scenario-manager to express “host + plugin artifact” for local testing (still one worker per container).
+1. [x] Publish a host Dockerfile that layers the `worker-plugin-host` jar and mounts plugins from a volume/OCI artifact.
+2. [x] Update orchestrator/swarm-controller templates so a swarm plan can reference `worker-plugin-host` + plugin artifact instead of per-worker images.
+3. [x] Extend scenario-manager to express “host + plugin artifact” for local testing (still one worker per container).
+
+> PF4J wiring status: `start-hive.sh` now packages `dist/hosts/worker-plugin-host.jar` before building images, docker-compose exports `POCKETHIVE_PLUGIN_HOST_DIR` (host) vs `POCKETHIVE_PLUGIN_DIR` (container), and the orchestrator/swarm-controller pipeline binds each `Bee.plugin.artifact` into the worker host container so PF4J loads the correct jar. Validate changes with `./mvnw -q -DskipTests -pl orchestrator-service,swarm-controller-service -am package`.
 
 #### Phase D – Observability & verification
 1. [ ] Expose health/actuator endpoints that report plugin `role`, `version`, git info, and checksum.

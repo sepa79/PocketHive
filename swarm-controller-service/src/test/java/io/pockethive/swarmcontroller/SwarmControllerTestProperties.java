@@ -17,6 +17,10 @@ final class SwarmControllerTestProperties {
     static final String METRICS_SHUTDOWN_OPERATION = "DELETE";
     static final String METRICS_JOB = "test-job";
     static final String METRICS_GROUPING_INSTANCE = "controller-instance";
+    private static final SwarmControllerProperties.PluginHost PLUGIN_HOST =
+        new SwarmControllerProperties.PluginHost(
+            "/var/lib/pockethive/plugins",
+            "/opt/pockethive/plugins");
 
     private SwarmControllerTestProperties() {
     }
@@ -45,6 +49,7 @@ final class SwarmControllerTestProperties {
                         METRICS_JOB,
                         new SwarmControllerProperties.GroupingKey(METRICS_GROUPING_INSTANCE))),
                 new SwarmControllerProperties.Docker(null, "/var/run/docker.sock"),
-                new SwarmControllerProperties.Features(bufferGuardEnabled)));
+                new SwarmControllerProperties.Features(bufferGuardEnabled),
+                PLUGIN_HOST));
     }
 }

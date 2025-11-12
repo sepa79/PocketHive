@@ -22,6 +22,7 @@ public class SwarmControllerProperties {
     private final Metrics metrics;
     private final Docker docker;
     private final Features features;
+    private final PluginHost pluginHost;
 
     public SwarmControllerProperties(@NotBlank String swarmId,
                                      @NotBlank String exchange,
@@ -39,6 +40,7 @@ public class SwarmControllerProperties {
         this.metrics = Objects.requireNonNull(resolved.metrics(), "metrics");
         this.docker = Objects.requireNonNull(resolved.docker(), "docker");
         this.features = Objects.requireNonNull(resolved.features(), "features");
+        this.pluginHost = Objects.requireNonNull(resolved.pluginHost(), "pluginHost");
     }
 
     public String getSwarmId() {
@@ -81,6 +83,10 @@ public class SwarmControllerProperties {
         return features;
     }
 
+    public PluginHost getPluginHost() {
+        return pluginHost;
+    }
+
     public String hiveExchange() {
         return traffic.hiveExchange();
     }
@@ -119,17 +125,20 @@ public class SwarmControllerProperties {
         private final Metrics metrics;
         private final Docker docker;
         private final Features features;
+        private final PluginHost pluginHost;
 
         public SwarmController(@Valid Traffic traffic,
                                @Valid Rabbit rabbit,
                                @Valid Metrics metrics,
                                @Valid Docker docker,
-                               @Valid Features features) {
+                               @Valid Features features,
+                               @Valid PluginHost pluginHost) {
             this.traffic = Objects.requireNonNull(traffic, "traffic");
             this.rabbit = Objects.requireNonNull(rabbit, "rabbit");
             this.metrics = Objects.requireNonNull(metrics, "metrics");
             this.docker = Objects.requireNonNull(docker, "docker");
             this.features = features != null ? features : new Features(null);
+            this.pluginHost = Objects.requireNonNull(pluginHost, "pluginHost");
         }
 
         public Traffic traffic() {
@@ -150,6 +159,10 @@ public class SwarmControllerProperties {
 
         public Features features() {
             return features;
+        }
+
+        public PluginHost pluginHost() {
+            return pluginHost;
         }
     }
 
@@ -328,6 +341,25 @@ public class SwarmControllerProperties {
 
         public boolean bufferGuardEnabled() {
             return bufferGuardEnabled;
+        }
+    }
+
+    @Validated
+    public static final class PluginHost {
+        private final String hostDir;
+        private final String containerDir;
+
+        public PluginHost(@NotBlank String hostDir, @NotBlank String containerDir) {
+            this.hostDir = requireNonBlank(hostDir, "hostDir");
+            this.containerDir = requireNonBlank(containerDir, "containerDir");
+        }
+
+        public String hostDir() {
+            return hostDir;
+        }
+
+        public String containerDir() {
+            return containerDir;
         }
     }
 

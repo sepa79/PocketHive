@@ -6,6 +6,12 @@ x-metrics-env: &metrics-env
   MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_PUSH_RATE: 10s
   MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_SHUTDOWN_OPERATION: DELETE
   MANAGEMENT_METRICS_TAGS_SWARM: swarm1
+x-plugin-host-env: &plugin-host-env
+  POCKETHIVE_PLUGIN_HOST_DIR: ${POCKETHIVE_PLUGIN_DIR}
+x-plugin-manager-env: &plugin-manager-env
+  POCKETHIVE_PLUGIN_HOST_DIR: ${POCKETHIVE_PLUGIN_DIR}
+  POCKETHIVE_PLUGIN_DIR: ${POCKETHIVE_PLUGIN_TARGET_DIR:-/opt/pockethive/plugins}
+  POCKETHIVE_PLUGIN_TARGET_DIR: ${POCKETHIVE_PLUGIN_TARGET_DIR:-/opt/pockethive/plugins}
 
 services:
 #--------------------------------------
@@ -186,6 +192,8 @@ services:
       dockerfile: orchestrator-service/Dockerfile
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      <<: *plugin-host-env
 # all defaulted in application.yml, uncomment to override here
 #    environment:
 #      <<: *metrics-env
@@ -204,11 +212,16 @@ services:
       context: .
       dockerfile: scenario-manager-service/Dockerfile
     environment:
-      <<: *metrics-env
+      <<: [*metrics-env, *plugin-manager-env]
       RABBITMQ_HOST: rabbitmq
       POCKETHIVE_LOGS_QUEUE: ph.logs.agg
       MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_GROUPING_KEY_INSTANCE: scenario-manager
       MANAGEMENT_METRICS_TAGS_INSTANCE: scenario-manager
+    volumes:
+      - type: bind
+        source: ${POCKETHIVE_PLUGIN_DIR}
+        target: ${POCKETHIVE_PLUGIN_DIR}
+        read_only: true
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/actuator/health | grep -q UP"]
       interval: 5s
@@ -224,6 +237,13 @@ services:
 #------------------------------------------
 # PocketHive Services - dynamic swarm bees
 #------------------------------------------
+
+  worker-plugin-host:
+    profiles: ["plugin-build"]
+    image: ${DOCKER_REGISTRY:-}worker-plugin-host:${POCKETHIVE_VERSION:-latest}
+    build:
+      context: .
+      dockerfile: worker-plugin-host/Dockerfile
 
   swarm-controller:
     profiles: ["bees"]

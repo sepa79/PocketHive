@@ -51,15 +51,31 @@ if [[ -z "$MODULE" ]]; then
   exit 1
 fi
 
-if [[ -z "$VERSION" ]]; then
-  VERSION="${POCKETHIVE_VERSION:-latest}"
-fi
+resolve_version() {
+  if [[ -n "${VERSION}" ]]; then
+    echo "${VERSION}"
+    return
+  fi
+  if [[ -n "${POCKETHIVE_VERSION:-}" ]]; then
+    echo "${POCKETHIVE_VERSION}"
+    return
+  fi
+  mvn -q -pl "$MODULE" help:evaluate -Dexpression=project.version -DforceStdout
+}
+
+VERSION="$(resolve_version)"
 
 echo "Building $MODULE (version $VERSION)..."
 mvn -q -pl "$MODULE" -am $SKIP_TESTS package
 
-LATEST_JAR=$(find "$MODULE/target" -maxdepth 1 -type f -name '*.jar' ! -name '*sources.jar' ! -name '*original*.jar' | sort | tail -n1)
-if [[ -z "$LATEST_JAR" ]]; then
+PLAIN_JAR=$(find "$MODULE/target" -maxdepth 1 -type f -name '*.jar.original' | sort | tail -n1)
+if [[ -n "$PLAIN_JAR" ]]; then
+  SOURCE_JAR="$PLAIN_JAR"
+else
+  SOURCE_JAR=$(find "$MODULE/target" -maxdepth 1 -type f -name '*.jar' ! -name '*sources.jar' | sort | tail -n1)
+fi
+
+if [[ -z "${SOURCE_JAR:-}" ]]; then
   echo "Unable to locate jar for $MODULE" >&2
   exit 1
 fi
@@ -68,7 +84,7 @@ DEST_NAME="$(basename "$MODULE")-$VERSION.jar"
 DEST_PATH="$OUTPUT_DIR/$DEST_NAME"
 
 mkdir -p "$OUTPUT_DIR"
-cp "$LATEST_JAR" "$DEST_PATH"
+cp "$SOURCE_JAR" "$DEST_PATH"
 
 validate_entry() {
   local entry="$1"

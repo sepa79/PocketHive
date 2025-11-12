@@ -27,12 +27,19 @@ public class ScenarioService {
     private final ObjectMapper jsonMapper = new ObjectMapper();
     private final ObjectMapper yamlMapper = new ObjectMapper(new YAMLFactory());
     private final CapabilityCatalogueService capabilities;
+    private final Path pluginsDir;
+    private final Path pluginTargetDir;
     private final Map<String, ScenarioRecord> scenarios = new ConcurrentHashMap<>();
 
     public ScenarioService(@Value("${scenarios.dir:scenarios}") String dir,
+                           @Value("${plugins.dir:${POCKETHIVE_PLUGIN_HOST_DIR:${POCKETHIVE_PLUGIN_DIR:dist/plugins}}}") String pluginsDir,
+                           @Value("${plugins.target-dir:${POCKETHIVE_PLUGIN_DIR:${POCKETHIVE_PLUGIN_TARGET_DIR:/opt/pockethive/plugins}}}") String pluginTargetDir,
                            CapabilityCatalogueService capabilities) throws IOException {
         this.storageDir = Paths.get(dir);
         Files.createDirectories(this.storageDir);
+        this.pluginsDir = Paths.get(pluginsDir).toAbsolutePath();
+        Files.createDirectories(this.pluginsDir);
+        this.pluginTargetDir = Paths.get(pluginTargetDir);
         this.capabilities = capabilities;
     }
 
@@ -48,6 +55,7 @@ public class ScenarioService {
             for (Path path : stream) {
                 Format format = detectFormat(path);
                 Scenario scenario = read(path, format);
+                enrichPlugins(scenario);
                 ScenarioRecord record = recordFor(scenario, format);
                 ScenarioRecord previous = loaded.put(scenario.getId(), record);
                 if (previous != null) {
@@ -175,6 +183,7 @@ public class ScenarioService {
         if (template.bees() != null) {
             for (Bee bee : template.bees()) {
                 checkImageReference(scenarioId, "bee '" + bee.role() + "'", bee.image(), missingReferences);
+                checkPluginArtifact(scenarioId, bee, missingReferences);
             }
         }
 
@@ -184,6 +193,43 @@ public class ScenarioService {
         }
 
         return false;
+    }
+
+    private void enrichPlugins(Scenario scenario) {
+        SwarmTemplate template = scenario.getTemplate();
+        if (template == null || template.bees() == null || template.bees().isEmpty()) {
+            return;
+        }
+        List<Bee> enriched = template.bees().stream()
+            .map(this::enrichBee)
+            .toList();
+        scenario.setTemplate(new SwarmTemplate(template.image(), enriched));
+    }
+
+    private Bee enrichBee(Bee bee) {
+        Bee.Plugin plugin = bee.plugin();
+        if (plugin == null) {
+            return bee;
+        }
+        String artifact = plugin.artifact();
+        String fileName = artifact;
+        if (artifact != null && artifact.contains("/")) {
+            fileName = Paths.get(artifact).getFileName().toString();
+        }
+        String containerArtifact = artifact != null && artifact.startsWith("/")
+            ? artifact
+            : pluginTargetDir.resolve(fileName).toString();
+        String hostArtifact = plugin.hostArtifact();
+        if (hostArtifact == null || hostArtifact.isBlank()) {
+            hostArtifact = pluginsDir.resolve(fileName).toString();
+        } else {
+            Path hostPath = Paths.get(hostArtifact);
+            if (!hostPath.isAbsolute()) {
+                hostArtifact = pluginsDir.resolve(hostPath).toString();
+            }
+        }
+        Bee.Plugin enrichedPlugin = new Bee.Plugin(containerArtifact, hostArtifact);
+        return new Bee(bee.role(), bee.image(), bee.work(), bee.env(), bee.config(), enrichedPlugin);
     }
 
     private void checkImageReference(String scenarioId,
@@ -199,6 +245,24 @@ public class ScenarioService {
         if (capabilities.findByImageReference(imageReference).isEmpty()) {
             logger.warn("Scenario '{}' missing capability manifest for {} image '{}'", scenarioId, component, imageReference);
             missingReferences.add(component + " -> " + imageReference);
+        }
+    }
+
+    private void checkPluginArtifact(String scenarioId,
+                                     Bee bee,
+                                     List<String> missingReferences) {
+        Bee.Plugin plugin = bee.plugin();
+        if (plugin == null) {
+            return;
+        }
+        String hostArtifact = plugin.hostArtifact();
+        if (hostArtifact == null || hostArtifact.isBlank()) {
+            missingReferences.add("bee '" + bee.role() + "' plugin artifact (missing host path)");
+            return;
+        }
+        Path hostPath = Paths.get(hostArtifact);
+        if (!Files.isRegularFile(hostPath)) {
+            missingReferences.add("bee '" + bee.role() + "' plugin artifact -> " + hostArtifact);
         }
     }
 

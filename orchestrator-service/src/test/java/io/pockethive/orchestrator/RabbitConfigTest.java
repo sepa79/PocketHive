@@ -37,7 +37,10 @@ class RabbitConfigTest {
                 new OrchestratorProperties.Docker("/var/run/docker.sock"),
                 new OrchestratorProperties.ScenarioManager(
                     "http://scenario-manager:8080",
-                    new OrchestratorProperties.Http(Duration.ofSeconds(5), Duration.ofSeconds(30)))));
+                    new OrchestratorProperties.Http(Duration.ofSeconds(5), Duration.ofSeconds(30))),
+                new OrchestratorProperties.PluginHost(
+                    "/var/lib/pockethive/plugins",
+                    "/opt/pockethive/plugins")));
 
         OrchestratorControlPlaneConfig config = new OrchestratorControlPlaneConfig(controlPlane, properties);
         ControlPlaneIdentity identity = new ControlPlaneIdentity("swarm-alpha", "orchestrator", "orch-1");

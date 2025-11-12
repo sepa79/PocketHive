@@ -11,7 +11,7 @@ Each plugin jar **must** contain the following files:
   plugin.id=<unique id>
   plugin.version=<semver>
   plugin.provider=<team or owner>
-  plugin.class=<fully qualified class implementing PocketHiveWorkerExtension>
+  plugin.class=<fully qualified class extending PocketHiveWorkerPlugin>
   ```
 - `META-INF/pockethive-plugin.yml` (PocketHive metadata):
   ```yaml
@@ -24,9 +24,19 @@ Each plugin jar **must** contain the following files:
   ```
 - `config/defaults.yaml`: optional defaults merged by the host before control-plane overrides.
 
-## Extension Contract
+## Extension & Plugin Contracts
 
-Every plugin implements `io.pockethive.worker.plugin.api.PocketHiveWorkerExtension`:
+Each plugin ships two building blocks:
+
+1. A PF4J plugin entry point extending `io.pockethive.worker.plugin.api.PocketHiveWorkerPlugin`. This is the class referenced by `plugin.class` and simply satisfies PF4J's lifecycle.
+    ```java
+    public final class GeneratorWorkerHostPlugin extends PocketHiveWorkerPlugin {
+        public GeneratorWorkerHostPlugin(PluginWrapper wrapper) {
+            super(wrapper);
+        }
+    }
+    ```
+2. A `PocketHiveWorkerExtension` that exposes the worker configuration the host should load.
 
 ```java
 @Extension
@@ -58,7 +68,7 @@ Use `scripts/package-plugin.sh` to produce a distributable jar:
 
 Flags:
 - `--module` (required): Maven module to build.
-- `--version`: tag appended to the output jar name (defaults to `$POCKETHIVE_VERSION` or `latest`).
+- `--version`: tag appended to the output jar name (defaults to `$POCKETHIVE_VERSION` or the module's `project.version`).
 - `--output`: destination directory (defaults to `dist/plugins`).
 - `--run-tests`: run module tests before packaging (tests skipped by default).
 

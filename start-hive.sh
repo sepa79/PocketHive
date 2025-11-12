@@ -5,15 +5,26 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "${SCRIPT_DIR}"
 
 CORE_SERVICES=(rabbitmq log-aggregator scenario-manager orchestrator ui prometheus grafana loki wiremock)
-BEE_SERVICES=(swarm-controller generator moderator processor postprocessor trigger)
+BEE_SERVICES=(swarm-controller generator moderator processor postprocessor trigger worker-plugin-host)
 ALL_STAGES=(clean build-core build-bees start push restart)
+PLUGIN_MODULES=(${POCKETHIVE_PLUGIN_MODULES:-generator-service})
 
 declare -A STAGE_TIMES
 SERVICE_ARGS=()
+PACKAGE_PLUGINS=false
 
 # Registry configuration
 DOCKER_REGISTRY="${DOCKER_REGISTRY:-}"
 POCKETHIVE_VERSION="${POCKETHIVE_VERSION:-latest}"
+POCKETHIVE_PLUGIN_DIR="${POCKETHIVE_PLUGIN_DIR:-$(pwd)/dist/plugins}"
+POCKETHIVE_PLUGIN_TARGET_DIR="${POCKETHIVE_PLUGIN_TARGET_DIR:-/opt/pockethive/plugins}"
+POCKETHIVE_PLUGIN_HOST_DIR="${POCKETHIVE_PLUGIN_HOST_DIR:-${POCKETHIVE_PLUGIN_DIR}}"
+
+mkdir -p "${POCKETHIVE_PLUGIN_DIR}"
+mkdir -p dist/hosts
+export POCKETHIVE_PLUGIN_DIR
+export POCKETHIVE_PLUGIN_TARGET_DIR
+export POCKETHIVE_PLUGIN_HOST_DIR
 
 usage() {
   cat <<USAGE
@@ -27,9 +38,13 @@ Stages:
   start        Launch the PocketHive stack via docker compose up -d.
   restart      Rebuild and restart only the services listed after '--'.
 
+Flags:
+  --package-plugins  Package all modules listed in POCKETHIVE_PLUGIN_MODULES before running stages.
+
 Environment Variables:
   DOCKER_REGISTRY       Registry prefix (e.g., 'myregistry.io/' or 'localhost:5000/')
   POCKETHIVE_VERSION    Image tag version (default: latest)
+  POCKETHIVE_PLUGIN_MODULES  Space-separated list of plugin modules to package (default: generator-service)
 
 Examples:
   $(basename "$0")                                    Run all stages in order.
@@ -87,9 +102,39 @@ run_build_core() {
   docker compose build "${CORE_SERVICES[@]}"
 }
 
+build_worker_plugin_host() {
+  echo "Packaging worker-plugin-host jar..."
+  ./mvnw -q -DskipTests -pl worker-plugin-host -am package
+  local jar
+  jar=$(ls -1t worker-plugin-host/target/worker-plugin-host-*.jar 2>/dev/null | grep -v '\.original$' | head -n1 || true)
+  if [[ -z "$jar" ]]; then
+    echo "Unable to find worker-plugin-host jar after build" >&2
+    exit 1
+  fi
+  cp "$jar" dist/hosts/worker-plugin-host.jar
+  echo "Copied $(basename "$jar") to dist/hosts/worker-plugin-host.jar"
+}
+
 run_build_bees() {
   stage_header "Building swarm controller and bee images"
+  build_worker_plugin_host
   docker compose --profile bees build "${BEE_SERVICES[@]}"
+}
+
+package_plugins() {
+  if [[ ${#PLUGIN_MODULES[@]} -eq 0 ]]; then
+    echo "No plugin modules configured (set POCKETHIVE_PLUGIN_MODULES). Skipping packaging."
+    return
+  fi
+  if [[ ! -x ./scripts/package-plugin.sh ]]; then
+    echo "scripts/package-plugin.sh is missing or not executable." >&2
+    exit 1
+  fi
+  stage_header "Packaging worker plugins"
+  for module in "${PLUGIN_MODULES[@]}"; do
+    echo "Packaging ${module}..."
+    ./scripts/package-plugin.sh --module "${module}"
+  done
 }
 
 run_push() {
@@ -121,6 +166,7 @@ run_restart() {
 resolve_stages() {
   if [[ $# -eq 0 ]]; then
     SELECTED_STAGES=("${ALL_STAGES[@]}")
+    PACKAGE_PLUGINS=true
     return
   fi
 
@@ -134,6 +180,9 @@ resolve_stages() {
       --all|all)
         SELECTED_STAGES=("${ALL_STAGES[@]}")
         return
+        ;;
+      --package-plugins)
+        PACKAGE_PLUGINS=true
         ;;
       clean|build-core|build-bees|push|start|restart)
         args+=("$1")
@@ -182,6 +231,10 @@ run_stage() {
 main() {
   require_tools
   resolve_stages "$@"
+
+  if [[ "$PACKAGE_PLUGINS" == true ]]; then
+    package_plugins
+  fi
 
   local total_start=$(date +%s)
   

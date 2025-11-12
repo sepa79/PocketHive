@@ -3,6 +3,7 @@ package io.pockethive.controlplane.topology;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.controlplane.ControlPlaneSignals;
 import io.pockethive.controlplane.payload.JsonFixtureAssertions;
+import io.pockethive.controlplane.topology.GenericWorkerControlPlaneTopologyDescriptor;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -29,7 +30,8 @@ class ControlPlaneTopologyDescriptorsTest {
 
     @Test
     void processorDescriptorMatchesRabbitConfig() {
-        ProcessorControlPlaneTopologyDescriptor descriptor = new ProcessorControlPlaneTopologyDescriptor(SETTINGS);
+        GenericWorkerControlPlaneTopologyDescriptor descriptor =
+            new GenericWorkerControlPlaneTopologyDescriptor("processor", SETTINGS);
 
         ControlQueueDescriptor queue = requireQueue(descriptor);
         assertThat(queue.name())
@@ -49,11 +51,11 @@ class ControlPlaneTopologyDescriptorsTest {
     @Test
     void descriptorDslMatchesGoldenFixture() throws IOException {
         Map<String, Object> document = new LinkedHashMap<>();
-        document.put("processor", describe(new ProcessorControlPlaneTopologyDescriptor(SETTINGS)));
-        document.put("generator", describe(new GeneratorControlPlaneTopologyDescriptor(SETTINGS)));
-        document.put("trigger", describe(new TriggerControlPlaneTopologyDescriptor(SETTINGS)));
-        document.put("moderator", describe(new ModeratorControlPlaneTopologyDescriptor(SETTINGS)));
-        document.put("postprocessor", describe(new PostProcessorControlPlaneTopologyDescriptor(SETTINGS)));
+        document.put("processor", describe(new GenericWorkerControlPlaneTopologyDescriptor("processor", SETTINGS)));
+        document.put("generator", describe(new GenericWorkerControlPlaneTopologyDescriptor("generator", SETTINGS)));
+        document.put("trigger", describe(new GenericWorkerControlPlaneTopologyDescriptor("trigger", SETTINGS)));
+        document.put("moderator", describe(new GenericWorkerControlPlaneTopologyDescriptor("moderator", SETTINGS)));
+        document.put("postprocessor", describe(new GenericWorkerControlPlaneTopologyDescriptor("postprocessor", SETTINGS)));
         document.put("swarmController", describe(new SwarmControllerControlPlaneTopologyDescriptor(SETTINGS)));
         document.put("orchestrator", describe(new OrchestratorControlPlaneTopologyDescriptor(SETTINGS)));
         document.put("scenarioManager", describe(new ScenarioManagerTopologyDescriptor()));
@@ -66,7 +68,8 @@ class ControlPlaneTopologyDescriptorsTest {
 
     @Test
     void generatorDescriptorMatchesRabbitConfig() {
-        GeneratorControlPlaneTopologyDescriptor descriptor = new GeneratorControlPlaneTopologyDescriptor(SETTINGS);
+        GenericWorkerControlPlaneTopologyDescriptor descriptor =
+            new GenericWorkerControlPlaneTopologyDescriptor("generator", SETTINGS);
 
         ControlQueueDescriptor queue = requireQueue(descriptor);
         assertThat(queue.name())
@@ -79,7 +82,8 @@ class ControlPlaneTopologyDescriptorsTest {
 
     @Test
     void triggerDescriptorMatchesRabbitConfig() {
-        TriggerControlPlaneTopologyDescriptor descriptor = new TriggerControlPlaneTopologyDescriptor(SETTINGS);
+        GenericWorkerControlPlaneTopologyDescriptor descriptor =
+            new GenericWorkerControlPlaneTopologyDescriptor("trigger", SETTINGS);
 
         ControlQueueDescriptor queue = requireQueue(descriptor);
         assertThat(queue.name())
@@ -92,7 +96,8 @@ class ControlPlaneTopologyDescriptorsTest {
 
     @Test
     void moderatorDescriptorMatchesRabbitConfig() {
-        ModeratorControlPlaneTopologyDescriptor descriptor = new ModeratorControlPlaneTopologyDescriptor(SETTINGS);
+        GenericWorkerControlPlaneTopologyDescriptor descriptor =
+            new GenericWorkerControlPlaneTopologyDescriptor("moderator", SETTINGS);
 
         ControlQueueDescriptor queue = requireQueue(descriptor);
         assertThat(queue.name())
@@ -105,7 +110,8 @@ class ControlPlaneTopologyDescriptorsTest {
 
     @Test
     void postProcessorDescriptorMatchesRabbitConfig() {
-        PostProcessorControlPlaneTopologyDescriptor descriptor = new PostProcessorControlPlaneTopologyDescriptor(SETTINGS);
+        GenericWorkerControlPlaneTopologyDescriptor descriptor =
+            new GenericWorkerControlPlaneTopologyDescriptor("postprocessor", SETTINGS);
 
         ControlQueueDescriptor queue = requireQueue(descriptor);
         assertThat(queue.name())

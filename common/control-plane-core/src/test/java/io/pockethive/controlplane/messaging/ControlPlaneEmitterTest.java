@@ -2,7 +2,6 @@ package io.pockethive.controlplane.messaging;
 
 import static io.pockethive.controlplane.payload.JsonFixtureAssertions.ANY_VALUE;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -34,7 +33,7 @@ class ControlPlaneEmitterTest {
         publisher = new CapturingPublisher();
         identity = new ControlPlaneIdentity("swarm-A", "generator", "gen-1");
         settings = new ControlPlaneTopologySettings("swarm-A", "ph.control", Map.of());
-        emitter = ControlPlaneEmitter.generator(identity, publisher, settings);
+        emitter = ControlPlaneEmitter.worker(identity, publisher, settings);
     }
 
     @Test
@@ -123,14 +122,6 @@ class ControlPlaneEmitterTest {
         JsonFixtureAssertions.assertMatchesFixture(
             "/io/pockethive/controlplane/messaging/status-delta-event.json",
             json);
-    }
-
-    @Test
-    void generatorFacadeRejectsMismatchedIdentity() {
-        ControlPlaneIdentity wrong = new ControlPlaneIdentity("swarm-A", "processor", "gen-1");
-        assertThatThrownBy(() -> ControlPlaneEmitter.generator(wrong, publisher, settings))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("Identity role mismatch");
     }
 
     private static String describeEvent(EventMessage message, Consumer<ObjectNode> payloadCustomiser) throws IOException {

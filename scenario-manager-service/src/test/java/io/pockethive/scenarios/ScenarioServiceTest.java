@@ -24,6 +24,8 @@ class ScenarioServiceTest {
 
     private Path scenariosDir;
     private Path capabilitiesDir;
+    private Path pluginsDir;
+    private Path pluginTargetDir;
     private CapabilityCatalogueService capabilities;
     private ScenarioService service;
 
@@ -31,8 +33,14 @@ class ScenarioServiceTest {
     void setUp() throws IOException {
         scenariosDir = Files.createDirectories(tempDir.resolve("scenarios"));
         capabilitiesDir = Files.createDirectories(tempDir.resolve("capabilities"));
+        pluginsDir = Files.createDirectories(tempDir.resolve("plugins"));
+        pluginTargetDir = Files.createDirectories(tempDir.resolve("plugins-target"));
         capabilities = new CapabilityCatalogueService(capabilitiesDir.toString());
-        service = new ScenarioService(scenariosDir.toString(), capabilities);
+        service = new ScenarioService(
+                scenariosDir.toString(),
+                pluginsDir.toString(),
+                pluginTargetDir.toString(),
+                capabilities);
     }
 
     @Test

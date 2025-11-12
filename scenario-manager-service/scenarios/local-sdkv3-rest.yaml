@@ -1,0 +1,28 @@
+id: local-sdkv3-rest
+name: Local REST - SDK v3 Plugin Host
+description: Runs the REST generator via worker-plugin-host while the rest of the swarm uses classic images.
+template:
+  image: swarm-controller:latest
+  bees:
+    - role: generator
+      image: worker-plugin-host:latest
+      plugin:
+        artifact: /opt/pockethive/plugins/generator-service-0.13.7.jar
+      config:
+        ratePerSec: 50
+      work:
+        out: gen
+    - role: moderator
+      image: moderator:latest
+      work:
+        in: gen
+        out: mod
+    - role: processor
+      image: processor:latest
+      work:
+        in: mod
+        out: final
+    - role: postprocessor
+      image: postprocessor:latest
+      work:
+        in: final

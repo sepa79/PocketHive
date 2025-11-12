@@ -9,6 +9,7 @@ COPY common/swarm-model/pom.xml common/swarm-model/pom.xml
 COPY common/control-plane-core/pom.xml common/control-plane-core/pom.xml
 COPY common/control-plane-spring/pom.xml common/control-plane-spring/pom.xml
 COPY common/worker-sdk/pom.xml common/worker-sdk/pom.xml
+COPY common/worker-plugin-api/pom.xml common/worker-plugin-api/pom.xml
 COPY e2e-tests/pom.xml e2e-tests/pom.xml
 COPY orchestrator-service/pom.xml orchestrator-service/pom.xml
 COPY generator-service/pom.xml generator-service/pom.xml
@@ -26,6 +27,7 @@ COPY common/swarm-model/src common/swarm-model/src
 COPY common/control-plane-core/src common/control-plane-core/src
 COPY common/control-plane-spring/src common/control-plane-spring/src
 COPY common/worker-sdk/src common/worker-sdk/src
+COPY common/worker-plugin-api/src common/worker-plugin-api/src
 COPY e2e-tests/src e2e-tests/src
 COPY orchestrator-service/src orchestrator-service/src
 COPY generator-service/src generator-service/src
@@ -36,6 +38,8 @@ COPY postprocessor-service/src postprocessor-service/src
 COPY log-aggregator-service/src log-aggregator-service/src
 COPY trigger-service/src trigger-service/src
 COPY swarm-controller-service/src swarm-controller-service/src
+COPY worker-plugin-host/pom.xml worker-plugin-host/pom.xml
+COPY worker-plugin-host/src worker-plugin-host/src
 COPY scenario-manager-service/src scenario-manager-service/src
 # build only this module (+ its dependencies) to get a fat jar with Boot repackage
 RUN mvn -q -B -DskipTests -pl orchestrator-service -am package

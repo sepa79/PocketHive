@@ -42,6 +42,10 @@ public class OrchestratorProperties {
         return orchestrator.scenarioManager();
     }
 
+    public PluginHost getPluginHost() {
+        return orchestrator.pluginHost();
+    }
+
     @Validated
     public static final class Orchestrator {
 
@@ -51,19 +55,22 @@ public class OrchestratorProperties {
         private final @Valid Metrics metrics;
         private final @Valid Docker docker;
         private final @Valid ScenarioManager scenarioManager;
+        private final @Valid PluginHost pluginHost;
 
         public Orchestrator(@NotBlank String controlQueuePrefix,
                              @NotBlank String statusQueuePrefix,
                              @Valid Rabbit rabbit,
                              @Valid Metrics metrics,
                              @Valid Docker docker,
-                             @Valid ScenarioManager scenarioManager) {
+                             @Valid ScenarioManager scenarioManager,
+                             @Valid PluginHost pluginHost) {
             this.controlQueuePrefix = requireNonBlank(controlQueuePrefix, "controlQueuePrefix");
             this.statusQueuePrefix = requireNonBlank(statusQueuePrefix, "statusQueuePrefix");
             this.rabbit = Objects.requireNonNull(rabbit, "rabbit");
             this.metrics = Objects.requireNonNull(metrics, "metrics");
             this.docker = Objects.requireNonNull(docker, "docker");
             this.scenarioManager = Objects.requireNonNull(scenarioManager, "scenarioManager");
+            this.pluginHost = Objects.requireNonNull(pluginHost, "pluginHost");
         }
 
         public String controlQueuePrefix() {
@@ -88,6 +95,10 @@ public class OrchestratorProperties {
 
         public ScenarioManager scenarioManager() {
             return scenarioManager;
+        }
+
+        public PluginHost pluginHost() {
+            return pluginHost;
         }
     }
 
@@ -233,6 +244,26 @@ public class OrchestratorProperties {
 
         public Http getHttp() {
             return http;
+        }
+    }
+
+    @Validated
+    public static final class PluginHost {
+
+        private final String hostDir;
+        private final String containerDir;
+
+        public PluginHost(@NotBlank String hostDir, @NotBlank String containerDir) {
+            this.hostDir = requireNonBlank(hostDir, "hostDir");
+            this.containerDir = requireNonBlank(containerDir, "containerDir");
+        }
+
+        public String hostDir() {
+            return hostDir;
+        }
+
+        public String containerDir() {
+            return containerDir;
         }
     }
 

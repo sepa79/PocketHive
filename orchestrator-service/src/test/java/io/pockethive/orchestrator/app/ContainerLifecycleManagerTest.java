@@ -253,7 +253,8 @@ class ContainerLifecycleManagerTest {
                 new OrchestratorProperties.Docker("/var/run/docker.sock"),
                 new OrchestratorProperties.ScenarioManager(
                     "http://scenario-manager:8080",
-                    new OrchestratorProperties.Http(Duration.ofSeconds(5), Duration.ofSeconds(30)))));
+                    new OrchestratorProperties.Http(Duration.ofSeconds(5), Duration.ofSeconds(30))),
+                pluginHost()));
     }
 
     private static OrchestratorProperties withDockerSocket(String socketPath) {
@@ -275,7 +276,8 @@ class ContainerLifecycleManagerTest {
                 new OrchestratorProperties.Docker(socketPath),
                 new OrchestratorProperties.ScenarioManager(
                     "http://scenario-manager:8080",
-                    new OrchestratorProperties.Http(Duration.ofSeconds(5), Duration.ofSeconds(30)))));
+                    new OrchestratorProperties.Http(Duration.ofSeconds(5), Duration.ofSeconds(30))),
+                pluginHost()));
     }
 
     private static ControlPlaneProperties controlPlaneProperties() {
@@ -297,5 +299,11 @@ class ContainerLifecycleManagerTest {
         properties.setPassword("guest");
         properties.setVirtualHost("/");
         return properties;
+    }
+
+    private static OrchestratorProperties.PluginHost pluginHost() {
+        return new OrchestratorProperties.PluginHost(
+            "/var/lib/pockethive/plugins",
+            "/opt/pockethive/plugins");
     }
 }

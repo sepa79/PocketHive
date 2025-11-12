@@ -9,12 +9,8 @@ import io.pockethive.controlplane.payload.StatusPayloadFactory;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.controlplane.topology.ControlPlaneTopologyDescriptor;
 import io.pockethive.controlplane.topology.ControlPlaneTopologySettings;
-import io.pockethive.controlplane.topology.GeneratorControlPlaneTopologyDescriptor;
-import io.pockethive.controlplane.topology.ModeratorControlPlaneTopologyDescriptor;
-import io.pockethive.controlplane.topology.PostProcessorControlPlaneTopologyDescriptor;
-import io.pockethive.controlplane.topology.ProcessorControlPlaneTopologyDescriptor;
+import io.pockethive.controlplane.topology.GenericWorkerControlPlaneTopologyDescriptor;
 import io.pockethive.controlplane.topology.SwarmControllerControlPlaneTopologyDescriptor;
-import io.pockethive.controlplane.topology.TriggerControlPlaneTopologyDescriptor;
 import io.pockethive.observability.StatusEnvelopeBuilder;
 import java.time.Instant;
 import java.util.Map;
@@ -56,45 +52,17 @@ public final class ControlPlaneEmitter {
         return new ControlPlaneEmitter(topology, role, publisher, confirmationFactory, statusFactory);
     }
 
-    public static ControlPlaneEmitter generator(ControlPlaneIdentity identity,
-                                                ControlPlanePublisher publisher,
-                                                ControlPlaneTopologySettings settings) {
-        RoleContext role = requireIdentity(identity, "generator");
-        return using(new GeneratorControlPlaneTopologyDescriptor(settings), role, publisher);
-    }
-
-    public static ControlPlaneEmitter moderator(ControlPlaneIdentity identity,
-                                                ControlPlanePublisher publisher,
-                                                ControlPlaneTopologySettings settings) {
-        RoleContext role = requireIdentity(identity, "moderator");
-        return using(new ModeratorControlPlaneTopologyDescriptor(settings), role, publisher);
-    }
-
-    public static ControlPlaneEmitter processor(ControlPlaneIdentity identity,
-                                                ControlPlanePublisher publisher,
-                                                ControlPlaneTopologySettings settings) {
-        RoleContext role = requireIdentity(identity, "processor");
-        return using(new ProcessorControlPlaneTopologyDescriptor(settings), role, publisher);
-    }
-
-    public static ControlPlaneEmitter postProcessor(ControlPlaneIdentity identity,
-                                                    ControlPlanePublisher publisher,
-                                                    ControlPlaneTopologySettings settings) {
-        RoleContext role = requireIdentity(identity, "postprocessor");
-        return using(new PostProcessorControlPlaneTopologyDescriptor(settings), role, publisher);
-    }
-
-    public static ControlPlaneEmitter trigger(ControlPlaneIdentity identity,
-                                              ControlPlanePublisher publisher,
-                                              ControlPlaneTopologySettings settings) {
-        RoleContext role = requireIdentity(identity, "trigger");
-        return using(new TriggerControlPlaneTopologyDescriptor(settings), role, publisher);
+    public static ControlPlaneEmitter worker(ControlPlaneIdentity identity,
+                                             ControlPlanePublisher publisher,
+                                             ControlPlaneTopologySettings settings) {
+        RoleContext role = roleFromIdentity(identity);
+        return using(new GenericWorkerControlPlaneTopologyDescriptor(role.role(), settings), role, publisher);
     }
 
     public static ControlPlaneEmitter swarmController(ControlPlaneIdentity identity,
                                                       ControlPlanePublisher publisher,
                                                       ControlPlaneTopologySettings settings) {
-        RoleContext role = requireIdentity(identity, "swarm-controller");
+        RoleContext role = roleFromIdentity(identity);
         return using(new SwarmControllerControlPlaneTopologyDescriptor(settings), role, publisher);
     }
 
@@ -175,14 +143,9 @@ public final class ControlPlaneEmitter {
         }
     }
 
-    private static RoleContext requireIdentity(ControlPlaneIdentity identity, String expectedRole) {
+    private static RoleContext roleFromIdentity(ControlPlaneIdentity identity) {
         Objects.requireNonNull(identity, "identity");
-        RoleContext role = RoleContext.fromIdentity(identity);
-        if (!expectedRole.equals(role.role())) {
-            throw new IllegalArgumentException("Identity role mismatch: expected " + expectedRole + " but was "
-                + role.role());
-        }
-        return role;
+        return RoleContext.fromIdentity(identity);
     }
 
     public record ReadyContext(String signal,

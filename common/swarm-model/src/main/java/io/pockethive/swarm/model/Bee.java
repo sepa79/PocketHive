@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import java.nio.file.Path;
 import java.util.Map;
 import java.util.Objects;
 
@@ -12,7 +13,8 @@ public record Bee(@NotBlank String role,
                   @NotBlank String image,
                   @Valid @NotNull Work work,
                   Map<String, String> env,
-                  Map<String, Object> config) {
+                  Map<String, Object> config,
+                  @Valid Plugin plugin) {
     public Bee {
         work = Objects.requireNonNull(work, "work");
         env = env == null || env.isEmpty() ? Map.of() : Map.copyOf(env);
@@ -23,6 +25,30 @@ public record Bee(@NotBlank String role,
                String image,
                Work work,
                Map<String, String> env) {
-        this(role, image, work, env, null);
+        this(role, image, work, env, null, null);
+    }
+
+    public Bee(String role,
+               String image,
+               Work work,
+               Map<String, String> env,
+               Map<String, Object> config) {
+        this(role, image, work, env, config, null);
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record Plugin(@NotBlank String artifact,
+                         String hostArtifact) {
+        public Plugin {
+            artifact = requirePath(artifact, "artifact");
+        }
+
+        private static String requirePath(String candidate, String field) {
+            if (candidate == null || candidate.isBlank()) {
+                throw new IllegalArgumentException("plugin " + field + " must not be blank");
+            }
+            Path.of(candidate); // validates syntax
+            return candidate;
+        }
     }
 }

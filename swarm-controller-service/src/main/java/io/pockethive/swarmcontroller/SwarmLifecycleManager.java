@@ -3,46 +3,38 @@ package io.pockethive.swarmcontroller;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.github.dockerjava.api.model.AccessMode;
+import com.github.dockerjava.api.model.Bind;
+import com.github.dockerjava.api.model.HostConfig;
+import com.github.dockerjava.api.model.Volume;
 import io.pockethive.control.CommandTarget;
 import io.pockethive.control.ControlSignal;
+import io.pockethive.controlplane.ControlPlaneSignals;
+import io.pockethive.controlplane.routing.ControlPlaneRouting;
+import io.pockethive.controlplane.spring.ControlPlaneContainerEnvironmentFactory;
+import io.pockethive.controlplane.spring.ControlPlaneContainerEnvironmentFactory.PushgatewaySettings;
+import io.pockethive.controlplane.spring.ControlPlaneContainerEnvironmentFactory.WorkerSettings;
+import io.pockethive.docker.DockerContainerClient;
+import io.pockethive.observability.StatusEnvelopeBuilder;
 import io.pockethive.swarm.model.Bee;
 import io.pockethive.swarm.model.BufferGuardPolicy;
 import io.pockethive.swarm.model.SwarmPlan;
 import io.pockethive.swarm.model.TrafficPolicy;
 import io.pockethive.swarm.model.Work;
-import io.pockethive.controlplane.routing.ControlPlaneRouting;
-import io.pockethive.controlplane.ControlPlaneSignals;
-import io.pockethive.controlplane.spring.ControlPlaneContainerEnvironmentFactory;
-import io.pockethive.controlplane.spring.ControlPlaneContainerEnvironmentFactory.PushgatewaySettings;
-import io.pockethive.controlplane.spring.ControlPlaneContainerEnvironmentFactory.WorkerSettings;
 import io.pockethive.swarmcontroller.config.SwarmControllerProperties;
 import io.pockethive.swarmcontroller.guard.BufferGuardController;
 import io.pockethive.swarmcontroller.guard.BufferGuardSettings;
+import io.pockethive.util.BeeNameGenerator;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Tags;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.amqp.core.AmqpAdmin;
-import org.springframework.amqp.core.Binding;
-import org.springframework.amqp.core.BindingBuilder;
-import org.springframework.amqp.core.Queue;
-import org.springframework.amqp.core.QueueBuilder;
-import org.springframework.amqp.core.TopicExchange;
-import org.springframework.amqp.rabbit.core.RabbitAdmin;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
-import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.autoconfigure.amqp.RabbitProperties;
-import org.springframework.stereotype.Component;
-
-import io.pockethive.observability.StatusEnvelopeBuilder;
-import io.pockethive.util.BeeNameGenerator;
-
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -56,16 +48,28 @@ import java.util.OptionalDouble;
 import java.util.OptionalLong;
 import java.util.Properties;
 import java.util.Set;
-import java.util.function.Function;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.Optional;
-
-import io.pockethive.docker.DockerContainerClient;
+import java.util.function.Function;
+import java.util.function.UnaryOperator;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.amqp.core.AmqpAdmin;
+import org.springframework.amqp.core.Binding;
+import org.springframework.amqp.core.BindingBuilder;
+import org.springframework.amqp.core.Queue;
+import org.springframework.amqp.core.QueueBuilder;
+import org.springframework.amqp.core.TopicExchange;
+import org.springframework.amqp.rabbit.core.RabbitAdmin;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.boot.autoconfigure.amqp.RabbitProperties;
+import org.springframework.stereotype.Component;
 
 /**
  * Concrete {@link SwarmLifecycle} that wires the control plane to real infrastructure.
@@ -91,6 +95,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
   private final String controlExchange;
   private final MeterRegistry meterRegistry;
   private final WorkerSettings workerSettings;
+  private final SwarmControllerProperties.PluginHost pluginHost;
   private final Map<String, List<String>> containers = new HashMap<>();
   private final Set<String> declaredQueues = new HashSet<>();
   private final Map<String, Integer> expectedReady = new HashMap<>();
@@ -163,6 +168,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
     this.controlExchange = properties.getControlExchange();
     this.meterRegistry = Objects.requireNonNull(meterRegistry, "meterRegistry");
     this.workerSettings = Objects.requireNonNull(workerSettings, "workerSettings");
+    this.pluginHost = Objects.requireNonNull(properties.getPluginHost(), "pluginHost");
   }
 
   private static WorkerSettings deriveWorkerSettings(SwarmControllerProperties properties) {
@@ -266,9 +272,14 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
         if (bee.env() != null) {
           env.putAll(bee.env());
         }
+        Bee.Plugin plugin = bee.plugin();
+        if (plugin != null) {
+          configurePluginEnvironment(env, plugin);
+        }
         log.info("creating container {} for role {} using image {}", beeName, bee.role(), bee.image());
         log.info("container env for {}: {}", beeName, env);
-        String containerId = docker.createContainer(bee.image(), env, beeName);
+        UnaryOperator<HostConfig> hostConfigCustomizer = plugin != null ? pluginBindCustomizer(plugin) : null;
+        String containerId = docker.createContainer(bee.image(), env, beeName, hostConfigCustomizer);
         log.info("starting container {} ({}) for role {}", containerId, beeName, bee.role());
         docker.startContainer(containerId);
         containers.computeIfAbsent(bee.role(), r -> new ArrayList<>()).add(containerId);
@@ -303,6 +314,66 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
       amqp.declareBinding(desiredBinding);
       declaredQueues.add(suffix);
     }
+  }
+
+  private void configurePluginEnvironment(Map<String, String> env, Bee.Plugin plugin) {
+    String containerArtifact = resolveContainerArtifact(plugin);
+    String pluginDir = directoryFor(containerArtifact, pluginHost.containerDir());
+    env.put("POCKETHIVE_PLUGIN_DIR", pluginDir);
+    env.put("POCKETHIVE_PLUGIN_TARGET_DIR", pluginDir);
+    env.put("POCKETHIVE_PLUGIN_ARTIFACT", containerArtifact);
+  }
+
+  private UnaryOperator<HostConfig> pluginBindCustomizer(Bee.Plugin plugin) {
+    String hostArtifact = resolveHostArtifact(plugin);
+    String containerArtifact = resolveContainerArtifact(plugin);
+    return hostConfig -> {
+      Bind pluginBind = new Bind(hostArtifact, new Volume(containerArtifact), AccessMode.ro);
+      Bind[] existing = hostConfig.getBinds();
+      if (existing == null || existing.length == 0) {
+        hostConfig.withBinds(pluginBind);
+      } else {
+        Bind[] combined = Arrays.copyOf(existing, existing.length + 1);
+        combined[existing.length] = pluginBind;
+        hostConfig.withBinds(combined);
+      }
+      log.info("mounted plugin artifact {} -> {}", hostArtifact, containerArtifact);
+      return hostConfig;
+    };
+  }
+
+  private String resolveContainerArtifact(Bee.Plugin plugin) {
+    Path artifact = Paths.get(plugin.artifact());
+    if (!artifact.isAbsolute()) {
+      artifact = Paths.get(pluginHost.containerDir()).resolve(artifact);
+    }
+    return artifact.normalize().toString();
+  }
+
+  private String resolveHostArtifact(Bee.Plugin plugin) {
+    String hostArtifact = plugin.hostArtifact();
+    Path hostPath;
+    if (hostArtifact == null || hostArtifact.isBlank()) {
+      Path artifactFile = Paths.get(plugin.artifact()).getFileName();
+      if (artifactFile == null) {
+        throw new IllegalStateException("Plugin artifact must include a file name");
+      }
+      hostPath = Paths.get(pluginHost.hostDir()).resolve(artifactFile);
+    } else {
+      hostPath = Paths.get(hostArtifact);
+      if (!hostPath.isAbsolute()) {
+        hostPath = Paths.get(pluginHost.hostDir()).resolve(hostPath);
+      }
+    }
+    return hostPath.normalize().toString();
+  }
+
+  private static String directoryFor(String artifactPath, String fallbackDir) {
+    Path parent = Paths.get(artifactPath).getParent();
+    if (parent == null) {
+      return fallbackDir;
+    }
+    return parent.normalize().toString();
   }
 
   /**

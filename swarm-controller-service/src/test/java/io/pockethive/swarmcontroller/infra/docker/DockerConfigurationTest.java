@@ -15,6 +15,10 @@ class DockerConfigurationTest {
   private static final String TRAFFIC_PREFIX = "ph." + SWARM_ID;
   private static final String HIVE_EXCHANGE = TRAFFIC_PREFIX + ".hive";
   private static final String LOGS_EXCHANGE = "ph.logs";
+  private static final SwarmControllerProperties.PluginHost PLUGIN_HOST =
+      new SwarmControllerProperties.PluginHost(
+          "/var/lib/pockethive/plugins",
+          "/opt/pockethive/plugins");
   private static final SwarmControllerProperties.Metrics METRICS =
       new SwarmControllerProperties.Metrics(
           new SwarmControllerProperties.Pushgateway(
@@ -62,6 +66,7 @@ class DockerConfigurationTest {
                 new SwarmControllerProperties.Logging(true)),
             METRICS,
             docker,
-            new SwarmControllerProperties.Features(false)));
+            new SwarmControllerProperties.Features(false),
+            PLUGIN_HOST));
   }
 }

@@ -52,3 +52,6 @@ pockethive:
         http:
           connect-timeout: ${POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_SCENARIO_MANAGER_HTTP_CONNECT_TIMEOUT:PT5S}
           read-timeout: ${POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_SCENARIO_MANAGER_HTTP_READ_TIMEOUT:PT30S}
+      plugin-host:
+        host-dir: ${POCKETHIVE_PLUGIN_HOST_DIR:${POCKETHIVE_PLUGIN_DIR:dist/plugins}}
+        container-dir: ${POCKETHIVE_PLUGIN_TARGET_DIR:/opt/pockethive/plugins}
