@@ -1,0 +1,9 @@
+pockethive:
+  plugin-host:
+    enabled: false
+
+spring:
+  autoconfigure:
+    exclude:
+      - io.pockethive.worker.sdk.autoconfigure.PocketHiveWorkerSdkAutoConfiguration
+      - io.pockethive.controlplane.spring.WorkerControlPlaneAutoConfiguration

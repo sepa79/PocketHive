@@ -1,0 +1,6 @@
+role: generator
+configPrefix: pockethive.workers.generator
+version: ${project.version}
+defaultConfig: config/defaults.yaml
+capabilities:
+  - scheduler

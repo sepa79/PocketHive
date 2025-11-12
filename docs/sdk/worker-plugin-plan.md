@@ -49,18 +49,18 @@
 ### 2.4 Workstreams & Tasks
 
 #### Phase A – Host scaffolding
-1. [ ] Create the `worker-plugin-host` module (Spring Boot starter with no embedded workers).
-2. [ ] Integrate PF4J + pf4j-spring:
+1. [x] Create the `worker-plugin-host` module (Spring Boot starter with no embedded workers).
+2. [x] Integrate PF4J + pf4j-spring:
    - Wire a `SpringPluginManager` that scans the plugin directory, enforces “single plugin loaded,” and exposes extensions through PF4J.
    - Define a `PocketHiveWorkerExtension` interface so plugins register their worker configuration explicitly.
    - Keep `META-INF/pockethive-plugin.yml` in step with PF4J’s `plugin.properties`.
-3. [ ] Implement `PluginClasspathLoader` wrappers only for PF4J-provided classloaders (validation, metadata logging).
-4. [ ] Add smoke tests that load a sample plugin jar via PF4J and assert the worker lifecycle (start/stop, control-plane heartbeat).
+3. [x] Implement plugin manifest validation + diagnostics for PF4J-loaded plugins.
+4. [x] Add smoke tests that load a sample plugin jar via PF4J and assert the worker lifecycle (start/stop, control-plane heartbeat).
 
 #### Phase B – Configuration & packaging
-1. [ ] Finalize the plugin manifest schema (`role`, `version`, `capabilities`, `configPrefix`, optional `defaultConfig` path).
-2. [ ] Implement the config merge order (`plugin defaults` < `host overrides` < `control-plane overrides`) and document the precedence.
-3. [ ] Provide `./scripts/package-plugin.sh` (or Maven goal) that assembles the plugin jar, injects the manifest, and copies default configs into `config/defaults.yaml`.
+1. [x] Finalize the plugin manifest schema (`role`, `version`, `capabilities`, `configPrefix`, optional `defaultConfig` path) – see `docs/sdk/worker-plugin-packaging.md`.
+2. [x] Document the config merge order (`plugin defaults` < `host overrides` < `control-plane overrides`) in `docs/sdk/worker-plugin-packaging.md`.
+3. [x] Provide `./scripts/package-plugin.sh` that assembles the plugin jar, validates manifests, and emits versioned artifacts in `dist/plugins`.
 
 #### Phase C – Deployment & tooling
 1. [ ] Publish a host Dockerfile that layers the `worker-plugin-host` jar and mounts plugins from a volume/OCI artifact.

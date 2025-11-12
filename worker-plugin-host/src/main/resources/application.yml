@@ -1,0 +1,7 @@
+pockethive:
+  plugin-host:
+    plugins-dir: ${POCKETHIVE_PLUGIN_DIR:/opt/pockethive/plugins}
+
+logging:
+  level:
+    io.pockethive.worker.plugin.host: INFO
