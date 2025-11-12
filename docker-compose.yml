@@ -259,6 +259,24 @@ services:
       log-aggregator:
         condition: service_healthy
 
+  payload-generator:
+    profiles: ["bees"]
+    image: ${DOCKER_REGISTRY:-}payload-generator:${POCKETHIVE_VERSION:-latest}
+    build:
+      context: .
+      dockerfile: payload-generator-service/Dockerfile
+    environment:
+      <<: *metrics-env
+      RABBITMQ_HOST: rabbitmq
+      POCKETHIVE_CONTROL_PLANE_TRAFFIC_EXCHANGE: ph.swarm1.hive
+      POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE: ph.control
+      POCKETHIVE_CONTROL_PLANE_SWARM_ID: swarm1
+      MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_GROUPING_KEY_INSTANCE: payload-generator
+      MANAGEMENT_METRICS_TAGS_INSTANCE: payload-generator
+    depends_on:
+      log-aggregator:
+        condition: service_healthy
+
   moderator:
     profiles: ["bees"]
     image: ${DOCKER_REGISTRY:-}moderator:${POCKETHIVE_VERSION:-latest}

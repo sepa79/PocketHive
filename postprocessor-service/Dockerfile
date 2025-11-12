@@ -14,6 +14,7 @@ COPY postprocessor-service/pom.xml postprocessor-service/pom.xml
 COPY generator-service/pom.xml generator-service/pom.xml
 COPY moderator-service/pom.xml moderator-service/pom.xml
 COPY processor-service/pom.xml processor-service/pom.xml
+COPY payload-generator-service/pom.xml payload-generator-service/pom.xml
 COPY log-aggregator-service/pom.xml log-aggregator-service/pom.xml
 COPY trigger-service/pom.xml trigger-service/pom.xml
 COPY orchestrator-service/pom.xml orchestrator-service/pom.xml
@@ -31,6 +32,7 @@ COPY postprocessor-service/src postprocessor-service/src
 COPY generator-service/src generator-service/src
 COPY moderator-service/src moderator-service/src
 COPY processor-service/src processor-service/src
+COPY payload-generator-service/src payload-generator-service/src
 COPY log-aggregator-service/src log-aggregator-service/src
 COPY trigger-service/src trigger-service/src
 COPY orchestrator-service/src orchestrator-service/src

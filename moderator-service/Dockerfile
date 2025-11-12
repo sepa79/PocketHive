@@ -13,6 +13,7 @@ COPY e2e-tests/pom.xml e2e-tests/pom.xml
 COPY generator-service/pom.xml generator-service/pom.xml
 COPY moderator-service/pom.xml moderator-service/pom.xml
 COPY processor-service/pom.xml processor-service/pom.xml
+COPY payload-generator-service/pom.xml payload-generator-service/pom.xml
 COPY observability/pom.xml observability/pom.xml
 COPY postprocessor-service/pom.xml postprocessor-service/pom.xml
 COPY log-aggregator-service/pom.xml log-aggregator-service/pom.xml
@@ -30,6 +31,7 @@ COPY e2e-tests/src e2e-tests/src
 COPY generator-service/src generator-service/src
 COPY moderator-service/src moderator-service/src
 COPY processor-service/src processor-service/src
+COPY payload-generator-service/src payload-generator-service/src
 COPY observability/src observability/src
 COPY postprocessor-service/src postprocessor-service/src
 COPY log-aggregator-service/src log-aggregator-service/src

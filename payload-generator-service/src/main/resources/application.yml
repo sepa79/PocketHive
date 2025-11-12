@@ -1,0 +1,65 @@
+pockethive:
+  worker:
+    inputs:
+      autowire: ${POCKETHIVE_WORKER_INPUT_AUTOWIRE:true}
+  outputs:
+    rabbit:
+      exchange: ${POCKETHIVE_OUTPUT_RABBIT_EXCHANGE}
+      routingKey: ${POCKETHIVE_OUTPUT_RABBIT_ROUTING_KEY}
+  control-plane:
+    exchange: ${POCKETHIVE_CONTROL_PLANE_EXCHANGE:ph.control}
+    swarm-id: ${POCKETHIVE_CONTROL_PLANE_SWARM_ID:hive}
+    instance-id: ${POCKETHIVE_CONTROL_PLANE_INSTANCE_ID:payload-generator}
+    control-queue-prefix: ${POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE_PREFIX:ph.control}
+    worker:
+      role: ${POCKETHIVE_CONTROL_PLANE_WORKER_ROLE:payload-generator}
+      skip-self-signals: ${POCKETHIVE_CONTROL_PLANE_WORKER_SKIP_SELF_SIGNALS:false}
+    manager:
+      enabled: false
+  workers:
+    payload-generator:
+      scheduler:
+        rate-per-sec: ${PAYLOAD_GENERATOR_RATE_PER_SEC:1.0}
+        single-request: ${PAYLOAD_GENERATOR_SINGLE_REQUEST:false}
+      template:
+        body: |
+          <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
+                            xmlns:req="http://example.com/req/v1">
+            <soapenv:Header>
+              <req:ClientId>{{ record.clientId }}</req:ClientId>
+            </soapenv:Header>
+            <soapenv:Body>
+              <req:PingRequest>
+                <req:payload>{{ record.payload }}</req:payload>
+              </req:PingRequest>
+            </soapenv:Body>
+          </soapenv:Envelope>
+        headers:
+          content-type: text/xml
+          soapaction: ping
+      dataset:
+        name: soap-sample
+        records:
+          - id: req-1
+            clientId: sample-client
+            payload: Hello from PayloadGenerator
+          - id: req-2
+            clientId: sample-client
+            payload: Secondary payload
+
+logging:
+  level:
+    io.pockethive.payload.generator: INFO
+
+management:
+  prometheus:
+    metrics:
+      export:
+        pushgateway:
+          enabled: ${MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_ENABLED:true}
+          base-url: ${MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_BASE_URL:http://pushgateway:9091}
+          push-rate: ${MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_PUSH_RATE:PT30S}
+          job: ${MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_JOB:payload-generator}
+          shutdown-operation: ${MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_SHUTDOWN_OPERATION:DELETE}
+          grouping-key:
+            instance: ${MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_GROUPING_KEY_INSTANCE:${POCKETHIVE_CONTROL_PLANE_INSTANCE_ID:payload-generator}}

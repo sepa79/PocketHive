@@ -1,40 +1,48 @@
 id: soap-generator
 name: SOAP Generator Sample
-description: Custom-role example that repurposes the stock generator and processor with SOAP payload overrides.
+description: Custom-role example that drives the PayloadGenerator worker with SOAP templates and feeds a processor.
 template:
   image: swarm-controller:latest
   bees:
-    - role: soap-generator
-      image: generator:latest
+    - role: payload-generator
+      image: payload-generator:latest
       config:
         pockethive:
           control-plane:
             worker:
               role: soap-generator
           workers:
-            generator:
-              config:
-                message:
-                  path: /soap
-                  method: POST
-                  body: |
-                    <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
-                                      xmlns:req="http://example.com/req/v1">
-                      <soapenv:Header>
-                        <req:ClientId>soap-sample</req:ClientId>
-                      </soapenv:Header>
-                      <soapenv:Body>
-                        <req:PingRequest>
-                          <req:payload>Hello from PocketHive</req:payload>
-                        </req:PingRequest>
-                      </soapenv:Body>
-                    </soapenv:Envelope>
-                  headers:
-                    content-type: text/xml
-        ratePerSec: 25
+            payload-generator:
+              scheduler:
+                rate-per-sec: 10
+              template:
+                body: |
+                  <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
+                                    xmlns:req="http://example.com/req/v1">
+                    <soapenv:Header>
+                      <req:ClientId>{{ record.clientId }}</req:ClientId>
+                    </soapenv:Header>
+                    <soapenv:Body>
+                      <req:PingRequest>
+                        <req:payload>{{ record.payload }}</req:payload>
+                      </req:PingRequest>
+                    </soapenv:Body>
+                  </soapenv:Envelope>
+                headers:
+                  content-type: text/xml
+                  soapaction: Ping
+              dataset:
+                name: soap-dataset
+                records:
+                  - id: soap-1
+                    clientId: soap-sample
+                    payload: Hello from PayloadGenerator
+                  - id: soap-2
+                    clientId: soap-sample
+                    payload: Second payload
       work:
         out: soap-generator-out
-    - role: soap-processor
+    - role: processor
       image: processor:latest
       config:
         pockethive:

@@ -17,6 +17,7 @@ COPY processor-service/pom.xml processor-service/pom.xml
 COPY observability/pom.xml observability/pom.xml
 COPY postprocessor-service/pom.xml postprocessor-service/pom.xml
 COPY log-aggregator-service/pom.xml log-aggregator-service/pom.xml
+COPY payload-generator-service/pom.xml payload-generator-service/pom.xml
 COPY trigger-service/pom.xml trigger-service/pom.xml
 COPY swarm-controller-service/pom.xml swarm-controller-service/pom.xml
 COPY scenario-manager-service/pom.xml scenario-manager-service/pom.xml
@@ -34,6 +35,7 @@ COPY processor-service/src processor-service/src
 COPY observability/src observability/src
 COPY postprocessor-service/src postprocessor-service/src
 COPY log-aggregator-service/src log-aggregator-service/src
+COPY payload-generator-service/src payload-generator-service/src
 COPY trigger-service/src trigger-service/src
 COPY swarm-controller-service/src swarm-controller-service/src
 COPY scenario-manager-service/src scenario-manager-service/src

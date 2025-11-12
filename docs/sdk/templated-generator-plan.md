@@ -14,10 +14,10 @@ Operators need to emit SOAP/XML (and other structured) payloads where the body, 
 ## Goals
 
 - [ ] Introduce a **Dataset Provider** SPI that can stream `DataRecord` objects (JSON, POJO, or binary) from Redis, files, or synthetic sources.
-- [ ] Add a brand-new **PayloadGenerator** worker (the existing generator stays untouched) that renders payload/header templates via a Jinja-like engine (Pebble).
+- [x] Add a brand-new **PayloadGenerator** worker (the existing generator stays untouched) that renders payload/header templates via a Jinja-like engine (Pebble).
 - [ ] Expose **templating extension hooks** (filters/functions/tests) so teams can add MAC/signature helpers without building entire worker plugins.
-- [ ] Build the templating logic as a dedicated helper class invoked from `onMessage`, preparing us to lift it into a smaller plugin surface later.
-- [ ] Ensure every `DataRecord` carries dataset provenance (dataset name/record id) via headers so downstream processors/postprocessors can reinsert or audit the original payload.
+- [x] Build the templating logic as a dedicated helper class invoked from `onMessage`, preparing us to lift it into a smaller plugin surface later.
+- [x] Ensure every `DataRecord` carries dataset provenance (dataset name/record id) via headers so downstream processors/postprocessors can reinsert or audit the original payload.
 - [ ] Keep all configuration declarative (`pockethive.workers.<role>.*`) so control-plane overrides can swap datasets/templates at runtime.
 
 ## Non-Goals
@@ -45,16 +45,17 @@ flowchart TD
 - [ ] Define `DataRecord` (POJO + metadata headers) and `DatasetProvider` interfaces in Worker SDK.
 - [ ] Implement a Redis-backed provider (lists/streams) with pluggable selection policies (round-robin, weighted, priority). Start with a simple `RedisDataSet` implementation that pops entries from a named list/stream.
 - [ ] Provide sample providers: Static JSON array, CSV, synthetic generator (UUID/time-driven).
+- [x] Seed v1 with a static dataset provider baked into the worker (round-robin over config-defined records) so templating can ship ahead of Redis integration.
 - [ ] Document how providers attach to worker inputs (mirroring scheduler input semantics). Spell out that backpressure remains under Swarm Controller control (ratePerSec + guard-based enable/disable), and the provider should rely on scheduler pacing rather than its own ACK loop.
 - [ ] Emit clear status signals when datasets are empty/unreachable so operators see “dataset outage” in Grafana/CLI status.
 
 ### 2. Pebble-Based PayloadGenerator
 
-- [ ] Create a new worker module/service for PayloadGenerator and wire Pebble with Spring-friendly configuration.
-- [ ] Implement a reusable templating helper invoked from `onMessage` so future plugins can share the same logic.
-- [ ] Support multiple template fields per worker (`body`, `headers`, optional `status`), each pointing to a file/resource/env string.
-- [ ] Resolve templates against the `DataRecord` plus helper context (control-plane info, timestamps).
-- [ ] Emit WorkMessage with templated payload + headers and keep existing control-plane reporting.
+- [x] Create a new worker module/service for PayloadGenerator and wire Pebble with Spring-friendly configuration.
+- [x] Implement a reusable templating helper invoked from `onMessage` so future plugins can share the same logic.
+- [x] Support body + header template fields per worker (status template support still TBD).
+- [x] Resolve templates against the `DataRecord` plus helper context (control-plane info, timestamps).
+- [x] Emit WorkMessage with templated payload + headers (including dataset provenance) and keep existing control-plane reporting.
 
 ### 3. Extension Surface
 
@@ -65,7 +66,7 @@ flowchart TD
 ### 4. Configuration & Docs
 
 - [ ] Describe dataset + template configuration in `docs/USAGE.md` (new section: “Templated Generators”).
-- [ ] Add a SOAP swarm example under `scenarios/` that uses Redis dataset + Pebble templates for body/header rendering.
+- [x] Add a SOAP swarm example under `scenarios/` that uses the PayloadGenerator worker with templated payloads (currently backed by the static dataset provider).
 - [ ] Update `docs/sdk/worker-plugin-plan.md` to link this plan for teams needing richer generators pre SDK v4.
 
 ### 5. Validation

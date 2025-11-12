@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "${SCRIPT_DIR}"
 
 CORE_SERVICES=(rabbitmq log-aggregator scenario-manager orchestrator ui prometheus grafana loki wiremock)
-BEE_SERVICES=(swarm-controller generator moderator processor postprocessor trigger)
+BEE_SERVICES=(swarm-controller generator payload-generator moderator processor postprocessor trigger)
 ALL_STAGES=(clean build-core build-bees start push restart)
 
 declare -A STAGE_TIMES

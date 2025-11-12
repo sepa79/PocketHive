@@ -1,0 +1,46 @@
+schemaVersion: "1.0"
+capabilitiesVersion: "1.0"
+role: soap-generator
+image:
+  name: payload-generator
+  tag: soap
+ui:
+  label: "SOAP Generator"
+  color: "#0ea5e9"
+  shape: "hexagon"
+  abbreviation: "SG"
+config:
+  - name: enabled
+    type: boolean
+    default: false
+  - name: scheduler.ratePerSec
+    type: number
+    default: 10
+    min: 0
+    max: 100000
+    ui:
+      step: 1
+      unit: msg/s
+  - name: scheduler.singleRequest
+    type: boolean
+    default: false
+  - name: template.body
+    type: text
+    default: |
+      <soapenv:Envelope>
+        {{ record }}
+      </soapenv:Envelope>
+    multiline: true
+  - name: template.headers
+    type: json
+    default: {"content-type":"text/xml"}
+    multiline: true
+  - name: dataset.name
+    type: string
+    default: "soap-dataset"
+  - name: dataset.records
+    type: json
+    multiline: true
+    default: [{"id":"soap-1","clientId":"demo","payload":"Hello from SOAP generator"}]
+actions: []
+panels: []

@@ -1,0 +1,43 @@
+schemaVersion: "1.0"
+capabilitiesVersion: "1.0"
+role: payload-generator
+image:
+  name: payload-generator
+  tag: latest
+ui:
+  label: "Payload Generator"
+  color: "#a855f7"
+  shape: "hexagon"
+  abbreviation: "PG"
+config:
+  - name: enabled
+    type: boolean
+    default: false
+  - name: scheduler.ratePerSec
+    type: number
+    default: 1
+    min: 0
+    max: 100000
+    ui:
+      step: 0.5
+      unit: msg/s
+  - name: scheduler.singleRequest
+    type: boolean
+    default: false
+  - name: template.body
+    type: text
+    default: "<payload>{{ record }}</payload>"
+    multiline: true
+  - name: template.headers
+    type: json
+    default: {"content-type":"text/xml"}
+    multiline: true
+  - name: dataset.name
+    type: string
+    default: "payload-dataset"
+  - name: dataset.records
+    type: json
+    multiline: true
+    default: [{"id":"sample-1","payload":"Hello from PayloadGenerator"}]
+actions: []
+panels: []
