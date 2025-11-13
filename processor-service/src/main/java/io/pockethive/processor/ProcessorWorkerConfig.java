@@ -3,13 +3,9 @@ package io.pockethive.processor;
 public record ProcessorWorkerConfig(String baseUrl) {
 
   public ProcessorWorkerConfig {
-    baseUrl = normalize(baseUrl);
-  }
-
-  private static String normalize(String baseUrl) {
-    if (baseUrl == null) {
-      return "";
+    if (baseUrl == null || baseUrl.trim().isEmpty()) {
+      throw new IllegalArgumentException("processor baseUrl must be provided");
     }
-    return baseUrl.trim();
+    baseUrl = baseUrl.trim();
   }
 }

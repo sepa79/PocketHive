@@ -9,13 +9,12 @@ import org.springframework.stereotype.Component;
 @ConfigurationProperties(prefix = "pockethive.workers.postprocessor")
 class PostProcessorWorkerProperties extends CanonicalWorkerProperties<PostProcessorWorkerConfig> {
 
-  private static final PostProcessorWorkerConfig FALLBACK = new PostProcessorWorkerConfig(false);
-
   PostProcessorWorkerProperties(ObjectMapper mapper) {
     super("postprocessor", PostProcessorWorkerConfig.class, mapper);
   }
 
   PostProcessorWorkerConfig defaultConfig() {
-    return toConfig(objectMapper()).orElse(FALLBACK);
+    return toConfig(objectMapper()).orElseThrow(() ->
+        new IllegalStateException("Missing postprocessor config under pockethive.workers.postprocessor"));
   }
 }

@@ -7,20 +7,41 @@ template:
     - role: generator
       image: generator:latest
       config:
-        ratePerSec: 50
+        scheduler:
+          ratePerSec: 50
+          singleRequest: false
+        message:
+          path: /test
+          method: POST
+          body: '{"event":"local-rest"}'
+          headers:
+            content-type: application/json
       work:
         out: gen
     - role: moderator
       image: moderator:latest
+      config:
+        mode:
+          type: rate-per-sec
+          ratePerSec: 25
+          sine:
+            minRatePerSec: 5
+            maxRatePerSec: 30
+            periodSeconds: 60
+            phaseOffsetSeconds: 5
       work:
         in: gen
         out: mod
     - role: processor
       image: processor:latest
+      config:
+        baseUrl: http://wiremock:8080/api
       work:
         in: mod
         out: final
     - role: postprocessor
       image: postprocessor:latest
+      config:
+        publishAllMetrics: true
       work:
         in: final

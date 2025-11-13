@@ -9,14 +9,12 @@ import org.springframework.stereotype.Component;
 @ConfigurationProperties(prefix = "pockethive.workers.processor")
 class ProcessorWorkerProperties extends CanonicalWorkerProperties<ProcessorWorkerConfig> {
 
-  private static final ProcessorWorkerConfig FALLBACK =
-      new ProcessorWorkerConfig("http://localhost:8082");
-
   ProcessorWorkerProperties(ObjectMapper mapper) {
     super("processor", ProcessorWorkerConfig.class, mapper);
   }
 
   ProcessorWorkerConfig defaultConfig() {
-    return toConfig(objectMapper()).orElse(FALLBACK);
+    return toConfig(objectMapper()).orElseThrow(() ->
+        new IllegalStateException("Missing processor config under pockethive.workers.processor"));
   }
 }

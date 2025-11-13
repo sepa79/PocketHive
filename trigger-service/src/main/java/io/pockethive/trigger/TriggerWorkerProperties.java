@@ -10,22 +10,12 @@ import org.springframework.stereotype.Component;
 @ConfigurationProperties(prefix = "pockethive.workers.trigger")
 class TriggerWorkerProperties extends CanonicalWorkerProperties<TriggerWorkerConfig> {
 
-  private static final TriggerWorkerConfig FALLBACK = new TriggerWorkerConfig(
-      1000L,
-      false,
-      "none",
-      "",
-      "",
-      "GET",
-      "",
-      Map.of()
-  );
-
   TriggerWorkerProperties(ObjectMapper mapper) {
     super("trigger", TriggerWorkerConfig.class, mapper);
   }
 
   TriggerWorkerConfig defaultConfig() {
-    return toConfig(objectMapper()).orElse(FALLBACK);
+    return toConfig(objectMapper()).orElseThrow(() ->
+        new IllegalStateException("Missing trigger config under pockethive.workers.trigger"));
   }
 }

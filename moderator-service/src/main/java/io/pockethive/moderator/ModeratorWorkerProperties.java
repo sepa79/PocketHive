@@ -9,14 +9,12 @@ import org.springframework.stereotype.Component;
 @ConfigurationProperties(prefix = "pockethive.workers.moderator")
 class ModeratorWorkerProperties extends CanonicalWorkerProperties<ModeratorWorkerConfig> {
 
-  private static final ModeratorWorkerConfig FALLBACK =
-      new ModeratorWorkerConfig(ModeratorWorkerConfig.Mode.passThrough());
-
   ModeratorWorkerProperties(ObjectMapper mapper) {
     super("moderator", ModeratorWorkerConfig.class, mapper);
   }
 
   ModeratorWorkerConfig defaultConfig() {
-    return toConfig(objectMapper()).orElse(FALLBACK);
+    return toConfig(objectMapper()).orElseThrow(() ->
+        new IllegalStateException("Missing moderator config under pockethive.workers.moderator"));
   }
 }

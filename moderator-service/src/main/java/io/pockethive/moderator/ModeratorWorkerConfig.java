@@ -3,11 +3,14 @@ package io.pockethive.moderator;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonValue;
 import java.util.Locale;
+import java.util.Objects;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public record ModeratorWorkerConfig(Mode mode) {
 
   public ModeratorWorkerConfig {
-    mode = mode == null ? Mode.passThrough() : mode;
+    Objects.requireNonNull(mode, "mode");
   }
 
   public ModeratorOperationMode operationMode() {
@@ -16,10 +19,12 @@ public record ModeratorWorkerConfig(Mode mode) {
 
   public record Mode(Type type, double ratePerSec, Sine sine) {
 
+    private static final Logger log = LoggerFactory.getLogger(Mode.class);
+
     public Mode {
-      type = type == null ? Type.PASS_THROUGH : type;
+      Objects.requireNonNull(type, "type");
+      Objects.requireNonNull(sine, "sine");
       ratePerSec = sanitiseRate(ratePerSec);
-      sine = sine == null ? Sine.DEFAULT : sine;
     }
 
     static Mode passThrough() {
@@ -43,21 +48,25 @@ public record ModeratorWorkerConfig(Mode mode) {
       RATE_PER_SEC,
       SINE;
 
+      private static final Logger log = LoggerFactory.getLogger(Type.class);
+
       @JsonCreator
       public static Type fromString(String raw) {
         if (raw == null) {
+          log.warn("Missing moderator mode type; defaulting to pass-through");
           return PASS_THROUGH;
         }
         String normalized = raw.trim();
         if (normalized.isEmpty()) {
+          log.warn("Blank moderator mode type; defaulting to pass-through");
           return PASS_THROUGH;
         }
         normalized = normalized.replace('-', '_').replace(' ', '_');
         try {
           return Type.valueOf(normalized.toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException ex) {
-          throw new IllegalArgumentException(
-              "Unsupported moderator mode type '%s'".formatted(raw), ex);
+          log.warn("Unsupported moderator mode type '{}'; defaulting to pass-through", raw);
+          return PASS_THROUGH;
         }
       }
 

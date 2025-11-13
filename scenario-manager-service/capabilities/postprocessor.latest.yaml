@@ -13,7 +13,7 @@ config:
   - name: enabled
     type: boolean
     default: false
-  - name: publish-all-metrics
+  - name: publishAllMetrics
     type: boolean
     default: false
 actions: []
