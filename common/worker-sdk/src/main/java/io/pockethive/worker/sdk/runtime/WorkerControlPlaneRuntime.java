@@ -511,7 +511,7 @@ public final class WorkerControlPlaneRuntime {
         if (trimmed.isEmpty()) {
             return null;
         }
-        return trimmed.toLowerCase(Locale.ROOT);
+        return trimmed;
     }
 
     private void emitStatus(boolean snapshot) {

@@ -88,7 +88,7 @@ class PocketHiveWorkerDefaultsInitializerTest {
 
     @Test
     void throwsWhenRoleMissing() {
-        assertThatThrownBy(() -> new TestWorkerProperties(() -> " ", TestWorkerConfig.class))
+        assertThatThrownBy(() -> new TestWorkerProperties(() -> " ", TestWorkerConfig.class).role())
             .isInstanceOf(IllegalArgumentException.class);
     }
 

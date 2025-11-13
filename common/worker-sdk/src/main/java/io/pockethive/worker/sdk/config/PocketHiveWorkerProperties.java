@@ -89,6 +89,6 @@ public abstract class PocketHiveWorkerProperties<T> {
         if (role == null || role.isBlank()) {
             throw new IllegalArgumentException("role must not be blank");
         }
-        return role.trim().toLowerCase();
+        return role.trim();
     }
 }

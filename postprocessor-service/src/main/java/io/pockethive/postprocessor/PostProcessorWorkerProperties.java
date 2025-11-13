@@ -1,6 +1,7 @@
 package io.pockethive.postprocessor;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.pockethive.controlplane.spring.WorkerControlPlaneProperties;
 import io.pockethive.worker.sdk.config.CanonicalWorkerProperties;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
@@ -9,8 +10,8 @@ import org.springframework.stereotype.Component;
 @ConfigurationProperties(prefix = "pockethive.workers.postprocessor")
 class PostProcessorWorkerProperties extends CanonicalWorkerProperties<PostProcessorWorkerConfig> {
 
-  PostProcessorWorkerProperties(ObjectMapper mapper) {
-    super("postprocessor", PostProcessorWorkerConfig.class, mapper);
+  PostProcessorWorkerProperties(ObjectMapper mapper, WorkerControlPlaneProperties controlPlaneProperties) {
+    super(() -> controlPlaneProperties.getWorker().getRole(), PostProcessorWorkerConfig.class, mapper);
   }
 
   PostProcessorWorkerConfig defaultConfig() {

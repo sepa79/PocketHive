@@ -13,7 +13,7 @@ class SampleGeneratorProperties extends CanonicalWorkerProperties<SampleGenerato
       new SampleGeneratorConfig(1.0, "Hello from the generator");
 
   SampleGeneratorProperties(ObjectMapper mapper) {
-    super("generator", SampleGeneratorConfig.class, mapper);
+    super(() -> "generator", SampleGeneratorConfig.class, mapper);
   }
 
   SampleGeneratorConfig defaultConfig() {

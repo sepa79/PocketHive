@@ -1,6 +1,7 @@
 package io.pockethive.trigger;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.pockethive.controlplane.spring.WorkerControlPlaneProperties;
 import io.pockethive.worker.sdk.config.CanonicalWorkerProperties;
 import java.util.Map;
 import org.springframework.boot.context.properties.ConfigurationProperties;
@@ -10,8 +11,8 @@ import org.springframework.stereotype.Component;
 @ConfigurationProperties(prefix = "pockethive.workers.trigger")
 class TriggerWorkerProperties extends CanonicalWorkerProperties<TriggerWorkerConfig> {
 
-  TriggerWorkerProperties(ObjectMapper mapper) {
-    super("trigger", TriggerWorkerConfig.class, mapper);
+  TriggerWorkerProperties(ObjectMapper mapper, WorkerControlPlaneProperties controlPlaneProperties) {
+    super(() -> controlPlaneProperties.getWorker().getRole(), TriggerWorkerConfig.class, mapper);
   }
 
   TriggerWorkerConfig defaultConfig() {

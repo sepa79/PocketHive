@@ -290,9 +290,7 @@ public class SwarmLifecycleSteps {
     ensureFinalQueueTap();
     String queue = tapQueueName != null ? tapQueueName : finalQueueName();
 
-    WorkQueueConsumer.Message message = SwarmAssertions.await(
-        "final queue message",
-        () -> workQueueConsumer.consumeNext(SwarmAssertions.defaultTimeout()))
+    WorkQueueConsumer.Message message = workQueueConsumer.consumeNext(SwarmAssertions.defaultTimeout())
         .orElseThrow(() -> new AssertionError("No message observed on tap queue " + queue));
 
     try {
@@ -400,7 +398,7 @@ public class SwarmLifecycleSteps {
     if (!swarmRemoved && orchestratorClient != null && swarmId != null) {
       try {
         LOGGER.info("Attempting to remove swarm {} during cleanup", swarmId);
-        orchestratorClient.removeSwarm(swarmId, new ControlRequest(idKey("cleanup"), "cleanup"));
+        // orchestratorClient.removeSwarm(swarmId, new ControlRequest(idKey("cleanup"), "cleanup"));
       } catch (Exception ex) {
         LOGGER.warn("Cleanup remove failed for swarm {}", swarmId, ex);
       }

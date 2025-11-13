@@ -1,6 +1,7 @@
 package io.pockethive.generator;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.pockethive.controlplane.spring.WorkerControlPlaneProperties;
 import io.pockethive.worker.sdk.config.CanonicalWorkerProperties;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
@@ -10,8 +11,8 @@ import org.springframework.stereotype.Component;
 class GeneratorWorkerProperties extends CanonicalWorkerProperties<GeneratorWorkerConfig> {
 
 
-  GeneratorWorkerProperties(ObjectMapper mapper) {
-    super("generator", GeneratorWorkerConfig.class, mapper);
+  GeneratorWorkerProperties(ObjectMapper mapper, WorkerControlPlaneProperties controlPlaneProperties) {
+    super(() -> controlPlaneProperties.getWorker().getRole(), GeneratorWorkerConfig.class, mapper);
   }
 
   GeneratorWorkerConfig defaultConfig() {

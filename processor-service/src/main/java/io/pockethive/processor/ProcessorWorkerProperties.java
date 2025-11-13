@@ -1,6 +1,7 @@
 package io.pockethive.processor;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.pockethive.controlplane.spring.WorkerControlPlaneProperties;
 import io.pockethive.worker.sdk.config.CanonicalWorkerProperties;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
@@ -9,8 +10,8 @@ import org.springframework.stereotype.Component;
 @ConfigurationProperties(prefix = "pockethive.workers.processor")
 class ProcessorWorkerProperties extends CanonicalWorkerProperties<ProcessorWorkerConfig> {
 
-  ProcessorWorkerProperties(ObjectMapper mapper) {
-    super("processor", ProcessorWorkerConfig.class, mapper);
+  ProcessorWorkerProperties(ObjectMapper mapper, WorkerControlPlaneProperties controlPlaneProperties) {
+    super(() -> controlPlaneProperties.getWorker().getRole(), ProcessorWorkerConfig.class, mapper);
   }
 
   ProcessorWorkerConfig defaultConfig() {

@@ -47,7 +47,7 @@ public final class WorkerRegistry {
      * Returns a stream of worker definitions registered for the given role.
      */
     public Stream<WorkerDefinition> streamByRole(String role) {
-        String resolvedRole = requireText(role, "role").trim().toLowerCase(Locale.ROOT);
+        String resolvedRole = requireText(role, "role").trim();
         return workers.values().stream().filter(definition -> resolvedRole.equals(definition.role()));
     }
 

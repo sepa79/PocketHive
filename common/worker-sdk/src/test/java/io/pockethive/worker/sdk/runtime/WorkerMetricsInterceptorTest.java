@@ -5,27 +5,26 @@ import static org.assertj.core.api.Assertions.assertThat;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.micrometer.observation.ObservationRegistry;
-import io.pockethive.observability.ObservabilityContext;
-import io.pockethive.worker.sdk.autoconfigure.PocketHiveWorkerSdkAutoConfiguration;
 import io.pockethive.controlplane.topology.ControlPlaneRouteCatalog;
 import io.pockethive.controlplane.topology.ControlPlaneTopologyDescriptor;
 import io.pockethive.controlplane.topology.ControlQueueDescriptor;
+import io.pockethive.observability.ObservabilityContext;
 import io.pockethive.worker.sdk.api.PocketHiveWorkerFunction;
 import io.pockethive.worker.sdk.api.StatusPublisher;
 import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pockethive.worker.sdk.api.WorkResult;
 import io.pockethive.worker.sdk.api.WorkerContext;
 import io.pockethive.worker.sdk.api.WorkerInfo;
+import io.pockethive.worker.sdk.autoconfigure.PocketHiveWorkerSdkAutoConfiguration;
+import io.pockethive.worker.sdk.config.PocketHiveWorker;
 import io.pockethive.worker.sdk.config.WorkInputConfig;
 import io.pockethive.worker.sdk.config.WorkOutputConfig;
 import io.pockethive.worker.sdk.config.WorkerCapability;
 import io.pockethive.worker.sdk.config.WorkerInputType;
 import io.pockethive.worker.sdk.config.WorkerOutputType;
-import io.pockethive.worker.sdk.config.PocketHiveWorker;
 import io.pockethive.worker.sdk.input.WorkInput;
 import io.pockethive.worker.sdk.input.WorkInputFactory;
-import java.util.Optional;
-import java.util.Set;
+import io.pockethive.worker.sdk.testing.ControlPlaneTestFixtures;
 import java.util.Optional;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
@@ -51,13 +50,18 @@ class WorkerMetricsInterceptorTest {
 
     private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
         .withPropertyValues(
-            "pockethive.control-plane.worker.role=metrics-role",
-            "pockethive.control-plane.worker.enabled=false",
-            "pockethive.control-plane.manager.enabled=false",
-            "pockethive.control-plane.instance-id=metrics-test",
-            "pockethive.control-plane.swarm-id=metrics-swarm",
             "pockethive.control-plane.exchange=metrics-swarm.control",
+            "pockethive.control-plane.swarm-id=metrics-swarm",
+            "pockethive.control-plane.instance-id=metrics-test",
+            "pockethive.control-plane.identity.swarm-id=metrics-swarm",
+            "pockethive.control-plane.identity.instance-id=metrics-test",
             "pockethive.control-plane.control-queue-prefix=ph.control.metrics",
+            "pockethive.control-plane.worker.role=metrics-role",
+            "pockethive.control-plane.worker.enabled=true",
+            "pockethive.control-plane.worker.declare-topology=false",
+            "pockethive.control-plane.manager.enabled=false",
+            "pockethive.control-plane.swarm-controller.rabbit.logs-exchange=ph.logs",
+            "pockethive.control-plane.swarm-controller.rabbit.logging.enabled=false",
             "management.prometheus.metrics.export.pushgateway.enabled=true",
             "management.prometheus.metrics.export.pushgateway.base-url=http://pushgateway:9091",
             "management.prometheus.metrics.export.pushgateway.push-rate=PT30S",
@@ -152,6 +156,11 @@ class WorkerMetricsInterceptorTest {
 
     @Configuration(proxyBeanMethods = false)
     static class TestConfiguration {
+
+        @Bean
+        com.fasterxml.jackson.databind.ObjectMapper objectMapper() {
+            return new com.fasterxml.jackson.databind.ObjectMapper();
+        }
 
         @Bean
         MeterRegistry meterRegistry() {

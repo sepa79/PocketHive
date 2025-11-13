@@ -50,7 +50,7 @@ public record WorkerDefinition(
         beanName = requireText(beanName, "beanName");
         beanType = Objects.requireNonNull(beanType, "beanType");
         input = Objects.requireNonNull(input, "input");
-        role = requireText(role, "role").trim().toLowerCase(Locale.ROOT);
+        role = requireText(role, "role").trim();
         io = io == null ? WorkIoBindings.none() : io;
         configType = configType == null || configType == Void.class ? Void.class : configType;
         inputConfigType = normalizeConfigClass(inputConfigType, WorkInputConfig.class);

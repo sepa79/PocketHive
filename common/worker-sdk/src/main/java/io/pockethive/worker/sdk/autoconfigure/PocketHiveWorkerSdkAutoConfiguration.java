@@ -369,7 +369,7 @@ public class PocketHiveWorkerSdkAutoConfiguration {
         if (role == null || role.isBlank()) {
             throw new IllegalStateException("pockethive.control-plane.worker.role must not be blank");
         }
-        return role.trim().toLowerCase(Locale.ROOT);
+        return role.trim();
     }
 
     private static Set<WorkerCapability> resolveCapabilities(PocketHiveWorker annotation) {

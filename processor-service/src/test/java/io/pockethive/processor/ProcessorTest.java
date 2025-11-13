@@ -64,7 +64,7 @@ class ProcessorTest {
 
     @Test
     void workerInvokesHttpAndPropagatesResponse() throws Exception {
-        ProcessorWorkerProperties properties = new ProcessorWorkerProperties(MAPPER);
+        ProcessorWorkerProperties properties = newProcessorWorkerProperties();
         properties.setConfig(Map.of("baseUrl", "http://sut/"));
         HttpClient httpClient = mock(HttpClient.class);
         Clock clock = Clock.fixed(Instant.parse("2024-01-01T00:00:00Z"), ZoneOffset.UTC);
@@ -123,7 +123,7 @@ class ProcessorTest {
 
     @Test
     void workerTracksRollingMetricsAcrossCalls() throws Exception {
-        ProcessorWorkerProperties properties = new ProcessorWorkerProperties(MAPPER);
+        ProcessorWorkerProperties properties = newProcessorWorkerProperties();
         properties.setConfig(Map.of("baseUrl", "http://sut/"));
         HttpClient httpClient = mock(HttpClient.class);
         SequenceClock clock = new SequenceClock(0, 50, 100, 250);
@@ -167,7 +167,7 @@ class ProcessorTest {
 
     @Test
     void workerFallsBackToDefaultsWhenConfigMissing() throws Exception {
-        ProcessorWorkerProperties properties = new ProcessorWorkerProperties(MAPPER);
+        ProcessorWorkerProperties properties = newProcessorWorkerProperties();
         properties.setConfig(Map.of("baseUrl", "http://defaults/"));
         HttpClient httpClient = mock(HttpClient.class);
         Clock clock = Clock.fixed(Instant.parse("2024-01-01T00:00:00Z"), ZoneOffset.UTC);
@@ -192,7 +192,7 @@ class ProcessorTest {
 
     @Test
     void workerReturnsErrorWhenBaseUrlMissing() throws Exception {
-        ProcessorWorkerProperties properties = new ProcessorWorkerProperties(MAPPER);
+        ProcessorWorkerProperties properties = newProcessorWorkerProperties();
         properties.setConfig(Map.of("baseUrl", ""));
         HttpClient httpClient = mock(HttpClient.class);
         Clock clock = Clock.systemUTC();
@@ -444,5 +444,9 @@ class ProcessorTest {
         public HttpClient.Version version() {
             return HttpClient.Version.HTTP_1_1;
         }
+    }
+
+    private ProcessorWorkerProperties newProcessorWorkerProperties() {
+        return new ProcessorWorkerProperties(MAPPER, WORKER_PROPERTIES);
     }
 }
