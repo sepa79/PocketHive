@@ -26,18 +26,11 @@ config:
     default: false
   - name: template.body
     type: text
-    default: "<payload>{{ record }}</payload>"
+    default: "<payload>{{ seed.body | default('Hello from PayloadGenerator') }}</payload>"
     multiline: true
   - name: template.headers
     type: json
     default: {"content-type":"text/xml"}
     multiline: true
-  - name: dataset.name
-    type: string
-    default: "payload-dataset"
-  - name: dataset.records
-    type: json
-    multiline: true
-    default: [{"id":"sample-1","payload":"Hello from PayloadGenerator"}]
 actions: []
 panels: []

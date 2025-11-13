@@ -1,5 +1,6 @@
 package io.pockethive.payload.generator.runtime;
 
+import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pebbletemplates.pebble.PebbleEngine;
 import io.pebbletemplates.pebble.error.PebbleException;
 import io.pebbletemplates.pebble.template.PebbleTemplate;
@@ -25,16 +26,17 @@ public final class PayloadTemplateRenderer {
         this.headerTemplates = Map.copyOf(compiledHeaders);
     }
 
-    public RenderedMessage render(StaticDatasetRecordProvider.PayloadRecord record) {
-        Objects.requireNonNull(record, "record");
+    public RenderedMessage render(WorkMessage seed) {
+        Objects.requireNonNull(seed, "seed");
         Map<String, Object> context = new LinkedHashMap<>();
-        context.put("record", record.attributes());
-        context.put("dataset", Map.of("name", record.dataset()));
+        Map<String, Object> seedContext = new LinkedHashMap<>();
+        seedContext.put("headers", seed.headers());
+        seedContext.put("body", seed.asString());
+        context.put("seed", seedContext);
 
         String body = evaluate(bodyTemplate, context);
         Map<String, String> headers = new LinkedHashMap<>();
         headerTemplates.forEach((name, template) -> headers.put(name, evaluate(template, context)));
-        headers.putIfAbsent("x-ph-dataset", record.dataset());
         return new RenderedMessage(body, headers);
     }
 

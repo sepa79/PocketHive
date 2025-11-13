@@ -1,0 +1,9 @@
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
+                  xmlns:req="http://example.com/req/v1">
+  <soapenv:Body>
+    <req:PingResponse>
+      <req:status>OK</req:status>
+      <req:message>WireMock SOAP response</req:message>
+    </req:PingResponse>
+  </soapenv:Body>
+</soapenv:Envelope>

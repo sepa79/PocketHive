@@ -20,26 +20,17 @@ template:
                   <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
                                     xmlns:req="http://example.com/req/v1">
                     <soapenv:Header>
-                      <req:ClientId>{{ record.clientId }}</req:ClientId>
+                      <req:ClientId>{{ seed.headers['instanceId'] }}</req:ClientId>
                     </soapenv:Header>
                     <soapenv:Body>
-                      <req:PingRequest>
-                        <req:payload>{{ record.payload }}</req:payload>
+                      <req:PingRequest tick="{{ seed.headers['x-ph-scheduler-tick'] }}">
+                        <req:payload>{{ seed.body | default(record.payload) }}</req:payload>
                       </req:PingRequest>
                     </soapenv:Body>
                   </soapenv:Envelope>
                 headers:
                   content-type: text/xml
                   soapaction: Ping
-              dataset:
-                name: soap-dataset
-                records:
-                  - id: soap-1
-                    clientId: soap-sample
-                    payload: Hello from PayloadGenerator
-                  - id: soap-2
-                    clientId: soap-sample
-                    payload: Second payload
       work:
         out: soap-generator-out
     - role: processor

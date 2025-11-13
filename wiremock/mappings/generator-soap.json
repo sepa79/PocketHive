@@ -1,0 +1,23 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "/api/soap",
+    "headers": {
+      "Content-Type": {
+        "contains": "text/xml"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "delayDistribution": {
+      "type": "uniform",
+      "lower": 10,
+      "upper": 50
+    },
+    "headers": {
+      "Content-Type": "text/xml"
+    },
+    "bodyFileName": "soap-response.xml"
+  }
+}

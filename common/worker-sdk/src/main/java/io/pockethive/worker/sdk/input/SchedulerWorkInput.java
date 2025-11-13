@@ -88,7 +88,10 @@ public final class SchedulerWorkInput<C> implements WorkInput {
             log.debug("{} scheduler dispatching {} invocation(s) at tick {}", workerDefinition.beanName(), quota, nowMillis);
         }
         for (int i = 0; i < quota; i++) {
-            WorkMessage seed = seedFactory.apply(workerDefinition, identity);
+            WorkMessage seed = seedFactory.apply(workerDefinition, identity)
+                .toBuilder()
+                .header("x-ph-scheduler-tick", Long.toString(nowMillis))
+                .build();
             try {
                 WorkResult result = workerRuntime.dispatch(workerDefinition.beanName(), seed);
                 if (result == null) {

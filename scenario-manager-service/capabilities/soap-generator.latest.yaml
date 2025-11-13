@@ -28,19 +28,12 @@ config:
     type: text
     default: |
       <soapenv:Envelope>
-        {{ record }}
+        {{ seed.body | default('Hello from SOAP generator') }}
       </soapenv:Envelope>
     multiline: true
   - name: template.headers
     type: json
     default: {"content-type":"text/xml"}
     multiline: true
-  - name: dataset.name
-    type: string
-    default: "soap-dataset"
-  - name: dataset.records
-    type: json
-    multiline: true
-    default: [{"id":"soap-1","clientId":"demo","payload":"Hello from SOAP generator"}]
 actions: []
 panels: []

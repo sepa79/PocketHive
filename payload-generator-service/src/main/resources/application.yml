@@ -29,9 +29,9 @@ pockethive:
               <req:ClientId>{{ record.clientId }}</req:ClientId>
             </soapenv:Header>
             <soapenv:Body>
-              <req:PingRequest>
-                <req:payload>{{ record.payload }}</req:payload>
-              </req:PingRequest>
+                <req:PingRequest tick="{{ seed.headers['x-ph-scheduler-tick'] | default('n/a') }}">
+                  <req:payload>{{ seed.body | default(record.payload) }}</req:payload>
+                </req:PingRequest>
             </soapenv:Body>
           </soapenv:Envelope>
         headers:
@@ -50,6 +50,8 @@ pockethive:
 logging:
   level:
     io.pockethive.payload.generator: INFO
+    io.pockethive.worker.sdk.input.SchedulerWorkInput: DEBUG
+    io.pockethive.worker.sdk.input.SchedulerStates: DEBUG
 
 management:
   prometheus:

@@ -17,7 +17,7 @@ Operators need to emit SOAP/XML (and other structured) payloads where the body, 
 - [x] Add a brand-new **PayloadGenerator** worker (the existing generator stays untouched) that renders payload/header templates via a Jinja-like engine (Pebble).
 - [ ] Expose **templating extension hooks** (filters/functions/tests) so teams can add MAC/signature helpers without building entire worker plugins.
 - [x] Build the templating logic as a dedicated helper class invoked from `onMessage`, preparing us to lift it into a smaller plugin surface later.
-- [x] Ensure every `DataRecord` carries dataset provenance (dataset name/record id) via headers so downstream processors/postprocessors can reinsert or audit the original payload.
+- [ ] (Deferred) Dataset providers will attach provenance headers when introduced; the worker itself no longer references dataset config.
 - [ ] Keep all configuration declarative (`pockethive.workers.<role>.*`) so control-plane overrides can swap datasets/templates at runtime.
 
 ## Non-Goals
@@ -45,7 +45,7 @@ flowchart TD
 - [ ] Define `DataRecord` (POJO + metadata headers) and `DatasetProvider` interfaces in Worker SDK.
 - [ ] Implement a Redis-backed provider (lists/streams) with pluggable selection policies (round-robin, weighted, priority). Start with a simple `RedisDataSet` implementation that pops entries from a named list/stream.
 - [ ] Provide sample providers: Static JSON array, CSV, synthetic generator (UUID/time-driven).
-- [x] Seed v1 with a static dataset provider baked into the worker (round-robin over config-defined records) so templating can ship ahead of Redis integration.
+- [x] Provide a temporary seed-based pipeline (current worker consumes `WorkMessage` directly; legacy static dataset helper removed) so templating runs end-to-end ahead of Redis integration.
 - [ ] Document how providers attach to worker inputs (mirroring scheduler input semantics). Spell out that backpressure remains under Swarm Controller control (ratePerSec + guard-based enable/disable), and the provider should rely on scheduler pacing rather than its own ACK loop.
 - [ ] Emit clear status signals when datasets are empty/unreachable so operators see “dataset outage” in Grafana/CLI status.
 
@@ -54,7 +54,7 @@ flowchart TD
 - [x] Create a new worker module/service for PayloadGenerator and wire Pebble with Spring-friendly configuration.
 - [x] Implement a reusable templating helper invoked from `onMessage` so future plugins can share the same logic.
 - [x] Support body + header template fields per worker (status template support still TBD).
-- [x] Resolve templates against the `DataRecord` plus helper context (control-plane info, timestamps).
+- [ ] Resolve templates against the `WorkMessage seed` + helper context (expose seed headers/payload). Scheduler input should inject a tick header so templates can reference it directly, and dataset/provider details stay hidden from the worker.
 - [x] Emit WorkMessage with templated payload + headers (including dataset provenance) and keep existing control-plane reporting.
 
 ### 3. Extension Surface
