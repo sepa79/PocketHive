@@ -28,7 +28,7 @@ public final class PayloadTemplateRenderer {
 
     public RenderedRequest render(PayloadGeneratorConfig.Template template, WorkMessage seed) {
         Objects.requireNonNull(seed, "seed");
-        PayloadGeneratorConfig.Template resolved = template == null ? PayloadGeneratorConfig.Template.defaults() : template;
+        PayloadGeneratorConfig.Template resolved = Objects.requireNonNull(template, "template");
         Map<String, Object> context = new LinkedHashMap<>();
         Map<String, Object> seedContext = new LinkedHashMap<>();
         seedContext.put("headers", seed.headers());

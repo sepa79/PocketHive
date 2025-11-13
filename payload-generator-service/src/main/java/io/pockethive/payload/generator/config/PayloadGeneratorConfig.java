@@ -14,20 +14,16 @@ public record PayloadGeneratorConfig(
 
     public PayloadGeneratorConfig {
         ratePerSec = Double.isNaN(ratePerSec) || ratePerSec < 0 ? 0.0 : ratePerSec;
-        template = template == null ? Template.defaults() : template;
-    }
-
-    public PayloadGeneratorConfig() {
-        this(0.0, false, Template.defaults());
+        template = Objects.requireNonNull(template, "template");
     }
 
     public static PayloadGeneratorConfig of(double ratePerSec, boolean singleRequest, Template template) {
-        return new PayloadGeneratorConfig(ratePerSec, singleRequest, template);
+        return new PayloadGeneratorConfig(ratePerSec, singleRequest, Objects.requireNonNull(template, "template"));
     }
 
     public static PayloadGeneratorConfig copyOf(SchedulerStates.RateConfig config, Template template) {
         Objects.requireNonNull(config, "config");
-        return new PayloadGeneratorConfig(config.ratePerSec(), config.singleRequest(), template);
+        return new PayloadGeneratorConfig(config.ratePerSec(), config.singleRequest(), Objects.requireNonNull(template, "template"));
     }
 
     public record Template(
@@ -66,10 +62,6 @@ public record PayloadGeneratorConfig(
                 }
             });
             return copy.isEmpty() ? Map.of() : Collections.unmodifiableMap(copy);
-        }
-
-        public static Template defaults() {
-            return new Template("POST", "", "", "/", Map.of(), Map.of(), "");
         }
     }
 }

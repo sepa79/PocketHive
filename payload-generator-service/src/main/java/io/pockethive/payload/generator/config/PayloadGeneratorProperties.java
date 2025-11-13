@@ -19,6 +19,7 @@ public class PayloadGeneratorProperties extends CanonicalWorkerProperties<Payloa
 
     @JsonIgnore
     public PayloadGeneratorConfig defaultConfig() {
-        return toConfig(mapper).orElseGet(PayloadGeneratorConfig::new);
+        return toConfig(mapper).orElseThrow(() ->
+            new IllegalStateException("Missing pockethive.workers.payload-generator configuration"));
     }
 }
