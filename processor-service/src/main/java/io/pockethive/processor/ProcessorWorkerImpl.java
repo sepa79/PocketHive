@@ -3,6 +3,7 @@ package io.pockethive.processor;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import io.pockethive.worker.sdk.api.HttpWorkMessage;
 import io.pockethive.worker.sdk.api.PocketHiveWorkerFunction;
 import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pockethive.worker.sdk.api.WorkResult;
@@ -12,6 +13,7 @@ import io.pockethive.worker.sdk.config.WorkerCapability;
 import io.pockethive.worker.sdk.config.WorkerInputType;
 import io.pockethive.worker.sdk.config.WorkerOutputType;
 import java.net.URI;
+import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -45,8 +47,9 @@ import org.springframework.stereotype.Component;
  *   "enabled": true
  * }}</pre></li>
  * </ul>
- * Once configured, the worker performs an outbound HTTP call using the payload's {@code path},
- * {@code method}, {@code headers}, and {@code body} fields. Success and failure paths both emit a
+ * Once configured, the worker performs an outbound HTTP call using the {@link HttpWorkMessage}
+ * envelope provided by upstream workers (method, url/baseUrl+path, query, headers, body). It falls
+ * back to the legacy generator schema when the envelope is missing. Success and failure paths both emit a
  * {@link WorkResult} to the configured final routing key
  * ({@code pockethive.outputs.rabbit.routing-key}), and the runtime's observability interceptor adds the hop
  * metadata so downstream services can trace the request.
@@ -141,6 +144,67 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
 
   private WorkMessage invokeHttp(WorkMessage message, ProcessorWorkerConfig config, WorkerContext context)
       throws Exception {
+    try {
+      HttpWorkMessage envelope = message.asJson(HttpWorkMessage.class);
+      return executeEnvelope(envelope, config, context);
+    } catch (IllegalStateException ex) {
+      // Fall back to legacy payloads that emit arbitrary JSON.
+      return invokeLegacyPayload(message, config, context);
+    }
+  }
+
+  private WorkMessage executeEnvelope(HttpWorkMessage envelope, ProcessorWorkerConfig config, WorkerContext context)
+      throws Exception {
+    Logger logger = context.logger();
+    URI target = resolveTarget(envelope, config);
+    if (target == null) {
+      logger.warn("Unable to resolve target URL (envelopeUrl={}, baseUrl={}, path={})",
+          envelope.url(), envelope.baseUrl(), envelope.path());
+      return buildError(context, "invalidUrl", CallMetrics.failure(0, -1));
+    }
+
+    HttpRequest.Builder requestBuilder = HttpRequest.newBuilder(target);
+    envelope.headers().forEach(requestBuilder::header);
+    Optional<String> body = Optional.ofNullable(envelope.body()).filter(b -> !b.isBlank());
+    HttpRequest.BodyPublisher publisher = body
+        .map(value -> HttpRequest.BodyPublishers.ofString(value, StandardCharsets.UTF_8))
+        .orElse(HttpRequest.BodyPublishers.noBody());
+    String method = envelope.method();
+    requestBuilder.method(method, publisher);
+
+    logger.debug("HTTP {} {} headers={} body={}", method, target, envelope.headers(), body.orElse(""));
+
+    long start = clock.millis();
+    try {
+      HttpResponse<String> response = httpClient.send(requestBuilder.build(), HttpResponse.BodyHandlers.ofString());
+      long duration = Math.max(0L, clock.millis() - start);
+      logger.debug("HTTP {} {} -> {}", method, target, response.statusCode());
+
+      boolean success = isSuccessful(response.statusCode());
+      CallMetrics metrics = success
+          ? CallMetrics.success(duration, response.statusCode())
+          : CallMetrics.failure(duration, response.statusCode());
+      recordCall(metrics);
+
+      ObjectNode result = MAPPER.createObjectNode();
+      result.put("status", response.statusCode());
+      result.set("headers", MAPPER.valueToTree(response.headers().map()));
+      result.put("body", response.body());
+
+      return applyCallHeaders(WorkMessage.json(result)
+          .header("content-type", "application/json")
+          .header("x-ph-service", context.info().role()), metrics)
+          .build();
+    } catch (Exception ex) {
+      long duration = Math.max(0L, clock.millis() - start);
+      CallMetrics metrics = CallMetrics.failure(duration, -1);
+      recordCall(metrics);
+      throw new ProcessorCallException(metrics, ex);
+    }
+  }
+
+  private WorkMessage invokeLegacyPayload(WorkMessage message, ProcessorWorkerConfig config, WorkerContext context)
+      throws Exception {
     Logger logger = context.logger();
     JsonNode node = message.asJsonNode();
     String baseUrl = config.baseUrl();
@@ -198,6 +262,93 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
       recordCall(metrics);
       throw new ProcessorCallException(metrics, ex);
     }
+  }
+
+  private URI resolveTarget(HttpWorkMessage envelope, ProcessorWorkerConfig config) {
+    String directUrl = normalize(envelope.url());
+    Map<String, String> query = envelope.query();
+    if (directUrl != null) {
+      return buildUri(applyQuery(directUrl, query));
+    }
+    String base = firstNonBlank(envelope.baseUrl(), config.baseUrl());
+    if (base == null || base.isBlank()) {
+      return null;
+    }
+    String path = normalizePath(envelope.path());
+    String combined = concatenate(base, path);
+    return buildUri(applyQuery(combined, query));
+  }
+
+  private String applyQuery(String url, Map<String, String> query) {
+    if (query == null || query.isEmpty()) {
+      return url;
+    }
+    StringBuilder builder = new StringBuilder(url);
+    builder.append(url.contains("?") ? "&" : "?");
+    boolean first = true;
+    for (Map.Entry<String, String> entry : query.entrySet()) {
+      if (!first) {
+        builder.append("&");
+      }
+      first = false;
+      String key = encode(entry.getKey());
+      String value = encode(entry.getValue());
+      builder.append(key);
+      builder.append("=");
+      builder.append(value);
+    }
+    return builder.toString();
+  }
+
+  private URI buildUri(String target) {
+    try {
+      return URI.create(target);
+    } catch (IllegalArgumentException ex) {
+      return null;
+    }
+  }
+
+  private static String encode(String value) {
+    if (value == null) {
+      return "";
+    }
+    return URLEncoder.encode(value, StandardCharsets.UTF_8);
+  }
+
+  private static String concatenate(String base, String path) {
+    if (path == null || path.isBlank()) {
+      return base;
+    }
+    if (base.endsWith("/") && path.startsWith("/")) {
+      return base + path.substring(1);
+    }
+    if (!base.endsWith("/") && !path.startsWith("/")) {
+      return base + "/" + path;
+    }
+    return base + path;
+  }
+
+  private static String normalize(String value) {
+    if (value == null) {
+      return null;
+    }
+    String trimmed = value.trim();
+    return trimmed.isEmpty() ? null : trimmed;
+  }
+
+  private static String normalizePath(String path) {
+    if (path == null || path.isBlank()) {
+      return "";
+    }
+    return path.trim();
+  }
+
+  private static String firstNonBlank(String primary, String fallback) {
+    String normalizedPrimary = normalize(primary);
+    if (normalizedPrimary != null) {
+      return normalizedPrimary;
+    }
+    return normalize(fallback);
   }
 
   private URI resolveTarget(String baseUrl, String path) {

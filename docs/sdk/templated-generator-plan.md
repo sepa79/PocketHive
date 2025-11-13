@@ -54,6 +54,7 @@ flowchart TD
 - [x] Create a new worker module/service for PayloadGenerator and wire Pebble with Spring-friendly configuration.
 - [x] Implement a reusable templating helper invoked from `onMessage` so future plugins can share the same logic.
 - [x] Support body + header template fields per worker (status template support still TBD).
+- [ ] Emit a canonical `HttpWorkMessage` JSON envelope (method, URL parts, headers, body) so downstream HTTP processors can execute the request verbatim. The payload generator must produce this envelope instead of raw text, and any future HTTP worker will deserialize it as its contract.
 - [ ] Resolve templates against the `WorkMessage seed` + helper context (expose seed headers/payload). Scheduler input should inject a tick header so templates can reference it directly, and dataset/provider details stay hidden from the worker.
 - [x] Emit WorkMessage with templated payload + headers (including dataset provenance) and keep existing control-plane reporting.
 

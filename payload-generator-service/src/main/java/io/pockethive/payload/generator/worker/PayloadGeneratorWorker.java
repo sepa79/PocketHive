@@ -3,6 +3,7 @@ package io.pockethive.payload.generator.worker;
 import io.pockethive.payload.generator.config.PayloadGeneratorConfig;
 import io.pockethive.payload.generator.config.PayloadGeneratorProperties;
 import io.pockethive.payload.generator.runtime.PayloadTemplateRenderer;
+import io.pockethive.worker.sdk.api.HttpWorkMessage;
 import io.pockethive.worker.sdk.api.PocketHiveWorkerFunction;
 import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pockethive.worker.sdk.api.WorkResult;
@@ -41,11 +42,12 @@ public class PayloadGeneratorWorker implements PocketHiveWorkerFunction {
         PayloadGeneratorConfig defaultConfig = properties.defaultConfig();
         PayloadGeneratorProperties.Template template = properties.getTemplate();
         log.info(
-            "payloadGeneratorWorker initialized (defaultRatePerSec={}, singleRequest={}, templateBodyLength={}, headerTemplateCount={})",
+            "payloadGeneratorWorker initialized (defaultRatePerSec={}, singleRequest={}, bodyLength={}, headerTemplates={}, queryTemplates={})",
             defaultConfig.ratePerSec(),
             defaultConfig.singleRequest(),
             template.getBody() == null ? 0 : template.getBody().length(),
-            template.getHeaders() == null ? 0 : template.getHeaders().size()
+            template.getHeaders() == null ? 0 : template.getHeaders().size(),
+            template.getQuery() == null ? 0 : template.getQuery().size()
         );
     }
 
@@ -74,18 +76,32 @@ public class PayloadGeneratorWorker implements PocketHiveWorkerFunction {
 
         // Pebble renders the configured template (`pockethive.workers.payload-generator.template.body/headers`)
         // using the incoming seed (available as `seed.body` and `seed.headers`, see https://pebbletemplates.io/).
-        PayloadTemplateRenderer.RenderedMessage rendered = templateRenderer.render(seed);
+        PayloadTemplateRenderer.RenderedRequest rendered = templateRenderer.render(seed);
+        HttpWorkMessage httpMessage = new HttpWorkMessage(
+            rendered.method(),
+            rendered.url(),
+            rendered.baseUrl(),
+            rendered.path(),
+            rendered.query(),
+            rendered.headers(),
+            rendered.body()
+        );
 
         // Publish live status so operators can observe current generation settings.
         context.statusPublisher()
             .update(status -> status
                 .data("ratePerSec", config.ratePerSec())
                 .data("singleRequest", config.singleRequest())
-                .data("templateBodyLength", rendered.body().length()));
+                .data("method", httpMessage.method())
+                .data("target", httpMessage.url() != null && !httpMessage.url().isBlank()
+                    ? httpMessage.url()
+                    : httpMessage.path())
+                .data("templateBodyLength", rendered.body() == null ? 0 : rendered.body().length()));
 
-        // Build a new work message from the rendered payload while preserving its headers.
-        WorkMessage.Builder builder = WorkMessage.text(rendered.body());
-        rendered.headers().forEach(builder::header);
+        // Build a new work message from the rendered HTTP envelope.
+        WorkMessage.Builder builder = WorkMessage.json(httpMessage)
+            .header("content-type", "application/json")
+            .header("x-ph-http-envelope", "1");
         return WorkResult.message(builder.build());
     }
 }

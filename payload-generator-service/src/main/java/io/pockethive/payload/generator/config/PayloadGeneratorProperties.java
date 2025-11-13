@@ -37,8 +37,53 @@ public class PayloadGeneratorProperties extends CanonicalWorkerProperties<Payloa
 
     public static final class Template {
 
+        private String method = "POST";
+        private String url = "";
+        private String baseUrl = "";
+        private String path = "/";
+        private Map<String, String> query = Collections.emptyMap();
         private String body = "{{ seed.body | default('Hello from PayloadGenerator') }}";
         private Map<String, String> headers = Collections.emptyMap();
+
+        public String getMethod() {
+            return method;
+        }
+
+        public void setMethod(String method) {
+            this.method = method == null ? "" : method;
+        }
+
+        public String getUrl() {
+            return url;
+        }
+
+        public void setUrl(String url) {
+            this.url = url == null ? "" : url;
+        }
+
+        public String getBaseUrl() {
+            return baseUrl;
+        }
+
+        public void setBaseUrl(String baseUrl) {
+            this.baseUrl = baseUrl == null ? "" : baseUrl;
+        }
+
+        public String getPath() {
+            return path;
+        }
+
+        public void setPath(String path) {
+            this.path = path == null ? "/" : path;
+        }
+
+        public Map<String, String> getQuery() {
+            return query;
+        }
+
+        public void setQuery(Map<String, String> query) {
+            this.query = query == null ? Collections.emptyMap() : Map.copyOf(query);
+        }
 
         public String getBody() {
             return body;
@@ -54,6 +99,10 @@ public class PayloadGeneratorProperties extends CanonicalWorkerProperties<Payloa
 
         public void setHeaders(Map<String, String> headers) {
             this.headers = headers == null ? Collections.emptyMap() : Map.copyOf(headers);
+        }
+
+        public void setPayload(String payload) {
+            setBody(payload);
         }
     }
 }

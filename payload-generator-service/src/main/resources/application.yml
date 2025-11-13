@@ -22,6 +22,9 @@ pockethive:
         ratePerSec: 1.0
         singleRequest: false
       template:
+        method: POST
+        base-url: http://wiremock:8080
+        path: /soap
         body: |
           <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
                             xmlns:req="http://example.com/req/v1">
