@@ -1,0 +1,42 @@
+services:
+  swarm-controller:
+    build:
+      context: .
+      dockerfile: Dockerfile.bees.local
+      target: swarm-controller
+
+  generator:
+    build:
+      context: .
+      dockerfile: Dockerfile.bees.local
+      target: generator
+
+  payload-generator:
+    build:
+      context: .
+      dockerfile: Dockerfile.bees.local
+      target: payload-generator
+
+  moderator:
+    build:
+      context: .
+      dockerfile: Dockerfile.bees.local
+      target: moderator
+
+  processor:
+    build:
+      context: .
+      dockerfile: Dockerfile.bees.local
+      target: processor
+
+  postprocessor:
+    build:
+      context: .
+      dockerfile: Dockerfile.bees.local
+      target: postprocessor
+
+  trigger:
+    build:
+      context: .
+      dockerfile: Dockerfile.bees.local
+      target: trigger

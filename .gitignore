@@ -28,10 +28,10 @@ dependency-reduced-pom.xml
 # --- Docker / Compose ---
 .env
 docker-data/
+.local-bee-artifacts/
 
 # --- Node / Frontend (future-proof) ---
 node_modules/
 dist/
 build/
 *.map
-

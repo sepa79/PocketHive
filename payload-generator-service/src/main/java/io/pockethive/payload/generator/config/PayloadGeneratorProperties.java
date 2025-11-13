@@ -1,22 +1,25 @@
 package io.pockethive.payload.generator.config;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import io.pockethive.worker.sdk.config.CanonicalWorkerProperties;
 import java.util.Collections;
 import java.util.Map;
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.stereotype.Component;
 
+@Component
 @ConfigurationProperties(prefix = "pockethive.workers.payload-generator")
-public class PayloadGeneratorProperties {
+public class PayloadGeneratorProperties extends CanonicalWorkerProperties<PayloadGeneratorConfig> {
 
-    private Scheduler scheduler = new Scheduler();
+    private static final PayloadGeneratorConfig FALLBACK = new PayloadGeneratorConfig(1.0, false);
+
+    private final ObjectMapper mapper;
     private Template template = new Template();
 
-    public Scheduler getScheduler() {
-        return scheduler;
-    }
-
-    public void setScheduler(Scheduler scheduler) {
-        this.scheduler = scheduler == null ? new Scheduler() : scheduler;
+    public PayloadGeneratorProperties(ObjectMapper mapper) {
+        super("payload-generator", PayloadGeneratorConfig.class, mapper);
+        this.mapper = mapper;
     }
 
     public Template getTemplate() {
@@ -29,29 +32,7 @@ public class PayloadGeneratorProperties {
 
     @JsonIgnore
     public PayloadGeneratorConfig defaultConfig() {
-        return PayloadGeneratorConfig.of(scheduler.ratePerSec, scheduler.singleRequest);
-    }
-
-    public static final class Scheduler {
-
-        private double ratePerSec = 1.0;
-        private boolean singleRequest;
-
-        public double getRatePerSec() {
-            return ratePerSec;
-        }
-
-        public void setRatePerSec(double ratePerSec) {
-            this.ratePerSec = Double.isNaN(ratePerSec) || ratePerSec < 0 ? 0.0 : ratePerSec;
-        }
-
-        public boolean isSingleRequest() {
-            return singleRequest;
-        }
-
-        public void setSingleRequest(boolean singleRequest) {
-            this.singleRequest = singleRequest;
-        }
+        return toConfig(mapper).orElse(FALLBACK);
     }
 
     public static final class Template {

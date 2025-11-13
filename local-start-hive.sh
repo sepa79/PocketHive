@@ -6,8 +6,13 @@ cd "${SCRIPT_DIR}"
 
 CORE_SERVICES=(rabbitmq log-aggregator scenario-manager orchestrator ui prometheus grafana loki wiremock)
 BEE_SERVICES=(swarm-controller generator payload-generator moderator processor postprocessor trigger)
-DEFAULT_STAGES=(clean build-core build-bees start push)
-ALL_STAGES=("${DEFAULT_STAGES[@]}" restart)
+BEE_MODULES=(swarm-controller-service generator-service payload-generator-service moderator-service processor-service postprocessor-service trigger-service)
+DEFAULT_STAGES=(clean build-core build-bees start)
+ALL_STAGES=("${DEFAULT_STAGES[@]}" push restart)
+
+LOCAL_ARTIFACTS_DIR="${LOCAL_ARTIFACTS_DIR:-.local-bee-artifacts}"
+MAVEN_CLI_OPTS="${MAVEN_CLI_OPTS:--q -B -DskipTests}"
+COMPOSE_FILES=(-f docker-compose.yml -f docker-compose.local.yml)
 
 declare -A STAGE_TIMES
 SERVICE_ARGS=()
@@ -23,21 +28,22 @@ Usage: $(basename "$0") [stage ...]
 Stages:
   clean        Stop the compose stack and remove stray swarm containers.
   build-core   Build core PocketHive service images (RabbitMQ, UI, etc.).
-  build-bees   Build swarm controller and bee images.
+  build-bees   Package bee jars locally, then build lightweight images.
   push         Push images to configured registry.
   start        Launch the PocketHive stack via docker compose up -d.
   restart      Rebuild and restart only the services listed after '--'.
 
 Environment Variables:
-  DOCKER_REGISTRY       Registry prefix (e.g., 'myregistry.io/' or 'localhost:5000/')
-  POCKETHIVE_VERSION    Image tag version (default: latest)
+  MAVEN_CLI_OPTS        Maven options for packaging bees (default: "${MAVEN_CLI_OPTS}").
+  LOCAL_ARTIFACTS_DIR   Directory for staged bee jars (default: ${LOCAL_ARTIFACTS_DIR}).
+  DOCKER_REGISTRY       Registry prefix (e.g., 'myregistry.io/' or 'localhost:5000/').
+  POCKETHIVE_VERSION    Image tag version (default: latest).
 
 Examples:
   $(basename "$0")                                    Run default stages (${DEFAULT_STAGES[*]}).
   $(basename "$0") clean start                        Only clean and start (skip builds).
-  $(basename "$0") build-bees                         Build bee images only.
-  $(basename "$0") restart -- grafana ui              Rebuild + restart only Grafana and UI.
-  DOCKER_REGISTRY=myregistry.io/ $(basename "$0") push  Push to external registry.
+  $(basename "$0") build-bees                         Package jars locally and rebuild bees.
+  $(basename "$0") restart -- payload-generator        Rebuild + restart payload-generator only.
 USAGE
 }
 
@@ -50,6 +56,14 @@ require_tools() {
     echo "Docker Compose V2 is required (docker compose command)." >&2
     exit 1
   fi
+  if ! command -v mvn >/dev/null 2>&1; then
+    echo "Maven is required for local bee packaging." >&2
+    exit 1
+  fi
+}
+
+compose() {
+  docker compose "${COMPOSE_FILES[@]}" "$@"
 }
 
 stage_header() {
@@ -61,6 +75,32 @@ stage_header() {
 format_duration() {
   local seconds=$1
   printf "%dm %ds" $((seconds / 60)) $((seconds % 60))
+}
+
+package_bee_jars() {
+  echo "Packaging bee modules locally (${MAVEN_CLI_OPTS})"
+  local modules_csv
+  modules_csv=$(IFS=,; echo "${BEE_MODULES[*]}")
+  mvn ${MAVEN_CLI_OPTS} -pl "${modules_csv}" -am package
+
+  rm -rf "${LOCAL_ARTIFACTS_DIR}"
+  mkdir -p "${LOCAL_ARTIFACTS_DIR}"
+
+  for module in "${BEE_MODULES[@]}"; do
+    if [[ ! -d "${module}/target" ]]; then
+      echo "Module ${module} has no target directory (build failed?)." >&2
+      exit 1
+    fi
+    local jar_path
+    jar_path=$(find "${module}/target" -maxdepth 1 -type f -name '*.jar' \
+      ! -name '*-sources.jar' ! -name '*-javadoc.jar' ! -name 'original-*.jar' -print -quit)
+    if [[ -z "${jar_path}" ]]; then
+      echo "Unable to locate packaged jar for ${module}" >&2
+      exit 1
+    fi
+    cp "${jar_path}" "${LOCAL_ARTIFACTS_DIR}/${module}.jar"
+    echo " - Staged ${module} → ${LOCAL_ARTIFACTS_DIR}/${module}.jar"
+  done
 }
 
 run_clean() {
@@ -80,17 +120,18 @@ run_clean() {
   fi
 
   echo "Stopping docker compose services..."
-  docker compose down --remove-orphans
+  compose down --remove-orphans || true
 }
 
 run_build_core() {
   stage_header "Building core PocketHive services"
-  docker compose build "${CORE_SERVICES[@]}"
+  compose build "${CORE_SERVICES[@]}"
 }
 
 run_build_bees() {
-  stage_header "Building swarm controller and bee images"
-  docker compose --profile bees build "${BEE_SERVICES[@]}"
+  stage_header "Building swarm controller and bee images (local jars)"
+  package_bee_jars
+  compose --profile bees build "${BEE_SERVICES[@]}"
 }
 
 run_push() {
@@ -100,23 +141,23 @@ run_push() {
     return 0
   fi
   echo "Pushing to registry: ${DOCKER_REGISTRY}"
-  docker compose push "${CORE_SERVICES[@]}"
-  docker compose --profile bees push "${BEE_SERVICES[@]}"
+  compose push "${CORE_SERVICES[@]}"
+  compose --profile bees push "${BEE_SERVICES[@]}"
 }
 
 run_start() {
   stage_header "Starting PocketHive stack"
-  docker compose up -d
+  compose up -d
 }
 
 run_restart() {
   if [[ ${#SERVICE_ARGS[@]} -eq 0 ]]; then
-    echo "restart stage requires service names after '--' (e.g. ./start-hive.sh restart -- grafana ui)" >&2
+    echo "restart stage requires service names after '--' (e.g. ./local-start-hive.sh restart -- grafana ui)" >&2
     exit 1
   fi
   stage_header "Restarting services: ${SERVICE_ARGS[*]}"
-  docker compose build "${SERVICE_ARGS[@]}"
-  docker compose up -d "${SERVICE_ARGS[@]}"
+  compose build "${SERVICE_ARGS[@]}"
+  compose up -d "${SERVICE_ARGS[@]}"
 }
 
 resolve_stages() {
@@ -165,7 +206,7 @@ resolve_stages() {
 run_stage() {
   local stage="$1"
   local start_time=$(date +%s)
-  
+
   case "$stage" in
     clean) run_clean ;;
     build-core) run_build_core ;;
@@ -175,7 +216,7 @@ run_stage() {
     restart) run_restart ;;
     *) echo "Unknown stage: $stage" >&2; exit 1 ;;
   esac
-  
+
   local end_time=$(date +%s)
   STAGE_TIMES["$stage"]=$((end_time - start_time))
 }
@@ -185,7 +226,7 @@ main() {
   resolve_stages "$@"
 
   local total_start=$(date +%s)
-  
+
   for stage in "${SELECTED_STAGES[@]}"; do
     run_stage "$stage"
   done
@@ -201,7 +242,7 @@ main() {
   echo "  ────────────────────"
   printf "  %-12s %s\n" "Total:" "$(format_duration $total_time)"
   echo
-  echo "PocketHive stack setup complete."
+  echo "PocketHive local stack setup complete."
 }
 
 main "$@"

@@ -230,7 +230,8 @@ services:
     image: ${DOCKER_REGISTRY:-}swarm-controller:${POCKETHIVE_VERSION:-latest}
     build:
       context: .
-      dockerfile: swarm-controller-service/Dockerfile
+      dockerfile: Dockerfile.bees
+      target: swarm-controller
     environment:
       <<: *metrics-env
       RABBITMQ_HOST: rabbitmq
@@ -246,7 +247,8 @@ services:
     image: ${DOCKER_REGISTRY:-}generator:${POCKETHIVE_VERSION:-latest}
     build:
       context: .
-      dockerfile: generator-service/Dockerfile
+      dockerfile: Dockerfile.bees
+      target: generator
     environment:
       <<: *metrics-env
       RABBITMQ_HOST: rabbitmq
@@ -264,7 +266,8 @@ services:
     image: ${DOCKER_REGISTRY:-}payload-generator:${POCKETHIVE_VERSION:-latest}
     build:
       context: .
-      dockerfile: payload-generator-service/Dockerfile
+      dockerfile: Dockerfile.bees
+      target: payload-generator
     environment:
       <<: *metrics-env
       RABBITMQ_HOST: rabbitmq
@@ -282,7 +285,8 @@ services:
     image: ${DOCKER_REGISTRY:-}moderator:${POCKETHIVE_VERSION:-latest}
     build:
       context: .
-      dockerfile: moderator-service/Dockerfile
+      dockerfile: Dockerfile.bees
+      target: moderator
     environment:
       <<: *metrics-env
       RABBITMQ_HOST: rabbitmq
@@ -300,7 +304,8 @@ services:
     image: ${DOCKER_REGISTRY:-}processor:${POCKETHIVE_VERSION:-latest}
     build:
       context: .
-      dockerfile: processor-service/Dockerfile
+      dockerfile: Dockerfile.bees
+      target: processor
     environment:
       <<: *metrics-env
       RABBITMQ_HOST: rabbitmq
@@ -318,7 +323,8 @@ services:
     image: ${DOCKER_REGISTRY:-}postprocessor:${POCKETHIVE_VERSION:-latest}
     build:
       context: .
-      dockerfile: postprocessor-service/Dockerfile
+      dockerfile: Dockerfile.bees
+      target: postprocessor
     environment:
       <<: *metrics-env
       RABBITMQ_HOST: rabbitmq
@@ -336,7 +342,8 @@ services:
     image: ${DOCKER_REGISTRY:-}trigger:${POCKETHIVE_VERSION:-latest}
     build:
       context: .
-      dockerfile: trigger-service/Dockerfile
+      dockerfile: Dockerfile.bees
+      target: trigger
     environment:
       <<: *metrics-env
       RABBITMQ_HOST: rabbitmq

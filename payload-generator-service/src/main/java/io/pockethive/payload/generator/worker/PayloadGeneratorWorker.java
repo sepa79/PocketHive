@@ -11,6 +11,9 @@ import io.pockethive.worker.sdk.config.PocketHiveWorker;
 import io.pockethive.worker.sdk.config.WorkerCapability;
 import io.pockethive.worker.sdk.config.WorkerInputType;
 import io.pockethive.worker.sdk.config.WorkerOutputType;
+import java.util.Map;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 @Component("payloadGeneratorWorker")
@@ -23,6 +26,8 @@ import org.springframework.stereotype.Component;
 )
 public class PayloadGeneratorWorker implements PocketHiveWorkerFunction {
 
+    private static final Logger log = LoggerFactory.getLogger(PayloadGeneratorWorker.class);
+
     private final PayloadGeneratorProperties properties;
     private final PayloadTemplateRenderer templateRenderer;
 
@@ -32,6 +37,16 @@ public class PayloadGeneratorWorker implements PocketHiveWorkerFunction {
     ) {
         this.properties = properties;
         this.templateRenderer = templateRenderer;
+
+        PayloadGeneratorConfig defaultConfig = properties.defaultConfig();
+        PayloadGeneratorProperties.Template template = properties.getTemplate();
+        log.info(
+            "payloadGeneratorWorker initialized (defaultRatePerSec={}, singleRequest={}, templateBodyLength={}, headerTemplateCount={})",
+            defaultConfig.ratePerSec(),
+            defaultConfig.singleRequest(),
+            template.getBody() == null ? 0 : template.getBody().length(),
+            template.getHeaders() == null ? 0 : template.getHeaders().size()
+        );
     }
 
     @Override
@@ -39,6 +54,23 @@ public class PayloadGeneratorWorker implements PocketHiveWorkerFunction {
         // Pull worker config from the context or fall back to defaults.
         PayloadGeneratorConfig config = context.config(PayloadGeneratorConfig.class)
             .orElseGet(properties::defaultConfig);
+
+        Map<String, Object> headers = seed.headers();
+        Object correlationId = headers.get("correlationId");
+        if (correlationId == null) {
+            correlationId = headers.get("correlation-id");
+        }
+        if (correlationId == null) {
+            correlationId = "n/a";
+        }
+
+        log.info(
+            "payloadGeneratorWorker processing seed (instance={}, correlationId={}, ratePerSec={}, singleRequest={})",
+            context.info().instanceId(),
+            correlationId,
+            config.ratePerSec(),
+            config.singleRequest()
+        );
 
         // Pebble renders the configured template (`pockethive.workers.payload-generator.template.body/headers`)
         // using the incoming seed (available as `seed.body` and `seed.headers`, see https://pebbletemplates.io/).
