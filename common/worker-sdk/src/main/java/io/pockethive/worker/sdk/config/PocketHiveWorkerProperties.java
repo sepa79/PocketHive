@@ -5,6 +5,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.Supplier;
 
 /**
  * Base configuration bean that captures worker-specific defaults under {@code pockethive.workers.<role>}.
@@ -17,20 +18,20 @@ import java.util.Optional;
  */
 public abstract class PocketHiveWorkerProperties<T> {
 
-    private final String role;
+    private final Supplier<String> roleSupplier;
     private final Class<T> configType;
     /**
      * Worker-specific configuration payload bound from {@code pockethive.workers.<role>.config.*}.
      */
     private Map<String, Object> config = new LinkedHashMap<>();
 
-    protected PocketHiveWorkerProperties(String role, Class<T> configType) {
-        this.role = normaliseRole(role);
+    protected PocketHiveWorkerProperties(Supplier<String> roleSupplier, Class<T> configType) {
+        this.roleSupplier = Objects.requireNonNull(roleSupplier, "roleSupplier");
         this.configType = Objects.requireNonNull(configType, "configType");
     }
 
     public String role() {
-        return role;
+        return normaliseRole(roleSupplier.get());
     }
 
     public Class<T> configType() {
@@ -79,7 +80,7 @@ public abstract class PocketHiveWorkerProperties<T> {
             return Optional.of(mapper.convertValue(raw, configType));
         } catch (IllegalArgumentException ex) {
             String message = "Unable to convert worker defaults for role '%s' to %s"
-                .formatted(role, configType.getSimpleName());
+                .formatted(role(), configType.getSimpleName());
             throw new IllegalStateException(message, ex);
         }
     }

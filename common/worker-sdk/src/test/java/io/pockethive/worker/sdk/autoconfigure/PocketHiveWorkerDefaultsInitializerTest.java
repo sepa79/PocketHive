@@ -88,18 +88,18 @@ class PocketHiveWorkerDefaultsInitializerTest {
 
     @Test
     void throwsWhenRoleMissing() {
-        assertThatThrownBy(() -> new TestWorkerProperties("", TestWorkerConfig.class))
+        assertThatThrownBy(() -> new TestWorkerProperties(() -> " ", TestWorkerConfig.class))
             .isInstanceOf(IllegalArgumentException.class);
     }
 
     private static final class TestWorkerProperties extends PocketHiveWorkerProperties<TestWorkerConfig> {
 
         TestWorkerProperties() {
-            this("test-role", TestWorkerConfig.class);
+            this(() -> "test-role", TestWorkerConfig.class);
         }
 
-        TestWorkerProperties(String role, Class<TestWorkerConfig> type) {
-            super(role, type);
+        TestWorkerProperties(java.util.function.Supplier<String> roleSupplier, Class<TestWorkerConfig> type) {
+            super(roleSupplier, type);
         }
     }
 
