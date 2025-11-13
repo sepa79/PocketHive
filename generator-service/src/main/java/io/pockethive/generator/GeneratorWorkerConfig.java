@@ -3,6 +3,7 @@ package io.pockethive.generator;
 import io.pockethive.worker.sdk.input.SchedulerStates;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 
 public record GeneratorWorkerConfig(
     double ratePerSec,
@@ -12,12 +13,10 @@ public record GeneratorWorkerConfig(
 
   public GeneratorWorkerConfig {
     ratePerSec = Double.isNaN(ratePerSec) || ratePerSec < 0 ? 0.0 : ratePerSec;
-    message = message == null ? Message.defaults() : message;
+    Objects.requireNonNull(message, "message");
   }
 
   public record Message(String path, String method, String body, Map<String, String> headers) {
-
-    private static final Message DEFAULT = new Message("/", "GET", "", Map.of());
 
     public Message {
       path = normalizePath(path);
@@ -38,10 +37,6 @@ public record GeneratorWorkerConfig(
         return "GET";
       }
       return value.trim().toUpperCase(Locale.ROOT);
-    }
-
-    static Message defaults() {
-      return DEFAULT;
     }
   }
 }
