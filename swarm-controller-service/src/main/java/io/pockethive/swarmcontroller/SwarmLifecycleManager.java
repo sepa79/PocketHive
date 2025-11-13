@@ -97,7 +97,6 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
   private final Map<String, List<String>> instancesByRole = new HashMap<>();
   private final Map<String, Long> lastSeen = new HashMap<>();
   private final Map<String, Boolean> enabled = new HashMap<>();
-  private volatile Boolean desiredEnablement = Boolean.FALSE;
   private final ConcurrentMap<String, AtomicLong> queueDepthValues = new ConcurrentHashMap<>();
   private final ConcurrentMap<String, Gauge> queueDepthGauges = new ConcurrentHashMap<>();
   private final ConcurrentMap<String, AtomicInteger> queueConsumerValues = new ConcurrentHashMap<>();
@@ -415,7 +414,6 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
   void updateHeartbeat(String role, String instance, long timestamp) {
     lastSeen.put(role + "." + instance, timestamp);
     publishBootstrapConfigIfNecessary(role, instance);
-    publishEnablementIfNecessary(role, instance);
   }
 
   /**
@@ -1015,7 +1013,6 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
    */
   @Override
   public synchronized void setSwarmEnabled(boolean enabledFlag) {
-    desiredEnablement = enabledFlag;
     if (enabledFlag) {
       enableAll();
     } else {
@@ -1142,25 +1139,6 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
         force ? " (initial)" : " (retry)");
     publishConfigUpdate(payload, "bootstrap-config");
     pending.markPublished(now);
-  }
-
-  private void publishEnablementIfNecessary(String role, String instance) {
-    Boolean desired = desiredEnablement;
-    if (desired == null) {
-      return;
-    }
-    Boolean reported = enabled.get(role + "." + instance);
-    if (Objects.equals(reported, desired)) {
-      return;
-    }
-    var payload = mapper.createObjectNode();
-    payload.put("enabled", desired);
-    payload.put("commandTarget", "INSTANCE");
-    payload.put("role", role);
-    payload.put("instance", instance);
-    String context = desired ? "enable-instance" : "disable-instance";
-    log.info("Publishing {} for role={} instance={}", context, role, instance);
-    publishConfigUpdate(payload, context);
   }
 
   private CommandTarget parseCommandTarget(String value, String context) {
