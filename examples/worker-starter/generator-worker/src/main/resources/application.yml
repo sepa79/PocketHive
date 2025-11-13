@@ -3,9 +3,6 @@ spring:
     name: generator-worker-starter
 
 pockethive:
-  worker:
-    inputs:
-      autowire: true
   inputs:
     scheduler:
       enabled: true
@@ -19,7 +16,7 @@ pockethive:
     instance-id: ${POCKETHIVE_CONTROL_PLANE_INSTANCE_ID:generator-1}
     control-queue-prefix: ph.control
     worker:
-      role: generator
+      role: ${POCKETHIVE_CONTROL_PLANE_WORKER_ROLE}
   workers:
     generator:
       config:

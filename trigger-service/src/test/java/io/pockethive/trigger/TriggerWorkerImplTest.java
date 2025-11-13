@@ -47,6 +47,7 @@ class TriggerWorkerImplTest {
     properties.setConfig(Map.of(
         "intervalMs", 500,
         "actionType", "rest",
+        "command", "noop",
         "url", "https://example.com",
         "method", "POST",
         "body", "{}\n",
@@ -68,7 +69,7 @@ class TriggerWorkerImplTest {
         1000L,
         false,
         "rest",
-        "",
+        "noop",
         "https://service.test",
         "put",
         "{\"a\":1}",

@@ -4,6 +4,7 @@ import io.pockethive.worker.sdk.config.WorkerInputType;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -46,7 +47,7 @@ public final class WorkerRegistry {
      * Returns a stream of worker definitions registered for the given role.
      */
     public Stream<WorkerDefinition> streamByRole(String role) {
-        String resolvedRole = requireText(role, "role");
+        String resolvedRole = requireText(role, "role").trim().toLowerCase(Locale.ROOT);
         return workers.values().stream().filter(definition -> resolvedRole.equals(definition.role()));
     }
 

@@ -92,7 +92,6 @@ class PocketHiveWorkerSdkAutoConfigurationQueueResolutionTest {
             "management.prometheus.metrics.export.pushgateway.job=worker-sdk-test",
             "management.prometheus.metrics.export.pushgateway.shutdown-operation=DELETE",
             "management.prometheus.metrics.export.pushgateway.grouping-key.instance=test-worker",
-            "pockethive.worker.inputs.autowire=false",
             "pockethive.inputs.rabbit.queue=ph.swarm-alpha.mod",
             "pockethive.outputs.rabbit.exchange=ph.swarm-alpha.hive",
             "pockethive.outputs.rabbit.routingKey=ph.swarm-alpha.final"
@@ -129,7 +128,6 @@ class PocketHiveWorkerSdkAutoConfigurationQueueResolutionTest {
     }
 
     @PocketHiveWorker(
-        role = "processor",
         input = WorkerInputType.RABBITMQ,
         output = WorkerOutputType.RABBITMQ
     )

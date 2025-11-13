@@ -36,7 +36,7 @@ pockethive:
     swarm-id: swarm-1
     instance-id: processor-1
     worker:
-      role: processor
+      role: ${POCKETHIVE_CONTROL_PLANE_WORKER_ROLE}
   inputs:
     rabbit:
       queue: ph.swarm-1.mod
@@ -53,14 +53,14 @@ See the [control-plane worker guide](../control-plane/worker-guide.md#configurat
 
 Annotate each business implementation with `@PocketHiveWorker`. Select the appropriate input binding (`RABBIT` by
 default, `SCHEDULER` for timer-driven workers). Queue metadata now flows solely from the control-plane plan via the
-`pockethive.inputs/outputs.*` configuration (or the matching environment variables), so the annotation only captures role,
-input type, capabilities, and optional config. Optional `config` classes participate in
+`pockethive.inputs/outputs.*` configuration (or the matching environment variables), so the annotation only captures input
+type, capabilities, and optional config. The worker role now comes from `pockethive.control-plane.worker.role`
+(injected through `POCKETHIVE_CONTROL_PLANE_WORKER_ROLE`). Optional `config` classes participate in
 Stage 2 control-plane hydration.
 
 ```java
 @Component("processorWorker")
 @PocketHiveWorker(
-    role = "processor",
     config = ProcessorWorkerConfig.class
 )
 class ProcessorWorkerImpl implements MessageWorker {
@@ -93,16 +93,15 @@ end-to-end implementations.
 
 ## 4. Let the SDK wire inputs and outputs
 
-Enable `pockethive.worker.inputs.autowire=true` (the default in every worker service) so the SDK provisions the correct
-`WorkInput` / `WorkOutput` pair for each annotated worker. Rabbit-driven workers automatically receive the shared
-`RabbitWorkInput`/`RabbitWorkOutput`, while scheduler-driven roles (generator, trigger) receive the built-in scheduler input.
+The SDK provisions the correct `WorkInput`/`WorkOutput` pair for each annotated worker automatically. Rabbit-driven
+workers receive the shared `RabbitWorkInput`/`RabbitWorkOutput`, while scheduler-driven roles (generator, trigger)
+receive the built-in scheduler input.
 
 Custom inputs remain possible via `WorkInputFactory` beans. The trigger worker keeps a bespoke factory because it combines
 the scheduler with rate-limit state, but all other services rely on the SDK defaults:
 
 ```java
 @Component
-@ConditionalOnProperty(prefix = "pockethive.worker.inputs", name = "autowire", havingValue = "true")
 class TriggerWorkInputFactory implements WorkInputFactory {
 
   private final WorkerRuntime workerRuntime;
@@ -123,7 +122,7 @@ class TriggerWorkInputFactory implements WorkInputFactory {
   @Override
   public boolean supports(WorkerDefinition definition) {
     return definition.input() == WorkerInputType.SCHEDULER
-        && "trigger".equals(definition.role());
+        && "trigger".equalsIgnoreCase(definition.role());
   }
 
   @Override

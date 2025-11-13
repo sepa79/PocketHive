@@ -32,7 +32,6 @@ adapter such as RabbitMQ. Return `WorkResult.message(...)` to emit downstream wo
 ```java
 @Component("generatorWorker")
 @PocketHiveWorker(
-    role = "generator",
     input = WorkerInputType.SCHEDULER,
     config = GeneratorWorkerConfig.class
 )
@@ -60,7 +59,6 @@ class GeneratorWorkerImpl implements PocketHiveWorkerFunction {
 ```java
 @Component("processorWorker")
 @PocketHiveWorker(
-    role = "processor",
     config = ProcessorWorkerConfig.class
 )
 class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
@@ -87,7 +85,9 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
 The full implementations live in the `generator-service` and `processor-service` modules.
 
 > Queue names come from the swarm plan (`SwarmPlan.bees[*].work`) and are injected by the Swarm Controller—scenario authors update them through the
-> `workers.<role>.config` block instead of touching environment variables.
+> `workers.<role>.config` block instead of touching environment variables. The worker role follows the same pattern:
+> `pockethive.control-plane.worker.role` (sourced from `POCKETHIVE_CONTROL_PLANE_WORKER_ROLE`) is injected per container so annotations never hard-code
+> routing identifiers.
 > Local runs can still rely on `pockethive.inputs.<type>` / `pockethive.outputs.<type>` for wiring, but the controller ignores ad-hoc env overrides once a swarm launches.
 
 ### `WorkMessage`
@@ -111,7 +111,7 @@ The control-plane runtime bridges the SDK with the control-plane topic. It appli
 1. Add the `worker-sdk` dependency to your service.
 2. Annotate business beans with `@PocketHiveWorker`, selecting the appropriate input binding (Rabbit by default). Queue bindings are provided by the swarm plan via `pockethive.inputs/outputs.*`.
 3. Implement `PocketHiveWorkerFunction` and return `WorkResult` instances.
-4. Enable `pockethive.worker.inputs.autowire=true` (the default) so the SDK wires the Rabbit or scheduler inputs/outputs for each annotated worker. Only build custom `WorkInputFactory` implementations when you truly need a bespoke transport.
+4. The SDK automatically wires the Rabbit or scheduler inputs/outputs for the registered `@PocketHiveWorker`. Only build custom `WorkInputFactory` implementations when you truly need a bespoke transport.
 5. Use `WorkerContext` for config, metrics, observability, and status reporting.
 
 For a full walkthrough consult the [Worker SDK quick start](../../docs/sdk/worker-sdk-quickstart.md), which links to Stage 1–3 features and migration tips.

@@ -57,7 +57,6 @@ import org.springframework.stereotype.Component;
  */
 @Component("processorWorker")
 @PocketHiveWorker(
-    role = "processor",
     input = WorkerInputType.RABBITMQ,
     output = WorkerOutputType.RABBITMQ,
     capabilities = {WorkerCapability.MESSAGE_DRIVEN, WorkerCapability.HTTP},

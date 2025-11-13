@@ -3,9 +3,6 @@ spring:
     name: processor-worker-starter
 
 pockethive:
-  worker:
-    inputs:
-      autowire: true
   inputs:
     rabbit:
       queue: ph.sample-swarm.mod
@@ -19,4 +16,4 @@ pockethive:
     instance-id: ${POCKETHIVE_CONTROL_PLANE_INSTANCE_ID:processor-1}
     control-queue-prefix: ph.control
     worker:
-      role: processor
+      role: ${POCKETHIVE_CONTROL_PLANE_WORKER_ROLE}

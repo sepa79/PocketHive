@@ -24,9 +24,10 @@
    binds it automatically and exposes it via `WorkerContext#config(...)`.
 
 5. **Enrich worker metadata**  
-   Workers describe their role, capabilities, description, and IO bindings once,
-   via `@PocketHiveWorker`. Scenario-manager reads the same metadata to expose it
-   to the UI (so the UI no longer hard-codes which worker can do what).
+   Workers describe their capabilities, description, and IO bindings once via
+   `@PocketHiveWorker`. The control-plane configuration remains the source of truth
+   for the worker role, and scenario-manager reads the combined metadata to expose
+   it to the UI (so the UI no longer hard-codes which worker can do what).
 
 6. **Remove RuntimeAdapter classes**  
    After the above pieces land, generator/moderator/processor/trigger services have
@@ -157,7 +158,7 @@
 4. **Autoconfiguration**
    - [x] Add `WorkInputFactory` SPI + initializer so auto-config can resolve per-worker inputs (currently defaulting to noop until concrete factories are wired).
    - [x] Ensure lifecycle beans manage both inputs and outputs (registries + lifecycle hooks now exist for each, ready for wiring into factories).
-   - [x] Provide scheduler/Rabbit `WorkInputFactory` implementations (opt-in via `pockethive.worker.inputs.autowire=true` until runtime adapters are removed).
+  - [x] Provide scheduler/Rabbit `WorkInputFactory` implementations (auto-wired by default so every worker receives the correct transport without extra config).
  - [x] Support custom inputs/outputs via factories contributed as Spring beans (ordered lists + `Ordered` support for precedence).
 
 5. **Service Migration**
