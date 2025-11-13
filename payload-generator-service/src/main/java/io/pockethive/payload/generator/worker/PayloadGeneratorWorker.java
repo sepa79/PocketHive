@@ -40,14 +40,14 @@ public class PayloadGeneratorWorker implements PocketHiveWorkerFunction {
         this.templateRenderer = templateRenderer;
 
         PayloadGeneratorConfig defaultConfig = properties.defaultConfig();
-        PayloadGeneratorProperties.Template template = properties.getTemplate();
+        PayloadGeneratorConfig.Template template = defaultConfig.template();
         log.info(
             "payloadGeneratorWorker initialized (defaultRatePerSec={}, singleRequest={}, bodyLength={}, headerTemplates={}, queryTemplates={})",
             defaultConfig.ratePerSec(),
             defaultConfig.singleRequest(),
-            template.getBody() == null ? 0 : template.getBody().length(),
-            template.getHeaders() == null ? 0 : template.getHeaders().size(),
-            template.getQuery() == null ? 0 : template.getQuery().size()
+            template.body() == null ? 0 : template.body().length(),
+            template.headers() == null ? 0 : template.headers().size(),
+            template.query() == null ? 0 : template.query().size()
         );
     }
 
@@ -76,7 +76,7 @@ public class PayloadGeneratorWorker implements PocketHiveWorkerFunction {
 
         // Pebble renders the configured template (`pockethive.workers.payload-generator.template.body/headers`)
         // using the incoming seed (available as `seed.body` and `seed.headers`, see https://pebbletemplates.io/).
-        PayloadTemplateRenderer.RenderedRequest rendered = templateRenderer.render(seed);
+        PayloadTemplateRenderer.RenderedRequest rendered = templateRenderer.render(config.template(), seed);
         HttpWorkMessage httpMessage = new HttpWorkMessage(
             rendered.method(),
             rendered.url(),

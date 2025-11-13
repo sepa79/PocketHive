@@ -21,25 +21,25 @@ pockethive:
       config:
         ratePerSec: 1.0
         singleRequest: false
-      template:
-        method: POST
-        base-url: http://wiremock:8080
-        path: /soap
-        body: |
-          <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
-                            xmlns:req="http://example.com/req/v1">
-            <soapenv:Header>
-              <req:ClientId>{{ record.clientId }}</req:ClientId>
-            </soapenv:Header>
-            <soapenv:Body>
-                <req:PingRequest tick="{{ seed.headers['x-ph-scheduler-tick'] | default('n/a') }}">
-                  <req:payload>{{ seed.body | default(record.payload) }}</req:payload>
-                </req:PingRequest>
-            </soapenv:Body>
-          </soapenv:Envelope>
-        headers:
-          content-type: text/xml
-          soapaction: ping
+        template:
+          method: POST
+          base-url: http://wiremock:8080
+          path: /soap
+          body: |
+            <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
+                              xmlns:req="http://example.com/req/v1">
+              <soapenv:Header>
+                <req:ClientId>{{ record.clientId }}</req:ClientId>
+              </soapenv:Header>
+              <soapenv:Body>
+                  <req:PingRequest tick="{{ seed.headers['x-ph-scheduler-tick'] | default('n/a') }}">
+                    <req:payload>{{ seed.body | default(record.payload) }}</req:payload>
+                  </req:PingRequest>
+              </soapenv:Body>
+            </soapenv:Envelope>
+          headers:
+            content-type: text/xml
+            soapaction: ping
 
 logging:
   level:

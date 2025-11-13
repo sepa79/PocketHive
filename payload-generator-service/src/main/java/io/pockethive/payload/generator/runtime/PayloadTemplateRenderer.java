@@ -3,7 +3,8 @@ package io.pockethive.payload.generator.runtime;
 import io.pebbletemplates.pebble.PebbleEngine;
 import io.pebbletemplates.pebble.error.PebbleException;
 import io.pebbletemplates.pebble.template.PebbleTemplate;
-import io.pockethive.payload.generator.config.PayloadGeneratorProperties;
+import io.pebbletemplates.pebble.PebbleEngine;
+import io.pockethive.payload.generator.config.PayloadGeneratorConfig;
 import io.pockethive.worker.sdk.api.WorkMessage;
 import java.io.StringWriter;
 import java.util.LinkedHashMap;
@@ -11,57 +12,39 @@ import java.util.Map;
 import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Component;
 
+@Component
 public final class PayloadTemplateRenderer {
 
     private static final Logger log = LoggerFactory.getLogger(PayloadTemplateRenderer.class);
 
     private final PebbleEngine engine;
-    private final PebbleTemplate methodTemplate;
-    private final PebbleTemplate urlTemplate;
-    private final PebbleTemplate baseUrlTemplate;
-    private final PebbleTemplate pathTemplate;
-    private final PebbleTemplate bodyTemplate;
-    private final Map<String, PebbleTemplate> headerTemplates;
-    private final Map<String, PebbleTemplate> queryTemplates;
 
-    public PayloadTemplateRenderer(PebbleEngine engine, PayloadGeneratorProperties.Template template) {
+    public PayloadTemplateRenderer(PebbleEngine engine) {
         this.engine = Objects.requireNonNull(engine, "engine");
-        PayloadGeneratorProperties.Template resolved = template == null ? new PayloadGeneratorProperties.Template() : template;
-        this.methodTemplate = compile(resolved.getMethod());
-        this.urlTemplate = compile(resolved.getUrl());
-        this.baseUrlTemplate = compile(resolved.getBaseUrl());
-        this.pathTemplate = compile(resolved.getPath());
-        this.bodyTemplate = compile(resolved.getBody());
-        this.headerTemplates = compileMap(resolved.getHeaders());
-        this.queryTemplates = compileMap(resolved.getQuery());
-
-        log.info(
-            "PayloadTemplateRenderer compiled templates (bodyLength={}, headerTemplateCount={}, queryTemplateCount={})",
-            resolved.getBody() == null ? 0 : resolved.getBody().length(),
-            resolved.getHeaders() == null ? 0 : resolved.getHeaders().size(),
-            resolved.getQuery() == null ? 0 : resolved.getQuery().size()
-        );
+        log.info("PayloadTemplateRenderer initialized");
     }
 
-    public RenderedRequest render(WorkMessage seed) {
+    public RenderedRequest render(PayloadGeneratorConfig.Template template, WorkMessage seed) {
         Objects.requireNonNull(seed, "seed");
+        PayloadGeneratorConfig.Template resolved = template == null ? PayloadGeneratorConfig.Template.defaults() : template;
         Map<String, Object> context = new LinkedHashMap<>();
         Map<String, Object> seedContext = new LinkedHashMap<>();
         seedContext.put("headers", seed.headers());
         seedContext.put("body", seed.asString());
         context.put("seed", seedContext);
 
-        String method = evaluate(methodTemplate, context).trim();
-        String url = evaluate(urlTemplate, context).trim();
-        String baseUrl = evaluate(baseUrlTemplate, context).trim();
-        String path = evaluate(pathTemplate, context).trim();
-        String body = evaluate(bodyTemplate, context);
+        String method = evaluate(compile(resolved.method()), context).trim();
+        String url = evaluate(compile(resolved.url()), context).trim();
+        String baseUrl = evaluate(compile(resolved.baseUrl()), context).trim();
+        String path = evaluate(compile(resolved.path()), context).trim();
+        String body = evaluate(compile(resolved.body()), context);
         Map<String, String> headers = new LinkedHashMap<>();
-        headerTemplates.forEach((name, template) -> headers.put(name, evaluate(template, context)));
+        compileMap(resolved.headers()).forEach((name, compiled) -> headers.put(name, evaluate(compiled, context)));
         Map<String, String> query = new LinkedHashMap<>();
-        queryTemplates.forEach((name, template) -> {
-            String value = evaluate(template, context).trim();
+        compileMap(resolved.query()).forEach((name, compiled) -> {
+            String value = evaluate(compiled, context).trim();
             if (!value.isEmpty()) {
                 query.put(name, value);
             }

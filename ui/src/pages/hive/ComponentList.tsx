@@ -4,20 +4,14 @@ import { sendConfigUpdate } from '../../lib/orchestratorApi'
 import type { MouseEvent } from 'react'
 import { Play, Square } from 'lucide-react'
 
-const CONFIG_UPDATE_ROLES = new Set([
-  'generator',
-  'moderator',
-  'processor',
-  'postprocessor',
-  'trigger',
-  'swarm-controller',
-])
-
-function supportsConfigToggle(role: string | undefined) {
-  if (!role) return false
-  const normalized = role.trim().toLowerCase()
-  if (!normalized) return false
-  return CONFIG_UPDATE_ROLES.has(normalized)
+function supportsConfigToggle(component: Component) {
+  const swarmId = component.swarmId?.trim()
+  if (!swarmId) {
+    return false
+  }
+  // Infrastructure components (e.g., orchestrator) typically have undefined swarm ids.
+  // Any component with a swarm id belongs to a worker swarm and can accept config updates.
+  return true
 }
 
 interface Props {
@@ -40,7 +34,7 @@ export default function ComponentList({ components, selectedId, onSelect }: Prop
     <ul className="space-y-2">
       {components.map((c) => {
         const role = c.role.trim() || '—'
-        const canToggle = supportsConfigToggle(c.role)
+        const canToggle = supportsConfigToggle(c)
         const enabled = c.config?.enabled !== false
         return (
           <li
@@ -102,4 +96,3 @@ function color(h: HealthStatus) {
       return 'bg-green-500'
   }
 }
-
