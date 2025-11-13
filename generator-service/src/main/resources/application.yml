@@ -23,7 +23,7 @@ pockethive:
   workers:
     generator:
       config:
-        ratePerSec: 0.0
+        ratePerSec: 1.5
         singleRequest: false
         message:
           path: /api/test

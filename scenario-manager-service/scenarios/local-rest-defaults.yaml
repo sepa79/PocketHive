@@ -1,13 +1,11 @@
-id: local-rest
-name: Local REST - Simple REST Swarm using custom values
-description: Uses local images. Sample scenario that ships the REST generator with a 50 msg/s default rate limit.
+id: local-rest-defaults
+name: Local REST - Simple REST Swarm using Defaults
+description: Uses local images. Sample scenario that is using defaults from workers.
 template:
   image: swarm-controller:latest
   bees:
     - role: generator
       image: generator:latest
-      config:
-        ratePerSec: 50
       work:
         out: gen
     - role: moderator
