@@ -347,37 +347,13 @@ class SwarmLifecycleManagerTest {
   }
 
   @Test
-  void heartbeatPublishesEnablementWhenWorkerStateDiffers() throws Exception {
+  void heartbeatDoesNotPublishEnablement() throws Exception {
     SwarmLifecycleManager manager = newManager();
     SwarmPlan plan = new SwarmPlan("swarm", List.of(new Bee("gen", "img1", new Work(null, null), null)));
     when(docker.createContainer(eq("img1"), anyMap(), anyString())).thenReturn("c1");
 
     manager.prepare(mapper.writeValueAsString(plan));
     manager.setSwarmEnabled(true);
-
-    reset(rabbit);
-    manager.updateHeartbeat("gen", "g1");
-
-    ArgumentCaptor<String> targetedPayload = ArgumentCaptor.forClass(String.class);
-    String expectedRoute = ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, TEST_SWARM_ID, "gen", "g1");
-    verify(rabbit).convertAndSend(eq(CONTROL_EXCHANGE), eq(expectedRoute), targetedPayload.capture());
-    JsonNode targetedNode = mapper.readTree(targetedPayload.getValue());
-    assertThat(targetedNode.path("signal").asText()).isEqualTo(ControlPlaneSignals.CONFIG_UPDATE);
-    assertThat(targetedNode.path("args").path("data").path("enabled").asBoolean(false)).isTrue();
-    assertThat(targetedNode.path("commandTarget").asText()).isEqualToIgnoringCase("INSTANCE");
-    assertThat(targetedNode.path("role").asText()).isEqualTo("gen");
-    assertThat(targetedNode.path("instance").asText()).isEqualTo("g1");
-  }
-
-  @Test
-  void heartbeatSkipsEnablementWhenWorkerMatchesDesired() throws Exception {
-    SwarmLifecycleManager manager = newManager();
-    SwarmPlan plan = new SwarmPlan("swarm", List.of(new Bee("gen", "img1", new Work(null, null), null)));
-    when(docker.createContainer(eq("img1"), anyMap(), anyString())).thenReturn("c1");
-
-    manager.prepare(mapper.writeValueAsString(plan));
-    manager.setSwarmEnabled(true);
-    manager.updateEnabled("gen", "g1", true);
 
     reset(rabbit);
     manager.updateHeartbeat("gen", "g1");
