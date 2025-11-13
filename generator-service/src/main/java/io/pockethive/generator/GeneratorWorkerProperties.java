@@ -2,7 +2,6 @@ package io.pockethive.generator;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.worker.sdk.config.CanonicalWorkerProperties;
-import java.util.Map;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
