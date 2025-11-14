@@ -93,8 +93,7 @@ class TriggerWorkerImpl implements PocketHiveWorkerFunction {
    */
   @Override
   public WorkResult onMessage(WorkMessage seed, WorkerContext context) {
-    TriggerWorkerConfig config = context.config(TriggerWorkerConfig.class)
-        .orElseGet(properties::defaultConfig);
+    TriggerWorkerConfig config = context.configOrDefault(TriggerWorkerConfig.class, properties::defaultConfig);
 
     context.statusPublisher()
         .update(status -> status

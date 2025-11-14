@@ -70,8 +70,7 @@ class ModeratorWorkerImpl implements PocketHiveWorkerFunction {
    */
   @Override
   public WorkResult onMessage(WorkMessage in, WorkerContext context) {
-    ModeratorWorkerConfig config = context.config(ModeratorWorkerConfig.class)
-        .orElseGet(properties::defaultConfig);
+    ModeratorWorkerConfig config = context.configOrDefault(ModeratorWorkerConfig.class, properties::defaultConfig);
     ModeratorOperationMode mode = config.operationMode();
     context.statusPublisher()
         .update(status -> {

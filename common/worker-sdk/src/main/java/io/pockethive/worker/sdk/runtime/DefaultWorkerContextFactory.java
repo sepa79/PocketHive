@@ -142,19 +142,19 @@ public final class DefaultWorkerContextFactory implements WorkerContextFactory {
         }
 
         @Override
-        public <C> Optional<C> config(Class<C> type) {
+        public <C> C config(Class<C> type) {
             Objects.requireNonNull(type, "type");
             Optional<C> fromState = state.config(type);
             if (fromState.isPresent()) {
-                return fromState;
+                return fromState.get();
             }
             if (definition.configType() != Void.class && type.isAssignableFrom(definition.configType())) {
                 Object bean = beanResolver.apply(definition.configType());
                 if (type.isInstance(bean)) {
-                    return Optional.of(type.cast(bean));
+                    return type.cast(bean);
                 }
             }
-            return Optional.empty();
+            return null;
         }
 
         @Override

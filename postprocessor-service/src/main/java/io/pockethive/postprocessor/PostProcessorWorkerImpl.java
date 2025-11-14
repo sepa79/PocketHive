@@ -106,8 +106,7 @@ class PostProcessorWorkerImpl implements PocketHiveWorkerFunction {
    */
   @Override
   public WorkResult onMessage(WorkMessage in, WorkerContext context) {
-    PostProcessorWorkerConfig config = context.config(PostProcessorWorkerConfig.class)
-        .orElseGet(properties::defaultConfig);
+    PostProcessorWorkerConfig config = context.configOrDefault(PostProcessorWorkerConfig.class, properties::defaultConfig);
 
     ObservabilityContext observability =
         Objects.requireNonNull(context.observabilityContext(), "observabilityContext");

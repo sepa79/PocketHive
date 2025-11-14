@@ -15,7 +15,6 @@ import io.pockethive.worker.sdk.config.WorkOutputConfig;
 import io.pockethive.worker.sdk.config.WorkerCapability;
 import io.pockethive.worker.sdk.config.WorkerInputType;
 import io.pockethive.worker.sdk.config.WorkerOutputType;
-import java.util.Optional;
 import java.util.Set;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -88,8 +87,8 @@ class WorkerObservabilityInterceptorTest {
             }
 
             @Override
-            public <C> Optional<C> config(Class<C> type) {
-                return state.config(type);
+            public <C> C config(Class<C> type) {
+                return state.config(type).orElse(null);
             }
 
             @Override

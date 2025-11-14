@@ -329,11 +329,11 @@ class ProcessorTest {
         }
 
         @Override
-        public <C> Optional<C> config(Class<C> type) {
+        public <C> C config(Class<C> type) {
             if (config != null && type.isAssignableFrom(ProcessorWorkerConfig.class)) {
-                return Optional.of(type.cast(config));
+                return type.cast(config);
             }
-            return Optional.empty();
+            return null;
         }
 
         @Override

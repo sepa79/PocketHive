@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+## [0.13.9] - 2025-11-15
+Timestamp: 2025-11-15T00:00:00Z
+
+- WorkerContext API cleanup: `config(Class)` now returns the concrete configuration (plus a new `configOptional` helper) so worker code doesn’t have to unwrap `Optional`s. All worker implementations, starter samples, and SDK/runtime tests were updated to the new contract.
+- Repository hygiene: removed the deprecated `examples/worker-starter` templates and scrubbed the quick start / removal plans so documentation no longer points to the deleted scaffolding.
+
 ## [0.13.8] - 2025-11-14
 Timestamp: 2025-11-14T00:00:00Z
 

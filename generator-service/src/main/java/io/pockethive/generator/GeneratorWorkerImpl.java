@@ -102,8 +102,7 @@ class GeneratorWorkerImpl implements PocketHiveWorkerFunction {
    */
   @Override
   public WorkResult onMessage(WorkMessage seed, WorkerContext context) {
-    GeneratorWorkerConfig config = context.config(GeneratorWorkerConfig.class)
-        .orElseGet(properties::defaultConfig);
+    GeneratorWorkerConfig config = context.configOrDefault(GeneratorWorkerConfig.class, properties::defaultConfig);
     context.statusPublisher()
         .update(status -> status
             .data("path", config.message().path())

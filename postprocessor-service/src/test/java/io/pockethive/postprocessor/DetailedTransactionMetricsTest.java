@@ -13,7 +13,6 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.function.Consumer;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
@@ -98,8 +97,8 @@ class DetailedTransactionMetricsTest {
     }
 
     @Override
-    public <C> Optional<C> config(Class<C> type) {
-      return Optional.empty();
+    public <C> C config(Class<C> type) {
+      return null;
     }
 
     @Override
