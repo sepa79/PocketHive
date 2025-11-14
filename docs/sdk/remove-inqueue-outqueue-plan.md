@@ -21,7 +21,7 @@ The Swarm Controller already injects `POCKETHIVE_INPUT_RABBIT_QUEUE` / `POCKETHI
 
 ### External consumers / docs still mentioning annotation queues
 
-- SDK docs & samples: `common/worker-sdk/README.md`, `docs/sdk/worker-sdk-quickstart.md`, `examples/worker-starter/*`, and service workers (`generator`, `moderator`, `processor`, `postprocessor`) still show `@PocketHiveWorker(... inQueue/outQueue ...)` and call `context.info().inQueue()`. These need to be rewritten to highlight the `pockethive.inputs/outputs` config instead.
+- SDK docs & service workers: `common/worker-sdk/README.md`, `docs/sdk/worker-sdk-quickstart.md`, and core workers (`generator`, `moderator`, `processor`, `postprocessor`) still show `@PocketHiveWorker(... inQueue/outQueue ...)` and call `context.info().inQueue()`. These need to be rewritten to highlight the `pockethive.inputs/outputs` config instead.
 - Runtime tests (`common/worker-sdk/src/test/**`) verify the old behaviour; they must be updated alongside the code changes above.
 - UI/runtime consumers already rely on the richer `queues.work` payload (per `docs/spec/control-events.schema.json`), so no UI code reads the deprecated fields anymore; no additional consumers were found under `ui/` or `scenario-manager-service/`.
 
