@@ -201,7 +201,8 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
 
   private URI resolveTarget(String baseUrl, String path) {
     try {
-      return URI.create(baseUrl).resolve(path == null ? "" : path);
+      String suffix = path == null ? "" : path;
+      return URI.create(baseUrl + suffix);
     } catch (IllegalArgumentException ex) {
       return null;
     }

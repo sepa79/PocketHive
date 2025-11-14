@@ -65,11 +65,11 @@ class ProcessorTest {
     @Test
     void workerInvokesHttpAndPropagatesResponse() throws Exception {
         ProcessorWorkerProperties properties = newProcessorWorkerProperties();
-        properties.setConfig(Map.of("baseUrl", "http://sut/"));
+        properties.setConfig(Map.of("baseUrl", "http://sut"));
         HttpClient httpClient = mock(HttpClient.class);
         Clock clock = Clock.fixed(Instant.parse("2024-01-01T00:00:00Z"), ZoneOffset.UTC);
         ProcessorWorkerImpl worker = new ProcessorWorkerImpl(properties, httpClient, clock);
-        ProcessorWorkerConfig config = new ProcessorWorkerConfig("http://sut/");
+        ProcessorWorkerConfig config = new ProcessorWorkerConfig("http://sut");
         TestWorkerContext context = new TestWorkerContext(config);
 
         AtomicReference<HttpRequest> requestRef = new AtomicReference<>();
@@ -114,7 +114,7 @@ class ProcessorTest {
         assertThat(request.headers().firstValue("X-Test")).contains("true");
 
         assertThat(context.statusData())
-                .containsEntry("baseUrl", "http://sut/")
+                .containsEntry("baseUrl", "http://sut")
                 .containsEntry("enabled", true)
                 .containsEntry("transactions", 1L)
                 .containsEntry("successRatio", 1.0)
@@ -122,13 +122,39 @@ class ProcessorTest {
     }
 
     @Test
+    void workerConcatenatesBaseUrlAndMessagePath() throws Exception {
+        ProcessorWorkerProperties properties = newProcessorWorkerProperties();
+        properties.setConfig(Map.of("baseUrl", "http://sut/api"));
+        HttpClient httpClient = mock(HttpClient.class);
+        Clock clock = Clock.fixed(Instant.parse("2024-02-02T00:00:00Z"), ZoneOffset.UTC);
+        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(properties, httpClient, clock);
+        ProcessorWorkerConfig config = new ProcessorWorkerConfig("http://sut/api");
+        TestWorkerContext context = new TestWorkerContext(config);
+
+        AtomicReference<HttpRequest> requestRef = new AtomicReference<>();
+        when(httpClient.send(any(), any())).thenAnswer(invocation -> {
+            HttpRequest request = invocation.getArgument(0, HttpRequest.class);
+            requestRef.set(request);
+            return SimpleHttpResponse.from(request, 200, Map.of(), "");
+        });
+
+        WorkMessage inbound = WorkMessage.json(Map.of("path", "/test")).build();
+
+        worker.onMessage(inbound, context);
+
+        HttpRequest request = requestRef.get();
+        assertThat(request).isNotNull();
+        assertThat(request.uri()).isEqualTo(URI.create("http://sut/api/test"));
+    }
+
+    @Test
     void workerTracksRollingMetricsAcrossCalls() throws Exception {
         ProcessorWorkerProperties properties = newProcessorWorkerProperties();
-        properties.setConfig(Map.of("baseUrl", "http://sut/"));
+        properties.setConfig(Map.of("baseUrl", "http://sut"));
         HttpClient httpClient = mock(HttpClient.class);
         SequenceClock clock = new SequenceClock(0, 50, 100, 250);
         ProcessorWorkerImpl worker = new ProcessorWorkerImpl(properties, httpClient, clock);
-        ProcessorWorkerConfig config = new ProcessorWorkerConfig("http://sut/");
+        ProcessorWorkerConfig config = new ProcessorWorkerConfig("http://sut");
         TestWorkerContext context = new TestWorkerContext(config);
 
         AtomicInteger invocation = new AtomicInteger();
@@ -168,7 +194,7 @@ class ProcessorTest {
     @Test
     void workerFallsBackToDefaultsWhenConfigMissing() throws Exception {
         ProcessorWorkerProperties properties = newProcessorWorkerProperties();
-        properties.setConfig(Map.of("baseUrl", "http://defaults/"));
+        properties.setConfig(Map.of("baseUrl", "http://defaults"));
         HttpClient httpClient = mock(HttpClient.class);
         Clock clock = Clock.fixed(Instant.parse("2024-01-01T00:00:00Z"), ZoneOffset.UTC);
         ProcessorWorkerImpl worker = new ProcessorWorkerImpl(properties, httpClient, clock);

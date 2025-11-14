@@ -144,6 +144,7 @@ public class SwarmLifecycleSteps {
     workerStatusesCaptured = false;
     workerStatusByRole.clear();
     workerInstances.clear();
+    logScenarioTemplate("default listing");
   }
 
   @And("the {string} scenario template is requested")
@@ -165,6 +166,7 @@ public class SwarmLifecycleSteps {
     workerStatusesCaptured = false;
     workerStatusByRole.clear();
     workerInstances.clear();
+    logScenarioTemplate("explicit request");
   }
 
   @When("I create the swarm from that template")
@@ -398,7 +400,7 @@ public class SwarmLifecycleSteps {
     if (!swarmRemoved && orchestratorClient != null && swarmId != null) {
       try {
         LOGGER.info("Attempting to remove swarm {} during cleanup", swarmId);
-        // orchestratorClient.removeSwarm(swarmId, new ControlRequest(idKey("cleanup"), "cleanup"));
+        orchestratorClient.removeSwarm(swarmId, new ControlRequest(idKey("cleanup"), "cleanup"));
       } catch (Exception ex) {
         LOGGER.warn("Cleanup remove failed for swarm {}", swarmId, ex);
       }
@@ -667,51 +669,18 @@ public class SwarmLifecycleSteps {
 
   private String finalQueueSuffix() {
     ensureTemplate();
-
-    Bee postprocessor = findBeeOptional("postprocessor");
+    Bee postprocessor = findBeeOptional(POSTPROCESSOR_ROLE);
     if (postprocessor != null && postprocessor.work() != null) {
       String inbound = trimmed(postprocessor.work().in());
       if (inbound != null) {
+        LOGGER.info("Final queue resolved from postprocessor work.in='{}'", inbound);
         return inbound;
       }
+      LOGGER.warn("Postprocessor work.in was blank; falling back to default final queue");
+    } else {
+      LOGGER.warn("Postprocessor bee not present in template; falling back to default final queue");
     }
-
-    Bee processor = findBeeOptional("processor");
-    if (processor != null && processor.work() != null) {
-      String outbound = trimmed(processor.work().out());
-      if (outbound != null) {
-        return outbound;
-      }
-    }
-
-    LinkedHashSet<String> produced = new LinkedHashSet<>();
-    LinkedHashSet<String> consumed = new LinkedHashSet<>();
-    if (template != null && template.bees() != null) {
-      for (Bee bee : template.bees()) {
-        if (bee == null || bee.work() == null) {
-          continue;
-        }
-        String inbound = trimmed(bee.work().in());
-        if (inbound != null) {
-          consumed.add(inbound);
-        }
-        String outbound = trimmed(bee.work().out());
-        if (outbound != null) {
-          produced.add(outbound);
-        }
-      }
-    }
-
-    for (String candidate : produced) {
-      if (!consumed.contains(candidate)) {
-        return candidate;
-      }
-    }
-
-    if (!produced.isEmpty()) {
-      return produced.iterator().next();
-    }
-
+    LOGGER.info("Final queue fallback applied -> 'final'");
     return "final";
   }
 
@@ -1105,13 +1074,26 @@ public class SwarmLifecycleSteps {
     return roleAliasMap.getOrDefault(key, alias == null ? null : alias.trim());
   }
 
+  private void logScenarioTemplate(String context) {
+    if (scenarioDetails == null || scenarioDetails.template() == null) {
+      LOGGER.warn("Scenario template not available for logging (context={})", context);
+      return;
+    }
+    try {
+      String json = objectMapper.writeValueAsString(scenarioDetails.template());
+      LOGGER.info("Scenario template (context={} id={}): {}", context, scenarioDetails.id(), json);
+    } catch (Exception ex) {
+      LOGGER.warn("Failed to serialise scenario template (context={} id={}): {}", context, scenarioDetails.id(), ex.toString());
+    }
+  }
+
   private boolean roleMatches(String expectedAlias, String actualRole) {
     String expected = normalizeRole(expectedAlias);
     String actual = normalizeRole(actualRole);
     if (expected == null || actual == null) {
       return false;
     }
-    return expected.equals(actual) || actual.contains(expected) || expected.contains(actual);
+    return expected.equals(actual) || actual.contains(expected);
   }
 
   private void ensureCreateResponse() {
