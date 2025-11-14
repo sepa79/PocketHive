@@ -153,7 +153,7 @@ public final class WorkerControlPlaneRuntime {
             return;
         }
         Map<String, Object> rawConfig = configMerger.toRawConfig(defaultConfig);
-        Boolean enabled = resolveEnabled(rawConfig, null);
+        Boolean enabled = null;
         Object typedConfig = ensureTypedDefault(state.definition(), defaultConfig, rawConfig);
         if (state.seedConfig(typedConfig, enabled)) {
             ensureStatusPublisher(state);
@@ -242,7 +242,7 @@ public final class WorkerControlPlaneRuntime {
                     filteredUpdate,
                     patch.resetRequested()
                 );
-                Boolean enabled = resolveEnabled(mergeResult.rawConfig(), command.enabled());
+                Boolean enabled = command.enabled();
                 state.updateConfig(mergeResult.typedConfig(), mergeResult.replaced(), enabled);
                 Map<String, Object> appliedConfig = mergeResult.replaced() ? mergeResult.rawConfig() : Map.of();
                 if (hasCorrelation(signal)) {
@@ -472,20 +472,6 @@ public final class WorkerControlPlaneRuntime {
             }
         });
         return Map.copyOf(copy);
-    }
-
-    private Boolean resolveEnabled(Map<String, Object> workerConfig, Boolean commandEnabled) {
-        if (commandEnabled != null) {
-            return commandEnabled;
-        }
-        Object candidate = workerConfig.get("enabled");
-        if (candidate instanceof Boolean b) {
-            return b;
-        }
-        if (candidate instanceof String s && !s.isBlank()) {
-            return Boolean.parseBoolean(s);
-        }
-        return null;
     }
 
     private boolean roleMatches(String signalRole, String workerRole) {

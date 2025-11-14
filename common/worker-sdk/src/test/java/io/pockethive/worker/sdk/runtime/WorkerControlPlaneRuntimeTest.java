@@ -86,7 +86,7 @@ class WorkerControlPlaneRuntimeTest {
         assertThat(runtime.workerRawConfig(definition.beanName()))
             .containsEntry("ratePerSec", 7.5)
             .containsEntry("enabled", true);
-        assertThat(runtime.workerEnabled(definition.beanName())).isTrue();
+        assertThat(runtime.workerEnabled(definition.beanName())).isFalse();
 
         reset(emitter);
         runtime.emitStatusSnapshot();
@@ -459,7 +459,7 @@ class WorkerControlPlaneRuntimeTest {
         runtime.registerStateListener(definition.beanName(), lastSnapshot::set);
         WorkerControlPlaneRuntime.WorkerStateSnapshot initial = lastSnapshot.get();
         assertThat(initial).isNotNull();
-        assertThat(initial.enabled()).isTrue();
+        assertThat(initial.enabled()).isFalse();
         assertThat(initial.description()).contains("Test worker");
         assertThat(initial.capabilities()).containsExactlyElementsOf(definition.capabilities());
         assertThat(initial.inputType()).isEqualTo(definition.input());

@@ -76,7 +76,7 @@ class WorkerInvocationTest {
     }
 
     @Test
-    void dispatchSucceedsWhenEnablementUnknown() throws Exception {
+    void dispatchFailsWhenEnablementUnknown() {
         WorkerState state = new WorkerState(DEFINITION);
         state.setStatusPublisher(new WorkerStatusPublisher(state, () -> { }, () -> { }));
         WorkerInvocation invocation = new WorkerInvocation(
@@ -87,9 +87,10 @@ class WorkerInvocationTest {
             List.of()
         );
 
-        WorkResult result = invocation.invoke(WorkMessage.text("payload").build());
-        assertThat(result).isInstanceOf(WorkResult.None.class);
-        assertThat(state.peekProcessedCount()).isEqualTo(1);
+        assertThatThrownBy(() -> invocation.invoke(WorkMessage.text("payload").build()))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("disabled");
+        assertThat(state.peekProcessedCount()).isZero();
     }
 
     @Test
@@ -119,6 +120,7 @@ class WorkerInvocationTest {
             state,
             List.of(first, second)
         );
+        state.updateConfig(null, false, Boolean.TRUE);
 
         invocation.invoke(WorkMessage.text("ignored").build());
 
