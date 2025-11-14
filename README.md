@@ -224,6 +224,9 @@ Keep configuration **explicit**—favor declaring values over hidden defaults.
 1. Install Docker.
 2. Run `./start-hive.sh` (Linux/macOS) or `start-hive.bat` (Windows) to clean previous runs, build the images and launch RabbitMQ, services and the UI. Use `--help` to run individual stages (clean, build, start) when needed.
    - Alternatively run `docker compose up -d` directly to start the stack with your existing images.
+   - For faster local loops, use `./build-hive.sh`. It builds the jars locally, stages them under `.local-jars/`, and reuses a shared JVM base image so `docker compose` only copies fresh jars into the runtime containers. Useful flags:
+     - `--quick` skips tests.
+     - `--service <name>` or `--module <module>` rebuilds targeted services (e.g., `--service generator --module orchestrator-service`), independent of `--restart`.
 3. Open <http://localhost:8088>. Only the Orchestrator (Queen) runs initially. Create and start swarms from the Hive view by selecting a scenario.
 
 ### Service Proxies

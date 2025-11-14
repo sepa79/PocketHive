@@ -1,0 +1,7 @@
+ARG RUNTIME_IMAGE=pockethive-jvm-base:latest
+ARG LOCAL_ARTIFACT_DIR=.local-jars
+
+FROM ${RUNTIME_IMAGE}
+COPY ${LOCAL_ARTIFACT_DIR}/scenario-manager-service.jar /app/app.jar
+COPY scenario-manager-service/scenarios /app/scenarios
+COPY scenario-manager-service/capabilities /app/capabilities
