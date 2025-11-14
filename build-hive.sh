@@ -4,14 +4,13 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "${SCRIPT_DIR}"
 
-ALL_SERVICES=(rabbitmq log-aggregator scenario-manager orchestrator ui prometheus grafana loki wiremock pushgateway swarm-controller generator payload-generator moderator processor postprocessor trigger)
+ALL_SERVICES=(rabbitmq log-aggregator scenario-manager orchestrator ui prometheus grafana loki wiremock pushgateway swarm-controller generator moderator processor postprocessor trigger)
 JAR_MODULES=(
   log-aggregator-service
   scenario-manager-service
   orchestrator-service
   swarm-controller-service
   generator-service
-  payload-generator-service
   moderator-service
   processor-service
   postprocessor-service
@@ -24,7 +23,6 @@ declare -A MODULE_TO_SERVICE=(
   ["orchestrator-service"]="orchestrator"
   ["swarm-controller-service"]="swarm-controller"
   ["generator-service"]="generator"
-  ["payload-generator-service"]="payload-generator"
   ["moderator-service"]="moderator"
   ["processor-service"]="processor"
   ["postprocessor-service"]="postprocessor"
@@ -37,7 +35,6 @@ declare -A SERVICE_TO_MODULE=(
   ["orchestrator"]="orchestrator-service"
   ["swarm-controller"]="swarm-controller-service"
   ["generator"]="generator-service"
-  ["payload-generator"]="payload-generator-service"
   ["moderator"]="moderator-service"
   ["processor"]="processor-service"
   ["postprocessor"]="postprocessor-service"
