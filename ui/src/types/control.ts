@@ -1,38 +1,38 @@
 export interface ControlEvent {
-  event: 'status' | 'lifecycle' | 'metric' | 'alert' | 'link';
-  kind: string;
-  version: string;
-  role: 'generator' | 'moderator' | 'processor' | 'postprocessor' | 'trigger' | 'swarm-controller';
-  instance: string;
-  swarmId: string;
-  location?: string;
-  messageId: string;
-  timestamp: string;
-  enabled?: boolean;
-  image?: string;
-  traffic?: string;
-  publishes?: string[];
+  event: 'status' | 'lifecycle' | 'metric' | 'alert' | 'link'
+  kind: string
+  version: string
+  role: string
+  instance: string
+  swarmId: string
+  location?: string
+  messageId: string
+  timestamp: string
+  enabled?: boolean
+  image?: string
+  traffic?: string
+  publishes?: string[]
   queues?: {
     work?: {
-      in?: string[];
-      out?: string[];
-      routes?: string[];
-    };
+      in?: string[]
+      out?: string[]
+      routes?: string[]
+    }
     control?: {
-      in?: string[];
-      out?: string[];
-      routes?: string[];
-    };
-  };
+      in?: string[]
+      out?: string[]
+      routes?: string[]
+    }
+  }
   queueStats?: Record<
     string,
     {
-      depth: number;
-      consumers: number;
-      oldestAgeSec?: number;
+      depth: number
+      consumers: number
+      oldestAgeSec?: number
     }
-  >;
-  data?: Record<string, unknown>;
+  >
+  data?: Record<string, unknown>
 }
 
 export function isControlEvent(raw: unknown): raw is ControlEvent {

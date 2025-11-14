@@ -60,7 +60,6 @@ import org.springframework.stereotype.Component;
  */
 @Component("processorWorker")
 @PocketHiveWorker(
-    role = "processor",
     input = WorkerInputType.RABBITMQ,
     output = WorkerOutputType.RABBITMQ,
     capabilities = {WorkerCapability.MESSAGE_DRIVEN, WorkerCapability.HTTP},
@@ -233,13 +232,13 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
         .orElse(HttpRequest.BodyPublishers.noBody());
     requestBuilder.method(method, publisher);
 
-    logger.debug("HTTP {} {} headers={} body={}", method, target, headersNode, body.orElse(""));
+    logger.debug("HTTP REQUEST {} {} headers={} body={}", method, target, headersNode, body.orElse(""));
 
     long start = clock.millis();
     try {
       HttpResponse<String> response = httpClient.send(requestBuilder.build(), HttpResponse.BodyHandlers.ofString());
       long duration = Math.max(0L, clock.millis() - start);
-      logger.debug("HTTP {} {} -> {}", method, target, response.statusCode());
+      logger.debug("HTTP RESPONSE {} {} -> {}", method, target, response.statusCode());
 
       boolean success = isSuccessful(response.statusCode());
       CallMetrics metrics = success

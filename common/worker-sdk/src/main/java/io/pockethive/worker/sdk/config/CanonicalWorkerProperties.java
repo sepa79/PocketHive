@@ -11,7 +11,8 @@ import java.util.Set;
 
 /**
  * Base {@link PocketHiveWorkerProperties} implementation that canonicalises configuration maps so the
- * control-plane runtime only ever sees camelCase keys that match the worker POJO.
+ * control-plane runtime only ever sees camelCase keys that match the worker POJO when binding
+ * {@code pockethive.worker.config}.
  *
  * @param <T> worker config type
  */
@@ -23,8 +24,8 @@ public abstract class CanonicalWorkerProperties<T> extends PocketHiveWorkerPrope
     private final ObjectMapper mapper;
     private final ObjectMapper canonicalisingMapper;
 
-    protected CanonicalWorkerProperties(String role, Class<T> configType, ObjectMapper mapper) {
-        super(role, configType);
+    protected CanonicalWorkerProperties(java.util.function.Supplier<String> roleSupplier, Class<T> configType, ObjectMapper mapper) {
+        super(roleSupplier, configType);
         this.mapper = Objects.requireNonNull(mapper, "mapper");
         this.canonicalisingMapper = mapper.copy()
             .configure(MapperFeature.ACCEPT_CASE_INSENSITIVE_PROPERTIES, true);

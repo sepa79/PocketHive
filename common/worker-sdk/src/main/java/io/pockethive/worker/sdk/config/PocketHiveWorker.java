@@ -10,17 +10,14 @@ import java.lang.annotation.Target;
  * Marks a bean as a PocketHive worker and provides routing metadata.
  * <p>
  * The runtime scans for this annotation when building {@link io.pockethive.worker.sdk.runtime.WorkerDefinition}
- * records. Usage examples are documented in {@code docs/sdk/worker-sdk-quickstart.md}.
+ * records. Usage examples are documented in {@code docs/sdk/worker-sdk-quickstart.md}. The worker role itself is
+ * resolved from {@code WorkerControlPlaneProperties} (typically sourced from the
+ * {@code POCKETHIVE_CONTROL_PLANE_WORKER_ROLE} environment variable) rather than the annotation.
  */
 @Target(ElementType.TYPE)
 @Retention(RetentionPolicy.RUNTIME)
 @Documented
 public @interface PocketHiveWorker {
-
-    /**
-     * Logical role of the worker (e.g. {@code processor}).
-     */
-    String role();
 
     /**
      * Optional human-friendly description added to status payloads/UI.

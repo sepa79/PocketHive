@@ -11,11 +11,13 @@ template:
           control-plane:
             worker:
               role: soap-generator
-          workers:
-            payload-generator:
+          worker:
+            config:
               scheduler:
                 rate-per-sec: 10
               template:
+                path: /soap
+                method: POST
                 body: |
                   <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
                                     xmlns:req="http://example.com/req/v1">
@@ -40,10 +42,9 @@ template:
           control-plane:
             worker:
               role: soap-processor
-          workers:
-            processor:
-              config:
-                batchSize: 5
+          worker:
+            config:
+              batchSize: 5
       work:
         in: soap-generator-out
         out: soap-processor-out

@@ -60,7 +60,8 @@ When creating your own workers from this template:
 - [ ] Copy the entire `examples/worker-starter` directory to a new repository.
 - [ ] Update Maven coordinates (`groupId`, `artifactId`, version) in the parent and module POMs.
 - [ ] Rename packages under `io.pockethive.examples.starter.generator` and `.processor` to match your namespace.
-- [ ] Adjust the `@PocketHiveWorker` annotations (role, queue aliases, config classes) to reflect your topology.
+- [ ] Adjust the `@PocketHiveWorker` annotations (input/capability metadata) and ensure `pockethive.control-plane.worker.role`
+      matches the role injected into each container.
 - [ ] Align `pockethive.control-plane.*` defaults in each module’s `application.yml` (control-plane exchange, traffic exchange, swarm identity, queue
       aliases) with the values provisioned by your Swarm Controller.
 - [ ] Replace the sample business logic and tests with your own. Inputs/outputs are auto-wired by the SDK, so you rarely need bespoke adapters.

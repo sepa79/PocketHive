@@ -1,0 +1,24 @@
+id: local-rest-defaults
+name: Local REST - Simple REST Swarm using Defaults
+description: Uses local images. Sample scenario that is using defaults from workers.
+template:
+  image: swarm-controller:latest
+  bees:
+    - role: generator
+      image: generator:latest
+      work:
+        out: gen
+    - role: moderator
+      image: moderator:latest
+      work:
+        in: gen
+        out: mod
+    - role: processor
+      image: processor:latest
+      work:
+        in: mod
+        out: final
+    - role: postprocessor
+      image: postprocessor:latest
+      work:
+        in: final

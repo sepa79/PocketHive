@@ -3,13 +3,13 @@ package io.pockethive.processor;
 public record ProcessorWorkerConfig(String baseUrl) {
 
   public ProcessorWorkerConfig {
-    baseUrl = normalize(baseUrl);
+    baseUrl = sanitise(baseUrl);
   }
-
-  private static String normalize(String baseUrl) {
-    if (baseUrl == null) {
-      return "";
+  private static String sanitise(String candidate) {
+    if (candidate == null) {
+      return null;
     }
-    return baseUrl.trim();
+    String trimmed = candidate.trim();
+    return trimmed.isEmpty() ? null : trimmed;
   }
 }

@@ -256,7 +256,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
       for (Bee bee : runnableBees) {
         String beeName = BeeNameGenerator.generate(bee.role(), swarmId);
         Map<String, String> env = new LinkedHashMap<>(
-            ControlPlaneContainerEnvironmentFactory.workerEnvironment(beeName, workerSettings, rabbitProperties));
+            ControlPlaneContainerEnvironmentFactory.workerEnvironment(beeName, bee.role(), workerSettings, rabbitProperties));
         applyWorkIoEnvironment(bee, env);
         String net = docker.resolveControlNetwork();
         if (hasText(net)) {

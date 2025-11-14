@@ -85,7 +85,7 @@ pockethive:
         logging:
           enabled: true
     worker:
-      role: processor
+      role: ${POCKETHIVE_CONTROL_PLANE_WORKER_ROLE}
       skip-self-signals: false
     manager:
       enabled: false # disable if the service is worker-only
@@ -106,7 +106,9 @@ The `control-queue-prefix` should capture only the shared prefix (for example,
 Rabbit inputs/outputs now live under `pockethive.inputs.rabbit` and
 `pockethive.outputs.rabbit`, keeping queue/exchange wiring separate from the control-plane block. The Swarm
 Controller injects the same queue/exchange/routing-key triplet into every worker container via environment
-variables, and `WorkerControlPlaneProperties` enforces that each declared entry is non-empty.
+variables, and `WorkerControlPlaneProperties` enforces that each declared entry is non-empty. The worker role is
+also provided through `POCKETHIVE_CONTROL_PLANE_WORKER_ROLE`, so services no longer hard-code it in their
+configuration files.
 
 For a detailed breakdown of the Swarm Controller's environment contract, including every required `pockethive.control-plane.*` and RabbitMQ property, see the [Swarm Controller configuration reference](../../swarm-controller-service/README.md#configuration-reference).
 
@@ -119,7 +121,7 @@ configuration to abort fast:
 | Category | Required variables |
 | --- | --- |
 | RabbitMQ connectivity | `SPRING_RABBITMQ_HOST`, `SPRING_RABBITMQ_PORT`, `SPRING_RABBITMQ_USERNAME`, `SPRING_RABBITMQ_PASSWORD`, `SPRING_RABBITMQ_VIRTUAL_HOST` |
-| Control-plane identity & routing | `POCKETHIVE_CONTROL_PLANE_EXCHANGE`, `POCKETHIVE_CONTROL_PLANE_SWARM_ID`, `POCKETHIVE_CONTROL_PLANE_INSTANCE_ID`, `POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE_PREFIX` |
+| Control-plane identity & routing | `POCKETHIVE_CONTROL_PLANE_EXCHANGE`, `POCKETHIVE_CONTROL_PLANE_SWARM_ID`, `POCKETHIVE_CONTROL_PLANE_INSTANCE_ID`, `POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE_PREFIX`, `POCKETHIVE_CONTROL_PLANE_WORKER_ROLE` |
 | Work IO configuration | `POCKETHIVE_INPUT_RABBIT_QUEUE`, `POCKETHIVE_OUTPUT_RABBIT_EXCHANGE`, `POCKETHIVE_OUTPUT_RABBIT_ROUTING_KEY`* |
 | Logging contract | `POCKETHIVE_LOGS_EXCHANGE`, `POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGGING_ENABLED`, `POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGS_EXCHANGE` |
 
@@ -143,6 +145,7 @@ services:
       POCKETHIVE_CONTROL_PLANE_EXCHANGE: ph.control
       POCKETHIVE_CONTROL_PLANE_SWARM_ID: dev-swarm
       POCKETHIVE_CONTROL_PLANE_INSTANCE_ID: generator-dev
+      POCKETHIVE_CONTROL_PLANE_WORKER_ROLE: generator
       POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE_PREFIX: ph.control
       POCKETHIVE_INPUT_RABBIT_QUEUE: ph.dev.mod
       POCKETHIVE_OUTPUT_RABBIT_EXCHANGE: ph.dev.hive

@@ -11,6 +11,7 @@ import io.pockethive.e2e.clients.ScenarioManagerClient.ScenarioDetails;
 import io.pockethive.e2e.config.EnvironmentConfig;
 import io.pockethive.swarm.model.Bee;
 import io.pockethive.swarm.model.SwarmTemplate;
+import java.util.Locale;
 import java.util.Map;
 import org.junit.jupiter.api.Assumptions;
 
@@ -56,7 +57,7 @@ public class ScenarioDefaultsSteps {
     assertNotNull(template, "Scenario template was not returned");
 
     Bee generatorBee = template.bees().stream()
-        .filter(bee -> GENERATOR_ROLE.equals(bee.role()))
+        .filter(bee -> bee != null && roleMatches(GENERATOR_ROLE, bee.role()))
         .findFirst()
         .orElseThrow(() -> new AssertionError("Scenario template did not define a generator bee"));
 
@@ -79,5 +80,17 @@ public class ScenarioDefaultsSteps {
 
   private void ensureScenario() {
     Assumptions.assumeTrue(scenarioDetails != null, "Scenario template was not fetched");
+  }
+
+  private boolean roleMatches(String expectedAlias, String actualRole) {
+    if (expectedAlias == null || actualRole == null) {
+      return false;
+    }
+    String alias = expectedAlias.trim().toLowerCase(Locale.ROOT);
+    String actual = actualRole.trim().toLowerCase(Locale.ROOT);
+    if (alias.isEmpty() || actual.isEmpty()) {
+      return false;
+    }
+    return alias.equals(actual) || actual.contains(alias) || alias.contains(actual);
   }
 }

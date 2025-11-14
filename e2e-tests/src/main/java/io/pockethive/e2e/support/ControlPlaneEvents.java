@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -251,7 +252,7 @@ public final class ControlPlaneEvents implements AutoCloseable {
       return false;
     }
     return equalsIgnoreCase(swarmId, status.swarmId())
-        && equalsIgnoreCase(role, status.role())
+        && rolesEqual(role, status.role())
         && equalsIgnoreCase(instance, status.instance());
   }
 
@@ -264,6 +265,25 @@ public final class ControlPlaneEvents implements AutoCloseable {
       return false;
     }
     return left.equalsIgnoreCase(right);
+  }
+
+  private boolean rolesEqual(String expected, String actual) {
+    String normalizedExpected = normalizeRole(expected);
+    String normalizedActual = normalizeRole(actual);
+    if (normalizedExpected == null || normalizedActual == null) {
+      return false;
+    }
+    return normalizedExpected.equals(normalizedActual)
+        || normalizedActual.contains(normalizedExpected)
+        || normalizedExpected.contains(normalizedActual);
+  }
+
+  private String normalizeRole(String role) {
+    if (role == null) {
+      return null;
+    }
+    String trimmed = role.trim();
+    return trimmed.isEmpty() ? null : trimmed.toLowerCase(Locale.ROOT);
   }
 
   private void assertQueueSection(String section, List<String> expected, List<String> actual) {

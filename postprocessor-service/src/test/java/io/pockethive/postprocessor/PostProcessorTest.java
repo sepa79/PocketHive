@@ -393,7 +393,7 @@ class PostProcessorTest {
     }
 
     private static PostProcessorWorkerProperties workerProperties(boolean publishAllMetrics) {
-        PostProcessorWorkerProperties properties = new PostProcessorWorkerProperties(new ObjectMapper());
+        PostProcessorWorkerProperties properties = new PostProcessorWorkerProperties(new ObjectMapper(), WORKER_PROPERTIES);
         Map<String, Object> config = new LinkedHashMap<>();
         config.put("publishAllMetrics", publishAllMetrics);
         properties.setConfig(config);

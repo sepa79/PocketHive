@@ -78,10 +78,12 @@ class ControlPlaneContainerEnvironmentFactoryTest {
 
         Map<String, String> env = ControlPlaneContainerEnvironmentFactory.workerEnvironment(
             "bee-a",
+            "processor",
             settings,
             rabbitProperties);
 
         assertThat(env).containsEntry("POCKETHIVE_CONTROL_PLANE_INSTANCE_ID", "bee-a");
+        assertThat(env).containsEntry("POCKETHIVE_CONTROL_PLANE_WORKER_ROLE", "processor");
         assertThat(env).containsEntry("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGS_EXCHANGE", "ph.logs");
         assertThat(env).containsEntry("POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE_PREFIX", "ph.control");
         assertThat(env).containsEntry("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_ENABLED", "true");
@@ -110,6 +112,7 @@ class ControlPlaneContainerEnvironmentFactoryTest {
 
         assertThatThrownBy(() -> ControlPlaneContainerEnvironmentFactory.workerEnvironment(
             "bee-a",
+            "processor",
             settings,
             rabbitProperties))
             .isInstanceOf(IllegalStateException.class)

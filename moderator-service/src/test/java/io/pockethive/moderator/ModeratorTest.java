@@ -30,7 +30,16 @@ class ModeratorTest {
 
     @BeforeEach
     void setUp() {
-        properties = new ModeratorWorkerProperties(new ObjectMapper());
+        properties = new ModeratorWorkerProperties(new ObjectMapper(), WORKER_PROPERTIES);
+        properties.setConfig(Map.of(
+            "mode", Map.of(
+                "type", "pass-through",
+                "ratePerSec", 0.0,
+                "sine", Map.of(
+                    "minRatePerSec", 0.0,
+                    "maxRatePerSec", 0.0,
+                    "periodSeconds", 60.0,
+                    "phaseOffsetSeconds", 0.0))));
         worker = new ModeratorWorkerImpl(properties);
     }
 

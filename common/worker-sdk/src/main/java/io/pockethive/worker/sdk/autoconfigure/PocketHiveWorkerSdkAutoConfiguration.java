@@ -10,7 +10,6 @@ import io.pockethive.controlplane.spring.ControlPlaneCommonAutoConfiguration;
 import io.pockethive.controlplane.spring.ManagerControlPlaneAutoConfiguration;
 import io.pockethive.controlplane.spring.WorkerControlPlaneAutoConfiguration;
 import io.pockethive.controlplane.spring.WorkerControlPlaneProperties;
-import io.pockethive.controlplane.topology.ControlPlaneTopologyDescriptor;
 import io.pockethive.controlplane.worker.WorkerControlPlane;
 import io.pockethive.worker.sdk.config.PocketHiveWorker;
 import io.pockethive.worker.sdk.config.PocketHiveWorkerProperties;
@@ -55,6 +54,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
 import org.springframework.beans.factory.ObjectProvider;
@@ -73,7 +73,6 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
 import org.springframework.core.env.ConfigurableEnvironment;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 
 /**
@@ -112,6 +111,7 @@ public class PocketHiveWorkerSdkAutoConfiguration {
             throw new IllegalStateException(
                 "Multiple @PocketHiveWorker beans are not supported. Found: %s".formatted(String.join(", ", beanNames)));
         }
+        String workerRole = resolveWorkerRole(workerProperties.getIfAvailable());
         List<WorkerDefinition> definitions = new ArrayList<>(beanNames.length);
         for (String beanName : beanNames) {
             PocketHiveWorker annotation = beanFactory.findAnnotationOnBean(beanName, PocketHiveWorker.class);
@@ -133,7 +133,7 @@ public class PocketHiveWorkerSdkAutoConfiguration {
                 beanName,
                 beanType,
                 annotation.input(),
-                annotation.role(),
+                workerRole,
                 io,
                 configType,
                 inputConfigType,
@@ -311,7 +311,6 @@ public class PocketHiveWorkerSdkAutoConfiguration {
 
     @Bean
     @ConditionalOnBean({WorkerRuntime.class, WorkerControlPlaneRuntime.class})
-    @ConditionalOnProperty(prefix = "pockethive.worker.inputs", name = "autowire", havingValue = "true")
     io.pockethive.worker.sdk.input.WorkInputFactory schedulerWorkInputFactory(
         WorkerRuntime workerRuntime,
         WorkerControlPlaneRuntime controlPlaneRuntime,
@@ -325,7 +324,6 @@ public class PocketHiveWorkerSdkAutoConfiguration {
 
     @Bean
     @ConditionalOnBean({WorkerRuntime.class, WorkerControlPlaneRuntime.class, RabbitTemplate.class, RabbitListenerEndpointRegistry.class})
-    @ConditionalOnProperty(prefix = "pockethive.worker.inputs", name = "autowire", havingValue = "true")
     io.pockethive.worker.sdk.input.WorkInputFactory rabbitWorkInputFactory(
         WorkerRuntime workerRuntime,
         WorkerControlPlaneRuntime controlPlaneRuntime,
@@ -340,7 +338,6 @@ public class PocketHiveWorkerSdkAutoConfiguration {
 
     @Bean
     @ConditionalOnBean({WorkerRegistry.class, WorkInputRegistry.class})
-    @ConditionalOnProperty(prefix = "pockethive.worker.inputs", name = "autowire", havingValue = "true")
     RabbitListenerConfigurer rabbitWorkInputListenerConfigurer(
         WorkerRegistry workerRegistry,
         WorkInputRegistry workInputRegistry
@@ -362,6 +359,17 @@ public class PocketHiveWorkerSdkAutoConfiguration {
         havingValue = "true")
     WorkerInvocationInterceptor workerMetricsInterceptor(MeterRegistry meterRegistry) {
         return new WorkerMetricsInterceptor(meterRegistry);
+    }
+
+    private static String resolveWorkerRole(WorkerControlPlaneProperties properties) {
+        if (properties == null || properties.getWorker() == null) {
+            throw new IllegalStateException("WorkerControlPlaneProperties must be configured to resolve the worker role");
+        }
+        String role = properties.getWorker().getRole();
+        if (role == null || role.isBlank()) {
+            throw new IllegalStateException("pockethive.control-plane.worker.role must not be blank");
+        }
+        return role.trim();
     }
 
     private static Set<WorkerCapability> resolveCapabilities(PocketHiveWorker annotation) {

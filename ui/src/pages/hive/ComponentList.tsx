@@ -33,7 +33,7 @@ export default function ComponentList({ components, selectedId, onSelect }: Prop
   return (
     <ul className="space-y-2">
       {components.map((c) => {
-        const role = c.role.trim() || '—'
+        const role = c.role?.trim() || '—'
         const canToggle = supportsConfigToggle(c)
         const enabled = c.config?.enabled !== false
         return (

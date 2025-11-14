@@ -16,9 +16,15 @@ Operators need to emit SOAP/XML (and other structured) payloads where the body, 
 - [ ] Introduce a **Dataset Provider** SPI that can stream `DataRecord` objects (JSON, POJO, or binary) from Redis, files, or synthetic sources.
 - [x] Add a brand-new **PayloadGenerator** worker (the existing generator stays untouched) that renders payload/header templates via a Jinja-like engine (Pebble).
 - [ ] Expose **templating extension hooks** (filters/functions/tests) so teams can add MAC/signature helpers without building entire worker plugins.
+<<<<<<< HEAD
 - [x] Build the templating logic as a dedicated helper class invoked from `onMessage`, preparing us to lift it into a smaller plugin surface later.
-- [ ] (Deferred) Dataset providers will attach provenance headers when introduced; the worker itself no longer references dataset config.
-- [ ] Keep all configuration declarative (`pockethive.workers.<role>.*`) so control-plane overrides can swap datasets/templates at runtime.
+- [ ] Ensure every `DataRecord` carries dataset provenance (dataset name/record id) via headers so downstream processors/postprocessors can reinsert or audit the original payload.
+- [ ] Keep all configuration declarative (`pockethive.worker.*`) so control-plane overrides can swap datasets/templates at runtime.
+=======
+- [ ] Build the templating logic as a dedicated helper class invoked from `onMessage`, preparing us to lift it into a smaller plugin surface later.
+- [ ] Ensure every `DataRecord` carries dataset provenance (dataset name/record id) via headers so downstream processors/postprocessors can reinsert or audit the original payload.
+- [ ] Keep all configuration declarative (`pockethive.worker.*`) so control-plane overrides can swap datasets/templates at runtime.
+>>>>>>> origin/main
 
 ## Non-Goals
 

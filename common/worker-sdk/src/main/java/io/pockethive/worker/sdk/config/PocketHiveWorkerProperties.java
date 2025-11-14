@@ -5,32 +5,32 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.Supplier;
 
 /**
- * Base configuration bean that captures worker-specific defaults under {@code pockethive.workers.<role>}.
+ * Base configuration bean that captures worker-specific defaults under {@code pockethive.worker}.
  * <p>
- * Services can extend this class, provide the worker role + config type, and expose it via
- * {@code @ConfigurationProperties("pockethive.workers.<role>")} to participate in automatic default-config
- * registration.
+ * Services extend this class, provide the worker role + config type, and simply annotate the concrete bean
+ * with {@link PocketHiveWorkerConfigProperties} so the SDK binds {@code pockethive.worker.config.*} once.
  *
  * @param <T> domain configuration type of the worker
  */
 public abstract class PocketHiveWorkerProperties<T> {
 
-    private final String role;
+    private final Supplier<String> roleSupplier;
     private final Class<T> configType;
     /**
-     * Worker-specific configuration payload bound from {@code pockethive.workers.<role>.config.*}.
+     * Worker-specific configuration payload bound from {@code pockethive.worker.config.*}.
      */
     private Map<String, Object> config = new LinkedHashMap<>();
 
-    protected PocketHiveWorkerProperties(String role, Class<T> configType) {
-        this.role = normaliseRole(role);
+    protected PocketHiveWorkerProperties(Supplier<String> roleSupplier, Class<T> configType) {
+        this.roleSupplier = Objects.requireNonNull(roleSupplier, "roleSupplier");
         this.configType = Objects.requireNonNull(configType, "configType");
     }
 
     public String role() {
-        return role;
+        return normaliseRole(roleSupplier.get());
     }
 
     public Class<T> configType() {
@@ -79,7 +79,7 @@ public abstract class PocketHiveWorkerProperties<T> {
             return Optional.of(mapper.convertValue(raw, configType));
         } catch (IllegalArgumentException ex) {
             String message = "Unable to convert worker defaults for role '%s' to %s"
-                .formatted(role, configType.getSimpleName());
+                .formatted(role(), configType.getSimpleName());
             throw new IllegalStateException(message, ex);
         }
     }
@@ -88,6 +88,6 @@ public abstract class PocketHiveWorkerProperties<T> {
         if (role == null || role.isBlank()) {
             throw new IllegalArgumentException("role must not be blank");
         }
-        return role.trim().toLowerCase();
+        return role.trim();
     }
 }

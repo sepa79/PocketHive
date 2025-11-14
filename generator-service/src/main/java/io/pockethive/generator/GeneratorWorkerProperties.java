@@ -1,26 +1,22 @@
 package io.pockethive.generator;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.pockethive.controlplane.spring.WorkerControlPlaneProperties;
 import io.pockethive.worker.sdk.config.CanonicalWorkerProperties;
-import java.util.Map;
-import org.springframework.boot.context.properties.ConfigurationProperties;
+import io.pockethive.worker.sdk.config.PocketHiveWorkerConfigProperties;
 import org.springframework.stereotype.Component;
 
 @Component
-@ConfigurationProperties(prefix = "pockethive.workers.generator")
+@PocketHiveWorkerConfigProperties
 class GeneratorWorkerProperties extends CanonicalWorkerProperties<GeneratorWorkerConfig> {
 
-  private static final GeneratorWorkerConfig FALLBACK = new GeneratorWorkerConfig(
-      0.0,
-      false,
-      new GeneratorWorkerConfig.Message("/api/test", "POST", "", Map.of())
-  );
 
-  GeneratorWorkerProperties(ObjectMapper mapper) {
-    super("generator", GeneratorWorkerConfig.class, mapper);
+  GeneratorWorkerProperties(ObjectMapper mapper, WorkerControlPlaneProperties controlPlaneProperties) {
+    super(() -> controlPlaneProperties.getWorker().getRole(), GeneratorWorkerConfig.class, mapper);
   }
 
   GeneratorWorkerConfig defaultConfig() {
-    return toConfig(objectMapper()).orElse(FALLBACK);
+    return toConfig(objectMapper()).orElseThrow(() ->
+        new IllegalStateException("Missing generator config under pockethive.worker.config"));
   }
 }

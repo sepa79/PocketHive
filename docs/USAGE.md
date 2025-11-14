@@ -100,22 +100,19 @@ Manual checks:
 - Start execution with `POST /api/swarms/{swarmId}/start` (body: `{ "idempotencyKey": "start-rest-001" }`). The Orchestrator sends `sig.swarm-start.<swarmId>.swarm-controller.ALL` on your behalf and you can reuse the same event subscriptions above to detect readiness or handle the matching `ev.error.*` topics if something fails.
 
 ### Worker configuration overrides
-- Scenario definitions provide per-role overrides through the `workers.<role>.config` block. The Scenario Manager merges those maps into the `SwarmPlan.bees[*].config` payload and the Swarm Controller immediately broadcasts them as `config-update` signals during bootstrap—no environment variables are used for logical worker settings anymore.
+- Scenario definitions provide per-role overrides by embedding a `pockethive.worker.config` payload inside each bee's `config` map. The Scenario Manager merges those maps into the `SwarmPlan.bees[*].config` payload and the Swarm Controller immediately broadcasts them as `config-update` signals during bootstrap—no environment variables are used for logical worker settings anymore.
 - Example snippet:
   ```yaml
-  workers:
-    generator:
-      config:
-        ratePerSec: 15
-        message:
-          path: /api/guarded
-          body: warmup
-    processor:
-      config:
-        baseUrl: http://wiremock:8080
-        timeoutMillis: 2500
+  config:
+    pockethive:
+      worker:
+        config:
+          ratePerSec: 15
+          message:
+            path: /api/guarded
+            body: warmup
   ```
-- Service defaults declared under `pockethive.workers.<role>.*` remain useful for local development, but once a swarm runs under the controller the scenario-supplied config is the single source of truth.
+- Service defaults declared under `pockethive.worker.*` remain useful for local development, but once a swarm runs under the controller the scenario-supplied config is the single source of truth.
 
 ## Troubleshooting
 - **WebSocket errors**: ensure UI health is `ok`, RabbitMQ is running and Web-STOMP is enabled; check browser network logs for `/ws`.

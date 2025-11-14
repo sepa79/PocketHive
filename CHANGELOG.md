@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.13.8] - 2025-11-14
+Timestamp: 2025-11-14T00:00:00Z
+
+- Worker configuration unification: introduced the `@PocketHiveWorkerConfigProperties` meta-annotation so every worker binds defaults from `pockethive.worker.config`, updated all services (generator/moderator/processor/postprocessor/trigger and the starter samples) plus scenarios to drop the old `pockethive.workers.<role>` hierarchy, and refreshed the SDK docs/usage guides to describe the simplified contract.
+- Hive UI resiliency: removed the hard-coded role allowlist so every component row exposes start/stop toggles, generalized control-event typing, and changed the topology builder to derive “SUT/WireMock” links from any worker that advertises a `baseUrl`, ensuring renamed/custom roles still render correctly.
+- Scenario + e2e harness polish: SwarmLifecycleSteps now logs the exact scenario payload, always taps the postprocessor queue, and normalizes role matching so renamed bees (e.g., `samplePostprocessor`) work without heuristics; the SOAP scenario example now embeds `pockethive.worker.config` overrides.
+- Tooling: `start-hive.sh` no longer includes the `restart` stage by default (restoring timing summaries on standard runs) but still supports targeted restarts via `./start-hive.sh restart -- <services>`.
+
 ## [0.13.7] - 2025-11-11
 Timestamp: 2025-11-11T00:00:00Z
 
@@ -622,3 +630,4 @@ Timestamp: 2025-08-28T23:51:09Z
 Timestamp: 2025-08-28T23:07:54Z
 
 - Initial repository setup.
+# Changelog

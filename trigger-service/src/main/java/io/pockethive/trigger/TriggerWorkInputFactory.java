@@ -12,11 +12,9 @@ import io.pockethive.worker.sdk.runtime.WorkerDefinition;
 import io.pockethive.worker.sdk.runtime.WorkerRuntime;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 @Component
-@ConditionalOnProperty(prefix = "pockethive.worker.inputs", name = "autowire", havingValue = "true")
 class TriggerWorkInputFactory implements WorkInputFactory {
 
   private final WorkerRuntime workerRuntime;
@@ -39,7 +37,7 @@ class TriggerWorkInputFactory implements WorkInputFactory {
   @Override
   public boolean supports(WorkerDefinition definition) {
     return definition.input() == WorkerInputType.SCHEDULER
-        && "trigger".equals(definition.role());
+        && "trigger".equalsIgnoreCase(definition.role());
   }
 
   @Override

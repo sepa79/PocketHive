@@ -1,31 +1,21 @@
 package io.pockethive.trigger;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.pockethive.controlplane.spring.WorkerControlPlaneProperties;
 import io.pockethive.worker.sdk.config.CanonicalWorkerProperties;
-import java.util.Map;
-import org.springframework.boot.context.properties.ConfigurationProperties;
+import io.pockethive.worker.sdk.config.PocketHiveWorkerConfigProperties;
 import org.springframework.stereotype.Component;
 
 @Component
-@ConfigurationProperties(prefix = "pockethive.workers.trigger")
+@PocketHiveWorkerConfigProperties
 class TriggerWorkerProperties extends CanonicalWorkerProperties<TriggerWorkerConfig> {
 
-  private static final TriggerWorkerConfig FALLBACK = new TriggerWorkerConfig(
-      1000L,
-      false,
-      "none",
-      "",
-      "",
-      "GET",
-      "",
-      Map.of()
-  );
-
-  TriggerWorkerProperties(ObjectMapper mapper) {
-    super("trigger", TriggerWorkerConfig.class, mapper);
+  TriggerWorkerProperties(ObjectMapper mapper, WorkerControlPlaneProperties controlPlaneProperties) {
+    super(() -> controlPlaneProperties.getWorker().getRole(), TriggerWorkerConfig.class, mapper);
   }
 
   TriggerWorkerConfig defaultConfig() {
-    return toConfig(objectMapper()).orElse(FALLBACK);
+    return toConfig(objectMapper()).orElseThrow(() ->
+        new IllegalStateException("Missing trigger config under pockethive.worker.config"));
   }
 }

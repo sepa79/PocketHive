@@ -16,7 +16,6 @@ import org.springframework.stereotype.Component;
  */
 @Component("sampleGeneratorWorker")
 @PocketHiveWorker(
-    role = "generator",
     config = SampleGeneratorConfig.class
 )
 class SampleGeneratorWorker implements PocketHiveWorkerFunction {
