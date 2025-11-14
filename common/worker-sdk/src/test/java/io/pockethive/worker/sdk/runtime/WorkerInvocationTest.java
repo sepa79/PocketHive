@@ -18,7 +18,6 @@ import io.pockethive.worker.sdk.config.WorkerInputType;
 import io.pockethive.worker.sdk.config.WorkerOutputType;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 import org.slf4j.LoggerFactory;
@@ -148,8 +147,8 @@ class WorkerInvocationTest {
             }
 
             @Override
-            public <C> Optional<C> config(Class<C> type) {
-                return state.config(type);
+            public <C> C config(Class<C> type) {
+                return state.config(type).orElse(null);
             }
 
             @Override

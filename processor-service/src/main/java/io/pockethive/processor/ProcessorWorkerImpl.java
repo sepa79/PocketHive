@@ -117,8 +117,7 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
    */
   @Override
   public WorkResult onMessage(WorkMessage in, WorkerContext context) {
-    ProcessorWorkerConfig config = context.config(ProcessorWorkerConfig.class)
-        .orElseGet(properties::defaultConfig);
+    ProcessorWorkerConfig config = context.configOrDefault(ProcessorWorkerConfig.class, properties::defaultConfig);
 
     Logger logger = context.logger();
     try {

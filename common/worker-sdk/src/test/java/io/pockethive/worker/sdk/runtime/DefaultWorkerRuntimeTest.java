@@ -22,7 +22,6 @@ import io.pockethive.worker.sdk.config.WorkerInputType;
 import io.pockethive.worker.sdk.config.WorkerOutputType;
 import io.pockethive.worker.sdk.output.WorkOutputRegistry;
 import java.util.List;
-import java.util.Optional;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 
@@ -83,8 +82,8 @@ class DefaultWorkerRuntimeTest {
             }
 
             @Override
-            public <C> Optional<C> config(Class<C> type) {
-                return state.config(type);
+            public <C> C config(Class<C> type) {
+                return state.config(type).orElse(null);
             }
 
             @Override

@@ -123,8 +123,8 @@ class WorkerMetricsInterceptorTest {
             }
 
             @Override
-            public <C> Optional<C> config(Class<C> type) {
-                return state.config(type);
+            public <C> C config(Class<C> type) {
+                return state.config(type).orElse(null);
             }
 
             @Override

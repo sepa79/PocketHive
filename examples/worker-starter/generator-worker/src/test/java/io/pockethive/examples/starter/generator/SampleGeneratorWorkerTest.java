@@ -12,7 +12,6 @@ import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pockethive.worker.sdk.api.WorkResult;
 import io.pockethive.worker.sdk.api.WorkerContext;
 import io.pockethive.worker.sdk.api.WorkerInfo;
-import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -69,11 +68,11 @@ class SampleGeneratorWorkerTest {
     }
 
     @Override
-    public <C> Optional<C> config(Class<C> type) {
+    public <C> C config(Class<C> type) {
       if (type.isAssignableFrom(SampleGeneratorConfig.class)) {
-        return Optional.of(type.cast(config));
+        return type.cast(config);
       }
-      return Optional.empty();
+      return null;
     }
 
     @Override

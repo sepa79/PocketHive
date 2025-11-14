@@ -20,7 +20,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -325,11 +324,11 @@ class PostProcessorTest {
         }
 
         @Override
-        public <C> Optional<C> config(Class<C> type) {
+        public <C> C config(Class<C> type) {
             if (config != null && type.isAssignableFrom(PostProcessorWorkerConfig.class)) {
-                return Optional.of(type.cast(config));
+                return type.cast(config);
             }
-            return Optional.empty();
+            return null;
         }
 
         @Override

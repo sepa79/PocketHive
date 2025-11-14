@@ -14,7 +14,6 @@ import java.net.http.HttpHeaders;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.util.Map;
-import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -119,11 +118,11 @@ class TriggerWorkerImplTest {
     }
 
     @Override
-    public <C> Optional<C> config(Class<C> type) {
+    public <C> C config(Class<C> type) {
       if (config != null && type.isAssignableFrom(TriggerWorkerConfig.class)) {
-        return Optional.of(type.cast(config));
+        return type.cast(config);
       }
-      return Optional.empty();
+      return null;
     }
 
     @Override

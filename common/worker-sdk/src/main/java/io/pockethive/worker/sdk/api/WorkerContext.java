@@ -32,9 +32,16 @@ public interface WorkerContext {
      *
      * @param type configuration class to look up
      * @param <C>  configuration type
-     * @return a typed configuration or {@link Optional#empty()} when no config is available
+     * @return the typed configuration or {@code null} when no config is available
      */
-    <C> Optional<C> config(Class<C> type);
+    <C> C config(Class<C> type);
+
+    /**
+     * Convenience wrapper that exposes the configuration as an {@link Optional}.
+     */
+    default <C> Optional<C> configOptional(Class<C> type) {
+        return Optional.ofNullable(config(type));
+    }
 
     /**
      * Convenience wrapper that falls back to a supplier when no configuration is available.
@@ -42,7 +49,8 @@ public interface WorkerContext {
     default <C> C configOrDefault(Class<C> type, Supplier<C> fallback) {
         Objects.requireNonNull(type, "type");
         Objects.requireNonNull(fallback, "fallback");
-        return config(type).orElseGet(fallback);
+        C value = config(type);
+        return value != null ? value : fallback.get();
     }
 
     /**

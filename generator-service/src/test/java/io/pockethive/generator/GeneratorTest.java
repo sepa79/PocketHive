@@ -12,7 +12,6 @@ import io.pockethive.worker.sdk.api.WorkerInfo;
 import io.pockethive.worker.sdk.testing.ControlPlaneTestFixtures;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.amqp.core.MessageProperties;
@@ -111,11 +110,11 @@ class GeneratorTest {
     }
 
     @Override
-    public <C> Optional<C> config(Class<C> type) {
+    public <C> C config(Class<C> type) {
       if (config != null && type.isAssignableFrom(GeneratorWorkerConfig.class)) {
-        return Optional.of(type.cast(config));
+        return type.cast(config);
       }
-      return Optional.empty();
+      return null;
     }
 
     @Override

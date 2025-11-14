@@ -11,7 +11,6 @@ import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pockethive.worker.sdk.api.WorkResult;
 import io.pockethive.worker.sdk.api.WorkerContext;
 import io.pockethive.worker.sdk.api.WorkerInfo;
-import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -50,8 +49,8 @@ class SampleProcessorWorkerTest {
     }
 
     @Override
-    public <C> Optional<C> config(Class<C> type) {
-      return Optional.empty();
+    public <C> C config(Class<C> type) {
+      return null;
     }
 
     @Override

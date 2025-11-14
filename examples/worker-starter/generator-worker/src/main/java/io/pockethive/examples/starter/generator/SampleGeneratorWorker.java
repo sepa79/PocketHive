@@ -28,8 +28,7 @@ class SampleGeneratorWorker implements PocketHiveWorkerFunction {
 
   @Override
   public WorkResult onMessage(WorkMessage seed, WorkerContext context) {
-    SampleGeneratorConfig config = context.config(SampleGeneratorConfig.class)
-        .orElseGet(properties::defaultConfig);
+    SampleGeneratorConfig config = context.configOrDefault(SampleGeneratorConfig.class, properties::defaultConfig);
 
     context.statusPublisher()
         .update(status -> status
