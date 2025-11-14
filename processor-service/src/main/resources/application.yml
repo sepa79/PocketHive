@@ -20,10 +20,9 @@ pockethive:
     rabbit:
       exchange: ${POCKETHIVE_OUTPUT_RABBIT_EXCHANGE}
       routingKey: ${POCKETHIVE_OUTPUT_RABBIT_ROUTING_KEY}
-  workers:
-    processor:
-      config:
-        base-url: http://wiremock:8080
+  worker:
+    config:
+      base-url: http://wiremock:8080
   control-plane:
     exchange: ${POCKETHIVE_CONTROL_PLANE_EXCHANGE}
     swarm-id: ${POCKETHIVE_CONTROL_PLANE_SWARM_ID}

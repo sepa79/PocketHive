@@ -3,12 +3,11 @@ package io.pockethive.trigger;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.controlplane.spring.WorkerControlPlaneProperties;
 import io.pockethive.worker.sdk.config.CanonicalWorkerProperties;
-import java.util.Map;
-import org.springframework.boot.context.properties.ConfigurationProperties;
+import io.pockethive.worker.sdk.config.PocketHiveWorkerConfigProperties;
 import org.springframework.stereotype.Component;
 
 @Component
-@ConfigurationProperties(prefix = "pockethive.workers.trigger")
+@PocketHiveWorkerConfigProperties
 class TriggerWorkerProperties extends CanonicalWorkerProperties<TriggerWorkerConfig> {
 
   TriggerWorkerProperties(ObjectMapper mapper, WorkerControlPlaneProperties controlPlaneProperties) {
@@ -17,6 +16,6 @@ class TriggerWorkerProperties extends CanonicalWorkerProperties<TriggerWorkerCon
 
   TriggerWorkerConfig defaultConfig() {
     return toConfig(objectMapper()).orElseThrow(() ->
-        new IllegalStateException("Missing trigger config under pockethive.workers.trigger"));
+        new IllegalStateException("Missing trigger config under pockethive.worker.config"));
   }
 }

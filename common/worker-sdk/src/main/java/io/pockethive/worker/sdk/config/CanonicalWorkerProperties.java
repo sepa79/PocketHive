@@ -11,7 +11,8 @@ import java.util.Set;
 
 /**
  * Base {@link PocketHiveWorkerProperties} implementation that canonicalises configuration maps so the
- * control-plane runtime only ever sees camelCase keys that match the worker POJO.
+ * control-plane runtime only ever sees camelCase keys that match the worker POJO when binding
+ * {@code pockethive.worker.config}.
  *
  * @param <T> worker config type
  */

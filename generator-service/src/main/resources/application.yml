@@ -17,16 +17,15 @@ pockethive:
     rabbit:
       exchange: ${POCKETHIVE_OUTPUT_RABBIT_EXCHANGE}
       routingKey: ${POCKETHIVE_OUTPUT_RABBIT_ROUTING_KEY}
-  workers:
-    generator:
-      config:
-        ratePerSec: 0.0
-        singleRequest: false
-        message:
-          path: /api/test
-          method: POST
-          body: hello-world
-          headers: {}
+  worker:
+    config:
+      ratePerSec: 0.0
+      singleRequest: false
+      message:
+        path: /api/test
+        method: POST
+        body: hello-world
+        headers: {}
   control-plane:
     exchange: ${POCKETHIVE_CONTROL_PLANE_EXCHANGE}
     swarm-id: ${POCKETHIVE_CONTROL_PLANE_SWARM_ID}

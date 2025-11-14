@@ -18,7 +18,7 @@ Operators need to emit SOAP/XML (and other structured) payloads where the body, 
 - [ ] Expose **templating extension hooks** (filters/functions/tests) so teams can add MAC/signature helpers without building entire worker plugins.
 - [ ] Build the templating logic as a dedicated helper class invoked from `onMessage`, preparing us to lift it into a smaller plugin surface later.
 - [ ] Ensure every `DataRecord` carries dataset provenance (dataset name/record id) via headers so downstream processors/postprocessors can reinsert or audit the original payload.
-- [ ] Keep all configuration declarative (`pockethive.workers.<role>.*`) so control-plane overrides can swap datasets/templates at runtime.
+- [ ] Keep all configuration declarative (`pockethive.worker.*`) so control-plane overrides can swap datasets/templates at runtime.
 
 ## Non-Goals
 

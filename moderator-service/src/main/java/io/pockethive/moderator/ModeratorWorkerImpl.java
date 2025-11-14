@@ -23,7 +23,7 @@ import org.springframework.stereotype.Component;
  *
  * <p>Moderation is intentionally lightweight today—just pass-through with metadata—but
  * engineers can extend it with validation or routing logic. Flip the
- * {@code pockethive.workers.moderator.enabled}
+ * {@code pockethive.worker.enabled}
  * flag in {@code application.yml} (or push a runtime override) to pause moderation during load
  * testing. The worker keeps publishing status updates so you can confirm its enabled/disabled state
  * from Grafana.</p>
@@ -48,9 +48,9 @@ class ModeratorWorkerImpl implements PocketHiveWorkerFunction {
   /**
    * Accepts a message from the generator queue, records the moderator's enabled flag in the worker
    * status stream, and forwards the payload to the moderator queue. Configuration arrives via
-   * {@code pockethive.workers.moderator.enabled} (boolean) and can be overridden live
+   * {@code pockethive.worker.enabled} (boolean) and can be overridden live
    * through the control plane. Operation modes are selected with
-   * {@code pockethive.workers.moderator.config.mode.type} and support
+   * {@code pockethive.worker.config.mode.type} and support
    * {@code pass-through}, {@code rate-per-sec}, and {@code sine}. A
    * simple JSON override looks like {@code {"enabled": true}} or
    * {@code {"mode": {"type": "rate-per-sec", "ratePerSec": 5}}}.

@@ -3,11 +3,11 @@ package io.pockethive.postprocessor;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.controlplane.spring.WorkerControlPlaneProperties;
 import io.pockethive.worker.sdk.config.CanonicalWorkerProperties;
-import org.springframework.boot.context.properties.ConfigurationProperties;
+import io.pockethive.worker.sdk.config.PocketHiveWorkerConfigProperties;
 import org.springframework.stereotype.Component;
 
 @Component
-@ConfigurationProperties(prefix = "pockethive.workers.postprocessor")
+@PocketHiveWorkerConfigProperties
 class PostProcessorWorkerProperties extends CanonicalWorkerProperties<PostProcessorWorkerConfig> {
 
   PostProcessorWorkerProperties(ObjectMapper mapper, WorkerControlPlaneProperties controlPlaneProperties) {
@@ -16,6 +16,6 @@ class PostProcessorWorkerProperties extends CanonicalWorkerProperties<PostProces
 
   PostProcessorWorkerConfig defaultConfig() {
     return toConfig(objectMapper()).orElseThrow(() ->
-        new IllegalStateException("Missing postprocessor config under pockethive.workers.postprocessor"));
+        new IllegalStateException("Missing postprocessor config under pockethive.worker.config"));
   }
 }

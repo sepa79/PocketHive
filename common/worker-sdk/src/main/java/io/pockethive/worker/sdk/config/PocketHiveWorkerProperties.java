@@ -8,11 +8,10 @@ import java.util.Optional;
 import java.util.function.Supplier;
 
 /**
- * Base configuration bean that captures worker-specific defaults under {@code pockethive.workers.<role>}.
+ * Base configuration bean that captures worker-specific defaults under {@code pockethive.worker}.
  * <p>
- * Services can extend this class, provide the worker role + config type, and expose it via
- * {@code @ConfigurationProperties("pockethive.workers.<role>")} to participate in automatic default-config
- * registration.
+ * Services extend this class, provide the worker role + config type, and simply annotate the concrete bean
+ * with {@link PocketHiveWorkerConfigProperties} so the SDK binds {@code pockethive.worker.config.*} once.
  *
  * @param <T> domain configuration type of the worker
  */
@@ -21,7 +20,7 @@ public abstract class PocketHiveWorkerProperties<T> {
     private final Supplier<String> roleSupplier;
     private final Class<T> configType;
     /**
-     * Worker-specific configuration payload bound from {@code pockethive.workers.<role>.config.*}.
+     * Worker-specific configuration payload bound from {@code pockethive.worker.config.*}.
      */
     private Map<String, Object> config = new LinkedHashMap<>();
 

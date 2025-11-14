@@ -16,17 +16,16 @@ pockethive:
     rabbit:
       exchange: ${POCKETHIVE_OUTPUT_RABBIT_EXCHANGE}
       routingKey: ${POCKETHIVE_OUTPUT_RABBIT_ROUTING_KEY}
-  workers:
-    trigger:
-      config:
-        interval-ms: 1000
-        single-request: false
-        action-type: none
-        command: ""
-        url: ""
-        method: GET
-        body: ""
-        headers: {}
+  worker:
+    config:
+      interval-ms: 1000
+      single-request: false
+      action-type: none
+      command: ""
+      url: ""
+      method: GET
+      body: ""
+      headers: {}
   control-plane:
     exchange: ${POCKETHIVE_CONTROL_PLANE_EXCHANGE}
     swarm-id: ${POCKETHIVE_CONTROL_PLANE_SWARM_ID}

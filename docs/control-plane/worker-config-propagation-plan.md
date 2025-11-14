@@ -5,11 +5,11 @@ Purpose: allow scenario definitions to provide full worker `config` sections tha
 ## Proposed startup sequence
 
 1. **Scenario authoring**
-   - [x] Extend the scenario schema (`scenarios/*.yaml`) with a `workers.<role>.config` block that mirrors the worker DTO (same shape as `pockethive.workers.<role>.config`).
-   - [x] Keep `env` for low-level overrides, but treat `workers.<role>.config` as the preferred declarative config.
+   - [x] Extend the scenario schema (`scenarios/*.yaml`) with a `pockethive.worker.config` block inside each bee so it mirrors the worker DTO (same shape as `pockethive.worker.config`).
+   - [x] Keep `env` for low-level overrides, but treat `pockethive.worker.config` as the preferred declarative config.
 
 2. **Scenario Manager**
-   - [x] When validating a scenario, merge the `workers.<role>.config` block with any template defaults to produce the effective config map.
+   - [x] When validating a scenario, merge the `pockethive.worker.config` block with any template defaults to produce the effective config map.
    - [x] Persist that structured config alongside other swarm metadata so the orchestrator can fetch it.
 
 3. **Swarm creation request**
@@ -24,13 +24,13 @@ Purpose: allow scenario definitions to provide full worker `config` sections tha
 
 5. **Worker SDK behavior**
    - [x] Workers already listen for `config-update` and expose `context.config(...)`; verify that startup updates hydrate before the first work message is dispatched.
-   - [x] If a worker also has `pockethive.workers.<role>.config` defaults in its `application.yml`, ensure the control-plane payload overrides them deterministically, matching Stage 2 semantics.
+   - [x] If a worker also has `pockethive.worker.config` defaults in its `application.yml`, ensure the control-plane payload overrides them deterministically, matching Stage 2 semantics.
 
 6. **Fallback / migration**
    - [x] Remove env-based config wiring once the control-plane-backed flow is live (no dual-write).
 
 7. **Documentation & tooling**
-   - [x] Update `docs/USAGE.md`, worker READMEs, and scenario docs to show the new `workers.<role>.config` syntax.
+   - [x] Update `docs/USAGE.md`, worker READMEs, and scenario docs to show the new `pockethive.worker.config` syntax.
    - [x] Describe the startup sequence so operators understand that configs now flow through control-plane messages instead of env vars.
 
 ## Open items

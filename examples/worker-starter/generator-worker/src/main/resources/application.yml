@@ -17,8 +17,7 @@ pockethive:
     control-queue-prefix: ph.control
     worker:
       role: ${POCKETHIVE_CONTROL_PLANE_WORKER_ROLE}
-  workers:
-    generator:
-      config:
-        ratePerSecond: 1.0
-        message: "Hello from the generator"
+  worker:
+    config:
+      ratePerSecond: 1.0
+      message: "Hello from the generator"
