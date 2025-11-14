@@ -20,8 +20,6 @@ import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.controlplane.routing.ControlPlaneRouting.RoutingKey;
 import io.pockethive.swarm.model.TrafficPolicy;
 import io.pockethive.swarmcontroller.config.SwarmControllerProperties;
-import io.pockethive.swarmcontroller.SwarmMetrics;
-import io.pockethive.swarmcontroller.SwarmStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
@@ -349,6 +347,7 @@ public class SwarmSignalListener {
           if (isControllerCommand(cs)) {
             if (enabledFlag != null) {
               controllerEnabled = enabledFlag;
+              lifecycle.setControllerEnabled(enabledFlag);
               sendStatusDelta();
               stateEnabled = enabledFlag;
               details.put("controller", Map.of("enabled", enabledFlag));
@@ -404,13 +403,17 @@ public class SwarmSignalListener {
         if (isForLocalSwarm(cs)) {
           processSwarmSignal(cs, signal, swarmIdOrDefault(cs), args -> {
             lifecycle.start(args);
+            controllerEnabled = true;
             sendStatusFull();
           }, "start");
         }
       }
       case ControlPlaneSignals.SWARM_STOP -> {
         if (isForLocalSwarm(cs)) {
-          processSwarmSignal(cs, signal, swarmIdOrDefault(cs), args -> lifecycle.stop(), "stop");
+          processSwarmSignal(cs, signal, swarmIdOrDefault(cs), args -> {
+            lifecycle.stop();
+            controllerEnabled = false;
+          }, "stop");
         }
       }
       case ControlPlaneSignals.SWARM_REMOVE -> {

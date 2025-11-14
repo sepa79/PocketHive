@@ -109,6 +109,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
   private BufferGuardController bufferGuardController;
   private TrafficPolicy trafficPolicy;
   private SwarmStatus status = SwarmStatus.STOPPED;
+  private boolean controllerEnabled = false;
   private String template;
 
   private static final long STATUS_TTL_MS = 15_000L;
@@ -198,6 +199,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
     } else if (template == null) {
       template = planJson;
     }
+    setControllerEnabled(true);
     setSwarmEnabled(true);
   }
 
@@ -315,6 +317,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
   public void stop() {
     log.info("Stopping swarm {}", swarmId);
     setSwarmEnabled(false);
+    setControllerEnabled(false);
 
     String controlQueue = properties.controlQueueName(role, instanceId);
     String rk = "ev.status-delta." + role + "." + instanceId;
@@ -591,18 +594,41 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
         queueTags("buffer-guard"),
         rate -> sendBufferGuardRate(settings.targetRole(), rate));
     bufferGuardController.start();
-    log.info("Buffer guard enabled for queue {} targeting role {} (target depth {})",
+    if (!controllerEnabled) {
+      bufferGuardController.pause();
+    }
+    log.info("Buffer guard started for queue {} targeting role {} (target depth {})",
         settings.queueAlias(),
         settings.targetRole(),
         settings.targetDepth());
   }
 
   private void stopBufferGuard() {
+    if (bufferGuardController == null && bufferGuardSettings.isEmpty()) {
+      return;
+    }
     if (bufferGuardController != null) {
       bufferGuardController.stop();
       bufferGuardController = null;
     }
     bufferGuardSettings = Optional.empty();
+  }
+
+  private void startBufferGuardIfConfigured() {
+    if (!controllerEnabled) {
+      return;
+    }
+    if (bufferGuardController != null) {
+      bufferGuardController.resume();
+      return;
+    }
+    bufferGuardSettings.ifPresent(this::startBufferGuard);
+  }
+
+  private void stopBufferGuardController() {
+    if (bufferGuardController != null) {
+      bufferGuardController.pause();
+    }
   }
 
   private Optional<String> queueName(SwarmPlan plan, String role, Function<Work, String> extractor) {
@@ -1000,6 +1026,8 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
   public synchronized void enableAll() {
     var data = mapper.createObjectNode();
     data.put("enabled", true);
+    log.info("Issuing swarm-wide enable config-update for swarm {} (role={} instance={})",
+        swarmId, role, instanceId);
     publishConfigUpdate(data, "enable");
     status = SwarmStatus.RUNNING;
   }
@@ -1015,15 +1043,35 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
   public synchronized void setSwarmEnabled(boolean enabledFlag) {
     if (enabledFlag) {
       enableAll();
+      startBufferGuardIfConfigured();
     } else {
       disableAll();
+      stopBufferGuardController();
       status = SwarmStatus.STOPPED;
+    }
+  }
+
+  @Override
+  public synchronized void setControllerEnabled(boolean enabled) {
+    if (this.controllerEnabled == enabled) {
+      return;
+    }
+    this.controllerEnabled = enabled;
+    log.info("Swarm controller {} for swarm {} (role {})", enabled ? "enabled" : "disabled", swarmId, role);
+    if (bufferGuardController != null) {
+      if (enabled) {
+        bufferGuardController.resume();
+      } else {
+        bufferGuardController.pause();
+      }
     }
   }
 
   private synchronized void disableAll() {
     var data = mapper.createObjectNode();
     data.put("enabled", false);
+    log.info("Issuing swarm-wide disable config-update for swarm {} (role={} instance={})",
+        swarmId, role, instanceId);
     publishConfigUpdate(data, "disable");
   }
 

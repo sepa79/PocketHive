@@ -55,8 +55,7 @@
   <logger name="com.rabbitmq" level="WARN" additivity="false">
     <appender-ref ref="CONSOLE"/>
   </logger>
-  <logger name="io.pockethive" level="WARN"/>
-  <logger name="io.pockethive.swarmcontroller.guard" level="INFO"/>
+  <logger name="io.pockethive" level="INFO"/>
 
   <if condition='!"false".equalsIgnoreCase(property("rabbitLoggingEnabled"))'>
     <then>

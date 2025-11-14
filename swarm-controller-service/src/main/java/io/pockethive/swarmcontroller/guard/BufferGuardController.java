@@ -8,6 +8,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
@@ -40,6 +41,7 @@ public final class BufferGuardController {
   private final ScheduledExecutorService executor;
 
   private ScheduledFuture<?> future;
+  private final AtomicBoolean paused = new AtomicBoolean(false);
   private BufferGuardState guardState;
   private final AtomicLong depthValue = new AtomicLong(0);
   private final AtomicLong targetValue = new AtomicLong(0);
@@ -79,7 +81,12 @@ public final class BufferGuardController {
     long periodMs = Math.max(settings.samplePeriod().toMillis(), 50L);
     runGuardTick();
     future = executor.scheduleAtFixedRate(this::runGuardTick, periodMs, periodMs, TimeUnit.MILLISECONDS);
-  }
+    log.info(
+      "Buffer guard [{}] started (queue={} targetRole={})",
+      settings.queueAlias(),
+      settings.queueName(),
+      settings.targetRole());
+    }
 
   public synchronized void stop() {
     if (future != null) {
@@ -90,6 +97,19 @@ public final class BufferGuardController {
     removeGauges();
     stateValue.set(GuardMode.DISABLED.code);
     executor.shutdownNow();
+    log.info("Buffer guard [{}] stopped", settings.queueAlias());
+  }
+
+  public void pause() {
+    if (paused.compareAndSet(false, true)){
+      log.info("Buffer guard [{}] paused", settings.queueAlias());
+    }
+  }
+
+  public void resume() {
+    if (paused.compareAndSet(true, false)){
+      log.info("Buffer guard [{}] resumed", settings.queueAlias());
+    }
   }
 
   private void runGuardTick() {
@@ -98,6 +118,10 @@ public final class BufferGuardController {
       return;
     }
     try {
+      if (paused.get()) {
+        updateMetrics(0, state.currentRatePerSec, GuardMode.DISABLED);
+        return;
+      }
       GuardMode mode = GuardMode.STEADY;
       boolean prefillActive = state.isPrefillActive();
       double prefillFactor = 1.0;
