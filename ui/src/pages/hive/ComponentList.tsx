@@ -4,22 +4,6 @@ import { sendConfigUpdate } from '../../lib/orchestratorApi'
 import type { MouseEvent } from 'react'
 import { Play, Square } from 'lucide-react'
 
-const CONFIG_UPDATE_ROLES = new Set([
-  'generator',
-  'moderator',
-  'processor',
-  'postprocessor',
-  'trigger',
-  'swarm-controller',
-])
-
-function supportsConfigToggle(role: string | undefined) {
-  if (!role) return false
-  const normalized = role.trim().toLowerCase()
-  if (!normalized) return false
-  return CONFIG_UPDATE_ROLES.has(normalized)
-}
-
 interface Props {
   components: Component[]
   selectedId?: string
@@ -39,8 +23,8 @@ export default function ComponentList({ components, selectedId, onSelect }: Prop
   return (
     <ul className="space-y-2">
       {components.map((c) => {
-        const role = c.role.trim() || '—'
-        const canToggle = supportsConfigToggle(c.role)
+        const role = c.role?.trim() || '—'
+        const canToggle = Boolean(c.role?.trim())
         const enabled = c.config?.enabled !== false
         return (
           <li
@@ -102,4 +86,3 @@ function color(h: HealthStatus) {
       return 'bg-green-500'
   }
 }
-

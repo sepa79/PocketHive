@@ -24,9 +24,10 @@
    binds it automatically and exposes it via `WorkerContext#config(...)`.
 
 5. **Enrich worker metadata**  
-   Workers describe their role, capabilities, description, and IO bindings once,
-   via `@PocketHiveWorker`. Scenario-manager reads the same metadata to expose it
-   to the UI (so the UI no longer hard-codes which worker can do what).
+   Workers describe their capabilities, description, and IO bindings once via
+   `@PocketHiveWorker`. The control-plane configuration remains the source of truth
+   for the worker role, and scenario-manager reads the combined metadata to expose
+   it to the UI (so the UI no longer hard-codes which worker can do what).
 
 6. **Remove RuntimeAdapter classes**  
    After the above pieces land, generator/moderator/processor/trigger services have
@@ -56,7 +57,7 @@
   `pockethive.outputs.<worker-role>` by default; allow overrides per worker via
   annotation attributes.
 - Worker domain config becomes a separate bean, e.g.
-  `@ConfigurationProperties("pockethive.workers.<role>")`.
+  `@PocketHiveWorkerConfigProperties`.
 
 ### 3. Output SPI
 
@@ -90,7 +91,7 @@
 
 - Provide a base `PocketHiveWorkerProperties<T>` that workers can extend or reuse:
   ```java
-  @ConfigurationProperties("pockethive.workers.generator")
+  @PocketHiveWorkerConfigProperties
   public class GeneratorWorkerProperties extends PocketHiveWorkerProperties<GeneratorWorkerConfig> {}
   ```
 - Auto-bind defaults via `@EnablePocketHiveWorkers` so the SDK registers them with
@@ -118,7 +119,7 @@
 1. **Registry naming** — Favor keeping separate registries (`WorkInputRegistry`
    + `WorkOutputRegistry`) to keep usage simple and aligned with the existing
    lifecycle hooks.
-2. **Default config binding** — Enforce the convention (`pockethive.workers.<role>`)
+2. **Default config binding** — Enforce the convention (`pockethive.worker.*`)
    rather than allowing annotation overrides; keep the user experience simple.
 3. **Backward deletion** — Breaking changes are acceptable as part of SDK v2; no
    backward compatibility required. Migration happens alongside the v2 rollout.
@@ -145,7 +146,7 @@
    - [x] Update `WorkerStatus` model and control-plane emissions to include description, IO, capabilities.
 
 2. **Configuration Infrastructure**
-   - [x] Introduce `PocketHiveWorkerProperties<T>` base class and bind `pockethive.workers.<role>` automatically. Services can extend the base, provide `role` + `configType`, and expose `@ConfigurationProperties("pockethive.workers.<role>")`. Defaults defined under `...enabled` / `...config.*` are auto-registered with the control plane for every worker sharing that role.
+   - [x] Introduce `PocketHiveWorkerProperties<T>` base class and bind `pockethive.worker.*` automatically. Services can extend the base, provide `role` + `configType`, and expose `@PocketHiveWorkerConfigProperties`. Defaults defined under `...enabled` / `...config.*` are auto-registered with the control plane for every worker sharing that role.
   - [x] Create `WorkInputConfig` / `WorkOutputConfig` marker interfaces and default property classes (e.g., scheduler + RabbitMQ) plus binders to resolve `pockethive.inputs/outputs.<type>` into typed configs.
   - [x] Move enable/disable flags + infra knobs out of worker domain configs into the new input/output properties.
 
@@ -157,7 +158,7 @@
 4. **Autoconfiguration**
    - [x] Add `WorkInputFactory` SPI + initializer so auto-config can resolve per-worker inputs (currently defaulting to noop until concrete factories are wired).
    - [x] Ensure lifecycle beans manage both inputs and outputs (registries + lifecycle hooks now exist for each, ready for wiring into factories).
-   - [x] Provide scheduler/Rabbit `WorkInputFactory` implementations (opt-in via `pockethive.worker.inputs.autowire=true` until runtime adapters are removed).
+  - [x] Provide scheduler/Rabbit `WorkInputFactory` implementations (auto-wired by default so every worker receives the correct transport without extra config).
  - [x] Support custom inputs/outputs via factories contributed as Spring beans (ordered lists + `Ordered` support for precedence).
 
 5. **Service Migration**

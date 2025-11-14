@@ -4,12 +4,11 @@ description: Uses local images. Sample scenario that ships the REST generator wi
 template:
   image: swarm-controller:latest
   bees:
-    - role: generator
+    - role: sampleGenerator
       image: generator:latest
       config:
-        scheduler:
-          ratePerSec: 50
-          singleRequest: false
+        ratePerSec: 50
+        singleRequest: false
         message:
           path: /test
           method: POST
@@ -18,7 +17,7 @@ template:
             content-type: application/json
       work:
         out: gen
-    - role: moderator
+    - role: sampleModerator
       image: moderator:latest
       config:
         mode:
@@ -32,14 +31,14 @@ template:
       work:
         in: gen
         out: mod
-    - role: processor
+    - role: sampleProcessor
       image: processor:latest
       config:
         baseUrl: http://wiremock:8080/api
       work:
         in: mod
         out: final
-    - role: postprocessor
+    - role: samplePostprocessor
       image: postprocessor:latest
       config:
         publishAllMetrics: true

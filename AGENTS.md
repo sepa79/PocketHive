@@ -33,6 +33,7 @@ This file is a **navigation and guardrails** page for both human and AI contribu
 
 - **No cascading defaults, no implicit back-compat:** When configuring services or libraries, never layer fallback property chains. Assume breaking changes are acceptable unless the task explicitly calls for backward compatibility.
 - **No implicit Optionals:** Do not use `Optional` for core state like enablement/configuration flags unless a rule explicitly allows it. Every case where Optional is to be used must be consulted with humans.
+- **KISS:** Bias toward the simplest viable solution. Avoid clever or convoluted code paths when a straightforward approach works; complexity must be justified explicitly.
 
 ### 2.1 Java & libraries
 - **Java 21 (LTS)** across services.

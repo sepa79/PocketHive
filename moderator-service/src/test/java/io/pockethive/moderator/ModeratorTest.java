@@ -30,7 +30,7 @@ class ModeratorTest {
 
     @BeforeEach
     void setUp() {
-        properties = new ModeratorWorkerProperties(new ObjectMapper());
+        properties = new ModeratorWorkerProperties(new ObjectMapper(), WORKER_PROPERTIES);
         properties.setConfig(Map.of(
             "mode", Map.of(
                 "type", "pass-through",

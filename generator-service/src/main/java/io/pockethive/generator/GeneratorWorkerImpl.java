@@ -28,9 +28,9 @@ import org.springframework.stereotype.Component;
  *
  * <p>When PocketHive boots the generator worker it resolves configuration in three stages:</p>
  * <ol>
- *   <li>Read {@code pockethive.workers.generator.*} defaults from
+ *   <li>Read {@code pockethive.worker.*} defaults from
  *       {@link GeneratorWorkerProperties} (for example a
- *       {@code pockethive.workers.generator.config.rate-per-sec} property in
+ *       {@code pockethive.worker.config.rate-per-sec} property in
  *       {@code application.yml}).</li>
  *   <li>Merge in any runtime overrides supplied by the control plane. Those show up in
  *       {@link WorkerContext#config(Class)}.</li>
@@ -46,7 +46,6 @@ import org.springframework.stereotype.Component;
  */
 @Component("generatorWorker")
 @PocketHiveWorker(
-    role = "generator",
     input = WorkerInputType.SCHEDULER,
     output = WorkerOutputType.RABBITMQ,
     capabilities = {WorkerCapability.SCHEDULER},

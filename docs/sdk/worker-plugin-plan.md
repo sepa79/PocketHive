@@ -15,7 +15,7 @@
 1. **Single image, single worker**  
    Provide one Spring Boot host container that discovers one plugin jar and exposes its `@PocketHiveWorker` beans. The host fails fast if zero or multiple plugins are present.
 2. **Uniform configuration contract**  
-   Preserve the current `application.yml` layout (`pockethive.inputs.*`, `pockethive.outputs.*`, `pockethive.workers.<role>`). Operators mount the same config files; the host binds them before the worker starts.
+   Preserve the current `application.yml` layout (`pockethive.inputs.*`, `pockethive.outputs.*`, `pockethive.worker.*`). Operators mount the same config files; the host binds them before the worker starts.
 3. **Control-plane parity**  
    The host registers exactly one control-plane identity per container so the controller still sees a topology identical to today (one role/instance per image).
 4. **Operational safety**  

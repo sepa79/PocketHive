@@ -3,9 +3,13 @@ package io.pockethive.processor;
 public record ProcessorWorkerConfig(String baseUrl) {
 
   public ProcessorWorkerConfig {
-    if (baseUrl == null || baseUrl.trim().isEmpty()) {
-      throw new IllegalArgumentException("processor baseUrl must be provided");
+    baseUrl = sanitise(baseUrl);
+  }
+  private static String sanitise(String candidate) {
+    if (candidate == null) {
+      return null;
     }
-    baseUrl = baseUrl.trim();
+    String trimmed = candidate.trim();
+    return trimmed.isEmpty() ? null : trimmed;
   }
 }

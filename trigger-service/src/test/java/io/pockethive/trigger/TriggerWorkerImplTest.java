@@ -1,12 +1,14 @@
 package io.pockethive.trigger;
 
-import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import io.pockethive.controlplane.spring.WorkerControlPlaneProperties;
 import io.pockethive.worker.sdk.api.StatusPublisher;
 import io.pockethive.worker.sdk.api.WorkMessage;
 import io.pockethive.worker.sdk.api.WorkResult;
 import io.pockethive.worker.sdk.api.WorkerContext;
 import io.pockethive.worker.sdk.api.WorkerInfo;
+import io.pockethive.worker.sdk.testing.ControlPlaneTestFixtures;
 import java.net.http.HttpClient;
 import java.net.http.HttpHeaders;
 import java.net.http.HttpRequest;
@@ -39,14 +41,17 @@ class TriggerWorkerImplTest {
 
   private TriggerWorkerProperties properties;
   private TriggerWorkerImpl worker;
+  private static final WorkerControlPlaneProperties WORKER_PROPERTIES =
+      ControlPlaneTestFixtures.workerProperties("swarm", "trigger", "instance");
 
   @BeforeEach
   void setUp() throws Exception {
     MockitoAnnotations.openMocks(this);
-    properties = new TriggerWorkerProperties(new ObjectMapper());
+    properties = new TriggerWorkerProperties(new ObjectMapper(), WORKER_PROPERTIES);
     properties.setConfig(Map.of(
         "intervalMs", 500,
         "actionType", "rest",
+        "command", "noop",
         "url", "https://example.com",
         "method", "POST",
         "body", "{}\n",
@@ -68,7 +73,7 @@ class TriggerWorkerImplTest {
         1000L,
         false,
         "rest",
-        "",
+        "noop",
         "https://service.test",
         "put",
         "{\"a\":1}",

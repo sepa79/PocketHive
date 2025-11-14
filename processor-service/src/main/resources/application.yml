@@ -13,9 +13,6 @@ logging:
   pattern.level: "%5p [%X{traceId}]"
 
 pockethive:
-  worker:
-    inputs:
-      autowire: true
   inputs:
     rabbit:
       queue: ${POCKETHIVE_INPUT_RABBIT_QUEUE}
@@ -23,17 +20,16 @@ pockethive:
     rabbit:
       exchange: ${POCKETHIVE_OUTPUT_RABBIT_EXCHANGE}
       routingKey: ${POCKETHIVE_OUTPUT_RABBIT_ROUTING_KEY}
-  workers:
-    processor:
-      config:
-        base-url: http://wiremock:8080
+  worker:
+    config:
+      base-url: http://wiremock:8080
   control-plane:
     exchange: ${POCKETHIVE_CONTROL_PLANE_EXCHANGE}
     swarm-id: ${POCKETHIVE_CONTROL_PLANE_SWARM_ID}
     instance-id: ${POCKETHIVE_CONTROL_PLANE_INSTANCE_ID}
     control-queue-prefix: ${POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE_PREFIX}
     worker:
-      role: processor
+      role: ${POCKETHIVE_CONTROL_PLANE_WORKER_ROLE}
       skip-self-signals: false
     manager:
       enabled: false

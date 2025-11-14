@@ -5,7 +5,7 @@ Feature: Swarm lifecycle golden path
 
   @golden-path
   Scenario: Operators can drive the swarm lifecycle via REST and confirmations
-    And the "local-rest" scenario template is requested
+    And the "local-rest-defaults" scenario template is requested
     When I create the swarm from that template
     Then the swarm is registered and queues are declared
     When I start the swarm

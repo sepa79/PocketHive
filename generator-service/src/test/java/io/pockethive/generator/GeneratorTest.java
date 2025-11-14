@@ -34,7 +34,7 @@ class GeneratorTest {
 
   @BeforeEach
   void setUp() {
-    properties = new GeneratorWorkerProperties(new ObjectMapper());
+    properties = new GeneratorWorkerProperties(new ObjectMapper(), WORKER_PROPERTIES);
     Map<String, Object> message = new LinkedHashMap<>();
     message.put("path", "/default");
     message.put("method", "POST");

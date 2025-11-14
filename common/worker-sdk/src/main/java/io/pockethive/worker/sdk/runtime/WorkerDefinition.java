@@ -7,13 +7,15 @@ import io.pockethive.worker.sdk.config.WorkOutputConfig;
 import io.pockethive.worker.sdk.config.WorkerCapability;
 import io.pockethive.worker.sdk.config.WorkerInputType;
 import io.pockethive.worker.sdk.config.WorkerOutputType;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
- * Captures metadata extracted from {@link PocketHiveWorker} annotations.
- * Refer to {@code docs/sdk/worker-sdk-quickstart.md} for how definitions drive runtime discovery.
+ * Captures metadata extracted from {@link PocketHiveWorker} annotations plus control-plane configuration
+ * (the worker role is resolved from {@code WorkerControlPlaneProperties}). Refer to
+ * {@code docs/sdk/worker-sdk-quickstart.md} for how definitions drive runtime discovery.
  */
 public record WorkerDefinition(
     String beanName,
@@ -35,7 +37,7 @@ public record WorkerDefinition(
      * @param beanName   Spring bean name
      * @param beanType   underlying class of the bean
      * @param input      input binding declared on the annotation
-     * @param role       control-plane role identifier
+     * @param role       control-plane role identifier resolved from {@code WorkerControlPlaneProperties}
      * @param io         resolved work-queue bindings
      * @param configType         worker-domain configuration exposed to {@link WorkerContext#config(Class)}
      * @param inputConfigType    infrastructure input configuration class (scheduler, Rabbit, etc.)
@@ -48,7 +50,7 @@ public record WorkerDefinition(
         beanName = requireText(beanName, "beanName");
         beanType = Objects.requireNonNull(beanType, "beanType");
         input = Objects.requireNonNull(input, "input");
-        role = requireText(role, "role");
+        role = requireText(role, "role").trim();
         io = io == null ? WorkIoBindings.none() : io;
         configType = configType == null || configType == Void.class ? Void.class : configType;
         inputConfigType = normalizeConfigClass(inputConfigType, WorkInputConfig.class);

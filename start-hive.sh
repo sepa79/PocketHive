@@ -6,7 +6,7 @@ cd "${SCRIPT_DIR}"
 
 CORE_SERVICES=(rabbitmq log-aggregator scenario-manager orchestrator ui prometheus grafana loki wiremock)
 BEE_SERVICES=(swarm-controller generator moderator processor postprocessor trigger)
-ALL_STAGES=(clean build-core build-bees start push restart)
+ALL_STAGES=(clean build-core build-bees start push)
 
 declare -A STAGE_TIMES
 SERVICE_ARGS=()

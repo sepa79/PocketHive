@@ -64,12 +64,15 @@ public final class ControlPlaneContainerEnvironmentFactory {
     }
 
     public static Map<String, String> workerEnvironment(String instanceId,
+                                                        String role,
                                                         WorkerSettings settings,
                                                         RabbitProperties rabbitProperties) {
         String resolvedInstance = requireArgument(instanceId, "worker instance");
+        String resolvedRole = requireArgument(role, "worker role");
         Objects.requireNonNull(settings, "settings");
         Map<String, String> env = new LinkedHashMap<>();
         env.put("POCKETHIVE_CONTROL_PLANE_INSTANCE_ID", resolvedInstance);
+        env.put("POCKETHIVE_CONTROL_PLANE_WORKER_ROLE", resolvedRole);
         env.put("POCKETHIVE_CONTROL_PLANE_SWARM_ID", requireSetting(settings.swarmId(), "pockethive.control-plane.swarm-id"));
         env.put(
             "POCKETHIVE_CONTROL_PLANE_EXCHANGE",

@@ -10,7 +10,7 @@ import org.slf4j.LoggerFactory;
 public record ModeratorWorkerConfig(Mode mode) {
 
   public ModeratorWorkerConfig {
-    Objects.requireNonNull(mode, "mode");
+    mode = mode == null ? Mode.passThrough() : mode;
   }
 
   public ModeratorOperationMode operationMode() {
@@ -23,7 +23,7 @@ public record ModeratorWorkerConfig(Mode mode) {
 
     public Mode {
       Objects.requireNonNull(type, "type");
-      Objects.requireNonNull(sine, "sine");
+      sine = sine == null ? Sine.DEFAULT : sine;
       ratePerSec = sanitiseRate(ratePerSec);
     }
 
