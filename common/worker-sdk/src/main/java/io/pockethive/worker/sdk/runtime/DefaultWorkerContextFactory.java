@@ -138,7 +138,7 @@ public final class DefaultWorkerContextFactory implements WorkerContextFactory {
 
         @Override
         public boolean enabled() {
-            return state.enabled().orElse(true);
+            return state.enabled();
         }
 
         @Override

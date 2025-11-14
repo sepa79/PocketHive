@@ -376,9 +376,10 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
                 return enabled;
             };
             Function<WorkerStateSnapshot, Boolean> resolvedDesiredState = snapshot -> snapshot.enabled()
-                .orElseGet(() -> snapshot.config(configType)
+                ? true
+                : snapshot.config(configType)
                     .map(enabledExtractor)
-                    .orElseGet(resolvedDefaultEnabled));
+                    .orElseGet(resolvedDefaultEnabled);
 
             this.defaultConfigSupplier = () -> typedDefaults.get();
             this.defaultEnabledSupplier = resolvedDefaultEnabled;

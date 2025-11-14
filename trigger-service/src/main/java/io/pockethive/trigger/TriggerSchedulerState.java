@@ -38,7 +38,7 @@ final class TriggerSchedulerState implements SchedulerState<TriggerWorkerConfig>
     Objects.requireNonNull(snapshot, "snapshot");
     TriggerWorkerConfig incoming = snapshot.config(TriggerWorkerConfig.class)
         .orElseGet(properties::defaultConfig);
-    boolean resolvedEnabled = snapshot.enabled().orElse(defaultEnabled);
+    boolean resolvedEnabled = snapshot.enabled();
     TriggerWorkerConfig updated = new TriggerWorkerConfig(
         incoming.intervalMs(),
         incoming.singleRequest(),

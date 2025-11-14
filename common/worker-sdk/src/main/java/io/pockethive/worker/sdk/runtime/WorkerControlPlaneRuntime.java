@@ -106,11 +106,13 @@ public final class WorkerControlPlaneRuntime {
     }
 
     /**
-     * Returns the last known enablement flag for the worker bean, if the control-plane has provided one.
+     * Returns the last known enablement flag for the worker bean (defaults to {@code true} when no command has been applied yet).
      */
-    public Optional<Boolean> workerEnabled(String workerBeanName) {
+    public boolean workerEnabled(String workerBeanName) {
         Objects.requireNonNull(workerBeanName, "workerBeanName");
-        return stateStore.find(workerBeanName).flatMap(WorkerState::enabled);
+        return stateStore.find(workerBeanName)
+            .map(WorkerState::enabled)
+            .orElse(true);
     }
 
     /**
@@ -151,7 +153,7 @@ public final class WorkerControlPlaneRuntime {
             return;
         }
         Map<String, Object> rawConfig = configMerger.toRawConfig(defaultConfig);
-        Boolean enabled = resolveEnabled(rawConfig, null);
+        Boolean enabled = null;
         Object typedConfig = ensureTypedDefault(state.definition(), defaultConfig, rawConfig);
         if (state.seedConfig(typedConfig, enabled)) {
             ensureStatusPublisher(state);
@@ -231,7 +233,7 @@ public final class WorkerControlPlaneRuntime {
             ensureStatusPublisher(state);
             WorkerConfigPatch patch = workerConfigFor(state, sanitized);
             Map<String, Object> filteredUpdate = withoutNullValues(patch.values());
-            Boolean previousEnabled = state.enabled().orElse(null);
+            boolean previousEnabled = state.enabled();
             Object currentConfig = currentTypedConfig(state);
             try {
                 ConfigMerger.ConfigMergeResult mergeResult = configMerger.merge(
@@ -240,7 +242,7 @@ public final class WorkerControlPlaneRuntime {
                     filteredUpdate,
                     patch.resetRequested()
                 );
-                Boolean enabled = resolveEnabled(mergeResult.rawConfig(), command.enabled());
+                Boolean enabled = command.enabled();
                 state.updateConfig(mergeResult.typedConfig(), mergeResult.replaced(), enabled);
                 Map<String, Object> appliedConfig = mergeResult.replaced() ? mergeResult.rawConfig() : Map.of();
                 if (hasCorrelation(signal)) {
@@ -255,7 +257,7 @@ public final class WorkerControlPlaneRuntime {
                 Map<String, Object> finalConfig = mergeResult.replaced()
                     ? mergeResult.rawConfig()
                     : mergeResult.previousRaw();
-                Boolean finalEnabled = state.enabled().orElse(null);
+                boolean finalEnabled = state.enabled();
                 if (shouldLogConfigUpdate(
                     patch,
                     command,
@@ -472,20 +474,6 @@ public final class WorkerControlPlaneRuntime {
         return Map.copyOf(copy);
     }
 
-    private Boolean resolveEnabled(Map<String, Object> workerConfig, Boolean commandEnabled) {
-        if (commandEnabled != null) {
-            return commandEnabled;
-        }
-        Object candidate = workerConfig.get("enabled");
-        if (candidate instanceof Boolean b) {
-            return b;
-        }
-        if (candidate instanceof String s && !s.isBlank()) {
-            return Boolean.parseBoolean(s);
-        }
-        return null;
-    }
-
     private boolean roleMatches(String signalRole, String workerRole) {
         if (signalRole == null || signalRole.equals("all")) {
             return true;
@@ -564,8 +552,8 @@ public final class WorkerControlPlaneRuntime {
             workOut.addAll(state.outboundRoutes());
             long processed = snapshotMode ? state.peekProcessedCount() : state.drainProcessedCount();
             processedTotal += processed;
-            Boolean enabled = state.enabled().orElse(null);
-            boolean workerEnabled = Boolean.TRUE.equals(enabled);
+            boolean enabled = state.enabled();
+            boolean workerEnabled = enabled;
             if (!seenWorker) {
                 allEnabled = workerEnabled;
                 seenWorker = true;
@@ -701,7 +689,7 @@ public final class WorkerControlPlaneRuntime {
         /**
          * Indicates whether the worker is currently enabled according to the latest control-plane command.
          */
-        public Optional<Boolean> enabled() {
+        public boolean enabled() {
             return state.enabled();
         }
 

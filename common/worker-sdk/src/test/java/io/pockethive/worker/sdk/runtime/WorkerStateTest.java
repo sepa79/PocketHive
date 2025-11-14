@@ -34,7 +34,7 @@ class WorkerStateTest {
 
         assertThat(seeded).isTrue();
         assertThat(state.config(TestConfig.class)).contains(defaults);
-        assertThat(state.enabled()).contains(true);
+        assertThat(state.enabled()).isTrue();
         assertThat(state.seedConfig(new TestConfig(false, 1.0), false)).isFalse();
     }
 
@@ -82,7 +82,7 @@ class WorkerStateTest {
         state.updateConfig(null, false, Boolean.FALSE);
 
         assertThat(state.config(TestConfig.class)).contains(defaults);
-        assertThat(state.enabled()).contains(false);
+        assertThat(state.enabled()).isFalse();
     }
 
     @Test

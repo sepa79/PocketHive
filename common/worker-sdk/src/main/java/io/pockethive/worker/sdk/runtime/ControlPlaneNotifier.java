@@ -105,7 +105,7 @@ final class ControlPlaneNotifier {
     void emitConfigError(ControlSignal signal, WorkerState state, Exception error) {
         String code = error.getClass().getSimpleName();
         String message = error.getMessage() == null || error.getMessage().isBlank() ? code : error.getMessage();
-        CommandState commandState = new CommandState("failed", state.enabled().orElse(null), null);
+        CommandState commandState = new CommandState("failed", state.enabled(), null);
         Map<String, Object> details = new LinkedHashMap<>();
         details.put("worker", state.definition().beanName());
         details.put("exception", code);

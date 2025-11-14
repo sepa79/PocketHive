@@ -86,7 +86,7 @@ class WorkerControlPlaneRuntimeTest {
         assertThat(runtime.workerRawConfig(definition.beanName()))
             .containsEntry("ratePerSec", 7.5)
             .containsEntry("enabled", true);
-        assertThat(runtime.workerEnabled(definition.beanName())).contains(true);
+        assertThat(runtime.workerEnabled(definition.beanName())).isFalse();
 
         reset(emitter);
         runtime.emitStatusSnapshot();
@@ -132,7 +132,7 @@ class WorkerControlPlaneRuntimeTest {
         assertThat(handled).isTrue();
         Optional<TestConfig> config = runtime.workerConfig(definition.beanName(), TestConfig.class);
         assertThat(config).contains(new TestConfig(true, 12.5));
-        assertThat(runtime.workerEnabled(definition.beanName())).contains(true);
+        assertThat(runtime.workerEnabled(definition.beanName())).isTrue();
         Map<String, Object> rawConfig = runtime.workerRawConfig(definition.beanName());
         assertThat(rawConfig).containsEntry("ratePerSec", 12.5);
         ArgumentCaptor<ControlPlaneEmitter.ReadyContext> captor = ArgumentCaptor.forClass(ControlPlaneEmitter.ReadyContext.class);
@@ -160,7 +160,7 @@ class WorkerControlPlaneRuntimeTest {
 
         runtime.handle(initialPayload, routingKey);
 
-        assertThat(runtime.workerEnabled(definition.beanName())).contains(true);
+        assertThat(runtime.workerEnabled(definition.beanName())).isTrue();
 
         Map<String, Object> updateArgs = Map.of(
             "data", Map.of("ratePerSec", 20.0)
@@ -179,7 +179,7 @@ class WorkerControlPlaneRuntimeTest {
 
         runtime.handle(updatePayload, routingKey);
 
-        assertThat(runtime.workerEnabled(definition.beanName())).contains(true);
+        assertThat(runtime.workerEnabled(definition.beanName())).isTrue();
         Map<String, Object> rawConfig = runtime.workerRawConfig(definition.beanName());
         assertThat(rawConfig).containsEntry("ratePerSec", 20.0);
     }
@@ -382,7 +382,7 @@ class WorkerControlPlaneRuntimeTest {
 
         runtime.handle(MAPPER.writeValueAsString(toggleSignal), routingKey);
 
-        assertThat(runtime.workerEnabled(definition.beanName())).contains(false);
+        assertThat(runtime.workerEnabled(definition.beanName())).isFalse();
         Map<String, Object> rawConfig = runtime.workerRawConfig(definition.beanName());
         assertThat(rawConfig)
             .containsEntry("ratePerSec", 9.5)
@@ -459,7 +459,7 @@ class WorkerControlPlaneRuntimeTest {
         runtime.registerStateListener(definition.beanName(), lastSnapshot::set);
         WorkerControlPlaneRuntime.WorkerStateSnapshot initial = lastSnapshot.get();
         assertThat(initial).isNotNull();
-        assertThat(initial.enabled()).isEmpty();
+        assertThat(initial.enabled()).isFalse();
         assertThat(initial.description()).contains("Test worker");
         assertThat(initial.capabilities()).containsExactlyElementsOf(definition.capabilities());
         assertThat(initial.inputType()).isEqualTo(definition.input());
@@ -488,7 +488,7 @@ class WorkerControlPlaneRuntimeTest {
 
         WorkerControlPlaneRuntime.WorkerStateSnapshot snapshot = lastSnapshot.get();
         assertThat(snapshot).isNotNull();
-        assertThat(snapshot.enabled()).contains(true);
+        assertThat(snapshot.enabled()).isTrue();
     }
 
     @Test
@@ -620,7 +620,7 @@ class WorkerControlPlaneRuntimeTest {
         assertThat(handled).isTrue();
         assertThat(runtime.workerConfig(definition.beanName(), TestConfig.class))
             .contains(new TestConfig(true, 11.0));
-        assertThat(runtime.workerEnabled(definition.beanName())).contains(true);
+        assertThat(runtime.workerEnabled(definition.beanName())).isTrue();
         Map<String, Object> rawConfig = runtime.workerRawConfig(definition.beanName());
         assertThat(rawConfig).containsEntry("ratePerSec", 11.0);
     }

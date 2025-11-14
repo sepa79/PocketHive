@@ -19,7 +19,8 @@ public final class WorkerState {
 
     private final WorkerDefinition definition;
     private final AtomicReference<Object> configRef = new AtomicReference<>();
-    private final AtomicReference<Boolean> enabledRef = new AtomicReference<>();
+    private volatile boolean enabled;
+    private volatile boolean enableConfigured;
     private final AtomicReference<StatusPublisher> statusPublisherRef = new AtomicReference<>(StatusPublisher.NO_OP);
     private final AtomicReference<Map<String, Object>> statusDataRef = new AtomicReference<>(Map.of());
     private final LongAdder processedMessages = new LongAdder();
@@ -71,27 +72,29 @@ public final class WorkerState {
             }
         }
         if (enabled != null) {
-            enabledRef.set(enabled);
+            this.enabled = enabled;
+            this.enableConfigured = true;
         }
     }
 
     boolean seedConfig(Object config, Boolean enabled) {
         synchronized (this) {
-            if (configRef.get() != null || enabledRef.get() != null) {
+            if (configRef.get() != null || enableConfigured) {
                 return false;
             }
             if (config != null) {
                 configRef.set(config);
             }
             if (enabled != null) {
-                enabledRef.set(enabled);
+                this.enabled = enabled;
+                this.enableConfigured = true;
             }
             return true;
         }
     }
 
-    Optional<Boolean> enabled() {
-        return Optional.ofNullable(enabledRef.get());
+    boolean enabled() {
+        return enabled;
     }
 
     <C> Optional<C> config(Class<C> type) {

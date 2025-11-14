@@ -54,6 +54,9 @@ class DefaultWorkerRuntimeTest {
             List.of(),
             outputRegistry
         );
+        WorkerState state = store.getOrCreate(definition);
+        state.setStatusPublisher(new WorkerStatusPublisher(state, () -> { }, () -> { }));
+        state.updateConfig(null, false, Boolean.TRUE);
 
         WorkResult result = runtime.dispatch("testWorker", WorkMessage.text("payload").build());
 
