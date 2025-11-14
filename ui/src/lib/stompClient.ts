@@ -46,7 +46,7 @@ function getMergedComponents(): Record<string, Component> {
   return merged
 }
 
-function getProcessorBaseUrl(config?: Record<string, unknown>): string | undefined {
+function getWorkerBaseUrl(config?: Record<string, unknown>): string | undefined {
   if (!config) return undefined
   const value = config['baseUrl']
   if (typeof value !== 'string') return undefined
@@ -54,11 +54,9 @@ function getProcessorBaseUrl(config?: Record<string, unknown>): string | undefin
   return trimmed.length > 0 ? trimmed : undefined
 }
 
-function processorTargetsWiremock(component: Component): boolean {
+function workerTargetsWiremock(component: Component): boolean {
   if (component.id === 'wiremock') return false
-  const role = component.role?.trim().toLowerCase()
-  if (role !== 'processor') return false
-  const targetUrl = getProcessorBaseUrl(component.config)
+  const targetUrl = getWorkerBaseUrl(component.config)
   if (!targetUrl) return false
   return targetUrl.toLowerCase().includes('wiremock')
 }
@@ -181,13 +179,10 @@ function buildTopology(allComponents: Record<string, Component> = getMergedCompo
       })
     })
   })
-  const processorTarget = allComponents['processor']
-  if (processorTarget) {
-    edges.push({ from: 'processor', to: 'sut', queue: 'sut' })
-  }
+  const httpTargets = Object.values(allComponents).filter((component) => Boolean(getWorkerBaseUrl(component.config)))
   if (allComponents['wiremock']) {
-    Object.values(allComponents).forEach((component) => {
-      if (!processorTargetsWiremock(component)) return
+    httpTargets.forEach((component) => {
+      if (!workerTargetsWiremock(component)) return
       edges.push({ from: component.id, to: 'wiremock', queue: 'sut' })
     })
   }
@@ -224,15 +219,6 @@ function buildTopology(allComponents: Record<string, Component> = getMergedCompo
     enabled: c.config?.enabled !== false,
     swarmId: c.swarmId,
   }))
-  if (processorTarget) {
-    nodes.push({
-      id: 'sut',
-      type: 'sut',
-      x: nodePositions['sut']?.x,
-      y: nodePositions['sut']?.y,
-      enabled: true,
-    })
-  }
   return { nodes, edges: uniq }
 }
 
