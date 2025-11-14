@@ -19,7 +19,7 @@ public final class WorkerState {
 
     private final WorkerDefinition definition;
     private final AtomicReference<Object> configRef = new AtomicReference<>();
-    private final AtomicReference<Boolean> enabledRef = new AtomicReference<>();
+    private final AtomicReference<Boolean> enabledRef = new AtomicReference<>(Boolean.TRUE);
     private final AtomicReference<StatusPublisher> statusPublisherRef = new AtomicReference<>(StatusPublisher.NO_OP);
     private final AtomicReference<Map<String, Object>> statusDataRef = new AtomicReference<>(Map.of());
     private final LongAdder processedMessages = new LongAdder();
@@ -90,8 +90,9 @@ public final class WorkerState {
         }
     }
 
-    Optional<Boolean> enabled() {
-        return Optional.ofNullable(enabledRef.get());
+    boolean enabled() {
+        Boolean value = enabledRef.get();
+        return value == null ? true : value;
     }
 
     <C> Optional<C> config(Class<C> type) {

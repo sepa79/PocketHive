@@ -33,7 +33,7 @@ final class WorkerInvocation {
     }
 
     WorkResult invoke(WorkMessage message) throws Exception {
-        if (workerState.enabled().map(Boolean.FALSE::equals).orElse(false)) {
+        if (!workerState.enabled()) {
             throw new IllegalStateException("Worker '" + workerDefinition.beanName() + "' is disabled by control-plane configuration");
         }
         WorkerContext context = contextFactory.createContext(workerDefinition, workerState, message);

@@ -72,7 +72,7 @@ public final class RabbitWorkInputFactory implements WorkInputFactory, Ordered {
             .identity(identity)
             .defaultEnabledSupplier(rabbitConfig::isEnabled)
             .defaultConfigSupplier(() -> defaults.rawConfig().isEmpty() ? null : defaults.rawConfig())
-            .desiredStateResolver(snapshot -> snapshot.enabled().orElse(rabbitConfig.isEnabled()))
+            .desiredStateResolver(WorkerControlPlaneRuntime.WorkerStateSnapshot::enabled)
             .rabbitTemplate(rabbitTemplate)
             .dispatcher(message -> workerRuntime.dispatch(definition.beanName(), message))
             .messageResultPublisher((result, outbound) -> { })

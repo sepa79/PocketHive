@@ -101,7 +101,7 @@ public final class SchedulerStates {
             Objects.requireNonNull(snapshot, "snapshot");
             C incoming = snapshot.config(configType).orElseGet(defaults);
             C previous = this.config;
-            boolean resolvedEnabled = snapshot.enabled().orElseGet(() -> Boolean.TRUE.equals(defaultEnabledSupplier.get()));
+            boolean resolvedEnabled = snapshot.enabled();
             this.config = incoming;
             boolean configChanged = !Objects.equals(previous, incoming);
             boolean enabledChanged = resolvedEnabled != this.enabled;

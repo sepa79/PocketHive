@@ -12,7 +12,6 @@ import io.pockethive.worker.sdk.runtime.WorkIoBindings;
 import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
 import java.nio.charset.StandardCharsets;
-import java.util.Optional;
 import java.util.Set;
 import java.util.function.Consumer;
 import org.junit.jupiter.api.BeforeEach;
@@ -112,19 +111,19 @@ class RabbitMessageWorkerAdapterTest {
         verify(listenerContainer, never()).start();
 
         WorkerControlPlaneRuntime.WorkerStateSnapshot disabledSnapshot = mock(WorkerControlPlaneRuntime.WorkerStateSnapshot.class);
-        when(disabledSnapshot.enabled()).thenReturn(Optional.of(false));
+        when(disabledSnapshot.enabled()).thenReturn(false);
         listenerCaptor.getValue().accept(disabledSnapshot);
         verify(listenerContainer, never()).start();
         verify(listenerContainer, never()).stop();
 
         WorkerControlPlaneRuntime.WorkerStateSnapshot enabledSnapshot = mock(WorkerControlPlaneRuntime.WorkerStateSnapshot.class);
-        when(enabledSnapshot.enabled()).thenReturn(Optional.of(true));
+        when(enabledSnapshot.enabled()).thenReturn(true);
         listenerCaptor.getValue().accept(enabledSnapshot);
         verify(listenerContainer).start();
         when(listenerContainer.isRunning()).thenReturn(true);
 
         WorkerControlPlaneRuntime.WorkerStateSnapshot snapshotDisabledAgain = mock(WorkerControlPlaneRuntime.WorkerStateSnapshot.class);
-        when(snapshotDisabledAgain.enabled()).thenReturn(Optional.of(false));
+        when(snapshotDisabledAgain.enabled()).thenReturn(false);
         listenerCaptor.getValue().accept(snapshotDisabledAgain);
         verify(listenerContainer).stop();
     }
@@ -370,7 +369,7 @@ class RabbitMessageWorkerAdapterTest {
             .identity(identity)
             .defaultEnabledSupplier(() -> false)
             .defaultConfigSupplier(() -> defaults)
-            .desiredStateResolver(snapshot -> snapshot.enabled().orElse(false))
+            .desiredStateResolver(WorkerControlPlaneRuntime.WorkerStateSnapshot::enabled)
             .dispatcher(dispatcher)
             .dispatchErrorHandler(errorHandler);
     }
