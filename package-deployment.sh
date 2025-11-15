@@ -20,7 +20,7 @@ mkdir -p "${DEPLOY_DIR}"
 echo "Copying deployment files..."
 
 # Core deployment files
-cp docker-compose.portainer.yml "${DEPLOY_DIR}/docker-compose.yml"
+cp docker-compose.yml "${DEPLOY_DIR}/docker-compose.yml"
 cp .env.example "${DEPLOY_DIR}/.env.example"
 cp README.md "${DEPLOY_DIR}/"
 cp LICENSE "${DEPLOY_DIR}/"
@@ -56,8 +56,7 @@ cp scenario-manager-service/capabilities/*.yaml "${DEPLOY_DIR}/scenario-manager/
 
 # Documentation
 mkdir -p "${DEPLOY_DIR}/docs"
-cp docs/PORTAINER_DEPLOYMENT.md "${DEPLOY_DIR}/docs/"
-cp docs/GHCR_SETUP.md "${DEPLOY_DIR}/docs/"
+cp docs/GHCR_SETUP.md "${DEPLOY_DIR}/docs/" 2>/dev/null || true
 cp docs/USAGE.md "${DEPLOY_DIR}/docs/" 2>/dev/null || true
 
 # Create deployment guide
@@ -81,8 +80,8 @@ cat > "${DEPLOY_DIR}/DEPLOY.md" << 'EOF'
 
 ## Note on Paths
 
-The docker-compose.yml uses absolute paths to `/opt/pockethive/*` for configuration files.
-Ensure the package is extracted to `/opt/pockethive/` for volumes to mount correctly
+The docker-compose.yml uses paths relative to the deployment directory (by default `/opt/pockethive`).
+Ensure the package is extracted to `/opt/pockethive/` or adjust volume paths accordingly.
 
 ## Persistent Data
 
