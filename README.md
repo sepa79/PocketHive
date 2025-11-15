@@ -221,9 +221,12 @@ Keep configuration **explicit**—favor declaring values over hidden defaults.
 ## Quick start
 
 ### Local Development
-1. Install Docker.
-2. Run `./start-hive.sh` (Linux/macOS) or `start-hive.bat` (Windows) to clean previous runs, build the images and launch RabbitMQ, services and the UI. Use `--help` to run individual stages (clean, build, start) when needed.
+1. Install Docker and Java 21.
+2. Run `./build-hive.sh` to clean previous runs, build the jars + images and launch RabbitMQ, services and the UI in one go.
    - Alternatively run `docker compose up -d` directly to start the stack with your existing images.
+   - Useful flags:
+     - `--quick` skips tests during Maven build.
+     - `--service <name>` or `--module <module>` rebuilds targeted services (e.g., `--service generator --module orchestrator-service`), independent of `--restart`.
 3. Open <http://localhost:8088>. Only the Orchestrator (Queen) runs initially. Create and start swarms from the Hive view by selecting a scenario.
 
 ### Service Proxies
@@ -238,12 +241,11 @@ The UI container fronted by Nginx proxies several internal services so browsers 
 
 When accessing PocketHive from another machine, keep using the UI origin and these prefixed paths; the reverse proxy handles service discovery inside the compose network.
 
-### External Deployment (Portainer/Production)
+### External Deployment (Production)
 1. Create deployment package: `./package-deployment.sh` (or `package-deployment.bat` on Windows)
 2. Copy `pockethive-deployment-<version>.tar.gz` to target environment
 3. Extract: `tar xzf pockethive-deployment-<version>.tar.gz`
-4. Deploy: `cd pockethive && ./start.sh`
-5. Or import the Compose stack into Portainer via **Stacks → Add Stack** using `docker-compose.yml`
+4. Deploy using the bundled `docker-compose.yml` (e.g., `docker compose up -d` on the target host or by importing that file into Portainer).
 
 ---
 

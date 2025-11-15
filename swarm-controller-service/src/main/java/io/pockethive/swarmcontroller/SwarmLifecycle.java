@@ -187,4 +187,11 @@ public interface SwarmLifecycle {
   default boolean hasPendingConfigUpdates() {
     return false;
   }
+
+  /**
+   * Notifies the lifecycle that the controller's own enablement flag changed.
+   * Implementations can pause or resume internal loops such as buffer guards.
+   */
+  default void setControllerEnabled(boolean enabled) {
+  }
 }

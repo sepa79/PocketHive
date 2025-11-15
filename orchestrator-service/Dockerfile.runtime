@@ -1,0 +1,4 @@
+ARG RUNTIME_IMAGE=pockethive-jvm-base:latest
+
+FROM ${RUNTIME_IMAGE}
+COPY .local-jars/orchestrator-service.jar /app/app.jar

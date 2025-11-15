@@ -1,0 +1,25 @@
+# Lightweight bee build that expects pre-built jars staged under .local-jars.
+ARG RUNTIME_IMAGE=pockethive-jvm-base:latest
+
+FROM ${RUNTIME_IMAGE} AS bee-runtime
+
+FROM bee-runtime AS swarm-controller
+COPY .local-jars/swarm-controller-service.jar /app/app.jar
+
+FROM bee-runtime AS generator
+COPY .local-jars/generator-service.jar /app/app.jar
+
+FROM bee-runtime AS payload-generator
+COPY .local-jars/payload-generator-service.jar /app/app.jar
+
+FROM bee-runtime AS moderator
+COPY .local-jars/moderator-service.jar /app/app.jar
+
+FROM bee-runtime AS processor
+COPY .local-jars/processor-service.jar /app/app.jar
+
+FROM bee-runtime AS postprocessor
+COPY .local-jars/postprocessor-service.jar /app/app.jar
+
+FROM bee-runtime AS trigger
+COPY .local-jars/trigger-service.jar /app/app.jar

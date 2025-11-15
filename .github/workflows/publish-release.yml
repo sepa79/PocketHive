@@ -18,6 +18,8 @@ jobs:
     strategy:
       matrix:
         service:
+          - name: jvm-base
+            dockerfile: docker/base/Dockerfile
           - name: rabbitmq
             dockerfile: Dockerfile.rabbit
           - name: orchestrator
@@ -58,8 +60,8 @@ jobs:
       - name: Extract version
         id: version
         run: |
-          VERSION=${GITHUB_REF#refs/tags/v}
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          VERSION="${GITHUB_REF#refs/tags/v}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
       
       - name: Build and push ${{ matrix.service.name }}
         uses: docker/build-push-action@v5

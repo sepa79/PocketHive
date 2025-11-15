@@ -20,6 +20,8 @@ jobs:
     strategy:
       matrix:
         service:
+          - name: jvm-base
+            dockerfile: docker/base/Dockerfile
           - name: rabbitmq
             dockerfile: Dockerfile.rabbit
           - name: orchestrator
@@ -60,12 +62,12 @@ jobs:
       - name: Extract version
         id: version
         run: |
-          VERSION=$(cat VERSION | tr -d '\n')
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
-            echo "tag=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+          VERSION=$(tr -d '\n' < VERSION)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            echo "tag=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
           else
-            echo "tag=latest" >> $GITHUB_OUTPUT
+            echo "tag=latest" >> "$GITHUB_OUTPUT"
           fi
       
       - name: Build and push ${{ matrix.service.name }}

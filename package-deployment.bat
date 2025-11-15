@@ -19,7 +19,7 @@ mkdir "%DEPLOY_DIR%"
 echo Copying deployment files...
 
 rem Core files
-copy docker-compose.portainer.yml "%DEPLOY_DIR%\docker-compose.yml" >nul
+copy docker-compose.yml "%DEPLOY_DIR%\docker-compose.yml" >nul
 copy .env.example "%DEPLOY_DIR%\.env.example" >nul
 copy README.md "%DEPLOY_DIR%\" >nul
 copy LICENSE "%DEPLOY_DIR%\" >nul
@@ -54,8 +54,7 @@ copy scenario-manager-service\capabilities\*.yaml "%DEPLOY_DIR%\scenario-manager
 
 rem Documentation
 mkdir "%DEPLOY_DIR%\docs"
-copy docs\PORTAINER_DEPLOYMENT.md "%DEPLOY_DIR%\docs\" >nul
-copy docs\GHCR_SETUP.md "%DEPLOY_DIR%\docs\" >nul
+copy docs\GHCR_SETUP.md "%DEPLOY_DIR%\docs\" >nul 2>&1
 copy docs\USAGE.md "%DEPLOY_DIR%\docs\" >nul 2>&1
 
 rem Create DEPLOY.md
@@ -70,8 +69,6 @@ echo 3. Deploy: `docker compose up -d`
 echo 4. Access UI: http://localhost:8088
 echo.
 echo ## Documentation
-echo.
-echo See `docs/PORTAINER_DEPLOYMENT.md` for Portainer deployment.
 echo.
 echo ## Ports
 echo.

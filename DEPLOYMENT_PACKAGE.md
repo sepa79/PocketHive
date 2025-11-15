@@ -71,14 +71,6 @@ docker compose up -d
 3. **Upload**: Select `docker-compose.yml`
 4. **Deploy**
 
-
-### Method 3: Portainer from Git
-
-1. **Stacks → Add Stack → Repository**
-2. **URL**: `https://github.com/sepa79/PocketHive`
-3. **Compose path**: `docker-compose.portainer.yml`
-4. **Deploy**
-
 ## What's Included vs What's Not
 
 ### ✅ Included (Ready to Use)
