@@ -60,8 +60,8 @@ jobs:
       - name: Extract version
         id: version
         run: |
-          VERSION=${GITHUB_REF#refs/tags/v}
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          VERSION="${GITHUB_REF#refs/tags/v}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
       
       - name: Build and push ${{ matrix.service.name }}
         uses: docker/build-push-action@v5
