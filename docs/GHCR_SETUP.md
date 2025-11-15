@@ -23,7 +23,7 @@ POCKETHIVE_VERSION=0.13.3
 Start PocketHive:
 
 ```bash
-./start-hive.sh start
+./build-hive.sh --quick
 ```
 
 ### 2. Authentication (for private repositories)
@@ -96,7 +96,8 @@ export POCKETHIVE_VERSION=0.13.3
 echo $GITHUB_TOKEN | docker login ghcr.io -u USERNAME --password-stdin
 
 # Build and push
-./start-hive.sh build-core build-bees push
+docker compose build
+docker compose push
 ```
 
 ## Troubleshooting
