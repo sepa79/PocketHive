@@ -1,8 +1,6 @@
 ARG RUNTIME_IMAGE=pockethive-jvm-base:latest
-ARG LOCAL_ARTIFACT_DIR=.local-jars
 
 FROM ${RUNTIME_IMAGE}
-COPY ${LOCAL_ARTIFACT_DIR}/log-aggregator-service.jar /app/app.jar
+COPY .local-jars/log-aggregator-service.jar /app/app.jar
 COPY log-aggregator-service/entrypoint.sh /app/entrypoint.sh
-RUN chmod +x /app/entrypoint.sh
 ENTRYPOINT ["/app/entrypoint.sh"]

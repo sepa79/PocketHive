@@ -1,63 +1,69 @@
-x-local-build-args: &local-build-args
-  context: .
-  args:
-    LOCAL_ARTIFACT_DIR: ${LOCAL_ARTIFACT_DIR:-.local-jars}
-    RUNTIME_IMAGE: ${POCKETHIVE_RUNTIME_IMAGE:-pockethive-jvm-base:latest}
-
 services:
   log-aggregator:
     build:
-      <<: *local-build-args
+      context: .
+      args:
+        RUNTIME_IMAGE: ${POCKETHIVE_RUNTIME_IMAGE:-pockethive-jvm-base:latest}
       dockerfile: log-aggregator-service/Dockerfile.runtime
 
   scenario-manager:
     build:
-      <<: *local-build-args
+      context: .
+      args:
+        RUNTIME_IMAGE: ${POCKETHIVE_RUNTIME_IMAGE:-pockethive-jvm-base:latest}
       dockerfile: scenario-manager-service/Dockerfile.runtime
 
   orchestrator:
     build:
-      <<: *local-build-args
+      context: .
+      args:
+        RUNTIME_IMAGE: ${POCKETHIVE_RUNTIME_IMAGE:-pockethive-jvm-base:latest}
       dockerfile: orchestrator-service/Dockerfile.runtime
 
   swarm-controller:
     build:
-      <<: *local-build-args
+      context: .
+      args:
+        RUNTIME_IMAGE: ${POCKETHIVE_RUNTIME_IMAGE:-pockethive-jvm-base:latest}
       dockerfile: Dockerfile.bees.local
       target: swarm-controller
 
   generator:
     build:
-      <<: *local-build-args
+      context: .
+      args:
+        RUNTIME_IMAGE: ${POCKETHIVE_RUNTIME_IMAGE:-pockethive-jvm-base:latest}
       dockerfile: Dockerfile.bees.local
       target: generator
 
-  payload-generator:
-    build:
-      <<: *local-build-args
-      dockerfile: Dockerfile.bees.local
-      target: payload-generator
-
   moderator:
     build:
-      <<: *local-build-args
+      context: .
+      args:
+        RUNTIME_IMAGE: ${POCKETHIVE_RUNTIME_IMAGE:-pockethive-jvm-base:latest}
       dockerfile: Dockerfile.bees.local
       target: moderator
 
   processor:
     build:
-      <<: *local-build-args
+      context: .
+      args:
+        RUNTIME_IMAGE: ${POCKETHIVE_RUNTIME_IMAGE:-pockethive-jvm-base:latest}
       dockerfile: Dockerfile.bees.local
       target: processor
 
   postprocessor:
     build:
-      <<: *local-build-args
+      context: .
+      args:
+        RUNTIME_IMAGE: ${POCKETHIVE_RUNTIME_IMAGE:-pockethive-jvm-base:latest}
       dockerfile: Dockerfile.bees.local
       target: postprocessor
 
   trigger:
     build:
-      <<: *local-build-args
+      context: .
+      args:
+        RUNTIME_IMAGE: ${POCKETHIVE_RUNTIME_IMAGE:-pockethive-jvm-base:latest}
       dockerfile: Dockerfile.bees.local
       target: trigger

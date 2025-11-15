@@ -20,6 +20,8 @@ jobs:
     strategy:
       matrix:
         service:
+          - name: jvm-base
+            dockerfile: docker/base/Dockerfile
           - name: rabbitmq
             dockerfile: Dockerfile.rabbit
           - name: orchestrator

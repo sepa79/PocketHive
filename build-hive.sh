@@ -5,6 +5,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "${SCRIPT_DIR}"
 
 ALL_SERVICES=(rabbitmq log-aggregator scenario-manager orchestrator ui prometheus grafana loki wiremock pushgateway swarm-controller generator moderator processor postprocessor trigger)
+declare -A DURATIONS=()
+TIMING_ORDER=(clean build_base maven_package stage_artifacts docker_build compose_up restart)
+BUILD_START_TIME=0
 JAR_MODULES=(
   log-aggregator-service
   scenario-manager-service
@@ -42,7 +45,7 @@ declare -A SERVICE_TO_MODULE=(
 )
 
 LOCAL_ARTIFACTS_DIR="${LOCAL_ARTIFACTS_DIR:-.local-jars}"
-COMPOSE_FILES=(-f docker-compose.yml -f docker-compose.local.yml)
+COMPOSE_FILES=(-f docker-compose.yml)
 MAVEN_CLI_OPTS="${MAVEN_CLI_OPTS:-}"
 RUNTIME_IMAGE="${POCKETHIVE_RUNTIME_IMAGE:-pockethive-jvm-base:latest}"
 
@@ -85,7 +88,7 @@ compose_cmd() {
 compose_build_services() {
   local services=("$@")
   (( ${#services[@]} == 0 )) && return
-  compose_cmd build "${services[@]}"
+  docker compose -f docker-compose.yml -f docker-compose.local.yml build "${services[@]}"
 }
 
 compose_up_services() {
@@ -274,41 +277,102 @@ parse_args() {
   done
 }
 
+format_duration() {
+  local seconds=$1
+  if (( seconds < 0 )); then
+    printf "n/a"
+  else
+    printf "%dm %02ds" $((seconds / 60)) $((seconds % 60))
+  fi
+}
+
+measure() {
+  local label="$1"
+  shift
+  local start
+  start=$(date +%s)
+  set +e
+  "$@"
+  local status=$?
+  set -e
+  local end
+  end=$(date +%s)
+  DURATIONS["$label"]=$((end - start))
+  if (( status != 0 )); then
+    exit "$status"
+  fi
+}
+
+print_timing_summary() {
+  local total_end
+  total_end=$(date +%s)
+  local total_duration=$((total_end - BUILD_START_TIME))
+  echo
+  echo "=== Timing Summary ==="
+  for label in "${TIMING_ORDER[@]}"; do
+    local pretty_label
+    case "$label" in
+      build_base) pretty_label="build base";;
+      maven_package) pretty_label="maven package";;
+      stage_artifacts) pretty_label="stage jars";;
+      docker_build) pretty_label="docker build";;
+      compose_up) pretty_label="docker up";;
+      restart) pretty_label="restart";;
+      *) pretty_label="$label";;
+    esac
+    local duration=${DURATIONS[$label]:--1}
+    printf "  %-16s %s\n" "${pretty_label}:" "$(format_duration "$duration")"
+  done
+  printf "  %-16s %s\n" "total:" "$(format_duration "$total_duration")"
+  echo
+}
+
 main() {
   parse_args "$@"
   require_tools
   determine_targets
+  BUILD_START_TIME=$(date +%s)
 
   # Always clean before full-stack builds,
   # and honour explicit --clean for partial builds.
   if $CLEAN_STACK || { (( ${#MODULE_FILTER[@]} == 0 )) && (( ${#SERVICE_FILTER[@]} == 0 )) ; }; then
-    clean_stack
+    measure "clean" clean_stack
+  else
+    DURATIONS["clean"]=-1
   fi
 
   export LOCAL_ARTIFACT_DIR="${LOCAL_ARTIFACTS_DIR}"
   export POCKETHIVE_RUNTIME_IMAGE="${RUNTIME_IMAGE}"
 
   if (( ${#MODULES_TO_BUILD[@]} )); then
-    build_base_image
-    run_maven_package "${MODULES_TO_BUILD[@]}"
-    stage_artifacts "${MODULES_TO_BUILD[@]}"
+    measure "build_base" build_base_image
+    measure "maven_package" run_maven_package "${MODULES_TO_BUILD[@]}"
+    measure "stage_artifacts" stage_artifacts "${MODULES_TO_BUILD[@]}"
+  else
+    DURATIONS["build_base"]=-1
+    DURATIONS["maven_package"]=-1
+    DURATIONS["stage_artifacts"]=-1
   fi
 
   if (( ${#SERVICES_TO_BUILD[@]} )); then
     echo "Building Docker images for: ${SERVICES_TO_BUILD[*]}"
-    compose_build_services "${SERVICES_TO_BUILD[@]}"
+    measure "docker_build" compose_build_services "${SERVICES_TO_BUILD[@]}"
   else
     echo "No services selected for build; skipping image build."
+    DURATIONS["docker_build"]=-1
   fi
 
   echo "Starting PocketHive stack via docker compose up -d"
-  compose_up_full_stack
+  measure "compose_up" compose_up_full_stack
 
   if (( ${#RESTART_TARGETS[@]} )); then
     echo "Restarting requested services: ${RESTART_TARGETS[*]}"
-    compose_up_services "${RESTART_TARGETS[@]}"
+    measure "restart" compose_up_services "${RESTART_TARGETS[@]}"
+  else
+    DURATIONS["restart"]=-1
   fi
 
+  print_timing_summary
   echo
   echo "PocketHive local build complete."
 }
