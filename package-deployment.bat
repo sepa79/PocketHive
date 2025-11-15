@@ -70,8 +70,6 @@ echo 4. Access UI: http://localhost:8088
 echo.
 echo ## Documentation
 echo.
-echo See `docs/PORTAINER_DEPLOYMENT.md` for Portainer deployment.
-echo.
 echo ## Ports
 echo.
 echo - 8088 - UI

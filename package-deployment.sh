@@ -95,10 +95,6 @@ Docker named volumes retain stateful data between restarts:
 They are created automatically on the first `docker compose up`. Remove them explicitly
 with `docker compose down -v` if you need a clean slate.
 
-## Portainer Deployment
-
-See `docs/PORTAINER_DEPLOYMENT.md` for detailed Portainer instructions.
-
 ## What's Included
 
 - `docker-compose.yml` - Main deployment configuration
