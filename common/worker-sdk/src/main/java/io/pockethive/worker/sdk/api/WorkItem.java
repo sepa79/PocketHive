@@ -7,8 +7,10 @@ import io.pockethive.observability.ObservabilityContextUtil;
 import java.io.IOException;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -17,10 +19,12 @@ import java.util.Optional;
  * Immutable representation of a worker item payload plus metadata.
  * <p>
  * The runtime converts transport-specific envelopes to {@code WorkItem} instances before handing them to
- * worker implementations. Builders support text, JSON, and binary
- * bodies, as described in {@code docs/sdk/worker-sdk-quickstart.md}.
+ * worker implementations. Builders support text, JSON, and binary bodies, as described in
+ * {@code docs/sdk/worker-sdk-quickstart.md}.
  * <p>
- * Initially this behaves like the former {@code WorkMessage}; step support will be added on top in later stages.
+ * A {@code WorkItem} can also carry an optional step history made up of {@link WorkStep} snapshots. Existing
+ * workers that only use {@link #asString()} and {@link #headers()} remain single-step by default; step APIs such
+ * as {@link #addStepPayload(String)}, {@link #addStep(String, Map)}, and {@link #clearHistory()} are opt-in.
  */
 public final class WorkItem {
 
@@ -30,12 +34,20 @@ public final class WorkItem {
     private final Map<String, Object> headers;
     private final Charset charset;
     private final ObservabilityContext observabilityContext;
+    private final List<WorkStep> steps;
 
-    private WorkItem(byte[] body, Map<String, Object> headers, Charset charset, ObservabilityContext observabilityContext) {
-        this.body = Objects.requireNonNull(body, "body");
+    private WorkItem(byte[] body,
+                     Map<String, Object> headers,
+                     Charset charset,
+                     ObservabilityContext observabilityContext,
+                     List<WorkStep> steps) {
+        this.body = Objects.requireNonNull(body, "body").clone();
         this.headers = Collections.unmodifiableMap(new LinkedHashMap<>(headers));
-        this.charset = charset;
+        this.charset = Objects.requireNonNull(charset, "charset");
         this.observabilityContext = observabilityContext;
+        this.steps = steps == null || steps.isEmpty()
+            ? List.of()
+            : List.copyOf(steps);
     }
 
     /**
@@ -74,6 +86,123 @@ public final class WorkItem {
     }
 
     /**
+     * Returns the textual payload for the current step. This is equivalent to {@link #asString()} but makes
+     * step-oriented code more readable.
+     */
+    public String payload() {
+        return asString();
+    }
+
+    /**
+     * Returns the payload of the previous step, if the item carries at least two recorded steps.
+     */
+    public Optional<String> previousPayload() {
+        if (steps == null || steps.size() < 2) {
+            return Optional.empty();
+        }
+        WorkStep previous = steps.get(steps.size() - 2);
+        return Optional.ofNullable(previous.payload());
+    }
+
+    /**
+     * Returns an ordered view of all recorded steps, from earliest to latest.
+     * <p>
+     * When no explicit history has been recorded yet, this returns a single synthetic step representing the
+     * current message body and headers.
+     */
+    public Iterable<WorkStep> steps() {
+        if (steps == null || steps.isEmpty()) {
+            WorkStep synthetic = new WorkStep(0, null, asString(), headers);
+            return List.of(synthetic);
+        }
+        return steps;
+    }
+
+    /**
+     * Adds a new step with the given payload, reusing the current headers.
+     * <p>
+     * The returned {@link WorkItem} exposes the new payload as its current body while retaining
+     * the previous payload in the step history.
+     */
+    public WorkItem addStepPayload(String payload) {
+        Objects.requireNonNull(payload, "payload");
+        return addStep(payload, Map.of());
+    }
+
+    /**
+     * Adds a new step with the given payload and per-step headers.
+     * <p>
+     * The caller sees the updated payload and merged headers via {@link #asString()} and {@link #headers()},
+     * while {@link #steps()} exposes the full history (initial step plus appended steps).
+     */
+    public WorkItem addStep(String payload, Map<String, Object> stepHeaders) {
+        Objects.requireNonNull(payload, "payload");
+        Map<String, Object> newHeaders = new LinkedHashMap<>(this.headers);
+        if (stepHeaders != null && !stepHeaders.isEmpty()) {
+            newHeaders.putAll(stepHeaders);
+        }
+        String effectivePayload = payload;
+        byte[] newBody = effectivePayload.getBytes(StandardCharsets.UTF_8);
+
+        List<WorkStep> newSteps = new ArrayList<>();
+        if (this.steps == null || this.steps.isEmpty()) {
+            newSteps.add(new WorkStep(0, null, asString(), this.headers));
+        } else {
+            newSteps.addAll(this.steps);
+        }
+        newSteps.add(new WorkStep(newSteps.size(), null, effectivePayload, newHeaders));
+
+        return new WorkItem(newBody, newHeaders, StandardCharsets.UTF_8, observabilityContext, newSteps);
+    }
+
+    /**
+     * Adds or removes a header on the current step and message.
+     * <p>
+     * Passing {@code null} as the value clears the header.
+     */
+    public WorkItem addStepHeader(String name, Object value) {
+        Objects.requireNonNull(name, "name");
+        Map<String, Object> newHeaders = new LinkedHashMap<>(this.headers);
+        if (value == null) {
+            newHeaders.remove(name);
+        } else {
+            newHeaders.put(name, value);
+        }
+
+        List<WorkStep> newSteps;
+        if (this.steps == null || this.steps.isEmpty()) {
+            WorkStep current = new WorkStep(0, null, asString(), newHeaders);
+            newSteps = List.of(current);
+        } else {
+            newSteps = new ArrayList<>(this.steps.size());
+            int lastIndex = this.steps.size() - 1;
+            for (int i = 0; i < lastIndex; i++) {
+                newSteps.add(this.steps.get(i));
+            }
+            WorkStep last = this.steps.get(lastIndex);
+            newSteps.add(new WorkStep(last.index(), last.name(), last.payload(), newHeaders));
+        }
+
+        return new WorkItem(body, newHeaders, charset, observabilityContext, newSteps);
+    }
+
+    /**
+     * Drops all but the current step from history so the retained step becomes the new baseline.
+     * <p>
+     * This is useful for large payloads where only the latest state should be carried forward.
+     */
+    public WorkItem clearHistory() {
+        if (steps == null || steps.isEmpty()) {
+            return this;
+        }
+        WorkStep last = steps.get(steps.size() - 1);
+        WorkStep normalised = last.withIndex(0);
+        byte[] newBody = normalised.payload().getBytes(StandardCharsets.UTF_8);
+        Map<String, Object> newHeaders = normalised.headers();
+        return new WorkItem(newBody, newHeaders, StandardCharsets.UTF_8, observabilityContext, List.of(normalised));
+    }
+
+    /**
      * Parses the body as a Jackson {@link JsonNode}.
      *
      * @throws IllegalStateException if the body cannot be parsed as JSON
@@ -100,17 +229,17 @@ public final class WorkItem {
     }
 
     /**
-     * Creates a builder pre-populated with this item's contents.
+     * Creates a builder pre-populated with this item's contents, including any recorded steps.
      */
     public Builder toBuilder() {
-        return new Builder(this.body, this.headers, this.charset, this.observabilityContext);
+        return new Builder(this.body, this.headers, this.charset, this.observabilityContext, this.steps);
     }
 
     /**
      * Returns a new builder with an empty body and UTF-8 charset.
      */
     public static Builder builder() {
-        return new Builder(new byte[0], Map.of(), StandardCharsets.UTF_8, null);
+        return new Builder(new byte[0], Map.of(), StandardCharsets.UTF_8, null, null);
     }
 
     /**
@@ -118,7 +247,7 @@ public final class WorkItem {
      */
     public static Builder text(String body) {
         Objects.requireNonNull(body, "body");
-        return new Builder(body.getBytes(StandardCharsets.UTF_8), Map.of(), StandardCharsets.UTF_8, null);
+        return new Builder(body.getBytes(StandardCharsets.UTF_8), Map.of(), StandardCharsets.UTF_8, null, null);
     }
 
     /**
@@ -128,7 +257,7 @@ public final class WorkItem {
         Objects.requireNonNull(value, "value");
         try {
             byte[] bytes = DEFAULT_MAPPER.writeValueAsBytes(value);
-            return new Builder(bytes, Map.of(), StandardCharsets.UTF_8, null);
+            return new Builder(bytes, Map.of(), StandardCharsets.UTF_8, null, null);
         } catch (IOException e) {
             throw new IllegalStateException("Failed to serialize JSON value", e);
         }
@@ -139,7 +268,7 @@ public final class WorkItem {
      */
     public static Builder binary(byte[] body) {
         Objects.requireNonNull(body, "body");
-        return new Builder(body.clone(), Map.of(), StandardCharsets.UTF_8, null);
+        return new Builder(body.clone(), Map.of(), StandardCharsets.UTF_8, null, null);
     }
 
     public static final class Builder {
@@ -147,12 +276,18 @@ public final class WorkItem {
         private Map<String, Object> headers;
         private Charset charset;
         private ObservabilityContext observabilityContext;
+        private List<WorkStep> steps;
 
-        private Builder(byte[] body, Map<String, Object> headers, Charset charset, ObservabilityContext observabilityContext) {
+        private Builder(byte[] body,
+                        Map<String, Object> headers,
+                        Charset charset,
+                        ObservabilityContext observabilityContext,
+                        List<WorkStep> steps) {
             this.body = body;
             this.headers = new LinkedHashMap<>(headers);
             this.charset = charset;
             this.observabilityContext = observabilityContext;
+            this.steps = (steps == null || steps.isEmpty()) ? null : List.copyOf(steps);
         }
 
         /**
@@ -246,8 +381,7 @@ public final class WorkItem {
             } else {
                 copy.put(ObservabilityContextUtil.HEADER, ObservabilityContextUtil.toHeader(context));
             }
-            return new WorkItem(body.clone(), copy, resolvedCharset, context);
+            return new WorkItem(body, copy, resolvedCharset, context, steps);
         }
     }
 }
-

@@ -96,7 +96,8 @@ Once all workers (internal and external) are on the new contract, we can introdu
   - `WorkItem clearHistory()` — retains only the current step (no-op initially).
 - [ ] Introduce `HistoryPolicy`:
   - Configurable per worker/role/swarm with modes `FULL`, `LATEST_ONLY`, `DISABLED`.
-  - In Stage 2, keep implementation effectively `LATEST_ONLY` while wiring configuration and API surfaces.
+  - Expose the default via `pockethive.worker.history-policy` in Scenario YAML / service config, defaulting to `FULL`.
+  - In Stage 2, the public API is wired; enforcement can be tightened in Stage 3 when real step history limits are applied.
 
 > Stage 2 is additive; no worker contract changes are required. Existing workers can ignore these new methods until they need step support.
 
@@ -109,4 +110,3 @@ After Stage 2 is stable, we can upgrade `WorkItem` to hold real step history and
 - [ ] Ensure the HTTP processor, templating pipeline, and routing output use steps in a consistent way.
 
 > Stage 3 ties directly into `docs/sdk/templated-generator-plan.md` and `docs/sdk/http-request-processor-plan.md`.
-

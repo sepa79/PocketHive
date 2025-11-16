@@ -1,0 +1,43 @@
+id: history-policy-demo
+name: History Policy Demo - Local REST
+description: Local REST swarm that sets explicit WorkItem history policies per worker.
+template:
+  image: swarm-controller:latest
+  bees:
+    - role: generator
+      image: generator:latest
+      config:
+        pockethive:
+          worker:
+            historyPolicy: FULL
+            config:
+              ratePerSec: 5
+      work:
+        out: gen
+    - role: moderator
+      image: moderator:latest
+      config:
+        pockethive:
+          worker:
+            historyPolicy: LATEST_ONLY
+      work:
+        in: gen
+        out: mod
+    - role: processor
+      image: processor:latest
+      config:
+        pockethive:
+          worker:
+            historyPolicy: DISABLED
+      work:
+        in: mod
+        out: final
+    - role: postprocessor
+      image: postprocessor:latest
+      config:
+        pockethive:
+          worker:
+            historyPolicy: FULL
+      work:
+        in: final
+

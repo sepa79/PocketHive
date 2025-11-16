@@ -1,0 +1,57 @@
+package io.pockethive.worker.sdk.api;
+
+import java.util.Map;
+import java.util.Objects;
+
+/**
+ * Snapshot of a single logical processing step within a {@link WorkItem}'s history.
+ * <p>
+ * Steps are ordered from earliest ({@link #index()} == 0) to latest.
+ */
+public final class WorkStep {
+
+    private final int index;
+    private final String name;
+    private final String payload;
+    private final Map<String, Object> headers;
+
+    public WorkStep(int index, String name, String payload, Map<String, Object> headers) {
+        if (index < 0) {
+            throw new IllegalArgumentException("index must be >= 0");
+        }
+        this.index = index;
+        this.name = name;
+        this.payload = Objects.requireNonNull(payload, "payload");
+        this.headers = Map.copyOf(Objects.requireNonNull(headers, "headers"));
+    }
+
+    public int index() {
+        return index;
+    }
+
+    /**
+     * Optional, human-readable step name derived from the worker/input/interceptor.
+     */
+    public String name() {
+        return name;
+    }
+
+    /**
+     * Textual payload snapshot for this step.
+     */
+    public String payload() {
+        return payload;
+    }
+
+    /**
+     * Headers that were in effect for this step.
+     */
+    public Map<String, Object> headers() {
+        return headers;
+    }
+
+    WorkStep withIndex(int newIndex) {
+        return new WorkStep(newIndex, name, payload, headers);
+    }
+}
+

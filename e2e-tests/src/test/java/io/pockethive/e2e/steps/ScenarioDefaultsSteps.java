@@ -73,6 +73,38 @@ public class ScenarioDefaultsSteps {
         "Generator default rate did not match expected value");
   }
 
+  @Then("the {string} bee has history policy {string}")
+  public void theBeeHasHistoryPolicy(String role, String expectedPolicy) {
+    ensureScenario();
+    SwarmTemplate template = scenarioDetails.template();
+    assertNotNull(template, "Scenario template was not returned");
+
+    Bee target = template.bees().stream()
+        .filter(bee -> bee != null && roleMatches(role, bee.role()))
+        .findFirst()
+        .orElseThrow(() -> new AssertionError("Scenario template did not define a bee with role " + role));
+
+    Map<String, Object> config = target.config();
+    assertNotNull(config, "Bee config was not returned");
+
+    Object pockethiveObj = config.get("pockethive");
+    assertNotNull(pockethiveObj, "Bee config did not include 'pockethive' block");
+
+    @SuppressWarnings("unchecked")
+    Map<String, Object> pockethive = (Map<String, Object>) pockethiveObj;
+    Object workerObj = pockethive.get("worker");
+    assertNotNull(workerObj, "Bee config did not include 'worker' block under 'pockethive'");
+
+    @SuppressWarnings("unchecked")
+    Map<String, Object> worker = (Map<String, Object>) workerObj;
+    Object policyObj = worker.get("historyPolicy");
+    assertNotNull(policyObj, "Bee config did not include 'historyPolicy'");
+
+    String actual = policyObj.toString();
+    assertEquals(expectedPolicy, actual,
+        "History policy for role %s did not match expected value".formatted(role));
+  }
+
   private void ensureHarness() {
     Assumptions.assumeTrue(scenarioManagerClient != null,
         "Scenario defaults harness was not initialised");

@@ -1,6 +1,7 @@
 package io.pockethive.worker.sdk.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.pockethive.worker.sdk.api.HistoryPolicy;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -23,6 +24,11 @@ public abstract class PocketHiveWorkerProperties<T> {
      * Worker-specific configuration payload bound from {@code pockethive.worker.config.*}.
      */
     private Map<String, Object> config = new LinkedHashMap<>();
+    /**
+     * Default {@link HistoryPolicy} for items handled by this worker. Bound from
+     * {@code pockethive.worker.history-policy}. Defaults to {@link HistoryPolicy#FULL}.
+     */
+    private HistoryPolicy historyPolicy = HistoryPolicy.FULL;
 
     protected PocketHiveWorkerProperties(Supplier<String> roleSupplier, Class<T> configType) {
         this.roleSupplier = Objects.requireNonNull(roleSupplier, "roleSupplier");
@@ -47,6 +53,14 @@ public abstract class PocketHiveWorkerProperties<T> {
         } else {
             this.config = new LinkedHashMap<>(config);
         }
+    }
+
+    public HistoryPolicy getHistoryPolicy() {
+        return historyPolicy;
+    }
+
+    public void setHistoryPolicy(HistoryPolicy historyPolicy) {
+        this.historyPolicy = historyPolicy == null ? HistoryPolicy.FULL : historyPolicy;
     }
 
     /**
