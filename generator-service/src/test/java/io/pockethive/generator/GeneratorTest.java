@@ -5,8 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.pockethive.controlplane.spring.WorkerControlPlaneProperties;
 import io.pockethive.worker.sdk.api.StatusPublisher;
-import io.pockethive.worker.sdk.api.WorkMessage;
-import io.pockethive.worker.sdk.api.WorkResult;
+import io.pockethive.worker.sdk.api.WorkItem;
 import io.pockethive.worker.sdk.api.WorkerContext;
 import io.pockethive.worker.sdk.api.WorkerInfo;
 import io.pockethive.worker.sdk.testing.ControlPlaneTestFixtures;
@@ -60,25 +59,25 @@ class GeneratorTest {
         )
     );
 
-    WorkResult result = worker.onMessage(seedMessage(), new TestWorkerContext(config));
+    WorkItem result = worker.onMessage(seedMessage(), new TestWorkerContext(config));
 
-    assertThat(result).isInstanceOf(WorkResult.Message.class);
-    JsonNode payload = MAPPER.readTree(((WorkResult.Message) result).value().asString());
+    assertThat(result).isNotNull();
+    JsonNode payload = MAPPER.readTree(result.asString());
     assertThat(payload.path("path").asText()).isEqualTo("/custom");
     assertThat(payload.path("method").asText()).isEqualTo("PUT");
     assertThat(payload.path("body").asText()).isEqualTo("{\"value\":42}");
     assertThat(payload.path("headers").path("X-Custom").asText()).isEqualTo("yes");
-    assertThat(((WorkResult.Message) result).value().headers())
+    assertThat(result.headers())
         .containsEntry("content-type", MessageProperties.CONTENT_TYPE_JSON)
         .containsEntry("x-ph-service", "generator");
   }
 
   @Test
   void generateFallsBackToDefaultsWhenConfigMissing() throws Exception {
-    WorkResult result = worker.onMessage(seedMessage(), new TestWorkerContext(null));
+    WorkItem result = worker.onMessage(seedMessage(), new TestWorkerContext(null));
 
-    assertThat(result).isInstanceOf(WorkResult.Message.class);
-    JsonNode payload = MAPPER.readTree(((WorkResult.Message) result).value().asString());
+    assertThat(result).isNotNull();
+    JsonNode payload = MAPPER.readTree(result.asString());
     assertThat(payload.path("path").asText()).isEqualTo("/default");
     assertThat(payload.path("method").asText()).isEqualTo("POST");
     assertThat(payload.path("headers").path("X-Test").asText()).isEqualTo("true");
@@ -143,7 +142,7 @@ class GeneratorTest {
     }
   }
 
-  private static WorkMessage seedMessage() {
-    return WorkMessage.builder().build();
+  private static WorkItem seedMessage() {
+    return WorkItem.builder().build();
   }
 }

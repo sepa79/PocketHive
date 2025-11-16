@@ -2,8 +2,7 @@ package io.pockethive.worker.sdk.transport.rabbit;
 
 import io.pockethive.observability.ObservabilityContext;
 import io.pockethive.observability.ObservabilityContextUtil;
-import io.pockethive.worker.sdk.api.WorkMessage;
-import io.pockethive.worker.sdk.api.WorkResult;
+import io.pockethive.worker.sdk.api.WorkItem;
 import io.pockethive.worker.sdk.runtime.WorkIoBindings;
 import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime;
 import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime.WorkerStateSnapshot;
@@ -34,9 +33,9 @@ import org.springframework.context.event.ContextRefreshedEvent;
  * <ul>
  *     <li>Starting and stopping the Spring AMQP listener container based on the control-plane desired
  *         state for the worker instance.</li>
- *     <li>Translating inbound {@link Message AMQP messages} into {@link WorkMessage} envelopes using the
+ *     <li>Translating inbound {@link Message AMQP messages} into {@link WorkItem} envelopes using the
  *         {@link RabbitWorkMessageConverter} that is shared across PocketHive workers.</li>
- *     <li>Invoking the provided {@link WorkDispatcher} callback and, when a {@link WorkResult.Message}
+ *     <li>Invoking the provided {@link WorkDispatcher} callback and, when a non-null {@link WorkItem}
  *         result is produced, publishing it via the optional {@link MessageResultPublisher} hook.</li>
  *     <li>Relaying control-plane payloads through the {@link WorkerControlPlaneRuntime} with the expected
  *         observability context population and validation semantics.</li>
@@ -139,7 +138,7 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
      * Converts inbound AMQP messages and dispatches them through the configured worker runtime.
      * <p>
      * The message payload is translated using {@link RabbitWorkMessageConverter} before being handed off
-     * to the {@link WorkDispatcher}. Any {@link WorkResult.Message} outputs are converted back into AMQP
+     * to the {@link WorkDispatcher}. Any non-{@code null} results are converted back into AMQP
      * {@link Message messages} and forwarded to the optional {@link MessageResultPublisher}. Exceptions
      * thrown by the dispatcher are routed to the configured {@link #dispatchErrorHandler} allowing
      * services to integrate with their own error handling strategies.
@@ -147,19 +146,12 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
      * @param message inbound message delivered by Spring AMQP
      */
     public void onWork(Message message) {
-        WorkMessage workMessage = messageConverter.fromMessage(message);
+        WorkItem workItem = messageConverter.fromMessage(message);
         try {
-            WorkResult result = dispatcher.dispatch(workMessage);
-            if (result == null) {
-                throw new IllegalStateException(
-                    "Worker " + workerDefinition.beanName() + " returned null WorkResult");
-            }
-            if (result instanceof WorkResult.Message messageResult) {
-                Message outbound = messageConverter.toMessage(messageResult.value());
-                messageResultPublisher.publish(messageResult, outbound);
-            } else if (!(result instanceof WorkResult.None)) {
-                throw new IllegalStateException("Worker " + workerDefinition.beanName()
-                    + " returned unsupported WorkResult type: " + result.getClass().getName());
+            WorkItem result = dispatcher.dispatch(workItem);
+            if (result != null) {
+                Message outbound = messageConverter.toMessage(result);
+                messageResultPublisher.publish(result, outbound);
             }
         } catch (Exception ex) {
             dispatchErrorHandler.accept(ex);
@@ -427,7 +419,7 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
          * Configures the callback responsible for executing the business logic once an inbound work message
          * has been converted.
          *
-         * @param dispatcher dispatcher invoked for each {@link WorkMessage}
+         * @param dispatcher dispatcher invoked for each {@link WorkItem}
          * @return this builder instance
          */
         public Builder dispatcher(WorkDispatcher dispatcher) {
@@ -436,10 +428,10 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
         }
 
         /**
-         * Provides the optional hook for publishing downstream {@link WorkResult.Message message results}.
-         * Services that do not produce message results can omit this configuration.
+         * Provides the optional hook for publishing downstream {@link WorkItem} results.
+         * Services that do not produce downstream items can omit this configuration.
          *
-         * @param messageResultPublisher callback invoked when a message result is produced
+         * @param messageResultPublisher callback invoked when a non-null item result is produced
          * @return this builder instance
          */
         public Builder messageResultPublisher(MessageResultPublisher messageResultPublisher) {
@@ -448,7 +440,7 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
         }
 
         /**
-         * Supplies the {@link RabbitTemplate} used for publishing downstream {@link WorkResult.Message} payloads. When a
+         * Supplies the {@link RabbitTemplate} used for publishing downstream {@link WorkItem} payloads. When a
          * template is provided and no custom {@link MessageResultPublisher} is configured the helper automatically
          * publishes to the exchange resolved from the {@link WorkerDefinition} unless an explicit override is supplied.
          *
@@ -461,7 +453,7 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
         }
 
         /**
-         * Overrides the exchange used when publishing {@link WorkResult.Message} payloads via the {@link RabbitTemplate}.
+         * Overrides the exchange used when publishing {@link WorkItem} payloads via the {@link RabbitTemplate}.
          * Services can rely on this when the {@link WorkerDefinition} does not provide the exchange name.
          *
          * @param outboundExchange AMQP exchange name used for outbound traffic
@@ -530,7 +522,7 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
                             ? "an outbound queue"
                             : "a message result publisher";
                         throw new IllegalStateException("Worker " + workerDefinition.beanName()
-                            + " attempted to publish WorkResult.Message but has not configured " + missing);
+                            + " attempted to publish a result but has not configured " + missing);
                     };
                 }
             }
@@ -543,23 +535,23 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
     }
 
     /**
-     * Callback invoked by the helper to dispatch converted {@link WorkMessage} instances.
-     * Implementations typically wrap the service specific runtime that processes the work message and
-     * returns a {@link WorkResult}.
+     * Callback invoked by the helper to dispatch converted {@link WorkItem} instances.
+     * Implementations typically wrap the service specific runtime that processes the work item and
+     * returns a {@link WorkItem} or {@code null} when no downstream item should be published.
      */
     @FunctionalInterface
     public interface WorkDispatcher {
-        WorkResult dispatch(WorkMessage message) throws Exception;
+        WorkItem dispatch(WorkItem item) throws Exception;
     }
 
     /**
-     * Callback invoked when the worker returns a {@link WorkResult.Message}. Implementations can forward the
-     * AMQP {@link Message} downstream or perform service-specific logging.
+     * Callback invoked when the worker returns a non-{@code null} {@link WorkItem}. Implementations can
+     * forward the AMQP {@link Message} downstream or perform service-specific logging.
      * The helper intentionally exposes the converted {@link Message} to avoid repeated converter lookups in
      * service adapters.
      */
     @FunctionalInterface
     public interface MessageResultPublisher {
-        void publish(WorkResult.Message result, Message message);
+        void publish(WorkItem result, Message message);
     }
 }

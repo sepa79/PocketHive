@@ -6,7 +6,7 @@ import io.micrometer.observation.ObservationRegistry;
 import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.observability.ObservabilityContext;
 import io.pockethive.worker.sdk.api.StatusPublisher;
-import io.pockethive.worker.sdk.api.WorkMessage;
+import io.pockethive.worker.sdk.api.WorkItem;
 import io.pockethive.worker.sdk.api.WorkerContext;
 import io.pockethive.worker.sdk.api.WorkerInfo;
 import java.util.ArrayList;
@@ -74,7 +74,7 @@ public final class DefaultWorkerContextFactory implements WorkerContextFactory {
     }
 
     @Override
-    public WorkerContext createContext(WorkerDefinition definition, WorkerState state, WorkMessage message) {
+    public WorkerContext createContext(WorkerDefinition definition, WorkerState state, WorkItem message) {
         Objects.requireNonNull(definition, "definition");
         Objects.requireNonNull(state, "state");
         Objects.requireNonNull(message, "message");
@@ -98,7 +98,7 @@ public final class DefaultWorkerContextFactory implements WorkerContextFactory {
     }
 
     private static String resolveIdentifier(
-        WorkMessage message,
+        WorkItem message,
         String headerName,
         String configuredValue,
         String field
@@ -183,7 +183,7 @@ public final class DefaultWorkerContextFactory implements WorkerContextFactory {
         }
     }
 
-    private ObservabilityContext resolveObservabilityContext(WorkerInfo info, WorkMessage message) {
+    private ObservabilityContext resolveObservabilityContext(WorkerInfo info, WorkItem message) {
         ObservabilityContext context = message.observabilityContext().orElseGet(ObservabilityContext::new);
         if (context.getTraceId() == null || context.getTraceId().isBlank()) {
             context.setTraceId(UUID.randomUUID().toString());

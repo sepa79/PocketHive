@@ -11,8 +11,7 @@ import io.micrometer.observation.ObservationRegistry;
 import io.pockethive.observability.ObservabilityContext;
 import io.pockethive.worker.sdk.api.PocketHiveWorkerFunction;
 import io.pockethive.worker.sdk.api.StatusPublisher;
-import io.pockethive.worker.sdk.api.WorkMessage;
-import io.pockethive.worker.sdk.api.WorkResult;
+import io.pockethive.worker.sdk.api.WorkItem;
 import io.pockethive.worker.sdk.api.WorkerContext;
 import io.pockethive.worker.sdk.api.WorkerInfo;
 import io.pockethive.worker.sdk.config.WorkInputConfig;
@@ -58,10 +57,10 @@ class DefaultWorkerRuntimeTest {
         state.setStatusPublisher(new WorkerStatusPublisher(state, () -> { }, () -> { }));
         state.updateConfig(null, false, Boolean.TRUE);
 
-        WorkResult result = runtime.dispatch("testWorker", WorkMessage.text("payload").build());
+        WorkItem result = runtime.dispatch("testWorker", WorkItem.text("payload").build());
 
-        assertThat(result).isInstanceOf(WorkResult.Message.class);
-        verify(outputRegistry).publish(eq(definition), any(WorkResult.Message.class));
+        assertThat(result).isNotNull();
+        verify(outputRegistry).publish(eq(result), eq(definition));
     }
 
     private static WorkerContext workerContext(WorkerDefinition definition, WorkerState state) {
@@ -122,8 +121,8 @@ class DefaultWorkerRuntimeTest {
     private static final class TestWorker implements PocketHiveWorkerFunction {
 
         @Override
-        public WorkResult onMessage(WorkMessage in, WorkerContext context) {
-            return WorkResult.message(in);
+        public WorkItem onMessage(WorkItem in, WorkerContext context) {
+            return in;
         }
     }
 }

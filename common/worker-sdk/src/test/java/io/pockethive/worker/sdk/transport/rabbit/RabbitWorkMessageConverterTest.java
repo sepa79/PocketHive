@@ -2,7 +2,7 @@ package io.pockethive.worker.sdk.transport.rabbit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import io.pockethive.worker.sdk.api.WorkMessage;
+import io.pockethive.worker.sdk.api.WorkItem;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.springframework.amqp.core.Message;
@@ -14,7 +14,7 @@ class RabbitWorkMessageConverterTest {
 
     @Test
     void roundTripPreservesHeadersAndBody() {
-        WorkMessage original = WorkMessage.json(Map.of("hello", "world"))
+        WorkItem original = WorkItem.json(Map.of("hello", "world"))
             .header("content-type", MessageProperties.CONTENT_TYPE_JSON)
             .header("message-id", "msg-123")
             .header("x-ph-service", "generator")
@@ -25,7 +25,7 @@ class RabbitWorkMessageConverterTest {
         assertThat(amqpMessage.getMessageProperties().getMessageId()).isEqualTo("msg-123");
         assertThat(amqpMessage.getMessageProperties().getHeaders()).containsEntry("x-ph-service", "generator");
 
-        WorkMessage roundTrip = converter.fromMessage(amqpMessage);
+        WorkItem roundTrip = converter.fromMessage(amqpMessage);
         assertThat(roundTrip.asJsonNode()).isEqualTo(original.asJsonNode());
         assertThat(roundTrip.headers()).containsEntry("x-ph-service", "generator");
         assertThat(roundTrip.headers()).containsEntry("content-type", MessageProperties.CONTENT_TYPE_JSON);

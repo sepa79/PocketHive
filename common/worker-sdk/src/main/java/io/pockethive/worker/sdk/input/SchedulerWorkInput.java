@@ -1,8 +1,7 @@
 package io.pockethive.worker.sdk.input;
 
 import io.pockethive.controlplane.ControlPlaneIdentity;
-import io.pockethive.worker.sdk.api.WorkMessage;
-import io.pockethive.worker.sdk.api.WorkResult;
+import io.pockethive.worker.sdk.api.WorkItem;
 import io.pockethive.worker.sdk.config.SchedulerInputProperties;
 import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
@@ -18,7 +17,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * {@link WorkInput} implementation that periodically dispatches synthetic {@link WorkMessage} seed
+ * {@link WorkInput} implementation that periodically dispatches synthetic {@link WorkItem} seed
  * envelopes to the worker runtime. It delegates scheduling semantics to a pluggable {@link SchedulerState}
  * and supports service-specific result handling and seed enrichment.
  *
@@ -33,8 +32,8 @@ public final class SchedulerWorkInput<C> implements WorkInput {
     private final WorkerRuntime workerRuntime;
     private final ControlPlaneIdentity identity;
     private final SchedulerState<C> schedulerState;
-    private final BiFunction<WorkerDefinition, ControlPlaneIdentity, WorkMessage> seedFactory;
-    private final BiConsumer<WorkResult, WorkerDefinition> resultHandler;
+    private final BiFunction<WorkerDefinition, ControlPlaneIdentity, WorkItem> seedFactory;
+    private final BiConsumer<WorkItem, WorkerDefinition> resultHandler;
     private final Consumer<Exception> dispatchErrorHandler;
     private final Logger log;
     private final long initialDelayMs;
@@ -88,14 +87,12 @@ public final class SchedulerWorkInput<C> implements WorkInput {
             log.debug("{} scheduler dispatching {} invocation(s) at tick {}", workerDefinition.beanName(), quota, nowMillis);
         }
         for (int i = 0; i < quota; i++) {
-            WorkMessage seed = seedFactory.apply(workerDefinition, identity);
+            WorkItem seed = seedFactory.apply(workerDefinition, identity);
             try {
-                WorkResult result = workerRuntime.dispatch(workerDefinition.beanName(), seed);
-                if (result == null) {
-                    throw new IllegalStateException("Worker " + workerDefinition.beanName()
-                        + " returned null WorkResult");
+                WorkItem result = workerRuntime.dispatch(workerDefinition.beanName(), seed);
+                if (result != null) {
+                    resultHandler.accept(result, workerDefinition);
                 }
-                resultHandler.accept(result, workerDefinition);
             } catch (Exception ex) {
                 dispatchErrorHandler.accept(ex);
             }
@@ -164,14 +161,14 @@ public final class SchedulerWorkInput<C> implements WorkInput {
         listenersRegistered = true;
     }
 
-    private static WorkMessage defaultSeed(WorkerDefinition definition, ControlPlaneIdentity identity) {
-        return WorkMessage.builder()
+    private static WorkItem defaultSeed(WorkerDefinition definition, ControlPlaneIdentity identity) {
+        return WorkItem.builder()
             .header("swarmId", identity.swarmId())
             .header("instanceId", identity.instanceId())
             .build();
     }
 
-    private static void ignoreResult(WorkResult result, WorkerDefinition definition) {
+    private static void ignoreResult(WorkItem result, WorkerDefinition definition) {
         // no-op
     }
 
@@ -192,8 +189,8 @@ public final class SchedulerWorkInput<C> implements WorkInput {
         private WorkerRuntime workerRuntime;
         private ControlPlaneIdentity identity;
         private SchedulerState<C> schedulerState;
-        private BiFunction<WorkerDefinition, ControlPlaneIdentity, WorkMessage> seedFactory = SchedulerWorkInput::defaultSeed;
-        private BiConsumer<WorkResult, WorkerDefinition> resultHandler = SchedulerWorkInput::ignoreResult;
+        private BiFunction<WorkerDefinition, ControlPlaneIdentity, WorkItem> seedFactory = SchedulerWorkInput::defaultSeed;
+        private BiConsumer<WorkItem, WorkerDefinition> resultHandler = SchedulerWorkInput::ignoreResult;
         private Consumer<Exception> dispatchErrorHandler = ex -> defaultLog.warn("Scheduler worker invocation failed", ex);
         private Logger log = defaultLog;
         private long initialDelayMs = 0L;
@@ -228,14 +225,14 @@ public final class SchedulerWorkInput<C> implements WorkInput {
         }
 
         public Builder<C> seedFactory(
-            BiFunction<WorkerDefinition, ControlPlaneIdentity, WorkMessage> seedFactory
+            BiFunction<WorkerDefinition, ControlPlaneIdentity, WorkItem> seedFactory
         ) {
             this.seedFactory = Objects.requireNonNull(seedFactory, "seedFactory");
             return this;
         }
 
         public Builder<C> resultHandler(
-            BiConsumer<WorkResult, WorkerDefinition> resultHandler
+            BiConsumer<WorkItem, WorkerDefinition> resultHandler
         ) {
             this.resultHandler = Objects.requireNonNull(resultHandler, "resultHandler");
             return this;

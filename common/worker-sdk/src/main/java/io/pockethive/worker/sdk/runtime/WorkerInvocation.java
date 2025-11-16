@@ -1,8 +1,7 @@
 package io.pockethive.worker.sdk.runtime;
 
 import io.pockethive.worker.sdk.api.PocketHiveWorkerFunction;
-import io.pockethive.worker.sdk.api.WorkMessage;
-import io.pockethive.worker.sdk.api.WorkResult;
+import io.pockethive.worker.sdk.api.WorkItem;
 import io.pockethive.worker.sdk.api.WorkerContext;
 import java.util.List;
 import java.util.Objects;
@@ -32,7 +31,7 @@ final class WorkerInvocation {
         this.interceptors = List.copyOf(interceptors);
     }
 
-    WorkResult invoke(WorkMessage message) throws Exception {
+    WorkItem invoke(WorkItem message) throws Exception {
         if (!workerState.enabled()) {
             throw new IllegalStateException("Worker '" + workerDefinition.beanName() + "' is disabled by control-plane configuration");
         }
@@ -43,7 +42,7 @@ final class WorkerInvocation {
             .data("worker", workerDefinition.beanName())
             .data("phase", "STARTED"));
         try {
-            WorkResult result = proceed(0, invocationContext);
+            WorkItem result = proceed(0, invocationContext);
             statusPublisher.recordProcessed();
             statusPublisher.update(status -> status
                 .data("worker", workerDefinition.beanName())
@@ -58,7 +57,7 @@ final class WorkerInvocation {
         }
     }
 
-    private WorkResult proceed(int index, WorkerInvocationContext invocationContext) throws Exception {
+    private WorkItem proceed(int index, WorkerInvocationContext invocationContext) throws Exception {
         if (index < interceptors.size()) {
             WorkerInvocationInterceptor interceptor = interceptors.get(index);
             return interceptor.intercept(invocationContext, nextContext -> proceed(index + 1, nextContext));
@@ -66,9 +65,9 @@ final class WorkerInvocation {
         return invokeWorker(invocationContext);
     }
 
-    private WorkResult invokeWorker(WorkerInvocationContext invocationContext) throws Exception {
+    private WorkItem invokeWorker(WorkerInvocationContext invocationContext) throws Exception {
         WorkerContext context = invocationContext.workerContext();
-        WorkMessage input = invocationContext.message();
+        WorkItem input = invocationContext.message();
         if (workerBean instanceof PocketHiveWorkerFunction function) {
             return function.onMessage(input, context);
         }

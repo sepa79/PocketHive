@@ -1,6 +1,6 @@
 package io.pockethive.worker.sdk.runtime;
 
-import io.pockethive.worker.sdk.api.WorkResult;
+import io.pockethive.worker.sdk.api.WorkItem;
 
 /**
  * Hook that can observe or modify worker invocations.
@@ -12,12 +12,12 @@ public interface WorkerInvocationInterceptor {
     /**
      * Applies cross-cutting logic around a worker invocation.
      */
-    WorkResult intercept(WorkerInvocationContext context, Chain chain) throws Exception;
+    WorkItem intercept(WorkerInvocationContext context, Chain chain) throws Exception;
 
     interface Chain {
         /**
          * Invokes the next interceptor or the underlying worker implementation.
          */
-        WorkResult proceed(WorkerInvocationContext context) throws Exception;
+        WorkItem proceed(WorkerInvocationContext context) throws Exception;
     }
 }

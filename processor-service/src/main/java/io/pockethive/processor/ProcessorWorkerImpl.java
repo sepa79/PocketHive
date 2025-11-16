@@ -4,8 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.pockethive.worker.sdk.api.PocketHiveWorkerFunction;
-import io.pockethive.worker.sdk.api.WorkMessage;
-import io.pockethive.worker.sdk.api.WorkResult;
+import io.pockethive.worker.sdk.api.WorkItem;
 import io.pockethive.worker.sdk.api.WorkerContext;
 import io.pockethive.worker.sdk.config.PocketHiveWorker;
 import io.pockethive.worker.sdk.config.WorkerCapability;
@@ -31,7 +30,7 @@ import org.springframework.stereotype.Component;
  * <p>
  * The worker is wired into the moderator queue configured via {@code pockethive.inputs.rabbit.queue}
  * (typically provided through {@code POCKETHIVE_INPUT_RABBIT_QUEUE}) and receives
- * {@link WorkMessage} payloads that typically originate from the orchestrator. For every incoming
+ * {@link WorkItem} payloads that typically originate from the orchestrator. For every incoming
  * message we resolve configuration from the {@link WorkerContext}:
  * <ul>
  *   <li>If control plane overrides exist they are surfaced through
@@ -47,7 +46,7 @@ import org.springframework.stereotype.Component;
  * </ul>
  * Once configured, the worker performs an outbound HTTP call using the payload's {@code path},
  * {@code method}, {@code headers}, and {@code body} fields. Success and failure paths both emit a
- * {@link WorkResult} to the configured final routing key
+ * {@link WorkItem} to the configured final routing key
  * ({@code pockethive.outputs.rabbit.routing-key}), and the runtime's observability interceptor adds the hop
  * metadata so downstream services can trace the request.
  * <p>
@@ -98,7 +97,7 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
    *       {@link ProcessorWorkerProperties#defaultConfig()} (enabled with {@code baseUrl=http://localhost:8082}).
    *       The active configuration is echoed to the control plane through
    *       {@link WorkerContext#statusPublisher()} for easy debugging.</li>
-   *   <li><strong>HTTP invocation</strong> – Using {@link #invokeHttp(WorkMessage, ProcessorWorkerConfig, Logger)}
+   *   <li><strong>HTTP invocation</strong> – Using {@link #invokeHttp(WorkItem, ProcessorWorkerConfig, Logger)}
    *       we create a {@link HttpRequest} from the message body and forward it to the configured
    *       service. The request defaults to {@code GET /} with no body when fields are missing.</li>
    *   <li><strong>Error handling</strong> – Any exception (invalid config, network error, unexpected
@@ -110,34 +109,34 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
  *       timestamps) to the shared observability context so traces remain visible in Loki/Grafana.</li>
    * </ol>
    *
-   * @param in incoming work message from the configured moderator queue
+   * @param in incoming work item from the configured moderator queue
    * @param context context provided by the runtime (metrics, logging, config, observability)
-   * @return a {@link WorkResult#message(WorkMessage)} destined for the configured final queue with the
+   * @return a {@link WorkItem} destined for the configured final queue with the
    *         observability envelope already updated
    */
   @Override
-  public WorkResult onMessage(WorkMessage in, WorkerContext context) {
+  public WorkItem onMessage(WorkItem in, WorkerContext context) {
     ProcessorWorkerConfig config = context.configOrDefault(ProcessorWorkerConfig.class, properties::defaultConfig);
 
     Logger logger = context.logger();
     try {
-      WorkMessage response = invokeHttp(in, config, context);
+      WorkItem response = invokeHttp(in, config, context);
       publishStatus(context, config);
-      return WorkResult.message(response);
+      return response;
     } catch (ProcessorCallException ex) {
       logger.warn("Processor request failed: {}", ex.getCause() != null ? ex.getCause().toString() : ex.toString(), ex);
-      WorkMessage error = buildError(context, ex.getCause() != null ? ex.getCause().toString() : ex.toString(), ex.metrics());
+      WorkItem error = buildError(context, ex.getCause() != null ? ex.getCause().toString() : ex.toString(), ex.metrics());
       publishStatus(context, config);
-      return WorkResult.message(error);
+      return error;
     } catch (Exception ex) {
       logger.warn("Processor request failed: {}", ex.toString(), ex);
-      WorkMessage error = buildError(context, ex.toString(), CallMetrics.failure(0, -1));
+      WorkItem error = buildError(context, ex.toString(), CallMetrics.failure(0, -1));
       publishStatus(context, config);
-      return WorkResult.message(error);
+      return error;
     }
   }
 
-  private WorkMessage invokeHttp(WorkMessage message, ProcessorWorkerConfig config, WorkerContext context)
+  private WorkItem invokeHttp(WorkItem message, ProcessorWorkerConfig config, WorkerContext context)
       throws Exception {
     Logger logger = context.logger();
     JsonNode node = message.asJsonNode();
@@ -186,7 +185,7 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
       result.set("headers", MAPPER.valueToTree(response.headers().map()));
       result.put("body", response.body());
 
-      return applyCallHeaders(WorkMessage.json(result)
+      return applyCallHeaders(WorkItem.json(result)
           .header("content-type", "application/json")
           .header("x-ph-service", context.info().role()), metrics)
           .build();
@@ -217,16 +216,16 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
     return Optional.of(MAPPER.writeValueAsString(bodyNode));
   }
 
-  private WorkMessage buildError(WorkerContext context, String message, CallMetrics metrics) {
+  private WorkItem buildError(WorkerContext context, String message, CallMetrics metrics) {
     ObjectNode result = MAPPER.createObjectNode();
     result.put("error", message);
-    return applyCallHeaders(WorkMessage.json(result)
+    return applyCallHeaders(WorkItem.json(result)
         .header("content-type", "application/json")
         .header("x-ph-service", context.info().role()), metrics)
         .build();
   }
 
-  private WorkMessage.Builder applyCallHeaders(WorkMessage.Builder builder, CallMetrics metrics) {
+  private WorkItem.Builder applyCallHeaders(WorkItem.Builder builder, CallMetrics metrics) {
     return builder
         .header(HEADER_DURATION, Long.toString(metrics.durationMs()))
         .header(HEADER_SUCCESS, Boolean.toString(metrics.success()))

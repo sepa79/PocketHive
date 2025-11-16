@@ -1,5 +1,9 @@
 package io.pockethive.worker.sdk.api;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import io.pockethive.observability.ObservabilityContext;
+import io.pockethive.observability.ObservabilityContextUtil;
 import java.io.IOException;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
@@ -9,20 +13,16 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import io.pockethive.observability.ObservabilityContext;
-import io.pockethive.observability.ObservabilityContextUtil;
-import io.pockethive.worker.sdk.api.PocketHiveWorkerFunction;
-
 /**
- * Immutable representation of a worker message payload plus metadata.
+ * Immutable representation of a worker item payload plus metadata.
  * <p>
- * The runtime converts transport-specific envelopes to {@code WorkMessage} instances before handing them to
- * {@link PocketHiveWorkerFunction} implementations. Builders support text, JSON, and binary
+ * The runtime converts transport-specific envelopes to {@code WorkItem} instances before handing them to
+ * worker implementations. Builders support text, JSON, and binary
  * bodies, as described in {@code docs/sdk/worker-sdk-quickstart.md}.
+ * <p>
+ * Initially this behaves like the former {@code WorkMessage}; step support will be added on top in later stages.
  */
-public final class WorkMessage {
+public final class WorkItem {
 
     private static final ObjectMapper DEFAULT_MAPPER = new ObjectMapper().findAndRegisterModules();
 
@@ -31,7 +31,7 @@ public final class WorkMessage {
     private final Charset charset;
     private final ObservabilityContext observabilityContext;
 
-    private WorkMessage(byte[] body, Map<String, Object> headers, Charset charset, ObservabilityContext observabilityContext) {
+    private WorkItem(byte[] body, Map<String, Object> headers, Charset charset, ObservabilityContext observabilityContext) {
         this.body = Objects.requireNonNull(body, "body");
         this.headers = Collections.unmodifiableMap(new LinkedHashMap<>(headers));
         this.charset = charset;
@@ -39,14 +39,14 @@ public final class WorkMessage {
     }
 
     /**
-     * Returns the raw message body. Callers should treat the returned array as read-only.
+     * Returns the raw item body. Callers should treat the returned array as read-only.
      */
     public byte[] body() {
         return body;
     }
 
     /**
-     * Returns message headers as an immutable map.
+     * Returns item headers as an immutable map.
      */
     public Map<String, Object> headers() {
         return headers;
@@ -82,7 +82,7 @@ public final class WorkMessage {
         try {
             return DEFAULT_MAPPER.readTree(body);
         } catch (IOException e) {
-            throw new IllegalStateException("Failed to deserialize message body as JSON", e);
+            throw new IllegalStateException("Failed to deserialize item body as JSON", e);
         }
     }
 
@@ -95,12 +95,12 @@ public final class WorkMessage {
         try {
             return DEFAULT_MAPPER.readValue(body, targetType);
         } catch (IOException e) {
-            throw new IllegalStateException("Failed to deserialize message body as JSON", e);
+            throw new IllegalStateException("Failed to deserialize item body as JSON", e);
         }
     }
 
     /**
-     * Creates a builder pre-populated with this message's contents.
+     * Creates a builder pre-populated with this item's contents.
      */
     public Builder toBuilder() {
         return new Builder(this.body, this.headers, this.charset, this.observabilityContext);
@@ -219,7 +219,7 @@ public final class WorkMessage {
         }
 
         /**
-         * Associates an {@link ObservabilityContext} with the message and synchronises the corresponding header.
+         * Associates an {@link ObservabilityContext} with the item and synchronises the corresponding header.
          */
         public Builder observabilityContext(ObservabilityContext context) {
             this.observabilityContext = context;
@@ -230,9 +230,9 @@ public final class WorkMessage {
         }
 
         /**
-         * Builds an immutable {@link WorkMessage} instance.
+         * Builds an immutable {@link WorkItem} instance.
          */
-        public WorkMessage build() {
+        public WorkItem build() {
             Charset resolvedCharset = charset == null ? StandardCharsets.UTF_8 : charset;
             Map<String, Object> copy = new LinkedHashMap<>(headers);
             ObservabilityContext context = observabilityContext;
@@ -246,7 +246,8 @@ public final class WorkMessage {
             } else {
                 copy.put(ObservabilityContextUtil.HEADER, ObservabilityContextUtil.toHeader(context));
             }
-            return new WorkMessage(body.clone(), copy, resolvedCharset, context);
+            return new WorkItem(body.clone(), copy, resolvedCharset, context);
         }
     }
 }
+

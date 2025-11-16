@@ -9,8 +9,7 @@ import io.pockethive.observability.ObservabilityContext;
 import io.pockethive.observability.ObservabilityContextUtil;
 import io.pockethive.worker.sdk.api.PocketHiveWorkerFunction;
 import io.pockethive.worker.sdk.api.StatusPublisher;
-import io.pockethive.worker.sdk.api.WorkMessage;
-import io.pockethive.worker.sdk.api.WorkResult;
+import io.pockethive.worker.sdk.api.WorkItem;
 import io.pockethive.worker.sdk.api.WorkerContext;
 import io.pockethive.worker.sdk.api.WorkerInfo;
 import io.pockethive.worker.sdk.config.WorkInputConfig;
@@ -79,17 +78,16 @@ class ProcessorTest {
             return SimpleHttpResponse.from(request, 201, Map.of("content-type", List.of("application/json")), "{\"result\":\"ok\"}");
         });
 
-        WorkMessage inbound = WorkMessage.json(Map.of(
+        WorkItem inbound = WorkItem.json(Map.of(
                 "path", "/api",
                 "method", "post",
                 "headers", Map.of("X-Test", "true"),
                 "body", Map.of("value", 42)
         )).build();
 
-        WorkResult result = invokeThroughObservabilityInterceptor(worker, context, inbound);
+        WorkItem outbound = invokeThroughObservabilityInterceptor(worker, context, inbound);
 
-        assertThat(result).isInstanceOf(WorkResult.Message.class);
-        WorkMessage outbound = ((WorkResult.Message) result).value();
+        assertThat(outbound).isNotNull();
         JsonNode payload = MAPPER.readTree(outbound.asString());
         assertThat(payload.path("status").asInt()).isEqualTo(201);
         assertThat(payload.path("body").asText()).isEqualTo("{\"result\":\"ok\"}");
@@ -138,7 +136,7 @@ class ProcessorTest {
             return SimpleHttpResponse.from(request, 200, Map.of(), "");
         });
 
-        WorkMessage inbound = WorkMessage.json(Map.of("path", "/test")).build();
+        WorkItem inbound = WorkItem.json(Map.of("path", "/test")).build();
 
         worker.onMessage(inbound, context);
 
@@ -166,20 +164,18 @@ class ProcessorTest {
             return SimpleHttpResponse.from(request, 502, Map.of(), "bad");
         });
 
-        WorkMessage inbound = WorkMessage.json(Map.of("path", "/metrics")).build();
+        WorkItem inbound = WorkItem.json(Map.of("path", "/metrics")).build();
 
-        WorkResult first = worker.onMessage(inbound, context);
-        assertThat(first).isInstanceOf(WorkResult.Message.class);
-        WorkMessage firstMessage = ((WorkResult.Message) first).value();
-        assertThat(firstMessage.headers())
+        WorkItem first = worker.onMessage(inbound, context);
+        assertThat(first).isNotNull();
+        assertThat(first.headers())
                 .containsEntry("x-ph-processor-duration-ms", "50")
                 .containsEntry("x-ph-processor-success", "true")
                 .containsEntry("x-ph-processor-status", "200");
 
-        WorkResult second = worker.onMessage(inbound, context);
-        assertThat(second).isInstanceOf(WorkResult.Message.class);
-        WorkMessage secondMessage = ((WorkResult.Message) second).value();
-        assertThat(secondMessage.headers())
+        WorkItem second = worker.onMessage(inbound, context);
+        assertThat(second).isNotNull();
+        assertThat(second.headers())
                 .containsEntry("x-ph-processor-duration-ms", "150")
                 .containsEntry("x-ph-processor-success", "false")
                 .containsEntry("x-ph-processor-status", "502");
@@ -207,7 +203,7 @@ class ProcessorTest {
             return SimpleHttpResponse.from(request, 200, Map.of(), "ok");
         });
 
-        WorkMessage inbound = WorkMessage.json(Map.of("path", "/defaults" )).build();
+        WorkItem inbound = WorkItem.json(Map.of("path", "/defaults" )).build();
 
         worker.onMessage(inbound, context);
 
@@ -226,15 +222,14 @@ class ProcessorTest {
         ProcessorWorkerConfig config = new ProcessorWorkerConfig(" ");
         TestWorkerContext context = new TestWorkerContext(config);
 
-        WorkMessage inbound = WorkMessage.json(Map.of("path", "/noop" )).build();
+        WorkItem inbound = WorkItem.json(Map.of("path", "/noop" )).build();
 
-        WorkResult result = worker.onMessage(inbound, context);
+        WorkItem result = worker.onMessage(inbound, context);
 
-        assertThat(result).isInstanceOf(WorkResult.Message.class);
-        WorkMessage errorMessage = ((WorkResult.Message) result).value();
-        JsonNode payload = MAPPER.readTree(errorMessage.asString());
+        assertThat(result).isNotNull();
+        JsonNode payload = MAPPER.readTree(result.asString());
         assertThat(payload.path("error").asText()).isEqualTo("invalid baseUrl");
-        assertThat(errorMessage.headers())
+        assertThat(result.headers())
                 .containsEntry("x-ph-processor-duration-ms", "0")
                 .containsEntry("x-ph-processor-success", "false")
                 .containsEntry("x-ph-processor-status", "-1");
@@ -242,9 +237,9 @@ class ProcessorTest {
     }
 
 
-    private WorkResult invokeThroughObservabilityInterceptor(ProcessorWorkerImpl worker,
-                                                             TestWorkerContext context,
-                                                             WorkMessage inbound) throws Exception {
+    private WorkItem invokeThroughObservabilityInterceptor(ProcessorWorkerImpl worker,
+                                                           TestWorkerContext context,
+                                                           WorkItem inbound) throws Exception {
         WorkerDefinition definition = processorDefinition();
         WorkerObservabilityInterceptor interceptor = new WorkerObservabilityInterceptor();
         WorkerState state = instantiateWorkerState(definition);
@@ -282,10 +277,10 @@ class ProcessorTest {
     private static WorkerInvocationContext instantiateInvocationContext(WorkerDefinition definition,
                                                                          WorkerState state,
                                                                          WorkerContext workerContext,
-                                                                         WorkMessage message) {
+                                                                         WorkItem message) {
         try {
             Constructor<WorkerInvocationContext> constructor = WorkerInvocationContext.class
-                    .getDeclaredConstructor(WorkerDefinition.class, WorkerState.class, WorkerContext.class, WorkMessage.class);
+                    .getDeclaredConstructor(WorkerDefinition.class, WorkerState.class, WorkerContext.class, WorkItem.class);
             constructor.setAccessible(true);
             return constructor.newInstance(definition, state, workerContext, message);
         } catch (ReflectiveOperationException ex) {

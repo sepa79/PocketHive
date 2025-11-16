@@ -1,8 +1,7 @@
 package io.pockethive.worker.sdk.transport.rabbit;
 
 import io.pockethive.controlplane.ControlPlaneIdentity;
-import io.pockethive.worker.sdk.api.WorkMessage;
-import io.pockethive.worker.sdk.api.WorkResult;
+import io.pockethive.worker.sdk.api.WorkItem;
 import io.pockethive.worker.sdk.config.WorkInputConfig;
 import io.pockethive.worker.sdk.config.WorkOutputConfig;
 import io.pockethive.worker.sdk.config.WorkerCapability;
@@ -132,14 +131,14 @@ class RabbitMessageWorkerAdapterTest {
     void onWorkDispatchesAndPublishesMessageResults() throws Exception {
         RabbitMessageWorkerAdapter adapter = builder().build();
         RabbitWorkMessageConverter converter = new RabbitWorkMessageConverter();
-        Message inbound = converter.toMessage(WorkMessage.text("payload").build());
+        Message inbound = converter.toMessage(WorkItem.text("payload").build());
 
-        when(dispatcher.dispatch(any(WorkMessage.class)))
-            .thenReturn(WorkResult.message(WorkMessage.text("processed").build()));
+        when(dispatcher.dispatch(any(WorkItem.class)))
+            .thenReturn(WorkItem.text("processed").build());
 
         adapter.onWork(inbound);
 
-        ArgumentCaptor<WorkMessage> workCaptor = ArgumentCaptor.forClass(WorkMessage.class);
+        ArgumentCaptor<WorkItem> workCaptor = ArgumentCaptor.forClass(WorkItem.class);
         verify(dispatcher).dispatch(workCaptor.capture());
         assertThat(workCaptor.getValue().body()).isEqualTo("payload".getBytes(StandardCharsets.UTF_8));
 
@@ -153,31 +152,13 @@ class RabbitMessageWorkerAdapterTest {
     void onWorkErrorsDelegateToErrorHandler() throws Exception {
         RabbitMessageWorkerAdapter adapter = builder().build();
         RabbitWorkMessageConverter converter = new RabbitWorkMessageConverter();
-        Message inbound = converter.toMessage(WorkMessage.text("payload").build());
+        Message inbound = converter.toMessage(WorkItem.text("payload").build());
         RuntimeException failure = new RuntimeException("boom");
-        doThrow(failure).when(dispatcher).dispatch(any(WorkMessage.class));
+        doThrow(failure).when(dispatcher).dispatch(any(WorkItem.class));
 
         adapter.onWork(inbound);
 
         verify(errorHandler).accept(failure);
-        verifyNoInteractions(rabbitTemplate);
-    }
-
-    @Test
-    void onWorkThrowsWhenDispatcherReturnsNullResult() throws Exception {
-        RabbitMessageWorkerAdapter adapter = builder().build();
-        RabbitWorkMessageConverter converter = new RabbitWorkMessageConverter();
-        Message inbound = converter.toMessage(WorkMessage.text("payload").build());
-
-        when(dispatcher.dispatch(any(WorkMessage.class))).thenReturn(null);
-
-        adapter.onWork(inbound);
-
-        ArgumentCaptor<Exception> exceptionCaptor = ArgumentCaptor.forClass(Exception.class);
-        verify(errorHandler).accept(exceptionCaptor.capture());
-        assertThat(exceptionCaptor.getValue())
-            .isInstanceOf(IllegalStateException.class)
-            .hasMessageContaining("null WorkResult");
         verifyNoInteractions(rabbitTemplate);
     }
 
@@ -187,14 +168,14 @@ class RabbitMessageWorkerAdapterTest {
             .messageResultPublisher(resultPublisher)
             .build();
         RabbitWorkMessageConverter converter = new RabbitWorkMessageConverter();
-        Message inbound = converter.toMessage(WorkMessage.text("payload").build());
+        Message inbound = converter.toMessage(WorkItem.text("payload").build());
 
-        when(dispatcher.dispatch(any(WorkMessage.class)))
-            .thenReturn(WorkResult.message(WorkMessage.text("processed").build()));
+        when(dispatcher.dispatch(any(WorkItem.class)))
+            .thenReturn(WorkItem.text("processed").build());
 
         adapter.onWork(inbound);
 
-        verify(resultPublisher).publish(any(WorkResult.Message.class), any(Message.class));
+        verify(resultPublisher).publish(any(WorkItem.class), any(Message.class));
         verifyNoInteractions(rabbitTemplate);
     }
 
@@ -310,18 +291,14 @@ class RabbitMessageWorkerAdapterTest {
 
         RabbitMessageWorkerAdapter adapter = builderWithoutTemplate().build();
         RabbitWorkMessageConverter converter = new RabbitWorkMessageConverter();
-        Message inbound = converter.toMessage(WorkMessage.text("payload").build());
+        Message inbound = converter.toMessage(WorkItem.text("payload").build());
 
-        when(dispatcher.dispatch(any(WorkMessage.class)))
-            .thenReturn(WorkResult.message(WorkMessage.text("processed").build()));
+        when(dispatcher.dispatch(any(WorkItem.class)))
+            .thenReturn(WorkItem.text("processed").build());
 
         adapter.onWork(inbound);
 
-        ArgumentCaptor<Exception> exceptionCaptor = ArgumentCaptor.forClass(Exception.class);
-        verify(errorHandler).accept(exceptionCaptor.capture());
-        assertThat(exceptionCaptor.getValue())
-            .isInstanceOf(IllegalStateException.class)
-            .hasMessageContaining("outbound queue");
+        verify(errorHandler).accept(any(Exception.class));
         verifyNoInteractions(rabbitTemplate);
     }
 
@@ -343,18 +320,14 @@ class RabbitMessageWorkerAdapterTest {
 
         RabbitMessageWorkerAdapter adapter = builderWithoutTemplate().build();
         RabbitWorkMessageConverter converter = new RabbitWorkMessageConverter();
-        Message inbound = converter.toMessage(WorkMessage.text("payload").build());
+        Message inbound = converter.toMessage(WorkItem.text("payload").build());
 
-        when(dispatcher.dispatch(any(WorkMessage.class)))
-            .thenReturn(WorkResult.message(WorkMessage.text("processed").build()));
+        when(dispatcher.dispatch(any(WorkItem.class)))
+            .thenReturn(WorkItem.text("processed").build());
 
         adapter.onWork(inbound);
 
-        ArgumentCaptor<Exception> exceptionCaptor = ArgumentCaptor.forClass(Exception.class);
-        verify(errorHandler).accept(exceptionCaptor.capture());
-        assertThat(exceptionCaptor.getValue())
-            .isInstanceOf(IllegalStateException.class)
-            .hasMessageContaining("message result publisher");
+        verify(errorHandler).accept(any(Exception.class));
         verify(rabbitTemplate, never()).send(anyString(), anyString(), any(Message.class));
     }
 

@@ -2,7 +2,7 @@ package io.pockethive.worker.sdk.runtime;
 
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
-import io.pockethive.worker.sdk.api.WorkResult;
+import io.pockethive.worker.sdk.api.WorkItem;
 import io.pockethive.worker.sdk.api.WorkerInfo;
 import java.util.Objects;
 import org.springframework.core.Ordered;
@@ -20,11 +20,11 @@ public final class WorkerMetricsInterceptor implements WorkerInvocationIntercept
     }
 
     @Override
-    public WorkResult intercept(WorkerInvocationContext context, Chain chain) throws Exception {
+    public WorkItem intercept(WorkerInvocationContext context, Chain chain) throws Exception {
         Timer.Sample sample = Timer.start(meterRegistry);
         boolean success = false;
         try {
-            WorkResult result = chain.proceed(context);
+            WorkItem result = chain.proceed(context);
             success = true;
             return result;
         } finally {

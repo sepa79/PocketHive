@@ -1,6 +1,6 @@
 package io.pockethive.worker.sdk.transport.rabbit;
 
-import io.pockethive.worker.sdk.api.WorkMessage;
+import io.pockethive.worker.sdk.api.WorkItem;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
@@ -11,7 +11,7 @@ import org.springframework.amqp.core.MessageDeliveryMode;
 import org.springframework.amqp.core.MessageProperties;
 
 /**
- * Utility for converting between {@link WorkMessage} instances and Spring AMQP {@link Message} objects.
+ * Utility for converting between {@link WorkItem} instances and Spring AMQP {@link Message} objects.
  */
 public final class RabbitWorkMessageConverter {
 
@@ -21,14 +21,14 @@ public final class RabbitWorkMessageConverter {
     private static final String HEADER_MESSAGE_ID_CAMEL = "messageId";
     private static final Charset DEFAULT_CHARSET = StandardCharsets.UTF_8;
 
-    public Message toMessage(WorkMessage workMessage) {
-        Objects.requireNonNull(workMessage, "workMessage");
+    public Message toMessage(WorkItem workItem) {
+        Objects.requireNonNull(workItem, "workItem");
         MessageProperties properties = new MessageProperties();
-        properties.setContentEncoding(workMessage.charset().name());
-        properties.setContentLength(workMessage.body().length);
+        properties.setContentEncoding(workItem.charset().name());
+        properties.setContentLength(workItem.body().length);
         properties.setDeliveryMode(MessageDeliveryMode.PERSISTENT);
 
-        Map<String, Object> headers = new LinkedHashMap<>(workMessage.headers());
+        Map<String, Object> headers = new LinkedHashMap<>(workItem.headers());
         Object contentType = removeFirst(headers, HEADER_CONTENT_TYPE, HEADER_CONTENT_TYPE_CAMEL);
         if (contentType != null) {
             properties.setContentType(contentType.toString());
@@ -40,14 +40,14 @@ public final class RabbitWorkMessageConverter {
             properties.setMessageId(messageId.toString());
         }
         headers.forEach(properties::setHeader);
-        return new Message(workMessage.body(), properties);
+        return new Message(workItem.body(), properties);
     }
 
-    public WorkMessage fromMessage(Message message) {
+    public WorkItem fromMessage(Message message) {
         Objects.requireNonNull(message, "message");
         MessageProperties properties = message.getMessageProperties();
         Charset charset = resolveCharset(properties.getContentEncoding());
-        WorkMessage.Builder builder = WorkMessage.binary(message.getBody()).charset(charset);
+        WorkItem.Builder builder = WorkItem.binary(message.getBody()).charset(charset);
         Map<String, Object> headers = new LinkedHashMap<>(properties.getHeaders());
         if (properties.getMessageId() != null && !headers.containsKey(HEADER_MESSAGE_ID)) {
             headers.put(HEADER_MESSAGE_ID, properties.getMessageId());

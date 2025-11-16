@@ -3,7 +3,7 @@ package io.pockethive.worker.sdk.input;
 import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime;
 
 /**
- * Baseline contract implemented by components that feed {@code WorkMessage} instances into the worker
+ * Baseline contract implemented by components that feed {@code WorkItem} instances into the worker
  * runtime. Inputs encapsulate transport or scheduling concerns (RabbitMQ listeners, cron schedulers,
  * webhooks, etc.) while delegating business processing to the unified worker interface.
  *

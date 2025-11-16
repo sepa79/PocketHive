@@ -24,10 +24,10 @@ Add the dependency to a worker service to automatically register the control-pla
 ### `PocketHiveWorkerFunction`
 
 All workers implement `PocketHiveWorkerFunction`, exposing a single
-`onMessage(WorkMessage, WorkerContext)` method. The inbound `WorkMessage` may be a seed emitted by
+`onMessage(WorkItem, WorkerContext)` method. The inbound `WorkItem` may be a seed emitted by
 the scheduler input (for generator/trigger scenarios) or a real payload delivered by a transport
-adapter such as RabbitMQ. Return `WorkResult.message(...)` to emit downstream work or
-`WorkResult.none()` to suppress publishing.
+adapter such as RabbitMQ. Return a `WorkItem` instance to emit downstream work or `null`
+to suppress publishing.
 
 ```java
 @Component("generatorWorker")
@@ -44,14 +44,14 @@ class GeneratorWorkerImpl implements PocketHiveWorkerFunction {
   }
 
   @Override
-  public WorkResult onMessage(WorkMessage seed, WorkerContext context) {
+  public WorkItem onMessage(WorkItem seed, WorkerContext context) {
     GeneratorWorkerConfig config = context.config(GeneratorWorkerConfig.class)
         .orElseGet(properties::defaultConfig);
     String outQueue = context.info().outQueue();
     context.statusPublisher()
         .workOut(outQueue)
         .update(status -> status.data("path", config.path()));
-    return WorkResult.message(WorkMessage.json(buildPayload(config)).build());
+    return WorkItem.json(buildPayload(config)).build();
   }
 }
 ```
@@ -70,14 +70,14 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
   }
 
   @Override
-  public WorkResult onMessage(WorkMessage in, WorkerContext context) {
+  public WorkItem onMessage(WorkItem in, WorkerContext context) {
     ProcessorWorkerConfig config = context.config(ProcessorWorkerConfig.class)
         .orElseGet(properties::defaultConfig);
     context.statusPublisher()
         .update(status -> status.data("queue", "ph.swarm-alpha.mod"))
         .update(status -> status.data("baseUrl", config.baseUrl()));
-    WorkMessage enriched = invokeHttpAndEnrich(in, context, config);
-    return WorkResult.message(enriched);
+    WorkItem enriched = invokeHttpAndEnrich(in, context, config);
+    return enriched;
   }
 }
 ```
@@ -90,9 +90,9 @@ The full implementations live in the `generator-service` and `processor-service`
 > routing identifiers.
 > Local runs can still rely on `pockethive.inputs.<type>` / `pockethive.outputs.<type>` for wiring, but the controller ignores ad-hoc env overrides once a swarm launches.
 
-### `WorkMessage`
+### `WorkItem`
 
-`WorkMessage` is the immutable representation of a worker payload (body, headers, charset, and optional `ObservabilityContext`). Builders support text, JSON, and binary bodies, plus accessors like `asJsonNode()` for consumers. Every `WorkInput`/`WorkOutput` implementation uses `WorkMessage` as the canonical format when bridging transports.
+`WorkItem` is the immutable representation of a worker payload (body, headers, charset, and optional `ObservabilityContext`). Builders support text, JSON, and binary bodies, plus accessors like `asJsonNode()` for consumers. Every `WorkInput`/`WorkOutput` implementation uses `WorkItem` as the canonical format when bridging transports.
 
 ### `WorkerContext`
 
@@ -100,7 +100,7 @@ Every invocation receives a `WorkerContext` that exposes topology metadata (`Wor
 
 ### `WorkerRuntime`
 
-`WorkInput` implementations interact with the runtime through `WorkerRuntime.dispatch(beanName, WorkMessage)`. The `DefaultWorkerRuntime` is provided by auto-configuration and resolves worker beans, builds invocation contexts, runs interceptors, and translates results back to whatever transport created the message. Most services rely on the SDK’s built-in inputs (RabbitMQ and scheduler), but bespoke transports can inject `WorkerRuntime` and `WorkerControlPlaneRuntime` the same way the shared factories do.
+`WorkInput` implementations interact with the runtime through `WorkerRuntime.dispatch(beanName, WorkItem)`. The `DefaultWorkerRuntime` is provided by auto-configuration and resolves worker beans, builds invocation contexts, runs interceptors, and translates results back to whatever transport created the message. Most services rely on the SDK’s built-in inputs (RabbitMQ and scheduler), but bespoke transports can inject `WorkerRuntime` and `WorkerControlPlaneRuntime` the same way the shared factories do.
 
 ### `WorkerControlPlaneRuntime`
 
@@ -110,7 +110,7 @@ The control-plane runtime bridges the SDK with the control-plane topic. It appli
 
 1. Add the `worker-sdk` dependency to your service.
 2. Annotate business beans with `@PocketHiveWorker`, selecting the appropriate input binding (Rabbit by default). Queue bindings are provided by the swarm plan via `pockethive.inputs/outputs.*`.
-3. Implement `PocketHiveWorkerFunction` and return `WorkResult` instances.
+3. Implement `PocketHiveWorkerFunction` and return `WorkItem` instances (or `null` for no output).
 4. The SDK automatically wires the Rabbit or scheduler inputs/outputs for the registered `@PocketHiveWorker`. Only build custom `WorkInputFactory` implementations when you truly need a bespoke transport.
 5. Use `WorkerContext` for config, metrics, observability, and status reporting.
 

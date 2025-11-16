@@ -3,8 +3,7 @@ package io.pockethive.worker.sdk.runtime;
 import io.pockethive.observability.Hop;
 import io.pockethive.observability.ObservabilityContext;
 import io.pockethive.observability.ObservabilityContextUtil;
-import io.pockethive.worker.sdk.api.WorkMessage;
-import io.pockethive.worker.sdk.api.WorkResult;
+import io.pockethive.worker.sdk.api.WorkItem;
 import io.pockethive.worker.sdk.api.WorkerInfo;
 import java.time.Instant;
 import java.util.List;
@@ -19,7 +18,7 @@ import org.springframework.core.Ordered;
 public final class WorkerObservabilityInterceptor implements WorkerInvocationInterceptor, Ordered {
 
     @Override
-    public WorkResult intercept(WorkerInvocationContext context, Chain chain) throws Exception {
+    public WorkItem intercept(WorkerInvocationContext context, Chain chain) throws Exception {
         ObservabilityContext observabilityContext = context.workerContext().observabilityContext();
         Objects.requireNonNull(observabilityContext, "WorkerContext must provide an observability context");
         context.attributes().put("observabilityContext", observabilityContext);
@@ -37,7 +36,7 @@ public final class WorkerObservabilityInterceptor implements WorkerInvocationInt
         ObservabilityContextUtil.populateMdc(observabilityContext);
 
         try {
-            WorkResult result = chain.proceed(context);
+            WorkItem result = chain.proceed(context);
             hop.setProcessedAt(Instant.now());
             return attachContext(result, observabilityContext);
         } finally {
@@ -46,13 +45,11 @@ public final class WorkerObservabilityInterceptor implements WorkerInvocationInt
         }
     }
 
-    private WorkResult attachContext(WorkResult result, ObservabilityContext context) {
-        if (result instanceof WorkResult.Message messageResult) {
-            WorkMessage message = messageResult.value();
-            WorkMessage.Builder builder = message.toBuilder().observabilityContext(context);
-            return WorkResult.message(builder.build());
+    private WorkItem attachContext(WorkItem item, ObservabilityContext context) {
+        if (item == null) {
+            return null;
         }
-        return result;
+        return item.toBuilder().observabilityContext(context).build();
     }
 
     private void restore(String key, String previousValue) {

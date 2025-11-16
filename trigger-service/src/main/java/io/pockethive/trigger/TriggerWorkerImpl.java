@@ -1,8 +1,7 @@
 package io.pockethive.trigger;
 
 import io.pockethive.worker.sdk.api.PocketHiveWorkerFunction;
-import io.pockethive.worker.sdk.api.WorkMessage;
-import io.pockethive.worker.sdk.api.WorkResult;
+import io.pockethive.worker.sdk.api.WorkItem;
 import io.pockethive.worker.sdk.api.WorkerContext;
 import io.pockethive.worker.sdk.config.PocketHiveWorker;
 import io.pockethive.worker.sdk.config.SchedulerInputProperties;
@@ -88,11 +87,11 @@ class TriggerWorkerImpl implements PocketHiveWorkerFunction {
    *
    * @param context PocketHive runtime context that provides configuration overrides, logging, and
    *     status publishing.
-   * @return {@link WorkResult#none()} because the trigger merely kicks off side effects instead of
+   * @return {@code null} because the trigger merely kicks off side effects instead of
    *     enqueueing work.
    */
   @Override
-  public WorkResult onMessage(WorkMessage seed, WorkerContext context) {
+  public WorkItem onMessage(WorkItem seed, WorkerContext context) {
     TriggerWorkerConfig config = context.configOrDefault(TriggerWorkerConfig.class, properties::defaultConfig);
 
     context.statusPublisher()
@@ -115,7 +114,7 @@ class TriggerWorkerImpl implements PocketHiveWorkerFunction {
     } catch (Exception ex) {
       logger.warn("Trigger action failed: {}", ex.toString(), ex);
     }
-    return WorkResult.none();
+    return null;
   }
 
   private void runShell(String command, Logger logger) throws Exception {

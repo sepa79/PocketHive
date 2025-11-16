@@ -7,7 +7,7 @@ import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.micrometer.observation.ObservationRegistry;
 import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.observability.ObservabilityContext;
-import io.pockethive.worker.sdk.api.WorkMessage;
+import io.pockethive.worker.sdk.api.WorkItem;
 import io.pockethive.worker.sdk.api.WorkerContext;
 import io.pockethive.worker.sdk.config.WorkInputConfig;
 import io.pockethive.worker.sdk.config.WorkOutputConfig;
@@ -45,7 +45,7 @@ class DefaultWorkerContextFactoryTest {
 
     @Test
     void generatesObservabilityContextWhenMissing() {
-        WorkMessage message = WorkMessage.text("payload")
+        WorkItem message = WorkItem.text("payload")
             .header("swarmId", "swarm-1")
             .header("instanceId", "instance-1")
             .build();
@@ -66,7 +66,7 @@ class DefaultWorkerContextFactoryTest {
         inbound.setTraceId("");
         inbound.setSwarmId(null);
 
-        WorkMessage message = WorkMessage.text("payload")
+        WorkItem message = WorkItem.text("payload")
             .header("swarmId", "swarm-2")
             .header("instanceId", "instance-2")
             .observabilityContext(inbound)
@@ -83,7 +83,7 @@ class DefaultWorkerContextFactoryTest {
 
     @Test
     void fallsBackToConfiguredIdentityWhenHeadersMissing() {
-        WorkMessage message = WorkMessage.text("payload").build();
+        WorkItem message = WorkItem.text("payload").build();
 
         WorkerContext context = factory.createContext(DEFINITION, state, message);
 
@@ -101,7 +101,7 @@ class DefaultWorkerContextFactoryTest {
             ObservationRegistry.create()
         );
 
-        WorkMessage message = WorkMessage.text("payload").build();
+        WorkItem message = WorkItem.text("payload").build();
 
         assertThatThrownBy(() -> noIdentityFactory.createContext(DEFINITION, state, message))
             .isInstanceOf(IllegalStateException.class)

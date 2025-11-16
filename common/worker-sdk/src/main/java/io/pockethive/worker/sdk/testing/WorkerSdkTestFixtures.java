@@ -1,8 +1,7 @@
 package io.pockethive.worker.sdk.testing;
 
 import io.pockethive.observability.ObservabilityContext;
-import io.pockethive.worker.sdk.api.WorkMessage;
-import io.pockethive.worker.sdk.api.WorkResult;
+import io.pockethive.worker.sdk.api.WorkItem;
 import io.pockethive.worker.sdk.runtime.WorkerInvocationContext;
 import io.pockethive.worker.sdk.runtime.WorkerInvocationInterceptor;
 import java.util.ArrayList;
@@ -27,9 +26,9 @@ public final class WorkerSdkTestFixtures {
         return context;
     }
 
-    public static WorkMessage messageWithObservability(String payload, ObservabilityContext context) {
+    public static WorkItem messageWithObservability(String payload, ObservabilityContext context) {
         Objects.requireNonNull(payload, "payload");
-        return WorkMessage.text(payload)
+        return WorkItem.text(payload)
             .observabilityContext(context)
             .build();
     }
@@ -42,7 +41,7 @@ public final class WorkerSdkTestFixtures {
         };
     }
 
-    public static WorkerInvocationInterceptor shortCircuitInterceptor(WorkResult result) {
+    public static WorkerInvocationInterceptor shortCircuitInterceptor(WorkItem result) {
         Objects.requireNonNull(result, "result");
         return (context, chain) -> result;
     }

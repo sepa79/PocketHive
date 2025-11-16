@@ -1,6 +1,6 @@
 package io.pockethive.worker.sdk.output;
 
-import io.pockethive.worker.sdk.api.WorkResult;
+import io.pockethive.worker.sdk.api.WorkItem;
 import io.pockethive.worker.sdk.config.RabbitOutputProperties;
 import io.pockethive.worker.sdk.runtime.WorkIoBindings;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
@@ -23,7 +23,7 @@ public final class RabbitWorkOutput implements WorkOutput {
     }
 
     @Override
-    public void publish(WorkResult.Message result, WorkerDefinition definition) {
+    public void publish(WorkItem item, WorkerDefinition definition) {
         WorkIoBindings io = definition.io();
         String exchange = properties.getExchange() != null ? properties.getExchange() : io.outboundExchange();
         String routingKey = properties.getRoutingKey() != null ? properties.getRoutingKey() : io.outboundQueue();
@@ -32,16 +32,16 @@ public final class RabbitWorkOutput implements WorkOutput {
         }
         MessageProperties props = new MessageProperties();
         props.setDeliveryMode(properties.isPersistent() ? MessageDeliveryMode.PERSISTENT : MessageDeliveryMode.NON_PERSISTENT);
-        applyHeaders(result, props);
+        applyHeaders(item, props);
         if (props.getContentType() == null) {
             props.setContentType(MessageProperties.CONTENT_TYPE_BYTES);
         }
-        Message outbound = new Message(result.value().body(), props);
+        Message outbound = new Message(item.body(), props);
         rabbitTemplate.send(exchange, routingKey, outbound);
     }
 
-    private void applyHeaders(WorkResult.Message result, MessageProperties props) {
-        var headers = result.value().headers();
+    private void applyHeaders(WorkItem item, MessageProperties props) {
+        var headers = item.headers();
         if (headers == null || headers.isEmpty()) {
             return;
         }

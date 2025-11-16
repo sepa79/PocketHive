@@ -1,7 +1,7 @@
 package io.pockethive.worker.sdk.runtime;
 
+import io.pockethive.worker.sdk.api.WorkItem;
 import io.pockethive.worker.sdk.api.WorkerContext;
-import io.pockethive.worker.sdk.api.WorkMessage;
 
 /**
  * Produces a {@link WorkerContext} for an incoming message.
@@ -16,5 +16,5 @@ public interface WorkerContextFactory {
      * {@link WorkerContext#observabilityContext()} populated with a trace identifier, hop list, and
      * swarm identifier so downstream interceptors can rely on it.
      */
-    WorkerContext createContext(WorkerDefinition definition, WorkerState state, WorkMessage message);
+    WorkerContext createContext(WorkerDefinition definition, WorkerState state, WorkItem message);
 }

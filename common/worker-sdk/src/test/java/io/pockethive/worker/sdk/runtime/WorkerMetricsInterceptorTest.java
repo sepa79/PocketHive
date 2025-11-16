@@ -11,8 +11,7 @@ import io.pockethive.controlplane.topology.ControlQueueDescriptor;
 import io.pockethive.observability.ObservabilityContext;
 import io.pockethive.worker.sdk.api.PocketHiveWorkerFunction;
 import io.pockethive.worker.sdk.api.StatusPublisher;
-import io.pockethive.worker.sdk.api.WorkMessage;
-import io.pockethive.worker.sdk.api.WorkResult;
+import io.pockethive.worker.sdk.api.WorkItem;
 import io.pockethive.worker.sdk.api.WorkerContext;
 import io.pockethive.worker.sdk.api.WorkerInfo;
 import io.pockethive.worker.sdk.autoconfigure.PocketHiveWorkerSdkAutoConfiguration;
@@ -96,12 +95,12 @@ class WorkerMetricsInterceptorTest {
             DEFINITION,
             state,
             workerContext(state, registry),
-            WorkMessage.text("body").build()
+            WorkItem.text("body").build()
         );
 
-        WorkResult result = interceptor.intercept(context, ctx -> WorkResult.none());
+        WorkItem result = interceptor.intercept(context, ctx -> null);
 
-        assertThat(result).isInstanceOf(WorkResult.None.class);
+        assertThat(result).isNull();
         var timer = registry.find("pockethive.worker.invocation.duration").timer();
         assertThat(timer).isNotNull();
         assertThat(timer.count()).isEqualTo(1);
@@ -215,8 +214,8 @@ class WorkerMetricsInterceptorTest {
     static class TestWorker implements PocketHiveWorkerFunction {
 
         @Override
-        public WorkResult onMessage(WorkMessage in, WorkerContext context) {
-            return WorkResult.none();
+        public WorkItem onMessage(WorkItem in, WorkerContext context) {
+            return null;
         }
     }
 }

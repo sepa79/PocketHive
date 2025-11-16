@@ -1,8 +1,7 @@
 package io.pockethive.moderator;
 
 import io.pockethive.worker.sdk.api.PocketHiveWorkerFunction;
-import io.pockethive.worker.sdk.api.WorkMessage;
-import io.pockethive.worker.sdk.api.WorkResult;
+import io.pockethive.worker.sdk.api.WorkItem;
 import io.pockethive.worker.sdk.api.WorkerContext;
 import io.pockethive.worker.sdk.config.PocketHiveWorker;
 import io.pockethive.worker.sdk.config.WorkerCapability;
@@ -61,15 +60,15 @@ class ModeratorWorkerImpl implements PocketHiveWorkerFunction {
    *
    * <p>New behaviors should be added by branching the {@code in.toBuilder()} call—e.g. set a
    * {@code moderation-status} header after evaluating your own rules, or drop the message entirely
-   * by returning {@link WorkResult#none()}.</p>
+   * by returning {@code null}.</p>
    *
    * @param in the message pulled from the configured generator queue.
    * @param context PocketHive runtime utilities (status publisher, worker info, configuration).
-   * @return a {@link WorkResult} instructing the runtime to publish the updated message to
+   * @return a {@link WorkItem} instructing the runtime to publish the updated item to
    *     the configured moderator queue.
    */
   @Override
-  public WorkResult onMessage(WorkMessage in, WorkerContext context) {
+  public WorkItem onMessage(WorkItem in, WorkerContext context) {
     ModeratorWorkerConfig config = context.configOrDefault(ModeratorWorkerConfig.class, properties::defaultConfig);
     ModeratorOperationMode mode = config.operationMode();
     context.statusPublisher()
@@ -86,10 +85,10 @@ class ModeratorWorkerImpl implements PocketHiveWorkerFunction {
           }
         });
     modeLimiter.await(mode);
-    WorkMessage out = in.toBuilder()
+    WorkItem out = in.toBuilder()
         .header("x-ph-service", context.info().role())
         .build();
-    return WorkResult.message(out);
+    return out;
   }
 
   private static String formatMode(ModeratorOperationMode.Type type) {
