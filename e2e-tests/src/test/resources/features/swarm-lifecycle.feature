@@ -27,3 +27,13 @@ Feature: Swarm lifecycle golden path
     Then the swarm reports running
     And I request a single generator run
     Then the final queue receives the default generator response
+
+  @templated-generator
+  Scenario: Templated generator works end to end
+    And the "templated-rest" scenario template is requested
+    When I create the swarm from that template
+    Then the swarm is registered and queues are declared
+    When I start the swarm
+    Then the swarm reports running
+    And I request a single generator run
+    Then the final queue receives the default generator response

@@ -669,19 +669,26 @@ public class SwarmLifecycleSteps {
 
   private String finalQueueSuffix() {
     ensureTemplate();
-    Bee postprocessor = findBeeOptional(POSTPROCESSOR_ROLE);
-    if (postprocessor != null && postprocessor.work() != null) {
-      String inbound = trimmed(postprocessor.work().in());
-      if (inbound != null) {
-        LOGGER.info("Final queue resolved from postprocessor work.in='{}'", inbound);
-        return inbound;
-      }
-      LOGGER.warn("Postprocessor work.in was blank; falling back to default final queue");
-    } else {
-      LOGGER.warn("Postprocessor bee not present in template; falling back to default final queue");
+    if (template == null || template.bees() == null || template.bees().isEmpty()) {
+      throw new AssertionError("Scenario template has no bees; cannot resolve final queue");
     }
-    LOGGER.info("Final queue fallback applied -> 'final'");
-    return "final";
+    Bee lastWithInput = null;
+    for (Bee bee : template.bees()) {
+      if (bee == null || bee.work() == null) {
+        continue;
+      }
+      String inbound = trimmed(bee.work().in());
+      if (inbound != null) {
+        lastWithInput = bee;
+      }
+    }
+    if (lastWithInput != null && lastWithInput.work() != null) {
+      String inbound = trimmed(lastWithInput.work().in());
+      LOGGER.info("Final queue resolved from last bee role={} work.in='{}'",
+          lastWithInput.role(), inbound);
+      return inbound;
+    }
+    throw new AssertionError("No bees with work.in found in scenario; cannot resolve final queue");
   }
 
   private String hiveExchangeName() {

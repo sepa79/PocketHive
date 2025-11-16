@@ -243,6 +243,14 @@ public final class WorkerControlPlaneRuntime {
                     patch.resetRequested()
                 );
                 Boolean enabled = command.enabled();
+                if (log.isDebugEnabled()) {
+                    log.debug("Applying config-update for worker={} role={} previousEnabled={} requestedEnabled={} data={}",
+                        state.definition().beanName(),
+                        state.definition().role(),
+                        previousEnabled,
+                        enabled,
+                        filteredUpdate);
+                }
                 state.updateConfig(mergeResult.typedConfig(), mergeResult.replaced(), enabled);
                 Map<String, Object> appliedConfig = mergeResult.replaced() ? mergeResult.rawConfig() : Map.of();
                 if (hasCorrelation(signal)) {
@@ -258,6 +266,13 @@ public final class WorkerControlPlaneRuntime {
                     ? mergeResult.rawConfig()
                     : mergeResult.previousRaw();
                 boolean finalEnabled = state.enabled();
+                if (log.isDebugEnabled()) {
+                    log.debug("Applied config-update for worker={} role={} finalEnabled={} configKeys={}",
+                        state.definition().beanName(),
+                        state.definition().role(),
+                        finalEnabled,
+                        finalConfig.keySet());
+                }
                 if (shouldLogConfigUpdate(
                     patch,
                     command,
