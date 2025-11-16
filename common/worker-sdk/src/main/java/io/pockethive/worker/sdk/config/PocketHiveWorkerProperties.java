@@ -70,7 +70,16 @@ public abstract class PocketHiveWorkerProperties<T> {
         if (config.isEmpty()) {
             return Map.of();
         }
-        return Map.copyOf(config);
+        Map<String, Object> filtered = new LinkedHashMap<>();
+        config.forEach((key, value) -> {
+            if (value != null) {
+                filtered.put(key, value);
+            }
+        });
+        if (filtered.isEmpty()) {
+            return Map.of();
+        }
+        return Map.copyOf(filtered);
     }
 
     public boolean hasConfigOverrides() {

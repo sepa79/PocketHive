@@ -13,7 +13,6 @@ import io.pockethive.controlplane.spring.WorkerControlPlaneProperties;
 import io.pockethive.controlplane.worker.WorkerControlPlane;
 import io.pockethive.worker.sdk.config.PocketHiveWorker;
 import io.pockethive.worker.sdk.config.PocketHiveWorkerProperties;
-import io.pockethive.worker.sdk.config.PocketHiveWorkerProperties;
 import io.pockethive.worker.sdk.config.RabbitInputProperties;
 import io.pockethive.worker.sdk.config.RabbitOutputProperties;
 import io.pockethive.worker.sdk.config.SchedulerInputProperties;
@@ -38,6 +37,7 @@ import io.pockethive.worker.sdk.runtime.WorkerDefinition;
 import io.pockethive.worker.sdk.config.WorkerOutputType;
 import io.pockethive.worker.sdk.runtime.WorkerMetricsInterceptor;
 import io.pockethive.worker.sdk.runtime.WorkerObservabilityInterceptor;
+import io.pockethive.worker.sdk.runtime.TemplatingInterceptor;
 import io.pockethive.worker.sdk.runtime.WorkIoBindings;
 import io.pockethive.worker.sdk.runtime.WorkerRegistry;
 import io.pockethive.worker.sdk.runtime.WorkerRuntime;
@@ -51,6 +51,8 @@ import io.pockethive.worker.sdk.output.WorkOutputLifecycle;
 import io.pockethive.worker.sdk.output.WorkOutputRegistry;
 import io.pockethive.worker.sdk.output.WorkOutputRegistryInitializer;
 import io.pockethive.worker.sdk.output.RabbitWorkOutputFactory;
+import io.pockethive.worker.sdk.templating.PebbleTemplateRenderer;
+import io.pockethive.worker.sdk.templating.TemplateRenderer;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
@@ -362,6 +364,39 @@ public class PocketHiveWorkerSdkAutoConfiguration {
         havingValue = "true")
     WorkerInvocationInterceptor workerMetricsInterceptor(MeterRegistry meterRegistry) {
         return new WorkerMetricsInterceptor(meterRegistry);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(TemplateRenderer.class)
+    TemplateRenderer templatingRenderer() {
+        return new PebbleTemplateRenderer();
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(TemplatingInterceptor.class)
+    WorkerInvocationInterceptor templatingInterceptor(TemplateRenderer renderer) {
+        return new TemplatingInterceptor(renderer, context -> {
+            Object typedConfig = context.workerContext().config(Object.class);
+            if (typedConfig == null) {
+                return null;
+            }
+            try {
+                var method = typedConfig.getClass().getMethod("templating");
+                Object templating = method.invoke(typedConfig);
+                if (!(templating instanceof io.pockethive.worker.sdk.config.TemplatingConfig cfg)) {
+                    return null;
+                }
+                if (!cfg.enabled()) {
+                    return null;
+                }
+                String template = cfg.template();
+                return (template == null || template.isBlank()) ? null : template;
+            } catch (NoSuchMethodException ignored) {
+                return null;
+            } catch (Exception ex) {
+                return null;
+            }
+        });
     }
 
     private static String resolveWorkerRole(WorkerControlPlaneProperties properties) {

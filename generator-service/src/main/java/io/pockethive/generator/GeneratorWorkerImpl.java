@@ -108,11 +108,11 @@ class GeneratorWorkerImpl implements PocketHiveWorkerFunction {
             .data("ratePerSec", config.ratePerSec())
             .data("enabled", context.enabled())
             .data("singleRequest", config.singleRequest()));
-    WorkItem message = buildMessage(config, context);
+    WorkItem message = buildMessage(config, context, seed);
     return seed.addStep(message.asString(), message.headers());
   }
 
-  private WorkItem buildMessage(GeneratorWorkerConfig config, WorkerContext context) {
+  private WorkItem buildMessage(GeneratorWorkerConfig config, WorkerContext context, WorkItem seed) {
     String messageId = UUID.randomUUID().toString();
     Map<String, Object> payload = new LinkedHashMap<>();
     payload.put("id", messageId);
@@ -120,7 +120,11 @@ class GeneratorWorkerImpl implements PocketHiveWorkerFunction {
     payload.put("path", message.path());
     payload.put("method", message.method());
     payload.put("headers", message.headers());
-    payload.put("body", message.body());
+
+    String seedBody = seed.payload();
+    String effectiveBody = (seedBody != null && !seedBody.isBlank()) ? seedBody : message.body();
+    payload.put("body", effectiveBody);
+
     payload.put("createdAt", Instant.now().toString());
 
     return WorkItem.json(payload)

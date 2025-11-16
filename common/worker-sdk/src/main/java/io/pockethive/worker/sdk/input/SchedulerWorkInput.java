@@ -6,10 +6,12 @@ import io.pockethive.worker.sdk.config.SchedulerInputProperties;
 import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
 import io.pockethive.worker.sdk.runtime.WorkerRuntime;
+import java.time.Instant;
 import java.util.Objects;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
@@ -26,6 +28,7 @@ import org.slf4j.LoggerFactory;
 public final class SchedulerWorkInput<C> implements WorkInput {
 
     private static final Logger defaultLog = LoggerFactory.getLogger(SchedulerWorkInput.class);
+    private static final AtomicLong SEQUENCE = new AtomicLong();
 
     private final WorkerDefinition workerDefinition;
     private final WorkerControlPlaneRuntime controlPlaneRuntime;
@@ -162,9 +165,13 @@ public final class SchedulerWorkInput<C> implements WorkInput {
     }
 
     private static WorkItem defaultSeed(WorkerDefinition definition, ControlPlaneIdentity identity) {
+        long sequence = SEQUENCE.incrementAndGet();
+        String generatedAt = Instant.now().toString();
         return WorkItem.builder()
             .header("swarmId", identity.swarmId())
             .header("instanceId", identity.instanceId())
+            .header("x-ph-seq", sequence)
+            .header("generatedAt", generatedAt)
             .build();
     }
 
