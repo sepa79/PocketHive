@@ -69,7 +69,7 @@ class PostProcessorTest {
         assertThat(workerContext.statusData().get("processorTransactions")).isEqualTo(1L);
         assertThat(workerContext.statusData().get("processorSuccessRatio")).isEqualTo(1.0d);
         assertThat(workerContext.statusData().get("processorAvgLatencyMs")).isEqualTo(12.0d);
-        assertThat(workerContext.statusData()).doesNotContainKeys("hopDurationsMs", "hopTimeline", "processorCall");
+        assertThat(workerContext.statusData()).doesNotContainKeys("hopDurationsMs", "hopTimeline", "processorCall", "workItemSteps");
         assertThat(workerContext.capturingPublisher().fullSnapshotEmitted()).isFalse();
 
         MeterRegistry registry = workerContext.meterRegistry();

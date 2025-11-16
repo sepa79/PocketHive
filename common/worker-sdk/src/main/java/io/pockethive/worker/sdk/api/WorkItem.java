@@ -203,6 +203,29 @@ public final class WorkItem {
     }
 
     /**
+     * Applies the given {@link HistoryPolicy} to this item and returns the resulting view.
+     * <p>
+     * Behaviour:
+     * <ul>
+     *   <li>{@link HistoryPolicy#FULL} – returns this instance unchanged.</li>
+     *   <li>{@link HistoryPolicy#LATEST_ONLY} – equivalent to {@link #clearHistory()}.</li>
+     *   <li>{@link HistoryPolicy#DISABLED} – returns a view with the same body/headers but no recorded steps.</li>
+     * </ul>
+     */
+    public WorkItem applyHistoryPolicy(HistoryPolicy policy) {
+        if (policy == null || policy == HistoryPolicy.FULL) {
+            return this;
+        }
+        if (policy == HistoryPolicy.LATEST_ONLY) {
+            return clearHistory();
+        }
+        if (policy == HistoryPolicy.DISABLED) {
+            return new WorkItem(body, headers, charset, observabilityContext, null);
+        }
+        return this;
+    }
+
+    /**
      * Parses the body as a Jackson {@link JsonNode}.
      *
      * @throws IllegalStateException if the body cannot be parsed as JSON

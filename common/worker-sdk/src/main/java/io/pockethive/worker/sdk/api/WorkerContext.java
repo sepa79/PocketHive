@@ -80,4 +80,12 @@ public interface WorkerContext {
      * receive an initialised context even when the inbound message does not include one.
      */
     ObservabilityContext observabilityContext();
+
+    /**
+     * Returns the effective {@link HistoryPolicy} for this worker, as resolved from service defaults
+     * and, if applicable, Scenario configuration. The default is {@link HistoryPolicy#FULL}.
+     */
+    default HistoryPolicy historyPolicy() {
+        return HistoryPolicy.FULL;
+    }
 }

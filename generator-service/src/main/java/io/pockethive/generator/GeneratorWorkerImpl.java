@@ -108,7 +108,8 @@ class GeneratorWorkerImpl implements PocketHiveWorkerFunction {
             .data("ratePerSec", config.ratePerSec())
             .data("enabled", context.enabled())
             .data("singleRequest", config.singleRequest()));
-    return buildMessage(config, context);
+    WorkItem message = buildMessage(config, context);
+    return seed.addStep(message.asString(), message.headers());
   }
 
   private WorkItem buildMessage(GeneratorWorkerConfig config, WorkerContext context) {

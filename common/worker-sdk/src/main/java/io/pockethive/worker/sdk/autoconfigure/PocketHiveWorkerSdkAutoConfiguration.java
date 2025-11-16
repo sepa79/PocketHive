@@ -13,6 +13,7 @@ import io.pockethive.controlplane.spring.WorkerControlPlaneProperties;
 import io.pockethive.controlplane.worker.WorkerControlPlane;
 import io.pockethive.worker.sdk.config.PocketHiveWorker;
 import io.pockethive.worker.sdk.config.PocketHiveWorkerProperties;
+import io.pockethive.worker.sdk.config.PocketHiveWorkerProperties;
 import io.pockethive.worker.sdk.config.RabbitInputProperties;
 import io.pockethive.worker.sdk.config.RabbitOutputProperties;
 import io.pockethive.worker.sdk.config.SchedulerInputProperties;
@@ -187,12 +188,14 @@ public class PocketHiveWorkerSdkAutoConfiguration {
         ConfigurableListableBeanFactory beanFactory,
         ObjectProvider<MeterRegistry> meterRegistry,
         ObjectProvider<ObservationRegistry> observationRegistry,
-        ObjectProvider<ControlPlaneIdentity> controlPlaneIdentity
+        ObjectProvider<ControlPlaneIdentity> controlPlaneIdentity,
+        ObjectProvider<List<PocketHiveWorkerProperties<?>>> propertiesProvider
     ) {
         MeterRegistry meters = meterRegistry.getIfAvailable(SimpleMeterRegistry::new);
         ObservationRegistry observations = observationRegistry.getIfAvailable(ObservationRegistry::create);
         ControlPlaneIdentity identity = controlPlaneIdentity.getIfAvailable();
-        return new DefaultWorkerContextFactory(beanFactory::getBean, meters, observations, identity);
+        List<PocketHiveWorkerProperties<?>> properties = propertiesProvider.getIfAvailable(Collections::emptyList);
+        return new DefaultWorkerContextFactory(beanFactory::getBean, meters, observations, identity, properties);
     }
 
     @Bean

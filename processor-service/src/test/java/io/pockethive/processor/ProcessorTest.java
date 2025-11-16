@@ -38,6 +38,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.StreamSupport;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import javax.net.ssl.SSLSession;
@@ -97,6 +98,9 @@ class ProcessorTest {
                 .containsEntry("x-ph-processor-duration-ms", "0")
                 .containsEntry("x-ph-processor-success", "true")
                 .containsEntry("x-ph-processor-status", "201");
+
+        long stepCount = StreamSupport.stream(outbound.steps().spliterator(), false).count();
+        assertThat(stepCount).isEqualTo(2L);
 
         String traceHeader = (String) outbound.headers().get(ObservabilityContextUtil.HEADER);
         ObservabilityContext trace = ObservabilityContextUtil.fromHeader(traceHeader);

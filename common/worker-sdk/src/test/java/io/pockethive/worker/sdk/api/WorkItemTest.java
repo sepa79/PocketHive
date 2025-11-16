@@ -104,6 +104,25 @@ class WorkItemTest {
         assertThat(step.payload()).isEqualTo("third");
     }
 
+    @Test
+    void applyHistoryPolicyControlsRecordedSteps() {
+        WorkItem item = WorkItem.text("first")
+            .build()
+            .addStepPayload("second");
+
+        WorkItem full = item.applyHistoryPolicy(HistoryPolicy.FULL);
+        assertThat(steps(full)).hasSize(2);
+
+        WorkItem latestOnly = item.applyHistoryPolicy(HistoryPolicy.LATEST_ONLY);
+        assertThat(steps(latestOnly)).hasSize(1);
+        assertThat(latestOnly.asString()).isEqualTo("second");
+
+        WorkItem disabled = item.applyHistoryPolicy(HistoryPolicy.DISABLED);
+        // no recorded steps, but legacy view still exposes a single synthetic step
+        assertThat(steps(disabled)).hasSize(1);
+        assertThat(disabled.asString()).isEqualTo("second");
+    }
+
     private static List<WorkStep> steps(WorkItem item) {
         return StreamSupport.stream(item.steps().spliterator(), false).toList();
     }

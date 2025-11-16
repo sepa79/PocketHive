@@ -124,6 +124,8 @@ class PostProcessorWorkerImpl implements PocketHiveWorkerFunction {
               processorStats);
     }
 
+    long stepCount = java.util.stream.StreamSupport.stream(in.steps().spliterator(), false).count();
+
     StatusPublisher publisher = context.statusPublisher();
     publisher.update(status -> {
       status
@@ -138,6 +140,7 @@ class PostProcessorWorkerImpl implements PocketHiveWorkerFunction {
           .data("processorAvgLatencyMs", metrics.processorAverageLatencyMs());
       if (config.publishAllMetrics()) {
         status
+            .data("workItemSteps", stepCount)
             .data("hopDurationsMs", measurements.hopDurations())
             .data("hopTimeline", describeHops(observability.getHops()))
             .data("processorCall", describeProcessorCall(processorStats));

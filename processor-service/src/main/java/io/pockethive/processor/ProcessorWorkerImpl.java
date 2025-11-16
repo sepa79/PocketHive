@@ -125,12 +125,12 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
       return response;
     } catch (ProcessorCallException ex) {
       logger.warn("Processor request failed: {}", ex.getCause() != null ? ex.getCause().toString() : ex.toString(), ex);
-      WorkItem error = buildError(context, ex.getCause() != null ? ex.getCause().toString() : ex.toString(), ex.metrics());
+      WorkItem error = buildError(in, context, ex.getCause() != null ? ex.getCause().toString() : ex.toString(), ex.metrics());
       publishStatus(context, config);
       return error;
     } catch (Exception ex) {
       logger.warn("Processor request failed: {}", ex.toString(), ex);
-      WorkItem error = buildError(context, ex.toString(), CallMetrics.failure(0, -1));
+      WorkItem error = buildError(in, context, ex.toString(), CallMetrics.failure(0, -1));
       publishStatus(context, config);
       return error;
     }
@@ -143,7 +143,7 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
     String baseUrl = config.baseUrl();
     if (baseUrl == null || baseUrl.isBlank()) {
       logger.warn("No baseUrl configured; skipping HTTP call");
-      return buildError(context, "invalid baseUrl", CallMetrics.failure(0, -1));
+      return buildError(message, context, "invalid baseUrl", CallMetrics.failure(0, -1));
     }
 
     String path = node.path("path").asText("/");
@@ -151,7 +151,7 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
     URI target = resolveTarget(baseUrl, path);
     if (target == null) {
       logger.warn("Invalid URI base='{}' path='{}'", baseUrl, path);
-      return buildError(context, "invalid baseUrl", CallMetrics.failure(0, -1));
+      return buildError(message, context, "invalid baseUrl", CallMetrics.failure(0, -1));
     }
 
     HttpRequest.Builder requestBuilder = HttpRequest.newBuilder(target);
@@ -185,10 +185,12 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
       result.set("headers", MAPPER.valueToTree(response.headers().map()));
       result.put("body", response.body());
 
-      return applyCallHeaders(WorkItem.json(result)
+      WorkItem responseItem = applyCallHeaders(WorkItem.json(result)
           .header("content-type", "application/json")
           .header("x-ph-service", context.info().role()), metrics)
           .build();
+
+      return message.addStep(responseItem.asString(), responseItem.headers());
     } catch (Exception ex) {
       long duration = Math.max(0L, clock.millis() - start);
       CallMetrics metrics = CallMetrics.failure(duration, -1);
@@ -216,13 +218,14 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
     return Optional.of(MAPPER.writeValueAsString(bodyNode));
   }
 
-  private WorkItem buildError(WorkerContext context, String message, CallMetrics metrics) {
+  private WorkItem buildError(WorkItem in, WorkerContext context, String message, CallMetrics metrics) {
     ObjectNode result = MAPPER.createObjectNode();
     result.put("error", message);
-    return applyCallHeaders(WorkItem.json(result)
+    WorkItem errorItem = applyCallHeaders(WorkItem.json(result)
         .header("content-type", "application/json")
         .header("x-ph-service", context.info().role()), metrics)
         .build();
+    return in.addStep(errorItem.asString(), errorItem.headers());
   }
 
   private WorkItem.Builder applyCallHeaders(WorkItem.Builder builder, CallMetrics metrics) {

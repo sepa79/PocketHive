@@ -1,5 +1,6 @@
 package io.pockethive.worker.sdk.runtime;
 
+import io.pockethive.worker.sdk.api.HistoryPolicy;
 import io.pockethive.worker.sdk.api.PocketHiveWorkerFunction;
 import io.pockethive.worker.sdk.api.WorkItem;
 import io.pockethive.worker.sdk.api.WorkerContext;
@@ -43,6 +44,10 @@ final class WorkerInvocation {
             .data("phase", "STARTED"));
         try {
             WorkItem result = proceed(0, invocationContext);
+            HistoryPolicy policy = context.historyPolicy();
+            if (result != null && policy != null && policy != HistoryPolicy.FULL) {
+                result = result.applyHistoryPolicy(policy);
+            }
             statusPublisher.recordProcessed();
             statusPublisher.update(status -> status
                 .data("worker", workerDefinition.beanName())
