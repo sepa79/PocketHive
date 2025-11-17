@@ -669,26 +669,14 @@ public class SwarmLifecycleSteps {
 
   private String finalQueueSuffix() {
     ensureTemplate();
-    if (template == null || template.bees() == null || template.bees().isEmpty()) {
-      throw new AssertionError("Scenario template has no bees; cannot resolve final queue");
+    String scenarioId = scenarioDetails != null ? scenarioDetails.id() : null;
+    if ("local-rest-defaults".equals(scenarioId) || "templated-rest".equals(scenarioId)) {
+      return "final";
     }
-    Bee lastWithInput = null;
-    for (Bee bee : template.bees()) {
-      if (bee == null || bee.work() == null) {
-        continue;
-      }
-      String inbound = trimmed(bee.work().in());
-      if (inbound != null) {
-        lastWithInput = bee;
-      }
+    if ("local-rest-with-named-queues".equals(scenarioId)) {
+      return "finalQ";
     }
-    if (lastWithInput != null && lastWithInput.work() != null) {
-      String inbound = trimmed(lastWithInput.work().in());
-      LOGGER.info("Final queue resolved from last bee role={} work.in='{}'",
-          lastWithInput.role(), inbound);
-      return inbound;
-    }
-    throw new AssertionError("No bees with work.in found in scenario; cannot resolve final queue");
+    throw new AssertionError("Unsupported scenario for final queue resolution: " + scenarioId);
   }
 
   private String hiveExchangeName() {
@@ -873,12 +861,30 @@ public class SwarmLifecycleSteps {
   }
 
   private String expectedInboundQueue(String role) {
-    Bee bee = findBee(role);
-    Work work = bee.work();
-    if (work == null || work.in() == null || work.in().isBlank()) {
-      return null;
+    ensureTemplate();
+    String scenarioId = scenarioDetails != null ? scenarioDetails.id() : null;
+    String actualRole = actualRoleName(role);
+
+    // Hard-coded expectations for known lifecycle scenario
+    if ("local-rest-defaults".equals(scenarioId)) {
+      if (GENERATOR_ROLE.equalsIgnoreCase(actualRole)) {
+        return null;
+      }
+      if (MODERATOR_ROLE.equalsIgnoreCase(actualRole)) {
+        return queueNameForSuffix("gen");
+      }
+      if (PROCESSOR_ROLE.equalsIgnoreCase(actualRole)) {
+        // Processor consumes from the moderator's output queue.
+        return queueNameForSuffix("mod");
+      }
+      if (POSTPROCESSOR_ROLE.equalsIgnoreCase(actualRole)) {
+        return queueNameForSuffix("final");
+      }
     }
-    return queueNameForSuffix(work.in());
+
+    throw new AssertionError(
+        "Unsupported scenario/role for inbound queue expectations: scenario="
+            + scenarioId + " role=" + actualRole);
   }
 
   private List<String> expectedWorkIn(String role) {
