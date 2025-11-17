@@ -54,6 +54,7 @@ MODULE_FILTER=()
 SERVICE_FILTER=()
 RESTART_TARGETS=()
 CLEAN_STACK=false
+ONLY_CLEAN=true
 MODULES_TO_BUILD=()
 SERVICES_TO_BUILD=()
 
@@ -239,22 +240,27 @@ parse_args() {
         ;;
       --quick)
         SKIP_TESTS=true
+        ONLY_CLEAN=false
         ;;
       --module)
         [[ $# -lt 2 ]] && { echo "--module requires a value" >&2; exit 1; }
         MODULE_FILTER+=("$2")
         shift
+        ONLY_CLEAN=false
         ;;
       --module=*)
         MODULE_FILTER+=("${1#*=}")
+        ONLY_CLEAN=false
         ;;
       --service)
         [[ $# -lt 2 ]] && { echo "--service requires a value" >&2; exit 1; }
         SERVICE_FILTER+=("$2")
         shift
+        ONLY_CLEAN=false
         ;;
       --service=*)
         SERVICE_FILTER+=("${1#*=}")
+        ONLY_CLEAN=false
         ;;
       --clean)
         CLEAN_STACK=true
@@ -263,9 +269,11 @@ parse_args() {
         [[ $# -lt 2 ]] && { echo "--restart requires a service name" >&2; exit 1; }
         RESTART_TARGETS+=("$2")
         shift
+        ONLY_CLEAN=false
         ;;
       --restart=*)
         RESTART_TARGETS+=("${1#*=}")
+        ONLY_CLEAN=false
         ;;
       *)
         echo "Unknown option: $1" >&2
@@ -332,6 +340,15 @@ main() {
   require_tools
   determine_targets
   BUILD_START_TIME=$(date +%s)
+
+  # Special case: just --clean → only tear down containers/stack.
+  if $CLEAN_STACK && $ONLY_CLEAN; then
+    measure "clean" clean_stack
+    print_timing_summary
+    echo
+    echo "PocketHive stack cleanup complete (no build requested)."
+    exit 0
+  fi
 
   # Always clean before full-stack builds,
   # and honour explicit --clean for partial builds.

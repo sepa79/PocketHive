@@ -46,6 +46,7 @@ function printUsage() {
       "  node tools/mcp-orchestrator-debug/client.mjs stop-swarm <swarmId> [notes]\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs remove-swarm <swarmId> [notes]\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs check-queues <queueName> [<queueName>...]\n" +
+      "  node tools/mcp-orchestrator-debug/client.mjs tap-queue <exchange> <routingKey> [queueName]\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs list-queues\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs commands\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs get-recorded\n" +
@@ -57,6 +58,7 @@ function printUsage() {
       "  node tools/mcp-orchestrator-debug/client.mjs start-swarm foo --record\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs remove-swarm foo --record\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs check-queues ph.foo.gen ph.foo.mod ph.foo.final\n" +
+      "  node tools/mcp-orchestrator-debug/client.mjs tap-queue ph.foo.hive ph.foo.final\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs list-queues\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs commands\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs get-recorded\n"
@@ -116,6 +118,12 @@ const COMMANDS = [
     name: "check-queues",
     description: "Check existence / counts for specific queues via AMQP",
     params: ["queueName", "[...queueNames]"],
+  },
+  {
+    name: "tap-queue",
+    description:
+      "Declare a queue and bind it to an exchange/routingKey so you can tap messages",
+    params: ["exchange", "routingKey", "[queueName]"],
   },
   {
     name: "list-queues",
@@ -278,6 +286,19 @@ async function main() {
       }
       const results = await checkQueues(names);
       console.log(JSON.stringify(results, null, 2));
+      return;
+    }
+
+    if (subcommand === "tap-queue") {
+      const exchange = args[1];
+      const routingKey = args[2];
+      const queueName = args[3];
+      if (!exchange || !routingKey) {
+        console.error("tap-queue requires <exchange> and <routingKey> [queueName]");
+        process.exit(1);
+      }
+      const tap = await createTapQueue(exchange, routingKey, queueName);
+      console.log(JSON.stringify(tap, null, 2));
       return;
     }
 
@@ -537,6 +558,45 @@ async function checkQueues(names) {
     }
   }
   return results;
+}
+
+async function createTapQueue(exchange, routingKey, queueName) {
+  const url = rabbitUrl();
+  const conn = await amqplib.connect(url);
+  const ch = await conn.createChannel();
+  try {
+    const ex = (exchange || "").trim();
+    const key = (routingKey || "").trim();
+    if (!ex || !key) {
+      throw new Error("exchange and routingKey must be non-empty");
+    }
+    await ch.assertExchange(ex, "topic", { durable: true });
+    const q = await ch.assertQueue(queueName || "", {
+      exclusive: !queueName,
+      durable: !!queueName,
+      autoDelete: !queueName,
+    });
+    await ch.bindQueue(q.queue, ex, key);
+    return {
+      exchange: ex,
+      routingKey: key,
+      queue: q.queue,
+      durable: !!queueName,
+      exclusive: !queueName,
+      autoDelete: !queueName,
+    };
+  } finally {
+    try {
+      await ch.close();
+    } catch {
+      // ignore
+    }
+    try {
+      await conn.close();
+    } catch {
+      // ignore
+    }
+  }
 }
 
 function rabbitUrl() {
