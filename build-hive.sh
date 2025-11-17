@@ -120,8 +120,12 @@ clean_stack() {
   mapfile -t bee_containers < <(docker ps -a --format '{{.ID}}\t{{.Names}}' | awk -F '\t' '$2 ~ /-bee-/')
   for entry in "${bee_containers[@]}"; do
     IFS=$'\t' read -r cid cname <<<"$entry"
-    [[ -n "$cid" ]] && docker rm -f "$cid" >/dev/null
+    if [[ -n "$cid" ]]; then
+      echo " - Removing bee container ${cname} (${cid})"
+      docker rm -f "$cid" >/dev/null || echo "   (failed to remove ${cid})"
+    fi
   done
+  echo "Running docker compose down --remove-orphans..."
   compose_cmd down --remove-orphans || true
 }
 
@@ -340,6 +344,13 @@ main() {
   require_tools
   determine_targets
   BUILD_START_TIME=$(date +%s)
+
+  # Special case: --quick with no module/service filters → reuse existing jars/images,
+  # just clean + compose up (no Maven package, no docker build).
+  if $SKIP_TESTS && (( ${#MODULE_FILTER[@]} == 0 )) && (( ${#SERVICE_FILTER[@]} == 0 )); then
+    MODULES_TO_BUILD=()
+    SERVICES_TO_BUILD=()
+  fi
 
   # Special case: just --clean → only tear down containers/stack.
   if $CLEAN_STACK && $ONLY_CLEAN; then

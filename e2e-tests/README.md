@@ -18,7 +18,7 @@ src/
     steps/               # Step definitions used by the feature files
   test/resources/features/
     deployment-smoke.feature # Phase 1 deployment smoke checks
-    harness-skeleton.feature # Placeholder scenario tagged as @wip so it does not execute
+    harness-skeleton.feature # Harness connectivity skeleton (runs when endpoints are configured)
 ```
 
 ## Control-plane event helpers
@@ -55,8 +55,9 @@ service container configuration (e.g. `http://localhost:8088/orchestrator`, `htt
 the environment variables before launching the helper.
 
 The deployment smoke feature runs automatically once the required environment variables are present; otherwise the
-scenario is skipped via JUnit assumptions so local builds without a running stack still succeed. Remove the `@wip` tag
-on the placeholder feature as new steps are implemented in later tasks.
+scenario is skipped via JUnit assumptions so local builds without a running stack still succeed. The harness skeleton
+feature follows the same pattern, initialising the shared environment configuration before any behaviour-focused
+scenarios execute.
 
 ## Environment configuration
 

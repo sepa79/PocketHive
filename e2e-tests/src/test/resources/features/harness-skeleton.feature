@@ -1,4 +1,3 @@
-@wip
 Feature: PocketHive harness skeleton
   This placeholder feature documents that the acceptance suite scaffold is in place.
 
