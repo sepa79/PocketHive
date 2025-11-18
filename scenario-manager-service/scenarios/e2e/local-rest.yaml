@@ -1,46 +1,53 @@
 id: local-rest
 name: Local REST - Simple REST Swarm using custom values
-description: Uses local images. Sample scenario that ships the REST generator with a 50 msg/s default rate limit.
+description: Uses local images. Sample scenario that ships the REST generator with a 50 msg/s default rate limit and custom queue names.
 template:
   image: swarm-controller:latest
   bees:
-    - role: sampleGenerator
+    - role: generator
       image: generator:latest
       config:
-        ratePerSec: 50
-        singleRequest: false
-        message:
-          path: /test
-          method: POST
-          body: '{"event":"local-rest"}'
-          headers:
-            content-type: application/json
+        pockethive:
+          worker:
+            config:
+              ratePerSec: 50
+              singleRequest: false
+              message:
+                path: /test
+                method: POST
+                body: '{"event":"local-rest"}'
+                headers:
+                  content-type: application/json
       work:
-        out: gen
-    - role: sampleModerator
+        out: genQ
+    - role: moderator
       image: moderator:latest
       config:
-        mode:
-          type: rate-per-sec
-          ratePerSec: 25
-          sine:
-            minRatePerSec: 5
-            maxRatePerSec: 30
-            periodSeconds: 60
-            phaseOffsetSeconds: 5
+        pockethive:
+          worker:
+            config:
+              mode:
+                type: rate-per-sec
+                ratePerSec: 10
       work:
-        in: gen
-        out: mod
-    - role: sampleProcessor
+        in: genQ
+        out: modQ
+    - role: processor
       image: processor:latest
       config:
-        baseUrl: http://wiremock:8080/api
+        pockethive:
+          worker:
+            config:
+              baseUrl: http://wiremock:8080/api
       work:
-        in: mod
-        out: final
-    - role: samplePostprocessor
+        in: modQ
+        out: finalQ
+    - role: postprocessor
       image: postprocessor:latest
       config:
-        publishAllMetrics: true
+        pockethive:
+          worker:
+            config:
+              publishAllMetrics: true
       work:
-        in: final
+        in: finalQ

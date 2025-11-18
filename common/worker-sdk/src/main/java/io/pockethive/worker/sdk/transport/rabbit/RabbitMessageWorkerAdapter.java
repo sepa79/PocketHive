@@ -34,7 +34,7 @@ import org.springframework.context.event.ContextRefreshedEvent;
  *     <li>Starting and stopping the Spring AMQP listener container based on the control-plane desired
  *         state for the worker instance.</li>
  *     <li>Translating inbound {@link Message AMQP messages} into {@link WorkItem} envelopes using the
- *         {@link RabbitWorkMessageConverter} that is shared across PocketHive workers.</li>
+ *         {@link RabbitWorkItemConverter} that is shared across PocketHive workers.</li>
  *     <li>Invoking the provided {@link WorkDispatcher} callback and, when a non-null {@link WorkItem}
  *         result is produced, publishing it via the optional {@link MessageResultPublisher} hook.</li>
  *     <li>Relaying control-plane payloads through the {@link WorkerControlPlaneRuntime} with the expected
@@ -65,7 +65,7 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
     private final String outboundExchange;
     private final Consumer<Exception> dispatchErrorHandler;
     private final java.util.concurrent.atomic.AtomicBoolean initialised = new java.util.concurrent.atomic.AtomicBoolean(false);
-    private final RabbitWorkMessageConverter messageConverter = new RabbitWorkMessageConverter();
+    private final RabbitWorkItemConverter messageConverter = new RabbitWorkItemConverter();
     private volatile boolean desiredEnabled;
 
     private RabbitMessageWorkerAdapter(Builder builder) {
@@ -137,7 +137,7 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
     /**
      * Converts inbound AMQP messages and dispatches them through the configured worker runtime.
      * <p>
-     * The message payload is translated using {@link RabbitWorkMessageConverter} before being handed off
+     * The message payload is translated using {@link RabbitWorkItemConverter} before being handed off
      * to the {@link WorkDispatcher}. Any non-{@code null} results are converted back into AMQP
      * {@link Message messages} and forwarded to the optional {@link MessageResultPublisher}. Exceptions
      * thrown by the dispatcher are routed to the configured {@link #dispatchErrorHandler} allowing

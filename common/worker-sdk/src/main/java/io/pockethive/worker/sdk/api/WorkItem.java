@@ -45,7 +45,7 @@ public final class WorkItem {
         this.headers = Collections.unmodifiableMap(new LinkedHashMap<>(headers));
         this.charset = Objects.requireNonNull(charset, "charset");
         this.observabilityContext = observabilityContext;
-        this.steps = steps == null || steps.isEmpty()
+        this.steps = steps == null
             ? List.of()
             : List.copyOf(steps);
     }
@@ -107,14 +107,8 @@ public final class WorkItem {
     /**
      * Returns an ordered view of all recorded steps, from earliest to latest.
      * <p>
-     * When no explicit history has been recorded yet, this returns a single synthetic step representing the
-     * current message body and headers.
      */
     public Iterable<WorkStep> steps() {
-        if (steps == null || steps.isEmpty()) {
-            WorkStep synthetic = new WorkStep(0, null, asString(), headers);
-            return List.of(synthetic);
-        }
         return steps;
     }
 
@@ -146,11 +140,12 @@ public final class WorkItem {
 
         List<WorkStep> newSteps = new ArrayList<>();
         if (this.steps == null || this.steps.isEmpty()) {
-            newSteps.add(new WorkStep(0, null, asString(), this.headers));
+            // Seed history with the current state as step 0 (e.g. after DISABLED history).
+            newSteps.add(new WorkStep(0, asString(), this.headers));
         } else {
             newSteps.addAll(this.steps);
         }
-        newSteps.add(new WorkStep(newSteps.size(), null, effectivePayload, newHeaders));
+        newSteps.add(new WorkStep(newSteps.size(), effectivePayload, newHeaders));
 
         return new WorkItem(newBody, newHeaders, StandardCharsets.UTF_8, observabilityContext, newSteps);
     }
@@ -171,7 +166,7 @@ public final class WorkItem {
 
         List<WorkStep> newSteps;
         if (this.steps == null || this.steps.isEmpty()) {
-            WorkStep current = new WorkStep(0, null, asString(), newHeaders);
+            WorkStep current = new WorkStep(0, asString(), newHeaders);
             newSteps = List.of(current);
         } else {
             newSteps = new ArrayList<>(this.steps.size());
@@ -180,7 +175,7 @@ public final class WorkItem {
                 newSteps.add(this.steps.get(i));
             }
             WorkStep last = this.steps.get(lastIndex);
-            newSteps.add(new WorkStep(last.index(), last.name(), last.payload(), newHeaders));
+            newSteps.add(new WorkStep(last.index(), last.payload(), newHeaders));
         }
 
         return new WorkItem(body, newHeaders, charset, observabilityContext, newSteps);
@@ -220,7 +215,8 @@ public final class WorkItem {
             return clearHistory();
         }
         if (policy == HistoryPolicy.DISABLED) {
-            return new WorkItem(body, headers, charset, observabilityContext, null);
+            // Preserve body/headers but drop recorded steps entirely.
+            return new WorkItem(body, headers, charset, observabilityContext, List.of());
         }
         return this;
     }
@@ -388,6 +384,26 @@ public final class WorkItem {
         }
 
         /**
+         * Sets the recorded step history for this item. Callers should prefer the public step APIs on
+         * {@link WorkItem} in most cases; this hook exists primarily for transport adapters that need
+         * to reconstruct history from the wire.
+         */
+        public Builder steps(Iterable<WorkStep> steps) {
+            if (steps == null) {
+                this.steps = null;
+                return this;
+            }
+            List<WorkStep> copy = new ArrayList<>();
+            for (WorkStep step : steps) {
+                if (step != null) {
+                    copy.add(step);
+                }
+            }
+            this.steps = copy.isEmpty() ? null : List.copyOf(copy);
+            return this;
+        }
+
+        /**
          * Builds an immutable {@link WorkItem} instance.
          */
         public WorkItem build() {
@@ -404,7 +420,13 @@ public final class WorkItem {
             } else {
                 copy.put(ObservabilityContextUtil.HEADER, ObservabilityContextUtil.toHeader(context));
             }
-            return new WorkItem(body, copy, resolvedCharset, context, steps);
+            List<WorkStep> effectiveSteps = this.steps;
+            if (effectiveSteps == null || effectiveSteps.isEmpty()) {
+                // Seed history with the initial state as step 0 so history is explicit from construction.
+                String initialPayload = new String(body, resolvedCharset);
+                effectiveSteps = List.of(new WorkStep(0, initialPayload, copy));
+            }
+            return new WorkItem(body, copy, resolvedCharset, context, effectiveSteps);
         }
     }
 }

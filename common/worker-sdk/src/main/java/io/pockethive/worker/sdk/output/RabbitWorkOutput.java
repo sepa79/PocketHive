@@ -4,6 +4,7 @@ import io.pockethive.worker.sdk.api.WorkItem;
 import io.pockethive.worker.sdk.config.RabbitOutputProperties;
 import io.pockethive.worker.sdk.runtime.WorkIoBindings;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
+import io.pockethive.worker.sdk.transport.rabbit.RabbitWorkItemConverter;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.core.MessageDeliveryMode;
 import org.springframework.amqp.core.MessageProperties;
@@ -16,6 +17,7 @@ public final class RabbitWorkOutput implements WorkOutput {
 
     private final RabbitTemplate rabbitTemplate;
     private final RabbitOutputProperties properties;
+    private final RabbitWorkItemConverter converter = new RabbitWorkItemConverter();
 
     public RabbitWorkOutput(RabbitTemplate rabbitTemplate, RabbitOutputProperties properties) {
         this.rabbitTemplate = rabbitTemplate;
@@ -30,13 +32,12 @@ public final class RabbitWorkOutput implements WorkOutput {
         if (exchange == null || routingKey == null) {
             throw new IllegalStateException("Cannot publish worker result without exchange and routing key");
         }
-        MessageProperties props = new MessageProperties();
+        Message outbound = converter.toMessage(item);
+        MessageProperties props = outbound.getMessageProperties();
         props.setDeliveryMode(properties.isPersistent() ? MessageDeliveryMode.PERSISTENT : MessageDeliveryMode.NON_PERSISTENT);
-        applyHeaders(item, props);
         if (props.getContentType() == null) {
             props.setContentType(MessageProperties.CONTENT_TYPE_BYTES);
         }
-        Message outbound = new Message(item.body(), props);
         rabbitTemplate.send(exchange, routingKey, outbound);
     }
 

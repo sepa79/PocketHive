@@ -118,8 +118,8 @@ class WorkItemTest {
         assertThat(latestOnly.asString()).isEqualTo("second");
 
         WorkItem disabled = item.applyHistoryPolicy(HistoryPolicy.DISABLED);
-        // no recorded steps, but legacy view still exposes a single synthetic step
-        assertThat(steps(disabled)).hasSize(1);
+        // history disabled: no recorded steps, but body/headers remain available
+        assertThat(steps(disabled)).isEmpty();
         assertThat(disabled.asString()).isEqualTo("second");
     }
 

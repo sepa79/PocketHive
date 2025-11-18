@@ -46,7 +46,10 @@ final class ConfigMerger {
         }
         try {
             Map<String, Object> converted = objectMapper.convertValue(config, MAP_TYPE);
-            return converted == null ? Map.of() : Map.copyOf(converted);
+            if (converted == null || converted.isEmpty()) {
+                return Map.of();
+            }
+            return copyMap(converted);
         } catch (IllegalArgumentException ex) {
             throw new IllegalArgumentException(
                 "Unable to convert config of type " + config.getClass().getSimpleName() + " to map", ex);
@@ -132,11 +135,11 @@ final class ConfigMerger {
     private Map<String, Object> copyMap(Map<?, ?> source) {
         Map<String, Object> copy = new LinkedHashMap<>();
         source.forEach((key, value) -> {
-            if (key != null) {
+            if (key != null && value != null) {
                 copy.put(key.toString(), value);
             }
         });
-        return Map.copyOf(copy);
+        return copy.isEmpty() ? Map.of() : Map.copyOf(copy);
     }
 
     record ConfigMergeResult(

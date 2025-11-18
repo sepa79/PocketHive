@@ -30,16 +30,16 @@ This plan focuses primarily on Stage 1 for now so downstream worker authors can 
 
 ### 1.1 Introduce `WorkItem` and New Worker Contract
 
-- [ ] Create a new `WorkItem` type by adapting the existing `WorkMessage` implementation:
+- [x] Create a new `WorkItem` type by adapting the existing `WorkMessage` implementation:
   - Keep fields and behaviour identical for now: body (bytes), headers (map), charset, `ObservabilityContext`.
   - Preserve existing builder semantics as an implementation detail (will be hidden behind friendlier methods later).
-- [ ] Change the core worker contract to return a `WorkItem` directly:
+- [x] Change the core worker contract to return a `WorkItem` directly:
   - Update `PocketHiveWorkerFunction` to:
     ```java
     WorkItem onMessage(WorkItem in, WorkerContext context) throws Exception;
     ```
   - Define `null` as the explicit “no output” signal for now (simple for downstream teams).
-- [ ] Remove `WorkResult` from the public API:
+- [x] Remove `WorkResult` from the public API:
   - Update runtime code (`WorkerInvocation`, `WorkOutput` implementations) to:
     - Call `onMessage(...)` and check for `null`.
     - Publish the returned `WorkItem` directly via the configured `WorkOutput` if non-null.
@@ -47,30 +47,30 @@ This plan focuses primarily on Stage 1 for now so downstream worker authors can 
 
 ### 1.2 Adapt Runtime & Outputs
 
-- [ ] Update `WorkerInvocation` and related runtime classes:
+- [x] Update `WorkerInvocation` and related runtime classes:
   - Replace any use of `WorkResult` with `WorkItem` / `null`.
   - Ensure interceptors and status publishing logic still wrap around the new call signature cleanly.
-- [ ] Update `WorkOutput` SPI and implementations:
+- [x] Update `WorkOutput` SPI and implementations:
   - Change `WorkOutput.publish(...)` to accept `WorkItem` directly (or a wrapper object if needed for future extensibility).
   - Update `RabbitWorkOutput` to:
     - Read body/headers directly from `WorkItem`.
     - Preserve current content-type/header behaviour.
-- [ ] Ensure `WorkInput` implementations still construct the inbound type correctly, now as `WorkItem`.
+- [x] Ensure `WorkInput` implementations still construct the inbound type correctly, now as `WorkItem`.
 
 ### 1.3 Migrate Built-in Workers & Tests
 
-- [ ] Update all workers in this repo to the new contract:
+- [x] Update all workers in this repo to the new contract:
   - Replace imports of `WorkMessage` with `WorkItem`.
   - Replace `WorkResult.message(...)` / `WorkResult.none()` call sites with:
     - `return workItem;` (or a newly built item) for “publish”.
     - `return null;` for “no output”.
-- [ ] Update tests and fixtures:
+- [x] Update tests and fixtures:
   - Adapt any helpers/factories that previously used `WorkResult` or `WorkMessage` directly.
   - Ensure existing behavioural tests for generator/moderator/processor/postprocessor/trigger still pass with the new contract.
 
 ### 1.4 Docs & Migration Notes
 
-- [ ] Update `common/worker-sdk/README.md` and `docs/sdk/worker-sdk-quickstart.md`:
+- [x] Update `common/worker-sdk/README.md` and `docs/sdk/worker-sdk-quickstart.md`:
   - Show the new `PocketHiveWorkerFunction` signature with `WorkItem`.
   - Provide simple examples:
     - “Return the same item with an extra header.”
@@ -85,16 +85,16 @@ This plan focuses primarily on Stage 1 for now so downstream worker authors can 
 
 Once all workers (internal and external) are on the new contract, we can introduce the step API without breaking existing code.
 
-- [ ] Add read helpers to `WorkItem`:
+- [x] Add read helpers to `WorkItem`:
   - `String payload()` for current step payload.
   - `Optional<String> previousPayload()` for one-step-back (initially empty).
   - `Iterable<WorkStep> steps()` returning a single synthetic step at first.
-- [ ] Add write helpers:
+- [x] Add write helpers:
   - `WorkItem addStepPayload(String payload)` — adds/replaces the current step payload.
   - `WorkItem addStep(String payload, Map<String,Object> headers)` — adds a step with headers.
   - `WorkItem addStepHeader(String name, Object value)` — adds a header to the current step.
   - `WorkItem clearHistory()` — retains only the current step (no-op initially).
-- [ ] Introduce `HistoryPolicy`:
+- [x] Introduce `HistoryPolicy`:
   - Configurable per worker/role/swarm with modes `FULL`, `LATEST_ONLY`, `DISABLED`.
   - Expose the default via `pockethive.worker.history-policy` in Scenario YAML / service config, defaulting to `FULL`.
   - In Stage 2, the public API is wired; enforcement can be tightened in Stage 3 when real step history limits are applied.
@@ -105,7 +105,7 @@ Once all workers (internal and external) are on the new contract, we can introdu
 
 After Stage 2 is stable, we can upgrade `WorkItem` to hold real step history and honour `HistoryPolicy`.
 
-- [ ] Implement internal `WorkStep` structure and step list on `WorkItem`.
+- [x] Implement internal `WorkStep` structure and step list on `WorkItem`.
 - [ ] Honour `HistoryPolicy` limits and bounds (max steps, optional size constraints).
 - [ ] Ensure the HTTP processor, templating pipeline, and routing output use steps in a consistent way.
 

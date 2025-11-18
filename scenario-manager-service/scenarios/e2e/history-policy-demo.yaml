@@ -38,6 +38,7 @@ template:
         pockethive:
           worker:
             historyPolicy: FULL
+            config:
+              publishAllMetrics: true
       work:
         in: final
-

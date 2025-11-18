@@ -11,29 +11,20 @@ import java.util.Objects;
 public final class WorkStep {
 
     private final int index;
-    private final String name;
     private final String payload;
     private final Map<String, Object> headers;
 
-    public WorkStep(int index, String name, String payload, Map<String, Object> headers) {
+    public WorkStep(int index, String payload, Map<String, Object> headers) {
         if (index < 0) {
             throw new IllegalArgumentException("index must be >= 0");
         }
         this.index = index;
-        this.name = name;
         this.payload = Objects.requireNonNull(payload, "payload");
         this.headers = Map.copyOf(Objects.requireNonNull(headers, "headers"));
     }
 
     public int index() {
         return index;
-    }
-
-    /**
-     * Optional, human-readable step name derived from the worker/input/interceptor.
-     */
-    public String name() {
-        return name;
     }
 
     /**
@@ -51,7 +42,6 @@ public final class WorkStep {
     }
 
     WorkStep withIndex(int newIndex) {
-        return new WorkStep(newIndex, name, payload, headers);
+        return new WorkStep(newIndex, payload, headers);
     }
 }
-

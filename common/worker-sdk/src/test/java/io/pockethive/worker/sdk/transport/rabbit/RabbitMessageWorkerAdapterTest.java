@@ -130,7 +130,7 @@ class RabbitMessageWorkerAdapterTest {
     @Test
     void onWorkDispatchesAndPublishesMessageResults() throws Exception {
         RabbitMessageWorkerAdapter adapter = builder().build();
-        RabbitWorkMessageConverter converter = new RabbitWorkMessageConverter();
+        RabbitWorkItemConverter converter = new RabbitWorkItemConverter();
         Message inbound = converter.toMessage(WorkItem.text("payload").build());
 
         when(dispatcher.dispatch(any(WorkItem.class)))
@@ -151,7 +151,7 @@ class RabbitMessageWorkerAdapterTest {
     @Test
     void onWorkErrorsDelegateToErrorHandler() throws Exception {
         RabbitMessageWorkerAdapter adapter = builder().build();
-        RabbitWorkMessageConverter converter = new RabbitWorkMessageConverter();
+        RabbitWorkItemConverter converter = new RabbitWorkItemConverter();
         Message inbound = converter.toMessage(WorkItem.text("payload").build());
         RuntimeException failure = new RuntimeException("boom");
         doThrow(failure).when(dispatcher).dispatch(any(WorkItem.class));
@@ -167,7 +167,7 @@ class RabbitMessageWorkerAdapterTest {
         RabbitMessageWorkerAdapter adapter = builderWithoutTemplate()
             .messageResultPublisher(resultPublisher)
             .build();
-        RabbitWorkMessageConverter converter = new RabbitWorkMessageConverter();
+        RabbitWorkItemConverter converter = new RabbitWorkItemConverter();
         Message inbound = converter.toMessage(WorkItem.text("payload").build());
 
         when(dispatcher.dispatch(any(WorkItem.class)))
@@ -290,7 +290,7 @@ class RabbitMessageWorkerAdapterTest {
         );
 
         RabbitMessageWorkerAdapter adapter = builderWithoutTemplate().build();
-        RabbitWorkMessageConverter converter = new RabbitWorkMessageConverter();
+        RabbitWorkItemConverter converter = new RabbitWorkItemConverter();
         Message inbound = converter.toMessage(WorkItem.text("payload").build());
 
         when(dispatcher.dispatch(any(WorkItem.class)))
@@ -319,7 +319,7 @@ class RabbitMessageWorkerAdapterTest {
         );
 
         RabbitMessageWorkerAdapter adapter = builderWithoutTemplate().build();
-        RabbitWorkMessageConverter converter = new RabbitWorkMessageConverter();
+        RabbitWorkItemConverter converter = new RabbitWorkItemConverter();
         Message inbound = converter.toMessage(WorkItem.text("payload").build());
 
         when(dispatcher.dispatch(any(WorkItem.class)))

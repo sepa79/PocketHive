@@ -103,10 +103,6 @@ public class SmokeSteps {
     if (!rabbitProbe.reachable()) {
       String diagnostic = "RabbitMQ not reachable at " + rabbitMq.redactedUri() + ": "
           + Optional.ofNullable(rabbitProbe.error()).orElse("no additional diagnostics");
-      if (isLikelyLocalRabbitHost(rabbitMq.host())) {
-        LOGGER.warn("Skipping RabbitMQ connectivity assertion: {}", diagnostic);
-        Assumptions.assumeTrue(false, () -> diagnostic);
-      }
       assertTrue(rabbitProbe.reachable(), diagnostic);
       return;
     }

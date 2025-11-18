@@ -8,9 +8,9 @@ import org.junit.jupiter.api.Test;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.core.MessageProperties;
 
-class RabbitWorkMessageConverterTest {
+class RabbitWorkItemConverterTest {
 
-    private final RabbitWorkMessageConverter converter = new RabbitWorkMessageConverter();
+    private final RabbitWorkItemConverter converter = new RabbitWorkItemConverter();
 
     @Test
     void roundTripPreservesHeadersAndBody() {

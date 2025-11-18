@@ -16,7 +16,7 @@ import org.junit.platform.suite.api.Suite;
 @IncludeEngines("cucumber")
 @SelectClasspathResource("features")
 @ConfigurationParameter(key = GLUE_PROPERTY_NAME, value = "io.pockethive.e2e.steps,io.pockethive.e2e.hooks")
-@ConfigurationParameter(key = PLUGIN_PROPERTY_NAME, value = "pretty")
+@ConfigurationParameter(key = PLUGIN_PROPERTY_NAME, value = "pretty,summary")
 @ConfigurationParameter(key = FILTER_TAGS_PROPERTY_NAME, value = "not @wip")
 public final class CucumberE2ETest {
 }

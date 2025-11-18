@@ -32,6 +32,9 @@ const LOG_PATH = resolve(__dirname, "control-recording.jsonl");
 
 const ORCHESTRATOR_BASE_URL =
   process.env.ORCHESTRATOR_BASE_URL || "http://localhost:8088/orchestrator";
+const SCENARIO_MANAGER_BASE_URL =
+  process.env.SCENARIO_MANAGER_BASE_URL ||
+  "http://localhost:8088/scenario-manager";
 const RABBIT_MGMT_BASE_URL =
   process.env.RABBITMQ_MANAGEMENT_BASE_URL ||
   "http://localhost:15672/rabbitmq/api";
@@ -41,10 +44,15 @@ function printUsage() {
     "Usage:\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs list-swarms\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs get-swarm <swarmId>\n" +
+      "  node tools/mcp-orchestrator-debug/client.mjs swarm-snapshot <swarmId>\n" +
+      "  node tools/mcp-orchestrator-debug/client.mjs worker-configs <swarmId>\n" +
+      "  node tools/mcp-orchestrator-debug/client.mjs list-scenarios\n" +
+      "  node tools/mcp-orchestrator-debug/client.mjs get-scenario <scenarioId>\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs create-swarm <swarmId> <templateId> [notes]\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs start-swarm <swarmId> [notes]\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs stop-swarm <swarmId> [notes]\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs remove-swarm <swarmId> [notes]\n" +
+      "  node tools/mcp-orchestrator-debug/client.mjs status-request <swarmId> <role> <instanceId>\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs check-queues <queueName> [<queueName>...]\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs tap-queue <exchange> <routingKey> [queueName]\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs list-queues\n" +
@@ -54,9 +62,12 @@ function printUsage() {
       "Examples:\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs list-swarms\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs get-swarm foo\n" +
+      "  node tools/mcp-orchestrator-debug/client.mjs swarm-snapshot foo\n" +
+      "  node tools/mcp-orchestrator-debug/client.mjs worker-configs foo\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs create-swarm foo local-rest-defaults\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs start-swarm foo --record\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs remove-swarm foo --record\n" +
+      "  node tools/mcp-orchestrator-debug/client.mjs status-request foo processor foo-worker-bee-1234\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs check-queues ph.foo.gen ph.foo.mod ph.foo.final\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs tap-queue ph.foo.hive ph.foo.final\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs list-queues\n" +
@@ -95,6 +106,21 @@ const COMMANDS = [
     params: ["swarmId"],
   },
   {
+    name: "worker-configs",
+    description:
+      "Dump latest worker config snapshot for a swarm by listening to status events on the control exchange",
+    params: ["swarmId"],
+  },
+  {
+    name: "list-scenarios",
+    description: "List scenarios via GET /scenarios from Scenario Manager",
+  },
+  {
+    name: "get-scenario",
+    description: "Fetch scenario by id via GET /scenarios/{id} from Scenario Manager",
+    params: ["scenarioId"],
+  },
+  {
     name: "create-swarm",
     description: "Create swarm via POST /api/swarms/{swarmId}/create",
     params: ["swarmId", "templateId", "[notes]", "[--record]"],
@@ -113,6 +139,12 @@ const COMMANDS = [
     name: "remove-swarm",
     description: "Remove swarm via POST /api/swarms/{swarmId}/remove",
     params: ["swarmId", "[notes]", "[--record]"],
+  },
+  {
+    name: "status-request",
+    description:
+      "Send a control-plane status-request signal directly via AMQP: sig.status-request.<swarmId>.<role>.<instanceId>",
+    params: ["swarmId", "role", "instanceId"],
   },
   {
     name: "check-queues",
@@ -159,6 +191,26 @@ async function main() {
       return;
     }
 
+    if (subcommand === "list-scenarios") {
+      const url = `${SCENARIO_MANAGER_BASE_URL.replace(/\/+$/, "")}/scenarios`;
+      const scenarios = await httpJson(url);
+      console.log(JSON.stringify(scenarios ?? [], null, 2));
+      return;
+    }
+
+    if (subcommand === "get-scenario") {
+      const id = args[1];
+      if (!id) {
+        console.error("get-scenario requires a scenario id");
+        process.exit(1);
+      }
+      const base = SCENARIO_MANAGER_BASE_URL.replace(/\/+$/, "");
+      const url = `${base}/scenarios/${encodeURIComponent(id)}`;
+      const scenario = await httpJson(url);
+      console.log(JSON.stringify(scenario ?? null, null, 2));
+      return;
+    }
+
     if (subcommand === "swarm-snapshot") {
       const swarmId = args[1];
       if (!swarmId) {
@@ -167,6 +219,17 @@ async function main() {
       }
       const snapshot = await buildSwarmSnapshot(swarmId);
       console.log(JSON.stringify(snapshot, null, 2));
+      return;
+    }
+
+    if (subcommand === "worker-configs") {
+      const swarmId = args[1];
+      if (!swarmId) {
+        console.error("worker-configs requires a swarm id");
+        process.exit(1);
+      }
+      const configs = await collectWorkerConfigs(swarmId);
+      console.log(JSON.stringify(configs, null, 2));
       return;
     }
 
@@ -266,6 +329,35 @@ async function main() {
           { method: "POST", body }
         );
         console.log(JSON.stringify(resp ?? null, null, 2));
+      });
+      if (recordEnabled) {
+        await printRecorded();
+      }
+      return;
+    }
+
+    if (subcommand === "status-request") {
+      const swarmId = args[1];
+      const role = args[2];
+      const instanceId = args[3];
+      if (!swarmId || !role || !instanceId) {
+        console.error("status-request requires <swarmId> <role> <instanceId>");
+        process.exit(1);
+      }
+      await withOptionalRecording(async () => {
+        await sendStatusRequest(swarmId, role, instanceId);
+        console.log(
+          JSON.stringify(
+            {
+              swarmId,
+              role,
+              instanceId,
+              routingKey: `sig.status-request.${swarmId}.${role}.${instanceId}`,
+            },
+            null,
+            2
+          )
+        );
       });
       if (recordEnabled) {
         await printRecorded();
@@ -518,6 +610,116 @@ async function buildSwarmSnapshot(swarmId) {
   };
 }
 
+/**
+ * Collects the latest worker config snapshot for a given swarm by listening to
+ * status-full and status-delta events on the control exchange.
+ *
+ * The result is a map keyed by worker role, each entry containing:
+ *   - instanceId
+ *   - enabled (aggregate flag)
+ *   - config (raw config map from the status payload)
+ *   - statusData (status.data field for debugging)
+ */
+async function collectWorkerConfigs(swarmId) {
+  const trimmed = String(swarmId).trim();
+  if (!trimmed) {
+    throw new Error("swarmId must not be blank");
+  }
+  const url = rabbitUrl();
+  const conn = await amqplib.connect(url);
+  const ch = await conn.createChannel();
+  try {
+    const ex = controlExchange();
+    await ch.assertExchange(ex, "topic", { durable: true });
+    const q = await ch.assertQueue("", {
+      exclusive: true,
+      autoDelete: true,
+    });
+    // Bind to status-full and status-delta events for this swarm.
+    const keys = [
+      `ev.status-full.${trimmed}.#`,
+      `ev.status-delta.${trimmed}.#`,
+    ];
+    for (const key of keys) {
+      await ch.bindQueue(q.queue, ex, key);
+    }
+
+    const byRole = {};
+    const start = Date.now();
+    const timeoutMs = 5000;
+
+    while (Date.now() - start < timeoutMs) {
+      const msg = await ch.get(q.queue, { noAck: false });
+      if (!msg) {
+        await sleep(100);
+        continue;
+      }
+      try {
+        const rk = msg.fields.routingKey || "";
+        const body = msg.content.toString("utf8");
+        let payload;
+        try {
+          payload = JSON.parse(body);
+        } catch {
+          payload = null;
+        }
+        if (!payload || typeof payload !== "object") {
+          ch.ack(msg);
+          continue;
+        }
+        if (payload.event !== "status") {
+          ch.ack(msg);
+          continue;
+        }
+        const role = payload.role || "unknown";
+        const instance = payload.instance || "unknown";
+        const enabled = !!payload.enabled;
+        const data = payload.data && typeof payload.data === "object"
+          ? payload.data
+          : {};
+        const workers = Array.isArray(data.workers) ? data.workers : [];
+
+        for (const worker of workers) {
+          if (!worker || typeof worker !== "object") continue;
+          const workerRole = worker.role || role;
+          const workerConfig =
+            worker.config && typeof worker.config === "object"
+              ? worker.config
+              : {};
+          const statusData =
+            worker.data && typeof worker.data === "object" ? worker.data : {};
+          byRole[workerRole] = {
+            role: workerRole,
+            instanceId: instance,
+            enabled,
+            config: workerConfig,
+            statusData,
+            routingKey: rk,
+          };
+        }
+      } finally {
+        ch.ack(msg);
+      }
+    }
+
+    return {
+      swarmId: trimmed,
+      workers: byRole,
+    };
+  } finally {
+    try {
+      await ch.close();
+    } catch {
+      // ignore
+    }
+    try {
+      await conn.close();
+    } catch {
+      // ignore
+    }
+  }
+}
+
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -611,6 +813,10 @@ function rabbitUrl() {
   )}@${host}:${port}/${encodedVhost}`;
 }
 
+function controlExchange() {
+  return process.env.POCKETHIVE_CONTROL_PLANE_EXCHANGE || "ph.control";
+}
+
 async function listQueues() {
   const base = RABBIT_MGMT_BASE_URL.replace(/\/+$/, "");
   const url = `${base}/queues`;
@@ -639,6 +845,32 @@ async function listQueues() {
     return JSON.parse(text);
   } catch {
     return [];
+  }
+}
+
+async function sendStatusRequest(swarmId, role, instanceId) {
+  const url = rabbitUrl();
+  const conn = await amqplib.connect(url);
+  const ch = await conn.createChannel();
+  try {
+    const exchange = controlExchange();
+    const rk = `sig.status-request.${swarmId}.${role}.${instanceId}`;
+    const payload = JSON.stringify({});
+    await ch.assertExchange(exchange, "topic", { durable: true });
+    ch.publish(exchange, rk, Buffer.from(payload, "utf8"), {
+      contentType: "application/json",
+    });
+  } finally {
+    try {
+      await ch.close();
+    } catch {
+      // ignore
+    }
+    try {
+      await conn.close();
+    } catch {
+      // ignore
+    }
   }
 }
 
