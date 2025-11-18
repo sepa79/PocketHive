@@ -8,6 +8,7 @@ Timestamp: 2025-11-15T00:00:00Z
 - Swarm controller observability: added INFO logs for controller start/stop, swarm-wide enable/disable config-updates, and buffer guard lifecycle transitions so operators can trace controller activity without digging through DEBUG output.
 - Control-plane tracing: SwarmSignalListener now prints the incoming swarm template payload plus every controller-level config update with the resulting config snapshot, mirroring worker runtime logging.
 - Logging configuration: relaxed the logback filter so `io.pockethive.swarmcontroller` logs at INFO by default, ensuring the new lifecycle/config messages reach both console and RabbitMQ appenders.
+- Swarm controller bootstrap config: delay initial per-worker `config-update` signals until after the first status heartbeat so workers only receive overrides once their control queues are declared, reducing races where bees briefly run with default config.
 
 ## [0.13.9] - 2025-11-15
 Timestamp: 2025-11-15T00:00:00Z
