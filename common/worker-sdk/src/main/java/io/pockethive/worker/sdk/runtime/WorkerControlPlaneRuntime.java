@@ -57,6 +57,14 @@ public final class WorkerControlPlaneRuntime {
     private final List<Consumer<WorkerStateSnapshot>> globalStateListeners = new CopyOnWriteArrayList<>();
     private final ControlPlaneNotifier notifier;
 
+    /**
+     * Tracks the most recent status-delta emission so we can derive a per-second throughput
+     * rather than reporting raw interval counts. Snapshots reuse the last computed values.
+     */
+    private volatile long lastDeltaStatusAtMillis = 0L;
+    private volatile double lastComputedTps = 0.0;
+    private volatile double lastIntervalSeconds = 0.0;
+
     public WorkerControlPlaneRuntime(
         WorkerControlPlane workerControlPlane,
         WorkerStateStore stateStore,
@@ -525,6 +533,25 @@ public final class WorkerControlPlaneRuntime {
             return;
         }
         StatusSnapshot snapshotData = collectSnapshot(states, snapshot);
+        long nowMillis = System.currentTimeMillis();
+        double intervalSeconds;
+        double tps;
+        if (snapshot) {
+            intervalSeconds = lastIntervalSeconds;
+            tps = lastComputedTps;
+        } else {
+            long previous = lastDeltaStatusAtMillis;
+            lastDeltaStatusAtMillis = nowMillis;
+            long intervalMillis = previous > 0L ? Math.max(1L, nowMillis - previous) : 0L;
+            intervalSeconds = intervalMillis > 0L ? intervalMillis / 1000.0 : 0.0;
+            if (intervalSeconds > 0.0) {
+                tps = snapshotData.processedTotal() / intervalSeconds;
+            } else {
+                tps = 0.0;
+            }
+            lastComputedTps = tps;
+            lastIntervalSeconds = intervalSeconds;
+        }
         Consumer<io.pockethive.observability.StatusEnvelopeBuilder> customiser = builder -> {
             builder.role(identity.role())
                 .instance(identity.instanceId())
@@ -542,7 +569,8 @@ public final class WorkerControlPlaneRuntime {
             if (!snapshotData.workOut().isEmpty()) {
                 builder.workOut(snapshotData.workOut().toArray(String[]::new));
             }
-            builder.tps(snapshotData.processedTotal());
+            builder.tps(Math.round(tps));
+            builder.data("intervalSeconds", intervalSeconds);
             builder.data("workers", snapshotData.workers());
             builder.data("snapshot", snapshot);
         };

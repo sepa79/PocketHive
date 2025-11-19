@@ -114,6 +114,63 @@ export default function ComponentDetail({ component, onClose }: Props) {
   const normalizedRole = component.role.trim().toLowerCase()
   const isWiremock = normalizedRole === 'wiremock'
 
+  const runtimeEntries = useMemo(() => {
+    const cfg =
+      component.config && typeof component.config === 'object'
+        ? (component.config as Record<string, unknown>)
+        : undefined
+    if (!cfg) return [] as { label: string; value: string }[]
+    const entries: { label: string; value: string }[] = []
+    const tps = getNumber(cfg.tps)
+    const intervalSeconds = getNumber(cfg.intervalSeconds)
+    const transactions = getNumber(cfg.transactions)
+    const successRatio = getNumber(cfg.successRatio)
+    const avgLatencyMs = getNumber(cfg.avgLatencyMs)
+    const httpMode = getString(cfg.httpMode)
+    const httpThreadCount = getNumber(cfg.httpThreadCount)
+    const httpActiveCalls = getNumber(cfg.httpActiveCalls)
+    if (tps !== undefined) {
+      entries.push({ label: 'TPS', value: Math.round(tps).toString() })
+    }
+    if (intervalSeconds !== undefined && intervalSeconds > 0) {
+      entries.push({
+        label: 'Interval (s)',
+        value: intervalSeconds.toFixed(intervalSeconds >= 10 ? 0 : 1),
+      })
+    }
+    if (transactions !== undefined) {
+      entries.push({ label: 'Transactions', value: transactions.toString() })
+    }
+    if (successRatio !== undefined) {
+      entries.push({
+        label: 'Success ratio',
+        value: successRatio.toFixed(3),
+      })
+    }
+    if (avgLatencyMs !== undefined) {
+      entries.push({
+        label: 'Avg latency (ms)',
+        value: avgLatencyMs.toFixed(1),
+      })
+    }
+    if (httpMode) {
+      entries.push({ label: 'HTTP mode', value: httpMode })
+    }
+    if (httpThreadCount !== undefined) {
+      entries.push({
+        label: 'HTTP thread count',
+        value: httpThreadCount.toString(),
+      })
+    }
+    if (httpActiveCalls !== undefined) {
+      entries.push({
+        label: 'HTTP active calls',
+        value: httpActiveCalls.toString(),
+      })
+    }
+    return entries
+  }, [component.config])
+
   const configEntries = manifest?.config ?? []
   const renderedContent = isWiremock ? (
     <WiremockPanel component={component} />
@@ -178,6 +235,17 @@ export default function ComponentDetail({ component, onClose }: Props) {
             : '—'}
         </div>
       </div>
+      {runtimeEntries.length > 0 && (
+        <div className="space-y-1 text-sm mb-4">
+          <div className="text-white/70 font-semibold">Runtime</div>
+          {runtimeEntries.map((entry) => (
+            <div key={entry.label} className="flex justify-between">
+              <span className="text-white/60">{entry.label}</span>
+              <span className="text-white/90">{entry.value}</span>
+            </div>
+          ))}
+        </div>
+      )}
       {!isWiremock && configEntries.length > 0 && (
         <div className="mb-2 flex items-center justify-between text-xs text-white/60">
           <span className="uppercase tracking-wide text-white/50">Configuration</span>
@@ -388,6 +456,23 @@ function formatJsonValue(value: unknown): string {
   }
 }
 
+function getNumber(value: unknown): number | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value
+  }
+  if (typeof value === 'string') {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) ? parsed : undefined
+  }
+  return undefined
+}
+
+function getString(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined
+  const trimmed = value.trim()
+  return trimmed.length > 0 ? trimmed : undefined
+}
+
 type ConversionResult =
   | { ok: true; apply: boolean; value: unknown }
   | { ok: false; message: string }
@@ -482,4 +567,3 @@ function timeAgo(ts: number) {
   const diff = Math.floor((Date.now() - ts) / 1000)
   return `${diff}s ago`
 }
-

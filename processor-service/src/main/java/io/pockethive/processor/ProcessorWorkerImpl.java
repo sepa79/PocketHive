@@ -80,6 +80,7 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
   private final java.util.concurrent.atomic.AtomicLong nextAllowedTimeNanos = new java.util.concurrent.atomic.AtomicLong(0L);
   private final java.util.concurrent.atomic.AtomicReference<HttpClient[]> perThreadClients = new java.util.concurrent.atomic.AtomicReference<>(null);
   private final java.util.concurrent.atomic.AtomicInteger clientIndex = new java.util.concurrent.atomic.AtomicInteger(0);
+  private final java.util.concurrent.atomic.AtomicInteger activeCalls = new java.util.concurrent.atomic.AtomicInteger(0);
 
   @Autowired
   ProcessorWorkerImpl(ProcessorWorkerProperties properties) {
@@ -177,9 +178,12 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
     logger.debug("HTTP REQUEST {} {} headers={} body={}", method, target, headersNode, body.orElse(""));
 
     boolean acquired = false;
+    boolean counted = false;
     long start = clock.millis();
     try {
       acquired = applyExecutionMode(config);
+      activeCalls.incrementAndGet();
+      counted = true;
 
       HttpClient client = selectClient(config);
       HttpResponse<String> response = client.send(requestBuilder.build(), HttpResponse.BodyHandlers.ofString());
@@ -209,6 +213,9 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
       recordCall(metrics);
       throw new ProcessorCallException(metrics, ex);
     } finally {
+      if (counted) {
+        activeCalls.decrementAndGet();
+      }
       if (acquired && config.mode() == ProcessorWorkerConfig.Mode.THREAD_COUNT) {
         threadLimiter.release();
       }
@@ -339,6 +346,9 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
         .update(status -> status
             .data("baseUrl", config.baseUrl())
             .data("enabled", context.enabled())
+            .data("httpMode", config.mode().name())
+            .data("httpThreadCount", config.threadCount())
+            .data("httpActiveCalls", activeCalls.get())
             .data("transactions", totalCalls.sum())
             .data("successRatio", successRatio())
             .data("avgLatencyMs", averageLatencyMs()));

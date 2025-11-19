@@ -1,0 +1,281 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "refresh": "10s",
+  "schemaVersion": 39,
+  "style": "dark",
+  "tags": [
+    "pockethive",
+    "pipeline",
+    "detailed"
+  ],
+  "time": {
+    "from": "now-30m",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "allValue": ".*",
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": "Prometheus",
+        "definition": "label_values(ph_processor_calls_total, ph_swarm)",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Swarm",
+        "multi": true,
+        "name": "swarm",
+        "options": [],
+        "query": "label_values(ph_processor_calls_total, ph_swarm)",
+        "refresh": 2,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "query"
+      }
+    ]
+  },
+  "timepicker": {},
+  "timezone": "",
+  "title": "PocketHive Pipeline Deep Dive",
+  "uid": "pockethive-pipeline-detailed",
+  "version": 1,
+  "panels": [
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "decimals": 2,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1000
+              }
+            ]
+          },
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.5, sum by (le, ph_instance, ph_swarm) (rate(ph_processor_latency_ms_bucket{ph_role=\"postprocessor\",ph_swarm=~\"$swarm\"}[5m])))",
+          "legendFormat": "p50 {{ph_instance}} ({{ph_swarm}})",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le, ph_instance, ph_swarm) (rate(ph_processor_latency_ms_bucket{ph_role=\"postprocessor\",ph_swarm=~\"$swarm\"}[5m])))",
+          "legendFormat": "p95 {{ph_instance}} ({{ph_swarm}})",
+          "refId": "B"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum by (le, ph_instance, ph_swarm) (rate(ph_processor_latency_ms_bucket{ph_role=\"postprocessor\",ph_swarm=~\"$swarm\"}[5m])))",
+          "legendFormat": "p99 {{ph_instance}} ({{ph_swarm}})",
+          "refId": "C"
+        }
+      ],
+      "title": "Processor Latency Quantiles (p50 / p95 / p99 ms)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {},
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 5000
+              }
+            ]
+          },
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 9
+      },
+      "id": 2,
+      "options": {
+        "legend": {
+          "showLegend": false
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        },
+        "color": {
+          "mode": "scheme",
+          "scheme": "Spectral"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (le) (rate(ph_processor_latency_ms_bucket{ph_role=\"postprocessor\",ph_swarm=~\"$swarm\"}[5m]))",
+          "legendFormat": "{{le}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Processor Latency Distribution (5m histogram)",
+      "type": "heatmap"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "decimals": 3,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 0.1
+              }
+            ]
+          },
+          "unit": "ratio"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 19
+      },
+      "id": 3,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "expr": "ph_processor_success_ratio{ph_role=\"postprocessor\",ph_swarm=~\"$swarm\"}",
+          "legendFormat": "{{ph_instance}} ({{ph_swarm}})",
+          "refId": "A"
+        }
+      ],
+      "title": "Processor Success Ratio",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "decimals": 2,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 50
+              }
+            ]
+          },
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 19
+      },
+      "id": 4,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "expr": "rate(ph_processor_calls_total{ph_role=\"postprocessor\",ph_swarm=~\"$swarm\"}[1m])",
+          "legendFormat": "{{ph_instance}} ({{ph_swarm}})",
+          "refId": "A"
+        }
+      ],
+      "title": "Processor Calls (per-instance, 1m rate)",
+      "type": "timeseries"
+    }
+  ]
+}
+
