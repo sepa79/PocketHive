@@ -15,7 +15,7 @@ import java.util.Map;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record ScenarioPlan(SwarmTemplate template,
                            TrafficPolicy trafficPolicy) {
-    public SwarmPlan toSwarmPlan(String id) {
+  public SwarmPlan toSwarmPlan(String id) {
         List<Bee> bees = template == null || template.bees() == null
             ? List.of()
             : template.bees().stream()
@@ -25,10 +25,10 @@ public record ScenarioPlan(SwarmTemplate template,
     }
 
     /**
-     * Merges any {@code pockethive.worker.config} block declared on the bee into the
-     * flat config map expected by the worker control-plane runtime.
+     * Normalises per-bee configuration into the flat map expected by the worker control-plane
+     * runtime.
      * <p>
-     * Scenarios authored with:
+     * Scenarios authored with either the legacy shape:
      *
      * <pre>{@code
      * config:
@@ -40,8 +40,20 @@ public record ScenarioPlan(SwarmTemplate template,
      *           path: /api/test
      * }</pre>
      *
-     * become a {@code Bee.config} map that includes {@code ratePerSec}, {@code message}, etc.,
-     * so worker DTOs can bind them directly.
+     * or the newer, direct worker block:
+     *
+     * <pre>{@code
+     * config:
+     *   worker:
+     *     ratePerSec: 50
+     *     message:
+     *       path: /api/test
+     * }</pre>
+     *
+     * become a {@code Bee.config} map that includes {@code ratePerSec}, {@code message}, and any
+     * other worker-scoped fields directly, so worker DTOs can bind them. Any {@code inputs},
+     * {@code outputs}, or {@code interceptors} blocks remain nested for specialised components
+     * to inspect.
      */
     private static Bee mergeWorkerConfig(Bee bee) {
         if (bee == null) {
@@ -51,29 +63,37 @@ public record ScenarioPlan(SwarmTemplate template,
         if (config == null || config.isEmpty()) {
             return bee;
         }
+        Map<String, Object> merged = new LinkedHashMap<>(config);
+
+        // Prefer the new shape: config.worker.{...}
+        Object workerBlock = config.get("worker");
+        if (workerBlock instanceof Map<?, ?> workerMapRaw) {
+            Map<String, Object> workerMap = copyToStringKeyMap(workerMapRaw);
+            Map<String, Object> flattened = flattenWorkerBlock(workerMap);
+            if (!flattened.isEmpty()) {
+                merged.remove("worker");
+                merged.putAll(flattened);
+                return new Bee(bee.role(), bee.image(), bee.work(), bee.env(), merged);
+            }
+        }
+
+        // Fallback to the legacy shape: config.pockethive.worker.config.{...}
         Object pockethiveObj = config.get("pockethive");
         if (!(pockethiveObj instanceof Map<?, ?> pockethive)) {
             return bee;
         }
         Object workerObj = pockethive.get("worker");
-        if (!(workerObj instanceof Map<?, ?> worker)) {
+        if (!(workerObj instanceof Map<?, ?> workerRaw)) {
             return bee;
         }
-        Map<String, Object> workerMap = copyToStringKeyMap(worker);
-        Object workerConfigObj = workerMap.get("config");
-        if (!(workerConfigObj instanceof Map<?, ?> workerConfigRaw)) {
-            return bee;
-        }
-        Map<String, Object> workerConfig = copyToStringKeyMap(workerConfigRaw);
-        if (workerConfig.isEmpty()) {
+        Map<String, Object> workerMap = copyToStringKeyMap(workerRaw);
+        Map<String, Object> flattened = flattenWorkerBlock(workerMap);
+        if (flattened.isEmpty()) {
             return bee;
         }
 
-        Map<String, Object> merged = new LinkedHashMap<>(config);
-        // Scenario-supplied worker config should be the single source of truth;
-        // flatten it into the top-level map and drop the nested helper structure.
         merged.remove("pockethive");
-        merged.putAll(workerConfig);
+        merged.putAll(flattened);
 
         return new Bee(bee.role(), bee.image(), bee.work(), bee.env(), merged);
     }
@@ -89,5 +109,24 @@ public record ScenarioPlan(SwarmTemplate template,
             }
         });
         return copy.isEmpty() ? Map.of() : Map.copyOf(copy);
+    }
+
+    /**
+     * Flattens a worker configuration block so the {@code config} sub-object (when present) is
+     * merged into the same level as other worker-scoped fields such as {@code historyPolicy}.
+     */
+    private static Map<String, Object> flattenWorkerBlock(Map<String, Object> workerMap) {
+        if (workerMap == null || workerMap.isEmpty()) {
+            return Map.of();
+        }
+        Map<String, Object> flattened = new LinkedHashMap<>();
+        workerMap.forEach((key, value) -> {
+            if ("config".equals(key) && value instanceof Map<?, ?> nested) {
+                flattened.putAll(copyToStringKeyMap(nested));
+            } else {
+                flattened.put(key, value);
+            }
+        });
+        return flattened.isEmpty() ? Map.of() : Map.copyOf(flattened);
     }
 }

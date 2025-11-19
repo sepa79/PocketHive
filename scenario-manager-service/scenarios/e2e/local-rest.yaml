@@ -7,47 +7,39 @@ template:
     - role: generator
       image: generator:latest
       config:
-        pockethive:
-          worker:
-            config:
-              ratePerSec: 50
-              singleRequest: false
-              message:
-                path: /test
-                method: POST
-                body: '{"event":"local-rest"}'
-                headers:
-                  content-type: application/json
+        worker:
+          ratePerSec: 50
+          singleRequest: false
+          message:
+            path: /test
+            method: POST
+            body: '{"event":"local-rest"}'
+            headers:
+              content-type: application/json
       work:
         out: genQ
     - role: moderator
       image: moderator:latest
       config:
-        pockethive:
-          worker:
-            config:
-              mode:
-                type: rate-per-sec
-                ratePerSec: 10
+        worker:
+          mode:
+            type: rate-per-sec
+            ratePerSec: 10
       work:
         in: genQ
         out: modQ
     - role: processor
       image: processor:latest
       config:
-        pockethive:
-          worker:
-            config:
-              baseUrl: http://wiremock:8080/api
+        worker:
+          baseUrl: http://wiremock:8080/api
       work:
         in: modQ
         out: finalQ
     - role: postprocessor
       image: postprocessor:latest
       config:
-        pockethive:
-          worker:
-            config:
-              publishAllMetrics: true
+        worker:
+          publishAllMetrics: true
       work:
         in: finalQ

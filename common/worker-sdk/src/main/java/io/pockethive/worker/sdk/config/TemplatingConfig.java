@@ -7,7 +7,6 @@ package io.pockethive.worker.sdk.config;
  * the shared interceptor can be enabled purely via configuration.
  */
 public record TemplatingConfig(
-    boolean enabled,
     String template
 ) {
 

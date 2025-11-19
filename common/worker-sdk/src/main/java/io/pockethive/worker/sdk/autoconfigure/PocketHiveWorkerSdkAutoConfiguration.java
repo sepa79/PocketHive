@@ -58,6 +58,7 @@ import java.util.Collections;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import org.springframework.beans.factory.ObjectProvider;
@@ -376,26 +377,24 @@ public class PocketHiveWorkerSdkAutoConfiguration {
     @ConditionalOnMissingBean(TemplatingInterceptor.class)
     WorkerInvocationInterceptor templatingInterceptor(TemplateRenderer renderer) {
         return new TemplatingInterceptor(renderer, context -> {
-            Object typedConfig = context.workerContext().config(Object.class);
-            if (typedConfig == null) {
+            Map<String, Object> rawConfig = context.state().rawConfig();
+            if (rawConfig.isEmpty()) {
                 return null;
             }
-            try {
-                var method = typedConfig.getClass().getMethod("templating");
-                Object templating = method.invoke(typedConfig);
-                if (!(templating instanceof io.pockethive.worker.sdk.config.TemplatingConfig cfg)) {
-                    return null;
-                }
-                if (!cfg.enabled()) {
-                    return null;
-                }
-                String template = cfg.template();
-                return (template == null || template.isBlank()) ? null : template;
-            } catch (NoSuchMethodException ignored) {
-                return null;
-            } catch (Exception ex) {
+            Object interceptorsObj = rawConfig.get("interceptors");
+            if (!(interceptorsObj instanceof Map<?, ?> interceptors)) {
                 return null;
             }
+            Object templatingObj = interceptors.get("templating");
+            if (!(templatingObj instanceof Map<?, ?> templatingMap)) {
+                return null;
+            }
+            Object templateValue = templatingMap.get("template");
+            if (templateValue == null) {
+                return null;
+            }
+            String template = templateValue.toString();
+            return (template == null || template.isBlank()) ? null : template;
         });
     }
 

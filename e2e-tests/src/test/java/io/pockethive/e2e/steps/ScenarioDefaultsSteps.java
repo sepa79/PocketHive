@@ -66,18 +66,10 @@ public class ScenarioDefaultsSteps {
     assertNotNull(config, "Generator bee config was not returned");
 
     @SuppressWarnings("unchecked")
-    Map<String, Object> pockethive = (Map<String, Object>) config.get("pockethive");
-    assertNotNull(pockethive, "Generator bee config did not include 'pockethive' block");
+    Map<String, Object> worker = (Map<String, Object>) config.get("worker");
+    assertNotNull(worker, "Generator bee config did not include 'worker' block");
 
-    @SuppressWarnings("unchecked")
-    Map<String, Object> worker = (Map<String, Object>) pockethive.get("worker");
-    assertNotNull(worker, "Generator bee config did not include 'worker' block under 'pockethive'");
-
-    @SuppressWarnings("unchecked")
-    Map<String, Object> workerConfig = (Map<String, Object>) worker.get("config");
-    assertNotNull(workerConfig, "Generator bee worker config did not include 'config' block");
-
-    Object configuredRate = workerConfig.get(GENERATOR_RATE_CONFIG);
+    Object configuredRate = worker.get(GENERATOR_RATE_CONFIG);
     assertNotNull(configuredRate, () ->
         "Generator bee worker config did not include " + GENERATOR_RATE_CONFIG);
     int actual = configuredRate instanceof Number number
@@ -101,16 +93,10 @@ public class ScenarioDefaultsSteps {
     Map<String, Object> config = target.config();
     assertNotNull(config, "Bee config was not returned");
 
-    Object pockethiveObj = config.get("pockethive");
-    assertNotNull(pockethiveObj, "Bee config did not include 'pockethive' block");
-
     @SuppressWarnings("unchecked")
-    Map<String, Object> pockethive = (Map<String, Object>) pockethiveObj;
-    Object workerObj = pockethive.get("worker");
-    assertNotNull(workerObj, "Bee config did not include 'worker' block under 'pockethive'");
+    Map<String, Object> worker = (Map<String, Object>) config.get("worker");
+    assertNotNull(worker, "Bee config did not include 'worker' block");
 
-    @SuppressWarnings("unchecked")
-    Map<String, Object> worker = (Map<String, Object>) workerObj;
     Object policyObj = worker.get("historyPolicy");
     assertNotNull(policyObj, "Bee config did not include 'historyPolicy'");
 
@@ -133,31 +119,13 @@ public class ScenarioDefaultsSteps {
     Map<String, Object> config = generatorBee.config();
     assertNotNull(config, "Generator bee config was not returned");
 
-    Object pockethiveObj = config.get("pockethive");
-    assertNotNull(pockethiveObj, "Generator bee config did not include 'pockethive' block");
+    @SuppressWarnings("unchecked")
+    Map<String, Object> interceptors = (Map<String, Object>) config.get("interceptors");
+    assertNotNull(interceptors, "Generator bee config did not include 'interceptors' block");
 
     @SuppressWarnings("unchecked")
-    Map<String, Object> pockethive = (Map<String, Object>) pockethiveObj;
-    Object workerObj = pockethive.get("worker");
-    assertNotNull(workerObj, "Generator bee config did not include 'worker' block under 'pockethive'");
-
-    @SuppressWarnings("unchecked")
-    Map<String, Object> worker = (Map<String, Object>) workerObj;
-    Object workerConfigObj = worker.get("config");
-    assertNotNull(workerConfigObj, "Generator bee worker config did not include 'config' block");
-
-    @SuppressWarnings("unchecked")
-    Map<String, Object> workerConfig = (Map<String, Object>) workerConfigObj;
-    Object templatingObj = workerConfig.get("templating");
-    assertNotNull(templatingObj, "Generator bee worker config did not include 'templating' block");
-
-    @SuppressWarnings("unchecked")
-    Map<String, Object> templating = (Map<String, Object>) templatingObj;
-    Object enabledObj = templating.get("enabled");
-    assertNotNull(enabledObj, "Templating config did not include 'enabled' flag");
-
-    boolean enabled = enabledObj instanceof Boolean b ? b : Boolean.parseBoolean(enabledObj.toString());
-    assertTrue(enabled, "Templating interceptor was not enabled for generator");
+    Map<String, Object> templating = (Map<String, Object>) interceptors.get("templating");
+    assertNotNull(templating, "Generator bee config did not include 'templating' block under 'interceptors'");
 
     Object templateText = templating.get("template");
     assertNotNull(templateText, "Templating config did not include 'template' content");

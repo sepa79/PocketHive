@@ -101,7 +101,7 @@ public final class WorkerControlPlaneRuntime {
     public Map<String, Object> workerRawConfig(String workerBeanName) {
         Objects.requireNonNull(workerBeanName, "workerBeanName");
         return stateStore.find(workerBeanName)
-            .map(this::snapshotRawConfig)
+            .map(WorkerState::rawConfig)
             .orElse(Map.of());
     }
 
@@ -156,6 +156,7 @@ public final class WorkerControlPlaneRuntime {
         Boolean enabled = null;
         Object typedConfig = ensureTypedDefault(state.definition(), defaultConfig, rawConfig);
         if (state.seedConfig(typedConfig, enabled)) {
+            state.updateRawConfig(rawConfig);
             ensureStatusPublisher(state);
             notifier.logInitialConfig(state, rawConfig, enabled);
             notifyStateListeners(state);
@@ -234,11 +235,10 @@ public final class WorkerControlPlaneRuntime {
             WorkerConfigPatch patch = workerConfigFor(state, sanitized);
             Map<String, Object> filteredUpdate = withoutNullValues(patch.values());
             boolean previousEnabled = state.enabled();
-            Object currentConfig = currentTypedConfig(state);
             try {
                 ConfigMerger.ConfigMergeResult mergeResult = configMerger.merge(
                     state.definition(),
-                    currentConfig,
+                    state.rawConfig(),
                     filteredUpdate,
                     patch.resetRequested()
                 );
@@ -252,6 +252,7 @@ public final class WorkerControlPlaneRuntime {
                         filteredUpdate);
                 }
                 state.updateConfig(mergeResult.typedConfig(), mergeResult.replaced(), enabled);
+                state.updateRawConfig(mergeResult.rawConfig());
                 Map<String, Object> appliedConfig = mergeResult.replaced() ? mergeResult.rawConfig() : Map.of();
                 if (hasCorrelation(signal)) {
                     notifier.emitConfigReady(signal, state, appliedConfig, enabled);
@@ -440,7 +441,7 @@ public final class WorkerControlPlaneRuntime {
     }
 
     private Map<String, Object> snapshotRawConfig(WorkerState state) {
-        return configMerger.toRawConfig(currentTypedConfig(state));
+        return state.rawConfig();
     }
 
     private Object currentTypedConfig(WorkerState state) {

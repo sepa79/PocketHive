@@ -189,6 +189,8 @@ clean_stack() {
         docker rmi -f "$img" >/dev/null 2>&1 || echo "   (failed to remove image ${img})"
       fi
     done
+    echo "Pruning dangling images created by previous builds..."
+    docker image prune -f --filter "dangling=true" >/dev/null 2>&1 || true
   fi
 }
 

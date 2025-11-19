@@ -1,6 +1,5 @@
 package io.pockethive.generator;
 
-import io.pockethive.worker.sdk.config.TemplatingConfig;
 import io.pockethive.worker.sdk.input.SchedulerStates;
 import java.util.Locale;
 import java.util.Map;
@@ -9,8 +8,7 @@ import java.util.Objects;
 public record GeneratorWorkerConfig(
     double ratePerSec,
     boolean singleRequest,
-    Message message,
-    TemplatingConfig templating
+    Message message
 ) implements SchedulerStates.RateConfig {
 
   public GeneratorWorkerConfig {

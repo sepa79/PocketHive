@@ -1,6 +1,7 @@
 package io.pockethive.worker.sdk.runtime;
 
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -13,9 +14,12 @@ final class ConfigMerger {
     private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
 
     private final ObjectMapper objectMapper;
+    private final ObjectMapper tolerantMapper;
 
     ConfigMerger(ObjectMapper objectMapper) {
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper");
+        this.tolerantMapper = objectMapper.copy()
+            .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
     }
 
     ConfigMergeResult merge(
@@ -62,7 +66,7 @@ final class ConfigMerger {
             return null;
         }
         try {
-            return objectMapper.convertValue(rawConfig, configType);
+            return tolerantMapper.convertValue(rawConfig, configType);
         } catch (IllegalArgumentException ex) {
             String message = "Unable to convert control-plane config for worker '%s' to type %s".formatted(
                 definition.beanName(), configType.getSimpleName());
