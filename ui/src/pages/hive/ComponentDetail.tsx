@@ -341,6 +341,29 @@ function renderConfigInput(
   onChange: (value: string | boolean) => void,
 ): JSX.Element {
   const normalizedType = (entry.type || '').toLowerCase()
+  const options = Array.isArray(entry.options) ? entry.options : undefined
+
+  if (options && options.length > 0) {
+    const value = typeof rawValue === 'string' ? rawValue : formatCapabilityValue(entry.default)
+    return (
+      <select
+        className="w-full rounded bg-white/10 px-2 py-1 text-white"
+        value={value}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.value)}
+      >
+        {options.map((option, index) => {
+          const label = formatCapabilityValue(option)
+          return (
+            <option key={index} value={label}>
+              {label}
+            </option>
+          )
+        })}
+      </select>
+    )
+  }
+
   if (normalizedType === 'boolean' || normalizedType === 'bool') {
     const checked = rawValue === true
     return (
@@ -372,6 +395,45 @@ function renderConfigInput(
 
   const inputType = inferCapabilityInputType(entry.type)
   const step = extractStep(entry)
+  const useSlider = inputType === 'number' && typeof entry.min === 'number' && typeof entry.max === 'number'
+
+  if (useSlider) {
+    const numericValue =
+      value === '' ? (typeof entry.default === 'number' ? entry.default : entry.min ?? 0) : Number(value)
+    const displayValue = Number.isFinite(numericValue) ? String(numericValue) : ''
+    return (
+      <div className="space-y-1">
+        <input
+          className="w-full"
+          type="range"
+          value={Number.isFinite(numericValue) ? numericValue : 0}
+          disabled={disabled}
+          min={typeof entry.min === 'number' ? entry.min : undefined}
+          max={typeof entry.max === 'number' ? entry.max : undefined}
+          step={step}
+          onChange={(event) => onChange(event.target.value)}
+        />
+        <div className="flex items-center justify-between gap-2 text-xs text-white/70">
+          <span>
+            {typeof entry.min === 'number' ? entry.min : ''}
+            {typeof entry.min === 'number' && typeof entry.max === 'number' ? ' – ' : ''}
+            {typeof entry.max === 'number' ? entry.max : ''}
+          </span>
+          <input
+            className="w-20 rounded bg-white/10 px-2 py-0.5 text-right text-xs text-white"
+            type="number"
+            value={displayValue}
+            disabled={disabled}
+            min={typeof entry.min === 'number' ? entry.min : undefined}
+            max={typeof entry.max === 'number' ? entry.max : undefined}
+            step={step}
+            onChange={(event) => onChange(event.target.value)}
+          />
+        </div>
+      </div>
+    )
+  }
+
   return (
     <input
       className="w-full rounded bg-white/10 px-2 py-1 text-white"

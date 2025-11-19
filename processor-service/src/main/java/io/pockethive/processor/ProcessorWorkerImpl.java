@@ -11,16 +11,23 @@ import io.pockethive.worker.sdk.config.WorkerCapability;
 import io.pockethive.worker.sdk.config.WorkerInputType;
 import io.pockethive.worker.sdk.config.WorkerOutputType;
 import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.atomic.DoubleAccumulator;
 import java.util.concurrent.atomic.LongAdder;
+import org.apache.hc.client5.http.classic.HttpClient;
+import org.apache.hc.client5.http.classic.methods.HttpUriRequestBase;
+import org.apache.hc.client5.http.impl.classic.HttpClients;
+import org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManager;
+import org.apache.hc.core5.http.ClassicHttpResponse;
+import org.apache.hc.core5.http.Header;
+import org.apache.hc.core5.http.ConnectionReuseStrategy;
+import org.apache.hc.core5.http.io.entity.EntityUtils;
 import org.slf4j.Logger;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -70,29 +77,33 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
 
   private final ProcessorWorkerProperties properties;
   private final HttpClient httpClient;
+  private final HttpClient noKeepAliveClient;
+  private final ThreadLocal<HttpClient> perThreadClient;
   private final Clock clock;
   private final LongAdder totalCalls = new LongAdder();
   private final LongAdder successfulCalls = new LongAdder();
   private final DoubleAccumulator totalLatencyMs = new DoubleAccumulator(Double::sum, 0.0);
-  private final java.util.concurrent.Semaphore threadLimiter;
-  private final java.util.concurrent.atomic.AtomicInteger limiterPermits = new java.util.concurrent.atomic.AtomicInteger(0);
-  private final Object limiterLock = new Object();
   private final java.util.concurrent.atomic.AtomicLong nextAllowedTimeNanos = new java.util.concurrent.atomic.AtomicLong(0L);
-  private final java.util.concurrent.atomic.AtomicReference<HttpClient[]> perThreadClients = new java.util.concurrent.atomic.AtomicReference<>(null);
-  private final java.util.concurrent.atomic.AtomicInteger clientIndex = new java.util.concurrent.atomic.AtomicInteger(0);
   private final java.util.concurrent.atomic.AtomicInteger activeCalls = new java.util.concurrent.atomic.AtomicInteger(0);
 
   @Autowired
   ProcessorWorkerImpl(ProcessorWorkerProperties properties) {
-    this(properties, HttpClient.newHttpClient(), Clock.systemUTC());
+    this(
+        properties,
+        newPooledClient(),
+        newNoKeepAliveClient(),
+        Clock.systemUTC());
   }
 
-  ProcessorWorkerImpl(ProcessorWorkerProperties properties, HttpClient httpClient, Clock clock) {
+  ProcessorWorkerImpl(ProcessorWorkerProperties properties,
+                      HttpClient httpClient,
+                      HttpClient noKeepAliveClient,
+                      Clock clock) {
     this.properties = Objects.requireNonNull(properties, "properties");
     this.httpClient = Objects.requireNonNull(httpClient, "httpClient");
+    this.noKeepAliveClient = Objects.requireNonNull(noKeepAliveClient, "noKeepAliveClient");
+    this.perThreadClient = ThreadLocal.withInitial(HttpClients::createDefault);
     this.clock = Objects.requireNonNull(clock, "clock");
-    // Limiter is configured lazily based on the first THREAD_COUNT configuration observed.
-    this.threadLimiter = new java.util.concurrent.Semaphore(0);
   }
 
   /**
@@ -107,7 +118,7 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
    *       The active configuration is echoed to the control plane through
    *       {@link WorkerContext#statusPublisher()} for easy debugging.</li>
    *   <li><strong>HTTP invocation</strong> – Using {@link #invokeHttp(WorkItem, ProcessorWorkerConfig, Logger)}
-   *       we create a {@link HttpRequest} from the message body and forward it to the configured
+   *       we create an HTTP request from the message body and forward it to the configured
    *       service. The request defaults to {@code GET /} with no body when fields are missing.</li>
    *   <li><strong>Error handling</strong> – Any exception (invalid config, network error, unexpected
    *       HTTP failure) is logged at {@code WARN} level and converted into an error message via
@@ -163,43 +174,44 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
       return buildError(message, context, "invalid baseUrl", CallMetrics.failure(0, -1));
     }
 
-    HttpRequest.Builder requestBuilder = HttpRequest.newBuilder(target);
-    JsonNode headersNode = node.path("headers");
-    if (headersNode.isObject()) {
-      headersNode.fields().forEachRemaining(entry -> requestBuilder.header(entry.getKey(), entry.getValue().asText()));
-    }
+	    JsonNode headersNode = node.path("headers");
+	    if (headersNode.isObject()) {
+	      headersNode.fields().forEachRemaining(entry -> logger.debug("header {}={}", entry.getKey(), entry.getValue().asText()));
+	    }
 
-    Optional<String> body = extractBody(node.path("body"));
-    HttpRequest.BodyPublisher publisher = body
-        .map(value -> HttpRequest.BodyPublishers.ofString(value, StandardCharsets.UTF_8))
-        .orElse(HttpRequest.BodyPublishers.noBody());
-    requestBuilder.method(method, publisher);
+	    Optional<String> body = extractBody(node.path("body"));
+	    logger.debug("HTTP REQUEST {} {} headers={} body={}", method, target, headersNode, body.orElse(""));
 
-    logger.debug("HTTP REQUEST {} {} headers={} body={}", method, target, headersNode, body.orElse(""));
-
-    boolean acquired = false;
     boolean counted = false;
     long start = clock.millis();
     try {
-      acquired = applyExecutionMode(config);
+      applyExecutionMode(config);
       activeCalls.incrementAndGet();
       counted = true;
 
       HttpClient client = selectClient(config);
-      HttpResponse<String> response = client.send(requestBuilder.build(), HttpResponse.BodyHandlers.ofString());
-      long duration = Math.max(0L, clock.millis() - start);
-      logger.debug("HTTP RESPONSE {} {} -> {}", method, target, response.statusCode());
+      HttpUriRequestBase apacheRequest = new HttpUriRequestBase(method, target);
+      headersNode.fields().forEachRemaining(entry -> apacheRequest.addHeader(entry.getKey(), entry.getValue().asText()));
+      body.ifPresent(value -> apacheRequest.setEntity(new org.apache.hc.core5.http.io.entity.StringEntity(value, StandardCharsets.UTF_8)));
 
-      boolean success = isSuccessful(response.statusCode());
+      ClassicHttpResponse response = (ClassicHttpResponse) client.execute(apacheRequest);
+      long duration = Math.max(0L, clock.millis() - start);
+      int statusCode = response.getCode();
+      logger.debug("HTTP RESPONSE {} {} -> {}", method, target, statusCode);
+
+      boolean success = isSuccessful(statusCode);
       CallMetrics metrics = success
-          ? CallMetrics.success(duration, response.statusCode())
-          : CallMetrics.failure(duration, response.statusCode());
+          ? CallMetrics.success(duration, statusCode)
+          : CallMetrics.failure(duration, statusCode);
       recordCall(metrics);
 
       ObjectNode result = MAPPER.createObjectNode();
-      result.put("status", response.statusCode());
-      result.set("headers", MAPPER.valueToTree(response.headers().map()));
-      result.put("body", response.body());
+      result.put("status", statusCode);
+      result.set("headers", MAPPER.valueToTree(convertHeaders(response)));
+      String responseBody = response.getEntity() == null
+          ? ""
+          : EntityUtils.toString(response.getEntity(), StandardCharsets.UTF_8);
+      result.put("body", responseBody);
 
       WorkItem responseItem = applyCallHeaders(WorkItem.json(result)
           .header("content-type", "application/json")
@@ -216,37 +228,16 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
       if (counted) {
         activeCalls.decrementAndGet();
       }
-      if (acquired && config.mode() == ProcessorWorkerConfig.Mode.THREAD_COUNT) {
-        threadLimiter.release();
-      }
     }
   }
 
   /**
    * Applies the configured execution mode for this call.
    *
-   * @return true if a THREAD_COUNT permit was acquired and must be released by the caller.
+   * @return true if execution was rate-limited (currently unused by callers).
    */
   private boolean applyExecutionMode(ProcessorWorkerConfig config) throws InterruptedException {
     ProcessorWorkerConfig.Mode mode = config.mode();
-    if (mode == ProcessorWorkerConfig.Mode.THREAD_COUNT) {
-      int desired = Math.max(1, config.threadCount());
-      int current = limiterPermits.get();
-      // Only grow the limiter; shrinking would require more invasive coordination and is not
-      // needed for the current use cases (config typically increases concurrency over time).
-      if (current < desired) {
-        synchronized (limiterLock) {
-          current = limiterPermits.get();
-          if (current < desired) {
-            int diff = desired - current;
-            threadLimiter.release(diff);
-            limiterPermits.set(desired);
-          }
-        }
-      }
-      threadLimiter.acquire();
-      return true;
-    }
     if (mode == ProcessorWorkerConfig.Mode.RATE_PER_SEC) {
       double rate = config.ratePerSec();
       if (rate <= 0.0) {
@@ -283,35 +274,32 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
 
   /**
    * Selects the HttpClient to use for the current call based on the configured connection reuse
-   * mode and execution mode. For RATE_PER_SEC we always fall back to the global client so the
-   * connection pool remains bounded even when running on virtual threads.
+   * mode.
    */
   private HttpClient selectClient(ProcessorWorkerConfig config) {
     ProcessorWorkerConfig.ConnectionReuse reuse = config.connectionReuse();
-    ProcessorWorkerConfig.Mode mode = config.mode();
-
-    if (reuse != ProcessorWorkerConfig.ConnectionReuse.PER_THREAD || mode != ProcessorWorkerConfig.Mode.THREAD_COUNT) {
-      // GLOBAL and NONE both share the primary client; PER_THREAD is treated as GLOBAL for RATE_PER_SEC.
-      return httpClient;
+    if (reuse == ProcessorWorkerConfig.ConnectionReuse.NONE) {
+      return noKeepAliveClient;
     }
-
-    int desired = Math.max(1, config.threadCount());
-    HttpClient[] pool = perThreadClients.get();
-    if (pool == null || pool.length != desired) {
-      synchronized (perThreadClients) {
-        pool = perThreadClients.get();
-        if (pool == null || pool.length != desired) {
-          HttpClient[] created = new HttpClient[desired];
-          for (int i = 0; i < desired; i++) {
-            created[i] = HttpClient.newHttpClient();
-          }
-          perThreadClients.set(created);
-          pool = created;
-        }
-      }
+    if (reuse == ProcessorWorkerConfig.ConnectionReuse.PER_THREAD) {
+      return perThreadClient.get();
     }
-    int index = Math.floorMod(clientIndex.getAndIncrement(), pool.length);
-    return pool[index];
+    return httpClient;
+  }
+
+  private Map<String, List<String>> convertHeaders(ClassicHttpResponse response) {
+    Header[] headers = response.getHeaders();
+    if (headers == null || headers.length == 0) {
+      return Map.of();
+    }
+    Map<String, List<String>> result = new java.util.LinkedHashMap<>();
+    for (Header header : headers) {
+      String name = header.getName();
+      String value = header.getValue();
+      List<String> values = result.computeIfAbsent(name, k -> new ArrayList<>());
+      values.add(value);
+    }
+    return result;
   }
 
   private Optional<String> extractBody(JsonNode bodyNode) throws Exception {
@@ -380,6 +368,22 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
 
   private boolean isSuccessful(int statusCode) {
     return statusCode >= 200 && statusCode < 300;
+  }
+
+  private static HttpClient newPooledClient() {
+    PoolingHttpClientConnectionManager manager = new PoolingHttpClientConnectionManager();
+    manager.setMaxTotal(200);
+    manager.setDefaultMaxPerRoute(200);
+    return HttpClients.custom()
+        .setConnectionManager(manager)
+        .build();
+  }
+
+  private static HttpClient newNoKeepAliveClient() {
+    ConnectionReuseStrategy noReuse = (request, response, context) -> false;
+    return HttpClients.custom()
+        .setConnectionReuseStrategy(noReuse)
+        .build();
   }
 
   private static final class ProcessorCallException extends Exception {

@@ -10,6 +10,7 @@
   <properties>
     <java.version>21</java.version>
     <spring.boot.version>3.3.2</spring.boot.version>
+    <httpcomponents.version>5.0.3</httpcomponents.version>
   </properties>
   <dependencyManagement>
     <dependencies>
@@ -67,6 +68,11 @@
       <groupId>io.pockethive</groupId>
       <artifactId>control-plane-spring</artifactId>
       <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.httpcomponents.client5</groupId>
+      <artifactId>httpclient5</artifactId>
+      <version>${httpcomponents.version}</version>
     </dependency>
     <dependency>
       <groupId>net.logstash.logback</groupId>

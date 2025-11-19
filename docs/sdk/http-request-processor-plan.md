@@ -73,32 +73,37 @@ flowchart TD
 
 - [x] Define configuration properties for the processor worker:
   - `mode`: `THREAD_COUNT` vs `RATE_PER_SEC`.
-  - `threadCount`: how many concurrent HTTP calls this worker instance is allowed to run in `THREAD_COUNT` mode.
+  - `threadCount`: how many concurrent HTTP calls this worker instance is allowed to run in `THREAD_COUNT` mode (see execution engine below).
   - `ratePerSec`: desired requests per second in `RATE_PER_SEC` mode (used to compute inter-arrival spacing).
   - `connectionReuse`: `GLOBAL`, `PER_THREAD`, or `NONE` for HTTP connection reuse behaviour.
   - Timeouts, retry policy, and circuit-breaker style options (where appropriate, possibly deferred).
-- [ ] Clarify interaction with existing control-plane rate controls:
-  - In `THROUGHPUT` mode, treat incoming message rate (scheduler/queue) as the main rate control; the worker simply uses an internal pool to overlap latency.
-  - In `TARGET_RPS` mode, treat worker config as an additional pacing layer on top of scheduler rate (e.g. scheduler might emit seeds at a higher rate, but the worker enforces the effective outbound HTTP rate).
-// Concurrency/pacing engine is implemented; virtual-thread wiring lives at the container factory layer.
-- [x] Design the concurrency / pacing engine using virtual threads:
-  - Run the Rabbit listener and worker invocations on virtual threads so blocking waits (semaphore / sleep) are cheap. This is wired at the Rabbit listener container level in the Worker SDK (executor = virtual-thread per task).
-  - In `THREAD_COUNT` mode:
-    - Use a `Semaphore(threadCount)` to gate concurrent HTTP calls; each `onMessage` acquires before invoking HTTP and releases in `finally`.
-  - In `RATE_PER_SEC` mode:
-    - Maintain a shared `nextAllowedTimeNanos` and compute `intervalNanos = 1_000_000_000L / ratePerSec`.
-    - For each message, atomically schedule a start time (`max(now, prev) + intervalNanos`) and `sleep` until that time before invoking HTTP, producing evenly spaced calls (as much as possible).
-  - Ensure `onMessage` semantics remain clear: for each incoming `WorkItem`, the processor:
-    - Waits according to the chosen mode (semaphore / pacing).
-    - Performs the HTTP call.
-    - Appends the HTTP response as a new step and returns the updated `WorkItem`.
+  - Clarify interaction with existing control-plane rate controls:
+    - In `THREAD_COUNT` mode, treat incoming message rate (scheduler/queue) as the main rate control; the worker uses internal concurrency to overlap latency but does not throttle RPS explicitly.
+    - In `RATE_PER_SEC` mode, treat worker config as an additional pacing layer on top of scheduler rate (e.g. scheduler might emit seeds at a higher rate, but the worker enforces the effective outbound HTTP rate).
+- [x] Design the concurrency / pacing engine around a per-worker execution pool:
+  - Rabbit work plane:
+    - Exactly one consumer per processor instance for work messages.
+    - Work messages are deserialised into `WorkItem`s and handed to a per-worker executor; the Rabbit listener thread does no HTTP I/O.
+  - Execution engine (generic Worker SDK):
+    - For each worker, create a `ThreadPoolExecutor` (or virtual-thread equivalent) with:
+      - `corePoolSize = maxPoolSize = maxInFlight`
+      - `workQueue = SynchronousQueue` (no internal backlog; tasks are either running or the caller blocks).
+    - The Rabbit adapter hands each `WorkItem` off via `execute(...)` and returns immediately.
+    - When all `maxInFlight` workers are busy, `execute(...)` blocks; backpressure is applied to the single consumer and new messages remain queued in Rabbit.
+    - The worker's domain config can opt into this model by implementing a small `MaxInFlightConfig` SPI; when present, the Rabbit adapter reads `maxInFlight()` from the current control-plane config snapshot and adjusts the pool size at runtime.
+  - Processor-specific mapping:
+    - For the HTTP processor, `threadCount` maps 1:1 to `maxInFlight` for that worker:
+      - `threadCount = N` ⇒ at most N concurrent HTTP calls per processor instance when there is enough work.
+      - With sufficient queue depth, the executor keeps N workers busy; if less work is available, concurrency naturally falls below N without artificial throttling.
+  - `RATE_PER_SEC` mode:
+    - Uses the same execution pool but spaces calls by `1 / ratePerSec` using a shared `nextAllowedTimeNanos` counter.
+    - If `threadCount` is large relative to `ratePerSec`, the mode becomes RPS-bound rather than concurrency-bound.
 
-> Note on `connectionReuse` semantics (current vs planned):
+> Note on `connectionReuse` semantics:
 >
-> - `GLOBAL` – uses the shared JDK `HttpClient` instance with its default connection pooling/keep-alive.
-> - `PER_THREAD` – for now behaves effectively like `GLOBAL` in `RATE_PER_SEC` mode; in `THREAD_COUNT` mode it uses a small client pool sized to `threadCount`.
-> - `NONE` – currently behaves like `GLOBAL` as well; JDK `HttpClient` treats `Connection` as a restricted header, so we cannot reliably force `Connection: close`.
-> - Planned: for `NONE`, introduce a dedicated “no keep-alive” HTTP client (for example an Apache HttpClient 5 based adapter) that guarantees one request per connection so PocketHive can match tools like JMeter’s “Use Keep-Alive” toggle. This client will be used only when `connectionReuse=NONE`; other modes will continue to use the existing JDK client.
+> - `GLOBAL` – uses a shared Apache HttpClient 5 instance with a tuned connection pool per processor instance.
+> - `PER_THREAD` – associates one client/connection per execution-thread in `THREAD_COUNT` mode so each lane has its own keep-alive connection; in `RATE_PER_SEC` mode this behaves like `GLOBAL`.
+> - `NONE` – uses a dedicated Apache client with a `ConnectionReuseStrategy` that always returns `false`, guaranteeing one request per connection (no keep-alive) so PocketHive can match tools like JMeter’s “Use Keep-Alive” toggle.
 
 ### 3. WorkItem Integration & History Management
 

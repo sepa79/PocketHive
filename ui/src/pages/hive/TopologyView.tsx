@@ -427,7 +427,7 @@ function SwarmGroupNode({ data }: NodeProps<SwarmGroupNodeData>) {
               */}
               <rect
                 x={comp.x + iconRadius - 10}
-                y={comp.y - iconRadius + 5}
+                y={comp.y - iconRadius - 3}
                 width={18}
                 height={10}
                 rx={6}
@@ -437,8 +437,8 @@ function SwarmGroupNode({ data }: NodeProps<SwarmGroupNodeData>) {
                 strokeWidth={0.7}
               />
               <text
-                x={comp.x + iconRadius - 5}
-                y={comp.y - iconRadius + 9}
+                x={comp.x + iconRadius - 1}
+                y={comp.y - iconRadius + 6}
                 textAnchor="middle"
                 className="swarm-group__icon-label"
               >

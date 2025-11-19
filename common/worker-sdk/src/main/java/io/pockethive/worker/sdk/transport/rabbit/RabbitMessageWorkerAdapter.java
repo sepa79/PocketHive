@@ -3,12 +3,20 @@ package io.pockethive.worker.sdk.transport.rabbit;
 import io.pockethive.observability.ObservabilityContext;
 import io.pockethive.observability.ObservabilityContextUtil;
 import io.pockethive.worker.sdk.api.WorkItem;
+import io.pockethive.worker.sdk.config.MaxInFlightConfig;
 import io.pockethive.worker.sdk.runtime.WorkIoBindings;
 import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime;
 import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime.WorkerStateSnapshot;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.SynchronousQueue;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -64,8 +72,22 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
     private final String outboundQueue;
     private final String outboundExchange;
     private final Consumer<Exception> dispatchErrorHandler;
-    private final java.util.concurrent.atomic.AtomicBoolean initialised = new java.util.concurrent.atomic.AtomicBoolean(false);
+    private final AtomicBoolean initialised = new AtomicBoolean(false);
     private final RabbitWorkItemConverter messageConverter = new RabbitWorkItemConverter();
+    /**
+     * Maximum number of concurrent worker invocations allowed for this adapter. Derived from
+     * the worker's typed configuration when it implements {@link MaxInFlightConfig}. Defaults
+     * to {@code 1}, in which case work is dispatched synchronously on the listener thread.
+     */
+    private final AtomicInteger maxInFlight = new AtomicInteger(1);
+    /**
+     * Executor used to dispatch work when {@link #maxInFlight} is greater than {@code 1}. The
+     * pool uses a {@link SynchronousQueue} so there is no internal backlog: when all worker
+     * threads are busy, submissions block the caller (the Rabbit listener) and backpressure
+     * is applied to Rabbit.
+     */
+    private volatile ThreadPoolExecutor workExecutor;
+    private final Object executorLock = new Object();
     private volatile boolean desiredEnabled;
 
     private RabbitMessageWorkerAdapter(Builder builder) {
@@ -114,6 +136,7 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
             controlPlaneRuntime.registerDefaultConfig(workerDefinition.beanName(), defaultConfig);
         }
         controlPlaneRuntime.registerStateListener(workerDefinition.beanName(), snapshot -> {
+            updateConcurrency(snapshot);
             boolean enabled = Optional.ofNullable(desiredStateResolver.apply(snapshot)).orElse(desiredEnabled);
             toggleListener(enabled);
         });
@@ -147,6 +170,22 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
      */
     public void onWork(Message message) {
         WorkItem workItem = messageConverter.fromMessage(message);
+        ThreadPoolExecutor executor = workExecutor;
+        int currentMax = maxInFlight.get();
+        if (executor == null || currentMax <= 1) {
+            // Preserve existing synchronous behaviour when no concurrency cap is configured.
+            dispatchSynchronously(workItem);
+            return;
+        }
+        try {
+            executor.execute(() -> dispatchSynchronously(workItem));
+        } catch (RejectedExecutionException ex) {
+            // As a safety net, fall back to synchronous dispatch if the executor rejects the task.
+            dispatchSynchronously(workItem);
+        }
+    }
+
+    private void dispatchSynchronously(WorkItem workItem) {
         try {
             WorkItem result = dispatcher.dispatch(workItem);
             if (result != null) {
@@ -190,6 +229,61 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
     @Override
     public void onApplicationEvent(ContextRefreshedEvent event) {
         applyListenerState();
+    }
+
+    private void updateConcurrency(WorkerStateSnapshot snapshot) {
+        int configured = snapshot.config(MaxInFlightConfig.class)
+            .map(MaxInFlightConfig::maxInFlight)
+            .orElse(1);
+        int resolved = configured <= 1 ? 1 : configured;
+        int previous = maxInFlight.getAndSet(resolved);
+        if (resolved <= 1) {
+            // No async dispatch required; keep executor (if any) but ensure it does not grow.
+            ThreadPoolExecutor executor = workExecutor;
+            if (executor != null) {
+                executor.setCorePoolSize(1);
+                executor.setMaximumPoolSize(1);
+            }
+            return;
+        }
+        synchronized (executorLock) {
+            ThreadPoolExecutor executor = workExecutor;
+            if (executor == null) {
+                workExecutor = createExecutor(resolved);
+            } else if (resolved != previous) {
+                executor.setCorePoolSize(resolved);
+                executor.setMaximumPoolSize(resolved);
+            }
+        }
+    }
+
+    private ThreadPoolExecutor createExecutor(int max) {
+        SynchronousQueue<Runnable> queue = new SynchronousQueue<>();
+        ThreadFactory threadFactory = runnable -> {
+            Thread thread = new Thread(runnable);
+            thread.setName("ph-worker-" + workerDefinition.beanName() + "-exec-" + thread.getId());
+            thread.setDaemon(true);
+            return thread;
+        };
+        ThreadPoolExecutor executor = new ThreadPoolExecutor(
+            max,
+            max,
+            60L,
+            TimeUnit.SECONDS,
+            queue,
+            threadFactory,
+            (task, pool) -> {
+                try {
+                    pool.getQueue().put(task);
+                } catch (InterruptedException ex) {
+                    Thread.currentThread().interrupt();
+                    throw new RejectedExecutionException("Interrupted while waiting for worker executor slot", ex);
+                }
+            }
+        );
+        // Keep core threads alive so per-thread resources (e.g. HTTP clients) can be reused.
+        executor.allowCoreThreadTimeOut(false);
+        return executor;
     }
 
     private void toggleListener(boolean enabled) {

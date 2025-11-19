@@ -10,6 +10,7 @@ export interface CapabilityConfigEntry {
   default?: unknown
   min?: number
   max?: number
+  options?: unknown
   multiline?: boolean
   ui?: unknown
 }

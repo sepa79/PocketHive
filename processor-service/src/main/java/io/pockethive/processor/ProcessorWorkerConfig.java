@@ -1,12 +1,14 @@
 package io.pockethive.processor;
 
+import io.pockethive.worker.sdk.config.MaxInFlightConfig;
+
 public record ProcessorWorkerConfig(
     String baseUrl,
     Mode mode,
     int threadCount,
     double ratePerSec,
     ConnectionReuse connectionReuse
-) {
+) implements MaxInFlightConfig {
 
   public enum Mode {
     THREAD_COUNT,
@@ -25,6 +27,11 @@ public record ProcessorWorkerConfig(
     threadCount = threadCount <= 0 ? 1 : threadCount;
     ratePerSec = ratePerSec <= 0.0 ? 1.0 : ratePerSec;
     connectionReuse = connectionReuse == null ? ConnectionReuse.GLOBAL : connectionReuse;
+  }
+
+  @Override
+  public int maxInFlight() {
+    return threadCount;
   }
 
   private static String sanitise(String candidate) {
