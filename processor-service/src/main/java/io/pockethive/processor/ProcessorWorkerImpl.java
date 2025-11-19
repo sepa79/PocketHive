@@ -74,6 +74,12 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
   private final LongAdder totalCalls = new LongAdder();
   private final LongAdder successfulCalls = new LongAdder();
   private final DoubleAccumulator totalLatencyMs = new DoubleAccumulator(Double::sum, 0.0);
+  private final java.util.concurrent.Semaphore threadLimiter;
+  private final java.util.concurrent.atomic.AtomicInteger limiterPermits = new java.util.concurrent.atomic.AtomicInteger(0);
+  private final Object limiterLock = new Object();
+  private final java.util.concurrent.atomic.AtomicLong nextAllowedTimeNanos = new java.util.concurrent.atomic.AtomicLong(0L);
+  private final java.util.concurrent.atomic.AtomicReference<HttpClient[]> perThreadClients = new java.util.concurrent.atomic.AtomicReference<>(null);
+  private final java.util.concurrent.atomic.AtomicInteger clientIndex = new java.util.concurrent.atomic.AtomicInteger(0);
 
   @Autowired
   ProcessorWorkerImpl(ProcessorWorkerProperties properties) {
@@ -84,6 +90,8 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
     this.properties = Objects.requireNonNull(properties, "properties");
     this.httpClient = Objects.requireNonNull(httpClient, "httpClient");
     this.clock = Objects.requireNonNull(clock, "clock");
+    // Limiter is configured lazily based on the first THREAD_COUNT configuration observed.
+    this.threadLimiter = new java.util.concurrent.Semaphore(0);
   }
 
   /**
@@ -168,9 +176,13 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
 
     logger.debug("HTTP REQUEST {} {} headers={} body={}", method, target, headersNode, body.orElse(""));
 
+    boolean acquired = false;
     long start = clock.millis();
     try {
-      HttpResponse<String> response = httpClient.send(requestBuilder.build(), HttpResponse.BodyHandlers.ofString());
+      acquired = applyExecutionMode(config);
+
+      HttpClient client = selectClient(config);
+      HttpResponse<String> response = client.send(requestBuilder.build(), HttpResponse.BodyHandlers.ofString());
       long duration = Math.max(0L, clock.millis() - start);
       logger.debug("HTTP RESPONSE {} {} -> {}", method, target, response.statusCode());
 
@@ -196,7 +208,61 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
       CallMetrics metrics = CallMetrics.failure(duration, -1);
       recordCall(metrics);
       throw new ProcessorCallException(metrics, ex);
+    } finally {
+      if (acquired && config.mode() == ProcessorWorkerConfig.Mode.THREAD_COUNT) {
+        threadLimiter.release();
+      }
     }
+  }
+
+  /**
+   * Applies the configured execution mode for this call.
+   *
+   * @return true if a THREAD_COUNT permit was acquired and must be released by the caller.
+   */
+  private boolean applyExecutionMode(ProcessorWorkerConfig config) throws InterruptedException {
+    ProcessorWorkerConfig.Mode mode = config.mode();
+    if (mode == ProcessorWorkerConfig.Mode.THREAD_COUNT) {
+      int desired = Math.max(1, config.threadCount());
+      int current = limiterPermits.get();
+      // Only grow the limiter; shrinking would require more invasive coordination and is not
+      // needed for the current use cases (config typically increases concurrency over time).
+      if (current < desired) {
+        synchronized (limiterLock) {
+          current = limiterPermits.get();
+          if (current < desired) {
+            int diff = desired - current;
+            threadLimiter.release(diff);
+            limiterPermits.set(desired);
+          }
+        }
+      }
+      threadLimiter.acquire();
+      return true;
+    }
+    if (mode == ProcessorWorkerConfig.Mode.RATE_PER_SEC) {
+      double rate = config.ratePerSec();
+      if (rate <= 0.0) {
+        return false;
+      }
+      long intervalNanos = (long) (1_000_000_000L / rate);
+      long now = System.nanoTime();
+      while (true) {
+        long prev = nextAllowedTimeNanos.get();
+        long base = Math.max(prev, now);
+        long scheduled = base + intervalNanos;
+        if (nextAllowedTimeNanos.compareAndSet(prev, scheduled)) {
+          long sleepNanos = scheduled - now;
+          if (sleepNanos > 0L) {
+            long millis = sleepNanos / 1_000_000L;
+            int nanos = (int) (sleepNanos % 1_000_000L);
+            Thread.sleep(millis, nanos);
+          }
+          return false;
+        }
+      }
+    }
+    return false;
   }
 
   private URI resolveTarget(String baseUrl, String path) {
@@ -206,6 +272,39 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
     } catch (IllegalArgumentException ex) {
       return null;
     }
+  }
+
+  /**
+   * Selects the HttpClient to use for the current call based on the configured connection reuse
+   * mode and execution mode. For RATE_PER_SEC we always fall back to the global client so the
+   * connection pool remains bounded even when running on virtual threads.
+   */
+  private HttpClient selectClient(ProcessorWorkerConfig config) {
+    ProcessorWorkerConfig.ConnectionReuse reuse = config.connectionReuse();
+    ProcessorWorkerConfig.Mode mode = config.mode();
+
+    if (reuse != ProcessorWorkerConfig.ConnectionReuse.PER_THREAD || mode != ProcessorWorkerConfig.Mode.THREAD_COUNT) {
+      // GLOBAL and NONE both share the primary client; PER_THREAD is treated as GLOBAL for RATE_PER_SEC.
+      return httpClient;
+    }
+
+    int desired = Math.max(1, config.threadCount());
+    HttpClient[] pool = perThreadClients.get();
+    if (pool == null || pool.length != desired) {
+      synchronized (perThreadClients) {
+        pool = perThreadClients.get();
+        if (pool == null || pool.length != desired) {
+          HttpClient[] created = new HttpClient[desired];
+          for (int i = 0; i < desired; i++) {
+            created[i] = HttpClient.newHttpClient();
+          }
+          perThreadClients.set(created);
+          pool = created;
+        }
+      }
+    }
+    int index = Math.floorMod(clientIndex.getAndIncrement(), pool.length);
+    return pool[index];
   }
 
   private Optional<String> extractBody(JsonNode bodyNode) throws Exception {

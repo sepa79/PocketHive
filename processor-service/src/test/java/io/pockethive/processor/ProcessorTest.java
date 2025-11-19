@@ -39,6 +39,9 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.StreamSupport;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import javax.net.ssl.SSLSession;
@@ -69,7 +72,7 @@ class ProcessorTest {
         HttpClient httpClient = mock(HttpClient.class);
         Clock clock = Clock.fixed(Instant.parse("2024-01-01T00:00:00Z"), ZoneOffset.UTC);
         ProcessorWorkerImpl worker = new ProcessorWorkerImpl(properties, httpClient, clock);
-        ProcessorWorkerConfig config = new ProcessorWorkerConfig("http://sut");
+        ProcessorWorkerConfig config = new ProcessorWorkerConfig("http://sut", null, 0, 0.0, null);
         TestWorkerContext context = new TestWorkerContext(config);
 
         AtomicReference<HttpRequest> requestRef = new AtomicReference<>();
@@ -130,7 +133,7 @@ class ProcessorTest {
         HttpClient httpClient = mock(HttpClient.class);
         Clock clock = Clock.fixed(Instant.parse("2024-02-02T00:00:00Z"), ZoneOffset.UTC);
         ProcessorWorkerImpl worker = new ProcessorWorkerImpl(properties, httpClient, clock);
-        ProcessorWorkerConfig config = new ProcessorWorkerConfig("http://sut/api");
+        ProcessorWorkerConfig config = new ProcessorWorkerConfig("http://sut/api", null, 0, 0.0, null);
         TestWorkerContext context = new TestWorkerContext(config);
 
         AtomicReference<HttpRequest> requestRef = new AtomicReference<>();
@@ -156,7 +159,7 @@ class ProcessorTest {
         HttpClient httpClient = mock(HttpClient.class);
         SequenceClock clock = new SequenceClock(0, 50, 100, 250);
         ProcessorWorkerImpl worker = new ProcessorWorkerImpl(properties, httpClient, clock);
-        ProcessorWorkerConfig config = new ProcessorWorkerConfig("http://sut");
+        ProcessorWorkerConfig config = new ProcessorWorkerConfig("http://sut", null, 0, 0.0, null);
         TestWorkerContext context = new TestWorkerContext(config);
 
         AtomicInteger invocation = new AtomicInteger();
@@ -217,13 +220,60 @@ class ProcessorTest {
     }
 
     @Test
+    void threadCountModeCapsConcurrentHttpCalls() throws Exception {
+        ProcessorWorkerProperties properties = newProcessorWorkerProperties();
+        properties.setConfig(Map.of("baseUrl", "http://sut"));
+        HttpClient httpClient = mock(HttpClient.class);
+        Clock clock = Clock.fixed(Instant.parse("2024-03-03T00:00:00Z"), ZoneOffset.UTC);
+        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(properties, httpClient, clock);
+        ProcessorWorkerConfig config = new ProcessorWorkerConfig(
+            "http://sut",
+            ProcessorWorkerConfig.Mode.THREAD_COUNT,
+            2,
+            0.0,
+            ProcessorWorkerConfig.ConnectionReuse.GLOBAL
+        );
+        TestWorkerContext context = new TestWorkerContext(config);
+
+        AtomicInteger inFlight = new AtomicInteger();
+        AtomicInteger maxInFlight = new AtomicInteger();
+        when(httpClient.send(any(), any())).thenAnswer(invocation -> {
+            int now = inFlight.incrementAndGet();
+            maxInFlight.updateAndGet(prev -> Math.max(prev, now));
+            try {
+                Thread.sleep(50);
+            } finally {
+                inFlight.decrementAndGet();
+            }
+            HttpRequest request = invocation.getArgument(0, HttpRequest.class);
+            return SimpleHttpResponse.from(request, 200, Map.of(), "");
+        });
+
+        WorkItem inbound = WorkItem.json(Map.of("path", "/thread-count")).build();
+        int total = 6;
+        ExecutorService executor = Executors.newFixedThreadPool(total);
+        try {
+            for (int i = 0; i < total; i++) {
+                executor.submit(() -> worker.onMessage(inbound, context));
+            }
+            executor.shutdown();
+            executor.awaitTermination(5, TimeUnit.SECONDS);
+        } finally {
+            executor.shutdownNow();
+        }
+
+        assertThat(maxInFlight.get()).isBetween(1, 2);
+    }
+
+
+    @Test
     void workerReturnsErrorWhenBaseUrlMissing() throws Exception {
         ProcessorWorkerProperties properties = newProcessorWorkerProperties();
         properties.setConfig(Map.of("baseUrl", ""));
         HttpClient httpClient = mock(HttpClient.class);
         Clock clock = Clock.systemUTC();
         ProcessorWorkerImpl worker = new ProcessorWorkerImpl(properties, httpClient, clock);
-        ProcessorWorkerConfig config = new ProcessorWorkerConfig(" ");
+        ProcessorWorkerConfig config = new ProcessorWorkerConfig(" ", null, 0, 0.0, null);
         TestWorkerContext context = new TestWorkerContext(config);
 
         WorkItem inbound = WorkItem.json(Map.of("path", "/noop" )).build();
