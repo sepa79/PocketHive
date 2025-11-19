@@ -1,6 +1,5 @@
 package io.pockethive.worker.sdk.transport.rabbit;
 
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.worker.sdk.api.WorkItem;
 import io.pockethive.worker.sdk.api.WorkStep;
@@ -11,8 +10,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.core.MessageDeliveryMode;
 import org.springframework.amqp.core.MessageProperties;
@@ -22,36 +19,26 @@ import org.springframework.amqp.core.MessageProperties;
  */
 public final class RabbitWorkItemConverter {
 
-    private static final String HEADER_CONTENT_TYPE = "content-type";
-    private static final String HEADER_CONTENT_TYPE_CAMEL = "contentType";
     private static final String HEADER_MESSAGE_ID = "message-id";
     private static final String HEADER_MESSAGE_ID_CAMEL = "messageId";
-    private static final Logger log = LoggerFactory.getLogger(RabbitWorkItemConverter.class);
-    private static final String HEADER_WORKITEM_STEPS = "x-ph-workitem-steps";
+    private static final String ENVELOPE_STEPS = "steps";
     private static final Charset DEFAULT_CHARSET = StandardCharsets.UTF_8;
     private static final ObjectMapper MAPPER = new ObjectMapper().findAndRegisterModules();
 
     public Message toMessage(WorkItem workItem) {
         Objects.requireNonNull(workItem, "workItem");
         MessageProperties properties = new MessageProperties();
-        properties.setContentEncoding(workItem.charset().name());
-        properties.setContentLength(workItem.body().length);
+        properties.setContentEncoding(DEFAULT_CHARSET.name());
         properties.setDeliveryMode(MessageDeliveryMode.PERSISTENT);
 
         Map<String, Object> headers = new LinkedHashMap<>(workItem.headers());
-        Object contentType = removeFirst(headers, HEADER_CONTENT_TYPE, HEADER_CONTENT_TYPE_CAMEL);
-        if (contentType != null) {
-            properties.setContentType(contentType.toString());
-        } else {
-            properties.setContentType(MessageProperties.CONTENT_TYPE_JSON);
-        }
         Object messageId = removeFirst(headers, HEADER_MESSAGE_ID, HEADER_MESSAGE_ID_CAMEL);
         if (messageId != null) {
             properties.setMessageId(messageId.toString());
         }
 
-        // Serialise step history into a dedicated header so downstream workers can reconstruct
-        // the WorkItem history across Rabbit hops without altering the primary payload.
+        // Serialise WorkItem body and step history into a JSON envelope carried in the message
+        // payload. This avoids large headers and keeps the on-wire representation self-contained.
         List<Map<String, Object>> stepSnapshots = new ArrayList<>();
         for (WorkStep step : workItem.steps()) {
             if (step == null) {
@@ -63,57 +50,80 @@ public final class RabbitWorkItemConverter {
             snapshot.put("headers", step.headers());
             stepSnapshots.add(snapshot);
         }
-        if (!stepSnapshots.isEmpty()) {
-            try {
-                String stepsJson = MAPPER.writeValueAsString(stepSnapshots);
-                properties.setHeader(HEADER_WORKITEM_STEPS, stepsJson);
-            } catch (Exception ex) {
-                // History is part of the WorkItem contract; failing to serialise it indicates a bug
-                // in our mapping rather than a recoverable condition.
-                throw new IllegalStateException("Failed to serialise WorkItem steps for Rabbit message", ex);
-            }
+
+        Map<String, Object> envelope = new LinkedHashMap<>();
+        envelope.put(ENVELOPE_STEPS, stepSnapshots);
+
+        byte[] payload;
+        try {
+            payload = MAPPER.writeValueAsBytes(envelope);
+        } catch (Exception ex) {
+            throw new IllegalStateException("Failed to serialise WorkItem envelope for Rabbit message", ex);
         }
 
         headers.forEach(properties::setHeader);
-        return new Message(workItem.body(), properties);
+        properties.setContentType(MessageProperties.CONTENT_TYPE_JSON);
+        properties.setContentLength(payload.length);
+        return new Message(payload, properties);
     }
 
     public WorkItem fromMessage(Message message) {
         Objects.requireNonNull(message, "message");
         MessageProperties properties = message.getMessageProperties();
-        Charset charset = resolveCharset(properties.getContentEncoding());
-        WorkItem.Builder builder = WorkItem.binary(message.getBody()).charset(charset);
-        Map<String, Object> headers = new LinkedHashMap<>(properties.getHeaders());
 
-        Object stepsHeader = headers.remove(HEADER_WORKITEM_STEPS);
-        if (stepsHeader instanceof String stepsJson && !stepsJson.isBlank()) {
-            try {
-                List<Map<String, Object>> stepSnapshots = MAPPER.readValue(
-                    stepsJson, new TypeReference<List<Map<String, Object>>>() {});
-                List<WorkStep> steps = new ArrayList<>(stepSnapshots.size());
-                for (Map<String, Object> snapshot : stepSnapshots) {
-                    Object indexObj = snapshot.get("index");
-                    int index = indexObj instanceof Number n ? n.intValue() : 0;
-                    String payload = snapshot.get("payload") != null ? snapshot.get("payload").toString() : "";
-                    @SuppressWarnings("unchecked")
-                    Map<String, Object> stepHeaders = snapshot.get("headers") instanceof Map<?, ?> map
-                        ? new LinkedHashMap<>((Map<String, Object>) map)
-                        : Map.of();
-                    steps.add(new WorkStep(index, payload, stepHeaders));
-                }
-                builder.steps(steps);
-            } catch (Exception ex) {
-                // Do not silently drop history; surface a warning so operators know the header was invalid,
-                // then continue with body + headers only.
-                log.warn("Failed to deserialize {} header; proceeding without WorkItem steps", HEADER_WORKITEM_STEPS, ex);
-            }
+        byte[] rawBody = message.getBody();
+        if (rawBody == null) {
+            rawBody = new byte[0];
         }
 
+        byte[] bodyBytes = new byte[0];
+        Charset charset = DEFAULT_CHARSET;
+        List<WorkStep> steps = List.of();
+
+        try {
+            var root = MAPPER.readTree(rawBody);
+            if (!root.isObject()) {
+                throw new IllegalStateException("WorkItem envelope must be a JSON object");
+            }
+            var stepsNode = root.path(ENVELOPE_STEPS);
+            if (stepsNode.isArray()) {
+                List<WorkStep> parsedSteps = new ArrayList<>();
+                stepsNode.forEach(element -> {
+                    if (!element.isObject()) {
+                        return;
+                    }
+                    Object indexObj = element.path("index").isNumber()
+                        ? element.path("index").numberValue()
+                        : null;
+                    int index = indexObj instanceof Number n ? n.intValue() : 0;
+                    String payload = element.path("payload").asText("");
+                    Map<String, Object> stepHeaders = new LinkedHashMap<>();
+                    var headersNode = element.path("headers");
+                    if (headersNode.isObject()) {
+                        headersNode.fields().forEachRemaining(entry ->
+                            stepHeaders.put(entry.getKey(), MAPPER.convertValue(entry.getValue(), Object.class)));
+                    }
+                    parsedSteps.add(new WorkStep(index, payload, stepHeaders));
+                });
+                steps = List.copyOf(parsedSteps);
+
+                if (!steps.isEmpty()) {
+                    WorkStep last = steps.get(steps.size() - 1);
+                    bodyBytes = last.payload().getBytes(DEFAULT_CHARSET);
+                }
+            }
+        } catch (Exception ex) {
+            throw new IllegalStateException("Failed to deserialize WorkItem envelope from Rabbit message", ex);
+        }
+
+        WorkItem.Builder builder = WorkItem.binary(bodyBytes).charset(charset);
+        if (!steps.isEmpty()) {
+            builder.steps(steps);
+        }
+
+        Map<String, Object> headers = new LinkedHashMap<>(properties.getHeaders());
         if (properties.getMessageId() != null && !headers.containsKey(HEADER_MESSAGE_ID)) {
             headers.put(HEADER_MESSAGE_ID, properties.getMessageId());
-        }
-        if (properties.getContentType() != null && !headers.containsKey(HEADER_CONTENT_TYPE)) {
-            headers.put(HEADER_CONTENT_TYPE, properties.getContentType());
         }
         builder.headers(headers);
         return builder.build();

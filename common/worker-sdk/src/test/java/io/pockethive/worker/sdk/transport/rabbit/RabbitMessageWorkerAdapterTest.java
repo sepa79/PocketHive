@@ -145,7 +145,8 @@ class RabbitMessageWorkerAdapterTest {
         ArgumentCaptor<Message> outboundCaptor = ArgumentCaptor.forClass(Message.class);
         verify(rabbitTemplate)
             .send(eq(workerDefinition.io().outboundExchange()), Mockito.<String>eq(workerDefinition.io().outboundQueue()), outboundCaptor.capture());
-        assertThat(outboundCaptor.getValue().getBody()).isEqualTo("processed".getBytes(StandardCharsets.UTF_8));
+        WorkItem roundTrip = converter.fromMessage(outboundCaptor.getValue());
+        assertThat(roundTrip.asString()).isEqualTo("processed");
     }
 
     @Test

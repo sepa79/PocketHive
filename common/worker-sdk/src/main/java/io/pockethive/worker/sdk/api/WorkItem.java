@@ -30,18 +30,15 @@ public final class WorkItem {
 
     private static final ObjectMapper DEFAULT_MAPPER = new ObjectMapper().findAndRegisterModules();
 
-    private final byte[] body;
     private final Map<String, Object> headers;
     private final Charset charset;
     private final ObservabilityContext observabilityContext;
     private final List<WorkStep> steps;
 
-    private WorkItem(byte[] body,
-                     Map<String, Object> headers,
+    private WorkItem(Map<String, Object> headers,
                      Charset charset,
                      ObservabilityContext observabilityContext,
                      List<WorkStep> steps) {
-        this.body = Objects.requireNonNull(body, "body").clone();
         this.headers = Collections.unmodifiableMap(new LinkedHashMap<>(headers));
         this.charset = Objects.requireNonNull(charset, "charset");
         this.observabilityContext = observabilityContext;
@@ -54,7 +51,7 @@ public final class WorkItem {
      * Returns the raw item body. Callers should treat the returned array as read-only.
      */
     public byte[] body() {
-        return body;
+        return asString().getBytes(charset);
     }
 
     /**
@@ -82,7 +79,11 @@ public final class WorkItem {
      * Decodes the body as a {@link String} using the configured {@link #charset()}.
      */
     public String asString() {
-        return new String(body, charset);
+        if (steps == null || steps.isEmpty()) {
+            return "";
+        }
+        WorkStep last = steps.get(steps.size() - 1);
+        return last.payload();
     }
 
     /**
@@ -135,9 +136,6 @@ public final class WorkItem {
         if (stepHeaders != null && !stepHeaders.isEmpty()) {
             newHeaders.putAll(stepHeaders);
         }
-        String effectivePayload = payload;
-        byte[] newBody = effectivePayload.getBytes(StandardCharsets.UTF_8);
-
         List<WorkStep> newSteps = new ArrayList<>();
         if (this.steps == null || this.steps.isEmpty()) {
             // Seed history with the current state as step 0 (e.g. after DISABLED history).
@@ -145,9 +143,9 @@ public final class WorkItem {
         } else {
             newSteps.addAll(this.steps);
         }
-        newSteps.add(new WorkStep(newSteps.size(), effectivePayload, newHeaders));
+        newSteps.add(new WorkStep(newSteps.size(), payload, newHeaders));
 
-        return new WorkItem(newBody, newHeaders, StandardCharsets.UTF_8, observabilityContext, newSteps);
+        return new WorkItem(newHeaders, StandardCharsets.UTF_8, observabilityContext, newSteps);
     }
 
     /**
@@ -178,7 +176,7 @@ public final class WorkItem {
             newSteps.add(new WorkStep(last.index(), last.payload(), newHeaders));
         }
 
-        return new WorkItem(body, newHeaders, charset, observabilityContext, newSteps);
+        return new WorkItem(newHeaders, charset, observabilityContext, newSteps);
     }
 
     /**
@@ -192,9 +190,8 @@ public final class WorkItem {
         }
         WorkStep last = steps.get(steps.size() - 1);
         WorkStep normalised = last.withIndex(0);
-        byte[] newBody = normalised.payload().getBytes(StandardCharsets.UTF_8);
         Map<String, Object> newHeaders = normalised.headers();
-        return new WorkItem(newBody, newHeaders, StandardCharsets.UTF_8, observabilityContext, List.of(normalised));
+        return new WorkItem(newHeaders, StandardCharsets.UTF_8, observabilityContext, List.of(normalised));
     }
 
     /**
@@ -215,8 +212,16 @@ public final class WorkItem {
             return clearHistory();
         }
         if (policy == HistoryPolicy.DISABLED) {
-            // Preserve body/headers but drop recorded steps entirely.
-            return new WorkItem(body, headers, charset, observabilityContext, List.of());
+            // Preserve only the latest step as the new baseline so callers continue to see
+            // a single, explicit step without historical snapshots.
+            if (steps == null || steps.isEmpty()) {
+                // Builder guarantees at least one step; this is just a guard.
+                return clearHistory();
+            }
+            WorkStep last = steps.get(steps.size() - 1);
+            WorkStep normalised = last.withIndex(0);
+            Map<String, Object> newHeaders = normalised.headers();
+            return new WorkItem(newHeaders, StandardCharsets.UTF_8, observabilityContext, List.of(normalised));
         }
         return this;
     }
@@ -228,7 +233,7 @@ public final class WorkItem {
      */
     public JsonNode asJsonNode() {
         try {
-            return DEFAULT_MAPPER.readTree(body);
+            return DEFAULT_MAPPER.readTree(asString());
         } catch (IOException e) {
             throw new IllegalStateException("Failed to deserialize item body as JSON", e);
         }
@@ -241,7 +246,7 @@ public final class WorkItem {
      */
     public <T> T asJson(Class<T> targetType) {
         try {
-            return DEFAULT_MAPPER.readValue(body, targetType);
+            return DEFAULT_MAPPER.readValue(asString(), targetType);
         } catch (IOException e) {
             throw new IllegalStateException("Failed to deserialize item body as JSON", e);
         }
@@ -251,7 +256,10 @@ public final class WorkItem {
      * Creates a builder pre-populated with this item's contents, including any recorded steps.
      */
     public Builder toBuilder() {
-        return new Builder(this.body, this.headers, this.charset, this.observabilityContext, this.steps);
+        // The builder primarily needs headers/charset/steps; it will seed any missing step 0
+        // from the provided body when required, but callers that go through toBuilder() already
+        // have an explicit history.
+        return new Builder(new byte[0], this.headers, this.charset, this.observabilityContext, this.steps);
     }
 
     /**
@@ -426,7 +434,7 @@ public final class WorkItem {
                 String initialPayload = new String(body, resolvedCharset);
                 effectiveSteps = List.of(new WorkStep(0, initialPayload, copy));
             }
-            return new WorkItem(body, copy, resolvedCharset, context, effectiveSteps);
+            return new WorkItem(copy, resolvedCharset, context, effectiveSteps);
         }
     }
 }

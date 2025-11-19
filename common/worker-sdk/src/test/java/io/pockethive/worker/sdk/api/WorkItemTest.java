@@ -118,8 +118,9 @@ class WorkItemTest {
         assertThat(latestOnly.asString()).isEqualTo("second");
 
         WorkItem disabled = item.applyHistoryPolicy(HistoryPolicy.DISABLED);
-        // history disabled: no recorded steps, but body/headers remain available
-        assertThat(steps(disabled)).isEmpty();
+        // history disabled: a single baseline step is retained so callers still
+        // see the latest payload without previous snapshots.
+        assertThat(steps(disabled)).hasSize(1);
         assertThat(disabled.asString()).isEqualTo("second");
     }
 

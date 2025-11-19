@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
@@ -547,7 +548,16 @@ public class SwarmLifecycleSteps {
         .orElseThrow(() -> new AssertionError("No message observed on tap queue " + queue));
 
     try {
-      JsonNode root = objectMapper.readTree(message.body());
+      JsonNode envelope = objectMapper.readTree(message.body());
+      JsonNode stepsNode = envelope.path("steps");
+      if (!stepsNode.isArray() || stepsNode.isEmpty()) {
+        throw new AssertionError("Final queue WorkItem did not carry any steps");
+      }
+      JsonNode lastStep = stepsNode.get(stepsNode.size() - 1);
+      String httpPayload = lastStep.path("payload").asText("");
+      byte[] bodyBytes = httpPayload.getBytes(StandardCharsets.UTF_8);
+
+      JsonNode root = objectMapper.readTree(bodyBytes);
       int statusCode = root.path("status").asInt();
       if (statusCode != 200) {
         LOGGER.warn("Final queue status code was {}. Body={} headers={}",
@@ -555,14 +565,14 @@ public class SwarmLifecycleSteps {
         assertEquals(200, statusCode, "Final queue response should report status 200");
       }
       JsonNode bodyNode = root.path("body");
-      String bodyText = bodyNode.isMissingNode() ? message.bodyAsString() : bodyNode.asText();
+      String bodyText = bodyNode.isMissingNode() ? new String(bodyBytes, StandardCharsets.UTF_8) : bodyNode.asText();
       if (bodyText == null || bodyText.isBlank()) {
-        bodyText = message.bodyAsString();
+        bodyText = new String(bodyBytes, StandardCharsets.UTF_8);
       }
       final String finalBodyText = bodyText;
       if (!finalBodyText.contains("default generator response")) {
         LOGGER.warn("Final queue payload did not contain default marker. payload={} headers={} rawBody={}",
-            finalBodyText, message.headers(), message.bodyAsString());
+            finalBodyText, message.headers(), new String(bodyBytes, StandardCharsets.UTF_8));
       }
       if (looksLikeJson(finalBodyText)) {
         JsonNode parsedBody = objectMapper.readTree(finalBodyText);
@@ -587,26 +597,32 @@ public class SwarmLifecycleSteps {
       }
 
       if ("templated-rest".equals(scenarioId)) {
-        String pattern = "^hello world from Template Interceptor, sequence number is .+ and was generated at .+$";
-        boolean matched = stepPayloads.stream()
+        String generatorPattern = "^hello world from Template Interceptor, sequence number is .+ and was generated at .+$";
+        boolean generatorMatched = stepPayloads.stream()
             .anyMatch(payload -> {
               if (payload == null || payload.isBlank()) {
                 return false;
               }
               try {
                 JsonNode node = objectMapper.readTree(payload);
-                String body = node.path("body").asText(null);
-                if (body == null || body.isBlank()) {
+                JsonNode stepBody = node.path("body");
+                String candidate = null;
+                if (stepBody.isTextual()) {
+                  candidate = stepBody.asText();
+                } else if (stepBody.isObject()) {
+                  candidate = stepBody.path("original").path("body").asText(null);
+                }
+                if (candidate == null || candidate.isBlank()) {
                   return false;
                 }
-                return !body.contains("{{") && body.matches(pattern);
+                return !candidate.contains("{{") && candidate.matches(generatorPattern);
               } catch (IOException ex) {
                 // Not JSON; ignore this step for templating assertions.
                 return false;
               }
             });
-        assertTrue(matched,
-            () -> "No WorkItem step payload matched templated pattern /" + pattern
+        assertTrue(generatorMatched,
+            () -> "No WorkItem step payload matched templated pattern /" + generatorPattern
                 + "/ for templated-rest scenario. payloads=" + stepPayloads);
       }
     } finally {
@@ -1009,7 +1025,14 @@ public class SwarmLifecycleSteps {
         .orElseThrow(() -> new AssertionError("No message observed on generator tap queue " + generatorTapQueueName));
     try {
       String payload = message.bodyAsString();
-      JsonNode root = objectMapper.readTree(payload);
+      JsonNode envelope = objectMapper.readTree(payload);
+      JsonNode stepsNode = envelope.path("steps");
+      if (!stepsNode.isArray() || stepsNode.isEmpty()) {
+        throw new AssertionError("Generator tap WorkItem did not carry any steps");
+      }
+      JsonNode lastStep = stepsNode.get(stepsNode.size() - 1);
+      String httpPayload = lastStep.path("payload").asText("");
+      JsonNode root = objectMapper.readTree(httpPayload);
       JsonNode bodyNode = root.path("body");
       String requestBody = bodyNode.isMissingNode() ? null : bodyNode.asText(null);
       assertNotNull(requestBody, "Templated generator work item did not include a 'body' field");
@@ -1067,24 +1090,17 @@ public class SwarmLifecycleSteps {
   }
 
   private List<String> workItemStepPayloads(WorkQueueConsumer.Message message) throws IOException {
-    Map<String, Object> headers = message.headers();
-    if (headers == null || headers.isEmpty()) {
-      return List.of();
-    }
-    Object stepsHeader = headers.get("x-ph-workitem-steps");
-    if (stepsHeader == null) {
-      return List.of();
-    }
-    String text = stepsHeader.toString();
+    String text = message.bodyAsString();
     if (text == null || text.isBlank()) {
       return List.of();
     }
-    JsonNode node = objectMapper.readTree(text);
-    if (!node.isArray()) {
+    JsonNode root = objectMapper.readTree(text);
+    JsonNode stepsNode = root.path("steps");
+    if (!stepsNode.isArray()) {
       return List.of();
     }
     List<String> payloads = new ArrayList<>();
-    node.forEach(element -> payloads.add(element.path("payload").asText("")));
+    stepsNode.forEach(element -> payloads.add(element.path("payload").asText("")));
     return payloads;
   }
 

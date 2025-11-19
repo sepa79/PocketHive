@@ -5,6 +5,10 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 Timestamp: 2025-11-15T00:00:00Z
 
+- WorkItem history model and transport:
+  - Refactored `WorkItem` to be step-driven (no internal `body` field); `asString()` and `payload()` now always reflect the latest `WorkStep` payload while `body()` and JSON helpers derive from that payload.
+  - Moved step history off the `x-ph-workitem-steps` Rabbit header into a JSON envelope carried in the message payload, and updated the worker SDK converter, Rabbit-based outputs/inputs, and e2e harness to read/write `steps` from the payload.
+  - Ensured generator → moderator → processor hops append successive steps so templated and default REST scenarios carry a complete, ordered history into the final queue.
 - Swarm controller observability: added INFO logs for controller start/stop, swarm-wide enable/disable config-updates, and buffer guard lifecycle transitions so operators can trace controller activity without digging through DEBUG output.
 - Control-plane tracing: SwarmSignalListener now prints the incoming swarm template payload plus every controller-level config update with the resulting config snapshot, mirroring worker runtime logging.
 - Logging configuration: relaxed the logback filter so `io.pockethive.swarmcontroller` logs at INFO by default, ensuring the new lifecycle/config messages reach both console and RabbitMQ appenders.

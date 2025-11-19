@@ -106,7 +106,11 @@ Once all workers (internal and external) are on the new contract, we can introdu
 After Stage 2 is stable, we can upgrade `WorkItem` to hold real step history and honour `HistoryPolicy`.
 
 - [x] Implement internal `WorkStep` structure and step list on `WorkItem`.
-- [ ] Honour `HistoryPolicy` limits and bounds (max steps, optional size constraints).
-- [ ] Ensure the HTTP processor, templating pipeline, and routing output use steps in a consistent way.
+- [x] Honour `HistoryPolicy` semantics on `WorkItem`:
+  - `FULL` – preserve all steps.
+  - `LATEST_ONLY` – normalise to a single latest step.
+  - `DISABLED` – collapse history to a single baseline step and drop previous snapshots.
+- [ ] (Deferred) Introduce explicit history bounds (max steps and/or size limits) for large payloads.
+- [x] Ensure the HTTP processor, templating pipeline, and routing output use steps in a consistent way (generator → moderator → processor chain recorded as successive steps, transport encodes steps in the Rabbit payload).
 
 > Stage 3 ties directly into `docs/sdk/templated-generator-plan.md` and `docs/sdk/http-request-processor-plan.md`.

@@ -30,4 +30,27 @@ class RabbitWorkItemConverterTest {
         assertThat(roundTrip.headers()).containsEntry("x-ph-service", "generator");
         assertThat(roundTrip.headers()).containsEntry("content-type", MessageProperties.CONTENT_TYPE_JSON);
     }
+
+    @Test
+    void roundTripPreservesStepHistory() {
+        WorkItem seed = WorkItem.text("seed")
+            .header("swarmId", "abc")
+            .build();
+        WorkItem withTemplate = seed.addStepPayload("templated");
+        WorkItem withHttp = withTemplate.addStep(
+            "{\"path\":\"/test\",\"method\":\"POST\"}",
+            Map.of("x-ph-service", "generator"));
+
+        Message amqpMessage = converter.toMessage(withHttp);
+        WorkItem roundTrip = converter.fromMessage(amqpMessage);
+
+        assertThat(roundTrip.payload()).isEqualTo(withHttp.payload());
+        assertThat(roundTrip.headers()).containsEntry("x-ph-service", "generator");
+
+        assertThat(roundTrip.steps()).hasSize(3);
+        assertThat(roundTrip.steps()).element(0).extracting("payload").isEqualTo("seed");
+        assertThat(roundTrip.steps()).element(1).extracting("payload").isEqualTo("templated");
+        assertThat(roundTrip.steps()).element(2).extracting("payload")
+            .isEqualTo("{\"path\":\"/test\",\"method\":\"POST\"}");
+    }
 }

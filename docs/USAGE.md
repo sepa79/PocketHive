@@ -101,18 +101,20 @@ Manual checks:
 
 ### Worker configuration overrides
 - Scenario definitions provide per-role overrides by embedding a `pockethive.worker.config` payload inside each bee's `config` map. The Scenario Manager merges those maps into the `SwarmPlan.bees[*].config` payload and the Swarm Controller immediately broadcasts them as `config-update` signals during bootstrap—no environment variables are used for logical worker settings anymore.
-- The WorkItem history policy is also configurable per worker via `pockethive.worker.history-policy` (values: `FULL`, `LATEST_ONLY`, `DISABLED`); it defaults to `FULL` when omitted.
+- The `WorkItem` history policy is also configurable per worker via `pockethive.worker.history-policy` (values: `FULL`, `LATEST_ONLY`, `DISABLED`); it defaults to `FULL` when omitted. In all modes the current payload is treated as the last recorded step:
+  - `FULL` – every logical stage (scheduler seed, templating, worker onMessage, processor) appends a new step; history is preserved end-to-end.
+  - `LATEST_ONLY` – previous steps are collapsed so only the latest step remains (reindexed to `0`).
+  - `DISABLED` – history snapshots are dropped after each hop, but the current step is still retained as a single baseline.
 - Example snippet:
   ```yaml
   config:
-    pockethive:
-      worker:
-        historyPolicy: FULL
-        config:
-          ratePerSec: 15
-          message:
-            path: /api/guarded
-            body: warmup
+    worker:
+      historyPolicy: FULL
+      config:
+        ratePerSec: 15
+        message:
+          path: /api/guarded
+          body: warmup
   ```
 - Service defaults declared under `pockethive.worker.*` remain useful for local development, but once a swarm runs under the controller the scenario-supplied config is the single source of truth.
 
