@@ -16,5 +16,24 @@ config:
   - name: baseUrl
     type: string
     default: ""
+  - name: mode
+    type: string
+    default: "THREAD_COUNT"
+    options:
+      - "THREAD_COUNT"
+      - "RATE_PER_SEC"
+  - name: threadCount
+    type: int
+    default: 1
+  - name: ratePerSec
+    type: double
+    default: 1.0
+  - name: connectionReuse
+    type: string
+    default: "GLOBAL"
+    options:
+      - "GLOBAL"
+      - "PER_THREAD"
+      - "NONE"
 actions: []
 panels: []

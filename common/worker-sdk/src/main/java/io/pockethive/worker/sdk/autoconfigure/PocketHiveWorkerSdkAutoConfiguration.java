@@ -352,6 +352,12 @@ public class PocketHiveWorkerSdkAutoConfiguration {
     }
 
     @Bean
+    @ConditionalOnBean(RabbitListenerEndpointRegistry.class)
+    VirtualThreadRabbitContainerCustomizer virtualThreadRabbitContainerCustomizer() {
+        return new VirtualThreadRabbitContainerCustomizer();
+    }
+
+    @Bean
     @ConditionalOnMissingBean
     WorkerInvocationInterceptor workerObservabilityInterceptor() {
         return new WorkerObservabilityInterceptor();

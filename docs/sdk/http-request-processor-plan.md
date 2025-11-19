@@ -20,7 +20,7 @@ We want an HTTP Request Processor that:
 ## High-Level Goals
 
 - [x] Introduce a simple HTTP processor worker (current `ProcessorWorkerImpl`) that consumes `WorkItem`s whose current step describes an HTTP request (method, URL, headers, body) and appends an HTTP response step.
-- [ ] Extend the HTTP processor with configurable execution modes:
+- [x] Extend the HTTP processor with configurable execution modes:
   - **`THREAD_COUNT` mode**: process incoming items as fast as possible, bounded by a configured `threadCount` (max concurrent HTTP calls per worker instance).
   - **`RATE_PER_SEC` mode**: aim for a configured requests-per-second rate (e.g. 10/s), spreading calls evenly over time (inter-arrival ≈ `1 / ratePerSec`), even when responses are slow.
 - [x] Integrate with the `WorkItem` step model:
@@ -71,7 +71,7 @@ flowchart TD
 
 ### 2. Execution Modes & Concurrency Model
 
-- [ ] Define configuration properties for the processor worker:
+- [x] Define configuration properties for the processor worker:
   - `mode`: `THREAD_COUNT` vs `RATE_PER_SEC`.
   - `threadCount`: how many concurrent HTTP calls this worker instance is allowed to run in `THREAD_COUNT` mode.
   - `ratePerSec`: desired requests per second in `RATE_PER_SEC` mode (used to compute inter-arrival spacing).
@@ -80,8 +80,9 @@ flowchart TD
 - [ ] Clarify interaction with existing control-plane rate controls:
   - In `THROUGHPUT` mode, treat incoming message rate (scheduler/queue) as the main rate control; the worker simply uses an internal pool to overlap latency.
   - In `TARGET_RPS` mode, treat worker config as an additional pacing layer on top of scheduler rate (e.g. scheduler might emit seeds at a higher rate, but the worker enforces the effective outbound HTTP rate).
-- [ ] Design the concurrency / pacing engine using virtual threads:
-  - Run the Rabbit listener and worker invocations on virtual threads so blocking waits (semaphore / sleep) are cheap.
+// Concurrency/pacing engine is implemented; virtual-thread wiring lives at the container factory layer.
+- [x] Design the concurrency / pacing engine using virtual threads:
+  - Run the Rabbit listener and worker invocations on virtual threads so blocking waits (semaphore / sleep) are cheap. This is wired at the Rabbit listener container level in the Worker SDK (executor = virtual-thread per task).
   - In `THREAD_COUNT` mode:
     - Use a `Semaphore(threadCount)` to gate concurrent HTTP calls; each `onMessage` acquires before invoking HTTP and releases in `finally`.
   - In `RATE_PER_SEC` mode:

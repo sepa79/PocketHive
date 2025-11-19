@@ -9,6 +9,10 @@ Timestamp: 2025-11-15T00:00:00Z
   - Refactored `WorkItem` to be step-driven (no internal `body` field); `asString()` and `payload()` now always reflect the latest `WorkStep` payload while `body()` and JSON helpers derive from that payload.
   - Moved step history off the `x-ph-workitem-steps` Rabbit header into a JSON envelope carried in the message payload, and updated the worker SDK converter, Rabbit-based outputs/inputs, and e2e harness to read/write `steps` from the payload.
   - Ensured generator → moderator → processor hops append successive steps so templated and default REST scenarios carry a complete, ordered history into the final queue.
+- HTTP processor execution modes and virtual threads:
+  - Extended `ProcessorWorkerConfig` with `mode` (`THREAD_COUNT`/`RATE_PER_SEC`), `threadCount`, `ratePerSec`, and `connectionReuse` flags, and wired `ProcessorWorkerImpl` to cap concurrency via a semaphore and pace requests via a shared `nextAllowedTimeNanos`.
+  - Added a small client pool for `connectionReuse=PER_THREAD` in `THREAD_COUNT` mode, and documented that `connectionReuse=NONE` currently behaves like `GLOBAL` due to JDK `HttpClient` header restrictions, with a future plan to introduce a true no-keep-alive client.
+  - Introduced a `VirtualThreadRabbitContainerCustomizer` bean in the Worker SDK so the default `rabbitListenerContainerFactory` uses virtual threads for work dispatch, allowing blocking worker code to scale without exhausting platform threads.
 - Swarm controller observability: added INFO logs for controller start/stop, swarm-wide enable/disable config-updates, and buffer guard lifecycle transitions so operators can trace controller activity without digging through DEBUG output.
 - Control-plane tracing: SwarmSignalListener now prints the incoming swarm template payload plus every controller-level config update with the resulting config snapshot, mirroring worker runtime logging.
 - Logging configuration: relaxed the logback filter so `io.pockethive.swarmcontroller` logs at INFO by default, ensuring the new lifecycle/config messages reach both console and RabbitMQ appenders.
