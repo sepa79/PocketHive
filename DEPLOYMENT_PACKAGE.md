@@ -31,6 +31,7 @@ pockethive/
 ├── LICENSE                     # License file
 ├── loki/
 │   └── config.yml              # Log aggregation config
+├── rabbitmq/                   # Rabbit definitions/config used by the stack
 ├── prometheus/
 │   └── prometheus.yml          # Metrics scraping config
 ├── grafana/
