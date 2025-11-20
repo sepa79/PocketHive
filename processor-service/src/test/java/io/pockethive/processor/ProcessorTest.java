@@ -72,7 +72,7 @@ class ProcessorTest {
         HttpClient httpClient = mock(HttpClient.class);
         Clock clock = Clock.fixed(Instant.parse("2024-01-01T00:00:00Z"), ZoneOffset.UTC);
         ProcessorWorkerImpl worker = new ProcessorWorkerImpl(properties, httpClient, httpClient, clock);
-        ProcessorWorkerConfig config = new ProcessorWorkerConfig("http://sut", null, 0, 0.0, null);
+        ProcessorWorkerConfig config = new ProcessorWorkerConfig("http://sut", null, 0, 0.0, null, null);
         TestWorkerContext context = new TestWorkerContext(config);
 
         AtomicReference<ClassicHttpRequest> requestRef = new AtomicReference<>();
@@ -136,7 +136,7 @@ class ProcessorTest {
         HttpClient httpClient = mock(HttpClient.class);
         Clock clock = Clock.fixed(Instant.parse("2024-02-02T00:00:00Z"), ZoneOffset.UTC);
         ProcessorWorkerImpl worker = new ProcessorWorkerImpl(properties, httpClient, httpClient, clock);
-        ProcessorWorkerConfig config = new ProcessorWorkerConfig("http://sut/api", null, 0, 0.0, null);
+        ProcessorWorkerConfig config = new ProcessorWorkerConfig("http://sut/api", null, 0, 0.0, null, null);
         TestWorkerContext context = new TestWorkerContext(config);
 
         AtomicReference<ClassicHttpRequest> requestRef = new AtomicReference<>();
@@ -164,7 +164,7 @@ class ProcessorTest {
         HttpClient httpClient = mock(HttpClient.class);
         SequenceClock clock = new SequenceClock(0, 50, 100, 250);
         ProcessorWorkerImpl worker = new ProcessorWorkerImpl(properties, httpClient, httpClient, clock);
-        ProcessorWorkerConfig config = new ProcessorWorkerConfig("http://sut", null, 0, 0.0, null);
+        ProcessorWorkerConfig config = new ProcessorWorkerConfig("http://sut", null, 0, 0.0, null, null);
         TestWorkerContext context = new TestWorkerContext(config);
 
         AtomicInteger invocation = new AtomicInteger();
@@ -237,7 +237,7 @@ class ProcessorTest {
         HttpClient httpClient = mock(HttpClient.class);
         Clock clock = Clock.systemUTC();
         ProcessorWorkerImpl worker = new ProcessorWorkerImpl(properties, httpClient, httpClient, clock);
-        ProcessorWorkerConfig config = new ProcessorWorkerConfig(" ", null, 0, 0.0, null);
+        ProcessorWorkerConfig config = new ProcessorWorkerConfig(" ", null, 0, 0.0, null, null);
         TestWorkerContext context = new TestWorkerContext(config);
 
         WorkItem inbound = WorkItem.json(Map.of("path", "/noop")).build();

@@ -1,5 +1,5 @@
 schemaVersion: "1.0"
-capabilitiesVersion: "1.0"
+capabilitiesVersion: "1.1"
 role: generator
 image:
   name: generator
@@ -27,6 +27,14 @@ config:
   - name: message.method
     type: string
     default: "GET"
+    options:
+      - "GET"
+      - "POST"
+      - "PUT"
+      - "DELETE"
+      - "PATCH"
+      - "HEAD"
+      - "OPTIONS"
   - name: message.body
     type: text
     default: ""

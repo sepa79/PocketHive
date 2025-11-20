@@ -132,122 +132,178 @@ export default function SwarmCreateModal({ onClose }: Props) {
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-[#1a1d24] p-4 rounded w-80">
-        <h3 className="text-lg mb-2">Create Swarm</h3>
-        <form onSubmit={handleSubmit} className="space-y-2">
-          <div>
-            <label htmlFor="swarmId" className="block text-sm mb-1">
-              Swarm ID
-            </label>
-            <input
-              id="swarmId"
-              value={swarmId}
-              onChange={(e) => setSwarmId(e.target.value)}
-              className="w-full rounded border border-white/20 bg-white/10 px-2 py-1 text-sm"
-            />
-          </div>
-          <div>
-            <label htmlFor="scenario" className="block text-sm mb-1">
-              Scenario
-            </label>
-            <select
-              id="scenario"
-              value={scenarioId}
-              onChange={(e) => setScenarioId(e.target.value)}
-              className="themed-select w-full text-sm"
-            >
-              <option value="">Select scenario</option>
-              {templates.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          {selectedTemplate && (
-            <div className="border border-white/10 rounded p-2 max-h-60 overflow-y-auto space-y-3 text-xs text-white/80">
-              {selectedTemplate.description && (
-                <p className="text-white/60">{selectedTemplate.description}</p>
-              )}
-              {selectedComponents.map((component) => (
-                <div key={component.key} className="space-y-2">
-                  <div className="font-semibold text-white">{component.label}</div>
-                  <div className="text-white/60 break-words">
-                    Image: {component.image ?? '—'}
-                  </div>
-                  {component.manifest ? (
-                    <div className="space-y-2">
-                      <div className="space-y-1">
-                        <div className="uppercase text-[10px] tracking-wide text-white/50">Config</div>
-                        {component.manifest.config.length === 0 && (
-                          <div className="text-white/50">No configurable options</div>
-                        )}
-                        {component.manifest.config.map((entry) => (
-                          <label key={entry.name} className="block space-y-1">
-                            <span className="block text-white/70">
-                              {entry.name}
-                              <span className="text-white/40"> ({entry.type})</span>
-                            </span>
-                            {renderConfigControl(entry)}
-                          </label>
-                        ))}
-                      </div>
-                      <div className="space-y-1">
-                        <div className="uppercase text-[10px] tracking-wide text-white/50">Actions</div>
-                        {component.manifest.actions.length === 0 && (
-                          <div className="text-white/50">No actions available</div>
-                        )}
-                        <div className="flex flex-wrap gap-2">
-                          {component.manifest.actions.map((action) => (
-                            <button
-                              key={action.id}
-                              type="button"
-                              disabled
-                              className="rounded bg-white/10 px-2 py-1 text-white/70 text-[11px]"
-                              title={action.params.length ? formatActionTooltip(action) : undefined}
-                            >
-                              {action.label}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                      <div className="space-y-1">
-                        <div className="uppercase text-[10px] tracking-wide text-white/50">Panels</div>
-                        {component.manifest.panels.length === 0 && (
-                          <div className="text-white/50">No panels registered</div>
-                        )}
-                        <div className="flex flex-wrap gap-1">
-                          {component.manifest.panels.map((panel) => (
-                            <span
-                              key={panel.id}
-                              className="rounded-full border border-white/20 px-2 py-[1px] text-[11px] text-white/70"
-                            >
-                              {panel.id}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="text-amber-300 text-[11px]">
-                      Capability manifest not found for this image.
-                    </div>
-                  )}
-                </div>
-              ))}
+      <div className="bg-[#1a1d24] p-5 rounded-lg w-[900px] max-w-[95vw] max-h-[85vh] flex flex-col shadow-xl border border-white/10">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-xl font-semibold">Create Swarm</h3>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-white/60 hover:text-white text-sm px-2 py-1"
+          >
+            ×
+          </button>
+        </div>
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4 flex-1 min-h-0">
+          <div className="flex gap-4">
+            <div className="flex-1">
+              <label htmlFor="swarmId" className="block text-sm mb-1">
+                Swarm ID
+              </label>
+              <input
+                id="swarmId"
+                value={swarmId}
+                onChange={(e) => setSwarmId(e.target.value)}
+                className="w-full rounded border border-white/20 bg-white/10 px-2 py-1 text-sm"
+              />
             </div>
-          )}
-          <div className="flex justify-end gap-2 pt-2">
+          </div>
+          <div className="flex gap-4 flex-1 min-h-0">
+            <div className="w-64 flex flex-col border border-white/10 rounded-md bg-white/5">
+              <div className="px-3 py-2 border-b border-white/10 text-xs uppercase tracking-wide text-white/60">
+                Scenarios
+              </div>
+              <div className="flex-1 overflow-y-auto">
+                {templates.length === 0 ? (
+                  <div className="px-3 py-3 text-xs text-white/50">No scenarios available.</div>
+                ) : (
+                  <ul className="text-sm">
+                    {templates.map((template) => {
+                      const selected = template.id === scenarioId
+                      return (
+                        <li key={template.id}>
+                          <button
+                            type="button"
+                            onClick={() => setScenarioId(template.id)}
+                            className={`w-full text-left px-3 py-2 hover:bg-white/10 ${
+                              selected ? 'bg-white/15 text-white' : 'text-white/80'
+                            }`}
+                          >
+                            <div className="font-medium leading-snug break-words">
+                              {template.name}
+                            </div>
+                            {template.description && (
+                              <div className="text-[11px] text-white/50 line-clamp-2">
+                                {template.description}
+                              </div>
+                            )}
+                          </button>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                )}
+              </div>
+            </div>
+            <div className="flex-1 min-h-0 border border-white/10 rounded-md bg-black/20 p-3 overflow-y-auto text-xs text-white/80">
+              {!selectedTemplate && (
+                <div className="text-white/50">
+                  Select a scenario on the left to preview its controller and bees.
+                </div>
+              )}
+              {selectedTemplate && (
+                <div className="space-y-4">
+                  <div>
+                    <div className="text-xs uppercase tracking-wide text-white/50 mb-1">
+                      Scenario
+                    </div>
+                    <div className="text-base font-semibold text-white leading-snug">
+                      {selectedTemplate.name}
+                    </div>
+                  </div>
+                  {selectedTemplate.description && (
+                    <p className="text-white/70 text-sm">{selectedTemplate.description}</p>
+                  )}
+                  {selectedComponents.map((component) => (
+                    <div key={component.key} className="space-y-2 border border-white/10 rounded-md p-3">
+                      <div className="flex items-baseline justify-between gap-3">
+                        <div className="font-semibold text-white">{component.label}</div>
+                        <div className="text-[11px] text-white/50 truncate">
+                          Image: {component.image ?? '—'}
+                        </div>
+                      </div>
+                      {component.manifest ? (
+                        <div className="space-y-3">
+                          <div className="space-y-1">
+                            <div className="uppercase text-[10px] tracking-wide text-white/50">
+                              Config
+                            </div>
+                            {component.manifest.config.length === 0 && (
+                              <div className="text-white/50">No configurable options</div>
+                            )}
+                            {component.manifest.config.map((entry) => (
+                              <label key={entry.name} className="block space-y-1">
+                                <span className="block text-white/70">
+                                  {entry.name}
+                                  <span className="text-white/40"> ({entry.type})</span>
+                                </span>
+                                {renderConfigControl(entry)}
+                              </label>
+                            ))}
+                          </div>
+                          <div className="space-y-1">
+                            <div className="uppercase text-[10px] tracking-wide text-white/50">
+                              Actions
+                            </div>
+                            {component.manifest.actions.length === 0 && (
+                              <div className="text-white/50">No actions available</div>
+                            )}
+                            <div className="flex flex-wrap gap-2">
+                              {component.manifest.actions.map((action) => (
+                                <button
+                                  key={action.id}
+                                  type="button"
+                                  disabled
+                                  className="rounded bg-white/10 px-2 py-1 text-white/70 text-[11px]"
+                                  title={
+                                    action.params.length ? formatActionTooltip(action) : undefined
+                                  }
+                                >
+                                  {action.label}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                          <div className="space-y-1">
+                            <div className="uppercase text-[10px] tracking-wide text-white/50">
+                              Panels
+                            </div>
+                            {component.manifest.panels.length === 0 && (
+                              <div className="text-white/50">No panels registered</div>
+                            )}
+                            <div className="flex flex-wrap gap-1">
+                              {component.manifest.panels.map((panel) => (
+                                <span
+                                  key={panel.id}
+                                  className="rounded-full border border-white/20 px-2 py-[1px] text-[11px] text-white/70"
+                                >
+                                  {panel.id}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="text-amber-300 text-[11px]">
+                          Capability manifest not found for this image.
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 pt-2 border-t border-white/10 mt-2">
             <button
               type="button"
               onClick={onClose}
-              className="rounded bg-white/10 hover:bg-white/20 px-2 py-1 text-sm"
+              className="rounded bg-white/10 hover:bg-white/20 px-3 py-1.5 text-sm"
             >
               Close
             </button>
             <button
               type="submit"
-              className="rounded bg-white/20 hover:bg-white/30 px-2 py-1 text-sm"
+              className="rounded bg-blue-500 hover:bg-blue-600 px-3 py-1.5 text-sm text-white"
             >
               Create
             </button>

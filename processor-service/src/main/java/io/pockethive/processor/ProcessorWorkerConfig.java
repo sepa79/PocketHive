@@ -7,7 +7,8 @@ public record ProcessorWorkerConfig(
     Mode mode,
     int threadCount,
     double ratePerSec,
-    ConnectionReuse connectionReuse
+    ConnectionReuse connectionReuse,
+    Boolean keepAlive
 ) implements MaxInFlightConfig {
 
   public enum Mode {
@@ -27,6 +28,7 @@ public record ProcessorWorkerConfig(
     threadCount = threadCount <= 0 ? 1 : threadCount;
     ratePerSec = ratePerSec <= 0.0 ? 1.0 : ratePerSec;
     connectionReuse = connectionReuse == null ? ConnectionReuse.GLOBAL : connectionReuse;
+    keepAlive = keepAlive == null ? Boolean.TRUE : keepAlive;
   }
 
   @Override

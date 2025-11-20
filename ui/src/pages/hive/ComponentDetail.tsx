@@ -128,7 +128,7 @@ export default function ComponentDetail({ component, onClose }: Props) {
     const avgLatencyMs = getNumber(cfg.avgLatencyMs)
     const httpMode = getString(cfg.httpMode)
     const httpThreadCount = getNumber(cfg.httpThreadCount)
-    const httpActiveCalls = getNumber(cfg.httpActiveCalls)
+    const httpMaxConnections = getNumber(cfg.httpMaxConnections)
     if (tps !== undefined) {
       entries.push({ label: 'TPS', value: Math.round(tps).toString() })
     }
@@ -162,10 +162,10 @@ export default function ComponentDetail({ component, onClose }: Props) {
         value: httpThreadCount.toString(),
       })
     }
-    if (httpActiveCalls !== undefined) {
+    if (httpMaxConnections !== undefined) {
       entries.push({
-        label: 'HTTP active calls',
-        value: httpActiveCalls.toString(),
+        label: 'HTTP max connections',
+        value: httpMaxConnections.toString(),
       })
     }
     return entries

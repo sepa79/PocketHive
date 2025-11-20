@@ -1,5 +1,5 @@
 schemaVersion: "1.0"
-capabilitiesVersion: "1.0"
+capabilitiesVersion: "1.1"
 role: processor
 image:
   name: processor
@@ -9,6 +9,34 @@ ui:
   color: "#a855f7"
   shape: "diamond"
   abbreviation: "PR"
+  # HTTP processor configuration model:
+  # - mode:
+  #     - THREAD_COUNT: cap concurrency per instance to `threadCount` in-flight HTTP calls.
+  #       The Rabbit worker adapter uses a bounded executor with no backlog so messages
+  #       stay queued in Rabbit when all threads are busy.
+  #     - RATE_PER_SEC: pace calls to approximately `ratePerSec` HTTP requests per second
+  #       across the instance, still honouring `threadCount` as a hard max-in-flight cap.
+  #       Pacing delay is not counted in the reported call latency.
+  # - threadCount: desired concurrent HTTP calls per worker instance. When there is enough
+  #   work available, the processor will maintain up to this many in-flight requests.
+  # - ratePerSec: target HTTP calls per second in RATE_PER_SEC mode. The worker spaces calls
+  #   using a shared token bucket so bursts are smoothed over time.
+  # - keepAlive + connectionReuse:
+  #     - keepAlive=true, connectionReuse=GLOBAL:
+  #         - Shared Apache HttpClient connection pool with up to 200 total / 200 per route
+  #           connections (also exposed as httpMaxConnections in runtime status).
+  #     - keepAlive=true, connectionReuse=PER_THREAD:
+  #         - One keep-alive HttpClient per worker thread, so effective max connections is
+  #           ~threadCount.
+  #     - keepAlive=false or connectionReuse=NONE:
+  #         - No keep-alive; each HTTP call uses a fresh connection and closes it afterwards.
+  # - Observability:
+  #     - Each call records:
+  #         - x-ph-processor-duration-ms: time spent in the HTTP call itself (no pacing delay).
+  #         - x-ph-processor-connection-latency-ms: time spent waiting for RATE_PER_SEC pacing.
+  #     - Runtime status includes:
+  #         - httpMode, httpThreadCount, httpMaxConnections, transactions, successRatio,
+  #           avgLatencyMs (average HTTP call latency).
 config:
   - name: enabled
     type: boolean
@@ -28,6 +56,9 @@ config:
   - name: ratePerSec
     type: double
     default: 1.0
+  - name: keepAlive
+    type: boolean
+    default: true
   - name: connectionReuse
     type: string
     default: "GLOBAL"

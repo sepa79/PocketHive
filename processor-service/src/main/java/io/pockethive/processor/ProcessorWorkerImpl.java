@@ -74,6 +74,9 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
   private static final String HEADER_DURATION = "x-ph-processor-duration-ms";
   private static final String HEADER_SUCCESS = "x-ph-processor-success";
   private static final String HEADER_STATUS = "x-ph-processor-status";
+  private static final String HEADER_CONNECTION_LATENCY = "x-ph-processor-connection-latency-ms";
+  private static final int GLOBAL_MAX_CONNECTIONS = 200;
+  private static final int GLOBAL_MAX_PER_ROUTE = 200;
 
   private final ProcessorWorkerProperties properties;
   private final HttpClient httpClient;
@@ -84,7 +87,6 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
   private final LongAdder successfulCalls = new LongAdder();
   private final DoubleAccumulator totalLatencyMs = new DoubleAccumulator(Double::sum, 0.0);
   private final java.util.concurrent.atomic.AtomicLong nextAllowedTimeNanos = new java.util.concurrent.atomic.AtomicLong(0L);
-  private final java.util.concurrent.atomic.AtomicInteger activeCalls = new java.util.concurrent.atomic.AtomicInteger(0);
 
   @Autowired
   ProcessorWorkerImpl(ProcessorWorkerProperties properties) {
@@ -150,7 +152,7 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
       return error;
     } catch (Exception ex) {
       logger.warn("Processor request failed: {}", ex.toString(), ex);
-      WorkItem error = buildError(in, context, ex.toString(), CallMetrics.failure(0, -1));
+      WorkItem error = buildError(in, context, ex.toString(), CallMetrics.failure(0L, 0L, -1));
       publishStatus(context, config);
       return error;
     }
@@ -163,7 +165,7 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
     String baseUrl = config.baseUrl();
     if (baseUrl == null || baseUrl.isBlank()) {
       logger.warn("No baseUrl configured; skipping HTTP call");
-      return buildError(message, context, "invalid baseUrl", CallMetrics.failure(0, -1));
+      return buildError(message, context, "invalid baseUrl", CallMetrics.failure(0L, 0L, -1));
     }
 
     String path = node.path("path").asText("/");
@@ -171,7 +173,7 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
     URI target = resolveTarget(baseUrl, path);
     if (target == null) {
       logger.warn("Invalid URI base='{}' path='{}'", baseUrl, path);
-      return buildError(message, context, "invalid baseUrl", CallMetrics.failure(0, -1));
+      return buildError(message, context, "invalid baseUrl", CallMetrics.failure(0L, 0L, -1));
     }
 
 	    JsonNode headersNode = node.path("headers");
@@ -182,27 +184,27 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
 	    Optional<String> body = extractBody(node.path("body"));
 	    logger.debug("HTTP REQUEST {} {} headers={} body={}", method, target, headersNode, body.orElse(""));
 
-    boolean counted = false;
     long start = clock.millis();
+    long pacingMillis = 0L;
     try {
-      applyExecutionMode(config);
-      activeCalls.incrementAndGet();
-      counted = true;
-
+      pacingMillis = applyExecutionMode(config);
       HttpClient client = selectClient(config);
       HttpUriRequestBase apacheRequest = new HttpUriRequestBase(method, target);
       headersNode.fields().forEachRemaining(entry -> apacheRequest.addHeader(entry.getKey(), entry.getValue().asText()));
       body.ifPresent(value -> apacheRequest.setEntity(new org.apache.hc.core5.http.io.entity.StringEntity(value, StandardCharsets.UTF_8)));
 
       ClassicHttpResponse response = (ClassicHttpResponse) client.execute(apacheRequest);
-      long duration = Math.max(0L, clock.millis() - start);
+      long endMillis = clock.millis();
+      long totalDuration = Math.max(0L, endMillis - start);
+      long callDuration = Math.max(0L, totalDuration - pacingMillis);
+      long connectionLatency = Math.max(0L, pacingMillis);
       int statusCode = response.getCode();
       logger.debug("HTTP RESPONSE {} {} -> {}", method, target, statusCode);
 
       boolean success = isSuccessful(statusCode);
       CallMetrics metrics = success
-          ? CallMetrics.success(duration, statusCode)
-          : CallMetrics.failure(duration, statusCode);
+          ? CallMetrics.success(callDuration, connectionLatency, statusCode)
+          : CallMetrics.failure(callDuration, connectionLatency, statusCode);
       recordCall(metrics);
 
       ObjectNode result = MAPPER.createObjectNode();
@@ -220,28 +222,27 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
 
       return message.addStep(responseItem.asString(), responseItem.headers());
     } catch (Exception ex) {
-      long duration = Math.max(0L, clock.millis() - start);
-      CallMetrics metrics = CallMetrics.failure(duration, -1);
+      long now = clock.millis();
+      long totalDuration = Math.max(0L, now - start);
+      long callDuration = Math.max(0L, totalDuration - pacingMillis);
+      long connectionLatency = Math.max(0L, pacingMillis);
+      CallMetrics metrics = CallMetrics.failure(callDuration, connectionLatency, -1);
       recordCall(metrics);
       throw new ProcessorCallException(metrics, ex);
-    } finally {
-      if (counted) {
-        activeCalls.decrementAndGet();
-      }
     }
   }
 
   /**
    * Applies the configured execution mode for this call.
    *
-   * @return true if execution was rate-limited (currently unused by callers).
+   * @return pacing delay in milliseconds applied before the HTTP call.
    */
-  private boolean applyExecutionMode(ProcessorWorkerConfig config) throws InterruptedException {
+  private long applyExecutionMode(ProcessorWorkerConfig config) throws InterruptedException {
     ProcessorWorkerConfig.Mode mode = config.mode();
     if (mode == ProcessorWorkerConfig.Mode.RATE_PER_SEC) {
       double rate = config.ratePerSec();
       if (rate <= 0.0) {
-        return false;
+        return 0L;
       }
       long intervalNanos = (long) (1_000_000_000L / rate);
       long now = System.nanoTime();
@@ -255,12 +256,13 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
             long millis = sleepNanos / 1_000_000L;
             int nanos = (int) (sleepNanos % 1_000_000L);
             Thread.sleep(millis, nanos);
+            return sleepNanos / 1_000_000L;
           }
-          return false;
+          return 0L;
         }
       }
     }
-    return false;
+    return 0L;
   }
 
   private URI resolveTarget(String baseUrl, String path) {
@@ -278,7 +280,8 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
    */
   private HttpClient selectClient(ProcessorWorkerConfig config) {
     ProcessorWorkerConfig.ConnectionReuse reuse = config.connectionReuse();
-    if (reuse == ProcessorWorkerConfig.ConnectionReuse.NONE) {
+    boolean keepAliveEnabled = Boolean.TRUE.equals(config.keepAlive());
+    if (!keepAliveEnabled || reuse == ProcessorWorkerConfig.ConnectionReuse.NONE) {
       return noKeepAliveClient;
     }
     if (reuse == ProcessorWorkerConfig.ConnectionReuse.PER_THREAD) {
@@ -325,21 +328,38 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
   private WorkItem.Builder applyCallHeaders(WorkItem.Builder builder, CallMetrics metrics) {
     return builder
         .header(HEADER_DURATION, Long.toString(metrics.durationMs()))
+        .header(HEADER_CONNECTION_LATENCY, Long.toString(metrics.connectionLatencyMs()))
         .header(HEADER_SUCCESS, Boolean.toString(metrics.success()))
         .header(HEADER_STATUS, Integer.toString(metrics.statusCode()));
   }
 
   private void publishStatus(WorkerContext context, ProcessorWorkerConfig config) {
+    int httpMaxConnections = httpMaxConnections(config);
     context.statusPublisher()
         .update(status -> status
             .data("baseUrl", config.baseUrl())
             .data("enabled", context.enabled())
             .data("httpMode", config.mode().name())
             .data("httpThreadCount", config.threadCount())
-            .data("httpActiveCalls", activeCalls.get())
+            .data("httpMaxConnections", httpMaxConnections)
             .data("transactions", totalCalls.sum())
             .data("successRatio", successRatio())
             .data("avgLatencyMs", averageLatencyMs()));
+  }
+
+  private int httpMaxConnections(ProcessorWorkerConfig config) {
+    boolean keepAliveEnabled = Boolean.TRUE.equals(config.keepAlive());
+    if (!keepAliveEnabled) {
+      return 0;
+    }
+    ProcessorWorkerConfig.ConnectionReuse reuse = config.connectionReuse();
+    if (reuse == ProcessorWorkerConfig.ConnectionReuse.GLOBAL) {
+      return GLOBAL_MAX_CONNECTIONS;
+    }
+    if (reuse == ProcessorWorkerConfig.ConnectionReuse.PER_THREAD) {
+      return config.threadCount();
+    }
+    return 0;
   }
 
   private void recordCall(CallMetrics metrics) {
@@ -372,8 +392,8 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
 
   private static HttpClient newPooledClient() {
     PoolingHttpClientConnectionManager manager = new PoolingHttpClientConnectionManager();
-    manager.setMaxTotal(200);
-    manager.setDefaultMaxPerRoute(200);
+    manager.setMaxTotal(GLOBAL_MAX_CONNECTIONS);
+    manager.setDefaultMaxPerRoute(GLOBAL_MAX_PER_ROUTE);
     return HttpClients.custom()
         .setConnectionManager(manager)
         .build();
@@ -399,13 +419,13 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
     }
   }
 
-  private record CallMetrics(long durationMs, boolean success, int statusCode) {
-    private static CallMetrics success(long durationMs, int statusCode) {
-      return new CallMetrics(durationMs, true, statusCode);
+  private record CallMetrics(long durationMs, long connectionLatencyMs, boolean success, int statusCode) {
+    private static CallMetrics success(long durationMs, long connectionLatencyMs, int statusCode) {
+      return new CallMetrics(durationMs, connectionLatencyMs, true, statusCode);
     }
 
-    private static CallMetrics failure(long durationMs, int statusCode) {
-      return new CallMetrics(durationMs, false, statusCode);
+    private static CallMetrics failure(long durationMs, long connectionLatencyMs, int statusCode) {
+      return new CallMetrics(durationMs, connectionLatencyMs, false, statusCode);
     }
   }
 
