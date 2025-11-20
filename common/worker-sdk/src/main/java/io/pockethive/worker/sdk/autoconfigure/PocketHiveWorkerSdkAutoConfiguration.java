@@ -15,6 +15,7 @@ import io.pockethive.worker.sdk.config.PocketHiveWorker;
 import io.pockethive.worker.sdk.config.PocketHiveWorkerProperties;
 import io.pockethive.worker.sdk.config.RabbitInputProperties;
 import io.pockethive.worker.sdk.config.RabbitOutputProperties;
+import io.pockethive.worker.sdk.config.RedisDataSetInputProperties;
 import io.pockethive.worker.sdk.config.SchedulerInputProperties;
 import io.pockethive.worker.sdk.config.WorkInputConfig;
 import io.pockethive.worker.sdk.config.WorkInputConfigBinder;
@@ -24,6 +25,7 @@ import io.pockethive.worker.sdk.input.WorkInputRegistryInitializer;
 import io.pockethive.worker.sdk.input.rabbit.RabbitWorkInputFactory;
 import io.pockethive.worker.sdk.input.rabbit.RabbitWorkInputListenerConfigurer;
 import io.pockethive.worker.sdk.input.SchedulerWorkInputFactory;
+import io.pockethive.worker.sdk.input.redis.RedisDataSetWorkInputFactory;
 import io.pockethive.worker.sdk.metrics.PrometheusPushGatewayProperties;
 import io.pockethive.worker.sdk.config.WorkOutputConfig;
 import io.pockethive.worker.sdk.config.WorkOutputConfigBinder;
@@ -37,6 +39,7 @@ import io.pockethive.worker.sdk.runtime.WorkerDefinition;
 import io.pockethive.worker.sdk.config.WorkerOutputType;
 import io.pockethive.worker.sdk.runtime.WorkerMetricsInterceptor;
 import io.pockethive.worker.sdk.runtime.WorkerObservabilityInterceptor;
+import io.pockethive.worker.sdk.runtime.RedisUploaderInterceptor;
 import io.pockethive.worker.sdk.runtime.TemplatingInterceptor;
 import io.pockethive.worker.sdk.runtime.WorkIoBindings;
 import io.pockethive.worker.sdk.runtime.WorkerRegistry;
@@ -343,6 +346,16 @@ public class PocketHiveWorkerSdkAutoConfiguration {
     }
 
     @Bean
+    @ConditionalOnBean({WorkerRuntime.class, WorkerControlPlaneRuntime.class})
+    io.pockethive.worker.sdk.input.WorkInputFactory redisDataSetWorkInputFactory(
+        WorkerRuntime workerRuntime,
+        WorkerControlPlaneRuntime controlPlaneRuntime,
+        @Qualifier("workerControlPlaneIdentity") ControlPlaneIdentity identity
+    ) {
+        return new RedisDataSetWorkInputFactory(workerRuntime, controlPlaneRuntime, identity);
+    }
+
+    @Bean
     @ConditionalOnBean({WorkerRegistry.class, WorkInputRegistry.class})
     RabbitListenerConfigurer rabbitWorkInputListenerConfigurer(
         WorkerRegistry workerRegistry,
@@ -361,6 +374,12 @@ public class PocketHiveWorkerSdkAutoConfiguration {
     @ConditionalOnMissingBean
     WorkerInvocationInterceptor workerObservabilityInterceptor() {
         return new WorkerObservabilityInterceptor();
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(RedisUploaderInterceptor.class)
+    WorkerInvocationInterceptor redisUploaderInterceptor() {
+        return new RedisUploaderInterceptor();
     }
 
     @Bean
@@ -483,6 +502,7 @@ public class PocketHiveWorkerSdkAutoConfiguration {
         return switch (annotation.input()) {
             case SCHEDULER -> SchedulerInputProperties.class;
             case RABBITMQ -> RabbitInputProperties.class;
+            case REDIS_DATASET -> RedisDataSetInputProperties.class;
             default -> WorkInputConfig.class;
         };
     }

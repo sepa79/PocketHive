@@ -1,0 +1,47 @@
+spring:
+  application.name: data-provider-service
+  rabbitmq:
+    host: ${SPRING_RABBITMQ_HOST}
+    port: ${SPRING_RABBITMQ_PORT}
+    username: ${SPRING_RABBITMQ_USERNAME}
+    password: ${SPRING_RABBITMQ_PASSWORD}
+    virtual-host: ${SPRING_RABBITMQ_VIRTUAL_HOST}
+
+# Include traceId from MDC in log output
+logging:
+  config: classpath:logback-spring.xml
+  pattern.level: "%5p [%X{traceId}]"
+
+pockethive:
+  inputs:
+    redis:
+      enabled: true
+      host: ${POCKETHIVE_INPUT_REDIS_HOST:redis}
+      port: ${POCKETHIVE_INPUT_REDIS_PORT:6379}
+      username: ${POCKETHIVE_INPUT_REDIS_USERNAME:}
+      password: ${POCKETHIVE_INPUT_REDIS_PASSWORD:}
+      ssl: ${POCKETHIVE_INPUT_REDIS_SSL:false}
+      list-name: ${POCKETHIVE_INPUT_REDIS_LIST_NAME:ph:dataset}
+      rate-per-sec: ${POCKETHIVE_INPUT_REDIS_RATE_PER_SEC:1.0}
+      tick-interval-ms: ${POCKETHIVE_INPUT_REDIS_TICK_INTERVAL_MS:1000}
+      initial-delay-ms: ${POCKETHIVE_INPUT_REDIS_INITIAL_DELAY_MS:0}
+  outputs:
+    rabbit:
+      exchange: ${POCKETHIVE_OUTPUT_RABBIT_EXCHANGE}
+      routingKey: ${POCKETHIVE_OUTPUT_RABBIT_ROUTING_KEY}
+  worker:
+    config:
+      headers: {}
+  control-plane:
+    exchange: ${POCKETHIVE_CONTROL_PLANE_EXCHANGE}
+    swarm-id: ${POCKETHIVE_CONTROL_PLANE_SWARM_ID}
+    instance-id: ${POCKETHIVE_CONTROL_PLANE_INSTANCE_ID}
+    control-queue-prefix: ${POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE_PREFIX}
+    worker:
+      role: ${POCKETHIVE_CONTROL_PLANE_WORKER_ROLE}
+      skip-self-signals: false
+    manager:
+      enabled: false
+
+management.prometheus.metrics.export.pushgateway.job: ${POCKETHIVE_CONTROL_PLANE_SWARM_ID}
+management.prometheus.metrics.export.pushgateway.grouping-key.instance: ${POCKETHIVE_CONTROL_PLANE_INSTANCE_ID}

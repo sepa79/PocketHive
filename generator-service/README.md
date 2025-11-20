@@ -10,3 +10,7 @@ Generator routing is supplied by the worker IO sections. Configure the hive outp
 `pockethive.outputs.rabbit` (or via `POCKETHIVE_OUTPUT_RABBIT_*` environment variables); see the
 [control-plane worker guide](../docs/control-plane/worker-guide.md#configuration-properties) for the complete property
 reference and [Worker SDK quick start](../docs/sdk/worker-sdk-quickstart.md) for sample YAML.
+
+The generator also supports inline templating for its HTTP envelope. The `path`, `method`, `headers`, and `body`
+fields are rendered through the shared `TemplateRenderer` (Pebble + constrained SpEL), with `payload`, `headers`,
+and `workItem` available in the template context so you can randomise or derive values without extra code.

@@ -7,7 +7,9 @@ import io.pockethive.worker.sdk.config.PocketHiveWorker;
 import io.pockethive.worker.sdk.config.WorkerCapability;
 import io.pockethive.worker.sdk.config.WorkerInputType;
 import io.pockethive.worker.sdk.config.WorkerOutputType;
+import io.pockethive.worker.sdk.templating.TemplateRenderer;
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -53,10 +55,12 @@ import org.springframework.stereotype.Component;
 class GeneratorWorkerImpl implements PocketHiveWorkerFunction {
 
   private final GeneratorWorkerProperties properties;
+  private final TemplateRenderer templateRenderer;
 
   @Autowired
-  GeneratorWorkerImpl(GeneratorWorkerProperties properties) {
+  GeneratorWorkerImpl(GeneratorWorkerProperties properties, TemplateRenderer templateRenderer) {
     this.properties = properties;
+    this.templateRenderer = templateRenderer;
   }
 
   /**
@@ -114,15 +118,18 @@ class GeneratorWorkerImpl implements PocketHiveWorkerFunction {
 
   private WorkItem buildMessage(GeneratorWorkerConfig config, WorkerContext context, WorkItem seed) {
     String messageId = UUID.randomUUID().toString();
+    Map<String, Object> templateContext = buildTemplateContext(seed);
     Map<String, Object> payload = new LinkedHashMap<>();
     payload.put("id", messageId);
     GeneratorWorkerConfig.Message message = config.message();
-    payload.put("path", message.path());
-    payload.put("method", message.method());
-    payload.put("headers", message.headers());
+    payload.put("path", render(message.path(), templateContext));
+    payload.put("method", render(message.method(), templateContext));
+    payload.put("headers", renderHeaders(message.headers(), templateContext));
 
     String seedBody = seed.payload();
-    String effectiveBody = (seedBody != null && !seedBody.isBlank()) ? seedBody : message.body();
+    String effectiveBody = (seedBody != null && !seedBody.isBlank())
+        ? seedBody
+        : render(message.body(), templateContext);
     payload.put("body", effectiveBody);
 
     payload.put("createdAt", Instant.now().toString());
@@ -132,5 +139,29 @@ class GeneratorWorkerImpl implements PocketHiveWorkerFunction {
         .header("message-id", messageId)
         .header("x-ph-service", context.info().role())
         .build();
+  }
+
+  private Map<String, Object> buildTemplateContext(WorkItem seed) {
+    Map<String, Object> ctx = new HashMap<>();
+    ctx.put("payload", seed.payload());
+    ctx.put("headers", seed.headers());
+    ctx.put("workItem", seed);
+    return ctx;
+  }
+
+  private String render(String template, Map<String, Object> context) {
+    if (template == null || template.isBlank()) {
+      return "";
+    }
+    return templateRenderer.render(template, context);
+  }
+
+  private Map<String, String> renderHeaders(Map<String, String> headers, Map<String, Object> context) {
+    if (headers == null || headers.isEmpty()) {
+      return Map.of();
+    }
+    Map<String, String> rendered = new LinkedHashMap<>(headers.size());
+    headers.forEach((name, value) -> rendered.put(name, render(value, context)));
+    return rendered;
   }
 }

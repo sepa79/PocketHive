@@ -34,6 +34,7 @@ public final class WorkInputConfigBinder {
         Objects.requireNonNull(inputType, "inputType");
         String suffix = switch (inputType) {
             case RABBITMQ -> "rabbit";
+            case REDIS_DATASET -> "redis";
             default -> inputType.name().toLowerCase(Locale.ROOT);
         };
         return "pockethive.inputs." + suffix;

@@ -1,0 +1,18 @@
+schemaVersion: "1.0"
+capabilitiesVersion: "1.1"
+role: data-provider
+image:
+  name: data-provider
+  tag: latest
+ui:
+  label: "Data Provider"
+  color: "#22c55e"
+  shape: "triangle"
+  abbreviation: "DP"
+config:
+  - name: headers
+    type: json
+    default: {}
+    multiline: true
+actions: []
+panels: []

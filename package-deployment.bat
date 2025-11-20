@@ -81,11 +81,12 @@ echo - 8080 - WireMock
 echo.
 echo ## Persistent Data
 echo.
-echo Docker named volumes keep state for RabbitMQ, Prometheus, Grafana, and Loki:
+echo Docker named volumes keep state for RabbitMQ, Prometheus, Grafana, Loki, and Redis:
 echo - rabbitmq-data
 echo - prometheus-data
 echo - grafana-data
 echo - loki-data
+echo - redis-data
 echo Use "docker compose down -v" to remove them for a clean reset.
 ) > "%DEPLOY_DIR%\DEPLOY.md"
 

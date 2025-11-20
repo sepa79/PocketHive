@@ -47,6 +47,13 @@ class WorkIOConfigBinderTest {
     }
 
     @Test
+    void exposesRedisInputPrefix() {
+        WorkInputConfigBinder binder = new WorkInputConfigBinder(new Binder(new MapConfigurationPropertySource()));
+
+        assertThat(binder.prefix(WorkerInputType.REDIS_DATASET)).isEqualTo("pockethive.inputs.redis");
+    }
+
+    @Test
     void exposesRabbitOutputPrefix() {
         WorkOutputConfigBinder binder = new WorkOutputConfigBinder(new Binder(new MapConfigurationPropertySource()));
 

@@ -9,6 +9,7 @@ COPY common/control-plane-core/pom.xml common/control-plane-core/pom.xml
 COPY common/control-plane-spring/pom.xml common/control-plane-spring/pom.xml
 COPY common/worker-sdk/pom.xml common/worker-sdk/pom.xml
 COPY e2e-tests/pom.xml e2e-tests/pom.xml
+COPY data-provider-service/pom.xml data-provider-service/pom.xml
 COPY log-aggregator-service/pom.xml log-aggregator-service/pom.xml
 COPY generator-service/pom.xml generator-service/pom.xml
 COPY moderator-service/pom.xml moderator-service/pom.xml
@@ -26,6 +27,7 @@ COPY common/control-plane-core/src common/control-plane-core/src
 COPY common/control-plane-spring/src common/control-plane-spring/src
 COPY common/worker-sdk/src common/worker-sdk/src
 COPY e2e-tests/src e2e-tests/src
+COPY data-provider-service/src data-provider-service/src
 COPY log-aggregator-service/src log-aggregator-service/src
 COPY generator-service/src generator-service/src
 COPY moderator-service/src moderator-service/src

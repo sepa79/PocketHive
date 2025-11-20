@@ -5,7 +5,10 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 Timestamp: 2025-11-20T00:00:00Z
 
-- (none)
+- Worker SDK: add a Redis dataset work input that pops from a configured Redis list at a fixed rate, emitting each entry as a `WorkItem` while skipping delivery when the list is empty.
+- Data Provider: introduce a new Redis-driven worker (role `data-provider`) that forwards list entries downstream and publishes a capability manifest for swarm plans.
+- Stack: ship Redis + Redis Commander in docker-compose and surface the Redis UI link in the Hive toolbar.
+- Worker SDK: add a Redis uploader interceptor (config-only opt-in) that can route payloads back into Redis lists based on simple regex rules or a fallback/original list.
 
 ## [0.14.0] - 2025-11-20
 Timestamp: 2025-11-20T00:00:00Z

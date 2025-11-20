@@ -115,3 +115,46 @@ The control-plane runtime bridges the SDK with the control-plane topic. It appli
 5. Use `WorkerContext` for config, metrics, observability, and status reporting.
 
 For a full walkthrough consult the [Worker SDK quick start](../../docs/sdk/worker-sdk-quickstart.md), which links to Stage 1–3 features and migration tips.
+
+### Templating interceptor context
+
+The templating interceptor builds a compact context map for Pebble templates:
+
+- `payload` – the current `WorkItem.payload()`
+- `headers` – the current `WorkItem.headers()`
+- `workItem` – the full immutable `WorkItem` (including steps and observability context) if you need deeper inspection
+- `eval(expression)` – evaluates a constrained SpEL expression against the same values plus helpers:
+  - Root: `workItem`, `payload`, `headers`, `now` (`Instant`), `nowIso` (UTC ISO string)
+  - Functions (call with a leading `#`): `randInt(min,max)`, `randLong(min,max)` (pass large bounds as strings), `uuid()`, `md5_hex(value)`, `sha256_hex(value)`, `base64_encode(value)`, `base64_decode(value)`, `hmac_sha256_hex(key,value)`, `regex_match(input,pattern)`, `regex_extract(input,pattern,group)`, `json_path(payload,path)`, `date_format(instant,pattern)`
+  - Example: `{{ eval('#md5_hex(payload)') }}` to hash the current payload
+  - Type references, `new`, bean lookups, and arbitrary method calls are blocked; stick to property access and the provided helpers.
+
+### Redis uploader interceptor (config-only)
+
+The SDK ships a Redis uploader interceptor that can be enabled purely via config under
+`pockethive.worker.config.interceptors.redisUploader`. It routes the selected payload to Redis
+lists without changing worker code:
+
+```yaml
+pockethive:
+  worker:
+    config:
+          interceptors:
+            redisUploader:
+              enabled: true
+              host: redis
+              port: 6379
+              phase: AFTER                   # BEFORE or AFTER; default AFTER (runs after onMessage)
+              sourceStep: FIRST              # or LAST; default FIRST
+              pushDirection: RPUSH           # default; symmetric with redis input LPOP
+              routes:                        # first match wins; optional
+                - match: '^.*"status":\\s*200.*$'
+                  list: ph:dataset:main
+                - match: 'no money'
+                  list: ph:dataset:topup
+          fallbackList: ph:dataset:other # if omitted, uses the x-ph-redis-list header from the WorkItem; otherwise skips
+```
+
+If no route matches and `fallbackList` is blank, the interceptor falls back to the original list
+name carried in the `x-ph-redis-list` header (emitted by the Redis dataset input). Leave `enabled=false`
+to keep it dormant.

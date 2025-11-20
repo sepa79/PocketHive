@@ -12,5 +12,9 @@ public enum WorkerInputType {
     /**
      * Input driven by a scheduler (generators, triggers, cron-like sources).
      */
-    SCHEDULER
+    SCHEDULER,
+    /**
+     * Input driven by Redis lists for dataset playback at a fixed rate.
+     */
+    REDIS_DATASET
 }
