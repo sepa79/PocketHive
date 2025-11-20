@@ -83,6 +83,8 @@ function normalizeConfigEntry(entry: unknown) {
   if (!entry || typeof entry !== 'object') return null
   const value = entry as Record<string, unknown>
   if (typeof value.name !== 'string' || typeof value.type !== 'string') return null
+  const options =
+    Array.isArray(value.options) && value.options.length > 0 ? [...value.options] : undefined
   return {
     name: value.name,
     type: value.type,
@@ -91,6 +93,7 @@ function normalizeConfigEntry(entry: unknown) {
     max: typeof value.max === 'number' ? value.max : undefined,
     multiline: typeof value.multiline === 'boolean' ? value.multiline : undefined,
     ui: value.ui,
+    options,
   } satisfies CapabilityConfigEntry
 }
 
@@ -278,4 +281,3 @@ export function buildRoleAppearanceMap(manifests: CapabilityManifest[]): RoleApp
   })
   return map
 }
-

@@ -1,7 +1,6 @@
 package io.pockethive.worker.sdk.runtime;
 
-import io.pockethive.worker.sdk.api.WorkMessage;
-import io.pockethive.worker.sdk.api.WorkResult;
+import io.pockethive.worker.sdk.api.WorkItem;
 import io.pockethive.worker.sdk.output.WorkOutputRegistry;
 import java.util.HashMap;
 import java.util.List;
@@ -57,14 +56,14 @@ public final class DefaultWorkerRuntime implements WorkerRuntime {
     }
 
     @Override
-    public WorkResult dispatch(String workerBeanName, WorkMessage message) throws Exception {
+    public WorkItem dispatch(String workerBeanName, WorkItem message) throws Exception {
         WorkerInvocation invocation = invocations.get(workerBeanName);
         if (invocation == null) {
             throw new IllegalArgumentException("Unknown worker bean: " + workerBeanName);
         }
-        WorkResult result = invocation.invoke(message);
-        if (outputRegistry != null && result instanceof WorkResult.Message messageResult) {
-            outputRegistry.publish(invocation.definition(), messageResult);
+        WorkItem result = invocation.invoke(message);
+        if (outputRegistry != null && result != null) {
+            outputRegistry.publish(result, invocation.definition());
         }
         return result;
     }

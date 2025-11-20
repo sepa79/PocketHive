@@ -275,7 +275,6 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
         containers.computeIfAbsent(bee.role(), r -> new ArrayList<>()).add(containerId);
         if (bee.config() != null && !bee.config().isEmpty()) {
           pendingConfigUpdates.put(beeName, new PendingConfig(bee.role(), Map.copyOf(bee.config())));
-          publishBootstrapConfigIfNecessary(bee.role(), beeName, true);
         }
       }
     } catch (JsonProcessingException e) {

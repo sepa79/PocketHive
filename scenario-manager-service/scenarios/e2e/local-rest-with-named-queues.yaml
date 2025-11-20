@@ -7,7 +7,8 @@ template:
     - role: generator
       image: generator:latest
       config:
-        ratePerSec: 5
+        worker:
+          ratePerSec: 5
       work:
         out: genQ
     - role: moderator

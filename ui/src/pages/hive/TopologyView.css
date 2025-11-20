@@ -72,6 +72,18 @@
   box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.35), 0 18px 40px rgba(2, 6, 23, 0.55);
 }
 
+.shape-node__badge {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  padding: 2px 6px;
+  border-radius: 9999px;
+  background: rgba(15, 23, 42, 0.9);
+  color: #facc15;
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
 .shape-node .shape-icon {
   flex-shrink: 0;
 }

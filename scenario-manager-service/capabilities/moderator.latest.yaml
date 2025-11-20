@@ -16,8 +16,10 @@ config:
   - name: mode.type
     type: string
     default: "PASS_THROUGH"
-    ui:
-      placeholder: "PASS_THROUGH | RATE_PER_SEC | SINE"
+    options:
+      - "PASS_THROUGH"
+      - "RATE_PER_SEC"
+      - "SINE"
   - name: mode.ratePerSec
     type: number
     default: 0

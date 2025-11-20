@@ -3,11 +3,33 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
-Timestamp: 2025-11-15T00:00:00Z
+Timestamp: 2025-11-20T00:00:00Z
 
+- (none)
+
+## [0.14.0] - 2025-11-20
+Timestamp: 2025-11-20T00:00:00Z
+
+- WorkItem history model and transport:
+  - Refactored `WorkItem` to be step-driven (no internal `body` field); `asString()` and `payload()` now always reflect the latest `WorkStep` payload while `body()` and JSON helpers derive from that payload.
+  - Moved step history off the `x-ph-workitem-steps` Rabbit header into a JSON envelope carried in the message payload, and updated the worker SDK converter, Rabbit-based outputs/inputs, and e2e harness to read/write `steps` from the payload.
+  - Ensured generator → moderator → processor hops append successive steps so templated and default REST scenarios carry a complete, ordered history into the final queue.
+- HTTP processor execution modes and virtual threads:
+  - Extended `ProcessorWorkerConfig` with `mode` (`THREAD_COUNT`/`RATE_PER_SEC`), `threadCount`, `ratePerSec`, and `connectionReuse` flags, and wired `ProcessorWorkerImpl` to cap concurrency via a semaphore and pace requests via a shared `nextAllowedTimeNanos`.
+  - Added a small client pool for `connectionReuse=PER_THREAD` in `THREAD_COUNT` mode, and documented that `connectionReuse=NONE` currently behaves like `GLOBAL` due to JDK `HttpClient` header restrictions, with a future plan to introduce a true no-keep-alive client.
+  - Introduced a `VirtualThreadRabbitContainerCustomizer` bean in the Worker SDK so the default `rabbitListenerContainerFactory` uses virtual threads for work dispatch, allowing blocking worker code to scale without exhausting platform threads.
+- HTTP processor latency, connection reuse, and capabilities:
+  - Replaced the JDK HttpClient-based processor with an Apache HttpClient 5 implementation that separates pure HTTP call latency from pacing delay in RATE_PER_SEC mode, exposing both on step headers (`x-ph-processor-duration-ms`, `x-ph-processor-connection-latency-ms`) and reporting average call latency in status (`avgLatencyMs`).
+  - Introduced a generic MaxInFlightConfig hook in the worker SDK and wired RabbitMessageWorkerAdapter to cap concurrent worker invocations via a bounded ThreadPoolExecutor (SynchronousQueue, no backlog), so the processor’s `threadCount` now directly represents max in-flight HTTP calls per instance.
+  - Added `keepAlive` and `connectionReuse` (`GLOBAL` / `PER_THREAD` / `NONE`) to `ProcessorWorkerConfig`, backed by a shared Apache connection pool for GLOBAL, per-thread clients for PER_THREAD, and a no-keep-alive client when disabled; surfaced the effective pool size via `httpMaxConnections` in runtime status.
+  - Updated processor capabilities (`processor.latest.yaml`, capabilitiesVersion 1.1) to document THREAD_COUNT vs RATE_PER_SEC semantics, concurrency mapping, connection reuse/keep-alive behaviour, and latency metrics inline with the config entries so UI authors and scenario writers can tune the worker without chasing external docs.
+  - Refined the Hive UI component details panel to render enum-backed config entries as dropdowns (e.g., processor mode/connectionReuse, moderator mode.type, generator HTTP method), display processor runtime fields such as HTTP mode/thread count/max connections, and improve the swarm create modal with a multi-line scenario list and rich preview pane.
+- Moderator rate limiting: fixed mode transitions so switching to pass-through or zero/invalid rates clears pending schedule targets, preventing stalls after leaving a slow SINE/RATE_PER_SEC configuration.
+- Deployment packaging: include `rabbitmq/` definitions/config in the deployment bundle so external deployments carry the Rabbit setup alongside compose and observability configs.
 - Swarm controller observability: added INFO logs for controller start/stop, swarm-wide enable/disable config-updates, and buffer guard lifecycle transitions so operators can trace controller activity without digging through DEBUG output.
 - Control-plane tracing: SwarmSignalListener now prints the incoming swarm template payload plus every controller-level config update with the resulting config snapshot, mirroring worker runtime logging.
 - Logging configuration: relaxed the logback filter so `io.pockethive.swarmcontroller` logs at INFO by default, ensuring the new lifecycle/config messages reach both console and RabbitMQ appenders.
+- Swarm controller bootstrap config: delay initial per-worker `config-update` signals until after the first status heartbeat so workers only receive overrides once their control queues are declared, reducing races where bees briefly run with default config.
 
 ## [0.13.9] - 2025-11-15
 Timestamp: 2025-11-15T00:00:00Z

@@ -1,9 +1,10 @@
 package io.pockethive.worker.sdk.output;
 
-import io.pockethive.worker.sdk.api.WorkResult;
+import io.pockethive.worker.sdk.api.WorkItem;
 import io.pockethive.worker.sdk.config.RabbitOutputProperties;
 import io.pockethive.worker.sdk.runtime.WorkIoBindings;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
+import io.pockethive.worker.sdk.transport.rabbit.RabbitWorkItemConverter;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.core.MessageDeliveryMode;
 import org.springframework.amqp.core.MessageProperties;
@@ -16,6 +17,7 @@ public final class RabbitWorkOutput implements WorkOutput {
 
     private final RabbitTemplate rabbitTemplate;
     private final RabbitOutputProperties properties;
+    private final RabbitWorkItemConverter converter = new RabbitWorkItemConverter();
 
     public RabbitWorkOutput(RabbitTemplate rabbitTemplate, RabbitOutputProperties properties) {
         this.rabbitTemplate = rabbitTemplate;
@@ -23,25 +25,24 @@ public final class RabbitWorkOutput implements WorkOutput {
     }
 
     @Override
-    public void publish(WorkResult.Message result, WorkerDefinition definition) {
+    public void publish(WorkItem item, WorkerDefinition definition) {
         WorkIoBindings io = definition.io();
         String exchange = properties.getExchange() != null ? properties.getExchange() : io.outboundExchange();
         String routingKey = properties.getRoutingKey() != null ? properties.getRoutingKey() : io.outboundQueue();
         if (exchange == null || routingKey == null) {
             throw new IllegalStateException("Cannot publish worker result without exchange and routing key");
         }
-        MessageProperties props = new MessageProperties();
+        Message outbound = converter.toMessage(item);
+        MessageProperties props = outbound.getMessageProperties();
         props.setDeliveryMode(properties.isPersistent() ? MessageDeliveryMode.PERSISTENT : MessageDeliveryMode.NON_PERSISTENT);
-        applyHeaders(result, props);
         if (props.getContentType() == null) {
             props.setContentType(MessageProperties.CONTENT_TYPE_BYTES);
         }
-        Message outbound = new Message(result.value().body(), props);
         rabbitTemplate.send(exchange, routingKey, outbound);
     }
 
-    private void applyHeaders(WorkResult.Message result, MessageProperties props) {
-        var headers = result.value().headers();
+    private void applyHeaders(WorkItem item, MessageProperties props) {
+        var headers = item.headers();
         if (headers == null || headers.isEmpty()) {
             return;
         }

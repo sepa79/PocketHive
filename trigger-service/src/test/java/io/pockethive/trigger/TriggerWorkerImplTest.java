@@ -4,8 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.pockethive.controlplane.spring.WorkerControlPlaneProperties;
 import io.pockethive.worker.sdk.api.StatusPublisher;
-import io.pockethive.worker.sdk.api.WorkMessage;
-import io.pockethive.worker.sdk.api.WorkResult;
+import io.pockethive.worker.sdk.api.WorkItem;
 import io.pockethive.worker.sdk.api.WorkerContext;
 import io.pockethive.worker.sdk.api.WorkerInfo;
 import io.pockethive.worker.sdk.testing.ControlPlaneTestFixtures;
@@ -80,9 +79,9 @@ class TriggerWorkerImplTest {
     );
     WorkerContext context = new TestWorkerContext(config, logger);
 
-    WorkResult result = worker.onMessage(WorkMessage.builder().build(), context);
+    WorkItem result = worker.onMessage(WorkItem.builder().build(), context);
 
-    assertThat(result).isEqualTo(WorkResult.none());
+    assertThat(result).isNull();
     ArgumentCaptor<HttpRequest> requestCaptor = ArgumentCaptor.forClass(HttpRequest.class);
     verify(httpClient).send(requestCaptor.capture(), any());
     HttpRequest request = requestCaptor.getValue();
@@ -93,8 +92,8 @@ class TriggerWorkerImplTest {
   @Test
   void fallsBackToDefaultsWhenConfigMissing() {
     WorkerContext context = new TestWorkerContext(null, logger);
-    WorkResult result = worker.onMessage(WorkMessage.builder().build(), context);
-    assertThat(result).isEqualTo(WorkResult.none());
+    WorkItem result = worker.onMessage(WorkItem.builder().build(), context);
+    assertThat(result).isNull();
   }
 
   private static final class TestWorkerContext implements WorkerContext {

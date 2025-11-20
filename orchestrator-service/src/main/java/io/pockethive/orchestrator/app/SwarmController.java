@@ -154,16 +154,15 @@ public class SwarmController {
                 String templateId = req.templateId();
                 ScenarioPlan planDescriptor = fetchScenario(templateId);
                 SwarmTemplate template = planDescriptor.template();
-                TrafficPolicy trafficPolicy = planDescriptor.trafficPolicy();
                 String image = requireImage(template, templateId);
-                List<Bee> bees = template.bees();
+                SwarmPlan plan = planDescriptor.toSwarmPlan(swarmId);
                 String instanceId = BeeNameGenerator.generate("swarm-controller", swarmId);
-                plans.register(instanceId, new SwarmPlan(swarmId, bees, trafficPolicy));
+                plans.register(instanceId, plan);
                 Swarm swarm = lifecycle.startSwarm(
                     swarmId,
                     image,
                     instanceId,
-                    new SwarmTemplateMetadata(templateId, image, bees));
+                    new SwarmTemplateMetadata(templateId, image, plan.bees()));
                 creates.register(swarm.getInstanceId(), new Pending(
                     swarmId,
                     swarm.getInstanceId(),

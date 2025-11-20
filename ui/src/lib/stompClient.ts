@@ -316,8 +316,11 @@ export function setClient(newClient: Client | null, destination = controlDestina
               }
               const dataSection = selected['data']
               if (isRecord(dataSection)) {
+                const configKeys = isRecord(configSection)
+                  ? new Set(Object.keys(configSection as Record<string, unknown>))
+                  : new Set<string>()
                 Object.entries(dataSection).forEach(([key, value]) => {
-                  if (key in cfg) return
+                  if (configKeys.has(key)) return
                   cfg[key] = value
                 })
               }

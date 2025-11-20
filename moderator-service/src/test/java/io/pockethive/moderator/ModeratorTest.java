@@ -4,8 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.pockethive.controlplane.spring.WorkerControlPlaneProperties;
 import io.pockethive.worker.sdk.api.StatusPublisher;
-import io.pockethive.worker.sdk.api.WorkMessage;
-import io.pockethive.worker.sdk.api.WorkResult;
+import io.pockethive.worker.sdk.api.WorkItem;
 import io.pockethive.worker.sdk.api.WorkerContext;
 import io.pockethive.worker.sdk.api.WorkerInfo;
 import io.pockethive.worker.sdk.testing.ControlPlaneTestFixtures;
@@ -44,31 +43,29 @@ class ModeratorTest {
 
     @Test
     void onMessageReturnsForwardedPayload() {
-        WorkMessage message = WorkMessage.builder()
+        WorkItem message = WorkItem.builder()
                 .body("test".getBytes(StandardCharsets.UTF_8))
                 .header("original", "true")
                 .build();
 
-        WorkResult result = worker.onMessage(message, new TestWorkerContext(
+        WorkItem result = worker.onMessage(message, new TestWorkerContext(
             new ModeratorWorkerConfig(ModeratorWorkerConfig.Mode.passThrough())));
 
-        assertThat(result).isInstanceOf(WorkResult.Message.class);
-        WorkMessage forwarded = ((WorkResult.Message) result).value();
-        assertThat(new String(forwarded.body(), StandardCharsets.UTF_8)).isEqualTo("test");
-        assertThat(forwarded.headers()).containsEntry("original", "true");
-        assertThat(forwarded.headers()).containsEntry("x-ph-service", "moderator");
+        assertThat(result).isNotNull();
+        assertThat(new String(result.body(), StandardCharsets.UTF_8)).isEqualTo("test");
+        assertThat(result.headers()).containsEntry("original", "true");
+        assertThat(result.headers()).containsEntry("x-ph-service", "moderator");
     }
 
     @Test
     void usesDefaultsWhenConfigMissing() {
-        WorkMessage message = WorkMessage.builder()
+        WorkItem message = WorkItem.builder()
                 .textBody("payload")
                 .build();
 
-        WorkResult result = worker.onMessage(message, new TestWorkerContext(null));
-
-        WorkMessage forwarded = ((WorkResult.Message) result).value();
-        assertThat(forwarded.headers()).containsEntry("x-ph-service", "moderator");
+        WorkItem result = worker.onMessage(message, new TestWorkerContext(null));
+        assertThat(result).isNotNull();
+        assertThat(result.headers()).containsEntry("x-ph-service", "moderator");
     }
 
     private static final class TestWorkerContext implements WorkerContext {

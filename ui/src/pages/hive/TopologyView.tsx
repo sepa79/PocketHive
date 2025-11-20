@@ -159,6 +159,18 @@ function ShapeNode({ data, selected }: NodeProps<ShapeNodeData>) {
   const shouldUseFallback =
     fallbackLabel.length > 0 && normalizedFallback !== normalizedRole
   const displayLabel = shouldUseFallback ? fallbackLabel : componentId || fallbackLabel
+  const meta =
+    data.meta && typeof data.meta === 'object'
+      ? (data.meta as Record<string, unknown>)
+      : undefined
+  const rawTps = meta?.tps
+  const numericTps =
+    typeof rawTps === 'number'
+      ? rawTps
+      : typeof rawTps === 'string'
+      ? Number(rawTps)
+      : undefined
+  const tps = Number.isFinite(numericTps as number) ? Math.round(numericTps as number) : undefined
   const metaEntries = useMemo(() => {
     if (!isOrchestrator) {
       return []
@@ -185,6 +197,11 @@ function ShapeNode({ data, selected }: NodeProps<ShapeNodeData>) {
         isOrchestrator ? ' shape-node--orchestrator' : ''
       }`}
     >
+      {!isOrchestrator && typeof tps === 'number' && (
+        <div className="shape-node__badge" title="Throughput (TPS)">
+          {tps}
+        </div>
+      )}
       <Handle type="target" position={Position.Left} />
       <svg className="shape-icon" width={2 * size} height={2 * size}>
         {data.shape === 'square' && (
@@ -241,6 +258,7 @@ interface SwarmGroupComponentData {
   fill?: string
   abbreviation?: string
   queueCount?: number
+  tps?: number
 }
 
 interface SwarmGroupEdgeData {
@@ -313,6 +331,10 @@ function SwarmGroupNode({ data }: NodeProps<SwarmGroupNodeData>) {
         typeof comp.abbreviation === 'string' && comp.abbreviation.trim().length > 0
           ? comp.abbreviation.trim()
           : abbreviateName(comp.name)
+      const tps =
+        typeof comp.tps === 'number' && Number.isFinite(comp.tps)
+          ? Math.round(comp.tps)
+          : undefined
       return (
         <g key={comp.id}>
           {comp.id === data.selectedId && (
@@ -397,6 +419,33 @@ function SwarmGroupNode({ data }: NodeProps<SwarmGroupNodeData>) {
           >
             {abbreviation || '?'}
           </text>
+          {typeof tps === 'number' && (
+            <>
+              {/*
+                Small pill-shaped background behind the TPS label to keep it readable
+                regardless of the underlying icon color.
+              */}
+              <rect
+                x={comp.x + iconRadius - 10}
+                y={comp.y - iconRadius - 3}
+                width={18}
+                height={10}
+                rx={6}
+                ry={6}
+                fill="rgba(15,23,42,0.9)"
+                stroke="#38bdf8"
+                strokeWidth={0.7}
+              />
+              <text
+                x={comp.x + iconRadius - 1}
+                y={comp.y - iconRadius + 6}
+                textAnchor="middle"
+                className="swarm-group__icon-label"
+              >
+                {tps}
+              </text>
+            </>
+          )}
         </g>
       )
     },
@@ -979,6 +1028,17 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
               components: members.map((member) => {
                 const componentData = componentsById[member.id]
                 const roleLabel = getRoleLabel(componentData?.role, member.type)
+                const config =
+                  componentData && typeof componentData.config === 'object'
+                    ? (componentData.config as Record<string, unknown>)
+                    : undefined
+                const rawTps = config?.tps
+                const numericTps =
+                  typeof rawTps === 'number'
+                    ? rawTps
+                    : typeof rawTps === 'string'
+                    ? Number(rawTps)
+                    : undefined
                 return {
                   id: member.id,
                   name: roleLabel,
@@ -988,6 +1048,10 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
                   fill: getFill(member.type, member.enabled),
                   abbreviation: getRoleAbbreviation(member.type),
                   queueCount: componentData?.queues?.length ?? 0,
+                  tps:
+                    numericTps !== undefined && Number.isFinite(numericTps)
+                      ? (numericTps as number)
+                      : undefined,
                 }
               }),
               edges: groupEdges,
@@ -1232,4 +1296,3 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
     </div>
   )
 }
-

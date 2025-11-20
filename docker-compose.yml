@@ -12,10 +12,12 @@ services:
 # Off the Shelf Services
 #--------------------------------------
   rabbitmq:
-    image: ${DOCKER_REGISTRY:-}rabbitmq:${POCKETHIVE_VERSION:-latest}
-    build:
-      context: .
-      dockerfile: Dockerfile.rabbit
+    image: rabbitmq:3.13-management-alpine
+    command:
+      [
+        "sh", "-c",
+        "rabbitmq-plugins enable --offline rabbitmq_web_stomp && rabbitmq-server"
+      ]
     environment: {}
     # exposed so that e2e tests can run outside of the docker network
     ports:
@@ -23,6 +25,8 @@ services:
       - "15672:15672"
       - "15674:15674"
     volumes:
+      - ./rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+      - ./rabbitmq/definitions.json:/etc/rabbitmq/definitions.json:ro
       - rabbitmq-data:/var/lib/rabbitmq
     healthcheck:
       test: ["CMD-SHELL", "nc -z 127.0.0.1 5672"]
@@ -61,7 +65,8 @@ services:
       - loki
 
   loki:
-    image: grafana/loki:latest
+    # Pin Loki: newer tags dropped /bin/sh which breaks our shell-based entrypoint below.
+    image: grafana/loki:2.9.1
     entrypoint:
       - /bin/sh
       - -c
@@ -134,12 +139,6 @@ services:
 
   ui:
     image: ${DOCKER_REGISTRY:-}ui:${POCKETHIVE_VERSION:-latest}
-    build:
-      context: .
-      dockerfile: ui/Dockerfile
-      args:
-        VITE_STOMP_READONLY_USER: ${VITE_STOMP_READONLY_USER:-ph-observer}
-        VITE_STOMP_READONLY_PASSCODE: ${VITE_STOMP_READONLY_PASSCODE:-ph-observer}
     depends_on:
       scenario-manager:
         condition: service_healthy
@@ -154,9 +153,6 @@ services:
 
   log-aggregator:
     image: ${DOCKER_REGISTRY:-}log-aggregator:${POCKETHIVE_VERSION:-latest}
-    build:
-      context: .
-      dockerfile: log-aggregator-service/Dockerfile
     environment:
       <<: *metrics-env
       RABBITMQ_HOST: rabbitmq
@@ -181,9 +177,6 @@ services:
 
   orchestrator:
     image: ${DOCKER_REGISTRY:-}orchestrator:${POCKETHIVE_VERSION:-latest}
-    build:
-      context: .
-      dockerfile: orchestrator-service/Dockerfile
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
 # all defaulted in application.yml, uncomment to override here
@@ -200,9 +193,6 @@ services:
 
   scenario-manager:
     image: ${DOCKER_REGISTRY:-}scenario-manager:${POCKETHIVE_VERSION:-latest}
-    build:
-      context: .
-      dockerfile: scenario-manager-service/Dockerfile
     environment:
       <<: *metrics-env
       RABBITMQ_HOST: rabbitmq

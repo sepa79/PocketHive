@@ -2,14 +2,21 @@ package io.pockethive.worker.sdk.transport.rabbit;
 
 import io.pockethive.observability.ObservabilityContext;
 import io.pockethive.observability.ObservabilityContextUtil;
-import io.pockethive.worker.sdk.api.WorkMessage;
-import io.pockethive.worker.sdk.api.WorkResult;
+import io.pockethive.worker.sdk.api.WorkItem;
+import io.pockethive.worker.sdk.config.MaxInFlightConfig;
 import io.pockethive.worker.sdk.runtime.WorkIoBindings;
 import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime;
 import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime.WorkerStateSnapshot;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.SynchronousQueue;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -34,9 +41,9 @@ import org.springframework.context.event.ContextRefreshedEvent;
  * <ul>
  *     <li>Starting and stopping the Spring AMQP listener container based on the control-plane desired
  *         state for the worker instance.</li>
- *     <li>Translating inbound {@link Message AMQP messages} into {@link WorkMessage} envelopes using the
- *         {@link RabbitWorkMessageConverter} that is shared across PocketHive workers.</li>
- *     <li>Invoking the provided {@link WorkDispatcher} callback and, when a {@link WorkResult.Message}
+ *     <li>Translating inbound {@link Message AMQP messages} into {@link WorkItem} envelopes using the
+ *         {@link RabbitWorkItemConverter} that is shared across PocketHive workers.</li>
+ *     <li>Invoking the provided {@link WorkDispatcher} callback and, when a non-null {@link WorkItem}
  *         result is produced, publishing it via the optional {@link MessageResultPublisher} hook.</li>
  *     <li>Relaying control-plane payloads through the {@link WorkerControlPlaneRuntime} with the expected
  *         observability context population and validation semantics.</li>
@@ -65,8 +72,22 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
     private final String outboundQueue;
     private final String outboundExchange;
     private final Consumer<Exception> dispatchErrorHandler;
-    private final java.util.concurrent.atomic.AtomicBoolean initialised = new java.util.concurrent.atomic.AtomicBoolean(false);
-    private final RabbitWorkMessageConverter messageConverter = new RabbitWorkMessageConverter();
+    private final AtomicBoolean initialised = new AtomicBoolean(false);
+    private final RabbitWorkItemConverter messageConverter = new RabbitWorkItemConverter();
+    /**
+     * Maximum number of concurrent worker invocations allowed for this adapter. Derived from
+     * the worker's typed configuration when it implements {@link MaxInFlightConfig}. Defaults
+     * to {@code 1}, in which case work is dispatched synchronously on the listener thread.
+     */
+    private final AtomicInteger maxInFlight = new AtomicInteger(1);
+    /**
+     * Executor used to dispatch work when {@link #maxInFlight} is greater than {@code 1}. The
+     * pool uses a {@link SynchronousQueue} so there is no internal backlog: when all worker
+     * threads are busy, submissions block the caller (the Rabbit listener) and backpressure
+     * is applied to Rabbit.
+     */
+    private volatile ThreadPoolExecutor workExecutor;
+    private final Object executorLock = new Object();
     private volatile boolean desiredEnabled;
 
     private RabbitMessageWorkerAdapter(Builder builder) {
@@ -115,6 +136,7 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
             controlPlaneRuntime.registerDefaultConfig(workerDefinition.beanName(), defaultConfig);
         }
         controlPlaneRuntime.registerStateListener(workerDefinition.beanName(), snapshot -> {
+            updateConcurrency(snapshot);
             boolean enabled = Optional.ofNullable(desiredStateResolver.apply(snapshot)).orElse(desiredEnabled);
             toggleListener(enabled);
         });
@@ -138,8 +160,8 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
     /**
      * Converts inbound AMQP messages and dispatches them through the configured worker runtime.
      * <p>
-     * The message payload is translated using {@link RabbitWorkMessageConverter} before being handed off
-     * to the {@link WorkDispatcher}. Any {@link WorkResult.Message} outputs are converted back into AMQP
+     * The message payload is translated using {@link RabbitWorkItemConverter} before being handed off
+     * to the {@link WorkDispatcher}. Any non-{@code null} results are converted back into AMQP
      * {@link Message messages} and forwarded to the optional {@link MessageResultPublisher}. Exceptions
      * thrown by the dispatcher are routed to the configured {@link #dispatchErrorHandler} allowing
      * services to integrate with their own error handling strategies.
@@ -147,19 +169,28 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
      * @param message inbound message delivered by Spring AMQP
      */
     public void onWork(Message message) {
-        WorkMessage workMessage = messageConverter.fromMessage(message);
+        WorkItem workItem = messageConverter.fromMessage(message);
+        ThreadPoolExecutor executor = workExecutor;
+        int currentMax = maxInFlight.get();
+        if (executor == null || currentMax <= 1) {
+            // Preserve existing synchronous behaviour when no concurrency cap is configured.
+            dispatchSynchronously(workItem);
+            return;
+        }
         try {
-            WorkResult result = dispatcher.dispatch(workMessage);
-            if (result == null) {
-                throw new IllegalStateException(
-                    "Worker " + workerDefinition.beanName() + " returned null WorkResult");
-            }
-            if (result instanceof WorkResult.Message messageResult) {
-                Message outbound = messageConverter.toMessage(messageResult.value());
-                messageResultPublisher.publish(messageResult, outbound);
-            } else if (!(result instanceof WorkResult.None)) {
-                throw new IllegalStateException("Worker " + workerDefinition.beanName()
-                    + " returned unsupported WorkResult type: " + result.getClass().getName());
+            executor.execute(() -> dispatchSynchronously(workItem));
+        } catch (RejectedExecutionException ex) {
+            // As a safety net, fall back to synchronous dispatch if the executor rejects the task.
+            dispatchSynchronously(workItem);
+        }
+    }
+
+    private void dispatchSynchronously(WorkItem workItem) {
+        try {
+            WorkItem result = dispatcher.dispatch(workItem);
+            if (result != null) {
+                Message outbound = messageConverter.toMessage(result);
+                messageResultPublisher.publish(result, outbound);
             }
         } catch (Exception ex) {
             dispatchErrorHandler.accept(ex);
@@ -198,6 +229,61 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
     @Override
     public void onApplicationEvent(ContextRefreshedEvent event) {
         applyListenerState();
+    }
+
+    private void updateConcurrency(WorkerStateSnapshot snapshot) {
+        int configured = snapshot.config(MaxInFlightConfig.class)
+            .map(MaxInFlightConfig::maxInFlight)
+            .orElse(1);
+        int resolved = configured <= 1 ? 1 : configured;
+        int previous = maxInFlight.getAndSet(resolved);
+        if (resolved <= 1) {
+            // No async dispatch required; keep executor (if any) but ensure it does not grow.
+            ThreadPoolExecutor executor = workExecutor;
+            if (executor != null) {
+                executor.setCorePoolSize(1);
+                executor.setMaximumPoolSize(1);
+            }
+            return;
+        }
+        synchronized (executorLock) {
+            ThreadPoolExecutor executor = workExecutor;
+            if (executor == null) {
+                workExecutor = createExecutor(resolved);
+            } else if (resolved != previous) {
+                executor.setCorePoolSize(resolved);
+                executor.setMaximumPoolSize(resolved);
+            }
+        }
+    }
+
+    private ThreadPoolExecutor createExecutor(int max) {
+        SynchronousQueue<Runnable> queue = new SynchronousQueue<>();
+        ThreadFactory threadFactory = runnable -> {
+            Thread thread = new Thread(runnable);
+            thread.setName("ph-worker-" + workerDefinition.beanName() + "-exec-" + thread.getId());
+            thread.setDaemon(true);
+            return thread;
+        };
+        ThreadPoolExecutor executor = new ThreadPoolExecutor(
+            max,
+            max,
+            60L,
+            TimeUnit.SECONDS,
+            queue,
+            threadFactory,
+            (task, pool) -> {
+                try {
+                    pool.getQueue().put(task);
+                } catch (InterruptedException ex) {
+                    Thread.currentThread().interrupt();
+                    throw new RejectedExecutionException("Interrupted while waiting for worker executor slot", ex);
+                }
+            }
+        );
+        // Keep core threads alive so per-thread resources (e.g. HTTP clients) can be reused.
+        executor.allowCoreThreadTimeOut(false);
+        return executor;
     }
 
     private void toggleListener(boolean enabled) {
@@ -427,7 +513,7 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
          * Configures the callback responsible for executing the business logic once an inbound work message
          * has been converted.
          *
-         * @param dispatcher dispatcher invoked for each {@link WorkMessage}
+         * @param dispatcher dispatcher invoked for each {@link WorkItem}
          * @return this builder instance
          */
         public Builder dispatcher(WorkDispatcher dispatcher) {
@@ -436,10 +522,10 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
         }
 
         /**
-         * Provides the optional hook for publishing downstream {@link WorkResult.Message message results}.
-         * Services that do not produce message results can omit this configuration.
+         * Provides the optional hook for publishing downstream {@link WorkItem} results.
+         * Services that do not produce downstream items can omit this configuration.
          *
-         * @param messageResultPublisher callback invoked when a message result is produced
+         * @param messageResultPublisher callback invoked when a non-null item result is produced
          * @return this builder instance
          */
         public Builder messageResultPublisher(MessageResultPublisher messageResultPublisher) {
@@ -448,7 +534,7 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
         }
 
         /**
-         * Supplies the {@link RabbitTemplate} used for publishing downstream {@link WorkResult.Message} payloads. When a
+         * Supplies the {@link RabbitTemplate} used for publishing downstream {@link WorkItem} payloads. When a
          * template is provided and no custom {@link MessageResultPublisher} is configured the helper automatically
          * publishes to the exchange resolved from the {@link WorkerDefinition} unless an explicit override is supplied.
          *
@@ -461,7 +547,7 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
         }
 
         /**
-         * Overrides the exchange used when publishing {@link WorkResult.Message} payloads via the {@link RabbitTemplate}.
+         * Overrides the exchange used when publishing {@link WorkItem} payloads via the {@link RabbitTemplate}.
          * Services can rely on this when the {@link WorkerDefinition} does not provide the exchange name.
          *
          * @param outboundExchange AMQP exchange name used for outbound traffic
@@ -530,7 +616,7 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
                             ? "an outbound queue"
                             : "a message result publisher";
                         throw new IllegalStateException("Worker " + workerDefinition.beanName()
-                            + " attempted to publish WorkResult.Message but has not configured " + missing);
+                            + " attempted to publish a result but has not configured " + missing);
                     };
                 }
             }
@@ -543,23 +629,23 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
     }
 
     /**
-     * Callback invoked by the helper to dispatch converted {@link WorkMessage} instances.
-     * Implementations typically wrap the service specific runtime that processes the work message and
-     * returns a {@link WorkResult}.
+     * Callback invoked by the helper to dispatch converted {@link WorkItem} instances.
+     * Implementations typically wrap the service specific runtime that processes the work item and
+     * returns a {@link WorkItem} or {@code null} when no downstream item should be published.
      */
     @FunctionalInterface
     public interface WorkDispatcher {
-        WorkResult dispatch(WorkMessage message) throws Exception;
+        WorkItem dispatch(WorkItem item) throws Exception;
     }
 
     /**
-     * Callback invoked when the worker returns a {@link WorkResult.Message}. Implementations can forward the
-     * AMQP {@link Message} downstream or perform service-specific logging.
+     * Callback invoked when the worker returns a non-{@code null} {@link WorkItem}. Implementations can
+     * forward the AMQP {@link Message} downstream or perform service-specific logging.
      * The helper intentionally exposes the converted {@link Message} to avoid repeated converter lookups in
      * service adapters.
      */
     @FunctionalInterface
     public interface MessageResultPublisher {
-        void publish(WorkResult.Message result, Message message);
+        void publish(WorkItem result, Message message);
     }
 }

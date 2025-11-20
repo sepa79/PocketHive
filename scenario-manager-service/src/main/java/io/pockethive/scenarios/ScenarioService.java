@@ -9,6 +9,7 @@ import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -24,15 +25,35 @@ public class ScenarioService {
     private static final Logger logger = LoggerFactory.getLogger(ScenarioService.class);
 
     private final Path storageDir;
+    private final Path testStorageDir;
+    private final boolean showTestScenarios;
     private final ObjectMapper jsonMapper = new ObjectMapper();
     private final ObjectMapper yamlMapper = new ObjectMapper(new YAMLFactory());
     private final CapabilityCatalogueService capabilities;
     private final Map<String, ScenarioRecord> scenarios = new ConcurrentHashMap<>();
 
+    @Autowired
     public ScenarioService(@Value("${scenarios.dir:scenarios}") String dir,
+                           @Value("${scenarios.show-test:true}") boolean showTestScenarios,
                            CapabilityCatalogueService capabilities) throws IOException {
-        this.storageDir = Paths.get(dir);
+        this(Paths.get(dir), showTestScenarios, capabilities);
+    }
+
+    ScenarioService(String dir,
+                    CapabilityCatalogueService capabilities) throws IOException {
+        this(Paths.get(dir), true, capabilities);
+    }
+
+    private ScenarioService(Path dir,
+                            boolean showTestScenarios,
+                            CapabilityCatalogueService capabilities) throws IOException {
+        this.storageDir = dir;
+        this.testStorageDir = dir.resolve("e2e");
+        this.showTestScenarios = showTestScenarios;
         Files.createDirectories(this.storageDir);
+        if (this.showTestScenarios) {
+            Files.createDirectories(this.testStorageDir);
+        }
         this.capabilities = capabilities;
     }
 
@@ -44,23 +65,20 @@ public class ScenarioService {
     public synchronized void reload() throws IOException {
         Map<String, ScenarioRecord> loaded = new HashMap<>();
 
-        try (DirectoryStream<Path> stream = Files.newDirectoryStream(storageDir, "*.{json,yaml,yml}")) {
-            for (Path path : stream) {
-                Format format = detectFormat(path);
-                Scenario scenario = read(path, format);
-                ScenarioRecord record = recordFor(scenario, format);
-                ScenarioRecord previous = loaded.put(scenario.getId(), record);
-                if (previous != null) {
-                    logger.warn("Duplicate scenario id '{}' found while loading {}; keeping latest", scenario.getId(), path);
-                }
-            }
+        loadFromDirectory(storageDir, loaded);
+        if (showTestScenarios && Files.isDirectory(testStorageDir)) {
+            loadFromDirectory(testStorageDir, loaded);
         }
 
         scenarios.clear();
         scenarios.putAll(loaded);
 
         long available = loaded.values().stream().filter(record -> !record.defunct()).count();
-        logger.info("Loaded {} scenario(s) from {} ({} available)", loaded.size(), storageDir, available);
+        logger.info("Loaded {} scenario(s) from {}{} ({} available)",
+            loaded.size(),
+            storageDir,
+            (showTestScenarios ? " and " + testStorageDir : ""),
+            available);
     }
 
     public List<ScenarioSummary> list() {
@@ -222,6 +240,23 @@ public class ScenarioService {
 
     private ScenarioSummary toSummary(Scenario scenario) {
         return new ScenarioSummary(scenario.getId(), scenario.getName());
+    }
+
+    private void loadFromDirectory(Path directory, Map<String, ScenarioRecord> target) throws IOException {
+        if (!Files.isDirectory(directory)) {
+            return;
+        }
+        try (DirectoryStream<Path> stream = Files.newDirectoryStream(directory, "*.{json,yaml,yml}")) {
+            for (Path path : stream) {
+                Format format = detectFormat(path);
+                Scenario scenario = read(path, format);
+                ScenarioRecord record = recordFor(scenario, format);
+                ScenarioRecord previous = target.put(scenario.getId(), record);
+                if (previous != null) {
+                    logger.warn("Duplicate scenario id '{}' found while loading {}; keeping latest", scenario.getId(), path);
+                }
+            }
+        }
     }
 
     private Path pathFor(String id, Format format) {

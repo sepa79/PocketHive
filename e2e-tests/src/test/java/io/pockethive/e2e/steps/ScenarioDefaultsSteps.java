@@ -2,6 +2,7 @@ package io.pockethive.e2e.steps;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.cucumber.java.en.Given;
 import io.cucumber.java.en.Then;
@@ -63,14 +64,71 @@ public class ScenarioDefaultsSteps {
 
     Map<String, Object> config = generatorBee.config();
     assertNotNull(config, "Generator bee config was not returned");
-    Object configuredRate = config.get(GENERATOR_RATE_CONFIG);
+
+    @SuppressWarnings("unchecked")
+    Map<String, Object> worker = (Map<String, Object>) config.get("worker");
+    assertNotNull(worker, "Generator bee config did not include 'worker' block");
+
+    Object configuredRate = worker.get(GENERATOR_RATE_CONFIG);
     assertNotNull(configuredRate, () ->
-        "Generator bee config did not include " + GENERATOR_RATE_CONFIG);
+        "Generator bee worker config did not include " + GENERATOR_RATE_CONFIG);
     int actual = configuredRate instanceof Number number
         ? number.intValue()
         : Integer.parseInt(configuredRate.toString());
     assertEquals(ratePerSecond, actual,
         "Generator default rate did not match expected value");
+  }
+
+  @Then("the {string} bee has history policy {string}")
+  public void theBeeHasHistoryPolicy(String role, String expectedPolicy) {
+    ensureScenario();
+    SwarmTemplate template = scenarioDetails.template();
+    assertNotNull(template, "Scenario template was not returned");
+
+    Bee target = template.bees().stream()
+        .filter(bee -> bee != null && roleMatches(role, bee.role()))
+        .findFirst()
+        .orElseThrow(() -> new AssertionError("Scenario template did not define a bee with role " + role));
+
+    Map<String, Object> config = target.config();
+    assertNotNull(config, "Bee config was not returned");
+
+    @SuppressWarnings("unchecked")
+    Map<String, Object> worker = (Map<String, Object>) config.get("worker");
+    assertNotNull(worker, "Bee config did not include 'worker' block");
+
+    Object policyObj = worker.get("historyPolicy");
+    assertNotNull(policyObj, "Bee config did not include 'historyPolicy'");
+
+    String actual = policyObj.toString();
+    assertEquals(expectedPolicy, actual,
+        "History policy for role %s did not match expected value".formatted(role));
+  }
+
+  @Then("the generator bee enables templating")
+  public void theGeneratorBeeEnablesTemplating() {
+    ensureScenario();
+    SwarmTemplate template = scenarioDetails.template();
+    assertNotNull(template, "Scenario template was not returned");
+
+    Bee generatorBee = template.bees().stream()
+        .filter(bee -> bee != null && roleMatches(GENERATOR_ROLE, bee.role()))
+        .findFirst()
+        .orElseThrow(() -> new AssertionError("Scenario template did not define a generator bee"));
+
+    Map<String, Object> config = generatorBee.config();
+    assertNotNull(config, "Generator bee config was not returned");
+
+    @SuppressWarnings("unchecked")
+    Map<String, Object> interceptors = (Map<String, Object>) config.get("interceptors");
+    assertNotNull(interceptors, "Generator bee config did not include 'interceptors' block");
+
+    @SuppressWarnings("unchecked")
+    Map<String, Object> templating = (Map<String, Object>) interceptors.get("templating");
+    assertNotNull(templating, "Generator bee config did not include 'templating' block under 'interceptors'");
+
+    Object templateText = templating.get("template");
+    assertNotNull(templateText, "Templating config did not include 'template' content");
   }
 
   private void ensureHarness() {

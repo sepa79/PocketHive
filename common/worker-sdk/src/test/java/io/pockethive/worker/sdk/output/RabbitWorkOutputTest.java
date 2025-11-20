@@ -5,8 +5,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 
-import io.pockethive.worker.sdk.api.WorkMessage;
-import io.pockethive.worker.sdk.api.WorkResult;
+import io.pockethive.worker.sdk.api.WorkItem;
 import io.pockethive.worker.sdk.config.RabbitOutputProperties;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
 import java.util.Map;
@@ -26,14 +25,13 @@ class RabbitWorkOutputTest {
         properties.setRoutingKey("rk");
         RabbitWorkOutput output = new RabbitWorkOutput(template, properties);
 
-        WorkMessage outbound = WorkMessage.json(Map.of("status", 200))
+        WorkItem outbound = WorkItem.json(Map.of("status", 200))
             .header("content-type", "application/json")
             .header("x-test", "value")
             .build();
-        WorkResult.Message result = (WorkResult.Message) WorkResult.message(outbound);
 
         WorkerDefinition definition = mock(WorkerDefinition.class);
-        output.publish(result, definition);
+        output.publish(outbound, definition);
 
         ArgumentCaptor<Message> captor = ArgumentCaptor.forClass(Message.class);
         verify(template).send(eq("ex"), eq("rk"), captor.capture());

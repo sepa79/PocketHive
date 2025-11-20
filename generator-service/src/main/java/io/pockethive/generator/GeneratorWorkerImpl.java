@@ -1,8 +1,7 @@
 package io.pockethive.generator;
 
 import io.pockethive.worker.sdk.api.PocketHiveWorkerFunction;
-import io.pockethive.worker.sdk.api.WorkMessage;
-import io.pockethive.worker.sdk.api.WorkResult;
+import io.pockethive.worker.sdk.api.WorkItem;
 import io.pockethive.worker.sdk.api.WorkerContext;
 import io.pockethive.worker.sdk.config.PocketHiveWorker;
 import io.pockethive.worker.sdk.config.WorkerCapability;
@@ -40,7 +39,7 @@ import org.springframework.stereotype.Component;
  *
  * <p>Because the generator is the entry point, it does not emit metrics on its own; instead it
  * updates the worker status stream. Watch the <em>Generator status</em> card in Grafana to confirm
- * it is emitting work. You can also inspect the generated {@code WorkMessage}—it includes headers
+ * it is emitting work. You can also inspect the generated {@code WorkItem}—it includes headers
  * like {@code content-type}, {@code message-id}, and {@code x-ph-service} to help with
  * observability.</p>
  */
@@ -61,7 +60,7 @@ class GeneratorWorkerImpl implements PocketHiveWorkerFunction {
   }
 
   /**
-   * Builds a {@link WorkMessage} ready for the moderator queue. The method pulls generator
+   * Builds a {@link WorkItem} ready for the moderator queue. The method pulls generator
    * settings from the {@link WorkerContext} (control-plane overrides) or falls back to
    * {@link GeneratorWorkerProperties}. Expect a nested {@code message} object with keys like
    * {@code path}, {@code method}, {@code body}, and {@code headers}—they mirror the fields in
@@ -84,7 +83,7 @@ class GeneratorWorkerImpl implements PocketHiveWorkerFunction {
    * targeting and the effective HTTP settings. That update feeds the <em>Worker Status</em>
    * dashboards and is the first place to check if you wonder “why is nothing being generated?”.</p>
    *
-   * <p>The returned {@link WorkResult} wraps a message with default headers:</p>
+   * <p>The returned {@link WorkItem} includes default headers:</p>
    * <ul>
    *   <li>{@code content-type} → {@code application/json}</li>
    *   <li>{@code message-id} → a generated UUID (helpful for tracing)</li>
@@ -97,11 +96,10 @@ class GeneratorWorkerImpl implements PocketHiveWorkerFunction {
    *
    * @param context the PocketHive runtime context, including configuration and status/meter
    *     publishers.
-   * @return a {@link WorkResult} wrapping the JSON message that should be placed on
-   *     the configured generator queue.
+   * @return a {@link WorkItem} that should be placed on the configured generator queue.
    */
   @Override
-  public WorkResult onMessage(WorkMessage seed, WorkerContext context) {
+  public WorkItem onMessage(WorkItem seed, WorkerContext context) {
     GeneratorWorkerConfig config = context.configOrDefault(GeneratorWorkerConfig.class, properties::defaultConfig);
     context.statusPublisher()
         .update(status -> status
@@ -110,10 +108,11 @@ class GeneratorWorkerImpl implements PocketHiveWorkerFunction {
             .data("ratePerSec", config.ratePerSec())
             .data("enabled", context.enabled())
             .data("singleRequest", config.singleRequest()));
-    return WorkResult.message(buildMessage(config, context));
+    WorkItem message = buildMessage(config, context, seed);
+    return seed.addStep(message.asString(), message.headers());
   }
 
-  private WorkMessage buildMessage(GeneratorWorkerConfig config, WorkerContext context) {
+  private WorkItem buildMessage(GeneratorWorkerConfig config, WorkerContext context, WorkItem seed) {
     String messageId = UUID.randomUUID().toString();
     Map<String, Object> payload = new LinkedHashMap<>();
     payload.put("id", messageId);
@@ -121,10 +120,14 @@ class GeneratorWorkerImpl implements PocketHiveWorkerFunction {
     payload.put("path", message.path());
     payload.put("method", message.method());
     payload.put("headers", message.headers());
-    payload.put("body", message.body());
+
+    String seedBody = seed.payload();
+    String effectiveBody = (seedBody != null && !seedBody.isBlank()) ? seedBody : message.body();
+    payload.put("body", effectiveBody);
+
     payload.put("createdAt", Instant.now().toString());
 
-    return WorkMessage.json(payload)
+    return WorkItem.json(payload)
         .header("content-type", MessageProperties.CONTENT_TYPE_JSON)
         .header("message-id", messageId)
         .header("x-ph-service", context.info().role())

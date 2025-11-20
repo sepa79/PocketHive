@@ -5,8 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.controlplane.topology.ControlPlaneTopologyDescriptor;
 import io.pockethive.worker.sdk.api.PocketHiveWorkerFunction;
-import io.pockethive.worker.sdk.api.WorkMessage;
-import io.pockethive.worker.sdk.api.WorkResult;
+import io.pockethive.worker.sdk.api.WorkItem;
 import io.pockethive.worker.sdk.api.WorkerContext;
 import io.pockethive.worker.sdk.config.PocketHiveWorker;
 import io.pockethive.worker.sdk.config.WorkInputConfig;
@@ -134,8 +133,8 @@ class PocketHiveWorkerSdkAutoConfigurationQueueResolutionTest {
     static class ProcessorWorker implements PocketHiveWorkerFunction {
 
         @Override
-        public WorkResult onMessage(WorkMessage in, WorkerContext context) {
-            return WorkResult.none();
+        public WorkItem onMessage(WorkItem in, WorkerContext context) {
+            return null;
         }
     }
 }

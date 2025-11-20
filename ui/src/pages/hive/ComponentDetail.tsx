@@ -114,6 +114,63 @@ export default function ComponentDetail({ component, onClose }: Props) {
   const normalizedRole = component.role.trim().toLowerCase()
   const isWiremock = normalizedRole === 'wiremock'
 
+  const runtimeEntries = useMemo(() => {
+    const cfg =
+      component.config && typeof component.config === 'object'
+        ? (component.config as Record<string, unknown>)
+        : undefined
+    if (!cfg) return [] as { label: string; value: string }[]
+    const entries: { label: string; value: string }[] = []
+    const tps = getNumber(cfg.tps)
+    const intervalSeconds = getNumber(cfg.intervalSeconds)
+    const transactions = getNumber(cfg.transactions)
+    const successRatio = getNumber(cfg.successRatio)
+    const avgLatencyMs = getNumber(cfg.avgLatencyMs)
+    const httpMode = getString(cfg.httpMode)
+    const httpThreadCount = getNumber(cfg.httpThreadCount)
+    const httpMaxConnections = getNumber(cfg.httpMaxConnections)
+    if (tps !== undefined) {
+      entries.push({ label: 'TPS', value: Math.round(tps).toString() })
+    }
+    if (intervalSeconds !== undefined && intervalSeconds > 0) {
+      entries.push({
+        label: 'Interval (s)',
+        value: intervalSeconds.toFixed(intervalSeconds >= 10 ? 0 : 1),
+      })
+    }
+    if (transactions !== undefined) {
+      entries.push({ label: 'Transactions', value: transactions.toString() })
+    }
+    if (successRatio !== undefined) {
+      entries.push({
+        label: 'Success ratio',
+        value: successRatio.toFixed(3),
+      })
+    }
+    if (avgLatencyMs !== undefined) {
+      entries.push({
+        label: 'Avg latency (ms)',
+        value: avgLatencyMs.toFixed(1),
+      })
+    }
+    if (httpMode) {
+      entries.push({ label: 'HTTP mode', value: httpMode })
+    }
+    if (httpThreadCount !== undefined) {
+      entries.push({
+        label: 'HTTP thread count',
+        value: httpThreadCount.toString(),
+      })
+    }
+    if (httpMaxConnections !== undefined) {
+      entries.push({
+        label: 'HTTP max connections',
+        value: httpMaxConnections.toString(),
+      })
+    }
+    return entries
+  }, [component.config])
+
   const configEntries = manifest?.config ?? []
   const renderedContent = isWiremock ? (
     <WiremockPanel component={component} />
@@ -178,6 +235,17 @@ export default function ComponentDetail({ component, onClose }: Props) {
             : '—'}
         </div>
       </div>
+      {runtimeEntries.length > 0 && (
+        <div className="space-y-1 text-sm mb-4">
+          <div className="text-white/70 font-semibold">Runtime</div>
+          {runtimeEntries.map((entry) => (
+            <div key={entry.label} className="flex justify-between">
+              <span className="text-white/60">{entry.label}</span>
+              <span className="text-white/90">{entry.value}</span>
+            </div>
+          ))}
+        </div>
+      )}
       {!isWiremock && configEntries.length > 0 && (
         <div className="mb-2 flex items-center justify-between text-xs text-white/60">
           <span className="uppercase tracking-wide text-white/50">Configuration</span>
@@ -273,6 +341,29 @@ function renderConfigInput(
   onChange: (value: string | boolean) => void,
 ): JSX.Element {
   const normalizedType = (entry.type || '').toLowerCase()
+  const options = Array.isArray(entry.options) ? entry.options : undefined
+
+  if (options && options.length > 0) {
+    const value = typeof rawValue === 'string' ? rawValue : formatCapabilityValue(entry.default)
+    return (
+      <select
+        className="w-full rounded bg-white/10 px-2 py-1 text-white"
+        value={value}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.value)}
+      >
+        {options.map((option, index) => {
+          const label = formatCapabilityValue(option)
+          return (
+            <option key={index} value={label}>
+              {label}
+            </option>
+          )
+        })}
+      </select>
+    )
+  }
+
   if (normalizedType === 'boolean' || normalizedType === 'bool') {
     const checked = rawValue === true
     return (
@@ -304,6 +395,45 @@ function renderConfigInput(
 
   const inputType = inferCapabilityInputType(entry.type)
   const step = extractStep(entry)
+  const useSlider = inputType === 'number' && typeof entry.min === 'number' && typeof entry.max === 'number'
+
+  if (useSlider) {
+    const numericValue =
+      value === '' ? (typeof entry.default === 'number' ? entry.default : entry.min ?? 0) : Number(value)
+    const displayValue = Number.isFinite(numericValue) ? String(numericValue) : ''
+    return (
+      <div className="space-y-1">
+        <input
+          className="w-full"
+          type="range"
+          value={Number.isFinite(numericValue) ? numericValue : 0}
+          disabled={disabled}
+          min={typeof entry.min === 'number' ? entry.min : undefined}
+          max={typeof entry.max === 'number' ? entry.max : undefined}
+          step={step}
+          onChange={(event) => onChange(event.target.value)}
+        />
+        <div className="flex items-center justify-between gap-2 text-xs text-white/70">
+          <span>
+            {typeof entry.min === 'number' ? entry.min : ''}
+            {typeof entry.min === 'number' && typeof entry.max === 'number' ? ' – ' : ''}
+            {typeof entry.max === 'number' ? entry.max : ''}
+          </span>
+          <input
+            className="w-20 rounded bg-white/10 px-2 py-0.5 text-right text-xs text-white"
+            type="number"
+            value={displayValue}
+            disabled={disabled}
+            min={typeof entry.min === 'number' ? entry.min : undefined}
+            max={typeof entry.max === 'number' ? entry.max : undefined}
+            step={step}
+            onChange={(event) => onChange(event.target.value)}
+          />
+        </div>
+      </div>
+    )
+  }
+
   return (
     <input
       className="w-full rounded bg-white/10 px-2 py-1 text-white"
@@ -386,6 +516,23 @@ function formatJsonValue(value: unknown): string {
   } catch {
     return ''
   }
+}
+
+function getNumber(value: unknown): number | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value
+  }
+  if (typeof value === 'string') {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) ? parsed : undefined
+  }
+  return undefined
+}
+
+function getString(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined
+  const trimmed = value.trim()
+  return trimmed.length > 0 ? trimmed : undefined
 }
 
 type ConversionResult =
@@ -482,4 +629,3 @@ function timeAgo(ts: number) {
   const diff = Math.floor((Date.now() - ts) / 1000)
   return `${diff}s ago`
 }
-

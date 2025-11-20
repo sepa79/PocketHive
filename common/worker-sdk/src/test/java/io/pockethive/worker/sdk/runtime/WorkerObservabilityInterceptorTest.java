@@ -6,8 +6,7 @@ import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.micrometer.observation.ObservationRegistry;
 import io.pockethive.observability.ObservabilityContext;
 import io.pockethive.worker.sdk.api.StatusPublisher;
-import io.pockethive.worker.sdk.api.WorkMessage;
-import io.pockethive.worker.sdk.api.WorkResult;
+import io.pockethive.worker.sdk.api.WorkItem;
 import io.pockethive.worker.sdk.api.WorkerContext;
 import io.pockethive.worker.sdk.api.WorkerInfo;
 import io.pockethive.worker.sdk.config.WorkInputConfig;
@@ -50,10 +49,10 @@ class WorkerObservabilityInterceptorTest {
             DEFINITION,
             state,
             workerContext(state),
-            WorkMessage.text("payload").build()
+            WorkItem.text("payload").build()
         );
 
-        WorkResult result = interceptor.intercept(invocationContext, ctx -> WorkResult.message(ctx.message()));
+        WorkItem result = interceptor.intercept(invocationContext, ctx -> ctx.message());
 
         ObservabilityContext context = invocationContext.workerContext().observabilityContext();
         assertThat(context.getTraceId()).isNotBlank();
@@ -63,10 +62,9 @@ class WorkerObservabilityInterceptorTest {
         assertThat(MDC.get("traceId")).isNull();
         assertThat(MDC.get("swarmId")).isNull();
 
-        assertThat(result).isInstanceOf(WorkResult.Message.class);
-        WorkMessage outbound = ((WorkResult.Message) result).value();
-        assertThat(outbound.observabilityContext()).isPresent();
-        assertThat(outbound.observabilityContext().orElseThrow().getHops()).hasSize(1);
+        assertThat(result).isNotNull();
+        assertThat(result.observabilityContext()).isPresent();
+        assertThat(result.observabilityContext().orElseThrow().getHops()).hasSize(1);
     }
 
     private WorkerContext workerContext(WorkerState state) {

@@ -4,24 +4,30 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.pockethive.worker.sdk.api.PocketHiveWorkerFunction;
-import io.pockethive.worker.sdk.api.WorkMessage;
-import io.pockethive.worker.sdk.api.WorkResult;
+import io.pockethive.worker.sdk.api.WorkItem;
 import io.pockethive.worker.sdk.api.WorkerContext;
 import io.pockethive.worker.sdk.config.PocketHiveWorker;
 import io.pockethive.worker.sdk.config.WorkerCapability;
 import io.pockethive.worker.sdk.config.WorkerInputType;
 import io.pockethive.worker.sdk.config.WorkerOutputType;
 import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.atomic.DoubleAccumulator;
 import java.util.concurrent.atomic.LongAdder;
+import org.apache.hc.client5.http.classic.HttpClient;
+import org.apache.hc.client5.http.classic.methods.HttpUriRequestBase;
+import org.apache.hc.client5.http.impl.classic.HttpClients;
+import org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManager;
+import org.apache.hc.core5.http.ClassicHttpResponse;
+import org.apache.hc.core5.http.Header;
+import org.apache.hc.core5.http.ConnectionReuseStrategy;
+import org.apache.hc.core5.http.io.entity.EntityUtils;
 import org.slf4j.Logger;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -31,7 +37,7 @@ import org.springframework.stereotype.Component;
  * <p>
  * The worker is wired into the moderator queue configured via {@code pockethive.inputs.rabbit.queue}
  * (typically provided through {@code POCKETHIVE_INPUT_RABBIT_QUEUE}) and receives
- * {@link WorkMessage} payloads that typically originate from the orchestrator. For every incoming
+ * {@link WorkItem} payloads that typically originate from the orchestrator. For every incoming
  * message we resolve configuration from the {@link WorkerContext}:
  * <ul>
  *   <li>If control plane overrides exist they are surfaced through
@@ -47,7 +53,7 @@ import org.springframework.stereotype.Component;
  * </ul>
  * Once configured, the worker performs an outbound HTTP call using the payload's {@code path},
  * {@code method}, {@code headers}, and {@code body} fields. Success and failure paths both emit a
- * {@link WorkResult} to the configured final routing key
+ * {@link WorkItem} to the configured final routing key
  * ({@code pockethive.outputs.rabbit.routing-key}), and the runtime's observability interceptor adds the hop
  * metadata so downstream services can trace the request.
  * <p>
@@ -68,22 +74,37 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
   private static final String HEADER_DURATION = "x-ph-processor-duration-ms";
   private static final String HEADER_SUCCESS = "x-ph-processor-success";
   private static final String HEADER_STATUS = "x-ph-processor-status";
+  private static final String HEADER_CONNECTION_LATENCY = "x-ph-processor-connection-latency-ms";
+  private static final int GLOBAL_MAX_CONNECTIONS = 200;
+  private static final int GLOBAL_MAX_PER_ROUTE = 200;
 
   private final ProcessorWorkerProperties properties;
   private final HttpClient httpClient;
+  private final HttpClient noKeepAliveClient;
+  private final ThreadLocal<HttpClient> perThreadClient;
   private final Clock clock;
   private final LongAdder totalCalls = new LongAdder();
   private final LongAdder successfulCalls = new LongAdder();
   private final DoubleAccumulator totalLatencyMs = new DoubleAccumulator(Double::sum, 0.0);
+  private final java.util.concurrent.atomic.AtomicLong nextAllowedTimeNanos = new java.util.concurrent.atomic.AtomicLong(0L);
 
   @Autowired
   ProcessorWorkerImpl(ProcessorWorkerProperties properties) {
-    this(properties, HttpClient.newHttpClient(), Clock.systemUTC());
+    this(
+        properties,
+        newPooledClient(),
+        newNoKeepAliveClient(),
+        Clock.systemUTC());
   }
 
-  ProcessorWorkerImpl(ProcessorWorkerProperties properties, HttpClient httpClient, Clock clock) {
+  ProcessorWorkerImpl(ProcessorWorkerProperties properties,
+                      HttpClient httpClient,
+                      HttpClient noKeepAliveClient,
+                      Clock clock) {
     this.properties = Objects.requireNonNull(properties, "properties");
     this.httpClient = Objects.requireNonNull(httpClient, "httpClient");
+    this.noKeepAliveClient = Objects.requireNonNull(noKeepAliveClient, "noKeepAliveClient");
+    this.perThreadClient = ThreadLocal.withInitial(HttpClients::createDefault);
     this.clock = Objects.requireNonNull(clock, "clock");
   }
 
@@ -98,8 +119,8 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
    *       {@link ProcessorWorkerProperties#defaultConfig()} (enabled with {@code baseUrl=http://localhost:8082}).
    *       The active configuration is echoed to the control plane through
    *       {@link WorkerContext#statusPublisher()} for easy debugging.</li>
-   *   <li><strong>HTTP invocation</strong> – Using {@link #invokeHttp(WorkMessage, ProcessorWorkerConfig, Logger)}
-   *       we create a {@link HttpRequest} from the message body and forward it to the configured
+   *   <li><strong>HTTP invocation</strong> – Using {@link #invokeHttp(WorkItem, ProcessorWorkerConfig, Logger)}
+   *       we create an HTTP request from the message body and forward it to the configured
    *       service. The request defaults to {@code GET /} with no body when fields are missing.</li>
    *   <li><strong>Error handling</strong> – Any exception (invalid config, network error, unexpected
    *       HTTP failure) is logged at {@code WARN} level and converted into an error message via
@@ -110,41 +131,41 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
  *       timestamps) to the shared observability context so traces remain visible in Loki/Grafana.</li>
    * </ol>
    *
-   * @param in incoming work message from the configured moderator queue
+   * @param in incoming work item from the configured moderator queue
    * @param context context provided by the runtime (metrics, logging, config, observability)
-   * @return a {@link WorkResult#message(WorkMessage)} destined for the configured final queue with the
+   * @return a {@link WorkItem} destined for the configured final queue with the
    *         observability envelope already updated
    */
   @Override
-  public WorkResult onMessage(WorkMessage in, WorkerContext context) {
+  public WorkItem onMessage(WorkItem in, WorkerContext context) {
     ProcessorWorkerConfig config = context.configOrDefault(ProcessorWorkerConfig.class, properties::defaultConfig);
 
     Logger logger = context.logger();
     try {
-      WorkMessage response = invokeHttp(in, config, context);
+      WorkItem response = invokeHttp(in, config, context);
       publishStatus(context, config);
-      return WorkResult.message(response);
+      return response;
     } catch (ProcessorCallException ex) {
       logger.warn("Processor request failed: {}", ex.getCause() != null ? ex.getCause().toString() : ex.toString(), ex);
-      WorkMessage error = buildError(context, ex.getCause() != null ? ex.getCause().toString() : ex.toString(), ex.metrics());
+      WorkItem error = buildError(in, context, ex.getCause() != null ? ex.getCause().toString() : ex.toString(), ex.metrics());
       publishStatus(context, config);
-      return WorkResult.message(error);
+      return error;
     } catch (Exception ex) {
       logger.warn("Processor request failed: {}", ex.toString(), ex);
-      WorkMessage error = buildError(context, ex.toString(), CallMetrics.failure(0, -1));
+      WorkItem error = buildError(in, context, ex.toString(), CallMetrics.failure(0L, 0L, -1));
       publishStatus(context, config);
-      return WorkResult.message(error);
+      return error;
     }
   }
 
-  private WorkMessage invokeHttp(WorkMessage message, ProcessorWorkerConfig config, WorkerContext context)
+  private WorkItem invokeHttp(WorkItem message, ProcessorWorkerConfig config, WorkerContext context)
       throws Exception {
     Logger logger = context.logger();
     JsonNode node = message.asJsonNode();
     String baseUrl = config.baseUrl();
     if (baseUrl == null || baseUrl.isBlank()) {
       logger.warn("No baseUrl configured; skipping HTTP call");
-      return buildError(context, "invalid baseUrl", CallMetrics.failure(0, -1));
+      return buildError(message, context, "invalid baseUrl", CallMetrics.failure(0L, 0L, -1));
     }
 
     String path = node.path("path").asText("/");
@@ -152,50 +173,96 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
     URI target = resolveTarget(baseUrl, path);
     if (target == null) {
       logger.warn("Invalid URI base='{}' path='{}'", baseUrl, path);
-      return buildError(context, "invalid baseUrl", CallMetrics.failure(0, -1));
+      return buildError(message, context, "invalid baseUrl", CallMetrics.failure(0L, 0L, -1));
     }
 
-    HttpRequest.Builder requestBuilder = HttpRequest.newBuilder(target);
-    JsonNode headersNode = node.path("headers");
-    if (headersNode.isObject()) {
-      headersNode.fields().forEachRemaining(entry -> requestBuilder.header(entry.getKey(), entry.getValue().asText()));
-    }
+	    JsonNode headersNode = node.path("headers");
+	    if (headersNode.isObject()) {
+	      headersNode.fields().forEachRemaining(entry -> logger.debug("header {}={}", entry.getKey(), entry.getValue().asText()));
+	    }
 
-    Optional<String> body = extractBody(node.path("body"));
-    HttpRequest.BodyPublisher publisher = body
-        .map(value -> HttpRequest.BodyPublishers.ofString(value, StandardCharsets.UTF_8))
-        .orElse(HttpRequest.BodyPublishers.noBody());
-    requestBuilder.method(method, publisher);
-
-    logger.debug("HTTP REQUEST {} {} headers={} body={}", method, target, headersNode, body.orElse(""));
+	    Optional<String> body = extractBody(node.path("body"));
+	    logger.debug("HTTP REQUEST {} {} headers={} body={}", method, target, headersNode, body.orElse(""));
 
     long start = clock.millis();
+    long pacingMillis = 0L;
     try {
-      HttpResponse<String> response = httpClient.send(requestBuilder.build(), HttpResponse.BodyHandlers.ofString());
-      long duration = Math.max(0L, clock.millis() - start);
-      logger.debug("HTTP RESPONSE {} {} -> {}", method, target, response.statusCode());
+      pacingMillis = applyExecutionMode(config);
+      HttpClient client = selectClient(config);
+      HttpUriRequestBase apacheRequest = new HttpUriRequestBase(method, target);
+      headersNode.fields().forEachRemaining(entry -> apacheRequest.addHeader(entry.getKey(), entry.getValue().asText()));
+      body.ifPresent(value -> apacheRequest.setEntity(new org.apache.hc.core5.http.io.entity.StringEntity(value, StandardCharsets.UTF_8)));
 
-      boolean success = isSuccessful(response.statusCode());
+      ClassicHttpResponse response = (ClassicHttpResponse) client.execute(apacheRequest);
+      long endMillis = clock.millis();
+      long totalDuration = Math.max(0L, endMillis - start);
+      long callDuration = Math.max(0L, totalDuration - pacingMillis);
+      long connectionLatency = Math.max(0L, pacingMillis);
+      int statusCode = response.getCode();
+      logger.debug("HTTP RESPONSE {} {} -> {}", method, target, statusCode);
+
+      boolean success = isSuccessful(statusCode);
       CallMetrics metrics = success
-          ? CallMetrics.success(duration, response.statusCode())
-          : CallMetrics.failure(duration, response.statusCode());
+          ? CallMetrics.success(callDuration, connectionLatency, statusCode)
+          : CallMetrics.failure(callDuration, connectionLatency, statusCode);
       recordCall(metrics);
 
       ObjectNode result = MAPPER.createObjectNode();
-      result.put("status", response.statusCode());
-      result.set("headers", MAPPER.valueToTree(response.headers().map()));
-      result.put("body", response.body());
+      result.put("status", statusCode);
+      result.set("headers", MAPPER.valueToTree(convertHeaders(response)));
+      String responseBody = response.getEntity() == null
+          ? ""
+          : EntityUtils.toString(response.getEntity(), StandardCharsets.UTF_8);
+      result.put("body", responseBody);
 
-      return applyCallHeaders(WorkMessage.json(result)
+      WorkItem responseItem = applyCallHeaders(WorkItem.json(result)
           .header("content-type", "application/json")
           .header("x-ph-service", context.info().role()), metrics)
           .build();
+
+      return message.addStep(responseItem.asString(), responseItem.headers());
     } catch (Exception ex) {
-      long duration = Math.max(0L, clock.millis() - start);
-      CallMetrics metrics = CallMetrics.failure(duration, -1);
+      long now = clock.millis();
+      long totalDuration = Math.max(0L, now - start);
+      long callDuration = Math.max(0L, totalDuration - pacingMillis);
+      long connectionLatency = Math.max(0L, pacingMillis);
+      CallMetrics metrics = CallMetrics.failure(callDuration, connectionLatency, -1);
       recordCall(metrics);
       throw new ProcessorCallException(metrics, ex);
     }
+  }
+
+  /**
+   * Applies the configured execution mode for this call.
+   *
+   * @return pacing delay in milliseconds applied before the HTTP call.
+   */
+  private long applyExecutionMode(ProcessorWorkerConfig config) throws InterruptedException {
+    ProcessorWorkerConfig.Mode mode = config.mode();
+    if (mode == ProcessorWorkerConfig.Mode.RATE_PER_SEC) {
+      double rate = config.ratePerSec();
+      if (rate <= 0.0) {
+        return 0L;
+      }
+      long intervalNanos = (long) (1_000_000_000L / rate);
+      long now = System.nanoTime();
+      while (true) {
+        long prev = nextAllowedTimeNanos.get();
+        long base = Math.max(prev, now);
+        long scheduled = base + intervalNanos;
+        if (nextAllowedTimeNanos.compareAndSet(prev, scheduled)) {
+          long sleepNanos = scheduled - now;
+          if (sleepNanos > 0L) {
+            long millis = sleepNanos / 1_000_000L;
+            int nanos = (int) (sleepNanos % 1_000_000L);
+            Thread.sleep(millis, nanos);
+            return sleepNanos / 1_000_000L;
+          }
+          return 0L;
+        }
+      }
+    }
+    return 0L;
   }
 
   private URI resolveTarget(String baseUrl, String path) {
@@ -205,6 +272,37 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
     } catch (IllegalArgumentException ex) {
       return null;
     }
+  }
+
+  /**
+   * Selects the HttpClient to use for the current call based on the configured connection reuse
+   * mode.
+   */
+  private HttpClient selectClient(ProcessorWorkerConfig config) {
+    ProcessorWorkerConfig.ConnectionReuse reuse = config.connectionReuse();
+    boolean keepAliveEnabled = Boolean.TRUE.equals(config.keepAlive());
+    if (!keepAliveEnabled || reuse == ProcessorWorkerConfig.ConnectionReuse.NONE) {
+      return noKeepAliveClient;
+    }
+    if (reuse == ProcessorWorkerConfig.ConnectionReuse.PER_THREAD) {
+      return perThreadClient.get();
+    }
+    return httpClient;
+  }
+
+  private Map<String, List<String>> convertHeaders(ClassicHttpResponse response) {
+    Header[] headers = response.getHeaders();
+    if (headers == null || headers.length == 0) {
+      return Map.of();
+    }
+    Map<String, List<String>> result = new java.util.LinkedHashMap<>();
+    for (Header header : headers) {
+      String name = header.getName();
+      String value = header.getValue();
+      List<String> values = result.computeIfAbsent(name, k -> new ArrayList<>());
+      values.add(value);
+    }
+    return result;
   }
 
   private Optional<String> extractBody(JsonNode bodyNode) throws Exception {
@@ -217,30 +315,51 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
     return Optional.of(MAPPER.writeValueAsString(bodyNode));
   }
 
-  private WorkMessage buildError(WorkerContext context, String message, CallMetrics metrics) {
+  private WorkItem buildError(WorkItem in, WorkerContext context, String message, CallMetrics metrics) {
     ObjectNode result = MAPPER.createObjectNode();
     result.put("error", message);
-    return applyCallHeaders(WorkMessage.json(result)
+    WorkItem errorItem = applyCallHeaders(WorkItem.json(result)
         .header("content-type", "application/json")
         .header("x-ph-service", context.info().role()), metrics)
         .build();
+    return in.addStep(errorItem.asString(), errorItem.headers());
   }
 
-  private WorkMessage.Builder applyCallHeaders(WorkMessage.Builder builder, CallMetrics metrics) {
+  private WorkItem.Builder applyCallHeaders(WorkItem.Builder builder, CallMetrics metrics) {
     return builder
         .header(HEADER_DURATION, Long.toString(metrics.durationMs()))
+        .header(HEADER_CONNECTION_LATENCY, Long.toString(metrics.connectionLatencyMs()))
         .header(HEADER_SUCCESS, Boolean.toString(metrics.success()))
         .header(HEADER_STATUS, Integer.toString(metrics.statusCode()));
   }
 
   private void publishStatus(WorkerContext context, ProcessorWorkerConfig config) {
+    int httpMaxConnections = httpMaxConnections(config);
     context.statusPublisher()
         .update(status -> status
             .data("baseUrl", config.baseUrl())
             .data("enabled", context.enabled())
+            .data("httpMode", config.mode().name())
+            .data("httpThreadCount", config.threadCount())
+            .data("httpMaxConnections", httpMaxConnections)
             .data("transactions", totalCalls.sum())
             .data("successRatio", successRatio())
             .data("avgLatencyMs", averageLatencyMs()));
+  }
+
+  private int httpMaxConnections(ProcessorWorkerConfig config) {
+    boolean keepAliveEnabled = Boolean.TRUE.equals(config.keepAlive());
+    if (!keepAliveEnabled) {
+      return 0;
+    }
+    ProcessorWorkerConfig.ConnectionReuse reuse = config.connectionReuse();
+    if (reuse == ProcessorWorkerConfig.ConnectionReuse.GLOBAL) {
+      return GLOBAL_MAX_CONNECTIONS;
+    }
+    if (reuse == ProcessorWorkerConfig.ConnectionReuse.PER_THREAD) {
+      return config.threadCount();
+    }
+    return 0;
   }
 
   private void recordCall(CallMetrics metrics) {
@@ -271,6 +390,22 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
     return statusCode >= 200 && statusCode < 300;
   }
 
+  private static HttpClient newPooledClient() {
+    PoolingHttpClientConnectionManager manager = new PoolingHttpClientConnectionManager();
+    manager.setMaxTotal(GLOBAL_MAX_CONNECTIONS);
+    manager.setDefaultMaxPerRoute(GLOBAL_MAX_PER_ROUTE);
+    return HttpClients.custom()
+        .setConnectionManager(manager)
+        .build();
+  }
+
+  private static HttpClient newNoKeepAliveClient() {
+    ConnectionReuseStrategy noReuse = (request, response, context) -> false;
+    return HttpClients.custom()
+        .setConnectionReuseStrategy(noReuse)
+        .build();
+  }
+
   private static final class ProcessorCallException extends Exception {
     private final CallMetrics metrics;
 
@@ -284,13 +419,13 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
     }
   }
 
-  private record CallMetrics(long durationMs, boolean success, int statusCode) {
-    private static CallMetrics success(long durationMs, int statusCode) {
-      return new CallMetrics(durationMs, true, statusCode);
+  private record CallMetrics(long durationMs, long connectionLatencyMs, boolean success, int statusCode) {
+    private static CallMetrics success(long durationMs, long connectionLatencyMs, int statusCode) {
+      return new CallMetrics(durationMs, connectionLatencyMs, true, statusCode);
     }
 
-    private static CallMetrics failure(long durationMs, int statusCode) {
-      return new CallMetrics(durationMs, false, statusCode);
+    private static CallMetrics failure(long durationMs, long connectionLatencyMs, int statusCode) {
+      return new CallMetrics(durationMs, connectionLatencyMs, false, statusCode);
     }
   }
 

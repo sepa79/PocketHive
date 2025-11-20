@@ -8,8 +8,7 @@ import io.pockethive.controlplane.spring.WorkerControlPlaneProperties;
 import io.pockethive.observability.Hop;
 import io.pockethive.observability.ObservabilityContext;
 import io.pockethive.worker.sdk.api.StatusPublisher;
-import io.pockethive.worker.sdk.api.WorkMessage;
-import io.pockethive.worker.sdk.api.WorkResult;
+import io.pockethive.worker.sdk.api.WorkItem;
 import io.pockethive.worker.sdk.api.WorkerContext;
 import io.pockethive.worker.sdk.api.WorkerInfo;
 import io.pockethive.worker.sdk.api.PocketHiveWorkerFunction;
@@ -47,7 +46,7 @@ class PostProcessorTest {
         context.setHops(hops);
         context.setTraceId("trace-123");
 
-        WorkMessage message = WorkMessage.text("payload")
+        WorkItem message = WorkItem.text("payload")
                 .header("x-ph-error", true)
                 .header("x-ph-processor-duration-ms", "12")
                 .header("x-ph-processor-success", "true")
@@ -58,9 +57,9 @@ class PostProcessorTest {
         TestWorkerContext workerContext =
                 new TestWorkerContext(new PostProcessorWorkerConfig(false), context);
 
-        WorkResult result = worker.onMessage(message, workerContext);
+        WorkItem result = worker.onMessage(message, workerContext);
 
-        assertThat(result).isEqualTo(WorkResult.none());
+        assertThat(result).isNull();
         assertThat(workerContext.statusData().get("enabled")).isEqualTo(true);
         assertThat(workerContext.statusData().get("publishAllMetrics")).isEqualTo(false);
         assertThat(workerContext.statusData().get("errors")).isEqualTo(1.0d);
@@ -70,7 +69,7 @@ class PostProcessorTest {
         assertThat(workerContext.statusData().get("processorTransactions")).isEqualTo(1L);
         assertThat(workerContext.statusData().get("processorSuccessRatio")).isEqualTo(1.0d);
         assertThat(workerContext.statusData().get("processorAvgLatencyMs")).isEqualTo(12.0d);
-        assertThat(workerContext.statusData()).doesNotContainKeys("hopDurationsMs", "hopTimeline", "processorCall");
+        assertThat(workerContext.statusData()).doesNotContainKeys("hopDurationsMs", "hopTimeline", "processorCall", "workItemSteps");
         assertThat(workerContext.capturingPublisher().fullSnapshotEmitted()).isFalse();
 
         MeterRegistry registry = workerContext.meterRegistry();
@@ -123,7 +122,7 @@ class PostProcessorTest {
         context.setHops(hops);
         context.setTraceId("trace-789");
 
-        WorkMessage message = WorkMessage.text("payload")
+        WorkItem message = WorkItem.text("payload")
                 .header("x-ph-processor-duration-ms", "30")
                 .header("x-ph-processor-success", "false")
                 .header("x-ph-processor-status", "500")
@@ -173,7 +172,7 @@ class PostProcessorTest {
         context.setHops(hops);
         context.setTraceId("trace-456");
 
-        WorkMessage message = WorkMessage.text("payload")
+        WorkItem message = WorkItem.text("payload")
                 .observabilityContext(context)
                 .build();
 
@@ -205,7 +204,7 @@ class PostProcessorTest {
         ObservabilityContext context = new ObservabilityContext();
         context.setHops(List.of());
 
-        WorkMessage message = WorkMessage.text("payload")
+        WorkItem message = WorkItem.text("payload")
                 .build();
 
         TestWorkerContext workerContext = new TestWorkerContext(null, context, false);
@@ -227,7 +226,7 @@ class PostProcessorTest {
         context.setHops(hops);
         context.setTraceId("trace-456");
 
-        WorkMessage message = WorkMessage.text("payload")
+        WorkItem message = WorkItem.text("payload")
                 .header("x-ph-processor-duration-ms", "42")
                 .header("x-ph-processor-success", "true")
                 .header("x-ph-processor-status", "200")

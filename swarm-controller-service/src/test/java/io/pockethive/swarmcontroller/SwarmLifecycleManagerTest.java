@@ -693,6 +693,8 @@ class SwarmLifecycleManagerTest {
     verify(docker).createContainer(eq("img1"), anyMap(), nameCaptor.capture());
     String instanceName = nameCaptor.getValue();
 
+    manager.updateHeartbeat("generator", instanceName);
+
     String expectedRoute = ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, TEST_SWARM_ID, "generator", instanceName);
     ArgumentCaptor<String> routingCaptor = ArgumentCaptor.forClass(String.class);
     ArgumentCaptor<String> payloadCaptor = ArgumentCaptor.forClass(String.class);
@@ -708,7 +710,6 @@ class SwarmLifecycleManagerTest {
     assertThat(signal.path("instance").asText()).isEqualTo(instanceName);
     assertThat(data.path("workerOverrides").path("custom").asText()).isEqualTo("value");
 
-    manager.updateHeartbeat("generator", instanceName);
     assertTrue(manager.hasPendingConfigUpdates());
 
     manager.markReady("generator", instanceName);

@@ -19,13 +19,13 @@ We want an HTTP Request Processor that:
 
 ## High-Level Goals
 
-- [ ] Introduce an `HttpRequestProcessor` worker that consumes `WorkItem`s whose current step describes an HTTP request (method, URL, headers, body).
-- [ ] Support multiple execution modes:
-  - **Throughput mode**: process incoming items as fast as possible, using a configurable thread/concurrency model.
-  - **Target RPS mode**: aim for a configured requests-per-second rate (e.g. 10/s), spreading calls evenly over time, even when responses are slow.
-- [ ] Integrate with the `WorkItem` step model:
+- [x] Introduce a simple HTTP processor worker (current `ProcessorWorkerImpl`) that consumes `WorkItem`s whose current step describes an HTTP request (method, URL, headers, body) and appends an HTTP response step.
+- [x] Extend the HTTP processor with configurable execution modes:
+  - **`THREAD_COUNT` mode**: process incoming items as fast as possible, bounded by a configured `threadCount` (max concurrent HTTP calls per worker instance).
+  - **`RATE_PER_SEC` mode**: aim for a configured requests-per-second rate (e.g. 10/s), spreading calls evenly over time (inter-arrival ≈ `1 / ratePerSec`), even when responses are slow.
+- [x] Integrate with the `WorkItem` step model:
   - Add an HTTP request step (if not already present) and an HTTP response step using `addStepPayload(...)` / `addStep(...)`.
-  - Allow history to be trimmed via `clearHistory()` when payload sizes are large.
+  - Allow history to be trimmed via `clearHistory()` and per-worker `HistoryPolicy` when payload sizes are large.
 - [ ] Provide a response routing mechanism that can:
   - Examine HTTP status / headers / body.
   - Decide which outbound queue/exchange to use (e.g. 2xx vs 4xx/5xx routes).
@@ -71,23 +71,39 @@ flowchart TD
 
 ### 2. Execution Modes & Concurrency Model
 
-- [ ] Define configuration properties for the worker:
-  - `mode`: e.g. `THROUGHPUT` vs `TARGET_RPS`.
-  - `threads` or `maxConcurrency`: how many concurrent HTTP calls this worker instance is allowed to run.
-  - `targetRps`: desired requests per second in `TARGET_RPS` mode.
-  - Timeouts, retry policy, and circuit-breaker style options (where appropriate).
-- [ ] Clarify interaction with existing control-plane rate controls:
-  - In `THROUGHPUT` mode, treat incoming message rate (scheduler/queue) as the main rate control; the worker simply uses an internal pool to overlap latency.
-  - In `TARGET_RPS` mode, treat worker config as an additional pacing layer on top of scheduler rate (e.g. scheduler might emit seeds at a higher rate, but the worker enforces the effective outbound HTTP rate).
-- [ ] Design the concurrency engine:
-  - Prefer using HTTP client async APIs or a bounded executor rather than hand-spawned threads.
-  - Ensure `onMessage` semantics remain clear: for each incoming `WorkItem`, the processor should:
-    - Either block until its HTTP call is done (simpler model), or
-    - Use internal scheduling where output is emitted via a controlled path that still fits the Worker SDK lifecycle.
-  - Document whichever model we pick so it doesn’t surprise other workers or tools (metrics, status, etc.).
-- [ ] For `TARGET_RPS` mode, sketch a pacing algorithm:
-  - E.g. token bucket or “next scheduled send time” computation shared across the worker instance.
-  - Aim for even spacing (as much as possible) rather than bursty batches.
+- [x] Define configuration properties for the processor worker:
+  - `mode`: `THREAD_COUNT` vs `RATE_PER_SEC`.
+  - `threadCount`: how many concurrent HTTP calls this worker instance is allowed to run in `THREAD_COUNT` mode (see execution engine below).
+  - `ratePerSec`: desired requests per second in `RATE_PER_SEC` mode (used to compute inter-arrival spacing).
+  - `connectionReuse`: `GLOBAL`, `PER_THREAD`, or `NONE` for HTTP connection reuse behaviour.
+  - Timeouts, retry policy, and circuit-breaker style options (where appropriate, possibly deferred).
+  - Clarify interaction with existing control-plane rate controls:
+    - In `THREAD_COUNT` mode, treat incoming message rate (scheduler/queue) as the main rate control; the worker uses internal concurrency to overlap latency but does not throttle RPS explicitly.
+    - In `RATE_PER_SEC` mode, treat worker config as an additional pacing layer on top of scheduler rate (e.g. scheduler might emit seeds at a higher rate, but the worker enforces the effective outbound HTTP rate).
+- [x] Design the concurrency / pacing engine around a per-worker execution pool:
+  - Rabbit work plane:
+    - Exactly one consumer per processor instance for work messages.
+    - Work messages are deserialised into `WorkItem`s and handed to a per-worker executor; the Rabbit listener thread does no HTTP I/O.
+  - Execution engine (generic Worker SDK):
+    - For each worker, create a `ThreadPoolExecutor` (or virtual-thread equivalent) with:
+      - `corePoolSize = maxPoolSize = maxInFlight`
+      - `workQueue = SynchronousQueue` (no internal backlog; tasks are either running or the caller blocks).
+    - The Rabbit adapter hands each `WorkItem` off via `execute(...)` and returns immediately.
+    - When all `maxInFlight` workers are busy, `execute(...)` blocks; backpressure is applied to the single consumer and new messages remain queued in Rabbit.
+    - The worker's domain config can opt into this model by implementing a small `MaxInFlightConfig` SPI; when present, the Rabbit adapter reads `maxInFlight()` from the current control-plane config snapshot and adjusts the pool size at runtime.
+  - Processor-specific mapping:
+    - For the HTTP processor, `threadCount` maps 1:1 to `maxInFlight` for that worker:
+      - `threadCount = N` ⇒ at most N concurrent HTTP calls per processor instance when there is enough work.
+      - With sufficient queue depth, the executor keeps N workers busy; if less work is available, concurrency naturally falls below N without artificial throttling.
+  - `RATE_PER_SEC` mode:
+    - Uses the same execution pool but spaces calls by `1 / ratePerSec` using a shared `nextAllowedTimeNanos` counter.
+    - If `threadCount` is large relative to `ratePerSec`, the mode becomes RPS-bound rather than concurrency-bound.
+
+> Note on `connectionReuse` semantics:
+>
+> - `GLOBAL` – uses a shared Apache HttpClient 5 instance with a tuned connection pool per processor instance.
+> - `PER_THREAD` – associates one client/connection per execution-thread in `THREAD_COUNT` mode so each lane has its own keep-alive connection; in `RATE_PER_SEC` mode this behaves like `GLOBAL`.
+> - `NONE` – uses a dedicated Apache client with a `ConnectionReuseStrategy` that always returns `false`, guaranteeing one request per connection (no keep-alive) so PocketHive can match tools like JMeter’s “Use Keep-Alive” toggle.
 
 ### 3. WorkItem Integration & History Management
 

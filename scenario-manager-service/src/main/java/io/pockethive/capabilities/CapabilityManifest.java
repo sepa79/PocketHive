@@ -34,7 +34,8 @@ public record CapabilityManifest(
             Number min,
             Number max,
             Boolean multiline,
-            JsonNode ui
+            JsonNode ui,
+            JsonNode options
     ) { }
 
     @JsonIgnoreProperties(ignoreUnknown = true)

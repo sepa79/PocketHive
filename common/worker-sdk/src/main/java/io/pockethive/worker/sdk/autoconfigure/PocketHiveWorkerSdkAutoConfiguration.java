@@ -37,6 +37,7 @@ import io.pockethive.worker.sdk.runtime.WorkerDefinition;
 import io.pockethive.worker.sdk.config.WorkerOutputType;
 import io.pockethive.worker.sdk.runtime.WorkerMetricsInterceptor;
 import io.pockethive.worker.sdk.runtime.WorkerObservabilityInterceptor;
+import io.pockethive.worker.sdk.runtime.TemplatingInterceptor;
 import io.pockethive.worker.sdk.runtime.WorkIoBindings;
 import io.pockethive.worker.sdk.runtime.WorkerRegistry;
 import io.pockethive.worker.sdk.runtime.WorkerRuntime;
@@ -50,11 +51,14 @@ import io.pockethive.worker.sdk.output.WorkOutputLifecycle;
 import io.pockethive.worker.sdk.output.WorkOutputRegistry;
 import io.pockethive.worker.sdk.output.WorkOutputRegistryInitializer;
 import io.pockethive.worker.sdk.output.RabbitWorkOutputFactory;
+import io.pockethive.worker.sdk.templating.PebbleTemplateRenderer;
+import io.pockethive.worker.sdk.templating.TemplateRenderer;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import org.springframework.beans.factory.ObjectProvider;
@@ -187,12 +191,14 @@ public class PocketHiveWorkerSdkAutoConfiguration {
         ConfigurableListableBeanFactory beanFactory,
         ObjectProvider<MeterRegistry> meterRegistry,
         ObjectProvider<ObservationRegistry> observationRegistry,
-        ObjectProvider<ControlPlaneIdentity> controlPlaneIdentity
+        ObjectProvider<ControlPlaneIdentity> controlPlaneIdentity,
+        ObjectProvider<List<PocketHiveWorkerProperties<?>>> propertiesProvider
     ) {
         MeterRegistry meters = meterRegistry.getIfAvailable(SimpleMeterRegistry::new);
         ObservationRegistry observations = observationRegistry.getIfAvailable(ObservationRegistry::create);
         ControlPlaneIdentity identity = controlPlaneIdentity.getIfAvailable();
-        return new DefaultWorkerContextFactory(beanFactory::getBean, meters, observations, identity);
+        List<PocketHiveWorkerProperties<?>> properties = propertiesProvider.getIfAvailable(Collections::emptyList);
+        return new DefaultWorkerContextFactory(beanFactory::getBean, meters, observations, identity, properties);
     }
 
     @Bean
@@ -346,6 +352,12 @@ public class PocketHiveWorkerSdkAutoConfiguration {
     }
 
     @Bean
+    @ConditionalOnBean(RabbitListenerEndpointRegistry.class)
+    VirtualThreadRabbitContainerCustomizer virtualThreadRabbitContainerCustomizer() {
+        return new VirtualThreadRabbitContainerCustomizer();
+    }
+
+    @Bean
     @ConditionalOnMissingBean
     WorkerInvocationInterceptor workerObservabilityInterceptor() {
         return new WorkerObservabilityInterceptor();
@@ -359,6 +371,37 @@ public class PocketHiveWorkerSdkAutoConfiguration {
         havingValue = "true")
     WorkerInvocationInterceptor workerMetricsInterceptor(MeterRegistry meterRegistry) {
         return new WorkerMetricsInterceptor(meterRegistry);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(TemplateRenderer.class)
+    TemplateRenderer templatingRenderer() {
+        return new PebbleTemplateRenderer();
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(TemplatingInterceptor.class)
+    WorkerInvocationInterceptor templatingInterceptor(TemplateRenderer renderer) {
+        return new TemplatingInterceptor(renderer, context -> {
+            Map<String, Object> rawConfig = context.state().rawConfig();
+            if (rawConfig.isEmpty()) {
+                return null;
+            }
+            Object interceptorsObj = rawConfig.get("interceptors");
+            if (!(interceptorsObj instanceof Map<?, ?> interceptors)) {
+                return null;
+            }
+            Object templatingObj = interceptors.get("templating");
+            if (!(templatingObj instanceof Map<?, ?> templatingMap)) {
+                return null;
+            }
+            Object templateValue = templatingMap.get("template");
+            if (templateValue == null) {
+                return null;
+            }
+            String template = templateValue.toString();
+            return (template == null || template.isBlank()) ? null : template;
+        });
     }
 
     private static String resolveWorkerRole(WorkerControlPlaneProperties properties) {

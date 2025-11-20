@@ -8,6 +8,11 @@
     "lint": "eslint -c ui/eslint.config.js \"ui/src/**/*.{ts,tsx}\"",
     "test": "vitest run --passWithNoTests"
   },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.22.0",
+    "amqplib": "^0.10.4",
+    "zod": "^3.24.1"
+  },
   "devDependencies": {
     "eslint": "^9.34.0",
     "jsdom": "^26.1.0",

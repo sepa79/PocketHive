@@ -29,6 +29,10 @@ cp LICENSE "${DEPLOY_DIR}/"
 mkdir -p "${DEPLOY_DIR}/loki"
 cp loki/config.yml "${DEPLOY_DIR}/loki/"
 
+# RabbitMQ config (definitions, listeners, and plugins)
+mkdir -p "${DEPLOY_DIR}/rabbitmq"
+cp -r rabbitmq/* "${DEPLOY_DIR}/rabbitmq/" 2>/dev/null || true
+
 mkdir -p "${DEPLOY_DIR}/prometheus"
 cp prometheus/prometheus.yml "${DEPLOY_DIR}/prometheus/"
 

@@ -1,6 +1,6 @@
 package io.pockethive.worker.sdk.output;
 
-import io.pockethive.worker.sdk.api.WorkResult;
+import io.pockethive.worker.sdk.api.WorkItem;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
 import java.util.Map;
 import java.util.Objects;
@@ -19,10 +19,12 @@ public final class WorkOutputRegistry {
         outputs.put(definition.beanName(), output);
     }
 
-    public void publish(WorkerDefinition definition, WorkResult.Message result) {
+    public void publish(WorkItem item, WorkerDefinition definition) {
+        Objects.requireNonNull(definition, "definition");
+        Objects.requireNonNull(item, "item");
         WorkOutput output = outputs.get(definition.beanName());
         if (output != null) {
-            output.publish(result, definition);
+            output.publish(item, definition);
         }
     }
 

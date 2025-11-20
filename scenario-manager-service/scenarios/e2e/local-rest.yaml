@@ -1,0 +1,45 @@
+id: local-rest
+name: Local REST - Simple REST Swarm using custom values
+description: Uses local images. Sample scenario that ships the REST generator with a 50 msg/s default rate limit and custom queue names.
+template:
+  image: swarm-controller:latest
+  bees:
+    - role: generator
+      image: generator:latest
+      config:
+        worker:
+          ratePerSec: 50
+          singleRequest: false
+          message:
+            path: /test
+            method: POST
+            body: '{"event":"local-rest"}'
+            headers:
+              content-type: application/json
+      work:
+        out: genQ
+    - role: moderator
+      image: moderator:latest
+      config:
+        worker:
+          mode:
+            type: rate-per-sec
+            ratePerSec: 10
+      work:
+        in: genQ
+        out: modQ
+    - role: processor
+      image: processor:latest
+      config:
+        worker:
+          baseUrl: http://wiremock:8080/api
+      work:
+        in: modQ
+        out: finalQ
+    - role: postprocessor
+      image: postprocessor:latest
+      config:
+        worker:
+          publishAllMetrics: true
+      work:
+        in: finalQ

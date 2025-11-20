@@ -23,7 +23,7 @@ public interface WorkInputContext {
     WorkerControlPlaneRuntime controlPlaneRuntime();
 
     /**
-     * @return dispatcher invoked by inputs to pass {@code WorkMessage} envelopes to the worker runtime
+     * @return dispatcher invoked by inputs to pass {@code WorkItem} envelopes to the worker runtime
      */
     WorkMessageDispatcher dispatcher();
 

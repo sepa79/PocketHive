@@ -1,6 +1,6 @@
 package io.pockethive.worker.sdk.output;
 
-import io.pockethive.worker.sdk.api.WorkResult;
+import io.pockethive.worker.sdk.api.WorkItem;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
 
 /**
@@ -9,10 +9,10 @@ import io.pockethive.worker.sdk.runtime.WorkerDefinition;
 public interface WorkOutput {
 
     /**
-     * Publishes a {@link WorkResult.Message} produced by a worker.
+     * Publishes a {@link WorkItem} produced by a worker.
      *
-     * @param result     message result emitted by the worker
+     * @param item       outbound item emitted by the worker (never {@code null})
      * @param definition worker metadata (role, queues, etc.)
      */
-    void publish(WorkResult.Message result, WorkerDefinition definition);
+    void publish(WorkItem item, WorkerDefinition definition);
 }

@@ -17,13 +17,10 @@ final class OperationModeLimiter {
       ModeratorOperationMode.Type requestedType = mode.type();
       if (activeType != requestedType) {
         activeType = requestedType;
-        nextAllowedTimeNanos = now;
-        if (requestedType == ModeratorOperationMode.Type.SINE) {
-          sineStartNanos = now;
-        }
+        reset(now);
       }
       switch (requestedType) {
-        case PASS_THROUGH -> nextAllowedTimeNanos = now;
+        case PASS_THROUGH -> reset(now);
         case RATE_PER_SEC -> limitConstantRate(now, ((ModeratorOperationMode.RatePerSec) mode).ratePerSec());
         case SINE -> limitSine(now, (ModeratorOperationMode.Sine) mode);
       }
@@ -31,6 +28,10 @@ final class OperationModeLimiter {
   }
 
   private void limitConstantRate(long now, double ratePerSec) {
+    if (!Double.isFinite(ratePerSec) || ratePerSec <= 0.0) {
+      reset(now);
+      return;
+    }
     long target = Math.max(nextAllowedTimeNanos, now);
     waitUntil(target);
     updateNext(target, ratePerSec);
@@ -51,6 +52,10 @@ final class OperationModeLimiter {
     if (amplitude > 0.0) {
       rate = centre + amplitude * Math.sin(2 * Math.PI * cycles);
       rate = clamp(rate, config.minRatePerSec(), config.maxRatePerSec());
+    }
+    if (!Double.isFinite(rate) || rate <= 0.0) {
+      reset(now);
+      return;
     }
     limitVariableRate(target, rate);
   }
@@ -96,5 +101,10 @@ final class OperationModeLimiter {
       return max;
     }
     return value;
+  }
+
+  private void reset(long now) {
+    nextAllowedTimeNanos = now;
+    sineStartNanos = now;
   }
 }

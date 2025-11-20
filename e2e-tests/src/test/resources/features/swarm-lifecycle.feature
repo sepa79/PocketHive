@@ -27,3 +27,35 @@ Feature: Swarm lifecycle golden path
     Then the swarm reports running
     And I request a single generator run
     Then the final queue receives the default generator response
+
+  @templated-generator
+  Scenario: Templated generator works end to end
+    And the "templated-rest" scenario template is requested
+    When I create the swarm from that template
+    Then the swarm is registered and queues are declared
+    When I start the swarm
+    Then the swarm reports running
+    And I request a single generator run
+    Then the final queue receives the default generator response
+
+  Scenario: Worker runtime config matches service defaults when scenario provides none
+    And the "local-rest-defaults" scenario template is requested
+    When I create the swarm from that template
+    Then the swarm is registered and queues are declared
+    When I start the swarm
+    Then the swarm reports running
+    And the generator runtime config matches the service defaults
+    And the moderator runtime config matches the service defaults
+    And the processor runtime config matches the service defaults
+    And the postprocessor runtime config matches the service defaults
+
+  Scenario: Worker runtime config matches overrides from local-rest
+    And the "local-rest" scenario template is requested
+    When I create the swarm from that template
+    Then the swarm is registered and queues are declared
+    When I start the swarm
+    Then the swarm reports running
+    And the generator runtime config matches the local-rest scenario
+    And the moderator runtime config matches the local-rest scenario
+    And the processor runtime config matches the local-rest scenario
+    And the postprocessor runtime config matches the local-rest scenario

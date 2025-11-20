@@ -1,0 +1,44 @@
+id: templated-rest
+name: Local REST - Templated Generator
+description: Uses local images. Sample scenario that enables the templating interceptor for the generator.
+template:
+  image: swarm-controller:latest
+  bees:
+    - role: generator
+      image: generator:latest
+      config:
+        worker:
+          ratePerSec: 5
+          singleRequest: false
+          message:
+            path: /test
+            method: POST
+            body: "{}"
+            headers:
+              content-type: text/plain
+        interceptors:
+          templating:
+            template: >
+              hello world from Template Interceptor,
+              sequence number is {{ headers["x-ph-seq"] }}
+              and was generated at {{ headers.generatedAt }}
+      work:
+        out: gen
+    - role: moderator
+      image: moderator:latest
+      work:
+        in: gen
+        out: mod
+    - role: processor
+      image: processor:latest
+      config:
+        baseUrl: http://wiremock:8080/api
+      work:
+        in: mod
+        out: final
+    - role: postprocessor
+      image: postprocessor:latest
+      config:
+        publishAllMetrics: true
+      work:
+        in: final

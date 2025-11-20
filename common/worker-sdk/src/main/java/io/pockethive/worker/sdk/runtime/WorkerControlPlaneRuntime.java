@@ -57,6 +57,14 @@ public final class WorkerControlPlaneRuntime {
     private final List<Consumer<WorkerStateSnapshot>> globalStateListeners = new CopyOnWriteArrayList<>();
     private final ControlPlaneNotifier notifier;
 
+    /**
+     * Tracks the most recent status-delta emission so we can derive a per-second throughput
+     * rather than reporting raw interval counts. Snapshots reuse the last computed values.
+     */
+    private volatile long lastDeltaStatusAtMillis = 0L;
+    private volatile double lastComputedTps = 0.0;
+    private volatile double lastIntervalSeconds = 0.0;
+
     public WorkerControlPlaneRuntime(
         WorkerControlPlane workerControlPlane,
         WorkerStateStore stateStore,
@@ -101,7 +109,7 @@ public final class WorkerControlPlaneRuntime {
     public Map<String, Object> workerRawConfig(String workerBeanName) {
         Objects.requireNonNull(workerBeanName, "workerBeanName");
         return stateStore.find(workerBeanName)
-            .map(this::snapshotRawConfig)
+            .map(WorkerState::rawConfig)
             .orElse(Map.of());
     }
 
@@ -156,6 +164,7 @@ public final class WorkerControlPlaneRuntime {
         Boolean enabled = null;
         Object typedConfig = ensureTypedDefault(state.definition(), defaultConfig, rawConfig);
         if (state.seedConfig(typedConfig, enabled)) {
+            state.updateRawConfig(rawConfig);
             ensureStatusPublisher(state);
             notifier.logInitialConfig(state, rawConfig, enabled);
             notifyStateListeners(state);
@@ -234,16 +243,24 @@ public final class WorkerControlPlaneRuntime {
             WorkerConfigPatch patch = workerConfigFor(state, sanitized);
             Map<String, Object> filteredUpdate = withoutNullValues(patch.values());
             boolean previousEnabled = state.enabled();
-            Object currentConfig = currentTypedConfig(state);
             try {
                 ConfigMerger.ConfigMergeResult mergeResult = configMerger.merge(
                     state.definition(),
-                    currentConfig,
+                    state.rawConfig(),
                     filteredUpdate,
                     patch.resetRequested()
                 );
                 Boolean enabled = command.enabled();
+                if (log.isDebugEnabled()) {
+                    log.debug("Applying config-update for worker={} role={} previousEnabled={} requestedEnabled={} data={}",
+                        state.definition().beanName(),
+                        state.definition().role(),
+                        previousEnabled,
+                        enabled,
+                        filteredUpdate);
+                }
                 state.updateConfig(mergeResult.typedConfig(), mergeResult.replaced(), enabled);
+                state.updateRawConfig(mergeResult.rawConfig());
                 Map<String, Object> appliedConfig = mergeResult.replaced() ? mergeResult.rawConfig() : Map.of();
                 if (hasCorrelation(signal)) {
                     notifier.emitConfigReady(signal, state, appliedConfig, enabled);
@@ -258,6 +275,13 @@ public final class WorkerControlPlaneRuntime {
                     ? mergeResult.rawConfig()
                     : mergeResult.previousRaw();
                 boolean finalEnabled = state.enabled();
+                if (log.isDebugEnabled()) {
+                    log.debug("Applied config-update for worker={} role={} finalEnabled={} configKeys={}",
+                        state.definition().beanName(),
+                        state.definition().role(),
+                        finalEnabled,
+                        finalConfig.keySet());
+                }
                 if (shouldLogConfigUpdate(
                     patch,
                     command,
@@ -425,7 +449,7 @@ public final class WorkerControlPlaneRuntime {
     }
 
     private Map<String, Object> snapshotRawConfig(WorkerState state) {
-        return configMerger.toRawConfig(currentTypedConfig(state));
+        return state.rawConfig();
     }
 
     private Object currentTypedConfig(WorkerState state) {
@@ -509,6 +533,25 @@ public final class WorkerControlPlaneRuntime {
             return;
         }
         StatusSnapshot snapshotData = collectSnapshot(states, snapshot);
+        long nowMillis = System.currentTimeMillis();
+        double intervalSeconds;
+        double tps;
+        if (snapshot) {
+            intervalSeconds = lastIntervalSeconds;
+            tps = lastComputedTps;
+        } else {
+            long previous = lastDeltaStatusAtMillis;
+            lastDeltaStatusAtMillis = nowMillis;
+            long intervalMillis = previous > 0L ? Math.max(1L, nowMillis - previous) : 0L;
+            intervalSeconds = intervalMillis > 0L ? intervalMillis / 1000.0 : 0.0;
+            if (intervalSeconds > 0.0) {
+                tps = snapshotData.processedTotal() / intervalSeconds;
+            } else {
+                tps = 0.0;
+            }
+            lastComputedTps = tps;
+            lastIntervalSeconds = intervalSeconds;
+        }
         Consumer<io.pockethive.observability.StatusEnvelopeBuilder> customiser = builder -> {
             builder.role(identity.role())
                 .instance(identity.instanceId())
@@ -526,7 +569,8 @@ public final class WorkerControlPlaneRuntime {
             if (!snapshotData.workOut().isEmpty()) {
                 builder.workOut(snapshotData.workOut().toArray(String[]::new));
             }
-            builder.tps(snapshotData.processedTotal());
+            builder.tps(Math.round(tps));
+            builder.data("intervalSeconds", intervalSeconds);
             builder.data("workers", snapshotData.workers());
             builder.data("snapshot", snapshot);
         };

@@ -56,25 +56,25 @@ flowchart TD
 
 Introduce a step model inside the SDK so each worker/Interceptor can “add a step” in a simple, readable way, while keeping the surface approachable for minimal-Java users.
 
-- [ ] Rename `WorkMessage` to `WorkItem` at the public API level (keep a compatibility type/aliases as needed during migration).
-- [ ] Design an internal `WorkStep` type representing one step:
+- [x] Rename `WorkMessage` to `WorkItem` at the public API level (keep a compatibility type/aliases as needed during migration).
+- [x] Design an internal `WorkStep` type representing one step:
   - Payload (raw body + charset) and headers snapshot for that step.
   - Internal `stepId` (derived from interceptor/worker/input; **not** exposed to end users).
   - Optional metadata (timestamps, duration, step index).
-- [ ] Extend `WorkItem` to optionally hold a list of steps in addition to the existing body/headers:
+- [x] Extend `WorkItem` to optionally hold a list of steps in addition to the existing body/headers:
   - Ensure existing code (`asString()`, `headers()`, etc.) still treats the “current” step as the primary view.
   - Decide whether the top-level `body`/`headers` mirror the latest step or a base step and document this.
-- [ ] Add explicit, readable public methods with no step parameter:
+- [x] Add explicit, readable public methods with no step parameter:
   - `WorkItem addStepPayload(String payload)` — adds a new step using the current step’s auto-derived name.
   - `WorkItem addStep(String payload, Map<String, Object> headers)` — adds a new step with per-step headers.
   - `WorkItem addStepHeader(String name, Object value)` — mutates headers for the *current* step in a friendly way.
-- [ ] Provide read helpers for downstream modules (especially post-processors):
+- [x] Provide read helpers for downstream modules (especially post-processors):
   - `String payload()` / helpers for JSON/binary views scoped to the current step.
   - `Optional<String> previousPayload()` for “one step back”.
   - `Iterable<WorkStep> steps()` for iterating all steps when needed.
-- [ ] Add an explicit manual history reset helper on `WorkItem`:
+- [x] Add an explicit manual history reset helper on `WorkItem`:
   - `WorkItem clearHistory()` — keeps the current step, drops all previous steps, and normalises step indices/headers so the retained step becomes the new baseline (e.g. `ph.step.index = 0`, `ph.step.total = 1`).
-- [ ] Introduce a `HistoryPolicy` (or similar) that controls how much step history is retained:
+- [x] Introduce a `HistoryPolicy` (or similar) that controls how much step history is retained:
   - Modes such as `FULL` (keep all steps up to a limit), `LATEST_ONLY` (keep only the current step), and `DISABLED` (no history, behave like today’s single-payload message).
   - Apply policy per worker/role or per swarm via configuration, with `clearHistory()` available as an explicit escape hatch in individual workers/interceptors that need to drop history eagerly for large payloads.
 - [ ] Implement sensible bounds (max steps per item, max header size) to avoid unbounded growth and allow operators to effectively “remove history” for large payloads.
@@ -104,13 +104,13 @@ Step metadata is required for observability and debugging, but should not appear
 
 Lift the templating logic from the payload-generator work into a reusable module.
 
-- [ ] Introduce a small, engine-agnostic API in `common/worker-sdk`:
+- [x] Introduce a small, engine-agnostic API in `common/worker-sdk`:
   - `interface TemplateRenderer { String render(String template, Map<String,Object> context); }`
-- [ ] Provide a Pebble-based implementation:
+- [x] Provide a Pebble-based implementation:
   - `PebbleTemplateRenderer` that uses `PebbleEngine#getLiteralTemplate` and `template.evaluate(...)`.
   - Keep configuration simple and safe (no reflection helpers, limited function set by default).
-- [ ] Define a standard context model for templating:
-  - Always include the current `WorkItem` as a map (`seed.body`, `seed.headers`, `seed.steps`, etc.).
+- [x] Define a standard context model for templating:
+  - Always include the current `WorkItem` as a map (`payload`, `headers`, and steps via `WorkItem` APIs).
   - Optionally expose control-plane metadata (worker role, swarm id) via safe helper objects.
 - [ ] Document a few one-line examples for users (in docs, not Javadoc) such as:
   - `{{ seed.body }}`, `{{ seed.headers.correlationId }}`, etc.
@@ -119,7 +119,7 @@ Lift the templating logic from the payload-generator work into a reusable module
 
 Use `WorkerInvocationInterceptor` as the configurable pipeline stage between input and `onMessage`.
 
-- [ ] Introduce a `TemplatingInterceptor` that:
+- [x] Introduce a `TemplatingInterceptor` that:
   - Reads the current step from `WorkItem`.
   - Builds the template context (as defined above).
   - Uses `TemplateRenderer` to render new payloads (e.g. an HTTP request envelope) and calls `addStepPayload(...)` / `addStep(...)`.

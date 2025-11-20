@@ -1,6 +1,7 @@
 package io.pockethive.worker.sdk.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.pockethive.worker.sdk.api.HistoryPolicy;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -23,6 +24,11 @@ public abstract class PocketHiveWorkerProperties<T> {
      * Worker-specific configuration payload bound from {@code pockethive.worker.config.*}.
      */
     private Map<String, Object> config = new LinkedHashMap<>();
+    /**
+     * Default {@link HistoryPolicy} for items handled by this worker. Bound from
+     * {@code pockethive.worker.history-policy}. Defaults to {@link HistoryPolicy#FULL}.
+     */
+    private HistoryPolicy historyPolicy = HistoryPolicy.FULL;
 
     protected PocketHiveWorkerProperties(Supplier<String> roleSupplier, Class<T> configType) {
         this.roleSupplier = Objects.requireNonNull(roleSupplier, "roleSupplier");
@@ -49,6 +55,14 @@ public abstract class PocketHiveWorkerProperties<T> {
         }
     }
 
+    public HistoryPolicy getHistoryPolicy() {
+        return historyPolicy;
+    }
+
+    public void setHistoryPolicy(HistoryPolicy historyPolicy) {
+        this.historyPolicy = historyPolicy == null ? HistoryPolicy.FULL : historyPolicy;
+    }
+
     /**
      * Returns the merged raw configuration (worker-specific fields plus the {@code enabled} toggle) as an immutable map.
      */
@@ -56,7 +70,16 @@ public abstract class PocketHiveWorkerProperties<T> {
         if (config.isEmpty()) {
             return Map.of();
         }
-        return Map.copyOf(config);
+        Map<String, Object> filtered = new LinkedHashMap<>();
+        config.forEach((key, value) -> {
+            if (value != null) {
+                filtered.put(key, value);
+            }
+        });
+        if (filtered.isEmpty()) {
+            return Map.of();
+        }
+        return Map.copyOf(filtered);
     }
 
     public boolean hasConfigOverrides() {

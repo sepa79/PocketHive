@@ -8,8 +8,7 @@ import io.pockethive.observability.Hop;
 import io.pockethive.observability.ObservabilityContext;
 import io.pockethive.worker.sdk.api.PocketHiveWorkerFunction;
 import io.pockethive.worker.sdk.api.StatusPublisher;
-import io.pockethive.worker.sdk.api.WorkMessage;
-import io.pockethive.worker.sdk.api.WorkResult;
+import io.pockethive.worker.sdk.api.WorkItem;
 import io.pockethive.worker.sdk.api.WorkerContext;
 import io.pockethive.worker.sdk.config.PocketHiveWorker;
 import io.pockethive.worker.sdk.config.WorkerCapability;
@@ -93,19 +92,18 @@ class PostProcessorWorkerImpl implements PocketHiveWorkerFunction {
    * first look here; the values reflect what the Micrometer counters recorded during the same
    * invocation.</p>
    *
-   * <p>The worker finishes by returning {@link WorkResult#none()} because the pipeline ends here.
-   * Teams who need to forward the results to another queue can swap in
-   * {@link WorkResult#message(WorkMessage)} and reuse message-building helpers from the generator
+   * <p>The worker finishes by returning {@code null} because the pipeline ends here.
+   * Teams who need to forward the results to another queue can return a new
+   * {@link WorkItem} and reuse message-building helpers from the generator
    * or processor services.</p>
    *
-   * @param in the message consumed from the configured final queue.
+   * @param in the item consumed from the configured final queue.
    * @param context provides configuration, Micrometer {@link MeterRegistry}, and the current
    *     {@link ObservabilityContext}.
-   * @return {@link WorkResult#none()} because the post-processor does not produce a follow-up
-   *     message.
+   * @return {@code null} because the post-processor does not produce a follow-up item.
    */
   @Override
-  public WorkResult onMessage(WorkMessage in, WorkerContext context) {
+  public WorkItem onMessage(WorkItem in, WorkerContext context) {
     PostProcessorWorkerConfig config = context.configOrDefault(PostProcessorWorkerConfig.class, properties::defaultConfig);
 
     ObservabilityContext observability =
@@ -126,6 +124,8 @@ class PostProcessorWorkerImpl implements PocketHiveWorkerFunction {
               processorStats);
     }
 
+    long stepCount = java.util.stream.StreamSupport.stream(in.steps().spliterator(), false).count();
+
     StatusPublisher publisher = context.statusPublisher();
     publisher.update(status -> {
       status
@@ -140,6 +140,7 @@ class PostProcessorWorkerImpl implements PocketHiveWorkerFunction {
           .data("processorAvgLatencyMs", metrics.processorAverageLatencyMs());
       if (config.publishAllMetrics()) {
         status
+            .data("workItemSteps", stepCount)
             .data("hopDurationsMs", measurements.hopDurations())
             .data("hopTimeline", describeHops(observability.getHops()))
             .data("processorCall", describeProcessorCall(processorStats));
@@ -149,7 +150,7 @@ class PostProcessorWorkerImpl implements PocketHiveWorkerFunction {
       publisher.emitFull();
     }
 
-    return WorkResult.none();
+    return null;
   }
 
   private void appendTerminalHop(WorkerContext context, ObservabilityContext observability) {

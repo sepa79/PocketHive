@@ -1,6 +1,7 @@
 package io.pockethive.worker.sdk.runtime;
 
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -13,9 +14,12 @@ final class ConfigMerger {
     private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
 
     private final ObjectMapper objectMapper;
+    private final ObjectMapper tolerantMapper;
 
     ConfigMerger(ObjectMapper objectMapper) {
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper");
+        this.tolerantMapper = objectMapper.copy()
+            .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
     }
 
     ConfigMergeResult merge(
@@ -46,7 +50,10 @@ final class ConfigMerger {
         }
         try {
             Map<String, Object> converted = objectMapper.convertValue(config, MAP_TYPE);
-            return converted == null ? Map.of() : Map.copyOf(converted);
+            if (converted == null || converted.isEmpty()) {
+                return Map.of();
+            }
+            return copyMap(converted);
         } catch (IllegalArgumentException ex) {
             throw new IllegalArgumentException(
                 "Unable to convert config of type " + config.getClass().getSimpleName() + " to map", ex);
@@ -59,7 +66,7 @@ final class ConfigMerger {
             return null;
         }
         try {
-            return objectMapper.convertValue(rawConfig, configType);
+            return tolerantMapper.convertValue(rawConfig, configType);
         } catch (IllegalArgumentException ex) {
             String message = "Unable to convert control-plane config for worker '%s' to type %s".formatted(
                 definition.beanName(), configType.getSimpleName());
@@ -132,11 +139,11 @@ final class ConfigMerger {
     private Map<String, Object> copyMap(Map<?, ?> source) {
         Map<String, Object> copy = new LinkedHashMap<>();
         source.forEach((key, value) -> {
-            if (key != null) {
+            if (key != null && value != null) {
                 copy.put(key.toString(), value);
             }
         });
-        return Map.copyOf(copy);
+        return copy.isEmpty() ? Map.of() : Map.copyOf(copy);
     }
 
     record ConfigMergeResult(

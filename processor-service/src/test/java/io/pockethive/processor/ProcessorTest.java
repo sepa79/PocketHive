@@ -9,8 +9,7 @@ import io.pockethive.observability.ObservabilityContext;
 import io.pockethive.observability.ObservabilityContextUtil;
 import io.pockethive.worker.sdk.api.PocketHiveWorkerFunction;
 import io.pockethive.worker.sdk.api.StatusPublisher;
-import io.pockethive.worker.sdk.api.WorkMessage;
-import io.pockethive.worker.sdk.api.WorkResult;
+import io.pockethive.worker.sdk.api.WorkItem;
 import io.pockethive.worker.sdk.api.WorkerContext;
 import io.pockethive.worker.sdk.api.WorkerInfo;
 import io.pockethive.worker.sdk.config.WorkInputConfig;
@@ -25,10 +24,6 @@ import io.pockethive.worker.sdk.runtime.WorkerObservabilityInterceptor;
 import io.pockethive.worker.sdk.runtime.WorkerState;
 import io.pockethive.worker.sdk.testing.ControlPlaneTestFixtures;
 import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpHeaders;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.lang.reflect.Constructor;
 import java.time.Clock;
 import java.time.Instant;
@@ -37,11 +32,19 @@ import java.time.ZoneOffset;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
+import java.util.stream.StreamSupport;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
-import javax.net.ssl.SSLSession;
+import io.pockethive.processor.ProcessorWorkerProperties;
+import org.apache.hc.client5.http.classic.HttpClient;
+import org.apache.hc.core5.http.ClassicHttpRequest;
+import org.apache.hc.core5.http.io.entity.StringEntity;
+import org.apache.hc.core5.http.message.BasicClassicHttpResponse;
+import org.apache.hc.core5.http.message.BasicHeader;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -68,28 +71,30 @@ class ProcessorTest {
         properties.setConfig(Map.of("baseUrl", "http://sut"));
         HttpClient httpClient = mock(HttpClient.class);
         Clock clock = Clock.fixed(Instant.parse("2024-01-01T00:00:00Z"), ZoneOffset.UTC);
-        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(properties, httpClient, clock);
-        ProcessorWorkerConfig config = new ProcessorWorkerConfig("http://sut");
+        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(properties, httpClient, httpClient, clock);
+        ProcessorWorkerConfig config = new ProcessorWorkerConfig("http://sut", null, 0, 0.0, null, null);
         TestWorkerContext context = new TestWorkerContext(config);
 
-        AtomicReference<HttpRequest> requestRef = new AtomicReference<>();
-        when(httpClient.send(any(), any())).thenAnswer(invocation -> {
-            HttpRequest request = invocation.getArgument(0, HttpRequest.class);
+        AtomicReference<ClassicHttpRequest> requestRef = new AtomicReference<>();
+        when(httpClient.execute(any(ClassicHttpRequest.class))).thenAnswer(invocation -> {
+            ClassicHttpRequest request = invocation.getArgument(0, ClassicHttpRequest.class);
             requestRef.set(request);
-            return SimpleHttpResponse.from(request, 201, Map.of("content-type", List.of("application/json")), "{\"result\":\"ok\"}");
+            BasicClassicHttpResponse response = new BasicClassicHttpResponse(201, "Created");
+            response.setHeader(new BasicHeader("content-type", "application/json"));
+            response.setEntity(new StringEntity("{\"result\":\"ok\"}", java.nio.charset.StandardCharsets.UTF_8));
+            return response;
         });
 
-        WorkMessage inbound = WorkMessage.json(Map.of(
+        WorkItem inbound = WorkItem.json(Map.of(
                 "path", "/api",
                 "method", "post",
                 "headers", Map.of("X-Test", "true"),
                 "body", Map.of("value", 42)
         )).build();
 
-        WorkResult result = invokeThroughObservabilityInterceptor(worker, context, inbound);
+        WorkItem outbound = invokeThroughObservabilityInterceptor(worker, context, inbound);
 
-        assertThat(result).isInstanceOf(WorkResult.Message.class);
-        WorkMessage outbound = ((WorkResult.Message) result).value();
+        assertThat(outbound).isNotNull();
         JsonNode payload = MAPPER.readTree(outbound.asString());
         assertThat(payload.path("status").asInt()).isEqualTo(201);
         assertThat(payload.path("body").asText()).isEqualTo("{\"result\":\"ok\"}");
@@ -100,6 +105,9 @@ class ProcessorTest {
                 .containsEntry("x-ph-processor-success", "true")
                 .containsEntry("x-ph-processor-status", "201");
 
+        long stepCount = StreamSupport.stream(outbound.steps().spliterator(), false).count();
+        assertThat(stepCount).isEqualTo(2L);
+
         String traceHeader = (String) outbound.headers().get(ObservabilityContextUtil.HEADER);
         ObservabilityContext trace = ObservabilityContextUtil.fromHeader(traceHeader);
         assertThat(trace.getHops()).hasSize(2);
@@ -107,11 +115,11 @@ class ProcessorTest {
         assertThat(trace.getHops().get(1).getService()).isEqualTo("processor");
         assertThat(context.observabilityContext().getHops()).hasSize(2);
 
-        HttpRequest request = requestRef.get();
+        ClassicHttpRequest request = requestRef.get();
         assertThat(request).isNotNull();
-        assertThat(request.uri()).isEqualTo(URI.create("http://sut/api"));
-        assertThat(request.method()).isEqualTo("POST");
-        assertThat(request.headers().firstValue("X-Test")).contains("true");
+        assertThat(request.getUri()).isEqualTo(URI.create("http://sut/api"));
+        assertThat(request.getMethod()).isEqualTo("POST");
+        assertThat(request.getFirstHeader("X-Test").getValue()).isEqualTo("true");
 
         assertThat(context.statusData())
                 .containsEntry("baseUrl", "http://sut")
@@ -127,24 +135,26 @@ class ProcessorTest {
         properties.setConfig(Map.of("baseUrl", "http://sut/api"));
         HttpClient httpClient = mock(HttpClient.class);
         Clock clock = Clock.fixed(Instant.parse("2024-02-02T00:00:00Z"), ZoneOffset.UTC);
-        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(properties, httpClient, clock);
-        ProcessorWorkerConfig config = new ProcessorWorkerConfig("http://sut/api");
+        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(properties, httpClient, httpClient, clock);
+        ProcessorWorkerConfig config = new ProcessorWorkerConfig("http://sut/api", null, 0, 0.0, null, null);
         TestWorkerContext context = new TestWorkerContext(config);
 
-        AtomicReference<HttpRequest> requestRef = new AtomicReference<>();
-        when(httpClient.send(any(), any())).thenAnswer(invocation -> {
-            HttpRequest request = invocation.getArgument(0, HttpRequest.class);
+        AtomicReference<ClassicHttpRequest> requestRef = new AtomicReference<>();
+        when(httpClient.execute(any(ClassicHttpRequest.class))).thenAnswer(invocation -> {
+            ClassicHttpRequest request = invocation.getArgument(0, ClassicHttpRequest.class);
             requestRef.set(request);
-            return SimpleHttpResponse.from(request, 200, Map.of(), "");
+            BasicClassicHttpResponse response = new BasicClassicHttpResponse(200, "OK");
+            response.setEntity(new StringEntity("", java.nio.charset.StandardCharsets.UTF_8));
+            return response;
         });
 
-        WorkMessage inbound = WorkMessage.json(Map.of("path", "/test")).build();
+        WorkItem inbound = WorkItem.json(Map.of("path", "/test")).build();
 
         worker.onMessage(inbound, context);
 
-        HttpRequest request = requestRef.get();
+        ClassicHttpRequest request = requestRef.get();
         assertThat(request).isNotNull();
-        assertThat(request.uri()).isEqualTo(URI.create("http://sut/api/test"));
+        assertThat(request.getUri()).isEqualTo(URI.create("http://sut/api/test"));
     }
 
     @Test
@@ -153,33 +163,35 @@ class ProcessorTest {
         properties.setConfig(Map.of("baseUrl", "http://sut"));
         HttpClient httpClient = mock(HttpClient.class);
         SequenceClock clock = new SequenceClock(0, 50, 100, 250);
-        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(properties, httpClient, clock);
-        ProcessorWorkerConfig config = new ProcessorWorkerConfig("http://sut");
+        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(properties, httpClient, httpClient, clock);
+        ProcessorWorkerConfig config = new ProcessorWorkerConfig("http://sut", null, 0, 0.0, null, null);
         TestWorkerContext context = new TestWorkerContext(config);
 
         AtomicInteger invocation = new AtomicInteger();
-        when(httpClient.send(any(), any())).thenAnswer(invocationOnMock -> {
-            HttpRequest request = invocationOnMock.getArgument(0, HttpRequest.class);
+        when(httpClient.execute(any(ClassicHttpRequest.class))).thenAnswer(invocationOnMock -> {
+            ClassicHttpRequest request = invocationOnMock.getArgument(0, ClassicHttpRequest.class);
             if (invocation.getAndIncrement() == 0) {
-                return SimpleHttpResponse.from(request, 200, Map.of(), "ok");
+                BasicClassicHttpResponse response = new BasicClassicHttpResponse(200, "OK");
+                response.setEntity(new StringEntity("ok", java.nio.charset.StandardCharsets.UTF_8));
+                return response;
             }
-            return SimpleHttpResponse.from(request, 502, Map.of(), "bad");
+            BasicClassicHttpResponse response = new BasicClassicHttpResponse(502, "Bad Gateway");
+            response.setEntity(new StringEntity("bad", java.nio.charset.StandardCharsets.UTF_8));
+            return response;
         });
 
-        WorkMessage inbound = WorkMessage.json(Map.of("path", "/metrics")).build();
+        WorkItem inbound = WorkItem.json(Map.of("path", "/metrics")).build();
 
-        WorkResult first = worker.onMessage(inbound, context);
-        assertThat(first).isInstanceOf(WorkResult.Message.class);
-        WorkMessage firstMessage = ((WorkResult.Message) first).value();
-        assertThat(firstMessage.headers())
+        WorkItem first = worker.onMessage(inbound, context);
+        assertThat(first).isNotNull();
+        assertThat(first.headers())
                 .containsEntry("x-ph-processor-duration-ms", "50")
                 .containsEntry("x-ph-processor-success", "true")
                 .containsEntry("x-ph-processor-status", "200");
 
-        WorkResult second = worker.onMessage(inbound, context);
-        assertThat(second).isInstanceOf(WorkResult.Message.class);
-        WorkMessage secondMessage = ((WorkResult.Message) second).value();
-        assertThat(secondMessage.headers())
+        WorkItem second = worker.onMessage(inbound, context);
+        assertThat(second).isNotNull();
+        assertThat(second.headers())
                 .containsEntry("x-ph-processor-duration-ms", "150")
                 .containsEntry("x-ph-processor-success", "false")
                 .containsEntry("x-ph-processor-status", "502");
@@ -197,23 +209,25 @@ class ProcessorTest {
         properties.setConfig(Map.of("baseUrl", "http://defaults"));
         HttpClient httpClient = mock(HttpClient.class);
         Clock clock = Clock.fixed(Instant.parse("2024-01-01T00:00:00Z"), ZoneOffset.UTC);
-        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(properties, httpClient, clock);
+        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(properties, httpClient, httpClient, clock);
         TestWorkerContext context = new TestWorkerContext(null);
 
-        AtomicReference<HttpRequest> requestRef = new AtomicReference<>();
-        when(httpClient.send(any(), any())).thenAnswer(invocation -> {
-            HttpRequest request = invocation.getArgument(0, HttpRequest.class);
+        AtomicReference<ClassicHttpRequest> requestRef = new AtomicReference<>();
+        when(httpClient.execute(any(ClassicHttpRequest.class))).thenAnswer(invocation -> {
+            ClassicHttpRequest request = invocation.getArgument(0, ClassicHttpRequest.class);
             requestRef.set(request);
-            return SimpleHttpResponse.from(request, 200, Map.of(), "ok");
+            BasicClassicHttpResponse response = new BasicClassicHttpResponse(200, "OK");
+            response.setEntity(new StringEntity("ok", java.nio.charset.StandardCharsets.UTF_8));
+            return response;
         });
 
-        WorkMessage inbound = WorkMessage.json(Map.of("path", "/defaults" )).build();
+        WorkItem inbound = WorkItem.json(Map.of("path", "/defaults" )).build();
 
         worker.onMessage(inbound, context);
 
-        HttpRequest request = requestRef.get();
+        ClassicHttpRequest request = requestRef.get();
         assertThat(request).isNotNull();
-        assertThat(request.uri()).isEqualTo(URI.create("http://defaults/defaults"));
+        assertThat(request.getUri()).isEqualTo(URI.create("http://defaults/defaults"));
     }
 
     @Test
@@ -222,29 +236,27 @@ class ProcessorTest {
         properties.setConfig(Map.of("baseUrl", ""));
         HttpClient httpClient = mock(HttpClient.class);
         Clock clock = Clock.systemUTC();
-        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(properties, httpClient, clock);
-        ProcessorWorkerConfig config = new ProcessorWorkerConfig(" ");
+        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(properties, httpClient, httpClient, clock);
+        ProcessorWorkerConfig config = new ProcessorWorkerConfig(" ", null, 0, 0.0, null, null);
         TestWorkerContext context = new TestWorkerContext(config);
 
-        WorkMessage inbound = WorkMessage.json(Map.of("path", "/noop" )).build();
+        WorkItem inbound = WorkItem.json(Map.of("path", "/noop")).build();
 
-        WorkResult result = worker.onMessage(inbound, context);
+        WorkItem result = worker.onMessage(inbound, context);
 
-        assertThat(result).isInstanceOf(WorkResult.Message.class);
-        WorkMessage errorMessage = ((WorkResult.Message) result).value();
-        JsonNode payload = MAPPER.readTree(errorMessage.asString());
+        assertThat(result).isNotNull();
+        JsonNode payload = MAPPER.readTree(result.asString());
         assertThat(payload.path("error").asText()).isEqualTo("invalid baseUrl");
-        assertThat(errorMessage.headers())
-                .containsEntry("x-ph-processor-duration-ms", "0")
-                .containsEntry("x-ph-processor-success", "false")
-                .containsEntry("x-ph-processor-status", "-1");
-        verify(httpClient, never()).send(any(), any());
+        assertThat(result.headers())
+            .containsEntry("x-ph-processor-duration-ms", "0")
+            .containsEntry("x-ph-processor-success", "false")
+            .containsEntry("x-ph-processor-status", "-1");
+        verify(httpClient, never()).execute(any(ClassicHttpRequest.class));
     }
 
-
-    private WorkResult invokeThroughObservabilityInterceptor(ProcessorWorkerImpl worker,
-                                                             TestWorkerContext context,
-                                                             WorkMessage inbound) throws Exception {
+    private WorkItem invokeThroughObservabilityInterceptor(ProcessorWorkerImpl worker,
+                                                           TestWorkerContext context,
+                                                           WorkItem inbound) throws Exception {
         WorkerDefinition definition = processorDefinition();
         WorkerObservabilityInterceptor interceptor = new WorkerObservabilityInterceptor();
         WorkerState state = instantiateWorkerState(definition);
@@ -282,10 +294,10 @@ class ProcessorTest {
     private static WorkerInvocationContext instantiateInvocationContext(WorkerDefinition definition,
                                                                          WorkerState state,
                                                                          WorkerContext workerContext,
-                                                                         WorkMessage message) {
+                                                                         WorkItem message) {
         try {
             Constructor<WorkerInvocationContext> constructor = WorkerInvocationContext.class
-                    .getDeclaredConstructor(WorkerDefinition.class, WorkerState.class, WorkerContext.class, WorkMessage.class);
+                    .getDeclaredConstructor(WorkerDefinition.class, WorkerState.class, WorkerContext.class, WorkItem.class);
             constructor.setAccessible(true);
             return constructor.newInstance(definition, state, workerContext, message);
         } catch (ReflectiveOperationException ex) {
@@ -416,59 +428,6 @@ class ProcessorTest {
         public Instant instant() {
             int current = Math.max(0, Math.min(index - 1, sequence.length - 1));
             return Instant.ofEpochMilli(sequence[current]);
-        }
-    }
-
-    private record SimpleHttpResponse(HttpRequest request,
-                                      int status,
-                                      HttpHeaders headers,
-                                      String body) implements HttpResponse<String> {
-
-        private static SimpleHttpResponse from(HttpRequest request,
-                                               int status,
-                                               Map<String, List<String>> headers,
-                                               String body) {
-            return new SimpleHttpResponse(request, status, HttpHeaders.of(headers, (a, b) -> true), body);
-        }
-
-        @Override
-        public int statusCode() {
-            return status;
-        }
-
-        @Override
-        public HttpRequest request() {
-            return request;
-        }
-
-        @Override
-        public Optional<HttpResponse<String>> previousResponse() {
-            return Optional.empty();
-        }
-
-        @Override
-        public HttpHeaders headers() {
-            return headers;
-        }
-
-        @Override
-        public String body() {
-            return body;
-        }
-
-        @Override
-        public Optional<SSLSession> sslSession() {
-            return Optional.empty();
-        }
-
-        @Override
-        public URI uri() {
-            return request.uri();
-        }
-
-        @Override
-        public HttpClient.Version version() {
-            return HttpClient.Version.HTTP_1_1;
         }
     }
 
