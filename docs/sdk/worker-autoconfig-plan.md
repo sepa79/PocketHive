@@ -126,6 +126,12 @@
 4. **Output extensibility** — Yes; align with inputs. Third parties can contribute
    custom outputs by exposing `WorkOutputFactory` beans, and the SDK autoconfig will
    pick them up when wiring workers.
+5. **Manager control-plane default** — Today the manager-side auto-configuration is
+   enabled by default (`matchIfMissing=true`), forcing worker services to explicitly
+   disable it via `pockethive.control-plane.manager.enabled=false`. As part of the
+   IO/autoconfig rollout, flip this default so worker services opt in explicitly
+   (orchestrator and swarm-controller) and remove the need for the `manager.enabled: false`
+   block from worker `application.yml` files.
 
 ## Next Steps
 
