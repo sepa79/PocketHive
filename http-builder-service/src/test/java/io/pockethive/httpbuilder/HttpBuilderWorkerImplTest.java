@@ -121,6 +121,62 @@ class HttpBuilderWorkerImplTest {
     assertThat(result).isSameAs(seed);
   }
 
+  @Test
+  void reloadsTemplatesWhenConfigChanges() throws Exception {
+    Path dir1 = Files.createTempDirectory("http-templates-1");
+    Files.createDirectories(dir1.resolve("default"));
+    Files.writeString(dir1.resolve("default/simple-call.json"), """
+        {
+          "serviceId": "default",
+          "callId": "simple",
+          "method": "POST",
+          "pathTemplate": "/one",
+          "bodyTemplate": "{{ payload }}",
+          "headersTemplate": {}
+        }
+        """);
+
+    Path dir2 = Files.createTempDirectory("http-templates-2");
+    Files.createDirectories(dir2.resolve("default"));
+    Files.writeString(dir2.resolve("default/simple-call.json"), """
+        {
+          "serviceId": "default",
+          "callId": "simple",
+          "method": "POST",
+          "pathTemplate": "/two",
+          "bodyTemplate": "{{ payload }}",
+          "headersTemplate": {}
+        }
+        """);
+
+    // Default config points at dir1.
+    properties.setConfig(Map.of(
+        "templateRoot", dir1.toString(),
+        "serviceId", "default",
+        "passThroughOnMissingTemplate", true
+    ));
+    HttpBuilderWorkerImpl worker =
+        new HttpBuilderWorkerImpl(properties, templateRenderer, new HttpTemplateLoader());
+
+    WorkItem seed = WorkItem.text("body").header("x-ph-call-id", "simple").build();
+
+    // First call uses dir1 config.
+    HttpBuilderWorkerConfig config1 = new HttpBuilderWorkerConfig(
+        dir1.toString(), "default", true);
+    WorkerContext ctx1 = new TestWorkerContext(config1);
+    WorkItem result1 = worker.onMessage(seed, ctx1);
+    JsonNode envelope1 = new ObjectMapper().readTree(result1.asString());
+    assertThat(envelope1.get("path").asText()).isEqualTo("/one");
+
+    // Second call supplies a control-plane override pointing at dir2; worker should reload.
+    HttpBuilderWorkerConfig config2 = new HttpBuilderWorkerConfig(
+        dir2.toString(), "default", true);
+    WorkerContext ctx2 = new TestWorkerContext(config2);
+    WorkItem result2 = worker.onMessage(seed, ctx2);
+    JsonNode envelope2 = new ObjectMapper().readTree(result2.asString());
+    assertThat(envelope2.get("path").asText()).isEqualTo("/two");
+  }
+
   private static final class TestWorkerContext implements WorkerContext {
 
     private final HttpBuilderWorkerConfig config;
@@ -180,4 +236,3 @@ class HttpBuilderWorkerImplTest {
     }
   }
 }
-

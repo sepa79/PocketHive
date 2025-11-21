@@ -36,6 +36,7 @@ class HttpBuilderWorkerImpl implements PocketHiveWorkerFunction {
   private final MessageTemplateRenderer messageTemplateRenderer;
   private final HttpTemplateLoader templateLoader;
   private volatile Map<String, HttpTemplateDefinition> templates;
+  private volatile String lastTemplateConfigKey;
   private final LongAdder errorCount = new LongAdder();
   private final Object statusLock = new Object();
   private volatile long lastStatusAtMillis = System.currentTimeMillis();
@@ -61,9 +62,7 @@ class HttpBuilderWorkerImpl implements PocketHiveWorkerFunction {
     HttpBuilderWorkerConfig config =
         context.configOrDefault(HttpBuilderWorkerConfig.class, properties::defaultConfig);
 
-    if (templates == null) {
-      reloadTemplates(config);
-    }
+    reloadTemplatesIfNeeded(config);
 
     String serviceId = resolveServiceId(seed, config);
     String callId = resolveCallId(seed);
@@ -119,7 +118,18 @@ class HttpBuilderWorkerImpl implements PocketHiveWorkerFunction {
   }
 
   private void reloadTemplates(HttpBuilderWorkerConfig config) {
-    this.templates = templateLoader.load(config.templateRoot(), config.serviceId());
+    Map<String, HttpTemplateDefinition> loaded =
+        templateLoader.load(config.templateRoot(), config.serviceId());
+    this.templates = loaded;
+    this.lastTemplateConfigKey = config.templateRoot() + "::" + config.serviceId();
+  }
+
+  private void reloadTemplatesIfNeeded(HttpBuilderWorkerConfig config) {
+    String key = config.templateRoot() + "::" + config.serviceId();
+    Map<String, HttpTemplateDefinition> current = this.templates;
+    if (current == null || !key.equals(lastTemplateConfigKey)) {
+      reloadTemplates(config);
+    }
   }
 
   private WorkItem handleMissing(HttpBuilderWorkerConfig config, WorkItem seed, WorkerContext context) {
