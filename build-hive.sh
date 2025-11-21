@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "${SCRIPT_DIR}"
 
-ALL_SERVICES=(rabbitmq log-aggregator scenario-manager orchestrator ui prometheus grafana loki wiremock pushgateway redis redis-commander swarm-controller generator data-provider moderator processor postprocessor trigger)
+ALL_SERVICES=(rabbitmq log-aggregator scenario-manager orchestrator ui prometheus grafana loki wiremock pushgateway redis redis-commander swarm-controller generator data-provider http-builder moderator processor postprocessor trigger)
 declare -A DURATIONS=()
 TIMING_ORDER=(clean build_base maven_package stage_artifacts docker_build_workers docker_build compose_up restart)
 BUILD_START_TIME=0
@@ -15,6 +15,7 @@ JAR_MODULES=(
   swarm-controller-service
   generator-service
   data-provider-service
+  http-builder-service
   moderator-service
   processor-service
   postprocessor-service
@@ -28,6 +29,7 @@ declare -A MODULE_TO_SERVICE=(
   ["swarm-controller-service"]="swarm-controller"
   ["generator-service"]="generator"
   ["data-provider-service"]="data-provider"
+  ["http-builder-service"]="http-builder"
   ["moderator-service"]="moderator"
   ["processor-service"]="processor"
   ["postprocessor-service"]="postprocessor"
@@ -41,6 +43,7 @@ declare -A SERVICE_TO_MODULE=(
   ["swarm-controller"]="swarm-controller-service"
   ["generator"]="generator-service"
   ["data-provider"]="data-provider-service"
+  ["http-builder"]="http-builder-service"
   ["moderator"]="moderator-service"
   ["processor"]="processor-service"
   ["postprocessor"]="postprocessor-service"
@@ -323,6 +326,10 @@ build_worker_images() {
       data-provider-service)
         image="data-provider:latest"
         target="data-provider"
+        ;;
+      http-builder-service)
+        image="http-builder:latest"
+        target="http-builder"
         ;;
       moderator-service)
         image="moderator:latest"

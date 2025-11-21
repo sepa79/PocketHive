@@ -12,6 +12,9 @@ COPY .local-jars/generator-service.jar /app/app.jar
 FROM bee-runtime AS data-provider
 COPY .local-jars/data-provider-service.jar /app/app.jar
 
+FROM bee-runtime AS http-builder
+COPY .local-jars/http-builder-service.jar /app/app.jar
+
 FROM bee-runtime AS payload-generator
 COPY .local-jars/payload-generator-service.jar /app/app.jar
 
