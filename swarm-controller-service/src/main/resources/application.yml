@@ -19,6 +19,7 @@ pockethive:
     worker:
       enabled: ${POCKETHIVE_CONTROL_PLANE_WORKER_ENABLED}
     manager:
+      enabled: true
       role: ${POCKETHIVE_CONTROL_PLANE_MANAGER_ROLE}
     swarm-controller:
       traffic:

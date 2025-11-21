@@ -34,5 +34,3 @@ pockethive:
     worker:
       role: ${POCKETHIVE_CONTROL_PLANE_WORKER_ROLE}
       skip-self-signals: false
-    manager:
-      enabled: false

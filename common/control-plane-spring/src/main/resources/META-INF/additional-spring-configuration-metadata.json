@@ -86,7 +86,7 @@
       "name": "pockethive.control-plane.manager.enabled",
       "type": "java.lang.Boolean",
       "description": "Enable manager control-plane auto-configuration.",
-      "defaultValue": true
+      "defaultValue": false
     },
     {
       "name": "pockethive.control-plane.manager.declare-topology",

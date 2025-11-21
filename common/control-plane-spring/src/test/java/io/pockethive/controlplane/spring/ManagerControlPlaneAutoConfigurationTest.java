@@ -27,6 +27,7 @@ class ManagerControlPlaneAutoConfigurationTest {
         .withBean(RabbitTemplate.class, () -> org.mockito.Mockito.mock(RabbitTemplate.class))
         .withPropertyValues(
             "pockethive.control-plane.worker.enabled=false",
+            "pockethive.control-plane.manager.enabled=true",
             "pockethive.control-plane.manager.role=orchestrator",
             "pockethive.control-plane.instance-id=orch-1",
             "pockethive.control-plane.swarm-id=swarm-beta",

@@ -29,6 +29,7 @@ pockethive:
     swarm-id: default
     instance-id: log-aggregator
     manager:
+      enabled: true
       role: log-aggregator
   logs:
     queue: ${POCKETHIVE_LOGS_QUEUE:ph.logs.agg}
