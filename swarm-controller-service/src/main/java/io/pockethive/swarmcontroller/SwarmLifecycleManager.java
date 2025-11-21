@@ -18,6 +18,7 @@ import io.pockethive.controlplane.spring.ControlPlaneContainerEnvironmentFactory
 import io.pockethive.swarmcontroller.config.SwarmControllerProperties;
 import io.pockethive.swarmcontroller.guard.BufferGuardController;
 import io.pockethive.swarmcontroller.guard.BufferGuardSettings;
+import io.pockethive.swarmcontroller.infra.amqp.SwarmWorkTopologyManager;
 import io.pockethive.swarmcontroller.runtime.SwarmRuntimeContext;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -25,10 +26,6 @@ import io.micrometer.core.instrument.Tags;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.core.AmqpAdmin;
-import org.springframework.amqp.core.Binding;
-import org.springframework.amqp.core.BindingBuilder;
-import org.springframework.amqp.core.Queue;
-import org.springframework.amqp.core.QueueBuilder;
 import org.springframework.amqp.core.TopicExchange;
 import org.springframework.amqp.rabbit.core.RabbitAdmin;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
@@ -107,6 +104,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
   private final ConcurrentMap<String, PendingConfig> pendingConfigUpdates = new ConcurrentHashMap<>();
   private List<String> startOrder = List.of();
   private volatile SwarmRuntimeContext runtimeContext;
+  private final SwarmWorkTopologyManager topology;
   private Optional<BufferGuardSettings> bufferGuardSettings = Optional.empty();
   private BufferGuardController bufferGuardController;
   private TrafficPolicy trafficPolicy;
@@ -165,6 +163,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
     this.controlExchange = properties.getControlExchange();
     this.meterRegistry = Objects.requireNonNull(meterRegistry, "meterRegistry");
     this.workerSettings = Objects.requireNonNull(workerSettings, "workerSettings");
+    this.topology = new SwarmWorkTopologyManager(amqp, properties);
   }
 
   private static WorkerSettings deriveWorkerSettings(SwarmControllerProperties properties) {
@@ -227,9 +226,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
       this.trafficPolicy = plan.trafficPolicy();
       Optional<BufferGuardSettings> resolvedGuard = resolveBufferGuard(plan);
       configureBufferGuard(resolvedGuard);
-      TopicExchange hive = new TopicExchange(properties.hiveExchange(), true, false);
-      amqp.declareExchange(hive);
-      log.info("declared hive exchange {}", properties.hiveExchange());
+      TopicExchange hive = topology.declareHiveExchange();
 
       expectedReady.clear();
       instancesByRole.clear();
@@ -254,8 +251,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
           runnableBees.add(bee);
         }
       }
-
-      declareQueues(hive, suffixes);
+      topology.declareWorkQueues(hive, suffixes, declaredQueues);
 
       // Capture the plan-derived runtime context so remove() can tear down only this swarm's resources.
       runtimeContext = new SwarmRuntimeContext(plan, startOrder, suffixes);
@@ -284,29 +280,6 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
       }
     } catch (JsonProcessingException e) {
       log.warn("Invalid template payload", e);
-    }
-  }
-
-  private void declareQueues(TopicExchange hive, Set<String> suffixes) {
-    for (String suffix : suffixes) {
-      String queueName = properties.queueName(suffix);
-      boolean queueMissing = amqp.getQueueProperties(queueName) == null;
-      if (queueMissing) {
-        declaredQueues.remove(suffix);
-      }
-      Binding legacyBinding = new Binding(queueName, Binding.DestinationType.QUEUE,
-          hive.getName(), suffix, null);
-      amqp.removeBinding(legacyBinding);
-
-      Queue queue = QueueBuilder.durable(queueName).build();
-      if (queueMissing || !declaredQueues.contains(suffix)) {
-        amqp.declareQueue(queue);
-        log.info("declared queue {}", queueName);
-      }
-
-      Binding desiredBinding = BindingBuilder.bind(queue).to(hive).with(queueName);
-      amqp.declareBinding(desiredBinding);
-      declaredQueues.add(suffix);
     }
   }
 
@@ -385,13 +358,8 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
     pendingConfigUpdates.clear();
 
     Set<String> suffixes = ctx != null ? ctx.queueSuffixes() : new LinkedHashSet<>(declaredQueues);
-    for (String suffix : suffixes) {
-      String queueName = properties.queueName(suffix);
-      log.info("deleting queue {}", queueName);
-      amqp.deleteQueue(queueName);
-      unregisterQueueMetrics(queueName);
-    }
-    amqp.deleteExchange(properties.hiveExchange());
+    topology.deleteWorkQueues(suffixes, this::unregisterQueueMetrics);
+    topology.deleteHiveExchange();
     declaredQueues.clear();
     runtimeContext = null;
 
