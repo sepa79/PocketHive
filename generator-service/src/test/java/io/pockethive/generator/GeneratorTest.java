@@ -47,7 +47,6 @@ class GeneratorTest {
     Map<String, Object> config = new LinkedHashMap<>();
     config.put("ratePerSec", 3.0);
     config.put("singleRequest", false);
-    config.put("suppressOutput", false);
     config.put("message", message);
     properties.setConfig(config);
     worker = new GeneratorWorkerImpl(properties, templateRenderer);
@@ -64,8 +63,7 @@ class GeneratorTest {
             "put",
             "{\"value\":42}",
             Map.of("X-Custom", "yes")
-        ),
-        false
+        )
     );
 
     WorkItem result = worker.onMessage(seedMessage(), new TestWorkerContext(config));

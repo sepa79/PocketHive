@@ -10,7 +10,6 @@ template:
         worker:
           ratePerSec: 5
           singleRequest: false
-          suppressOutput: false
           message:
             bodyType: SIMPLE
             body: |
@@ -20,12 +19,18 @@ template:
               "accountNumber":"{{ eval('#randInt(10000000,99999999)') }}",
               "cardNumber":"{{ card }}",
               "nonce":"{{ eval('#uuid()') }}"}
+      work:
+        out: seed-redis
+
+    - role: redis-postprocessor
+      image: postprocessor:latest
+      config:
         interceptors:
           redisUploader:
             enabled: true
             host: redis
             port: 6379
-            phase: AFTER
+            phase: BEFORE
             sourceStep: LAST
             pushDirection: RPUSH
             routes:
@@ -35,7 +40,7 @@ template:
                 list: ph:dataset:custb
             fallbackList: ph:dataset:other
       work:
-        out: seed-unused
+        in: seed-redis
 
     - role: data-provider
       image: data-provider:latest

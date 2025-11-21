@@ -9,8 +9,7 @@ import java.util.Objects;
 public record GeneratorWorkerConfig(
     double ratePerSec,
     boolean singleRequest,
-    Message message,
-    boolean suppressOutput
+    Message message
 ) implements SchedulerStates.RateConfig {
 
   public GeneratorWorkerConfig {

@@ -119,9 +119,6 @@ class GeneratorWorkerImpl implements PocketHiveWorkerFunction {
             .data("enabled", context.enabled())
             .data("singleRequest", config.singleRequest()));
     WorkItem message = buildMessage(config, context, seed);
-    if (config.suppressOutput()) {
-      return null;
-    }
     return seed.addStep(message.asString(), message.headers());
   }
 
