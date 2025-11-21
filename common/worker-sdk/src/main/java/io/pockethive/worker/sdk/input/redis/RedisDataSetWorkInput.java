@@ -13,6 +13,7 @@ import io.pockethive.worker.sdk.runtime.WorkerDefinition;
 import io.pockethive.worker.sdk.runtime.WorkerRuntime;
 import java.time.Duration;
 import java.util.Objects;
+import java.util.Map;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -184,7 +185,84 @@ public final class RedisDataSetWorkInput implements WorkInput {
             if (previouslyEnabled != enabled && log.isInfoEnabled()) {
                 log.info("{} redis dataset {}", workerDefinition.beanName(), enabled ? "enabled" : "disabled");
             }
+            applyRawConfigOverrides(snapshot.rawConfig());
         });
+    }
+
+    @SuppressWarnings("unchecked")
+    private void applyRawConfigOverrides(Map<String, Object> rawConfig) {
+        if (rawConfig == null || rawConfig.isEmpty()) {
+            return;
+        }
+        Object inputs = rawConfig.get("inputs");
+        if (!(inputs instanceof Map<?, ?> inputsMap)) {
+            return;
+        }
+        Object redis = inputsMap.get("redis");
+        if (!(redis instanceof Map<?, ?> redisMap)) {
+            return;
+        }
+
+        String listName = asText(redisMap.get("listName"));
+        if (listName != null && !listName.isBlank() && !listName.equals(properties.getListName())) {
+            properties.setListName(listName);
+            if (log.isInfoEnabled()) {
+                log.info("{} redis dataset list updated via config: {}", workerDefinition.beanName(), listName);
+            }
+        }
+        String host = asText(redisMap.get("host"));
+        if (host != null && !host.isBlank() && !host.equals(properties.getHost())) {
+            properties.setHost(host);
+            if (log.isInfoEnabled()) {
+                log.info("{} redis dataset host updated via config: {}", workerDefinition.beanName(), host);
+            }
+        }
+        Integer port = asInteger(redisMap.get("port"));
+        if (port != null && port > 0 && port != properties.getPort()) {
+            properties.setPort(port);
+            if (log.isInfoEnabled()) {
+                log.info("{} redis dataset port updated via config: {}", workerDefinition.beanName(), port);
+            }
+        }
+        Double rate = asDouble(redisMap.get("ratePerSec"));
+        if (rate != null && rate >= 0.0 && rate != properties.getRatePerSec()) {
+            properties.setRatePerSec(rate);
+            if (log.isInfoEnabled()) {
+                log.info("{} redis dataset ratePerSec updated via config: {}", workerDefinition.beanName(), rate);
+            }
+        }
+    }
+
+    private static String asText(Object value) {
+        return value == null ? null : value.toString();
+    }
+
+    private static Integer asInteger(Object value) {
+        if (value instanceof Number number) {
+            return number.intValue();
+        }
+        if (value instanceof String text) {
+            try {
+                return Integer.parseInt(text.trim());
+            } catch (NumberFormatException ignored) {
+                return null;
+            }
+        }
+        return null;
+    }
+
+    private static Double asDouble(Object value) {
+        if (value instanceof Number number) {
+            return number.doubleValue();
+        }
+        if (value instanceof String text) {
+            try {
+                return Double.parseDouble(text.trim());
+            } catch (NumberFormatException ignored) {
+                return null;
+            }
+        }
+        return null;
     }
 
     private void validateConfiguration() {

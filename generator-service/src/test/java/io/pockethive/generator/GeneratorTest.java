@@ -9,6 +9,7 @@ import io.pockethive.worker.sdk.api.WorkItem;
 import io.pockethive.worker.sdk.api.WorkerContext;
 import io.pockethive.worker.sdk.api.WorkerInfo;
 import io.pockethive.worker.sdk.testing.ControlPlaneTestFixtures;
+import io.pockethive.worker.sdk.templating.MessageBodyType;
 import io.pockethive.worker.sdk.templating.PebbleTemplateRenderer;
 import io.pockethive.worker.sdk.templating.TemplateRenderer;
 import java.util.LinkedHashMap;
@@ -38,6 +39,7 @@ class GeneratorTest {
     properties = new GeneratorWorkerProperties(new ObjectMapper(), WORKER_PROPERTIES);
     templateRenderer = new PebbleTemplateRenderer();
     Map<String, Object> message = new LinkedHashMap<>();
+    message.put("bodyType", "HTTP");
     message.put("path", "/default");
     message.put("method", "POST");
     message.put("body", "{}");
@@ -45,6 +47,7 @@ class GeneratorTest {
     Map<String, Object> config = new LinkedHashMap<>();
     config.put("ratePerSec", 3.0);
     config.put("singleRequest", false);
+    config.put("suppressOutput", false);
     config.put("message", message);
     properties.setConfig(config);
     worker = new GeneratorWorkerImpl(properties, templateRenderer);
@@ -56,11 +59,13 @@ class GeneratorTest {
         10.0,
         false,
         new GeneratorWorkerConfig.Message(
+            MessageBodyType.HTTP,
             "/custom",
             "put",
             "{\"value\":42}",
             Map.of("X-Custom", "yes")
-        )
+        ),
+        false
     );
 
     WorkItem result = worker.onMessage(seedMessage(), new TestWorkerContext(config));

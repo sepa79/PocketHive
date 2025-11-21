@@ -16,6 +16,6 @@ class DataProviderWorkerProperties extends CanonicalWorkerProperties<DataProvide
   }
 
   DataProviderWorkerConfig defaultConfig() {
-    return toConfig(objectMapper()).orElseGet(() -> new DataProviderWorkerConfig(Map.of()));
+    return toConfig(objectMapper()).orElseGet(() -> new DataProviderWorkerConfig(DataProviderWorkerConfig.Template.defaultTemplate()));
   }
 }

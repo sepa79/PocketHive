@@ -22,6 +22,7 @@
   <logger name="com.rabbitmq" level="WARN" additivity="false">
     <appender-ref ref="CONSOLE"/>
   </logger>
+  <logger name="io.pockethive.dataprovider" level="DEBUG"/>
   <logger name="io.pockethive" level="INFO"/>
 
   <if condition='!"false".equalsIgnoreCase(property("rabbitLoggingEnabled"))'>

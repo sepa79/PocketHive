@@ -39,6 +39,7 @@ export default function Layout() {
   }, [toast, clearToast])
 
   const { rabbitmq, prometheus, grafana, redis, wiremock } = useConfig()
+  const wiremockUi = wiremock + '/webapp/'
   const services = { rabbitmq, prometheus, grafana, redis, wiremock }
 
   return (
@@ -78,7 +79,7 @@ export default function Layout() {
             <a id="link-prometheus" href={services.prometheus} target="_blank" rel="noopener" aria-label="Prometheus"><img src="/icons/prometheus.svg" alt="Prometheus" /></a>
             <a id="link-grafana" href={services.grafana} target="_blank" rel="noopener" aria-label="Grafana"><img src="/icons/grafana.svg" alt="Grafana" /></a>
             <a id="link-redis" href={services.redis} target="_blank" rel="noopener" aria-label="Redis Commander"><img src="/icons/redis.svg" alt="Redis" /></a>
-            <a id="link-wiremock" href={services.wiremock} target="_blank" rel="noopener" aria-label="WireMock"><img src="/icons/wiremock.svg" alt="WireMock" /></a>
+            <a id="link-wiremock" href={wiremockUi} target="_blank" rel="noopener" aria-label="WireMock"><img src="/icons/wiremock.svg" alt="WireMock" /></a>
           </div>
           <Connectivity />
           <Health />

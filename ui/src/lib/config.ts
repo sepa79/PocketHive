@@ -25,7 +25,7 @@ const config: UIConfig = {
   grafana: `/grafana`,
   redis: `/redis`,
   // grafana: `http://${host}:3333`,
-  wiremock: `http://${host}:8080/__admin/webapp/`,
+  wiremock: `http://${host}:8080/__admin`,
   stompUrl: `/ws`,
   stompUser: readOnlyUser,
   stompPasscode: readOnlyPasscode,

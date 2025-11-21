@@ -11,6 +11,9 @@ import io.pockethive.worker.sdk.api.WorkItem;
 import io.pockethive.worker.sdk.api.WorkerContext;
 import io.pockethive.worker.sdk.api.WorkerInfo;
 import io.pockethive.worker.sdk.testing.ControlPlaneTestFixtures;
+import io.pockethive.worker.sdk.templating.MessageBodyType;
+import io.pockethive.worker.sdk.templating.PebbleTemplateRenderer;
+import io.pockethive.worker.sdk.templating.TemplateRenderer;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
@@ -23,17 +26,29 @@ class DataProviderWorkerTest {
 
   private DataProviderWorkerImpl worker;
   private DataProviderWorkerProperties properties;
+  private TemplateRenderer templateRenderer;
 
   @BeforeEach
   void setUp() {
     properties = new DataProviderWorkerProperties(new ObjectMapper(), WORKER_PROPERTIES);
-    properties.setConfig(Map.of("headers", Map.of("X-Default", "yes")));
-    worker = new DataProviderWorkerImpl(properties);
+    templateRenderer = new PebbleTemplateRenderer();
+    properties.setConfig(Map.of(
+        "template", Map.of(
+            "bodyType", "SIMPLE",
+            "body", "{{ payload }}",
+            "headers", Map.of("X-Default", "yes"))));
+    worker = new DataProviderWorkerImpl(properties, templateRenderer);
   }
 
   @Test
   void enrichesHeadersFromConfigAndSeed() {
-    DataProviderWorkerConfig config = new DataProviderWorkerConfig(Map.of("X-Config", "cfg"));
+    DataProviderWorkerConfig config = new DataProviderWorkerConfig(
+        new DataProviderWorkerConfig.Template(
+            MessageBodyType.SIMPLE,
+            "/",
+            "GET",
+            "{{ payload }}",
+            Map.of("X-Config", "cfg")));
     WorkItem seed = WorkItem.text("payload").header("X-Seed", "seed").build();
 
     WorkItem result = worker.onMessage(seed, new TestWorkerContext(config));

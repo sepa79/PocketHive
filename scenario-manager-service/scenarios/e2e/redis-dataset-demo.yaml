@@ -10,9 +10,9 @@ template:
         worker:
           ratePerSec: 5
           singleRequest: false
+          suppressOutput: false
           message:
-            path: "/api/redis-demo"
-            method: "POST"
+            bodyType: SIMPLE
             body: |
               {% set cust = eval("#randInt(0,1)==0 ? 'custA' : 'custB'") %}
               {% set card = eval("#randLong('4000000000000000','4999999999999999')") %}
@@ -20,20 +20,18 @@ template:
               "accountNumber":"{{ eval('#randInt(10000000,99999999)') }}",
               "cardNumber":"{{ card }}",
               "nonce":"{{ eval('#uuid()') }}"}
-            headers:
-              content-type: application/json
         interceptors:
           redisUploader:
             enabled: true
             host: redis
             port: 6379
             phase: AFTER
-            sourceStep: FIRST
+            sourceStep: LAST
             pushDirection: RPUSH
             routes:
-              - match: '"customerCode"\\s*:\\s*"custA"'
+              - match: '"customerCode"\s*:\s*"custA"'
                 list: ph:dataset:custa
-              - match: '"customerCode"\\s*:\\s*"custB"'
+              - match: '"customerCode"\s*:\s*"custB"'
                 list: ph:dataset:custb
             fallbackList: ph:dataset:other
       work:
@@ -42,6 +40,14 @@ template:
     - role: data-provider
       image: data-provider:latest
       config:
+        worker:
+          template:
+            bodyType: HTTP
+            path: "/api/redis-demo"
+            method: "POST"
+            body: "{{ payload }}"
+            headers:
+              content-type: application/json
         inputs:
           redis:
             enabled: true
@@ -55,6 +61,14 @@ template:
     - role: data-provider
       image: data-provider:latest
       config:
+        worker:
+          template:
+            bodyType: HTTP
+            path: "/api/redis-demo"
+            method: "POST"
+            body: "{{ payload }}"
+            headers:
+              content-type: application/json
         inputs:
           redis:
             enabled: true

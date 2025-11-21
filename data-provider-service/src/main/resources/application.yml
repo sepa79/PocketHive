@@ -16,22 +16,25 @@ pockethive:
   inputs:
     redis:
       enabled: true
-      host: ${POCKETHIVE_INPUT_REDIS_HOST:redis}
-      port: ${POCKETHIVE_INPUT_REDIS_PORT:6379}
-      username: ${POCKETHIVE_INPUT_REDIS_USERNAME:}
-      password: ${POCKETHIVE_INPUT_REDIS_PASSWORD:}
-      ssl: ${POCKETHIVE_INPUT_REDIS_SSL:false}
-      list-name: ${POCKETHIVE_INPUT_REDIS_LIST_NAME:ph:dataset}
-      rate-per-sec: ${POCKETHIVE_INPUT_REDIS_RATE_PER_SEC:1.0}
-      tick-interval-ms: ${POCKETHIVE_INPUT_REDIS_TICK_INTERVAL_MS:1000}
-      initial-delay-ms: ${POCKETHIVE_INPUT_REDIS_INITIAL_DELAY_MS:0}
+      host: redis
+      port: 6379
+      username: ""
+      password: ""
+      ssl: false
+      list-name: ph:dataset
+      rate-per-sec: 1.0
   outputs:
     rabbit:
       exchange: ${POCKETHIVE_OUTPUT_RABBIT_EXCHANGE}
       routingKey: ${POCKETHIVE_OUTPUT_RABBIT_ROUTING_KEY}
   worker:
     config:
-      headers: {}
+      template:
+        bodyType: HTTP
+        path: /
+        method: POST
+        body: "{{ payload }}"
+        headers: {}
   control-plane:
     exchange: ${POCKETHIVE_CONTROL_PLANE_EXCHANGE}
     swarm-id: ${POCKETHIVE_CONTROL_PLANE_SWARM_ID}

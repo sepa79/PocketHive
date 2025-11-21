@@ -1,6 +1,7 @@
 package io.pockethive.generator;
 
 import io.pockethive.worker.sdk.input.SchedulerStates;
+import io.pockethive.worker.sdk.templating.MessageBodyType;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
@@ -8,7 +9,8 @@ import java.util.Objects;
 public record GeneratorWorkerConfig(
     double ratePerSec,
     boolean singleRequest,
-    Message message
+    Message message,
+    boolean suppressOutput
 ) implements SchedulerStates.RateConfig {
 
   public GeneratorWorkerConfig {
@@ -16,9 +18,10 @@ public record GeneratorWorkerConfig(
     Objects.requireNonNull(message, "message");
   }
 
-  public record Message(String path, String method, String body, Map<String, String> headers) {
+  public record Message(MessageBodyType bodyType, String path, String method, String body, Map<String, String> headers) {
 
     public Message {
+      bodyType = bodyType == null ? MessageBodyType.HTTP : bodyType;
       path = normalizePath(path);
       method = normalizeMethod(method);
       body = body == null ? "" : body;
