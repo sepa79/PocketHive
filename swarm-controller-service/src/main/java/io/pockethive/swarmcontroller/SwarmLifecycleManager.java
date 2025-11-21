@@ -18,6 +18,7 @@ import io.pockethive.controlplane.spring.ControlPlaneContainerEnvironmentFactory
 import io.pockethive.swarmcontroller.config.SwarmControllerProperties;
 import io.pockethive.swarmcontroller.guard.BufferGuardController;
 import io.pockethive.swarmcontroller.guard.BufferGuardSettings;
+import io.pockethive.swarmcontroller.runtime.SwarmRuntimeContext;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Tags;
@@ -105,6 +106,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
   private final ConcurrentMap<String, Gauge> queueOldestGauges = new ConcurrentHashMap<>();
   private final ConcurrentMap<String, PendingConfig> pendingConfigUpdates = new ConcurrentHashMap<>();
   private List<String> startOrder = List.of();
+  private volatile SwarmRuntimeContext runtimeContext;
   private Optional<BufferGuardSettings> bufferGuardSettings = Optional.empty();
   private BufferGuardController bufferGuardController;
   private TrafficPolicy trafficPolicy;
@@ -255,6 +257,9 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
 
       declareQueues(hive, suffixes);
 
+      // Capture the plan-derived runtime context so remove() can tear down only this swarm's resources.
+      runtimeContext = new SwarmRuntimeContext(plan, startOrder, suffixes);
+
       for (Bee bee : runnableBees) {
         String beeName = BeeNameGenerator.generate(bee.role(), swarmId);
         Map<String, String> env = new LinkedHashMap<>(
@@ -378,7 +383,9 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
     containers.clear();
     pendingConfigUpdates.clear();
 
-    for (String suffix : declaredQueues) {
+    SwarmRuntimeContext ctx = runtimeContext;
+    Set<String> suffixes = ctx != null ? ctx.queueSuffixes() : new LinkedHashSet<>(declaredQueues);
+    for (String suffix : suffixes) {
       String queueName = properties.queueName(suffix);
       log.info("deleting queue {}", queueName);
       amqp.deleteQueue(queueName);
@@ -386,6 +393,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
     }
     amqp.deleteExchange(properties.hiveExchange());
     declaredQueues.clear();
+    runtimeContext = null;
 
     status = SwarmStatus.REMOVED;
   }
@@ -462,10 +470,8 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
 
   @Override
   public Map<String, QueueStats> snapshotQueueStats() {
-    List<String> suffixes;
-    synchronized (declaredQueues) {
-      suffixes = List.copyOf(declaredQueues);
-    }
+    SwarmRuntimeContext ctx = runtimeContext;
+    Set<String> suffixes = ctx != null ? ctx.queueSuffixes() : new LinkedHashSet<>(declaredQueues);
     Map<String, QueueStats> snapshot = new LinkedHashMap<>(suffixes.size());
     for (String suffix : suffixes) {
       String queueName = properties.queueName(suffix);
