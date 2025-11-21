@@ -372,7 +372,8 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
     stopBufferGuard();
     setSwarmEnabled(false);
     trafficPolicy = null;
-    List<String> order = new ArrayList<>(startOrder);
+    SwarmRuntimeContext ctx = runtimeContext;
+    List<String> order = new ArrayList<>(ctx != null ? ctx.startOrder() : startOrder);
     java.util.Collections.reverse(order);
     for (String role : order) {
       for (String id : containers.getOrDefault(role, List.of())) {
@@ -383,7 +384,6 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
     containers.clear();
     pendingConfigUpdates.clear();
 
-    SwarmRuntimeContext ctx = runtimeContext;
     Set<String> suffixes = ctx != null ? ctx.queueSuffixes() : new LinkedHashSet<>(declaredQueues);
     for (String suffix : suffixes) {
       String queueName = properties.queueName(suffix);
