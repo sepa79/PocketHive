@@ -23,6 +23,7 @@ pockethive:
     config:
       templateRoot: /app/http-templates
       serviceId: default
+      passThroughOnMissingTemplate: true
   control-plane:
     exchange: ${POCKETHIVE_CONTROL_PLANE_EXCHANGE}
     swarm-id: ${POCKETHIVE_CONTROL_PLANE_SWARM_ID}
@@ -36,4 +37,3 @@ pockethive:
 
 management.prometheus.metrics.export.pushgateway.job: ${POCKETHIVE_CONTROL_PLANE_SWARM_ID}
 management.prometheus.metrics.export.pushgateway.grouping-key.instance: ${POCKETHIVE_CONTROL_PLANE_INSTANCE_ID}
-

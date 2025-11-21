@@ -16,6 +16,8 @@ config:
   - name: serviceId
     type: string
     default: "default"
+  - name: passThroughOnMissingTemplate
+    type: boolean
+    default: true
 actions: []
 panels: []
-

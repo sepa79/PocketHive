@@ -47,13 +47,12 @@ template:
       config:
         worker:
           template:
-            bodyType: HTTP
-            path: "/api/redis-demo"
-            method: "POST"
+            bodyType: SIMPLE
             body: "{{ payload }}"
             headers:
               content-type: application/json
-              x-ph-call-id: redis-dataset-demo
+              x-ph-call-id: >
+                {{ eval("#randInt(0,99) < 50 ? 'redis-auth' : (#randInt(0,99) < 80 ? 'redis-balance' : 'redis-topup')") }}
         inputs:
           redis:
             enabled: true
@@ -69,13 +68,12 @@ template:
       config:
         worker:
           template:
-            bodyType: HTTP
-            path: "/api/redis-demo"
-            method: "POST"
+            bodyType: SIMPLE
             body: "{{ payload }}"
             headers:
               content-type: application/json
-              x-ph-call-id: redis-dataset-demo
+              x-ph-call-id: >
+                {{ eval("#randInt(0,99) < 40 ? 'redis-balance' : (#randInt(0,99) < 80 ? 'redis-topup' : 'redis-auth')") }}
         inputs:
           redis:
             enabled: true

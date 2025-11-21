@@ -4,7 +4,8 @@ import java.util.Objects;
 
 public record HttpBuilderWorkerConfig(
     String templateRoot,
-    String serviceId
+    String serviceId,
+    boolean passThroughOnMissingTemplate
 ) {
 
   public HttpBuilderWorkerConfig {
@@ -20,4 +21,3 @@ public record HttpBuilderWorkerConfig(
     return trimmed.isEmpty() ? defaultValue : trimmed;
   }
 }
-

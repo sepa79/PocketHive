@@ -15,7 +15,6 @@ class HttpBuilderWorkerProperties extends CanonicalWorkerProperties<HttpBuilderW
   }
 
   HttpBuilderWorkerConfig defaultConfig() {
-    return toConfig(objectMapper()).orElseGet(() -> new HttpBuilderWorkerConfig("/app/http-templates", "default"));
+    return toConfig(objectMapper()).orElseGet(() -> new HttpBuilderWorkerConfig("/app/http-templates", "default", true));
   }
 }
-

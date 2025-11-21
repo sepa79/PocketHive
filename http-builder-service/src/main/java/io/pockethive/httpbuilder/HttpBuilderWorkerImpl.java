@@ -16,6 +16,7 @@ import io.pockethive.worker.sdk.templating.TemplateRenderer;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.atomic.LongAdder;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
@@ -35,6 +36,10 @@ class HttpBuilderWorkerImpl implements PocketHiveWorkerFunction {
   private final MessageTemplateRenderer messageTemplateRenderer;
   private final HttpTemplateLoader templateLoader;
   private volatile Map<String, HttpTemplateDefinition> templates;
+  private final LongAdder errorCount = new LongAdder();
+  private final Object statusLock = new Object();
+  private volatile long lastStatusAtMillis = System.currentTimeMillis();
+  private volatile long lastErrorCountSnapshot = 0L;
 
   @Autowired
   HttpBuilderWorkerImpl(HttpBuilderWorkerProperties properties, TemplateRenderer templateRenderer) {
@@ -63,40 +68,50 @@ class HttpBuilderWorkerImpl implements PocketHiveWorkerFunction {
     String serviceId = resolveServiceId(seed, config);
     String callId = resolveCallId(seed);
     if (callId == null || callId.isBlank()) {
-      context.logger().warn("No callId present on work item; skipping HTTP building");
-      return seed;
+      context.logger().warn("No callId present on work item; {}", missingBehavior(config));
+      return handleMissing(config, seed, context);
     }
 
     HttpTemplateDefinition definition =
         templates.get(HttpTemplateLoader.key(serviceId, callId));
     if (definition == null) {
-      context.logger().warn("No HTTP template found for serviceId={} callId={}", serviceId, callId);
-      return seed;
+      context.logger().warn("No HTTP template found for serviceId={} callId={}; {}", serviceId, callId, missingBehavior(config));
+      return handleMissing(config, seed, context);
     }
 
-    MessageTemplate template = MessageTemplate.builder()
-        .bodyType(MessageBodyType.HTTP)
-        .pathTemplate(definition.pathTemplate())
-        .methodTemplate(definition.method())
-        .bodyTemplate(definition.bodyTemplate())
-        .headerTemplates(definition.headersTemplate() == null ? Map.of() : definition.headersTemplate())
-        .build();
+    try {
+      MessageTemplate template = MessageTemplate.builder()
+          .bodyType(MessageBodyType.HTTP)
+          .pathTemplate(definition.pathTemplate())
+          .methodTemplate(definition.method())
+          .bodyTemplate(definition.bodyTemplate())
+          .headerTemplates(definition.headersTemplate() == null ? Map.of() : definition.headersTemplate())
+          .build();
 
-    MessageTemplateRenderer.RenderedMessage rendered =
-        messageTemplateRenderer.render(template, seed);
+      MessageTemplateRenderer.RenderedMessage rendered =
+          messageTemplateRenderer.render(template, seed);
 
-    ObjectNode envelope = MAPPER.createObjectNode();
-    envelope.put("path", rendered.path());
-    envelope.put("method", rendered.method() == null ? "GET" : rendered.method().toUpperCase(Locale.ROOT));
-    envelope.set("headers", MAPPER.valueToTree(rendered.headers()));
-    envelope.put("body", rendered.body());
+      ObjectNode envelope = MAPPER.createObjectNode();
+      envelope.put("path", rendered.path());
+      envelope.put("method", rendered.method() == null ? "GET" : rendered.method().toUpperCase(Locale.ROOT));
+      envelope.set("headers", MAPPER.valueToTree(rendered.headers()));
+      envelope.put("body", rendered.body());
 
-    WorkItem httpItem = WorkItem.json(envelope)
-        .header("content-type", "application/json")
-        .header("x-ph-service", context.info().role())
-        .build();
+      WorkItem httpItem = WorkItem.json(envelope)
+          .header("content-type", "application/json")
+          .header("x-ph-service", context.info().role())
+          .build();
 
-    return seed.addStep(httpItem.asString(), httpItem.headers());
+      WorkItem result = seed.addStep(httpItem.asString(), httpItem.headers());
+      publishStatus(context, config);
+      return result;
+    } catch (Exception ex) {
+      context.logger().warn("HTTP Builder failed to render template for serviceId={} callId={}: {}",
+          serviceId, callId, ex.toString());
+      recordError();
+      publishStatus(context, config);
+      return config.passThroughOnMissingTemplate() ? seed : null;
+    }
   }
 
   private void reloadTemplates() {
@@ -105,6 +120,18 @@ class HttpBuilderWorkerImpl implements PocketHiveWorkerFunction {
 
   private void reloadTemplates(HttpBuilderWorkerConfig config) {
     this.templates = templateLoader.load(config.templateRoot(), config.serviceId());
+  }
+
+  private WorkItem handleMissing(HttpBuilderWorkerConfig config, WorkItem seed, WorkerContext context) {
+    recordError();
+    publishStatus(context, config);
+    return config.passThroughOnMissingTemplate() ? seed : null;
+  }
+
+  private static String missingBehavior(HttpBuilderWorkerConfig config) {
+    return config.passThroughOnMissingTemplate()
+        ? "passing work item through unchanged"
+        : "dropping work item (no output)";
   }
 
   private static String resolveServiceId(WorkItem item, HttpBuilderWorkerConfig config) {
@@ -122,5 +149,32 @@ class HttpBuilderWorkerImpl implements PocketHiveWorkerFunction {
     }
     return null;
   }
-}
 
+  private void recordError() {
+    errorCount.increment();
+  }
+
+  private void publishStatus(WorkerContext context, HttpBuilderWorkerConfig config) {
+    long now = System.currentTimeMillis();
+    synchronized (statusLock) {
+      long totalErrors = errorCount.sum();
+      long deltaErrors = totalErrors - lastErrorCountSnapshot;
+      long deltaMillis = now - lastStatusAtMillis;
+      double errorTps = 0.0;
+      if (deltaMillis > 0L && deltaErrors > 0L) {
+        errorTps = (deltaErrors * 1000.0) / deltaMillis;
+      }
+      lastStatusAtMillis = now;
+      lastErrorCountSnapshot = totalErrors;
+      final double finalErrorTps = errorTps;
+      final long finalTotalErrors = totalErrors;
+      context.statusPublisher()
+          .update(status -> status
+              .data("templateRoot", config.templateRoot())
+              .data("serviceId", config.serviceId())
+              .data("passThroughOnMissingTemplate", config.passThroughOnMissingTemplate())
+              .data("errorCount", finalTotalErrors)
+              .data("errorTps", finalErrorTps));
+    }
+  }
+}
