@@ -630,6 +630,54 @@ public class SwarmLifecycleSteps {
     }
   }
 
+  @Then("the redis dataset demo pipeline processes traffic end to end")
+  public void redisDatasetDemoPipelineProcessesTrafficEndToEnd() throws Exception {
+    ensureStartResponse();
+    ensureFinalQueueTap();
+    String queue = tapQueueName != null ? tapQueueName : finalQueueName();
+
+    WorkQueueConsumer.Message message = workQueueConsumer.consumeNext(SwarmAssertions.defaultTimeout())
+        .orElseThrow(() -> new AssertionError("No message observed on tap queue " + queue));
+
+    try {
+      List<String> stepPayloads = workItemStepPayloads(message);
+      String scenarioId = scenarioDetails != null ? scenarioDetails.id() : null;
+      LOGGER.info("Redis dataset demo WorkItem step payloads for scenario {}: {}", scenarioId, stepPayloads);
+
+      boolean hasDataset = stepPayloads.stream()
+          .anyMatch(payload -> payload != null && payload.contains("\"customerCode\""));
+
+      boolean hasHttpRequest = false;
+      boolean hasHttpResponse = false;
+
+      for (String payload : stepPayloads) {
+        if (payload == null || payload.isBlank()) {
+          continue;
+        }
+        try {
+          JsonNode node = objectMapper.readTree(payload);
+          if (node.has("path") && node.has("method") && node.has("headers") && node.has("body")) {
+            hasHttpRequest = true;
+          }
+          if (node.has("status") && node.has("body")) {
+            hasHttpResponse = true;
+          }
+        } catch (IOException ex) {
+          // Not JSON; ignore this step for HTTP assertions.
+        }
+      }
+
+      assertTrue(hasDataset,
+          () -> "Expected at least one step payload containing customerCode but saw: " + stepPayloads);
+      assertTrue(hasHttpRequest,
+          () -> "Expected at least one HTTP request envelope step (path/method/headers/body) but saw: " + stepPayloads);
+      assertTrue(hasHttpResponse,
+          () -> "Expected at least one HTTP response step (status/body) but saw: " + stepPayloads);
+    } finally {
+      message.ack();
+    }
+  }
+
   // Templated generator behaviour is currently validated via the templated-rest
   // scenario wiring and per-scenario configuration checks in ScenarioDefaultsSteps.
 
@@ -975,6 +1023,9 @@ public class SwarmLifecycleSteps {
     }
     if ("local-rest-with-named-queues".equals(scenarioId)) {
       return "finalQ";
+    }
+    if ("redis-dataset-demo".equals(scenarioId)) {
+      return "post";
     }
     throw new AssertionError("Unsupported scenario for final queue resolution: " + scenarioId);
   }

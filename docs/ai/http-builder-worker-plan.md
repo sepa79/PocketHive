@@ -94,7 +94,7 @@
   - [x] Successful resolution and rendering for a simple call.
   - [x] Missing `callId` → clear error / no output (given `passThroughOnMissingTemplate=false`).
   - [x] Missing template for known `callId` → clear error (no fallback) and either pass-through or drop depending on config.
-- [ ] Integration-style test wiring DataProvider → HTTP Builder → Processor using testcontainers/WireMock (optional but preferred).
+- [x] Integration-style test wiring DataProvider → HTTP Builder → Processor via the e2e harness and the `redis-dataset-demo` scenario (end-to-end pipeline with WireMock in the stack).
 
 ### 6. Documentation
 
