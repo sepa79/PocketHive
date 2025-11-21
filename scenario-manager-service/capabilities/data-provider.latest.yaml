@@ -38,5 +38,13 @@ config:
     type: json
     default: {}
     multiline: true
+  - name: inputs.redis.ratePerSec
+    type: number
+    default: 1
+    min: 0
+    max: 1000
+    ui:
+      step: 1
+      unit: msg/s
 actions: []
 panels: []
