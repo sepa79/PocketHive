@@ -21,6 +21,12 @@ config:
     ui:
       step: 1
       unit: msg/s
+  - name: message.bodyType
+    type: string
+    default: "HTTP"
+    options:
+      - "HTTP"
+      - "SIMPLE"
   - name: message.path
     type: string
     default: "/"

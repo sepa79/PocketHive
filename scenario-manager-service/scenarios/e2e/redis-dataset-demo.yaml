@@ -1,0 +1,108 @@
+id: redis-dataset-demo
+name: Redis dataset demo (generator + per-customer lists)
+description: Seeds Redis with randomised payloads and runs two low-rate data providers that each drain their own list.
+template:
+  image: swarm-controller:latest
+  bees:
+    - role: generator
+      image: generator:latest
+      config:
+        worker:
+          ratePerSec: 5
+          singleRequest: false
+          message:
+            bodyType: SIMPLE
+            body: |
+              {% set cust = eval("#randInt(0,1)==0 ? 'custA' : 'custB'") %}
+              {% set card = eval("#randLong('4000000000000000','4999999999999999')") %}
+              {"customerCode":"{{ cust }}",
+              "accountNumber":"{{ eval('#randInt(10000000,99999999)') }}",
+              "cardNumber":"{{ card }}",
+              "nonce":"{{ eval('#uuid()') }}"}
+      work:
+        out: seed-redis
+
+    - role: redis-postprocessor
+      image: postprocessor:latest
+      config:
+        interceptors:
+          redisUploader:
+            enabled: true
+            host: redis
+            port: 6379
+            phase: BEFORE
+            sourceStep: LAST
+            pushDirection: RPUSH
+            routes:
+              - match: '"customerCode"\s*:\s*"custA"'
+                list: ph:dataset:custa
+              - match: '"customerCode"\s*:\s*"custB"'
+                list: ph:dataset:custb
+            fallbackList: ph:dataset:other
+      work:
+        in: seed-redis
+
+    - role: data-provider
+      image: data-provider:latest
+      config:
+        worker:
+          template:
+            bodyType: SIMPLE
+            body: "{{ payload }}"
+            headers:
+              content-type: application/json
+              x-ph-call-id: >
+                {{ eval("#randInt(0,99) < 50 ? 'redis-auth' : (#randInt(0,99) < 80 ? 'redis-balance' : 'redis-topup')") }}
+        inputs:
+          redis:
+            enabled: true
+            host: redis
+            port: 6379
+            listName: ph:dataset:custa
+            ratePerSec: 5
+      work:
+        out: http-build
+
+    - role: data-provider
+      image: data-provider:latest
+      config:
+        worker:
+          template:
+            bodyType: SIMPLE
+            body: "{{ payload }}"
+            headers:
+              content-type: application/json
+              x-ph-call-id: >
+                {{ eval("#randInt(0,99) < 40 ? 'redis-balance' : (#randInt(0,99) < 80 ? 'redis-topup' : 'redis-auth')") }}
+        inputs:
+          redis:
+            enabled: true
+            host: redis
+            port: 6379
+            listName: ph:dataset:custb
+            ratePerSec: 5
+      work:
+        out: http-build
+
+    - role: http-builder
+      image: http-builder:latest
+      config:
+        worker:
+          templateRoot: /app/http-templates
+          serviceId: default
+      work:
+        in: http-build
+        out: proc
+
+    - role: processor
+      image: processor:latest
+      config:
+        baseUrl: http://wiremock:8080
+      work:
+        in: proc
+        out: post
+
+    - role: postprocessor
+      image: postprocessor:latest
+      work:
+        in: post

@@ -95,6 +95,7 @@ Docker named volumes retain stateful data between restarts:
 - `prometheus-data` (Prometheus TSDB)
 - `grafana-data` (Grafana database and plugins)
 - `loki-data` (Loki indexes and chunks)
+- `redis-data` (Redis datasets)
 
 They are created automatically on the first `docker compose up`. Remove them explicitly
 with `docker compose down -v` if you need a clean slate.

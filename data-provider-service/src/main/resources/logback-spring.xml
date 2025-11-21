@@ -1,0 +1,53 @@
+<configuration>
+  <include resource="org/springframework/boot/logging/logback/base.xml"/>
+
+  <springProperty scope="context" name="applicationName"
+                  source="spring.application.name"/>
+
+  <springProperty scope="context" name="roleIdentifier"
+                  source="pockethive.control-plane.worker.role"/>
+
+  <springProperty scope="context" name="swarmIdentifier"
+                  source="pockethive.control-plane.swarm-id"/>
+
+  <springProperty scope="context" name="instanceIdentifier"
+                  source="pockethive.control-plane.instance-id"/>
+
+  <springProperty scope="context" name="rabbitLoggingEnabled"
+                  source="pockethive.control-plane.swarm-controller.rabbit.logging.enabled"/>
+
+  <logger name="org.springframework.amqp" level="WARN" additivity="false">
+    <appender-ref ref="CONSOLE"/>
+  </logger>
+  <logger name="com.rabbitmq" level="WARN" additivity="false">
+    <appender-ref ref="CONSOLE"/>
+  </logger>
+  <logger name="io.pockethive.dataprovider" level="DEBUG"/>
+  <logger name="io.pockethive" level="INFO"/>
+
+  <if condition='!"false".equalsIgnoreCase(property("rabbitLoggingEnabled"))'>
+    <then>
+      <appender name="RABBIT" class="org.springframework.amqp.rabbit.logback.AmqpAppender">
+        <host>${SPRING_RABBITMQ_HOST}</host>
+        <port>${SPRING_RABBITMQ_PORT}</port>
+        <username>${SPRING_RABBITMQ_USERNAME}</username>
+        <password>${SPRING_RABBITMQ_PASSWORD}</password>
+        <virtualHost>${SPRING_RABBITMQ_VIRTUAL_HOST}</virtualHost>
+        <exchangeName>${POCKETHIVE_LOGS_EXCHANGE}</exchangeName>
+        <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+          <customFields>{"role":"${roleIdentifier}","swarmId":"${swarmIdentifier}","instanceId":"${instanceIdentifier}"}</customFields>
+        </encoder>
+      </appender>
+
+      <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="RABBIT"/>
+      </root>
+    </then>
+    <else>
+      <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+      </root>
+    </else>
+  </if>
+</configuration>

@@ -20,10 +20,7 @@ public final class PebbleTemplateRenderer implements TemplateRenderer {
     private final PebbleEngine engine;
 
     public PebbleTemplateRenderer() {
-        this(new PebbleEngine.Builder()
-            .autoEscaping(false)
-            .cacheActive(true)
-            .build());
+        this(defaultEngine());
     }
 
     public PebbleTemplateRenderer(PebbleEngine engine) {
@@ -44,5 +41,13 @@ public final class PebbleTemplateRenderer implements TemplateRenderer {
             throw new TemplateRenderingException("Failed to render template", ex);
         }
     }
-}
 
+    private static PebbleEngine defaultEngine() {
+        SpelTemplateEvaluator evaluator = new SpelTemplateEvaluator();
+        return new PebbleEngine.Builder()
+            .extension(new PebbleEvalExtension(evaluator))
+            .autoEscaping(false)
+            .cacheActive(true)
+            .build();
+    }
+}

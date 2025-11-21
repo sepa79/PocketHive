@@ -59,3 +59,17 @@ Feature: Swarm lifecycle golden path
     And the moderator runtime config matches the local-rest scenario
     And the processor runtime config matches the local-rest scenario
     And the postprocessor runtime config matches the local-rest scenario
+
+  @redis-dataset-demo
+  Scenario: Redis dataset demo flows through HTTP Builder and Processor
+    And the "redis-dataset-demo" scenario template is requested
+    When I create the swarm from that template
+    Then the swarm is registered and queues are declared
+    When I start the swarm
+    Then the swarm reports running
+    And I request a single generator run
+    Then the redis dataset demo pipeline processes traffic end to end
+    When I stop the swarm
+    Then the swarm reports stopped
+    When I remove the swarm
+    Then the swarm is removed and lifecycle confirmations are recorded

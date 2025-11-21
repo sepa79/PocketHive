@@ -1,0 +1,25 @@
+{
+  "priority": 5,
+  "request": {
+    "method": "POST",
+    "url": "/api/redis-demo",
+    "bodyPatterns": [
+      { "contains": "\"customerCode\":\"custA\"" }
+    ],
+    "headers": {
+      "x-demo-call": {
+        "equalTo": "auth"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "message": "processed custA (auth)"
+    }
+  }
+}
+

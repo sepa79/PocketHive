@@ -15,6 +15,7 @@ import java.util.Objects;
  * <ul>
  *   <li>{@code payload} – the current {@link WorkItem#payload()} value</li>
  *   <li>{@code headers} – the current {@link WorkItem#headers()} map</li>
+ *   <li>{@code workItem} – the full immutable {@link WorkItem} for convenience</li>
  * </ul>
  * and appends the rendered string via {@link WorkItem#addStepPayload(String)}.
  */
@@ -48,6 +49,7 @@ public final class TemplatingInterceptor implements WorkerInvocationInterceptor 
         Map<String, Object> templateContext = new HashMap<>();
         templateContext.put("payload", current.payload());
         templateContext.put("headers", current.headers());
+        templateContext.put("workItem", current);
 
         String rendered = renderer.render(template, templateContext);
         WorkItem updated = current.addStepPayload(rendered);
@@ -55,4 +57,3 @@ public final class TemplatingInterceptor implements WorkerInvocationInterceptor 
         return chain.proceed(context);
     }
 }
-

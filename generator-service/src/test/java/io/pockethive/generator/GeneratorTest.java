@@ -9,6 +9,9 @@ import io.pockethive.worker.sdk.api.WorkItem;
 import io.pockethive.worker.sdk.api.WorkerContext;
 import io.pockethive.worker.sdk.api.WorkerInfo;
 import io.pockethive.worker.sdk.testing.ControlPlaneTestFixtures;
+import io.pockethive.worker.sdk.templating.MessageBodyType;
+import io.pockethive.worker.sdk.templating.PebbleTemplateRenderer;
+import io.pockethive.worker.sdk.templating.TemplateRenderer;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
@@ -29,11 +32,14 @@ class GeneratorTest {
 
   private GeneratorWorkerProperties properties;
   private GeneratorWorkerImpl worker;
+  private TemplateRenderer templateRenderer;
 
   @BeforeEach
   void setUp() {
     properties = new GeneratorWorkerProperties(new ObjectMapper(), WORKER_PROPERTIES);
+    templateRenderer = new PebbleTemplateRenderer();
     Map<String, Object> message = new LinkedHashMap<>();
+    message.put("bodyType", "HTTP");
     message.put("path", "/default");
     message.put("method", "POST");
     message.put("body", "{}");
@@ -43,7 +49,7 @@ class GeneratorTest {
     config.put("singleRequest", false);
     config.put("message", message);
     properties.setConfig(config);
-    worker = new GeneratorWorkerImpl(properties);
+    worker = new GeneratorWorkerImpl(properties, templateRenderer);
   }
 
   @Test
@@ -52,6 +58,7 @@ class GeneratorTest {
         10.0,
         false,
         new GeneratorWorkerConfig.Message(
+            MessageBodyType.HTTP,
             "/custom",
             "put",
             "{\"value\":42}",

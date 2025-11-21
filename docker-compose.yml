@@ -35,6 +35,36 @@ services:
       retries: 24
       start_period: 30s
 
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "60", "1", "--loglevel", "warning"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    environment:
+      REDIS_HOSTS: local:redis:6379
+    ports:
+      - "8081:8081"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8081"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
   prometheus:
     image: prom/prometheus:latest
     command:
@@ -93,7 +123,7 @@ services:
       start_period: 5s
 
   wiremock:
-    image: wiremock/wiremock:latest
+    image: holomekc/wiremock-gui:latest
     command:
       [
         "--verbose",                          # useful logs for debugging
@@ -219,3 +249,4 @@ volumes:
   prometheus-data:
   grafana-data:
   loki-data:
+  redis-data:

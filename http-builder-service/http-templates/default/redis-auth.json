@@ -1,0 +1,12 @@
+{
+  "serviceId": "default",
+  "callId": "redis-auth",
+  "method": "POST",
+  "pathTemplate": "/api/redis-demo",
+  "bodyTemplate": "{{ payload }}",
+  "headersTemplate": {
+    "content-type": "application/json",
+    "x-demo-call": "auth"
+  }
+}
+

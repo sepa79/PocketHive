@@ -129,7 +129,7 @@ All images are pulled from GitHub Container Registry:
 - `ghcr.io/sepa79/pockethive/scenario-manager:latest`
 - `ghcr.io/sepa79/pockethive/log-aggregator:latest`
 - `ghcr.io/sepa79/pockethive/ui:latest`
-- Plus standard images: Prometheus, Grafana, Loki, WireMock
+- Plus standard images: Prometheus, Grafana, Loki, Redis, Redis Commander, WireMock
 
 ## Ports
 
@@ -139,6 +139,8 @@ All images are pulled from GitHub Container Registry:
 | 5672  | RabbitMQ             | AMQP protocol                  |
 | 15672 | RabbitMQ Management  | Admin UI (guest/guest)         |
 | 15674 | RabbitMQ Web STOMP   | WebSocket STOMP                |
+| 6379  | Redis                | Dataset cache/source           |
+| 8081  | Redis Commander      | Redis web UI                   |
 | 3000  | Grafana              | Dashboards (pockethive/pockethive) |
 | 9090  | Prometheus           | Metrics                        |
 | 9091  | Pushgateway          | Metrics push endpoint          |
@@ -152,6 +154,7 @@ Volumes created for data persistence:
 - `pockethive_loki-data` - Logs
 - `pockethive_prometheus-data` - Metrics
 - `pockethive_grafana-data` - Dashboards
+- `pockethive_redis-data` - Redis datasets
 
 ## Troubleshooting
 

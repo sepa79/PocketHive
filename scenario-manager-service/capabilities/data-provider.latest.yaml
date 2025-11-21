@@ -1,0 +1,50 @@
+schemaVersion: "1.0"
+capabilitiesVersion: "1.1"
+role: data-provider
+image:
+  name: data-provider
+  tag: latest
+ui:
+  label: "Data Provider"
+  color: "#22c55e"
+  shape: "triangle"
+  abbreviation: "DP"
+config:
+  - name: template.bodyType
+    type: string
+    default: "HTTP"
+    options:
+      - "HTTP"
+      - "SIMPLE"
+  - name: template.path
+    type: string
+    default: "/"
+  - name: template.method
+    type: string
+    default: "POST"
+    options:
+      - "GET"
+      - "POST"
+      - "PUT"
+      - "DELETE"
+      - "PATCH"
+      - "HEAD"
+      - "OPTIONS"
+  - name: template.body
+    type: text
+    default: "{{ payload }}"
+    multiline: true
+  - name: template.headers
+    type: json
+    default: {}
+    multiline: true
+  - name: inputs.redis.ratePerSec
+    type: number
+    default: 1
+    min: 0
+    max: 1000
+    ui:
+      step: 1
+      unit: msg/s
+actions: []
+panels: []

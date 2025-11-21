@@ -30,10 +30,14 @@ template:
     - role: generator
       image: generator:latest
       config:
-        ratePerSec: 10
-        message:
-          path: /api/guarded
-          body: guarded-request
+        worker:
+          ratePerSec: 10
+          singleRequest: false
+          message:
+            bodyType: HTTP
+            path: /api/guarded
+            method: POST
+            body: guarded-request
       work:
         out: gen-out
     - role: moderator

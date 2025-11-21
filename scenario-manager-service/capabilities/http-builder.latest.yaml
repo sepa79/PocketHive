@@ -1,0 +1,23 @@
+schemaVersion: "1.0"
+capabilitiesVersion: "1.1"
+role: http-builder
+image:
+  name: http-builder
+  tag: latest
+ui:
+  label: "HTTP Builder"
+  color: "#6366f1"
+  shape: "triangle"
+  abbreviation: "HB"
+config:
+  - name: templateRoot
+    type: string
+    default: "/app/http-templates"
+  - name: serviceId
+    type: string
+    default: "default"
+  - name: passThroughOnMissingTemplate
+    type: boolean
+    default: true
+actions: []
+panels: []

@@ -58,6 +58,24 @@ PocketHive splits the control plane into **managers** (orchestrator + swarm cont
 - Apply `sig.config-update.{swarmId}.{role}.{instance}` (`enabled: true|false`) to control **workload** state only while keeping control listeners responsive.
 - Runtime behaviour, worker interfaces, and adoption guidance are covered in the [Worker SDK quick start](sdk/worker-sdk-quickstart.md).
 
+### 2.3 HTTP Builder worker
+
+- Optional worker that sits between **Data Providers** (or other producers) and the **processor** in the work topology.
+- **Input:** generic `WorkItem` from RabbitMQ with:
+  - payload: arbitrary text/JSON produced upstream (for example, a per-customer dataset row from Redis),
+  - headers: including `x-ph-call-id` (required) and optional `x-ph-service-id`.
+- **Templates:** disk-backed HTTP call definitions under a configurable `templateRoot`:
+  - organised as `(serviceId, callId)` pairs,
+  - define `method`, `pathTemplate`, `headersTemplate`, and `bodyTemplate`,
+  - rendered via the shared Pebble+SpEL templating engine using `payload`, `headers`, and `workItem` as context.
+- **Behaviour:**
+  - On each message, resolves `(serviceId, callId)` to a template and appends an HTTP envelope step:
+    - `{ path, method, headers, body }` – exactly what `processor-service` expects.
+  - Missing `callId` or template is handled explicitly via config:
+    - `passThroughOnMissingTemplate: true` → log and return the original `WorkItem` unchanged.
+    - `passThroughOnMissingTemplate: false` → log and drop the message (no output).
+  - Publishes status data per role via the control plane (template root, service id, `errorCount`, `errorTps`) so operators can see template issues without inspecting logs.
+
 Workers source their queue/exchange bindings from the IO sections, not from the control-plane block:
 
 ```yaml
