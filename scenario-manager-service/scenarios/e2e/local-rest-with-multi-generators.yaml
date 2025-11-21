@@ -7,21 +7,27 @@ template:
     - role: generator
       image: generator:latest
       config:
-        ratePerSec: 30
-        message:
-          path: /api/test-alpha
-          method: POST
-          body: hello-from-generator-a
+        worker:
+          ratePerSec: 30
+          singleRequest: false
+          message:
+            bodyType: HTTP
+            path: /api/test-alpha
+            method: POST
+            body: hello-from-generator-a
       work:
         out: gen
     - role: generator
       image: generator:latest
       config:
-        ratePerSec: 70
-        message:
-          path: /api/test-beta
-          method: POST
-          body: hello-from-generator-b
+        worker:
+          ratePerSec: 70
+          singleRequest: false
+          message:
+            bodyType: HTTP
+            path: /api/test-beta
+            method: POST
+            body: hello-from-generator-b
       work:
         out: gen
     - role: moderator

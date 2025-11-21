@@ -9,6 +9,14 @@ template:
       config:
         worker:
           ratePerSec: 5
+          singleRequest: false
+          message:
+            bodyType: HTTP
+            path: /api/test
+            method: POST
+            body: hello-named-queues
+            headers:
+              content-type: text/plain
       work:
         out: genQ
     - role: moderator

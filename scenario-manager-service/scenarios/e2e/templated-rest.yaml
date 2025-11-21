@@ -11,9 +11,10 @@ template:
           ratePerSec: 5
           singleRequest: false
           message:
+            bodyType: HTTP
             path: /test
             method: POST
-            body: "{}"
+            body: "{{ payload }}"
             headers:
               content-type: text/plain
         interceptors:
