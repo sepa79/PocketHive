@@ -10,7 +10,10 @@ The HTTP Builder worker takes a generic `WorkItem` from Rabbit, resolves a disk�
   - `x-ph-service-id` (optional): logical service namespace.
   - `x-ph-call-id` (required): which HTTP call template to apply.
 
-If `x-ph-service-id` is missing or blank, the worker falls back to `pockethive.worker.config.serviceId` (default `default`). If `x-ph-call-id` is missing or a matching template is not found, the worker logs a warning and returns the original `WorkItem` unchanged.
+If `x-ph-service-id` is missing or blank, the worker uses `pockethive.worker.config.serviceId` (default `default`). Behaviour for missing `callId` / template is explicit and configurable via `passThroughOnMissingTemplate`:
+
+- `true` (default) – log a warning and return the original `WorkItem` unchanged.
+- `false` – log a warning and drop the message (no output).
 
 ## Configuration
 
@@ -22,6 +25,7 @@ pockethive:
     config:
       templateRoot: /app/http-templates
       serviceId: default
+      passThroughOnMissingTemplate: true
 ```
 
 Capability manifest (`scenario-manager-service/capabilities/http-builder.latest.yaml`) exposes:
@@ -61,6 +65,8 @@ At runtime the worker uses the shared `TemplateRenderer`/SpEL integration from t
 - `payload` – `WorkItem.payload()` (text).
 - `headers` – `WorkItem.headers()`.
 - `workItem` – the full `WorkItem` instance.
+
+Templates are loaded once at startup; if any template file is malformed, the worker fails fast on startup instead of silently skipping it.
 
 ## Selecting serviceId and callId
 
@@ -160,3 +166,16 @@ When a template is found, the worker appends a new step whose payload is a JSON 
 
 The processor combines this `path` with its configured `baseUrl` to execute the HTTP call. If no `callId` is present or no matching template is found, the HTTP Builder logs a warning and leaves the `WorkItem` unchanged.
 
+## Overriding templates
+
+- The Docker image bakes default templates under `/app/http-templates`.
+- You can override or extend these by mounting a host directory at the same path, for example:
+
+  ```yaml
+  services:
+    http-builder:
+      volumes:
+        - ./my-http-templates:/app/http-templates:ro
+  ```
+
+- On startup the worker scans the effective `templateRoot` and fails fast if any template cannot be parsed. Callers can use the `scenario-templating-check` tool to list loaded `(serviceId, callId)` pairs and validate scenarios against the available templates.

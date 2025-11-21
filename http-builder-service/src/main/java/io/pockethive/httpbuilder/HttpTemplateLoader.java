@@ -5,29 +5,46 @@ import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Stream;
 
-final class HttpTemplateLoader {
+public final class HttpTemplateLoader {
 
   private final ObjectMapper jsonMapper;
   private final ObjectMapper yamlMapper;
 
-  HttpTemplateLoader() {
+  public HttpTemplateLoader() {
     this.jsonMapper = new ObjectMapper().findAndRegisterModules();
     this.yamlMapper = new ObjectMapper(new YAMLFactory()).findAndRegisterModules();
   }
 
-  Map<String, HttpTemplateDefinition> load(String root, String defaultServiceId) {
+  /**
+   * Loads HTTP templates from the given root directory into an immutable map keyed by
+   * {@code serviceId::callId}.
+   */
+  public Map<String, HttpTemplateDefinition> load(String root, String defaultServiceId) {
+    Map<String, LoadedTemplate> withSources = loadWithSources(root, defaultServiceId);
+    Map<String, HttpTemplateDefinition> templates = new HashMap<>(withSources.size());
+    withSources.forEach((key, loaded) -> templates.put(key, loaded.definition()));
+    return Map.copyOf(templates);
+  }
+
+  /**
+   * Loads HTTP templates from the given root directory and exposes both the parsed
+   * {@link HttpTemplateDefinition} and its source {@link Path}.
+   * <p>
+   * This is primarily intended for tooling and diagnostics; the worker only needs the
+   * definition itself.
+   */
+  public Map<String, LoadedTemplate> loadWithSources(String root, String defaultServiceId) {
     Objects.requireNonNull(root, "root");
     Path rootPath = Path.of(root);
     if (!Files.isDirectory(rootPath)) {
-      return Collections.emptyMap();
+      return Map.of();
     }
-    Map<String, HttpTemplateDefinition> templates = new HashMap<>();
+    Map<String, LoadedTemplate> templates = new HashMap<>();
     try (Stream<Path> paths = Files.walk(rootPath)) {
       paths.filter(Files::isRegularFile)
           .filter(p -> {
@@ -37,7 +54,9 @@ final class HttpTemplateLoader {
           .forEach(path -> {
             HttpTemplateDefinition def = parseTemplate(path, defaultServiceId);
             if (def != null && def.callId() != null && !def.callId().isBlank()) {
-              templates.put(key(def.serviceId(), def.callId()), def);
+              templates.put(
+                  key(def.serviceId(), def.callId()),
+                  new LoadedTemplate(def, path.toAbsolutePath().normalize()));
             }
           });
     } catch (IOException ex) {
@@ -79,5 +98,10 @@ final class HttpTemplateLoader {
     String c = callId == null ? "" : callId.trim();
     return s + "::" + c;
   }
-}
 
+  /**
+   * Parsed template plus the source file it was loaded from.
+   */
+  public record LoadedTemplate(HttpTemplateDefinition definition, Path sourcePath) {
+  }
+}
