@@ -3,12 +3,23 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
-Timestamp: 2025-11-20T00:00:00Z
+Timestamp: 2025-11-21T00:00:00Z
+
+_No unreleased changes yet._
+
+## [0.14.1] - 2025-11-21
+Timestamp: 2025-11-21T00:00:00Z
 
 - Worker SDK: add a Redis dataset work input that pops from a configured Redis list at a fixed rate, emitting each entry as a `WorkItem` while skipping delivery when the list is empty.
-- Data Provider: introduce a new Redis-driven worker (role `data-provider`) that forwards list entries downstream and publishes a capability manifest for swarm plans.
+- Data Provider: introduce a new Redis-driven worker (role `data-provider`) that forwards list entries downstream and publishes a capability manifest for swarm plans, including UI-configurable `inputs.redis.ratePerSec`.
 - Stack: ship Redis + Redis Commander in docker-compose and surface the Redis UI link in the Hive toolbar.
 - Worker SDK: add a Redis uploader interceptor (config-only opt-in) that can route payloads back into Redis lists based on simple regex rules or a fallback/original list.
+- HTTP Builder: add a new `http-builder` worker that resolves disk-backed HTTP templates (`serviceId` + `callId`) into HTTP envelopes consumed by the existing processor, with configurable `passThroughOnMissingTemplate` behaviour and per-template status metrics.
+- Templating & helpers: extend the Pebble-based templating engine with a constrained SpEL-backed `eval(...)` helper (exposing `workItem`, `now`, `rand*`, hashing/encoding helpers, etc.) and integrate it into generator, data-provider, and HTTP Builder pipelines.
+- Scenario tooling: introduce the `tools/scenario-templating-check` CLI to render generator templates and validate HTTP Builder templates against scenarios (callId coverage + one-shot render to catch Pebble/SpEL errors).
+- Redis dataset demo: add the `redis-dataset-demo` scenario wiring generator → Redis uploader → per-customer data providers → HTTP Builder → processor, plus an e2e harness scenario that asserts dataset, HTTP request, and HTTP response steps are present on the final queue.
+- Capabilities & UI: publish HTTP Builder and Data Provider capability manifests so the Hive UI can expose HTTP template roots, call selectors, and Redis dataset rate controls.
+- Tooling: document the MCP-based orchestrator/debug CLI and expose it to agents via `AGENTS.md` to streamline control-plane inspection from MCP-enabled clients.
 
 ## [0.14.0] - 2025-11-20
 Timestamp: 2025-11-20T00:00:00Z
