@@ -1,5 +1,7 @@
-package io.pockethive.swarmcontroller.guard;
+package io.pockethive.manager.guard;
 
+import io.pockethive.manager.ports.QueueStatsPort;
+import io.pockethive.manager.runtime.QueueStats;
 import java.time.Duration;
 import java.util.ArrayDeque;
 import java.util.Objects;
@@ -9,23 +11,17 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.atomic.AtomicReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.amqp.core.AmqpAdmin;
-import org.springframework.amqp.rabbit.core.RabbitAdmin;
-import io.pockethive.swarmcontroller.QueuePropertyCoercion;
-import io.micrometer.core.instrument.Gauge;
-import io.micrometer.core.instrument.MeterRegistry;
-import io.micrometer.core.instrument.Tags;
 
 /**
- * Encapsulates the buffer guard state machine so it can be reused independently of the
- * SwarmLifecycle implementation.
+ * Transport-agnostic buffer guard controller that adjusts a target rate based
+ * on upstream and downstream queue depths.
+ * <p>
+ * Uses {@link QueueStatsPort} for queue depths and {@link BufferGuardMetrics}
+ * for metrics, so it can be reused by different manager implementations.
  */
-public final class BufferGuardController implements SwarmGuard {
+public final class BufferGuardController implements Guard {
 
   @FunctionalInterface
   public interface RateUpdatePublisher {
@@ -35,33 +31,22 @@ public final class BufferGuardController implements SwarmGuard {
   private static final Logger log = LoggerFactory.getLogger(BufferGuardController.class);
 
   private final BufferGuardSettings settings;
-  private final AmqpAdmin amqp;
-  private final MeterRegistry meterRegistry;
-  private final Tags metricTags;
+  private final QueueStatsPort queues;
+  private final BufferGuardMetrics metrics;
   private final RateUpdatePublisher ratePublisher;
   private final ScheduledExecutorService executor;
 
   private ScheduledFuture<?> future;
   private final AtomicBoolean paused = new AtomicBoolean(false);
   private BufferGuardState guardState;
-  private final AtomicLong depthValue = new AtomicLong(0);
-  private final AtomicLong targetValue = new AtomicLong(0);
-  private final AtomicReference<Double> rateValue = new AtomicReference<>(0.0);
-  private final AtomicInteger stateValue = new AtomicInteger(GuardMode.DISABLED.code);
-  private Gauge depthGauge;
-  private Gauge targetGauge;
-  private Gauge rateGauge;
-  private Gauge stateGauge;
 
   public BufferGuardController(BufferGuardSettings settings,
-                               AmqpAdmin amqp,
-                               MeterRegistry meterRegistry,
-                               Tags metricTags,
+                               QueueStatsPort queues,
+                               BufferGuardMetrics metrics,
                                RateUpdatePublisher ratePublisher) {
     this.settings = Objects.requireNonNull(settings, "settings");
-    this.amqp = Objects.requireNonNull(amqp, "amqp");
-    this.meterRegistry = Objects.requireNonNull(meterRegistry, "meterRegistry");
-    this.metricTags = Objects.requireNonNull(metricTags, "metricTags");
+    this.queues = Objects.requireNonNull(queues, "queues");
+    this.metrics = Objects.requireNonNull(metrics, "metrics");
     this.ratePublisher = Objects.requireNonNull(ratePublisher, "ratePublisher");
     this.executor = Executors.newSingleThreadScheduledExecutor(new ThreadFactory() {
       @Override
@@ -78,17 +63,16 @@ public final class BufferGuardController implements SwarmGuard {
     if (future != null) {
       return;
     }
-    registerGauges();
     guardState = new BufferGuardState(settings);
     long periodMs = Math.max(settings.samplePeriod().toMillis(), 50L);
     runGuardTick();
     future = executor.scheduleAtFixedRate(this::runGuardTick, periodMs, periodMs, TimeUnit.MILLISECONDS);
     log.info(
-      "Buffer guard [{}] started (queue={} targetRole={})",
-      settings.queueAlias(),
-      settings.queueName(),
-      settings.targetRole());
-    }
+        "Buffer guard [{}] started (queue={} targetRole={})",
+        settings.queueAlias(),
+        settings.queueName(),
+        settings.targetRole());
+  }
 
   @Override
   public synchronized void stop() {
@@ -97,22 +81,21 @@ public final class BufferGuardController implements SwarmGuard {
       future = null;
     }
     guardState = null;
-    removeGauges();
-    stateValue.set(GuardMode.DISABLED.code);
+    metrics.close();
     executor.shutdownNow();
     log.info("Buffer guard [{}] stopped", settings.queueAlias());
   }
 
   @Override
   public void pause() {
-    if (paused.compareAndSet(false, true)){
+    if (paused.compareAndSet(false, true)) {
       log.info("Buffer guard [{}] paused", settings.queueAlias());
     }
   }
 
   @Override
   public void resume() {
-    if (paused.compareAndSet(true, false)){
+    if (paused.compareAndSet(true, false)) {
       log.info("Buffer guard [{}] resumed", settings.queueAlias());
     }
   }
@@ -124,7 +107,7 @@ public final class BufferGuardController implements SwarmGuard {
     }
     try {
       if (paused.get()) {
-        updateMetrics(0, state.currentRatePerSec, GuardMode.DISABLED);
+        metrics.update(0, settings.targetDepth(), state.currentRatePerSec, GuardMode.DISABLED.code);
         return;
       }
       GuardMode mode = GuardMode.STEADY;
@@ -138,13 +121,13 @@ public final class BufferGuardController implements SwarmGuard {
       int minDepth = (int) Math.round(settings.minDepth() * prefillFactor);
       int maxDepth = (int) Math.round(settings.maxDepth() * prefillFactor);
       double targetDepth = settings.targetDepth() * prefillFactor;
-      PropertiesWrapper stats = fetchQueueStats(settings.queueName());
-      if (!stats.present()) {
+      DepthWrapper upstream = fetchQueueDepth(settings.queueName());
+      if (!upstream.present()) {
         log.debug("Buffer guard queue {} not found; skipping tick", settings.queueName());
-        updateMetrics(0, state.currentRatePerSec, GuardMode.DISABLED);
+        metrics.update(0, settings.targetDepth(), state.currentRatePerSec, GuardMode.DISABLED.code);
         return;
       }
-      long depth = stats.depth();
+      long depth = upstream.depth();
       state.recordSample(depth, settings.movingAverageWindow());
       double average = state.averageDepth();
       double currentRate = state.currentRatePerSec;
@@ -167,7 +150,7 @@ public final class BufferGuardController implements SwarmGuard {
 
       BufferGuardSettings.Backpressure backpressure = settings.backpressure();
       if (backpressure.queueName() != null) {
-        PropertiesWrapper downstream = fetchQueueStats(backpressure.queueName());
+        DepthWrapper downstream = fetchQueueDepth(backpressure.queueName());
         long downstreamDepth = downstream.present() ? downstream.depth() : 0L;
         if (state.updateBackpressure(downstreamDepth, backpressure)) {
           mode = GuardMode.BACKPRESSURE;
@@ -201,19 +184,18 @@ public final class BufferGuardController implements SwarmGuard {
         ratePublisher.publish(nextRate);
         state.currentRatePerSec = nextRate;
       }
-      updateMetrics(average, state.currentRatePerSec, mode);
+      metrics.update(average, settings.targetDepth(), state.currentRatePerSec, mode.code);
     } catch (Exception ex) {
       log.warn("Buffer guard tick failed", ex);
     }
   }
 
-  private PropertiesWrapper fetchQueueStats(String queueName) {
-    Object result = amqp.getQueueProperties(queueName);
-    if (!(result instanceof java.util.Properties props)) {
-      return PropertiesWrapper.missing();
+  private DepthWrapper fetchQueueDepth(String queueName) {
+    QueueStats stats = queues.getQueueStats(queueName);
+    if (stats == null) {
+      return DepthWrapper.missing();
     }
-    long depth = QueuePropertyCoercion.coerceLong(props.get(RabbitAdmin.QUEUE_MESSAGE_COUNT));
-    return PropertiesWrapper.present(depth);
+    return DepthWrapper.present(stats.depth());
   }
 
   private boolean shouldSendRateChange(double current, double candidate) {
@@ -252,51 +234,6 @@ public final class BufferGuardController implements SwarmGuard {
       delta = Math.max(-Math.max(1.0, Math.abs(maxDecrease)), delta);
     }
     return currentRate + delta;
-  }
-
-  private void registerGauges() {
-    depthGauge = Gauge.builder("ph_swarm_buffer_guard_depth", depthValue, AtomicLong::doubleValue)
-        .description("Moving average depth observed by buffer guard")
-        .tags(metricTags)
-        .register(meterRegistry);
-    targetGauge = Gauge.builder("ph_swarm_buffer_guard_target", targetValue, AtomicLong::doubleValue)
-        .description("Target depth configured for buffer guard")
-        .tags(metricTags)
-        .register(meterRegistry);
-    rateGauge = Gauge.builder("ph_swarm_buffer_guard_rate_per_sec", rateValue, AtomicReference::get)
-        .description("Latest rate override issued by buffer guard")
-        .tags(metricTags)
-        .register(meterRegistry);
-    stateGauge = Gauge.builder("ph_swarm_buffer_guard_state", stateValue, AtomicInteger::doubleValue)
-        .description("Buffer guard state code (0=disabled,1=steady,2=prefill,3=filling,4=draining,5=backpressure)")
-        .tags(metricTags)
-        .register(meterRegistry);
-  }
-
-  private void removeGauges() {
-    if (depthGauge != null) {
-      meterRegistry.remove(depthGauge);
-      depthGauge = null;
-    }
-    if (targetGauge != null) {
-      meterRegistry.remove(targetGauge);
-      targetGauge = null;
-    }
-    if (rateGauge != null) {
-      meterRegistry.remove(rateGauge);
-      rateGauge = null;
-    }
-    if (stateGauge != null) {
-      meterRegistry.remove(stateGauge);
-      stateGauge = null;
-    }
-  }
-
-  private void updateMetrics(double averageDepth, double ratePerSec, GuardMode mode) {
-    depthValue.set(Math.round(averageDepth));
-    targetValue.set(settings.targetDepth());
-    rateValue.set(ratePerSec);
-    stateValue.set(mode.code);
   }
 
   private enum GuardMode {
@@ -393,13 +330,14 @@ public final class BufferGuardController implements SwarmGuard {
     }
   }
 
-  private record PropertiesWrapper(boolean present, long depth) {
-    static PropertiesWrapper missing() {
-      return new PropertiesWrapper(false, 0);
+  private record DepthWrapper(boolean present, long depth) {
+    static DepthWrapper missing() {
+      return new DepthWrapper(false, 0);
     }
 
-    static PropertiesWrapper present(long depth) {
-      return new PropertiesWrapper(true, depth);
+    static DepthWrapper present(long depth) {
+      return new DepthWrapper(true, depth);
     }
   }
 }
+

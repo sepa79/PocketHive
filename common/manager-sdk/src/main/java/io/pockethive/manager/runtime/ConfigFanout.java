@@ -1,4 +1,4 @@
-package io.pockethive.swarmcontroller;
+package io.pockethive.manager.runtime;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -7,9 +7,8 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.pockethive.control.CommandTarget;
 import io.pockethive.control.ControlSignal;
 import io.pockethive.controlplane.ControlPlaneSignals;
-import io.pockethive.controlplane.messaging.ControlPlanePublisher;
-import io.pockethive.controlplane.messaging.SignalMessage;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
+import io.pockethive.manager.ports.ControlPlanePort;
 import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
@@ -23,14 +22,15 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Encapsulates config-update fan-out and bootstrap config handling for a swarm.
+ * Transport-agnostic config-update fan-out and bootstrap config handling.
  * <p>
- * This helper owns the {@code config-update} wiring so that {@link SwarmLifecycleManager}
- * does not need to manipulate control-plane signals or pending bootstrap state directly.
+ * This is a shared variant of the Swarm Controller's SwarmConfigFanout that
+ * uses {@link ControlPlanePort} instead of a concrete publisher so different
+ * managers can reuse the same behaviour.
  */
-public final class SwarmConfigFanout {
+public final class ConfigFanout {
 
-  private static final Logger log = LoggerFactory.getLogger(SwarmConfigFanout.class);
+  private static final Logger log = LoggerFactory.getLogger(ConfigFanout.class);
 
   private static final long BOOTSTRAP_CONFIG_RESEND_DELAY_MS = 5_000L;
 
@@ -38,20 +38,20 @@ public final class SwarmConfigFanout {
       new TypeReference<>() {};
 
   private final ObjectMapper mapper;
-  private final ControlPlanePublisher controlPublisher;
+  private final ControlPlanePort controlPlane;
   private final String swarmId;
   private final String controllerRole;
   private final String controllerInstanceId;
 
   private final ConcurrentMap<String, PendingConfig> pendingConfigUpdates = new ConcurrentHashMap<>();
 
-  public SwarmConfigFanout(ObjectMapper mapper,
-                           ControlPlanePublisher controlPublisher,
-                           String swarmId,
-                           String controllerRole,
-                           String controllerInstanceId) {
+  public ConfigFanout(ObjectMapper mapper,
+                      ControlPlanePort controlPlane,
+                      String swarmId,
+                      String controllerRole,
+                      String controllerInstanceId) {
     this.mapper = Objects.requireNonNull(mapper, "mapper");
-    this.controlPublisher = Objects.requireNonNull(controlPublisher, "controlPublisher");
+    this.controlPlane = Objects.requireNonNull(controlPlane, "controlPlane");
     this.swarmId = Objects.requireNonNull(swarmId, "swarmId");
     this.controllerRole = Objects.requireNonNull(controllerRole, "controllerRole");
     this.controllerInstanceId = Objects.requireNonNull(controllerInstanceId, "controllerInstanceId");
@@ -203,11 +203,22 @@ public final class SwarmConfigFanout {
       String routingKey = ControlPlaneRouting.signal(
           ControlPlaneSignals.CONFIG_UPDATE, resolvedSwarmId, role, instance);
       log.info("{} config-update rk={} correlation={} payload {}",
-          context, routingKey, correlationId, SwarmLifecycleManager.snippet(payload));
-      controlPublisher.publishSignal(new SignalMessage(routingKey, payload));
+          context, routingKey, correlationId, payloadSnippet(payload));
+      controlPlane.publishSignal(routingKey, payload);
     } catch (JsonProcessingException e) {
       throw new IllegalStateException("Failed to serialize config-update signal", e);
     }
+  }
+
+  private static String payloadSnippet(String payload) {
+    if (payload == null) {
+      return "";
+    }
+    String trimmed = payload.strip();
+    if (trimmed.length() > 300) {
+      return trimmed.substring(0, 300) + "…";
+    }
+    return trimmed;
   }
 
   private static CommandTarget parseCommandTarget(String value, String context) {
@@ -343,3 +354,4 @@ public final class SwarmConfigFanout {
     return "ALL".equalsIgnoreCase(trimmed) ? null : trimmed;
   }
 }
+

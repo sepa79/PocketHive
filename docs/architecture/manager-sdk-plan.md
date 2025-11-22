@@ -12,17 +12,17 @@ workers: small apps built on top of a shared SDK, with clear ports and adapters.
 
 ## 0. High-level task tracking
 
-- [ ] Create `common/manager-sdk` module (pom + empty packages)
-- [ ] Introduce core abstractions:
-  - [ ] `ManagerLifecycle`, `ManagerStatus`, `ManagerMetrics`, `QueueStats`
-  - [ ] Port interfaces: `WorkTopologyPort`, `WorkloadPort`, `ControlPlanePort`, `QueueStatsPort`, `MetricsPort`, `Clock`
-- [ ] Move core runtime:
-  - [ ] Extract `ManagerRuntimeCore` from `SwarmRuntimeCore`
-  - [ ] Rewire `SwarmLifecycleManager` to use `ManagerRuntimeCore` via ports
+- [x] Create `common/manager-sdk` module (pom + empty packages)
+- [x] Introduce core abstractions:
+  - [x] `ManagerLifecycle`, `ManagerStatus`, `ManagerMetrics`, `QueueStats`
+  - [x] Port interfaces: `WorkTopologyPort`, `WorkloadPort`, `ControlPlanePort`, `QueueStatsPort`, `MetricsPort`, `Clock`
+- [x] Move core runtime:
+  - [x] Extract `ManagerRuntimeCore` from `SwarmRuntimeCore`
+  - [x] Rewire `SwarmLifecycleManager` to use `ManagerRuntimeCore` via ports (readiness/queue stats/enablement wiring; provisioning to be migrated incrementally)
 - [ ] Move readiness & config fan-out:
-  - [ ] Relocate `SwarmReadinessTracker` → `ReadinessTracker` in manager SDK
-  - [ ] Relocate `SwarmConfigFanout` → `ConfigFanout` in manager SDK
-  - [ ] Adjust Swarm Controller to use the shared implementations
+  - [x] Relocate `SwarmReadinessTracker` → `ReadinessTracker` in manager SDK
+  - [x] Relocate `SwarmConfigFanout` → `ConfigFanout` in manager SDK
+  - [x] Adjust Swarm Controller to use the shared implementations
 - [ ] Extract BufferGuard into common:
   - [ ] Move `BufferGuardSettings` into manager SDK
   - [ ] Move `BufferGuardController` into manager SDK and replace Rabbit/Micrometer with ports

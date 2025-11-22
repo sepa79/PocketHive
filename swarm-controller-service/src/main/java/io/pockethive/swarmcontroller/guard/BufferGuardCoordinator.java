@@ -3,16 +3,19 @@ package io.pockethive.swarmcontroller.guard;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Tags;
-import io.pockethive.controlplane.messaging.ControlPlanePublisher;
-import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.controlplane.ControlPlaneSignals;
+import io.pockethive.controlplane.messaging.ControlPlanePublisher;
 import io.pockethive.controlplane.messaging.SignalMessage;
+import io.pockethive.controlplane.routing.ControlPlaneRouting;
+import io.pockethive.manager.guard.BufferGuardController;
+import io.pockethive.manager.guard.BufferGuardMetrics;
+import io.pockethive.manager.guard.BufferGuardSettings;
+import io.pockethive.manager.ports.QueueStatsPort;
 import io.pockethive.swarm.model.Bee;
 import io.pockethive.swarm.model.BufferGuardPolicy;
 import io.pockethive.swarm.model.SwarmPlan;
 import io.pockethive.swarm.model.TrafficPolicy;
 import io.pockethive.swarm.model.Work;
-import io.pockethive.swarmcontroller.QueuePropertyCoercion;
 import io.pockethive.swarmcontroller.config.SwarmControllerProperties;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -43,22 +46,22 @@ public final class BufferGuardCoordinator {
 
   private final SwarmControllerProperties properties;
   private final String swarmId;
-  private final AmqpAdmin amqp;
+  private final QueueStatsPort queueStatsPort;
   private final MeterRegistry meterRegistry;
   private final ControlPlanePublisher controlPublisher;
   private final ObjectMapper mapper;
 
-  private BufferGuardSettings settings;
-  private BufferGuardController controller;
+  private List<BufferGuardSettings> settings;
+  private GuardEngine engine;
 
   public BufferGuardCoordinator(SwarmControllerProperties properties,
-                                AmqpAdmin amqp,
+                                QueueStatsPort queueStatsPort,
                                 MeterRegistry meterRegistry,
                                 ControlPlanePublisher controlPublisher,
                                 ObjectMapper mapper) {
     this.properties = Objects.requireNonNull(properties, "properties");
     this.swarmId = properties.getSwarmId();
-    this.amqp = Objects.requireNonNull(amqp, "amqp");
+    this.queueStatsPort = Objects.requireNonNull(queueStatsPort, "queueStatsPort");
     this.meterRegistry = Objects.requireNonNull(meterRegistry, "meterRegistry");
     this.controlPublisher = Objects.requireNonNull(controlPublisher, "controlPublisher");
     this.mapper = Objects.requireNonNull(mapper, "mapper");
@@ -71,7 +74,7 @@ public final class BufferGuardCoordinator {
     }
     try {
       SwarmPlan plan = mapper.readValue(templateJson, SwarmPlan.class);
-      this.settings = resolveSettings(plan).orElse(null);
+      this.settings = resolveSettings(plan).map(List::of).orElse(null);
     } catch (Exception ex) {
       log.warn("Failed to parse swarm plan for buffer guard configuration", ex);
       this.settings = null;
@@ -79,38 +82,41 @@ public final class BufferGuardCoordinator {
   }
 
   public synchronized void onSwarmEnabled(boolean enabled) {
-    if (settings == null) {
+    if (settings == null || settings.isEmpty()) {
       return;
     }
     if (enabled) {
-      if (controller == null) {
-        controller = new BufferGuardController(
-            settings,
-            amqp,
-            meterRegistry,
-            Tags.of("swarm", swarmId, "queue", "buffer-guard"),
-            rate -> sendRateUpdate(settings.targetRole(), rate));
-        controller.start();
+      if (engine == null) {
+        List<SwarmGuard> guards = new ArrayList<>();
+        for (BufferGuardSettings s : settings) {
+          Tags tags = Tags.of("swarm", swarmId, "queue", "buffer-guard");
+          BufferGuardMetrics metrics = new MicrometerBufferGuardMetrics(meterRegistry, tags);
+          guards.add(new ManagerGuardAdapter(new BufferGuardController(
+              s,
+              queueStatsPort,
+              metrics,
+              rate -> sendRateUpdate(s.targetRole(), rate))));
+        }
+        engine = new GuardEngine(guards);
+        if (!engine.isEmpty()) {
+          engine.start();
+        }
       } else {
-        controller.resume();
+        engine.resume();
       }
-    } else if (controller != null) {
-      controller.pause();
+    } else if (engine != null) {
+      engine.pause();
     }
   }
 
   public synchronized void onRemove() {
-    if (controller != null) {
-      controller.stop();
-      controller = null;
-    }
-    settings = null;
+    reset();
   }
 
   private synchronized void reset() {
-    if (controller != null) {
-      controller.stop();
-      controller = null;
+    if (engine != null) {
+      engine.stop();
+      engine = null;
     }
     settings = null;
   }

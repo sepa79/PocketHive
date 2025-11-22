@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.pockethive.controlplane.messaging.AmqpControlPlanePublisher;
 import io.pockethive.controlplane.messaging.ControlPlanePublisher;
+import io.pockethive.manager.runtime.ConfigFanout;
 import io.pockethive.controlplane.spring.ControlPlaneContainerEnvironmentFactory.WorkerSettings;
 import io.pockethive.swarm.model.TrafficPolicy;
 import io.pockethive.swarmcontroller.config.SwarmControllerProperties;
@@ -72,8 +73,14 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
     SwarmWorkTopologyManager topology = new SwarmWorkTopologyManager(amqp, properties);
     WorkloadProvisioner workloadProvisioner = new DockerWorkloadProvisioner(docker);
     SwarmQueueMetrics queueMetrics = new SwarmQueueMetrics(properties.getSwarmId(), meterRegistry);
-    SwarmConfigFanout configFanout =
-        new SwarmConfigFanout(mapper, controlPublisher, properties.getSwarmId(), properties.getRole(), instanceId);
+    io.pockethive.manager.ports.QueueStatsPort queueStatsPort =
+        new io.pockethive.swarmcontroller.runtime.SwarmQueueStatsPortAdapter(amqp);
+    ConfigFanout configFanout =
+        new ConfigFanout(mapper,
+            new io.pockethive.swarmcontroller.runtime.SwarmControlPlanePortAdapter(controlPublisher),
+            properties.getSwarmId(),
+            properties.getRole(),
+            instanceId);
 
     this.core = new SwarmRuntimeCore(
         amqp,
@@ -90,7 +97,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
         instanceId);
     this.bufferGuard = new io.pockethive.swarmcontroller.guard.BufferGuardCoordinator(
         properties,
-        amqp,
+        queueStatsPort,
         meterRegistry,
         controlPublisher,
         mapper);
