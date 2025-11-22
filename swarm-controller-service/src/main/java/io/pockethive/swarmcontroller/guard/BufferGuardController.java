@@ -16,6 +16,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.core.AmqpAdmin;
 import org.springframework.amqp.rabbit.core.RabbitAdmin;
+import io.pockethive.swarmcontroller.QueuePropertyCoercion;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Tags;
@@ -211,7 +212,7 @@ public final class BufferGuardController implements SwarmGuard {
     if (!(result instanceof java.util.Properties props)) {
       return PropertiesWrapper.missing();
     }
-    long depth = coerceLong(props.get(RabbitAdmin.QUEUE_MESSAGE_COUNT));
+    long depth = QueuePropertyCoercion.coerceLong(props.get(RabbitAdmin.QUEUE_MESSAGE_COUNT));
     return PropertiesWrapper.present(depth);
   }
 
@@ -296,20 +297,6 @@ public final class BufferGuardController implements SwarmGuard {
     targetValue.set(settings.targetDepth());
     rateValue.set(ratePerSec);
     stateValue.set(mode.code);
-  }
-
-  private static long coerceLong(Object value) {
-    if (value instanceof Number number) {
-      return number.longValue();
-    }
-    if (value instanceof String string) {
-      try {
-        return Long.parseLong(string);
-      } catch (NumberFormatException ignored) {
-        return 0L;
-      }
-    }
-    return 0L;
   }
 
   private enum GuardMode {

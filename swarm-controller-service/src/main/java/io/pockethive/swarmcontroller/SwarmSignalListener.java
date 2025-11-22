@@ -53,6 +53,7 @@ public class SwarmSignalListener {
   private final String swarmId;
   private final String role;
   private final String controlExchange;
+  private final SwarmDiagnosticsAggregator diagnostics;
   private static final long STATUS_INTERVAL_MS = 5000L;
   private static final long MAX_STALENESS_MS = 15_000L;
   private volatile boolean controllerEnabled = false;
@@ -73,6 +74,7 @@ public class SwarmSignalListener {
     this.swarmId = properties.getSwarmId();
     this.role = properties.getRole();
     this.controlExchange = properties.getControlExchange();
+    this.diagnostics = new SwarmDiagnosticsAggregator(this.mapper);
     this.controlPlane = ManagerControlPlane.builder(
         new AmqpControlPlanePublisher(rabbit, controlExchange),
         this.mapper)
@@ -157,6 +159,7 @@ public class SwarmSignalListener {
         return;
       }
       lifecycle.updateHeartbeat(role, instance);
+      diagnostics.updateFromWorkerStatus(role, instance, node.path("data"));
 
       JsonNode enabledNode = node.path("enabled");
       boolean enabled = !enabledNode.isMissingNode() && !enabledNode.isNull()
@@ -813,6 +816,7 @@ public class SwarmSignalListener {
         .data("swarmStatus", status.name())
         .data("controllerEnabled", controllerEnabled)
         .data("workloadsEnabled", workloadsEnabled)
+        .data("swarmDiagnostics", diagnostics.snapshot())
         .queueStats(toQueueStatsPayload(queueSnapshot))
         .controlIn(controlQueue)
         .controlRoutes(SwarmControllerRoutes.controllerControlRoutes(swarmId, role, instanceId))
@@ -845,6 +849,7 @@ public class SwarmSignalListener {
         .data("swarmStatus", status.name())
         .data("controllerEnabled", controllerEnabled)
         .data("workloadsEnabled", workloadsEnabled)
+        .data("swarmDiagnostics", diagnostics.snapshot())
         .queueStats(toQueueStatsPayload(queueSnapshot))
         .controlIn(controlQueue)
         .controlRoutes(SwarmControllerRoutes.controllerControlRoutes(swarmId, role, instanceId))

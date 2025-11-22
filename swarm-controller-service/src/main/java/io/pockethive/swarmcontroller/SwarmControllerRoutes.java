@@ -6,7 +6,7 @@ import io.pockethive.controlplane.routing.ControlPlaneRouting;
 /**
  * Shared helpers for control-plane routing keys used by the swarm controller.
  */
-final class SwarmControllerRoutes {
+public final class SwarmControllerRoutes {
 
   private static final String ALL = "ALL";
 
@@ -17,7 +17,7 @@ final class SwarmControllerRoutes {
    * Resolve the canonical set of control routes the swarm controller advertises
    * in its status payloads.
    */
-  static String[] controllerControlRoutes(String swarmId, String role, String instanceId) {
+  public static String[] controllerControlRoutes(String swarmId, String role, String instanceId) {
     String swarm = swarmId;
     String controllerRole = role;
     String instance = instanceId;
@@ -36,4 +36,3 @@ final class SwarmControllerRoutes {
     };
   }
 }
-

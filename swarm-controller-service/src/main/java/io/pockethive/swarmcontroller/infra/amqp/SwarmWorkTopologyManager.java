@@ -33,28 +33,28 @@ public final class SwarmWorkTopologyManager {
   }
 
   /**
-   * Declare (or ensure existence of) the hive exchange for the current swarm.
+   * Declare (or ensure existence of) the work exchange for the current swarm.
    *
    * @return the declared {@link TopicExchange}.
    */
-  public TopicExchange declareHiveExchange() {
+  public TopicExchange declareWorkExchange() {
     TopicExchange hive = new TopicExchange(properties.hiveExchange(), true, false);
     amqp.declareExchange(hive);
-    log.info("declared hive exchange {}", properties.hiveExchange());
+    log.info("declared work exchange {}", properties.hiveExchange());
     return hive;
   }
 
   /**
-   * Declare all work queues for the provided suffixes and bind them to the hive exchange.
+   * Declare all work queues for the provided suffixes and bind them to the work exchange.
    * <p>
    * The supplied {@code declaredSuffixes} set tracks which suffixes have already been
    * declared so repeated calls can skip redundant declarations while still healing
    * missing queues.
    */
-  public void declareWorkQueues(TopicExchange hive,
+  public void declareWorkQueues(TopicExchange workExchange,
                                 Set<String> suffixes,
                                 Set<String> declaredSuffixes) {
-    Objects.requireNonNull(hive, "hive");
+    Objects.requireNonNull(workExchange, "workExchange");
     Objects.requireNonNull(suffixes, "suffixes");
     Objects.requireNonNull(declaredSuffixes, "declaredSuffixes");
 
@@ -65,7 +65,7 @@ public final class SwarmWorkTopologyManager {
         declaredSuffixes.remove(suffix);
       }
       Binding legacyBinding = new Binding(queueName, Binding.DestinationType.QUEUE,
-          hive.getName(), suffix, null);
+          workExchange.getName(), suffix, null);
       amqp.removeBinding(legacyBinding);
 
       Queue queue = QueueBuilder.durable(queueName).build();
@@ -74,7 +74,7 @@ public final class SwarmWorkTopologyManager {
         log.info("declared queue {}", queueName);
       }
 
-      Binding desiredBinding = BindingBuilder.bind(queue).to(hive).with(queueName);
+      Binding desiredBinding = BindingBuilder.bind(queue).to(workExchange).with(queueName);
       amqp.declareBinding(desiredBinding);
       declaredSuffixes.add(suffix);
     }
@@ -99,10 +99,9 @@ public final class SwarmWorkTopologyManager {
   }
 
   /**
-   * Delete the hive exchange for the current swarm.
+   * Delete the work exchange for the current swarm.
    */
-  public void deleteHiveExchange() {
+  public void deleteWorkExchange() {
     amqp.deleteExchange(properties.hiveExchange());
   }
 }
-

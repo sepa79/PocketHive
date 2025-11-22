@@ -17,6 +17,7 @@ public final class SwarmRuntimeState {
 
   private final SwarmRuntimeContext context;
   private final Map<String, List<String>> containersByRole = new LinkedHashMap<>();
+  private final Map<String, List<String>> instancesByRole = new LinkedHashMap<>();
 
   public SwarmRuntimeState(SwarmRuntimeContext context) {
     this.context = Objects.requireNonNull(context, "context");
@@ -34,11 +35,14 @@ public final class SwarmRuntimeState {
     return context.startOrder();
   }
 
-  public void registerContainer(String role, String containerId) {
-    if (role == null || role.isBlank() || containerId == null || containerId.isBlank()) {
+  public void registerWorker(String role, String instanceId, String containerId) {
+    if (role == null || role.isBlank()
+        || instanceId == null || instanceId.isBlank()
+        || containerId == null || containerId.isBlank()) {
       return;
     }
     containersByRole.computeIfAbsent(role, r -> new ArrayList<>()).add(containerId);
+    instancesByRole.computeIfAbsent(role, r -> new ArrayList<>()).add(instanceId);
   }
 
   /**
@@ -47,6 +51,15 @@ public final class SwarmRuntimeState {
   public Map<String, List<String>> containersByRole() {
     Map<String, List<String>> snapshot = new LinkedHashMap<>(containersByRole.size());
     containersByRole.forEach((role, ids) -> snapshot.put(role, List.copyOf(ids)));
+    return Collections.unmodifiableMap(snapshot);
+  }
+
+  /**
+   * Worker instance identifiers grouped by role in arbitrary insertion order.
+   */
+  public Map<String, List<String>> instancesByRole() {
+    Map<String, List<String>> snapshot = new LinkedHashMap<>(instancesByRole.size());
+    instancesByRole.forEach((role, ids) -> snapshot.put(role, List.copyOf(ids)));
     return Collections.unmodifiableMap(snapshot);
   }
 }
