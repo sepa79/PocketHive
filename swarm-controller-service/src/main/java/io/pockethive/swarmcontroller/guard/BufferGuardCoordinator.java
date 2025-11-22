@@ -74,7 +74,8 @@ public final class BufferGuardCoordinator {
     }
     try {
       SwarmPlan plan = mapper.readValue(templateJson, SwarmPlan.class);
-      this.settings = resolveSettings(plan).map(List::of).orElse(null);
+      List<BufferGuardSettings> resolved = resolveSettings(plan);
+      this.settings = resolved.isEmpty() ? null : resolved;
     } catch (Exception ex) {
       log.warn("Failed to parse swarm plan for buffer guard configuration", ex);
       this.settings = null;
@@ -89,7 +90,7 @@ public final class BufferGuardCoordinator {
       if (engine == null) {
         List<SwarmGuard> guards = new ArrayList<>();
         for (BufferGuardSettings s : settings) {
-          Tags tags = Tags.of("swarm", swarmId, "queue", "buffer-guard");
+          Tags tags = Tags.of("swarm", swarmId, "queue", s.queueAlias());
           BufferGuardMetrics metrics = new MicrometerBufferGuardMetrics(meterRegistry, tags);
           guards.add(new ManagerGuardAdapter(new BufferGuardController(
               s,
@@ -147,12 +148,29 @@ public final class BufferGuardCoordinator {
     }
   }
 
-  private Optional<BufferGuardSettings> resolveSettings(SwarmPlan plan) {
+  private List<BufferGuardSettings> resolveSettings(SwarmPlan plan) {
     TrafficPolicy policy = plan.trafficPolicy();
     if (policy == null) {
-      return Optional.empty();
+      return List.of();
     }
-    BufferGuardPolicy guard = policy.bufferGuard();
+    List<BufferGuardSettings> result = new ArrayList<>();
+
+    BufferGuardPolicy single = policy.bufferGuard();
+    if (single != null) {
+      buildSettings(plan, single).ifPresent(result::add);
+    }
+    List<BufferGuardPolicy> many = policy.bufferGuards();
+    if (many != null) {
+      for (BufferGuardPolicy guard : many) {
+        if (guard != null) {
+          buildSettings(plan, guard).ifPresent(result::add);
+        }
+      }
+    }
+    return result;
+  }
+
+  private Optional<BufferGuardSettings> buildSettings(SwarmPlan plan, BufferGuardPolicy guard) {
     if (guard == null || !Boolean.TRUE.equals(guard.enabled())) {
       return Optional.empty();
     }

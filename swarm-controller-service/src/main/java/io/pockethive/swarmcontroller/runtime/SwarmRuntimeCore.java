@@ -11,6 +11,9 @@ import io.pockethive.docker.DockerContainerClient;
 import io.pockethive.manager.ports.Clock;
 import io.pockethive.manager.runtime.ManagerRuntimeCore;
 import io.pockethive.manager.runtime.ManagerStatus;
+import io.pockethive.manager.scenario.ManagerRuntimeView;
+import io.pockethive.manager.scenario.ScenarioContext;
+import io.pockethive.manager.scenario.ScenarioEngine;
 import io.pockethive.observability.StatusEnvelopeBuilder;
 import io.pockethive.swarm.model.Bee;
 import io.pockethive.swarm.model.SwarmPlan;
@@ -84,6 +87,7 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
   private final String role;
   private final String swarmId;
   private final ManagerRuntimeCore managerCore;
+  private final ScenarioEngine scenarioEngine;
 
   private final Set<String> declaredQueues = new HashSet<>();
   private List<String> startOrder = List.of();
@@ -132,6 +136,16 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
         this.swarmId,
         this.role,
         this.instanceId);
+    java.util.function.Supplier<ManagerRuntimeView> viewSupplier =
+        () -> new ManagerRuntimeView(
+            managerCore.getStatus(),
+            managerCore.getMetrics(),
+            java.util.Collections.emptyMap());
+    ScenarioContext scenarioContext = new ScenarioContext(managerCore, configFanout);
+    this.scenarioEngine = new ScenarioEngine(
+        java.util.List.of(new io.pockethive.swarmcontroller.scenario.NoopScenario("default")),
+        viewSupplier,
+        scenarioContext);
   }
 
   private static WorkerSettings deriveWorkerSettings(SwarmControllerProperties properties) {
@@ -317,6 +331,7 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
     readinessTracker.recordHeartbeat(role, instance, timestamp);
     configFanout.publishBootstrapConfigIfNecessary(instance, false);
     managerCore.updateHeartbeat(role, instance);
+    scenarioEngine.tick();
   }
 
   @Override

@@ -24,17 +24,16 @@ workers: small apps built on top of a shared SDK, with clear ports and adapters.
   - [x] Relocate `SwarmConfigFanout` → `ConfigFanout` in manager SDK
   - [x] Adjust Swarm Controller to use the shared implementations
 - [ ] Extract BufferGuard into common:
-  - [ ] Move `BufferGuardSettings` into manager SDK
-  - [ ] Move `BufferGuardController` into manager SDK and replace Rabbit/Micrometer with ports
-  - [ ] Introduce `BufferGuardCoordinator` in manager SDK
-  - [ ] Adapt Swarm Controller to wire BufferGuard via ports
-- [ ] Introduce Scenario engine abstraction:
-  - [ ] Define `Scenario`, `ManagerRuntimeView`, `ScenarioContext`
-  - [ ] Provide a simple `ScenarioEngine` in manager SDK
-  - [ ] Wire a placeholder scenario from Swarm Controller to validate
-- [ ] Clean up Swarm Controller:
-  - [ ] Shrink `SwarmLifecycleManager` to wiring + composition
-  - [ ] Ensure no guard/scenario logic remains in core SC classes
+  - [x] Move `BufferGuardSettings` into manager SDK
+  - [x] Move `BufferGuardController` into manager SDK and replace Rabbit/Micrometer with ports
+  - [x] Adapt Swarm Controller to wire BufferGuard via ports and support multiple guard instances per swarm
+- [x] Introduce Scenario engine abstraction:
+  - [x] Define `Scenario`, `ManagerRuntimeView`, `ScenarioContext`
+  - [x] Provide a simple `ScenarioEngine` in manager SDK
+  - [x] Wire a placeholder scenario from Swarm Controller to validate (heartbeat-driven, no-op `NoopScenario`)
+- [x] Clean up Swarm Controller:
+  - [x] Shrink `SwarmLifecycleManager` to wiring + composition
+  - [x] Ensure no guard/scenario logic remains in core SC classes
 - [ ] Documentation & alignment:
   - [ ] Align `swarm-controller-refactor.md` with this plan
   - [ ] Update architecture docs once the Manager SDK is in place

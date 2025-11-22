@@ -667,7 +667,7 @@ class SwarmLifecycleManagerTest {
     manager.start(mapper.writeValueAsString(plan));
 
     Gauge rateGauge = meterRegistry.find("ph_swarm_buffer_guard_rate_per_sec")
-        .tags("swarm", TEST_SWARM_ID, "queue", "buffer-guard")
+        .tags("swarm", TEST_SWARM_ID, "queue", "gen-out")
         .gauge();
     assertThat(rateGauge).isNotNull();
     assertThat(waitForRate(rateGauge, value -> value > 5.0)).isTrue();
@@ -744,7 +744,7 @@ class SwarmLifecycleManagerTest {
     manager.start(mapper.writeValueAsString(plan));
 
     Gauge rateGauge = meterRegistry.find("ph_swarm_buffer_guard_rate_per_sec")
-        .tags("swarm", TEST_SWARM_ID, "queue", "buffer-guard")
+        .tags("swarm", TEST_SWARM_ID, "queue", "gen-out")
         .gauge();
     assertThat(rateGauge).isNotNull();
     assertThat(waitForRate(rateGauge, value -> value > 10.0)).isTrue();
@@ -780,7 +780,7 @@ class SwarmLifecycleManagerTest {
     manager.start(mapper.writeValueAsString(plan));
 
     Gauge rateGauge = meterRegistry.find("ph_swarm_buffer_guard_rate_per_sec")
-        .tags("swarm", TEST_SWARM_ID, "queue", "buffer-guard")
+        .tags("swarm", TEST_SWARM_ID, "queue", "gen-out")
         .gauge();
     assertThat(rateGauge).isNotNull();
     assertThat(waitForRate(rateGauge, value -> value < 70.0)).isTrue();
@@ -820,7 +820,7 @@ class SwarmLifecycleManagerTest {
     manager.start(mapper.writeValueAsString(plan));
 
     Gauge rateGauge = meterRegistry.find("ph_swarm_buffer_guard_rate_per_sec")
-        .tags("swarm", TEST_SWARM_ID, "queue", "buffer-guard")
+        .tags("swarm", TEST_SWARM_ID, "queue", "gen-out")
         .gauge();
     assertThat(rateGauge).isNotNull();
     assertThat(waitForRate(rateGauge, value -> Math.abs(value - 1.0) < 0.0001)).isTrue();
