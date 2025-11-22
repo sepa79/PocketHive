@@ -24,7 +24,7 @@ import io.micrometer.core.instrument.Tags;
  * Encapsulates the buffer guard state machine so it can be reused independently of the
  * SwarmLifecycle implementation.
  */
-public final class BufferGuardController {
+public final class BufferGuardController implements SwarmGuard {
 
   @FunctionalInterface
   public interface RateUpdatePublisher {
@@ -72,6 +72,7 @@ public final class BufferGuardController {
     });
   }
 
+  @Override
   public synchronized void start() {
     if (future != null) {
       return;
@@ -88,6 +89,7 @@ public final class BufferGuardController {
       settings.targetRole());
     }
 
+  @Override
   public synchronized void stop() {
     if (future != null) {
       future.cancel(true);
@@ -100,12 +102,14 @@ public final class BufferGuardController {
     log.info("Buffer guard [{}] stopped", settings.queueAlias());
   }
 
+  @Override
   public void pause() {
     if (paused.compareAndSet(false, true)){
       log.info("Buffer guard [{}] paused", settings.queueAlias());
     }
   }
 
+  @Override
   public void resume() {
     if (paused.compareAndSet(true, false)){
       log.info("Buffer guard [{}] resumed", settings.queueAlias());

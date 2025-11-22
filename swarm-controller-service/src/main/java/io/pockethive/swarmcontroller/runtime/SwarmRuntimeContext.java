@@ -40,4 +40,3 @@ public final class SwarmRuntimeContext {
     return Collections.unmodifiableSet(queueSuffixes);
   }
 }
-

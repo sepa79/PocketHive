@@ -12,14 +12,22 @@ import io.pockethive.swarm.model.TrafficPolicy;
 import io.pockethive.swarm.model.Work;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.controlplane.ControlPlaneSignals;
+import io.pockethive.controlplane.messaging.AmqpControlPlanePublisher;
+import io.pockethive.controlplane.messaging.ControlPlanePublisher;
+import io.pockethive.controlplane.messaging.EventMessage;
+import io.pockethive.controlplane.messaging.SignalMessage;
 import io.pockethive.controlplane.spring.ControlPlaneContainerEnvironmentFactory;
 import io.pockethive.controlplane.spring.ControlPlaneContainerEnvironmentFactory.PushgatewaySettings;
 import io.pockethive.controlplane.spring.ControlPlaneContainerEnvironmentFactory.WorkerSettings;
 import io.pockethive.swarmcontroller.config.SwarmControllerProperties;
 import io.pockethive.swarmcontroller.guard.BufferGuardController;
 import io.pockethive.swarmcontroller.guard.BufferGuardSettings;
+import io.pockethive.swarmcontroller.guard.GuardEngine;
 import io.pockethive.swarmcontroller.infra.amqp.SwarmWorkTopologyManager;
+import io.pockethive.swarmcontroller.infra.docker.DockerWorkloadProvisioner;
+import io.pockethive.swarmcontroller.infra.docker.WorkloadProvisioner;
 import io.pockethive.swarmcontroller.runtime.SwarmRuntimeContext;
+import io.pockethive.swarmcontroller.runtime.SwarmRuntimeState;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Tags;
@@ -81,6 +89,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
   private final ObjectMapper mapper;
   private final DockerContainerClient docker;
   private final RabbitTemplate rabbit;
+  private final ControlPlanePublisher controlPublisher;
   private final String instanceId;
   private final SwarmControllerProperties properties;
   private final RabbitProperties rabbitProperties;
@@ -89,7 +98,6 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
   private final String controlExchange;
   private final MeterRegistry meterRegistry;
   private final WorkerSettings workerSettings;
-  private final Map<String, List<String>> containers = new HashMap<>();
   private final Set<String> declaredQueues = new HashSet<>();
   private final Map<String, Integer> expectedReady = new HashMap<>();
   private final Map<String, List<String>> instancesByRole = new HashMap<>();
@@ -104,9 +112,11 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
   private final ConcurrentMap<String, PendingConfig> pendingConfigUpdates = new ConcurrentHashMap<>();
   private List<String> startOrder = List.of();
   private volatile SwarmRuntimeContext runtimeContext;
+  private volatile SwarmRuntimeState runtimeState;
   private final SwarmWorkTopologyManager topology;
+  private final WorkloadProvisioner workloadProvisioner;
   private Optional<BufferGuardSettings> bufferGuardSettings = Optional.empty();
-  private BufferGuardController bufferGuardController;
+  private GuardEngine guardEngine;
   private TrafficPolicy trafficPolicy;
   private SwarmStatus status = SwarmStatus.STOPPED;
   private boolean controllerEnabled = false;
@@ -163,7 +173,9 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
     this.controlExchange = properties.getControlExchange();
     this.meterRegistry = Objects.requireNonNull(meterRegistry, "meterRegistry");
     this.workerSettings = Objects.requireNonNull(workerSettings, "workerSettings");
+    this.controlPublisher = new AmqpControlPlanePublisher(rabbit, controlExchange);
     this.topology = new SwarmWorkTopologyManager(amqp, properties);
+    this.workloadProvisioner = new DockerWorkloadProvisioner(docker);
   }
 
   private static WorkerSettings deriveWorkerSettings(SwarmControllerProperties properties) {
@@ -195,7 +207,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
   @Override
   public void start(String planJson) {
     log.info("Starting swarm {}", swarmId);
-    if (containers.isEmpty()) {
+    if (runtimeState == null || runtimeState.containersByRole().isEmpty()) {
       prepare(planJson);
     } else if (template == null) {
       template = planJson;
@@ -255,6 +267,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
 
       // Capture the plan-derived runtime context so remove() can tear down only this swarm's resources.
       runtimeContext = new SwarmRuntimeContext(plan, startOrder, suffixes);
+      runtimeState = new SwarmRuntimeState(runtimeContext);
 
       for (Bee bee : runnableBees) {
         String beeName = BeeNameGenerator.generate(bee.role(), swarmId);
@@ -268,12 +281,9 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
         if (bee.env() != null) {
           env.putAll(bee.env());
         }
-        log.info("creating container {} for role {} using image {}", beeName, bee.role(), bee.image());
-        log.info("container env for {}: {}", beeName, env);
-        String containerId = docker.createContainer(bee.image(), env, beeName);
-        log.info("starting container {} ({}) for role {}", containerId, beeName, bee.role());
-        docker.startContainer(containerId);
-        containers.computeIfAbsent(bee.role(), r -> new ArrayList<>()).add(containerId);
+        String containerId = workloadProvisioner.createAndStart(bee.image(), beeName, env);
+        log.info("started container {} ({}) for role {}", containerId, beeName, bee.role());
+        runtimeState.registerContainer(bee.role(), containerId);
         if (bee.config() != null && !bee.config().isEmpty()) {
           pendingConfigUpdates.put(beeName, new PendingConfig(bee.role(), Map.copyOf(bee.config())));
         }
@@ -305,30 +315,13 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
         .origin(instanceId)
         .swarmId(swarmId)
         .controlIn(controlQueue)
-        .controlRoutes(controllerControlRoutes())
+        .controlRoutes(SwarmControllerRoutes.controllerControlRoutes(swarmId, role, instanceId))
         .controlOut(rk)
         .enabled(true)
         .data("swarmStatus", status.name())
         .toJson();
     log.debug("[CTRL] SEND rk={} inst={} payload={}", rk, instanceId, snippet(payload));
-    rabbit.convertAndSend(controlExchange, rk, payload);
-  }
-
-  private String[] controllerControlRoutes() {
-    String swarm = swarmId;
-    return new String[] {
-        ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, "ALL", role, "ALL"),
-        ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, swarm, role, "ALL"),
-        ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, swarm, role, instanceId),
-        ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, swarm, "ALL", "ALL"),
-        ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, "ALL", role, "ALL"),
-        ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, swarm, role, "ALL"),
-        ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, swarm, role, instanceId),
-        ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_TEMPLATE, swarm, role, "ALL"),
-        ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_START, swarm, role, "ALL"),
-        ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_STOP, swarm, role, "ALL"),
-        ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_REMOVE, swarm, role, "ALL")
-    };
+    controlPublisher.publishEvent(new EventMessage(rk, payload));
   }
 
   /**
@@ -342,19 +335,22 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
   @Override
   public void remove() {
     log.info("Removing swarm {}", swarmId);
-    stopBufferGuard();
+    stopGuardEngine();
     setSwarmEnabled(false);
     trafficPolicy = null;
     SwarmRuntimeContext ctx = runtimeContext;
+    SwarmRuntimeState state = runtimeState;
     List<String> order = new ArrayList<>(ctx != null ? ctx.startOrder() : startOrder);
     java.util.Collections.reverse(order);
-    for (String role : order) {
-      for (String id : containers.getOrDefault(role, List.of())) {
-        log.info("stopping container {}", id);
-        docker.stopAndRemoveContainer(id);
+    if (state != null) {
+      Map<String, List<String>> containersByRole = state.containersByRole();
+      for (String role : order) {
+        for (String id : containersByRole.getOrDefault(role, List.of())) {
+          log.info("stopping container {}", id);
+          workloadProvisioner.stopAndRemove(id);
+        }
       }
     }
-    containers.clear();
     pendingConfigUpdates.clear();
 
     Set<String> suffixes = ctx != null ? ctx.queueSuffixes() : new LinkedHashSet<>(declaredQueues);
@@ -362,6 +358,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
     topology.deleteHiveExchange();
     declaredQueues.clear();
     runtimeContext = null;
+    runtimeState = null;
 
     status = SwarmStatus.REMOVED;
   }
@@ -554,21 +551,21 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
   }
 
   private void configureBufferGuard(Optional<BufferGuardSettings> resolvedGuard) {
-    stopBufferGuard();
+    stopGuardEngine();
     bufferGuardSettings = resolvedGuard;
-    resolvedGuard.ifPresent(this::startBufferGuard);
   }
 
-  private void startBufferGuard(BufferGuardSettings settings) {
-    bufferGuardController = new BufferGuardController(
+  private void startGuardEngine(BufferGuardSettings settings) {
+    BufferGuardController bufferGuard = new BufferGuardController(
         settings,
         amqp,
         meterRegistry,
         queueTags("buffer-guard"),
         rate -> sendBufferGuardRate(settings.targetRole(), rate));
-    bufferGuardController.start();
+    guardEngine = new GuardEngine(List.of(bufferGuard));
+    guardEngine.start();
     if (!controllerEnabled) {
-      bufferGuardController.pause();
+      guardEngine.pause();
     }
     log.info("Buffer guard started for queue {} targeting role {} (target depth {})",
         settings.queueAlias(),
@@ -576,13 +573,13 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
         settings.targetDepth());
   }
 
-  private void stopBufferGuard() {
-    if (bufferGuardController == null && bufferGuardSettings.isEmpty()) {
+  private void stopGuardEngine() {
+    if (guardEngine == null && bufferGuardSettings.isEmpty()) {
       return;
     }
-    if (bufferGuardController != null) {
-      bufferGuardController.stop();
-      bufferGuardController = null;
+    if (guardEngine != null) {
+      guardEngine.stop();
+      guardEngine = null;
     }
     bufferGuardSettings = Optional.empty();
   }
@@ -591,16 +588,16 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
     if (!controllerEnabled) {
       return;
     }
-    if (bufferGuardController != null) {
-      bufferGuardController.resume();
+    if (guardEngine != null && !guardEngine.isEmpty()) {
+      guardEngine.resume();
       return;
     }
-    bufferGuardSettings.ifPresent(this::startBufferGuard);
+    bufferGuardSettings.ifPresent(this::startGuardEngine);
   }
 
   private void stopBufferGuardController() {
-    if (bufferGuardController != null) {
-      bufferGuardController.pause();
+    if (guardEngine != null && !guardEngine.isEmpty()) {
+      guardEngine.pause();
     }
   }
 
@@ -922,7 +919,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
   private void requestStatus(String role, String instance, String reason) {
     String rk = ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, swarmId, role, instance);
     log.info("[CTRL] SEND rk={} inst={} payload={} (reason={})", rk, instanceId, "{}", reason);
-    rabbit.convertAndSend(controlExchange, rk, "{}");
+    controlPublisher.publishSignal(new SignalMessage(rk, "{}"));
   }
 
   private List<String> computeStartOrder(SwarmPlan plan) {
@@ -1031,11 +1028,11 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
     }
     this.controllerEnabled = enabled;
     log.info("Swarm controller {} for swarm {} (role {})", enabled ? "enabled" : "disabled", swarmId, role);
-    if (bufferGuardController != null) {
+    if (guardEngine != null && !guardEngine.isEmpty()) {
       if (enabled) {
-        bufferGuardController.resume();
+        guardEngine.resume();
       } else {
-        bufferGuardController.pause();
+        guardEngine.pause();
       }
     }
   }
@@ -1122,7 +1119,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
       String payload = mapper.writeValueAsString(signal);
       String routingKey = ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, resolvedSwarmId, role, instance);
       log.info("{} config-update rk={} correlation={} payload {}", context, routingKey, correlationId, snippet(payload));
-      rabbit.convertAndSend(controlExchange, routingKey, payload);
+      controlPublisher.publishSignal(new SignalMessage(routingKey, payload));
     } catch (JsonProcessingException e) {
       throw new IllegalStateException("Failed to serialize config-update signal", e);
     }
