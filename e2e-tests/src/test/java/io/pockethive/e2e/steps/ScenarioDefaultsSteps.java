@@ -66,10 +66,14 @@ public class ScenarioDefaultsSteps {
     assertNotNull(config, "Generator bee config was not returned");
 
     @SuppressWarnings("unchecked")
-    Map<String, Object> worker = (Map<String, Object>) config.get("worker");
-    assertNotNull(worker, "Generator bee config did not include 'worker' block");
+    Map<String, Object> inputs = (Map<String, Object>) config.get("inputs");
+    assertNotNull(inputs, "Generator bee config did not include 'inputs' block");
 
-    Object configuredRate = worker.get(GENERATOR_RATE_CONFIG);
+    @SuppressWarnings("unchecked")
+    Map<String, Object> scheduler = (Map<String, Object>) inputs.get("scheduler");
+    assertNotNull(scheduler, "Generator bee inputs did not include 'scheduler' block");
+
+    Object configuredRate = scheduler.get(GENERATOR_RATE_CONFIG);
     assertNotNull(configuredRate, () ->
         "Generator bee worker config did not include " + GENERATOR_RATE_CONFIG);
     int actual = configuredRate instanceof Number number

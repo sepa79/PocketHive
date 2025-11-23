@@ -64,7 +64,8 @@ public final class SchedulerWorkInputFactory implements WorkInputFactory, Ordere
             typedConfigType,
             () -> fetchDefaultConfig(definition, typedConfigType),
             logger,
-            scheduling::isEnabled
+            scheduling::isEnabled,
+            scheduling::getRatePerSec
         );
         return SchedulerWorkInput.<RateConfig>builder()
             .workerDefinition(definition)

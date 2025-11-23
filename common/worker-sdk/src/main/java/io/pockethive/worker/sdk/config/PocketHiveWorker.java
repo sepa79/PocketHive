@@ -40,6 +40,14 @@ public @interface PocketHiveWorker {
     WorkerOutputType output() default WorkerOutputType.NONE;
 
     /**
+     * When set to {@code true}, the worker's input/output types are taken exclusively
+     * from configuration ({@code pockethive.worker.io.*}) rather than the {@link #input()}
+     * and {@link #output()} attributes. NFF: if enabled, both
+     * {@code pockethive.worker.io.input-type} and {@code ...output-type} must be set.
+     */
+    boolean ioFromConfig() default false;
+
+    /**
      * Optional infrastructure configuration type that overrides the default input config binding.
      */
     Class<? extends WorkInputConfig> inputConfig() default WorkInputConfig.class;

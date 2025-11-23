@@ -13,14 +13,18 @@ logging:
   pattern.level: "%5p [%X{traceId}]"
 
 pockethive:
+  inputs:
+    type: SCHEDULER
+    scheduler:
+      ratePerSec: 0.0
+      singleRequest: false
   outputs:
+    type: RABBITMQ
     rabbit:
       exchange: ${POCKETHIVE_OUTPUT_RABBIT_EXCHANGE}
       routingKey: ${POCKETHIVE_OUTPUT_RABBIT_ROUTING_KEY}
   worker:
     config:
-      ratePerSec: 0.0
-      singleRequest: false
       message:
         path: /api/test
         method: POST

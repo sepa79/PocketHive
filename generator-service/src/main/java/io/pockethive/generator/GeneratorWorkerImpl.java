@@ -53,6 +53,7 @@ import org.springframework.stereotype.Component;
 @PocketHiveWorker(
     input = WorkerInputType.SCHEDULER,
     output = WorkerOutputType.RABBITMQ,
+    ioFromConfig = true,
     capabilities = {WorkerCapability.SCHEDULER},
     config = GeneratorWorkerConfig.class
 )

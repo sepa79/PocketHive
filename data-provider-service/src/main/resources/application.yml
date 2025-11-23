@@ -14,6 +14,7 @@ logging:
 
 pockethive:
   inputs:
+    type: REDIS_DATASET
     redis:
       enabled: true
       host: redis
@@ -24,6 +25,7 @@ pockethive:
       list-name: ph:dataset
       rate-per-sec: 1.0
   outputs:
+    type: RABBITMQ
     rabbit:
       exchange: ${POCKETHIVE_OUTPUT_RABBIT_EXCHANGE}
       routingKey: ${POCKETHIVE_OUTPUT_RABBIT_ROUTING_KEY}

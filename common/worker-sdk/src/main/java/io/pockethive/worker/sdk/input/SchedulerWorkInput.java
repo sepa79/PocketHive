@@ -7,6 +7,7 @@ import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
 import io.pockethive.worker.sdk.runtime.WorkerRuntime;
 import java.time.Instant;
+import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -35,6 +36,7 @@ public final class SchedulerWorkInput<C> implements WorkInput {
     private final WorkerRuntime workerRuntime;
     private final ControlPlaneIdentity identity;
     private final SchedulerState<C> schedulerState;
+    private final SchedulerInputProperties scheduling;
     private final BiFunction<WorkerDefinition, ControlPlaneIdentity, WorkItem> seedFactory;
     private final BiConsumer<WorkItem, WorkerDefinition> resultHandler;
     private final Consumer<Exception> dispatchErrorHandler;
@@ -52,6 +54,7 @@ public final class SchedulerWorkInput<C> implements WorkInput {
         this.workerRuntime = builder.workerRuntime;
         this.identity = builder.identity;
         this.schedulerState = builder.schedulerState;
+        this.scheduling = builder.scheduling;
         this.seedFactory = builder.seedFactory;
         this.resultHandler = builder.resultHandler;
         this.dispatchErrorHandler = builder.dispatchErrorHandler;
@@ -152,6 +155,7 @@ public final class SchedulerWorkInput<C> implements WorkInput {
         controlPlaneRuntime.registerStateListener(workerDefinition.beanName(), snapshot -> {
             boolean previouslyEnabled = schedulerState.isEnabled();
             schedulerState.update(snapshot);
+            applyRawConfigOverrides(snapshot.rawConfig());
             boolean currentlyEnabled = schedulerState.isEnabled();
             if (previouslyEnabled != currentlyEnabled && log.isInfoEnabled()) {
                 log.info(
@@ -162,6 +166,33 @@ public final class SchedulerWorkInput<C> implements WorkInput {
             }
         });
         listenersRegistered = true;
+    }
+
+    @SuppressWarnings("unchecked")
+    private void applyRawConfigOverrides(Map<String, Object> rawConfig) {
+        if (rawConfig == null || rawConfig.isEmpty()) {
+            return;
+        }
+        Object inputs = rawConfig.get("inputs");
+        if (!(inputs instanceof Map<?, ?> inputsMap)) {
+            return;
+        }
+        Object scheduler = inputsMap.get("scheduler");
+        if (!(scheduler instanceof Map<?, ?> schedulerMap)) {
+            return;
+        }
+
+        Object rateObj = schedulerMap.get("ratePerSec");
+        if (!(rateObj instanceof Number number)) {
+            return;
+        }
+        double rate = number.doubleValue();
+        if (rate >= 0.0 && rate != scheduling.getRatePerSec()) {
+            scheduling.setRatePerSec(rate);
+            if (log.isInfoEnabled()) {
+                log.info("{} scheduler ratePerSec updated via config: {}", workerDefinition.beanName(), rate);
+            }
+        }
     }
 
     private static WorkItem defaultSeed(WorkerDefinition definition, ControlPlaneIdentity identity) {
@@ -200,6 +231,7 @@ public final class SchedulerWorkInput<C> implements WorkInput {
         private BiConsumer<WorkItem, WorkerDefinition> resultHandler = SchedulerWorkInput::ignoreResult;
         private Consumer<Exception> dispatchErrorHandler = ex -> defaultLog.warn("Scheduler worker invocation failed", ex);
         private Logger log = defaultLog;
+        private SchedulerInputProperties scheduling = new SchedulerInputProperties();
         private long initialDelayMs = 0L;
         private long tickIntervalMs = 1_000L;
 
@@ -246,9 +278,9 @@ public final class SchedulerWorkInput<C> implements WorkInput {
         }
 
         public Builder<C> scheduling(SchedulerInputProperties properties) {
-            SchedulerInputProperties props = properties == null ? new SchedulerInputProperties() : properties;
-            this.initialDelayMs = Math.max(0L, props.getInitialDelayMs());
-            this.tickIntervalMs = Math.max(100L, props.getTickIntervalMs());
+            this.scheduling = properties == null ? new SchedulerInputProperties() : properties;
+            this.initialDelayMs = Math.max(0L, scheduling.getInitialDelayMs());
+            this.tickIntervalMs = Math.max(100L, scheduling.getTickIntervalMs());
             return this;
         }
 

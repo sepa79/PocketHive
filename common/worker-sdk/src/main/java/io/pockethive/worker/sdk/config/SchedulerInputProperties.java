@@ -9,6 +9,7 @@ public class SchedulerInputProperties implements WorkInputConfig {
     private long initialDelayMs = 0L;
     private long tickIntervalMs = 1_000L;
     private int maxPendingTicks = 1;
+    private double ratePerSec = 0.0;
 
     public boolean isEnabled() {
         return enabled;
@@ -40,5 +41,13 @@ public class SchedulerInputProperties implements WorkInputConfig {
 
     public void setMaxPendingTicks(int maxPendingTicks) {
         this.maxPendingTicks = Math.max(1, maxPendingTicks);
+    }
+
+    public double getRatePerSec() {
+        return ratePerSec;
+    }
+
+    public void setRatePerSec(double ratePerSec) {
+        this.ratePerSec = Math.max(0.0, ratePerSec);
     }
 }

@@ -13,7 +13,7 @@ config:
   - name: enabled
     type: boolean
     default: false
-  - name: ratePerSec
+  - name: inputs.scheduler.ratePerSec
     type: number
     default: 0
     min: 0

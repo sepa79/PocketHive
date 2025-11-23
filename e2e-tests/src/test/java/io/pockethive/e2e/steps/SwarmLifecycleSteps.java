@@ -334,9 +334,11 @@ public class SwarmLifecycleSteps {
     Map<String, Object> config = snapshotConfig(snapshot);
     assertFalse(config.isEmpty(), "Generator snapshot should include applied config");
 
-    Object rateObj = config.get("ratePerSec");
+    Map<String, Object> inputs = toMap(config.get("inputs"));
+    Map<String, Object> scheduler = toMap(inputs.get("scheduler"));
+    Object rateObj = scheduler.get("ratePerSec");
     assertTrue(rateObj instanceof Number,
-        () -> "Expected numeric ratePerSec in generator config but was " + rateObj);
+        () -> "Expected numeric inputs.scheduler.ratePerSec in generator config but was " + rateObj);
     double ratePerSec = ((Number) rateObj).doubleValue();
     assertEquals(50.0, ratePerSec, 0.0001,
         "Expected generator ratePerSec=50.0 from local-rest scenario");

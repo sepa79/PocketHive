@@ -47,6 +47,7 @@ import org.springframework.stereotype.Component;
 @Component("triggerWorker")
 @PocketHiveWorker(
     input = WorkerInputType.SCHEDULER,
+    ioFromConfig = true,
     config = TriggerWorkerConfig.class,
     inputConfig = SchedulerInputProperties.class
 )

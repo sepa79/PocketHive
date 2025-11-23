@@ -7,9 +7,11 @@ template:
     - role: generator
       image: generator:latest
       config:
+        inputs:
+          scheduler:
+            ratePerSec: 30
+            singleRequest: false
         worker:
-          ratePerSec: 30
-          singleRequest: false
           message:
             bodyType: HTTP
             path: /api/test-alpha
@@ -20,9 +22,11 @@ template:
     - role: generator
       image: generator:latest
       config:
+        inputs:
+          scheduler:
+            ratePerSec: 70
+            singleRequest: false
         worker:
-          ratePerSec: 70
-          singleRequest: false
           message:
             bodyType: HTTP
             path: /api/test-beta

@@ -31,12 +31,14 @@ import io.pockethive.worker.sdk.config.WorkOutputConfig;
 import io.pockethive.worker.sdk.config.WorkOutputConfigBinder;
 import io.pockethive.worker.sdk.config.WorkerCapability;
 import io.pockethive.worker.sdk.config.WorkerInputType;
+import io.pockethive.worker.sdk.config.WorkerInputTypeProperties;
+import io.pockethive.worker.sdk.config.WorkerOutputType;
+import io.pockethive.worker.sdk.config.WorkerOutputTypeProperties;
 import io.pockethive.worker.sdk.runtime.DefaultWorkerContextFactory;
 import io.pockethive.worker.sdk.runtime.DefaultWorkerRuntime;
 import io.pockethive.worker.sdk.runtime.WorkerContextFactory;
 import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
-import io.pockethive.worker.sdk.config.WorkerOutputType;
 import io.pockethive.worker.sdk.runtime.WorkerMetricsInterceptor;
 import io.pockethive.worker.sdk.runtime.WorkerObservabilityInterceptor;
 import io.pockethive.worker.sdk.runtime.RedisUploaderInterceptor;
@@ -87,7 +89,11 @@ import org.springframework.amqp.rabbit.core.RabbitTemplate;
  * opt-in by depending on the Worker SDK starter.
  */
 @Configuration(proxyBeanMethods = false)
-@EnableConfigurationProperties(PrometheusPushGatewayProperties.class)
+@EnableConfigurationProperties({
+    PrometheusPushGatewayProperties.class,
+    WorkerInputTypeProperties.class,
+    WorkerOutputTypeProperties.class
+})
 @Import({
     ControlPlaneCommonAutoConfiguration.class,
     WorkerControlPlaneAutoConfiguration.class,
@@ -108,7 +114,9 @@ public class PocketHiveWorkerSdkAutoConfiguration {
         ListableBeanFactory beanFactory,
         ObjectProvider<WorkerControlPlaneProperties> workerProperties,
         WorkInputConfigBinder workInputConfigBinder,
-        WorkOutputConfigBinder workOutputConfigBinder
+        WorkOutputConfigBinder workOutputConfigBinder,
+        ObjectProvider<WorkerInputTypeProperties> inputTypePropertiesProvider,
+        ObjectProvider<WorkerOutputTypeProperties> outputTypePropertiesProvider
     ) {
         String[] beanNames = beanFactory.getBeanNamesForAnnotation(PocketHiveWorker.class);
         if (beanNames.length == 0) {
@@ -119,6 +127,8 @@ public class PocketHiveWorkerSdkAutoConfiguration {
                 "Multiple @PocketHiveWorker beans are not supported. Found: %s".formatted(String.join(", ", beanNames)));
         }
         String workerRole = resolveWorkerRole(workerProperties.getIfAvailable());
+        WorkerInputTypeProperties inputTypeProperties = inputTypePropertiesProvider.getIfAvailable();
+        WorkerOutputTypeProperties outputTypeProperties = outputTypePropertiesProvider.getIfAvailable();
         List<WorkerDefinition> definitions = new ArrayList<>(beanNames.length);
         for (String beanName : beanNames) {
             PocketHiveWorker annotation = beanFactory.findAnnotationOnBean(beanName, PocketHiveWorker.class);
@@ -128,18 +138,19 @@ public class PocketHiveWorkerSdkAutoConfiguration {
             Class<?> beanType = Objects.requireNonNull(beanFactory.getType(beanName),
                 () -> "Unable to resolve bean type for worker '" + beanName + "'");
             Class<?> configType = annotation.config();
-            Class<? extends WorkInputConfig> inputConfigType = resolveInputConfigType(annotation);
-            Class<? extends WorkOutputConfig> outputConfigType = resolveOutputConfigType(annotation);
-            WorkerOutputType outputType = annotation.output();
+            WorkerInputType inputType = resolveEffectiveInputType(annotation, inputTypeProperties);
+            WorkerOutputType outputType = resolveEffectiveOutputType(annotation, outputTypeProperties);
+            Class<? extends WorkInputConfig> inputConfigType = resolveInputConfigType(annotation, inputType);
+            Class<? extends WorkOutputConfig> outputConfigType = resolveOutputConfigType(annotation, outputType);
             String description = annotation.description();
             Set<WorkerCapability> capabilities = resolveCapabilities(annotation);
-            WorkInputConfig inputConfig = workInputConfigBinder.bind(annotation.input(), inputConfigType);
+            WorkInputConfig inputConfig = workInputConfigBinder.bind(inputType, inputConfigType);
             WorkOutputConfig outputConfig = workOutputConfigBinder.bind(outputType, outputConfigType);
-            WorkIoBindings io = resolveIo(annotation, inputConfig, outputConfig, workInputConfigBinder, workOutputConfigBinder);
+            WorkIoBindings io = resolveIo(inputType, outputType, inputConfig, outputConfig, workInputConfigBinder, workOutputConfigBinder);
             definitions.add(new WorkerDefinition(
                 beanName,
                 beanType,
-                annotation.input(),
+                inputType,
                 workerRole,
                 io,
                 configType,
@@ -449,14 +460,15 @@ public class PocketHiveWorkerSdkAutoConfiguration {
     }
 
     private WorkIoBindings resolveIo(
-        PocketHiveWorker annotation,
+        WorkerInputType inputType,
+        WorkerOutputType outputType,
         WorkInputConfig inputConfig,
         WorkOutputConfig outputConfig,
         WorkInputConfigBinder inputBinder,
         WorkOutputConfigBinder outputBinder
     ) {
         String inQueue = null;
-        if (annotation.input() == WorkerInputType.RABBITMQ) {
+        if (inputType == WorkerInputType.RABBITMQ) {
             if (!(inputConfig instanceof RabbitInputProperties rabbit)) {
                 throw new IllegalStateException(
                     "Rabbit inputs require " + RabbitInputProperties.class.getSimpleName() + " configuration");
@@ -465,13 +477,13 @@ public class PocketHiveWorkerSdkAutoConfiguration {
             if (queue == null) {
                 throw new IllegalStateException(
                     "Rabbit workers must configure an input queue via %s.queue".formatted(
-                        inputBinder.prefix(annotation.input())));
+                        inputBinder.prefix(inputType)));
             }
             inQueue = queue;
         }
         String outQueue = null;
         String exchange = null;
-        if (annotation.output() == WorkerOutputType.RABBITMQ) {
+        if (outputType == WorkerOutputType.RABBITMQ) {
             if (!(outputConfig instanceof RabbitOutputProperties rabbit)) {
                 throw new IllegalStateException(
                     "Rabbit outputs require " + RabbitOutputProperties.class.getSimpleName() + " configuration");
@@ -481,12 +493,12 @@ public class PocketHiveWorkerSdkAutoConfiguration {
             if (routingKey == null) {
                 throw new IllegalStateException(
                     "Rabbit workers must configure an output routing key via %s.routingKey".formatted(
-                        outputBinder.prefix(annotation.output())));
+                        outputBinder.prefix(outputType)));
             }
             if (configuredExchange == null) {
                 throw new IllegalStateException(
                     "Rabbit workers must configure an output exchange via %s.exchange".formatted(
-                        outputBinder.prefix(annotation.output())));
+                        outputBinder.prefix(outputType)));
             }
             outQueue = routingKey;
             exchange = configuredExchange;
@@ -494,12 +506,13 @@ public class PocketHiveWorkerSdkAutoConfiguration {
         return new WorkIoBindings(inQueue, outQueue, exchange);
     }
 
-    private static Class<? extends WorkInputConfig> resolveInputConfigType(PocketHiveWorker annotation) {
+    private static Class<? extends WorkInputConfig> resolveInputConfigType(PocketHiveWorker annotation,
+                                                                          WorkerInputType inputType) {
         Class<? extends WorkInputConfig> configured = annotation.inputConfig();
         if (configured != WorkInputConfig.class) {
             return configured;
         }
-        return switch (annotation.input()) {
+        return switch (inputType) {
             case SCHEDULER -> SchedulerInputProperties.class;
             case RABBITMQ -> RabbitInputProperties.class;
             case REDIS_DATASET -> RedisDataSetInputProperties.class;
@@ -507,15 +520,46 @@ public class PocketHiveWorkerSdkAutoConfiguration {
         };
     }
 
-    private static Class<? extends WorkOutputConfig> resolveOutputConfigType(PocketHiveWorker annotation) {
+    private static Class<? extends WorkOutputConfig> resolveOutputConfigType(PocketHiveWorker annotation,
+                                                                            WorkerOutputType outputType) {
         Class<? extends WorkOutputConfig> configured = annotation.outputConfig();
         if (configured != WorkOutputConfig.class) {
             return configured;
         }
-        return switch (annotation.output()) {
+        return switch (outputType) {
             case RABBITMQ -> RabbitOutputProperties.class;
             default -> WorkOutputConfig.class;
         };
+    }
+
+    private static WorkerInputType resolveEffectiveInputType(PocketHiveWorker annotation,
+                                                             WorkerInputTypeProperties inputTypeProperties) {
+        if (annotation.ioFromConfig()) {
+            if (inputTypeProperties == null || inputTypeProperties.getType() == null) {
+                throw new IllegalStateException(
+                    "pockethive.inputs.type must be configured when @PocketHiveWorker.ioFromConfig=true");
+            }
+            return inputTypeProperties.getType();
+        }
+        if (inputTypeProperties != null && inputTypeProperties.getType() != null) {
+            return inputTypeProperties.getType();
+        }
+        return annotation.input();
+    }
+
+    private static WorkerOutputType resolveEffectiveOutputType(PocketHiveWorker annotation,
+                                                               WorkerOutputTypeProperties outputTypeProperties) {
+        if (annotation.ioFromConfig()) {
+            if (outputTypeProperties == null || outputTypeProperties.getType() == null) {
+                throw new IllegalStateException(
+                    "pockethive.outputs.type must be configured when @PocketHiveWorker.ioFromConfig=true");
+            }
+            return outputTypeProperties.getType();
+        }
+        if (outputTypeProperties != null && outputTypeProperties.getType() != null) {
+            return outputTypeProperties.getType();
+        }
+        return annotation.output();
     }
 
     private static String normalise(String value) {

@@ -7,9 +7,11 @@ template:
     - role: generator
       image: generator:latest
       config:
+        inputs:
+          scheduler:
+            ratePerSec: 5
+            singleRequest: false
         worker:
-          ratePerSec: 5
-          singleRequest: false
           message:
             bodyType: HTTP
             path: /test

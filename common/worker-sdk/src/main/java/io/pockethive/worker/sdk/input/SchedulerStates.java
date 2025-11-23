@@ -2,6 +2,7 @@ package io.pockethive.worker.sdk.input;
 
 import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime;
 import java.util.Objects;
+import java.util.function.DoubleSupplier;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Supplier;
 import org.slf4j.Logger;
@@ -40,7 +41,7 @@ public final class SchedulerStates {
         Class<C> configType,
         Supplier<C> defaults
     ) {
-        return ratePerSecond(configType, defaults, LoggerFactory.getLogger(RatePerSecondState.class), () -> true);
+        return ratePerSecond(configType, defaults, LoggerFactory.getLogger(RatePerSecondState.class), () -> true, null);
     }
 
     /**
@@ -51,7 +52,7 @@ public final class SchedulerStates {
         Supplier<C> defaults,
         Logger log
     ) {
-        return ratePerSecond(configType, defaults, log, () -> true);
+        return ratePerSecond(configType, defaults, log, () -> true, null);
     }
 
     public static <C extends RateConfig> SchedulerState<C> ratePerSecond(
@@ -60,7 +61,17 @@ public final class SchedulerStates {
         Logger log,
         Supplier<Boolean> defaultEnabled
     ) {
-        return new RatePerSecondState<>(configType, defaults, log, defaultEnabled);
+        return ratePerSecond(configType, defaults, log, defaultEnabled, null);
+    }
+
+    public static <C extends RateConfig> SchedulerState<C> ratePerSecond(
+        Class<C> configType,
+        Supplier<C> defaults,
+        Logger log,
+        Supplier<Boolean> defaultEnabled,
+        DoubleSupplier rateSupplier
+    ) {
+        return new RatePerSecondState<>(configType, defaults, log, defaultEnabled, rateSupplier);
     }
 
     private static final class RatePerSecondState<C extends RateConfig> implements SchedulerState<C> {
@@ -70,24 +81,31 @@ public final class SchedulerStates {
         private final Logger log;
         private final AtomicBoolean singleRequestPending = new AtomicBoolean(false);
         private final Supplier<Boolean> defaultEnabledSupplier;
+        private final DoubleSupplier rateSupplier;
 
         private volatile C config;
         private volatile boolean enabled;
         private double carryOver;
 
-        private RatePerSecondState(Class<C> configType, Supplier<C> defaults, Logger log, Supplier<Boolean> defaultEnabledSupplier) {
+        private RatePerSecondState(Class<C> configType,
+                                   Supplier<C> defaults,
+                                   Logger log,
+                                   Supplier<Boolean> defaultEnabledSupplier,
+                                   DoubleSupplier rateSupplier) {
             this.configType = Objects.requireNonNull(configType, "configType");
             Objects.requireNonNull(defaults, "defaults");
             this.defaults = () -> Objects.requireNonNull(defaults.get(), "defaults supplier returned null");
             this.log = log != null ? log : LoggerFactory.getLogger(RatePerSecondState.class);
             this.defaultEnabledSupplier = defaultEnabledSupplier == null ? () -> true : defaultEnabledSupplier;
+            this.rateSupplier = rateSupplier;
             C initial = this.defaults.get();
             this.config = initial;
             this.enabled = Boolean.TRUE.equals(this.defaultEnabledSupplier.get());
             this.carryOver = 0.0;
             if (log.isDebugEnabled()) {
+                double initialRate = rateSupplier != null ? Math.max(0.0, rateSupplier.getAsDouble()) : initial.ratePerSec();
                 log.debug("{} scheduler initialised: enabled={}, ratePerSec={}, singleRequest={}",
-                    configType.getSimpleName(), enabled, initial.ratePerSec(), initial.singleRequest());
+                    configType.getSimpleName(), enabled, initialRate, initial.singleRequest());
             }
         }
 
@@ -114,10 +132,11 @@ public final class SchedulerStates {
                 singleRequestPending.set(false);
             }
             if (log.isDebugEnabled() && (configChanged || enabledChanged)) {
+                double updatedRate = rateSupplier != null ? Math.max(0.0, rateSupplier.getAsDouble()) : incoming.ratePerSec();
                 log.debug("{} scheduler updated: enabled={}, ratePerSec={}, singleRequest={}, reason={}",
                     configType.getSimpleName(),
                     resolvedEnabled,
-                    incoming.ratePerSec(),
+                    updatedRate,
                     incoming.singleRequest(),
                     enabledChanged ? "enabled toggled" : "config changed");
             }
@@ -138,7 +157,9 @@ public final class SchedulerStates {
                 }
                 return 0;
             }
-            double rate = Math.max(0.0, config.ratePerSec());
+            double rate = rateSupplier != null
+                ? Math.max(0.0, rateSupplier.getAsDouble())
+                : Math.max(0.0, config.ratePerSec());
             double planned = rate + carryOver;
             int quota = (int) Math.floor(planned);
             carryOver = planned - quota;

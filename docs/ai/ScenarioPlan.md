@@ -76,6 +76,33 @@
 
 ---
 
+## Environment Profiles (Future Work)
+
+Goal: make scenarios environment-agnostic by treating target systems as named, typed
+“environments” that provide values for a small set of parameters.
+
+- [ ] Define an **Environment manifest**:
+  - `id`, `name`, `tags[]` (e.g. `http-demo`, `soap`, `perf`).
+  - `values` map for parameters (e.g. `processorBaseUrl`, `soapEndpoint`).
+- [ ] Let scenarios declare **environment requirements**:
+  - `requiresEnvironment.tags[]` to express compatible env types.
+  - `parameters` section listing required keys and simple types (string/url/int).
+- [ ] Add a small, explicit **binding step** in Scenario Manager:
+  - On run: `effectiveTemplate = scenarioTemplate ⊕ environment.values`.
+  - Only allow `${paramName}` (or an overlay mapping) in scenario config; no free-form templating here.
+  - Fail fast if any required parameter or tag is missing (NFF, no guessing).
+- [ ] Optional overlay model (no `${...}` in scenarios):
+  - Environments may declare overlays such as:
+    - `role: processor`, `path: worker.baseUrl`, `valueFrom: processorBaseUrl`.
+  - Scenario Manager applies overlays when materialising the template.
+- [ ] UI / UX:
+  - Surface “required parameters” for a scenario and available environments that satisfy them.
+  - Allow selecting an environment when starting a swarm; show the resolved values for review.
+
+This keeps scenarios clean and reusable, lets us maintain a library of environments,
+and preserves strictness: configuration remains explicit and strongly typed, with no
+implicit fallbacks.
+
 ### Reference YAML (as agreed)
 
 ```yaml

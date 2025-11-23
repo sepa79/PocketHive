@@ -14,9 +14,11 @@ logging:
 
 pockethive:
   inputs:
+    type: RABBITMQ
     rabbit:
       queue: ${POCKETHIVE_INPUT_RABBIT_QUEUE}
   outputs:
+    type: RABBITMQ
     rabbit:
       exchange: ${POCKETHIVE_OUTPUT_RABBIT_EXCHANGE}
       routingKey: ${POCKETHIVE_OUTPUT_RABBIT_ROUTING_KEY}
