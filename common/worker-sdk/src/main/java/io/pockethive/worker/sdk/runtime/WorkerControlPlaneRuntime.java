@@ -634,7 +634,31 @@ public final class WorkerControlPlaneRuntime {
             }
             Map<String, Object> config = snapshotRawConfig(state);
             if (!config.isEmpty()) {
-                workerEntry.put("config", config);
+                // Ensure IO type is always present in status config so UIs do not need
+                // to guess it from other fields. The type comes from the resolved
+                // worker definition, not heuristics.
+                Map<String, Object> augmented = new LinkedHashMap<>(config);
+                Map<String, Object> inputsBlock = null;
+                Object existingInputs = augmented.get("inputs");
+                if (existingInputs instanceof Map<?, ?> rawInputs) {
+                    inputsBlock = new LinkedHashMap<>();
+                    for (Map.Entry<?, ?> entry : rawInputs.entrySet()) {
+                        Object key = entry.getKey();
+                        if (key != null) {
+                            inputsBlock.put(key.toString(), entry.getValue());
+                        }
+                    }
+                }
+                if (inputsBlock == null) {
+                    inputsBlock = new LinkedHashMap<>();
+                }
+                if (!inputsBlock.containsKey("type")) {
+                    inputsBlock.put("type", def.input().name());
+                }
+                if (!inputsBlock.isEmpty()) {
+                    augmented.put("inputs", inputsBlock);
+                }
+                workerEntry.put("config", augmented);
             }
             Map<String, Object> statusData = state.statusData();
             if (!statusData.isEmpty()) {
