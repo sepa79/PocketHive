@@ -534,32 +534,20 @@ public class PocketHiveWorkerSdkAutoConfiguration {
 
     private static WorkerInputType resolveEffectiveInputType(PocketHiveWorker annotation,
                                                              WorkerInputTypeProperties inputTypeProperties) {
-        if (annotation.ioFromConfig()) {
-            if (inputTypeProperties == null || inputTypeProperties.getType() == null) {
-                throw new IllegalStateException(
-                    "pockethive.inputs.type must be configured when @PocketHiveWorker.ioFromConfig=true");
-            }
-            return inputTypeProperties.getType();
+        if (inputTypeProperties == null || inputTypeProperties.getType() == null) {
+            throw new IllegalStateException(
+                "pockethive.inputs.type must be configured (no fallback to @PocketHiveWorker.input)");
         }
-        if (inputTypeProperties != null && inputTypeProperties.getType() != null) {
-            return inputTypeProperties.getType();
-        }
-        return annotation.input();
+        return inputTypeProperties.getType();
     }
 
     private static WorkerOutputType resolveEffectiveOutputType(PocketHiveWorker annotation,
                                                                WorkerOutputTypeProperties outputTypeProperties) {
-        if (annotation.ioFromConfig()) {
-            if (outputTypeProperties == null || outputTypeProperties.getType() == null) {
-                throw new IllegalStateException(
-                    "pockethive.outputs.type must be configured when @PocketHiveWorker.ioFromConfig=true");
-            }
-            return outputTypeProperties.getType();
+        if (outputTypeProperties == null || outputTypeProperties.getType() == null) {
+            throw new IllegalStateException(
+                "pockethive.outputs.type must be configured (no fallback to @PocketHiveWorker.output)");
         }
-        if (outputTypeProperties != null && outputTypeProperties.getType() != null) {
-            return outputTypeProperties.getType();
-        }
-        return annotation.output();
+        return outputTypeProperties.getType();
     }
 
     private static String normalise(String value) {

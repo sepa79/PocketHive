@@ -47,7 +47,7 @@ class PocketHiveWorkerIoFromConfigTest {
     }
 
     @Test
-    void ioFromConfigWithoutTypesFailsFast() {
+    void ioConfigWithoutTypesFailsFast() {
         contextRunner.run(context -> {
             assertThat(context).hasFailed();
             Throwable failure = context.getStartupFailure();

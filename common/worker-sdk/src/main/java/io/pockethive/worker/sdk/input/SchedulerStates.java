@@ -27,10 +27,9 @@ public final class SchedulerStates {
     }
 
     /**
-     * Creates a scheduler state that honours {@code enabled}, {@code ratePerSec}, and
-     * {@code singleRequest} fields from the supplied configuration type. The returned state mirrors
-     * the legacy generator loop: it accumulates fractional rates, dispatches single-shot requests
-     * once, and disables invocations when the control plane toggles the worker off.
+     * Creates a scheduler state that honours {@code enabled} and {@code ratePerSec} fields from the
+     * supplied configuration type. The returned state accumulates fractional rates and disables
+     * invocations when the control plane toggles the worker off.
      *
      * @param configType configuration class published to the control plane
      * @param defaults   supplier that returns the service defaults for the worker

@@ -100,15 +100,6 @@ export default function ComponentDetail({ component, onClose }: Props) {
     }
   }
 
-  const single = async () => {
-    try {
-      await sendConfigUpdate(component, { singleRequest: true })
-      displayToast(setToast, 'Config update sent')
-    } catch {
-      displayToast(setToast, 'Config update failed')
-    }
-  }
-
   const health = heartbeatHealth(component.lastHeartbeat)
   const role = component.role.trim() || '—'
   const normalizedRole = component.role.trim().toLowerCase()
@@ -273,14 +264,6 @@ export default function ComponentDetail({ component, onClose }: Props) {
           disabled={!isEditing}
         >
           Confirm
-        </button>
-      )}
-      {!isWiremock && (normalizedRole === 'generator' || normalizedRole === 'trigger') && (
-        <button
-          className="mb-4 rounded bg-blue-700 px-3 py-1 text-xs"
-          onClick={single}
-        >
-          {normalizedRole === 'trigger' ? 'Single trigger' : 'Single request'}
         </button>
       )}
       {toast && (

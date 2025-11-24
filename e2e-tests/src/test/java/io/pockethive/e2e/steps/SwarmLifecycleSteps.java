@@ -322,18 +322,6 @@ public class SwarmLifecycleSteps {
     Map<String, Object> config = snapshotConfig(snapshot);
     assertFalse(config.isEmpty(), "Generator snapshot should include applied config");
 
-    Map<String, Object> inputs = toMap(config.get("inputs"));
-    Map<String, Object> scheduler = toMap(inputs.get("scheduler"));
-    Object rateObj = scheduler.get("ratePerSec");
-    assertTrue(rateObj instanceof Number,
-        () -> "Expected numeric inputs.scheduler.ratePerSec in generator config but was " + rateObj);
-    double ratePerSec = ((Number) rateObj).doubleValue();
-    assertEquals(50.0, ratePerSec, 0.0001,
-        "Expected generator ratePerSec=50.0 from local-rest scenario");
-
-    assertFalse(isTruthy(config.get("singleRequest")),
-        () -> "Expected singleRequest=false from local-rest scenario but was " + config.get("singleRequest"));
-
     Map<String, Object> message = toMap(config.get("message"));
     assertEquals("/test", message.get("path"),
         "Expected generator path '/test' from local-rest scenario");
