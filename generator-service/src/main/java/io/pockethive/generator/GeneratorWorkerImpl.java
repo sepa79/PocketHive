@@ -51,10 +51,7 @@ import org.springframework.stereotype.Component;
  */
 @Component("generatorWorker")
 @PocketHiveWorker(
-    input = WorkerInputType.SCHEDULER,
-    output = WorkerOutputType.RABBITMQ,
-    ioFromConfig = true,
-    capabilities = {WorkerCapability.SCHEDULER},
+    capabilities = {WorkerCapability.MESSAGE_DRIVEN},
     config = GeneratorWorkerConfig.class
 )
 class GeneratorWorkerImpl implements PocketHiveWorkerFunction {

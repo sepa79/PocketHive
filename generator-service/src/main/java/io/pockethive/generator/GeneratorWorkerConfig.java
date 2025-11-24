@@ -1,25 +1,14 @@
 package io.pockethive.generator;
 
-import io.pockethive.worker.sdk.input.SchedulerStates;
 import io.pockethive.worker.sdk.templating.MessageBodyType;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 
-public record GeneratorWorkerConfig(Message message) implements SchedulerStates.RateConfig {
+public record GeneratorWorkerConfig(Message message) {
 
   public GeneratorWorkerConfig {
     Objects.requireNonNull(message, "message");
-  }
-
-  /**
-   * Generator rate is owned by SchedulerInputProperties (IO config), so this
-   * implementation is unused. It exists only to satisfy the SchedulerStates.RateConfig
-   * contract required by the scheduler input factory.
-   */
-  @Override
-  public double ratePerSec() {
-    return 0.0;
   }
 
   public record Message(MessageBodyType bodyType, String path, String method, String body, Map<String, String> headers) {

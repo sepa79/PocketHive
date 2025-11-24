@@ -21,9 +21,6 @@ import org.springframework.stereotype.Component;
 
 @Component("dataProviderWorker")
 @PocketHiveWorker(
-    input = WorkerInputType.REDIS_DATASET,
-    output = WorkerOutputType.RABBITMQ,
-    ioFromConfig = true,
     capabilities = {WorkerCapability.SCHEDULER},
     config = DataProviderWorkerConfig.class
 )

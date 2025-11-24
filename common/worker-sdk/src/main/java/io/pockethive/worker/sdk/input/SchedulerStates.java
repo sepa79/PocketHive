@@ -19,14 +19,6 @@ public final class SchedulerStates {
     }
 
     /**
-     * Marker interface for configurations that expose rate-per-second scheduling semantics.
-     */
-    public interface RateConfig {
-
-        double ratePerSec();
-    }
-
-    /**
      * Creates a scheduler state that honours {@code enabled} and {@code ratePerSec} fields from the
      * supplied configuration type. The returned state accumulates fractional rates and disables
      * invocations when the control plane toggles the worker off.
@@ -34,7 +26,7 @@ public final class SchedulerStates {
      * @param configType configuration class published to the control plane
      * @param defaults   supplier that returns the service defaults for the worker
      */
-    public static <C extends RateConfig> SchedulerState<C> ratePerSecond(
+    public static <C> SchedulerState<C> ratePerSecond(
         Class<C> configType,
         Supplier<C> defaults
     ) {
@@ -44,7 +36,7 @@ public final class SchedulerStates {
     /**
      * Variant of {@link #ratePerSecond(Class, Supplier)} that uses the provided logger instance.
      */
-    public static <C extends RateConfig> SchedulerState<C> ratePerSecond(
+    public static <C> SchedulerState<C> ratePerSecond(
         Class<C> configType,
         Supplier<C> defaults,
         Logger log
@@ -52,7 +44,7 @@ public final class SchedulerStates {
         return ratePerSecond(configType, defaults, log, () -> true, null);
     }
 
-    public static <C extends RateConfig> SchedulerState<C> ratePerSecond(
+    public static <C> SchedulerState<C> ratePerSecond(
         Class<C> configType,
         Supplier<C> defaults,
         Logger log,
@@ -61,7 +53,7 @@ public final class SchedulerStates {
         return ratePerSecond(configType, defaults, log, defaultEnabled, null);
     }
 
-    public static <C extends RateConfig> SchedulerState<C> ratePerSecond(
+    public static <C> SchedulerState<C> ratePerSecond(
         Class<C> configType,
         Supplier<C> defaults,
         Logger log,
@@ -71,7 +63,7 @@ public final class SchedulerStates {
         return new RatePerSecondState<>(configType, defaults, log, defaultEnabled, rateSupplier);
     }
 
-    private static final class RatePerSecondState<C extends RateConfig> implements SchedulerState<C> {
+    private static final class RatePerSecondState<C> implements SchedulerState<C> {
 
         private final Class<C> configType;
         private final Supplier<C> defaults;
@@ -99,7 +91,7 @@ public final class SchedulerStates {
             this.enabled = Boolean.TRUE.equals(this.defaultEnabledSupplier.get());
             this.carryOver = 0.0;
             if (log.isDebugEnabled()) {
-                double initialRate = rateSupplier != null ? Math.max(0.0, rateSupplier.getAsDouble()) : initial.ratePerSec();
+                double initialRate = rateSupplier != null ? Math.max(0.0, rateSupplier.getAsDouble()) : 0.0;
                 log.debug("{} scheduler initialised: enabled={}, ratePerSec={}",
                     configType.getSimpleName(), enabled, initialRate);
             }
@@ -124,7 +116,7 @@ public final class SchedulerStates {
                 carryOver = 0.0;
             }
             if (log.isDebugEnabled() && (configChanged || enabledChanged)) {
-                double updatedRate = rateSupplier != null ? Math.max(0.0, rateSupplier.getAsDouble()) : incoming.ratePerSec();
+                double updatedRate = rateSupplier != null ? Math.max(0.0, rateSupplier.getAsDouble()) : 0.0;
                 log.debug("{} scheduler updated: enabled={}, ratePerSec={}, reason={}",
                     configType.getSimpleName(),
                     resolvedEnabled,
@@ -149,7 +141,7 @@ public final class SchedulerStates {
             }
             double rate = rateSupplier != null
                 ? Math.max(0.0, rateSupplier.getAsDouble())
-                : Math.max(0.0, config.ratePerSec());
+                : 0.0;
             double planned = rate + carryOver;
             int quota = (int) Math.floor(planned);
             carryOver = planned - quota;

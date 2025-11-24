@@ -6,7 +6,6 @@ import io.pockethive.worker.sdk.config.PocketHiveWorkerProperties;
 import io.pockethive.worker.sdk.config.SchedulerInputProperties;
 import io.pockethive.worker.sdk.config.WorkInputConfig;
 import io.pockethive.worker.sdk.config.WorkerInputType;
-import io.pockethive.worker.sdk.input.SchedulerStates.RateConfig;
 import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
 import io.pockethive.worker.sdk.runtime.WorkerRuntime;
@@ -14,13 +13,14 @@ import java.lang.reflect.Constructor;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.function.Supplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.Ordered;
 
 /**
- * Creates {@link SchedulerWorkInput} instances for workers that expose {@link RateConfig} semantics.
+ * Creates {@link SchedulerWorkInput} instances for workers that opt into scheduler-driven
+ * invocation via {@link WorkerInputType#SCHEDULER}. The actual rate is owned by
+ * {@link SchedulerInputProperties} (IO configuration), not the worker config.
  */
 public final class SchedulerWorkInputFactory implements WorkInputFactory, Ordered {
 
@@ -46,28 +46,27 @@ public final class SchedulerWorkInputFactory implements WorkInputFactory, Ordere
 
     @Override
     public boolean supports(WorkerDefinition definition) {
-        return definition.input() == WorkerInputType.SCHEDULER
-            && RateConfig.class.isAssignableFrom(definition.configType());
+        return definition.input() == WorkerInputType.SCHEDULER;
     }
 
     @SuppressWarnings("unchecked")
     @Override
     public WorkInput create(WorkerDefinition definition, WorkInputConfig config) {
         Logger logger = LoggerFactory.getLogger(definition.beanType());
-        Class<? extends RateConfig> configType = (Class<? extends RateConfig>) definition.configType();
+        Class<?> configType = definition.configType();
         @SuppressWarnings("unchecked")
-        Class<RateConfig> typedConfigType = (Class<RateConfig>) configType;
+        Class<Object> typedConfigType = (Class<Object>) configType;
         SchedulerInputProperties scheduling = config instanceof SchedulerInputProperties props
             ? props
             : new SchedulerInputProperties();
-        SchedulerState<RateConfig> schedulerState = SchedulerStates.ratePerSecond(
+        SchedulerState<Object> schedulerState = SchedulerStates.ratePerSecond(
             typedConfigType,
             () -> fetchDefaultConfig(definition, typedConfigType),
             logger,
             scheduling::isEnabled,
             scheduling::getRatePerSec
         );
-        return SchedulerWorkInput.<RateConfig>builder()
+        return SchedulerWorkInput.<Object>builder()
             .workerDefinition(definition)
             .controlPlaneRuntime(controlPlaneRuntime)
             .workerRuntime(workerRuntime)
@@ -78,7 +77,7 @@ public final class SchedulerWorkInputFactory implements WorkInputFactory, Ordere
             .build();
     }
 
-    private <C extends RateConfig> C fetchDefaultConfig(WorkerDefinition definition, Class<C> configType) {
+    private <C> C fetchDefaultConfig(WorkerDefinition definition, Class<C> configType) {
         Optional<C> configured = controlPlaneRuntime.workerConfig(definition.beanName(), configType);
         if (configured.isPresent()) {
             return configured.get();
@@ -87,7 +86,7 @@ public final class SchedulerWorkInputFactory implements WorkInputFactory, Ordere
         return defaults.orElseGet(() -> instantiateConfig(configType));
     }
 
-    private <C extends RateConfig> Optional<C> resolveConfigFromProperties(String role, Class<C> configType) {
+    private <C> Optional<C> resolveConfigFromProperties(String role, Class<C> configType) {
         if (workerProperties.isEmpty() || role == null) {
             return Optional.empty();
         }
@@ -97,7 +96,7 @@ public final class SchedulerWorkInputFactory implements WorkInputFactory, Ordere
             .flatMap(props -> convertRawConfig(props.rawConfig(), configType));
     }
 
-    private <C extends RateConfig> Optional<C> convertRawConfig(Map<String, Object> rawConfig, Class<C> configType) {
+    private <C> Optional<C> convertRawConfig(Map<String, Object> rawConfig, Class<C> configType) {
         if (rawConfig == null || rawConfig.isEmpty()) {
             return Optional.empty();
         }
@@ -109,7 +108,7 @@ public final class SchedulerWorkInputFactory implements WorkInputFactory, Ordere
         }
     }
 
-    private static <C extends RateConfig> C instantiateConfig(Class<C> configType) {
+    private static <C> C instantiateConfig(Class<C> configType) {
         try {
             Constructor<C> ctor = configType.getDeclaredConstructor();
             ctor.setAccessible(true);
