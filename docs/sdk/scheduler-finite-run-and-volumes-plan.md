@@ -12,16 +12,16 @@ control how long generators run and what host paths they see.
 
 ## 0. Task tracking
 
-- [ ] Scheduler finite-run support:
-  - [ ] Config shape & docs
-  - [ ] Scheduler state & counters
-  - [ ] Config update handling (including reset semantics)
-  - [ ] Headers & status fields
-  - [ ] Tests & an example scenario
+- [x] Scheduler finite-run support:
+  - [x] Config shape & docs
+  - [x] Scheduler state & counters
+  - [x] Config update handling (including reset semantics)
+  - [x] Headers & status fields
+  - [x] Tests & an example scenario
 - [ ] Scenario-driven Docker volumes:
-  - [ ] Volume shape in swarm model / scenarios
-  - [ ] Volume resolution in `SwarmRuntimeCore`
-  - [ ] Workload port & Docker adapter extension
+  - [x] Volume shape in swarm model / scenarios
+  - [x] Volume resolution in `SwarmRuntimeCore`
+  - [x] Workload port & Docker adapter extension
   - [ ] Tests (unit + smoke) and documentation
 
 ---
@@ -206,4 +206,3 @@ control how long generators run and what host paths they see.
   - Add a short “Using volumes in scenarios” section in
     `scenario-manager-service` docs or `docs/USAGE.md`, with a concrete YAML
     example.
-

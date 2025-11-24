@@ -16,6 +16,15 @@ config:
     ui:
       step: 1
       unit: msg/s
+  - name: inputs.scheduler.maxMessages
+    type: number
+    default: 0
+    min: 0
+    ui:
+      step: 1
+      unit: messages
+  - name: inputs.scheduler.reset
+    type: boolean
+    default: false
 actions: []
 panels: []
-

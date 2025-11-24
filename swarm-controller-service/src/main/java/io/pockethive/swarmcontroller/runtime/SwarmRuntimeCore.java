@@ -227,7 +227,8 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
         if (bee.env() != null) {
           env.putAll(bee.env());
         }
-        String containerId = workloadProvisioner.createAndStart(bee.image(), beeName, env);
+        List<String> volumes = resolveVolumes(bee.config());
+        String containerId = workloadProvisioner.createAndStart(bee.image(), beeName, env, volumes);
         log.info("started container {} ({}) for role {}", containerId, beeName, bee.role());
         runtimeState.registerWorker(bee.role(), beeName, containerId);
         if (bee.config() != null && !bee.config().isEmpty()) {
@@ -514,6 +515,32 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
 
   private boolean hasText(String value) {
     return value != null && !value.isBlank();
+  }
+
+  @SuppressWarnings("unchecked")
+  private static List<String> resolveVolumes(Map<String, Object> config) {
+    if (config == null || config.isEmpty()) {
+      return List.of();
+    }
+    Object dockerObj = config.get("docker");
+    if (!(dockerObj instanceof Map<?, ?> dockerMap) || dockerMap.isEmpty()) {
+      return List.of();
+    }
+    Object volumesObj = dockerMap.get("volumes");
+    if (!(volumesObj instanceof List<?> rawList) || rawList.isEmpty()) {
+      return List.of();
+    }
+    List<String> result = new ArrayList<>(rawList.size());
+    for (Object entry : rawList) {
+      if (!(entry instanceof String s)) {
+        continue;
+      }
+      String spec = s.trim();
+      if (!spec.isBlank()) {
+        result.add(spec);
+      }
+    }
+    return result.isEmpty() ? List.of() : List.copyOf(result);
   }
 
   private List<String> computeStartOrder(SwarmPlan plan) {
