@@ -5,8 +5,8 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 /**
  * Binds the worker's output type from configuration.
  * <p>
- * NFF: if {@code type} is null and {@code ioFromConfig=false}, the annotation
- * values on {@link PocketHiveWorker} are used instead.
+ * NFF: {@code type} must be configured; there is no fallback to {@link PocketHiveWorker}
+ * annotation attributes. IO is driven exclusively from {@code pockethive.outputs.*}.
  */
 @ConfigurationProperties(prefix = "pockethive.outputs")
 public class WorkerOutputTypeProperties {
@@ -21,4 +21,3 @@ public class WorkerOutputTypeProperties {
         this.type = type;
     }
 }
-

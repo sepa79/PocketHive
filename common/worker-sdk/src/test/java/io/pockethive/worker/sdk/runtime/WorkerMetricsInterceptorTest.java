@@ -209,10 +209,7 @@ class WorkerMetricsInterceptorTest {
         }
     }
 
-    @PocketHiveWorker(
-        input = WorkerInputType.RABBITMQ,
-        output = WorkerOutputType.RABBITMQ
-    )
+    @PocketHiveWorker
     static class TestWorker implements PocketHiveWorkerFunction {
 
         @Override

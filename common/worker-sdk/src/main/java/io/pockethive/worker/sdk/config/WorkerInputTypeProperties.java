@@ -5,8 +5,8 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 /**
  * Binds the worker's input type from configuration.
  * <p>
- * NFF: if {@code type} is null and {@code ioFromConfig=false}, the annotation
- * values on {@link PocketHiveWorker} are used instead.
+ * NFF: {@code type} must be configured; there is no fallback to {@link PocketHiveWorker}
+ * annotation attributes. IO is driven exclusively from {@code pockethive.inputs.*}.
  */
 @ConfigurationProperties(prefix = "pockethive.inputs")
 public class WorkerInputTypeProperties {
@@ -21,4 +21,3 @@ public class WorkerInputTypeProperties {
         this.type = type;
     }
 }
-

@@ -128,10 +128,7 @@ class PocketHiveWorkerSdkAutoConfigurationQueueResolutionTest {
         }
     }
 
-    @PocketHiveWorker(
-        input = WorkerInputType.RABBITMQ,
-        output = WorkerOutputType.RABBITMQ
-    )
+    @PocketHiveWorker
     static class ProcessorWorker implements PocketHiveWorkerFunction {
 
         @Override

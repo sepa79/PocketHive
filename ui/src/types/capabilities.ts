@@ -13,6 +13,7 @@ export interface CapabilityConfigEntry {
   options?: unknown
   multiline?: boolean
   ui?: unknown
+  when?: Record<string, unknown>
 }
 
 export type CapabilityShape =

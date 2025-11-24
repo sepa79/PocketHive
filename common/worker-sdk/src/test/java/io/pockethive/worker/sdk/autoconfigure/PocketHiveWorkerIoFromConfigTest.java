@@ -9,7 +9,6 @@ import io.pockethive.worker.sdk.api.WorkItem;
 import io.pockethive.worker.sdk.api.WorkerContext;
 import io.pockethive.worker.sdk.config.PocketHiveWorker;
 import io.pockethive.worker.sdk.config.WorkInputConfig;
-import io.pockethive.worker.sdk.config.WorkerInputType;
 import io.pockethive.worker.sdk.config.WorkerOutputType;
 import io.pockethive.worker.sdk.input.WorkInput;
 import io.pockethive.worker.sdk.input.WorkInputFactory;
@@ -31,7 +30,7 @@ class PocketHiveWorkerIoFromConfigTest {
         .withUserConfiguration(TestWorkerConfiguration.class, PocketHiveWorkerSdkAutoConfiguration.class);
 
     @Test
-    void ioFromConfigUsesConfiguredTypes() {
+    void ioTypesComeFromConfiguration() {
         contextRunner
             .withPropertyValues(
                 "pockethive.inputs.type=REDIS_DATASET",
@@ -41,7 +40,7 @@ class PocketHiveWorkerIoFromConfigTest {
                 WorkerRegistry registry = context.getBean(WorkerRegistry.class);
                 Optional<WorkerDefinition> definition = registry.find("testWorker");
                 assertThat(definition).isPresent();
-                assertThat(definition.get().input()).isEqualTo(WorkerInputType.REDIS_DATASET);
+                assertThat(definition.get().input().name()).isEqualTo("REDIS_DATASET");
                 assertThat(definition.get().outputType()).isEqualTo(WorkerOutputType.NONE);
             });
     }
@@ -105,11 +104,7 @@ class PocketHiveWorkerIoFromConfigTest {
         }
     }
 
-    @PocketHiveWorker(
-        input = WorkerInputType.RABBITMQ,
-        output = WorkerOutputType.RABBITMQ,
-        ioFromConfig = true
-    )
+    @PocketHiveWorker
     static class TestWorker implements PocketHiveWorkerFunction {
 
         @Override

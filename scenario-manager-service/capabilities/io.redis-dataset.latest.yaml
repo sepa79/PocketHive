@@ -1,0 +1,24 @@
+schemaVersion: "1.0"
+capabilitiesVersion: "1.1"
+role: io-redis-dataset
+image:
+  name: io-redis-dataset
+  tag: latest
+ui:
+  label: "Redis dataset IO"
+  ioType: "REDIS_DATASET"
+config:
+  - name: inputs.redis.listName
+    type: string
+    default: ph:dataset
+  - name: inputs.redis.ratePerSec
+    type: number
+    default: 1
+    min: 0
+    max: 1000
+    ui:
+      step: 1
+      unit: msg/s
+actions: []
+panels: []
+

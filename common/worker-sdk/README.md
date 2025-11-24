@@ -32,7 +32,6 @@ to suppress publishing.
 ```java
 @Component("generatorWorker")
 @PocketHiveWorker(
-    input = WorkerInputType.SCHEDULER,
     config = GeneratorWorkerConfig.class
 )
 class GeneratorWorkerImpl implements PocketHiveWorkerFunction {
@@ -109,7 +108,8 @@ The control-plane runtime bridges the SDK with the control-plane topic. It appli
 ## Putting it together
 
 1. Add the `worker-sdk` dependency to your service.
-2. Annotate business beans with `@PocketHiveWorker`, selecting the appropriate input binding (Rabbit by default). Queue bindings are provided by the swarm plan via `pockethive.inputs/outputs.*`.
+2. Annotate business beans with `@PocketHiveWorker`. IO bindings are configured via
+   `pockethive.inputs/outputs.*` and the swarm plan; the annotation no longer carries input/output types.
 3. Implement `PocketHiveWorkerFunction` and return `WorkItem` instances (or `null` for no output).
 4. The SDK automatically wires the Rabbit or scheduler inputs/outputs for the registered `@PocketHiveWorker`. Only build custom `WorkInputFactory` implementations when you truly need a bespoke transport.
 5. Use `WorkerContext` for config, metrics, observability, and status reporting.

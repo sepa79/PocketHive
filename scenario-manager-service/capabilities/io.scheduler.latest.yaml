@@ -1,0 +1,21 @@
+schemaVersion: "1.0"
+capabilitiesVersion: "1.1"
+role: io-scheduler
+image:
+  name: io-scheduler
+  tag: latest
+ui:
+  label: "Scheduler IO"
+  ioType: "SCHEDULER"
+config:
+  - name: inputs.scheduler.ratePerSec
+    type: number
+    default: 0
+    min: 0
+    max: 1000
+    ui:
+      step: 1
+      unit: msg/s
+actions: []
+panels: []
+

@@ -126,4 +126,3 @@ export function CapabilitiesProvider({ children }: Props) {
 
   return <CapabilitiesContext.Provider value={value}>{children}</CapabilitiesContext.Provider>
 }
-

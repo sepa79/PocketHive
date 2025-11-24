@@ -8,29 +8,27 @@ capabilities only; concrete IO types come from config.
 
 ## 0. High-level tasks
 
-- [ ] Baseline & constraints
-  - [ ] Map current IO wiring in worker-sdk (`WorkInput`, `WorkOutput`, autoconfig).
-  - [ ] Document constraints from architecture:
+  - [x] Baseline & constraints
+  - [x] Map current IO wiring in worker-sdk (`WorkInput`, `WorkOutput`, autoconfig).
+  - [x] Document constraints from architecture:
     - Control-plane + topology (queues/exchanges/routing) remain plan-driven.
     - NFF: no implicit fallbacks or heuristic IO selection.
     - IO type is fixed for a running swarm (no live swaps).
 - [x] IO configuration model
   - [x] Design a config model for IO in worker-sdk:
-    - `pockethive.worker.io.input-type = RABBITMQ|REDIS_DATASET|SCHEDULER|NOOP`
-    - `pockethive.worker.io.output-type = RABBITMQ|REDIS_DATASET|NOOP`
+    - `pockethive.inputs.type = RABBITMQ|REDIS_DATASET|SCHEDULER|NOOP`
+    - `pockethive.outputs.type = RABBITMQ|REDIS_DATASET|NOOP`
     - Type-specific blocks for settings live under `pockethive.inputs.*` / `pockethive.outputs.*`, no guessing.
   - [x] Decide how this maps to:
     - `application.yml` in each worker (all core workers now declare `pockethive.worker.io.*`).
     - capabilities manifests: IO type remains plan/topology driven; capability files focus on worker config knobs, not IO transport.
     - scenario manager config updates: continue to tune worker config only (no runtime topology changes).
 - [x] Annotation + autoconfig evolution
-  - [x] Extend/deprecate `@PocketHiveWorker`:
-    - Added `ioFromConfig` flag to opt into config-driven IO.
-    - Keep `input`/`output` enums as defaults/compatibility for now.
+  - [x] Simplify `@PocketHiveWorker`:
+    - Remove `input` / `output` / `ioFromConfig`; annotation carries only capabilities and config type.
   - [x] Update `PocketHiveWorkerSdkAutoConfiguration` to:
-    - Read the new IO config model via `WorkerIoProperties`.
-    - Resolve effective IO types from `ioFromConfig` + config.
-    - Preserve current behaviour when `ioFromConfig=false` and no config override is present.
+    - Read the IO type from `WorkerInputTypeProperties` / `WorkerOutputTypeProperties`.
+    - Fail fast when `pockethive.inputs.type` or `pockethive.outputs.type` is missing.
 - [ ] IO factory in worker-sdk
   - [ ] Introduce `IoConfig` / `IoProfile` in worker-sdk (no Spring).
   - [ ] Add a `WorkInputFactory` + `WorkOutputFactory` that:
@@ -51,11 +49,11 @@ capabilities only; concrete IO types come from config.
   - [x] Moderator
   - [x] HTTP Builder
   - [x] Trigger
-- [ ] Clean-up & deprecation
-  - [ ] Mark `input`/`output` on `@PocketHiveWorker` as deprecated once all
-    workers are on config-driven IO.
-  - [ ] Update docs to show IO configuration is scenario/capability-driven.
-  - [ ] Remove legacy IO wiring paths once 1–2 releases have shipped.
+- [x] Clean-up & deprecation
+  - [x] Remove `input` / `output` / `ioFromConfig` from `@PocketHiveWorker`; IO is now
+    configuration-only via `pockethive.inputs.*` / `pockethive.outputs.*`.
+  - [x] Update docs to show IO configuration is scenario/capability-driven.
+  - [x] Remove legacy IO wiring paths once workers were migrated.
 
 ---
 

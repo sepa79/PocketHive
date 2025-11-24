@@ -10,6 +10,7 @@ template:
         outputs:
           type: NONE
         inputs:
+          type: SCHEDULER
           scheduler:
             ratePerSec: 5
         worker:
