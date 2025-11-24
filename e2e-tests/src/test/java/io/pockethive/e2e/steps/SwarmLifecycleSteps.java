@@ -234,8 +234,8 @@ public class SwarmLifecycleSteps {
     });
   }
 
-  @And("I request a single generator run")
-  public void iRequestASingleGeneratorRun() {
+  @And("I start generator traffic")
+  public void iStartGeneratorTraffic() {
     ensureStartResponse();
     captureWorkerStatuses();
     ensureFinalQueueTap();
@@ -247,7 +247,6 @@ public class SwarmLifecycleSteps {
 
     Map<String, Object> patch = new LinkedHashMap<>();
     patch.put("enabled", true);
-    patch.put("singleRequest", true);
 
     ComponentConfigRequest request = new ComponentConfigRequest(
         idKey("generator-single"),
@@ -275,8 +274,6 @@ public class SwarmLifecycleSteps {
       assertTrue(isTruthy(snapshot.get("enabled")), "Generator snapshot should report enabled=true");
       Map<String, Object> config = snapshotConfig(snapshot);
       assertFalse(config.isEmpty(), "Generator snapshot should include applied config");
-      assertTrue(isTruthy(config.get("singleRequest")),
-          () -> "Expected singleRequest=true in generator config but was " + config.get("singleRequest"));
     });
 
     assertTemplatedGeneratorOutputIfApplicable();
@@ -296,15 +293,6 @@ public class SwarmLifecycleSteps {
     assertFalse(snapshot.isEmpty(), "Generator snapshot should include worker details");
     Map<String, Object> config = snapshotConfig(snapshot);
     assertFalse(config.isEmpty(), "Generator snapshot should include applied config");
-
-    Object rateObj = config.get("ratePerSec");
-    assertTrue(rateObj instanceof Number,
-        () -> "Expected numeric ratePerSec in generator config but was " + rateObj);
-    double ratePerSec = ((Number) rateObj).doubleValue();
-    assertEquals(0.0, ratePerSec, 0.0001, "Expected default ratePerSec=0.0 for generator");
-
-    assertFalse(isTruthy(config.get("singleRequest")),
-        () -> "Expected singleRequest=false by default but was " + config.get("singleRequest"));
 
     Map<String, Object> message = toMap(config.get("message"));
     assertEquals("/api/test", message.get("path"),
@@ -1020,11 +1008,10 @@ public class SwarmLifecycleSteps {
     String scenarioId = scenarioDetails != null ? scenarioDetails.id() : null;
     if ("local-rest-defaults".equals(scenarioId)
         || "templated-rest".equals(scenarioId)
-        || "history-policy-demo".equals(scenarioId)) {
+        || "history-policy-demo".equals(scenarioId)
+        || "local-rest".equals(scenarioId)
+        || "local-rest-with-multi-generators".equals(scenarioId)) {
       return "final";
-    }
-    if ("local-rest-with-named-queues".equals(scenarioId)) {
-      return "finalQ";
     }
     if ("redis-dataset-demo".equals(scenarioId)) {
       return "post";

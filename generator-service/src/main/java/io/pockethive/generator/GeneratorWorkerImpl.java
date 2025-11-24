@@ -79,8 +79,6 @@ class GeneratorWorkerImpl implements PocketHiveWorkerFunction {
    *
    * <pre>{@code
    * {
-   *   "ratePerSec": 1.5,
-   *   "singleRequest": false,
    *   "message": {
    *     "path": "/api/orders",
    *     "method": "POST",
@@ -116,9 +114,7 @@ class GeneratorWorkerImpl implements PocketHiveWorkerFunction {
         .update(status -> status
             .data("path", config.message().path())
             .data("method", config.message().method())
-            .data("ratePerSec", config.ratePerSec())
-            .data("enabled", context.enabled())
-            .data("singleRequest", config.singleRequest()));
+            .data("enabled", context.enabled()));
     WorkItem message = buildMessage(config, context, seed);
     return seed.addStep(message.asString(), message.headers());
   }

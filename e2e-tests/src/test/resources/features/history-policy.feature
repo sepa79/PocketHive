@@ -20,7 +20,7 @@ Feature: WorkItem history policy configuration
     Then the swarm is registered and queues are declared
     When I start the swarm
     Then the swarm reports running
-    And I request a single generator run
+    And I start generator traffic
     Then the final queue receives the default generator response
     And the postprocessor status reflects applied history policy
     And the worker statuses advertise history policies

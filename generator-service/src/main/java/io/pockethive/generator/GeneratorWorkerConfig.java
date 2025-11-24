@@ -6,15 +6,20 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 
-public record GeneratorWorkerConfig(
-    double ratePerSec,
-    boolean singleRequest,
-    Message message
-) implements SchedulerStates.RateConfig {
+public record GeneratorWorkerConfig(Message message) implements SchedulerStates.RateConfig {
 
   public GeneratorWorkerConfig {
-    ratePerSec = Double.isNaN(ratePerSec) || ratePerSec < 0 ? 0.0 : ratePerSec;
     Objects.requireNonNull(message, "message");
+  }
+
+  /**
+   * Generator rate is owned by SchedulerInputProperties (IO config), so this
+   * implementation is unused. It exists only to satisfy the SchedulerStates.RateConfig
+   * contract required by the scheduler input factory.
+   */
+  @Override
+  public double ratePerSec() {
+    return 0.0;
   }
 
   public record Message(MessageBodyType bodyType, String path, String method, String body, Map<String, String> headers) {

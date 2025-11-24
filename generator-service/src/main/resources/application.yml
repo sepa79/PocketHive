@@ -16,8 +16,7 @@ pockethive:
   inputs:
     type: SCHEDULER
     scheduler:
-      ratePerSec: 0.0
-      singleRequest: false
+      ratePerSec: 1.0
   outputs:
     type: RABBITMQ
     rabbit:

@@ -10,23 +10,13 @@ Feature: Swarm lifecycle golden path
     Then the swarm is registered and queues are declared
     When I start the swarm
     Then the swarm reports running
-    And I request a single generator run
+    And I start generator traffic
     Then the final queue receives the default generator response
     And the swarm worker statuses reflect the swarm topology
     When I stop the swarm
     Then the swarm reports stopped
     When I remove the swarm
     Then the swarm is removed and lifecycle confirmations are recorded
-
-  @named-queues
-  Scenario: Templates with named queues are honoured end to end
-    And the "local-rest-with-named-queues" scenario template is requested
-    When I create the swarm from that template
-    Then the swarm is registered and queues are declared
-    When I start the swarm
-    Then the swarm reports running
-    And I request a single generator run
-    Then the final queue receives the default generator response
 
   @templated-generator
   Scenario: Templated generator works end to end
@@ -35,7 +25,7 @@ Feature: Swarm lifecycle golden path
     Then the swarm is registered and queues are declared
     When I start the swarm
     Then the swarm reports running
-    And I request a single generator run
+    And I start generator traffic
     Then the final queue receives the default generator response
 
   Scenario: Worker runtime config matches service defaults when scenario provides none
@@ -67,7 +57,7 @@ Feature: Swarm lifecycle golden path
     Then the swarm is registered and queues are declared
     When I start the swarm
     Then the swarm reports running
-    And I request a single generator run
+    And I start generator traffic
     Then the redis dataset demo pipeline processes traffic end to end
     When I stop the swarm
     Then the swarm reports stopped

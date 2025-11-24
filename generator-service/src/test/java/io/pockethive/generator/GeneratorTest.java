@@ -45,8 +45,6 @@ class GeneratorTest {
     message.put("body", "{}");
     message.put("headers", Map.of("X-Test", "true"));
     Map<String, Object> config = new LinkedHashMap<>();
-    config.put("ratePerSec", 3.0);
-    config.put("singleRequest", false);
     config.put("message", message);
     properties.setConfig(config);
     worker = new GeneratorWorkerImpl(properties, templateRenderer);
@@ -55,8 +53,6 @@ class GeneratorTest {
   @Test
   void generateUsesProvidedConfig() throws Exception {
     GeneratorWorkerConfig config = new GeneratorWorkerConfig(
-        10.0,
-        false,
         new GeneratorWorkerConfig.Message(
             MessageBodyType.HTTP,
             "/custom",

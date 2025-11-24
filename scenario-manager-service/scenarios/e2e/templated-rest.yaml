@@ -10,7 +10,6 @@ template:
         inputs:
           scheduler:
             ratePerSec: 5
-            singleRequest: false
         worker:
           message:
             bodyType: HTTP

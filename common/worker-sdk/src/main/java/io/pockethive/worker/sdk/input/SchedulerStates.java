@@ -24,8 +24,6 @@ public final class SchedulerStates {
     public interface RateConfig {
 
         double ratePerSec();
-
-        boolean singleRequest();
     }
 
     /**
@@ -79,7 +77,6 @@ public final class SchedulerStates {
         private final Class<C> configType;
         private final Supplier<C> defaults;
         private final Logger log;
-        private final AtomicBoolean singleRequestPending = new AtomicBoolean(false);
         private final Supplier<Boolean> defaultEnabledSupplier;
         private final DoubleSupplier rateSupplier;
 
@@ -104,8 +101,8 @@ public final class SchedulerStates {
             this.carryOver = 0.0;
             if (log.isDebugEnabled()) {
                 double initialRate = rateSupplier != null ? Math.max(0.0, rateSupplier.getAsDouble()) : initial.ratePerSec();
-                log.debug("{} scheduler initialised: enabled={}, ratePerSec={}, singleRequest={}",
-                    configType.getSimpleName(), enabled, initialRate, initial.singleRequest());
+                log.debug("{} scheduler initialised: enabled={}, ratePerSec={}",
+                    configType.getSimpleName(), enabled, initialRate);
             }
         }
 
@@ -124,20 +121,15 @@ public final class SchedulerStates {
             boolean configChanged = !Objects.equals(previous, incoming);
             boolean enabledChanged = resolvedEnabled != this.enabled;
             this.enabled = resolvedEnabled;
-            if (configChanged && incoming.singleRequest()) {
-                singleRequestPending.set(true);
-            }
             if (!resolvedEnabled) {
                 carryOver = 0.0;
-                singleRequestPending.set(false);
             }
             if (log.isDebugEnabled() && (configChanged || enabledChanged)) {
                 double updatedRate = rateSupplier != null ? Math.max(0.0, rateSupplier.getAsDouble()) : incoming.ratePerSec();
-                log.debug("{} scheduler updated: enabled={}, ratePerSec={}, singleRequest={}, reason={}",
+                log.debug("{} scheduler updated: enabled={}, ratePerSec={}, reason={}",
                     configType.getSimpleName(),
                     resolvedEnabled,
                     updatedRate,
-                    incoming.singleRequest(),
                     enabledChanged ? "enabled toggled" : "config changed");
             }
         }
@@ -151,7 +143,6 @@ public final class SchedulerStates {
         public synchronized int planInvocations(long nowMillis) {
             if (!enabled) {
                 carryOver = 0.0;
-                singleRequestPending.set(false);
                 if (log.isDebugEnabled()) {
                     log.debug("{} scheduler disabled at tick {}; skipping dispatch", configType.getSimpleName(), nowMillis);
                 }
@@ -163,12 +154,6 @@ public final class SchedulerStates {
             double planned = rate + carryOver;
             int quota = (int) Math.floor(planned);
             carryOver = planned - quota;
-            if (singleRequestPending.getAndSet(false)) {
-                quota += 1;
-                if (log.isDebugEnabled()) {
-                    log.debug("{} scheduler consumed single-request override at tick {}", configType.getSimpleName(), nowMillis);
-                }
-            }
             if (log.isDebugEnabled()) {
                 log.debug("{} scheduler tick {} resolved quota={} (rate={}, carryOver={})",
                     configType.getSimpleName(), nowMillis, quota, rate, carryOver);

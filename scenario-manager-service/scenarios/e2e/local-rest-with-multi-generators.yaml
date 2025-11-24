@@ -10,7 +10,6 @@ template:
         inputs:
           scheduler:
             ratePerSec: 30
-            singleRequest: false
         worker:
           message:
             bodyType: HTTP
@@ -25,7 +24,6 @@ template:
         inputs:
           scheduler:
             ratePerSec: 70
-            singleRequest: false
         worker:
           message:
             bodyType: HTTP
