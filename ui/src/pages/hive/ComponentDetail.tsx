@@ -20,7 +20,7 @@ export default function ComponentDetail({ component, onClose }: Props) {
   const [toast, setToast] = useState<string | null>(null)
   const [isEditing, setIsEditing] = useState(false)
   const [form, setForm] = useState<Record<string, ConfigFormValue>>({})
-  const { ensureCapabilities, getManifestForImage } = useCapabilities()
+  const { ensureCapabilities, getManifestForImage, manifests } = useCapabilities()
   const { ensureSwarms, getBeeImage, getControllerImage } = useSwarmMetadata()
   const resolvedImage = useMemo(() => {
     if (component.image) {
@@ -56,32 +56,14 @@ export default function ComponentDetail({ component, onClose }: Props) {
     void ensureSwarms()
   }, [ensureSwarms])
 
-  useEffect(() => {
-    const previousId = previousComponentIdRef.current
-    const idChanged = component.id !== previousId
-    if (isEditing && !idChanged) {
-      return
-    }
-    previousComponentIdRef.current = component.id
-    if (!manifest) {
-      setForm({})
-      return
-    }
-    const cfg = isRecord(component.config) ? component.config : undefined
-    const next: Record<string, ConfigFormValue> = {}
-    manifest.config.forEach((entry) => {
-      next[entry.name] = computeInitialValue(entry, cfg)
-    })
-    setForm(next)
-  }, [component.id, component.config, manifest, isEditing])
-
   const handleSubmit = async () => {
     if (!manifest) {
       displayToast(setToast, 'Capability manifest not available for this component')
       return
     }
     const cfg: Record<string, unknown> = {}
-    for (const entry of manifest.config) {
+    // Use merged worker + IO entries so IO changes (e.g. ratePerSec) are sent as part of the patch.
+    for (const entry of effectiveConfigEntries) {
       const result = convertFormValue(entry, form[entry.name])
       if (!result.ok) {
         displayToast(setToast, result.message)
@@ -104,12 +86,13 @@ export default function ComponentDetail({ component, onClose }: Props) {
   const role = component.role.trim() || '—'
   const normalizedRole = component.role.trim().toLowerCase()
   const isWiremock = normalizedRole === 'wiremock'
+  const componentConfig =
+    component.config && typeof component.config === 'object'
+      ? (component.config as Record<string, unknown>)
+      : undefined
 
   const runtimeEntries = useMemo(() => {
-    const cfg =
-      component.config && typeof component.config === 'object'
-        ? (component.config as Record<string, unknown>)
-        : undefined
+    const cfg = componentConfig
     if (!cfg) return [] as { label: string; value: string }[]
     const entries: { label: string; value: string }[] = []
     const tps = getNumber(cfg.tps)
@@ -162,15 +145,92 @@ export default function ComponentDetail({ component, onClose }: Props) {
     return entries
   }, [component.config])
 
-  const configEntries = manifest?.config ?? []
+  const effectiveConfigEntries: CapabilityConfigEntry[] = useMemo(() => {
+    if (!manifest) return []
+    const baseEntries = manifest.config ?? []
+
+    const cfg = componentConfig
+    const inputs =
+      cfg && cfg.inputs && typeof cfg.inputs === 'object'
+        ? (cfg.inputs as Record<string, unknown>)
+        : undefined
+    const inputType =
+      typeof inputs?.type === 'string' ? inputs.type.trim().toUpperCase() : undefined
+
+    const allEntries: CapabilityConfigEntry[] = [...baseEntries]
+
+    // Merge IO capabilities for the current input type, if any
+    if (inputType) {
+      const ioEntries: CapabilityConfigEntry[] = []
+      for (const m of manifests) {
+        const ui = m.ui as Record<string, unknown> | undefined
+        const ioTypeRaw = ui && typeof ui.ioType === 'string' ? ui.ioType : undefined
+        const ioType = ioTypeRaw ? ioTypeRaw.trim().toUpperCase() : undefined
+        if (ioType && ioType === inputType && Array.isArray(m.config)) {
+          ioEntries.push(...m.config)
+        }
+      }
+      allEntries.push(...ioEntries)
+    }
+
+    // De-duplicate by config name (first entry wins)
+    const byName = new Map<string, CapabilityConfigEntry>()
+    for (const entry of allEntries) {
+      if (!byName.has(entry.name)) {
+        byName.set(entry.name, entry)
+      }
+    }
+
+    // Apply simple conditional support based on entry.when (if present)
+    const merged = Array.from(byName.values())
+    if (!cfg) return merged
+
+    return merged.filter((entry) => {
+      const when = entry.when
+      if (!when || typeof when !== 'object') {
+        return true
+      }
+      const requiredInputTypeRaw = when['inputs.type']
+      const requiredInputType =
+        typeof requiredInputTypeRaw === 'string'
+          ? requiredInputTypeRaw.trim().toUpperCase()
+          : undefined
+      if (requiredInputType && inputType && requiredInputType !== inputType) {
+        return false
+      }
+      return true
+    })
+  }, [manifest, manifests, componentConfig])
+
+  useEffect(() => {
+    const previousId = previousComponentIdRef.current
+    const idChanged = component.id !== previousId
+    if (isEditing && !idChanged) {
+      return
+    }
+    previousComponentIdRef.current = component.id
+    if (!manifest) {
+      setForm({})
+      return
+    }
+    const cfg = isRecord(component.config) ? component.config : undefined
+    const next: Record<string, ConfigFormValue> = {}
+    // Use the merged worker + IO config entries when initialising the form,
+    // so IO fields (like ratePerSec) pick up existing values from config.
+    effectiveConfigEntries.forEach((entry) => {
+      next[entry.name] = computeInitialValue(entry, cfg)
+    })
+    setForm(next)
+  }, [component.id, component.config, manifest, isEditing, effectiveConfigEntries])
+
   const renderedContent = isWiremock ? (
     <WiremockPanel component={component} />
   ) : manifest ? (
     <div className="space-y-2">
-      {configEntries.length === 0 ? (
+      {effectiveConfigEntries.length === 0 ? (
         <div className="text-white/50">No configurable options</div>
       ) : (
-        configEntries.map((entry) => (
+        effectiveConfigEntries.map((entry) => (
           <ConfigEntryRow
             key={entry.name}
             entry={entry}
@@ -237,7 +297,7 @@ export default function ComponentDetail({ component, onClose }: Props) {
           ))}
         </div>
       )}
-      {!isWiremock && configEntries.length > 0 && (
+      {!isWiremock && effectiveConfigEntries.length > 0 && (
         <div className="mb-2 flex items-center justify-between text-xs text-white/60">
           <span className="uppercase tracking-wide text-white/50">Configuration</span>
           <label className="flex items-center gap-3 cursor-pointer select-none">
@@ -257,7 +317,7 @@ export default function ComponentDetail({ component, onClose }: Props) {
         </div>
       )}
       <div className={containerClass}>{renderedContent}</div>
-      {!isWiremock && configEntries.length > 0 && (
+      {!isWiremock && effectiveConfigEntries.length > 0 && (
         <button
           className="mb-4 rounded bg-blue-600 px-3 py-1 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
           onClick={handleSubmit}
