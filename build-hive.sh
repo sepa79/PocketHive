@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "${SCRIPT_DIR}"
 
-ALL_SERVICES=(rabbitmq log-aggregator scenario-manager orchestrator ui prometheus grafana loki wiremock pushgateway redis redis-commander swarm-controller generator data-provider http-builder moderator processor postprocessor trigger)
+ALL_SERVICES=(rabbitmq log-aggregator scenario-manager orchestrator ui prometheus grafana loki wiremock pushgateway redis redis-commander swarm-controller generator http-builder moderator processor postprocessor trigger)
 declare -A DURATIONS=()
 TIMING_ORDER=(clean build_base maven_package stage_artifacts docker_build_workers docker_build compose_up restart)
 BUILD_START_TIME=0
@@ -14,7 +14,6 @@ JAR_MODULES=(
   orchestrator-service
   swarm-controller-service
   generator-service
-  data-provider-service
   http-builder-service
   moderator-service
   processor-service
@@ -28,7 +27,6 @@ declare -A MODULE_TO_SERVICE=(
   ["orchestrator-service"]="orchestrator"
   ["swarm-controller-service"]="swarm-controller"
   ["generator-service"]="generator"
-  ["data-provider-service"]="data-provider"
   ["http-builder-service"]="http-builder"
   ["moderator-service"]="moderator"
   ["processor-service"]="processor"
@@ -42,7 +40,6 @@ declare -A SERVICE_TO_MODULE=(
   ["orchestrator"]="orchestrator-service"
   ["swarm-controller"]="swarm-controller-service"
   ["generator"]="generator-service"
-  ["data-provider"]="data-provider-service"
   ["http-builder"]="http-builder-service"
   ["moderator"]="moderator-service"
   ["processor"]="processor-service"
@@ -78,6 +75,7 @@ Options:
   --prune-images          Remove local PocketHive application images before rebuilding (orchestrator, scenario-manager, bees, etc).
   --sync-scenarios        Copy local scenario files into the running Scenario Manager container and trigger a reload (no Maven or Docker build).
   --restart <service>     Restart a running service after the build completes (repeatable).
+  --restart-all           Restart all compose services after the build completes.
   --help                  Show this help.
 
 Behaviour:
@@ -323,10 +321,6 @@ build_worker_images() {
         image="generator:latest"
         target="generator"
         ;;
-      data-provider-service)
-        image="data-provider:latest"
-        target="data-provider"
-        ;;
       http-builder-service)
         image="http-builder:latest"
         target="http-builder"
@@ -459,6 +453,10 @@ parse_args() {
         ;;
       --restart=*)
         RESTART_TARGETS+=("${1#*=}")
+        ONLY_CLEAN=false
+        ;;
+      --restart-all)
+        RESTART_TARGETS=("${ALL_SERVICES[@]}")
         ONLY_CLEAN=false
         ;;
       *)

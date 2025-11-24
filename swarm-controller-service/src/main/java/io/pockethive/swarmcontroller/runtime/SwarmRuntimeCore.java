@@ -447,19 +447,68 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
 
   private void applyWorkIoEnvironment(Bee bee, Map<String, String> env) {
     Work work = bee.work();
-    if (work == null) {
+    if (work != null) {
+      boolean hasInput = hasText(work.in());
+      boolean hasOutput = hasText(work.out());
+      if (hasInput) {
+        env.put("POCKETHIVE_INPUT_RABBIT_QUEUE", properties.queueName(work.in()));
+      }
+      if (hasOutput) {
+        env.put("POCKETHIVE_OUTPUT_RABBIT_ROUTING_KEY", properties.queueName(work.out()));
+      }
+      if (hasInput || hasOutput) {
+        env.put("POCKETHIVE_OUTPUT_RABBIT_EXCHANGE", properties.hiveExchange());
+      }
+    }
+
+    Map<String, Object> config = bee.config();
+    if (config == null || config.isEmpty()) {
       return;
     }
-    boolean hasInput = hasText(work.in());
-    boolean hasOutput = hasText(work.out());
-    if (hasInput) {
-      env.put("POCKETHIVE_INPUT_RABBIT_QUEUE", properties.queueName(work.in()));
+
+    Object inputs = config.get("inputs");
+    if (inputs instanceof Map<?, ?> inputsMap) {
+      Object type = inputsMap.get("type");
+      if (type != null) {
+        String value = type.toString().trim();
+        if (!value.isBlank()) {
+          env.put("POCKETHIVE_INPUTS_TYPE", value.toUpperCase(Locale.ROOT));
+        }
+      }
+
+      Object redis = inputsMap.get("redis");
+      if (redis instanceof Map<?, ?> redisMap) {
+        putEnvIfPresent(env, "POCKETHIVE_INPUTS_REDIS_HOST", redisMap.get("host"));
+        putEnvIfPresent(env, "POCKETHIVE_INPUTS_REDIS_PORT", redisMap.get("port"));
+        putEnvIfPresent(env, "POCKETHIVE_INPUTS_REDIS_USERNAME", redisMap.get("username"));
+        putEnvIfPresent(env, "POCKETHIVE_INPUTS_REDIS_PASSWORD", redisMap.get("password"));
+        putEnvIfPresent(env, "POCKETHIVE_INPUTS_REDIS_SSL", redisMap.get("ssl"));
+        putEnvIfPresent(env, "POCKETHIVE_INPUTS_REDIS_LISTNAME", redisMap.get("listName"));
+        putEnvIfPresent(env, "POCKETHIVE_INPUTS_REDIS_RATEPERSEC", redisMap.get("ratePerSec"));
+        putEnvIfPresent(env, "POCKETHIVE_INPUTS_REDIS_INITIALDELAYMS", redisMap.get("initialDelayMs"));
+        putEnvIfPresent(env, "POCKETHIVE_INPUTS_REDIS_TICKINTERVALMS", redisMap.get("tickIntervalMs"));
+      }
     }
-    if (hasOutput) {
-      env.put("POCKETHIVE_OUTPUT_RABBIT_ROUTING_KEY", properties.queueName(work.out()));
+
+    Object outputs = config.get("outputs");
+    if (outputs instanceof Map<?, ?> outputsMap) {
+      Object type = outputsMap.get("type");
+      if (type != null) {
+        String value = type.toString().trim();
+        if (!value.isBlank()) {
+          env.put("POCKETHIVE_OUTPUTS_TYPE", value.toUpperCase(Locale.ROOT));
+        }
+      }
     }
-    if (hasInput || hasOutput) {
-      env.put("POCKETHIVE_OUTPUT_RABBIT_EXCHANGE", properties.hiveExchange());
+  }
+
+  private static void putEnvIfPresent(Map<String, String> env, String key, Object value) {
+    if (value == null) {
+      return;
+    }
+    String text = value.toString().trim();
+    if (!text.isBlank()) {
+      env.put(key, text);
     }
   }
 

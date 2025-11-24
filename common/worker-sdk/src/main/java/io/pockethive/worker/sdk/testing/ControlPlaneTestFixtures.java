@@ -160,7 +160,6 @@ public final class ControlPlaneTestFixtures {
 
     private static final Map<String, String> DEFAULT_QUEUE_SUFFIXES = Map.of(
         "generator", "gen",
-        "data-provider", "data",
         "moderator", "mod",
         "processor", "processor",
         "postprocessor", "post",

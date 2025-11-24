@@ -20,7 +20,6 @@
     <module>common/docker-client</module>
     <module>common/swarm-model</module>
     <module>generator-service</module>
-    <module>data-provider-service</module>
     <module>log-aggregator-service</module>
     <module>moderator-service</module>
     <module>orchestrator-service</module>

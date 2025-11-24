@@ -53,7 +53,7 @@
 
 - [x] Define the template file schema for a single HTTP call (fields + types + required/optional).
 - [x] Decide on the on-disk layout for templates (`serviceId`/`callId` tree and root path config).
-- [x] Extend `generator`/`data-provider` scenario capabilities to carry `serviceId` + `callId` where needed (via headers/templating and the `http-builder` capability).
+- [x] Extend `generator` scenario capabilities to carry `serviceId` + `callId` where needed (via headers/templating and the `http-builder` capability).
 - [x] Define worker-level config for:
   - [x] Template root(s) (baked-in vs override).
   - [x] Default `serviceId` if upstream doesn’t supply one.

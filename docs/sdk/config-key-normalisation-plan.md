@@ -16,7 +16,7 @@ Goal: converge on a single key style (camelCase) across worker configs, IO confi
   - [ ] Document the convention briefly in `docs/sdk` and reference it from worker docs.
 
 - [ ] Worker `application.yml` normalisation
-  - [ ] For each worker service (generator, processor, data-provider, moderator, postprocessor, http-builder, trigger):
+  - [ ] For each worker service (generator, processor, moderator, postprocessor, http-builder, trigger):
     - [ ] Update `pockethive.worker.config.*` keys to camelCase.
     - [ ] Ensure IO config blocks (`pockethive.inputs.*`, `pockethive.outputs.*`) also use camelCase for nested fields.
     - [ ] Verify that defaults still bind correctly via Spring Boot configuration properties.
@@ -48,4 +48,3 @@ Goal: converge on a single key style (camelCase) across worker configs, IO confi
 - NFF: no silent fallbacks between different key shapes. Once normalised, each logical field has exactly one canonical key.
 - KISS: prefer Spring/JSON binding over manual map lookups; where map access is needed, use the canonical camelCase key only.
 - Control-plane and IO topology remain plan-driven; this plan affects only configuration keys, not routing or resource naming.
-

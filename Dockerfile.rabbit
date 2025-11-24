@@ -1,7 +1,0 @@
-FROM rabbitmq:3.13-management-alpine
-# Enable Web-STOMP plugin offline at build time
-RUN rabbitmq-plugins enable --offline rabbitmq_web_stomp
-# Load predefined exchanges/queues/bindings at boot via management plugin
-COPY rabbitmq/definitions.json /etc/rabbitmq/definitions.json
-COPY rabbitmq/rabbitmq.conf /etc/rabbitmq/rabbitmq.conf
-CMD ["rabbitmq-server"]
