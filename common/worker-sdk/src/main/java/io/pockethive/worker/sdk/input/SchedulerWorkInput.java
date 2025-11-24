@@ -44,6 +44,8 @@ public final class SchedulerWorkInput<C> implements WorkInput {
     private final long initialDelayMs;
     private final long tickIntervalMs;
 
+    private final java.util.concurrent.atomic.AtomicLong dispatchedCount = new java.util.concurrent.atomic.AtomicLong();
+
     private volatile boolean running;
     private volatile boolean listenersRegistered;
     private ScheduledExecutorService schedulerExecutor;
@@ -89,11 +91,34 @@ public final class SchedulerWorkInput<C> implements WorkInput {
             }
             return;
         }
+        long limit = scheduling.getMaxMessages();
+        if (limit > 0L) {
+            long remaining = Math.max(0L, limit - dispatchedCount.get());
+            if (remaining <= 0L) {
+                if (log.isDebugEnabled()) {
+                    log.debug(
+                        "{} scheduler finite-run exhausted at tick {} (maxMessages={}, dispatched={})",
+                        workerDefinition.beanName(), nowMillis, limit, dispatchedCount.get());
+                }
+                return;
+            }
+            if (quota > remaining) {
+                quota = (int) remaining;
+            }
+        }
         if (log.isDebugEnabled()) {
             log.debug("{} scheduler dispatching {} invocation(s) at tick {}", workerDefinition.beanName(), quota, nowMillis);
         }
         for (int i = 0; i < quota; i++) {
             WorkItem seed = seedFactory.apply(workerDefinition, identity);
+            long maxMessages = scheduling.getMaxMessages();
+            if (maxMessages > 0L) {
+                long after = dispatchedCount.incrementAndGet();
+                long remainingAfter = Math.max(0L, maxMessages - after);
+                seed = seed.toBuilder()
+                    .header("x-ph-scheduler-remaining", remainingAfter)
+                    .build();
+            }
             try {
                 WorkItem result = workerRuntime.dispatch(workerDefinition.beanName(), seed);
                 if (result != null) {
@@ -182,15 +207,49 @@ public final class SchedulerWorkInput<C> implements WorkInput {
             return;
         }
 
+        // Rate per second override
         Object rateObj = schedulerMap.get("ratePerSec");
-        if (!(rateObj instanceof Number number)) {
-            return;
+        if (rateObj instanceof Number number) {
+            double rate = number.doubleValue();
+            if (rate >= 0.0 && rate != scheduling.getRatePerSec()) {
+                scheduling.setRatePerSec(rate);
+                if (log.isInfoEnabled()) {
+                    log.info("{} scheduler ratePerSec updated via config: {}", workerDefinition.beanName(), rate);
+                }
+            }
         }
-        double rate = number.doubleValue();
-        if (rate >= 0.0 && rate != scheduling.getRatePerSec()) {
-            scheduling.setRatePerSec(rate);
+
+        // Finite-run configuration: maxMessages + optional reset flag
+        boolean resetRequested = false;
+        Object maxObj = schedulerMap.get("maxMessages");
+        if (maxObj instanceof Number maxNumber) {
+            long newMax = Math.max(0L, maxNumber.longValue());
+            long currentMax = scheduling.getMaxMessages();
+            if (newMax != currentMax) {
+                scheduling.setMaxMessages(newMax);
+                resetRequested = true;
+                if (log.isInfoEnabled()) {
+                    log.info(
+                        "{} scheduler maxMessages updated via config: {} (previous={})",
+                        workerDefinition.beanName(), newMax, currentMax);
+                }
+            }
+        }
+        Object resetObj = schedulerMap.get("reset");
+        if (resetObj instanceof Boolean b && b) {
+            resetRequested = true;
+        } else if (resetObj instanceof String s) {
+            String normalized = s.trim().toLowerCase(java.util.Locale.ROOT);
+            if ("true".equals(normalized)) {
+                resetRequested = true;
+            }
+        }
+        if (resetRequested) {
+            long before = dispatchedCount.getAndSet(0L);
             if (log.isInfoEnabled()) {
-                log.info("{} scheduler ratePerSec updated via config: {}", workerDefinition.beanName(), rate);
+                log.info(
+                    "{} scheduler finite-run counters reset via config (previousDispatched={})",
+                    workerDefinition.beanName(), before);
             }
         }
     }

@@ -142,6 +142,29 @@ export default function ComponentDetail({ component, onClose }: Props) {
         value: httpMaxConnections.toString(),
       })
     }
+    // Scheduler finite-run/runtime info (if present in config)
+    const inputs =
+      cfg && cfg.inputs && typeof cfg.inputs === 'object'
+        ? (cfg.inputs as Record<string, unknown>)
+        : undefined
+    const scheduler =
+      inputs && inputs.scheduler && typeof inputs.scheduler === 'object'
+        ? (inputs.scheduler as Record<string, unknown>)
+        : undefined
+    const schedRate = scheduler ? getNumber(scheduler.ratePerSec) : undefined
+    const schedMax = scheduler ? getNumber(scheduler.maxMessages) : undefined
+    if (schedRate !== undefined) {
+      entries.push({
+        label: 'Scheduler rate (msg/s)',
+        value: schedRate.toString(),
+      })
+    }
+    if (schedMax !== undefined && schedMax > 0) {
+      entries.push({
+        label: 'Scheduler max messages',
+        value: schedMax.toString(),
+      })
+    }
     return entries
   }, [component.config])
 
