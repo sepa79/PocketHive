@@ -30,6 +30,7 @@ dependency-reduced-pom.xml
 docker-data/
 .local-bee-artifacts/
 .local-jars/
+pockethive-deployment-*.tar.gz
 
 # --- Node / Frontend (future-proof) ---
 node_modules/

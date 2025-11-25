@@ -21,6 +21,7 @@ echo "Copying deployment files..."
 
 # Core deployment files
 cp docker-compose.yml "${DEPLOY_DIR}/docker-compose.yml"
+sed 's#\./#/opt/pockethive/#g' docker-compose.yml > "${DEPLOY_DIR}/docker-compose.opt.yml"
 cp .env.example "${DEPLOY_DIR}/.env.example"
 cp README.md "${DEPLOY_DIR}/"
 cp LICENSE "${DEPLOY_DIR}/"
@@ -55,7 +56,7 @@ cp wiremock/README.md "${DEPLOY_DIR}/wiremock/" 2>/dev/null || true
 # But include them for reference/customization
 mkdir -p "${DEPLOY_DIR}/scenario-manager/scenarios"
 mkdir -p "${DEPLOY_DIR}/scenario-manager/capabilities"
-cp scenario-manager-service/scenarios/*.yaml "${DEPLOY_DIR}/scenario-manager/scenarios/" 2>/dev/null || true
+cp -r scenario-manager-service/scenarios/* "${DEPLOY_DIR}/scenario-manager/scenarios/" 2>/dev/null || true
 cp scenario-manager-service/capabilities/*.yaml "${DEPLOY_DIR}/scenario-manager/capabilities/" 2>/dev/null || true
 
 # Documentation
@@ -76,7 +77,7 @@ cat > "${DEPLOY_DIR}/DEPLOY.md" << 'EOF'
    cd /opt/pockethive
    ```
 2. **Review configuration** in `.env.example` (optional)
-3. **Deploy with Docker Compose**:
+3. **Deploy with Docker Compose (from /opt/pockethive)**:
    ```bash
    sudo docker compose up -d
    ```
@@ -84,8 +85,18 @@ cat > "${DEPLOY_DIR}/DEPLOY.md" << 'EOF'
 
 ## Note on Paths
 
-The docker-compose.yml uses paths relative to the deployment directory (by default `/opt/pockethive`).
-Ensure the package is extracted to `/opt/pockethive/` or adjust volume paths accordingly.
+There are two compose files:
+
+- `docker-compose.yml` – uses paths **relative** to the deployment directory (recommended when running from `/opt/pockethive`).
+- `docker-compose.opt.yml` – uses **absolute** host paths under `/opt/pockethive/...` for all bind mounts.
+
+If you run commands from `/opt/pockethive`, the default `docker-compose.yml` is sufficient.
+If you want to manage the stack from another directory but still keep config under `/opt/pockethive`,
+use:
+
+```bash
+sudo docker compose -f docker-compose.opt.yml up -d
+```
 
 ## Persistent Data
 
