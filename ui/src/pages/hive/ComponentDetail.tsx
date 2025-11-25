@@ -142,7 +142,7 @@ export default function ComponentDetail({ component, onClose }: Props) {
         value: httpMaxConnections.toString(),
       })
     }
-    // Scheduler finite-run/runtime info (if present in config)
+    // Scheduler finite-run/runtime config (if present)
     const inputs =
       cfg && cfg.inputs && typeof cfg.inputs === 'object'
         ? (cfg.inputs as Record<string, unknown>)
@@ -164,6 +164,90 @@ export default function ComponentDetail({ component, onClose }: Props) {
         label: 'Scheduler max messages',
         value: schedMax.toString(),
       })
+    }
+    // Scheduler runtime diagnostics (if present in status data)
+    const schedulerDiag =
+      cfg && cfg.scheduler && typeof cfg.scheduler === 'object'
+        ? (cfg.scheduler as Record<string, unknown>)
+        : undefined
+    if (schedulerDiag) {
+      const dispatched = getNumber(schedulerDiag.dispatched)
+      const remaining = getNumber(schedulerDiag.remaining)
+      const exhausted = getBoolean(schedulerDiag.exhausted)
+      if (dispatched !== undefined) {
+        entries.push({
+          label: 'Scheduler dispatched',
+          value: dispatched.toString(),
+        })
+      }
+      if (remaining !== undefined && remaining >= 0) {
+        entries.push({
+          label: 'Scheduler remaining',
+          value: remaining.toString(),
+        })
+      }
+      if (exhausted !== undefined) {
+        entries.push({
+          label: 'Scheduler exhausted',
+          value: exhausted ? 'true' : 'false',
+        })
+      }
+    }
+    // Redis dataset runtime diagnostics (if present in status data)
+    const redisDiag =
+      cfg && cfg.redisDataset && typeof cfg.redisDataset === 'object'
+        ? (cfg.redisDataset as Record<string, unknown>)
+        : undefined
+    if (redisDiag) {
+      const listName = getString(redisDiag.listName)
+      const rate = getNumber(redisDiag.ratePerSec)
+      const dispatched = getNumber(redisDiag.dispatched)
+      const lastPopAt = getString(redisDiag.lastPopAt)
+      const lastEmptyAt = getString(redisDiag.lastEmptyAt)
+      const lastErrorAt = getString(redisDiag.lastErrorAt)
+      const lastErrorMessage = getString(redisDiag.lastErrorMessage)
+      if (listName) {
+        entries.push({
+          label: 'Redis list',
+          value: listName,
+        })
+      }
+      if (rate !== undefined) {
+        entries.push({
+          label: 'Redis rate (msg/s)',
+          value: rate.toString(),
+        })
+      }
+      if (dispatched !== undefined) {
+        entries.push({
+          label: 'Redis dispatched',
+          value: dispatched.toString(),
+        })
+      }
+      if (lastPopAt) {
+        entries.push({
+          label: 'Last Redis pop at',
+          value: lastPopAt,
+        })
+      }
+      if (lastEmptyAt) {
+        entries.push({
+          label: 'Last Redis empty at',
+          value: lastEmptyAt,
+        })
+      }
+      if (lastErrorAt) {
+        entries.push({
+          label: 'Last Redis error at',
+          value: lastErrorAt,
+        })
+      }
+      if (lastErrorMessage) {
+        entries.push({
+          label: 'Last Redis error',
+          value: lastErrorMessage,
+        })
+      }
     }
     return entries
   }, [component.config])
@@ -599,6 +683,16 @@ function getString(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined
   const trimmed = value.trim()
   return trimmed.length > 0 ? trimmed : undefined
+}
+
+function getBoolean(value: unknown): boolean | undefined {
+  if (typeof value === 'boolean') return value
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase()
+    if (normalized === 'true') return true
+    if (normalized === 'false') return false
+  }
+  return undefined
 }
 
 type ConversionResult =
