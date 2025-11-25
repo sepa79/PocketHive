@@ -41,6 +41,7 @@ cp prometheus/prometheus.yml "${DEPLOY_DIR}/prometheus/"
 mkdir -p "${DEPLOY_DIR}/grafana/dashboards"
 mkdir -p "${DEPLOY_DIR}/grafana/provisioning/dashboards"
 mkdir -p "${DEPLOY_DIR}/grafana/provisioning/datasources"
+cp grafana/grafana.ini "${DEPLOY_DIR}/grafana/grafana.ini" 2>/dev/null || true
 cp -r grafana/dashboards/* "${DEPLOY_DIR}/grafana/dashboards/" 2>/dev/null || true
 cp -r grafana/provisioning/dashboards/* "${DEPLOY_DIR}/grafana/provisioning/dashboards/" 2>/dev/null || true
 cp -r grafana/provisioning/datasources/* "${DEPLOY_DIR}/grafana/provisioning/datasources/" 2>/dev/null || true
