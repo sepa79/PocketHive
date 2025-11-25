@@ -153,7 +153,7 @@ class SwarmLifecycleManagerTest {
     assertThat(stopNode.path("args").path("data").path("enabled").asBoolean(true)).isFalse();
     ArgumentCaptor<String> statusPayload = ArgumentCaptor.forClass(String.class);
     verify(rabbit).convertAndSend(eq(CONTROL_EXCHANGE),
-        startsWith("ev.status-delta.swarm-controller.inst"),
+        startsWith("ev.status-delta." + TEST_SWARM_ID + ".swarm-controller.inst"),
         statusPayload.capture());
     JsonNode statusNode = mapper.readTree(statusPayload.getValue());
     assertThat(statusNode.path("data").path("swarmStatus").asText()).isEqualTo("STOPPED");
@@ -421,7 +421,9 @@ class SwarmLifecycleManagerTest {
     ArgumentCaptor<String> fanoutDisable = ArgumentCaptor.forClass(String.class);
     InOrder inStop = inOrder(rabbit);
     inStop.verify(rabbit).convertAndSend(eq(CONTROL_EXCHANGE), eq(BROADCAST_ROUTE), fanoutDisable.capture());
-    inStop.verify(rabbit).convertAndSend(eq(CONTROL_EXCHANGE), startsWith("ev.status-delta.swarm-controller.inst"), anyString());
+    inStop.verify(rabbit).convertAndSend(eq(CONTROL_EXCHANGE),
+        startsWith("ev.status-delta." + TEST_SWARM_ID + ".swarm-controller.inst"),
+        anyString());
     JsonNode fanoutDisableNode = mapper.readTree(fanoutDisable.getValue());
     assertThat(fanoutDisableNode.path("signal").asText()).isEqualTo(ControlPlaneSignals.CONFIG_UPDATE);
     assertThat(fanoutDisableNode.path("args").path("data").path("enabled").asBoolean(true)).isFalse();
@@ -470,7 +472,9 @@ class SwarmLifecycleManagerTest {
     ArgumentCaptor<String> broadcastDisable = ArgumentCaptor.forClass(String.class);
     InOrder inStop = inOrder(rabbit);
     inStop.verify(rabbit).convertAndSend(eq(CONTROL_EXCHANGE), eq(BROADCAST_ROUTE), broadcastDisable.capture());
-    inStop.verify(rabbit).convertAndSend(eq(CONTROL_EXCHANGE), startsWith("ev.status-delta.swarm-controller.inst"), anyString());
+    inStop.verify(rabbit).convertAndSend(eq(CONTROL_EXCHANGE),
+        startsWith("ev.status-delta." + TEST_SWARM_ID + ".swarm-controller.inst"),
+        anyString());
     JsonNode broadcastDisableNode = mapper.readTree(broadcastDisable.getValue());
     assertThat(broadcastDisableNode.path("signal").asText()).isEqualTo(ControlPlaneSignals.CONFIG_UPDATE);
     assertThat(broadcastDisableNode.path("args").path("data").path("enabled").asBoolean(true)).isFalse();
@@ -536,7 +540,7 @@ class SwarmLifecycleManagerTest {
     manager.markReady("gen", "g1");
 
     assertThat(output)
-        .doesNotContain("[CTRL] SEND rk=ev.status-delta.swarm-controller.inst")
+        .doesNotContain("[CTRL] SEND rk=ev.status-delta." + TEST_SWARM_ID + ".swarm-controller.inst")
         .contains("Requesting status for gen.g1 because heartbeat is stale")
         .contains("[CTRL] SEND rk=" + ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, TEST_SWARM_ID, "gen", "g1"))
         .contains("reason=stale-heartbeat");

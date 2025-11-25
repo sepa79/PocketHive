@@ -3,6 +3,7 @@ package io.pockethive.swarmcontroller.runtime;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.MeterRegistry;
+import io.pockethive.control.ConfirmationScope;
 import io.pockethive.controlplane.ControlPlaneSignals;
 import io.pockethive.controlplane.messaging.ControlPlanePublisher;
 import io.pockethive.controlplane.messaging.EventMessage;
@@ -248,7 +249,9 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
     setControllerEnabled(false);
 
     String controlQueue = properties.controlQueueName(role, instanceId);
-    String rk = "ev.status-delta." + role + "." + instanceId;
+    String rk = ControlPlaneRouting.event(
+        "status-delta",
+        ConfirmationScope.forInstance(swarmId, role, instanceId));
     String payload = new StatusEnvelopeBuilder()
         .kind("status-delta")
         .role(role)
