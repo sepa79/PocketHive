@@ -11,59 +11,97 @@ env:
   IMAGE_PREFIX: ${{ github.repository_owner }}/pockethive
 
 jobs:
+  build-base:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      version: ${{ steps.version.outputs.version }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract version
+        id: version
+        run: |
+          VERSION=$(tr -d '\n' < VERSION)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            echo "tag=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=latest" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build and push base image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: docker/base/Dockerfile
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/jvm-base:${{ steps.version.outputs.tag }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/jvm-base:${{ steps.version.outputs.version }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
   publish:
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
-    
+    needs: build-base
+
     strategy:
       matrix:
         service:
-          - name: jvm-base
-            dockerfile: docker/base/Dockerfile
-            kind: base
           - name: log-aggregator
             dockerfile: log-aggregator-service/Dockerfile.runtime
-            kind: runtime
+            target: ""
           - name: scenario-manager
             dockerfile: scenario-manager-service/Dockerfile.runtime
-            kind: runtime
+            target: ""
           - name: orchestrator
             dockerfile: orchestrator-service/Dockerfile.runtime
-            kind: runtime
+            target: ""
           - name: swarm-controller
             dockerfile: Dockerfile.bees.local
-            kind: bee
             target: swarm-controller
           - name: generator
             dockerfile: Dockerfile.bees.local
-            kind: bee
             target: generator
           - name: http-builder
             dockerfile: Dockerfile.bees.local
-            kind: bee
             target: http-builder
           - name: moderator
             dockerfile: Dockerfile.bees.local
-            kind: bee
             target: moderator
           - name: processor
             dockerfile: Dockerfile.bees.local
-            kind: bee
             target: processor
           - name: postprocessor
             dockerfile: Dockerfile.bees.local
-            kind: bee
             target: postprocessor
           - name: trigger
             dockerfile: Dockerfile.bees.local
-            kind: bee
             target: trigger
           - name: ui
             dockerfile: ui/Dockerfile
-            kind: ui
-    
+            target: ""
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -103,31 +141,16 @@ jobs:
             echo "Staged ${jar} -> .local-jars/${module}.jar"
           done
 
-      - name: Build local JVM base image for bees
-        run: |
-          docker build -f docker/base/Dockerfile -t pockethive-jvm-base:latest docker/base
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-      
+
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      
-      - name: Extract version
-        id: version
-        run: |
-          VERSION=$(tr -d '\n' < VERSION)
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
-            echo "tag=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
-          else
-            echo "tag=latest" >> "$GITHUB_OUTPUT"
-          fi
-      
+
       - name: Build and push ${{ matrix.service.name }}
         uses: docker/build-push-action@v5
         with:
@@ -136,9 +159,10 @@ jobs:
           target: ${{ matrix.service.target }}
           push: true
           build-args: |
-            RUNTIME_IMAGE=pockethive-jvm-base:latest
+            RUNTIME_IMAGE=${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/jvm-base:${{ needs.build-base.outputs.tag }}
           tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.service.name }}:${{ steps.version.outputs.tag }}
-            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.service.name }}:${{ steps.version.outputs.version }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.service.name }}:${{ needs.build-base.outputs.tag }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.service.name }}:${{ needs.build-base.outputs.version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
