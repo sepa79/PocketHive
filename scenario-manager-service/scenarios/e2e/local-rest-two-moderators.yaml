@@ -30,9 +30,10 @@ template:
     - role: generator
       image: generator:latest
       config:
+        inputs:
+          scheduler:
+            ratePerSec: 10
         worker:
-          ratePerSec: 10
-          singleRequest: false
           message:
             bodyType: HTTP
             path: /api/guarded

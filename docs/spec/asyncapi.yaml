@@ -535,6 +535,16 @@ components:
               tps:
                 type: integer
                 minimum: 0
+              workers:
+                type: array
+                description: >
+                  Per-worker status entries (bean name, role, IO bindings, config and
+                  worker-specific data). The exact shape of each entry is intentionally
+                  loosely typed; consumers should treat fields other than 'worker' and
+                  'role' as best-effort metadata.
+                items:
+                  type: object
+                  additionalProperties: true
     ControlStatusDeltaPayload:
       allOf:
       - $ref: '#/components/schemas/ControlBase'
@@ -552,6 +562,15 @@ components:
               tps:
                 type: integer
                 minimum: 0
+              workers:
+                type: array
+                description: >
+                  Per-worker status entries (bean name, role, IO bindings, config and
+                  worker-specific data) for the interval since the last status event.
+                  The exact shape of each entry is intentionally loosely typed.
+                items:
+                  type: object
+                  additionalProperties: true
     ControlLifecyclePayload:
       allOf:
       - $ref: '#/components/schemas/ControlBase'

@@ -5,6 +5,7 @@ import io.lettuce.core.RedisURI;
 import io.lettuce.core.api.StatefulRedisConnection;
 import io.lettuce.core.api.sync.RedisCommands;
 import io.pockethive.controlplane.ControlPlaneIdentity;
+import io.pockethive.worker.sdk.api.StatusPublisher;
 import io.pockethive.worker.sdk.api.WorkItem;
 import io.pockethive.worker.sdk.config.RedisDataSetInputProperties;
 import io.pockethive.worker.sdk.input.WorkInput;
@@ -12,11 +13,13 @@ import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
 import io.pockethive.worker.sdk.runtime.WorkerRuntime;
 import java.time.Duration;
-import java.util.Objects;
+import java.time.Instant;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -41,6 +44,12 @@ public final class RedisDataSetWorkInput implements WorkInput {
     private volatile RedisListClient redisClient;
     private volatile long tickIntervalMs;
     private double carryOver;
+    private volatile StatusPublisher statusPublisher;
+    private final AtomicLong dispatchedCount = new AtomicLong();
+    private volatile long lastPopAtMillis;
+    private volatile long lastEmptyAtMillis;
+    private volatile long lastErrorAtMillis;
+    private volatile String lastErrorMessage;
 
     public RedisDataSetWorkInput(
         WorkerDefinition workerDefinition,
@@ -79,6 +88,13 @@ public final class RedisDataSetWorkInput implements WorkInput {
         enabled = properties.isEnabled();
         tickIntervalMs = Math.max(100L, properties.getTickIntervalMs());
         registerStateListener();
+        try {
+            this.statusPublisher = controlPlaneRuntime.statusPublisher(workerDefinition.beanName());
+        } catch (Exception ex) {
+            if (log.isDebugEnabled()) {
+                log.debug("{} redis dataset could not obtain status publisher for diagnostics", workerDefinition.beanName(), ex);
+            }
+        }
         controlPlaneRuntime.emitStatusSnapshot();
         redisClient = clientFactory.create(properties);
         schedulerExecutor = Executors.newSingleThreadScheduledExecutor(r -> {
@@ -112,6 +128,7 @@ public final class RedisDataSetWorkInput implements WorkInput {
      * Executes a single tick using the configured rate budget.
      */
     public void tick() {
+        long now = System.currentTimeMillis();
         if (!running) {
             if (log.isDebugEnabled()) {
                 log.debug("{} redis dataset input not running; skipping tick", workerDefinition.beanName());
@@ -138,12 +155,17 @@ public final class RedisDataSetWorkInput implements WorkInput {
                 value = redisClient.pop(properties.getListName());
             } catch (Exception ex) {
                 log.warn("{} failed to read from Redis list {}", workerDefinition.beanName(), properties.getListName(), ex);
+                lastErrorAtMillis = now;
+                lastErrorMessage = ex.getMessage();
+                publishDiagnostics();
                 break;
             }
             if (value == null) {
                 if (log.isDebugEnabled()) {
                     log.debug("{} redis dataset is empty for list {}", workerDefinition.beanName(), properties.getListName());
                 }
+                lastEmptyAtMillis = now;
+                publishDiagnostics();
                 break;
             }
             try {
@@ -152,11 +174,14 @@ public final class RedisDataSetWorkInput implements WorkInput {
                     .header("instanceId", identity.instanceId())
                     .header("x-ph-redis-list", properties.getListName())
                     .build();
+                dispatchedCount.incrementAndGet();
+                lastPopAtMillis = now;
                 workerRuntime.dispatch(workerDefinition.beanName(), item);
             } catch (Exception ex) {
                 log.warn("{} failed to dispatch redis dataset item", workerDefinition.beanName(), ex);
             }
         }
+        publishDiagnostics();
     }
 
     private void safeTick() {
@@ -164,6 +189,9 @@ public final class RedisDataSetWorkInput implements WorkInput {
             tick();
         } catch (Exception ex) {
             log.warn("{} redis dataset tick failed", workerDefinition.beanName(), ex);
+            lastErrorAtMillis = System.currentTimeMillis();
+            lastErrorMessage = ex.getMessage();
+            publishDiagnostics();
         }
     }
 
@@ -263,6 +291,39 @@ public final class RedisDataSetWorkInput implements WorkInput {
             }
         }
         return null;
+    }
+
+    private void publishDiagnostics() {
+        StatusPublisher publisher = this.statusPublisher;
+        if (publisher == null) {
+            return;
+        }
+        long dispatched = dispatchedCount.get();
+        long lastPop = lastPopAtMillis;
+        long lastEmpty = lastEmptyAtMillis;
+        long lastError = lastErrorAtMillis;
+        String error = lastErrorMessage;
+        publisher.update(status -> {
+            Map<String, Object> data = new java.util.LinkedHashMap<>();
+            data.put("host", properties.getHost());
+            data.put("port", properties.getPort());
+            data.put("listName", properties.getListName());
+            data.put("ratePerSec", properties.getRatePerSec());
+            data.put("dispatched", dispatched);
+            if (lastPop > 0L) {
+                data.put("lastPopAt", Instant.ofEpochMilli(lastPop).toString());
+            }
+            if (lastEmpty > 0L) {
+                data.put("lastEmptyAt", Instant.ofEpochMilli(lastEmpty).toString());
+            }
+            if (lastError > 0L) {
+                data.put("lastErrorAt", Instant.ofEpochMilli(lastError).toString());
+            }
+            if (error != null && !error.isBlank()) {
+                data.put("lastErrorMessage", error);
+            }
+            status.data("redisDataset", data);
+        });
     }
 
     private void validateConfiguration() {

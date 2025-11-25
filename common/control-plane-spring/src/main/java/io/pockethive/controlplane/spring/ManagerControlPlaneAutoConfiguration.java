@@ -26,7 +26,7 @@ import org.springframework.context.annotation.Configuration;
  */
 @Configuration(proxyBeanMethods = false)
 @ConditionalOnClass(ManagerControlPlane.class)
-@ConditionalOnProperty(prefix = "pockethive.control-plane.manager", name = "enabled", havingValue = "true", matchIfMissing = true)
+@ConditionalOnProperty(prefix = "pockethive.control-plane.manager", name = "enabled", havingValue = "true", matchIfMissing = false)
 public class ManagerControlPlaneAutoConfiguration {
 
     private final ControlPlaneProperties properties;

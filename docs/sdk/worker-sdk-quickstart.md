@@ -43,10 +43,10 @@ See the [control-plane worker guide](../control-plane/worker-guide.md#configurat
 
 ## 2. Annotate worker beans
 
-Annotate each business implementation with `@PocketHiveWorker`. Select the appropriate input binding (`RABBIT` by
-default, `SCHEDULER` for timer-driven workers). Queue metadata now flows solely from the control-plane plan via the
-`pockethive.inputs/outputs.*` configuration (or the matching environment variables), so the annotation only captures input
-type, capabilities, and optional config. The worker role now comes from `pockethive.control-plane.worker.role`
+Annotate each business implementation with `@PocketHiveWorker`. Queue and transport metadata now
+flows solely from the control-plane plan via the `pockethive.inputs/outputs.*` configuration
+(or the matching environment variables), so the annotation only captures capabilities and
+optional config. The worker role comes from `pockethive.control-plane.worker.role`
 (injected through `POCKETHIVE_CONTROL_PLANE_WORKER_ROLE`). Optional `config` classes participate in
 Stage 2 control-plane hydration.
 
@@ -60,7 +60,8 @@ class ProcessorWorkerImpl implements MessageWorker {
 }
 ```
 
-Generator workers follow the same pattern but typically specify `input = WorkerInputType.SCHEDULER`. Their queues come from the same plan-driven IO configuration described above.
+Generator and trigger workers follow the same pattern. Their IO type (`SCHEDULER` vs `RABBITMQ`)
+is selected via `pockethive.inputs.type` in configuration, not via annotation attributes.
 
 > **Status topology note**
 > The Worker SDK automatically mirrors plan-provided queues into the control-plane status payload via `statusPublisher().workIn(...)` and `statusPublisher().workOut(...)`. The legacy `inQueue` field in status events has been removed; consumers should rely on the richer `queues.work`/`queues.control` block instead.

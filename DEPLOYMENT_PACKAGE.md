@@ -141,11 +141,9 @@ All images are pulled from GitHub Container Registry:
 | 15674 | RabbitMQ Web STOMP   | WebSocket STOMP                |
 | 6379  | Redis                | Dataset cache/source           |
 | 8081  | Redis Commander      | Redis web UI                   |
-| 3000  | Grafana              | Dashboards (pockethive/pockethive) |
-| 9090  | Prometheus           | Metrics                        |
-| 9091  | Pushgateway          | Metrics push endpoint          |
-| 3100  | Loki                 | Log aggregation                |
+| 3333  | Grafana              | Dashboards (direct, optional)  |
 | 8080  | WireMock             | HTTP mocks                     |
+| 1080  | Log Aggregator       | Log aggregation API            |
 | 1081  | Scenario Manager     | Scenario API                   |
 
 ## Persistent Data

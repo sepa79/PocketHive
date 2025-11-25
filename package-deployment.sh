@@ -142,13 +142,15 @@ docker compose restart grafana
 
 ## Ports
 
-- 8088 - UI
+- 8088 - UI (also proxies Grafana, Prometheus, RabbitMQ UI, Redis Commander)
 - 5672 - RabbitMQ AMQP
 - 15672 - RabbitMQ Management
 - 15674 - RabbitMQ Web STOMP
-- 3000 - Grafana
-- 9090 - Prometheus
+- 6379 - Redis
+- 8081 - Redis Commander
+- 3333 - Grafana (direct, optional)
 - 8080 - WireMock
+- 1080 - Log Aggregator
 - 1081 - Scenario Manager
 
 ## Support

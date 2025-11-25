@@ -57,7 +57,6 @@ public final class BeeNameGenerator {
   private static final Map<String, String> ROLE_MAP =
       Map.of(
           "generator", "seeder",
-          "data-provider", "seeder",
           "moderator", "guardian",
           "processor", "worker",
           "postprocessor", "forager",

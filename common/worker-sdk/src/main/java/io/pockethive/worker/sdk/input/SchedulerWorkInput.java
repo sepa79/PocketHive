@@ -1,12 +1,14 @@
 package io.pockethive.worker.sdk.input;
 
 import io.pockethive.controlplane.ControlPlaneIdentity;
+import io.pockethive.worker.sdk.api.StatusPublisher;
 import io.pockethive.worker.sdk.api.WorkItem;
 import io.pockethive.worker.sdk.config.SchedulerInputProperties;
 import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
 import io.pockethive.worker.sdk.runtime.WorkerRuntime;
 import java.time.Instant;
+import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -35,6 +37,7 @@ public final class SchedulerWorkInput<C> implements WorkInput {
     private final WorkerRuntime workerRuntime;
     private final ControlPlaneIdentity identity;
     private final SchedulerState<C> schedulerState;
+    private final SchedulerInputProperties scheduling;
     private final BiFunction<WorkerDefinition, ControlPlaneIdentity, WorkItem> seedFactory;
     private final BiConsumer<WorkItem, WorkerDefinition> resultHandler;
     private final Consumer<Exception> dispatchErrorHandler;
@@ -42,8 +45,11 @@ public final class SchedulerWorkInput<C> implements WorkInput {
     private final long initialDelayMs;
     private final long tickIntervalMs;
 
+    private final java.util.concurrent.atomic.AtomicLong dispatchedCount = new java.util.concurrent.atomic.AtomicLong();
+
     private volatile boolean running;
     private volatile boolean listenersRegistered;
+    private volatile StatusPublisher statusPublisher;
     private ScheduledExecutorService schedulerExecutor;
 
     private SchedulerWorkInput(Builder<C> builder) {
@@ -52,6 +58,7 @@ public final class SchedulerWorkInput<C> implements WorkInput {
         this.workerRuntime = builder.workerRuntime;
         this.identity = builder.identity;
         this.schedulerState = builder.schedulerState;
+        this.scheduling = builder.scheduling;
         this.seedFactory = builder.seedFactory;
         this.resultHandler = builder.resultHandler;
         this.dispatchErrorHandler = builder.dispatchErrorHandler;
@@ -86,11 +93,35 @@ public final class SchedulerWorkInput<C> implements WorkInput {
             }
             return;
         }
+        long limit = scheduling.getMaxMessages();
+        if (limit > 0L) {
+            long remaining = Math.max(0L, limit - dispatchedCount.get());
+            if (remaining <= 0L) {
+                if (log.isDebugEnabled()) {
+                    log.debug(
+                        "{} scheduler finite-run exhausted at tick {} (maxMessages={}, dispatched={})",
+                        workerDefinition.beanName(), nowMillis, limit, dispatchedCount.get());
+                }
+                publishDiagnostics(limit);
+                return;
+            }
+            if (quota > remaining) {
+                quota = (int) remaining;
+            }
+        }
         if (log.isDebugEnabled()) {
             log.debug("{} scheduler dispatching {} invocation(s) at tick {}", workerDefinition.beanName(), quota, nowMillis);
         }
         for (int i = 0; i < quota; i++) {
             WorkItem seed = seedFactory.apply(workerDefinition, identity);
+            long maxMessages = scheduling.getMaxMessages();
+            if (maxMessages > 0L) {
+                long after = dispatchedCount.incrementAndGet();
+                long remainingAfter = Math.max(0L, maxMessages - after);
+                seed = seed.toBuilder()
+                    .header("x-ph-scheduler-remaining", remainingAfter)
+                    .build();
+            }
             try {
                 WorkItem result = workerRuntime.dispatch(workerDefinition.beanName(), seed);
                 if (result != null) {
@@ -100,6 +131,7 @@ public final class SchedulerWorkInput<C> implements WorkInput {
                 dispatchErrorHandler.accept(ex);
             }
         }
+        publishDiagnostics(limit);
     }
 
     @Override
@@ -108,6 +140,13 @@ public final class SchedulerWorkInput<C> implements WorkInput {
             return;
         }
         registerStateListeners();
+        try {
+            this.statusPublisher = controlPlaneRuntime.statusPublisher(workerDefinition.beanName());
+        } catch (Exception ex) {
+            if (log.isDebugEnabled()) {
+                log.debug("{} scheduler could not obtain status publisher for diagnostics", workerDefinition.beanName(), ex);
+            }
+        }
         controlPlaneRuntime.emitStatusSnapshot();
         running = true;
         schedulerExecutor = Executors.newSingleThreadScheduledExecutor(r -> {
@@ -152,6 +191,7 @@ public final class SchedulerWorkInput<C> implements WorkInput {
         controlPlaneRuntime.registerStateListener(workerDefinition.beanName(), snapshot -> {
             boolean previouslyEnabled = schedulerState.isEnabled();
             schedulerState.update(snapshot);
+            applyRawConfigOverrides(snapshot.rawConfig());
             boolean currentlyEnabled = schedulerState.isEnabled();
             if (previouslyEnabled != currentlyEnabled && log.isInfoEnabled()) {
                 log.info(
@@ -162,6 +202,67 @@ public final class SchedulerWorkInput<C> implements WorkInput {
             }
         });
         listenersRegistered = true;
+    }
+
+    @SuppressWarnings("unchecked")
+    private void applyRawConfigOverrides(Map<String, Object> rawConfig) {
+        if (rawConfig == null || rawConfig.isEmpty()) {
+            return;
+        }
+        Object inputs = rawConfig.get("inputs");
+        if (!(inputs instanceof Map<?, ?> inputsMap)) {
+            return;
+        }
+        Object scheduler = inputsMap.get("scheduler");
+        if (!(scheduler instanceof Map<?, ?> schedulerMap)) {
+            return;
+        }
+
+        // Rate per second override
+        Object rateObj = schedulerMap.get("ratePerSec");
+        if (rateObj instanceof Number number) {
+            double rate = number.doubleValue();
+            if (rate >= 0.0 && rate != scheduling.getRatePerSec()) {
+                scheduling.setRatePerSec(rate);
+                if (log.isInfoEnabled()) {
+                    log.info("{} scheduler ratePerSec updated via config: {}", workerDefinition.beanName(), rate);
+                }
+            }
+        }
+
+        // Finite-run configuration: maxMessages + optional reset flag
+        boolean resetRequested = false;
+        Object maxObj = schedulerMap.get("maxMessages");
+        if (maxObj instanceof Number maxNumber) {
+            long newMax = Math.max(0L, maxNumber.longValue());
+            long currentMax = scheduling.getMaxMessages();
+            if (newMax != currentMax) {
+                scheduling.setMaxMessages(newMax);
+                resetRequested = true;
+                if (log.isInfoEnabled()) {
+                    log.info(
+                        "{} scheduler maxMessages updated via config: {} (previous={})",
+                        workerDefinition.beanName(), newMax, currentMax);
+                }
+            }
+        }
+        Object resetObj = schedulerMap.get("reset");
+        if (resetObj instanceof Boolean b && b) {
+            resetRequested = true;
+        } else if (resetObj instanceof String s) {
+            String normalized = s.trim().toLowerCase(java.util.Locale.ROOT);
+            if ("true".equals(normalized)) {
+                resetRequested = true;
+            }
+        }
+        if (resetRequested) {
+            long before = dispatchedCount.getAndSet(0L);
+            if (log.isInfoEnabled()) {
+                log.info(
+                    "{} scheduler finite-run counters reset via config (previousDispatched={})",
+                    workerDefinition.beanName(), before);
+            }
+        }
     }
 
     private static WorkItem defaultSeed(WorkerDefinition definition, ControlPlaneIdentity identity) {
@@ -186,6 +287,24 @@ public final class SchedulerWorkInput<C> implements WorkInput {
         return new Builder<>();
     }
 
+    private void publishDiagnostics(long limit) {
+        StatusPublisher publisher = this.statusPublisher;
+        if (publisher == null) {
+            return;
+        }
+        long dispatched = dispatchedCount.get();
+        long remaining = limit > 0L ? Math.max(0L, limit - dispatched) : -1L;
+        boolean exhausted = limit > 0L && remaining == 0L;
+        double rate = scheduling.getRatePerSec();
+        publisher.update(status -> status.data("scheduler", Map.of(
+            "ratePerSec", rate,
+            "maxMessages", limit,
+            "dispatched", dispatched,
+            "remaining", remaining >= 0L ? remaining : null,
+            "exhausted", exhausted
+        )));
+    }
+
     /**
      * Builder for {@link SchedulerWorkInput} instances.
      */
@@ -200,6 +319,7 @@ public final class SchedulerWorkInput<C> implements WorkInput {
         private BiConsumer<WorkItem, WorkerDefinition> resultHandler = SchedulerWorkInput::ignoreResult;
         private Consumer<Exception> dispatchErrorHandler = ex -> defaultLog.warn("Scheduler worker invocation failed", ex);
         private Logger log = defaultLog;
+        private SchedulerInputProperties scheduling = new SchedulerInputProperties();
         private long initialDelayMs = 0L;
         private long tickIntervalMs = 1_000L;
 
@@ -246,9 +366,9 @@ public final class SchedulerWorkInput<C> implements WorkInput {
         }
 
         public Builder<C> scheduling(SchedulerInputProperties properties) {
-            SchedulerInputProperties props = properties == null ? new SchedulerInputProperties() : properties;
-            this.initialDelayMs = Math.max(0L, props.getInitialDelayMs());
-            this.tickIntervalMs = Math.max(100L, props.getTickIntervalMs());
+            this.scheduling = properties == null ? new SchedulerInputProperties() : properties;
+            this.initialDelayMs = Math.max(0L, scheduling.getInitialDelayMs());
+            this.tickIntervalMs = Math.max(100L, scheduling.getTickIntervalMs());
             return this;
         }
 

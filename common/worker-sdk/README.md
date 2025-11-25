@@ -32,7 +32,6 @@ to suppress publishing.
 ```java
 @Component("generatorWorker")
 @PocketHiveWorker(
-    input = WorkerInputType.SCHEDULER,
     config = GeneratorWorkerConfig.class
 )
 class GeneratorWorkerImpl implements PocketHiveWorkerFunction {
@@ -106,10 +105,43 @@ Every invocation receives a `WorkerContext` that exposes topology metadata (`Wor
 
 The control-plane runtime bridges the SDK with the control-plane topic. It applies config updates, maintains per-worker state, publishes ready/status events, and exposes listeners. Stage 2 and Stage 3 capabilities (config hydration, status deltas, observability scaffolding) are detailed in the Stage 1 runtime notes within the documentation archive and extended in the [quick start](../../docs/sdk/worker-sdk-quickstart.md).
 
+### Scheduler finite-run (rate + maxMessages)
+
+The scheduler input used by generator/trigger-style workers supports a simple finite-run mode
+driven entirely by configuration under the IO section:
+
+```yaml
+pockethive:
+  inputs:
+    type: SCHEDULER
+    scheduler:
+      ratePerSec: 50        # dispatch rate in messages per second (>= 0)
+      maxMessages: 1000     # optional finite cap; 0 means “no limit”
+```
+
+Behaviour:
+
+- `ratePerSec` controls how many seeds are dispatched per second; it can be updated at runtime via
+  `config-update` on `inputs.scheduler.ratePerSec`.
+- When `maxMessages > 0`, the scheduler tracks how many seeds have been dispatched for the current
+  configuration. Once `dispatched >= maxMessages`, the scheduler stops emitting new seeds but keeps
+  honouring config updates and enable/disable commands.
+- A config update that changes `maxMessages` or sets `inputs.scheduler.reset=true` resets the
+  internal counters and clears the exhaustion flag for a fresh run.
+
+For telemetry:
+
+- Each generated seed carries `x-ph-scheduler-remaining` when `maxMessages > 0`, indicating how
+  many seeds remain after this dispatch for the current configuration.
+- Scheduler runtime diagnostics are exposed in worker status under `data.scheduler`:
+  `ratePerSec`, `maxMessages`, `dispatched`, `remaining`, and `exhausted`. UIs can surface these
+  fields without reaching into worker internals.
+
 ## Putting it together
 
 1. Add the `worker-sdk` dependency to your service.
-2. Annotate business beans with `@PocketHiveWorker`, selecting the appropriate input binding (Rabbit by default). Queue bindings are provided by the swarm plan via `pockethive.inputs/outputs.*`.
+2. Annotate business beans with `@PocketHiveWorker`. IO bindings are configured via
+   `pockethive.inputs/outputs.*` and the swarm plan; the annotation no longer carries input/output types.
 3. Implement `PocketHiveWorkerFunction` and return `WorkItem` instances (or `null` for no output).
 4. The SDK automatically wires the Rabbit or scheduler inputs/outputs for the registered `@PocketHiveWorker`. Only build custom `WorkInputFactory` implementations when you truly need a bespoke transport.
 5. Use `WorkerContext` for config, metrics, observability, and status reporting.

@@ -37,6 +37,27 @@
 - Next, peel the lifecycle orchestration logic out of `SwarmLifecycleManager` into the Swarm runtime core and wrap the current RabbitMQ/Docker wiring in adapters, keeping behaviour intact while enabling orchestrator/worker reuse. As part of this step, introduce the explicit `SwarmRuntimeContext` and topology/resource tracking so queue/container removal is driven purely by the stored plan-derived resource set rather than ad hoc maps.
 - Finally, layer the guard engine and scenario executor on top, enabling multiple guard instances and timed/even-driven scenarios without altering the main lifecycle orchestration logic.
 
+## Implementation status (2025-11-21)
+
+- [x] **Runtime context & topology**
+  - [x] Implement `SwarmRuntimeContext` capturing the active `SwarmPlan`, computed start order, and plan-derived work queue suffixes, and use it as the primary source of truth for `remove()` and queue metrics.
+  - [x] Extract AMQP work topology into `SwarmWorkTopologyManager` to declare/tear down the hive exchange and work queues based on the context’s suffix set.
+- [x] **Control-plane usage**
+  - [x] Switch Swarm Controller to the shared control-plane publisher (`ControlPlanePublisher` / `AmqpControlPlanePublisher`) for `config-update`, `status-request`, and status-delta events instead of hand-calling `RabbitTemplate`.
+  - [x] Centralise controller control routes in `SwarmControllerRoutes.controllerControlRoutes(...)` and reuse them from both `SwarmLifecycleManager` and `SwarmSignalListener`.
+- [x] **Guard engine**
+  - [x] Introduce a minimal `SwarmGuard` SPI and `GuardEngine` coordinator; adapt `BufferGuardController` to implement `SwarmGuard` and host it behind `GuardEngine`.
+  - [x] Drive guard start/stop/pause/resume via the engine so additional guards (backpressure, scenario-driven guards) can be composed without modifying `SwarmLifecycleManager`.
+- [x] **Swarm runtime core & adapters**
+  - [x] Extract a transport-agnostic Swarm runtime core and move Docker/Rabbit specifics into dedicated ports/adapters (`WorkloadProvisioner`, `TopologyProvisioner`, etc.).
+- [x] **Scenario engine & richer policies**
+  - [x] Add a scenario engine and richer guard orchestration (shared clock/timers where appropriate) on top of the current guard engine scaffolding, including support for multiple guards and scenario runners per swarm.
+- [x] **Diagnostics & problem signalling**
+  - [x] Define a consistent diagnostics model for inputs/outputs/interceptors (e.g. “no data in dataset”, “parse error”) surfaced via worker status events rather than ad-hoc control-plane errors.
+  - [x] Ensure Swarm Controller aggregates worker diagnostics into its own status payload, and decide which conditions, if any, should be emitted as dedicated control-plane events.
+- [x] **Architecture docs refresh**
+  - [x] After the refactor lands, update `docs/ARCHITECTURE.md` and relevant control-plane/SC docs to reflect the new runtime core, guard/scenario engine, and diagnostics signalling behaviour.
+
 > **Note on worker mounts:** Once the Swarm runtime core and `WorkloadProvisioner` port exist, extend the `SwarmPlan`/bee model with an optional per-worker `mounts` block (hostPath, containerPath, readOnly) and have the controller pass those through the Docker adapter when creating containers. Mount configuration must be plan-driven (no implicit defaults), and missing/invalid host paths should fail the swarm rather than being silently ignored. This keeps extra directories such as HTTP template roots or dataset folders under the same “plan is the only source of truth” rule as queues and images.
 
 ### Topology vs runtime IO configuration

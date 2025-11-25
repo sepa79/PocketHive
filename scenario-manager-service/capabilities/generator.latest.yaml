@@ -13,14 +13,6 @@ config:
   - name: enabled
     type: boolean
     default: false
-  - name: ratePerSec
-    type: number
-    default: 0
-    min: 0
-    max: 1000
-    ui:
-      step: 1
-      unit: msg/s
   - name: message.bodyType
     type: string
     default: "HTTP"

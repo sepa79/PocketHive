@@ -26,7 +26,7 @@ class ControllerStatusListenerTest {
     void updatesRegistry() {
         ControllerStatusListener listener = new ControllerStatusListener(registry, new ObjectMapper());
         String json = "{\"swarmId\":\"sw1\",\"data\":{\"swarmStatus\":\"RUNNING\",\"state\":{\"workloads\":{\"enabled\":true},\"controller\":{\"enabled\":false}}}}";
-        listener.handle(json, "ev.status-delta.swarm-controller.inst1");
+        listener.handle(json, "ev.status-delta.sw1.swarm-controller.inst1");
         verify(registry).refresh("sw1", SwarmHealth.RUNNING);
         verify(registry).updateWorkEnabled("sw1", true);
         verify(registry).updateControllerEnabled("sw1", false);
@@ -36,7 +36,7 @@ class ControllerStatusListenerTest {
     void updatesRegistryFromTopLevelFlags() {
         ControllerStatusListener listener = new ControllerStatusListener(registry, new ObjectMapper());
         String json = "{\"swarmId\":\"sw1\",\"data\":{\"swarmStatus\":\"STOPPED\",\"workloadsEnabled\":false,\"controllerEnabled\":true}}";
-        listener.handle(json, "ev.status-delta.swarm-controller.inst1");
+        listener.handle(json, "ev.status-delta.sw1.swarm-controller.inst1");
         verify(registry).refresh("sw1", SwarmHealth.DEGRADED);
         verify(registry).updateWorkEnabled("sw1", false);
         verify(registry).updateControllerEnabled("sw1", true);
@@ -49,8 +49,8 @@ class ControllerStatusListenerTest {
         Level previous = logger.getLevel();
         logger.setLevel(Level.INFO);
         try {
-            listener.handle("{}", "ev.status-delta.swarm-controller.inst1");
-            assertThat(output).doesNotContain("[CTRL] RECV rk=ev.status-delta.swarm-controller.inst1");
+            listener.handle("{}", "ev.status-delta.sw1.swarm-controller.inst1");
+            assertThat(output).doesNotContain("[CTRL] RECV rk=ev.status-delta.sw1.swarm-controller.inst1");
         } finally {
             logger.setLevel(previous);
         }
@@ -78,7 +78,7 @@ class ControllerStatusListenerTest {
     void handleRejectsBlankPayload() {
         ControllerStatusListener listener = new ControllerStatusListener(registry, new ObjectMapper());
 
-        assertThatThrownBy(() -> listener.handle(" ", "ev.status-delta.swarm-controller.inst1"))
+        assertThatThrownBy(() -> listener.handle(" ", "ev.status-delta.sw1.swarm-controller.inst1"))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("payload");
     }

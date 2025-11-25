@@ -93,6 +93,7 @@ function normalizeConfigEntry(entry: unknown) {
     max: typeof value.max === 'number' ? value.max : undefined,
     multiline: typeof value.multiline === 'boolean' ? value.multiline : undefined,
     ui: value.ui,
+    when: typeof value.when === 'object' && value.when !== null ? (value.when as Record<string, unknown>) : undefined,
     options,
   } satisfies CapabilityConfigEntry
 }
@@ -140,7 +141,15 @@ function normalizeUi(entry: unknown): CapabilityUi | undefined {
   const color = sanitizeColor(value.color)
   const shapeValue = typeof value.shape === 'string' ? value.shape.trim().toLowerCase() : undefined
   const shape = isCapabilityShape(shapeValue) ? shapeValue : undefined
-  return { label, abbreviation, color, shape }
+  const ui: CapabilityUi = { label, abbreviation, color, shape }
+  // Preserve any additional UI fields (e.g. ioType) for advanced use cases.
+  for (const [key, raw] of Object.entries(value)) {
+    if (key === 'label' || key === 'abbreviation' || key === 'color' || key === 'shape') {
+      continue
+    }
+    ui[key] = raw
+  }
+  return ui
 }
 
 function sanitizeColor(value: unknown): string | undefined {

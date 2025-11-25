@@ -67,7 +67,9 @@ class WorkerMetricsInterceptorTest {
             "management.prometheus.metrics.export.pushgateway.job=worker-metrics-test",
             "management.prometheus.metrics.export.pushgateway.shutdown-operation=DELETE",
             "management.prometheus.metrics.export.pushgateway.grouping-key.instance=metrics-worker",
+            "pockethive.inputs.type=RABBITMQ",
             "pockethive.inputs.rabbit.queue=ph.metrics.in",
+            "pockethive.outputs.type=RABBITMQ",
             "pockethive.outputs.rabbit.exchange=ph.metrics.hive",
             "pockethive.outputs.rabbit.routingKey=ph.metrics.out"
         )
@@ -207,10 +209,7 @@ class WorkerMetricsInterceptorTest {
         }
     }
 
-    @PocketHiveWorker(
-        input = WorkerInputType.RABBITMQ,
-        output = WorkerOutputType.RABBITMQ
-    )
+    @PocketHiveWorker
     static class TestWorker implements PocketHiveWorkerFunction {
 
         @Override

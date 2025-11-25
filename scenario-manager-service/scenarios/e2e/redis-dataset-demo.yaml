@@ -7,9 +7,13 @@ template:
     - role: generator
       image: generator:latest
       config:
+        outputs:
+          type: NONE
+        inputs:
+          type: SCHEDULER
+          scheduler:
+            ratePerSec: 5
         worker:
-          ratePerSec: 5
-          singleRequest: false
           message:
             bodyType: SIMPLE
             body: |
@@ -19,18 +23,12 @@ template:
               "accountNumber":"{{ eval('#randInt(10000000,99999999)') }}",
               "cardNumber":"{{ card }}",
               "nonce":"{{ eval('#uuid()') }}"}
-      work:
-        out: seed-redis
-
-    - role: redis-postprocessor
-      image: postprocessor:latest
-      config:
         interceptors:
           redisUploader:
             enabled: true
             host: redis
             port: 6379
-            phase: BEFORE
+            phase: AFTER
             sourceStep: LAST
             pushDirection: RPUSH
             routes:
@@ -39,48 +37,47 @@ template:
               - match: '"customerCode"\s*:\s*"custB"'
                 list: ph:dataset:custb
             fallbackList: ph:dataset:other
-      work:
-        in: seed-redis
+      work: {}
 
-    - role: data-provider
-      image: data-provider:latest
+    - role: generator
+      image: generator:latest
       config:
+        inputs:
+          type: REDIS_DATASET
+          redis:
+            host: redis
+            port: 6379
+            listName: ph:dataset:custa
+            ratePerSec: 5
         worker:
-          template:
+          message:
             bodyType: SIMPLE
             body: "{{ payload }}"
             headers:
               content-type: application/json
               x-ph-call-id: >
                 {{ eval("#randInt(0,99) < 50 ? 'redis-auth' : (#randInt(0,99) < 80 ? 'redis-balance' : 'redis-topup')") }}
-        inputs:
-          redis:
-            enabled: true
-            host: redis
-            port: 6379
-            listName: ph:dataset:custa
-            ratePerSec: 5
       work:
         out: http-build
 
-    - role: data-provider
-      image: data-provider:latest
+    - role: generator
+      image: generator:latest
       config:
+        inputs:
+          type: REDIS_DATASET
+          redis:
+            host: redis
+            port: 6379
+            listName: ph:dataset:custb
+            ratePerSec: 5
         worker:
-          template:
+          message:
             bodyType: SIMPLE
             body: "{{ payload }}"
             headers:
               content-type: application/json
               x-ph-call-id: >
                 {{ eval("#randInt(0,99) < 40 ? 'redis-balance' : (#randInt(0,99) < 80 ? 'redis-topup' : 'redis-auth')") }}
-        inputs:
-          redis:
-            enabled: true
-            host: redis
-            port: 6379
-            listName: ph:dataset:custb
-            ratePerSec: 5
       work:
         out: http-build
 

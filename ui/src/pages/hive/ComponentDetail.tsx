@@ -20,7 +20,7 @@ export default function ComponentDetail({ component, onClose }: Props) {
   const [toast, setToast] = useState<string | null>(null)
   const [isEditing, setIsEditing] = useState(false)
   const [form, setForm] = useState<Record<string, ConfigFormValue>>({})
-  const { ensureCapabilities, getManifestForImage } = useCapabilities()
+  const { ensureCapabilities, getManifestForImage, manifests } = useCapabilities()
   const { ensureSwarms, getBeeImage, getControllerImage } = useSwarmMetadata()
   const resolvedImage = useMemo(() => {
     if (component.image) {
@@ -56,32 +56,14 @@ export default function ComponentDetail({ component, onClose }: Props) {
     void ensureSwarms()
   }, [ensureSwarms])
 
-  useEffect(() => {
-    const previousId = previousComponentIdRef.current
-    const idChanged = component.id !== previousId
-    if (isEditing && !idChanged) {
-      return
-    }
-    previousComponentIdRef.current = component.id
-    if (!manifest) {
-      setForm({})
-      return
-    }
-    const cfg = isRecord(component.config) ? component.config : undefined
-    const next: Record<string, ConfigFormValue> = {}
-    manifest.config.forEach((entry) => {
-      next[entry.name] = computeInitialValue(entry, cfg)
-    })
-    setForm(next)
-  }, [component.id, component.config, manifest, isEditing])
-
   const handleSubmit = async () => {
     if (!manifest) {
       displayToast(setToast, 'Capability manifest not available for this component')
       return
     }
     const cfg: Record<string, unknown> = {}
-    for (const entry of manifest.config) {
+    // Use merged worker + IO entries so IO changes (e.g. ratePerSec) are sent as part of the patch.
+    for (const entry of effectiveConfigEntries) {
       const result = convertFormValue(entry, form[entry.name])
       if (!result.ok) {
         displayToast(setToast, result.message)
@@ -100,25 +82,17 @@ export default function ComponentDetail({ component, onClose }: Props) {
     }
   }
 
-  const single = async () => {
-    try {
-      await sendConfigUpdate(component, { singleRequest: true })
-      displayToast(setToast, 'Config update sent')
-    } catch {
-      displayToast(setToast, 'Config update failed')
-    }
-  }
-
   const health = heartbeatHealth(component.lastHeartbeat)
   const role = component.role.trim() || '—'
   const normalizedRole = component.role.trim().toLowerCase()
   const isWiremock = normalizedRole === 'wiremock'
+  const componentConfig =
+    component.config && typeof component.config === 'object'
+      ? (component.config as Record<string, unknown>)
+      : undefined
 
   const runtimeEntries = useMemo(() => {
-    const cfg =
-      component.config && typeof component.config === 'object'
-        ? (component.config as Record<string, unknown>)
-        : undefined
+    const cfg = componentConfig
     if (!cfg) return [] as { label: string; value: string }[]
     const entries: { label: string; value: string }[] = []
     const tps = getNumber(cfg.tps)
@@ -168,18 +142,202 @@ export default function ComponentDetail({ component, onClose }: Props) {
         value: httpMaxConnections.toString(),
       })
     }
+    // Scheduler finite-run/runtime config (if present)
+    const inputs =
+      cfg && cfg.inputs && typeof cfg.inputs === 'object'
+        ? (cfg.inputs as Record<string, unknown>)
+        : undefined
+    const scheduler =
+      inputs && inputs.scheduler && typeof inputs.scheduler === 'object'
+        ? (inputs.scheduler as Record<string, unknown>)
+        : undefined
+    const schedRate = scheduler ? getNumber(scheduler.ratePerSec) : undefined
+    const schedMax = scheduler ? getNumber(scheduler.maxMessages) : undefined
+    if (schedRate !== undefined) {
+      entries.push({
+        label: 'Scheduler rate (msg/s)',
+        value: schedRate.toString(),
+      })
+    }
+    if (schedMax !== undefined && schedMax > 0) {
+      entries.push({
+        label: 'Scheduler max messages',
+        value: schedMax.toString(),
+      })
+    }
+    // Scheduler runtime diagnostics (if present in status data)
+    const schedulerDiag =
+      cfg && cfg.scheduler && typeof cfg.scheduler === 'object'
+        ? (cfg.scheduler as Record<string, unknown>)
+        : undefined
+    if (schedulerDiag) {
+      const dispatched = getNumber(schedulerDiag.dispatched)
+      const remaining = getNumber(schedulerDiag.remaining)
+      const exhausted = getBoolean(schedulerDiag.exhausted)
+      if (dispatched !== undefined) {
+        entries.push({
+          label: 'Scheduler dispatched',
+          value: dispatched.toString(),
+        })
+      }
+      if (remaining !== undefined && remaining >= 0) {
+        entries.push({
+          label: 'Scheduler remaining',
+          value: remaining.toString(),
+        })
+      }
+      if (exhausted !== undefined) {
+        entries.push({
+          label: 'Scheduler exhausted',
+          value: exhausted ? 'true' : 'false',
+        })
+      }
+    }
+    // Redis dataset runtime diagnostics (if present in status data)
+    const redisDiag =
+      cfg && cfg.redisDataset && typeof cfg.redisDataset === 'object'
+        ? (cfg.redisDataset as Record<string, unknown>)
+        : undefined
+    if (redisDiag) {
+      const listName = getString(redisDiag.listName)
+      const rate = getNumber(redisDiag.ratePerSec)
+      const dispatched = getNumber(redisDiag.dispatched)
+      const lastPopAt = getString(redisDiag.lastPopAt)
+      const lastEmptyAt = getString(redisDiag.lastEmptyAt)
+      const lastErrorAt = getString(redisDiag.lastErrorAt)
+      const lastErrorMessage = getString(redisDiag.lastErrorMessage)
+      if (listName) {
+        entries.push({
+          label: 'Redis list',
+          value: listName,
+        })
+      }
+      if (rate !== undefined) {
+        entries.push({
+          label: 'Redis rate (msg/s)',
+          value: rate.toString(),
+        })
+      }
+      if (dispatched !== undefined) {
+        entries.push({
+          label: 'Redis dispatched',
+          value: dispatched.toString(),
+        })
+      }
+      if (lastPopAt) {
+        entries.push({
+          label: 'Last Redis pop at',
+          value: lastPopAt,
+        })
+      }
+      if (lastEmptyAt) {
+        entries.push({
+          label: 'Last Redis empty at',
+          value: lastEmptyAt,
+        })
+      }
+      if (lastErrorAt) {
+        entries.push({
+          label: 'Last Redis error at',
+          value: lastErrorAt,
+        })
+      }
+      if (lastErrorMessage) {
+        entries.push({
+          label: 'Last Redis error',
+          value: lastErrorMessage,
+        })
+      }
+    }
     return entries
   }, [component.config])
 
-  const configEntries = manifest?.config ?? []
+  const effectiveConfigEntries: CapabilityConfigEntry[] = useMemo(() => {
+    if (!manifest) return []
+    const baseEntries = manifest.config ?? []
+
+    const cfg = componentConfig
+    const inputs =
+      cfg && cfg.inputs && typeof cfg.inputs === 'object'
+        ? (cfg.inputs as Record<string, unknown>)
+        : undefined
+    const inputType =
+      typeof inputs?.type === 'string' ? inputs.type.trim().toUpperCase() : undefined
+
+    const allEntries: CapabilityConfigEntry[] = [...baseEntries]
+
+    // Merge IO capabilities for the current input type, if any
+    if (inputType) {
+      const ioEntries: CapabilityConfigEntry[] = []
+      for (const m of manifests) {
+        const ui = m.ui as Record<string, unknown> | undefined
+        const ioTypeRaw = ui && typeof ui.ioType === 'string' ? ui.ioType : undefined
+        const ioType = ioTypeRaw ? ioTypeRaw.trim().toUpperCase() : undefined
+        if (ioType && ioType === inputType && Array.isArray(m.config)) {
+          ioEntries.push(...m.config)
+        }
+      }
+      allEntries.push(...ioEntries)
+    }
+
+    // De-duplicate by config name (first entry wins)
+    const byName = new Map<string, CapabilityConfigEntry>()
+    for (const entry of allEntries) {
+      if (!byName.has(entry.name)) {
+        byName.set(entry.name, entry)
+      }
+    }
+
+    // Apply simple conditional support based on entry.when (if present)
+    const merged = Array.from(byName.values())
+    if (!cfg) return merged
+
+    return merged.filter((entry) => {
+      const when = entry.when
+      if (!when || typeof when !== 'object') {
+        return true
+      }
+      const requiredInputTypeRaw = when['inputs.type']
+      const requiredInputType =
+        typeof requiredInputTypeRaw === 'string'
+          ? requiredInputTypeRaw.trim().toUpperCase()
+          : undefined
+      if (requiredInputType && inputType && requiredInputType !== inputType) {
+        return false
+      }
+      return true
+    })
+  }, [manifest, manifests, componentConfig])
+
+  useEffect(() => {
+    const previousId = previousComponentIdRef.current
+    const idChanged = component.id !== previousId
+    if (isEditing && !idChanged) {
+      return
+    }
+    previousComponentIdRef.current = component.id
+    if (!manifest) {
+      setForm({})
+      return
+    }
+    const cfg = isRecord(component.config) ? component.config : undefined
+    const next: Record<string, ConfigFormValue> = {}
+    // Use the merged worker + IO config entries when initialising the form,
+    // so IO fields (like ratePerSec) pick up existing values from config.
+    effectiveConfigEntries.forEach((entry) => {
+      next[entry.name] = computeInitialValue(entry, cfg)
+    })
+    setForm(next)
+  }, [component.id, component.config, manifest, isEditing, effectiveConfigEntries])
+
   const renderedContent = isWiremock ? (
     <WiremockPanel component={component} />
   ) : manifest ? (
     <div className="space-y-2">
-      {configEntries.length === 0 ? (
+      {effectiveConfigEntries.length === 0 ? (
         <div className="text-white/50">No configurable options</div>
       ) : (
-        configEntries.map((entry) => (
+        effectiveConfigEntries.map((entry) => (
           <ConfigEntryRow
             key={entry.name}
             entry={entry}
@@ -246,7 +404,7 @@ export default function ComponentDetail({ component, onClose }: Props) {
           ))}
         </div>
       )}
-      {!isWiremock && configEntries.length > 0 && (
+      {!isWiremock && effectiveConfigEntries.length > 0 && (
         <div className="mb-2 flex items-center justify-between text-xs text-white/60">
           <span className="uppercase tracking-wide text-white/50">Configuration</span>
           <label className="flex items-center gap-3 cursor-pointer select-none">
@@ -266,21 +424,13 @@ export default function ComponentDetail({ component, onClose }: Props) {
         </div>
       )}
       <div className={containerClass}>{renderedContent}</div>
-      {!isWiremock && configEntries.length > 0 && (
+      {!isWiremock && effectiveConfigEntries.length > 0 && (
         <button
           className="mb-4 rounded bg-blue-600 px-3 py-1 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
           onClick={handleSubmit}
           disabled={!isEditing}
         >
           Confirm
-        </button>
-      )}
-      {!isWiremock && (normalizedRole === 'generator' || normalizedRole === 'trigger') && (
-        <button
-          className="mb-4 rounded bg-blue-700 px-3 py-1 text-xs"
-          onClick={single}
-        >
-          {normalizedRole === 'trigger' ? 'Single trigger' : 'Single request'}
         </button>
       )}
       {toast && (
@@ -533,6 +683,16 @@ function getString(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined
   const trimmed = value.trim()
   return trimmed.length > 0 ? trimmed : undefined
+}
+
+function getBoolean(value: unknown): boolean | undefined {
+  if (typeof value === 'boolean') return value
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase()
+    if (normalized === 'true') return true
+    if (normalized === 'false') return false
+  }
+  return undefined
 }
 
 type ConversionResult =

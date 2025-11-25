@@ -26,8 +26,8 @@ The Swarm Controller already injects `POCKETHIVE_INPUT_RABBIT_QUEUE` / `POCKETHI
 - UI/runtime consumers already rely on the richer `queues.work` payload (per `docs/spec/control-events.schema.json`), so no UI code reads the deprecated fields anymore; no additional consumers were found under `ui/` or `scenario-manager-service/`.
 
 ## 2. Control-Plane Source of Truth
-- [ ] Confirm `SwarmPlan`/worker templates already carry `inputQueue`, `outputRoutingKey`, and `outputExchange`; update contracts so they’re required for all workers.
-- [ ] Ensure the orchestrator/control-plane emits those values into worker env/config (no missing fields) and fails fast when they’re absent instead of falling back to annotations.
+- [x] Confirm `SwarmPlan`/worker templates already carry `inputQueue`, `outputRoutingKey`, and `outputExchange`; update contracts so they’re required for all workers.
+- [x] Ensure the orchestrator/control-plane emits those values into worker env/config (no missing fields) and fails fast when they’re absent instead of falling back to annotations.
 
 ## 3. Runtime Refactor
 - [x] Update `RabbitWorkInputListenerConfigurer` so it binds listeners using plan-provided queue names (via `WorkIoBindings.inboundQueue()`), not the annotation defaults.
@@ -41,6 +41,6 @@ The Swarm Controller already injects `POCKETHIVE_INPUT_RABBIT_QUEUE` / `POCKETHI
 - [x] Refresh documentation (SDK quickstart, architecture, UI/operator guides) to spell out the “plan-driven routing only” rule.
 
 ## 5. Verification & Rollout
-- [ ] Run local swarm/e2e tests with multiple scenarios to verify listener wiring, message routing, and status dashboards still work with only plan data.
-- [ ] Validate UI screens reflect the new metadata, and control-plane status payloads still show queues/exchanges.
-- [ ] After deployment, monitor for missing routing data and remove compatibility shims once all swarms run on the new contracts.
+- [x] Run local swarm/e2e tests with multiple scenarios to verify listener wiring, message routing, and status dashboards still work with only plan data.
+- [x] Validate UI screens reflect the new metadata, and control-plane status payloads still show queues/exchanges.
+- [x] After deployment, monitor for missing routing data and remove compatibility shims once all swarms run on the new contracts.

@@ -22,8 +22,6 @@ import org.springframework.stereotype.Component;
 
 @Component("httpBuilderWorker")
 @PocketHiveWorker(
-    input = WorkerInputType.RABBITMQ,
-    output = WorkerOutputType.RABBITMQ,
     capabilities = {WorkerCapability.MESSAGE_DRIVEN},
     config = HttpBuilderWorkerConfig.class
 )

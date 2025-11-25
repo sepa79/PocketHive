@@ -7,9 +7,11 @@ template:
     - role: generator
       image: generator:latest
       config:
+        inputs:
+          scheduler:
+            ratePerSec: 5
         worker:
           historyPolicy: FULL
-          ratePerSec: 5
       work:
         out: gen
     - role: moderator

@@ -3,19 +3,28 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
-Timestamp: 2025-11-21T00:00:00Z
+Timestamp: 2025-11-24T00:00:00Z
 
 _No unreleased changes yet._
+
+## [0.14.2] - 2025-11-24
+Timestamp: 2025-11-24T00:00:00Z
+
+- Manager SDK & Swarm Controller: extracted a reusable `manager-sdk` module (runtime core, ports, guards, scenarios) and rewired the Swarm Controller onto `ManagerRuntimeCore`, cleaning up `SwarmLifecycleManager`, fixing swarm control-queue leaks on remove, and making BufferGuard/guards pluggable and multi-instance.
+- Worker IO configuration: removed input/output wiring from `@PocketHiveWorker` so all workers now take IO types from `pockethive.inputs.type` / `pockethive.outputs.type`; updated generator, processor, postprocessor, moderator, trigger, HTTP Builder, and Swarm Controller workers to the new config model and retired the dedicated Data Provider worker in favour of reusing generator with Redis input.
+- IO capabilities & UI: introduced shared IO capability manifests (`io.scheduler.latest.yaml`, `io.redis-dataset.latest.yaml`) keyed by `ui.ioType` so the Hive UI can surface scheduler (`inputs.scheduler.*`) and Redis dataset (`inputs.redis.*`) knobs for any worker whose `inputs.type` matches, and adjusted the config panel to merge worker- and IO-level config entries without duplicating definitions per worker.
+- Scheduler finite-run & diagnostics: extended the scheduler input with `inputs.scheduler.maxMessages` and a one-shot `reset` flag, emitting `x-ph-scheduler-remaining` on seeds and surfacing `data.scheduler` telemetry (rate, maxMessages, dispatched, remaining, exhausted); the UI runtime panel now renders these fields.
+- Redis dataset diagnostics: added `data.redisDataset` status (host, port, listName, ratePerSec, dispatched, lastPopAt/lastEmptyAt/lastErrorAt/lastErrorMessage) updated by `RedisDataSetWorkInput`, and wired the Hive UI runtime panel to display Redis list/rate/last activity and error information.
+- Scenario-driven Docker volumes: completed the volume wiring so `Bee.config.docker.volumes` in scenarios is resolved by `SwarmRuntimeCore` into Docker bind mounts via `WorkloadProvisioner`, covered by `SwarmRuntimeCoreVolumesTest` and `DockerWorkloadProvisionerVolumesTest` and documented in the scheduler/volumes plan and Swarm Controller architecture notes.
 
 ## [0.14.1] - 2025-11-21
 Timestamp: 2025-11-21T00:00:00Z
 
 - Worker SDK: add a Redis dataset work input that pops from a configured Redis list at a fixed rate, emitting each entry as a `WorkItem` while skipping delivery when the list is empty.
-- Data Provider: introduce a new Redis-driven worker (role `data-provider`) that forwards list entries downstream and publishes a capability manifest for swarm plans, including UI-configurable `inputs.redis.ratePerSec`.
 - Stack: ship Redis + Redis Commander in docker-compose and surface the Redis UI link in the Hive toolbar.
 - Worker SDK: add a Redis uploader interceptor (config-only opt-in) that can route payloads back into Redis lists based on simple regex rules or a fallback/original list.
 - HTTP Builder: add a new `http-builder` worker that resolves disk-backed HTTP templates (`serviceId` + `callId`) into HTTP envelopes consumed by the existing processor, with configurable `passThroughOnMissingTemplate` behaviour and per-template status metrics.
-- Templating & helpers: extend the Pebble-based templating engine with a constrained SpEL-backed `eval(...)` helper (exposing `workItem`, `now`, `rand*`, hashing/encoding helpers, etc.) and integrate it into generator, data-provider, and HTTP Builder pipelines.
+-- Templating & helpers: extend the Pebble-based templating engine with a constrained SpEL-backed `eval(...)` helper (exposing `workItem`, `now`, `rand*`, hashing/encoding helpers, etc.) and integrate it into generator and HTTP Builder pipelines.
 - Scenario tooling: introduce the `tools/scenario-templating-check` CLI to render generator templates and validate HTTP Builder templates against scenarios (callId coverage + one-shot render to catch Pebble/SpEL errors).
 - Redis dataset demo: add the `redis-dataset-demo` scenario wiring generator → Redis uploader → per-customer data providers → HTTP Builder → processor, plus an e2e harness scenario that asserts dataset, HTTP request, and HTTP response steps are present on the final queue.
 - Capabilities & UI: publish HTTP Builder and Data Provider capability manifests so the Hive UI can expose HTTP template roots, call selectors, and Redis dataset rate controls.

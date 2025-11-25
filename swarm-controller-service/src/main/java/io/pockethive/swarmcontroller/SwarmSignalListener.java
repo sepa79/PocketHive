@@ -53,6 +53,7 @@ public class SwarmSignalListener {
   private final String swarmId;
   private final String role;
   private final String controlExchange;
+  private final SwarmDiagnosticsAggregator diagnostics;
   private static final long STATUS_INTERVAL_MS = 5000L;
   private static final long MAX_STALENESS_MS = 15_000L;
   private volatile boolean controllerEnabled = false;
@@ -73,6 +74,7 @@ public class SwarmSignalListener {
     this.swarmId = properties.getSwarmId();
     this.role = properties.getRole();
     this.controlExchange = properties.getControlExchange();
+    this.diagnostics = new SwarmDiagnosticsAggregator(this.mapper);
     this.controlPlane = ManagerControlPlane.builder(
         new AmqpControlPlanePublisher(rabbit, controlExchange),
         this.mapper)
@@ -157,6 +159,7 @@ public class SwarmSignalListener {
         return;
       }
       lifecycle.updateHeartbeat(role, instance);
+      diagnostics.updateFromWorkerStatus(role, instance, node.path("data"));
 
       JsonNode enabledNode = node.path("enabled");
       boolean enabled = !enabledNode.isMissingNode() && !enabledNode.isNull()
@@ -813,9 +816,10 @@ public class SwarmSignalListener {
         .data("swarmStatus", status.name())
         .data("controllerEnabled", controllerEnabled)
         .data("workloadsEnabled", workloadsEnabled)
+        .data("swarmDiagnostics", diagnostics.snapshot())
         .queueStats(toQueueStatsPayload(queueSnapshot))
         .controlIn(controlQueue)
-        .controlRoutes(controllerControlRoutes())
+        .controlRoutes(SwarmControllerRoutes.controllerControlRoutes(swarmId, role, instanceId))
         .controlOut(rk);
     appendTrafficPolicy(builder);
     String payload = builder.toJson();
@@ -845,9 +849,10 @@ public class SwarmSignalListener {
         .data("swarmStatus", status.name())
         .data("controllerEnabled", controllerEnabled)
         .data("workloadsEnabled", workloadsEnabled)
+        .data("swarmDiagnostics", diagnostics.snapshot())
         .queueStats(toQueueStatsPayload(queueSnapshot))
         .controlIn(controlQueue)
-        .controlRoutes(controllerControlRoutes())
+        .controlRoutes(SwarmControllerRoutes.controllerControlRoutes(swarmId, role, instanceId))
         .controlOut(rk);
     appendTrafficPolicy(builder);
     String payload = builder.toJson();
@@ -898,23 +903,6 @@ public class SwarmSignalListener {
 
   private boolean workloadsEnabled(SwarmStatus status) {
     return status == SwarmStatus.RUNNING || status == SwarmStatus.STARTING;
-  }
-
-  private String[] controllerControlRoutes() {
-    String swarm = swarmId;
-    return new String[] {
-        ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, "ALL", role, "ALL"),
-        ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, swarm, role, "ALL"),
-        ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, swarm, role, instanceId),
-        ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, swarm, "ALL", "ALL"),
-        ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, "ALL", role, "ALL"),
-        ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, swarm, role, "ALL"),
-        ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, swarm, role, instanceId),
-        ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_TEMPLATE, swarm, role, "ALL"),
-        ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_START, swarm, role, "ALL"),
-        ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_STOP, swarm, role, "ALL"),
-        ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_REMOVE, swarm, role, "ALL")
-    };
   }
 
   private void sendControl(String routingKey, String payload, String context) {

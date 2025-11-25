@@ -17,6 +17,7 @@ pockethive:
     swarm-id: default
     instance-id: scenario-manager
     manager:
+      enabled: true
       role: scenario-manager
   logs:
     queue: ${POCKETHIVE_LOGS_QUEUE:ph.logs.agg}

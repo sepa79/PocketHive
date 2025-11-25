@@ -12,7 +12,10 @@ logging:
   pattern.level: "%5p [%X{traceId}]"
 
 pockethive:
+  inputs:
+    type: SCHEDULER
   outputs:
+    type: RABBITMQ
     rabbit:
       exchange: ${POCKETHIVE_OUTPUT_RABBIT_EXCHANGE}
       routingKey: ${POCKETHIVE_OUTPUT_RABBIT_ROUTING_KEY}
@@ -34,5 +37,3 @@ pockethive:
     worker:
       role: ${POCKETHIVE_CONTROL_PLANE_WORKER_ROLE}
       skip-self-signals: false
-    manager:
-      enabled: false

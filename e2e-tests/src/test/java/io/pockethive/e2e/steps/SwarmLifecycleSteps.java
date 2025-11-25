@@ -234,8 +234,8 @@ public class SwarmLifecycleSteps {
     });
   }
 
-  @And("I request a single generator run")
-  public void iRequestASingleGeneratorRun() {
+  @And("I start generator traffic")
+  public void iStartGeneratorTraffic() {
     ensureStartResponse();
     captureWorkerStatuses();
     ensureFinalQueueTap();
@@ -247,7 +247,6 @@ public class SwarmLifecycleSteps {
 
     Map<String, Object> patch = new LinkedHashMap<>();
     patch.put("enabled", true);
-    patch.put("singleRequest", true);
 
     ComponentConfigRequest request = new ComponentConfigRequest(
         idKey("generator-single"),
@@ -275,8 +274,6 @@ public class SwarmLifecycleSteps {
       assertTrue(isTruthy(snapshot.get("enabled")), "Generator snapshot should report enabled=true");
       Map<String, Object> config = snapshotConfig(snapshot);
       assertFalse(config.isEmpty(), "Generator snapshot should include applied config");
-      assertTrue(isTruthy(config.get("singleRequest")),
-          () -> "Expected singleRequest=true in generator config but was " + config.get("singleRequest"));
     });
 
     assertTemplatedGeneratorOutputIfApplicable();
@@ -296,15 +293,6 @@ public class SwarmLifecycleSteps {
     assertFalse(snapshot.isEmpty(), "Generator snapshot should include worker details");
     Map<String, Object> config = snapshotConfig(snapshot);
     assertFalse(config.isEmpty(), "Generator snapshot should include applied config");
-
-    Object rateObj = config.get("ratePerSec");
-    assertTrue(rateObj instanceof Number,
-        () -> "Expected numeric ratePerSec in generator config but was " + rateObj);
-    double ratePerSec = ((Number) rateObj).doubleValue();
-    assertEquals(0.0, ratePerSec, 0.0001, "Expected default ratePerSec=0.0 for generator");
-
-    assertFalse(isTruthy(config.get("singleRequest")),
-        () -> "Expected singleRequest=false by default but was " + config.get("singleRequest"));
 
     Map<String, Object> message = toMap(config.get("message"));
     assertEquals("/api/test", message.get("path"),
@@ -334,16 +322,6 @@ public class SwarmLifecycleSteps {
     Map<String, Object> config = snapshotConfig(snapshot);
     assertFalse(config.isEmpty(), "Generator snapshot should include applied config");
 
-    Object rateObj = config.get("ratePerSec");
-    assertTrue(rateObj instanceof Number,
-        () -> "Expected numeric ratePerSec in generator config but was " + rateObj);
-    double ratePerSec = ((Number) rateObj).doubleValue();
-    assertEquals(50.0, ratePerSec, 0.0001,
-        "Expected generator ratePerSec=50.0 from local-rest scenario");
-
-    assertFalse(isTruthy(config.get("singleRequest")),
-        () -> "Expected singleRequest=false from local-rest scenario but was " + config.get("singleRequest"));
-
     Map<String, Object> message = toMap(config.get("message"));
     assertEquals("/test", message.get("path"),
         "Expected generator path '/test' from local-rest scenario");
@@ -355,6 +333,34 @@ public class SwarmLifecycleSteps {
     Map<String, Object> headers = toMap(message.get("headers"));
     assertEquals("application/json", headers.get("content-type"),
         "Expected content-type=application/json from local-rest scenario");
+  }
+
+  @And("the generator IO config matches the local-rest scenario")
+  public void theGeneratorIoConfigMatchesTheLocalRestScenario() {
+    ensureStartResponse();
+    captureWorkerStatuses(true);
+    String generatorKey = roleKey(GENERATOR_ROLE);
+    String roleKey = generatorKey != null ? generatorKey : GENERATOR_ROLE;
+    StatusEvent status = workerStatusByRole.get(roleKey);
+    String displayRole = actualRoleName(roleKey);
+    assertNotNull(status, () -> "No status recorded for role " + displayRole);
+
+    Map<String, Object> snapshot = workerSnapshot(status, roleKey);
+    assertFalse(snapshot.isEmpty(), "Generator snapshot should include worker details");
+    Map<String, Object> config = snapshotConfig(snapshot);
+    assertFalse(config.isEmpty(), "Generator snapshot should include applied config");
+
+    Map<String, Object> inputs = toMap(config.get("inputs"));
+    assertFalse(inputs.isEmpty(), "Generator config should include inputs block");
+    Map<String, Object> scheduler = toMap(inputs.get("scheduler"));
+    assertFalse(scheduler.isEmpty(), "Generator inputs should include scheduler block");
+
+    Object rateObj = scheduler.get("ratePerSec");
+    assertNotNull(rateObj, "Generator scheduler config did not include ratePerSec");
+    double ratePerSec = rateObj instanceof Number n ? n.doubleValue()
+        : Double.parseDouble(rateObj.toString());
+    assertEquals(50.0, ratePerSec, 0.0001,
+        "Expected generator inputs.scheduler.ratePerSec=50.0 from local-rest scenario");
   }
 
   @And("the moderator runtime config matches the service defaults")
@@ -1018,11 +1024,10 @@ public class SwarmLifecycleSteps {
     String scenarioId = scenarioDetails != null ? scenarioDetails.id() : null;
     if ("local-rest-defaults".equals(scenarioId)
         || "templated-rest".equals(scenarioId)
-        || "history-policy-demo".equals(scenarioId)) {
+        || "history-policy-demo".equals(scenarioId)
+        || "local-rest".equals(scenarioId)
+        || "local-rest-with-multi-generators".equals(scenarioId)) {
       return "final";
-    }
-    if ("local-rest-with-named-queues".equals(scenarioId)) {
-      return "finalQ";
     }
     if ("redis-dataset-demo".equals(scenarioId)) {
       return "post";

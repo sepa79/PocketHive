@@ -26,6 +26,7 @@ pockethive:
     swarm-id: ${POCKETHIVE_CONTROL_PLANE_SWARM_ID:hive}
     instance-id: ${POCKETHIVE_CONTROL_PLANE_INSTANCE_ID:orchestrator-local}
     manager:
+      enabled: true
       role: ${POCKETHIVE_CONTROL_PLANE_MANAGER_ROLE:orchestrator}
     worker:
       enabled: ${POCKETHIVE_CONTROL_PLANE_WORKER_ENABLED:false}
