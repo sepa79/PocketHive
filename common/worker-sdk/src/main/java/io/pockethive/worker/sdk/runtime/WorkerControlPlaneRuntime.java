@@ -114,6 +114,21 @@ public final class WorkerControlPlaneRuntime {
     }
 
     /**
+     * Returns a {@link StatusPublisher} for the given worker bean, creating one if necessary.
+     * <p>
+     * Intended for infrastructure components (inputs/outputs) that need to surface diagnostics
+     * in the worker status payload without reaching into worker state internals directly.
+     */
+    public StatusPublisher statusPublisher(String workerBeanName) {
+        Objects.requireNonNull(workerBeanName, "workerBeanName");
+        WorkerState state = stateStore.find(workerBeanName).orElse(null);
+        if (state == null) {
+            throw new IllegalArgumentException("Unknown worker bean: " + workerBeanName);
+        }
+        return ensureStatusPublisher(state);
+    }
+
+    /**
      * Returns the last known enablement flag for the worker bean (defaults to {@code true} when no command has been applied yet).
      */
     public boolean workerEnabled(String workerBeanName) {

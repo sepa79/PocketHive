@@ -1,6 +1,7 @@
 package io.pockethive.worker.sdk.input;
 
 import io.pockethive.controlplane.ControlPlaneIdentity;
+import io.pockethive.worker.sdk.api.StatusPublisher;
 import io.pockethive.worker.sdk.api.WorkItem;
 import io.pockethive.worker.sdk.config.SchedulerInputProperties;
 import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime;
@@ -48,6 +49,7 @@ public final class SchedulerWorkInput<C> implements WorkInput {
 
     private volatile boolean running;
     private volatile boolean listenersRegistered;
+    private volatile StatusPublisher statusPublisher;
     private ScheduledExecutorService schedulerExecutor;
 
     private SchedulerWorkInput(Builder<C> builder) {
@@ -100,6 +102,7 @@ public final class SchedulerWorkInput<C> implements WorkInput {
                         "{} scheduler finite-run exhausted at tick {} (maxMessages={}, dispatched={})",
                         workerDefinition.beanName(), nowMillis, limit, dispatchedCount.get());
                 }
+                publishDiagnostics(limit);
                 return;
             }
             if (quota > remaining) {
@@ -128,6 +131,7 @@ public final class SchedulerWorkInput<C> implements WorkInput {
                 dispatchErrorHandler.accept(ex);
             }
         }
+        publishDiagnostics(limit);
     }
 
     @Override
@@ -136,6 +140,13 @@ public final class SchedulerWorkInput<C> implements WorkInput {
             return;
         }
         registerStateListeners();
+        try {
+            this.statusPublisher = controlPlaneRuntime.statusPublisher(workerDefinition.beanName());
+        } catch (Exception ex) {
+            if (log.isDebugEnabled()) {
+                log.debug("{} scheduler could not obtain status publisher for diagnostics", workerDefinition.beanName(), ex);
+            }
+        }
         controlPlaneRuntime.emitStatusSnapshot();
         running = true;
         schedulerExecutor = Executors.newSingleThreadScheduledExecutor(r -> {
@@ -274,6 +285,24 @@ public final class SchedulerWorkInput<C> implements WorkInput {
      */
     public static <C> Builder<C> builder() {
         return new Builder<>();
+    }
+
+    private void publishDiagnostics(long limit) {
+        StatusPublisher publisher = this.statusPublisher;
+        if (publisher == null) {
+            return;
+        }
+        long dispatched = dispatchedCount.get();
+        long remaining = limit > 0L ? Math.max(0L, limit - dispatched) : -1L;
+        boolean exhausted = limit > 0L && remaining == 0L;
+        double rate = scheduling.getRatePerSec();
+        publisher.update(status -> status.data("scheduler", Map.of(
+            "ratePerSec", rate,
+            "maxMessages", limit,
+            "dispatched", dispatched,
+            "remaining", remaining >= 0L ? remaining : null,
+            "exhausted", exhausted
+        )));
     }
 
     /**
