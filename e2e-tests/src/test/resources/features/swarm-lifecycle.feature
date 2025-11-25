@@ -46,6 +46,7 @@ Feature: Swarm lifecycle golden path
     When I start the swarm
     Then the swarm reports running
     And the generator runtime config matches the local-rest scenario
+    And the generator IO config matches the local-rest scenario
     And the moderator runtime config matches the local-rest scenario
     And the processor runtime config matches the local-rest scenario
     And the postprocessor runtime config matches the local-rest scenario

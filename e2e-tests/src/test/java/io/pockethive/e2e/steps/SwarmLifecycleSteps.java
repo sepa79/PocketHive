@@ -335,6 +335,34 @@ public class SwarmLifecycleSteps {
         "Expected content-type=application/json from local-rest scenario");
   }
 
+  @And("the generator IO config matches the local-rest scenario")
+  public void theGeneratorIoConfigMatchesTheLocalRestScenario() {
+    ensureStartResponse();
+    captureWorkerStatuses(true);
+    String generatorKey = roleKey(GENERATOR_ROLE);
+    String roleKey = generatorKey != null ? generatorKey : GENERATOR_ROLE;
+    StatusEvent status = workerStatusByRole.get(roleKey);
+    String displayRole = actualRoleName(roleKey);
+    assertNotNull(status, () -> "No status recorded for role " + displayRole);
+
+    Map<String, Object> snapshot = workerSnapshot(status, roleKey);
+    assertFalse(snapshot.isEmpty(), "Generator snapshot should include worker details");
+    Map<String, Object> config = snapshotConfig(snapshot);
+    assertFalse(config.isEmpty(), "Generator snapshot should include applied config");
+
+    Map<String, Object> inputs = toMap(config.get("inputs"));
+    assertFalse(inputs.isEmpty(), "Generator config should include inputs block");
+    Map<String, Object> scheduler = toMap(inputs.get("scheduler"));
+    assertFalse(scheduler.isEmpty(), "Generator inputs should include scheduler block");
+
+    Object rateObj = scheduler.get("ratePerSec");
+    assertNotNull(rateObj, "Generator scheduler config did not include ratePerSec");
+    double ratePerSec = rateObj instanceof Number n ? n.doubleValue()
+        : Double.parseDouble(rateObj.toString());
+    assertEquals(50.0, ratePerSec, 0.0001,
+        "Expected generator inputs.scheduler.ratePerSec=50.0 from local-rest scenario");
+  }
+
   @And("the moderator runtime config matches the service defaults")
   public void theModeratorRuntimeConfigMatchesTheServiceDefaults() {
     ensureStartResponse();

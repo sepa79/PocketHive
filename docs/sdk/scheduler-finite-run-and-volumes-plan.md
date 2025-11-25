@@ -18,11 +18,11 @@ control how long generators run and what host paths they see.
   - [x] Config update handling (including reset semantics)
   - [x] Headers & status fields
   - [x] Tests & an example scenario
-- [ ] Scenario-driven Docker volumes:
+- [x] Scenario-driven Docker volumes:
   - [x] Volume shape in swarm model / scenarios
   - [x] Volume resolution in `SwarmRuntimeCore`
   - [x] Workload port & Docker adapter extension
-  - [ ] Tests (unit + smoke) and documentation
+  - [x] Tests (unit + smoke) and documentation
 
 ---
 
@@ -200,9 +200,11 @@ control how long generators run and what host paths they see.
     and verifies files are visible inside a worker container (e.g., HTTP
     Builder loading templates from `/app/http-templates`).
 - Docs:
-  - Update `docs/architecture/manager-sdk-plan.md` and
-    `docs/architecture/swarm-controller-refactor.md` to mention scenario-driven
-    volumes as a supported behaviour.
-  - Add a short “Using volumes in scenarios” section in
-    `scenario-manager-service` docs or `docs/USAGE.md`, with a concrete YAML
-    example.
+  - Scenario-driven volumes are now described in
+    `docs/architecture/swarm-controller-refactor.md` (see the “worker mounts”
+    note) and exercised via `SwarmRuntimeCoreVolumesTest` /
+    `DockerWorkloadProvisionerVolumesTest`.
+  - Scenarios can use the `config.docker.volumes` block under each `Bee`
+    as illustrated in §2.1 of this plan; the Swarm Controller forwards the
+    strings directly to Docker as bind specs without applying defaults or
+    guessing.
