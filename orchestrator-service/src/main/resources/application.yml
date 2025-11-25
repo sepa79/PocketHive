@@ -48,6 +48,8 @@ pockethive:
             instance: ${POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_METRICS_PUSHGATEWAY_GROUPING_KEY_INSTANCE:hive}
       docker:
         socket-path: ${POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_DOCKER_SOCKET_PATH:/var/run/docker.sock}
+      images:
+        repository-prefix: ${POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_IMAGE_REPOSITORY_PREFIX:}
       scenario-manager:
         url: ${POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_SCENARIO_MANAGER_URL:http://scenario-manager:8080}
         http:

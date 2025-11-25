@@ -27,6 +27,7 @@ class OrchestratorPropertiesBindingTest {
                 "pockethive.control-plane.orchestrator.metrics.pushgateway.job=swarm-job",
                 "pockethive.control-plane.orchestrator.metrics.pushgateway.grouping-key.instance=controller-instance",
                 "pockethive.control-plane.orchestrator.docker.socket-path=/var/run/docker.sock",
+                "pockethive.control-plane.orchestrator.images.repository-prefix=",
                 "pockethive.control-plane.orchestrator.scenario-manager.url=http://scenario-manager:8080",
                 "pockethive.control-plane.orchestrator.scenario-manager.http.connect-timeout=PT5S",
                 "pockethive.control-plane.orchestrator.scenario-manager.http.read-timeout=PT30S")

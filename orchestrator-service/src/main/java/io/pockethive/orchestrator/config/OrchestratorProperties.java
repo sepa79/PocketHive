@@ -38,6 +38,18 @@ public class OrchestratorProperties {
         return orchestrator.docker();
     }
 
+    public String getImageRepositoryPrefix() {
+        Images images = orchestrator.images();
+        if (images == null) {
+            return null;
+        }
+        String prefix = images.getRepositoryPrefix();
+        if (prefix == null || prefix.isBlank()) {
+            return null;
+        }
+        return prefix;
+    }
+
     public ScenarioManager getScenarioManager() {
         return orchestrator.scenarioManager();
     }
@@ -50,6 +62,7 @@ public class OrchestratorProperties {
         private final @Valid Rabbit rabbit;
         private final @Valid Metrics metrics;
         private final @Valid Docker docker;
+        private final @Valid Images images;
         private final @Valid ScenarioManager scenarioManager;
 
         public Orchestrator(@NotBlank String controlQueuePrefix,
@@ -57,12 +70,14 @@ public class OrchestratorProperties {
                              @Valid Rabbit rabbit,
                              @Valid Metrics metrics,
                              @Valid Docker docker,
+                             @Valid Images images,
                              @Valid ScenarioManager scenarioManager) {
             this.controlQueuePrefix = requireNonBlank(controlQueuePrefix, "controlQueuePrefix");
             this.statusQueuePrefix = requireNonBlank(statusQueuePrefix, "statusQueuePrefix");
             this.rabbit = Objects.requireNonNull(rabbit, "rabbit");
             this.metrics = Objects.requireNonNull(metrics, "metrics");
             this.docker = Objects.requireNonNull(docker, "docker");
+            this.images = Objects.requireNonNull(images, "images");
             this.scenarioManager = Objects.requireNonNull(scenarioManager, "scenarioManager");
         }
 
@@ -84,6 +99,10 @@ public class OrchestratorProperties {
 
         public Docker docker() {
             return docker;
+        }
+
+        public Images images() {
+            return images;
         }
 
         public ScenarioManager scenarioManager() {
@@ -213,6 +232,29 @@ public class OrchestratorProperties {
 
         public String getSocketPath() {
             return socketPath;
+        }
+    }
+
+    @Validated
+    public static final class Images {
+
+        private final String repositoryPrefix;
+
+        public Images(String repositoryPrefix) {
+            if (repositoryPrefix == null || repositoryPrefix.isBlank()) {
+                this.repositoryPrefix = null;
+            } else {
+                String trimmed = repositoryPrefix.trim();
+                // Normalise by stripping trailing slashes so callers can safely append "/name"
+                while (trimmed.endsWith("/")) {
+                    trimmed = trimmed.substring(0, trimmed.length() - 1);
+                }
+                this.repositoryPrefix = trimmed.isEmpty() ? null : trimmed;
+            }
+        }
+
+        public String getRepositoryPrefix() {
+            return repositoryPrefix;
         }
     }
 

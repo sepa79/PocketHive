@@ -103,6 +103,28 @@ class ContainerLifecycleManagerTest {
     }
 
     @Test
+    void startSwarmAppliesRepositoryPrefixWhenConfigured() {
+        SwarmRegistry registry = new SwarmRegistry();
+        OrchestratorProperties properties = withRepositoryPrefix("ghcr.io/acme/pockethive");
+        ControlPlaneProperties controlPlane = controlPlaneProperties();
+        when(docker.createAndStartContainer(eq("ghcr.io/acme/pockethive/swarm-controller:latest"), anyMap(), anyString(), any()))
+            .thenReturn("cid");
+        ContainerLifecycleManager manager = new ContainerLifecycleManager(
+            docker, registry, amqp, properties, controlPlane, rabbitProperties());
+
+        Swarm swarm = manager.startSwarm("sw1", "swarm-controller:latest", "inst1");
+
+        assertEquals("sw1", swarm.getId());
+        ArgumentCaptor<String> nameCaptor = ArgumentCaptor.forClass(String.class);
+        verify(docker).createAndStartContainer(
+            eq("ghcr.io/acme/pockethive/swarm-controller:latest"),
+            anyMap(),
+            nameCaptor.capture(),
+            any());
+        assertEquals("inst1", nameCaptor.getValue());
+    }
+
+    @Test
     void startSwarmUsesConfiguredDockerSocketPath() {
         SwarmRegistry registry = new SwarmRegistry();
         OrchestratorProperties properties = withDockerSocket("/custom/docker.sock");
@@ -251,6 +273,7 @@ class ContainerLifecycleManagerTest {
                         "swarm-job",
                         new OrchestratorProperties.GroupingKey("controller-instance"))),
                 new OrchestratorProperties.Docker("/var/run/docker.sock"),
+                new OrchestratorProperties.Images(null),
                 new OrchestratorProperties.ScenarioManager(
                     "http://scenario-manager:8080",
                     new OrchestratorProperties.Http(Duration.ofSeconds(5), Duration.ofSeconds(30)))));
@@ -273,6 +296,30 @@ class ContainerLifecycleManagerTest {
                         "swarm-job",
                         new OrchestratorProperties.GroupingKey("controller-instance"))),
                 new OrchestratorProperties.Docker(socketPath),
+                new OrchestratorProperties.Images(null),
+                new OrchestratorProperties.ScenarioManager(
+                    "http://scenario-manager:8080",
+                    new OrchestratorProperties.Http(Duration.ofSeconds(5), Duration.ofSeconds(30)))));
+    }
+
+    private static OrchestratorProperties withRepositoryPrefix(String prefix) {
+        return new OrchestratorProperties(
+            new OrchestratorProperties.Orchestrator(
+                "ph.control.orchestrator",
+                "ph.control.orchestrator-status",
+                new OrchestratorProperties.Rabbit(
+                    "ph.logs",
+                    new OrchestratorProperties.Logging(Boolean.FALSE)),
+                new OrchestratorProperties.Metrics(
+                    new OrchestratorProperties.Pushgateway(
+                        true,
+                        "http://pushgateway:9091",
+                        Duration.ofMinutes(1),
+                        "DELETE",
+                        "swarm-job",
+                        new OrchestratorProperties.GroupingKey("controller-instance"))),
+                new OrchestratorProperties.Docker("/var/run/docker.sock"),
+                new OrchestratorProperties.Images(prefix),
                 new OrchestratorProperties.ScenarioManager(
                     "http://scenario-manager:8080",
                     new OrchestratorProperties.Http(Duration.ofSeconds(5), Duration.ofSeconds(30)))));

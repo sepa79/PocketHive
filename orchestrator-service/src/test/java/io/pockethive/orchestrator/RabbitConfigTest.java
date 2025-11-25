@@ -35,6 +35,7 @@ class RabbitConfigTest {
                         "swarm-job",
                         new OrchestratorProperties.GroupingKey("controller-instance"))),
                 new OrchestratorProperties.Docker("/var/run/docker.sock"),
+                new OrchestratorProperties.Images(null),
                 new OrchestratorProperties.ScenarioManager(
                     "http://scenario-manager:8080",
                     new OrchestratorProperties.Http(Duration.ofSeconds(5), Duration.ofSeconds(30)))));

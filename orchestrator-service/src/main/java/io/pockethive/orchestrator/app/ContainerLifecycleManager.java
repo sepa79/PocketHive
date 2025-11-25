@@ -52,6 +52,7 @@ public class ContainerLifecycleManager {
     public Swarm startSwarm(String swarmId, String image, String instanceId, SwarmTemplateMetadata templateMetadata) {
         String resolvedInstance = requireNonBlank(instanceId, "controller instance");
         String resolvedSwarmId = requireNonBlank(swarmId, "swarmId");
+        String resolvedImage = resolveImage(image);
         OrchestratorProperties.Pushgateway pushgateway = properties.getMetrics().getPushgateway();
         PushgatewaySettings metrics = new PushgatewaySettings(
             pushgateway.isEnabled(),
@@ -81,10 +82,10 @@ public class ContainerLifecycleManager {
         String dockerSocket = properties.getDocker().getSocketPath();
         env.put("DOCKER_SOCKET_PATH", dockerSocket);
         env.put("DOCKER_HOST", "unix://" + dockerSocket);
-        log.info("launching controller for swarm {} as instance {} using image {}", resolvedSwarmId, resolvedInstance, image);
+        log.info("launching controller for swarm {} as instance {} using image {}", resolvedSwarmId, resolvedInstance, resolvedImage);
         log.info("docker env: {}", env);
         String containerId = docker.createAndStartContainer(
-            image,
+            resolvedImage,
             env,
             resolvedInstance,
             hostConfig -> hostConfig.withBinds(Bind.parse(dockerSocket + ":" + dockerSocket)));
@@ -96,6 +97,19 @@ public class ContainerLifecycleManager {
         registry.register(swarm);
         registry.updateStatus(resolvedSwarmId, SwarmStatus.CREATING);
         return swarm;
+    }
+
+    private String resolveImage(String image) {
+        String trimmed = requireNonBlank(image, "image");
+        String prefix = properties.getImageRepositoryPrefix();
+        if (prefix == null || prefix.isBlank()) {
+            return trimmed;
+        }
+        // If image already contains a '/', treat it as fully-qualified and leave it unchanged.
+        if (trimmed.contains("/")) {
+            return trimmed;
+        }
+        return prefix + "/" + trimmed;
     }
 
     public void stopSwarm(String swarmId) {
