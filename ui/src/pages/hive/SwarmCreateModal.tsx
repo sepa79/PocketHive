@@ -87,7 +87,7 @@ export default function SwarmCreateModal({ onClose, autoPullOnStart, onChangeAut
       return
     }
     try {
-      await createSwarm(swarmId.trim(), scenarioId)
+      await createSwarm(swarmId.trim(), scenarioId, { autoPullImages: autoPullOnStart })
       setMessage('Swarm created')
       setSwarmId('')
       setScenarioId('')

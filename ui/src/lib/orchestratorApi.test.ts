@@ -39,6 +39,7 @@ describe('orchestratorApi', () => {
     expect(body.templateId).toBe('tpl')
     expect(body.notes).toBeUndefined()
     expect(body.idempotencyKey).toBeDefined()
+    expect(body.autoPullImages).toBeUndefined()
   })
 
   it.todo('posts swarm creation with explicit notes once supported')
@@ -50,7 +51,7 @@ describe('orchestratorApi', () => {
     expect(call[1]?.method).toBe('POST')
     const body = JSON.parse(call[1]?.body as string)
     expect(typeof body.idempotencyKey).toBe('string')
-    expect(body.autoPullImages).toBeUndefined()
+    expect(body.autoPullImages).toBe(false)
   })
 
   it('posts swarm start with autoPullImages when requested', async () => {

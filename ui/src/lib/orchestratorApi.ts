@@ -37,10 +37,17 @@ async function ensureOk(response: Response, fallback: string) {
   throw error
 }
 
-export async function createSwarm(id: string, templateId: string) {
+export async function createSwarm(
+  id: string,
+  templateId: string,
+  options?: { autoPullImages?: boolean },
+) {
   const payload: Record<string, unknown> = {
     templateId,
     idempotencyKey: randomId(),
+  }
+  if (options && typeof options.autoPullImages === 'boolean') {
+    payload.autoPullImages = options.autoPullImages
   }
 
   const body = JSON.stringify(payload)
@@ -81,9 +88,7 @@ export async function createSwarm(id: string, templateId: string) {
 export async function startSwarm(id: string, options?: { autoPullImages?: boolean }) {
   const payload: Record<string, unknown> = {
     idempotencyKey: randomId(),
-  }
-  if (options && options.autoPullImages === true) {
-    payload.autoPullImages = true
+    autoPullImages: Boolean(options?.autoPullImages),
   }
   const body = JSON.stringify(payload)
   const response = await apiFetch(`/orchestrator/swarms/${id}/start`, {

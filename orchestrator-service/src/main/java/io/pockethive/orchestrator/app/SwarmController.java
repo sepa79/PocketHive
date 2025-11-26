@@ -158,11 +158,13 @@ public class SwarmController {
                 SwarmPlan plan = planDescriptor.toSwarmPlan(swarmId);
                 String instanceId = BeeNameGenerator.generate("swarm-controller", swarmId);
                 plans.register(instanceId, plan);
+                boolean autoPull = Boolean.TRUE.equals(req.autoPullImages());
                 Swarm swarm = lifecycle.startSwarm(
                     swarmId,
                     image,
                     instanceId,
-                    new SwarmTemplateMetadata(templateId, image, plan.bees()));
+                    new SwarmTemplateMetadata(templateId, image, plan.bees()),
+                    autoPull);
                 creates.register(swarm.getInstanceId(), new Pending(
                     swarmId,
                     swarm.getInstanceId(),

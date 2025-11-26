@@ -75,7 +75,7 @@ test('submits selected scenario', async () => {
 
   await screen.findByText('Basic')
   fireEvent.change(screen.getByLabelText(/swarm id/i), { target: { value: 'sw1' } })
-  fireEvent.change(screen.getByLabelText(/scenario/i), { target: { value: 'basic' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Basic' }))
   fireEvent.click(screen.getByText('Create'))
   await waitFor(() =>
     expect(apiFetchSpy.mock.calls.some((call) => call[0] === '/orchestrator/swarms/sw1/create')).toBe(true),
@@ -115,7 +115,7 @@ test('shows conflict message when swarm already exists', async () => {
 
   await screen.findByText('Basic')
   fireEvent.change(screen.getByLabelText(/swarm id/i), { target: { value: 'sw1' } })
-  fireEvent.change(screen.getByLabelText(/scenario/i), { target: { value: 'basic' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Basic' }))
   fireEvent.click(screen.getByText('Create'))
 
   expect(await screen.findByText("Swarm 'sw1' already exists")).toBeTruthy()
@@ -139,8 +139,6 @@ test('does not submit when scenario selection is cleared', async () => {
 
   await screen.findByText('Basic')
   fireEvent.change(screen.getByLabelText(/swarm id/i), { target: { value: 'sw1' } })
-  fireEvent.change(screen.getByLabelText(/scenario/i), { target: { value: 'basic' } })
-  fireEvent.change(screen.getByLabelText(/scenario/i), { target: { value: '' } })
   fireEvent.click(screen.getByText('Create'))
 
   await waitFor(() => expect(apiFetchSpy.mock.calls.length).toBe(2))
@@ -200,7 +198,8 @@ test('renders manifest details when available', async () => {
     </CapabilitiesProvider>,
   )
 
-  fireEvent.change(await screen.findByLabelText(/scenario/i), { target: { value: 'basic' } })
+  await screen.findByText('Basic')
+  fireEvent.click(screen.getByRole('button', { name: 'Basic' }))
 
   expect(await screen.findByDisplayValue('100')).toBeTruthy()
   expect(screen.getByText('Warm Up')).toBeTruthy()
