@@ -207,7 +207,9 @@ public class SwarmLifecycleSteps {
   public void iStartTheSwarm() {
     ensureCreateResponse();
     String idempotencyKey = idKey("start");
-    startResponse = orchestratorClient.startSwarm(swarmId, new ControlRequest(idempotencyKey, "e2e lifecycle start"));
+    startResponse = orchestratorClient.startSwarm(
+        swarmId,
+        new ControlRequest(idempotencyKey, "e2e lifecycle start", null));
     LOGGER.info("Start request correlation={} watch={}", startResponse.correlationId(), startResponse.watch());
   }
 
@@ -691,7 +693,9 @@ public class SwarmLifecycleSteps {
   public void iStopTheSwarm() {
     ensureStartResponse();
     String idempotencyKey = idKey("stop");
-    stopResponse = orchestratorClient.stopSwarm(swarmId, new ControlRequest(idempotencyKey, "e2e lifecycle stop"));
+    stopResponse = orchestratorClient.stopSwarm(
+        swarmId,
+        new ControlRequest(idempotencyKey, "e2e lifecycle stop", null));
     LOGGER.info("Stop request correlation={} watch={}", stopResponse.correlationId(), stopResponse.watch());
   }
 
@@ -720,7 +724,9 @@ public class SwarmLifecycleSteps {
   public void iRemoveTheSwarm() {
     ensureStopResponse();
     String idempotencyKey = idKey("remove");
-    removeResponse = orchestratorClient.removeSwarm(swarmId, new ControlRequest(idempotencyKey, "e2e lifecycle remove"));
+    removeResponse = orchestratorClient.removeSwarm(
+        swarmId,
+        new ControlRequest(idempotencyKey, "e2e lifecycle remove", null));
     LOGGER.info("Remove request correlation={} watch={}", removeResponse.correlationId(), removeResponse.watch());
   }
 
@@ -775,7 +781,7 @@ public class SwarmLifecycleSteps {
     if (!swarmRemoved && orchestratorClient != null && swarmId != null) {
       try {
         LOGGER.info("Attempting to remove swarm {} during cleanup", swarmId);
-        orchestratorClient.removeSwarm(swarmId, new ControlRequest(idKey("cleanup"), "cleanup"));
+        orchestratorClient.removeSwarm(swarmId, new ControlRequest(idKey("cleanup"), "cleanup", null));
       } catch (Exception ex) {
         LOGGER.warn("Cleanup remove failed for swarm {}", swarmId, ex);
       }

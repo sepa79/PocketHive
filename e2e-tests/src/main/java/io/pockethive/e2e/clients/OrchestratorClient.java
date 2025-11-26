@@ -118,7 +118,7 @@ public final class OrchestratorClient {
   public record Watch(String successTopic, String errorTopic) {
   }
 
-  public record ControlRequest(String idempotencyKey, String notes) {
+  public record ControlRequest(String idempotencyKey, String notes, Boolean autoPullImages) {
   }
 
   public record SwarmCreateRequest(String templateId, String idempotencyKey, String notes) {

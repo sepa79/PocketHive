@@ -46,10 +46,21 @@ public class ContainerLifecycleManager {
     }
 
     public Swarm startSwarm(String swarmId, String image, String instanceId) {
-        return startSwarm(swarmId, image, instanceId, null);
+        return startSwarm(swarmId, image, instanceId, null, false);
     }
 
-    public Swarm startSwarm(String swarmId, String image, String instanceId, SwarmTemplateMetadata templateMetadata) {
+    public Swarm startSwarm(String swarmId,
+                            String image,
+                            String instanceId,
+                            SwarmTemplateMetadata templateMetadata) {
+        return startSwarm(swarmId, image, instanceId, templateMetadata, false);
+    }
+
+    public Swarm startSwarm(String swarmId,
+                            String image,
+                            String instanceId,
+                            SwarmTemplateMetadata templateMetadata,
+                            boolean autoPullImages) {
         String resolvedInstance = requireNonBlank(instanceId, "controller instance");
         String resolvedSwarmId = requireNonBlank(swarmId, "swarmId");
         String resolvedImage = resolveImage(image);
@@ -82,6 +93,10 @@ public class ContainerLifecycleManager {
         String dockerSocket = properties.getDocker().getSocketPath();
         env.put("DOCKER_SOCKET_PATH", dockerSocket);
         env.put("DOCKER_HOST", "unix://" + dockerSocket);
+        if (autoPullImages) {
+            log.info("autoPullImages=true, pulling controller image {} before start", resolvedImage);
+            docker.pullImage(resolvedImage);
+        }
         log.info("launching controller for swarm {} as instance {} using image {}", resolvedSwarmId, resolvedInstance, resolvedImage);
         log.info("docker env: {}", env);
         String containerId = docker.createAndStartContainer(
@@ -97,6 +112,33 @@ public class ContainerLifecycleManager {
         registry.register(swarm);
         registry.updateStatus(resolvedSwarmId, SwarmStatus.CREATING);
         return swarm;
+    }
+
+    /**
+     * Optionally pre-pull all images referenced by a swarm before starting work.
+     * <p>
+     * When {@code autoPullImages=true} is specified on a start request, the orchestrator can call
+     * this helper to ensure that the controller and all bee images are present on the Docker host
+     * before the swarm-controller attempts to launch workers. The actual registry and proxy
+     * configuration is left to the Docker daemon.
+     */
+    public void preloadSwarmImages(String swarmId) {
+        registry.find(swarmId).ifPresent(swarm -> {
+            swarm.controllerImage().ifPresent(image -> {
+                String resolved = resolveImage(image);
+                log.info("auto-pull: controller image {} (from {}) for swarm {}", resolved, image, swarmId);
+                docker.pullImage(resolved);
+            });
+            swarm.bees().stream()
+                .map(bee -> bee.image())
+                .filter(image -> image != null && !image.isBlank())
+                .map(this::resolveImage)
+                .distinct()
+                .forEach(resolved -> {
+                    log.info("auto-pull: bee image {} for swarm {}", resolved, swarmId);
+                    docker.pullImage(resolved);
+                });
+        });
     }
 
     private String resolveImage(String image) {

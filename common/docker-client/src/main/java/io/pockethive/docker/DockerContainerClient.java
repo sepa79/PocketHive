@@ -98,6 +98,23 @@ public class DockerContainerClient {
         callDocker("remove container", () -> dockerClient.removeContainerCmd(containerId).exec());
     }
 
+    /**
+     * Ensure the given image is available locally by invoking the Docker daemon's pull command.
+     * <p>
+     * This relies on the daemon's registry configuration and any system-wide proxy settings; the
+     * client does not attempt to manage registry auth itself.
+     */
+    public void pullImage(String image) {
+        callDocker("pull image", () -> {
+            try {
+                dockerClient.pullImageCmd(image).start().awaitCompletion();
+            } catch (InterruptedException ex) {
+                Thread.currentThread().interrupt();
+                throw new RuntimeException("Interrupted while waiting for docker pull of image " + image, ex);
+            }
+        });
+    }
+
     public String resolveControlNetwork() {
         String net = System.getenv("CONTROL_NETWORK");
         if (net == null || net.isBlank()) {
