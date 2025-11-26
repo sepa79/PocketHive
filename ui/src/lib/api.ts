@@ -1,4 +1,5 @@
 import { logIn, logOut } from './logs'
+import { randomId } from './id'
 
 export interface ApiFetchInit extends RequestInit {
   omitCorrelationId?: boolean
@@ -19,7 +20,7 @@ function normaliseHeaders(headers?: HeadersInit): Record<string, string> {
 
 export async function apiFetch(input: RequestInfo, init: ApiFetchInit = {}): Promise<Response> {
   const { omitCorrelationId, headers: initHeaders, body, ...rest } = init
-  const correlationId = crypto.randomUUID()
+  const correlationId = randomId()
   const headers = normaliseHeaders(initHeaders)
   if (!omitCorrelationId) {
     headers['x-correlation-id'] = correlationId

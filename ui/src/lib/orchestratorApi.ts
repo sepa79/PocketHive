@@ -1,4 +1,5 @@
 import { apiFetch } from './api'
+import { randomId } from './id'
 import type { Component } from '../types/hive'
 import type { SwarmSummary, BeeSummary } from '../types/orchestrator'
 
@@ -39,7 +40,7 @@ async function ensureOk(response: Response, fallback: string) {
 export async function createSwarm(id: string, templateId: string) {
   const payload: Record<string, unknown> = {
     templateId,
-    idempotencyKey: crypto.randomUUID(),
+    idempotencyKey: randomId(),
   }
 
   const body = JSON.stringify(payload)
@@ -78,7 +79,7 @@ export async function createSwarm(id: string, templateId: string) {
 }
 
 export async function startSwarm(id: string) {
-  const body = JSON.stringify({ idempotencyKey: crypto.randomUUID() })
+  const body = JSON.stringify({ idempotencyKey: randomId() })
   const response = await apiFetch(`/orchestrator/swarms/${id}/start`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -88,7 +89,7 @@ export async function startSwarm(id: string) {
 }
 
 export async function stopSwarm(id: string) {
-  const body = JSON.stringify({ idempotencyKey: crypto.randomUUID() })
+  const body = JSON.stringify({ idempotencyKey: randomId() })
   const response = await apiFetch(`/orchestrator/swarms/${id}/stop`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -98,7 +99,7 @@ export async function stopSwarm(id: string) {
 }
 
 export async function removeSwarm(id: string) {
-  const body = JSON.stringify({ idempotencyKey: crypto.randomUUID() })
+  const body = JSON.stringify({ idempotencyKey: randomId() })
   const response = await apiFetch(`/orchestrator/swarms/${id}/remove`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -194,7 +195,7 @@ export async function getSwarm(id: string): Promise<SwarmSummary | null> {
 
 async function setSwarmManagersEnabled(enabled: boolean) {
   const payload: SwarmManagersTogglePayload = {
-    idempotencyKey: crypto.randomUUID(),
+    idempotencyKey: randomId(),
     commandTarget: 'swarm',
     enabled,
   }
@@ -215,7 +216,7 @@ export async function disableSwarmManagers() {
 
 export async function sendConfigUpdate(component: Component, config: unknown) {
   const payload: Record<string, unknown> = {
-    idempotencyKey: crypto.randomUUID(),
+    idempotencyKey: randomId(),
     patch: config,
   }
   if (component.swarmId) {
