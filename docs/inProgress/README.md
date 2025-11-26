@@ -1,0 +1,19 @@
+# In‑Progress Plans
+
+This directory groups **active architectural and SDK plans** that are
+currently being implemented or iterated on. The canonical sources live
+alongside the codebase (for example under `docs/sdk` and
+`docs/architecture`); this index is a convenience for humans and tools.
+
+Notable in‑progress plans:
+
+- `docs/architecture/ScenarioPlan.md` – Scenario engine and environment/SUT profiles.
+- `docs/architecture/manager-sdk-plan.md` – Manager SDK and Swarm Controller reuse.
+- `docs/control-plane/worker-config-propagation-plan.md` – Scenario → SwarmPlan → worker config propagation.
+- `docs/control-plane/queue-guard-plan.md` – BufferGuard and queue guard behaviour.
+- `docs/sdk/worker-configurable-io-plan.md` – Configurable worker IO types and factories.
+- `docs/sdk/config-key-normalisation-plan.md` – Normalising config key shapes.
+
+Each of those files now carries a `Status: in progress` header so it’s
+clear they are live design documents rather than historical notes.
+

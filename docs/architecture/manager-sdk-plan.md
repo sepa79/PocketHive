@@ -1,5 +1,8 @@
 # Manager SDK & Guard/Scenario Extraction — Plan
 
+> Status: **in progress**.  
+> Core Manager SDK pieces are implemented; remaining items are documentation/alignment and incremental improvements.
+
 This document sketches how to extract a reusable **Manager SDK** from the current
 Swarm Controller implementation, and how to move guards and scenarios into
 `common` so they are reusable and swappable across different controller

@@ -97,7 +97,8 @@ export default function Layout() {
                 <a href="/docs/readme.html" className="dropdown-item" onClick={closeSidebar}>README</a>
                 <a href="/docs/bindings.html" className="dropdown-item" onClick={closeSidebar}>Buzz Bindings</a>
                 <a href="/docs/changelog.html" className="dropdown-item" onClick={closeSidebar}>Changelog</a>
-                <a href="/docs/docs.html" className="dropdown-item" onClick={closeSidebar}>API Docs</a>
+                <a href="/docs/index.html" className="dropdown-item" onClick={closeSidebar}>Docs</a>
+                <a href="/docs/docs.html" className="dropdown-item" onClick={closeSidebar}>AsyncAPI</a>
               </div>
             )}
           </div>

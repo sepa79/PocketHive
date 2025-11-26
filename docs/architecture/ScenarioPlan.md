@@ -1,5 +1,8 @@
 # Scenario Plan — Architecture (Concise)
 
+> Status: **in progress**.  
+> Environment/SUT profiles and scenario engine behaviour are evolving; this is the authoritative plan.
+
 ## Scope & Principles
 - A single **Scenario Plan** drives the **Swarm Manager**, which schedules and sends **`config-update`** messages to targeted bees.
 - **All-or-nothing readiness**: the scenario starts only when **all declared bees** are ready; otherwise fail fast.

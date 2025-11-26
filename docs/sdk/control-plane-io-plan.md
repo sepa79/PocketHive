@@ -1,5 +1,8 @@
 # Control-Plane-Driven IO (Inputs/Outputs) — Plan
 
+> Status: **future / design**.  
+> IO v2 where the control plane owns IO config; not implemented yet.
+
 This document outlines a future refactor (beyond the current env-mapping
 approach) where worker IO configuration is owned entirely by the control
 plane, without relying on Spring environment properties for IO type and
@@ -192,4 +195,3 @@ all worker IO, while keeping the Worker SDK simple and predictable.
   and only allow transport options to change?
 - How should status/error reporting distinguish between IO wiring problems
   (e.g. queue missing) and worker-domain errors?
-

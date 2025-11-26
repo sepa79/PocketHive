@@ -1,5 +1,8 @@
 # Removing `inQueue` / `outQueue` From `@PocketHiveWorker`
 
+> Status: **implemented / archived**.  
+> Superseded by: `docs/sdk/worker-single-io-plan.md` and `docs/sdk/worker-configurable-io-plan.md`.
+
 > Goal: eliminate the annotation-level queue defaults and make scenario/plan data the sole source of truth—no silent fallbacks.
 
 ## 1. Inventory & Contracts

@@ -1,5 +1,8 @@
 # Worker Configurable IO — Plan
 
+> Status: **in progress**.  
+> Config-driven IO types are implemented; remaining work covers IO factories, broader capability wiring, and follow-up tests.
+
 Make worker input/output selectable by configuration (scenario/capabilities/env)
 instead of being hardcoded in `@PocketHiveWorker`. Workers should declare
 capabilities only; concrete IO types come from config.

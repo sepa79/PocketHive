@@ -1,5 +1,8 @@
 # Worker Config Simplification Plan
 
+> Status: **implemented / archived**.  
+> Superseded by: the current `WorkerControlPlaneRuntime` / `ConfigMerger` implementation and control-plane docs.
+
 Goal: cut down `WorkerControlPlaneRuntime` to the essentials so config handling becomes “default
 POJO → merge incoming patch → publish”. We’ll follow the steps below **after** the current branch
 stabilises and tests pass.

@@ -1,5 +1,8 @@
 # PocketHive Worker SDK — Plugin Container Plan
 
+> Status: **future / design**.  
+> Captures ideas for plugin-based worker hosts; not implemented yet.
+
 > Scope: stage the worker host rollout in two SDK releases. SDK v3 delivers a one-worker-per-host runtime to validate packaging, configuration, and tooling. SDK v4 extends the exact same host to load multiple workers once the operational model is proven.
 
 ## 1) Version Scope & Principles

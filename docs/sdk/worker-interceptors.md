@@ -1,5 +1,8 @@
 # PocketHive Worker Interceptors
 
+> Status: **implemented / reference**.  
+> Describes the current interceptor pipeline in the Worker SDK; kept as living documentation rather than a plan.
+
 This document explains the Worker SDK's invocation interceptors: what they are, how they are ordered, and how to plug in
 your own cross-cutting logic such as metrics, tracing, or templating.
 

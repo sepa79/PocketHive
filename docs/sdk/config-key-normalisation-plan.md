@@ -1,5 +1,8 @@
 # Config Key Normalisation — Plan
 
+> Status: **in progress**.  
+> New code mostly follows a single key style; this plan tracks remaining cleanup and enforcement.
+
 Goal: converge on a single key style (camelCase) across worker configs, IO configs, scenarios, and capabilities, and remove relaxed/heuristic parsing in code. This should make configuration predictable, discoverable, and NFF‑compliant.
 
 ---

@@ -1,5 +1,8 @@
 # Build ID / Runtime Version Plan
 
+> Status: **future / design**.  
+> Build id propagation is not wired end-to-end yet; this plan tracks the desired behaviour.
+
 Goal: introduce a single `POCKETHIVE_BUILD_ID` that is generated once per `build-hive.sh` run and propagated end‑to‑end (jars, images, containers, status events, tests) so we can prove at runtime which build we are actually running.
 
 ## 1. Build ID generation (build-hive.sh)
@@ -53,4 +56,3 @@ Goal: introduce a single `POCKETHIVE_BUILD_ID` that is generated once per `build
   - Set `POCKETHIVE_BUILD_ID` explicitly (e.g. `${GIT_SHA}-${BUILD_NUMBER}`) before invoking `build-hive.sh` so images and status events are traceable back to CI runs.
 - Document the contract briefly in `docs/ARCHITECTURE.md` / observability section:
   - “All services and workers must expose `buildId` via `/actuator/info` and control‑plane status envelopes; `build-hive.sh` guarantees a consistent `POCKETHIVE_BUILD_ID` per build.”
-

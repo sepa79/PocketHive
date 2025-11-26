@@ -1,5 +1,8 @@
 # Swarm Controller Queue Guard Plan
 
+> Status: **in progress**.  
+> BufferGuard is implemented and exercised by e2e scenarios; remaining tasks focus on documentation and operator guidance.
+
 > Scope: add controller + scenario changes so Generator `ratePerSec` is actively regulated to keep the Gen→Mod buffer inside a configurable bracket without breaking Moderator shaping.
 
 ## 1) Goals & Success Criteria

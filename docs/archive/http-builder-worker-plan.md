@@ -1,5 +1,8 @@
 # HTTP Builder Worker — Plan
 
+> Status: **implemented / archived**.  
+> The HTTP Builder worker and default HTTP templates are implemented; see `http-builder-service` and `docs/scenarios/SCENARIO_PATTERNS.md` for current usage.
+
 **Goal**
 - Add a generic HTTP Builder worker that takes `callId` + context from Rabbit, resolves a disk-backed template, and emits an HTTP request envelope for the existing processor (base URL, retries, etc. stay in the processor).
 

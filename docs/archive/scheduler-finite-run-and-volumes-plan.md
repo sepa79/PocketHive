@@ -1,5 +1,8 @@
 # Scheduler Finite-Run & Scenario-Driven Volumes — Plan
 
+> Status: **implemented / archived**.  
+> Superseded by: scheduler IO docs (`SchedulerWorkInput`), and scenario volume docs in `docs/scenarios/SCENARIO_CONTRACT.md`.
+
 This file tracks two related enhancements:
 
 - Finite-run support for the scheduler input (max messages, quota headers).

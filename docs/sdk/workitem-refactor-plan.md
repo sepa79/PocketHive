@@ -1,5 +1,8 @@
 # WorkItem Refactor & Worker Contract Simplification Plan
 
+> Status: **future / design**.  
+> Builds on the current WorkItem/steps model for richer pipelines and interceptor configuration; not fully implemented yet.
+
 > Scope: replace `WorkMessage`/`WorkResult` with a simpler `WorkItem` API and a single return type, then extend it with step support.  
 > Sources: align with `docs/ARCHITECTURE.md`, `docs/ORCHESTRATOR-REST.md`, and the pipeline/HTTP plans in `docs/sdk/`.
 
