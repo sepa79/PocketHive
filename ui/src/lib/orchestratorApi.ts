@@ -78,8 +78,14 @@ export async function createSwarm(id: string, templateId: string) {
   }
 }
 
-export async function startSwarm(id: string) {
-  const body = JSON.stringify({ idempotencyKey: randomId() })
+export async function startSwarm(id: string, options?: { autoPullImages?: boolean }) {
+  const payload: Record<string, unknown> = {
+    idempotencyKey: randomId(),
+  }
+  if (options && options.autoPullImages === true) {
+    payload.autoPullImages = true
+  }
+  const body = JSON.stringify(payload)
   const response = await apiFetch(`/orchestrator/swarms/${id}/start`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

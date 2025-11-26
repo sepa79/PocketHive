@@ -76,7 +76,7 @@ class SwarmControllerTest {
         registry.updateStatus("sw1", SwarmStatus.CREATING);
         registry.updateStatus("sw1", SwarmStatus.READY);
         SwarmController ctrl = controller(tracker, registry, new SwarmPlanRegistry());
-        SwarmController.ControlRequest req = new SwarmController.ControlRequest("idem", null);
+        SwarmController.ControlRequest req = new SwarmController.ControlRequest("idem", null, null);
 
         ResponseEntity<ControlResponse> resp = ctrl.start("sw1", req);
 
@@ -127,7 +127,7 @@ class SwarmControllerTest {
         SwarmRegistry registry = new SwarmRegistry();
         registry.register(new Swarm("sw1", "controller-inst", "ctrl"));
         SwarmController ctrl = controller(new SwarmCreateTracker(), registry, new SwarmPlanRegistry());
-        SwarmController.ControlRequest req = new SwarmController.ControlRequest("idem", null);
+        SwarmController.ControlRequest req = new SwarmController.ControlRequest("idem", null, null);
 
         ResponseEntity<ControlResponse> r1 = ctrl.start("sw1", req);
         ResponseEntity<ControlResponse> r2 = ctrl.start("sw1", req);

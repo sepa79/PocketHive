@@ -256,6 +256,29 @@ class ContainerLifecycleManagerTest {
         assertTrue(registry.find(sw2.getId()).isPresent());
     }
 
+    @Test
+    void preloadSwarmImagesPullsControllerAndBeeImages() {
+        SwarmRegistry registry = new SwarmRegistry();
+        Swarm swarm = new Swarm("sw1", "inst1", "cid");
+        swarm.attachTemplate(new SwarmTemplateMetadata(
+            "tpl-1",
+            "swarm-controller:latest",
+            List.of(
+                new Bee("generator", "generator:latest", new Work(null, "out"), Map.of()),
+                new Bee("processor", "processor:latest", new Work("in", "out"), Map.of()))));
+        registry.register(swarm);
+        OrchestratorProperties properties = withRepositoryPrefix("ghcr.io/acme/pockethive");
+        ControlPlaneProperties controlPlane = controlPlaneProperties();
+        ContainerLifecycleManager manager = new ContainerLifecycleManager(
+            docker, registry, amqp, properties, controlPlane, rabbitProperties());
+
+        manager.preloadSwarmImages("sw1");
+
+        verify(docker).pullImage("ghcr.io/acme/pockethive/swarm-controller:latest");
+        verify(docker).pullImage("ghcr.io/acme/pockethive/generator:latest");
+        verify(docker).pullImage("ghcr.io/acme/pockethive/processor:latest");
+    }
+
     private static OrchestratorProperties defaultProperties() {
         return new OrchestratorProperties(
             new OrchestratorProperties.Orchestrator(
