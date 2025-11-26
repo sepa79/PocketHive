@@ -35,7 +35,7 @@ test('loads available scenarios on mount', async () => {
 
   render(
     <CapabilitiesProvider>
-      <SwarmCreateModal onClose={() => {}} />
+      <SwarmCreateModal onClose={() => {}} autoPullOnStart={false} onChangeAutoPull={() => {}} />
     </CapabilitiesProvider>,
   )
 
@@ -69,7 +69,7 @@ test('submits selected scenario', async () => {
     .mockResolvedValueOnce({ ok: true } as Response)
   render(
     <CapabilitiesProvider>
-      <SwarmCreateModal onClose={() => {}} />
+      <SwarmCreateModal onClose={() => {}} autoPullOnStart={false} onChangeAutoPull={() => {}} />
     </CapabilitiesProvider>,
   )
 
@@ -109,7 +109,7 @@ test('shows conflict message when swarm already exists', async () => {
 
   render(
     <CapabilitiesProvider>
-      <SwarmCreateModal onClose={() => {}} />
+      <SwarmCreateModal onClose={() => {}} autoPullOnStart={false} onChangeAutoPull={() => {}} />
     </CapabilitiesProvider>,
   )
 
@@ -133,7 +133,7 @@ test('does not submit when scenario selection is cleared', async () => {
     } as unknown as Response)
   render(
     <CapabilitiesProvider>
-      <SwarmCreateModal onClose={() => {}} />
+      <SwarmCreateModal onClose={() => {}} autoPullOnStart={false} onChangeAutoPull={() => {}} />
     </CapabilitiesProvider>,
   )
 
@@ -196,7 +196,7 @@ test('renders manifest details when available', async () => {
 
   render(
     <CapabilitiesProvider>
-      <SwarmCreateModal onClose={() => {}} />
+      <SwarmCreateModal onClose={() => {}} autoPullOnStart={false} onChangeAutoPull={() => {}} />
     </CapabilitiesProvider>,
   )
 

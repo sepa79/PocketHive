@@ -22,6 +22,7 @@ export default function HivePage() {
   const [components, setComponents] = useState<Component[]>([])
   const [selected, setSelected] = useState<Component | null>(null)
   const [search, setSearch] = useState('')
+  const [autoPullOnStart, setAutoPullOnStart] = useState(false)
   const [showCreate, setShowCreate] = useState(false)
   const [activeSwarm, setActiveSwarm] = useState<string | null>(null)
   const [expandedSwarmId, setExpandedSwarmId] = useState<string | null>(null)
@@ -188,11 +189,11 @@ export default function HivePage() {
             {sortedAssignedEntries
               .filter(([id]) => !activeSwarm || id === activeSwarm)
               .map(([id, comps]) => {
-                const normalizedId = id === 'default' ? 'default' : id
-                const isExpanded = expandedSwarmId === id
-                const health = swarmHealth[id] ?? defaultSwarmHealth(id)
-                return (
-                  <div key={id} className="space-y-2">
+                    const normalizedId = id === 'default' ? 'default' : id
+                    const isExpanded = expandedSwarmId === id
+                    const health = swarmHealth[id] ?? defaultSwarmHealth(id)
+                    return (
+                      <div key={id} className="space-y-2">
                     <SwarmRow
                       swarmId={id}
                       isDefault={id === 'default'}
@@ -200,6 +201,7 @@ export default function HivePage() {
                       expanded={isExpanded}
                       isSelected={contextSwarmId === id}
                       componentCount={comps.length}
+                      autoPullOnStart={autoPullOnStart}
                       onFocusChange={(swarm, nextActive) =>
                         setActiveSwarm((current) => {
                           const normalized = swarm === 'default' ? 'default' : swarm
@@ -317,7 +319,13 @@ export default function HivePage() {
           </div>
         )}
       </div>
-      {showCreate && <SwarmCreateModal onClose={() => setShowCreate(false)} />}
+      {showCreate && (
+        <SwarmCreateModal
+          onClose={() => setShowCreate(false)}
+          autoPullOnStart={autoPullOnStart}
+          onChangeAutoPull={setAutoPullOnStart}
+        />
+      )}
     </div>
   )
 }
@@ -455,4 +463,3 @@ function stateLabel(state: HealthVisualState): string {
       return 'Missing'
   }
 }
-

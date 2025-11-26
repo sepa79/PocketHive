@@ -15,6 +15,8 @@ import { useCapabilities } from '../../contexts/CapabilitiesContext'
 
 interface Props {
   onClose: () => void
+  autoPullOnStart: boolean
+  onChangeAutoPull: (next: boolean) => void
 }
 
 interface ScenarioTemplate {
@@ -32,7 +34,7 @@ interface ScenarioBee {
 
 type ApiError = Error & { status?: number }
 
-export default function SwarmCreateModal({ onClose }: Props) {
+export default function SwarmCreateModal({ onClose, autoPullOnStart, onChangeAutoPull }: Props) {
   const [swarmId, setSwarmId] = useState('')
   const [templates, setTemplates] = useState<ScenarioTemplate[]>([])
   const [scenarioId, setScenarioId] = useState('')
@@ -155,6 +157,17 @@ export default function SwarmCreateModal({ onClose }: Props) {
                 onChange={(e) => setSwarmId(e.target.value)}
                 className="w-full rounded border border-white/20 bg-white/10 px-2 py-1 text-sm"
               />
+            </div>
+            <div className="flex items-end">
+              <label className="flex items-center gap-1 text-xs text-white/70">
+                <input
+                  type="checkbox"
+                  className="h-3 w-3 rounded border-white/40 bg-transparent"
+                  checked={autoPullOnStart}
+                  onChange={(e) => onChangeAutoPull(e.target.checked)}
+                />
+                <span>Pull images on start</span>
+              </label>
             </div>
           </div>
           <div className="flex gap-4 flex-1 min-h-0">
