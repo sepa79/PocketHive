@@ -41,6 +41,30 @@ workers: small apps built on top of a shared SDK, with clear ports and adapters.
   - [ ] Align `swarm-controller-refactor.md` with this plan
   - [ ] Update architecture docs once the Manager SDK is in place
 
+## 0.1 Next big step — Compute adapters (Docker/Swarm/K8s-ready)
+
+- [ ] Design a generic `ComputeAdapter` port in Manager SDK
+- [ ] Implement `DockerContainerComputeAdapter` (single-node Docker)
+- [ ] Implement `DockerSwarmServiceComputeAdapter` (Docker Swarm services)
+- [ ] Wire `ManagerRuntimeCore` / Swarm Controller to use `ComputeAdapter`
+- [ ] Add config flag to choose adapter per deployment (no guessing)
+- [ ] Document adapter model + extension path (Kubernetes/ECS)
+
+High-level idea:
+
+- Move all "how do we start/stop workers and controllers" logic behind a single
+  `ComputeAdapter` interface so Manager implementations do not depend directly
+  on Docker/Swarm/Kubernetes APIs.
+- Provide at least two concrete adapters:
+  - A **single-Docker** adapter that uses the existing `DockerContainerClient`
+    and explicit `pullImage(...)` + `createAndStartContainer(...)` calls.
+  - A **Swarm services** adapter that uses Docker Swarm's service API
+    (`createServiceCmd` / `removeServiceCmd`) to model bees as services rather
+    than ad-hoc containers.
+- Keep the choice explicit via configuration (e.g.
+  `pockethive.manager.computeAdapter = DOCKER_SINGLE | DOCKER_SWARM`), with no
+  implicit fallbacks or environment guessing.
+
 ## 1. New module layout (Manager SDK in `common`)
 
 Introduce a new module:
