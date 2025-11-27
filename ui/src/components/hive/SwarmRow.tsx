@@ -32,7 +32,6 @@ export type SwarmRowProps = PropsWithChildren<{
   healthState?: HealthVisualState
   healthTitle?: string
   statusKey?: number
-  autoPullOnStart?: boolean
 }>
 
 export default function SwarmRow({
@@ -48,7 +47,6 @@ export default function SwarmRow({
   healthState = 'missing',
   healthTitle = 'Swarm status unavailable',
   statusKey = 0,
-  autoPullOnStart = false,
   children,
   onFocusChange,
   onSelect,
@@ -108,7 +106,7 @@ export default function SwarmRow({
 
     try {
       if (action === 'start') {
-        await startSwarm(swarmId, autoPullOnStart ? { autoPullImages: true } : undefined)
+        await startSwarm(swarmId)
       } else if (action === 'stop') {
         await stopSwarm(swarmId)
       } else {

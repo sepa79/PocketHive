@@ -201,7 +201,6 @@ export default function HivePage() {
                       expanded={isExpanded}
                       isSelected={contextSwarmId === id}
                       componentCount={comps.length}
-                      autoPullOnStart={autoPullOnStart}
                       onFocusChange={(swarm, nextActive) =>
                         setActiveSwarm((current) => {
                           const normalized = swarm === 'default' ? 'default' : swarm

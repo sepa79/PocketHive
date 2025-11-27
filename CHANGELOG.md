@@ -10,7 +10,7 @@ _No unreleased changes yet._
 ## [0.14.3] - 2025-11-26
 Timestamp: 2025-11-26T00:00:00Z
 
-- Orchestrator & Docker integration: added an explicit `autoPullImages` flag on `/api/swarms/{swarmId}/start` (and the UI `startSwarm` helper) that, when enabled, causes the orchestrator to `docker pull` the swarm-controller image and all bee images for the selected scenario before issuing `swarm-start`, using the configured image repository prefix without introducing new fallbacks.
+- Orchestrator & Docker integration: added an explicit `autoPullImages` flag on `/api/swarms/{swarmId}/create` (surfaced in the swarm create modal) that, when enabled, causes the orchestrator to `docker pull` the swarm-controller image during swarm creation and then preload all bee images referenced by the scenario template using the configured image repository prefix, without introducing new fallbacks.
 - Docker client: introduced a `DockerContainerClient.pullImage(image)` helper that wraps the Docker Java `pullImageCmd` with consistent error translation and interrupt handling, so orchestrator and future manager SDK users can preload images via a single, reusable entry point.
 - Status & templates: extended swarm template metadata to keep the controller image and bee list available at runtime, allowing the orchestrator to resolve and log which images were preloaded for each swarm and paving the way for future image diagnostics and tooling.
 

@@ -209,7 +209,7 @@ public class SwarmLifecycleSteps {
     String idempotencyKey = idKey("start");
     startResponse = orchestratorClient.startSwarm(
         swarmId,
-        new ControlRequest(idempotencyKey, "e2e lifecycle start", null));
+        new ControlRequest(idempotencyKey, "e2e lifecycle start"));
     LOGGER.info("Start request correlation={} watch={}", startResponse.correlationId(), startResponse.watch());
   }
 
@@ -695,7 +695,7 @@ public class SwarmLifecycleSteps {
     String idempotencyKey = idKey("stop");
     stopResponse = orchestratorClient.stopSwarm(
         swarmId,
-        new ControlRequest(idempotencyKey, "e2e lifecycle stop", null));
+        new ControlRequest(idempotencyKey, "e2e lifecycle stop"));
     LOGGER.info("Stop request correlation={} watch={}", stopResponse.correlationId(), stopResponse.watch());
   }
 
@@ -726,7 +726,7 @@ public class SwarmLifecycleSteps {
     String idempotencyKey = idKey("remove");
     removeResponse = orchestratorClient.removeSwarm(
         swarmId,
-        new ControlRequest(idempotencyKey, "e2e lifecycle remove", null));
+        new ControlRequest(idempotencyKey, "e2e lifecycle remove"));
     LOGGER.info("Remove request correlation={} watch={}", removeResponse.correlationId(), removeResponse.watch());
   }
 
@@ -781,7 +781,7 @@ public class SwarmLifecycleSteps {
     if (!swarmRemoved && orchestratorClient != null && swarmId != null) {
       try {
         LOGGER.info("Attempting to remove swarm {} during cleanup", swarmId);
-        orchestratorClient.removeSwarm(swarmId, new ControlRequest(idKey("cleanup"), "cleanup", null));
+        orchestratorClient.removeSwarm(swarmId, new ControlRequest(idKey("cleanup"), "cleanup"));
       } catch (Exception ex) {
         LOGGER.warn("Cleanup remove failed for swarm {}", swarmId, ex);
       }

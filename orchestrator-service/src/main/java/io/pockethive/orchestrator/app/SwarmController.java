@@ -165,6 +165,9 @@ public class SwarmController {
                     instanceId,
                     new SwarmTemplateMetadata(templateId, image, plan.bees()),
                     autoPull);
+                if (autoPull) {
+                    lifecycle.preloadSwarmImages(swarmId);
+                }
                 creates.register(swarm.getInstanceId(), new Pending(
                     swarmId,
                     swarm.getInstanceId(),
@@ -192,11 +195,6 @@ public class SwarmController {
     public ResponseEntity<ControlResponse> start(@PathVariable String swarmId, @RequestBody ControlRequest req) {
         String path = "/api/swarms/" + swarmId + "/start";
         logRestRequest("POST", path, req);
-        Boolean autoPull = req.autoPullImages();
-        if (Boolean.TRUE.equals(autoPull)) {
-            log.info("autoPullImages=true for swarm {}; preloading controller and bee images before start", swarmId);
-            lifecycle.preloadSwarmImages(swarmId);
-        }
         ResponseEntity<ControlResponse> response = sendSignal("swarm-start", swarmId, req.idempotencyKey(), 180_000L);
         logRestResponse("POST", path, response);
         return response;
@@ -355,7 +353,7 @@ public class SwarmController {
         return image;
     }
 
-    public record ControlRequest(String idempotencyKey, String notes, Boolean autoPullImages) {}
+    public record ControlRequest(String idempotencyKey, String notes) {}
 
     private record ErrorResponse(String message) {}
 

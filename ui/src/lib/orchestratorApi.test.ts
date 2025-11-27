@@ -51,16 +51,7 @@ describe('orchestratorApi', () => {
     expect(call[1]?.method).toBe('POST')
     const body = JSON.parse(call[1]?.body as string)
     expect(typeof body.idempotencyKey).toBe('string')
-    expect(body.autoPullImages).toBe(false)
-  })
-
-  it('posts swarm start with autoPullImages when requested', async () => {
-    await startSwarm('sw1', { autoPullImages: true })
-    const call = (apiFetch as unknown as Mock).mock.calls.pop()!
-    expect(call[0]).toBe('/orchestrator/swarms/sw1/start')
-    expect(call[1]?.method).toBe('POST')
-    const body = JSON.parse(call[1]?.body as string)
-    expect(body.autoPullImages).toBe(true)
+    expect(body.autoPullImages).toBeUndefined()
   })
 
   it('posts swarm stop', async () => {
