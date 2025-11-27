@@ -13,6 +13,7 @@ import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.pockethive.controlplane.ControlPlaneSignals;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
+import com.github.dockerjava.api.DockerClient;
 import io.pockethive.docker.DockerContainerClient;
 import io.pockethive.swarm.model.Bee;
 import io.pockethive.swarm.model.BufferGuardPolicy;
@@ -67,6 +68,8 @@ class SwarmLifecycleManagerTest {
   AmqpAdmin amqp;
   @Mock
   DockerContainerClient docker;
+  @Mock
+  DockerClient dockerClient;
   @Mock
   RabbitTemplate rabbit;
 
@@ -275,7 +278,7 @@ class SwarmLifecycleManagerTest {
     SimpleMeterRegistry registry = new SimpleMeterRegistry();
     try {
       SwarmLifecycleManager manager = new SwarmLifecycleManager(
-          amqp, mapper, docker, rabbit, rabbitProperties, "inst", properties, registry);
+          amqp, mapper, dockerClient, docker, rabbit, rabbitProperties, "inst", properties, registry);
       SwarmPlan plan = new SwarmPlan("swarm", List.of(new Bee("gen", "img1", new Work(null, null), null)));
 
       assertThatThrownBy(() -> manager.prepare(mapper.writeValueAsString(plan)))
@@ -860,6 +863,7 @@ class SwarmLifecycleManagerTest {
     return new SwarmLifecycleManager(
         amqp,
         mapper,
+        dockerClient,
         docker,
         rabbit,
         rabbitProperties,

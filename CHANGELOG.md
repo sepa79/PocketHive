@@ -7,6 +7,14 @@ Timestamp: 2025-11-26T00:00:00Z
 
 _No unreleased changes yet._
 
+## [0.14.4] - 2025-11-27
+Timestamp: 2025-11-27T00:00:00Z
+
+- Manager SDK & compute adapters: introduced a shared `ComputeAdapterType` enum (with `DOCKER_SINGLE`, `AUTO`, `SWARM_SERVICE`) and centralised `DockerSingleNodeComputeAdapter` and `DockerSwarmServiceComputeAdapter` implementations in `common/docker-client`, so both Orchestrator and Swarm Controller can use the same single-host and Swarm-service backends without duplicating logic.
+- Orchestrator compute mode: added `pockethive.control-plane.orchestrator.docker.compute-adapter` with `AUTO` default; the orchestrator now inspects `docker info` to resolve `AUTO` into `DOCKER_SINGLE` or `SWARM_SERVICE`, validates explicit `SWARM_SERVICE` only when Swarm is active, logs the resolved adapter type at startup, and propagates the concrete choice to the Swarm Controller via `POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_DOCKER_COMPUTE_ADAPTER`.
+- Swarm Controller compute mode: rewired worker provisioning to go through the shared compute adapters (`DockerSingleNodeComputeAdapter` for single-host, `DockerSwarmServiceComputeAdapter` for Swarm services) while keeping existing queue, volume, and guard behaviour intact, and tightened config so controller no longer guesses adapter types.
+- Status & UI diagnostics: extended orchestrator `status-full`/`status-delta` events to include `data.computeAdapter`, updated the Hive UI component details panel to show `Compute adapter` for the orchestrator node, and ensured status deltas keep this field up to date so cluster operators can see the active compute mode at a glance.
+
 ## [0.14.3] - 2025-11-26
 Timestamp: 2025-11-26T00:00:00Z
 

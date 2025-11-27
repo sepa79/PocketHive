@@ -43,10 +43,10 @@ workers: small apps built on top of a shared SDK, with clear ports and adapters.
 
 ## 0.1 Next big step — Compute adapters (Docker/Swarm/K8s-ready)
 
-- [ ] Design a generic `ComputeAdapter` port in Manager SDK
-- [ ] Implement `DockerContainerComputeAdapter` (single-node Docker)
+- [x] Design a generic `ComputeAdapter` port in Manager SDK
+- [x] Implement `DockerContainerComputeAdapter` (single-node Docker)
 - [ ] Implement `DockerSwarmServiceComputeAdapter` (Docker Swarm services)
-- [ ] Wire `ManagerRuntimeCore` / Swarm Controller to use `ComputeAdapter`
+- [x] Wire `ManagerRuntimeCore` / Swarm Controller to use `ComputeAdapter`
 - [ ] Add config flag to choose adapter per deployment (no guessing)
 - [ ] Document adapter model + extension path (Kubernetes/ECS)
 

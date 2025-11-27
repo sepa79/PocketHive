@@ -1,5 +1,6 @@
 package io.pockethive.orchestrator.config;
 
+import io.pockethive.manager.runtime.ComputeAdapterType;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -225,13 +226,22 @@ public class OrchestratorProperties {
     public static final class Docker {
 
         private final String socketPath;
+        private final ComputeAdapterType computeAdapter;
 
-        public Docker(@NotBlank String socketPath) {
+        public Docker(@NotBlank String socketPath, ComputeAdapterType computeAdapter) {
             this.socketPath = requireNonBlank(socketPath, "socketPath");
+            // For orchestrator we want AUTO as the default so it can decide
+            // between single-node Docker and Swarm services based on the
+            // runtime environment. Explicit values are honoured as-is.
+            this.computeAdapter = computeAdapter == null ? ComputeAdapterType.AUTO : computeAdapter;
         }
 
         public String getSocketPath() {
             return socketPath;
+        }
+
+        public ComputeAdapterType getComputeAdapter() {
+            return computeAdapter;
         }
     }
 

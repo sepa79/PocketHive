@@ -428,21 +428,33 @@ public class SwarmSignalListener {
     }
 
     private void sendStatusFull() {
-        ControlPlaneEmitter.StatusContext context = ControlPlaneEmitter.StatusContext.of(builder -> builder
-            .enabled(true)
-            .controlIn(controlQueue)
-            .controlRoutes(controlRoutes.toArray(String[]::new))
-            .data("swarmCount", registry.count()));
+        ControlPlaneEmitter.StatusContext context = ControlPlaneEmitter.StatusContext.of(builder -> {
+            var b = builder
+                .enabled(true)
+                .controlIn(controlQueue)
+                .controlRoutes(controlRoutes.toArray(String[]::new))
+                .data("swarmCount", registry.count());
+            var adapterType = lifecycle.currentComputeAdapterType();
+            if (adapterType != null) {
+                b.data("computeAdapter", adapterType.name());
+            }
+        });
         controlEmitter.emitStatusSnapshot(context);
         log.debug("[CTRL] SEND status-full inst={} swarmCount={}", instanceId, registry.count());
     }
 
     private void sendStatusDelta() {
-        ControlPlaneEmitter.StatusContext context = ControlPlaneEmitter.StatusContext.of(builder -> builder
-            .enabled(true)
-            .controlIn(controlQueue)
-            .controlRoutes(controlRoutes.toArray(String[]::new))
-            .data("swarmCount", registry.count()));
+        ControlPlaneEmitter.StatusContext context = ControlPlaneEmitter.StatusContext.of(builder -> {
+            var b = builder
+                .enabled(true)
+                .controlIn(controlQueue)
+                .controlRoutes(controlRoutes.toArray(String[]::new))
+                .data("swarmCount", registry.count());
+            var adapterType = lifecycle.currentComputeAdapterType();
+            if (adapterType != null) {
+                b.data("computeAdapter", adapterType.name());
+            }
+        });
         controlEmitter.emitStatusDelta(context);
         log.debug("[CTRL] SEND status-delta inst={} swarmCount={}", instanceId, registry.count());
     }
