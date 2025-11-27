@@ -21,7 +21,8 @@ export default function ComponentDetail({ component, onClose }: Props) {
   const [isEditing, setIsEditing] = useState(false)
   const [form, setForm] = useState<Record<string, ConfigFormValue>>({})
   const { ensureCapabilities, getManifestForImage, manifests } = useCapabilities()
-  const { ensureSwarms, getBeeImage, getControllerImage } = useSwarmMetadata()
+  const { ensureSwarms, refreshSwarms, getBeeImage, getControllerImage, findSwarm } =
+    useSwarmMetadata()
   const resolvedImage = useMemo(() => {
     if (component.image) {
       return component.image
@@ -102,6 +103,22 @@ export default function ComponentDetail({ component, onClose }: Props) {
         entries.push({
           label: 'Compute adapter',
           value: adapter,
+        })
+      }
+    }
+    // Swarm-controller specific metadata based on swarm summaries
+    if (normalizedRole === 'swarm-controller') {
+      const swarmSummary = findSwarm(component.swarmId ?? null)
+      if (swarmSummary?.templateId) {
+        entries.push({
+          label: 'Scenario template',
+          value: swarmSummary.templateId,
+        })
+      }
+      if (swarmSummary?.stackName) {
+        entries.push({
+          label: 'Swarm stack',
+          value: swarmSummary.stackName,
         })
       }
     }
@@ -385,15 +402,33 @@ export default function ComponentDetail({ component, onClose }: Props) {
         <h2 className="text-xl flex items-center gap-2">
           {component.id}
           <span className={`h-3 w-3 rounded-full ${colorForHealth(health)}`} />
-          {/* status refresh no longer supported */}
         </h2>
+        {normalizedRole === 'orchestrator' && (
+          <button
+            className="rounded border border-white/20 px-2 py-0.5 text-xs text-white/80 hover:bg-white/10"
+            onClick={async () => {
+              try {
+                await refreshSwarms()
+                displayToast(setToast, 'Swarm metadata refreshed')
+              } catch {
+                displayToast(setToast, 'Failed to refresh swarm metadata')
+              }
+            }}
+          >
+            Refresh swarms
+          </button>
+        )}
       </div>
       <div className="text-sm text-white/60 mb-3">{role}</div>
       <div className="space-y-1 text-sm mb-4">
         <div>Version: {component.version ?? '—'}</div>
-        <div>Uptime: {formatSeconds(component.uptimeSec)}</div>
+        <div>
+          Started:{' '}
+          {typeof component.startedAt === 'number'
+            ? new Date(component.startedAt).toLocaleString()
+            : '—'}
+        </div>
         <div>Last heartbeat: {timeAgo(component.lastHeartbeat)}</div>
-        <div>Env: {component.env ?? '—'}</div>
         <div>
           Enabled:{' '}
           {component.config?.enabled === false
@@ -785,14 +820,6 @@ function extractStep(entry: CapabilityConfigEntry): number | undefined {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
-function formatSeconds(sec?: number) {
-  if (sec == null) return '—'
-  const h = Math.floor(sec / 3600)
-  const m = Math.floor((sec % 3600) / 60)
-  const s = sec % 60
-  return `${h}h ${m}m ${s}s`
 }
 
 function timeAgo(ts: number) {

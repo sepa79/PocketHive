@@ -17,6 +17,7 @@ import io.pockethive.worker.sdk.config.PocketHiveWorker;
 import io.pockethive.worker.sdk.config.WorkerCapability;
 import io.pockethive.worker.sdk.config.WorkerInputType;
 import io.pockethive.worker.sdk.config.WorkerOutputType;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -64,6 +65,7 @@ public final class WorkerControlPlaneRuntime {
     private volatile long lastDeltaStatusAtMillis = 0L;
     private volatile double lastComputedTps = 0.0;
     private volatile double lastIntervalSeconds = 0.0;
+    private final Instant startedAt;
 
     public WorkerControlPlaneRuntime(
         WorkerControlPlane workerControlPlane,
@@ -90,6 +92,7 @@ public final class WorkerControlPlaneRuntime {
             identity.role(),
             identity.instanceId()
         );
+        this.startedAt = Instant.now();
         // Ensure workers discovered during runtime bootstrap receive a status publisher.
         stateStore.all().forEach(this::ensureStatusPublisher);
     }
@@ -586,6 +589,7 @@ public final class WorkerControlPlaneRuntime {
             }
             builder.tps(Math.round(tps));
             builder.data("intervalSeconds", intervalSeconds);
+            builder.data("startedAt", startedAt);
             builder.data("workers", snapshotData.workers());
             builder.data("snapshot", snapshot);
         };

@@ -59,6 +59,7 @@ public class SwarmSignalListener {
   private volatile boolean controllerEnabled = false;
   private final AtomicReference<PendingTemplate> pendingTemplate = new AtomicReference<>();
   private final AtomicReference<PendingStart> pendingStart = new AtomicReference<>();
+  private final java.time.Instant startedAt;
 
   @Autowired
   public SwarmSignalListener(SwarmLifecycle lifecycle,
@@ -81,6 +82,7 @@ public class SwarmSignalListener {
         .identity(new ControlPlaneIdentity(swarmId, role, instanceId))
         .duplicateCache(java.time.Duration.ofMinutes(1), 256)
         .build();
+    this.startedAt = java.time.Instant.now();
     try {
       sendStatusFull();
     } catch (Exception e) {
@@ -816,6 +818,7 @@ public class SwarmSignalListener {
         .data("swarmStatus", status.name())
         .data("controllerEnabled", controllerEnabled)
         .data("workloadsEnabled", workloadsEnabled)
+        .data("startedAt", startedAt)
         .data("swarmDiagnostics", diagnostics.snapshot())
         .queueStats(toQueueStatsPayload(queueSnapshot))
         .controlIn(controlQueue)
@@ -849,6 +852,7 @@ public class SwarmSignalListener {
         .data("swarmStatus", status.name())
         .data("controllerEnabled", controllerEnabled)
         .data("workloadsEnabled", workloadsEnabled)
+        .data("startedAt", startedAt)
         .data("swarmDiagnostics", diagnostics.snapshot())
         .queueStats(toQueueStatsPayload(queueSnapshot))
         .controlIn(controlQueue)

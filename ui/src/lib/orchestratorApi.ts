@@ -157,6 +157,7 @@ function normalizeSwarmSummary(input: unknown): SwarmSummary | null {
     controllerEnabled: record['controllerEnabled'] === true,
     templateId: asString(record['templateId']),
     controllerImage: asString(record['controllerImage']),
+    stackName: asString(record['stackName']),
     bees,
   }
 }

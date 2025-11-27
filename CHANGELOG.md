@@ -7,6 +7,11 @@ Timestamp: 2025-11-26T00:00:00Z
 
 _No unreleased changes yet._
 
+## [0.14.5] - 2025-11-27
+Timestamp: 2025-11-27T12:00:00Z
+
+- Swarm lifecycle & Hive UI: fixed a bug where Swarm Controller components could remain visible in the Hive topology after a swarm was removed by teaching the UI to drop all components for a swarm whenever it sees either a `ready.swarm-remove` confirmation or a controller status event with `data.swarmStatus: "REMOVED"`, ensuring the graph stays in sync with orchestrator state even if the UI misses the original remove confirmation.
+
 ## [0.14.4] - 2025-11-27
 Timestamp: 2025-11-27T00:00:00Z
 

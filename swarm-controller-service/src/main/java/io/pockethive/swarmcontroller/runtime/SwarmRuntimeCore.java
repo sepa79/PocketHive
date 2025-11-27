@@ -91,6 +91,7 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
   private final String swarmId;
   private final ManagerRuntimeCore managerCore;
   private final ScenarioEngine scenarioEngine;
+  private final java.time.Instant startedAt;
 
   private final Set<String> declaredQueues = new HashSet<>();
   private List<String> startOrder = List.of();
@@ -151,6 +152,7 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
         java.util.List.of(new io.pockethive.swarmcontroller.scenario.NoopScenario("default")),
         viewSupplier,
         scenarioContext);
+    this.startedAt = java.time.Instant.now();
   }
 
   private static WorkerSettings deriveWorkerSettings(SwarmControllerProperties properties) {
@@ -273,6 +275,7 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
         .controlRoutes(io.pockethive.swarmcontroller.SwarmControllerRoutes.controllerControlRoutes(swarmId, role, instanceId))
         .controlOut(rk)
         .enabled(true)
+        .data("startedAt", startedAt)
         .data("swarmStatus", status.name())
         .toJson();
     log.debug("[CTRL] SEND rk={} inst={} payload={}", rk, instanceId, snippet(payload));

@@ -15,11 +15,9 @@ export interface Component {
   swarmId?: string
   version?: string
   image?: string | null
-  uptimeSec?: number
+  startedAt?: number
   lastHeartbeat: number
-  env?: string
   status?: string
   queues: QueueInfo[]
   config?: Record<string, unknown>
 }
-

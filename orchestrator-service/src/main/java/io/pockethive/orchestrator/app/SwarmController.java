@@ -20,6 +20,7 @@ import io.pockethive.swarm.model.SwarmPlan;
 import io.pockethive.swarm.model.SwarmTemplate;
 import io.pockethive.swarm.model.TrafficPolicy;
 import io.pockethive.controlplane.spring.ControlPlaneProperties;
+import io.pockethive.manager.runtime.ComputeAdapterType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.core.AmqpTemplate;
@@ -405,6 +406,10 @@ public class SwarmController {
         List<BeeSummary> bees = swarm.bees().stream()
             .map(b -> new BeeSummary(b.role(), b.image()))
             .toList();
+        ComputeAdapterType adapterType = lifecycle.currentComputeAdapterType();
+        String stackName = adapterType == ComputeAdapterType.SWARM_STACK
+            ? ("ph-" + swarm.getId().toLowerCase())
+            : null;
         return new SwarmSummary(
             swarm.getId(),
             swarm.getStatus(),
@@ -414,6 +419,7 @@ public class SwarmController {
             swarm.isControllerEnabled(),
             swarm.templateId().orElse(null),
             swarm.controllerImage().orElse(null),
+            stackName,
             bees);
     }
 
@@ -425,6 +431,7 @@ public class SwarmController {
                                boolean controllerEnabled,
                                String templateId,
                                String controllerImage,
+                               String stackName,
                                List<BeeSummary> bees) {
         public SwarmSummary {
             bees = bees == null ? List.of() : List.copyOf(bees);

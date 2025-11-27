@@ -12,5 +12,6 @@ export interface SwarmSummary {
   controllerEnabled: boolean
   templateId: string | null
   controllerImage: string | null
+  stackName: string | null
   bees: BeeSummary[]
 }

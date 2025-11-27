@@ -661,4 +661,92 @@ describe('swarm lifecycle', () => {
 
     setClient(null)
   })
+
+  it('drops swarm components when a swarm-controller status reports REMOVED', () => {
+    const publish = vi.fn()
+    let cb: (msg: { body: string; headers: Record<string, string> }) => void = () => {}
+    const subscribe = vi
+      .fn()
+      .mockImplementation((_dest: string, fn: (msg: { body: string; headers: Record<string, string> }) => void) => {
+        cb = fn
+        return { unsubscribe() {} }
+      })
+    setClient({ active: true, publish, subscribe } as unknown as Client)
+
+    const updates: Component[][] = []
+    const unsubscribe = subscribeComponents((list) => {
+      updates.push(list.map((component) => ({ ...component })))
+    })
+
+    const now = new Date().toISOString()
+
+    cb({
+      headers: { destination: '/exchange/ph.control/ev.status.swarm-sw1' },
+      body: JSON.stringify({
+        event: 'status',
+        kind: 'status',
+        version: '1',
+        role: 'generator',
+        instance: 'sw1-generator',
+        swarmId: 'sw1',
+        messageId: 'm-gen',
+        timestamp: now,
+      }),
+    })
+
+    cb({
+      headers: { destination: '/exchange/ph.control/ev.status.swarm-sw1' },
+      body: JSON.stringify({
+        event: 'status',
+        kind: 'status',
+        version: '1',
+        role: 'swarm-controller',
+        instance: 'sw1-controller',
+        swarmId: 'sw1',
+        messageId: 'm-ctrl',
+        timestamp: now,
+        data: { swarmStatus: 'RUNNING' },
+      }),
+    })
+
+    cb({
+      headers: { destination: '/exchange/ph.control/ev.status.swarm-sw2' },
+      body: JSON.stringify({
+        event: 'status',
+        kind: 'status',
+        version: '1',
+        role: 'processor',
+        instance: 'sw2-processor',
+        swarmId: 'sw2',
+        messageId: 'm-proc',
+        timestamp: now,
+      }),
+    })
+
+    const beforeRemoval = updates.at(-1)
+    expect(beforeRemoval?.some((component) => component.swarmId === 'sw1')).toBe(true)
+    expect(beforeRemoval?.some((component) => component.swarmId === 'sw2')).toBe(true)
+
+    cb({
+      headers: { destination: '/exchange/ph.control/ev.status.swarm-sw1' },
+      body: JSON.stringify({
+        event: 'status',
+        kind: 'status-delta',
+        version: '1',
+        role: 'swarm-controller',
+        instance: 'sw1-controller',
+        swarmId: 'sw1',
+        messageId: 'm-ctrl-removed',
+        timestamp: now,
+        data: { swarmStatus: 'REMOVED' },
+      }),
+    })
+
+    const afterRemoval = updates.at(-1)
+    expect(afterRemoval?.some((component) => component.swarmId === 'sw1')).toBe(false)
+    expect(afterRemoval?.some((component) => component.swarmId === 'sw2')).toBe(true)
+
+    unsubscribe()
+    setClient(null)
+  })
 })

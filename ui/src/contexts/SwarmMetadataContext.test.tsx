@@ -45,6 +45,7 @@ beforeEach(() => {
         controllerEnabled: true,
         templateId: 'tpl',
         controllerImage: 'ctrl:1',
+        stackName: null,
         bees: [
           { role: 'Generator', image: 'gen:1' },
           { role: 'processor', image: null },
@@ -63,6 +64,7 @@ beforeEach(() => {
         controllerEnabled: true,
         templateId: 'tpl-2',
         controllerImage: 'ctrl:2',
+        stackName: null,
         bees: [{ role: 'moderator', image: 'mod:2' }],
       },
     ]

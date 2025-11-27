@@ -38,6 +38,25 @@ const queueMetrics: Record<string, QueueMetrics> = {}
 const IGNORED_SWARM_IDS = new Set(['default', 'hive'])
 const nodePositions: Record<string, { x: number; y: number }> = {}
 
+function dropSwarmComponents(swarmId: string) {
+  const normalized = swarmId.trim()
+  if (!normalized) return
+
+  Object.entries(components).forEach(([key, comp]) => {
+    const compSwarm = comp.swarmId?.trim()
+    if (compSwarm && compSwarm === normalized) {
+      delete components[key]
+    }
+  })
+
+  Object.entries(syntheticComponents).forEach(([key, comp]) => {
+    const compSwarm = comp.swarmId?.trim()
+    if (compSwarm && compSwarm === normalized) {
+      delete syntheticComponents[key]
+    }
+  })
+}
+
 function getMergedComponents(): Record<string, Component> {
   const merged: Record<string, Component> = { ...components }
   Object.entries(syntheticComponents).forEach(([id, comp]) => {
@@ -111,11 +130,7 @@ function handleLifecycleConfirmation(raw: unknown): boolean {
   if (!swarmId) return false
 
   if (raw.signal === 'swarm-remove') {
-    Object.entries(components).forEach(([key, comp]) => {
-      if (comp.swarmId === swarmId) {
-        delete components[key]
-      }
-    })
+    dropSwarmComponents(swarmId)
     notifyComponentListeners()
     emitTopology()
   }
@@ -273,14 +288,16 @@ export function setClient(newClient: Client | null, destination = controlDestina
         const id = evt.instance
         const swarmId = evt.swarmId.trim()
         if (!swarmId) return
-        const comp: Component = components[id] || {
-          id,
-          name: id,
-          role: evt.role,
-          swarmId,
-          lastHeartbeat: 0,
-          queues: [],
-        }
+        const existing = components[id]
+        const comp: Component =
+          existing || {
+            id,
+            name: id,
+            role: evt.role,
+            swarmId,
+            lastHeartbeat: 0,
+            queues: [],
+          }
         comp.name = id
         comp.role = evt.role
         comp.swarmId = swarmId
@@ -294,11 +311,25 @@ export function setClient(newClient: Client | null, destination = controlDestina
         let workerEnabled: boolean | undefined
         const data = evt.data
         if (data && typeof data === 'object') {
+          const swarmStatus = getString((data as Record<string, unknown>)['swarmStatus'])
+          const normalizedRole = evt.role?.toLowerCase?.()
+          if (
+            normalizedRole === 'swarm-controller' &&
+            swarmStatus &&
+            swarmStatus.toUpperCase() === 'REMOVED'
+          ) {
+            dropSwarmComponents(swarmId)
+            notifyComponentListeners()
+            emitTopology()
+            if (swarmMetadataRefreshHandler) {
+              swarmMetadataRefreshHandler(swarmId)
+            }
+            return
+          }
           const { workers, ...rest } = data as Record<string, unknown> & {
             workers?: unknown
           }
           if (Array.isArray(workers)) {
-            const normalizedRole = evt.role?.toLowerCase?.()
             const workerEntries = workers.filter(isRecord)
             const selected =
               normalizedRole && normalizedRole.length > 0
@@ -338,6 +369,13 @@ export function setClient(newClient: Client | null, destination = controlDestina
             // by always writing the latest value instead of keeping the first snapshot.
             cfg[key] = value
           })
+          const startedAtIso = getString((data as Record<string, unknown>)['startedAt'])
+          if (startedAtIso) {
+            const ts = Date.parse(startedAtIso)
+            if (!Number.isNaN(ts)) {
+              comp.startedAt = ts
+            }
+          }
         }
         const aggregateEnabled =
           typeof workerEnabled === 'boolean'

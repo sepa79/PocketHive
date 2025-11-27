@@ -67,6 +67,7 @@ public class SwarmSignalListener {
     private final String instanceId;
     private final String controlQueue;
     private final List<String> controlRoutes;
+    private final java.time.Instant startedAt;
 
     public SwarmSignalListener(SwarmPlanRegistry plans,
                                SwarmCreateTracker creates,
@@ -90,6 +91,7 @@ public class SwarmSignalListener {
         this.instanceId = identity.instanceId();
         this.controlQueue = Objects.requireNonNull(controlQueue, "controlQueue");
         this.controlRoutes = List.copyOf(resolveControlRoutes(descriptor.routes()));
+        this.startedAt = java.time.Instant.now();
         try {
             sendStatusFull();
         } catch (Exception e) {
@@ -433,7 +435,8 @@ public class SwarmSignalListener {
                 .enabled(true)
                 .controlIn(controlQueue)
                 .controlRoutes(controlRoutes.toArray(String[]::new))
-                .data("swarmCount", registry.count());
+                .data("swarmCount", registry.count())
+                .data("startedAt", startedAt);
             var adapterType = lifecycle.currentComputeAdapterType();
             if (adapterType != null) {
                 b.data("computeAdapter", adapterType.name());
@@ -449,7 +452,8 @@ public class SwarmSignalListener {
                 .enabled(true)
                 .controlIn(controlQueue)
                 .controlRoutes(controlRoutes.toArray(String[]::new))
-                .data("swarmCount", registry.count());
+                .data("swarmCount", registry.count())
+                .data("startedAt", startedAt);
             var adapterType = lifecycle.currentComputeAdapterType();
             if (adapterType != null) {
                 b.data("computeAdapter", adapterType.name());
