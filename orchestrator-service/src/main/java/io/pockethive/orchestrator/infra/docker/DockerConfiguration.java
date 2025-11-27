@@ -45,7 +45,8 @@ public class DockerConfiguration {
         log.info("Using compute adapter type {} for orchestrator (configured as {})", resolved, configured);
         return switch (resolved) {
             case DOCKER_SINGLE -> new DockerSingleNodeComputeAdapter(dockerContainerClient);
-            case SWARM_SERVICE -> new DockerSwarmServiceComputeAdapter(dockerClient, dockerContainerClient::resolveControlNetwork);
+            case SWARM_STACK ->
+                new DockerSwarmServiceComputeAdapter(dockerClient, dockerContainerClient::resolveControlNetwork);
             case AUTO -> throw new IllegalStateException("AUTO must be resolved to a concrete adapter type");
         };
     }
@@ -55,12 +56,12 @@ public class DockerConfiguration {
             // AUTO: detect Swarm manager; default to single-node Docker if this
             // engine is not a Swarm manager (workers cannot create services).
             boolean isManager = isSwarmManager(dockerClient);
-            return isManager ? ComputeAdapterType.SWARM_SERVICE : ComputeAdapterType.DOCKER_SINGLE;
+            return isManager ? ComputeAdapterType.SWARM_STACK : ComputeAdapterType.DOCKER_SINGLE;
         }
-        if (configured == ComputeAdapterType.SWARM_SERVICE) {
+        if (configured == ComputeAdapterType.SWARM_STACK) {
             if (!isSwarmManager(dockerClient)) {
                 throw new IllegalStateException(
-                    "Compute adapter configured as SWARM_SERVICE but this Docker engine is not a Swarm manager. "
+                    "Compute adapter configured as SWARM_STACK but this Docker engine is not a Swarm manager. "
                         + "Run orchestrator against a Swarm manager node or use DOCKER_SINGLE/AUTO.");
             }
         }

@@ -85,7 +85,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
         : ComputeAdapterType.defaulted(properties.getDocker().computeAdapter());
     switch (adapterType) {
       case DOCKER_SINGLE -> computeAdapter = new DockerSingleNodeComputeAdapter(docker);
-      case SWARM_SERVICE ->
+      case SWARM_STACK ->
           computeAdapter = new DockerSwarmServiceComputeAdapter(dockerClient, docker::resolveControlNetwork);
       default -> throw new IllegalStateException("Unsupported compute adapter type: " + adapterType);
     }
