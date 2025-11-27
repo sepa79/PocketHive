@@ -7,12 +7,23 @@ import static io.pockethive.swarmcontroller.SwarmControllerTestProperties.LOGS_E
 import static io.pockethive.swarmcontroller.SwarmControllerTestProperties.TRAFFIC_PREFIX;
 import static io.pockethive.swarmcontroller.SwarmControllerTestProperties.TEST_SWARM_ID;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import io.pockethive.docker.DockerContainerClient;
+import java.io.IOException;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.amqp.AmqpException;
 import org.springframework.amqp.AmqpIOException;
-import org.springframework.amqp.core.*;
+import org.springframework.amqp.core.AmqpAdmin;
+import org.springframework.amqp.core.Binding;
+import org.springframework.amqp.core.BindingBuilder;
+import org.springframework.amqp.core.Message;
+import org.springframework.amqp.core.Queue;
+import org.springframework.amqp.core.TopicExchange;
 import org.springframework.amqp.rabbit.core.RabbitAdmin;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.amqp.rabbit.junit.RabbitAvailable;
@@ -23,12 +34,6 @@ import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 
-import io.pockethive.docker.DockerContainerClient;
-
-import java.io.IOException;
-import java.util.LinkedHashMap;
-import java.util.Map;
-
 import static org.junit.jupiter.api.Assertions.*;
 
 @SpringBootTest(properties = {
@@ -36,9 +41,10 @@ import static org.junit.jupiter.api.Assertions.*;
     "rabbitmq.logging.enabled=false",
     "pockethive.control-plane.manager.role=swarm-controller"
 })
-@RabbitAvailable
-class SwarmLifecycleManagerIntegrationTest {
+  @RabbitAvailable
+  class SwarmLifecycleManagerIntegrationTest {
   private static final Map<String, String> ORIGINAL_PROPERTIES = new LinkedHashMap<>();
+  private static final ObjectMapper mapper = new ObjectMapper();
   private static final String TEST_INSTANCE_ID = "test-swarm-controller-bee";
 
   static {
@@ -188,7 +194,7 @@ class SwarmLifecycleManagerIntegrationTest {
     amqp.declareQueue(q);
     Binding b = BindingBuilder.bind(q)
         .to(new TopicExchange(CONTROL_EXCHANGE))
-        .with("ev.status-delta.swarm-controller." + instanceId);
+        .with("ev.status-delta." + TEST_SWARM_ID + ".swarm-controller." + instanceId);
     amqp.declareBinding(b);
 
     manager.start(plan);
@@ -202,7 +208,13 @@ class SwarmLifecycleManagerIntegrationTest {
     Message msg = rabbit.receive(q.getName(), 5000);
     assertNotNull(msg);
     String body = new String(msg.getBody());
-    assertTrue(body.contains("STOPPED"));
+    JsonNode json;
+    try {
+      json = mapper.readTree(body);
+    } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+      throw new RuntimeException(e);
+    }
+    assertEquals("STOPPED", json.path("data").path("swarmStatus").asText());
 
     manager.remove();
 

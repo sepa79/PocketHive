@@ -28,7 +28,7 @@ class DockerConfigurationTest {
   @Test
   void dockerClientConfigHonorsConfiguredHost() {
     SwarmControllerProperties properties = propertiesWithDocker(
-        new SwarmControllerProperties.Docker("unix:///custom/docker.sock", "/var/run/docker.sock"));
+        new SwarmControllerProperties.Docker("unix:///custom/docker.sock", "/var/run/docker.sock", null));
     DockerConfiguration configuration = new DockerConfiguration(properties);
 
     DefaultDockerClientConfig config = configuration.dockerClientConfig();
@@ -39,7 +39,7 @@ class DockerConfigurationTest {
   @Test
   void dockerClientConfigFallsBackToSocketPath() {
     SwarmControllerProperties properties = propertiesWithDocker(
-        new SwarmControllerProperties.Docker(null, "/custom/docker.sock"));
+        new SwarmControllerProperties.Docker(null, "/custom/docker.sock", null));
     DockerConfiguration configuration = new DockerConfiguration(properties);
 
     DefaultDockerClientConfig config = configuration.dockerClientConfig();

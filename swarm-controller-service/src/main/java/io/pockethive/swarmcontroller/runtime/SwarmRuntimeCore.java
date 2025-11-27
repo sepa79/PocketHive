@@ -10,6 +10,7 @@ import io.pockethive.controlplane.messaging.EventMessage;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.docker.DockerContainerClient;
 import io.pockethive.manager.ports.Clock;
+import io.pockethive.manager.ports.ComputeAdapter;
 import io.pockethive.manager.runtime.ManagerRuntimeCore;
 import io.pockethive.manager.runtime.ManagerStatus;
 import io.pockethive.manager.scenario.ManagerRuntimeView;
@@ -81,6 +82,7 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
   private final ControlPlanePublisher controlPublisher;
   private final SwarmWorkTopologyManager topology;
   private final WorkloadProvisioner workloadProvisioner;
+  private final ComputeAdapter computeAdapter;
   private final SwarmQueueMetrics queueMetrics;
   private final io.pockethive.manager.runtime.ConfigFanout configFanout;
   private final SwarmReadinessTracker readinessTracker;
@@ -108,6 +110,7 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
                           ControlPlanePublisher controlPublisher,
                           SwarmWorkTopologyManager topology,
                           WorkloadProvisioner workloadProvisioner,
+                          ComputeAdapter computeAdapter,
                           SwarmQueueMetrics queueMetrics,
                           io.pockethive.manager.runtime.ConfigFanout configFanout,
                           String instanceId) {
@@ -120,6 +123,7 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
     this.controlPublisher = Objects.requireNonNull(controlPublisher, "controlPublisher");
     this.topology = Objects.requireNonNull(topology, "topology");
     this.workloadProvisioner = Objects.requireNonNull(workloadProvisioner, "workloadProvisioner");
+    this.computeAdapter = Objects.requireNonNull(computeAdapter, "computeAdapter");
     this.queueMetrics = Objects.requireNonNull(queueMetrics, "queueMetrics");
     this.configFanout = Objects.requireNonNull(configFanout, "configFanout");
     this.instanceId = Objects.requireNonNull(instanceId, "instanceId");
@@ -216,6 +220,7 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
       runtimeContext = new SwarmRuntimeContext(plan, startOrder, suffixes);
       runtimeState = new SwarmRuntimeState(runtimeContext);
 
+      java.util.List<io.pockethive.manager.runtime.WorkerSpec> workerSpecs = new java.util.ArrayList<>();
       for (Bee bee : runnableBees) {
         String beeName = BeeNameGenerator.generate(bee.role(), swarmId);
         Map<String, String> env = new LinkedHashMap<>(
@@ -229,13 +234,18 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
           env.putAll(bee.env());
         }
         List<String> volumes = resolveVolumes(bee.config());
-        String containerId = workloadProvisioner.createAndStart(bee.image(), beeName, env, volumes);
-        log.info("started container {} ({}) for role {}", containerId, beeName, bee.role());
-        runtimeState.registerWorker(bee.role(), beeName, containerId);
+        workerSpecs.add(new io.pockethive.manager.runtime.WorkerSpec(
+            beeName,
+            bee.role(),
+            bee.image(),
+            Map.copyOf(env),
+            volumes));
+        runtimeState.registerWorker(bee.role(), beeName, beeName);
         if (bee.config() != null && !bee.config().isEmpty()) {
           configFanout.registerBootstrapConfig(beeName, bee.role(), bee.config());
         }
       }
+      computeAdapter.applyWorkers(swarmId, workerSpecs);
     } catch (JsonProcessingException e) {
       log.warn("Invalid template payload", e);
     }
@@ -247,6 +257,7 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
     managerCore.stop();
     setSwarmEnabled(false);
     setControllerEnabled(false);
+    this.status = SwarmStatus.STOPPED;
 
     String controlQueue = properties.controlQueueName(role, instanceId);
     String rk = ControlPlaneRouting.event(
@@ -279,13 +290,8 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
     List<String> order = new ArrayList<>(ctx != null ? ctx.startOrder() : startOrder);
     java.util.Collections.reverse(order);
     if (state != null) {
-      Map<String, List<String>> containersByRole = state.containersByRole();
-      for (String role : order) {
-        for (String id : containersByRole.getOrDefault(role, List.of())) {
-          log.info("stopping container {}", id);
-          workloadProvisioner.stopAndRemove(id);
-        }
-      }
+      // Containers are managed via ComputeAdapter; delegate teardown there.
+      computeAdapter.removeWorkers(swarmId);
 
       Map<String, List<String>> instancesByRole = state.instancesByRole();
       for (Map.Entry<String, List<String>> entry : instancesByRole.entrySet()) {

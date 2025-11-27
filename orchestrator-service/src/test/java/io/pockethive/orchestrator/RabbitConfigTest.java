@@ -34,7 +34,7 @@ class RabbitConfigTest {
                         "DELETE",
                         "swarm-job",
                         new OrchestratorProperties.GroupingKey("controller-instance"))),
-                new OrchestratorProperties.Docker("/var/run/docker.sock"),
+                new OrchestratorProperties.Docker("/var/run/docker.sock", null),
                 new OrchestratorProperties.Images(null),
                 new OrchestratorProperties.ScenarioManager(
                     "http://scenario-manager:8080",

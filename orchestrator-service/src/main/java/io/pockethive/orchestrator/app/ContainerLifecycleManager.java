@@ -1,10 +1,14 @@
 package io.pockethive.orchestrator.app;
 
-import com.github.dockerjava.api.model.Bind;
 import io.pockethive.controlplane.spring.ControlPlaneContainerEnvironmentFactory;
 import io.pockethive.controlplane.spring.ControlPlaneContainerEnvironmentFactory.PushgatewaySettings;
 import io.pockethive.controlplane.spring.ControlPlaneProperties;
 import io.pockethive.docker.DockerContainerClient;
+import io.pockethive.docker.compute.DockerSingleNodeComputeAdapter;
+import io.pockethive.docker.compute.DockerSwarmServiceComputeAdapter;
+import io.pockethive.manager.ports.ComputeAdapter;
+import io.pockethive.manager.runtime.ComputeAdapterType;
+import io.pockethive.manager.runtime.ManagerSpec;
 import io.pockethive.orchestrator.config.OrchestratorProperties;
 import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmRegistry;
@@ -24,20 +28,24 @@ public class ContainerLifecycleManager {
     private static final Logger log = LoggerFactory.getLogger(ContainerLifecycleManager.class);
     private static final String SWARM_CONTROLLER_ROLE = "swarm-controller";
     private final DockerContainerClient docker;
+    private final ComputeAdapter computeAdapter;
     private final SwarmRegistry registry;
     private final AmqpAdmin amqp;
     private final OrchestratorProperties properties;
     private final ControlPlaneProperties controlPlaneProperties;
     private final RabbitProperties rabbitProperties;
+    private volatile ComputeAdapterType resolvedAdapterType = ComputeAdapterType.DOCKER_SINGLE;
 
     public ContainerLifecycleManager(
         DockerContainerClient docker,
+        ComputeAdapter computeAdapter,
         SwarmRegistry registry,
         AmqpAdmin amqp,
         OrchestratorProperties properties,
         ControlPlaneProperties controlPlaneProperties,
         RabbitProperties rabbitProperties) {
         this.docker = Objects.requireNonNull(docker, "docker");
+        this.computeAdapter = Objects.requireNonNull(computeAdapter, "computeAdapter");
         this.registry = Objects.requireNonNull(registry, "registry");
         this.amqp = Objects.requireNonNull(amqp, "amqp");
         this.properties = Objects.requireNonNull(properties, "properties");
@@ -93,17 +101,26 @@ public class ContainerLifecycleManager {
         String dockerSocket = properties.getDocker().getSocketPath();
         env.put("DOCKER_SOCKET_PATH", dockerSocket);
         env.put("DOCKER_HOST", "unix://" + dockerSocket);
+        // Propagate the resolved compute adapter choice based on the active adapter
+        // instance so the swarm-controller can provision workers with matching mode.
+        if (computeAdapter instanceof DockerSwarmServiceComputeAdapter) {
+            resolvedAdapterType = ComputeAdapterType.SWARM_SERVICE;
+        } else {
+            resolvedAdapterType = ComputeAdapterType.DOCKER_SINGLE;
+        }
+        env.put("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_DOCKER_COMPUTE_ADAPTER", resolvedAdapterType.name());
         if (autoPullImages) {
             log.info("autoPullImages=true, pulling controller image {} before start", resolvedImage);
             docker.pullImage(resolvedImage);
         }
         log.info("launching controller for swarm {} as instance {} using image {}", resolvedSwarmId, resolvedInstance, resolvedImage);
         log.info("docker env: {}", env);
-        String containerId = docker.createAndStartContainer(
-            resolvedImage,
-            env,
+        ManagerSpec managerSpec = new ManagerSpec(
             resolvedInstance,
-            hostConfig -> hostConfig.withBinds(Bind.parse(dockerSocket + ":" + dockerSocket)));
+            resolvedImage,
+            java.util.Map.copyOf(env),
+            java.util.List.of(dockerSocket + ":" + dockerSocket));
+        String containerId = computeAdapter.startManager(managerSpec);
         log.info("controller container {} ({}) started for swarm {}", containerId, resolvedInstance, resolvedSwarmId);
         Swarm swarm = new Swarm(resolvedSwarmId, resolvedInstance, containerId);
         if (templateMetadata != null) {
@@ -171,7 +188,7 @@ public class ContainerLifecycleManager {
         registry.find(swarmId).ifPresent(swarm -> {
             log.info("tearing down controller container {} for swarm {}", swarm.getContainerId(), swarmId);
             registry.updateStatus(swarmId, SwarmStatus.REMOVING);
-            docker.stopAndRemoveContainer(swarm.getContainerId());
+            computeAdapter.stopManager(swarm.getContainerId());
             amqp.deleteQueue("ph." + swarmId + ".gen");
             amqp.deleteQueue("ph." + swarmId + ".mod");
             amqp.deleteQueue("ph." + swarmId + ".final");
@@ -186,5 +203,9 @@ public class ContainerLifecycleManager {
             throw new IllegalArgumentException(description + " must not be null or blank");
         }
         return value;
+    }
+
+    ComputeAdapterType currentComputeAdapterType() {
+        return resolvedAdapterType;
     }
 }

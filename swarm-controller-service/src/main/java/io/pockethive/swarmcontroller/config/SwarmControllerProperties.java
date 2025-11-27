@@ -1,5 +1,6 @@
 package io.pockethive.swarmcontroller.config;
 
+import io.pockethive.manager.runtime.ComputeAdapterType;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -299,10 +300,12 @@ public class SwarmControllerProperties {
     public static final class Docker {
         private final String host;
         private final String socketPath;
+        private final ComputeAdapterType computeAdapter;
 
-        public Docker(String host, @NotBlank String socketPath) {
+        public Docker(String host, @NotBlank String socketPath, ComputeAdapterType computeAdapter) {
             this.host = host;
             this.socketPath = requireNonBlank(socketPath, "socketPath");
+            this.computeAdapter = ComputeAdapterType.defaulted(computeAdapter);
         }
 
         public String host() {
@@ -315,6 +318,10 @@ public class SwarmControllerProperties {
 
         public boolean hasHost() {
             return host != null && !host.isBlank();
+        }
+
+        public ComputeAdapterType computeAdapter() {
+            return computeAdapter;
         }
     }
 

@@ -95,6 +95,16 @@ export default function ComponentDetail({ component, onClose }: Props) {
     const cfg = componentConfig
     if (!cfg) return [] as { label: string; value: string }[]
     const entries: { label: string; value: string }[] = []
+    // Orchestrator-specific runtime metadata
+    if (normalizedRole === 'orchestrator') {
+      const adapter = getString(cfg.computeAdapter)
+      if (adapter) {
+        entries.push({
+          label: 'Compute adapter',
+          value: adapter,
+        })
+      }
+    }
     const tps = getNumber(cfg.tps)
     const intervalSeconds = getNumber(cfg.intervalSeconds)
     const transactions = getNumber(cfg.transactions)

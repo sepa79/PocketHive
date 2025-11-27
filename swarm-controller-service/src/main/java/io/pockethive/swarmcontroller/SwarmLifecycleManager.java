@@ -1,22 +1,27 @@
 package io.pockethive.swarmcontroller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.github.dockerjava.api.DockerClient;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.pockethive.controlplane.messaging.AmqpControlPlanePublisher;
 import io.pockethive.controlplane.messaging.ControlPlanePublisher;
-import io.pockethive.manager.runtime.ConfigFanout;
 import io.pockethive.controlplane.spring.ControlPlaneContainerEnvironmentFactory.WorkerSettings;
+import io.pockethive.docker.DockerContainerClient;
+import io.pockethive.docker.compute.DockerSingleNodeComputeAdapter;
+import io.pockethive.docker.compute.DockerSwarmServiceComputeAdapter;
+import io.pockethive.manager.ports.ComputeAdapter;
+import io.pockethive.manager.runtime.ComputeAdapterType;
+import io.pockethive.manager.runtime.ConfigFanout;
 import io.pockethive.swarm.model.TrafficPolicy;
+import io.pockethive.swarmcontroller.QueueStats;
 import io.pockethive.swarmcontroller.config.SwarmControllerProperties;
 import io.pockethive.swarmcontroller.infra.amqp.SwarmQueueMetrics;
 import io.pockethive.swarmcontroller.infra.amqp.SwarmWorkTopologyManager;
 import io.pockethive.swarmcontroller.infra.docker.DockerWorkloadProvisioner;
 import io.pockethive.swarmcontroller.infra.docker.WorkloadProvisioner;
+import io.pockethive.swarmcontroller.runtime.SwarmRuntimeContext;
 import io.pockethive.swarmcontroller.runtime.SwarmRuntimeCore;
 import io.pockethive.swarmcontroller.runtime.SwarmRuntimeState;
-import io.pockethive.swarmcontroller.runtime.SwarmRuntimeContext;
-import io.pockethive.swarmcontroller.QueueStats;
-import io.pockethive.docker.DockerContainerClient;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -47,18 +52,20 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
   @Autowired
   public SwarmLifecycleManager(AmqpAdmin amqp,
                                ObjectMapper mapper,
+                               DockerClient dockerClient,
                                DockerContainerClient docker,
                                RabbitTemplate rabbit,
                                RabbitProperties rabbitProperties,
                                @Qualifier("instanceId") String instanceId,
                                SwarmControllerProperties properties,
                                MeterRegistry meterRegistry) {
-    this(amqp, mapper, docker, rabbit, rabbitProperties, instanceId, properties, meterRegistry,
+    this(amqp, mapper, dockerClient, docker, rabbit, rabbitProperties, instanceId, properties, meterRegistry,
         deriveWorkerSettings(properties));
   }
 
   SwarmLifecycleManager(AmqpAdmin amqp,
                         ObjectMapper mapper,
+                        DockerClient dockerClient,
                         DockerContainerClient docker,
                         RabbitTemplate rabbit,
                         RabbitProperties rabbitProperties,
@@ -72,6 +79,16 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
         new AmqpControlPlanePublisher(rabbit, properties.getControlExchange());
     SwarmWorkTopologyManager topology = new SwarmWorkTopologyManager(amqp, properties);
     WorkloadProvisioner workloadProvisioner = new DockerWorkloadProvisioner(docker);
+    ComputeAdapter computeAdapter;
+    ComputeAdapterType adapterType = properties.getDocker() == null
+        ? ComputeAdapterType.DOCKER_SINGLE
+        : ComputeAdapterType.defaulted(properties.getDocker().computeAdapter());
+    switch (adapterType) {
+      case DOCKER_SINGLE -> computeAdapter = new DockerSingleNodeComputeAdapter(docker);
+      case SWARM_SERVICE ->
+          computeAdapter = new DockerSwarmServiceComputeAdapter(dockerClient, docker::resolveControlNetwork);
+      default -> throw new IllegalStateException("Unsupported compute adapter type: " + adapterType);
+    }
     SwarmQueueMetrics queueMetrics = new SwarmQueueMetrics(properties.getSwarmId(), meterRegistry);
     io.pockethive.manager.ports.QueueStatsPort queueStatsPort =
         new io.pockethive.swarmcontroller.runtime.SwarmQueueStatsPortAdapter(amqp);
@@ -92,6 +109,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
         controlPublisher,
         topology,
         workloadProvisioner,
+        computeAdapter,
         queueMetrics,
         configFanout,
         instanceId);
