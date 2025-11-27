@@ -51,6 +51,13 @@ public class ContainerLifecycleManager {
         this.properties = Objects.requireNonNull(properties, "properties");
         this.controlPlaneProperties = Objects.requireNonNull(controlPlaneProperties, "controlPlaneProperties");
         this.rabbitProperties = Objects.requireNonNull(rabbitProperties, "rabbitProperties");
+        // Initialise the resolved adapter type based on the injected adapter so that
+        // status-full events emitted before the first swarm start report the correct mode.
+        if (computeAdapter instanceof DockerSwarmServiceComputeAdapter) {
+            this.resolvedAdapterType = ComputeAdapterType.SWARM_SERVICE;
+        } else {
+            this.resolvedAdapterType = ComputeAdapterType.DOCKER_SINGLE;
+        }
     }
 
     public Swarm startSwarm(String swarmId, String image, String instanceId) {

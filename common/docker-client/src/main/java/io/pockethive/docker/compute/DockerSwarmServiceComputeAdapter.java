@@ -6,8 +6,8 @@ import com.github.dockerjava.api.model.ContainerSpec;
 import com.github.dockerjava.api.model.Mount;
 import com.github.dockerjava.api.model.MountType;
 import com.github.dockerjava.api.model.NetworkAttachmentConfig;
-import com.github.dockerjava.api.model.RestartPolicy;
 import com.github.dockerjava.api.model.ServiceModeConfig;
+import com.github.dockerjava.api.model.ServicePlacement;
 import com.github.dockerjava.api.model.ServiceReplicatedModeOptions;
 import com.github.dockerjava.api.model.ServiceSpec;
 import com.github.dockerjava.api.model.TaskSpec;
@@ -64,7 +64,7 @@ public final class DockerSwarmServiceComputeAdapter implements ComputeAdapter {
     List<String> volumes = spec.volumes() == null ? List.of() : List.copyOf(spec.volumes());
 
     log.info("Creating Swarm service for manager {} using image {}", id, image);
-    ServiceSpec serviceSpec = buildServiceSpec(id, image, env, volumes);
+    ServiceSpec serviceSpec = buildServiceSpec(id, image, env, volumes, true);
     CreateServiceResponse response = dockerClient.createServiceCmd(serviceSpec).exec();
     String serviceId = response.getId();
     managerServices.put(id, serviceId);
@@ -111,7 +111,7 @@ public final class DockerSwarmServiceComputeAdapter implements ComputeAdapter {
           : List.copyOf(worker.volumes());
       log.info("Creating Swarm service for worker {} in topology {} using image {}",
           workerId, resolvedTopology, image);
-      ServiceSpec spec = buildServiceSpec(workerId, image, env, volumes);
+      ServiceSpec spec = buildServiceSpec(workerId, image, env, volumes, false);
       CreateServiceResponse response = dockerClient.createServiceCmd(spec).exec();
       serviceIds.add(response.getId());
     }
@@ -142,7 +142,8 @@ public final class DockerSwarmServiceComputeAdapter implements ComputeAdapter {
   private ServiceSpec buildServiceSpec(String name,
                                        String image,
                                        Map<String, String> env,
-                                       List<String> volumes) {
+                                       List<String> volumes,
+                                       boolean managerOnly) {
     ContainerSpec containerSpec = new ContainerSpec()
         .withImage(image)
         .withEnv(toEnvList(env));
@@ -154,6 +155,12 @@ public final class DockerSwarmServiceComputeAdapter implements ComputeAdapter {
 
     TaskSpec taskSpec = new TaskSpec()
         .withContainerSpec(containerSpec);
+
+    if (managerOnly) {
+      ServicePlacement placement = new ServicePlacement()
+          .withConstraints(List.of("node.role == manager"));
+      taskSpec = taskSpec.withPlacement(placement);
+    }
 
     ServiceModeConfig mode = new ServiceModeConfig()
         .withReplicated(new ServiceReplicatedModeOptions().withReplicas(1));

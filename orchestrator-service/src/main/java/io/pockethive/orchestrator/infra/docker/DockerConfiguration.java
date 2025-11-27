@@ -52,23 +52,31 @@ public class DockerConfiguration {
 
     private ComputeAdapterType resolveAdapterType(DockerClient dockerClient, ComputeAdapterType configured) {
         if (configured == null || configured == ComputeAdapterType.AUTO) {
-            // AUTO: detect Swarm mode; default to single-node Docker if Swarm is inactive.
-            var info = dockerClient.infoCmd().exec();
-            var swarm = info.getSwarm();
-            boolean swarmActive = swarm != null && swarm.getLocalNodeState() != null
-                && swarm.getLocalNodeState().name().equalsIgnoreCase("active");
-            return swarmActive ? ComputeAdapterType.SWARM_SERVICE : ComputeAdapterType.DOCKER_SINGLE;
+            // AUTO: detect Swarm manager; default to single-node Docker if this
+            // engine is not a Swarm manager (workers cannot create services).
+            boolean isManager = isSwarmManager(dockerClient);
+            return isManager ? ComputeAdapterType.SWARM_SERVICE : ComputeAdapterType.DOCKER_SINGLE;
         }
         if (configured == ComputeAdapterType.SWARM_SERVICE) {
-            var info = dockerClient.infoCmd().exec();
-            var swarm = info.getSwarm();
-            boolean swarmActive = swarm != null && swarm.getLocalNodeState() != null
-                && swarm.getLocalNodeState().name().equalsIgnoreCase("active");
-            if (!swarmActive) {
+            if (!isSwarmManager(dockerClient)) {
                 throw new IllegalStateException(
-                    "Compute adapter configured as SWARM_SERVICE but Docker Swarm is not active on this node");
+                    "Compute adapter configured as SWARM_SERVICE but this Docker engine is not a Swarm manager. "
+                        + "Run orchestrator against a Swarm manager node or use DOCKER_SINGLE/AUTO.");
             }
         }
         return configured;
+    }
+
+    private boolean isSwarmManager(DockerClient dockerClient) {
+        var info = dockerClient.infoCmd().exec();
+        var swarm = info.getSwarm();
+        if (swarm == null) {
+            return false;
+        }
+        var state = swarm.getLocalNodeState();
+        // Local node must be active AND have control available to be a manager.
+        boolean active = state != null && state.name().equalsIgnoreCase("active");
+        Boolean controlAvailable = swarm.getControlAvailable();
+        return active && Boolean.TRUE.equals(controlAvailable);
     }
 }
