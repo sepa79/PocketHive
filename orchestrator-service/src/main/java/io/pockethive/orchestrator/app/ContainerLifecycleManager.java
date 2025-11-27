@@ -54,7 +54,7 @@ public class ContainerLifecycleManager {
         // Initialise the resolved adapter type based on the injected adapter so that
         // status-full events emitted before the first swarm start report the correct mode.
         if (computeAdapter instanceof DockerSwarmServiceComputeAdapter) {
-            this.resolvedAdapterType = ComputeAdapterType.SWARM_SERVICE;
+            this.resolvedAdapterType = ComputeAdapterType.SWARM_STACK;
         } else {
             this.resolvedAdapterType = ComputeAdapterType.DOCKER_SINGLE;
         }
@@ -111,7 +111,7 @@ public class ContainerLifecycleManager {
         // Propagate the resolved compute adapter choice based on the active adapter
         // instance so the swarm-controller can provision workers with matching mode.
         if (computeAdapter instanceof DockerSwarmServiceComputeAdapter) {
-            resolvedAdapterType = ComputeAdapterType.SWARM_SERVICE;
+            resolvedAdapterType = ComputeAdapterType.SWARM_STACK;
         } else {
             resolvedAdapterType = ComputeAdapterType.DOCKER_SINGLE;
         }

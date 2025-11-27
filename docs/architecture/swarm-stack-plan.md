@@ -27,10 +27,11 @@ Concretely:
 
 ## 3. High‑level design
 
-We introduce a Swarm‑specific “stack adapter” **on top of** the existing service‑level `ComputeAdapter`, not instead of it.
+We introduce a Swarm‑specific “stack adapter” as the Swarm‑only `ComputeAdapter`
+implementation (the earlier `SWARM_SERVICE` mode is retired).
 
 - A new adapter type in `ComputeAdapterType`:
-  - `[ ]` `SWARM_STACK` — Swarm stack grouping (controller + bees).
+  - `[x]` `SWARM_STACK` — Swarm stack grouping (controller + bees).
 - A Swarm‑specific adapter in `docker-client`:
   - `[ ]` `DockerSwarmStackAdapter` (or equivalent name):
     - Accepts a `ManagerSpec` + list of `WorkerSpec`s + `swarmId`.
@@ -45,19 +46,19 @@ We introduce a Swarm‑specific “stack adapter” **on top of** the existing s
 
 ### 4.1 Enum & configuration
 
-- [ ] Extend `ComputeAdapterType` with `SWARM_STACK` (documented as Swarm‑only).
+- [x] Extend `ComputeAdapterType` with `SWARM_STACK` (documented as Swarm‑only) and retire `SWARM_SERVICE`.
 - [ ] Add config knobs:
   - Orchestrator:
-    - `pockethive.control-plane.orchestrator.docker.compute-adapter=DOCKER_SINGLE|AUTO|SWARM_SERVICE|SWARM_STACK`.
+    - `pockethive.control-plane.orchestrator.docker.compute-adapter=DOCKER_SINGLE|AUTO|SWARM_STACK`.
   - Swarm Controller:
-    - `pockethive.control-plane.swarm-controller.docker.compute-adapter=DOCKER_SINGLE|SWARM_SERVICE|SWARM_STACK`.
+    - `pockethive.control-plane.swarm-controller.docker.compute-adapter=DOCKER_SINGLE|SWARM_STACK`.
 - [ ] Validation rules:
-  - `SWARM_STACK` only allowed when Docker endpoint is a Swarm **manager** (same `docker info` check as `SWARM_SERVICE`).
-  - `AUTO` remains “single vs. SWARM_SERVICE” only; `SWARM_STACK` must be explicit.
+  - `SWARM_STACK` only allowed when Docker endpoint is a Swarm **manager** (same `docker info` check as the old service mode).
+  - `AUTO` resolves to `SWARM_STACK` when the engine is a Swarm manager, otherwise `DOCKER_SINGLE`.
 
 ### 4.2 Swarm stack adapter (docker-client)
 
-- [ ] Add `DockerSwarmStackAdapter` in `common/docker-client`:
+- [ ] Add `DockerSwarmStackAdapter` in `common/docker-client` (or promote the existing Swarm service adapter to stack semantics):
   - Depends on `DockerClient` and control network supplier.
   - Responsibilities:
     - Given a `ManagerSpec` + `swarmId`:
@@ -77,13 +78,13 @@ We introduce a Swarm‑specific “stack adapter” **on top of** the existing s
       - All worker services for a swarm.
       - Controller service for that swarm.
       - Optionally the overlay network if the adapter created it.
-- [ ] Keep `DockerSwarmServiceComputeAdapter` as “services without explicit stack grouping” for scenarios where stacks are not desired.
+  - Internally may reuse `DockerSwarmServiceComputeAdapter` or replace it entirely.
 
 ### 4.3 Orchestrator integration
 
-- [ ] Update `DockerConfiguration` (orchestrator) to resolve `SWARM_STACK`:
-  - `SWARM_STACK` → `DockerSwarmStackAdapter`.
-  - Use the same Swarm manager validation as `SWARM_SERVICE`.
+- [x] Update `DockerConfiguration` (orchestrator) to resolve `SWARM_STACK`:
+  - `SWARM_STACK` → Swarm‑based compute adapter.
+  - Use the same Swarm manager validation as the old service mode.
 - [ ] `ContainerLifecycleManager`:
   - For `SWARM_STACK`:
     - Use stack adapter to start the Swarm Controller (manager service inside the stack).
@@ -92,16 +93,16 @@ We introduce a Swarm‑specific “stack adapter” **on top of** the existing s
 
 ### 4.4 Swarm Controller integration
 
-- [ ] Swarm Controller `SwarmLifecycleManager`:
+- [x] Swarm Controller `SwarmLifecycleManager`:
   - For `SWARM_STACK`:
-    - Construct worker `WorkerSpec`s as today, but delegate to `DockerSwarmStackAdapter` rather than the service‑only adapter.
-    - Ensure workers join the stack’s overlay network and carry the same labels.
+    - Construct worker `WorkerSpec`s as today, delegating to the Swarm‑based compute adapter.
+    - Ensure workers join the control network and carry stack labels once implemented.
 - [ ] Keep BufferGuard and scenario engine logic unchanged; only the provisioning port changes.
 
 ### 4.5 UI & diagnostics
 
 - [ ] Extend orchestrator status payloads:
-  - Add `data.stackMode = "SWARM_STACK" | "SWARM_SERVICE" | "DOCKER_SINGLE"`.
+  - Add `data.stackMode = "SWARM_STACK" | "DOCKER_SINGLE"`.
   - For `SWARM_STACK`, also add `data.stackName = "ph-${swarmId.toLowerCase()}"`.
 - [ ] Hive UI:
   - Orchestrator component details:
@@ -127,5 +128,4 @@ We introduce a Swarm‑specific “stack adapter” **on top of** the existing s
 ## 5. Notes & follow‑ups
 
 - This plan deliberately keeps stack behaviour **Swarm‑specific**. The longer‑term idea is to mirror similar “deployment group” semantics in other adapters (Kubernetes namespaces, ECS service groups) while keeping the Manager SDK unaware of those details.
-- Once `SWARM_STACK` is stable, we can consider de‑emphasising `SWARM_SERVICE` in docs in favour of the more structured stack mode, but both should remain available for now.
-
+- The previous `SWARM_SERVICE` adapter type is considered obsolete and has been folded into `SWARM_STACK`.

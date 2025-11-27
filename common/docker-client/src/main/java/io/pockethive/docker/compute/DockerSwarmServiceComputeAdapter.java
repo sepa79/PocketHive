@@ -16,7 +16,9 @@ import io.pockethive.manager.runtime.ManagerSpec;
 import io.pockethive.manager.runtime.WorkerSpec;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
@@ -62,9 +64,10 @@ public final class DockerSwarmServiceComputeAdapter implements ComputeAdapter {
     String image = requireNonBlank(spec.image(), "spec.image");
     Map<String, String> env = spec.environment() == null ? Map.of() : Map.copyOf(spec.environment());
     List<String> volumes = spec.volumes() == null ? List.of() : List.copyOf(spec.volumes());
+    String swarmId = extractSwarmId(env);
 
-    log.info("Creating Swarm service for manager {} using image {}", id, image);
-    ServiceSpec serviceSpec = buildServiceSpec(id, image, env, volumes, true);
+    log.info("Creating Swarm service for manager {} using image {} in swarm {}", id, image, swarmId);
+    ServiceSpec serviceSpec = buildServiceSpec(id, image, env, volumes, swarmId, true);
     CreateServiceResponse response = dockerClient.createServiceCmd(serviceSpec).exec();
     String serviceId = response.getId();
     managerServices.put(id, serviceId);
@@ -111,7 +114,7 @@ public final class DockerSwarmServiceComputeAdapter implements ComputeAdapter {
           : List.copyOf(worker.volumes());
       log.info("Creating Swarm service for worker {} in topology {} using image {}",
           workerId, resolvedTopology, image);
-      ServiceSpec spec = buildServiceSpec(workerId, image, env, volumes, false);
+      ServiceSpec spec = buildServiceSpec(workerId, image, env, volumes, resolvedTopology, false);
       CreateServiceResponse response = dockerClient.createServiceCmd(spec).exec();
       serviceIds.add(response.getId());
     }
@@ -143,6 +146,7 @@ public final class DockerSwarmServiceComputeAdapter implements ComputeAdapter {
                                        String image,
                                        Map<String, String> env,
                                        List<String> volumes,
+                                       String swarmId,
                                        boolean managerOnly) {
     ContainerSpec containerSpec = new ContainerSpec()
         .withImage(image)
@@ -165,10 +169,16 @@ public final class DockerSwarmServiceComputeAdapter implements ComputeAdapter {
     ServiceModeConfig mode = new ServiceModeConfig()
         .withReplicated(new ServiceReplicatedModeOptions().withReplicas(1));
 
+    Map<String, String> labels = new HashMap<>();
+    String stackNamespace = stackNamespace(swarmId);
+    labels.put("com.docker.stack.namespace", stackNamespace);
+    labels.put("ph.swarmId", swarmId);
+
     ServiceSpec serviceSpec = new ServiceSpec()
         .withName(name)
         .withTaskTemplate(taskSpec)
-        .withMode(mode);
+        .withMode(mode)
+        .withLabels(labels);
 
     String network = controlNetworkSupplier.get();
     if (network != null && !network.isBlank()) {
@@ -220,5 +230,21 @@ public final class DockerSwarmServiceComputeAdapter implements ComputeAdapter {
       throw new IllegalArgumentException(name + " must not be blank");
     }
     return value;
+  }
+
+  private static String extractSwarmId(Map<String, String> env) {
+    if (env == null || env.isEmpty()) {
+      throw new IllegalArgumentException("manager environment must contain POCKETHIVE_CONTROL_PLANE_SWARM_ID");
+    }
+    String swarmId = env.get("POCKETHIVE_CONTROL_PLANE_SWARM_ID");
+    if (swarmId == null || swarmId.isBlank()) {
+      throw new IllegalArgumentException("POCKETHIVE_CONTROL_PLANE_SWARM_ID must not be null or blank");
+    }
+    return swarmId;
+  }
+
+  private static String stackNamespace(String swarmId) {
+    String normalized = requireNonBlank(swarmId, "swarmId");
+    return "ph-" + normalized.toLowerCase(Locale.ROOT);
   }
 }

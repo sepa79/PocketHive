@@ -24,12 +24,14 @@ public enum ComputeAdapterType {
   AUTO,
 
   /**
-   * Docker Swarm services (or an equivalent service-style abstraction).
+   * Docker Swarm stack-style grouping (controller + bees).
    * <p>
-   * The initial implementations may delegate to {@link #DOCKER_SINGLE}
-   * while service-based adapters are being brought up.
+   * Initially this may be backed by the same implementation as a
+   * Swarm service-based adapter until a dedicated stack adapter is
+   * introduced; the separate enum value allows configuration and
+   * diagnostics to distinguish the intent.
    */
-  SWARM_SERVICE;
+  SWARM_STACK;
 
   /**
    * Return {@link #DOCKER_SINGLE} when the provided value is {@code null},
