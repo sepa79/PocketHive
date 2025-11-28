@@ -10,7 +10,9 @@ import com.github.dockerjava.api.model.ServiceModeConfig;
 import com.github.dockerjava.api.model.ServicePlacement;
 import com.github.dockerjava.api.model.ServiceReplicatedModeOptions;
 import com.github.dockerjava.api.model.ServiceSpec;
+import com.github.dockerjava.api.model.Task;
 import com.github.dockerjava.api.model.TaskSpec;
+import com.github.dockerjava.api.model.TaskState;
 import io.pockethive.manager.ports.ComputeAdapter;
 import io.pockethive.manager.runtime.ManagerSpec;
 import io.pockethive.manager.runtime.WorkerSpec;
@@ -136,9 +138,59 @@ public final class DockerSwarmServiceComputeAdapter implements ComputeAdapter {
       try {
         log.info("Removing Swarm service {} for topology {}", id, topologyId);
         dockerClient.removeServiceCmd(id).exec();
+        waitForServiceDrain(id);
       } catch (RuntimeException e) {
         log.warn("Failed to remove worker service {}: {}", id, e.getMessage());
       }
+    }
+  }
+
+  /**
+   * Wait for Swarm to drain tasks for the given service so that worker
+   * containers have actually terminated before upstream components delete
+   * their control queues.
+   */
+  private void waitForServiceDrain(String serviceId) {
+    if (serviceId == null || serviceId.isBlank()) {
+      return;
+    }
+    final long timeoutMs = 60_000L;
+    final long pollIntervalMs = 200L;
+    long deadline = System.currentTimeMillis() + timeoutMs;
+    try {
+      while (System.currentTimeMillis() < deadline) {
+        List<Task> tasks = dockerClient.listTasksCmd()
+            .withServiceFilter(serviceId)
+            .exec();
+        boolean anyRunning = false;
+        if (tasks != null && !tasks.isEmpty()) {
+          for (Task task : tasks) {
+            TaskState state = task != null && task.getStatus() != null ? task.getStatus().getState() : null;
+            if (state == TaskState.NEW
+                || state == TaskState.PENDING
+                || state == TaskState.ASSIGNED
+                || state == TaskState.ACCEPTED
+                || state == TaskState.PREPARING
+                || state == TaskState.STARTING
+                || state == TaskState.RUNNING) {
+              anyRunning = true;
+              break;
+            }
+          }
+        }
+        if (!anyRunning) {
+          return;
+        }
+        try {
+          Thread.sleep(pollIntervalMs);
+        } catch (InterruptedException ie) {
+          Thread.currentThread().interrupt();
+          return;
+        }
+      }
+      log.warn("Timed out waiting for Swarm service {} to drain tasks", serviceId);
+    } catch (RuntimeException e) {
+      log.warn("Error while waiting for Swarm service {} to drain: {}", serviceId, e.getMessage());
     }
   }
 
