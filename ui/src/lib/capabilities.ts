@@ -205,9 +205,23 @@ export function findManifestForImage(image: string, index: ManifestIndex): Capab
   }
 
   if (reference.name && reference.tag) {
-    const key = `${reference.name}:::${reference.tag}`
-    const manifest = index.byNameAndTag.get(key)
-    if (manifest) return manifest
+    const name = reference.name
+    const tag = reference.tag
+    // First try the full image name as-is.
+    const directKey = `${name}:::${tag}`
+    const direct = index.byNameAndTag.get(directKey)
+    if (direct) return direct
+
+    // If the image name includes a registry/repository prefix, also try the last path
+    // segment so manifests can declare short names like "generator" while runtime
+    // images use fully-qualified references such as "ghcr.io/org/generator".
+    const lastSlash = name.lastIndexOf('/')
+    if (lastSlash >= 0 && lastSlash < name.length - 1) {
+      const simpleName = name.slice(lastSlash + 1)
+      const simpleKey = `${simpleName}:::${tag}`
+      const simple = index.byNameAndTag.get(simpleKey)
+      if (simple) return simple
+    }
   }
 
   return null
