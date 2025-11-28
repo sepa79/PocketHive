@@ -149,7 +149,6 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
   @Override
   public void start(String planJson) {
     core.start(planJson);
-    bufferGuard.configureFromTemplate(planJson);
     bufferGuard.onSwarmEnabled(true);
   }
 
@@ -211,6 +210,16 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
   }
 
   @Override
+  public java.util.List<io.pockethive.manager.guard.BufferGuardSettings> bufferGuards() {
+    return bufferGuard.currentSettings();
+  }
+
+  @Override
+  public void configureBufferGuards(java.util.List<io.pockethive.manager.guard.BufferGuardSettings> settings) {
+    bufferGuard.configure(settings);
+  }
+
+  @Override
   public boolean isReadyForWork() {
     return core.isReadyForWork();
   }
@@ -218,6 +227,14 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
   @Override
   public TrafficPolicy trafficPolicy() {
     return core.trafficPolicy();
+  }
+
+  public boolean bufferGuardActive() {
+    return bufferGuard.isActive();
+  }
+
+  public String bufferGuardProblem() {
+    return bufferGuard.lastProblem();
   }
 
   @Override

@@ -194,4 +194,36 @@ public interface SwarmLifecycle {
    */
   default void setControllerEnabled(boolean enabled) {
   }
+
+  /**
+   * Return the currently effective buffer guard settings, if any, as resolved
+   * by the Manager SDK guard coordinator.
+   */
+  default java.util.List<io.pockethive.manager.guard.BufferGuardSettings> bufferGuards() {
+    return java.util.List.of();
+  }
+
+  /**
+   * Replace the active buffer guard settings. Implementations are expected to
+   * delegate to the Manager SDK coordinator; callers should supply a complete
+   * set of guards (no implicit merging).
+   */
+  default void configureBufferGuards(java.util.List<io.pockethive.manager.guard.BufferGuardSettings> settings) {
+  }
+
+  /**
+   * Indicates whether any buffer guard is currently active for this swarm.
+   */
+  default boolean bufferGuardActive() {
+    return false;
+  }
+
+  /**
+   * Returns the last diagnosed problem for the buffer guard configuration,
+   * if any (for example {@code "no-rate-input"}). {@code null} means no
+   * problem has been recorded.
+   */
+  default String bufferGuardProblem() {
+    return null;
+  }
 }

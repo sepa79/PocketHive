@@ -661,7 +661,9 @@ class SwarmLifecycleManagerTest {
     SwarmPlan plan = new SwarmPlan("swarm", List.of(
         new Bee("generator", "img1", new Work("qin", "gen-out"),
             null,
-            Map.of("ratePerSec", 5d))
+            Map.of("inputs", Map.of(
+                "type", "SCHEDULER",
+                "scheduler", Map.of("ratePerSec", 5d))))
     ), new TrafficPolicy(guard));
     when(docker.createAndStartContainer(eq("img1"), anyMap(), anyString(), any())).thenReturn("c1");
     when(docker.resolveControlNetwork()).thenReturn("ctrl-net");
@@ -669,7 +671,10 @@ class SwarmLifecycleManagerTest {
     when(amqp.getQueueProperties(eq(queue("gen-out")))).thenAnswer(inv -> queueProps(depth.get()));
     when(amqp.getQueueProperties(eq(queue("qin")))).thenReturn(null);
 
-    manager.start(mapper.writeValueAsString(plan));
+    // In real lifecycle the guard is configured during prepare (from swarm-template)
+    // and only enabled during start (swarm-start carries no plan payload).
+    manager.prepare(mapper.writeValueAsString(plan));
+    manager.start("{}");
 
     Gauge rateGauge = meterRegistry.find("ph_swarm_buffer_guard_rate_per_sec")
         .tags("swarm", TEST_SWARM_ID, "queue", "gen-out")
@@ -738,7 +743,9 @@ class SwarmLifecycleManagerTest {
     SwarmPlan plan = new SwarmPlan("swarm", List.of(
         new Bee("generator", "img1", new Work("qin", "gen-out"),
             null,
-            Map.of("ratePerSec", 10d))
+            Map.of("inputs", Map.of(
+                "type", "SCHEDULER",
+                "scheduler", Map.of("ratePerSec", 10d))))
     ), new TrafficPolicy(guard));
     when(docker.createAndStartContainer(eq("img1"), anyMap(), anyString(), any())).thenReturn("c1");
     when(docker.resolveControlNetwork()).thenReturn("ctrl-net");
@@ -746,7 +753,8 @@ class SwarmLifecycleManagerTest {
     when(amqp.getQueueProperties(eq(queue("gen-out")))).thenAnswer(inv -> queueProps(depth.get()));
     when(amqp.getQueueProperties(eq(queue("qin")))).thenReturn(null);
 
-    manager.start(mapper.writeValueAsString(plan));
+    manager.prepare(mapper.writeValueAsString(plan));
+    manager.start("{}");
 
     Gauge rateGauge = meterRegistry.find("ph_swarm_buffer_guard_rate_per_sec")
         .tags("swarm", TEST_SWARM_ID, "queue", "gen-out")
@@ -774,7 +782,9 @@ class SwarmLifecycleManagerTest {
     SwarmPlan plan = new SwarmPlan("swarm", List.of(
         new Bee("generator", "img1", new Work("qin", "gen-out"),
             null,
-            Map.of("ratePerSec", 80d))
+            Map.of("inputs", Map.of(
+                "type", "SCHEDULER",
+                "scheduler", Map.of("ratePerSec", 80d))))
     ), new TrafficPolicy(guard));
     when(docker.createAndStartContainer(eq("img1"), anyMap(), anyString(), any())).thenReturn("c1");
     when(docker.resolveControlNetwork()).thenReturn("ctrl-net");
@@ -782,7 +792,8 @@ class SwarmLifecycleManagerTest {
     when(amqp.getQueueProperties(eq(queue("gen-out")))).thenAnswer(inv -> queueProps(depth.get()));
     when(amqp.getQueueProperties(eq(queue("qin")))).thenReturn(null);
 
-    manager.start(mapper.writeValueAsString(plan));
+    manager.prepare(mapper.writeValueAsString(plan));
+    manager.start("{}");
 
     Gauge rateGauge = meterRegistry.find("ph_swarm_buffer_guard_rate_per_sec")
         .tags("swarm", TEST_SWARM_ID, "queue", "gen-out")
@@ -810,7 +821,9 @@ class SwarmLifecycleManagerTest {
     SwarmPlan plan = new SwarmPlan("swarm", List.of(
         new Bee("generator", "img1", new Work("qin", "gen-out"),
             null,
-            Map.of("ratePerSec", 20d)),
+            Map.of("inputs", Map.of(
+                "type", "SCHEDULER",
+                "scheduler", Map.of("ratePerSec", 20d)))),
         new Bee("processor", "img2", new Work("gen-out", "proc-out"), null)
     ), new TrafficPolicy(guard));
     when(docker.createAndStartContainer(eq("img1"), anyMap(), anyString(), any())).thenReturn("c1");
@@ -822,7 +835,8 @@ class SwarmLifecycleManagerTest {
     when(amqp.getQueueProperties(eq(queue("proc-out")))).thenAnswer(inv -> queueProps(downstreamDepth.get()));
     when(amqp.getQueueProperties(eq(queue("qin")))).thenReturn(null);
 
-    manager.start(mapper.writeValueAsString(plan));
+    manager.prepare(mapper.writeValueAsString(plan));
+    manager.start("{}");
 
     Gauge rateGauge = meterRegistry.find("ph_swarm_buffer_guard_rate_per_sec")
         .tags("swarm", TEST_SWARM_ID, "queue", "gen-out")

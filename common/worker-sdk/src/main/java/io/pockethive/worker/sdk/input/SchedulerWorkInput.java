@@ -296,13 +296,17 @@ public final class SchedulerWorkInput<C> implements WorkInput {
         long remaining = limit > 0L ? Math.max(0L, limit - dispatched) : -1L;
         boolean exhausted = limit > 0L && remaining == 0L;
         double rate = scheduling.getRatePerSec();
-        publisher.update(status -> status.data("scheduler", Map.of(
-            "ratePerSec", rate,
-            "maxMessages", limit,
-            "dispatched", dispatched,
-            "remaining", remaining >= 0L ? remaining : null,
-            "exhausted", exhausted
-        )));
+        publisher.update(status -> {
+            Map<String, Object> data = new java.util.LinkedHashMap<>();
+            data.put("ratePerSec", rate);
+            data.put("maxMessages", limit);
+            data.put("dispatched", dispatched);
+            if (remaining >= 0L) {
+                data.put("remaining", remaining);
+            }
+            data.put("exhausted", exhausted);
+            status.data("scheduler", data);
+        });
     }
 
     /**

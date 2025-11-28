@@ -3,9 +3,17 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
-Timestamp: 2025-11-26T00:00:00Z
+Timestamp: 2025-11-28T00:00:00Z
 
 _No unreleased changes yet._
+
+## [0.14.6] - 2025-11-28
+Timestamp: 2025-11-28T00:00:00Z
+
+- Scheduler input diagnostics: fixed a `NullPointerException` in `SchedulerWorkInput` status publishing when no finite `maxMessages` limit is configured by switching from `Map.of(...)` to a null-safe `LinkedHashMap` and omitting the `remaining` field when there is no quota, restoring stable scheduler ticks in long-running generators.
+- Guard IO alignment: adjusted Swarm Controller buffer guard resolution to treat scheduler and Redis inputs via `inputs.type` and `inputs.<kind>.ratePerSec`, updated guard-related unit tests and the `local-rest-two-moderators` scenario to use the new IO config shape, and removed the stale `SwarmLifecycleManager.start(planJson)` guard reconfiguration so `swarm-start` no longer clears guards that were configured from `swarm-template`.
+- Guard diagnostics & status: extended `BufferGuardCoordinator` to track whether guards are active and the last diagnosed problem (e.g. `no-traffic-policy`, `missing-producer`, `no-rate-input`), surfaced this via `SwarmLifecycle.bufferGuardActive()` / `bufferGuardProblem()`, and added status fields under the swarm-controller node (`data.bufferGuard.active` and `data.bufferGuard.problem`) so operators can see when guard configuration is miswired without relying solely on logs.
+- UI runtime panels: updated the Hive component details panel for the swarm-controller to render buffer guard runtime information (showing “Buffer guard: active|inactive” and any `Guard problem` string), aligned the moderator capability manifest with its JSON contract by using `pass-through`, `rate-per-sec`, and `sine` as option values, and ensured moderator mode selection in the UI reflects the actual worker mode instead of reverting to an uppercase fallback.
 
 ## [0.14.5] - 2025-11-27
 Timestamp: 2025-11-27T12:00:00Z

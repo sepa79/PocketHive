@@ -18,6 +18,8 @@ import io.pockethive.controlplane.messaging.EventMessage;
 import io.pockethive.controlplane.messaging.SignalMessage;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.controlplane.routing.ControlPlaneRouting.RoutingKey;
+import io.pockethive.manager.guard.BufferGuardSettings;
+import io.pockethive.swarm.model.BufferGuardPolicy;
 import io.pockethive.swarm.model.TrafficPolicy;
 import io.pockethive.swarmcontroller.config.SwarmControllerProperties;
 import org.slf4j.Logger;
@@ -331,6 +333,27 @@ public class SwarmSignalListener {
       Boolean stateEnabled = null;
       Map<String, Object> details = new LinkedHashMap<>();
 
+      // Optional buffer guard overrides live under data.trafficPolicy.bufferGuard
+      JsonNode guardRoot = dataNode.path("trafficPolicy").path("bufferGuard");
+      if (guardRoot.isObject()) {
+        List<BufferGuardSettings> currentGuards = lifecycle.bufferGuards();
+        if (currentGuards.isEmpty()) {
+          log.warn("Received bufferGuard override but no guards are configured from the scenario; ignoring override");
+        } else {
+          BufferGuardSettings base = currentGuards.getFirst();
+          BufferGuardSettings updated = applyGuardOverride(base, guardRoot);
+          if (updated == null) {
+            // disabled via enabled=false
+            lifecycle.configureBufferGuards(List.of());
+            details.put("trafficPolicy", Map.of("bufferGuard", Map.of("enabled", false)));
+          } else {
+            lifecycle.configureBufferGuards(List.of(updated));
+            TrafficPolicy effectivePolicy = trafficPolicyFromSettings(updated);
+            details.put("trafficPolicy", mapper.convertValue(effectivePolicy, Map.class));
+          }
+        }
+      }
+
       List<Runnable> fanouts = new ArrayList<>();
       boolean fromSelf = cs.origin() != null && instanceId.equalsIgnoreCase(cs.origin());
 
@@ -341,7 +364,12 @@ public class SwarmSignalListener {
               lifecycle.setSwarmEnabled(enabledFlag);
             }
             controllerEnabled = enabledFlag;
-            sendStatusDelta();
+            // For self-originated enablement changes, only emit a status-delta
+            // when disabling workloads; the initial "enable" at startup is
+            // covered by the status-full snapshot.
+            if (!fromSelf || !enabledFlag) {
+              sendStatusDelta();
+            }
             stateEnabled = enabledFlag;
             details.put("workloads", Map.of("enabled", enabledFlag));
           } else if (!fromSelf) {
@@ -889,11 +917,151 @@ public class SwarmSignalListener {
     if (builder == null) {
       return;
     }
-    TrafficPolicy policy = lifecycle.trafficPolicy();
+    TrafficPolicy policy = effectiveTrafficPolicy();
     if (policy != null) {
       builder.data("trafficPolicy", policy);
     }
+    boolean guardActive = lifecycle.bufferGuardActive();
+    String guardProblem = lifecycle.bufferGuardProblem();
+    if (guardActive || guardProblem != null) {
+      Map<String, Object> guardDiag = new LinkedHashMap<>();
+      guardDiag.put("active", guardActive);
+      if (guardProblem != null && !guardProblem.isBlank()) {
+        guardDiag.put("problem", guardProblem);
+      }
+      builder.data("bufferGuard", guardDiag);
+    }
   }
+
+  private TrafficPolicy effectiveTrafficPolicy() {
+    List<BufferGuardSettings> guards = lifecycle.bufferGuards();
+    if (guards != null && !guards.isEmpty()) {
+      BufferGuardSettings s = guards.get(0);
+      return trafficPolicyFromSettings(s);
+    }
+    return lifecycle.trafficPolicy();
+  }
+
+  private TrafficPolicy trafficPolicyFromSettings(BufferGuardSettings s) {
+    if (s == null) {
+      return null;
+    }
+    BufferGuardPolicy.Adjustment adjust = new BufferGuardPolicy.Adjustment(
+        s.adjust().maxIncreasePct(),
+        s.adjust().maxDecreasePct(),
+        s.adjust().minRatePerSec(),
+        s.adjust().maxRatePerSec());
+    BufferGuardPolicy.Prefill prefill = new BufferGuardPolicy.Prefill(
+        s.prefill().enabled(),
+        s.prefill().lookahead() != null ? s.prefill().lookahead().toString() : null,
+        s.prefill().liftPct());
+    BufferGuardPolicy.Backpressure backpressure = new BufferGuardPolicy.Backpressure(
+        s.backpressure().queueAlias(),
+        s.backpressure().highDepth(),
+        s.backpressure().recoveryDepth(),
+        s.backpressure().moderatorReductionPct());
+    BufferGuardPolicy policy = new BufferGuardPolicy(
+        Boolean.TRUE,
+        s.queueAlias(),
+        s.targetDepth(),
+        s.minDepth(),
+        s.maxDepth(),
+        s.samplePeriod() != null ? s.samplePeriod().toString() : null,
+        s.movingAverageWindow(),
+        adjust,
+        prefill,
+        backpressure);
+    return new TrafficPolicy(policy);
+  }
+
+  private BufferGuardSettings applyGuardOverride(BufferGuardSettings base, JsonNode guardNode) {
+    if (base == null || guardNode == null || !guardNode.isObject()) {
+      return base;
+    }
+    boolean hasEnabled = guardNode.has("enabled");
+    boolean enabled = hasEnabled && guardNode.path("enabled").asBoolean();
+    if (hasEnabled && !enabled) {
+      // Disabled: the caller intends to turn the guard off entirely.
+      return null;
+    }
+
+    String queueAliasOverride = textOrNull(guardNode.path("queueAlias"));
+    if (queueAliasOverride != null
+        && !queueAliasOverride.equalsIgnoreCase(base.queueAlias())) {
+      throw new IllegalArgumentException(
+          "Changing buffer guard queueAlias at runtime is not supported; edit the scenario plan instead");
+    }
+
+    int targetDepth = intOr(guardNode, "targetDepth", base.targetDepth());
+    int minDepth = intOr(guardNode, "minDepth", base.minDepth());
+    int maxDepth = intOr(guardNode, "maxDepth", base.maxDepth());
+    String samplePeriodStr = textOrNull(guardNode.path("samplePeriod"));
+    java.time.Duration samplePeriod = samplePeriodStr != null
+        ? java.time.Duration.parse(samplePeriodStr.toUpperCase(java.util.Locale.ROOT))
+        : base.samplePeriod();
+    int movingAverageWindow = intOr(guardNode, "movingAverageWindow", base.movingAverageWindow());
+
+    JsonNode adjustNode = guardNode.path("adjust");
+    BufferGuardSettings.Adjustment baseAdj = base.adjust();
+    int maxIncreasePct = intOr(adjustNode, "maxIncreasePct", baseAdj.maxIncreasePct());
+    int maxDecreasePct = intOr(adjustNode, "maxDecreasePct", baseAdj.maxDecreasePct());
+    int minRatePerSec = intOr(adjustNode, "minRatePerSec", baseAdj.minRatePerSec());
+    int maxRatePerSec = intOr(adjustNode, "maxRatePerSec", baseAdj.maxRatePerSec());
+    BufferGuardSettings.Adjustment adj = new BufferGuardSettings.Adjustment(
+        maxIncreasePct, maxDecreasePct, minRatePerSec, maxRatePerSec);
+
+    JsonNode prefillNode = guardNode.path("prefill");
+    BufferGuardSettings.Prefill basePrefill = base.prefill();
+    boolean prefillEnabled = prefillNode.isMissingNode()
+        ? basePrefill.enabled()
+        : prefillNode.path("enabled").asBoolean(basePrefill.enabled());
+    String lookaheadStr = textOrNull(prefillNode.path("lookahead"));
+    java.time.Duration lookahead = lookaheadStr != null
+        ? java.time.Duration.parse(lookaheadStr.toUpperCase(java.util.Locale.ROOT))
+        : basePrefill.lookahead();
+    int liftPct = intOr(prefillNode, "liftPct", basePrefill.liftPct());
+    BufferGuardSettings.Prefill prefill = new BufferGuardSettings.Prefill(prefillEnabled, lookahead, liftPct);
+
+    JsonNode bpNode = guardNode.path("backpressure");
+    BufferGuardSettings.Backpressure baseBp = base.backpressure();
+    String bpAliasOverride = textOrNull(bpNode.path("queueAlias"));
+    String bpQueueAlias = bpAliasOverride != null ? bpAliasOverride : baseBp.queueAlias();
+    int highDepth = intOr(bpNode, "highDepth", baseBp.highDepth());
+    int recoveryDepth = intOr(bpNode, "recoveryDepth", baseBp.recoveryDepth());
+    int moderatorReductionPct = intOr(bpNode, "moderatorReductionPct", baseBp.moderatorReductionPct());
+    BufferGuardSettings.Backpressure backpressure =
+        new BufferGuardSettings.Backpressure(bpQueueAlias, baseBp.queueName(), highDepth, recoveryDepth, moderatorReductionPct);
+
+    return new BufferGuardSettings(
+        base.queueAlias(),
+        base.queueName(),
+        base.targetRole(),
+        base.initialRatePerSec(),
+        targetDepth,
+        minDepth,
+        maxDepth,
+        samplePeriod,
+        movingAverageWindow,
+        adj,
+        prefill,
+        backpressure);
+  }
+
+  private static String textOrNull(JsonNode node) {
+    if (node == null || !node.isTextual()) {
+      return null;
+    }
+    String trimmed = node.asText().trim();
+    return trimmed.isEmpty() ? null : trimmed;
+  }
+
+  private static int intOr(JsonNode node, String field, int fallback) {
+    if (node == null || !node.has(field)) {
+      return fallback;
+    }
+    return node.path(field).isInt() ? node.path(field).asInt() : fallback;
+  }
+
 
   private String determineState(SwarmMetrics m) {
     if (m.desired() > 0 && m.healthy() == 0) {

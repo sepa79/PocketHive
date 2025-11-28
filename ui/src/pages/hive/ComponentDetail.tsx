@@ -106,7 +106,7 @@ export default function ComponentDetail({ component, onClose }: Props) {
         })
       }
     }
-    // Swarm-controller specific metadata based on swarm summaries
+    // Swarm-controller specific metadata based on swarm summaries + guard diagnostics
     if (normalizedRole === 'swarm-controller') {
       const swarmSummary = findSwarm(component.swarmId ?? null)
       if (swarmSummary?.templateId) {
@@ -120,6 +120,26 @@ export default function ComponentDetail({ component, onClose }: Props) {
           label: 'Swarm stack',
           value: swarmSummary.stackName,
         })
+      }
+      const guard =
+        cfg && cfg.bufferGuard && typeof cfg.bufferGuard === 'object'
+          ? (cfg.bufferGuard as Record<string, unknown>)
+          : undefined
+      if (guard) {
+        const guardActive = getBoolean(guard.active)
+        const guardProblem = getString(guard.problem)
+        if (guardActive !== undefined) {
+          entries.push({
+            label: 'Buffer guard',
+            value: guardActive ? 'active' : 'inactive',
+          })
+        }
+        if (guardProblem) {
+          entries.push({
+            label: 'Guard problem',
+            value: guardProblem,
+          })
+        }
       }
     }
     const tps = getNumber(cfg.tps)
