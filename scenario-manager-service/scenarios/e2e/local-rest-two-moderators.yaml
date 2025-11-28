@@ -31,6 +31,7 @@ template:
       image: generator:latest
       config:
         inputs:
+          type: SCHEDULER
           scheduler:
             ratePerSec: 10
         worker:

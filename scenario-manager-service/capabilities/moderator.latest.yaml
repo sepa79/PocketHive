@@ -15,11 +15,11 @@ config:
     default: false
   - name: mode.type
     type: string
-    default: "PASS_THROUGH"
+    default: "pass-through"
     options:
-      - "PASS_THROUGH"
-      - "RATE_PER_SEC"
-      - "SINE"
+      - "pass-through"
+      - "rate-per-sec"
+      - "sine"
   - name: mode.ratePerSec
     type: number
     default: 0

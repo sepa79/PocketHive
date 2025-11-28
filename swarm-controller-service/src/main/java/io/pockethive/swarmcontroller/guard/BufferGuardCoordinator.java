@@ -43,12 +43,20 @@ public final class BufferGuardCoordinator {
 
   private static final Logger log = LoggerFactory.getLogger(BufferGuardCoordinator.class);
 
+  private enum InputKind {
+    SCHEDULER,
+    REDIS_DATASET
+  }
+
   private final SwarmControllerProperties properties;
   private final String swarmId;
   private final ControlPlanePublisher controlPublisher;
   private final ObjectMapper mapper;
 
   private final io.pockethive.manager.guard.BufferGuardCoordinator coordinator;
+  private final Map<String, InputKind> inputKindByRole = new HashMap<>();
+  private volatile boolean active;
+  private volatile String lastProblem;
 
   public BufferGuardCoordinator(SwarmControllerProperties properties,
                                 QueueStatsPort queueStatsPort,
@@ -70,6 +78,8 @@ public final class BufferGuardCoordinator {
   }
 
   public void configureFromTemplate(String templateJson) {
+    this.active = false;
+    this.lastProblem = null;
     if (!properties.getFeatures().bufferGuardEnabled()) {
       coordinator.configure(List.of());
       return;
@@ -77,10 +87,19 @@ public final class BufferGuardCoordinator {
     try {
       SwarmPlan plan = mapper.readValue(templateJson, SwarmPlan.class);
       List<BufferGuardSettings> resolved = resolveSettings(plan);
+      if (resolved.isEmpty()) {
+        log.info("Buffer guard not configured: no eligible guard settings resolved for swarm {}", swarmId);
+        coordinator.configure(List.of());
+        return;
+      }
       coordinator.configure(resolved);
+      active = true;
+      lastProblem = null;
     } catch (Exception ex) {
       log.warn("Failed to parse swarm plan for buffer guard configuration", ex);
       coordinator.configure(List.of());
+      active = false;
+      lastProblem = "plan-parse-error: " + ex.getClass().getSimpleName();
     }
   }
 
@@ -100,11 +119,38 @@ public final class BufferGuardCoordinator {
     return coordinator.currentSettings();
   }
 
+  public boolean isActive() {
+    return active;
+  }
+
+  public String lastProblem() {
+    return lastProblem;
+  }
+
   private void sendRateUpdate(String targetRole, double rate) {
+    InputKind kind = inputKindByRole.get(normalizeRole(targetRole));
+    if (kind == null) {
+      log.warn("Buffer guard attempted to update rate for role {} but no input mapping is configured; ignoring", targetRole);
+      return;
+    }
     var data = mapper.createObjectNode();
     data.put("commandTarget", "ROLE");
     data.put("role", targetRole);
-    data.put("ratePerSec", rate);
+    var inputs = data.putObject("inputs");
+    switch (kind) {
+      case SCHEDULER -> {
+        var scheduler = inputs.putObject("scheduler");
+        scheduler.put("ratePerSec", rate);
+      }
+      case REDIS_DATASET -> {
+        var redis = inputs.putObject("redis");
+        redis.put("ratePerSec", rate);
+      }
+      default -> {
+        log.warn("Unsupported input kind {} for role {}; ignoring rate update", kind, targetRole);
+        return;
+      }
+    }
     try {
       Map<String, Object> args = Map.of("data", mapper.convertValue(data, Map.class));
       var signal = new io.pockethive.control.ControlSignal(
@@ -129,6 +175,7 @@ public final class BufferGuardCoordinator {
   private List<BufferGuardSettings> resolveSettings(SwarmPlan plan) {
     TrafficPolicy policy = plan.trafficPolicy();
     if (policy == null) {
+      lastProblem = "no-traffic-policy";
       return List.of();
     }
     List<BufferGuardSettings> result = new ArrayList<>();
@@ -145,6 +192,9 @@ public final class BufferGuardCoordinator {
         }
       }
     }
+    if (result.isEmpty()) {
+      lastProblem = "no-guards-resolved";
+    }
     return result;
   }
 
@@ -156,6 +206,7 @@ public final class BufferGuardCoordinator {
     String queueAlias = guard.queueAlias();
     if (!hasText(queueAlias)) {
       log.warn("Buffer guard enabled but queueAlias missing; guard configuration ignored");
+      lastProblem = "missing-queue-alias";
       return Optional.empty();
     }
     String queueName;
@@ -163,21 +214,32 @@ public final class BufferGuardCoordinator {
       queueName = properties.queueName(queueAlias);
     } catch (IllegalArgumentException ex) {
       log.warn("Buffer guard queue alias '{}' invalid: {}", queueAlias, ex.getMessage());
+      lastProblem = "invalid-queue-alias";
       return Optional.empty();
     }
 
     if (plan.bees() == null) {
       log.warn("Buffer guard requires at least one bee to determine target role");
+      lastProblem = "no-bees";
       return Optional.empty();
     }
-    String targetRole = plan.bees().stream()
+    Bee targetBee = plan.bees().stream()
         .filter(bee -> bee.work() != null && queueAlias.equalsIgnoreCase(bee.work().out()))
-        .map(Bee::role)
         .findFirst()
         .orElse(null);
+    String targetRole = targetBee != null ? targetBee.role() : null;
     if (!hasText(targetRole)) {
       log.warn("Buffer guard could not find a producer role for queue '{}'", queueAlias);
+      lastProblem = "missing-producer";
       return Optional.empty();
+    }
+
+    InputKind inputKind = resolveInputKind(targetBee.config());
+    if (inputKind != null) {
+      inputKindByRole.put(normalizeRole(targetRole), inputKind);
+    } else {
+      log.info("No rate-controllable input configured for role {}; buffer guard will use adjustment bounds only", targetRole);
+      lastProblem = "no-rate-input";
     }
 
     int targetDepth = defaultInt(guard.targetDepth(), 200);
@@ -222,7 +284,7 @@ public final class BufferGuardCoordinator {
         recoveryDepth,
         defaultInt(bpPolicy != null ? bpPolicy.moderatorReductionPct() : null, 15));
 
-    double initialRate = resolveInitialRate(plan, targetRole).orElse(adjustment.minRatePerSec());
+    double initialRate = extractRatePerSec(targetBee.config(), inputKind).orElse(adjustment.minRatePerSec());
     initialRate = clampRate(initialRate, adjustment);
 
     return Optional.of(new BufferGuardSettings(
@@ -240,23 +302,37 @@ public final class BufferGuardCoordinator {
         backpressure));
   }
 
-  private OptionalDouble resolveInitialRate(SwarmPlan plan, String role) {
-    if (plan.bees() == null) {
-      return OptionalDouble.empty();
-    }
-    return plan.bees().stream()
-        .filter(bee -> role.equalsIgnoreCase(bee.role()))
-        .map(bee -> extractRatePerSec(bee.config()))
-        .filter(OptionalDouble::isPresent)
-        .mapToDouble(OptionalDouble::getAsDouble)
-        .findFirst();
-  }
-
-  private OptionalDouble extractRatePerSec(Map<?, ?> source) {
+  private OptionalDouble extractRatePerSec(Map<?, ?> source, InputKind kind) {
     if (source == null || source.isEmpty()) {
       return OptionalDouble.empty();
     }
-    Object value = source.get("ratePerSec");
+    if (kind == null) {
+      return OptionalDouble.empty();
+    }
+    Object inputsObj = source.get("inputs");
+    if (!(inputsObj instanceof Map<?, ?> inputsMap)) {
+      return OptionalDouble.empty();
+    }
+    Object value = switch (kind) {
+      case SCHEDULER -> {
+        Object schedulerObj = inputsMap.get("scheduler");
+        if (schedulerObj instanceof Map<?, ?> schedulerMap) {
+          yield schedulerMap.get("ratePerSec");
+        }
+        yield null;
+      }
+      case REDIS_DATASET -> {
+        Object redisObj = inputsMap.get("redis");
+        if (redisObj instanceof Map<?, ?> redisMap) {
+          yield redisMap.get("ratePerSec");
+        }
+        yield null;
+      }
+      default -> null;
+    };
+    if (value == null) {
+      return OptionalDouble.empty();
+    }
     if (value == null) {
       return OptionalDouble.empty();
     }
@@ -294,6 +370,31 @@ public final class BufferGuardCoordinator {
 
   private static boolean hasText(String value) {
     return value != null && !value.isBlank();
+  }
+
+  private static String normalizeRole(String value) {
+    return value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
+  }
+
+  @SuppressWarnings("unchecked")
+  private static InputKind resolveInputKind(Map<String, Object> config) {
+    if (config == null || config.isEmpty()) {
+      return null;
+    }
+    Object inputsObj = config.get("inputs");
+    if (!(inputsObj instanceof Map<?, ?> inputsMap)) {
+      return null;
+    }
+    Object typeObj = inputsMap.get("type");
+    if (!(typeObj instanceof String rawType)) {
+      return null;
+    }
+    String normalized = rawType.trim().toUpperCase(Locale.ROOT);
+    return switch (normalized) {
+      case "SCHEDULER" -> InputKind.SCHEDULER;
+      case "REDIS_DATASET" -> InputKind.REDIS_DATASET;
+      default -> null;
+    };
   }
 
   private static Duration parseDuration(String candidate, Duration fallback) {
