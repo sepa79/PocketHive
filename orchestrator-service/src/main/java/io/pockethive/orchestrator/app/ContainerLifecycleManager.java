@@ -178,6 +178,15 @@ public class ContainerLifecycleManager {
         return prefix + "/" + trimmed;
     }
 
+    /**
+     * Resolve a bee image for inclusion in a SwarmPlan using the same repository
+     * prefix rules as controller images. This keeps the swarm-controller and
+     * compute adapters agnostic of registry roots.
+     */
+    public String resolveImageForPlan(String image) {
+        return resolveImage(image);
+    }
+
     public void stopSwarm(String swarmId) {
         registry.find(swarmId).ifPresent(swarm -> {
             SwarmStatus current = swarm.getStatus();

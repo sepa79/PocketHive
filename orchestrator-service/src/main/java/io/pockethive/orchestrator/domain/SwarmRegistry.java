@@ -103,6 +103,16 @@ public class SwarmRegistry {
         swarms.values().forEach(s -> s.expire(now, degradedAfter, failedAfter));
     }
 
+    /**
+     * Remove swarms that are no longer alive.
+     * <p>
+     * This is intentionally strict: only swarms that have already been marked {@link SwarmHealth#FAILED}
+     * by the expiry logic are pruned. Anything still reporting (RUNNING/DEGRADED) stays registered.
+     */
+    public void bringOutYourDead() {
+        swarms.values().removeIf(s -> s.getHealth() == SwarmHealth.FAILED);
+    }
+
     public int count() {
         return swarms.size();
     }

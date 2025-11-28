@@ -1,17 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { createSwarm } from '../../lib/orchestratorApi'
 import { apiFetch } from '../../lib/api'
-import type {
-  CapabilityAction,
-  CapabilityConfigEntry,
-  CapabilityManifest,
-} from '../../types/capabilities'
-import {
-  findManifestForImage,
-  formatCapabilityValue,
-  inferCapabilityInputType,
-} from '../../lib/capabilities'
-import { useCapabilities } from '../../contexts/CapabilitiesContext'
 
 interface Props {
   onClose: () => void
@@ -39,19 +28,18 @@ export default function SwarmCreateModal({ onClose, autoPullOnStart, onChangeAut
   const [templates, setTemplates] = useState<ScenarioTemplate[]>([])
   const [scenarioId, setScenarioId] = useState('')
   const [message, setMessage] = useState<string | null>(null)
-  const { manifestIndex, refreshCapabilities } = useCapabilities()
+  const [showRawScenario, setShowRawScenario] = useState(false)
+  const [scenarioPreview, setScenarioPreview] = useState<string | null>(null)
+  const [scenarioPreviewError, setScenarioPreviewError] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
 
     const load = async () => {
       try {
-        const [templatesResponse] = await Promise.all([
-          apiFetch('/scenario-manager/api/templates', {
-            headers: { Accept: 'application/json' },
-          }),
-          refreshCapabilities(),
-        ])
+        const templatesResponse = await apiFetch('/scenario-manager/api/templates', {
+          headers: { Accept: 'application/json' },
+        })
 
         if (cancelled) return
 
@@ -74,7 +62,7 @@ export default function SwarmCreateModal({ onClose, autoPullOnStart, onChangeAut
     return () => {
       cancelled = true
     }
-  }, [refreshCapabilities])
+  }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -106,31 +94,40 @@ export default function SwarmCreateModal({ onClose, autoPullOnStart, onChangeAut
     [templates, scenarioId],
   )
 
-  const selectedComponents = useMemo(() => {
-    if (!selectedTemplate) return []
+  useEffect(() => {
+    let cancelled = false
+    setScenarioPreview(null)
+    setScenarioPreviewError(null)
 
-    const components: ComponentManifestView[] = []
-    if (selectedTemplate.controllerImage) {
-      components.push({
-        key: 'controller',
-        label: 'Controller',
-        image: selectedTemplate.controllerImage,
-        manifest: findManifestForImage(selectedTemplate.controllerImage, manifestIndex),
-      })
+    const loadScenario = async () => {
+      if (!selectedTemplate) {
+        return
+      }
+      setShowRawScenario(false)
+      try {
+        const response = await apiFetch(`/scenario-manager/scenarios/${encodeURIComponent(selectedTemplate.id)}`, {
+          headers: { Accept: 'application/json' },
+        })
+        if (cancelled) return
+        if (!response.ok) {
+          setScenarioPreviewError('Failed to load scenario definition')
+          return
+        }
+        const body = await response.json()
+        setScenarioPreview(JSON.stringify(body, null, 2))
+      } catch {
+        if (!cancelled) {
+          setScenarioPreviewError('Failed to load scenario definition')
+        }
+      }
     }
 
-    selectedTemplate.bees.forEach((bee, index) => {
-      const label = bee.role ? `${capitalize(bee.role)} Bee` : `Bee ${index + 1}`
-      components.push({
-        key: `bee-${index}-${bee.role ?? 'unknown'}`,
-        label,
-        image: bee.image,
-        manifest: bee.image ? findManifestForImage(bee.image, manifestIndex) : null,
-      })
-    })
+    void loadScenario()
 
-    return components
-  }, [manifestIndex, selectedTemplate])
+    return () => {
+      cancelled = true
+    }
+  }, [selectedTemplate])
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
@@ -210,7 +207,7 @@ export default function SwarmCreateModal({ onClose, autoPullOnStart, onChangeAut
             <div className="flex-1 min-h-0 border border-white/10 rounded-md bg-black/20 p-3 overflow-y-auto text-xs text-white/80">
               {!selectedTemplate && (
                 <div className="text-white/50">
-                  Select a scenario on the left to preview its controller and bees.
+                  Select a scenario on the left to preview its definition.
                 </div>
               )}
               {selectedTemplate && (
@@ -226,82 +223,57 @@ export default function SwarmCreateModal({ onClose, autoPullOnStart, onChangeAut
                   {selectedTemplate.description && (
                     <p className="text-white/70 text-sm">{selectedTemplate.description}</p>
                   )}
-                  {selectedComponents.map((component) => (
-                    <div key={component.key} className="space-y-2 border border-white/10 rounded-md p-3">
-                      <div className="flex items-baseline justify-between gap-3">
-                        <div className="font-semibold text-white">{component.label}</div>
-                        <div className="text-[11px] text-white/50 truncate">
-                          Image: {component.image ?? '—'}
-                        </div>
+                  <div className="space-y-3">
+                    <div>
+                      <div className="uppercase text-[10px] tracking-wide text-white/50 mb-1">
+                        Components
                       </div>
-                      {component.manifest ? (
-                        <div className="space-y-3">
-                          <div className="space-y-1">
-                            <div className="uppercase text-[10px] tracking-wide text-white/50">
-                              Config
-                            </div>
-                            {component.manifest.config.length === 0 && (
-                              <div className="text-white/50">No configurable options</div>
-                            )}
-                            {component.manifest.config.map((entry) => (
-                              <label key={entry.name} className="block space-y-1">
-                                <span className="block text-white/70">
-                                  {entry.name}
-                                  <span className="text-white/40"> ({entry.type})</span>
-                                </span>
-                                {renderConfigControl(entry)}
-                              </label>
-                            ))}
+                      <ul className="text-[12px] text-white/80 space-y-1">
+                        {selectedTemplate.controllerImage && (
+                          <li>
+                            <span className="text-white/60">controller:</span>{' '}
+                            <span className="text-white/90">{selectedTemplate.controllerImage}</span>
+                          </li>
+                        )}
+                        {selectedTemplate.bees.map((bee, index) => (
+                          <li key={`${bee.role}-${index}`}>
+                            <span className="text-white/60">
+                              {bee.role || `bee-${index + 1}`}:
+                            </span>{' '}
+                            <span className="text-white/90">{bee.image ?? '—'}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                    <div className="space-y-1">
+                      <button
+                        type="button"
+                        className="text-[11px] text-blue-300 hover:text-blue-200 underline-offset-2 underline"
+                        onClick={() => setShowRawScenario((prev) => !prev)}
+                        disabled={!scenarioPreview && !scenarioPreviewError}
+                      >
+                        {showRawScenario ? 'Hide raw scenario definition' : 'Show raw scenario definition'}
+                      </button>
+                      {showRawScenario && (
+                        <div className="mt-1">
+                          <div className="uppercase text-[10px] tracking-wide text-white/50 mb-1">
+                            Scenario definition (from scenario-manager)
                           </div>
-                          <div className="space-y-1">
-                            <div className="uppercase text-[10px] tracking-wide text-white/50">
-                              Actions
-                            </div>
-                            {component.manifest.actions.length === 0 && (
-                              <div className="text-white/50">No actions available</div>
-                            )}
-                            <div className="flex flex-wrap gap-2">
-                              {component.manifest.actions.map((action) => (
-                                <button
-                                  key={action.id}
-                                  type="button"
-                                  disabled
-                                  className="rounded bg-white/10 px-2 py-1 text-white/70 text-[11px]"
-                                  title={
-                                    action.params.length ? formatActionTooltip(action) : undefined
-                                  }
-                                >
-                                  {action.label}
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-                          <div className="space-y-1">
-                            <div className="uppercase text-[10px] tracking-wide text-white/50">
-                              Panels
-                            </div>
-                            {component.manifest.panels.length === 0 && (
-                              <div className="text-white/50">No panels registered</div>
-                            )}
-                            <div className="flex flex-wrap gap-1">
-                              {component.manifest.panels.map((panel) => (
-                                <span
-                                  key={panel.id}
-                                  className="rounded-full border border-white/20 px-2 py-[1px] text-[11px] text-white/70"
-                                >
-                                  {panel.id}
-                                </span>
-                              ))}
-                            </div>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="text-amber-300 text-[11px]">
-                          Capability manifest not found for this image.
+                          {scenarioPreviewError && (
+                            <div className="text-amber-300 text-[11px]">{scenarioPreviewError}</div>
+                          )}
+                          {scenarioPreview && (
+                            <pre className="max-h-[260px] overflow-auto rounded bg-black/60 p-2 text-[11px] whitespace-pre text-white/90">
+                              {scenarioPreview}
+                            </pre>
+                          )}
+                          {!scenarioPreview && !scenarioPreviewError && (
+                            <div className="text-white/50 text-[11px]">Loading scenario…</div>
+                          )}
                         </div>
                       )}
                     </div>
-                  ))}
+                  </div>
                 </div>
               )}
             </div>
@@ -326,13 +298,6 @@ export default function SwarmCreateModal({ onClose, autoPullOnStart, onChangeAut
       </div>
     </div>
   )
-}
-
-interface ComponentManifestView {
-  key: string
-  label: string
-  image: string | null
-  manifest: CapabilityManifest | null
 }
 
 function normalizeTemplates(data: unknown): ScenarioTemplate[] {
@@ -370,45 +335,4 @@ function normalizeBee(entry: unknown): ScenarioBee | null {
   const image =
     typeof value.image === 'string' && value.image.trim().length > 0 ? value.image.trim() : null
   return { role, image }
-}
-
-function renderConfigControl(entry: CapabilityConfigEntry) {
-  const value = formatCapabilityValue(entry.default)
-  const normalizedType = entry.type ? entry.type.toLowerCase() : ''
-  if (entry.multiline || normalizedType === 'text' || normalizedType === 'json') {
-    return (
-      <textarea
-        className="w-full rounded bg-white/10 px-2 py-1 text-white"
-        value={value}
-        readOnly
-        rows={3}
-      />
-    )
-  }
-
-  const inputType = inferCapabilityInputType(entry.type)
-  return (
-    <input
-      className="w-full rounded bg-white/10 px-2 py-1 text-white"
-      type={inputType}
-      value={value}
-      readOnly
-      min={entry.min}
-      max={entry.max}
-    />
-  )
-}
-
-function formatActionTooltip(action: CapabilityAction) {
-  if (!action.params.length) return undefined
-  const parts = action.params.map((param) => {
-    const required = param.required ? 'required' : 'optional'
-    return `${param.name}: ${param.type} (${required})`
-  })
-  return parts.join('\n')
-}
-
-function capitalize(value: string) {
-  if (!value) return ''
-  return value.charAt(0).toUpperCase() + value.slice(1)
 }

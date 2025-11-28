@@ -156,7 +156,30 @@ public class SwarmController {
                 ScenarioPlan planDescriptor = fetchScenario(templateId);
                 SwarmTemplate template = planDescriptor.template();
                 String image = requireImage(template, templateId);
-                SwarmPlan plan = planDescriptor.toSwarmPlan(swarmId);
+                SwarmPlan originalPlan = planDescriptor.toSwarmPlan(swarmId);
+                // Resolve bee images through the same repository prefix logic used for controllers
+                // so the swarm-controller sees fully-qualified image names and does not need to
+                // guess registry roots.
+                java.util.List<io.pockethive.swarm.model.Bee> rewrittenBees =
+                    originalPlan.bees().stream()
+                        .map(bee -> {
+                            String beeImage = bee.image();
+                            if (beeImage == null || beeImage.isBlank()) {
+                                return bee;
+                            }
+                            String resolved = lifecycle.resolveImageForPlan(beeImage);
+                            if (resolved == null || resolved.equals(beeImage)) {
+                                return bee;
+                            }
+                            return new io.pockethive.swarm.model.Bee(
+                                bee.role(),
+                                resolved,
+                                bee.work(),
+                                bee.env(),
+                                bee.config());
+                        })
+                        .toList();
+                SwarmPlan plan = new SwarmPlan(originalPlan.id(), rewrittenBees, originalPlan.trafficPolicy());
                 String instanceId = BeeNameGenerator.generate("swarm-controller", swarmId);
                 plans.register(instanceId, plan);
                 boolean autoPull = Boolean.TRUE.equals(req.autoPullImages());
@@ -379,6 +402,10 @@ public class SwarmController {
     public ResponseEntity<List<SwarmSummary>> list() {
         String path = "/api/swarms";
         logRestRequest("GET", path, null);
+        // Drop swarms that have already been marked FAILED by expiry logic so operators can
+        // recreate swarms after controllers disappear (for example, when containers are killed
+        // manually outside PocketHive).
+        registry.bringOutYourDead();
         List<SwarmSummary> payload = registry.all().stream()
             .sorted(Comparator.comparing(Swarm::getId))
             .map(this::toSummary)

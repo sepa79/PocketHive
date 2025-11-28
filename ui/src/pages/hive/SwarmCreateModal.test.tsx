@@ -28,10 +28,6 @@ test('loads available scenarios on mount', async () => {
         { id: 'advanced', name: 'Advanced', bees: [] },
       ],
     } as unknown as Response)
-    .mockResolvedValueOnce({
-      ok: true,
-      json: async () => [],
-    } as unknown as Response)
 
   render(
     <CapabilitiesProvider>
@@ -48,12 +44,6 @@ test('loads available scenarios on mount', async () => {
       headers: expect.objectContaining({ Accept: 'application/json' }),
     }),
   )
-  expect(apiFetchSpy).toHaveBeenCalledWith(
-    '/scenario-manager/api/capabilities?all=true',
-    expect.objectContaining({
-      headers: expect.objectContaining({ Accept: 'application/json' }),
-    }),
-  )
 })
 
 test('submits selected scenario', async () => {
@@ -62,9 +52,10 @@ test('submits selected scenario', async () => {
       ok: true,
       json: async () => [{ id: 'basic', name: 'Basic', bees: [] }],
     } as unknown as Response)
+    // scenario preview fetch
     .mockResolvedValueOnce({
       ok: true,
-      json: async () => [],
+      json: async () => ({ id: 'basic', name: 'Basic', template: {} }),
     } as unknown as Response)
     .mockResolvedValueOnce({ ok: true } as Response)
   render(
@@ -97,9 +88,10 @@ test('shows conflict message when swarm already exists', async () => {
       ok: true,
       json: async () => [{ id: 'basic', name: 'Basic', bees: [] }],
     } as unknown as Response)
+    // scenario preview fetch
     .mockResolvedValueOnce({
       ok: true,
-      json: async () => [],
+      json: async () => ({ id: 'basic', name: 'Basic', template: {} }),
     } as unknown as Response)
     .mockResolvedValueOnce({
       ok: false,
@@ -127,10 +119,7 @@ test('does not submit when scenario selection is cleared', async () => {
       ok: true,
       json: async () => [{ id: 'basic', name: 'Basic', bees: [] }],
     } as unknown as Response)
-    .mockResolvedValueOnce({
-      ok: true,
-      json: async () => [],
-    } as unknown as Response)
+    // no create call
   render(
     <CapabilitiesProvider>
       <SwarmCreateModal onClose={() => {}} autoPullOnStart={false} onChangeAutoPull={() => {}} />
@@ -141,55 +130,19 @@ test('does not submit when scenario selection is cleared', async () => {
   fireEvent.change(screen.getByLabelText(/swarm id/i), { target: { value: 'sw1' } })
   fireEvent.click(screen.getByText('Create'))
 
-  await waitFor(() => expect(apiFetchSpy.mock.calls.length).toBe(2))
+  await waitFor(() => expect(apiFetchSpy.mock.calls.length).toBe(1))
   await screen.findByText(/swarm id and scenario required/i)
 })
 
-test('renders manifest details when available', async () => {
+test('loads scenario preview when a template is selected', async () => {
   apiFetchSpy
     .mockResolvedValueOnce({
       ok: true,
-      json: async () => [
-        {
-          id: 'basic',
-          name: 'Basic',
-          bees: [{ role: 'generator', image: 'ghcr.io/pockethive/generator:1.0.0' }],
-        },
-      ],
+      json: async () => [{ id: 'basic', name: 'Basic', bees: [] }],
     } as unknown as Response)
     .mockResolvedValueOnce({
       ok: true,
-      json: async () => [
-        {
-          schemaVersion: '1.0',
-          capabilitiesVersion: '1',
-          role: 'generator',
-          image: {
-            name: 'ghcr.io/pockethive/generator',
-            tag: '1.0.0',
-            digest: null,
-          },
-          config: [
-            {
-              name: 'rate',
-              type: 'int',
-              default: 100,
-            },
-          ],
-          actions: [
-            {
-              id: 'warmup',
-              label: 'Warm Up',
-              params: [],
-            },
-          ],
-          panels: [
-            {
-              id: 'metrics',
-            },
-          ],
-        },
-      ],
+      json: async () => ({ id: 'basic', name: 'Basic', template: { image: 'img' } }),
     } as unknown as Response)
 
   render(
@@ -201,7 +154,13 @@ test('renders manifest details when available', async () => {
   await screen.findByText('Basic')
   fireEvent.click(screen.getByRole('button', { name: 'Basic' }))
 
-  expect(await screen.findByDisplayValue('100')).toBeTruthy()
-  expect(screen.getByText('Warm Up')).toBeTruthy()
-  expect(screen.getByText('metrics')).toBeTruthy()
+  await screen.findByText(/Components/i)
+  // Raw toggle should be present once preview has loaded
+  await screen.findByRole('button', { name: /Show raw scenario definition/i })
+  expect(apiFetchSpy).toHaveBeenCalledWith(
+    '/scenario-manager/scenarios/basic',
+    expect.objectContaining({
+      headers: expect.objectContaining({ Accept: 'application/json' }),
+    }),
+  )
 })

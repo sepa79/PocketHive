@@ -20,6 +20,7 @@ export default function ComponentDetail({ component, onClose }: Props) {
   const [toast, setToast] = useState<string | null>(null)
   const [isEditing, setIsEditing] = useState(false)
   const [form, setForm] = useState<Record<string, ConfigFormValue>>({})
+   const [showRefreshTooltip, setShowRefreshTooltip] = useState(false)
   const { ensureCapabilities, getManifestForImage, manifests } = useCapabilities()
   const { ensureSwarms, refreshSwarms, getBeeImage, getControllerImage, findSwarm } =
     useSwarmMetadata()
@@ -48,6 +49,7 @@ export default function ComponentDetail({ component, onClose }: Props) {
     [resolvedImage, getManifestForImage],
   )
   const previousComponentIdRef = useRef(component.id)
+  const refreshTooltipTimer = useRef<number | null>(null)
 
   useEffect(() => {
     void ensureCapabilities()
@@ -56,6 +58,23 @@ export default function ComponentDetail({ component, onClose }: Props) {
   useEffect(() => {
     void ensureSwarms()
   }, [ensureSwarms])
+
+  const handleRefreshMouseEnter = () => {
+    if (refreshTooltipTimer.current != null) {
+      return
+    }
+    refreshTooltipTimer.current = window.setTimeout(() => {
+      setShowRefreshTooltip(true)
+    }, 5000)
+  }
+
+  const handleRefreshMouseLeave = () => {
+    if (refreshTooltipTimer.current != null) {
+      window.clearTimeout(refreshTooltipTimer.current)
+      refreshTooltipTimer.current = null
+    }
+    setShowRefreshTooltip(false)
+  }
 
   const handleSubmit = async () => {
     if (!manifest) {
@@ -424,19 +443,31 @@ export default function ComponentDetail({ component, onClose }: Props) {
           <span className={`h-3 w-3 rounded-full ${colorForHealth(health)}`} />
         </h2>
         {normalizedRole === 'orchestrator' && (
-          <button
-            className="rounded border border-white/20 px-2 py-0.5 text-xs text-white/80 hover:bg-white/10"
-            onClick={async () => {
-              try {
-                await refreshSwarms()
-                displayToast(setToast, 'Swarm metadata refreshed')
-              } catch {
-                displayToast(setToast, 'Failed to refresh swarm metadata')
-              }
-            }}
-          >
-            Refresh swarms
-          </button>
+          <div className="relative">
+            <button
+              className="rounded border border-white/20 px-2 py-0.5 text-xs text-white/80 hover:bg-white/10"
+              onClick={async () => {
+                try {
+                  await refreshSwarms()
+                  displayToast(setToast, 'Swarm metadata refreshed')
+                } catch {
+                  displayToast(setToast, 'Failed to refresh swarm metadata')
+                } finally {
+                  handleRefreshMouseLeave()
+                }
+              }}
+              onMouseEnter={handleRefreshMouseEnter}
+              onMouseLeave={handleRefreshMouseLeave}
+            >
+              Refresh swarms
+            </button>
+            {showRefreshTooltip && (
+              <div className="absolute right-0 mt-1 w-64 rounded border border-white/20 bg-black/80 p-2 text-[11px] text-white/90 z-10">
+                bringOutYourDead() — removes FAILED swarms from registry so you can recreate
+                deleted swarms.
+              </div>
+            )}
+          </div>
         )}
       </div>
       <div className="text-sm text-white/60 mb-3">{role}</div>

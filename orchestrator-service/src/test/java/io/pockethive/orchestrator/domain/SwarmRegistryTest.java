@@ -102,4 +102,22 @@ class SwarmRegistryTest {
         registry.expire(java.time.Duration.ofSeconds(10), java.time.Duration.ofSeconds(20), future);
         assertEquals(SwarmHealth.FAILED, swarm.getHealth());
     }
+
+    @Test
+    void bringOutYourDeadRemovesFailedSwarms() {
+        SwarmRegistry registry = new SwarmRegistry();
+        Swarm healthy = new Swarm("s1", "inst1", "container1");
+        Swarm failed = new Swarm("s2", "inst2", "container2");
+        registry.register(healthy);
+        registry.register(failed);
+
+        healthy.refresh(SwarmHealth.RUNNING);
+        failed.refresh(SwarmHealth.FAILED);
+
+        registry.bringOutYourDead();
+
+        assertTrue(registry.find("s1").isPresent());
+        assertTrue(registry.find("s2").isEmpty());
+        assertEquals(1, registry.count());
+    }
 }

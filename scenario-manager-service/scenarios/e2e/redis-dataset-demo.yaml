@@ -39,7 +39,7 @@ template:
             fallbackList: ph:dataset:other
       work: {}
 
-    - role: generator
+    - role: dataProviderA
       image: generator:latest
       config:
         inputs:
@@ -60,7 +60,7 @@ template:
       work:
         out: http-build
 
-    - role: generator
+    - role: dataProviderB
       image: generator:latest
       config:
         inputs:
