@@ -159,13 +159,17 @@ public final class DockerSwarmServiceComputeAdapter implements ComputeAdapter {
     long deadline = System.currentTimeMillis() + timeoutMs;
     try {
       while (System.currentTimeMillis() < deadline) {
-        List<Task> tasks = dockerClient.listTasksCmd()
-            .withServiceFilter(serviceId)
-            .exec();
+        List<Task> tasks = dockerClient.listTasksCmd().exec();
         boolean anyRunning = false;
         if (tasks != null && !tasks.isEmpty()) {
           for (Task task : tasks) {
-            TaskState state = task != null && task.getStatus() != null ? task.getStatus().getState() : null;
+            if (task == null) {
+              continue;
+            }
+            if (task.getServiceId() == null || !serviceId.equals(task.getServiceId())) {
+              continue;
+            }
+            TaskState state = task.getStatus() != null ? task.getStatus().getState() : null;
             if (state == TaskState.NEW
                 || state == TaskState.PENDING
                 || state == TaskState.ASSIGNED
