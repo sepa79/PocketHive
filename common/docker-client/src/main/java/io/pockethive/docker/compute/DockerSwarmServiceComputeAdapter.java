@@ -89,6 +89,11 @@ public final class DockerSwarmServiceComputeAdapter implements ComputeAdapter {
     log.info("Removing Swarm service for manager {}", serviceId);
     try {
       dockerClient.removeServiceCmd(serviceId).exec();
+      // Block until Swarm has drained manager tasks so that upstream
+      // components (like the orchestrator) can safely delete the
+      // swarm-controller control queue without racing against a still
+      // running manager process.
+      waitForServiceDrain(serviceId);
     } catch (RuntimeException e) {
       log.warn("Failed to remove manager service {}: {}", serviceId, e.getMessage());
     }
