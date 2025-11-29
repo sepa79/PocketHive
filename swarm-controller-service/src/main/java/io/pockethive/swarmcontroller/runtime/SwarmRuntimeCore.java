@@ -311,15 +311,6 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
       }
     }
 
-    // Delete this swarm-controller's own control queue as well
-    String controllerQueue = properties.controlQueueName(role, instanceId);
-    try {
-      log.info("deleting swarm-controller control queue {}", controllerQueue);
-      amqp.deleteQueue(controllerQueue);
-    } catch (Exception ex) {
-      log.warn("Failed to delete swarm-controller control queue {}: {}", controllerQueue, ex.getMessage());
-    }
-
     Set<String> suffixes = ctx != null ? ctx.queueSuffixes() : new LinkedHashSet<>(declaredQueues);
     topology.deleteWorkQueues(suffixes, queueMetrics::unregister);
     topology.deleteWorkExchange();

@@ -3,6 +3,8 @@ package io.pockethive.orchestrator.app;
 import io.pockethive.controlplane.spring.ControlPlaneContainerEnvironmentFactory;
 import io.pockethive.controlplane.spring.ControlPlaneContainerEnvironmentFactory.PushgatewaySettings;
 import io.pockethive.controlplane.spring.ControlPlaneProperties;
+import io.pockethive.controlplane.topology.ControlQueueDescriptor;
+import io.pockethive.controlplane.topology.SwarmControllerControlPlaneTopologyDescriptor;
 import io.pockethive.docker.DockerContainerClient;
 import io.pockethive.docker.compute.DockerSingleNodeComputeAdapter;
 import io.pockethive.docker.compute.DockerSwarmServiceComputeAdapter;
@@ -205,6 +207,23 @@ public class ContainerLifecycleManager {
             log.info("tearing down controller container {} for swarm {}", swarm.getContainerId(), swarmId);
             registry.updateStatus(swarmId, SwarmStatus.REMOVING);
             computeAdapter.stopManager(swarm.getContainerId());
+            // The swarm-controller's own control queue is declared via the manager
+            // control-plane topology. Delete it from the orchestrator once the
+            // manager has been stopped so we do not race against its AMQP context.
+            try {
+                String basePrefix = controlPlaneProperties.getControlQueuePrefix();
+                SwarmControllerControlPlaneTopologyDescriptor descriptor =
+                    new SwarmControllerControlPlaneTopologyDescriptor(swarmId, basePrefix);
+                String controllerQueue = descriptor.controlQueue(swarm.getInstanceId())
+                    .map(ControlQueueDescriptor::name)
+                    .orElse(null);
+                if (controllerQueue != null && !controllerQueue.isBlank()) {
+                    log.info("deleting swarm-controller control queue {}", controllerQueue);
+                    amqp.deleteQueue(controllerQueue);
+                }
+            } catch (Exception ex) {
+                log.warn("Failed to delete swarm-controller control queue for swarm {}: {}", swarmId, ex.getMessage());
+            }
             amqp.deleteQueue("ph." + swarmId + ".gen");
             amqp.deleteQueue("ph." + swarmId + ".mod");
             amqp.deleteQueue("ph." + swarmId + ".final");
