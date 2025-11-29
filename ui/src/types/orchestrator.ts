@@ -3,6 +3,7 @@ export interface BeeSummary {
   image: string | null
 }
 
+
 export interface SwarmSummary {
   id: string
   status: string
@@ -12,6 +13,7 @@ export interface SwarmSummary {
   controllerEnabled: boolean
   templateId: string | null
   controllerImage: string | null
+  sutId?: string | null
   stackName: string | null
   bees: BeeSummary[]
 }

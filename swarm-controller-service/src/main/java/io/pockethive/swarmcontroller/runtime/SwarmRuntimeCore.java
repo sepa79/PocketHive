@@ -21,6 +21,8 @@ import io.pockethive.swarm.model.Bee;
 import io.pockethive.swarm.model.SwarmPlan;
 import io.pockethive.swarm.model.TrafficPolicy;
 import io.pockethive.swarm.model.Work;
+import io.pockethive.swarm.model.SutEnvironment;
+import io.pockethive.swarm.model.SutEndpoint;
 import io.pockethive.swarmcontroller.SwarmLifecycle;
 import io.pockethive.swarmcontroller.SwarmMetrics;
 import io.pockethive.swarmcontroller.SwarmReadinessTracker;
@@ -223,6 +225,7 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
       runtimeState = new SwarmRuntimeState(runtimeContext);
 
       java.util.List<io.pockethive.manager.runtime.WorkerSpec> workerSpecs = new java.util.ArrayList<>();
+      SutEnvironment sutEnv = plan.sutEnvironment();
       for (Bee bee : runnableBees) {
         String beeName = BeeNameGenerator.generate(bee.role(), swarmId);
         Map<String, String> env = new LinkedHashMap<>(
@@ -235,7 +238,8 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
         if (bee.env() != null) {
           env.putAll(bee.env());
         }
-        List<String> volumes = resolveVolumes(bee.config());
+        Map<String, Object> effectiveConfig = enrichConfigWithSut(bee.config(), sutEnv);
+        List<String> volumes = resolveVolumes(effectiveConfig);
         workerSpecs.add(new io.pockethive.manager.runtime.WorkerSpec(
             beeName,
             bee.role(),
@@ -243,8 +247,8 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
             Map.copyOf(env),
             volumes));
         runtimeState.registerWorker(bee.role(), beeName, beeName);
-        if (bee.config() != null && !bee.config().isEmpty()) {
-          configFanout.registerBootstrapConfig(beeName, bee.role(), bee.config());
+        if (effectiveConfig != null && !effectiveConfig.isEmpty()) {
+          configFanout.registerBootstrapConfig(beeName, bee.role(), effectiveConfig);
         }
       }
       computeAdapter.applyWorkers(swarmId, workerSpecs);
@@ -544,6 +548,54 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
       }
     }
     return result.isEmpty() ? List.of() : List.copyOf(result);
+  }
+
+  @SuppressWarnings("unchecked")
+  private static Map<String, Object> enrichConfigWithSut(Map<String, Object> config,
+                                                         SutEnvironment sutEnvironment) {
+    if (sutEnvironment == null || config == null || config.isEmpty()) {
+      return config == null || config.isEmpty() ? Map.of() : config;
+    }
+
+    Object sutObj = config.get("sut");
+    if (!(sutObj instanceof Map<?, ?> sutMapRaw)) {
+      return config;
+    }
+    Object endpointIdObj = sutMapRaw.get("targetEndpointId");
+    if (!(endpointIdObj instanceof String endpointIdText)) {
+      return config;
+    }
+    String endpointId = endpointIdText.trim();
+    if (endpointId.isEmpty()) {
+      return config;
+    }
+    SutEndpoint endpoint = sutEnvironment.endpoints().get(endpointId);
+    if (endpoint == null) {
+      return config;
+    }
+
+    Map<String, Object> newSut = new LinkedHashMap<>();
+    sutMapRaw.forEach((key, value) -> {
+      if (key != null) {
+        newSut.put(key.toString(), value);
+      }
+    });
+    newSut.put("environmentId", sutEnvironment.id());
+    newSut.put("environmentType", sutEnvironment.type());
+    newSut.put("environment", sutEnvironment);
+    newSut.put("targetEndpointId", endpoint.id());
+    newSut.put("targetEndpoint", endpoint);
+
+    Map<String, Object> enriched = new LinkedHashMap<>(config);
+    enriched.put("sut", Map.copyOf(newSut));
+
+    // When SUT is explicitly configured, let its endpoint drive baseUrl for HTTP-style workers.
+    String baseUrl = endpoint.baseUrl();
+    if (baseUrl != null && !baseUrl.isBlank()) {
+      enriched.put("baseUrl", baseUrl.trim());
+    }
+
+    return Map.copyOf(enriched);
   }
 
   private List<String> computeStartOrder(SwarmPlan plan) {

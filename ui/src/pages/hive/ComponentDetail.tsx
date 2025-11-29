@@ -134,6 +134,12 @@ export default function ComponentDetail({ component, onClose }: Props) {
           value: swarmSummary.templateId,
         })
       }
+      if (swarmSummary?.sutId) {
+        entries.push({
+          label: 'System under test',
+          value: swarmSummary.sutId,
+        })
+      }
       if (swarmSummary?.stackName) {
         entries.push({
           label: 'Swarm stack',

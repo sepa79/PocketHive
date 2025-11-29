@@ -7,12 +7,22 @@ import java.util.List;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record SwarmPlan(String id,
                         @Valid List<Bee> bees,
-                        @Valid TrafficPolicy trafficPolicy) {
+                        @Valid TrafficPolicy trafficPolicy,
+                        String sutId,
+                        @Valid SutEnvironment sutEnvironment) {
     public SwarmPlan {
         bees = bees == null ? List.of() : List.copyOf(bees);
     }
 
     public SwarmPlan(String id, List<Bee> bees) {
-        this(id, bees, null);
+        this(id, bees, null, null, null);
+    }
+
+    public SwarmPlan(String id, List<Bee> bees, TrafficPolicy trafficPolicy) {
+        this(id, bees, trafficPolicy, null, null);
+    }
+
+    public SwarmPlan(String id, List<Bee> bees, TrafficPolicy trafficPolicy, String sutId) {
+        this(id, bees, trafficPolicy, sutId, null);
     }
 }

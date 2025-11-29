@@ -94,7 +94,7 @@ template:
     - role: processor
       image: processor:latest
       config:
-        baseUrl: http://wiremock:8080
+        baseUrl: "{{ sut.endpoints['default'].baseUrl }}"
       work:
         in: proc
         out: post

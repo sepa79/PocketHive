@@ -46,6 +46,10 @@ by the UI under `/docs/...` as part of the runtime image.
   workers via control-plane.
 - `docs/control-plane/queue-guard-plan.md` (Status: in progress) –
   BufferGuard/queue guard details.
+- `docs/architecture/sut-environments-plan.md` (Status: in progress) –
+  System Under Test (SUT) environments and how swarms bind to them.
+- `docs/architecture/scenario-sut-editor-plan.md` (Status: in progress) –
+  visual + text editors for SUT environments and scenarios.
 
 ## Specs & Tools
 
@@ -55,4 +59,3 @@ by the UI under `/docs/...` as part of the runtime image.
   HTTP Builder templates used in scenarios.
 - `tools/mcp-orchestrator-debug` – MCP client for driving Orchestrator
   from tools/IDEs.
-
