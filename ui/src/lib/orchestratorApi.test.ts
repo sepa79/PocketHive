@@ -215,6 +215,8 @@ describe('orchestratorApi', () => {
       controllerEnabled: true,
       templateId: null,
       controllerImage: 'ctrl:1',
+      sutId: null,
+      stackName: null,
       bees: [{ role: 'generator', image: 'gen:1' }],
     })
   })

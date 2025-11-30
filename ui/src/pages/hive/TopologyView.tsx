@@ -1,12 +1,10 @@
 /* eslint-disable @typescript-eslint/ban-ts-comment */
 // @ts-nocheck
-import { useEffect, useRef, useState, useMemo, useCallback, Fragment } from 'react'
+import { useEffect, useRef, useState, useMemo, useCallback } from 'react'
 import {
   ReactFlow,
   MarkerType,
   Background,
-  Handle,
-  Position,
   type Node,
   type Edge,
   type ReactFlowInstance,
@@ -25,26 +23,21 @@ import { buildRoleAppearanceMap, type RoleAppearanceMap } from '../../lib/capabi
 import type { Component } from '../../types/hive'
 import './TopologyView.css'
 import { useCapabilities } from '../../contexts/CapabilitiesContext'
-
-interface GraphNode {
-  id: string
-  type: string
-  x?: number
-  y?: number
-  enabled?: boolean
-  swarmId?: string
-}
-
-interface GraphLink {
-  source: string
-  target: string
-  queue: string
-}
-
-interface GraphData {
-  nodes: GraphNode[]
-  links: GraphLink[]
-}
+import {
+  ShapeNode,
+  SwarmGroupNode,
+  type ShapeNodeData,
+  type SwarmGroupNodeData,
+  DEFAULT_COLOR,
+  DISABLED_COLOR,
+  type NodeShape,
+} from './TopologyShapes'
+import {
+  buildGraph,
+  type GraphData,
+  type GraphNode,
+  type GraphLink,
+} from './TopologyBuilder'
 
 interface Props {
   selectedId?: string
@@ -52,15 +45,6 @@ interface Props {
   swarmId?: string
   onSwarmSelect?: (id: string) => void
 }
-
-type NodeShape =
-  | 'circle'
-  | 'square'
-  | 'triangle'
-  | 'diamond'
-  | 'pentagon'
-  | 'hexagon'
-  | 'star'
 
 const shapeOrder: NodeShape[] = [
   'square',
@@ -71,18 +55,12 @@ const shapeOrder: NodeShape[] = [
   'star',
 ]
 
-const DEFAULT_COLOR = '#60a5fa'
-const DISABLED_COLOR = '#64748b'
-
-const FALLBACK_HORIZONTAL_SPACING = 280
-const FALLBACK_VERTICAL_SPACING = 220
-
 const EDGE_LABEL_STYLE = {
   fill: '#fff',
   fontSize: 6,
-  // Allow guard labels like "depth 150..260\ntarget 200" to render
-  // on multiple lines instead of a single long string.
-  whiteSpace: 'pre-line' as const,
+  // Single-line labels are enough now; keep whitespace normal so text
+  // stays vertically centred within the label bubble.
+  whiteSpace: 'normal' as const,
 }
 
 function normalizeEdgeLabel(label: string): string {
@@ -91,20 +69,6 @@ function normalizeEdgeLabel(label: string): string {
     .map((line) => line.trim())
     .filter((line) => line.length > 0)
     .join('\n')
-}
-
-function average(values: number[]): number | undefined {
-  if (!values.length) return undefined
-  const total = values.reduce((sum, value) => sum + value, 0)
-  return total / values.length
-}
-
-function compareNodes(a: GraphNode, b: GraphNode) {
-  const typeCompare = (a.type || '').localeCompare(b.type || '')
-  if (typeCompare !== 0) {
-    return typeCompare
-  }
-  return (a.id || '').localeCompare(b.id || '')
 }
 
 function normalizeRoleKey(value?: string): string {
@@ -131,57 +95,6 @@ function queueMatchesAlias(queueName: string | undefined, alias: string | undefi
   return queueName.endsWith(`.${alias}`)
 }
 
-interface ShapeNodeData {
-  label: string
-  shape: NodeShape
-  enabled?: boolean
-  swarmId?: string
-  // Logical role, e.g. "generator", "processor", "swarm-controller".
-  componentType?: string
-  // Full instance id, e.g. "foo-generator-bee-fuzzy-dance-8090".
-  componentId?: string
-  status?: string
-  meta?: Record<string, unknown>
-  role?: string
-  fill?: string
-  [key: string]: unknown
-}
-
-function formatMetaValue(value: unknown): string | null {
-  if (value === undefined || value === null) return null
-  if (typeof value === 'boolean') return value ? 'Yes' : 'No'
-  if (typeof value === 'number') return value.toString()
-  if (typeof value === 'string') return value
-  return null
-}
-
-function abbreviateName(name: string | undefined): string {
-  if (!name) return ''
-  return name
-    .split(/[-_\s]+/)
-    .filter((part) => part.length > 0)
-    .map((part) => part[0]?.toUpperCase() ?? '')
-    .join('')
-    .slice(0, 2)
-}
-
-function shortInstanceName(id: string | undefined): string {
-  if (!id) return ''
-  const parts = id
-    .split(/[-_\s]+/)
-    .filter((part) => part.length > 0)
-  if (parts.length <= 3) {
-    return id
-  }
-  return parts.slice(-3).join('-')
-}
-
-function getString(value: unknown): string | undefined {
-  if (typeof value !== 'string') return undefined
-  const trimmed = value.trim()
-  return trimmed.length > 0 ? trimmed : undefined
-}
-
 function getNumber(value: unknown): number | undefined {
   if (typeof value === 'number' && Number.isFinite(value)) {
     return value
@@ -195,410 +108,10 @@ function getNumber(value: unknown): number | undefined {
   return undefined
 }
 
-function ShapeNode({ data, selected }: NodeProps<ShapeNodeData>) {
-  const size = 10
-  const fill =
-    data.enabled === false
-      ? DISABLED_COLOR
-      : typeof data.fill === 'string' && data.fill.trim().length > 0
-      ? data.fill
-      : DEFAULT_COLOR
-  const isOrchestrator = data.componentType === 'orchestrator'
-  const role = data.role || data.componentType
-  const componentId =
-    typeof data.componentId === 'string' ? data.componentId.trim() : ''
-  const fallbackLabel = typeof data.label === 'string' ? data.label : ''
-  const meta =
-    data.meta && typeof data.meta === 'object'
-      ? (data.meta as Record<string, unknown>)
-      : undefined
-
-  const cfg =
-    meta && typeof meta === 'object' ? (meta as Record<string, unknown>) : undefined
-  const inputs =
-    cfg && cfg.inputs && typeof cfg.inputs === 'object'
-      ? (cfg.inputs as Record<string, unknown>)
-      : undefined
-  const inputType = inputs ? getString(inputs.type) : undefined
-  const outputs =
-    cfg && cfg.outputs && typeof cfg.outputs === 'object'
-      ? (cfg.outputs as Record<string, unknown>)
-      : undefined
-  const outputType = outputs ? getString(outputs.type) : undefined
-
-  const rawTps = meta?.tps
-  const numericTps =
-    typeof rawTps === 'number'
-      ? rawTps
-      : typeof rawTps === 'string'
-      ? Number(rawTps)
-      : undefined
-  const tps = Number.isFinite(numericTps as number) ? Math.round(numericTps as number) : undefined
-  const metaEntries = useMemo(() => {
-    if (!isOrchestrator) {
-      return []
-    }
-    const meta =
-      data.meta && typeof data.meta === 'object'
-        ? (data.meta as Record<string, unknown>)
-        : undefined
-    const entries: { key: string; value: string }[] = []
-    const swarmCountValue =
-      meta?.swarmCount ??
-      meta?.activeSwarmCount ??
-      meta?.activeSwarms ??
-      meta?.['swarm-count'] ??
-      meta?.['active-swarms']
-    const formattedSwarmCount = formatMetaValue(swarmCountValue)
-    if (formattedSwarmCount !== null) {
-      entries.push({ key: 'Active swarms', value: formattedSwarmCount })
-    }
-    const guard =
-      meta && meta.bufferGuard && typeof meta.bufferGuard === 'object'
-        ? (meta.bufferGuard as Record<string, unknown>)
-        : undefined
-    if (guard) {
-      const active = getString(guard.active)
-      const problem = getString(guard.problem)
-      if (active) {
-        entries.push({
-          key: 'Buffer guard',
-          value: active.toLowerCase() === 'true' ? 'active' : 'inactive',
-        })
-      }
-      if (problem) {
-        entries.push({
-          key: 'Guard problem',
-          value: problem,
-        })
-      }
-    }
-    return entries
-  }, [data.meta, isOrchestrator])
-
-  const shortName = shortInstanceName(componentId || fallbackLabel)
-
-  return (
-    <div
-      className={`shape-node${selected ? ' selected' : ''}${
-        isOrchestrator ? ' shape-node--orchestrator' : ''
-      }`}
-      title={componentId || fallbackLabel}
-    >
-      {!isOrchestrator && typeof tps === 'number' && (
-        <div className="shape-node__badge" title="Throughput (TPS)">
-          {tps}
-        </div>
-      )}
-      <Handle type="target" position={Position.Left} />
-      <svg className="shape-icon" width={2 * size} height={2 * size}>
-        {data.shape === 'square' && (
-          <rect x={0} y={0} width={2 * size} height={2 * size} fill={fill} stroke="black" />
-        )}
-        {data.shape === 'triangle' && (
-          <polygon
-            points={`${size},0 ${2 * size},${2 * size} 0,${2 * size}`}
-            fill={fill}
-            stroke="black"
-          />
-        )}
-        {data.shape === 'diamond' && (
-          <polygon
-            points={`${size},0 ${2 * size},${size} ${size},${2 * size} 0,${size}`}
-            fill={fill}
-            stroke="black"
-          />
-        )}
-        {data.shape === 'pentagon' && (
-          <polygon points={polygonPoints(5, size)} fill={fill} stroke="black" />
-        )}
-        {data.shape === 'hexagon' && (
-          <polygon points={polygonPoints(6, size)} fill={fill} stroke="black" />
-        )}
-        {data.shape === 'star' && <polygon points={starPoints(size)} fill={fill} stroke="black" />}
-        {data.shape === 'circle' && <circle cx={size} cy={size} r={size} fill={fill} stroke="black" />}
-      </svg>
-      <div className="shape-node__content">
-        {role && <span className="shape-node__role">{role}</span>}
-        {shortName && <span className="label">{shortName}</span>}
-        {!isOrchestrator && inputType && (
-          <span className="shape-node__role">Input: {inputType}</span>
-        )}
-        {!isOrchestrator && outputType && (
-          <span className="shape-node__role">Output: {outputType}</span>
-        )}
-        {isOrchestrator && metaEntries.length > 0 && (
-          <dl className="shape-node__meta">
-            {metaEntries.map((entry) => (
-              <Fragment key={`${entry.key}:${entry.value}`}>
-                <dt className="shape-node__meta-term">{entry.key}</dt>
-                <dd className="shape-node__meta-value">{entry.value}</dd>
-              </Fragment>
-            ))}
-          </dl>
-        )}
-      </div>
-      <Handle type="source" position={Position.Right} />
-    </div>
-  )
-}
-
-interface SwarmGroupComponentData {
-  id: string
-  name: string
-  shape: NodeShape
-  enabled?: boolean
-  componentType?: string
-  fill?: string
-  abbreviation?: string
-  queueCount?: number
-  tps?: number
-}
-
-interface SwarmGroupEdgeData {
-  source: string
-  target: string
-  queue: string
-  depth: number
-}
-
-interface SwarmGroupNodeData {
-  label: string
-  swarmId: string
-  controllerId: string
-  components: SwarmGroupComponentData[]
-  edges: SwarmGroupEdgeData[]
-  onDetails?: (swarmId: string) => void
-  selectedId?: string
-}
-
-function SwarmGroupNode({ data }: NodeProps<SwarmGroupNodeData>) {
-  const size = 180
-  const center = size / 2
-  const controller = data.components.find((c) => c.id === data.controllerId)
-  const ringMembers = controller
-    ? data.components.filter((c) => c.id !== controller.id)
-    : data.components
-  const ringRadius = ringMembers.length > 1 || controller
-    ? Math.min(center - 24, 60)
-    : 0
-  const placements = useMemo(() => {
-    const list: (SwarmGroupComponentData & { x: number; y: number })[] = []
-    if (controller) {
-      list.push({ ...controller, x: center, y: center })
-    }
-    if (ringMembers.length === 0 && !controller && data.components[0]) {
-      list.push({ ...data.components[0], x: center, y: center })
-      return list
-    }
-    const denominator = Math.max(ringMembers.length, 1)
-    ringMembers.forEach((comp, idx) => {
-      const angle = -Math.PI / 2 + (2 * Math.PI * idx) / denominator
-      const radius = ringRadius
-      const x = radius ? center + radius * Math.cos(angle) : center
-      const y = radius ? center + radius * Math.sin(angle) : center
-      list.push({ ...comp, x, y })
-    })
-    return list
-  }, [center, controller, data.components, ringMembers, ringRadius])
-
-  const byId = useMemo(() => {
-    const map = new Map<string, (SwarmGroupComponentData & { x: number; y: number })>()
-    placements.forEach((p) => map.set(p.id, p))
-    return map
-  }, [placements])
-
-  const hasSelected = data.selectedId
-    ? data.components.some((c) => c.id === data.selectedId)
-    : false
-
-  const renderShape = useCallback(
-    (comp: SwarmGroupComponentData & { x: number; y: number }) => {
-      const fill =
-        comp.enabled === false
-          ? DISABLED_COLOR
-          : typeof comp.fill === 'string' && comp.fill.trim().length > 0
-          ? comp.fill
-          : DEFAULT_COLOR
-      const iconRadius = comp.id === data.controllerId ? 14 : 11
-      const abbreviation =
-        typeof comp.abbreviation === 'string' && comp.abbreviation.trim().length > 0
-          ? comp.abbreviation.trim()
-          : abbreviateName(comp.name)
-      const tps =
-        typeof comp.tps === 'number' && Number.isFinite(comp.tps)
-          ? Math.round(comp.tps)
-          : undefined
-      return (
-        <g key={comp.id}>
-          {comp.id === data.selectedId && (
-            <circle
-              className="swarm-group__selection"
-              cx={comp.x}
-              cy={comp.y}
-              r={iconRadius + 6}
-            />
-          )}
-          {comp.shape === 'square' && (
-            <rect
-              x={comp.x - iconRadius}
-              y={comp.y - iconRadius}
-              width={iconRadius * 2}
-              height={iconRadius * 2}
-              fill={fill}
-              stroke="black"
-            />
-          )}
-          {comp.shape === 'triangle' && (
-            <polygon
-              points={`${comp.x},${comp.y - iconRadius} ${comp.x + iconRadius},${comp.y + iconRadius} ${comp.x - iconRadius},${comp.y + iconRadius}`}
-              fill={fill}
-              stroke="black"
-            />
-          )}
-          {comp.shape === 'diamond' && (
-            <polygon
-              points={`${comp.x},${comp.y - iconRadius} ${comp.x + iconRadius},${comp.y} ${comp.x},${comp.y + iconRadius} ${comp.x - iconRadius},${comp.y}`}
-              fill={fill}
-              stroke="black"
-            />
-          )}
-          {comp.shape === 'pentagon' && (
-            <polygon
-              points={polygonPoints(5, iconRadius)
-                .split(' ')
-                .map((pair) => {
-                  const [px, py] = pair.split(',').map(Number)
-                  return `${px - iconRadius + comp.x},${py - iconRadius + comp.y}`
-                })
-                .join(' ')}
-              fill={fill}
-              stroke="black"
-            />
-          )}
-          {comp.shape === 'hexagon' && (
-            <polygon
-              points={polygonPoints(6, iconRadius)
-                .split(' ')
-                .map((pair) => {
-                  const [px, py] = pair.split(',').map(Number)
-                  return `${px - iconRadius + comp.x},${py - iconRadius + comp.y}`
-                })
-                .join(' ')}
-              fill={fill}
-              stroke="black"
-            />
-          )}
-          {comp.shape === 'star' && (
-            <polygon
-              points={starPoints(iconRadius)
-                .split(' ')
-                .map((pair) => {
-                  const [px, py] = pair.split(',').map(Number)
-                  return `${px - iconRadius + comp.x},${py - iconRadius + comp.y}`
-                })
-                .join(' ')}
-              fill={fill}
-              stroke="black"
-            />
-          )}
-          {comp.shape === 'circle' && (
-            <circle cx={comp.x} cy={comp.y} r={iconRadius} fill={fill} stroke="black" />
-          )}
-          <text
-            x={comp.x}
-            y={comp.y + 3}
-            textAnchor="middle"
-            className="swarm-group__icon-label"
-          >
-            {abbreviation || '?'}
-          </text>
-          {typeof tps === 'number' && (
-            <>
-              {/*
-                Small pill-shaped background behind the TPS label to keep it readable
-                regardless of the underlying icon color.
-              */}
-              <rect
-                x={comp.x + iconRadius - 10}
-                y={comp.y - iconRadius - 3}
-                width={18}
-                height={10}
-                rx={6}
-                ry={6}
-                fill="rgba(15,23,42,0.9)"
-                stroke="#38bdf8"
-                strokeWidth={0.7}
-              />
-              <text
-                x={comp.x + iconRadius - 1}
-                y={comp.y - iconRadius + 6}
-                textAnchor="middle"
-                className="swarm-group__icon-label"
-              >
-                {tps}
-              </text>
-            </>
-          )}
-        </g>
-      )
-    },
-    [data.controllerId, data.selectedId],
-  )
-
-  return (
-    <div className={`swarm-group${hasSelected ? ' selected' : ''}`}>
-      <Handle
-        type="target"
-        position={Position.Left}
-        className="swarm-group__handle swarm-group__handle--target"
-      />
-      <div className="swarm-group__header">
-        <span className="swarm-group__title">{data.label}</span>
-        <button
-          className="swarm-group__details"
-          onClick={(e) => {
-            e.stopPropagation()
-            data.onDetails?.(data.swarmId)
-          }}
-        >
-          Details
-        </button>
-      </div>
-      <svg
-        className="swarm-group__svg"
-        viewBox={`0 0 ${size} ${size}`}
-        preserveAspectRatio="xMidYMid meet"
-      >
-        {data.edges.map((edge) => {
-          const from = byId.get(edge.source)
-          const to = byId.get(edge.target)
-          if (!from || !to) return null
-          const color = edge.depth > 0 ? '#ff6666' : '#66aaff'
-          const width = 1 + Math.log(edge.depth + 1)
-          return (
-            <line
-              key={`${edge.source}-${edge.target}-${edge.queue}`}
-              x1={from.x}
-              y1={from.y}
-              x2={to.x}
-              y2={to.y}
-              stroke={color}
-              strokeWidth={width}
-              strokeLinecap="round"
-              className="swarm-group__edge"
-            />
-          )
-        })}
-        {placements.map((comp) => renderShape(comp))}
-      </svg>
-      <Handle
-        type="source"
-        position={Position.Right}
-        className="swarm-group__handle swarm-group__handle--source"
-      />
-    </div>
-  )
+function getString(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined
+  const trimmed = value.trim()
+  return trimmed.length > 0 ? trimmed : undefined
 }
 
 type FlowNodeData = ShapeNodeData | SwarmGroupNodeData
@@ -638,202 +151,167 @@ function starPoints(r: number) {
   return pts.join(' ')
 }
 
-function applyFallbackPositions(nodes: GraphNode[], links: GraphLink[]): GraphNode[] {
-  if (nodes.length === 0) {
-    return nodes
-  }
+type GuardQueuesConfig = {
+  primary?: string
+  backpressure?: string
+  targetDepth?: number
+  minDepth?: number
+  maxDepth?: number
+  highDepth?: number
+  recoveryDepth?: number
+  minRate?: number
+  maxRate?: number
+}
 
-  const nodeMap = new Map(nodes.map((node) => [node.id, node]))
-  const adjacency = new Map<string, string[]>()
-  const reverseAdjacency = new Map<string, string[]>()
-  const indegree = new Map<string, number>()
+function buildGuardedEdgesForSwarm(
+  data: GraphData,
+  queueDepths: Record<string, number>,
+  swarmId: string,
+  guardQueues?: GuardQueuesConfig,
+): Edge[] {
+  const baseEdges: Edge[] = data.links.map((link) => {
+    const depth = queueDepths[link.queue] ?? 0
+    const color = depth > 0 ? '#ff6666' : '#66aaff'
+    const width = 2 + Math.log(depth + 1)
 
-  links.forEach((link) => {
-    if (!nodeMap.has(link.source) || !nodeMap.has(link.target)) {
-      return
-    }
-    const children = adjacency.get(link.source) ?? []
-    children.push(link.target)
-    adjacency.set(link.source, children)
-    const parents = reverseAdjacency.get(link.target) ?? []
-    parents.push(link.source)
-    reverseAdjacency.set(link.target, parents)
-    indegree.set(link.target, (indegree.get(link.target) ?? 0) + 1)
-  })
-
-  nodes.forEach((node) => {
-    if (!adjacency.has(node.id)) {
-      adjacency.set(node.id, [])
-    }
-    if (!reverseAdjacency.has(node.id)) {
-      reverseAdjacency.set(node.id, [])
-    }
-  })
-
-  const queue: string[] = []
-  const remaining = new Map(indegree)
-  const level = new Map<string, number>()
-
-  nodes.forEach((node) => {
-    if ((remaining.get(node.id) ?? 0) === 0) {
-      queue.push(node.id)
-      level.set(node.id, 0)
-    }
-  })
-
-  if (queue.length === 0) {
-    nodes.forEach((node) => {
-      queue.push(node.id)
-      if (!level.has(node.id)) {
-        level.set(node.id, 0)
-      }
-    })
-  }
-
-  while (queue.length) {
-    const id = queue.shift()!
-    const currentLevel = level.get(id) ?? 0
-    const neighbors = adjacency.get(id) ?? []
-    neighbors.forEach((next) => {
-      const candidate = currentLevel + 1
-      const existingLevel = level.get(next)
-      if (existingLevel === undefined || candidate > existingLevel) {
-        level.set(next, candidate)
-      }
-      const nextRemaining = (remaining.get(next) ?? 0) - 1
-      remaining.set(next, nextRemaining)
-      if (nextRemaining === 0) {
-        queue.push(next)
-      }
-    })
-  }
-
-  let maxLevel = 0
-  level.forEach((value) => {
-    if (value > maxLevel) {
-      maxLevel = value
-    }
-  })
-
-  const unassigned = nodes.filter((node) => !level.has(node.id))
-  unassigned.forEach((node, index) => {
-    const nextLevel = maxLevel + 1 + index
-    level.set(node.id, nextLevel)
-    maxLevel = nextLevel
-  })
-
-  const groups = new Map<number, GraphNode[]>()
-  nodes.forEach((node) => {
-    const nodeLevel = level.get(node.id) ?? 0
-    const list = groups.get(nodeLevel) ?? []
-    list.push(node)
-    groups.set(nodeLevel, list)
-  })
-
-  const orderedLevels = Array.from(groups.keys()).sort((a, b) => a - b)
-  const levelIndexMap = new Map<number, number>()
-  orderedLevels.forEach((lvl, idx) => levelIndexMap.set(lvl, idx))
-  const totalWidth = (orderedLevels.length - 1) * FALLBACK_HORIZONTAL_SPACING
-  const offsetX = totalWidth / 2
-
-  const columns = orderedLevels.map((lvl) => {
-    const members = groups.get(lvl) ?? []
-    return [...members]
-  })
-
-  const rowOrder = new Map<string, number>()
-
-  columns.forEach((column, columnIndex) => {
-    const baseSorted = [...column].sort(compareNodes)
-    if (columnIndex === 0) {
-      baseSorted.forEach((node, index) => {
-        rowOrder.set(node.id, index)
-      })
-      columns[columnIndex] = baseSorted
-      return
-    }
-    const sorted = [...column].sort((a, b) => {
-      const parentsA = reverseAdjacency.get(a.id) ?? []
-      const parentsB = reverseAdjacency.get(b.id) ?? []
-      const scoreA = average(
-        parentsA
-          .map((id) => rowOrder.get(id))
-          .filter((value): value is number => value !== undefined),
-      )
-      const scoreB = average(
-        parentsB
-          .map((id) => rowOrder.get(id))
-          .filter((value): value is number => value !== undefined),
-      )
-      if (scoreA !== undefined && scoreB !== undefined && scoreA !== scoreB) {
-        return scoreA - scoreB
-      }
-      if (scoreA !== undefined && scoreB === undefined) return -1
-      if (scoreA === undefined && scoreB !== undefined) return 1
-      return compareNodes(a, b)
-    })
-    sorted.forEach((node, index) => {
-      rowOrder.set(node.id, index)
-    })
-    columns[columnIndex] = sorted
-  })
-
-  for (let columnIndex = columns.length - 2; columnIndex >= 0; columnIndex -= 1) {
-    const column = columns[columnIndex]
-    const sorted = [...column].sort((a, b) => {
-      const childrenA = adjacency.get(a.id) ?? []
-      const childrenB = adjacency.get(b.id) ?? []
-      const scoreA = average(
-        childrenA
-          .map((id) => rowOrder.get(id))
-          .filter((value): value is number => value !== undefined),
-      )
-      const scoreB = average(
-        childrenB
-          .map((id) => rowOrder.get(id))
-          .filter((value): value is number => value !== undefined),
-      )
-      if (scoreA !== undefined && scoreB !== undefined && scoreA !== scoreB) {
-        return scoreA - scoreB
-      }
-      if (scoreA !== undefined && scoreB === undefined) return -1
-      if (scoreA === undefined && scoreB !== undefined) return 1
-      return compareNodes(a, b)
-    })
-    sorted.forEach((node, index) => {
-      rowOrder.set(node.id, index)
-    })
-    columns[columnIndex] = sorted
-  }
-
-  const fallbackPositions = new Map<string, { x: number; y: number }>()
-
-  orderedLevels.forEach((lvl) => {
-    const columnIndex = levelIndexMap.get(lvl) ?? 0
-    const columnX = columnIndex * FALLBACK_HORIZONTAL_SPACING - offsetX
-    const members = columns[columnIndex]
-    if (!members || members.length === 0) return
-    const columnHeight = (members.length - 1) * FALLBACK_VERTICAL_SPACING
-    const offsetY = columnHeight / 2
-    members.forEach((member, rowIndex) => {
-      const y = rowIndex * FALLBACK_VERTICAL_SPACING - offsetY
-      fallbackPositions.set(member.id, { x: columnX, y })
-    })
-  })
-
-  return nodes.map((node) => {
-    const fallback = fallbackPositions.get(node.id)
-    const hasX = typeof node.x === 'number' && Number.isFinite(node.x)
-    const hasY = typeof node.y === 'number' && Number.isFinite(node.y)
-    if (!fallback) {
-      return node
-    }
     return {
-      ...node,
-      x: hasX ? node.x : fallback.x,
-      y: hasY ? node.y : fallback.y,
+      id: `${link.source}-${link.target}-${link.queue}`,
+      source: link.source,
+      target: link.target,
+      label: link.queue,
+      style: { stroke: color, strokeWidth: width },
+      markerEnd: { type: MarkerType.ArrowClosed, color },
+      labelBgPadding: [2, 2],
+      labelBgBorderRadius: 2,
+      labelStyle: EDGE_LABEL_STYLE,
+      labelBgStyle: { fill: 'rgba(0,0,0,0.6)' },
     }
   })
+
+  if (!guardQueues) {
+    return baseEdges
+  }
+
+  const controllerNode = data.nodes.find(
+    (node) =>
+      node.type === 'swarm-controller' &&
+      (node.swarmId === swarmId || normalizeSwarmId(node.swarmId) === swarmId),
+  )
+
+  if (!controllerNode) {
+    return baseEdges
+  }
+
+  const { primary: primaryAlias, backpressure: backpressureAlias } = guardQueues
+
+  if (primaryAlias) {
+    const depthParts: string[] = []
+    if (guardQueues.minDepth !== undefined && guardQueues.maxDepth !== undefined) {
+      depthParts.push(`depth ${guardQueues.minDepth}..${guardQueues.maxDepth}`)
+    }
+    if (guardQueues.targetDepth !== undefined) {
+      depthParts.push(`target ${guardQueues.targetDepth}`)
+    }
+    const depthLabel = depthParts.length > 0 ? depthParts.join(' ') : 'guard'
+    const normalizedDepthLabel = normalizeEdgeLabel(depthLabel)
+
+    const hasRateRange =
+      guardQueues.minRate !== undefined && guardQueues.maxRate !== undefined
+    const rateLabel = hasRateRange
+      ? `rate ${guardQueues.minRate}..${guardQueues.maxRate}`
+      : 'rate'
+    const normalizedRateLabel = normalizeEdgeLabel(rateLabel)
+
+    const seenPrimaryRateTargets = new Set<string>()
+    const seenPrimaryDepthTargets = new Set<string>()
+
+    data.links
+      .filter((link) => queueMatchesAlias(link.queue, primaryAlias))
+      .forEach((link) => {
+        const producerId = link.source
+        if (!seenPrimaryRateTargets.has(producerId)) {
+          seenPrimaryRateTargets.add(producerId)
+          baseEdges.push({
+            id: `guard-rate-${controllerNode.id}-${producerId}`,
+            source: controllerNode.id,
+            target: producerId,
+            label: normalizedRateLabel,
+            style: {
+              stroke: '#22c55e',
+              strokeWidth: 2.5,
+              strokeDasharray: '4 2',
+            },
+            markerEnd: { type: MarkerType.ArrowClosed, color: '#22c55e' },
+            labelBgPadding: [2, 2],
+            labelBgBorderRadius: 2,
+            labelStyle: EDGE_LABEL_STYLE,
+            labelBgStyle: { fill: 'rgba(15,23,42,0.9)' },
+          })
+        }
+
+        ;[link.target].forEach((targetId) => {
+          const key = `primary-depth|${targetId}`
+          if (seenPrimaryDepthTargets.has(key)) return
+          seenPrimaryDepthTargets.add(key)
+          baseEdges.push({
+            id: `guard-depth-${controllerNode.id}-${targetId}`,
+            source: controllerNode.id,
+            target: targetId,
+            label: normalizedDepthLabel,
+            style: {
+              stroke: '#f97316',
+              strokeWidth: 2.5,
+              strokeDasharray: '4 2',
+            },
+            markerEnd: { type: MarkerType.ArrowClosed, color: '#f97316' },
+            labelBgPadding: [2, 2],
+            labelBgBorderRadius: 2,
+            labelStyle: EDGE_LABEL_STYLE,
+            labelBgStyle: { fill: 'rgba(15,23,42,0.9)' },
+          })
+        })
+      })
+  }
+
+  if (backpressureAlias) {
+    const bpParts: string[] = ['backpressure']
+    if (guardQueues.highDepth !== undefined) {
+      bpParts.push(`high ${guardQueues.highDepth}`)
+    }
+    if (guardQueues.recoveryDepth !== undefined) {
+      bpParts.push(`recovery ${guardQueues.recoveryDepth}`)
+    }
+    const bpLabel = bpParts.join(' ')
+    const normalizedBpLabel = normalizeEdgeLabel(bpLabel)
+    const seenBpTargets = new Set<string>()
+
+    data.links
+      .filter((link) => queueMatchesAlias(link.queue, backpressureAlias))
+      .forEach((link) => {
+        const targetId = link.target
+        const key = `bp|${targetId}`
+        if (seenBpTargets.has(key)) return
+        seenBpTargets.add(key)
+        baseEdges.push({
+          id: `guard-bp-${controllerNode.id}-${targetId}`,
+          source: controllerNode.id,
+          target: targetId,
+          label: normalizedBpLabel,
+          style: {
+            stroke: '#a855f7',
+            strokeWidth: 2.5,
+            strokeDasharray: '4 2',
+          },
+          markerEnd: { type: MarkerType.ArrowClosed, color: '#a855f7' },
+          labelBgPadding: [2, 2],
+          labelBgBorderRadius: 2,
+          labelStyle: EDGE_LABEL_STYLE,
+          labelBgStyle: { fill: 'rgba(15,23,42,0.9)' },
+        })
+      })
+  }
+
+  return baseEdges
 }
 
 export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSelect }: Props) {
@@ -895,53 +373,8 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
 
   useEffect(() => {
     const unsub = subscribeTopology((topo: Topology) => {
-      const adjacency = new Map<string, string[]>()
-      topo.edges.forEach((e) => {
-        const arr = adjacency.get(e.from) ?? []
-        arr.push(e.to)
-        adjacency.set(e.from, arr)
-      })
-      const generators = topo.nodes.filter((n) => n.type === 'generator')
-      const visited = new Set<string>()
-      const order: string[] = []
-      const q: string[] = generators.map((g) => g.id)
-      while (q.length) {
-        const id = q.shift()!
-        if (visited.has(id)) continue
-        visited.add(id)
-        order.push(id)
-        ;(adjacency.get(id) ?? []).forEach((next) => q.push(next))
-      }
-      const connectedNodes = order
-        .map((id) => topo.nodes.find((n) => n.id === id))
-        .filter((n): n is GraphNode => Boolean(n))
-        .map((n) => ({ ...n }))
-      const unconnectedNodes = topo.nodes
-        .filter((n) => !visited.has(n.id))
-        .map((n) => ({ ...n }))
-      let nodes = [...connectedNodes, ...unconnectedNodes]
-      if (swarmId) {
-        nodes = nodes.filter((n) =>
-          swarmId === 'default' ? !n.swarmId : n.swarmId === swarmId,
-        )
-      }
-      const nodeSet = new Set(nodes.map((n) => n.id))
-      const relevantLinks = topo.edges.filter(
-        (edge) => nodeSet.has(edge.from) && nodeSet.has(edge.to),
-      )
-      const positionedNodes = applyFallbackPositions(
-        nodes,
-        relevantLinks.map((edge) => ({
-          source: edge.from,
-          target: edge.to,
-          queue: edge.queue,
-        })),
-      )
-      const ids = new Set(positionedNodes.map((n) => n.id))
-      const links = relevantLinks
-        .filter((edge) => ids.has(edge.from) && ids.has(edge.to))
-        .map((edge) => ({ source: edge.from, target: edge.to, queue: edge.queue }))
-      setData({ nodes: positionedNodes, links })
+      const graph = buildGraph(topo, swarmId)
+      setData(graph)
       pendingFitRef.current = true
     })
     return () => unsub()
@@ -1215,20 +648,7 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
   }, [data.nodes])
 
   const guardQueuesBySwarm = useMemo(() => {
-    const map = new Map<
-      string,
-      {
-        primary?: string
-        backpressure?: string
-        targetDepth?: number
-        minDepth?: number
-        maxDepth?: number
-        highDepth?: number
-        recoveryDepth?: number
-        minRate?: number
-        maxRate?: number
-      }
-    >()
+    const map = new Map<string, GuardQueuesConfig>()
     Object.values(componentsById).forEach((component) => {
       const role = typeof component.role === 'string' ? component.role.trim().toLowerCase() : ''
       if (role !== 'swarm-controller') return
@@ -1336,157 +756,7 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
       }, [])
     }
     const guardQueues = swarmId ? guardQueuesBySwarm.get(swarmId) : undefined
-    const primaryAlias = guardQueues?.primary
-    const backpressureAlias = guardQueues?.backpressure
-
-    const baseEdges = data.links.map((link) => {
-      const depth = queueDepths[link.queue] ?? 0
-      const color = depth > 0 ? '#ff6666' : '#66aaff'
-      const width = 2 + Math.log(depth + 1)
-
-      return {
-        id: `${link.source}-${link.target}-${link.queue}`,
-        source: link.source,
-        target: link.target,
-        label: link.queue,
-        style: { stroke: color, strokeWidth: width },
-        markerEnd: { type: MarkerType.ArrowClosed, color },
-        labelBgPadding: [2, 2],
-        labelBgBorderRadius: 2,
-        labelStyle: EDGE_LABEL_STYLE,
-        labelBgStyle: { fill: 'rgba(0,0,0,0.6)' },
-      }
-    }) as Edge[]
-
-    // Add explicit guard edges from swarm controller to the component whose
-    // output queue is being guarded, and to downstream consumers of the
-    // backpressure queue. This makes the guard relationship explicit without
-    // relying on queue edge colours.
-    const controllerNode = data.nodes.find(
-      (node) =>
-        node.type === 'swarm-controller' &&
-        (node.swarmId === swarmId || normalizeSwarmId(node.swarmId) === swarmId),
-    )
-    if (controllerNode && primaryAlias) {
-      const range =
-        guardQueues?.minDepth !== undefined && guardQueues?.maxDepth !== undefined
-          ? `${guardQueues.minDepth}..${guardQueues.maxDepth}`
-          : undefined
-      const target =
-        guardQueues?.targetDepth !== undefined
-          ? `target ${guardQueues.targetDepth}`
-          : undefined
-      const depthLabel =
-        range && target
-          ? `depth ${range}\n${target}`
-          : range
-          ? `depth ${range}`
-          : target ?? 'guard'
-      const normalizedDepthLabel = normalizeEdgeLabel(depthLabel)
-
-      const hasRateRange =
-        guardQueues?.minRate !== undefined && guardQueues?.maxRate !== undefined
-      const rateLabel = hasRateRange
-        ? `rate ${guardQueues!.minRate}..${guardQueues!.maxRate}`
-        : 'rate'
-      const normalizedRateLabel = normalizeEdgeLabel(rateLabel)
-
-      const seenPrimaryRateTargets = new Set<string>()
-      const seenPrimaryDepthTargets = new Set<string>()
-      data.links
-        .filter((link) => queueMatchesAlias(link.queue, primaryAlias))
-        .forEach((link) => {
-          // RPS control arrow towards the producer (source)
-          const producerId = link.source
-          if (!seenPrimaryRateTargets.has(producerId)) {
-            seenPrimaryRateTargets.add(producerId)
-            baseEdges.push({
-              id: `guard-rate-${controllerNode.id}-${producerId}`,
-              source: controllerNode.id,
-              target: producerId,
-              label: normalizedRateLabel,
-              style: {
-                stroke: '#22c55e',
-                strokeWidth: 2.5,
-                strokeDasharray: '4 2',
-              },
-              markerEnd: { type: MarkerType.ArrowClosed, color: '#22c55e' },
-              labelBgPadding: [2, 2],
-              labelBgBorderRadius: 2,
-              labelStyle: EDGE_LABEL_STYLE,
-              labelBgStyle: { fill: 'rgba(15,23,42,0.9)' },
-            })
-          }
-
-          // Queue depth watch arrow towards both endpoints
-          // Only draw depth arrows towards the consumer side (link.target); the
-          // generator already has the RPS-control arrow.
-          ;[link.target].forEach((targetId) => {
-            const key = `primary-depth|${targetId}`
-            if (seenPrimaryDepthTargets.has(key)) return
-            seenPrimaryDepthTargets.add(key)
-            baseEdges.push({
-              id: `guard-depth-${controllerNode.id}-${targetId}`,
-              source: controllerNode.id,
-              target: targetId,
-              label: normalizedDepthLabel,
-              style: {
-                stroke: '#f97316',
-                strokeWidth: 2.5,
-                strokeDasharray: '4 2',
-              },
-              markerEnd: { type: MarkerType.ArrowClosed, color: '#f97316' },
-              labelBgPadding: [2, 2],
-              labelBgBorderRadius: 2,
-              labelStyle: EDGE_LABEL_STYLE,
-              labelBgStyle: { fill: 'rgba(15,23,42,0.9)' },
-            })
-          })
-        })
-    }
-
-    if (controllerNode && backpressureAlias) {
-      const high =
-        guardQueues?.highDepth !== undefined ? `high ${guardQueues.highDepth}` : undefined
-      const recovery =
-        guardQueues?.recoveryDepth !== undefined
-          ? `recovery ${guardQueues.recoveryDepth}`
-          : undefined
-      const bpLabel =
-        high && recovery
-          ? `backpressure\n${high}\n${recovery}`
-          : high
-          ? `backpressure\n${high}`
-          : recovery ?? 'backpressure'
-      const normalizedBpLabel = normalizeEdgeLabel(bpLabel)
-      const seenBpTargets = new Set<string>()
-      data.links
-        .filter((link) => queueMatchesAlias(link.queue, backpressureAlias))
-        .forEach((link) => {
-          const targetId = link.target
-          const key = `bp|${targetId}`
-          if (seenBpTargets.has(key)) return
-          seenBpTargets.add(key)
-          baseEdges.push({
-            id: `guard-bp-${controllerNode.id}-${targetId}`,
-            source: controllerNode.id,
-            target: targetId,
-            label: normalizedBpLabel,
-            style: {
-              stroke: '#a855f7',
-              strokeWidth: 2.5,
-              strokeDasharray: '4 2',
-            },
-            markerEnd: { type: MarkerType.ArrowClosed, color: '#a855f7' },
-            labelBgPadding: [2, 2],
-            labelBgBorderRadius: 2,
-            labelStyle: EDGE_LABEL_STYLE,
-            labelBgStyle: { fill: 'rgba(15,23,42,0.9)' },
-          })
-        })
-    }
-
-    return baseEdges
+    return buildGuardedEdgesForSwarm(data, queueDepths, swarmId, guardQueues)
   }, [data.links, data.nodes, nodeById, queueDepths, swarmId, guardQueuesBySwarm])
 
   const onNodesChange = useCallback(

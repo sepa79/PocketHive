@@ -216,10 +216,8 @@ describe('ComponentDetail dynamic config', () => {
     await waitFor(() => expect(providerValue.ensureCapabilities).toHaveBeenCalled())
     await waitFor(() => expect(swarmValue.ensureSwarms).toHaveBeenCalled())
 
-    const editToggle = screen.getByRole('checkbox', { name: 'Enable editing' })
+    const editToggle = screen.getByRole('checkbox', { name: /Enable editing/i })
     await user.click(editToggle)
-
-    await user.click(screen.getByLabelText('Enable editing'))
 
     const rateInput = (await screen.findByDisplayValue('5')) as HTMLInputElement
     await user.click(rateInput)

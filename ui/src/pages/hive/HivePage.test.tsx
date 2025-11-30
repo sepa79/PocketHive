@@ -1,7 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { render, screen, waitFor, within, cleanup } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import '@testing-library/jest-dom/vitest'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
@@ -97,6 +97,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  cleanup()
   vi.clearAllMocks()
 })
 
