@@ -226,6 +226,82 @@ The tool will:
     template.
   - Render each template once with a dummy WorkItem to catch errors.
 
+## System Under Test (SUT) environments
+
+Scenarios themselves do not embed full environment details, but swarms
+may be bound to a **System Under Test (SUT)** chosen at create time.
+The contract for SUT environments lives in
+`common/swarm-model/src/main/java/io/pockethive/swarm/model/{SutEnvironment,SutEndpoint}.java`
+and is represented on disk as YAML under
+`scenario-manager-service/sut-environments*.yaml`.
+
+### SUT environment YAML
+
+```yaml
+# scenario-manager-service/sut-environments.yaml
+
+- id: wiremock-local
+  name: WireMock (local)
+  type: sandbox
+  endpoints:
+    default:
+      kind: HTTP
+      baseUrl: http://wiremock:8080
+
+- id: demo-http-sut
+  name: Demo HTTP SUT
+  type: dev
+  endpoints:
+    public-api:
+      kind: HTTP
+      baseUrl: https://demo.example.com/public
+```
+
+Shape:
+
+- Root – list of environments.
+- Environment (`SutEnvironment`):
+  - `id` (string, required) – stable identifier; referenced as `sutId`
+    when creating swarms.
+  - `name` (string, required) – human‑readable name.
+  - `type` (string, optional) – free‑text classification such as
+    `sandbox`, `dev`, `uat`, `prodlike`.
+  - `endpoints` (object, required) – map from endpoint id to endpoint
+    details.
+- Endpoint (`SutEndpoint`) inside `endpoints`:
+  - map key – endpoint id (e.g. `default`, `public-api`); this is also
+    used as the `SutEndpoint.id` value.
+  - `kind` (string, required) – short protocol label, currently
+    `HTTP`.
+  - `baseUrl` (string, required) – base URL for this endpoint, e.g.
+    `http://wiremock:8080` or `https://demo.example.com/public`.
+
+### Using SUTs from scenarios
+
+When creating a swarm, the UI (or API client) may supply a `sutId`
+alongside the `templateId`. Orchestrator will:
+
+- fetch the `SutEnvironment` for that id from Scenario Manager; and
+- apply SUT‑aware config templating for workers that opt in.
+
+The recommended pattern in worker config is:
+
+```yaml
+config:
+  worker:
+    # For HTTP workers (e.g. processor)
+    baseUrl: "{{ sut.endpoints['default'].baseUrl }}/api"
+```
+
+At **create** time the Orchestrator resolves this expression using the
+chosen SUT environment and writes a concrete `baseUrl` into the
+`SwarmPlan`. Workers themselves only see the final URL, not the SUT
+template.
+
+> Rule: if you use `sut.endpoints[...]` in config, you must provide a
+> `sutId` when creating the swarm. Missing SUTs or unknown endpoint ids
+> are treated as hard errors (no fallback).
+
 ## Backwards compatibility
 
 - Scenario Manager ignores unknown fields but workers and Swarm
@@ -233,4 +309,3 @@ The tool will:
 - The **NFF** rule applies: avoid multiple keys for the same concept and
   do not rely on fallback chains. Use the config structure described
   here and in capability manifests.
-

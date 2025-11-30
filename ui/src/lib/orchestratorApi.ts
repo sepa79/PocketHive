@@ -40,7 +40,7 @@ async function ensureOk(response: Response, fallback: string) {
 export async function createSwarm(
   id: string,
   templateId: string,
-  options?: { autoPullImages?: boolean },
+  options?: { autoPullImages?: boolean; sutId?: string | null },
 ) {
   const payload: Record<string, unknown> = {
     templateId,
@@ -48,6 +48,9 @@ export async function createSwarm(
   }
   if (options && typeof options.autoPullImages === 'boolean') {
     payload.autoPullImages = options.autoPullImages
+  }
+  if (options && typeof options.sutId === 'string' && options.sutId.trim()) {
+    payload.sutId = options.sutId.trim()
   }
 
   const body = JSON.stringify(payload)
@@ -148,6 +151,8 @@ function normalizeSwarmSummary(input: unknown): SwarmSummary | null {
     .map((entry) => normalizeBee(entry))
     .filter((entry): entry is BeeSummary => Boolean(entry))
 
+  const sutId = asString(record['sutId'])
+
   return {
     id,
     status,
@@ -157,6 +162,7 @@ function normalizeSwarmSummary(input: unknown): SwarmSummary | null {
     controllerEnabled: record['controllerEnabled'] === true,
     templateId: asString(record['templateId']),
     controllerImage: asString(record['controllerImage']),
+    sutId,
     stackName: asString(record['stackName']),
     bees,
   }

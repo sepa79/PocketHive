@@ -28,6 +28,10 @@ test('loads available scenarios on mount', async () => {
         { id: 'advanced', name: 'Advanced', bees: [] },
       ],
     } as unknown as Response)
+    .mockResolvedValueOnce({
+      ok: true,
+      json: async () => [],
+    } as unknown as Response)
 
   render(
     <CapabilitiesProvider>
@@ -51,6 +55,10 @@ test('submits selected scenario', async () => {
     .mockResolvedValueOnce({
       ok: true,
       json: async () => [{ id: 'basic', name: 'Basic', bees: [] }],
+    } as unknown as Response)
+    .mockResolvedValueOnce({
+      ok: true,
+      json: async () => [],
     } as unknown as Response)
     // scenario preview fetch
     .mockResolvedValueOnce({
@@ -88,6 +96,10 @@ test('shows conflict message when swarm already exists', async () => {
       ok: true,
       json: async () => [{ id: 'basic', name: 'Basic', bees: [] }],
     } as unknown as Response)
+    .mockResolvedValueOnce({
+      ok: true,
+      json: async () => [],
+    } as unknown as Response)
     // scenario preview fetch
     .mockResolvedValueOnce({
       ok: true,
@@ -119,6 +131,10 @@ test('does not submit when scenario selection is cleared', async () => {
       ok: true,
       json: async () => [{ id: 'basic', name: 'Basic', bees: [] }],
     } as unknown as Response)
+    .mockResolvedValueOnce({
+      ok: true,
+      json: async () => [],
+    } as unknown as Response)
     // no create call
   render(
     <CapabilitiesProvider>
@@ -130,7 +146,7 @@ test('does not submit when scenario selection is cleared', async () => {
   fireEvent.change(screen.getByLabelText(/swarm id/i), { target: { value: 'sw1' } })
   fireEvent.click(screen.getByText('Create'))
 
-  await waitFor(() => expect(apiFetchSpy.mock.calls.length).toBe(1))
+  await waitFor(() => expect(apiFetchSpy.mock.calls.length).toBe(2))
   await screen.findByText(/swarm id and scenario required/i)
 })
 
@@ -139,6 +155,10 @@ test('loads scenario preview when a template is selected', async () => {
     .mockResolvedValueOnce({
       ok: true,
       json: async () => [{ id: 'basic', name: 'Basic', bees: [] }],
+    } as unknown as Response)
+    .mockResolvedValueOnce({
+      ok: true,
+      json: async () => [],
     } as unknown as Response)
     .mockResolvedValueOnce({
       ok: true,

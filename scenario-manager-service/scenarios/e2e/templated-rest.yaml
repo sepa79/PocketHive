@@ -13,7 +13,7 @@ template:
         worker:
           message:
             bodyType: HTTP
-            path: /test
+            path: /api/guarded
             method: POST
             body: "{{ payload }}"
             headers:
@@ -34,7 +34,7 @@ template:
     - role: processor
       image: processor:latest
       config:
-        baseUrl: http://wiremock:8080/api
+        baseUrl: "{{ sut.endpoints['default'].baseUrl }}"
       work:
         in: mod
         out: final

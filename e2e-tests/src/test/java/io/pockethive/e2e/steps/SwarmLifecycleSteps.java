@@ -176,7 +176,13 @@ public class SwarmLifecycleSteps {
   public void iCreateTheSwarmFromThatTemplate() {
     ensureTemplate();
     String idempotencyKey = idKey("create");
-    SwarmCreateRequest request = new SwarmCreateRequest(scenarioDetails.id(), idempotencyKey, "e2e lifecycle create");
+    String sutId = resolveSutIdForScenario();
+    SwarmCreateRequest request = new SwarmCreateRequest(
+        scenarioDetails.id(),
+        idempotencyKey,
+        "e2e lifecycle create",
+        null,
+        sutId);
     createResponse = orchestratorClient.createSwarm(swarmId, request);
     LOGGER.info("Create request accepted correlation={} watch={}", createResponse.correlationId(), createResponse.watch());
   }
@@ -201,6 +207,27 @@ public class SwarmLifecycleSteps {
       String queueName = "ph." + swarmId + "." + suffix;
       assertTrue(probe.exists(queueName), () -> "Expected workload queue to exist: " + queueName);
     }
+  }
+
+  /**
+   * Select a SUT environment id for scenarios that rely on SUT-aware templating.
+   * <p>
+   * For now this is explicit and minimal – only scenarios that use
+   * {@code {{ sut.endpoints[...] }}} in their config (e.g. processor baseUrl) are
+   * bound to the {@code wiremock-local} environment defined in
+   * {@code scenario-manager-service/sut-environments.yaml}. Other scenarios
+   * leave {@code sutId} null.
+   */
+  private String resolveSutIdForScenario() {
+    ensureTemplate();
+    String scenarioId = scenarioDetails != null ? scenarioDetails.id() : null;
+    if (scenarioId == null) {
+      return null;
+    }
+    return switch (scenarioId) {
+      case "templated-rest", "redis-dataset-demo" -> "wiremock-local";
+      default -> null;
+    };
   }
 
   @When("I start the swarm")
@@ -556,6 +583,7 @@ public class SwarmLifecycleSteps {
         .orElseThrow(() -> new AssertionError("No message observed on tap queue " + queue));
 
     try {
+      String scenarioId = scenarioDetails != null ? scenarioDetails.id() : null;
       JsonNode envelope = objectMapper.readTree(message.body());
       JsonNode stepsNode = envelope.path("steps");
       if (!stepsNode.isArray() || stepsNode.isEmpty()) {
@@ -578,18 +606,18 @@ public class SwarmLifecycleSteps {
         bodyText = new String(bodyBytes, StandardCharsets.UTF_8);
       }
       final String finalBodyText = bodyText;
-      if (!finalBodyText.contains("default generator response")) {
-        LOGGER.warn("Final queue payload did not contain default marker. payload={} headers={} rawBody={}",
-            finalBodyText, message.headers(), new String(bodyBytes, StandardCharsets.UTF_8));
+      String expectedMessage = expectedGeneratorResponseMessageForScenario(scenarioId);
+      if (!finalBodyText.contains(expectedMessage)) {
+        LOGGER.warn("Final queue payload did not contain expected marker. scenario={} expected={} payload={} headers={} rawBody={}",
+            scenarioId, expectedMessage, finalBodyText, message.headers(), new String(bodyBytes, StandardCharsets.UTF_8));
       }
       if (looksLikeJson(finalBodyText)) {
         JsonNode parsedBody = objectMapper.readTree(finalBodyText);
-        assertEquals("default generator response", parsedBody.path("message").asText(),
-            "Generator response body should match WireMock default");
+        assertEquals(expectedMessage, parsedBody.path("message").asText(),
+            "Generator response body should match WireMock stub for scenario " + scenarioId);
       }
       inspectObservabilityTrace(message);
 
-      String scenarioId = scenarioDetails != null ? scenarioDetails.id() : null;
       List<String> stepPayloads = workItemStepPayloads(message);
       LOGGER.info("Final WorkItem step payloads for scenario {}: {}", scenarioId, stepPayloads);
 
@@ -684,6 +712,22 @@ public class SwarmLifecycleSteps {
     } finally {
       message.ack();
     }
+  }
+
+  /**
+   * Determine which WireMock stub message we expect for a given scenario.
+   * <p>
+   * Most lifecycle scenarios hit the {@code /api/test} endpoint backed by
+   * {@code generator-default.json}, which returns {@code "default generator response"}.
+   * The {@code templated-rest} scenario intentionally calls {@code /api/guarded}
+   * (see {@code wiremock/mappings/generator-guarded.json}) and therefore expects
+   * {@code "guarded wiremock response"} instead.
+   */
+  private String expectedGeneratorResponseMessageForScenario(String scenarioId) {
+    if ("templated-rest".equals(scenarioId)) {
+      return "guarded wiremock response";
+    }
+    return "default generator response";
   }
 
   // Templated generator behaviour is currently validated via the templated-rest

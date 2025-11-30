@@ -115,8 +115,8 @@ public final class SchedulerWorkInput<C> implements WorkInput {
         for (int i = 0; i < quota; i++) {
             WorkItem seed = seedFactory.apply(workerDefinition, identity);
             long maxMessages = scheduling.getMaxMessages();
+            long after = dispatchedCount.incrementAndGet();
             if (maxMessages > 0L) {
-                long after = dispatchedCount.incrementAndGet();
                 long remainingAfter = Math.max(0L, maxMessages - after);
                 seed = seed.toBuilder()
                     .header("x-ph-scheduler-remaining", remainingAfter)

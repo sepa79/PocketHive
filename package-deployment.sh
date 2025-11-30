@@ -57,8 +57,10 @@ cp wiremock/README.md "${DEPLOY_DIR}/wiremock/" 2>/dev/null || true
 # But include them for reference/customization
 mkdir -p "${DEPLOY_DIR}/scenario-manager/scenarios"
 mkdir -p "${DEPLOY_DIR}/scenario-manager/capabilities"
+mkdir -p "${DEPLOY_DIR}/scenario-manager/sut"
 cp -r scenario-manager-service/scenarios/* "${DEPLOY_DIR}/scenario-manager/scenarios/" 2>/dev/null || true
 cp scenario-manager-service/capabilities/*.yaml "${DEPLOY_DIR}/scenario-manager/capabilities/" 2>/dev/null || true
+cp scenario-manager-service/sut-environments.yaml "${DEPLOY_DIR}/scenario-manager/sut/" 2>/dev/null || true
 
 # Documentation
 mkdir -p "${DEPLOY_DIR}/docs"

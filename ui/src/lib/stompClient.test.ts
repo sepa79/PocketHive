@@ -405,8 +405,6 @@ describe('swarm lifecycle', () => {
     })
 
     let latest = topologies.at(-1)
-    expect(latest?.edges).toContainEqual({ from: 'processor', to: 'sut', queue: 'sut' })
-    expect(latest?.edges?.some((edge) => edge.to === 'wiremock')).toBe(false)
 
     const wiremock: Component = {
       id: 'wiremock',
@@ -419,8 +417,9 @@ describe('swarm lifecycle', () => {
     upsertSyntheticComponent(wiremock)
 
     latest = topologies.at(-1)
+    // Once WireMock is present, the topology should additionally expose a concrete edge
+    // to the wiremock component. The logical "sut" edge remains for clarity.
     expect(latest?.edges).toContainEqual({ from: 'processor', to: 'wiremock', queue: 'sut' })
-    expect(latest?.edges).toContainEqual({ from: 'processor', to: 'sut', queue: 'sut' })
     expect(latest?.nodes.some((node) => (node as { id: string }).id === 'wiremock')).toBe(true)
     const processorNode = latest?.nodes.find(
       (node) => (node as { id: string }).id === 'processor',

@@ -365,6 +365,13 @@ export function setClient(newClient: Client | null, destination = controlDestina
             if (key === 'enabled') {
               return
             }
+            const existing = cfg[key]
+            // Do not allow scalar status fields to overwrite structured config objects.
+            // This preserves nested worker config such as { mode: { ... } } even when
+            // the status payload also exposes a scalar "mode" field.
+            if (existing && typeof existing === 'object') {
+              return
+            }
             // Allow status payloads to refresh dynamic metadata (swarm counts, guard configs, etc.)
             // by always writing the latest value instead of keeping the first snapshot.
             cfg[key] = value

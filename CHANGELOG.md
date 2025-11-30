@@ -7,6 +7,14 @@ Timestamp: 2025-11-28T00:00:00Z
 
 _No unreleased changes yet._
 
+## [0.14.7] - 2025-11-28
+Timestamp: 2025-11-28T12:00:00Z
+
+- System under test (SUT) environments: introduced `sut-environments.yaml` and a small SUT registry in Scenario Manager (`/sut-environments` + `sut-environments.schema.json`), so environments like `wiremock-local` can be defined once with named HTTP endpoints (e.g. `default.baseUrl`) and reused across scenarios without hard-coding URLs.
+- SUT-aware swarm creation & templating: extended Orchestrator’s `SwarmCreateRequest`/`SwarmController` to accept an optional `sutId`, resolve the bound `SutEnvironment`, and apply `baseUrl: "{{ sut.endpoints['<id>'].baseUrl }}..."` templates when building bee configs; `templated-rest.yaml` and `redis-dataset-demo.yaml` now pick their processor baseUrl from SUT endpoints instead of literal WireMock URLs.
+- SUT in Hive UI: added a `SutEnvironmentContext` with localStorage-backed selection, wired the *Create Swarm* modal to show a *System under test* dropdown driven by `/sut-environments`, and updated the Swarm Controller detail panel to render the bound SUT name/type for easier inspection of where a swarm is pointing.
+- SUT-aware e2e harness: taught `SwarmLifecycleSteps` to pass `sutId` for scenarios that rely on SUT templating (`templated-rest`, `redis-dataset-demo`) and to expect `"guarded wiremock response"` for the guarded template while still asserting `"default generator response"` for the baseline scenarios, restoring green lifecycle tests after the SUT introduction.
+
 ## [0.14.6] - 2025-11-28
 Timestamp: 2025-11-28T00:00:00Z
 

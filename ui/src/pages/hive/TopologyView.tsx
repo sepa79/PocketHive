@@ -77,6 +77,22 @@ const DISABLED_COLOR = '#64748b'
 const FALLBACK_HORIZONTAL_SPACING = 280
 const FALLBACK_VERTICAL_SPACING = 220
 
+const EDGE_LABEL_STYLE = {
+  fill: '#fff',
+  fontSize: 6,
+  // Allow guard labels like "depth 150..260\ntarget 200" to render
+  // on multiple lines instead of a single long string.
+  whiteSpace: 'pre-line' as const,
+}
+
+function normalizeEdgeLabel(label: string): string {
+  return label
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+    .join('\n')
+}
+
 function average(values: number[]): number | undefined {
   if (!values.length) return undefined
   const total = values.reduce((sum, value) => sum + value, 0)
@@ -109,12 +125,20 @@ function fallbackColorForRole(role: string): string {
   return `hsl(${hue}, ${saturation}%, ${lightness}%)`
 }
 
+function queueMatchesAlias(queueName: string | undefined, alias: string | undefined): boolean {
+  if (!queueName || !alias) return false
+  if (queueName === alias) return true
+  return queueName.endsWith(`.${alias}`)
+}
+
 interface ShapeNodeData {
   label: string
   shape: NodeShape
   enabled?: boolean
   swarmId?: string
+  // Logical role, e.g. "generator", "processor", "swarm-controller".
   componentType?: string
+  // Full instance id, e.g. "foo-generator-bee-fuzzy-dance-8090".
   componentId?: string
   status?: string
   meta?: Record<string, unknown>
@@ -141,6 +165,36 @@ function abbreviateName(name: string | undefined): string {
     .slice(0, 2)
 }
 
+function shortInstanceName(id: string | undefined): string {
+  if (!id) return ''
+  const parts = id
+    .split(/[-_\s]+/)
+    .filter((part) => part.length > 0)
+  if (parts.length <= 3) {
+    return id
+  }
+  return parts.slice(-3).join('-')
+}
+
+function getString(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined
+  const trimmed = value.trim()
+  return trimmed.length > 0 ? trimmed : undefined
+}
+
+function getNumber(value: unknown): number | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    if (!trimmed) return undefined
+    const parsed = Number(trimmed)
+    return Number.isFinite(parsed) ? parsed : undefined
+  }
+  return undefined
+}
+
 function ShapeNode({ data, selected }: NodeProps<ShapeNodeData>) {
   const size = 10
   const fill =
@@ -154,15 +208,24 @@ function ShapeNode({ data, selected }: NodeProps<ShapeNodeData>) {
   const componentId =
     typeof data.componentId === 'string' ? data.componentId.trim() : ''
   const fallbackLabel = typeof data.label === 'string' ? data.label : ''
-  const normalizedRole = typeof role === 'string' ? role.trim() : ''
-  const normalizedFallback = fallbackLabel.trim()
-  const shouldUseFallback =
-    fallbackLabel.length > 0 && normalizedFallback !== normalizedRole
-  const displayLabel = shouldUseFallback ? fallbackLabel : componentId || fallbackLabel
   const meta =
     data.meta && typeof data.meta === 'object'
       ? (data.meta as Record<string, unknown>)
       : undefined
+
+  const cfg =
+    meta && typeof meta === 'object' ? (meta as Record<string, unknown>) : undefined
+  const inputs =
+    cfg && cfg.inputs && typeof cfg.inputs === 'object'
+      ? (cfg.inputs as Record<string, unknown>)
+      : undefined
+  const inputType = inputs ? getString(inputs.type) : undefined
+  const outputs =
+    cfg && cfg.outputs && typeof cfg.outputs === 'object'
+      ? (cfg.outputs as Record<string, unknown>)
+      : undefined
+  const outputType = outputs ? getString(outputs.type) : undefined
+
   const rawTps = meta?.tps
   const numericTps =
     typeof rawTps === 'number'
@@ -179,6 +242,7 @@ function ShapeNode({ data, selected }: NodeProps<ShapeNodeData>) {
       data.meta && typeof data.meta === 'object'
         ? (data.meta as Record<string, unknown>)
         : undefined
+    const entries: { key: string; value: string }[] = []
     const swarmCountValue =
       meta?.swarmCount ??
       meta?.activeSwarmCount ??
@@ -186,16 +250,40 @@ function ShapeNode({ data, selected }: NodeProps<ShapeNodeData>) {
       meta?.['swarm-count'] ??
       meta?.['active-swarms']
     const formattedSwarmCount = formatMetaValue(swarmCountValue)
-    if (formattedSwarmCount === null) {
-      return []
+    if (formattedSwarmCount !== null) {
+      entries.push({ key: 'Active swarms', value: formattedSwarmCount })
     }
-    return [{ key: 'Active swarms', value: formattedSwarmCount }]
+    const guard =
+      meta && meta.bufferGuard && typeof meta.bufferGuard === 'object'
+        ? (meta.bufferGuard as Record<string, unknown>)
+        : undefined
+    if (guard) {
+      const active = getString(guard.active)
+      const problem = getString(guard.problem)
+      if (active) {
+        entries.push({
+          key: 'Buffer guard',
+          value: active.toLowerCase() === 'true' ? 'active' : 'inactive',
+        })
+      }
+      if (problem) {
+        entries.push({
+          key: 'Guard problem',
+          value: problem,
+        })
+      }
+    }
+    return entries
   }, [data.meta, isOrchestrator])
+
+  const shortName = shortInstanceName(componentId || fallbackLabel)
+
   return (
     <div
       className={`shape-node${selected ? ' selected' : ''}${
         isOrchestrator ? ' shape-node--orchestrator' : ''
       }`}
+      title={componentId || fallbackLabel}
     >
       {!isOrchestrator && typeof tps === 'number' && (
         <div className="shape-node__badge" title="Throughput (TPS)">
@@ -231,8 +319,14 @@ function ShapeNode({ data, selected }: NodeProps<ShapeNodeData>) {
         {data.shape === 'circle' && <circle cx={size} cy={size} r={size} fill={fill} stroke="black" />}
       </svg>
       <div className="shape-node__content">
-        <span className="label">{displayLabel}</span>
         {role && <span className="shape-node__role">{role}</span>}
+        {shortName && <span className="label">{shortName}</span>}
+        {!isOrchestrator && inputType && (
+          <span className="shape-node__role">Input: {inputType}</span>
+        )}
+        {!isOrchestrator && outputType && (
+          <span className="shape-node__role">Output: {outputType}</span>
+        )}
         {isOrchestrator && metaEntries.length > 0 && (
           <dl className="shape-node__meta">
             {metaEntries.map((entry) => (
@@ -1120,6 +1214,83 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
     return map
   }, [data.nodes])
 
+  const guardQueuesBySwarm = useMemo(() => {
+    const map = new Map<
+      string,
+      {
+        primary?: string
+        backpressure?: string
+        targetDepth?: number
+        minDepth?: number
+        maxDepth?: number
+        highDepth?: number
+        recoveryDepth?: number
+        minRate?: number
+        maxRate?: number
+      }
+    >()
+    Object.values(componentsById).forEach((component) => {
+      const role = typeof component.role === 'string' ? component.role.trim().toLowerCase() : ''
+      if (role !== 'swarm-controller') return
+      const swarm = typeof component.swarmId === 'string' ? component.swarmId.trim() : ''
+      if (!swarm) return
+      const rawConfig =
+        component.config && typeof component.config === 'object'
+          ? (component.config as Record<string, unknown>)
+          : undefined
+      const trafficPolicy =
+        rawConfig && rawConfig.trafficPolicy && typeof rawConfig.trafficPolicy === 'object'
+          ? (rawConfig.trafficPolicy as Record<string, unknown>)
+          : undefined
+      const bufferGuard =
+        trafficPolicy &&
+        trafficPolicy.bufferGuard &&
+        typeof trafficPolicy.bufferGuard === 'object'
+          ? (trafficPolicy.bufferGuard as Record<string, unknown>)
+          : undefined
+      if (!bufferGuard) return
+      const primary = getString(bufferGuard.queueAlias)
+      const targetDepth = getNumber(bufferGuard.targetDepth)
+      const minDepth = getNumber(bufferGuard.minDepth)
+      const maxDepth = getNumber(bufferGuard.maxDepth)
+      let minRate: number | undefined
+      let maxRate: number | undefined
+      const adjust =
+        bufferGuard.adjust && typeof bufferGuard.adjust === 'object'
+          ? (bufferGuard.adjust as Record<string, unknown>)
+          : undefined
+      if (adjust) {
+        minRate = getNumber(adjust.minRatePerSec)
+        maxRate = getNumber(adjust.maxRatePerSec)
+      }
+      let backpressure: string | undefined
+      let highDepth: number | undefined
+      let recoveryDepth: number | undefined
+      const bp =
+        bufferGuard.backpressure && typeof bufferGuard.backpressure === 'object'
+          ? (bufferGuard.backpressure as Record<string, unknown>)
+          : undefined
+      if (bp) {
+        backpressure = getString(bp.queueAlias)
+        highDepth = getNumber(bp.highDepth)
+        recoveryDepth = getNumber(bp.recoveryDepth)
+      }
+      if (!primary && !backpressure) return
+      map.set(swarm, {
+        primary,
+        backpressure,
+        targetDepth,
+        minDepth,
+        maxDepth,
+        highDepth,
+        recoveryDepth,
+        minRate,
+        maxRate,
+      })
+    })
+    return map
+  }, [componentsById])
+
   const edges: Edge[] = useMemo(() => {
     const seen = new Set<string>()
     if (!swarmId) {
@@ -1158,16 +1329,21 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
           markerEnd: { type: MarkerType.ArrowClosed, color },
           labelBgPadding: [2, 2],
           labelBgBorderRadius: 2,
-          labelStyle: { fill: '#fff', fontSize: 6 },
+          labelStyle: EDGE_LABEL_STYLE,
           labelBgStyle: { fill: 'rgba(0,0,0,0.6)' },
         })
         return acc
       }, [])
     }
-    return data.links.map((link) => {
+    const guardQueues = swarmId ? guardQueuesBySwarm.get(swarmId) : undefined
+    const primaryAlias = guardQueues?.primary
+    const backpressureAlias = guardQueues?.backpressure
+
+    const baseEdges = data.links.map((link) => {
       const depth = queueDepths[link.queue] ?? 0
       const color = depth > 0 ? '#ff6666' : '#66aaff'
       const width = 2 + Math.log(depth + 1)
+
       return {
         id: `${link.source}-${link.target}-${link.queue}`,
         source: link.source,
@@ -1177,11 +1353,141 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
         markerEnd: { type: MarkerType.ArrowClosed, color },
         labelBgPadding: [2, 2],
         labelBgBorderRadius: 2,
-        labelStyle: { fill: '#fff', fontSize: 6 },
+        labelStyle: EDGE_LABEL_STYLE,
         labelBgStyle: { fill: 'rgba(0,0,0,0.6)' },
       }
     }) as Edge[]
-  }, [data.links, data.nodes, nodeById, queueDepths, swarmId])
+
+    // Add explicit guard edges from swarm controller to the component whose
+    // output queue is being guarded, and to downstream consumers of the
+    // backpressure queue. This makes the guard relationship explicit without
+    // relying on queue edge colours.
+    const controllerNode = data.nodes.find(
+      (node) =>
+        node.type === 'swarm-controller' &&
+        (node.swarmId === swarmId || normalizeSwarmId(node.swarmId) === swarmId),
+    )
+    if (controllerNode && primaryAlias) {
+      const range =
+        guardQueues?.minDepth !== undefined && guardQueues?.maxDepth !== undefined
+          ? `${guardQueues.minDepth}..${guardQueues.maxDepth}`
+          : undefined
+      const target =
+        guardQueues?.targetDepth !== undefined
+          ? `target ${guardQueues.targetDepth}`
+          : undefined
+      const depthLabel =
+        range && target
+          ? `depth ${range}\n${target}`
+          : range
+          ? `depth ${range}`
+          : target ?? 'guard'
+      const normalizedDepthLabel = normalizeEdgeLabel(depthLabel)
+
+      const hasRateRange =
+        guardQueues?.minRate !== undefined && guardQueues?.maxRate !== undefined
+      const rateLabel = hasRateRange
+        ? `rate ${guardQueues!.minRate}..${guardQueues!.maxRate}`
+        : 'rate'
+      const normalizedRateLabel = normalizeEdgeLabel(rateLabel)
+
+      const seenPrimaryRateTargets = new Set<string>()
+      const seenPrimaryDepthTargets = new Set<string>()
+      data.links
+        .filter((link) => queueMatchesAlias(link.queue, primaryAlias))
+        .forEach((link) => {
+          // RPS control arrow towards the producer (source)
+          const producerId = link.source
+          if (!seenPrimaryRateTargets.has(producerId)) {
+            seenPrimaryRateTargets.add(producerId)
+            baseEdges.push({
+              id: `guard-rate-${controllerNode.id}-${producerId}`,
+              source: controllerNode.id,
+              target: producerId,
+              label: normalizedRateLabel,
+              style: {
+                stroke: '#22c55e',
+                strokeWidth: 2.5,
+                strokeDasharray: '4 2',
+              },
+              markerEnd: { type: MarkerType.ArrowClosed, color: '#22c55e' },
+              labelBgPadding: [2, 2],
+              labelBgBorderRadius: 2,
+              labelStyle: EDGE_LABEL_STYLE,
+              labelBgStyle: { fill: 'rgba(15,23,42,0.9)' },
+            })
+          }
+
+          // Queue depth watch arrow towards both endpoints
+          // Only draw depth arrows towards the consumer side (link.target); the
+          // generator already has the RPS-control arrow.
+          ;[link.target].forEach((targetId) => {
+            const key = `primary-depth|${targetId}`
+            if (seenPrimaryDepthTargets.has(key)) return
+            seenPrimaryDepthTargets.add(key)
+            baseEdges.push({
+              id: `guard-depth-${controllerNode.id}-${targetId}`,
+              source: controllerNode.id,
+              target: targetId,
+              label: normalizedDepthLabel,
+              style: {
+                stroke: '#f97316',
+                strokeWidth: 2.5,
+                strokeDasharray: '4 2',
+              },
+              markerEnd: { type: MarkerType.ArrowClosed, color: '#f97316' },
+              labelBgPadding: [2, 2],
+              labelBgBorderRadius: 2,
+              labelStyle: EDGE_LABEL_STYLE,
+              labelBgStyle: { fill: 'rgba(15,23,42,0.9)' },
+            })
+          })
+        })
+    }
+
+    if (controllerNode && backpressureAlias) {
+      const high =
+        guardQueues?.highDepth !== undefined ? `high ${guardQueues.highDepth}` : undefined
+      const recovery =
+        guardQueues?.recoveryDepth !== undefined
+          ? `recovery ${guardQueues.recoveryDepth}`
+          : undefined
+      const bpLabel =
+        high && recovery
+          ? `backpressure\n${high}\n${recovery}`
+          : high
+          ? `backpressure\n${high}`
+          : recovery ?? 'backpressure'
+      const normalizedBpLabel = normalizeEdgeLabel(bpLabel)
+      const seenBpTargets = new Set<string>()
+      data.links
+        .filter((link) => queueMatchesAlias(link.queue, backpressureAlias))
+        .forEach((link) => {
+          const targetId = link.target
+          const key = `bp|${targetId}`
+          if (seenBpTargets.has(key)) return
+          seenBpTargets.add(key)
+          baseEdges.push({
+            id: `guard-bp-${controllerNode.id}-${targetId}`,
+            source: controllerNode.id,
+            target: targetId,
+            label: normalizedBpLabel,
+            style: {
+              stroke: '#a855f7',
+              strokeWidth: 2.5,
+              strokeDasharray: '4 2',
+            },
+            markerEnd: { type: MarkerType.ArrowClosed, color: '#a855f7' },
+            labelBgPadding: [2, 2],
+            labelBgBorderRadius: 2,
+            labelStyle: EDGE_LABEL_STYLE,
+            labelBgStyle: { fill: 'rgba(15,23,42,0.9)' },
+          })
+        })
+    }
+
+    return baseEdges
+  }, [data.links, data.nodes, nodeById, queueDepths, swarmId, guardQueuesBySwarm])
 
   const onNodesChange = useCallback(
     (changes: NodeChange[]) => setRfNodes((nds) => applyNodeChanges(changes, nds)),

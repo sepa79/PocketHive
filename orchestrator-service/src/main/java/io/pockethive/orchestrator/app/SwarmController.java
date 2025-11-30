@@ -19,6 +19,8 @@ import io.pockethive.swarm.model.Bee;
 import io.pockethive.swarm.model.SwarmPlan;
 import io.pockethive.swarm.model.SwarmTemplate;
 import io.pockethive.swarm.model.TrafficPolicy;
+import io.pockethive.swarm.model.SutEndpoint;
+import io.pockethive.swarm.model.SutEnvironment;
 import io.pockethive.controlplane.spring.ControlPlaneProperties;
 import io.pockethive.manager.runtime.ComputeAdapterType;
 import org.slf4j.Logger;
@@ -32,9 +34,12 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import io.pockethive.util.BeeNameGenerator;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
@@ -62,6 +67,8 @@ public class SwarmController {
     private final ObjectMapper json;
     private final String controlExchange;
     private static final String CREATE_LOCK_KEY = "__create-lock__";
+    private static final Pattern BASE_URL_TEMPLATE =
+        Pattern.compile("\\{\\{\\s*sut\\.endpoints\\['([^']+)'\\]\\.baseUrl\\s*}}(.*)");
 
     public SwarmController(AmqpTemplate rabbit,
                            ContainerLifecycleManager lifecycle,
@@ -157,29 +164,51 @@ public class SwarmController {
                 SwarmTemplate template = planDescriptor.template();
                 String image = requireImage(template, templateId);
                 SwarmPlan originalPlan = planDescriptor.toSwarmPlan(swarmId);
+                String sutId = normalize(req.sutId());
+                io.pockethive.swarm.model.SutEnvironment sutEnvironment = null;
+                if (sutId != null) {
+                    try {
+                        sutEnvironment = scenarios.fetchSutEnvironment(sutId);
+                    } catch (Exception ex) {
+                        throw new IllegalStateException(
+                            "Failed to resolve SUT environment '%s'".formatted(sutId), ex);
+                    }
+                }
+                final io.pockethive.swarm.model.SutEnvironment finalSutEnvironment = sutEnvironment;
                 // Resolve bee images through the same repository prefix logic used for controllers
                 // so the swarm-controller sees fully-qualified image names and does not need to
-                // guess registry roots.
+                // guess registry roots. While doing so, apply any SUT-aware templates in worker
+                // configuration (e.g. baseUrl: "{{ sut.endpoints['default'].baseUrl }}")
+                // when a SUT environment has been bound.
                 java.util.List<io.pockethive.swarm.model.Bee> rewrittenBees =
                     originalPlan.bees().stream()
                         .map(bee -> {
                             String beeImage = bee.image();
-                            if (beeImage == null || beeImage.isBlank()) {
-                                return bee;
+                            String resolvedImage = beeImage;
+                            if (beeImage != null && !beeImage.isBlank()) {
+                                String candidate = lifecycle.resolveImageForPlan(beeImage);
+                                if (candidate != null && !candidate.equals(beeImage)) {
+                                    resolvedImage = candidate;
+                                }
                             }
-                            String resolved = lifecycle.resolveImageForPlan(beeImage);
-                            if (resolved == null || resolved.equals(beeImage)) {
-                                return bee;
+                            java.util.Map<String, Object> config = bee.config();
+                            if (finalSutEnvironment != null && config != null && !config.isEmpty()) {
+                                config = applySutConfigTemplates(config, finalSutEnvironment);
                             }
                             return new io.pockethive.swarm.model.Bee(
                                 bee.role(),
-                                resolved,
+                                resolvedImage,
                                 bee.work(),
                                 bee.env(),
-                                bee.config());
+                                config);
                         })
                         .toList();
-                SwarmPlan plan = new SwarmPlan(originalPlan.id(), rewrittenBees, originalPlan.trafficPolicy());
+                SwarmPlan plan = new SwarmPlan(
+                    originalPlan.id(),
+                    rewrittenBees,
+                    originalPlan.trafficPolicy(),
+                    sutId,
+                    finalSutEnvironment);
                 String instanceId = BeeNameGenerator.generate("swarm-controller", swarmId);
                 plans.register(instanceId, plan);
                 boolean autoPull = Boolean.TRUE.equals(req.autoPullImages());
@@ -189,6 +218,9 @@ public class SwarmController {
                     instanceId,
                     new SwarmTemplateMetadata(templateId, image, plan.bees()),
                     autoPull);
+                if (sutId != null) {
+                    swarm.setSutId(sutId);
+                }
                 if (autoPull) {
                     lifecycle.preloadSwarmImages(swarmId);
                 }
@@ -446,6 +478,7 @@ public class SwarmController {
             swarm.isControllerEnabled(),
             swarm.templateId().orElse(null),
             swarm.controllerImage().orElse(null),
+            swarm.getSutId(),
             stackName,
             bees);
     }
@@ -458,6 +491,7 @@ public class SwarmController {
                                boolean controllerEnabled,
                                String templateId,
                                String controllerImage,
+                               String sutId,
                                String stackName,
                                List<BeeSummary> bees) {
         public SwarmSummary {
@@ -546,5 +580,57 @@ public class SwarmController {
             return trimmed.substring(0, 300) + "…";
         }
         return trimmed;
+    }
+
+    private static String normalize(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    /**
+     * Applies SUT-aware config templating for a single worker configuration map.
+     * <p>
+     * For now this is deliberately small and explicit:
+     * <ul>
+     *   <li>If {@code config.baseUrl} is a plain string, it is left unchanged.</li>
+     *   <li>If {@code config.baseUrl} matches
+     *       {@code {{ sut.endpoints['<id>'].baseUrl }}<suffix>},
+     *       we resolve {@code <id>} against the bound {@link SutEnvironment} and replace the
+     *       entire value with {@code endpoint.baseUrl + suffix}.</li>
+     *   <li>If a template is present but no SUT environment was bound, or the endpoint cannot
+     *       be resolved, we fail fast with an {@link IllegalStateException}.</li>
+     * </ul>
+     */
+    private static Map<String, Object> applySutConfigTemplates(Map<String, Object> config, SutEnvironment sutEnvironment) {
+        Object baseUrlObj = config.get("baseUrl");
+        if (!(baseUrlObj instanceof String template)) {
+            return config;
+        }
+        Matcher matcher = BASE_URL_TEMPLATE.matcher(template.trim());
+        if (!matcher.matches()) {
+            return config;
+        }
+        if (sutEnvironment == null) {
+            throw new IllegalStateException("SUT-aware baseUrl template used but no sutId was provided");
+        }
+        String endpointId = matcher.group(1);
+        String suffix = matcher.group(2);
+        SutEndpoint endpoint = sutEnvironment.endpoints().get(endpointId);
+        if (endpoint == null) {
+            throw new IllegalStateException("Unknown SUT endpoint '%s' for environment '%s'"
+                .formatted(endpointId, sutEnvironment.id()));
+        }
+        String base = endpoint.baseUrl();
+        if (base == null || base.isBlank()) {
+            throw new IllegalStateException("SUT endpoint '%s' for environment '%s' has no baseUrl"
+                .formatted(endpointId, sutEnvironment.id()));
+        }
+        String resolved = base.trim() + suffix;
+        Map<String, Object> updated = new java.util.LinkedHashMap<>(config);
+        updated.put("baseUrl", resolved);
+        return Map.copyOf(updated);
     }
 }

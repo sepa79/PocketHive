@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "io.pockethive.sut-environments",
+  "title": "PocketHive SUT Environments",
+  "description": "Schema for System Under Test (SUT) environments used by Scenario Manager and Orchestrator.",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["id", "name", "endpoints"],
+    "properties": {
+      "id": {
+        "type": "string",
+        "description": "Stable environment identifier (e.g. wiremock-local, paytech-reltest)."
+      },
+      "name": {
+        "type": "string",
+        "description": "Human-readable name for the environment."
+      },
+      "type": {
+        "type": "string",
+        "description": "Optional classification (sandbox, dev, uat, prodlike, team-dev, ...)."
+      },
+      "endpoints": {
+        "type": "object",
+        "description": "Map of named endpoints inside this environment.",
+        "additionalProperties": {
+          "$ref": "#/$defs/sutEndpoint"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "sutEndpoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "baseUrl"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Endpoint identifier. If omitted, the endpoints map key is used."
+        },
+        "kind": {
+          "type": "string",
+          "description": "Protocol/shape of the endpoint; currently HTTP is supported."
+        },
+        "baseUrl": {
+          "type": "string",
+          "format": "uri",
+          "description": "Base URL for this endpoint (e.g. http://wiremock:8080)."
+        }
+      }
+    }
+  }
+}
+

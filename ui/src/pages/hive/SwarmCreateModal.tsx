@@ -23,10 +23,18 @@ interface ScenarioBee {
 
 type ApiError = Error & { status?: number }
 
+interface SutEnvironment {
+  id: string
+  name: string
+  type: string | null
+}
+
 export default function SwarmCreateModal({ onClose, autoPullOnStart, onChangeAutoPull }: Props) {
   const [swarmId, setSwarmId] = useState('')
   const [templates, setTemplates] = useState<ScenarioTemplate[]>([])
   const [scenarioId, setScenarioId] = useState('')
+  const [sutEnvironments, setSutEnvironments] = useState<SutEnvironment[]>([])
+  const [sutId, setSutId] = useState<string>('')
   const [message, setMessage] = useState<string | null>(null)
   const [showRawScenario, setShowRawScenario] = useState(false)
   const [scenarioPreview, setScenarioPreview] = useState<string | null>(null)
@@ -40,6 +48,9 @@ export default function SwarmCreateModal({ onClose, autoPullOnStart, onChangeAut
         const templatesResponse = await apiFetch('/scenario-manager/api/templates', {
           headers: { Accept: 'application/json' },
         })
+        const sutResponse = await apiFetch('/scenario-manager/sut-environments', {
+          headers: { Accept: 'application/json' },
+        })
 
         if (cancelled) return
 
@@ -50,9 +61,16 @@ export default function SwarmCreateModal({ onClose, autoPullOnStart, onChangeAut
 
         const templatesData = await templatesResponse.json()
         setTemplates(normalizeTemplates(templatesData))
+        if (sutResponse.ok) {
+          const sutData = (await sutResponse.json()) as unknown
+          setSutEnvironments(normalizeSutEnvironments(sutData))
+        } else {
+          setSutEnvironments([])
+        }
       } catch {
         if (!cancelled) {
           setTemplates([])
+          setSutEnvironments([])
         }
       }
     }
@@ -75,10 +93,14 @@ export default function SwarmCreateModal({ onClose, autoPullOnStart, onChangeAut
       return
     }
     try {
-      await createSwarm(swarmId.trim(), scenarioId, { autoPullImages: autoPullOnStart })
+      await createSwarm(swarmId.trim(), scenarioId, {
+        autoPullImages: autoPullOnStart,
+        sutId: sutId || null,
+      })
       setMessage('Swarm created')
       setSwarmId('')
       setScenarioId('')
+      setSutId('')
     } catch (error) {
       const apiError = error as ApiError
       if (apiError?.status === 409) {
@@ -156,6 +178,24 @@ export default function SwarmCreateModal({ onClose, autoPullOnStart, onChangeAut
               />
             </div>
             <div className="flex items-end">
+              <div className="flex flex-col gap-1 mr-4">
+                <label htmlFor="sutEnv" className="block text-xs mb-0.5 text-white/70">
+                  System under test
+                </label>
+                <select
+                  id="sutEnv"
+                  className="rounded border border-white/20 bg-white/10 px-2 py-1 text-xs text-white"
+                  value={sutId}
+                  onChange={(e) => setSutId(e.target.value)}
+                >
+                  <option value="">(none)</option>
+                  {sutEnvironments.map((env) => (
+                    <option key={env.id} value={env.id}>
+                      {env.name} {env.type ? `(${env.type})` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
               <label className="flex items-center gap-1 text-xs text-white/70">
                 <input
                   type="checkbox"
@@ -335,4 +375,22 @@ function normalizeBee(entry: unknown): ScenarioBee | null {
   const image =
     typeof value.image === 'string' && value.image.trim().length > 0 ? value.image.trim() : null
   return { role, image }
+}
+
+function normalizeSutEnvironments(data: unknown): SutEnvironment[] {
+  if (!Array.isArray(data)) return []
+  const result: SutEnvironment[] = []
+  for (const entry of data) {
+    if (!entry || typeof entry !== 'object') continue
+    const value = entry as Record<string, unknown>
+    const id = typeof value.id === 'string' ? value.id.trim() : ''
+    const name = typeof value.name === 'string' ? value.name.trim() : ''
+    if (!id || !name) continue
+    const type =
+      typeof value.type === 'string' && value.type.trim().length > 0
+        ? value.type.trim()
+        : null
+    result.push({ id, name, type })
+  }
+  return result
 }

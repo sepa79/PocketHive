@@ -16,6 +16,7 @@ public class Swarm {
     private boolean workEnabled;
     private boolean controllerEnabled;
     private SwarmTemplateMetadata templateMetadata;
+    private String sutId;
 
     public Swarm(String id, String instanceId, String containerId) {
         this.id = id;
@@ -103,6 +104,14 @@ public class Swarm {
 
     public List<Bee> bees() {
         return templateMetadata == null ? List.of() : templateMetadata.bees();
+    }
+
+    public String getSutId() {
+        return sutId;
+    }
+
+    public void setSutId(String sutId) {
+        this.sutId = sutId;
     }
 
     void expire(Instant now, java.time.Duration degradedAfter, java.time.Duration failedAfter) {

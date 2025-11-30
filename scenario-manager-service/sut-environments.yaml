@@ -1,0 +1,18 @@
+- id: wiremock-local
+  name: WireMock (local)
+  type: sandbox
+  endpoints:
+    default:
+      kind: HTTP
+      baseUrl: http://wiremock:8080
+
+# Example HTTP SUT used for demos; can be wired to the same WireMock
+# instance or a different target.
+- id: demo-http-sut
+  name: Demo HTTP SUT
+  type: dev
+  endpoints:
+    public-api:
+      kind: HTTP
+      baseUrl: http://wiremock:8080
+

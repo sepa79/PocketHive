@@ -121,7 +121,15 @@ public final class OrchestratorClient {
   public record ControlRequest(String idempotencyKey, String notes) {
   }
 
-  public record SwarmCreateRequest(String templateId, String idempotencyKey, String notes) {
+  public record SwarmCreateRequest(String templateId,
+                                   String idempotencyKey,
+                                   String notes,
+                                   Boolean autoPullImages,
+                                   String sutId) {
+
+    public SwarmCreateRequest(String templateId, String idempotencyKey, String notes) {
+      this(templateId, idempotencyKey, notes, null, null);
+    }
   }
 
   public record SwarmView(String id,
