@@ -8,6 +8,7 @@ import { useCapabilities } from '../../contexts/CapabilitiesContext'
 import type { CapabilityConfigEntry } from '../../types/capabilities'
 import { formatCapabilityValue, inferCapabilityInputType } from '../../lib/capabilities'
 import { useSwarmMetadata } from '../../contexts/SwarmMetadataContext'
+import { apiFetch } from '../../lib/api'
 
 interface Props {
   component: Component
@@ -20,7 +21,8 @@ export default function ComponentDetail({ component, onClose }: Props) {
   const [toast, setToast] = useState<string | null>(null)
   const [isEditing, setIsEditing] = useState(false)
   const [form, setForm] = useState<Record<string, ConfigFormValue>>({})
-   const [showRefreshTooltip, setShowRefreshTooltip] = useState(false)
+  const [showRefreshTooltip, setShowRefreshTooltip] = useState(false)
+  const [sutLookup, setSutLookup] = useState<Record<string, { name: string; type: string | null }>>({})
   const { ensureCapabilities, getManifestForImage, manifests } = useCapabilities()
   const { ensureSwarms, refreshSwarms, getBeeImage, getControllerImage, findSwarm } =
     useSwarmMetadata()
@@ -44,6 +46,11 @@ export default function ComponentDetail({ component, onClose }: Props) {
     getBeeImage,
     getControllerImage,
   ])
+  const roleRaw = component.role ?? ''
+  const role = roleRaw.trim() || '—'
+  const normalizedRole = roleRaw.trim().toLowerCase()
+  const isWiremock = normalizedRole === 'wiremock'
+
   const manifest = useMemo(
     () => getManifestForImage(resolvedImage),
     [resolvedImage, getManifestForImage],
@@ -58,6 +65,52 @@ export default function ComponentDetail({ component, onClose }: Props) {
   useEffect(() => {
     void ensureSwarms()
   }, [ensureSwarms])
+
+  useEffect(() => {
+    if (normalizedRole !== 'swarm-controller') {
+      return
+    }
+    if (Object.keys(sutLookup).length > 0) {
+      return
+    }
+    let cancelled = false
+    const load = async () => {
+      try {
+        const response = await apiFetch('/scenario-manager/sut-environments', {
+          headers: { Accept: 'application/json' },
+        })
+        if (!response.ok || cancelled) {
+          return
+        }
+        const data = (await response.json()) as unknown
+        if (!Array.isArray(data)) {
+          return
+        }
+        const map: Record<string, { name: string; type: string | null }> = {}
+        for (const entry of data) {
+          if (!entry || typeof entry !== 'object') continue
+          const value = entry as Record<string, unknown>
+          const id = typeof value.id === 'string' ? value.id.trim() : ''
+          const name = typeof value.name === 'string' ? value.name.trim() : ''
+          if (!id || !name) continue
+          const type =
+            typeof value.type === 'string' && value.type.trim().length > 0
+              ? value.type.trim()
+              : null
+          map[id] = { name, type }
+        }
+        if (!cancelled) {
+          setSutLookup(map)
+        }
+      } catch {
+        // ignore; SUT display is best-effort only
+      }
+    }
+    void load()
+    return () => {
+      cancelled = true
+    }
+  }, [normalizedRole, sutLookup])
 
   const handleRefreshMouseEnter = () => {
     if (refreshTooltipTimer.current != null) {
@@ -103,9 +156,6 @@ export default function ComponentDetail({ component, onClose }: Props) {
   }
 
   const health = heartbeatHealth(component.lastHeartbeat)
-  const role = component.role.trim() || '—'
-  const normalizedRole = component.role.trim().toLowerCase()
-  const isWiremock = normalizedRole === 'wiremock'
   const componentConfig =
     component.config && typeof component.config === 'object'
       ? (component.config as Record<string, unknown>)
@@ -135,9 +185,20 @@ export default function ComponentDetail({ component, onClose }: Props) {
         })
       }
       if (swarmSummary?.sutId) {
+        const sutInfo = sutLookup[swarmSummary.sutId]
+        const labelParts = []
+        if (sutInfo?.name) {
+          labelParts.push(sutInfo.name)
+          if (sutInfo.type) {
+            labelParts.push(sutInfo.type)
+          }
+        } else {
+          // Fallback when SUT metadata is missing; show the raw id only.
+          labelParts.push(swarmSummary.sutId)
+        }
         entries.push({
           label: 'System under test',
-          value: swarmSummary.sutId,
+          value: labelParts.join(' • '),
         })
       }
       if (swarmSummary?.stackName) {
@@ -219,6 +280,15 @@ export default function ComponentDetail({ component, onClose }: Props) {
       cfg && cfg.inputs && typeof cfg.inputs === 'object'
         ? (cfg.inputs as Record<string, unknown>)
         : undefined
+    if (inputs) {
+      const inputType = getString(inputs.type)
+      if (inputType) {
+        entries.push({
+          label: 'Input type',
+          value: inputType,
+        })
+      }
+    }
     const scheduler =
       inputs && inputs.scheduler && typeof inputs.scheduler === 'object'
         ? (inputs.scheduler as Record<string, unknown>)
@@ -322,7 +392,7 @@ export default function ComponentDetail({ component, onClose }: Props) {
       }
     }
     return entries
-  }, [component.config])
+  }, [component.config, normalizedRole, findSwarm, component.swarmId, sutLookup])
 
   const effectiveConfigEntries: CapabilityConfigEntry[] = useMemo(() => {
     if (!manifest) return []
