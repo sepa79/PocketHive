@@ -288,6 +288,17 @@ export default function ComponentDetail({ component, onClose }: Props) {
           value: inputType,
         })
       }
+      const outputs =
+        cfg && cfg.outputs && typeof cfg.outputs === 'object'
+          ? (cfg.outputs as Record<string, unknown>)
+          : undefined
+      const outputType = outputs ? getString(outputs.type) : undefined
+      if (outputType) {
+        entries.push({
+          label: 'Output type',
+          value: outputType,
+        })
+      }
     }
     const scheduler =
       inputs && inputs.scheduler && typeof inputs.scheduler === 'object'

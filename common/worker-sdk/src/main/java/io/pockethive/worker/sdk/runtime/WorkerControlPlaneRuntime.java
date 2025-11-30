@@ -653,10 +653,11 @@ public final class WorkerControlPlaneRuntime {
             }
             Map<String, Object> config = snapshotRawConfig(state);
             if (!config.isEmpty()) {
-                // Ensure IO type is always present in status config so UIs do not need
-                // to guess it from other fields. The type comes from the resolved
-                // worker definition, not heuristics.
+                // Ensure IO types are always present in status config so UIs do not need
+                // to guess them from other fields. Types come from the resolved worker
+                // definition, not heuristics.
                 Map<String, Object> augmented = new LinkedHashMap<>(config);
+
                 Map<String, Object> inputsBlock = null;
                 Object existingInputs = augmented.get("inputs");
                 if (existingInputs instanceof Map<?, ?> rawInputs) {
@@ -677,6 +678,28 @@ public final class WorkerControlPlaneRuntime {
                 if (!inputsBlock.isEmpty()) {
                     augmented.put("inputs", inputsBlock);
                 }
+
+                Map<String, Object> outputsBlock = null;
+                Object existingOutputs = augmented.get("outputs");
+                if (existingOutputs instanceof Map<?, ?> rawOutputs) {
+                    outputsBlock = new LinkedHashMap<>();
+                    for (Map.Entry<?, ?> entry : rawOutputs.entrySet()) {
+                        Object key = entry.getKey();
+                        if (key != null) {
+                            outputsBlock.put(key.toString(), entry.getValue());
+                        }
+                    }
+                }
+                if (outputsBlock == null) {
+                    outputsBlock = new LinkedHashMap<>();
+                }
+                if (!outputsBlock.containsKey("type")) {
+                    outputsBlock.put("type", def.outputType().name());
+                }
+                if (!outputsBlock.isEmpty()) {
+                    augmented.put("outputs", outputsBlock);
+                }
+
                 workerEntry.put("config", augmented);
             }
             Map<String, Object> statusData = state.statusData();

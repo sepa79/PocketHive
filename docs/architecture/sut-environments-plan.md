@@ -137,8 +137,58 @@ Templating will then use:
       `baseUrl: "{{ sut.endpoints['<id>'].baseUrl }}..."` pattern where SUTs are involved.
 - [x] Migrate e2e scenarios away from hard‑coded URLs and onto SUT envs:
   - [x] `templated-rest.yaml` — processor now relies on injected SUT baseUrl instead of a literal.
-  - [ ] any others that hit WireMock / HTTP directly (optional; current redis demo still uses
-        a fixed WireMock URL for clarity).
+  - [x] `redis-dataset-demo.yaml` — processor now relies on injected SUT baseUrl instead of a literal.
+
+---
+
+## 6. SUT visibility & editing in Hive UI (next steps)
+
+> Goal: make SUTs first‑class objects on the Hive canvas and provide a small
+> editor/viewer so operators can see and tweak SUT definitions without leaving
+> PocketHive. This will eventually replace the ad‑hoc “Services” group.
+
+### 6.1 SUT registry APIs (Scenario Manager)
+
+- [x] `GET /sut-environments` → list of environments (id, name, type, endpoints summary).
+- [x] `GET /sut-environments/{id}` → full environment definition.
+- [ ] (Later) `PUT/POST/DELETE /sut-environments` for editing from the UI.
+
+### 6.2 UI: SUT picker & “active environments”
+
+- [ ] Introduce a `SutEnvironmentContext` (or extend an existing context) that:
+  - [ ] Fetches `/sut-environments` on startup.
+  - [ ] Exposes `{ envs, activeIds, setActiveIds }`.
+  - [ ] Persists `activeIds` in `localStorage` / cookie under a single key so SUT selection
+        survives reloads.
+- [ ] Replace the current “Services” cluster on the Hive page with a **Systems under test**
+      panel:
+  - [ ] Render one card per SUT env (name, type, endpoint count).
+  - [ ] Provide a simple toggle “Show on hive map” that flips membership in `activeIds`.
+  - [ ] WireMock becomes just one SUT entry defined in `sut-environments.yaml`.
+
+### 6.3 UI: Rendering SUTs on the Hive graph
+
+- [ ] For each active SUT env, create a synthetic component via `upsertSyntheticComponent`:
+  - [ ] `id = sut.id`, `name = sut.name`, `role = 'sut'`, `queues = []`.
+- [ ] Replace WireMock‑specific heuristics in `buildTopology` with SUT‑aware wiring:
+  - [ ] For each worker component, if `config.baseUrl` starts with any
+        `sut.endpoints[*].baseUrl` (no fallbacks), add an edge
+        `{ from: workerId, to: sutId, queue: 'sut' }`.
+  - [ ] Only draw edges/nodes for SUT ids present in `activeIds`.
+- [ ] Ensure existing edge types (swarm‑control, work queues) are unchanged.
+
+### 6.4 UI: SUT viewer (read‑only, then editable)
+
+- [ ] Add a “Systems under test” view:
+  - [ ] Left column: list envs (name, type, tags, endpoint count).
+  - [ ] Right panel: details for the selected env:
+    - [ ] Endpoints table (id, kind, baseUrl).
+    - [ ] Read‑only YAML view backed by `sut-environments.schema.json`.
+- [ ] Link from Swarm Controller detail panel:
+  - [ ] When a SC reports a `sutId`, show a “View SUT” action to open that env.
+- [ ] Phase 2 (optional): enable editing:
+  - [ ] Swap read‑only YAML for a Monaco editor.
+  - [ ] POST updated YAML back to Scenario Manager using the schema for validation.
 
 ---
 

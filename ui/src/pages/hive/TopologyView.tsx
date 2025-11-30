@@ -85,6 +85,14 @@ const EDGE_LABEL_STYLE = {
   whiteSpace: 'pre-line' as const,
 }
 
+function normalizeEdgeLabel(label: string): string {
+  return label
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+    .join('\n')
+}
+
 function average(values: number[]): number | undefined {
   if (!values.length) return undefined
   const total = values.reduce((sum, value) => sum + value, 0)
@@ -1374,12 +1382,14 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
           : range
           ? `depth ${range}`
           : target ?? 'guard'
+      const normalizedDepthLabel = normalizeEdgeLabel(depthLabel)
 
       const hasRateRange =
         guardQueues?.minRate !== undefined && guardQueues?.maxRate !== undefined
       const rateLabel = hasRateRange
         ? `rate ${guardQueues!.minRate}..${guardQueues!.maxRate}`
         : 'rate'
+      const normalizedRateLabel = normalizeEdgeLabel(rateLabel)
 
       const seenPrimaryRateTargets = new Set<string>()
       const seenPrimaryDepthTargets = new Set<string>()
@@ -1394,7 +1404,7 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
               id: `guard-rate-${controllerNode.id}-${producerId}`,
               source: controllerNode.id,
               target: producerId,
-              label: rateLabel,
+              label: normalizedRateLabel,
               style: {
                 stroke: '#22c55e',
                 strokeWidth: 2.5,
@@ -1419,7 +1429,7 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
               id: `guard-depth-${controllerNode.id}-${targetId}`,
               source: controllerNode.id,
               target: targetId,
-              label: depthLabel,
+              label: normalizedDepthLabel,
               style: {
                 stroke: '#f97316',
                 strokeWidth: 2.5,
@@ -1448,6 +1458,7 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
           : high
           ? `backpressure\n${high}`
           : recovery ?? 'backpressure'
+      const normalizedBpLabel = normalizeEdgeLabel(bpLabel)
       const seenBpTargets = new Set<string>()
       data.links
         .filter((link) => queueMatchesAlias(link.queue, backpressureAlias))
@@ -1460,7 +1471,7 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
             id: `guard-bp-${controllerNode.id}-${targetId}`,
             source: controllerNode.id,
             target: targetId,
-            label: bpLabel,
+            label: normalizedBpLabel,
             style: {
               stroke: '#a855f7',
               strokeWidth: 2.5,
