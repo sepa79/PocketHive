@@ -34,7 +34,7 @@ template:
       image: processor:latest
       config:
         worker:
-          baseUrl: http://wiremock:8080/api
+          baseUrl: "{{ sut.endpoints['default'].baseUrl }}/api"
       work:
         in: modQ
         out: finalQ
