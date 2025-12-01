@@ -42,7 +42,10 @@ public class RabbitConfig {
         @Qualifier("controlPlaneExchange") TopicExchange controlExchange) {
         return BindingBuilder.bind(statusQueue)
             .to(controlExchange)
-            .with("ev.status-full.swarm-controller.*");
+            // Swarm controllers emit status events using the routing key
+            // pattern: ev.status-full.<swarmId>.swarm-controller.<instanceId>
+            // so we bind with a wildcard swarm segment.
+            .with("ev.status-full.*.swarm-controller.*");
     }
 
     @Bean
@@ -51,6 +54,9 @@ public class RabbitConfig {
         @Qualifier("controlPlaneExchange") TopicExchange controlExchange) {
         return BindingBuilder.bind(statusQueue)
             .to(controlExchange)
-            .with("ev.status-delta.swarm-controller.*");
+            // Swarm controllers emit status events using the routing key
+            // pattern: ev.status-delta.<swarmId>.swarm-controller.<instanceId>
+            // so we bind with a wildcard swarm segment.
+            .with("ev.status-delta.*.swarm-controller.*");
     }
 }

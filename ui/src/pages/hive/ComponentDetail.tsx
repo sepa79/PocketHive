@@ -186,20 +186,21 @@ export default function ComponentDetail({ component, onClose }: Props) {
       }
       if (swarmSummary?.sutId) {
         const sutInfo = sutLookup[swarmSummary.sutId]
-        const labelParts = []
-        if (sutInfo?.name) {
-          labelParts.push(sutInfo.name)
+        if (sutInfo) {
+          const labelParts: string[] = []
+          if (sutInfo.name) {
+            labelParts.push(sutInfo.name)
+          }
           if (sutInfo.type) {
             labelParts.push(sutInfo.type)
           }
-        } else {
-          // Fallback when SUT metadata is missing; show the raw id only.
-          labelParts.push(swarmSummary.sutId)
+          if (labelParts.length > 0) {
+            entries.push({
+              label: 'System under test',
+              value: labelParts.join(' • '),
+            })
+          }
         }
-        entries.push({
-          label: 'System under test',
-          value: labelParts.join(' • '),
-        })
       }
       if (swarmSummary?.stackName) {
         entries.push({

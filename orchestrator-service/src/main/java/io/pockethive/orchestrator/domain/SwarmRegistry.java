@@ -5,12 +5,22 @@ import java.util.Collections;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class SwarmRegistry {
+
+    private static final Logger log = LoggerFactory.getLogger(SwarmRegistry.class);
+
     private final Map<String, Swarm> swarms = new ConcurrentHashMap<>();
 
     public Swarm register(Swarm swarm) {
+        if (swarm == null) {
+            return null;
+        }
         swarms.put(swarm.getId(), swarm);
+        log.info("SwarmRegistry: registered swarm id={} instance={} container={}",
+            swarm.getId(), swarm.getInstanceId(), swarm.getContainerId());
         return swarm;
     }
 
@@ -23,13 +33,23 @@ public class SwarmRegistry {
     }
 
     public void remove(String id) {
-        swarms.remove(id);
+        Swarm removed = swarms.remove(id);
+        if (removed != null) {
+            log.info("SwarmRegistry: removed swarm id={} instance={} container={}",
+                removed.getId(), removed.getInstanceId(), removed.getContainerId());
+        } else {
+            log.info("SwarmRegistry: remove called for unknown swarm id={}", id);
+        }
     }
 
     public void updateStatus(String id, SwarmStatus status) {
         Swarm swarm = swarms.get(id);
         if (swarm != null) {
+            SwarmStatus previous = swarm.getStatus();
             swarm.transitionTo(status);
+            if (previous != status) {
+                log.info("SwarmRegistry: status change id={} {} -> {}", id, previous, status);
+            }
         }
     }
 
@@ -110,7 +130,14 @@ public class SwarmRegistry {
      * by the expiry logic are pruned. Anything still reporting (RUNNING/DEGRADED) stays registered.
      */
     public void bringOutYourDead() {
-        swarms.values().removeIf(s -> s.getHealth() == SwarmHealth.FAILED);
+        swarms.values().removeIf(s -> {
+            if (s.getHealth() == SwarmHealth.FAILED) {
+                log.info("SwarmRegistry: pruning FAILED swarm id={} instance={} container={} health={}",
+                    s.getId(), s.getInstanceId(), s.getContainerId(), s.getHealth());
+                return true;
+            }
+            return false;
+        });
     }
 
     public int count() {
