@@ -207,18 +207,95 @@ export default function ComponentDetail({ component, onClose }: Props) {
           value: swarmSummary.stackName,
         })
       }
-      const guard =
+      const guardStatus =
         cfg && cfg.bufferGuard && typeof cfg.bufferGuard === 'object'
           ? (cfg.bufferGuard as Record<string, unknown>)
           : undefined
-      if (guard) {
-        const guardActive = getBoolean(guard.active)
-        const guardProblem = getString(guard.problem)
+      const trafficPolicyRoot =
+        cfg && cfg.trafficPolicy && typeof cfg.trafficPolicy === 'object'
+          ? (cfg.trafficPolicy as Record<string, unknown>)
+          : undefined
+      const guardConfig =
+        trafficPolicyRoot &&
+        trafficPolicyRoot.bufferGuard &&
+        typeof trafficPolicyRoot.bufferGuard === 'object'
+          ? (trafficPolicyRoot.bufferGuard as Record<string, unknown>)
+          : undefined
+      if (guardStatus || guardConfig) {
+        const guardActive = guardStatus ? getBoolean(guardStatus.active) : undefined
+        const guardProblem = guardStatus ? getString(guardStatus.problem) : undefined
         if (guardActive !== undefined) {
           entries.push({
             label: 'Buffer guard',
             value: guardActive ? 'active' : 'inactive',
           })
+        }
+        if (guardConfig) {
+          const queueAlias = getString(guardConfig.queueAlias)
+          const targetDepth = getNumber(guardConfig.targetDepth)
+          const minDepth = getNumber(guardConfig.minDepth)
+          const maxDepth = getNumber(guardConfig.maxDepth)
+          const adjust =
+            guardConfig.adjust && typeof guardConfig.adjust === 'object'
+              ? (guardConfig.adjust as Record<string, unknown>)
+              : undefined
+          const minRate = adjust ? getNumber(adjust.minRatePerSec) : undefined
+          const maxRate = adjust ? getNumber(adjust.maxRatePerSec) : undefined
+          const backpressureCfg =
+            guardConfig.backpressure && typeof guardConfig.backpressure === 'object'
+              ? (guardConfig.backpressure as Record<string, unknown>)
+              : undefined
+          const backpressureQueue = backpressureCfg ? getString(backpressureCfg.queueAlias) : undefined
+          const highDepth = backpressureCfg ? getNumber(backpressureCfg.highDepth) : undefined
+          const recoveryDepth = backpressureCfg ? getNumber(backpressureCfg.recoveryDepth) : undefined
+
+          if (queueAlias) {
+            entries.push({
+              label: 'Guarded queue',
+              value: queueAlias,
+            })
+          }
+          if (minDepth !== undefined || maxDepth !== undefined || targetDepth !== undefined) {
+            const parts: string[] = []
+            if (minDepth !== undefined && maxDepth !== undefined) {
+              parts.push(`depth ${minDepth}..${maxDepth}`)
+            }
+            if (targetDepth !== undefined) {
+              parts.push(`target ${targetDepth}`)
+            }
+            entries.push({
+              label: 'Guard depth',
+              value: parts.join(' '),
+            })
+          }
+          if (minRate !== undefined || maxRate !== undefined) {
+            const range =
+              minRate !== undefined && maxRate !== undefined
+                ? `${minRate}..${maxRate}`
+                : minRate !== undefined
+                ? `${minRate}`
+                : `${maxRate}`
+            entries.push({
+              label: 'Guard rate (msg/s)',
+              value: range,
+            })
+          }
+          if (backpressureQueue || highDepth !== undefined || recoveryDepth !== undefined) {
+            const parts: string[] = []
+            if (backpressureQueue) {
+              parts.push(`queue ${backpressureQueue}`)
+            }
+            if (highDepth !== undefined) {
+              parts.push(`high ${highDepth}`)
+            }
+            if (recoveryDepth !== undefined) {
+              parts.push(`recovery ${recoveryDepth}`)
+            }
+            entries.push({
+              label: 'Guard backpressure',
+              value: parts.join(' '),
+            })
+          }
         }
         if (guardProblem) {
           entries.push({
