@@ -484,8 +484,8 @@ public class SwarmLifecycleSteps {
     assertFalse(config.isEmpty(), "Processor snapshot should include applied config");
 
     String baseUrl = String.valueOf(config.get("baseUrl"));
-    assertEquals("http://wiremock:8080/api", baseUrl,
-        "Expected processor baseUrl=http://wiremock:8080/api from local-rest scenario");
+    assertEquals("{{ sut.endpoints['default'].baseUrl }}/api", baseUrl,
+        "Expected processor baseUrl=\"{{ sut.endpoints['default'].baseUrl }}/api\" from local-rest scenario");
   }
 
   @And("the postprocessor runtime config matches the service defaults")

@@ -5,6 +5,7 @@ import QueuesPanel from './QueuesPanel'
 import { heartbeatHealth, colorForHealth } from '../../lib/health'
 import WiremockPanel from './WiremockPanel'
 import { useCapabilities } from '../../contexts/CapabilitiesContext'
+import { Link } from 'react-router-dom'
 import type { CapabilityConfigEntry } from '../../types/capabilities'
 import { formatCapabilityValue, inferCapabilityInputType } from '../../lib/capabilities'
 import { useSwarmMetadata } from '../../contexts/SwarmMetadataContext'
@@ -653,6 +654,27 @@ export default function ComponentDetail({ component, onClose }: Props) {
             ? 'true'
             : '—'}
         </div>
+        {normalizedRole === 'swarm-controller' && (() => {
+          const swarm = findSwarm(component.swarmId ?? null)
+          if (!swarm?.sutId) return null
+          const sut = sutLookup[swarm.sutId]
+          const labelParts: string[] = []
+          if (sut?.name) labelParts.push(sut.name)
+          if (sut?.type) labelParts.push(sut.type)
+          const label = labelParts.join(' • ')
+          if (!label) return null
+          return (
+            <div className="pt-1 text-xs">
+              SUT:{' '}
+              <Link
+                to={`/sut?sutId=${encodeURIComponent(swarm.sutId)}`}
+                className="text-sky-300 hover:text-sky-200 underline-offset-2 hover:underline"
+              >
+                {label}
+              </Link>
+            </div>
+          )
+        })()}
       </div>
       {runtimeEntries.length > 0 && (
         <div className="space-y-1 text-sm mb-4">

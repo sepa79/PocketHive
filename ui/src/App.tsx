@@ -5,6 +5,7 @@ import HivePage from './pages/hive/HivePage'
 import Nectar from './pages/Nectar'
 import { CapabilitiesProvider } from './contexts/CapabilitiesContext'
 import { SwarmMetadataProvider } from './contexts/SwarmMetadataContext'
+import SutEnvironmentsPage from './pages/sut/SutEnvironmentsPage'
 
 export default function App() {
   return (
@@ -21,6 +22,7 @@ export default function App() {
             </SwarmMetadataProvider>
           }
         />
+        <Route path="sut" element={<SutEnvironmentsPage />} />
         <Route path="nectar" element={<Nectar />} />
       </Route>
     </Routes>

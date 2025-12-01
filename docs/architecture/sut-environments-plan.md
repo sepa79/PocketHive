@@ -111,7 +111,7 @@ Templating will then use:
 - [x] In *Create Swarm* modal:
   - [x] Add a *System under test* dropdown listing SUT envs (id + name + type).
   - [x] Include chosen `sutId` in the `create swarm` request payload.
-- [ ] Show SUT env on swarm detail panel (read‑only, for now).
+- [x] Show SUT env on swarm detail panel (read‑only, for now).
 
 ### 4.4 Orchestrator — store & pass SUT binding
 

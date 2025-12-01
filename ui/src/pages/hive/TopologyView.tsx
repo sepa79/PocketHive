@@ -9,6 +9,9 @@ import '@xyflow/react/dist/style.css'
 import { buildRoleAppearanceMap, type RoleAppearanceMap } from '../../lib/capabilities'
 import './TopologyView.css'
 import { useCapabilities } from '../../contexts/CapabilitiesContext'
+import { useSwarmMetadata } from '../../contexts/SwarmMetadataContext'
+import type { Component } from '../../types/hive'
+import type { SwarmSummary } from '../../types/orchestrator'
 import {
   ShapeNode,
   SwarmGroupNode,
@@ -45,6 +48,7 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
   const shapeMapRef = useRef<Record<string, NodeShape>>({ sut: 'circle' })
   const { data, queueDepths, componentsById } = useTopologyData(swarmId)
   const { manifests, ensureCapabilities } = useCapabilities()
+  const { swarms } = useSwarmMetadata()
 
   useEffect(() => {
     void ensureCapabilities()
@@ -136,10 +140,23 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
     }
     const normalizedSwarm = normalizeSwarmId(swarmId)
     const guardQueues = normalizedSwarm ? guardQueuesBySwarm.get(normalizedSwarm) : undefined
-    return normalizedSwarm
-      ? buildGuardedEdgesForSwarm(data, queueDepths, normalizedSwarm, guardQueues)
-      : []
-  }, [data.links, data.nodes, nodeById, queueDepths, swarmId, guardQueuesBySwarm])
+    if (!normalizedSwarm) {
+      return []
+    }
+    const guardEdges = buildGuardedEdgesForSwarm(
+      data,
+      queueDepths,
+      normalizedSwarm,
+      guardQueues,
+    )
+    const sutEdges = buildSutEdgesForSwarm(
+      data,
+      componentsById,
+      normalizedSwarm,
+      swarms,
+    )
+    return [...guardEdges, ...sutEdges]
+  }, [data, nodeById, queueDepths, swarmId, guardQueuesBySwarm, componentsById, swarms])
 
   const types = Array.from(new Set(data.nodes.map((n) => n.type)))
 
@@ -182,4 +199,54 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
       <TopologyLegend items={legendItems} />
     </div>
   )
+}
+
+const HTTP_WORKER_ROLES = new Set(['processor', 'http-builder'])
+
+function buildSutEdgesForSwarm(
+  data: { nodes: GraphNode[]; links: { source: string; target: string; queue: string }[] },
+  componentsById: Record<string, Component>,
+  normalizedSwarmId: string,
+  swarms: SwarmSummary[],
+): Edge[] {
+  const swarm = swarms.find(
+    (s) => normalizeSwarmId(s.id) === normalizedSwarmId,
+  )
+  const sutId = swarm?.sutId
+  if (!sutId) return []
+
+  const sutNodeId = `sut:${normalizedSwarmId}`
+  const sutNodeExists = data.nodes.some((n) => n.id === sutNodeId)
+  if (!sutNodeExists) return []
+
+  const edges: Edge[] = []
+
+  for (const node of data.nodes) {
+    const nodeSwarm = normalizeSwarmId(node.swarmId)
+    if (nodeSwarm !== normalizedSwarmId) continue
+    if (node.id === sutNodeId) continue
+    const comp = componentsById[node.id]
+    const role = comp?.role?.trim().toLowerCase()
+    if (!role || !HTTP_WORKER_ROLES.has(role)) continue
+
+    const color = '#c084fc'
+    edges.push({
+      id: `sut-${normalizedSwarmId}-${node.id}`,
+      source: node.id,
+      target: sutNodeId,
+      label: 'sut',
+      style: {
+        stroke: color,
+        strokeWidth: 1.5,
+        strokeDasharray: '3 3',
+      },
+      markerEnd: { type: MarkerType.ArrowClosed, color },
+      labelStyle: EDGE_LABEL_STYLE,
+      labelBgPadding: [2, 2],
+      labelBgBorderRadius: 2,
+      labelBgStyle: { fill: 'rgba(0,0,0,0.6)' },
+    })
+  }
+
+  return edges
 }

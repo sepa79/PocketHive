@@ -2,6 +2,7 @@ package io.pockethive.scenarios;
 
 import java.util.List;
 import java.util.Optional;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -21,12 +22,12 @@ public class SutEnvironmentController {
         this.service = service;
     }
 
-    @GetMapping
+    @GetMapping(produces = MediaType.APPLICATION_JSON_VALUE)
     public List<SutEnvironment> list() {
         return service.list();
     }
 
-    @GetMapping("/{id}")
+    @GetMapping(value = "/{id}", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<SutEnvironment> get(@PathVariable("id") String id) {
         return Optional.ofNullable(service.find(id))
             .map(ResponseEntity::ok)
