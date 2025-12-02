@@ -5,6 +5,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import jakarta.annotation.PostConstruct;
 import java.io.IOException;
+import java.io.StringReader;
+import java.io.StringWriter;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -109,5 +111,46 @@ public class SutEnvironmentService {
 
     public Map<String, SutEnvironment> asMap() {
         return Collections.unmodifiableMap(environments);
+    }
+
+    /**
+     * Returns the raw YAML backing the SUT registry, if present.
+     */
+    public synchronized String readRaw() throws IOException {
+        if (!Files.exists(configPath)) {
+            return "";
+        }
+        return Files.readString(configPath);
+    }
+
+    /**
+     * Replaces the underlying YAML with the given contents after validating that
+     * it can be parsed as a list of {@link SutEnvironment} objects. If parsing
+     * succeeds, the registry is reloaded from disk.
+     */
+    public synchronized void updateFromRaw(String yaml) throws IOException {
+        Objects.requireNonNull(yaml, "yaml");
+        // Validate first using the in-memory mapper.
+        try (StringReader reader = new StringReader(yaml)) {
+            List<SutEnvironment> parsed = yamlMapper.readValue(reader, LIST_TYPE);
+            if (parsed == null) {
+                throw new IOException("YAML did not contain any environments");
+            }
+        } catch (IOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new IOException("Failed to parse SUT environments YAML: " + e.getMessage(), e);
+        }
+
+        if (configPath.getParent() != null) {
+            Files.createDirectories(configPath.getParent());
+        }
+        try (StringWriter writer = new StringWriter()) {
+            // Normalise formatting while writing.
+            writer.write(yaml);
+            Files.writeString(configPath, writer.toString());
+        }
+
+        reload();
     }
 }

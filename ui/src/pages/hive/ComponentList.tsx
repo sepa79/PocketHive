@@ -3,6 +3,7 @@ import { componentHealth } from '../../lib/health'
 import { sendConfigUpdate } from '../../lib/orchestratorApi'
 import type { MouseEvent } from 'react'
 import { Play, Square } from 'lucide-react'
+import { useSwarmMetadata } from '../../contexts/SwarmMetadataContext'
 
 interface Props {
   components: Component[]
@@ -11,6 +12,8 @@ interface Props {
 }
 
 export default function ComponentList({ components, selectedId, onSelect }: Props) {
+  const { findSwarm } = useSwarmMetadata()
+
   const toggle = async (e: MouseEvent, comp: Component) => {
     e.stopPropagation()
     const enabled = comp.config?.enabled !== false
@@ -23,9 +26,15 @@ export default function ComponentList({ components, selectedId, onSelect }: Prop
   return (
     <ul className="space-y-2">
       {components.map((c) => {
-        const role = c.role?.trim() || '—'
+        const roleRaw = c.role ?? ''
+        const role = roleRaw.trim() || '—'
+        const normalizedRole = roleRaw.trim().toLowerCase()
         const canToggle = Boolean(c.role?.trim())
         const enabled = c.config?.enabled !== false
+        const swarm = findSwarm(c.swarmId ?? null)
+        const sutId = swarm?.sutId?.trim()
+        const showSutBadge =
+          sutId && (normalizedRole === 'processor' || normalizedRole === 'http-builder')
         return (
           <li
             key={c.id}
@@ -39,7 +48,14 @@ export default function ComponentList({ components, selectedId, onSelect }: Prop
           >
             <div className="flex items-center justify-between gap-2">
               <div>
-                <div className="font-medium">{c.id}</div>
+                <div className="font-medium flex items-center gap-2">
+                  <span>{c.id}</span>
+                  {showSutBadge && (
+                    <span className="inline-flex items-center rounded-full bg-purple-500/20 border border-purple-400/40 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-purple-200">
+                      SUT
+                    </span>
+                  )}
+                </div>
                 <div className="text-xs text-white/60">{role}</div>
                 {c.queues[0] && (
                   <div className="text-xs text-white/60">

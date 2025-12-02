@@ -151,7 +151,8 @@ Templating will then use:
 
 - [x] `GET /sut-environments` → list of environments (id, name, type, endpoints summary).
 - [x] `GET /sut-environments/{id}` → full environment definition.
-- [ ] (Later) `PUT/POST/DELETE /sut-environments` for editing from the UI.
+- [x] (v1) `GET /sut-environments/raw` and `PUT /sut-environments/raw` for whole‑file YAML editing from the UI.
+- [ ] (Later) fine‑grained `PUT/POST/DELETE /sut-environments` for per‑env editing.
 
 ### 6.2 UI: SUT picker & “active environments”
 
@@ -179,16 +180,16 @@ Templating will then use:
 
 ### 6.4 UI: SUT viewer (read‑only, then editable)
 
-- [ ] Add a “Systems under test” view:
-  - [ ] Left column: list envs (name, type, tags, endpoint count).
-  - [ ] Right panel: details for the selected env:
-    - [ ] Endpoints table (id, kind, baseUrl).
-    - [ ] Read‑only YAML view backed by `sut-environments.schema.json`.
-- [ ] Link from Swarm Controller detail panel:
-  - [ ] When a SC reports a `sutId`, show a “View SUT” action to open that env.
-- [ ] Phase 2 (optional): enable editing:
-  - [ ] Swap read‑only YAML for a Monaco editor.
-  - [ ] POST updated YAML back to Scenario Manager using the schema for validation.
+- [x] Add a “Systems under test” view:
+  - [x] Left column: list envs (name, type, endpoint count).
+  - [x] Right panel: details for the selected env:
+    - [x] Endpoints table (id, kind, baseUrl).
+    - [x] JSON dump of the selected env for quick inspection.
+- [x] Link from Swarm Controller detail panel:
+  - [x] When a SC reports a `sutId`, show a “View SUT” / link to `/sut?sutId=...`.
+- [x] Phase 2 (v1): enable editing via raw YAML:
+  - [x] Swap read‑only YAML block for a Monaco editor over the full `sut-environments.yaml`.
+  - [x] Save via `PUT /sut-environments/raw` with backend validation.
 
 ---
 

@@ -18,6 +18,8 @@ interface Props {
 
 type ConfigFormValue = string | boolean | undefined
 
+const HTTP_WORKER_ROLES = new Set(['processor', 'http-builder'])
+
 export default function ComponentDetail({ component, onClose }: Props) {
   const [toast, setToast] = useState<string | null>(null)
   const [isEditing, setIsEditing] = useState(false)
@@ -305,6 +307,16 @@ export default function ComponentDetail({ component, onClose }: Props) {
             value: guardProblem,
           })
         }
+      }
+    }
+    // HTTP workers (processor, http-builder): show SUT binding if present
+    if (HTTP_WORKER_ROLES.has(normalizedRole)) {
+      const swarmSummary = findSwarm(component.swarmId ?? null)
+      if (swarmSummary?.sutId) {
+        entries.push({
+          label: 'System under test',
+          value: swarmSummary.sutId,
+        })
       }
     }
     const tps = getNumber(cfg.tps)

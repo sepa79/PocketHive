@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
+import Editor from '@monaco-editor/react'
 import { apiFetch } from '../../lib/api'
 import WiremockPanel from '../hive/WiremockPanel'
 import { fetchWiremockComponent } from '../../lib/wiremockClient'
@@ -19,39 +20,44 @@ export default function SutEnvironmentsPage() {
   const [wiremockComponent, setWiremockComponent] = useState<Component | null>(null)
   const [wiremockError, setWiremockError] = useState<string | null>(null)
   const [wiremockLoading, setWiremockLoading] = useState(false)
+  const [editing, setEditing] = useState(false)
+  const [rawYaml, setRawYaml] = useState('')
+  const [rawError, setRawError] = useState<string | null>(null)
+  const [rawLoading, setRawLoading] = useState(false)
+  const [saving, setSaving] = useState(false)
+
+  const loadEnvs = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const response = await apiFetch('/scenario-manager/sut-environments')
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status} from scenario-manager`)
+      }
+      const raw = (await response.json()) as unknown
+      const normalized = normalizeSutList(raw)
+      setEnvs(normalized)
+      if (normalized.length > 0) {
+        setSelectedId((current) => current ?? normalized[0].id)
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to load environments')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
 
   useEffect(() => {
     let cancelled = false
     const load = async () => {
-      setLoading(true)
-      setError(null)
-      try {
-        const response = await apiFetch('/scenario-manager/sut-environments')
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status} from scenario-manager`)
-        }
-        const raw = (await response.json()) as unknown
-        if (cancelled) return
-        const normalized = normalizeSutList(raw)
-        setEnvs(normalized)
-        if (normalized.length > 0) {
-          setSelectedId((current) => current ?? normalized[0].id)
-        }
-      } catch (e) {
-        if (!cancelled) {
-          setError(e instanceof Error ? e.message : 'Failed to load environments')
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false)
-        }
-      }
+      await loadEnvs()
+      if (cancelled) return
     }
     void load()
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [loadEnvs])
 
   const selected = useMemo(
     () => envs.find((e) => e.id === selectedId) ?? null,
@@ -118,12 +124,47 @@ export default function SutEnvironmentsPage() {
       <div className="w-72 border-r border-white/10 px-4 py-4 space-y-3">
         <div className="flex items-center justify-between">
           <h1 className="text-sm font-semibold text-white/90">Systems under test</h1>
-          <Link
-            to="/hive"
-            className="text-xs text-sky-300 hover:text-sky-200 transition"
-          >
-            Back to Hive
-          </Link>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className="rounded border border-white/15 bg-white/10 px-2 py-1 text-[11px] text-white/80 hover:bg-white/20"
+              onClick={async () => {
+                if (editing) {
+                  setEditing(false)
+                  setRawError(null)
+                  return
+                }
+                setRawLoading(true)
+                setRawError(null)
+                try {
+                  const response = await apiFetch('/scenario-manager/sut-environments/raw')
+                  if (!response.ok) {
+                    throw new Error(`HTTP ${response.status} from scenario-manager`)
+                  }
+                  const text = await response.text()
+                  setRawYaml(text)
+                  setEditing(true)
+                } catch (e) {
+                  setRawError(
+                    e instanceof Error
+                      ? e.message
+                      : 'Failed to load raw SUT environments',
+                  )
+                  setEditing(false)
+                } finally {
+                  setRawLoading(false)
+                }
+              }}
+            >
+              {editing ? 'Close editor' : 'Edit YAML'}
+            </button>
+            <Link
+              to="/hive"
+              className="text-xs text-sky-300 hover:text-sky-200 transition"
+            >
+              Back to Hive
+            </Link>
+          </div>
         </div>
         {loading && (
           <div className="text-xs text-white/60">Loading environments…</div>
@@ -171,78 +212,176 @@ export default function SutEnvironmentsPage() {
         </div>
       </div>
       <div className="flex-1 px-6 py-4 overflow-y-auto">
-        {!selected && !loading && (
-          <div className="text-sm text-white/70">
-            Select an environment on the left to view details.
-          </div>
-        )}
-        {selected && (
-          <div className="space-y-4">
-            <div>
-              <h2 className="text-base font-semibold text-white/90">
-                {selected.name || selected.id}
+        {editing ? (
+          <div className="flex flex-col gap-3 h-full">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-white/90">
+                Edit SUT environments (YAML)
               </h2>
-              <div className="mt-1 text-xs text-white/60 space-x-2">
-                <span>ID: {selected.id}</span>
-                {selected.type && <span>Type: {selected.type}</span>}
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  className="rounded bg-white/5 px-2 py-1 text-[11px] text-white/80 hover:bg-white/15"
+                  onClick={() => {
+                    const template = [
+                      '# Example SUT environment',
+                      '- id: new-sut-id',
+                      '  name: New SUT',
+                      '  type: dev',
+                      '  endpoints:',
+                      '    default:',
+                      '      kind: HTTP',
+                      "      baseUrl: http://example:8080",
+                      '  ui:',
+                      "    panelId: wiremock # optional; binds WireMock panel",
+                      '',
+                    ].join('\n')
+                    setRawYaml((current) => {
+                      const trimmed = current.trim()
+                      if (!trimmed) {
+                        return template
+                      }
+                      return `${current.replace(/\s*$/, '')}\n\n${template}`
+                    })
+                  }}
+                >
+                  Insert template
+                </button>
+                <button
+                  type="button"
+                  className="rounded bg-white/10 px-3 py-1 text-xs text-white/90 hover:bg-white/20 disabled:opacity-50"
+                  disabled={saving || rawLoading}
+                  onClick={async () => {
+                    setSaving(true)
+                    setRawError(null)
+                    try {
+                      const response = await apiFetch(
+                        '/scenario-manager/sut-environments/raw',
+                        {
+                          method: 'PUT',
+                          headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+                          body: rawYaml,
+                        },
+                      )
+                      if (!response.ok) {
+                        const msg = await response.text()
+                        throw new Error(msg || `HTTP ${response.status}`)
+                      }
+                      await loadEnvs()
+                      setEditing(false)
+                    } catch (e) {
+                      setRawError(
+                        e instanceof Error ? e.message : 'Failed to save environments',
+                      )
+                    } finally {
+                      setSaving(false)
+                    }
+                  }}
+                >
+                  {saving ? 'Saving…' : 'Save'}
+                </button>
               </div>
             </div>
-            <div>
-              <h3 className="text-xs font-semibold text-white/80 mb-1.5">
-                Endpoints
-              </h3>
-              {endpointEntries.length === 0 ? (
-                <div className="text-xs text-white/60">No endpoints defined.</div>
-              ) : (
-                <table className="w-full text-xs border border-white/10 rounded-md overflow-hidden">
-                  <thead className="bg-white/5 text-white/70">
-                    <tr>
-                      <th className="px-2 py-1 text-left font-medium">ID</th>
-                      <th className="px-2 py-1 text-left font-medium">Kind</th>
-                      <th className="px-2 py-1 text-left font-medium">Base URL</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {endpointEntries.map((ep) => (
-                      <tr key={ep.id} className="border-t border-white/10">
-                        <td className="px-2 py-1 align-top font-mono text-[11px] text-white/90">
-                          {ep.id}
-                        </td>
-                        <td className="px-2 py-1 align-top text-white/80">
-                          {ep.kind || '—'}
-                        </td>
-                        <td className="px-2 py-1 align-top font-mono text-[11px] text-sky-100 break-all">
-                          {ep.baseUrl || '—'}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
+            {rawLoading && (
+              <div className="text-xs text-white/60">Loading YAML…</div>
+            )}
+            {rawError && (
+              <div className="text-xs text-red-400">Failed to load/save: {rawError}</div>
+            )}
+            <div className="flex-1 min-h-0 border border-white/15 rounded overflow-hidden">
+              <Editor
+                height="100%"
+                defaultLanguage="yaml"
+                theme="vs-dark"
+                value={rawYaml}
+                onChange={(value) => setRawYaml(value ?? '')}
+                options={{
+                  fontSize: 11,
+                  minimap: { enabled: false },
+                  scrollBeyondLastLine: false,
+                  wordWrap: 'on',
+                }}
+              />
             </div>
-            {selected.ui?.panelId?.trim() === 'wiremock' && (
-              <div>
-                <h3 className="text-xs font-semibold text-white/80 mb-1.5">
-                  WireMock metrics
-                </h3>
-                {wiremockLoading && (
-                  <div className="text-xs text-white/60">Loading WireMock snapshot…</div>
-                )}
-                {wiremockError && (
-                  <div className="text-xs text-red-400">{wiremockError}</div>
-                )}
-                {wiremockComponent && <WiremockPanel component={wiremockComponent} />}
+          </div>
+        ) : (
+          <>
+            {!selected && !loading && (
+              <div className="text-sm text-white/70">
+                Select an environment on the left to view details.
               </div>
             )}
-            <div>
-              <h3 className="text-xs font-semibold text-white/80 mb-1.5">
-                Raw environment (YAML)
-              </h3>
-              <pre className="bg-black/60 border border-white/10 rounded-md p-3 text-[11px] text-sky-100 overflow-x-auto whitespace-pre-wrap">
+            {selected && (
+              <div className="space-y-4">
+                <div>
+                  <h2 className="text-base font-semibold text-white/90">
+                    {selected.name || selected.id}
+                  </h2>
+                  <div className="mt-1 text-xs text-white/60 space-x-2">
+                    <span>ID: {selected.id}</span>
+                    {selected.type && <span>Type: {selected.type}</span>}
+                  </div>
+                </div>
+                <div>
+                  <h3 className="text-xs font-semibold text-white/80 mb-1.5">
+                    Endpoints
+                  </h3>
+                  {endpointEntries.length === 0 ? (
+                    <div className="text-xs text-white/60">No endpoints defined.</div>
+                  ) : (
+                    <table className="w-full text-xs border border-white/10 rounded-md overflow-hidden">
+                      <thead className="bg-white/5 text-white/70">
+                        <tr>
+                          <th className="px-2 py-1 text-left font-medium">ID</th>
+                          <th className="px-2 py-1 text-left font-medium">Kind</th>
+                          <th className="px-2 py-1 text-left font-medium">Base URL</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {endpointEntries.map((ep) => (
+                          <tr key={ep.id} className="border-t border-white/10">
+                            <td className="px-2 py-1 align-top font-mono text-[11px] text-white/90">
+                              {ep.id}
+                            </td>
+                            <td className="px-2 py-1 align-top text-white/80">
+                              {ep.kind || '—'}
+                            </td>
+                            <td className="px-2 py-1 align-top font-mono text-[11px] text-sky-100 break-all">
+                              {ep.baseUrl || '—'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+                {selected.ui?.panelId?.trim() === 'wiremock' && (
+                  <div>
+                    <h3 className="text-xs font-semibold text-white/80 mb-1.5">
+                      WireMock metrics
+                    </h3>
+                    {wiremockLoading && (
+                      <div className="text-xs text-white/60">
+                        Loading WireMock snapshot…
+                      </div>
+                    )}
+                    {wiremockError && (
+                      <div className="text-xs text-red-400">{wiremockError}</div>
+                    )}
+                    {wiremockComponent && <WiremockPanel component={wiremockComponent} />}
+                  </div>
+                )}
+                <div>
+                  <h3 className="text-xs font-semibold text-white/80 mb-1.5">
+                    Raw environment (JSON)
+                  </h3>
+                  <pre className="bg-black/60 border border-white/10 rounded-md p-3 text-[11px] text-sky-100 overflow-x-auto whitespace-pre-wrap">
 {JSON.stringify(selected, null, 2)}
-              </pre>
-            </div>
-          </div>
+                  </pre>
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

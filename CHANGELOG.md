@@ -7,6 +7,13 @@ Timestamp: 2025-11-28T00:00:00Z
 
 _No unreleased changes yet._
 
+## [0.14.8] - 2025-12-02
+Timestamp: 2025-12-02T12:30:00Z
+
+- SUT raw editing in Scenario Manager: extended the SUT registry with `/sut-environments/raw` (GET/PUT) so the full `sut-environments.yaml` file can be fetched and updated over HTTP, with server-side validation that the content parses into a `List<SutEnvironment>` before it is written back to disk and reloaded.
+- SUT authoring UI: added a dedicated “Systems under test” view with a Monaco-based YAML editor wired to the raw SUT endpoints, including an “Insert template” helper snippet for new environments and a save flow that surfaces backend parse errors, making it practical to define and evolve SUTs from the Hive UI instead of hand-editing files in the container.
+- SUT diagnostics & badges in Hive: refined the Hive topology and detail panels so swarms show their bound SUT in the swarm-controller runtime section, HTTP workers (processor/http-builder) display a small “SUT” badge plus a “System under test” line, and clicking SUT nodes on the graph opens a SUT detail panel that reuses the existing WireMock metrics view when `ui.panelId: wiremock` is configured.
+
 ## [0.14.7] - 2025-11-28
 Timestamp: 2025-11-28T12:00:00Z
 
