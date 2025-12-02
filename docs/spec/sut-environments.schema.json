@@ -27,6 +27,17 @@
         "additionalProperties": {
           "$ref": "#/$defs/sutEndpoint"
         }
+      },
+      "ui": {
+        "type": "object",
+        "description": "Optional UI hints for rendering this SUT in Hive.",
+        "additionalProperties": false,
+        "properties": {
+          "panelId": {
+            "type": "string",
+            "description": "Name of the UI panel/component to use (e.g. \"wiremock\")."
+          }
+        }
       }
     }
   },
@@ -53,4 +64,3 @@
     }
   }
 }
-

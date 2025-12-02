@@ -4,7 +4,6 @@ import {
   fetchWiremockComponent,
   type WiremockComponentConfig,
 } from '../../lib/wiremockClient'
-import { removeSyntheticComponent, upsertSyntheticComponent } from '../../lib/stompClient'
 import WiremockStat from './WiremockStat'
 import WiremockRequestsTable from './WiremockRequestsTable'
 import WiremockScenarioList from './WiremockScenarioList'
@@ -51,7 +50,9 @@ function formatNumber(value?: number) {
 }
 
 export default function WiremockPanel({ component }: Props) {
-  const config = isWiremockConfig(component.config) ? component.config : null
+  const [config, setConfig] = useState<WiremockComponentConfig | null>(() =>
+    isWiremockConfig(component.config) ? component.config : null,
+  )
   const [refreshing, setRefreshing] = useState(false)
   const [refreshError, setRefreshError] = useState<string | null>(null)
 
@@ -60,10 +61,10 @@ export default function WiremockPanel({ component }: Props) {
     setRefreshError(null)
     try {
       const latest = await fetchWiremockComponent()
-      if (latest) {
-        upsertSyntheticComponent(latest)
+      const latestConfig = latest?.config
+      if (isWiremockConfig(latestConfig)) {
+        setConfig(latestConfig)
       } else {
-        removeSyntheticComponent('wiremock')
         setRefreshError('WireMock snapshot unavailable.')
       }
     } catch (error) {

@@ -19,6 +19,8 @@ pockethive:
     manager:
       enabled: true
       role: scenario-manager
+  sut:
+    environments-path: sut/sut-environments.yaml
   logs:
     queue: ${POCKETHIVE_LOGS_QUEUE:ph.logs.agg}
     exchange: ${POCKETHIVE_LOGS_EXCHANGE:ph.logs}

@@ -18,16 +18,19 @@ public final class SutEnvironment {
     private final String name;
     private final String type;
     private final Map<String, SutEndpoint> endpoints;
+    private final Ui ui;
 
     @JsonCreator
     public SutEnvironment(@JsonProperty("id") String id,
                           @JsonProperty("name") String name,
                           @JsonProperty("type") String type,
-                          @JsonProperty("endpoints") Map<String, SutEndpoint> endpoints) {
+                          @JsonProperty("endpoints") Map<String, SutEndpoint> endpoints,
+                          @JsonProperty("ui") Ui ui) {
         this.id = id;
         this.name = name;
         this.type = type;
         this.endpoints = endpoints == null ? Map.of() : Map.copyOf(endpoints);
+        this.ui = ui;
     }
 
     public String getId() {
@@ -52,5 +55,24 @@ public final class SutEnvironment {
     public Map<String, SutEndpoint> getEndpoints() {
         return Collections.unmodifiableMap(endpoints);
     }
-}
 
+    /**
+     * Optional UI hints for rendering this environment in the Hive UI.
+     */
+    public Ui getUi() {
+        return ui;
+    }
+
+    public static final class Ui {
+        private final String panelId;
+
+        @JsonCreator
+        public Ui(@JsonProperty("panelId") String panelId) {
+          this.panelId = panelId;
+        }
+
+        public String getPanelId() {
+          return panelId;
+        }
+    }
+}

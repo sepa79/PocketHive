@@ -179,7 +179,7 @@ Client sends **`idempotencyKey`** (UUID v4) per new action (reuse on retry). Ser
         "image": "ghcr.io/pockethive/processor:latest",
         "work": { "in": "gen-out", "out": "final" },
         "config": {
-          "baseUrl": "http://wiremock:8080",
+          "baseUrl": "{{ sut.endpoints['default'].baseUrl }}",
           "timeoutMillis": 2500
         }
       }

@@ -1,26 +1,19 @@
 /**
  * @vitest-environment jsdom
  */
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { render, screen, waitFor, within, cleanup } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import '@testing-library/jest-dom/vitest'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 import HivePage from './HivePage'
 import type { Component } from '../../types/hive'
 import { subscribeComponents } from '../../lib/stompClient'
-import { fetchWiremockComponent } from '../../lib/wiremockClient'
 import * as orchestratorApi from '../../lib/orchestratorApi'
 import { useUIStore } from '../../store'
 
 vi.mock('../../lib/stompClient', () => ({
   subscribeComponents: vi.fn(),
-  upsertSyntheticComponent: vi.fn(),
-  removeSyntheticComponent: vi.fn(),
   setSwarmMetadataRefreshHandler: vi.fn(),
-}))
-
-vi.mock('../../lib/wiremockClient', () => ({
-  fetchWiremockComponent: vi.fn(),
 }))
 
 vi.mock('./TopologyView', () => ({
@@ -68,7 +61,6 @@ const baseComponents: Component[] = [
 let comps: Component[] = []
 
 const subscribeMock = vi.mocked(subscribeComponents)
-const fetchWiremockMock = vi.mocked(fetchWiremockComponent)
 const startSwarmSpy = vi.mocked(orchestratorApi.startSwarm)
 const stopSwarmSpy = vi.mocked(orchestratorApi.stopSwarm)
 const removeSwarmSpy = vi.mocked(orchestratorApi.removeSwarm)
@@ -86,7 +78,6 @@ beforeEach(() => {
     fn(comps)
     return () => {}
   })
-  fetchWiremockMock.mockResolvedValue(null)
   startSwarmSpy.mockResolvedValue()
   stopSwarmSpy.mockResolvedValue()
   removeSwarmSpy.mockResolvedValue()
@@ -97,6 +88,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  cleanup()
   vi.clearAllMocks()
 })
 
@@ -110,14 +102,14 @@ test('renders orchestrator panel with controls disabled when missing', () => {
   const stopButton = within(panel).getByRole('button', {
     name: 'Send stop command to all swarms',
   })
-  expect(startButton).toBeDisabled()
-  expect(stopButton).toBeDisabled()
+  expect((startButton as HTMLButtonElement).disabled).toBe(true)
+  expect((stopButton as HTMLButtonElement).disabled).toBe(true)
   const swarmsRow = within(panel).getByText('Active swarms').parentElement
   expect(swarmsRow).not.toBeNull()
   expect(swarmsRow?.textContent).toContain('Active swarms')
   expect(swarmsRow?.textContent).toContain('—')
   const hal = within(panel).getByTestId('orchestrator-health')
-  expect(hal).toHaveAttribute('data-state', 'missing')
+  expect(hal.getAttribute('data-state')).toBe('missing')
 })
 
 test('confirming orchestrator start and stop commands calls orchestration APIs', async () => {
@@ -142,26 +134,28 @@ test('confirming orchestrator start and stop commands calls orchestration APIs',
   const stopButton = within(panel).getByRole('button', {
     name: 'Send stop command to all swarms',
   })
-  expect(startButton).toBeEnabled()
-  expect(stopButton).toBeEnabled()
+  expect((startButton as HTMLButtonElement).disabled).toBe(false)
+  expect((stopButton as HTMLButtonElement).disabled).toBe(false)
 
   await user.click(startButton)
   const startDialog = await screen.findByRole('dialog', { name: /confirm start command/i })
   const startConfirm = within(startDialog).getByRole('button', { name: 'Send Start all' })
   await user.click(startConfirm)
   await waitFor(() => expect(enableSwarmManagersSpy).toHaveBeenCalledTimes(1))
-  await waitFor(() =>
-    expect(screen.queryByRole('dialog', { name: /confirm start command/i })).not.toBeInTheDocument(),
-  )
+  await waitFor(() => {
+    const dialog = screen.queryByRole('dialog', { name: /confirm start command/i })
+    expect(dialog).toBeNull()
+  })
 
   await user.click(stopButton)
   const stopDialog = await screen.findByRole('dialog', { name: /confirm stop command/i })
   const stopConfirm = within(stopDialog).getByRole('button', { name: 'Send Stop all' })
   await user.click(stopConfirm)
   await waitFor(() => expect(disableSwarmManagersSpy).toHaveBeenCalledTimes(1))
-  await waitFor(() =>
-    expect(screen.queryByRole('dialog', { name: /confirm stop command/i })).not.toBeInTheDocument(),
-  )
+  await waitFor(() => {
+    const dialog = screen.queryByRole('dialog', { name: /confirm stop command/i })
+    expect(dialog).toBeNull()
+  })
 })
 
 test('swarm actions support dropdown toggling and API commands with toasts', async () => {
@@ -177,12 +171,13 @@ test('swarm actions support dropdown toggling and API commands with toasts', asy
     throw new Error('Swarm sw1 group not found')
   }
   const toggle = within(swarmGroup).getByRole('button', { name: /swarm details/i })
-  expect(toggle).toHaveAttribute('aria-expanded', 'false')
+  expect(toggle.getAttribute('aria-expanded')).toBe('false')
 
   await user.click(toggle)
-  expect(toggle).toHaveAttribute('aria-expanded', 'true')
+  expect(toggle.getAttribute('aria-expanded')).toBe('true')
   await within(swarmGroup).findByText('sw1-queen')
-  expect(within(swarmGroup).getByTestId('swarm-component-count')).toHaveTextContent('2 components')
+  const countBadge = within(swarmGroup).getByTestId('swarm-component-count')
+  expect(countBadge.textContent).toContain('2 components')
 
   const startButton = within(swarmGroup).getByRole('button', { name: 'Start swarm' })
   await user.click(startButton)
@@ -202,18 +197,20 @@ test('selecting a swarm card reveals its components in the context panel without
 
   const swarmGroup = await screen.findByTestId('swarm-group-sw1')
   const toggle = within(swarmGroup).getByRole('button', { name: /swarm details/i })
-  expect(toggle).toHaveAttribute('aria-expanded', 'false')
+  expect(toggle.getAttribute('aria-expanded')).toBe('false')
 
   const label = within(swarmGroup).getByText('sw1')
   await user.click(label)
-  await waitFor(() => expect(swarmGroup).toHaveAttribute('data-selected', 'true'))
+  await waitFor(() => {
+    expect(swarmGroup.getAttribute('data-selected')).toBe('true')
+  })
 
   const contextPanel = await screen.findByTestId('swarm-context-panel')
-  expect(within(contextPanel).getByText('sw1')).toBeInTheDocument()
-  expect(within(contextPanel).getByText('2 components')).toBeInTheDocument()
-  expect(within(contextPanel).getByText('sw1-queen')).toBeInTheDocument()
-  expect(within(contextPanel).getByText('sw1-helper')).toBeInTheDocument()
-  expect(toggle).toHaveAttribute('aria-expanded', 'false')
+  expect(within(contextPanel).getByText('sw1')).toBeTruthy()
+  expect(within(contextPanel).getByText('2 components')).toBeTruthy()
+  expect(within(contextPanel).getByText('sw1-queen')).toBeTruthy()
+  expect(within(contextPanel).getByText('sw1-helper')).toBeTruthy()
+  expect(toggle.getAttribute('aria-expanded')).toBe('false')
 })
 
 test('renders unassigned components in a dedicated bucket', async () => {
@@ -225,6 +222,6 @@ test('renders unassigned components in a dedicated bucket', async () => {
   })
 
   const unassigned = await screen.findByTestId('swarm-group-unassigned')
-  expect(within(unassigned).getByText('Unassigned components')).toBeInTheDocument()
-  expect(within(unassigned).getByText('orphan')).toBeInTheDocument()
+  expect(within(unassigned).getByText('Unassigned components')).toBeTruthy()
+  expect(within(unassigned).getByText('orphan')).toBeTruthy()
 })

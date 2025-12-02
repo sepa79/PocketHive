@@ -35,7 +35,7 @@ interface QueueMetrics {
   oldestAgeSec?: number
 }
 const queueMetrics: Record<string, QueueMetrics> = {}
-const IGNORED_SWARM_IDS = new Set(['default', 'hive'])
+const IGNORED_SWARM_IDS = new Set(['hive'])
 const nodePositions: Record<string, { x: number; y: number }> = {}
 
 function dropSwarmComponents(swarmId: string) {
@@ -63,21 +63,6 @@ function getMergedComponents(): Record<string, Component> {
     merged[id] = comp
   })
   return merged
-}
-
-function getWorkerBaseUrl(config?: Record<string, unknown>): string | undefined {
-  if (!config) return undefined
-  const value = config['baseUrl']
-  if (typeof value !== 'string') return undefined
-  const trimmed = value.trim()
-  return trimmed.length > 0 ? trimmed : undefined
-}
-
-function workerTargetsWiremock(component: Component): boolean {
-  if (component.id === 'wiremock') return false
-  const targetUrl = getWorkerBaseUrl(component.config)
-  if (!targetUrl) return false
-  return targetUrl.toLowerCase().includes('wiremock')
 }
 
 function notifyComponentListeners() {
@@ -194,13 +179,6 @@ function buildTopology(allComponents: Record<string, Component> = getMergedCompo
       })
     })
   })
-  const httpTargets = Object.values(allComponents).filter((component) => Boolean(getWorkerBaseUrl(component.config)))
-  if (allComponents['wiremock']) {
-    httpTargets.forEach((component) => {
-      if (!workerTargetsWiremock(component)) return
-      edges.push({ from: component.id, to: 'wiremock', queue: 'sut' })
-    })
-  }
   const orchestrators = Object.values(allComponents).filter((component) => {
     const role = component.role?.trim().toLowerCase()
     return role === 'orchestrator'

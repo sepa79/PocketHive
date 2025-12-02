@@ -9,7 +9,6 @@ import ComponentDetail from './ComponentDetail'
 import type { Component } from '../../types/hive'
 import type { WiremockComponentConfig } from '../../lib/wiremockClient'
 import { fetchWiremockComponent } from '../../lib/wiremockClient'
-import { upsertSyntheticComponent } from '../../lib/stompClient'
 import { CapabilitiesContext, type CapabilitiesContextValue } from '../../contexts/CapabilitiesContext'
 import { buildManifestIndex } from '../../lib/capabilities'
 import type { CapabilityManifest } from '../../types/capabilities'
@@ -24,8 +23,6 @@ vi.mock('../../lib/orchestratorApi', () => ({
 }))
 
 vi.mock('../../lib/stompClient', () => ({
-  upsertSyntheticComponent: vi.fn(),
-  removeSyntheticComponent: vi.fn(),
   setSwarmMetadataRefreshHandler: vi.fn(),
 }))
 
@@ -138,14 +135,6 @@ describe('ComponentDetail wiremock panel', () => {
     await waitFor(() => {
       expect(fetchWiremockComponent).toHaveBeenCalled()
     })
-    await waitFor(() => {
-      expect(upsertSyntheticComponent).toHaveBeenCalledWith(
-        expect.objectContaining({
-          id: 'wiremock',
-          config: expect.objectContaining({ lastUpdatedTs: baseTimestamp }),
-        }),
-      )
-    })
   })
 })
 
@@ -216,10 +205,8 @@ describe('ComponentDetail dynamic config', () => {
     await waitFor(() => expect(providerValue.ensureCapabilities).toHaveBeenCalled())
     await waitFor(() => expect(swarmValue.ensureSwarms).toHaveBeenCalled())
 
-    const editToggle = screen.getByRole('checkbox', { name: 'Enable editing' })
+    const editToggle = screen.getByRole('checkbox', { name: /Enable editing/i })
     await user.click(editToggle)
-
-    await user.click(screen.getByLabelText('Enable editing'))
 
     const rateInput = (await screen.findByDisplayValue('5')) as HTMLInputElement
     await user.click(rateInput)
