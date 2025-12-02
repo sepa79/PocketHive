@@ -64,7 +64,7 @@ describe('fetchWiremockComponent', () => {
     expect(component).not.toBeNull()
     if (!component) throw new Error('component missing')
     expect(component.id).toBe('wiremock')
-    expect(component.swarmId).toBe('default')
+    expect(component.swarmId).toBeUndefined()
     expect(component.status).toBe('OK')
     expect(component.config).toEqual(
       expect.objectContaining({
@@ -140,4 +140,3 @@ describe('fetchWiremockComponent', () => {
     expect(config.recentRequests[0]?.loggedDate).toBe(Date.parse('2024-05-26T10:00:00Z'))
   })
 })
-

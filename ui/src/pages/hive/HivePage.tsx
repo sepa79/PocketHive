@@ -3,18 +3,14 @@ import ComponentList from './ComponentList'
 import ComponentDetail from './ComponentDetail'
 import TopologyView from './TopologyView'
 import SwarmCreateModal from './SwarmCreateModal'
-import {
-  subscribeComponents,
-  upsertSyntheticComponent,
-  removeSyntheticComponent,
-} from '../../lib/stompClient'
+import { subscribeComponents } from '../../lib/stompClient'
 import type { Component } from '../../types/hive'
 import OrchestratorPanel from './OrchestratorPanel'
-import { fetchWiremockComponent } from '../../lib/wiremockClient'
 import SwarmRow from '../../components/hive/SwarmRow'
 import { componentHealth } from '../../lib/health'
 import { mapStatusToVisualState, type HealthVisualState } from './visualState'
 import { useSwarmMetadata } from '../../contexts/SwarmMetadataContext'
+import SutDetailPanel from '../sut/SutDetailPanel'
 
 const UNASSIGNED_SWARM_ID = '__unassigned__'
 
@@ -28,7 +24,8 @@ export default function HivePage() {
   const [expandedSwarmId, setExpandedSwarmId] = useState<string | null>(null)
   const [contextSwarmId, setContextSwarmId] = useState<string | null>(null)
   const [now, setNow] = useState(() => Date.now())
-  const { ensureSwarms } = useSwarmMetadata()
+  const [selectedSutId, setSelectedSutId] = useState<string | null>(null)
+  const { ensureSwarms, swarms } = useSwarmMetadata()
 
   useEffect(() => {
     // We rely on the control-plane event stream (`ev.status-*`) to keep the
@@ -42,38 +39,6 @@ export default function HivePage() {
   }, [ensureSwarms])
 
   useEffect(() => {
-    let cancelled = false
-    let timer: number | undefined
-
-    const poll = async () => {
-      try {
-        const component = await fetchWiremockComponent()
-        if (cancelled) return
-        if (component) {
-          upsertSyntheticComponent(component)
-        } else {
-          removeSyntheticComponent('wiremock')
-        }
-      } catch {
-        if (!cancelled) {
-          removeSyntheticComponent('wiremock')
-        }
-      }
-    }
-
-    void poll()
-    timer = window.setInterval(() => {
-      void poll()
-    }, 5000)
-
-    return () => {
-      cancelled = true
-      if (timer) window.clearInterval(timer)
-      removeSyntheticComponent('wiremock')
-    }
-  }, [])
-
-  useEffect(() => {
     if (selected) {
       const updated = components.find((c) => c.id === selected.id)
       if (updated) setSelected(updated)
@@ -82,6 +47,7 @@ export default function HivePage() {
 
   useEffect(() => {
     setSelected(null)
+    setSelectedSutId(null)
   }, [activeSwarm])
 
   useEffect(() => {
@@ -116,9 +82,7 @@ export default function HivePage() {
     const swarmKey = normalizeSwarmId(c)
     const matchesSwarm =
       !activeSwarm ||
-      (activeSwarm === 'default'
-        ? swarmKey === 'default'
-        : activeSwarm === UNASSIGNED_SWARM_ID
+      (activeSwarm === UNASSIGNED_SWARM_ID
         ? swarmKey === null
         : swarmKey === activeSwarm)
     return matchesSearch && matchesSwarm
@@ -189,30 +153,23 @@ export default function HivePage() {
             {sortedAssignedEntries
               .filter(([id]) => !activeSwarm || id === activeSwarm)
               .map(([id, comps]) => {
-                    const normalizedId = id === 'default' ? 'default' : id
-                    const isExpanded = expandedSwarmId === id
-                    const health = swarmHealth[id] ?? defaultSwarmHealth(id)
-                    return (
-                      <div key={id} className="space-y-2">
+                const isExpanded = expandedSwarmId === id
+                const health = swarmHealth[id] ?? defaultSwarmHealth(id)
+                return (
+                  <div key={id} className="space-y-2">
                     <SwarmRow
                       swarmId={id}
-                      isDefault={id === 'default'}
-                      isActive={activeSwarm === normalizedId}
+                      isActive={activeSwarm === id}
                       expanded={isExpanded}
                       isSelected={contextSwarmId === id}
                       componentCount={comps.length}
                       onFocusChange={(swarm, nextActive) =>
-                        setActiveSwarm((current) => {
-                          const normalized = swarm === 'default' ? 'default' : swarm
-                          if (nextActive) {
-                            return normalized
-                          }
-                          return current === normalized ? null : current
-                        })
+                        setActiveSwarm((current) =>
+                          nextActive ? swarm : current === swarm ? null : current,
+                        )
                       }
                       onSelect={(swarm) => {
-                        const normalized = swarm === 'default' ? 'default' : swarm
-                        setContextSwarmId(normalized)
+                        setContextSwarmId(swarm)
                         setSelected(null)
                       }}
                       onRemove={(swarm) => {
@@ -220,20 +177,16 @@ export default function HivePage() {
                           current === swarm ? null : current,
                         )
                         setActiveSwarm((current) =>
-                          current === (swarm === 'default' ? 'default' : swarm)
-                            ? null
-                            : current,
+                          current === swarm ? null : current,
                         )
                         setSelected((current) => {
                           if (!current) return current
                           const currentSwarm = normalizeSwarmId(current)
-                          const removedSwarm = swarm === 'default' ? 'default' : swarm
+                          const removedSwarm = swarm
                           return currentSwarm === removedSwarm ? null : current
                         })
                         setContextSwarmId((current) =>
-                          current === (swarm === 'default' ? 'default' : swarm)
-                            ? null
-                            : current,
+                          current === swarm ? null : current,
                         )
                       }}
                       onToggleExpand={(swarm) =>
@@ -278,8 +231,25 @@ export default function HivePage() {
         <TopologyView
           selectedId={selectedId}
           onSelect={(id) => {
+            if (id.startsWith('sut-env:')) {
+              const sutId = id.slice('sut-env:'.length)
+              setSelected(null)
+              setSelectedSutId(sutId || null)
+              return
+            }
+            if (id.startsWith('sut:')) {
+              const swarmKey = id.slice('sut:'.length)
+              const swarm = swarms.find((s) => s.id === swarmKey)
+              const sutId = swarm?.sutId?.trim() || null
+              setSelected(null)
+              setSelectedSutId(sutId)
+              return
+            }
             const comp = components.find((c) => c.id === id)
-            if (comp) setSelected(comp)
+            if (comp) {
+              setSelected(comp)
+              setSelectedSutId(null)
+            }
           }}
           swarmId={activeSwarm ?? undefined}
           onSwarmSelect={(id) => setActiveSwarm(id)}
@@ -288,6 +258,8 @@ export default function HivePage() {
       <div className="hidden lg:flex w-[360px] xl:w-[420px] border-l border-white/10 bg-slate-950/40 backdrop-blur-sm">
         {selected ? (
           <ComponentDetail component={selected} onClose={() => setSelected(null)} />
+        ) : selectedSutId ? (
+          <SutDetailPanel sutId={selectedSutId} onClose={() => setSelectedSutId(null)} />
         ) : shouldShowSwarmList ? (
           <div className="flex-1 overflow-y-auto px-6 py-5" data-testid="swarm-context-panel">
             <div className="flex items-center justify-between gap-4 border-b border-white/10 pb-4">
@@ -412,7 +384,6 @@ function defaultSwarmHealth(swarmId: string): SwarmHealthMeta {
 }
 
 function formatSwarmDisplayName(id: string): string {
-  if (id === 'default') return 'Services'
   if (id === UNASSIGNED_SWARM_ID) return 'Unassigned components'
   return id
 }

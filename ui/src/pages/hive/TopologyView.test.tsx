@@ -302,11 +302,16 @@ test('orchestrator card renders instance name, role and active swarm count only'
   expect(scope.queryByText(/Role:/i)).toBeNull()
 })
 
-test('filters nodes for default swarm', () => {
-  render(<TopologyView swarmId="default" />)
+test('filters nodes for a specific swarm', () => {
+  render(<TopologyView swarmId="sw1" />)
   const props = (globalThis as unknown as { __RF_PROPS__: RFProps }).__RF_PROPS__
-  const ids = props.nodes.map((node) => node.id).sort()
-  expect(ids).toEqual(['c', 'wiremock'])
+  const ids = props.nodes.map((node) => node.id)
+  // Only nodes that belong to the requested swarm should be present.
+  expect(ids).toEqual(
+    expect.arrayContaining(['sw1-swarm-controller', 'sw1-generator', 'sw1-processor']),
+  )
+  expect(ids).not.toContain('c')
+  expect(ids).not.toContain('wiremock')
 })
 
 test('orchestrator falls back to instance id when name is empty', () => {
@@ -341,4 +346,3 @@ test('swarm group nodes expose handles for external connectivity', () => {
   expect(types).toContain('target')
   expect(types).toContain('source')
 })
-

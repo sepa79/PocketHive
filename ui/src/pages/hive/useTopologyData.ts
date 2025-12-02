@@ -8,6 +8,7 @@ import type { Component } from '../../types/hive'
 import { buildGraph, type GraphData } from './TopologyBuilder'
 import { useSwarmMetadata } from '../../contexts/SwarmMetadataContext'
 import type { SwarmSummary } from '../../types/orchestrator'
+import { normalizeSwarmId } from './TopologyUtils'
 
 export type TopologyData = {
   data: GraphData
@@ -69,23 +70,71 @@ function augmentGraphWithSuts(
   const links = [...graph.links]
   const existingIds = new Set(nodes.map((n) => n.id))
 
-  const relevantSwarms = swarmId
-    ? swarms.filter((swarm) => normalizeId(swarm.id) === normalizeId(swarmId))
-    : swarms
+  // Per-swarm view: add a SUT node that belongs to the swarm itself so it can be
+  // rendered inside the swarm layout.
+  if (swarmId) {
+    const normalizedSwarmId = normalizeId(swarmId)
+    if (!normalizedSwarmId) {
+      return graph
+    }
+    const relevant = swarms.filter(
+      (swarm) => normalizeId(swarm.id) === normalizedSwarmId && swarm.sutId,
+    )
+    for (const swarm of relevant) {
+      const swarmKey = normalizeId(swarm.id)
+      if (!swarmKey) continue
+      const nodeId = `sut:${swarmKey}`
+      if (existingIds.has(nodeId)) continue
+      nodes.push({
+        id: nodeId,
+        type: 'sut',
+        enabled: true,
+        swarmId: swarmKey,
+      })
+      existingIds.add(nodeId)
+    }
+    return { nodes, links }
+  }
 
-  for (const swarm of relevantSwarms) {
-    const sutId = swarm.sutId
+  // Overview (no swarm filter): add one node per SUT environment and connect each
+  // swarm controller that uses it via a synthetic "sut" link. This gives a
+  // global view of "many swarms → one SUT".
+  const envNodeIds = new Map<string, string>() // sutId -> nodeId
+  const controllersBySwarm = new Map<string, string>() // normalizedSwarmId -> controllerId
+
+  for (const node of nodes) {
+    const normalized = normalizeSwarmId(node.swarmId)
+    if (node.type === 'swarm-controller' && normalized) {
+      controllersBySwarm.set(normalized, node.id)
+    }
+  }
+
+  for (const swarm of swarms) {
+    const sutId = normalizeId(swarm.sutId)
     const swarmKey = normalizeId(swarm.id)
     if (!sutId || !swarmKey) continue
-    const nodeId = `sut:${swarmKey}`
-    if (existingIds.has(nodeId)) continue
-    nodes.push({
-      id: nodeId,
-      type: 'sut',
-      enabled: true,
-      swarmId: swarmKey,
+    const controllerId = controllersBySwarm.get(swarmKey)
+    if (!controllerId) continue
+
+    let envNodeId = envNodeIds.get(sutId)
+    if (!envNodeId) {
+      envNodeId = `sut-env:${sutId}`
+      envNodeIds.set(sutId, envNodeId)
+      if (!existingIds.has(envNodeId)) {
+        nodes.push({
+          id: envNodeId,
+          type: 'sut',
+          enabled: true,
+        })
+        existingIds.add(envNodeId)
+      }
+    }
+
+    links.push({
+      source: controllerId,
+      target: envNodeId,
+      queue: 'sut',
     })
-    existingIds.add(nodeId)
   }
 
   return { nodes, links }

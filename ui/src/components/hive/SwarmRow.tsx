@@ -19,7 +19,6 @@ type SwarmAction = 'start' | 'stop' | 'remove'
 
 export type SwarmRowProps = PropsWithChildren<{
   swarmId: string
-  isDefault?: boolean
   isActive?: boolean
   expanded?: boolean
   isSelected?: boolean
@@ -36,7 +35,6 @@ export type SwarmRowProps = PropsWithChildren<{
 
 export default function SwarmRow({
   swarmId,
-  isDefault = false,
   isActive = false,
   expanded = false,
   isSelected = false,
@@ -58,10 +56,11 @@ export default function SwarmRow({
   const normalizedComponentCount = Number.isFinite(componentCount)
     ? Math.max(0, Math.floor(componentCount))
     : 0
-  const componentLabel = normalizedComponentCount === 1 ? '1 component' : `${normalizedComponentCount} components`
-  const displayName = isDefault ? 'Services' : swarmId
+  const componentLabel =
+    normalizedComponentCount === 1 ? '1 component' : `${normalizedComponentCount} components`
+  const displayName = swarmId
   const sanitizedId = useMemo(() => normalizeForId(`${swarmId}-content`), [swarmId])
-  const showLifecycleActions = !isDefault
+  const showLifecycleActions = true
 
   const handleToggleExpand = (event: ReactMouseEvent<HTMLButtonElement>) => {
     event.stopPropagation()
@@ -247,22 +246,20 @@ export default function SwarmRow({
           }}
         >
           {children}
-          {!isDefault ? (
-            <div className={styles.controls}>
-              <button
-                type="button"
-                className={`${styles.controlButton} ${styles.removeButton}`}
-                onClick={(event) => {
-                  event.stopPropagation()
-                  runAction('remove')
-                }}
-                disabled={isBusy}
-                aria-busy={isRemoving}
-              >
-                {isRemoving ? 'Removing…' : 'Remove swarm'}
-              </button>
-            </div>
-          ) : null}
+          <div className={styles.controls}>
+            <button
+              type="button"
+              className={`${styles.controlButton} ${styles.removeButton}`}
+              onClick={(event) => {
+                event.stopPropagation()
+                runAction('remove')
+              }}
+              disabled={isBusy}
+              aria-busy={isRemoving}
+            >
+              {isRemoving ? 'Removing…' : 'Remove swarm'}
+            </button>
+          </div>
         </div>
       )}
     </div>

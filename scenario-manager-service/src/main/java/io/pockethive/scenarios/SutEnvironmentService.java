@@ -21,8 +21,9 @@ import org.springframework.stereotype.Service;
 /**
  * Loads SUT environments from a YAML file and exposes them for HTTP APIs.
  * <p>
- * The location is configurable via {@code sut.environments.path} and defaults
- * to {@code sut-environments.yaml} in the working directory.
+ * The location is configurable via {@code pockethive.sut.environments-path}
+ * and defaults to {@code sut/sut-environments.yaml} relative to the working
+ * directory.
  */
 @Service
 public class SutEnvironmentService {
@@ -36,7 +37,7 @@ public class SutEnvironmentService {
     private final Map<String, SutEnvironment> environments = new ConcurrentHashMap<>();
 
     public SutEnvironmentService(
-        @Value("${pockethive.sut.environments-path:sut-environments.yaml}") String path) {
+        @Value("${pockethive.sut.environments-path:sut/sut-environments.yaml}") String path) {
         Objects.requireNonNull(path, "path");
         this.configPath = Paths.get(path);
     }

@@ -352,9 +352,9 @@ describe('swarm lifecycle', () => {
     })
 
     const component: Component = {
-      id: 'wiremock',
-      name: 'WireMock',
-      role: 'wiremock',
+      id: 'synthetic',
+      name: 'Synthetic',
+      role: 'synthetic-role',
       lastHeartbeat: Date.now(),
       queues: [],
       config: { healthStatus: 'UP' },
@@ -363,135 +363,10 @@ describe('swarm lifecycle', () => {
     upsertSyntheticComponent(component)
 
     const latest = snapshots.at(-1)
-    expect(latest?.some((entry) => entry.id === 'wiremock')).toBe(true)
+    expect(latest?.some((entry) => entry.id === 'synthetic')).toBe(true)
 
-    removeSyntheticComponent('wiremock')
+    removeSyntheticComponent('synthetic')
     unsubscribe()
-  })
-
-  it('emits topology edges targeting wiremock when the synthetic component is present', () => {
-    const publish = vi.fn()
-    let cb: (msg: { body: string; headers: Record<string, string> }) => void = () => {}
-    const subscribe = vi
-      .fn()
-      .mockImplementation((_dest: string, fn: (msg: { body: string; headers: Record<string, string> }) => void) => {
-        cb = fn
-        return { unsubscribe() {} }
-      })
-    setClient({ active: true, publish, subscribe } as unknown as Client)
-
-    const topologies: { nodes: unknown[]; edges: { from: string; to: string; queue: string }[] }[] = []
-    const unsubscribeTopo = subscribeTopology((topology) => {
-      topologies.push({
-        nodes: topology.nodes.map((n) => ({ ...n })),
-        edges: topology.edges.map((e) => ({ ...e })),
-      })
-    })
-
-    const baseHeaders = { destination: '/exchange/ph.control/ev.status.swarm-default' }
-    cb({
-      headers: baseHeaders,
-      body: JSON.stringify({
-        event: 'status',
-        kind: 'status',
-        version: '1',
-        role: 'processor',
-        instance: 'processor',
-        swarmId: 'default',
-        messageId: 'm-processor',
-        timestamp: new Date().toISOString(),
-        data: { baseUrl: 'http://wiremock:8080' },
-      }),
-    })
-
-    let latest = topologies.at(-1)
-
-    const wiremock: Component = {
-      id: 'wiremock',
-      name: 'WireMock',
-      role: 'wiremock',
-      lastHeartbeat: Date.now(),
-      queues: [],
-      config: { healthStatus: 'UP' },
-    }
-    upsertSyntheticComponent(wiremock)
-
-    latest = topologies.at(-1)
-    // Once WireMock is present, the topology should additionally expose a concrete edge
-    // to the wiremock component. The logical "sut" edge remains for clarity.
-    expect(latest?.edges).toContainEqual({ from: 'processor', to: 'wiremock', queue: 'sut' })
-    expect(latest?.nodes.some((node) => (node as { id: string }).id === 'wiremock')).toBe(true)
-    const processorNode = latest?.nodes.find(
-      (node) => (node as { id: string }).id === 'processor',
-    ) as { id: string; swarmId?: string } | undefined
-    expect(processorNode?.swarmId).toBe('default')
-
-    unsubscribeTopo()
-    removeSyntheticComponent('wiremock')
-    setClient(null)
-  })
-
-  it('links the synthetic wiremock component to swarms targeting wiremock outputs', () => {
-    const publish = vi.fn()
-    let cb: (msg: { body: string; headers: Record<string, string> }) => void = () => {}
-    const subscribe = vi
-      .fn()
-      .mockImplementation((_dest: string, fn: (msg: { body: string; headers: Record<string, string> }) => void) => {
-        cb = fn
-        return { unsubscribe() {} }
-      })
-    setClient({ active: true, publish, subscribe } as unknown as Client)
-
-    const updates: Component[][] = []
-    const unsubscribe = subscribeComponents((list) => {
-      updates.push(list.map((component) => ({ ...component })))
-    })
-    const topologies: { nodes: string[]; edges: { from: string; to: string; queue: string }[] }[] = []
-    const unsubscribeTopology = subscribeTopology((topology) => {
-      topologies.push({
-        nodes: topology.nodes.map((node) => node.id),
-        edges: topology.edges.map((edge) => ({ ...edge })),
-      })
-    })
-
-    cb({
-      headers: { destination: '/exchange/ph.control/ev.status.swarm-sw1' },
-      body: JSON.stringify({
-        event: 'status',
-        kind: 'status',
-        version: '1',
-        role: 'processor',
-        instance: 'sw1-processor',
-        swarmId: 'sw1',
-        messageId: 'm-processor',
-        timestamp: new Date().toISOString(),
-        data: { baseUrl: 'http://wiremock:8080' },
-      }),
-    })
-
-    const component: Component = {
-      id: 'wiremock',
-      name: 'WireMock',
-      role: 'wiremock',
-      lastHeartbeat: Date.now(),
-      queues: [],
-      config: { healthStatus: 'UP' },
-    }
-
-    upsertSyntheticComponent(component)
-
-    const latest = updates.at(-1)
-    const wiremock = latest?.find((entry) => entry.id === 'wiremock')
-    expect(wiremock?.swarmId).toBeUndefined()
-
-    const latestTopology = topologies.at(-1)
-    expect(latestTopology?.nodes).toContain('wiremock')
-    expect(latestTopology?.edges).toContainEqual({ from: 'sw1-processor', to: 'wiremock', queue: 'sut' })
-
-    unsubscribe()
-    unsubscribeTopology()
-    removeSyntheticComponent('wiremock')
-    setClient(null)
   })
 
   it('connects orchestrators to swarm controllers in the topology output', () => {
@@ -543,27 +418,12 @@ describe('swarm lifecycle', () => {
       }),
     })
 
-    cb({
-      headers: { destination: '/exchange/ph.control/ev.status.swarm-default' },
-      body: JSON.stringify({
-        event: 'status',
-        kind: 'status',
-        version: '1',
-        role: 'swarm-controller',
-        instance: 'default-swarm-controller',
-        swarmId: 'default',
-        messageId: 'default-1',
-        timestamp: new Date().toISOString(),
-      }),
-    })
-
     const latest = topologies.at(-1)
     expect(latest?.edges).toContainEqual({
       from: 'hive-orchestrator',
       to: 'sw1-swarm-controller',
       queue: 'swarm-control',
     })
-    expect(latest?.edges?.some((edge) => edge.to === 'default-swarm-controller')).toBe(false)
 
     unsubscribeTopology()
     setClient(null)

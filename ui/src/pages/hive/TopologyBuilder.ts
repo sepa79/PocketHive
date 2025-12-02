@@ -71,9 +71,7 @@ export function buildGraph(
 
   let nodes: GraphNode[] = [...connectedNodes, ...unconnectedNodes]
   if (swarmId) {
-    nodes = nodes.filter((n) =>
-      swarmId === 'default' ? !n.swarmId : n.swarmId === swarmId,
-    )
+    nodes = nodes.filter((n) => n.swarmId === swarmId)
   }
 
   const nodeSet = new Set(nodes.map((n) => n.id))
@@ -295,4 +293,3 @@ function applyFallbackPositions(nodes: GraphNode[], links: GraphLink[]): GraphNo
     }
   })
 }
-

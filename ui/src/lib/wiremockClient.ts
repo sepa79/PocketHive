@@ -216,7 +216,6 @@ export async function fetchWiremockComponent(limit = 25): Promise<Component | nu
     id: 'wiremock',
     name: 'WireMock',
     role: 'wiremock',
-    swarmId: 'default',
     lastHeartbeat: healthStatus ? now : 0,
     status: healthStatus ?? 'ALERT',
     queues: [],
