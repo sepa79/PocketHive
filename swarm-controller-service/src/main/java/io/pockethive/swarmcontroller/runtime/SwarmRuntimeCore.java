@@ -92,6 +92,7 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
   private final String role;
   private final String swarmId;
   private final ManagerRuntimeCore managerCore;
+  private final io.pockethive.swarmcontroller.scenario.TimelineScenario timelineScenario;
   private final ScenarioEngine scenarioEngine;
   private final java.time.Instant startedAt;
 
@@ -150,8 +151,9 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
             managerCore.getMetrics(),
             java.util.Collections.emptyMap());
     ScenarioContext scenarioContext = new ScenarioContext(managerCore, configFanout);
+    this.timelineScenario = new io.pockethive.swarmcontroller.scenario.TimelineScenario("default", mapper);
     this.scenarioEngine = new ScenarioEngine(
-        java.util.List.of(new io.pockethive.swarmcontroller.scenario.NoopScenario("default")),
+        java.util.List.of(timelineScenario),
         viewSupplier,
         scenarioContext);
     this.startedAt = java.time.Instant.now();
@@ -257,6 +259,18 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
     }
   }
 
+  public void applyScenarioPlan(String planJson) {
+    if (planJson == null || planJson.isBlank()) {
+      log.info("Clearing scenario plan for swarm {}", swarmId);
+    } else {
+      log.info("Applying scenario plan for swarm {} ({} bytes)", swarmId, planJson.length());
+      if (log.isDebugEnabled()) {
+        log.debug("Scenario plan payload for swarm {}: {}", swarmId, snippet(planJson));
+      }
+    }
+    timelineScenario.applyPlan(planJson);
+  }
+
   @Override
   public void stop() {
     log.info("Stopping swarm {}", swarmId);
@@ -351,6 +365,13 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
   @Override
   public SwarmMetrics getMetrics() {
     return readinessTracker.metrics();
+  }
+
+  /**
+   * Snapshot of scenario progress for status reporting.
+   */
+  public io.pockethive.swarmcontroller.scenario.TimelineScenario.Progress scenarioProgress() {
+    return timelineScenario.snapshotProgress();
   }
 
   @Override

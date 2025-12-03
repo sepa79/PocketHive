@@ -344,14 +344,20 @@ export function setClient(newClient: Client | null, destination = controlDestina
               return
             }
             const existing = cfg[key]
-            // Do not allow scalar status fields to overwrite structured config objects.
-            // This preserves nested worker config such as { mode: { ... } } even when
-            // the status payload also exposes a scalar "mode" field.
-            if (existing && typeof existing === 'object') {
+            // Do not allow scalar status fields to overwrite structured config
+            // objects. This preserves nested worker config such as
+            // { mode: { ... } } even when the status payload also exposes a
+            // scalar "mode" field.
+            if (
+              existing &&
+              typeof existing === 'object' &&
+              (value === null || typeof value !== 'object')
+            ) {
               return
             }
-            // Allow status payloads to refresh dynamic metadata (swarm counts, guard configs, etc.)
-            // by always writing the latest value instead of keeping the first snapshot.
+            // Allow status payloads to refresh dynamic metadata (swarm counts,
+            // guard configs, scenario progress, etc.) by always writing the
+            // latest value instead of keeping the first snapshot.
             cfg[key] = value
           })
           const startedAtIso = getString((data as Record<string, unknown>)['startedAt'])
@@ -360,6 +366,14 @@ export function setClient(newClient: Client | null, destination = controlDestina
             if (!Number.isNaN(ts)) {
               comp.startedAt = ts
             }
+          }
+
+          // Keep Orchestrator‑side swarm summaries in sync with controller status
+          // without requiring the user to click "Refresh swarms". We only need
+          // the swarm id here; SwarmMetadataProvider decides whether to prune or
+          // just refresh based on the value.
+          if (normalizedRole === 'swarm-controller' && swarmMetadataRefreshHandler) {
+            swarmMetadataRefreshHandler(null)
           }
         }
         const aggregateEnabled =
@@ -391,7 +405,7 @@ export function setClient(newClient: Client | null, destination = controlDestina
 }
 
 export function setSwarmMetadataRefreshHandler(
-  handler: ((swarmId: string) => void) | null,
+  handler: ((swarmId: string | null) => void) | null,
 ) {
   swarmMetadataRefreshHandler = handler
 }
