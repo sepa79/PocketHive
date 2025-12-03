@@ -91,9 +91,11 @@ class SwarmEventFlowIntegrationTest {
         lenient().doNothing().when(controlEmitter).emitStatusSnapshot(any());
         lenient().doNothing().when(controlEmitter).emitStatusDelta(any());
         plans = new SwarmPlanRegistry();
+        io.pockethive.orchestrator.domain.ScenarioTimelineRegistry timelines =
+            new io.pockethive.orchestrator.domain.ScenarioTimelineRegistry();
         tracker = new SwarmCreateTracker();
         registry = new SwarmRegistry();
-        signalListener = new SwarmSignalListener(plans, tracker, registry, lifecycle, mapper,
+        signalListener = new SwarmSignalListener(plans, timelines, tracker, registry, lifecycle, mapper,
             controlPlane, controlEmitter, identity, descriptor, controlQueueName);
         statusListener = new ControllerStatusListener(registry, mapper);
         clearInvocations(controlPlane, controlEmitter, publisher, lifecycle);
@@ -137,7 +139,7 @@ class SwarmEventFlowIntegrationTest {
             new ConfirmationScope(SWARM_ID, "swarm-controller", CONTROLLER_INSTANCE)));
         assertThat(registry.find(SWARM_ID)).map(Swarm::getStatus).contains(SwarmStatus.RUNNING);
 
-        statusListener.handle("{\"swarmId\":\"sw1\",\"data\":{\"swarmStatus\":\"RUNNING\",\"state\":{\"workloads\":{\"enabled\":false},\"controller\":{\"enabled\":true}}}}",
+        statusListener.handle("{\"swarmId\":\"sw1\",\"data\":{\"swarmStatus\":\"RUNNING\",\"workloadsEnabled\":false,\"controllerEnabled\":true}}",
             "ev.status-delta.sw1.swarm-controller." + CONTROLLER_INSTANCE);
         Swarm swarm = registry.find(SWARM_ID).orElseThrow();
         assertEquals(SwarmHealth.RUNNING, swarm.getHealth());

@@ -368,13 +368,6 @@ export function setClient(newClient: Client | null, destination = controlDestina
             }
           }
 
-          // Keep Orchestrator‑side swarm summaries in sync with controller status
-          // without requiring the user to click "Refresh swarms". We only need
-          // the swarm id here; SwarmMetadataProvider decides whether to prune or
-          // just refresh based on the value.
-          if (normalizedRole === 'swarm-controller' && swarmMetadataRefreshHandler) {
-            swarmMetadataRefreshHandler(null)
-          }
         }
         const aggregateEnabled =
           typeof workerEnabled === 'boolean'
@@ -405,7 +398,7 @@ export function setClient(newClient: Client | null, destination = controlDestina
 }
 
 export function setSwarmMetadataRefreshHandler(
-  handler: ((swarmId: string | null) => void) | null,
+  handler: ((swarmId: string) => void) | null,
 ) {
   swarmMetadataRefreshHandler = handler
 }

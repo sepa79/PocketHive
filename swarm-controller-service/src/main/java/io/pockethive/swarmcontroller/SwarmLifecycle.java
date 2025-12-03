@@ -41,6 +41,17 @@ public interface SwarmLifecycle {
   void prepare(String templateJson);
 
   /**
+   * Apply a scenario plan for the swarm so the controller can drive time-based
+   * configuration updates locally.
+   * <p>
+   * The payload is an opaque JSON document whose schema is owned by the
+   * orchestrator/Scenario Manager. Implementations should treat it as
+   * read-only input and fail fast on parse errors.
+   */
+  default void applyScenarioPlan(String planJson) {
+  }
+
+  /**
    * Launch or resume the swarm using the provided plan, enabling queues and starting containers as
    * needed.
    * <p>
@@ -193,6 +204,17 @@ public interface SwarmLifecycle {
    * Implementations can pause or resume internal loops such as buffer guards.
    */
   default void setControllerEnabled(boolean enabled) {
+  }
+
+  /**
+   * Optional snapshot of scenario progress for status payloads.
+   * <p>
+   * Implementations that host a scenario engine may return a small map of
+   * diagnostics such as the last/next step id and elapsed time. Callers
+   * should treat the shape as opaque and surface it for observability only.
+   */
+  default Map<String, Object> scenarioProgress() {
+    return java.util.Map.of();
   }
 
   /**

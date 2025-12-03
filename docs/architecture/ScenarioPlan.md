@@ -29,6 +29,10 @@
 3. **Timeline Build**-
    - For each bee, sort steps by `time` (stable by provided `stepId`).
    - Compute absolute due times as `T0 + Δ`, where `T0` is scenario start.
+   - When multiple bees have steps scheduled around the same moment, **ordering comes from the
+     timestamps themselves** (e.g. `60.0s` → `60.1s` → `60.2s`). The engine does **not** invent
+     ordering; you must express sequences explicitly (e.g. “stop processor at `60.0s`, reconfigure
+     WireMock at `60.1s`, start processor at `60.2s`).
 4. **Scheduling & Dispatch**
    - At due time, send **`config-update`** to the target `instanceId` with the step’s `config`.
    - Use **at-least-once** delivery with bounded retries/backoff.

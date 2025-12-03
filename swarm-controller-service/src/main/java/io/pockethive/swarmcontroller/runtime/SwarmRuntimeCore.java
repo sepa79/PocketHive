@@ -11,6 +11,7 @@ import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.docker.DockerContainerClient;
 import io.pockethive.manager.ports.Clock;
 import io.pockethive.manager.ports.ComputeAdapter;
+import io.pockethive.manager.runtime.ManagerLifecycle;
 import io.pockethive.manager.runtime.ManagerRuntimeCore;
 import io.pockethive.manager.runtime.ManagerStatus;
 import io.pockethive.manager.scenario.ManagerRuntimeView;
@@ -145,12 +146,95 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
         this.swarmId,
         this.role,
         this.instanceId);
+
+    // Scenario plans should drive swarm lifecycle through the same core that
+    // REST /api/swarms/{id}/start|stop uses so that status, config fan-out and
+    // diagnostics stay consistent. To keep the ScenarioEngine transport-agnostic
+    // we wrap ManagerRuntimeCore with a ManagerLifecycle that delegates
+    // everything except swarm-wide enable/disable to the core, and maps those
+    // to SwarmRuntimeCore.setSwarmEnabled(..).
+    ManagerLifecycle scenarioManager = new ManagerLifecycle() {
+      @Override
+      public void prepare(String planJson) {
+        managerCore.prepare(planJson);
+      }
+
+      @Override
+      public void start(String planJson) {
+        managerCore.start(planJson);
+      }
+
+      @Override
+      public void stop() {
+        managerCore.stop();
+      }
+
+      @Override
+      public void remove() {
+        managerCore.remove();
+      }
+
+      @Override
+      public ManagerStatus getStatus() {
+        return managerCore.getStatus();
+      }
+
+      @Override
+      public boolean markReady(String role, String instance) {
+        return managerCore.markReady(role, instance);
+      }
+
+      @Override
+      public void updateHeartbeat(String role, String instance) {
+        managerCore.updateHeartbeat(role, instance);
+      }
+
+      @Override
+      public void updateEnabled(String role, String instance, boolean enabled) {
+        managerCore.updateEnabled(role, instance, enabled);
+      }
+
+      @Override
+      public io.pockethive.manager.runtime.ManagerMetrics getMetrics() {
+        return managerCore.getMetrics();
+      }
+
+      @Override
+      public java.util.Map<String, io.pockethive.manager.runtime.QueueStats> snapshotQueueStats() {
+        return managerCore.snapshotQueueStats();
+      }
+
+      @Override
+      public void enableAll() {
+        // Scenario "start" swarm step – drive the same swarm-wide enablement
+        // path that REST start uses, including config-update fan-out and
+        // SwarmStatus updates.
+        setSwarmEnabled(true);
+      }
+
+      @Override
+      public void setWorkEnabled(boolean enabled) {
+        // Scenario "stop" swarm step – mirror swarm-wide disable semantics.
+        setSwarmEnabled(enabled);
+      }
+
+      @Override
+      public void setManagerEnabled(boolean enabled) {
+        managerCore.setManagerEnabled(enabled);
+      }
+
+      @Override
+      public boolean isReadyForWork() {
+        return managerCore.isReadyForWork();
+      }
+    };
+
     java.util.function.Supplier<ManagerRuntimeView> viewSupplier =
         () -> new ManagerRuntimeView(
             managerCore.getStatus(),
             managerCore.getMetrics(),
             java.util.Collections.emptyMap());
-    ScenarioContext scenarioContext = new ScenarioContext(managerCore, configFanout);
+    ScenarioContext scenarioContext = new ScenarioContext(scenarioManager, configFanout);
     this.timelineScenario = new io.pockethive.swarmcontroller.scenario.TimelineScenario("default", mapper);
     this.scenarioEngine = new ScenarioEngine(
         java.util.List.of(timelineScenario),
@@ -353,7 +437,13 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
     readinessTracker.recordHeartbeat(role, instance, timestamp);
     configFanout.publishBootstrapConfigIfNecessary(instance, false);
     managerCore.updateHeartbeat(role, instance);
-    scenarioEngine.tick();
+    // Scenario plans, guards and other manager-side helpers must not run while
+    // the controller is disabled. Only tick the scenario engine once the
+    // controller has been started via the normal lifecycle (REST
+    // swarm-start / startSwarm or equivalent).
+    if (controllerEnabled) {
+      scenarioEngine.tick();
+    }
   }
 
   @Override
@@ -370,7 +460,7 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
   /**
    * Snapshot of scenario progress for status reporting.
    */
-  public io.pockethive.swarmcontroller.scenario.TimelineScenario.Progress scenarioProgress() {
+  public io.pockethive.swarmcontroller.scenario.TimelineScenario.Progress timelineScenarioProgress() {
     return timelineScenario.snapshotProgress();
   }
 

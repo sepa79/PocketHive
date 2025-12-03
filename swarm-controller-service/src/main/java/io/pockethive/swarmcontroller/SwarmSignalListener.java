@@ -432,6 +432,15 @@ public class SwarmSignalListener {
           processSwarmSignal(cs, signal, swarmIdOrDefault(cs), args -> lifecycle.prepare(args), "template");
         }
       }
+      case ControlPlaneSignals.SWARM_PLAN -> {
+        if (isForLocalSwarm(cs)) {
+          String targetSwarm = swarmIdOrDefault(cs);
+          log.info("Plan signal for swarm {} (origin={}, corr={}, idem={})",
+              targetSwarm, cs.origin(), cs.correlationId(), cs.idempotencyKey());
+          processSwarmSignal(cs, signal, targetSwarm,
+              args -> lifecycle.applyScenarioPlan(args), "plan");
+        }
+      }
       case ControlPlaneSignals.SWARM_START -> {
         if (isForLocalSwarm(cs)) {
           processSwarmSignal(cs, signal, swarmIdOrDefault(cs), args -> {
@@ -848,6 +857,7 @@ public class SwarmSignalListener {
         .data("workloadsEnabled", workloadsEnabled)
         .data("startedAt", startedAt)
         .data("swarmDiagnostics", diagnostics.snapshot())
+        .data("scenario", scenarioProgress())
         .queueStats(toQueueStatsPayload(queueSnapshot))
         .controlIn(controlQueue)
         .controlRoutes(SwarmControllerRoutes.controllerControlRoutes(swarmId, role, instanceId))
@@ -882,6 +892,7 @@ public class SwarmSignalListener {
         .data("workloadsEnabled", workloadsEnabled)
         .data("startedAt", startedAt)
         .data("swarmDiagnostics", diagnostics.snapshot())
+        .data("scenario", scenarioProgress())
         .queueStats(toQueueStatsPayload(queueSnapshot))
         .controlIn(controlQueue)
         .controlRoutes(SwarmControllerRoutes.controllerControlRoutes(swarmId, role, instanceId))
@@ -911,6 +922,11 @@ public class SwarmSignalListener {
       payload.put(queueName, values);
     }
     return payload;
+  }
+
+  private Map<String, Object> scenarioProgress() {
+    Map<String, Object> snapshot = lifecycle.scenarioProgress();
+    return snapshot != null ? snapshot : Map.of();
   }
 
   private void appendTrafficPolicy(StatusEnvelopeBuilder builder) {

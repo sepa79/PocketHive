@@ -136,6 +136,7 @@ class ControlPlaneTopologyDescriptorsTest {
         assertThat(routes.lifecycleSignals())
             .containsExactlyInAnyOrder(
                 ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_START, SWARM_ID, "swarm-controller", "ALL"),
+                ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_PLAN, SWARM_ID, "swarm-controller", "ALL"),
                 ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_TEMPLATE, SWARM_ID, "swarm-controller", "ALL"),
                 ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_STOP, SWARM_ID, "swarm-controller", "ALL"),
                 ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_REMOVE, SWARM_ID, "swarm-controller", "ALL"));
@@ -267,6 +268,7 @@ class ControlPlaneTopologyDescriptorsTest {
         LinkedHashSet<String> merged = new LinkedHashSet<>(expectedSwarmControllerConfigSignals(instanceSegment));
         merged.addAll(expectedSwarmControllerStatusSignals(instanceSegment));
         merged.add(ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_START, SWARM_ID, "swarm-controller", "ALL"));
+        merged.add(ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_PLAN, SWARM_ID, "swarm-controller", "ALL"));
         merged.add(ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_TEMPLATE, SWARM_ID, "swarm-controller", "ALL"));
         merged.add(ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_STOP, SWARM_ID, "swarm-controller", "ALL"));
         merged.add(ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_REMOVE, SWARM_ID, "swarm-controller", "ALL"));

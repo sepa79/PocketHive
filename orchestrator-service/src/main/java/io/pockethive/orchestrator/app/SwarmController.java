@@ -11,6 +11,7 @@ import io.pockethive.orchestrator.domain.SwarmCreateTracker.Pending;
 import io.pockethive.orchestrator.domain.SwarmCreateTracker.Phase;
 import io.pockethive.orchestrator.domain.IdempotencyStore;
 import io.pockethive.orchestrator.domain.SwarmHealth;
+import io.pockethive.orchestrator.domain.ScenarioTimelineRegistry;
 import io.pockethive.orchestrator.domain.SwarmPlanRegistry;
 import io.pockethive.orchestrator.domain.SwarmRegistry;
 import io.pockethive.orchestrator.domain.SwarmStatus;
@@ -63,6 +64,7 @@ public class SwarmController {
     private final IdempotencyStore idempotency;
     private final SwarmRegistry registry;
     private final SwarmPlanRegistry plans;
+    private final ScenarioTimelineRegistry timelines;
     private final ScenarioClient scenarios;
     private final ObjectMapper json;
     private final String controlExchange;
@@ -78,6 +80,7 @@ public class SwarmController {
                            ObjectMapper json,
                            ScenarioClient scenarios,
                            SwarmPlanRegistry plans,
+                           ScenarioTimelineRegistry timelines,
                            ControlPlaneProperties controlPlaneProperties) {
         this.rabbit = rabbit;
         this.lifecycle = lifecycle;
@@ -87,6 +90,7 @@ public class SwarmController {
         this.json = json;
         this.scenarios = scenarios;
         this.plans = plans;
+        this.timelines = timelines;
         this.controlExchange = requireExchange(controlPlaneProperties);
     }
 
@@ -162,6 +166,7 @@ public class SwarmController {
                 String templateId = req.templateId();
                 ScenarioPlan planDescriptor = fetchScenario(templateId);
                 SwarmTemplate template = planDescriptor.template();
+                ScenarioPlan.Plan timeline = planDescriptor.plan();
                 String image = requireImage(template, templateId);
                 SwarmPlan originalPlan = planDescriptor.toSwarmPlan(swarmId);
                 String sutId = normalize(req.sutId());
@@ -211,6 +216,14 @@ public class SwarmController {
                     finalSutEnvironment);
                 String instanceId = BeeNameGenerator.generate("swarm-controller", swarmId);
                 plans.register(instanceId, plan);
+                if (timeline != null) {
+                    try {
+                        String planJson = json.writeValueAsString(timeline);
+                        timelines.register(instanceId, planJson);
+                    } catch (JsonProcessingException e) {
+                        throw new IllegalStateException("Failed to serialize scenario plan for swarm " + swarmId, e);
+                    }
+                }
                 boolean autoPull = Boolean.TRUE.equals(req.autoPullImages());
                 Swarm swarm = lifecycle.startSwarm(
                     swarmId,

@@ -53,31 +53,55 @@ public class ControllerStatusListener {
             JsonNode node = mapper.readTree(body);
             String swarmId = node.path("swarmId").asText(null);
             JsonNode data = node.path("data");
-            String status = data.path("swarmStatus").asText(null);
-            if (swarmId != null && status != null) {
-                SwarmHealth health = map(status);
-                registry.refresh(swarmId, health);
+            String swarmStatusText = data.path("swarmStatus").asText(null);
+            if (swarmId != null && swarmStatusText != null) {
+                registry.refresh(swarmId, map(swarmStatusText));
             }
             if (swarmId != null) {
-                JsonNode state = data.path("state");
-                JsonNode workloads = state.path("workloads");
-                boolean updatedWorkloads = false;
-                if (!workloads.isMissingNode() && workloads.has("enabled")) {
-                    registry.updateWorkEnabled(swarmId, workloads.path("enabled").asBoolean());
-                    updatedWorkloads = true;
+                // Workloads / controller enablement – top‑level fields are the
+                // single source of truth. We deliberately ignore any nested
+                // state.* structure to avoid ambiguous fallbacks.
+                boolean workloadsKnown = false;
+                boolean workloadsEnabled = false;
+                if (data.has("workloadsEnabled")) {
+                    workloadsEnabled = data.path("workloadsEnabled").asBoolean();
+                    workloadsKnown = true;
+                    registry.updateWorkEnabled(swarmId, workloadsEnabled);
                 }
-                if (!updatedWorkloads && data.has("workloadsEnabled")) {
-                    registry.updateWorkEnabled(swarmId, data.path("workloadsEnabled").asBoolean());
+                if (data.has("controllerEnabled")) {
+                    boolean controllerEnabled = data.path("controllerEnabled").asBoolean();
+                    registry.updateControllerEnabled(swarmId, controllerEnabled);
                 }
 
-                JsonNode controller = state.path("controller");
-                boolean updatedController = false;
-                if (!controller.isMissingNode() && controller.has("enabled")) {
-                    registry.updateControllerEnabled(swarmId, controller.path("enabled").asBoolean());
-                    updatedController = true;
-                }
-                if (!updatedController && data.has("controllerEnabled")) {
-                    registry.updateControllerEnabled(swarmId, data.path("controllerEnabled").asBoolean());
+                // Derive SwarmStatus from controller view so plan‑driven start/stop
+                // keeps the Orchestrator registry in sync even when no explicit
+                // /start or /stop REST call was issued.
+                if (swarmStatusText != null && !swarmStatusText.isBlank()) {
+                    String normalized = swarmStatusText.trim().toUpperCase();
+
+                    switch (normalized) {
+                        case "RUNNING" -> {
+                            if (workloadsKnown && workloadsEnabled) {
+                                // Use the existing lifecycle helper so that
+                                // status transitions obey the state machine.
+                                registry.markStartConfirmed(swarmId);
+                            }
+                        }
+                        case "STOPPED" -> {
+                            if (workloadsKnown && !workloadsEnabled) {
+                                // Plan‑driven stop: make sure we walk through
+                                // STOPPING -> STOPPED so the local state
+                                // machine is satisfied.
+                                registry.updateStatus(
+                                    swarmId, io.pockethive.orchestrator.domain.SwarmStatus.STOPPING);
+                                registry.updateStatus(
+                                    swarmId, io.pockethive.orchestrator.domain.SwarmStatus.STOPPED);
+                            }
+                        }
+                        case "FAILED" -> registry.updateStatus(
+                            swarmId, io.pockethive.orchestrator.domain.SwarmStatus.FAILED);
+                        default -> { /* leave registry status unchanged for other states */ }
+                    }
                 }
             }
         } catch (Exception e) {

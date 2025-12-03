@@ -10,6 +10,7 @@ import type { CapabilityConfigEntry } from '../../types/capabilities'
 import { formatCapabilityValue, inferCapabilityInputType } from '../../lib/capabilities'
 import { useSwarmMetadata } from '../../contexts/SwarmMetadataContext'
 import { apiFetch } from '../../lib/api'
+import { subscribeComponents } from '../../lib/stompClient'
 
 interface Props {
   component: Component
@@ -29,6 +30,9 @@ export default function ComponentDetail({ component, onClose }: Props) {
   const { ensureCapabilities, getManifestForImage, manifests } = useCapabilities()
   const { ensureSwarms, refreshSwarms, getBeeImage, getControllerImage, findSwarm } =
     useSwarmMetadata()
+  const [controllerSwarms, setControllerSwarms] = useState<
+    { id: string; status?: string; workEnabled?: boolean }[]
+  >([])
   const resolvedImage = useMemo(() => {
     if (component.image) {
       return component.image
@@ -131,6 +135,33 @@ export default function ComponentDetail({ component, onClose }: Props) {
     }
     setShowRefreshTooltip(false)
   }
+
+  // Keep a lightweight view of active swarms directly from controller status
+  // events so the Orchestrator detail panel does not depend on REST polling.
+  useEffect(() => {
+    if (normalizedRole !== 'orchestrator') {
+      return
+    }
+    const unsubscribe = subscribeComponents((components) => {
+      const bySwarm = new Map<string, { id: string; status?: string; workEnabled?: boolean }>()
+      components.forEach((c) => {
+        const role = c.role?.trim().toLowerCase()
+        if (role !== 'swarm-controller') return
+        const swarmId = c.swarmId?.trim()
+        if (!swarmId) return
+        const cfg =
+          c.config && typeof c.config === 'object'
+            ? (c.config as Record<string, unknown>)
+            : undefined
+        const status = getString(cfg?.swarmStatus)
+        const workEnabled = getBoolean(cfg?.workloadsEnabled)
+        bySwarm.set(swarmId, { id: swarmId, status, workEnabled: workEnabled ?? undefined })
+      })
+      const sorted = Array.from(bySwarm.values()).sort((a, b) => a.id.localeCompare(b.id))
+      setControllerSwarms(sorted)
+    })
+    return unsubscribe
+  }, [normalizedRole])
 
   const handleSubmit = async () => {
     if (!manifest) {
@@ -306,6 +337,46 @@ export default function ComponentDetail({ component, onClose }: Props) {
             label: 'Guard problem',
             value: guardProblem,
           })
+        }
+      }
+      // Scenario plan progress (if any)
+      const scenario =
+        cfg && cfg.scenario && typeof cfg.scenario === 'object'
+          ? (cfg.scenario as Record<string, unknown>)
+          : undefined
+      if (scenario) {
+        const lastStepId = getString(scenario.lastStepId)
+        const nextStepId = getString(scenario.nextStepId)
+        const elapsedMillis = getNumber(scenario.elapsedMillis)
+        const nextDueMillis = getNumber(scenario.nextDueMillis)
+        if (lastStepId) {
+          entries.push({
+            label: 'Scenario last step',
+            value: lastStepId,
+          })
+        }
+        if (nextStepId) {
+          entries.push({
+            label: 'Scenario next step',
+            value: nextStepId,
+          })
+        }
+        if (elapsedMillis !== undefined) {
+          const elapsedSec = elapsedMillis / 1000
+          entries.push({
+            label: 'Scenario elapsed',
+            value: `${elapsedSec.toFixed(elapsedSec >= 10 ? 0 : 1)}s`,
+          })
+        }
+        if (elapsedMillis !== undefined && nextDueMillis !== undefined) {
+          const remaining = nextDueMillis - elapsedMillis
+          if (remaining > 0) {
+            const remainingSec = remaining / 1000
+            entries.push({
+              label: 'Next step in',
+              value: `${remainingSec.toFixed(remainingSec >= 10 ? 0 : 1)}s`,
+            })
+          }
         }
       }
     }
@@ -688,6 +759,20 @@ export default function ComponentDetail({ component, onClose }: Props) {
           )
         })()}
       </div>
+      {normalizedRole === 'orchestrator' && controllerSwarms.length > 0 && (
+        <div className="space-y-1 text-sm mb-4">
+          <div className="text-white/70 font-semibold">Swarms</div>
+          {controllerSwarms.map((swarm) => (
+            <div key={swarm.id} className="flex justify-between">
+              <span className="text-white/60">{swarm.id}</span>
+              <span className="text-white/90">
+                {swarm.status ?? '—'}
+                {swarm.workEnabled === false ? ' (work disabled)' : ''}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
       {runtimeEntries.length > 0 && (
         <div className="space-y-1 text-sm mb-4">
           <div className="text-white/70 font-semibold">Runtime</div>

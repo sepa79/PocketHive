@@ -36,6 +36,7 @@ public final class SwarmControllerControlPlaneTopologyDescriptor implements Cont
         String queueName = buildControlQueueName(controlQueuePrefix, swarmId, ROLE, id);
         LinkedHashSet<String> signals = new LinkedHashSet<>();
         signals.add(ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_START, swarmId, ROLE, "ALL"));
+        signals.add(ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_PLAN, swarmId, ROLE, "ALL"));
         signals.add(ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_TEMPLATE, swarmId, ROLE, "ALL"));
         signals.add(ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_STOP, swarmId, ROLE, "ALL"));
         signals.add(ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_REMOVE, swarmId, ROLE, "ALL"));
@@ -70,6 +71,7 @@ public final class SwarmControllerControlPlaneTopologyDescriptor implements Cont
         );
         Set<String> lifecycleRoutes = Set.of(
             ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_START, swarmId, ROLE, "ALL"),
+            ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_PLAN, swarmId, ROLE, "ALL"),
             ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_TEMPLATE, swarmId, ROLE, "ALL"),
             ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_STOP, swarmId, ROLE, "ALL"),
             ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_REMOVE, swarmId, ROLE, "ALL")

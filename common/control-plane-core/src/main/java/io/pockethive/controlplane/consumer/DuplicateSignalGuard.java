@@ -91,12 +91,19 @@ public final class DuplicateSignalGuard {
         if (signal == null) {
             return null;
         }
+        String id = null;
         if (signal.idempotencyKey() != null && !signal.idempotencyKey().isBlank()) {
-            return signal.idempotencyKey();
+            id = signal.idempotencyKey().trim();
+        } else if (signal.correlationId() != null && !signal.correlationId().isBlank()) {
+            id = signal.correlationId().trim();
         }
-        if (signal.correlationId() != null && !signal.correlationId().isBlank()) {
-            return signal.correlationId();
+        if (id == null || id.isEmpty()) {
+            return null;
         }
-        return null;
+        String type = signal.signal();
+        if (type == null || type.isBlank()) {
+            return id;
+        }
+        return type.trim() + "|" + id;
     }
 }

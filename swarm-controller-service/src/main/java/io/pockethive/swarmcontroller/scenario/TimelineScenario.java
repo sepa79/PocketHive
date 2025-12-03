@@ -123,15 +123,29 @@ public final class TimelineScenario implements Scenario {
   private void emitStep(StepInstance step, ScenarioContext context) {
     String type = step.type.toLowerCase(Locale.ROOT);
     ObjectNode data = mapper.createObjectNode();
+    boolean swarmLifecycleStep = step.instanceId == null && (step.role == null || step.role.isBlank());
     // Shape the payload that ConfigFanout expects under args.data.
     switch (type) {
       case "start" -> {
-        // Swarm-wide enable: match the existing enableAll()/disableAll()
-        // convention and only emit a top-level enabled flag.
+        if (swarmLifecycleStep) {
+          // Drive swarm-wide enablement through the same lifecycle path that
+          // REST /api/swarms/{id}/start uses. This reuses SwarmRuntimeCore's
+          // enableAll()/setSwarmEnabled logic, including config-update fan-out.
+          log.info("Scenario step {} enabling entire swarm via lifecycle", step.stepId);
+          context.manager().enableAll();
+          return;
+        }
+        // Bee-scoped enable (role/instance) – emit a top-level enabled flag
+        // that WorkerControlPlaneRuntime will interpret as worker.enabled.
         data.put("enabled", true);
       }
       case "stop" -> {
-        // Swarm-wide disable.
+        if (swarmLifecycleStep) {
+          log.info("Scenario step {} disabling entire swarm via lifecycle", step.stepId);
+          context.manager().setWorkEnabled(false);
+          return;
+        }
+        // Bee-scoped disable.
         data.put("enabled", false);
       }
       case "config-update", "" -> {

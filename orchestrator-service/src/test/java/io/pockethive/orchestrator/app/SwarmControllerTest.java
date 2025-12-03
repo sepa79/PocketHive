@@ -24,6 +24,7 @@ import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmCreateRequest;
 import io.pockethive.orchestrator.domain.SwarmCreateTracker;
 import io.pockethive.orchestrator.domain.SwarmCreateTracker.Phase;
+import io.pockethive.orchestrator.domain.ScenarioTimelineRegistry;
 import io.pockethive.orchestrator.domain.SwarmPlanRegistry;
 import io.pockethive.orchestrator.domain.SwarmRegistry;
 import io.pockethive.orchestrator.domain.SwarmStatus;
@@ -101,7 +102,7 @@ class SwarmControllerTest {
         SwarmTemplate template = new SwarmTemplate("ctrl-image", List.of(
             new Bee("generator", "img", new Work(null, "out"), java.util.Map.of())
         ));
-        when(scenarioClient.fetchScenario("tpl-1")).thenReturn(new ScenarioPlan(template, null));
+        when(scenarioClient.fetchScenario("tpl-1")).thenReturn(new ScenarioPlan(template, null, null));
         AtomicReference<String> capturedInstance = new AtomicReference<>();
         when(lifecycle.startSwarm(
             eq("sw1"),
@@ -151,7 +152,7 @@ class SwarmControllerTest {
         SwarmTemplate template = new SwarmTemplate("ctrl-image", List.of(
             new Bee("generator", "img", new Work(null, "out"), java.util.Map.of())
         ));
-        when(scenarioClient.fetchScenario("tpl-1")).thenReturn(new ScenarioPlan(template, null));
+        when(scenarioClient.fetchScenario("tpl-1")).thenReturn(new ScenarioPlan(template, null, null));
         when(lifecycle.startSwarm(
             eq("sw1"),
             eq("ctrl-image"),
@@ -201,7 +202,7 @@ class SwarmControllerTest {
         SwarmTemplate template = new SwarmTemplate("ctrl-image", List.of(
             new Bee("generator", "img", new Work(null, "out"), java.util.Map.of())
         ));
-        when(scenarioClient.fetchScenario("tpl-1")).thenReturn(new ScenarioPlan(template, null));
+        when(scenarioClient.fetchScenario("tpl-1")).thenReturn(new ScenarioPlan(template, null, null));
         when(lifecycle.startSwarm(
             eq("sw1"),
             eq("ctrl-image"),
@@ -443,6 +444,7 @@ class SwarmControllerTest {
             mapper,
             scenarioClient,
             plans,
+            new ScenarioTimelineRegistry(),
             controlPlaneProperties());
     }
 

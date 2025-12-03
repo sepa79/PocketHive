@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import io.pockethive.control.CommandState;
 import io.pockethive.control.CommandTarget;
 import io.pockethive.control.ControlSignal;
+import io.pockethive.orchestrator.domain.ScenarioTimelineRegistry;
 import io.pockethive.orchestrator.domain.SwarmPlanRegistry;
 import io.pockethive.orchestrator.domain.SwarmRegistry;
 import io.pockethive.orchestrator.domain.SwarmCreateTracker;
@@ -56,6 +57,7 @@ public class SwarmSignalListener {
     private static final String BROADCAST_INSTANCE = "ALL";
 
     private final SwarmPlanRegistry plans;
+    private final ScenarioTimelineRegistry timelines;
     private final SwarmRegistry registry;
     private final SwarmCreateTracker creates;
     private final ContainerLifecycleManager lifecycle;
@@ -70,6 +72,7 @@ public class SwarmSignalListener {
     private final java.time.Instant startedAt;
 
     public SwarmSignalListener(SwarmPlanRegistry plans,
+                               ScenarioTimelineRegistry timelines,
                                SwarmCreateTracker creates,
                                SwarmRegistry registry,
                                ContainerLifecycleManager lifecycle,
@@ -80,6 +83,7 @@ public class SwarmSignalListener {
                                @Qualifier("managerControlPlaneTopologyDescriptor") ControlPlaneTopologyDescriptor descriptor,
                                @Qualifier("managerControlQueueName") String controlQueue) {
         this.plans = plans;
+        this.timelines = timelines;
         this.creates = creates;
         this.registry = registry;
         this.lifecycle = lifecycle;
@@ -184,6 +188,41 @@ public class SwarmSignalListener {
         } else {
             log.warn("no swarm plan registered for controller {}", controllerInstance);
         }
+
+        timelines.remove(controllerInstance).ifPresent(planJson -> {
+            try {
+                Map<String, Object> args = json.readValue(planJson, new TypeReference<Map<String, Object>>() {});
+                String swarmId = plan != null ? plan.id() : info != null ? info.swarmId() : null;
+                if (swarmId == null || swarmId.isBlank()) {
+                    log.warn("cannot send swarm-plan for controller {} without swarm id", controllerInstance);
+                    return;
+                }
+                String signal = io.pockethive.controlplane.ControlPlaneSignals.SWARM_PLAN;
+                // Use a fresh correlation/idempotency pair so the manager's
+                // duplicate cache does not collapse this together with the
+                // swarm-template lifecycle signal.
+                String correlationId = java.util.UUID.randomUUID().toString();
+                String idempotencyKey = java.util.UUID.randomUUID().toString();
+                ControlSignal payload = new ControlSignal(
+                    signal,
+                    correlationId,
+                    idempotencyKey,
+                    swarmId,
+                    null,
+                    null,
+                    instanceId,
+                    CommandTarget.SWARM,
+                    args);
+                String jsonPayload = json.writeValueAsString(payload);
+                String rk = ControlPlaneRouting.signal(signal, swarmId, "swarm-controller", "ALL");
+                log.info("sending swarm-plan for {} via controller {} (corr={}, idem={})",
+                    swarmId, controllerInstance, correlationId, idempotencyKey);
+                sendControl(rk, jsonPayload, "sig.swarm-plan");
+            } catch (Exception e) {
+                log.warn("plan send", e);
+            }
+        });
+
         if (info != null) {
             emitCreateReady(info);
             creates.expectTemplate(info, TEMPLATE_TIMEOUT);

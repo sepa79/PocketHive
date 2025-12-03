@@ -242,6 +242,7 @@
         "sig.status-request.swarm-alpha.ALL.ALL",
         "sig.status-request.swarm-alpha.swarm-controller.ALL",
         "sig.status-request.swarm-alpha.swarm-controller.inst",
+        "sig.swarm-plan.swarm-alpha.swarm-controller.ALL",
         "sig.swarm-remove.swarm-alpha.swarm-controller.ALL",
         "sig.swarm-start.swarm-alpha.swarm-controller.ALL",
         "sig.swarm-stop.swarm-alpha.swarm-controller.ALL",
@@ -262,6 +263,7 @@
         "sig.status-request.swarm-alpha.ALL.ALL",
         "sig.status-request.swarm-alpha.swarm-controller.ALL",
         "sig.status-request.swarm-alpha.swarm-controller.inst",
+        "sig.swarm-plan.swarm-alpha.swarm-controller.ALL",
         "sig.swarm-remove.swarm-alpha.swarm-controller.ALL",
         "sig.swarm-start.swarm-alpha.swarm-controller.ALL",
         "sig.swarm-stop.swarm-alpha.swarm-controller.ALL",
@@ -288,6 +290,7 @@
         "sig.status-request.swarm-alpha.swarm-controller.{instance}"
       ],
       "lifecycleSignals": [
+        "sig.swarm-plan.swarm-alpha.swarm-controller.ALL",
         "sig.swarm-remove.swarm-alpha.swarm-controller.ALL",
         "sig.swarm-start.swarm-alpha.swarm-controller.ALL",
         "sig.swarm-stop.swarm-alpha.swarm-controller.ALL",
