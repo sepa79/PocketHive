@@ -26,6 +26,7 @@ export default function ComponentDetail({ component, onClose }: Props) {
   const [form, setForm] = useState<Record<string, ConfigFormValue>>({})
   const [showRefreshTooltip, setShowRefreshTooltip] = useState(false)
   const [sutLookup, setSutLookup] = useState<Record<string, { name: string; type: string | null }>>({})
+  const [scenarioRunsInput, setScenarioRunsInput] = useState('')
   const { ensureCapabilities, getManifestForImage, manifests } = useCapabilities()
   const { ensureSwarms, refreshSwarms, getBeeImage, getControllerImage, findSwarm } =
     useSwarmMetadata()
@@ -53,6 +54,14 @@ export default function ComponentDetail({ component, onClose }: Props) {
   const role = roleRaw.trim() || '—'
   const normalizedRole = roleRaw.trim().toLowerCase()
   const isWiremock = normalizedRole === 'wiremock'
+  const componentConfig =
+    component.config && typeof component.config === 'object'
+      ? (component.config as Record<string, unknown>)
+      : undefined
+  const scenarioStatus =
+    componentConfig && componentConfig.scenario && typeof componentConfig.scenario === 'object'
+      ? (componentConfig.scenario as Record<string, unknown>)
+      : undefined
 
   const manifest = useMemo(
     () => getManifestForImage(resolvedImage),
@@ -68,6 +77,19 @@ export default function ComponentDetail({ component, onClose }: Props) {
   useEffect(() => {
     void ensureSwarms()
   }, [ensureSwarms])
+
+  useEffect(() => {
+    if (normalizedRole !== 'swarm-controller') {
+      setScenarioRunsInput('')
+      return
+    }
+    const totalRuns = getNumber(scenarioStatus?.totalRuns)
+    if (totalRuns !== undefined && Number.isFinite(totalRuns)) {
+      setScenarioRunsInput(String(Math.max(1, Math.floor(totalRuns))))
+    } else {
+      setScenarioRunsInput('')
+    }
+  }, [normalizedRole, scenarioStatus])
 
   useEffect(() => {
     if (normalizedRole !== 'swarm-controller') {
@@ -158,11 +180,27 @@ export default function ComponentDetail({ component, onClose }: Props) {
     }
   }
 
+  const handleScenarioReset = async () => {
+    const scenarioPatch: Record<string, unknown> = { reset: true }
+    const trimmedRuns = scenarioRunsInput.trim()
+    if (trimmedRuns) {
+      const parsed = Number(trimmedRuns)
+      if (!Number.isInteger(parsed) || parsed < 1) {
+        displayToast(setToast, 'Runs must be a positive integer')
+        return
+      }
+      scenarioPatch.runs = parsed
+    }
+    const payload: Record<string, unknown> = { scenario: scenarioPatch }
+    try {
+      await sendConfigUpdate(component, payload)
+      displayToast(setToast, 'Scenario reset sent')
+    } catch {
+      displayToast(setToast, 'Scenario reset failed')
+    }
+  }
+
   const health = heartbeatHealth(component.lastHeartbeat)
-  const componentConfig =
-    component.config && typeof component.config === 'object'
-      ? (component.config as Record<string, unknown>)
-      : undefined
 
   const runtimeEntries = useMemo(() => {
     const cfg = componentConfig
@@ -210,6 +248,54 @@ export default function ComponentDetail({ component, onClose }: Props) {
           label: 'Swarm stack',
           value: swarmSummary.stackName,
         })
+      }
+      const scenario = scenarioStatus
+      if (scenario) {
+        const elapsedMs = getNumber(scenario.elapsedMillis)
+        const lastStepId = getString(scenario.lastStepId)
+        const lastStepName = getString(scenario.lastStepName)
+        const nextStepId = getString(scenario.nextStepId)
+        const nextStepName = getString(scenario.nextStepName)
+        const nextDueMs = getNumber(scenario.nextDueMillis)
+        const totalRuns = getNumber(scenario.totalRuns)
+        const runsRemaining = getNumber(scenario.runsRemaining)
+        if (elapsedMs !== undefined) {
+          entries.push({
+            label: 'Scenario elapsed',
+            value: `${(elapsedMs / 1000).toFixed(elapsedMs >= 10_000 ? 0 : 1)}s`,
+          })
+        }
+        if (lastStepId || lastStepName) {
+          entries.push({
+            label: 'Last step',
+            value: `${lastStepId ?? '—'}${lastStepName ? ` (${lastStepName})` : ''}`,
+          })
+        }
+        if (nextStepId || nextStepName) {
+          let countdown: string | undefined
+          if (elapsedMs !== undefined && nextDueMs !== undefined && nextDueMs > elapsedMs) {
+            const remainingSec = (nextDueMs - elapsedMs) / 1000
+            countdown = `${remainingSec.toFixed(remainingSec >= 10 ? 0 : 1)}s`
+          }
+          entries.push({
+            label: 'Next step',
+            value: `${nextStepId ?? '—'}${nextStepName ? ` (${nextStepName})` : ''}${
+              countdown ? ` in ${countdown}` : ''
+            }`,
+          })
+        }
+        if (totalRuns !== undefined) {
+          entries.push({
+            label: 'Scenario runs',
+            value: totalRuns.toString(),
+          })
+        }
+        if (runsRemaining !== undefined) {
+          entries.push({
+            label: 'Runs remaining',
+            value: runsRemaining.toString(),
+          })
+        }
       }
       const guardStatus =
         cfg && cfg.bufferGuard && typeof cfg.bufferGuard === 'object'
@@ -494,7 +580,7 @@ export default function ComponentDetail({ component, onClose }: Props) {
       }
     }
     return entries
-  }, [component.config, normalizedRole, findSwarm, component.swarmId, sutLookup])
+  }, [component.config, normalizedRole, findSwarm, component.swarmId, sutLookup, scenarioStatus])
 
   const effectiveConfigEntries: CapabilityConfigEntry[] = useMemo(() => {
     if (!manifest) return []
@@ -697,6 +783,30 @@ export default function ComponentDetail({ component, onClose }: Props) {
               <span className="text-white/90">{entry.value}</span>
             </div>
           ))}
+        </div>
+      )}
+      {normalizedRole === 'swarm-controller' && (
+        <div className="space-y-2 mb-4 text-sm">
+          <div className="text-white/70 font-semibold">Scenario controls</div>
+          <div className="flex items-center gap-3">
+            <label className="flex items-center gap-2 text-white/70">
+              <span>Runs</span>
+              <input
+                className="w-20 rounded bg-white/10 px-2 py-1 text-white"
+                type="number"
+                min={1}
+                step={1}
+                value={scenarioRunsInput}
+                onChange={(event) => setScenarioRunsInput(event.target.value)}
+              />
+            </label>
+            <button
+              className="rounded bg-blue-600 px-3 py-1 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={handleScenarioReset}
+            >
+              Reset plan
+            </button>
+          </div>
         </div>
       )}
       {!isWiremock && effectiveConfigEntries.length > 0 && (

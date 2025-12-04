@@ -113,16 +113,9 @@ class PostProcessorWorkerImpl implements PocketHiveWorkerFunction {
 
     PostProcessorMetrics metrics = metrics(context);
     metrics.record(measurements, error, processorStats);
-    if (config.publishAllMetrics()) {
-      detailedMetrics(context)
-          .record(
-              measurements.hopDurations(),
-              measurements.totalMs(),
-              observability.getHops(),
-              processorStats);
-    }
-
-    long stepCount = java.util.stream.StreamSupport.stream(in.steps().spliterator(), false).count();
+    // When publishAllMetrics is enabled we still record aggregated metrics above, but
+    // skip per-item Micrometer publishing for now. A future InfluxDB path will handle
+    // per-transaction dots without overloading Prometheus.
 
     StatusPublisher publisher = context.statusPublisher();
     publisher.update(status -> {
@@ -136,17 +129,7 @@ class PostProcessorWorkerImpl implements PocketHiveWorkerFunction {
           .data("processorTransactions", metrics.processorTransactions())
           .data("processorSuccessRatio", metrics.processorSuccessRatio())
           .data("processorAvgLatencyMs", metrics.processorAverageLatencyMs());
-      if (config.publishAllMetrics()) {
-        status
-            .data("workItemSteps", stepCount)
-            .data("hopDurationsMs", measurements.hopDurations())
-            .data("hopTimeline", describeHops(observability.getHops()))
-            .data("processorCall", describeProcessorCall(processorStats));
-      }
     });
-    if (config.publishAllMetrics()) {
-      publisher.emitFull();
-    }
 
     return null;
   }

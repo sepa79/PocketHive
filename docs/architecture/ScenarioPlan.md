@@ -3,6 +3,20 @@
 > Status: **in progress**.  
 > Environment/SUT profiles and scenario engine behaviour are evolving; this is the authoritative plan.
 
+### Status tracker (v1 engine)
+- [x] Foundations (YAML load, time normalisation, required stepId)
+- [x] Scheduler/dispatcher with `(planId, stepId)` idempotency and retries
+- [x] Readiness / all-or-nothing start
+- [x] Ack tracking & outcome (per-step states, success/fail)
+- [x] Observability (per-step status/latency metrics, structured logs)
+- [x] API: submit/start/status endpoints
+- [ ] Per-step types beyond `config-update`
+- [ ] Environment profiles / bindings
+- [ ] Config-update standardisation (out of scope for this branch):
+  - Inventory current producers/consumers and payload shapes per role.
+  - Define a versioned envelope + per-role schema with explicit merge semantics and idempotency keys.
+  - Add validation at ingress and migrate handlers to the contract.
+
 ## Scope & Principles
 - A single **Scenario Plan** drives the **Swarm Manager**, which schedules and sends **`config-update`** messages to targeted bees.
 - **All-or-nothing readiness**: the scenario starts only when **all declared bees** are ready; otherwise fail fast.
@@ -29,6 +43,10 @@
 3. **Timeline Build**-
    - For each bee, sort steps by `time` (stable by provided `stepId`).
    - Compute absolute due times as `T0 + Δ`, where `T0` is scenario start.
+   - When multiple bees have steps scheduled around the same moment, **ordering comes from the
+     timestamps themselves** (e.g. `60.0s` → `60.1s` → `60.2s`). The engine does **not** invent
+     ordering; you must express sequences explicitly (e.g. “stop processor at `60.0s`, reconfigure
+     WireMock at `60.1s`, start processor at `60.2s`).
 4. **Scheduling & Dispatch**
    - At due time, send **`config-update`** to the target `instanceId` with the step’s `config`.
    - Use **at-least-once** delivery with bounded retries/backoff.

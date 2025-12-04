@@ -5,6 +5,7 @@ import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
 import io.pockethive.orchestrator.domain.SwarmHealth;
 import io.pockethive.orchestrator.domain.SwarmRegistry;
+import io.pockethive.orchestrator.domain.SwarmStatus;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -25,11 +26,14 @@ class ControllerStatusListenerTest {
     @Test
     void updatesRegistry() {
         ControllerStatusListener listener = new ControllerStatusListener(registry, new ObjectMapper());
-        String json = "{\"swarmId\":\"sw1\",\"data\":{\"swarmStatus\":\"RUNNING\",\"state\":{\"workloads\":{\"enabled\":true},\"controller\":{\"enabled\":false}}}}";
+        String json = "{\"swarmId\":\"sw1\",\"data\":{\"swarmStatus\":\"RUNNING\",\"workloadsEnabled\":true,\"controllerEnabled\":false}}";
         listener.handle(json, "ev.status-delta.sw1.swarm-controller.inst1");
         verify(registry).refresh("sw1", SwarmHealth.RUNNING);
         verify(registry).updateWorkEnabled("sw1", true);
         verify(registry).updateControllerEnabled("sw1", false);
+        // RUNNING + workloadsEnabled=true should drive the registry into RUNNING
+        // using the normal lifecycle helper.
+        verify(registry).markStartConfirmed("sw1");
     }
 
     @Test
@@ -40,6 +44,9 @@ class ControllerStatusListenerTest {
         verify(registry).refresh("sw1", SwarmHealth.DEGRADED);
         verify(registry).updateWorkEnabled("sw1", false);
         verify(registry).updateControllerEnabled("sw1", true);
+        // STOPPED + workloadsEnabled=false should map to STOPPING -> STOPPED
+        verify(registry).updateStatus("sw1", SwarmStatus.STOPPING);
+        verify(registry).updateStatus("sw1", SwarmStatus.STOPPED);
     }
 
     @Test

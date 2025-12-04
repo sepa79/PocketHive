@@ -147,6 +147,11 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
   }
 
   @Override
+  public void applyScenarioPlan(String planJson) {
+    core.applyScenarioPlan(planJson);
+  }
+
+  @Override
   public void start(String planJson) {
     core.start(planJson);
     bufferGuard.onSwarmEnabled(true);
@@ -255,6 +260,48 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
   @Override
   public void setControllerEnabled(boolean enabled) {
     core.setControllerEnabled(enabled);
+  }
+
+  @Override
+  public java.util.Map<String, Object> scenarioProgress() {
+    io.pockethive.swarmcontroller.scenario.TimelineScenario.Progress p = core.timelineScenarioProgress();
+    if (p == null) {
+      return java.util.Map.of();
+    }
+    java.util.Map<String, Object> m = new java.util.LinkedHashMap<>();
+    if (p.lastStepId != null) {
+      m.put("lastStepId", p.lastStepId);
+    }
+    if (p.lastStepName != null) {
+      m.put("lastStepName", p.lastStepName);
+    }
+    m.put("elapsedMillis", p.elapsedMillis);
+    if (p.nextStepId != null) {
+      m.put("nextStepId", p.nextStepId);
+    }
+    if (p.nextStepName != null) {
+      m.put("nextStepName", p.nextStepName);
+    }
+    if (p.nextDueMillis != null) {
+      m.put("nextDueMillis", p.nextDueMillis);
+    }
+    if (p.totalRuns != null) {
+      m.put("totalRuns", p.totalRuns);
+    }
+    if (p.runsRemaining != null) {
+      m.put("runsRemaining", p.runsRemaining);
+    }
+    return m;
+  }
+
+  @Override
+  public void resetScenarioPlan() {
+    core.resetScenarioPlan();
+  }
+
+  @Override
+  public void setScenarioRuns(Integer runs) {
+    core.setScenarioRuns(runs);
   }
 
   static String snippet(String payload) {

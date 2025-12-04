@@ -15,6 +15,13 @@ public final class ControlPlaneSignals {
 
     public static final String SWARM_TEMPLATE = "swarm-template";
 
+    /**
+     * Optional scenario plan payload for a swarm. Swarm controllers can use this
+     * to drive time-based config-update flows without the orchestrator being
+     * involved after creation.
+     */
+    public static final String SWARM_PLAN = "swarm-plan";
+
     public static final String SWARM_START = "swarm-start";
 
     public static final String SWARM_STOP = "swarm-stop";

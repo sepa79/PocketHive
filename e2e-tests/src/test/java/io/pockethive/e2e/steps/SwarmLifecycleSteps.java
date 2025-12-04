@@ -571,6 +571,135 @@ public class SwarmLifecycleSteps {
     LOGGER.info("Postprocessor status data for history-policy-demo: {}", data);
   }
 
+  @And("the plan demo scenario plan drives the swarm lifecycle")
+  public void thePlanDemoScenarioPlanDrivesTheSwarmLifecycle() {
+    ensureCreateResponse();
+
+    // 1) Swarm should reach RUNNING with workloads enabled without an explicit
+    // swarm-start request – the scenario plan's swarm-start step is responsible
+    // for issuing the enablement config-update.
+    SwarmAssertions.await("swarm running via scenario plan", () -> {
+      Optional<SwarmView> viewOpt = orchestratorClient.findSwarm(swarmId);
+      assertTrue(viewOpt.isPresent(), "Swarm should be available while plan is running");
+      SwarmView view = viewOpt.get();
+      assertEquals("RUNNING", view.status(), "Swarm status should be RUNNING while plan is active");
+      assertTrue(view.workEnabled(), "Workloads should be enabled while plan is active");
+    });
+
+    // 2) Eventually the plan should stop the swarm entirely via its final
+    // swarm-stop step (no explicit stopSwarm call from the test).
+    SwarmAssertions.await("swarm stopped via scenario plan", () -> {
+      Optional<SwarmView> viewOpt = orchestratorClient.findSwarm(swarmId);
+      assertTrue(viewOpt.isPresent(), "Swarm should still be registered when stopped");
+      SwarmView view = viewOpt.get();
+      assertEquals("STOPPED", view.status(), "Swarm status should be STOPPED after plan completes");
+      assertFalse(view.workEnabled(), "Workloads should be disabled after plan completes");
+    });
+
+    // 3) Inspect control-plane status events emitted during the run to ensure
+    // the scenario plan progressed through the expected step ids and that the
+    // generator enablement and rate changes were applied.
+    List<ControlPlaneEvents.StatusEnvelope> allStatuses =
+        controlPlaneEvents.statusesForSwarm(swarmId);
+    assertFalse(allStatuses.isEmpty(), "Expected at least one status event for the plan demo");
+
+    // 3a) Verify swarm-controller reported scenario progress for each step.
+    List<ControlPlaneEvents.StatusEnvelope> controllerEvents = allStatuses.stream()
+        .filter(env -> roleMatches("swarm-controller", env.status().role()))
+        .sorted(Comparator.comparing(ControlPlaneEvents.StatusEnvelope::receivedAt))
+        .toList();
+    assertFalse(controllerEvents.isEmpty(), "Expected status events for swarm-controller");
+
+    LinkedHashSet<String> seenStepIds = new LinkedHashSet<>();
+    for (ControlPlaneEvents.StatusEnvelope env : controllerEvents) {
+      Map<String, Object> data = env.status().data();
+      Object scenarioObj = data.get("scenario");
+      if (!(scenarioObj instanceof Map<?, ?> scenarioMapRaw)) {
+        continue;
+      }
+      @SuppressWarnings("unchecked")
+      Map<String, Object> scenarioMap = (Map<String, Object>) scenarioMapRaw;
+      Object lastStep = scenarioMap.get("lastStepId");
+      if (lastStep != null) {
+        String stepId = String.valueOf(lastStep);
+        if (!stepId.isBlank()) {
+          seenStepIds.add(stepId.trim());
+        }
+      }
+    }
+    List<String> expectedSteps = List.of(
+        "swarm-start",
+        "gen-rate-fast",
+        "gen-stop-1",
+        "gen-start-2",
+        "swarm-stop");
+    assertTrue(seenStepIds.containsAll(expectedSteps),
+        () -> "Scenario plan did not report all expected steps. expected=" + expectedSteps
+            + " seen=" + seenStepIds);
+
+    // 3b) Verify generator enablement and rate changes were applied over time.
+    List<ControlPlaneEvents.StatusEnvelope> generatorEvents = allStatuses.stream()
+        .filter(env -> roleMatches(GENERATOR_ROLE, env.status().role()))
+        .sorted(Comparator.comparing(ControlPlaneEvents.StatusEnvelope::receivedAt))
+        .toList();
+    assertFalse(generatorEvents.isEmpty(), "Expected status events for generator");
+
+    boolean sawFastRate = false;
+    boolean sawStopped = false;
+    boolean sawRestarted = false;
+
+    for (ControlPlaneEvents.StatusEnvelope env : generatorEvents) {
+      StatusEvent status = env.status();
+      Map<String, Object> snapshot = workerSnapshot(status, GENERATOR_ROLE);
+      boolean enabled = isTruthy(snapshot.get("enabled"));
+      Map<String, Object> config = snapshotConfig(snapshot);
+      Map<String, Object> inputs = toMap(config.get("inputs"));
+      Map<String, Object> scheduler = toMap(inputs.get("scheduler"));
+      Object rateValue = scheduler.get("ratePerSec");
+      Double rate = null;
+      if (rateValue instanceof Number n) {
+        rate = n.doubleValue();
+      } else if (rateValue != null) {
+        try {
+          rate = Double.parseDouble(rateValue.toString());
+        } catch (NumberFormatException ignored) {
+          // leave null
+        }
+      }
+
+      if (rate != null && rate >= 49.0 && rate <= 51.0) {
+        sawFastRate = true;
+      }
+      if (!enabled) {
+        if (sawFastRate && !sawStopped) {
+          sawStopped = true;
+        }
+      } else {
+        if (sawStopped) {
+          sawRestarted = true;
+        }
+      }
+    }
+
+    assertTrue(sawFastRate, "Expected generator scheduler ratePerSec to be increased by the plan");
+    assertTrue(sawStopped, "Expected generator to be stopped by the plan");
+    assertTrue(sawRestarted, "Expected generator to be restarted by the plan");
+
+    // 3c) Final worker snapshots should all report enabled=false after the
+    // swarm-stop step.
+    captureWorkerStatuses(true);
+    for (String role : workerRoles()) {
+      StatusEvent status = workerStatusByRole.get(role);
+      String displayRole = actualRoleName(role);
+      assertNotNull(status, () -> "No final status recorded for role " + displayRole);
+      Map<String, Object> snapshot = workerSnapshot(status, role);
+      Object flag = snapshot.get("enabled");
+      boolean finalEnabled = isTruthy(flag);
+      assertFalse(finalEnabled,
+          () -> "Expected role " + displayRole + " to be disabled after plan completes but enabled=" + flag);
+    }
+  }
+
   @Then("the final queue receives the default generator response")
   public void theFinalQueueReceivesTheDefaultGeneratorResponse() throws Exception {
     ensureStartResponse();

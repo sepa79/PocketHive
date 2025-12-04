@@ -1,10 +1,13 @@
 package io.pockethive.scenarios;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import io.pockethive.swarm.model.SwarmTemplate;
 import io.pockethive.swarm.model.TrafficPolicy;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import java.util.Map;
 
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class Scenario {
     @NotBlank
     private String id;
@@ -15,6 +18,15 @@ public class Scenario {
     private SwarmTemplate template;
     @Valid
     private TrafficPolicy trafficPolicy;
+    /**
+     * Optional scenario execution plan.
+     * <p>
+     * Scenario-manager treats this as an opaque JSON object; the orchestrator
+     * is responsible for interpreting its structure. Keeping it as a
+     * {@code Map} avoids a hard dependency on orchestrator-specific types
+     * while still round-tripping the plan between YAML and JSON.
+     */
+    private Map<String, Object> plan;
 
     public Scenario() {}
 
@@ -22,19 +34,21 @@ public class Scenario {
                     String name,
                     String description,
                     SwarmTemplate template,
-                    TrafficPolicy trafficPolicy) {
+                    TrafficPolicy trafficPolicy,
+                    Map<String, Object> plan) {
         this.id = id;
         this.name = name;
         this.description = description;
         this.template = template;
         this.trafficPolicy = trafficPolicy;
+        this.plan = plan;
     }
 
     public Scenario(String id,
                     String name,
                     String description,
                     SwarmTemplate template) {
-        this(id, name, description, template, null);
+        this(id, name, description, template, null, null);
     }
 
     public String getId() {
@@ -75,5 +89,13 @@ public class Scenario {
 
     public void setTrafficPolicy(TrafficPolicy trafficPolicy) {
         this.trafficPolicy = trafficPolicy;
+    }
+
+    public Map<String, Object> getPlan() {
+        return plan;
+    }
+
+    public void setPlan(Map<String, Object> plan) {
+        this.plan = plan;
     }
 }

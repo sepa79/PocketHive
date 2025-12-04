@@ -80,6 +80,7 @@ class SwarmSignalListenerTest {
 
     private String controlQueueName;
     private SwarmPlanRegistry plans;
+    private io.pockethive.orchestrator.domain.ScenarioTimelineRegistry timelines;
     private SwarmCreateTracker tracker;
     private SwarmRegistry registry;
     private SwarmSignalListener listener;
@@ -90,12 +91,13 @@ class SwarmSignalListenerTest {
             .map(ControlQueueDescriptor::name)
             .orElseThrow();
         plans = new SwarmPlanRegistry();
+        timelines = new io.pockethive.orchestrator.domain.ScenarioTimelineRegistry();
         tracker = new SwarmCreateTracker();
         registry = new SwarmRegistry();
         lenient().when(controlPlane.publisher()).thenReturn(publisher);
         lenient().doNothing().when(controlEmitter).emitStatusSnapshot(any());
         lenient().doNothing().when(controlEmitter).emitStatusDelta(any());
-        listener = new SwarmSignalListener(plans, tracker, registry, lifecycle, mapper,
+        listener = new SwarmSignalListener(plans, timelines, tracker, registry, lifecycle, mapper,
             controlPlane, controlEmitter, identity, descriptor, controlQueueName);
         clearInvocations(controlPlane, controlEmitter, publisher, lifecycle);
     }
@@ -185,7 +187,7 @@ class SwarmSignalListenerTest {
 
     @Test
     void statusSnapshotIncludesControlRoutes() {
-        SwarmSignalListener fresh = new SwarmSignalListener(plans, tracker, registry, lifecycle, mapper,
+        SwarmSignalListener fresh = new SwarmSignalListener(plans, timelines, tracker, registry, lifecycle, mapper,
             controlPlane, controlEmitter, identity, descriptor, controlQueueName);
 
         verify(controlEmitter).emitStatusSnapshot(statusCaptor.capture());
