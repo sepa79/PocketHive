@@ -211,9 +211,13 @@ export default function ComponentDetail({ component, onClose }: Props) {
           value: swarmSummary.stackName,
         })
       }
+      const dataSection =
+        cfg && cfg.data && typeof cfg.data === 'object'
+          ? (cfg.data as Record<string, unknown>)
+          : undefined
       const scenario =
-        cfg && cfg.scenario && typeof cfg.scenario === 'object'
-          ? (cfg.scenario as Record<string, unknown>)
+        dataSection && dataSection.scenario && typeof dataSection.scenario === 'object'
+          ? (dataSection.scenario as Record<string, unknown>)
           : undefined
       if (scenario) {
         const elapsedMs = getNumber(scenario.elapsedMillis)

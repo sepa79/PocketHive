@@ -3,6 +3,20 @@
 > Status: **in progress**.  
 > Environment/SUT profiles and scenario engine behaviour are evolving; this is the authoritative plan.
 
+### Status tracker (v1 engine)
+- [x] Foundations (YAML load, time normalisation, required stepId)
+- [x] Scheduler/dispatcher with `(planId, stepId)` idempotency and retries
+- [x] Readiness / all-or-nothing start
+- [x] Ack tracking & outcome (per-step states, success/fail)
+- [x] Observability (per-step status/latency metrics, structured logs)
+- [x] API: submit/start/status endpoints
+- [ ] Per-step types beyond `config-update`
+- [ ] Environment profiles / bindings
+- [ ] Config-update standardisation (out of scope for this branch):
+  - Inventory current producers/consumers and payload shapes per role.
+  - Define a versioned envelope + per-role schema with explicit merge semantics and idempotency keys.
+  - Add validation at ingress and migrate handlers to the contract.
+
 ## Scope & Principles
 - A single **Scenario Plan** drives the **Swarm Manager**, which schedules and sends **`config-update`** messages to targeted bees.
 - **All-or-nothing readiness**: the scenario starts only when **all declared bees** are ready; otherwise fail fast.

@@ -75,6 +75,7 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
   const layout = useTopologyLayout({
     data,
     componentsById,
+    queueDepths,
     swarmId,
     selectedId,
     getFill,

@@ -24,6 +24,7 @@ export type FlowNode = Node
 export type LayoutArgs = {
   data: GraphData
   componentsById: Record<string, Component>
+  queueDepths: Record<string, number>
   swarmId?: string
   selectedId?: string
   getFill: (type?: string, enabled?: boolean) => string
@@ -47,6 +48,7 @@ export function useTopologyLayout(args: LayoutArgs): LayoutResult {
   const {
     data,
     componentsById,
+    queueDepths,
     swarmId,
     selectedId,
     getFill,
@@ -169,7 +171,7 @@ export function useTopologyLayout(args: LayoutArgs): LayoutResult {
               source: link.source,
               target: link.target,
               queue: link.queue,
-              depth: 0,
+              depth: queueDepths[link.queue] ?? 0,
             }))
 
           if (dragging.has(controller.id)) {
@@ -272,6 +274,7 @@ export function useTopologyLayout(args: LayoutArgs): LayoutResult {
     data.links,
     data.nodes,
     handleDetails,
+    queueDepths,
     selectedId,
     swarmId,
     getFill,

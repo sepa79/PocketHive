@@ -33,6 +33,10 @@ Status events now include an optional `queueStats` object keyed by queue name. E
 
 Operators can correlate these numbers with the `queues` topology block to understand which bindings map to a growing backlog. Empty or unavailable stats simply omit the `queueStats` object.
 
+## Postprocessor `publishAllMetrics`
+
+The postprocessor still emits aggregated latency and error metrics to Prometheus, but the high-frequency per-item (`publishAllMetrics=true`) metrics are currently disabled to avoid flooding the control plane and dashboards. A dedicated event-time sink (Influx/Loki) will be added in a future change; until then, `publishAllMetrics` only affects internal aggregation and no longer pushes per-message samples to Prometheus or status payloads.
+
 ## Buffer Guard runbook
 
 1. **Confirm prerequisites**

@@ -1,6 +1,6 @@
 # Swarm Stack Adapter & Per‑Swarm Grouping Plan
 
-Status: [ ] Draft  [ ] In Progress  [ ] Done  
+Status: [ ] Draft  [x] In Progress  [ ] Done  
 Owner: Manager SDK / Orchestrator / Swarm Controller
 
 ## 1. Goal
@@ -47,12 +47,12 @@ implementation (the earlier `SWARM_SERVICE` mode is retired).
 ### 4.1 Enum & configuration
 
 - [x] Extend `ComputeAdapterType` with `SWARM_STACK` (documented as Swarm‑only) and retire `SWARM_SERVICE`.
-- [ ] Add config knobs:
+- [x] Add config knobs:
   - Orchestrator:
     - `pockethive.control-plane.orchestrator.docker.compute-adapter=DOCKER_SINGLE|AUTO|SWARM_STACK`.
   - Swarm Controller:
     - `pockethive.control-plane.swarm-controller.docker.compute-adapter=DOCKER_SINGLE|SWARM_STACK`.
-- [ ] Validation rules:
+- [x] Validation rules:
   - `SWARM_STACK` only allowed when Docker endpoint is a Swarm **manager** (same `docker info` check as the old service mode).
   - `AUTO` resolves to `SWARM_STACK` when the engine is a Swarm manager, otherwise `DOCKER_SINGLE`.
 
@@ -97,7 +97,7 @@ implementation (the earlier `SWARM_SERVICE` mode is retired).
   - For `SWARM_STACK`:
     - Construct worker `WorkerSpec`s as today, delegating to the Swarm‑based compute adapter.
     - Ensure workers join the control network and carry stack labels once implemented.
-- [ ] Keep BufferGuard and scenario engine logic unchanged; only the provisioning port changes.
+  - [x] Keep BufferGuard and scenario engine logic unchanged; only the provisioning port changes.
 
 ### 4.5 UI & diagnostics
 

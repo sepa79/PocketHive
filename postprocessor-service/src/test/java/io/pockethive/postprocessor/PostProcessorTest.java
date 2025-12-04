@@ -240,48 +240,15 @@ class PostProcessorTest {
 
         Map<String, Object> status = workerContext.statusData();
         assertThat(status.get("publishAllMetrics")).isEqualTo(true);
-        assertThat(status).containsEntry("hopDurationsMs", List.of(5L, 10L, 0L));
-        assertThat(status).containsKey("hopTimeline");
-        @SuppressWarnings("unchecked")
-        List<Map<String, Object>> timeline = (List<Map<String, Object>>) status.get("hopTimeline");
-        assertThat(timeline).hasSize(3);
-        assertThat(timeline.get(0)).containsEntry("service", "generator");
-        assertThat(timeline.get(1)).containsEntry("service", "processor");
-        assertThat(timeline.get(2)).containsEntry("service", "postprocessor");
-        assertThat(status).containsKey("processorCall");
-        @SuppressWarnings("unchecked")
-        Map<String, Object> processorCall = (Map<String, Object>) status.get("processorCall");
-        assertThat(processorCall).containsEntry("durationMs", 42L);
-        assertThat(processorCall).containsEntry("success", true);
-        assertThat(processorCall).containsEntry("statusCode", 200);
-        assertThat(workerContext.capturingPublisher().fullSnapshotEmitted()).isTrue();
+        assertThat(status).doesNotContainKeys("hopDurationsMs", "hopTimeline", "processorCall", "workItemSteps");
+        assertThat(workerContext.capturingPublisher().fullSnapshotEmitted()).isFalse();
 
         MeterRegistry registry = workerContext.meterRegistry();
-        List<Gauge> hopGauges = new ArrayList<>(registry.find("ph_transaction_hop_duration_ms").gauges());
-        assertThat(hopGauges).hasSize(3);
-        assertThat(hopGauges.stream().map(Gauge::value).collect(toList()))
-                .containsExactlyInAnyOrder(5.0, 10.0, 0.0);
-        assertThat(hopGauges.stream().map(g -> g.getId().getTag("hop_service")).collect(toList()))
-                .containsExactlyInAnyOrder("generator", "processor", "postprocessor");
-        assertThat(hopGauges.stream().map(g -> g.getId().getTag("transaction_seq")).distinct().collect(toList()))
-                .containsExactly("1");
-
-        List<Gauge> totalGauges = new ArrayList<>(registry.find("ph_transaction_total_latency_ms").gauges());
-        assertThat(totalGauges).hasSize(1);
-        assertThat(totalGauges.get(0).value()).isEqualTo(15.0);
-        assertThat(totalGauges.get(0).getId().getTag("transaction_seq")).isEqualTo("1");
-
-        List<Gauge> processorDuration = new ArrayList<>(registry.find("ph_transaction_processor_duration_ms").gauges());
-        assertThat(processorDuration).hasSize(1);
-        assertThat(processorDuration.get(0).value()).isEqualTo(42.0);
-
-        List<Gauge> processorSuccess = new ArrayList<>(registry.find("ph_transaction_processor_success").gauges());
-        assertThat(processorSuccess).hasSize(1);
-        assertThat(processorSuccess.get(0).value()).isEqualTo(1.0);
-
-        List<Gauge> processorStatus = new ArrayList<>(registry.find("ph_transaction_processor_status").gauges());
-        assertThat(processorStatus).hasSize(1);
-        assertThat(processorStatus.get(0).value()).isEqualTo(200.0);
+        assertThat(registry.find("ph_transaction_hop_duration_ms").gauges()).isNullOrEmpty();
+        assertThat(registry.find("ph_transaction_total_latency_ms").gauges()).isNullOrEmpty();
+        assertThat(registry.find("ph_transaction_processor_duration_ms").gauges()).isNullOrEmpty();
+        assertThat(registry.find("ph_transaction_processor_success").gauges()).isNullOrEmpty();
+        assertThat(registry.find("ph_transaction_processor_status").gauges()).isNullOrEmpty();
     }
 
     private static final class TestWorkerContext implements WorkerContext {

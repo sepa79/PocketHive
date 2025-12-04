@@ -112,12 +112,18 @@ public final class TimelineScenario implements Scenario {
    */
   public Progress snapshotProgress() {
     Schedule schedule = scheduleRef.get();
-    Instant started = this.startedAt;
-    if (schedule == null || started == null) {
+    if (schedule == null) {
       return null;
     }
-    long elapsedMillis = Duration.between(started, Instant.now()).toMillis();
-    return Progress.current(schedule, elapsedMillis, progressRef.get());
+    Instant started = this.startedAt;
+    long elapsedMillis = started != null
+        ? Duration.between(started, Instant.now()).toMillis()
+        : 0L;
+    Progress current = progressRef.get();
+    if (started == null && current == null) {
+      current = Progress.initial(schedule);
+    }
+    return Progress.current(schedule, elapsedMillis, current);
   }
 
   private void emitStep(StepInstance step, ScenarioContext context) {
