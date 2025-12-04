@@ -339,15 +339,19 @@ export function setClient(newClient: Client | null, destination = controlDestina
               }
             }
           }
-          Object.entries(rest).forEach(([key, value]) => {
-            if (key === 'enabled') {
-              return
-            }
-            const existing = cfg[key]
-            // Do not allow scalar status fields to overwrite structured config objects.
-            // This preserves nested worker config such as { mode: { ... } } even when
-            // the status payload also exposes a scalar "mode" field.
-            if (existing && typeof existing === 'object') {
+      Object.entries(rest).forEach(([key, value]) => {
+        if (key === 'enabled') {
+          return
+        }
+        if (key === 'scenario') {
+          cfg[key] = value
+          return
+        }
+        const existing = cfg[key]
+        // Do not allow scalar status fields to overwrite structured config objects.
+        // This preserves nested worker config such as { mode: { ... } } even when
+        // the status payload also exposes a scalar "mode" field.
+        if (existing && typeof existing === 'object') {
               return
             }
             // Allow status payloads to refresh dynamic metadata (swarm counts, guard configs, etc.)

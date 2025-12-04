@@ -332,6 +332,7 @@ public class SwarmSignalListener {
 
       Boolean stateEnabled = null;
       Map<String, Object> details = new LinkedHashMap<>();
+      boolean scenarioChanged = false;
 
       // Optional buffer guard overrides live under data.trafficPolicy.bufferGuard
       JsonNode guardRoot = dataNode.path("trafficPolicy").path("bufferGuard");
@@ -372,6 +373,12 @@ public class SwarmSignalListener {
             }
             stateEnabled = enabledFlag;
             details.put("workloads", Map.of("enabled", enabledFlag));
+          } else if (isControllerCommand(cs)) {
+            ScenarioChange change = applyScenarioOverrides(dataNode);
+            scenarioChanged = change.changed();
+            if (change.details() != null && !change.details().isEmpty()) {
+              details.put("scenario", change.details());
+            }
           } else if (!fromSelf) {
             fanouts.add(() -> forwardToAll(cs, rawPayload));
           }
@@ -384,6 +391,11 @@ public class SwarmSignalListener {
               sendStatusDelta();
               stateEnabled = enabledFlag;
               details.put("controller", Map.of("enabled", enabledFlag));
+            }
+            ScenarioChange change = applyScenarioOverrides(dataNode);
+            scenarioChanged = scenarioChanged || change.changed();
+            if (change.details() != null && !change.details().isEmpty()) {
+              details.put("scenario", change.details());
             }
           } else {
             TargetSpec spec = resolveInstanceTarget(cs);
@@ -411,6 +423,9 @@ public class SwarmSignalListener {
         }
       }
 
+      if (scenarioChanged) {
+        sendStatusDelta();
+      }
       CommandState state = configCommandState(cs, resolvedSignal, stateEnabled, details);
       fanouts.forEach(Runnable::run);
       emitSuccess(cs, resolvedSignal, null, state);
@@ -927,6 +942,37 @@ public class SwarmSignalListener {
   private Map<String, Object> scenarioProgress() {
     Map<String, Object> snapshot = lifecycle.scenarioProgress();
     return snapshot != null ? snapshot : Map.of();
+  }
+
+  private ScenarioChange applyScenarioOverrides(JsonNode dataNode) {
+    JsonNode scenarioNode = dataNode.path("scenario");
+    if (!scenarioNode.isObject()) {
+      return ScenarioChange.none();
+    }
+    boolean changed = false;
+    Map<String, Object> detail = new LinkedHashMap<>();
+    if (scenarioNode.has("runs")) {
+      int runs = scenarioNode.path("runs").asInt(-1);
+      if (runs > 0) {
+        lifecycle.setScenarioRuns(runs);
+        detail.put("runs", runs);
+        changed = true;
+      } else {
+        log.warn("Ignoring scenario.runs override {}; value must be >= 1", scenarioNode.path("runs").asText());
+      }
+    }
+    if (scenarioNode.path("reset").asBoolean(false)) {
+      lifecycle.resetScenarioPlan();
+      detail.put("reset", true);
+      changed = true;
+    }
+    return changed ? new ScenarioChange(true, detail.isEmpty() ? null : detail) : ScenarioChange.none();
+  }
+
+  private record ScenarioChange(boolean changed, Map<String, Object> details) {
+    static ScenarioChange none() {
+      return new ScenarioChange(false, null);
+    }
   }
 
   private void appendTrafficPolicy(StatusEnvelopeBuilder builder) {

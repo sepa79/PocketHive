@@ -7,6 +7,13 @@ Timestamp: 2025-11-28T00:00:00Z
 
 _No unreleased changes yet._
 
+## [0.14.9] - 2025-12-04
+Timestamp: 2025-12-04T23:50:00Z
+
+- Scenario plan controls: Swarm Controller now accepts `config-update` payloads under `data.scenario` (`reset`, optional `runs`) to restart the active plan and loop it a fixed number of times; controller status includes `scenario.totalRuns` and `scenario.runsRemaining` so UI/runtime tooling can surface progress.
+- Scenario engine resiliency: Timeline runner resets cleanly, tracks run counters across loops, and emits last/next step details consistently in status snapshots, keeping plan progress visible even after repeated runs.
+- Hive UI: Swarm Controller detail panel now renders the latest scenario status (last/next step with countdown) and adds a “Scenario controls” section with run-count input and a reset action wired to the new control-plane fields; STOMP merge logic was fixed so scenario updates no longer get dropped after the first snapshot.
+
 ## [0.14.8] - 2025-12-02
 Timestamp: 2025-12-02T12:30:00Z
 

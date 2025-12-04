@@ -355,6 +355,14 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
     timelineScenario.applyPlan(planJson);
   }
 
+  public void resetScenarioPlan() {
+    timelineScenario.reset();
+  }
+
+  public void setScenarioRuns(Integer runs) {
+    timelineScenario.setRunCount(runs);
+  }
+
   @Override
   public void stop() {
     log.info("Stopping swarm {}", swarmId);

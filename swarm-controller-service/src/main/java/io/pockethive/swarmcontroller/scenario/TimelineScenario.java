@@ -42,6 +42,8 @@ public final class TimelineScenario implements Scenario {
   private final AtomicReference<Progress> progressRef = new AtomicReference<>();
 
   private volatile Instant startedAt;
+  private volatile Integer runLimit;
+  private volatile Integer runsRemaining;
 
   public TimelineScenario(String id, ObjectMapper mapper) {
     this.id = Objects.requireNonNull(id, "id");
@@ -60,6 +62,8 @@ public final class TimelineScenario implements Scenario {
     if (planJson == null || planJson.isBlank()) {
       log.info("Clearing scenario plan (empty payload)");
       scheduleRef.set(null);
+      progressRef.set(null);
+      runsRemaining = null;
       startedAt = null;
       return;
     }
@@ -69,13 +73,63 @@ public final class TimelineScenario implements Scenario {
       scheduleRef.set(schedule);
       log.info("Loaded scenario plan with {} bee step(s) and {} swarm step(s)",
           schedule.beeSteps.size(), schedule.swarmSteps.size());
-      progressRef.set(Progress.initial(schedule));
+      resetSchedule(schedule, true);
     } catch (Exception ex) {
       log.warn("Failed to parse scenario plan JSON; clearing schedule", ex);
       scheduleRef.set(null);
       progressRef.set(null);
+      runsRemaining = null;
       startedAt = null;
     }
+  }
+
+  /**
+   * Restart the loaded scenario plan from its first step.
+   */
+  public void reset() {
+    Schedule schedule = scheduleRef.get();
+    if (schedule == null) {
+      return;
+    }
+    log.info("Resetting scenario plan; runsRemaining={}", runsRemaining);
+    resetSchedule(schedule, true);
+  }
+
+  /**
+   * Configure how many times the current plan should execute.
+   */
+  public void setRunCount(Integer runs) {
+    if (runs == null || runs < 1) {
+      log.warn("Ignoring scenario run count {}; value must be >= 1", runs);
+      return;
+    }
+    this.runLimit = runs;
+    this.runsRemaining = runs;
+    Schedule schedule = scheduleRef.get();
+    if (schedule != null) {
+      resetSchedule(schedule, true);
+    }
+  }
+
+  /**
+   * Reset the current schedule to its initial state, clearing fired markers and
+   * optionally resetting the remaining run counter.
+   */
+  private synchronized void resetSchedule(Schedule schedule, boolean resetRuns) {
+    if (schedule == null) {
+      return;
+    }
+    for (StepInstance s : schedule.beeSteps) {
+      s.fired = false;
+    }
+    for (StepInstance s : schedule.swarmSteps) {
+      s.fired = false;
+    }
+    if (resetRuns && runLimit != null) {
+      runsRemaining = runLimit;
+    }
+    startedAt = null;
+    progressRef.set(Progress.initial(schedule, runLimit, runsRemaining));
   }
 
   @Override
@@ -93,9 +147,7 @@ public final class TimelineScenario implements Scenario {
     }
     long elapsedMillis = Duration.between(startedAt, Instant.now()).toMillis();
     List<StepInstance> due = schedule.dueSteps(elapsedMillis);
-    if (due.isEmpty()) {
-      return;
-    }
+    StepInstance lastExecuted = null;
     for (StepInstance step : due) {
       try {
         emitStep(step, context);
@@ -103,8 +155,33 @@ public final class TimelineScenario implements Scenario {
         log.warn("Failed to execute scenario step {}", step.stepId, ex);
       }
       // Update progress after each successfully emitted step.
-      progressRef.set(Progress.update(schedule, step, elapsedMillis));
+      lastExecuted = step;
+      progressRef.set(Progress.update(schedule, step, elapsedMillis, runLimit, runsRemaining));
     }
+    if (schedule.isComplete()) {
+      handleCompletion(schedule, lastExecuted, elapsedMillis);
+    }
+  }
+
+  private void handleCompletion(Schedule schedule, StepInstance lastStep, long elapsedMillis) {
+    Integer totalRuns = runLimit;
+    Integer remaining = runsRemaining;
+    if (runLimit == null) {
+      progressRef.set(Progress.update(schedule, lastStep, elapsedMillis, totalRuns, remaining));
+      return;
+    }
+    int effectiveRemaining = remaining != null ? remaining : runLimit;
+    if (effectiveRemaining > 0) {
+      effectiveRemaining -= 1;
+    }
+    runsRemaining = effectiveRemaining;
+    if (effectiveRemaining > 0) {
+      resetSchedule(schedule, false);
+      progressRef.set(Progress.initial(schedule, totalRuns, runsRemaining));
+      return;
+    }
+    StepInstance last = lastStep != null ? lastStep : schedule.lastFired();
+    progressRef.set(Progress.update(schedule, last, elapsedMillis, totalRuns, runsRemaining));
   }
 
   /**
@@ -121,9 +198,9 @@ public final class TimelineScenario implements Scenario {
         : 0L;
     Progress current = progressRef.get();
     if (started == null && current == null) {
-      current = Progress.initial(schedule);
+      current = Progress.initial(schedule, runLimit, runsRemaining);
     }
-    return Progress.current(schedule, elapsedMillis, current);
+    return Progress.current(schedule, elapsedMillis, current, runLimit, runsRemaining);
   }
 
   private void emitStep(StepInstance step, ScenarioContext context) {
@@ -261,6 +338,41 @@ public final class TimelineScenario implements Scenario {
       return due;
     }
 
+    boolean isComplete() {
+      for (StepInstance s : beeSteps) {
+        if (!s.fired) {
+          return false;
+        }
+      }
+      for (StepInstance s : swarmSteps) {
+        if (!s.fired) {
+          return false;
+        }
+      }
+      return true;
+    }
+
+    StepInstance lastFired() {
+      StepInstance candidate = null;
+      for (StepInstance s : beeSteps) {
+        if (!s.fired) {
+          continue;
+        }
+        if (candidate == null || s.dueMillis > candidate.dueMillis) {
+          candidate = s;
+        }
+      }
+      for (StepInstance s : swarmSteps) {
+        if (!s.fired) {
+          continue;
+        }
+        if (candidate == null || s.dueMillis > candidate.dueMillis) {
+          candidate = s;
+        }
+      }
+      return candidate;
+    }
+
     private static String asText(Object value) {
       if (value == null) {
         return null;
@@ -280,30 +392,42 @@ public final class TimelineScenario implements Scenario {
     public final String nextStepId;
     public final String nextStepName;
     public final Long nextDueMillis;
+    public final Integer totalRuns;
+    public final Integer runsRemaining;
 
     private Progress(String lastStepId,
                      String lastStepName,
                      long elapsedMillis,
                      String nextStepId,
                      String nextStepName,
-                     Long nextDueMillis) {
+                     Long nextDueMillis,
+                     Integer totalRuns,
+                     Integer runsRemaining) {
       this.lastStepId = lastStepId;
       this.lastStepName = lastStepName;
       this.elapsedMillis = elapsedMillis;
       this.nextStepId = nextStepId;
       this.nextStepName = nextStepName;
       this.nextDueMillis = nextDueMillis;
+      this.totalRuns = totalRuns;
+      this.runsRemaining = runsRemaining;
     }
 
-    static Progress initial(Schedule schedule) {
+    static Progress initial(Schedule schedule, Integer totalRuns, Integer runsRemaining) {
       StepInstance next = earliest(schedule);
       return new Progress(null, null, 0L,
           next != null ? next.stepId : null,
           next != null ? next.name : null,
-          next != null ? next.dueMillis : null);
+          next != null ? next.dueMillis : null,
+          totalRuns,
+          runsRemaining);
     }
 
-    static Progress update(Schedule schedule, StepInstance last, long elapsedMillis) {
+    static Progress update(Schedule schedule,
+                           StepInstance last,
+                           long elapsedMillis,
+                           Integer totalRuns,
+                           Integer runsRemaining) {
       StepInstance next = earliestAfter(schedule, elapsedMillis);
       return new Progress(
           last != null ? last.stepId : null,
@@ -311,10 +435,16 @@ public final class TimelineScenario implements Scenario {
           elapsedMillis,
           next != null ? next.stepId : null,
           next != null ? next.name : null,
-          next != null ? next.dueMillis : null);
+          next != null ? next.dueMillis : null,
+          totalRuns,
+          runsRemaining);
     }
 
-    static Progress current(Schedule schedule, long elapsedMillis, Progress previous) {
+    static Progress current(Schedule schedule,
+                            long elapsedMillis,
+                            Progress previous,
+                            Integer totalRuns,
+                            Integer runsRemaining) {
       // If we have a previous progress instance whose elapsedMillis is ahead of
       // the current snapshot, keep it to avoid moving backwards; otherwise
       // recompute based on the elapsed time.
@@ -329,7 +459,9 @@ public final class TimelineScenario implements Scenario {
           elapsedMillis,
           next != null ? next.stepId : null,
           next != null ? next.name : null,
-          next != null ? next.dueMillis : null);
+          next != null ? next.dueMillis : null,
+          totalRuns,
+          runsRemaining);
     }
 
     private static StepInstance earliest(Schedule schedule) {

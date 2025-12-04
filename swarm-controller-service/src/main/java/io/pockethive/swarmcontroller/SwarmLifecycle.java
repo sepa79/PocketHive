@@ -218,6 +218,21 @@ public interface SwarmLifecycle {
   }
 
   /**
+   * Reset the currently loaded scenario plan (if any) so it restarts from its
+   * initial timeline.
+   */
+  default void resetScenarioPlan() {
+  }
+
+  /**
+   * Update the configured run count for the active scenario plan.
+   *
+   * @param runs number of times to execute the loaded plan; must be >= 1
+   */
+  default void setScenarioRuns(Integer runs) {
+  }
+
+  /**
    * Return the currently effective buffer guard settings, if any, as resolved
    * by the Manager SDK guard coordinator.
    */

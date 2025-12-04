@@ -285,7 +285,23 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
     if (p.nextDueMillis != null) {
       m.put("nextDueMillis", p.nextDueMillis);
     }
+    if (p.totalRuns != null) {
+      m.put("totalRuns", p.totalRuns);
+    }
+    if (p.runsRemaining != null) {
+      m.put("runsRemaining", p.runsRemaining);
+    }
     return m;
+  }
+
+  @Override
+  public void resetScenarioPlan() {
+    core.resetScenarioPlan();
+  }
+
+  @Override
+  public void setScenarioRuns(Integer runs) {
+    core.setScenarioRuns(runs);
   }
 
   static String snippet(String payload) {
