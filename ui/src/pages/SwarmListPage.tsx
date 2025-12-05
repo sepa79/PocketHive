@@ -441,15 +441,6 @@ export default function SwarmListPage() {
                     >
                       Reset plan
                     </button>
-                    <a
-                      href={`/hive?swarm=${encodeURIComponent(row.id)}&zoom=1`}
-                      className="rounded bg-white/10 px-2 py-1 text-xs text-white hover:bg-white/20"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      Open swarm view
-                    </a>
                   </div>
                 </td>
               </tr>
