@@ -7,6 +7,13 @@ Timestamp: 2025-11-28T00:00:00Z
 
 _No unreleased changes yet._
 
+## [0.14.10] - 2025-12-05
+Timestamp: 2025-12-05T00:00:00Z
+
+- Swarms tabular view: added a new `/swarms` page in the Hive UI that renders a scalable text/table view of all swarms using the existing component feed and swarm metadata, including per-swarm status, heartbeat age, template/SUT, role counts, queue depth/consumer totals, scenario progress, and guard state.
+- Swarm controls: wired per-row controls on the Swarms page for starting/stopping swarms, resetting the active scenario plan for the controller, and bulk start/stop actions across selected swarms, reusing the same control-plane operations as the Hive topology view.
+- Swarm details drawer: integrated the existing swarm-controller detail panel as a side drawer on the Swarms page so operators can inspect controller/runtime diagnostics without leaving the text view; removed the broken “open swarm view” link until a dedicated zoom route is available.
+
 ## [0.14.9] - 2025-12-04
 Timestamp: 2025-12-04T23:50:00Z
 
