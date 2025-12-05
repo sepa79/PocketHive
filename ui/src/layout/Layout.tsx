@@ -1,5 +1,5 @@
 import { NavLink, Outlet } from 'react-router-dom'
-import { Hexagon, Radio, Droplet, Database } from 'lucide-react'
+import { Hexagon, Radio, Droplet, Database, List } from 'lucide-react'
 import MonolithIcon from '../icons/Monolith'
 import Health from '../components/Health'
 import Connectivity from '../components/Connectivity'
@@ -55,6 +55,15 @@ export default function Layout() {
           >
             <Hexagon strokeWidth={1.5} className="tab-icon text-white/80" />
             Hive
+          </NavLink>
+          <NavLink
+            to="/swarms"
+            className={({ isActive }) =>
+              `tab-btn flex items-center${isActive ? ' tab-active' : ''}`
+            }
+          >
+            <List strokeWidth={1.5} className="tab-icon text-white/80" />
+            Swarms
           </NavLink>
           <NavLink
             to="/sut"
