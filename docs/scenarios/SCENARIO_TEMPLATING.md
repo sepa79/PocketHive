@@ -96,25 +96,27 @@ Common patterns:
 
 ## HTTP Builder templates
 
-HTTP Builder loads templates from JSON files (see
-`http-builder-service/http-templates/default/*.json`). Each template
-can contain Pebble expressions in `pathTemplate`, `method`, `bodyTemplate`
-and header values.
+HTTP Builder loads templates from YAML or JSON files under the configured
+`templateRoot` (for example `http-builder-service/http-templates/default/*.yaml`).
+Each template can contain Pebble expressions in `pathTemplate`, `method`,
+`bodyTemplate` and header values.
+
+YAML is recommended for HTTP templates so multi-line bodies remain readable.
 
 Example:
 
-```json
-{
-  "serviceId": "default",
-  "callId": "redis-balance",
-  "pathTemplate": "/soap/{{ eval('#json_path(payload, \"$.customerCode\")') }}/balance",
-  "method": "POST",
-  "headersTemplate": {
-    "content-type": "application/xml",
-    "x-nonce": "{{ eval('#uuid()') }}"
-  },
-  "bodyTemplate": "<soapEnvelope>...</soapEnvelope>"
-}
+```yaml
+serviceId: default
+callId: redis-balance
+pathTemplate: "/soap/{{ eval(\"#json_path(payload, '$.customerCode')\") }}/balance"
+method: POST
+headersTemplate:
+  content-type: application/xml
+  x-nonce: "{{ eval(\"#uuid()\") }}"
+bodyTemplate: |
+  <soapEnvelope>
+    <!-- templated XML body -->
+  </soapEnvelope>
 ```
 
 When HTTP Builder runs:
@@ -161,4 +163,3 @@ anything fails to render or any callId is missing.
   else will fail.
 - Keep templating logic small and focused; heavy test logic should live
   in workers or HTTP Builder templates, not SpEL expressions.
-
