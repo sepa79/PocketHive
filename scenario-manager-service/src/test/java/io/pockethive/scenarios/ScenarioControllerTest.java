@@ -36,13 +36,16 @@ class ScenarioControllerTest {
 
     private static Path scenariosDir;
     private static Path capabilitiesDir;
+    private static Path runtimeDir;
 
     @DynamicPropertySource
     static void properties(DynamicPropertyRegistry registry) throws IOException {
         scenariosDir = Files.createDirectories(tempDir.resolve("scenarios"));
         capabilitiesDir = Files.createDirectories(tempDir.resolve("capabilities"));
+        runtimeDir = Files.createDirectories(tempDir.resolve("runtime"));
         registry.add("scenarios.dir", () -> scenariosDir.toString());
         registry.add("capabilities.dir", () -> capabilitiesDir.toString());
+        registry.add("pockethive.scenarios.runtime-root", () -> runtimeDir.toString());
         registry.add("rabbitmq.logging.enabled", () -> "false");
     }
 

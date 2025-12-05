@@ -46,3 +46,4 @@ template:
       image: postprocessor:latest
       work:
         in: final
+

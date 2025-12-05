@@ -373,14 +373,6 @@ sync_scenarios() {
     return 1
   fi
 
-  if [[ ! -d "scenario-manager-service/scenarios" ]]; then
-    echo "Local scenarios directory 'scenario-manager-service/scenarios' not found; nothing to sync." >&2
-    return 1
-  fi
-
-  echo " - Copying local scenarios to container ${container}:/app/scenarios"
-  docker cp "scenario-manager-service/scenarios/." "${container}:/app/scenarios/" >/dev/null
-
   if [[ -d "scenario-manager-service/capabilities" ]]; then
     echo " - Copying local capabilities to container ${container}:/app/capabilities"
     docker cp "scenario-manager-service/capabilities/." "${container}:/app/capabilities/" >/dev/null

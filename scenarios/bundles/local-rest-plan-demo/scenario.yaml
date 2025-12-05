@@ -39,34 +39,3 @@ template:
       work:
         in: finalQ
 
-plan:
-  bees:
-    # Swarm-scoped lifecycle steps (no role/instance => SWARM)
-    - steps:
-        - stepId: swarm-start
-          name: Start all workers
-          time: PT0S
-          type: start
-        - stepId: swarm-stop
-          name: Stop entire swarm
-          time: PT40S
-          type: stop
-    # Generator-specific behaviour
-    - role: generator
-      steps:
-        - stepId: gen-rate-fast
-          name: Increase generator rate
-          time: PT10S
-          type: config-update
-          config:
-            inputs:
-              scheduler:
-                ratePerSec: 50
-        - stepId: gen-stop-1
-          name: Stop generator
-          time: PT20S
-          type: stop
-        - stepId: gen-start-2
-          name: Restart generator
-          time: PT30S
-          type: start

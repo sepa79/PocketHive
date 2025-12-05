@@ -10,6 +10,12 @@ public interface ScenarioClient {
     ScenarioPlan fetchScenario(String templateId) throws Exception;
 
     /**
+     * Prepare a per-swarm runtime directory for the given scenario template and swarm id.
+     * The returned path is the host directory that should be mounted into workers.
+     */
+    String prepareScenarioRuntime(String templateId, String swarmId) throws Exception;
+
+    /**
      * Resolve a System Under Test (SUT) environment by id.
      */
     SutEnvironment fetchSutEnvironment(String environmentId) throws Exception;

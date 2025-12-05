@@ -39,39 +39,33 @@ template:
             bodyType: HTTP
             path: /api/guarded
             method: POST
-            body: guarded-request
+            body: hello from generator
       work:
         out: gen-out
     - role: moderator
-      instanceId: moderator-a
       image: moderator:latest
-      config:
-        mode:
-          type: rate-per-sec
-          ratePerSec: 4
       work:
         in: gen-out
-        out: moderator-a-out
+        out: mod-out
     - role: processor
       image: processor:latest
+      config:
+        baseUrl: "{{ sut.endpoints['default'].baseUrl }}"
       work:
-        in: moderator-a-out
-        out: proc-out
+        in: mod-out
+        out: mod2-out
     - role: moderator
-      instanceId: moderator-b
       image: moderator:latest
       config:
-        mode:
-          type: sine
-          sine:
-            minRatePerSec: 5
-            maxRatePerSec: 100
-            periodSeconds: 45
-            phaseOffsetSeconds: 0
+        worker:
+          mode:
+            type: rate-per-sec
+            ratePerSec: 5
       work:
-        in: proc-out
-        out: moderator-b-out
+        in: mod2-out
+        out: final
     - role: postprocessor
       image: postprocessor:latest
       work:
-        in: moderator-b-out
+        in: final
+

@@ -26,6 +26,8 @@ public class ScenarioService {
 
     private final Path storageDir;
     private final Path testStorageDir;
+    private final Path bundleRootDir;
+    private final Path runtimeRootDir;
     private final boolean showTestScenarios;
     private final ObjectMapper jsonMapper = new ObjectMapper();
     private final ObjectMapper yamlMapper = new ObjectMapper(new YAMLFactory());
@@ -35,25 +37,32 @@ public class ScenarioService {
     @Autowired
     public ScenarioService(@Value("${scenarios.dir:scenarios}") String dir,
                            @Value("${scenarios.show-test:true}") boolean showTestScenarios,
+                           @Value("${pockethive.scenarios.runtime-root}") String runtimeRoot,
                            CapabilityCatalogueService capabilities) throws IOException {
-        this(Paths.get(dir), showTestScenarios, capabilities);
+        this(Paths.get(dir), Paths.get(runtimeRoot), showTestScenarios, capabilities);
     }
 
     ScenarioService(String dir,
+                    String runtimeRoot,
                     CapabilityCatalogueService capabilities) throws IOException {
-        this(Paths.get(dir), true, capabilities);
+        this(Paths.get(dir), Paths.get(runtimeRoot), true, capabilities);
     }
 
     private ScenarioService(Path dir,
+                            Path runtimeRoot,
                             boolean showTestScenarios,
                             CapabilityCatalogueService capabilities) throws IOException {
         this.storageDir = dir;
         this.testStorageDir = dir.resolve("e2e");
+        this.bundleRootDir = dir.resolve("bundles");
+        this.runtimeRootDir = runtimeRoot.toAbsolutePath().normalize();
         this.showTestScenarios = showTestScenarios;
         Files.createDirectories(this.storageDir);
         if (this.showTestScenarios) {
             Files.createDirectories(this.testStorageDir);
         }
+        Files.createDirectories(this.bundleRootDir);
+        Files.createDirectories(this.runtimeRootDir);
         this.capabilities = capabilities;
     }
 
@@ -69,6 +78,7 @@ public class ScenarioService {
         if (showTestScenarios && Files.isDirectory(testStorageDir)) {
             loadFromDirectory(testStorageDir, loaded);
         }
+        loadFromBundles(bundleRootDir, loaded);
 
         scenarios.clear();
         scenarios.putAll(loaded);
@@ -242,12 +252,113 @@ public class ScenarioService {
         return new ScenarioSummary(scenario.getId(), scenario.getName());
     }
 
+    Path bundleDir(String id) {
+        String cleaned = sanitize(id);
+        Path dir = bundleRootDir.resolve(cleaned).normalize();
+        if (!dir.startsWith(bundleRootDir)) {
+            throw new IllegalArgumentException("Invalid scenario id");
+        }
+        return dir;
+    }
+
+    Path runtimeDir(String swarmId) {
+        String cleaned = sanitize(swarmId);
+        Path dir = runtimeRootDir.resolve(cleaned).normalize();
+        if (!dir.startsWith(runtimeRootDir)) {
+            throw new IllegalArgumentException("Invalid swarm id");
+        }
+        return dir;
+    }
+
+    public Path prepareRuntimeDirectory(String scenarioId, String swarmId) throws IOException {
+        if (scenarioId == null || scenarioId.isBlank()) {
+            throw new IllegalArgumentException("scenarioId must not be null or blank");
+        }
+        if (swarmId == null || swarmId.isBlank()) {
+            throw new IllegalArgumentException("swarmId must not be null or blank");
+        }
+        if (!scenarios.containsKey(scenarioId)) {
+            throw new IllegalArgumentException("Scenario '%s' not found".formatted(scenarioId));
+        }
+
+        Path target = runtimeDir(swarmId);
+        if (Files.exists(target)) {
+            clearDirectory(target);
+        }
+        Files.createDirectories(target);
+
+        Path source = bundleDir(scenarioId);
+        if (Files.isDirectory(source)) {
+            copyDirectory(source, target);
+        } else {
+            logger.info("No bundle directory found for scenario '{}'; runtime directory {} will be empty",
+                scenarioId, target);
+        }
+
+        return target;
+    }
+
+    private void clearDirectory(Path directory) throws IOException {
+        if (!Files.isDirectory(directory)) {
+            return;
+        }
+        try (Stream<Path> paths = Files.list(directory)) {
+            for (Path path : (Iterable<Path>) paths::iterator) {
+                if (Files.isDirectory(path)) {
+                    clearDirectory(path);
+                }
+                Files.deleteIfExists(path);
+            }
+        }
+    }
+
+    private void copyDirectory(Path source, Path target) throws IOException {
+        try (Stream<Path> stream = Files.walk(source)) {
+            for (Path path : (Iterable<Path>) stream::iterator) {
+                Path relative = source.relativize(path);
+                Path dest = target.resolve(relative);
+                if (Files.isDirectory(path)) {
+                    Files.createDirectories(dest);
+                } else {
+                    Files.createDirectories(dest.getParent());
+                    Files.copy(path, dest, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.COPY_ATTRIBUTES);
+                }
+            }
+        }
+    }
+
     private void loadFromDirectory(Path directory, Map<String, ScenarioRecord> target) throws IOException {
         if (!Files.isDirectory(directory)) {
             return;
         }
         try (DirectoryStream<Path> stream = Files.newDirectoryStream(directory, "*.{json,yaml,yml}")) {
             for (Path path : stream) {
+                Format format = detectFormat(path);
+                Scenario scenario = read(path, format);
+                ScenarioRecord record = recordFor(scenario, format);
+                ScenarioRecord previous = target.put(scenario.getId(), record);
+                if (previous != null) {
+                    logger.warn("Duplicate scenario id '{}' found while loading {}; keeping latest", scenario.getId(), path);
+                }
+            }
+        }
+    }
+
+    private void loadFromBundles(Path bundleRoot, Map<String, ScenarioRecord> target) throws IOException {
+        if (!Files.isDirectory(bundleRoot)) {
+            return;
+        }
+        try (Stream<Path> stream = Files.walk(bundleRoot)) {
+            for (Path path : (Iterable<Path>) stream::iterator) {
+                if (!Files.isRegularFile(path)) {
+                    continue;
+                }
+                String name = path.getFileName().toString();
+                if (!name.equals("scenario.yaml")
+                    && !name.equals("scenario.yml")
+                    && !name.equals("scenario.json")) {
+                    continue;
+                }
                 Format format = detectFormat(path);
                 Scenario scenario = read(path, format);
                 ScenarioRecord record = recordFor(scenario, format);

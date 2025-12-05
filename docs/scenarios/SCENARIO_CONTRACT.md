@@ -208,12 +208,12 @@ Examples:
 ```bash
 # Check generator templating only
 tools/scenario-templating-check/run.sh \
-  --scenario scenario-manager-service/scenarios/e2e/templated-rest.yaml
+  --scenario scenarios/bundles/templated-rest/scenario.yaml
 
 # Check generator + HTTP Builder templates referenced from a scenario
 tools/scenario-templating-check/run.sh \
   --check-http-templates \
-  --scenario scenario-manager-service/scenarios/e2e/redis-dataset-demo.yaml
+  --scenario scenarios/bundles/redis-dataset-demo/scenario.yaml
 ```
 
 The tool will:
@@ -233,7 +233,7 @@ may be bound to a **System Under Test (SUT)** chosen at create time.
 The contract for SUT environments lives in
 `common/swarm-model/src/main/java/io/pockethive/swarm/model/{SutEnvironment,SutEndpoint}.java`
 and is represented on disk as YAML under
-`scenario-manager-service/sut-environments*.yaml`.
+`scenario-manager-service/sut/sut-environments*.yaml`.
 
 ### SUT environment YAML
 

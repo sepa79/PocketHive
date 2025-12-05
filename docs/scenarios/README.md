@@ -21,9 +21,11 @@ and `io.pockethive.swarm.model.SwarmTemplate`:
   - `bees[]` – list of worker definitions (`Bee` records).
 - Optional `trafficPolicy` – buffer guards and other traffic shaping.
 
-Scenarios are stored under
-`scenario-manager-service/scenarios` and are loaded by the
-Scenario Manager service at startup.
+Scenarios are stored as bundles under
+`scenarios/bundles/{scenarioId}/scenario.yaml` at the repo root and are
+loaded by the Scenario Manager service at startup. The authoring root is
+configurable via the `scenarios.dir` property; bundles are then expected
+under `scenarios.dir/bundles/{scenarioId}`.
 
 ## Key building blocks
 
@@ -61,4 +63,3 @@ control‑plane contract; scenarios are the authoring‑time format.
 
 These docs are designed to be embedded into the UI as help pages.
 Callers should link here rather than re‑describing the contract.
-

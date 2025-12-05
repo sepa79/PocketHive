@@ -1,6 +1,7 @@
 package io.pockethive.scenarios;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import jakarta.validation.Valid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -11,14 +12,23 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
+import java.util.Locale;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
+import java.util.zip.ZipOutputStream;
 
 @RestController
 @RequestMapping("/scenarios")
 public class ScenarioController {
     private static final Logger log = LoggerFactory.getLogger(ScenarioController.class);
     private static final ObjectMapper LOG_MAPPER = new ObjectMapper();
+    private static final ObjectMapper YAML_MAPPER = new ObjectMapper(new YAMLFactory());
     private final ScenarioService service;
     private final AvailableScenarioRegistry availableScenarios;
 
@@ -100,6 +110,18 @@ public class ScenarioController {
     void invalidId() {
     }
 
+    @PostMapping(value = "/{id}/runtime", produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<ScenarioRuntimeResponse> prepareRuntime(@PathVariable("id") String id,
+                                                                  @RequestBody RuntimeRequest request) throws IOException {
+        String swarmId = request != null ? request.swarmId() : null;
+        log.info("[REST] POST /scenarios/{}/runtime swarmId={}", id, swarmId);
+        Scenario scenario = service.find(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        Path runtimeDir = service.prepareRuntimeDirectory(scenario.getId(), swarmId);
+        ScenarioRuntimeResponse body = new ScenarioRuntimeResponse(scenario.getId(), swarmId, runtimeDir.toString());
+        log.info("[REST] POST /scenarios/{}/runtime -> status=200 body={}", id, safeJson(body));
+        return ResponseEntity.ok(body);
+    }
+
     private static String safeJson(Object value) {
         if (value == null) {
             return "";
@@ -117,5 +139,11 @@ public class ScenarioController {
             }
             return text;
         }
+    }
+
+    public record RuntimeRequest(String swarmId) {
+    }
+
+    public record ScenarioRuntimeResponse(String scenarioId, String swarmId, String runtimeDir) {
     }
 }
