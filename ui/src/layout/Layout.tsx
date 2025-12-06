@@ -1,5 +1,5 @@
 import { NavLink, Outlet } from 'react-router-dom'
-import { Hexagon, Radio, Droplet, Database, List } from 'lucide-react'
+import { Hexagon, Radio, Droplet, Database, List, Activity } from 'lucide-react'
 import MonolithIcon from '../icons/Monolith'
 import Health from '../components/Health'
 import Connectivity from '../components/Connectivity'
@@ -73,6 +73,15 @@ export default function Layout() {
           >
             <Database strokeWidth={1.5} className="tab-icon text-white/80" />
             SUTs
+          </NavLink>
+          <NavLink
+            to="/perf"
+            className={({ isActive }) =>
+              `tab-btn flex items-center${isActive ? ' tab-active' : ''}`
+            }
+          >
+            <Activity strokeWidth={1.5} className="tab-icon text-white/80" />
+            Perf
           </NavLink>
           <button
             className={`tab-btn flex items-center${buzzVisible ? ' tab-active' : ''}`}
