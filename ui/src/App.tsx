@@ -9,6 +9,7 @@ import { SwarmMetadataProvider } from './contexts/SwarmMetadataContext'
 import SutEnvironmentsPage from './pages/sut/SutEnvironmentsPage'
 import SwarmListPage from './pages/SwarmListPage'
 import ScenariosPage from './pages/ScenariosPage'
+import PerfModelerPage from './pages/perf/PerfModelerPage'
 
 export default function App() {
   return (
@@ -52,6 +53,7 @@ export default function App() {
           }
         />
         <Route path="sut" element={<SutEnvironmentsPage />} />
+        <Route path="perf" element={<PerfModelerPage />} />
         <Route path="nectar" element={<Nectar />} />
       </Route>
     </Routes>
