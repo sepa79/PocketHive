@@ -32,7 +32,14 @@ export default function App() {
             </SwarmMetadataProvider>
           }
         />
-        <Route path="scenarios" element={<ScenariosPage />} />
+        <Route
+          path="scenarios"
+          element={
+            <CapabilitiesProvider>
+              <ScenariosPage />
+            </CapabilitiesProvider>
+          }
+        />
         <Route path="sut" element={<SutEnvironmentsPage />} />
         <Route path="nectar" element={<Nectar />} />
       </Route>

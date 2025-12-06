@@ -48,7 +48,7 @@ function normalizeSummary(input: unknown): ScenarioSummary | null {
 }
 
 export async function listScenarios(): Promise<ScenarioSummary[]> {
-  const response = await apiFetch('/scenario-manager/scenarios?includeDefunct=false', {
+  const response = await apiFetch('/scenario-manager/scenarios?includeDefunct=true', {
     headers: { Accept: 'application/json' },
   })
   await ensureOk(response, 'Failed to load scenarios')
@@ -61,6 +61,33 @@ export async function listScenarios(): Promise<ScenarioSummary[]> {
   } catch {
     return []
   }
+}
+
+export async function createScenario(payload: {
+  id: string
+  name: string
+  description?: string | null
+}): Promise<ScenarioSummary> {
+  const body = {
+    id: payload.id,
+    name: payload.name,
+    description:
+      typeof payload.description === 'string' && payload.description.trim().length > 0
+        ? payload.description.trim()
+        : null,
+  }
+  const response = await apiFetch('/scenario-manager/scenarios', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  await ensureOk(response, 'Failed to create scenario')
+  const data = (await response.json()) as unknown
+  const summary = normalizeSummary(data)
+  if (!summary) {
+    throw new Error('Scenario manager returned invalid scenario payload')
+  }
+  return summary
 }
 
 export async function downloadScenarioBundle(id: string): Promise<Blob> {
@@ -132,6 +159,7 @@ export interface ScenarioPlanStep {
   name: string | null
   time: string | null
   type: string | null
+  config?: Record<string, unknown> | null
 }
 
 export interface ScenarioPlanView {
@@ -143,11 +171,24 @@ export interface ScenarioPlanView {
   swarm: ScenarioPlanStep[]
 }
 
+export interface ScenarioTemplateBeeRef {
+  instanceId: string | null
+  role: string | null
+  image: string | null
+}
+
+export interface ScenarioTemplateRef {
+  image: string | null
+  bees: ScenarioTemplateBeeRef[]
+}
+
 export interface ScenarioPayload {
   id: string
   name: string
   description?: string | null
   plan?: unknown
+  templateRoles?: string[]
+  template?: ScenarioTemplateRef | null
 }
 
 export async function getScenario(id: string): Promise<ScenarioPayload | null> {
@@ -168,11 +209,38 @@ export async function getScenario(id: string): Promise<ScenarioPayload | null> {
     const idValue = asString(record['id'])
     const nameValue = asString(record['name']) ?? idValue
     if (!idValue || !nameValue) return null
+    let templateRoles: string[] | undefined
+    let template: ScenarioTemplateRef | null = null
+    const templateValue = record['template']
+    if (isRecord(templateValue)) {
+      const tpl = templateValue as Record<string, unknown>
+      const image = asString(tpl['image'])
+      const beesRaw = Array.isArray(tpl['bees']) ? (tpl['bees'] as unknown[]) : []
+      const bees: ScenarioTemplateBeeRef[] = []
+      const roles: string[] = []
+      for (const entry of beesRaw) {
+        if (!isRecord(entry)) continue
+        const beeRec = entry as Record<string, unknown>
+        const instanceId = asString(beeRec['instanceId'])
+        const role = asString(beeRec['role'])
+        const beeImage = asString(beeRec['image'])
+        bees.push({ instanceId, role, image: beeImage })
+        if (role) {
+          roles.push(role)
+        }
+      }
+      if (roles.length > 0) {
+        templateRoles = Array.from(new Set(roles)).sort()
+      }
+      template = { image: image ?? null, bees }
+    }
     return {
       id: idValue,
       name: nameValue,
       description: asString(record['description']),
       plan: record['plan'],
+      templateRoles,
+      template,
     }
   } catch {
     return null
@@ -215,6 +283,12 @@ export function mergePlan(
       if (step.name) entry.name = step.name
       if (step.time) entry.time = step.time
       if (step.type) entry.type = step.type
+      if (step.config && typeof step.config === 'object') {
+        const cfg = step.config as Record<string, unknown>
+        if (Object.keys(cfg).length > 0) {
+          entry.config = cfg
+        }
+      }
       return entry
     })
     return result
@@ -226,6 +300,12 @@ export function mergePlan(
     if (step.name) entry.name = step.name
     if (step.time) entry.time = step.time
     if (step.type) entry.type = step.type
+    if (step.config && typeof step.config === 'object') {
+      const cfg = step.config as Record<string, unknown>
+      if (Object.keys(cfg).length > 0) {
+        entry.config = cfg
+      }
+    }
     return entry
   })
 
@@ -249,11 +329,17 @@ export function buildPlanView(plan: unknown): ScenarioPlanView | null {
         .map((stepEntry) => {
           if (!isRecord(stepEntry)) return null as ScenarioPlanStep | null
           const stepRec = stepEntry as Record<string, unknown>
+          const configValue = stepRec['config']
+          const config =
+            isRecord(configValue) && Object.keys(configValue as Record<string, unknown>).length > 0
+              ? (configValue as Record<string, unknown>)
+              : null
           return {
             stepId: asString(stepRec['stepId']),
             name: asString(stepRec['name']),
             time: asString(stepRec['time']),
             type: asString(stepRec['type']),
+            config,
           }
         })
         .filter((step): step is ScenarioPlanStep => step !== null)
@@ -268,11 +354,17 @@ export function buildPlanView(plan: unknown): ScenarioPlanView | null {
     .map((stepEntry) => {
       if (!isRecord(stepEntry)) return null as ScenarioPlanStep | null
       const rec = stepEntry as Record<string, unknown>
+      const configValue = rec['config']
+      const config =
+        isRecord(configValue) && Object.keys(configValue as Record<string, unknown>).length > 0
+          ? (configValue as Record<string, unknown>)
+          : null
       return {
         stepId: asString(rec['stepId']),
         name: asString(rec['name']),
         time: asString(rec['time']),
         type: asString(rec['type']),
+        config,
       }
     })
     .filter((step): step is ScenarioPlanStep => step !== null)

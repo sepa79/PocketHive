@@ -1,77 +1,71 @@
-id: local-rest-plan-demo
-name: Local REST Plan Demo
-description: >
-  Local REST swarm that uses a scenario plan to drive the entire lifecycle:
-  start all workers, change generator rate, stop and restart the generator,
-  then stop the swarm without issuing an explicit swarm-start command.
+---
+id: "local-rest-plan-demo"
+name: "Local REST Plan Demo"
+description: "Local REST swarm that uses a scenario plan to drive the entire lifecycle:\
+  \ start all workers, change generator rate, stop and restart the generator, then\
+  \ stop the swarm without issuing an explicit swarm-start command.\n"
 template:
-  image: swarm-controller:latest
+  image: "swarm-controller:latest"
   bees:
-    - role: generator
-      image: generator:latest
-      config:
-        inputs:
-          scheduler:
-            ratePerSec: 10
-        worker:
-          message:
-            bodyType: HTTP
-            path: /test
-            method: POST
-            body: '{"event":"local-rest-plan-demo"}'
-            headers:
-              content-type: application/json
-      work:
-        out: genQ
-    - role: processor
-      image: processor:latest
-      config:
-        worker:
-          baseUrl: "{{ sut.endpoints['default'].baseUrl }}/api"
-      work:
-        in: genQ
-        out: finalQ
-    - role: postprocessor
-      image: postprocessor:latest
-      config:
-        worker:
-          publishAllMetrics: true
-      work:
-        in: finalQ
-
+  - role: "generator"
+    image: "generator:latest"
+    work:
+      in: null
+      out: "genQ"
+    env: {}
+    config:
+      worker:
+        message:
+          bodyType: "HTTP"
+          path: "/test"
+          method: "POST"
+          body: "{\"event\":\"local-rest-plan-demo\"}"
+          headers:
+            content-type: "application/json"
+      inputs:
+        scheduler:
+          ratePerSec: 10
+  - role: "processor"
+    image: "processor:latest"
+    work:
+      in: "genQ"
+      out: "finalQ"
+    env: {}
+    config:
+      worker:
+        baseUrl: "{{ sut.endpoints['default'].baseUrl }}/api"
+  - role: "postprocessor"
+    image: "postprocessor:latest"
+    work:
+      in: "finalQ"
+      out: null
+    env: {}
+    config:
+      worker:
+        publishAllMetrics: true
+trafficPolicy: null
 plan:
-  # Scenario plan for local-rest-plan-demo:
-  # - start swarm workloads
-  # - speed up generator
-  # - stop generator
-  # - restart generator
-  # - stop swarm workloads
   bees:
-    - role: generator
-      steps:
-        - stepId: gen-rate-fast
-          name: Increase generator rate to 50/s
-          time: PT5S
-          type: config-update
-          config:
-            inputs:
-              scheduler:
-                ratePerSec: 50
-        - stepId: gen-stop-1
-          name: Stop generator
-          time: PT15S
-          type: stop
-        - stepId: gen-start-2
-          name: Restart generator
-          time: PT25S
-          type: start
-
+  - role: "generator"
+    steps:
+    - stepId: "gen-rate-fast"
+      name: "Increase generator rate to 50/s"
+      time: "5s"
+      type: "config-update"
+    - stepId: "gen-stop-1"
+      name: "Stop generator"
+      time: "15s"
+      type: "stop"
+    - stepId: "gen-start-2"
+      name: "Restart generator"
+      time: "35s"
+      type: "start"
   swarm:
-    - stepId: swarm-start
-      name: Enable swarm workloads
-      time: PT1S
-      type: start
-    - stepId: swarm-stop
-      name: Stop swarm workloads
-      time: PT35S
-      type: stop
+  - stepId: "swarm-start"
+    name: "Enable swarm workloads"
+    time: "1s"
+    type: "start"
+  - stepId: "swarm-stop"
+    name: "Stop swarm workloads"
+    time: "3519s"
+    type: "stop"
