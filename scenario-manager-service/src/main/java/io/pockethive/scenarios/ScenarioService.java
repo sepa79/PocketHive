@@ -13,10 +13,13 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
+import java.io.ByteArrayInputStream;
 import java.nio.file.*;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Stream;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
 
 @Service
 public class ScenarioService {
@@ -177,6 +180,11 @@ public class ScenarioService {
         if (format != null) {
             Files.deleteIfExists(pathFor(id, format));
         }
+        Path bundleDir = bundleDir(id);
+        if (Files.isDirectory(bundleDir)) {
+            clearDirectory(bundleDir);
+            Files.deleteIfExists(bundleDir);
+        }
     }
 
     private ScenarioRecord recordFor(Scenario scenario, Format format) {
@@ -298,7 +306,7 @@ public class ScenarioService {
         return target;
     }
 
-    private void clearDirectory(Path directory) throws IOException {
+    void clearDirectory(Path directory) throws IOException {
         if (!Files.isDirectory(directory)) {
             return;
         }
@@ -312,7 +320,7 @@ public class ScenarioService {
         }
     }
 
-    private void copyDirectory(Path source, Path target) throws IOException {
+    void copyDirectory(Path source, Path target) throws IOException {
         try (Stream<Path> stream = Files.walk(source)) {
             for (Path path : (Iterable<Path>) stream::iterator) {
                 Path relative = source.relativize(path);
@@ -398,5 +406,223 @@ public class ScenarioService {
         return Format.JSON;
     }
 
+    public Map<String, Object> getPlan(String id) {
+        ScenarioRecord record = scenarios.get(id);
+        if (record == null) {
+            throw new IllegalArgumentException("Scenario '" + id + "' not found");
+        }
+        Scenario scenario = record.scenario();
+        Map<String, Object> plan = scenario.getPlan();
+        if (plan == null) {
+            return Map.of();
+        }
+        return plan;
+    }
+
+    public String readScenarioRaw(String id) throws IOException {
+        Path file = scenarioDescriptorFile(id);
+        return Files.readString(file);
+    }
+
+    public void updateScenarioFromRaw(String id, String body) throws IOException {
+        if (body == null) {
+            throw new IllegalArgumentException("Scenario body must not be null");
+        }
+        String trimmed = body.trim();
+        if (trimmed.isEmpty()) {
+            throw new IllegalArgumentException("Scenario body must not be empty");
+        }
+
+        Path file = scenarioDescriptorFile(id);
+        Format format = detectFormat(file);
+        Scenario scenario;
+        try {
+            scenario = (format == Format.JSON ? jsonMapper : yamlMapper).readValue(trimmed, Scenario.class);
+        } catch (IOException e) {
+            throw new IOException("Failed to parse scenario content: " + e.getMessage(), e);
+        }
+
+        if (scenario.getId() == null || scenario.getId().isBlank()) {
+            throw new IllegalArgumentException("Scenario id must not be null or blank");
+        }
+        if (!id.equals(scenario.getId())) {
+            throw new IllegalArgumentException(
+                    "Scenario id '" + scenario.getId() + "' does not match path id '" + id + "'");
+        }
+
+        (format == Format.JSON ? jsonMapper : yamlMapper)
+                .writerWithDefaultPrettyPrinter()
+                .writeValue(file.toFile(), scenario);
+
+        reload();
+    }
+
+    public Scenario updatePlan(String id, Map<String, Object> plan) throws IOException {
+        Path file = scenarioDescriptorFile(id);
+        Format format = detectFormat(file);
+        Scenario scenario = read(file, format);
+        if (scenario.getId() == null || scenario.getId().isBlank()) {
+            throw new IllegalArgumentException("Scenario id must not be null or blank");
+        }
+        if (!id.equals(scenario.getId())) {
+            throw new IllegalArgumentException(
+                "Scenario id '" + scenario.getId() + "' does not match path id '" + id + "'");
+        }
+
+        Map<String, Object> effectivePlan = plan == null || plan.isEmpty() ? null : plan;
+        scenario.setPlan(effectivePlan);
+
+        (format == Format.JSON ? jsonMapper : yamlMapper)
+            .writerWithDefaultPrettyPrinter()
+            .writeValue(file.toFile(), scenario);
+
+        reload();
+        ScenarioRecord record = scenarios.get(id);
+        return record != null ? record.scenario() : scenario;
+    }
+
+    public Scenario createBundleFromZip(byte[] zipBytes) throws IOException {
+        UploadedBundle uploaded = unpackBundle(zipBytes, null);
+        try {
+            String id = uploaded.scenario().getId();
+            if (id == null || id.isBlank()) {
+                throw new IllegalArgumentException("Scenario id must not be null or blank");
+            }
+            if (scenarios.containsKey(id)) {
+                throw new IllegalArgumentException("Scenario '%s' already exists".formatted(id));
+            }
+            writeBundle(uploaded);
+            reload();
+            ScenarioRecord record = scenarios.get(id);
+            return record != null ? record.scenario() : uploaded.scenario();
+        } finally {
+            cleanupUploaded(uploaded);
+        }
+    }
+
+    private Path scenarioDescriptorFile(String id) throws IOException {
+        Path bundleDir = bundleDir(id);
+        if (!Files.isDirectory(bundleDir)) {
+            throw new IllegalArgumentException("Bundle directory not found for scenario '" + id + "'");
+        }
+        List<String> candidates = List.of("scenario.yaml", "scenario.yml", "scenario.json");
+        for (String name : candidates) {
+            Path candidate = bundleDir.resolve(name);
+            if (Files.isRegularFile(candidate)) {
+                return candidate;
+            }
+        }
+        throw new IllegalArgumentException("Scenario descriptor not found for scenario '" + id + "'");
+    }
+
+    public Scenario replaceBundleFromZip(String expectedId, byte[] zipBytes) throws IOException {
+        UploadedBundle uploaded = unpackBundle(zipBytes, expectedId);
+        try {
+            String id = uploaded.scenario().getId();
+            writeBundle(uploaded);
+            reload();
+            ScenarioRecord record = scenarios.get(id);
+            return record != null ? record.scenario() : uploaded.scenario();
+        } finally {
+            cleanupUploaded(uploaded);
+        }
+    }
+
+    private UploadedBundle unpackBundle(byte[] zipBytes, String expectedId) throws IOException {
+        if (zipBytes == null || zipBytes.length == 0) {
+            throw new IllegalArgumentException("Zip payload must not be empty");
+        }
+        Path tempRoot = Files.createTempDirectory(bundleRootDir, "upload-");
+        try (ZipInputStream zis = new ZipInputStream(new ByteArrayInputStream(zipBytes))) {
+            ZipEntry entry;
+            while ((entry = zis.getNextEntry()) != null) {
+                String name = entry.getName();
+                if (name == null || name.isBlank()) {
+                    continue;
+                }
+                if (name.startsWith("/") || name.contains("..")) {
+                    throw new IllegalArgumentException("Invalid entry path '%s'".formatted(name));
+                }
+                Path dest = tempRoot.resolve(name).normalize();
+                if (!dest.startsWith(tempRoot)) {
+                    throw new IllegalArgumentException("Invalid entry path '%s'".formatted(name));
+                }
+                if (entry.isDirectory()) {
+                    Files.createDirectories(dest);
+                } else {
+                    Path parent = dest.getParent();
+                    if (parent != null) {
+                        Files.createDirectories(parent);
+                    }
+                    Files.copy(zis, dest, StandardCopyOption.REPLACE_EXISTING);
+                }
+            }
+
+            ScenarioDescriptor descriptor = findScenarioDescriptor(tempRoot);
+            Scenario scenario = descriptor.scenario();
+            String id = scenario.getId();
+            if (id == null || id.isBlank()) {
+                throw new IllegalArgumentException("Scenario id must not be null or blank");
+            }
+            if (expectedId != null && !expectedId.equals(id)) {
+                throw new IllegalArgumentException(
+                        "Scenario id '%s' in bundle does not match expected id '%s'".formatted(id, expectedId));
+            }
+            return new UploadedBundle(scenario, descriptor.rootDir(), tempRoot);
+        } catch (IOException | RuntimeException e) {
+            clearDirectory(tempRoot);
+            Files.deleteIfExists(tempRoot);
+            throw e;
+        }
+    }
+
+    private ScenarioDescriptor findScenarioDescriptor(Path root) throws IOException {
+        ScenarioDescriptor found = null;
+        try (Stream<Path> stream = Files.walk(root)) {
+            for (Path path : (Iterable<Path>) stream::iterator) {
+                if (!Files.isRegularFile(path)) {
+                    continue;
+                }
+                String name = path.getFileName().toString();
+                if (!name.equals("scenario.yaml")
+                    && !name.equals("scenario.yml")
+                    && !name.equals("scenario.json")) {
+                    continue;
+                }
+                Format format = detectFormat(path);
+                Scenario scenario = read(path, format);
+                if (found != null) {
+                    throw new IllegalArgumentException("Bundle contains multiple scenario descriptors");
+                }
+                found = new ScenarioDescriptor(scenario, path.getParent());
+            }
+        }
+        if (found == null) {
+            throw new IllegalArgumentException("Bundle does not contain a scenario.yaml, scenario.yml or scenario.json");
+        }
+        return found;
+    }
+
+    private void writeBundle(UploadedBundle uploaded) throws IOException {
+        String id = uploaded.scenario().getId();
+        Path sourceDir = uploaded.rootDir();
+        Path targetDir = bundleDir(id);
+        if (Files.exists(targetDir)) {
+            clearDirectory(targetDir);
+        }
+        Files.createDirectories(targetDir);
+        copyDirectory(sourceDir, targetDir);
+    }
+
+    private void cleanupUploaded(UploadedBundle uploaded) throws IOException {
+        Path tempRoot = uploaded.tempRoot();
+        clearDirectory(tempRoot);
+        Files.deleteIfExists(tempRoot);
+    }
+
     private record ScenarioRecord(Scenario scenario, Format format, boolean defunct) { }
+
+    private record ScenarioDescriptor(Scenario scenario, Path rootDir) { }
+
+    private record UploadedBundle(Scenario scenario, Path rootDir, Path tempRoot) { }
 }

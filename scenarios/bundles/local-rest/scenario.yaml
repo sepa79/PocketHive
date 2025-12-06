@@ -40,6 +40,8 @@ template:
         out: finalQ
     - role: postprocessor
       image: postprocessor:latest
+      config:
+        worker:
+          publishAllMetrics: true
       work:
         in: finalQ
-

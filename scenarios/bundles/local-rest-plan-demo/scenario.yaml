@@ -39,3 +39,39 @@ template:
       work:
         in: finalQ
 
+plan:
+  # Scenario plan for local-rest-plan-demo:
+  # - start swarm workloads
+  # - speed up generator
+  # - stop generator
+  # - restart generator
+  # - stop swarm workloads
+  bees:
+    - role: generator
+      steps:
+        - stepId: gen-rate-fast
+          name: Increase generator rate to 50/s
+          time: PT5S
+          type: config-update
+          config:
+            inputs:
+              scheduler:
+                ratePerSec: 50
+        - stepId: gen-stop-1
+          name: Stop generator
+          time: PT15S
+          type: stop
+        - stepId: gen-start-2
+          name: Restart generator
+          time: PT25S
+          type: start
+
+  swarm:
+    - stepId: swarm-start
+      name: Enable swarm workloads
+      time: PT1S
+      type: start
+    - stepId: swarm-stop
+      name: Stop swarm workloads
+      time: PT35S
+      type: stop

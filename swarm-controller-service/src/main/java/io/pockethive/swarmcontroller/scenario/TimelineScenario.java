@@ -334,7 +334,15 @@ public final class TimelineScenario implements Scenario {
           due.add(s);
         }
       }
-      // swarmSteps currently ignored; reserved for future swarm-level commands
+      for (StepInstance s : swarmSteps) {
+        if (!s.fired && s.dueMillis <= elapsedMillis) {
+          s.fired = true;
+          due.add(s);
+        }
+      }
+      if (due.size() > 1) {
+        due.sort(Comparator.comparingLong(si -> si.dueMillis));
+      }
       return due;
     }
 

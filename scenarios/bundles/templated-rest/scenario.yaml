@@ -38,4 +38,9 @@ template:
       work:
         in: mod
         out: final
-
+    - role: postprocessor
+      image: postprocessor:latest
+      config:
+        publishAllMetrics: true
+      work:
+        in: final

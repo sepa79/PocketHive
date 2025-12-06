@@ -7,6 +7,7 @@ import { CapabilitiesProvider } from './contexts/CapabilitiesContext'
 import { SwarmMetadataProvider } from './contexts/SwarmMetadataContext'
 import SutEnvironmentsPage from './pages/sut/SutEnvironmentsPage'
 import SwarmListPage from './pages/SwarmListPage'
+import ScenariosPage from './pages/ScenariosPage'
 
 export default function App() {
   return (
@@ -31,6 +32,7 @@ export default function App() {
             </SwarmMetadataProvider>
           }
         />
+        <Route path="scenarios" element={<ScenariosPage />} />
         <Route path="sut" element={<SutEnvironmentsPage />} />
         <Route path="nectar" element={<Nectar />} />
       </Route>
