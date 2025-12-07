@@ -357,15 +357,17 @@ function PlanTimelineLanes({ rows, onTimeChange }: PlanTimelineLanesProps) {
                 </div>
                 <div className="relative flex-1 h-9 border-l border-white/10">
                   {lane.rows.map((row) => {
-                    const secs = row.seconds ?? 0
-                    const baseLeft =
-                      (secs / zoom.secondsPerDivision) *
-                      TIMELINE_DIVISION_PX
-                    const offsetPx =
+                    const baseSeconds = row.seconds ?? 0
+                    const virtualSeconds =
                       activeDrag && activeDrag.row.key === row.key
-                        ? activeDrag.deltaPx
-                        : 0
-                    const left = Math.max(0, baseLeft + offsetPx)
+                        ? Math.max(0, baseSeconds + activeDrag.deltaPx / pxPerSecond)
+                        : row.seconds
+                    const secondsForPosition = virtualSeconds ?? baseSeconds
+                    const left = Math.max(
+                      0,
+                      (secondsForPosition / zoom.secondsPerDivision) *
+                        TIMELINE_DIVISION_PX,
+                    )
                     return (
                       <div
                         key={row.key}
@@ -380,7 +382,7 @@ function PlanTimelineLanes({ rows, onTimeChange }: PlanTimelineLanesProps) {
                         }
                       >
                         <span className="font-mono">
-                          {formatDurationLabel(row.seconds)}
+                          {formatDurationLabel(virtualSeconds ?? row.seconds)}
                         </span>
                         <span className="max-w-[140px] truncate">
                           {row.stepId ||

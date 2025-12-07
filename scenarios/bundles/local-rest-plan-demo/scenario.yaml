@@ -67,5 +67,5 @@ plan:
     type: "start"
   - stepId: "swarm-stop"
     name: "Stop swarm workloads"
-    time: "3519s"
+    time: "40s"
     type: "stop"
