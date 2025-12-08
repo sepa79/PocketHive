@@ -1,0 +1,72 @@
+id: csv-dataset-demo
+name: CSV Dataset Demo
+description: Demonstrates CSV_DATASET input with header parsing, rotation, and property access in templates
+
+template:
+  image: swarm-controller:latest
+  bees:
+    # CSV with headers - demonstrates column name access
+    - role: csvWithHeaders
+      image: generator:latest
+      volumes:
+        - ./csv-data:/app/csv-data:ro
+      config:
+        inputs:
+          type: CSV_DATASET
+          csv:
+            filePath: /app/csv-data/demo-with-headers.csv
+            ratePerSec: 2
+            rotate: true
+            skipHeader: true
+        worker:
+          message:
+            bodyType: SIMPLE
+            body: |
+              {
+                "source": "csv-with-headers",
+                "userId": "{{ payload.userId }}",
+                "email": "{{ payload.email }}",
+                "status": "{{ payload.status }}"
+              }
+            headers:
+              x-ph-source: csv-headers
+      work:
+        out: demo-output
+
+    # CSV without headers - demonstrates col0, col1, col2 access
+    - role: csvNoHeaders
+      image: generator:latest
+      volumes:
+        - ./csv-data:/app/csv-data:ro
+      config:
+        inputs:
+          type: CSV_DATASET
+          csv:
+            filePath: /app/csv-data/demo-no-headers.csv
+            ratePerSec: 2
+            rotate: true
+            skipHeader: false
+        worker:
+          message:
+            bodyType: SIMPLE
+            body: |
+              {
+                "source": "csv-no-headers",
+                "field1": "{{ payload.col0 }}",
+                "field2": "{{ payload.col1 }}",
+                "field3": "{{ payload.col2 }}"
+              }
+            headers:
+              x-ph-source: csv-no-headers
+      work:
+        out: demo-output
+
+    # Postprocessor to collect results
+    - role: postprocessor
+      image: postprocessor:latest
+      config:
+        worker:
+          postprocessor:
+            publish-all-metrics: false
+      work:
+        in: demo-output

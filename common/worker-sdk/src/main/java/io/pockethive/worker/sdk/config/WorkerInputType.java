@@ -16,5 +16,9 @@ public enum WorkerInputType {
     /**
      * Input driven by Redis lists for dataset playback at a fixed rate.
      */
-    REDIS_DATASET
+    REDIS_DATASET,
+    /**
+     * Input driven by CSV files for dataset playback at a fixed rate.
+     */
+    CSV_DATASET
 }
