@@ -14,6 +14,9 @@ template:
       out: "genQ"
     env: {}
     config:
+      inputs:
+        scheduler:
+          ratePerSec: 10
       worker:
         message:
           bodyType: "HTTP"
@@ -22,9 +25,6 @@ template:
           body: "{\"event\":\"local-rest-plan-demo\"}"
           headers:
             content-type: "application/json"
-      inputs:
-        scheduler:
-          ratePerSec: 10
   - role: "processor"
     image: "processor:latest"
     work:
@@ -52,6 +52,10 @@ plan:
       name: "Increase generator rate to 50/s"
       time: "5s"
       type: "config-update"
+      config:
+        inputs:
+          scheduler:
+            ratePerSec: 50
     - stepId: "gen-stop-1"
       name: "Stop generator"
       time: "15s"

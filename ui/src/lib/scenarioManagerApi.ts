@@ -175,6 +175,7 @@ export interface ScenarioTemplateBeeRef {
   instanceId: string | null
   role: string | null
   image: string | null
+  config?: Record<string, unknown> | null
 }
 
 export interface ScenarioTemplateRef {
@@ -224,7 +225,13 @@ export async function getScenario(id: string): Promise<ScenarioPayload | null> {
         const instanceId = asString(beeRec['instanceId'])
         const role = asString(beeRec['role'])
         const beeImage = asString(beeRec['image'])
-        bees.push({ instanceId, role, image: beeImage })
+        const configValue = beeRec['config']
+        const config =
+          isRecord(configValue) &&
+          Object.keys(configValue as Record<string, unknown>).length > 0
+            ? (configValue as Record<string, unknown>)
+            : null
+        bees.push({ instanceId, role, image: beeImage, config })
         if (role) {
           roles.push(role)
         }

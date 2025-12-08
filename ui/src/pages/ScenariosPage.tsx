@@ -47,6 +47,29 @@ type ConfigFormValue = string | boolean
 
 const TIMELINE_DIVISION_PX = 80
 
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function mergeConfig(
+  base: Record<string, unknown> | undefined,
+  patch: Record<string, unknown> | undefined,
+): Record<string, unknown> | undefined {
+  if (!patch || !isPlainObject(patch)) {
+    return base && Object.keys(base).length > 0 ? { ...base } : undefined
+  }
+  const target: Record<string, unknown> = base && isPlainObject(base) ? { ...base } : {}
+  for (const [key, value] of Object.entries(patch)) {
+    const existing = target[key]
+    if (isPlainObject(value) && isPlainObject(existing)) {
+      target[key] = mergeConfig(existing, value) as Record<string, unknown>
+    } else {
+      target[key] = value
+    }
+  }
+  return Object.keys(target).length > 0 ? target : undefined
+}
+
 const ZOOM_LEVELS = [
   { id: '1s', label: '1s / division', secondsPerDivision: 1 },
   { id: '5s', label: '5s / division', secondsPerDivision: 5 },
@@ -434,7 +457,7 @@ export default function ScenariosPage() {
   const replaceInputRef = useRef<HTMLInputElement | null>(null)
 
   const setToast = useUIStore((s) => s.setToast)
-  const { ensureCapabilities, getManifestForImage } = useCapabilities()
+  const { ensureCapabilities, getManifestForImage, manifests } = useCapabilities()
 
   const [configModalTarget, setConfigModalTarget] = useState<{
     kind: 'swarm' | 'bee'
@@ -445,6 +468,8 @@ export default function ScenariosPage() {
   const [configModalEntries, setConfigModalEntries] = useState<CapabilityConfigEntry[]>([])
   const [configModalForm, setConfigModalForm] = useState<Record<string, ConfigFormValue>>({})
   const [configModalError, setConfigModalError] = useState<string | null>(null)
+  const [configModalBaseConfig, setConfigModalBaseConfig] = useState<Record<string, unknown> | undefined>(undefined)
+  const [configModalEnabled, setConfigModalEnabled] = useState<Record<string, boolean>>({})
 
   const resetPlanHistory = useCallback((initial: ScenarioPlanView | null) => {
     if (!initial) {
@@ -692,6 +717,25 @@ export default function ScenariosPage() {
     try {
       await saveScenarioRaw(selectedId, rawYaml)
       await loadScenarios()
+      try {
+        const scenario = await getScenario(selectedId)
+        if (scenario) {
+          setSelectedScenario(scenario)
+          const builtPlan =
+            typeof scenario.plan !== 'undefined'
+              ? buildPlanView(scenario.plan)
+              : null
+          const normalised = normalisePlanTimes(builtPlan)
+          const initialPlan =
+            normalised ?? {
+              swarm: [],
+              bees: [],
+            }
+          resetPlanHistory(initialPlan)
+        }
+      } catch {
+        // ignore plan refresh failures; YAML save already succeeded
+      }
       setSavedYaml(rawYaml)
       setToast(`Saved scenario ${selectedId}`)
     } catch (e) {
@@ -765,6 +809,43 @@ export default function ScenariosPage() {
     [planDraft, selectedScenario],
   )
 
+  const resolveBeeTemplateConfig = useCallback(
+    (beeIndex: number): Record<string, unknown> | undefined => {
+      if (!selectedScenario?.template || !planDraft) return undefined
+      const tpl = selectedScenario.template
+      const beePlan = planDraft.bees[beeIndex]
+      if (!beePlan) return undefined
+      const tplBees = tpl.bees ?? []
+      if (beePlan.instanceId) {
+        const matches = tplBees.filter(
+          (b) => b.instanceId && b.instanceId === beePlan.instanceId,
+        )
+        if (
+          matches.length === 1 &&
+          matches[0]?.config &&
+          typeof matches[0].config === 'object'
+        ) {
+          return matches[0].config as Record<string, unknown>
+        }
+        return undefined
+      }
+      if (beePlan.role) {
+        const matches = tplBees.filter(
+          (b) => b.role && b.role === beePlan.role,
+        )
+        if (
+          matches.length === 1 &&
+          matches[0]?.config &&
+          typeof matches[0].config === 'object'
+        ) {
+          return matches[0].config as Record<string, unknown>
+        }
+      }
+      return undefined
+    },
+    [planDraft, selectedScenario],
+  )
+
   const getValueForPath = useCallback(
     (config: Record<string, unknown> | undefined, path: string): unknown => {
       if (!config || !path) return undefined
@@ -828,15 +909,6 @@ export default function ScenariosPage() {
     [],
   )
 
-  const computeInitialConfigValue = useCallback(
-    (entry: CapabilityConfigEntry, config: Record<string, unknown> | undefined): ConfigFormValue => {
-      const existing = getValueForPath(config, entry.name)
-      const source = existing !== undefined ? existing : entry.default
-      return formatValueForInput(entry, source)
-    },
-    [formatValueForInput, getValueForPath],
-  )
-
   const convertConfigFormValue = useCallback(
     (entry: CapabilityConfigEntry, rawValue: ConfigFormValue): { ok: true; apply: boolean; value: unknown } | { ok: false; message: string } => {
       const normalizedType = (entry.type || '').toLowerCase()
@@ -898,6 +970,59 @@ export default function ScenariosPage() {
     [],
   )
 
+  const inferIoTypeFromConfig = useCallback(
+    (componentConfig: Record<string, unknown> | undefined): string | undefined => {
+      if (!componentConfig) return undefined
+      const inputsRaw = componentConfig['inputs']
+      if (!inputsRaw || typeof inputsRaw !== 'object' || Array.isArray(inputsRaw)) {
+        return undefined
+      }
+      const inputs = inputsRaw as Record<string, unknown>
+      const hasScheduler =
+        inputs.scheduler && typeof inputs.scheduler === 'object' && !Array.isArray(inputs.scheduler)
+      const hasRedis =
+        inputs.redis && typeof inputs.redis === 'object' && !Array.isArray(inputs.redis)
+      if (hasScheduler) {
+        return 'SCHEDULER'
+      }
+      if (hasRedis) {
+        return 'REDIS_DATASET'
+      }
+      return undefined
+    },
+    [],
+  )
+
+  const buildConfigEntriesForComponent = useCallback(
+    (
+      manifest: CapabilityManifest,
+      componentConfig: Record<string, unknown> | undefined,
+    ): CapabilityConfigEntry[] => {
+      const baseEntries = Array.isArray(manifest.config) ? manifest.config : []
+      const ioType = inferIoTypeFromConfig(componentConfig)
+      if (!ioType) {
+        return baseEntries
+      }
+      const allEntries: CapabilityConfigEntry[] = [...baseEntries]
+      for (const m of manifests) {
+        const ui = m.ui as Record<string, unknown> | undefined
+        const ioTypeRaw = ui && typeof ui.ioType === 'string' ? ui.ioType : undefined
+        const manifestIoType = ioTypeRaw ? ioTypeRaw.trim().toUpperCase() : undefined
+        if (manifestIoType && manifestIoType === ioType && Array.isArray(m.config)) {
+          allEntries.push(...m.config)
+        }
+      }
+      const byName = new Map<string, CapabilityConfigEntry>()
+      for (const entry of allEntries) {
+        if (!byName.has(entry.name)) {
+          byName.set(entry.name, entry)
+        }
+      }
+      return Array.from(byName.values())
+    },
+    [inferIoTypeFromConfig, manifests],
+  )
+
   const openConfigModal = useCallback(
     async (target: { kind: 'swarm' | 'bee'; beeIndex: number | null; stepIndex: number }) => {
       if (!planDraft || !selectedScenario) {
@@ -923,34 +1048,77 @@ export default function ScenariosPage() {
         setToast('Capability manifest not available for this component')
         return
       }
-      const entries = Array.isArray(manifest.config) ? manifest.config : []
+      let templateComponentConfig: Record<string, unknown> | undefined
+      if (target.kind === 'bee' && target.beeIndex !== null) {
+        templateComponentConfig = resolveBeeTemplateConfig(target.beeIndex)
+      }
+      let baseConfig: Record<string, unknown> | undefined
+      if (target.kind === 'bee' && target.beeIndex !== null) {
+        const beeIndex = target.beeIndex
+        const bee = planDraft.bees[beeIndex]
+        const templateConfig = templateComponentConfig
+        let accumulated = templateConfig && isPlainObject(templateConfig) ? { ...templateConfig } : undefined
+        if (bee) {
+          bee.steps.forEach((step, index) => {
+            if (index >= target.stepIndex) return
+            if (step.type !== 'config-update') return
+            if (!step.config || !isPlainObject(step.config)) return
+            accumulated = mergeConfig(accumulated, step.config as Record<string, unknown>)
+          })
+        }
+        baseConfig = accumulated
+      }
+      const entries = buildConfigEntriesForComponent(manifest, baseConfig ?? templateComponentConfig)
       if (entries.length === 0) {
         setToast('No configurable options defined for this component')
         return
       }
       const step = getStepAtTarget(target)
-      const existingConfig =
+      const stepConfig =
         step && step.config && typeof step.config === 'object'
           ? (step.config as Record<string, unknown>)
           : undefined
+      const baseConfigForDisplay =
+        baseConfig ?? templateComponentConfig ?? undefined
       const form: Record<string, ConfigFormValue> = {}
+      const enabled: Record<string, boolean> = {}
       entries.forEach((entry) => {
-        form[entry.name] = computeInitialConfigValue(entry, existingConfig)
+        const overrideValue = stepConfig
+          ? getValueForPath(stepConfig, entry.name)
+          : undefined
+        const currentValue =
+          baseConfigForDisplay && overrideValue === undefined
+            ? getValueForPath(baseConfigForDisplay, entry.name)
+            : undefined
+        if (overrideValue !== undefined) {
+          enabled[entry.name] = true
+          form[entry.name] = formatValueForInput(entry, overrideValue)
+        } else {
+          enabled[entry.name] = false
+          const displaySource =
+            currentValue !== undefined ? currentValue : entry.default
+          form[entry.name] = formatValueForInput(entry, displaySource)
+        }
       })
       setConfigModalManifest(manifest)
       setConfigModalEntries(entries)
       setConfigModalForm(form)
       setConfigModalError(null)
+      setConfigModalBaseConfig(baseConfigForDisplay)
+      setConfigModalEnabled(enabled)
       setConfigModalTarget(target)
     },
     [
       planDraft,
       selectedScenario,
       resolveBeeImage,
+      resolveBeeTemplateConfig,
       ensureCapabilities,
       getManifestForImage,
       getStepAtTarget,
-      computeInitialConfigValue,
+      buildConfigEntriesForComponent,
+      formatValueForInput,
+      getValueForPath,
       setToast,
     ],
   )
@@ -966,6 +1134,10 @@ export default function ScenariosPage() {
     }
     const patch: Record<string, unknown> = {}
     for (const entry of configModalEntries) {
+      const enabled = configModalEnabled[entry.name] === true
+      if (!enabled) {
+        continue
+      }
       const raw = configModalForm[entry.name]
       const result = convertConfigFormValue(entry, raw)
       if (!result.ok) {
@@ -1003,12 +1175,15 @@ export default function ScenariosPage() {
     setConfigModalEntries([])
     setConfigModalForm({})
     setConfigModalError(null)
+    setConfigModalBaseConfig(undefined)
+    setConfigModalEnabled({})
   }, [
     applyPlanUpdate,
     assignNestedValue,
     configModalEntries,
     configModalForm,
     configModalTarget,
+    configModalEnabled,
     convertConfigFormValue,
   ])
 
@@ -1500,6 +1675,13 @@ export default function ScenariosPage() {
                           await saveScenarioPlan(selectedId, merged)
                           setToast(`Saved plan for ${selectedId}`)
                           await loadScenarios()
+                          try {
+                            const text = await fetchScenarioRaw(selectedId)
+                            setRawYaml(text)
+                            setSavedYaml(text)
+                          } catch {
+                            // ignore YAML refresh failures; plan save already succeeded
+                          }
                           setPlanExpanded(false)
                         } catch (e) {
                           setToast(
@@ -1933,6 +2115,17 @@ export default function ScenariosPage() {
                 const rawValue = configModalForm[entry.name]
                 const normalizedType = (entry.type || '').toLowerCase()
                 const options = Array.isArray(entry.options) ? entry.options : undefined
+                const enabled = configModalEnabled[entry.name] === true
+                const currentSource =
+                  configModalBaseConfig && isPlainObject(configModalBaseConfig)
+                    ? getValueForPath(
+                        configModalBaseConfig as Record<string, unknown>,
+                        entry.name,
+                      )
+                    : undefined
+                const currentDisplay = currentSource !== undefined
+                  ? formatValueForInput(entry, currentSource)
+                  : ''
                 let field: React.ReactElement
                 if (options && options.length > 0) {
                   const value =
@@ -1943,6 +2136,7 @@ export default function ScenariosPage() {
                     <select
                       className="w-full rounded bg-white/10 px-2 py-1 text-white text-xs"
                       value={value}
+                      disabled={!enabled}
                       onChange={(event) =>
                         setConfigModalForm((prev) => ({
                           ...prev,
@@ -1973,6 +2167,7 @@ export default function ScenariosPage() {
                         type="checkbox"
                         className="h-4 w-4 accent-blue-500"
                         checked={checked}
+                        disabled={!enabled}
                         onChange={(event) =>
                           setConfigModalForm((prev) => ({
                             ...prev,
@@ -1994,6 +2189,7 @@ export default function ScenariosPage() {
                       className="w-full rounded bg-white/10 px-2 py-1 text-white text-xs"
                       rows={normalizedType === 'json' ? 4 : 3}
                       value={value}
+                      disabled={!enabled}
                       onChange={(event) =>
                         setConfigModalForm((prev) => ({
                           ...prev,
@@ -2015,6 +2211,7 @@ export default function ScenariosPage() {
                           : 'text'
                       }
                       value={value}
+                      disabled={!enabled}
                       onChange={(event) =>
                         setConfigModalForm((prev) => ({
                           ...prev,
@@ -2026,10 +2223,48 @@ export default function ScenariosPage() {
                 }
                 return (
                   <label key={entry.name} className="block space-y-1 text-xs">
-                    <span className="block text-white/70">
-                      {entry.name}
-                      <span className="text-white/40"> ({labelSuffix})</span>
-                    </span>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="block text-white/70">
+                        {entry.name}
+                        <span className="text-white/40"> ({labelSuffix})</span>
+                      </span>
+                      <div className="flex items-center gap-3 text-[10px] text-white/60">
+                        <span className="font-mono">
+                          Current:{' '}
+                          {currentDisplay === '' ? '(none)' : String(currentDisplay)}
+                        </span>
+                        <label className="inline-flex items-center gap-1">
+                          <input
+                            type="checkbox"
+                            className="h-3 w-3 accent-blue-500"
+                            checked={enabled}
+                            onChange={(event) => {
+                              const nextEnabled = event.target.checked
+                              setConfigModalEnabled((prev) => ({
+                                ...prev,
+                                [entry.name]: nextEnabled,
+                              }))
+                              if (nextEnabled) {
+                                const baseValue =
+                                  configModalBaseConfig &&
+                                  getValueForPath(
+                                    configModalBaseConfig as Record<string, unknown>,
+                                    entry.name,
+                                  )
+                                setConfigModalForm((prev) => ({
+                                  ...prev,
+                                  [entry.name]: formatValueForInput(
+                                    entry,
+                                    baseValue !== undefined ? baseValue : entry.default,
+                                  ),
+                                }))
+                              }
+                            }}
+                          />
+                          <span>Override</span>
+                        </label>
+                      </div>
+                    </div>
                     {field}
                   </label>
                 )
