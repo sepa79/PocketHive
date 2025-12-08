@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type * as React from 'react'
+import type { editor as MonacoEditor } from 'monaco-editor'
 import Editor from '@monaco-editor/react'
 import { Link } from 'react-router-dom'
+import YAML from 'yaml'
 import {
   listScenarios,
   downloadScenarioBundle,
@@ -455,6 +457,7 @@ export default function ScenariosPage() {
 
   const uploadInputRef = useRef<HTMLInputElement | null>(null)
   const replaceInputRef = useRef<HTMLInputElement | null>(null)
+  const yamlEditorRef = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null)
 
   const setToast = useUIStore((s) => s.setToast)
   const { ensureCapabilities, getManifestForImage, manifests } = useCapabilities()
@@ -481,6 +484,31 @@ export default function ScenariosPage() {
     }
   }, [])
 
+  const syncPlanToYaml = useCallback(
+    (next: ScenarioPlanView | null) => {
+      if (!next) {
+        return
+      }
+      setRawYaml((current) => {
+        if (!current) return current
+        try {
+          const doc = YAML.parse(current) || {}
+          const root =
+            doc && typeof doc === 'object' && !Array.isArray(doc)
+              ? (doc as Record<string, unknown>)
+              : {}
+          const mergedPlan = mergePlan(root['plan'], next)
+          const updated: Record<string, unknown> = { ...root, plan: mergedPlan }
+          return YAML.stringify(updated)
+        } catch {
+          // If YAML is invalid, do not attempt to rewrite it here.
+          return current
+        }
+      })
+    },
+    [],
+  )
+
   const applyPlanUpdate = useCallback(
     (updater: (current: ScenarioPlanView | null) => ScenarioPlanView | null) => {
       setPlanHistoryState((state) => {
@@ -502,6 +530,7 @@ export default function ScenariosPage() {
         const nextSerialized = JSON.stringify(next)
         if (lastSerialized === nextSerialized) {
           setPlanDraft(next)
+          syncPlanToYaml(next)
           return {
             stack: baseStack,
             index: baseStack.length - 1,
@@ -512,10 +541,11 @@ export default function ScenariosPage() {
           appended.length > 50 ? appended.slice(appended.length - 50) : appended
         const index = trimmed.length - 1
         setPlanDraft(next)
+        syncPlanToYaml(next)
         return { stack: trimmed, index }
       })
     },
-    [],
+    [syncPlanToYaml],
   )
 
   const canUndoPlan = planHistoryState.index > 0
@@ -531,9 +561,10 @@ export default function ScenariosPage() {
       const index = state.index - 1
       const plan = state.stack[index]
       setPlanDraft(plan)
+      syncPlanToYaml(plan)
       return { ...state, index }
     })
-  }, [])
+  }, [syncPlanToYaml])
 
   const handleRedoPlan = useCallback(() => {
     setPlanHistoryState((state) => {
@@ -543,9 +574,38 @@ export default function ScenariosPage() {
       const index = state.index + 1
       const plan = state.stack[index]
       setPlanDraft(plan)
+      syncPlanToYaml(plan)
       return { ...state, index }
     })
-  }, [])
+  }, [syncPlanToYaml])
+
+  const handleGlobalUndo = useCallback(() => {
+    if (!selectedId) return
+    if (viewMode === 'yaml') {
+      const editor = yamlEditorRef.current
+      if (editor) {
+        editor.trigger('toolbar', 'undo', null)
+      }
+      return
+    }
+    if (viewMode === 'plan') {
+      handleUndoPlan()
+    }
+  }, [handleUndoPlan, selectedId, viewMode])
+
+  const handleGlobalRedo = useCallback(() => {
+    if (!selectedId) return
+    if (viewMode === 'yaml') {
+      const editor = yamlEditorRef.current
+      if (editor) {
+        editor.trigger('toolbar', 'redo', null)
+      }
+      return
+    }
+    if (viewMode === 'plan') {
+      handleRedoPlan()
+    }
+  }, [handleRedoPlan, selectedId, viewMode])
 
   useEffect(() => {
     void ensureCapabilities()
@@ -745,6 +805,33 @@ export default function ScenariosPage() {
     }
   }
 
+  const handleSavePlan = async () => {
+    if (!selectedId || !planDraft) return
+    try {
+      const merged = mergePlan(
+        selectedScenario?.plan,
+        planDraft,
+      )
+      await saveScenarioPlan(selectedId, merged)
+      setToast(`Saved plan for ${selectedId}`)
+      await loadScenarios()
+      try {
+        const text = await fetchScenarioRaw(selectedId)
+        setRawYaml(text)
+        setSavedYaml(text)
+      } catch {
+        // ignore YAML refresh failures; plan save already succeeded
+      }
+      setPlanExpanded(false)
+    } catch (e) {
+      setToast(
+        e instanceof Error
+          ? `Failed to save plan: ${e.message}`
+          : 'Failed to save plan',
+      )
+    }
+  }
+
   const selectedSummary = useMemo(
     () => items.find((s) => s.id === selectedId) ?? null,
     [items, selectedId],
@@ -753,6 +840,11 @@ export default function ScenariosPage() {
   const hasUnsavedChanges = useMemo(
     () => rawYaml !== savedYaml,
     [rawYaml, savedYaml],
+  )
+
+  const canSavePlan = useMemo(
+    () => Boolean(selectedId && planDraft),
+    [selectedId, planDraft],
   )
 
   const roleOptions = useMemo(() => {
@@ -1561,6 +1653,46 @@ export default function ScenariosPage() {
                     e.target.value = ''
                   }}
                 />
+                <div className="ml-4 flex items-center gap-2">
+                  <button
+                    type="button"
+                    className="rounded bg-sky-500/80 px-2 py-1 text-[11px] text-white hover:bg-sky-500 disabled:opacity-50"
+                    disabled={!canSavePlan}
+                    onClick={() => void handleSavePlan()}
+                  >
+                    Save plan
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded bg-white/10 px-2 py-1 text-[11px] text-white/80 hover:bg-white/20 disabled:opacity-50"
+                    disabled={saving || rawLoading || !hasUnsavedChanges}
+                    onClick={() => void handleSave()}
+                  >
+                    {saving ? 'Saving…' : 'Save YAML'}
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded bg-white/5 px-2 py-1 text-[11px] text-white/80 hover:bg-white/15 disabled:opacity-40"
+                    disabled={
+                      !selectedId ||
+                      (viewMode === 'plan' && !canUndoPlan)
+                    }
+                    onClick={() => handleGlobalUndo()}
+                  >
+                    Undo
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded bg-white/5 px-2 py-1 text-[11px] text-white/80 hover:bg-white/15 disabled:opacity-40"
+                    disabled={
+                      !selectedId ||
+                      (viewMode === 'plan' && !canRedoPlan)
+                    }
+                    onClick={() => handleGlobalRedo()}
+                  >
+                    Redo
+                  </button>
+                </div>
               </div>
             </div>
             <div className="flex items-center gap-2 border-b border-white/10 pb-2 mb-3">
@@ -1644,55 +1776,6 @@ export default function ScenariosPage() {
                     }
                   >
                     Add swarm step
-                    </button>
-                    <button
-                    type="button"
-                    className="rounded bg-white/10 px-2 py-1 text-[11px] text-white/80 hover:bg-white/20 disabled:opacity-40"
-                    disabled={!canUndoPlan}
-                    onClick={handleUndoPlan}
-                  >
-                    Undo
-                    </button>
-                    <button
-                    type="button"
-                    className="rounded bg-white/10 px-2 py-1 text-[11px] text-white/80 hover:bg-white/20 disabled:opacity-40"
-                    disabled={!canRedoPlan}
-                    onClick={handleRedoPlan}
-                  >
-                    Redo
-                    </button>
-                    <button
-                      type="button"
-                      className="rounded bg-sky-500/80 px-2 py-1 text-[11px] text-white hover:bg-sky-500 disabled:opacity-50"
-                      disabled={!selectedId}
-                      onClick={async () => {
-                        if (!selectedId) return
-                        try {
-                          const merged = mergePlan(
-                            selectedScenario?.plan,
-                            planDraft,
-                          )
-                          await saveScenarioPlan(selectedId, merged)
-                          setToast(`Saved plan for ${selectedId}`)
-                          await loadScenarios()
-                          try {
-                            const text = await fetchScenarioRaw(selectedId)
-                            setRawYaml(text)
-                            setSavedYaml(text)
-                          } catch {
-                            // ignore YAML refresh failures; plan save already succeeded
-                          }
-                          setPlanExpanded(false)
-                        } catch (e) {
-                          setToast(
-                            e instanceof Error
-                              ? `Failed to save plan: ${e.message}`
-                              : 'Failed to save plan',
-                          )
-                        }
-                      }}
-                    >
-                      Save plan
                     </button>
                     <button
                       type="button"
@@ -1975,11 +2058,9 @@ export default function ScenariosPage() {
               <div className="flex flex-col gap-3 h-[60vh]">
                 <div className="flex items-center justify-between">
                   <h3 className="text-xs font-semibold text-white/80">
-                    Scenario YAML{' '}
-                    {hasUnsavedChanges ? (
-                      <span className="text-[10px] text-amber-300">(unsaved changes)</span>
-                    ) : (
-                      <span className="text-[10px] text-white/40">(saved)</span>
+                    Scenario YAML
+                    {hasUnsavedChanges && (
+                      <span className="text-[10px] text-amber-300 ml-1">(unsaved changes)</span>
                     )}
                   </h3>
                   <div className="flex items-center gap-2">
@@ -2030,14 +2111,7 @@ export default function ScenariosPage() {
                     >
                       Insert template
                     </button>
-                    <button
-                      type="button"
-                      className="rounded bg-white/10 px-2 py-1 text-[11px] text-white/80 hover:bg-white/20 disabled:opacity-50"
-                      disabled={saving || rawLoading || !hasUnsavedChanges}
-                      onClick={() => void handleSave()}
-                    >
-                      {saving ? 'Saving…' : 'Save'}
-                    </button>
+                    {/* Save is now in the shared toolbar */}
                   </div>
                 </div>
                 {rawLoading && (
@@ -2053,8 +2127,31 @@ export default function ScenariosPage() {
                     height="100%"
                     defaultLanguage="yaml"
                     theme="vs-dark"
+                    onMount={(editorInstance) => {
+                      yamlEditorRef.current = editorInstance
+                    }}
                     value={rawYaml}
-                    onChange={(value) => setRawYaml(value ?? '')}
+                    onChange={(value) => {
+                      const text = value ?? ''
+                      setRawYaml(text)
+                      try {
+                        const doc = YAML.parse(text)
+                        if (doc && typeof doc === 'object' && !Array.isArray(doc)) {
+                          const root = doc as Record<string, unknown>
+                          const planNode = root['plan']
+                          const builtPlan = buildPlanView(planNode)
+                          const normalised = normalisePlanTimes(builtPlan)
+                          const initialPlan =
+                            normalised ?? {
+                              swarm: [],
+                              bees: [],
+                            }
+                          resetPlanHistory(initialPlan)
+                        }
+                      } catch {
+                        // Ignore parse errors while typing; plan stays on last valid version.
+                      }
+                    }}
                     options={{
                       fontSize: 11,
                       minimap: { enabled: false },
