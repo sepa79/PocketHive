@@ -7,6 +7,13 @@ Timestamp: 2025-11-28T00:00:00Z
 
 _No unreleased changes yet._
 
+## [0.14.11] - 2025-12-09
+Timestamp: 2025-12-09T00:00:00Z
+
+- Scenario plans: taught the swarm-controller timeline engine to parse both ISO-8601 (`PT5S`, `PT1M`) and shorthand (`5s`, `15s`) step offsets so plans authored or edited via the Hive UI remain executable; fixed the built-in `local-rest-plan-demo` bundle so its plan drives swarm start/stop and generator rate changes end-to-end again.
+- Scenario bundles & UI: updated Scenario Manager to persist scenarios as bundle descriptors under `scenarios.dir/bundles/<id>/scenario.(yaml|json)` and wired the Hive Scenarios page help/docs to the new Scenario Plan guide and bundle overview, keeping authoring flows aligned with the on-disk layout.
+- Hive topology polish: narrowed HTTP worker role detection to processors only and improved SUT node placement in the topology graph layout to reduce overlap and keep SUT relationships readable on initial render.
+
 ## [0.14.10] - 2025-12-05
 Timestamp: 2025-12-05T00:00:00Z
 

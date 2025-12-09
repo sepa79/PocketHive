@@ -103,6 +103,7 @@ class SwarmControllerTest {
             new Bee("generator", "img", new Work(null, "out"), java.util.Map.of())
         ));
         when(scenarioClient.fetchScenario("tpl-1")).thenReturn(new ScenarioPlan(template, null, null));
+        when(scenarioClient.prepareScenarioRuntime("tpl-1", "sw1")).thenReturn("/tmp/runtime/sw1");
         AtomicReference<String> capturedInstance = new AtomicReference<>();
         when(lifecycle.startSwarm(
             eq("sw1"),
@@ -153,6 +154,7 @@ class SwarmControllerTest {
             new Bee("generator", "img", new Work(null, "out"), java.util.Map.of())
         ));
         when(scenarioClient.fetchScenario("tpl-1")).thenReturn(new ScenarioPlan(template, null, null));
+        when(scenarioClient.prepareScenarioRuntime("tpl-1", "sw1")).thenReturn("/tmp/runtime/sw1");
         when(lifecycle.startSwarm(
             eq("sw1"),
             eq("ctrl-image"),
@@ -203,6 +205,7 @@ class SwarmControllerTest {
             new Bee("generator", "img", new Work(null, "out"), java.util.Map.of())
         ));
         when(scenarioClient.fetchScenario("tpl-1")).thenReturn(new ScenarioPlan(template, null, null));
+        when(scenarioClient.prepareScenarioRuntime("tpl-1", "sw1")).thenReturn("/tmp/runtime/sw1");
         when(lifecycle.startSwarm(
             eq("sw1"),
             eq("ctrl-image"),

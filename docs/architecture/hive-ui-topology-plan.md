@@ -114,7 +114,7 @@ behaviour.
   - guard semantics,
   - SUT / WireMock mappings.
 - No new features (multi‑SUT on canvas, scenario editing); those are covered by
-  `scenario-sut-editor-plan.md` and related docs.
+  `docs/inProgress/scenario-sut-editor-plan.md` and related docs.
 
 ---
 
@@ -124,4 +124,3 @@ behaviour.
       `TopologyView.test.tsx` and manual smoke in the Hive UI).
 - [ ] Once the refactor is stable, extend the topology builder to drive future
       scenario/SUT editors so we don’t duplicate graph logic.  
-

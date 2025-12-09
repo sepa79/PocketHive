@@ -105,7 +105,7 @@ Note: `#json_path` expects a JSON **string** as first argument, so use `workItem
 ## HTTP Builder templates
 
 HTTP Builder loads templates from YAML or JSON files under the configured
-`templateRoot` (for example `http-builder-service/http-templates/default/*.yaml`).
+`templateRoot` (for example `scenarios/bundles/redis-dataset-demo/http-templates/default/*.yaml`).
 Each template can contain Pebble expressions in `pathTemplate`, `method`,
 `bodyTemplate` and header values.
 
@@ -141,11 +141,11 @@ referenced HTTP templates exist, use the CLI tool:
 ```bash
 # From repo root
 tools/scenario-templating-check/run.sh \
-  --scenario scenario-manager-service/scenarios/e2e/redis-dataset-demo.yaml
+  --scenario scenarios/bundles/redis-dataset-demo/scenario.yaml
 
 tools/scenario-templating-check/run.sh \
   --check-http-templates \
-  --scenario scenario-manager-service/scenarios/e2e/redis-dataset-demo.yaml
+  --scenario scenarios/bundles/redis-dataset-demo/scenario.yaml
 ```
 
 Behaviour:

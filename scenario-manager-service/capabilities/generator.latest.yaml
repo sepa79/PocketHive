@@ -10,6 +10,12 @@ ui:
   shape: "triangle"
   abbreviation: "GE"
 config:
+  - name: inputs.type
+    type: string
+    default: "SCHEDULER"
+    options:
+      - "SCHEDULER"
+      - "REDIS_DATASET"
   - name: enabled
     type: boolean
     default: false

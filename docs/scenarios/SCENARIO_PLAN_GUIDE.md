@@ -287,9 +287,9 @@ plan:
 When a plan is loaded, the Swarm Controller:
 
 - Publishes scenario progress under `data.scenario` in its status payload:
-  - `lastStepId`, `lastStepName`
-  - `nextStepId`, `nextStepName`, `nextDueMillis`
-  - `elapsedMillis`
+  - `lastStepId`, `lastStepName`.  
+  - `nextStepId`, `nextStepName`, `nextDueMillis`.  
+  - `elapsedMillis`.  
   - optional `totalRuns` / `runsRemaining` when looping is configured.
 - Exposes this in Hive:
   - Swarm Controller detail drawer in the Hive view.
@@ -297,9 +297,38 @@ When a plan is loaded, the Swarm Controller:
 
 The controller also accepts `config-update` commands to:
 
-- Reset the plan (restart from the first step).
-- Set how many times the plan should execute (run count).
+  - Reset the plan (restart from the first step).
+  - Set how many times the plan should execute (run count).
 
 The Hive UI’s Swarm Controller panel and Swarms view wrap these controls in a
 small “scenario controls” section so you can operate plans without crafting
-raw control‑plane messages.***
+raw control‑plane messages.
+
+---
+
+## 7. Editing plans in Hive
+
+The **Scenarios** page in Hive provides a visual editor for the `plan`
+section. It is built on top of the same YAML contract described above:
+
+- The **Plan** tab shows:
+  - a **timeline** with one lane per bee (plus a swarm lane) and draggable
+    cards for each step; moving a card changes the step’s `time`.  
+  - a per‑bee and swarm step list with the same steps in text form.
+- The **Scenario YAML** tab shows the full YAML; both views operate on a
+  single in‑memory model, so changes in one are reflected in the other once
+  applied.
+
+For `config-update` steps the editor uses worker **capabilities**:
+
+- It resolves the worker image and capabilities manifest for the target bee.  
+- It builds a form for editable fields (for example
+  `inputs.scheduler.ratePerSec` or `inputs.redis.listName`).  
+- IO‑specific knobs are added from IO manifests when `config.inputs.type`
+  matches an IO type such as `SCHEDULER` or `REDIS_DATASET`.  
+- Each field has an “Override” toggle; only enabled overrides are written
+  into the step’s `config`, keeping YAML deltas small and explicit.
+
+Looping and reset controls are exposed via the Swarm Controller runtime
+panel and Swarms list, but they are just wrappers over `config-update`
+commands; the plan itself remains a static timeline defined in YAML.

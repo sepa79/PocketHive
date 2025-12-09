@@ -1,0 +1,3123 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type * as React from 'react'
+import type { editor as MonacoEditor } from 'monaco-editor'
+import Editor from '@monaco-editor/react'
+import { Link } from 'react-router-dom'
+import YAML from 'yaml'
+import {
+  listScenarios,
+  downloadScenarioBundle,
+  uploadScenarioBundle,
+  replaceScenarioBundle,
+  fetchScenarioRaw,
+  saveScenarioRaw,
+  getScenario,
+  buildPlanView,
+  mergePlan,
+  createScenario,
+  type ScenarioPayload,
+  type ScenarioPlanView,
+  type ScenarioPlanStep,
+} from '../lib/scenarioManagerApi'
+import type { ScenarioSummary } from '../types/scenarios'
+import type { CapabilityConfigEntry, CapabilityManifest } from '../types/capabilities'
+import { useUIStore } from '../store'
+import { useCapabilities } from '../contexts/CapabilitiesContext'
+
+type TimelineRow = {
+  key: string
+  kind: 'swarm' | 'bee'
+  beeIndex: number | null
+  stepIndex: number
+  seconds: number | null
+  original: string
+  target: string
+  stepId: string
+  name: string | null
+  type: string | null
+}
+
+type TimelineRowRef = Pick<TimelineRow, 'kind' | 'beeIndex' | 'stepIndex'>
+
+interface PlanTimelineLanesProps {
+  rows: TimelineRow[]
+  onTimeChange: (row: TimelineRowRef, seconds: number) => void
+}
+
+type ConfigFormValue = string | boolean
+
+type TemplateNode = Record<string, unknown> | null
+
+const TIMELINE_DIVISION_PX = 80
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function mergeConfig(
+  base: Record<string, unknown> | undefined,
+  patch: Record<string, unknown> | undefined,
+): Record<string, unknown> | undefined {
+  if (!patch || !isPlainObject(patch)) {
+    return base && Object.keys(base).length > 0 ? { ...base } : undefined
+  }
+  const target: Record<string, unknown> = base && isPlainObject(base) ? { ...base } : {}
+  for (const [key, value] of Object.entries(patch)) {
+    const existing = target[key]
+    if (isPlainObject(value) && isPlainObject(existing)) {
+      target[key] = mergeConfig(existing, value) as Record<string, unknown>
+    } else {
+      target[key] = value
+    }
+  }
+  return Object.keys(target).length > 0 ? target : undefined
+}
+
+const ZOOM_LEVELS = [
+  { id: '1s', label: '1s / division', secondsPerDivision: 1 },
+  { id: '5s', label: '5s / division', secondsPerDivision: 5 },
+  { id: '10s', label: '10s / division', secondsPerDivision: 10 },
+  { id: '30s', label: '30s / division', secondsPerDivision: 30 },
+  { id: '1m', label: '1m / division', secondsPerDivision: 60 },
+  { id: '5m', label: '5m / division', secondsPerDivision: 300 },
+  { id: '10m', label: '10m / division', secondsPerDivision: 600 },
+  { id: '30m', label: '30m / division', secondsPerDivision: 1800 },
+  { id: '1h', label: '1h / division', secondsPerDivision: 3600 },
+  { id: '1d', label: '1d / division', secondsPerDivision: 86400 },
+] as const
+
+function formatDurationLabel(seconds: number | null): string {
+  if (seconds == null || !Number.isFinite(seconds) || seconds < 0) {
+    return '—'
+  }
+  const total = Math.round(seconds)
+  if (total === 0) return '0s'
+  if (total < 60) return `${total}s`
+  if (total < 3600 && total % 60 === 0) return `${total / 60}m`
+  if (total < 86400 && total % 3600 === 0) return `${total / 3600}h`
+  if (total % 86400 === 0) return `${total / 86400}d`
+
+  const parts: string[] = []
+  let remaining = total
+  const days = Math.floor(remaining / 86400)
+  if (days > 0) {
+    parts.push(`${days}d`)
+    remaining -= days * 86400
+  }
+  const hours = Math.floor(remaining / 3600)
+  if (hours > 0) {
+    parts.push(`${hours}h`)
+    remaining -= hours * 3600
+  }
+  const minutes = Math.floor(remaining / 60)
+  if (minutes > 0) {
+    parts.push(`${minutes}m`)
+    remaining -= minutes * 60
+  }
+  if (remaining > 0) {
+    parts.push(`${remaining}s`)
+  }
+  return parts.join(' ')
+}
+
+function parseSeconds(value: string | null): number | null {
+  if (!value) return null
+  const text = value.trim()
+  if (!text) return null
+
+  if (text.startsWith('PT')) {
+    const match = /^PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?$/.exec(text)
+    if (!match) return null
+    const hours = match[1] ? Number(match[1]) : 0
+    const minutes = match[2] ? Number(match[2]) : 0
+    const seconds = match[3] ? Number(match[3]) : 0
+    const total = hours * 3600 + minutes * 60 + seconds
+    return Number.isFinite(total) ? total : null
+  }
+
+  const simple = /^(\d+(?:\.\d+)?)([smh])$/i.exec(text)
+  if (simple) {
+    const amount = Number(simple[1])
+    if (!Number.isFinite(amount)) return null
+    const unit = simple[2].toLowerCase()
+    if (unit === 's') return amount
+    if (unit === 'm') return amount * 60
+    if (unit === 'h') return amount * 3600
+  }
+
+  return null
+}
+
+function formatSeconds(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds <= 0) {
+    return '0s'
+  }
+  const rounded = Math.round(seconds)
+  return `${rounded}s`
+}
+
+function normalisePlanTimes(view: ScenarioPlanView | null): ScenarioPlanView | null {
+  if (!view) return null
+  const swarm = view.swarm.map((step) => {
+    const sec = parseSeconds(step.time)
+    if (sec !== null && sec >= 0) {
+      return { ...step, time: formatSeconds(sec) }
+    }
+    return step
+  })
+  const bees = view.bees.map((bee) => ({
+    ...bee,
+    steps: bee.steps.map((step) => {
+      const sec = parseSeconds(step.time)
+      if (sec !== null && sec >= 0) {
+        return { ...step, time: formatSeconds(sec) }
+      }
+      return step
+    }),
+  }))
+  return { swarm, bees }
+}
+
+function PlanTimelineLanes({ rows, onTimeChange }: PlanTimelineLanesProps) {
+  const [zoomIndex, setZoomIndex] = useState(0)
+  const [draggingKey, setDraggingKey] = useState<string | null>(null)
+  const dragStateRef = useRef<{
+    row: TimelineRow
+    startClientX: number
+    startSeconds: number
+    deltaPx: number
+  } | null>(null)
+  const [, setDragVersion] = useState(0)
+
+  const maxSeconds = useMemo(() => {
+    let max = 0
+    for (const row of rows) {
+      if (row.seconds != null && row.seconds > max) {
+        max = row.seconds
+      }
+    }
+    return max
+  }, [rows])
+
+  useEffect(() => {
+    if (rows.length === 0) {
+      setZoomIndex(0)
+      return
+    }
+    const max = maxSeconds
+    if (!Number.isFinite(max) || max <= 0) {
+      setZoomIndex(0)
+      return
+    }
+    const targetDivisions = 12
+    const idx = ZOOM_LEVELS.findIndex(
+      (level) => max / level.secondsPerDivision <= targetDivisions,
+    )
+    if (idx >= 0) {
+      setZoomIndex(idx)
+    } else {
+      setZoomIndex(ZOOM_LEVELS.length - 1)
+    }
+  }, [maxSeconds, rows.length])
+
+  const zoom = ZOOM_LEVELS[zoomIndex] ?? ZOOM_LEVELS[0]
+  const pxPerSecond = TIMELINE_DIVISION_PX / zoom.secondsPerDivision
+
+  const lanes = useMemo(
+    () => {
+      const map = new Map<
+        string,
+        { label: string; rows: TimelineRow[] }
+      >()
+      for (const row of rows) {
+        const laneKey = row.kind === 'swarm' ? 'swarm' : `bee-${row.target}`
+        const label = row.kind === 'swarm' ? 'Swarm' : row.target
+        const existing = map.get(laneKey)
+        if (existing) {
+          existing.rows.push(row)
+        } else {
+          map.set(laneKey, { label, rows: [row] })
+        }
+      }
+      const entries = Array.from(map.entries())
+      entries.sort((a, b) => {
+        if (a[0] === 'swarm') return -1
+        if (b[0] === 'swarm') return 1
+        return a[1].label.localeCompare(b[1].label)
+      })
+      return entries.map(([key, lane]) => ({
+        key,
+        label: lane.label,
+        rows: [...lane.rows].sort((a, b) => {
+          const aSec = a.seconds ?? Number.POSITIVE_INFINITY
+          const bSec = b.seconds ?? Number.POSITIVE_INFINITY
+          if (aSec !== bSec) return aSec - bSec
+          return a.stepId.localeCompare(b.stepId)
+        }),
+      }))
+    },
+    [rows],
+  )
+
+  const totalWidth = useMemo(() => {
+    if (!Number.isFinite(maxSeconds) || maxSeconds <= 0) {
+      return TIMELINE_DIVISION_PX * 6
+    }
+    const divisions = maxSeconds / zoom.secondsPerDivision
+    const base = (divisions + 2) * TIMELINE_DIVISION_PX
+    return Math.max(base, TIMELINE_DIVISION_PX * 6)
+  }, [maxSeconds, zoom.secondsPerDivision])
+
+  const handleCardMouseDown = (
+    row: TimelineRow,
+    event: React.MouseEvent<HTMLDivElement>,
+  ) => {
+    if (row.seconds == null) return
+    event.preventDefault()
+    dragStateRef.current = {
+      row,
+      startClientX: event.clientX,
+      startSeconds: row.seconds,
+      deltaPx: 0,
+    }
+    setDraggingKey(row.key)
+  }
+
+  useEffect(() => {
+    if (!draggingKey) return
+    const handleMove = (event: MouseEvent) => {
+      const state = dragStateRef.current
+      if (!state) return
+      const deltaX = event.clientX - state.startClientX
+      dragStateRef.current = { ...state, deltaPx: deltaX }
+      setDragVersion((v) => v + 1)
+    }
+    const handleUp = () => {
+      const state = dragStateRef.current
+      if (state) {
+        const deltaSeconds = state.deltaPx / pxPerSecond
+        const nextSeconds = Math.max(0, state.startSeconds + deltaSeconds)
+        onTimeChange(
+          {
+            kind: state.row.kind,
+            beeIndex: state.row.beeIndex,
+            stepIndex: state.row.stepIndex,
+          },
+          nextSeconds,
+        )
+      }
+      dragStateRef.current = null
+      setDraggingKey(null)
+    }
+    window.addEventListener('mousemove', handleMove)
+    window.addEventListener('mouseup', handleUp)
+    return () => {
+      window.removeEventListener('mousemove', handleMove)
+      window.removeEventListener('mouseup', handleUp)
+    }
+  }, [draggingKey, onTimeChange, pxPerSecond])
+
+  if (rows.length === 0) {
+    return null
+  }
+
+  const activeDrag = dragStateRef.current
+
+  return (
+    <div className="border border-white/10 rounded bg-black/30 p-2">
+      <div className="flex items-center justify-between mb-1">
+        <div className="text-[11px] font-semibold text-white/80">
+          Timeline
+        </div>
+        <div className="flex items-center gap-2 text-[11px] text-white/70">
+          <span className="text-white/60">Scale:</span>
+          <select
+            className="rounded border border-white/20 bg-black/60 px-1 py-0.5 text-[11px] text-white/80"
+            value={zoomIndex}
+            onChange={(e) => setZoomIndex(Number(e.target.value) || 0)}
+          >
+            {ZOOM_LEVELS.map((level, index) => (
+              <option key={level.id} value={index}>
+                {level.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+      <div className="mt-1 overflow-x-auto">
+        <div
+          className="min-w-full"
+          style={{ width: `${totalWidth}px` }}
+        >
+          <div className="flex items-center gap-2 pl-32 mb-1">
+            <div className="relative flex-1 h-6">
+              {Array.from(
+                { length: Math.ceil(totalWidth / TIMELINE_DIVISION_PX) + 1 },
+                (_, index) => {
+                  const left = index * TIMELINE_DIVISION_PX
+                  const seconds = index * zoom.secondsPerDivision
+                  if (left > totalWidth) return null
+                  return (
+                    <div
+                      key={index}
+                      className="absolute top-0 h-full border-l border-white/15"
+                      style={{ left: `${left}px` }}
+                    >
+                      <div className="absolute -top-4 -translate-x-1/2 text-[10px] text-white/60">
+                        {formatDurationLabel(seconds)}
+                      </div>
+                    </div>
+                  )
+                },
+              )}
+            </div>
+          </div>
+          <div className="flex flex-col gap-1 py-1">
+            {lanes.map((lane) => (
+              <div
+                key={lane.key}
+                className="flex items-center gap-2"
+              >
+                <div className="w-32 pr-2 text-right text-[11px] text-white/70">
+                  {lane.label}
+                </div>
+                <div className="relative flex-1 h-9 border-l border-white/10">
+                  {lane.rows.map((row) => {
+                    const baseSeconds = row.seconds ?? 0
+                    const virtualSeconds =
+                      activeDrag && activeDrag.row.key === row.key
+                        ? Math.max(0, baseSeconds + activeDrag.deltaPx / pxPerSecond)
+                        : row.seconds
+                    const secondsForPosition = virtualSeconds ?? baseSeconds
+                    const left = Math.max(
+                      0,
+                      (secondsForPosition / zoom.secondsPerDivision) *
+                        TIMELINE_DIVISION_PX,
+                    )
+                    return (
+                      <div
+                        key={row.key}
+                        className={`absolute top-0.5 inline-flex cursor-grab items-center gap-1 rounded border border-sky-400/70 bg-sky-500/60 px-2 py-0.5 text-[10px] text-white shadow-sm ${
+                          draggingKey === row.key
+                            ? 'ring-2 ring-sky-300'
+                            : 'hover:bg-sky-500/80'
+                        }`}
+                        style={{ left: `${left}px` }}
+                        onMouseDown={(event) =>
+                          handleCardMouseDown(row, event)
+                        }
+                      >
+                        <span className="font-mono">
+                          {formatDurationLabel(virtualSeconds ?? row.seconds)}
+                        </span>
+                        <span className="max-w-[140px] truncate">
+                          {row.stepId ||
+                            row.name ||
+                            row.type ||
+                            '(step)'}
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+interface SwarmTemplateEditorProps {
+  template: TemplateNode
+  onChange: (updater: (current: TemplateNode) => TemplateNode) => void
+  onOpenConfig: (beeIndex: number) => void
+}
+
+function SwarmTemplateEditor({ template, onChange, onOpenConfig }: SwarmTemplateEditorProps) {
+  const [selectedBeeIndex, setSelectedBeeIndex] = useState(0)
+  const { getManifestForImage } = useCapabilities()
+
+  const controllerImage =
+    template && typeof template.image === 'string' ? (template.image as string) : ''
+
+  const bees = useMemo(() => {
+    if (!template || typeof template !== 'object' || Array.isArray(template)) {
+      return []
+    }
+    const record = template as Record<string, unknown>
+    const beesRaw = Array.isArray(record['bees']) ? (record['bees'] as unknown[]) : []
+    return beesRaw
+      .map((entry, index) => {
+        if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+          return null
+        }
+        const bee = entry as Record<string, unknown>
+        const role = typeof bee['role'] === 'string' ? (bee['role'] as string) : ''
+        const instanceId =
+          typeof bee['instanceId'] === 'string' ? (bee['instanceId'] as string) : ''
+        const image = typeof bee['image'] === 'string' ? (bee['image'] as string) : ''
+        let workIn: string | null = null
+        let workOut: string | null = null
+        const work = bee['work']
+        if (work && typeof work === 'object' && !Array.isArray(work)) {
+          const workRec = work as Record<string, unknown>
+          workIn =
+            typeof workRec['in'] === 'string' ? (workRec['in'] as string) : null
+          workOut =
+            typeof workRec['out'] === 'string' ? (workRec['out'] as string) : null
+        }
+        let inputType: string | null = null
+        let hasSchedulerConfig = false
+        let hasRedisConfig = false
+        const config = bee['config']
+        if (config && typeof config === 'object' && !Array.isArray(config)) {
+          const cfg = config as Record<string, unknown>
+          const inputsRaw = cfg['inputs']
+          if (inputsRaw && typeof inputsRaw === 'object' && !Array.isArray(inputsRaw)) {
+            const inputs = inputsRaw as Record<string, unknown>
+            const typeVal = inputs['type']
+            if (typeof typeVal === 'string') {
+              inputType = typeVal
+            }
+            const schedulerRaw = inputs['scheduler']
+            if (
+              schedulerRaw &&
+              typeof schedulerRaw === 'object' &&
+              !Array.isArray(schedulerRaw) &&
+              Object.keys(schedulerRaw as Record<string, unknown>).length > 0
+            ) {
+              hasSchedulerConfig = true
+            }
+            const redisRaw = inputs['redis']
+            if (
+              redisRaw &&
+              typeof redisRaw === 'object' &&
+              !Array.isArray(redisRaw) &&
+              Object.keys(redisRaw as Record<string, unknown>).length > 0
+            ) {
+              hasRedisConfig = true
+            }
+          }
+        }
+        return {
+          index,
+          role,
+          instanceId,
+          image,
+          workIn,
+          workOut,
+          inputType,
+          hasSchedulerConfig,
+          hasRedisConfig,
+        }
+      })
+      .filter((entry) => entry !== null) as {
+      index: number
+      role: string
+      instanceId: string
+      image: string
+      workIn: string | null
+      workOut: string | null
+      inputType: string | null
+      hasSchedulerConfig: boolean
+      hasRedisConfig: boolean
+    }[]
+  }, [template])
+
+  const queueOptions = useMemo(() => {
+    const result = new Set<string>()
+    for (const bee of bees) {
+      if (bee.workIn) {
+        result.add(bee.workIn)
+      }
+      if (bee.workOut) {
+        result.add(bee.workOut)
+      }
+    }
+    return Array.from(result).sort((a, b) => a.localeCompare(b))
+  }, [bees])
+
+  useEffect(() => {
+    if (!bees.length) {
+      setSelectedBeeIndex(0)
+      return
+    }
+    if (selectedBeeIndex < 0 || selectedBeeIndex >= bees.length) {
+      setSelectedBeeIndex(0)
+    }
+  }, [bees, selectedBeeIndex])
+
+  const selectedBee =
+    bees.length > 0 && selectedBeeIndex >= 0 && selectedBeeIndex < bees.length
+      ? bees[selectedBeeIndex]
+      : null
+
+  const inputWarnings: string[] = []
+  if (selectedBee) {
+    if (selectedBee.inputType === 'SCHEDULER' && !selectedBee.hasSchedulerConfig) {
+      inputWarnings.push(
+        'Scheduler input selected, but inputs.scheduler.* is not configured for this bee.',
+      )
+    }
+    if (selectedBee.inputType === 'REDIS_DATASET' && !selectedBee.hasRedisConfig) {
+      inputWarnings.push(
+        'Redis dataset input selected, but inputs.redis.* is not configured for this bee.',
+      )
+    }
+    if (!selectedBee.inputType && (selectedBee.hasSchedulerConfig || selectedBee.hasRedisConfig)) {
+      inputWarnings.push(
+        'Input configuration is present, but inputs.type is not set; choose an explicit IO type.',
+      )
+    }
+  }
+
+  const selectedManifest = useMemo(() => {
+    if (!selectedBee || !selectedBee.image) return null
+    const manifest = getManifestForImage(selectedBee.image)
+    return manifest ?? null
+  }, [getManifestForImage, selectedBee])
+
+  const inputTypeOptions = useMemo(() => {
+    if (!selectedManifest || !Array.isArray(selectedManifest.config)) {
+      return [] as string[]
+    }
+    const entry = selectedManifest.config.find((cfg) => cfg.name === 'inputs.type')
+    if (!entry || !Array.isArray(entry.options)) {
+      return [] as string[]
+    }
+    const raw = entry.options as unknown[]
+    const values: string[] = []
+    raw.forEach((opt) => {
+      if (typeof opt === 'string' && opt.trim().length > 0) {
+        values.push(opt.trim())
+      }
+    })
+    return values
+  }, [selectedManifest])
+
+  const updateControllerImage = (next: string) => {
+    onChange((current) => {
+      const base =
+        current && typeof current === 'object' && !Array.isArray(current)
+          ? { ...(current as Record<string, unknown>) }
+          : {}
+      base.image = next.trim() || undefined
+      return base
+    })
+  }
+
+  const updateBeeField = (
+    beeIndex: number,
+    field: 'role' | 'instanceId' | 'image' | 'workIn' | 'workOut',
+    value: string,
+  ) => {
+    onChange((current) => {
+      const base =
+        current && typeof current === 'object' && !Array.isArray(current)
+          ? { ...(current as Record<string, unknown>) }
+          : {}
+      const beesRaw = Array.isArray(base.bees) ? [...(base.bees as unknown[])] : []
+      if (beeIndex < 0 || beeIndex >= beesRaw.length) {
+        return base
+      }
+      const existing =
+        beesRaw[beeIndex] && typeof beesRaw[beeIndex] === 'object' && !Array.isArray(beesRaw[beeIndex])
+          ? { ...(beesRaw[beeIndex] as Record<string, unknown>) }
+          : {}
+      if (field === 'role' || field === 'instanceId' || field === 'image') {
+        existing[field] = value.trim() || undefined
+      } else {
+        const work =
+          existing.work && typeof existing.work === 'object' && !Array.isArray(existing.work)
+            ? { ...(existing.work as Record<string, unknown>) }
+            : {}
+        if (field === 'workIn') {
+          work.in = value.trim() || undefined
+        }
+        if (field === 'workOut') {
+          work.out = value.trim() || undefined
+        }
+        existing.work = work
+      }
+      beesRaw[beeIndex] = existing
+      ;(base as Record<string, unknown>).bees = beesRaw
+      return base
+    })
+  }
+
+  const updateBeeIoType = (beeIndex: number, field: 'inputs.type' | 'outputs.type', rawValue: string) => {
+    const value = rawValue.trim()
+    if (!value) {
+      return
+    }
+    onChange((current) => {
+      const base =
+        current && typeof current === 'object' && !Array.isArray(current)
+          ? { ...(current as Record<string, unknown>) }
+          : {}
+      const beesRaw = Array.isArray((base as Record<string, unknown>).bees)
+        ? ([...(base as Record<string, unknown>).bees as unknown[]] as unknown[])
+        : ([] as unknown[])
+      if (beeIndex < 0 || beeIndex >= beesRaw.length) {
+        return base
+      }
+      const existing =
+        beesRaw[beeIndex] &&
+        typeof beesRaw[beeIndex] === 'object' &&
+        !Array.isArray(beesRaw[beeIndex])
+          ? { ...(beesRaw[beeIndex] as Record<string, unknown>) }
+          : {}
+      const configRaw = existing.config
+      const config =
+        configRaw && typeof configRaw === 'object' && !Array.isArray(configRaw)
+          ? { ...(configRaw as Record<string, unknown>) }
+          : {}
+      const [rootKey, leafKey] = field.split('.')
+      if (!rootKey || !leafKey) {
+        return base
+      }
+      const ioRaw = config[rootKey]
+      const io =
+        ioRaw && typeof ioRaw === 'object' && !Array.isArray(ioRaw)
+          ? { ...(ioRaw as Record<string, unknown>) }
+          : {}
+      io['type'] = value
+      config[rootKey] = io
+      existing.config = config
+      beesRaw[beeIndex] = existing
+      ;(base as Record<string, unknown>).bees = beesRaw
+      return base
+    })
+  }
+
+  const handleAddBee = () => {
+    const newIndex = bees.length
+    onChange((current) => {
+      const base =
+        current && typeof current === 'object' && !Array.isArray(current)
+          ? { ...(current as Record<string, unknown>) }
+          : {}
+      const beesRaw = Array.isArray((base as Record<string, unknown>).bees)
+        ? ([...(base as Record<string, unknown>).bees as unknown[]] as unknown[])
+        : ([] as unknown[])
+      const newBee: Record<string, unknown> = {
+        role: '',
+        image: '',
+        work: {},
+      }
+      beesRaw.push(newBee)
+      ;(base as Record<string, unknown>).bees = beesRaw
+      return base
+    })
+    setSelectedBeeIndex(newIndex)
+  }
+
+  const handleRemoveBee = (beeIndex: number) => {
+    if (beeIndex < 0) return
+    onChange((current) => {
+      const base =
+        current && typeof current === 'object' && !Array.isArray(current)
+          ? { ...(current as Record<string, unknown>) }
+          : {}
+      const beesRaw = Array.isArray((base as Record<string, unknown>).bees)
+        ? ([...(base as Record<string, unknown>).bees as unknown[]] as unknown[])
+        : ([] as unknown[])
+      if (beeIndex >= beesRaw.length) {
+        return base
+      }
+      beesRaw.splice(beeIndex, 1)
+      ;(base as Record<string, unknown>).bees = beesRaw
+      return base
+    })
+    setSelectedBeeIndex((currentIndex) => {
+      if (currentIndex > beeIndex) return currentIndex - 1
+      if (currentIndex === beeIndex) return Math.max(0, currentIndex - 1)
+      return currentIndex
+    })
+  }
+
+  const handleMoveBee = (beeIndex: number, direction: -1 | 1) => {
+    if (beeIndex < 0) return
+    const targetIndex = beeIndex + direction
+    if (targetIndex < 0 || targetIndex >= bees.length) return
+    onChange((current) => {
+      const base =
+        current && typeof current === 'object' && !Array.isArray(current)
+          ? { ...(current as Record<string, unknown>) }
+          : {}
+      const beesRaw = Array.isArray((base as Record<string, unknown>).bees)
+        ? ([...(base as Record<string, unknown>).bees as unknown[]] as unknown[])
+        : ([] as unknown[])
+      if (beeIndex < 0 || beeIndex >= beesRaw.length) {
+        return base
+      }
+      const [moved] = beesRaw.splice(beeIndex, 1)
+      beesRaw.splice(targetIndex, 0, moved)
+      ;(base as Record<string, unknown>).bees = beesRaw
+      return base
+    })
+    setSelectedBeeIndex(targetIndex)
+  }
+
+  if (!template || (typeof template !== 'object' && !Array.isArray(template))) {
+    return (
+      <div className="text-xs text-white/70">
+        This scenario YAML does not define a <code>template</code> section yet.
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <h3 className="text-xs font-semibold text-white/80">Swarm template</h3>
+      </div>
+      <div className="flex items-center gap-2 text-[11px] text-white/80">
+        <span className="text-white/70 w-28">Controller image</span>
+        <input
+          className="flex-1 rounded border border-white/20 bg-black/40 px-2 py-1 text-[11px] text-white/90"
+          value={controllerImage}
+          placeholder="swarm-controller:latest"
+          onChange={(e) => updateControllerImage(e.target.value)}
+        />
+      </div>
+      <div className="mt-3 grid grid-cols-[minmax(0,220px)_minmax(0,1fr)] gap-4 items-start">
+        <div className="border border-white/15 rounded bg-black/40">
+          <div className="px-3 py-2 border-b border-white/10 text-[11px] uppercase tracking-wide text-white/60 flex items-center justify-between">
+            <span>Bees</span>
+            <button
+              type="button"
+              className="rounded bg-white/10 px-1.5 py-0.5 text-[10px] text-white/80 hover:bg-white/20"
+              onClick={handleAddBee}
+            >
+              + Add
+            </button>
+          </div>
+          <div className="max-h-[420px] overflow-y-auto">
+            {bees.length === 0 ? (
+              <div className="px-3 py-3 text-[11px] text-white/60">
+                No bees defined in template.
+              </div>
+            ) : (
+              <ul className="text-[11px]">
+                {bees.map((bee) => {
+                  const isSelected = bee.index === selectedBeeIndex
+                  const label =
+                    bee.instanceId || bee.role
+                      ? `${bee.instanceId || ''}${bee.role ? ` (${bee.role})` : ''}`
+                      : `bee-${bee.index + 1}`
+                  return (
+                    <li key={bee.index}>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedBeeIndex(bee.index)}
+                        className={`w-full text-left px-3 py-1.5 border-b border-white/5 last:border-b-0 ${
+                          isSelected
+                            ? 'bg-white/20 text-white border-white/40'
+                            : 'bg-transparent text-white/80 hover:bg-white/10'
+                        }`}
+                      >
+                        <div className="font-medium truncate">{label}</div>
+                        <div className="text-[10px] text-white/60 truncate">
+                          in: {bee.workIn || '—'} • out: {bee.workOut || '—'}
+                        </div>
+                        <div className="mt-1 flex justify-end gap-1 text-[10px]">
+                          <button
+                            type="button"
+                            className="px-1 py-0.5 rounded bg-white/5 text-white/70 hover:bg-white/15 disabled:opacity-30"
+                            disabled={bee.index === 0}
+                            onClick={() => handleMoveBee(bee.index, -1)}
+                          >
+                            ↑
+                          </button>
+                          <button
+                            type="button"
+                            className="px-1 py-0.5 rounded bg-white/5 text-white/70 hover:bg-white/15 disabled:opacity-30"
+                            disabled={bee.index === bees.length - 1}
+                            onClick={() => handleMoveBee(bee.index, 1)}
+                          >
+                            ↓
+                          </button>
+                          <button
+                            type="button"
+                            className="px-1 py-0.5 rounded bg-red-500/40 text-red-50 hover:bg-red-500/60"
+                            onClick={() => handleRemoveBee(bee.index)}
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      </button>
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
+          </div>
+        </div>
+        <div className="space-y-3">
+          <div className="border border-white/15 rounded bg-black/30 p-3 text-[11px] text-white/80">
+          {!selectedBee && (
+            <div className="text-white/60">Select a bee to view details.</div>
+          )}
+          {selectedBee && (
+            <div className="space-y-2">
+              <div className="font-semibold text-white/90 mb-1">Bee details</div>
+              <div className="flex items-center gap-2">
+                <span className="w-28 text-white/70">Instance ID</span>
+                <input
+                  className="flex-1 rounded border border-white/20 bg-black/40 px-2 py-1 text-[11px] text-white/90"
+                  value={selectedBee.instanceId}
+                  placeholder="gen-1"
+                  onChange={(e) =>
+                    updateBeeField(selectedBee.index, 'instanceId', e.target.value)
+                  }
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="w-28 text-white/70">Role</span>
+                <input
+                  className="flex-1 rounded border border-white/20 bg-black/40 px-2 py-1 text-[11px] text-white/90"
+                  value={selectedBee.role}
+                  placeholder="generator"
+                  onChange={(e) =>
+                    updateBeeField(selectedBee.index, 'role', e.target.value)
+                  }
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="w-28 text-white/70">Image</span>
+                <input
+                  className="flex-1 rounded border border-white/20 bg-black/40 px-2 py-1 text-[11px] text-white/90"
+                  value={selectedBee.image}
+                  placeholder="generator:latest"
+                  onChange={(e) =>
+                    updateBeeField(selectedBee.index, 'image', e.target.value)
+                  }
+                />
+              </div>
+              {(inputTypeOptions.length > 0 || selectedBee.inputType) && (
+                <div className="flex items-center gap-2">
+                  <span className="w-28 text-white/70">Input type</span>
+                  {inputTypeOptions.length > 0 ? (
+                    <select
+                      className="w-40 rounded border border-white/20 bg-black/60 px-2 py-1 text-[11px] text-white/90"
+                      value={selectedBee.inputType ?? ''}
+                      onChange={(e) =>
+                        updateBeeIoType(selectedBee.index, 'inputs.type', e.target.value)
+                      }
+                    >
+                      <option value="">(not set)</option>
+                      {inputTypeOptions.map((option) => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <span className="text-white/70 text-[11px]">
+                      {selectedBee.inputType || '(not set)'}
+                    </span>
+                  )}
+                </div>
+              )}
+              {inputWarnings.length > 0 && (
+                <div className="pl-28 text-[10px] text-amber-300 space-y-0.5">
+                  {inputWarnings.map((warning) => (
+                    <div key={warning}>{warning}</div>
+                  ))}
+                </div>
+              )}
+              <div className="flex items-center gap-2">
+                <span className="w-28 text-white/70">Work in</span>
+                <input
+                  className="flex-1 rounded border border-white/20 bg-black/40 px-2 py-1 text-[11px] text-white/90"
+                  value={selectedBee.workIn ?? ''}
+                  placeholder="queue-in"
+                  onChange={(e) =>
+                    updateBeeField(selectedBee.index, 'workIn', e.target.value)
+                  }
+                />
+                {queueOptions.length > 0 && (
+                  <select
+                    className="w-28 rounded border border-white/20 bg-black/60 px-1 py-0.5 text-[10px] text-white/80"
+                    value=""
+                    onChange={(e) => {
+                      const value = e.target.value
+                      if (value) {
+                        updateBeeField(selectedBee.index, 'workIn', value)
+                      }
+                    }}
+                  >
+                    <option value="">pick…</option>
+                    {queueOptions.map((name) => (
+                      <option key={name} value={name}>
+                        {name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="w-28 text-white/70">Work out</span>
+                <input
+                  className="flex-1 rounded border border-white/20 bg-black/40 px-2 py-1 text-[11px] text-white/90"
+                  value={selectedBee.workOut ?? ''}
+                  placeholder="queue-out"
+                  onChange={(e) =>
+                    updateBeeField(selectedBee.index, 'workOut', e.target.value)
+                  }
+                />
+                {queueOptions.length > 0 && (
+                  <select
+                    className="w-28 rounded border border-white/20 bg-black/60 px-1 py-0.5 text-[10px] text-white/80"
+                    value=""
+                    onChange={(e) => {
+                      const value = e.target.value
+                      if (value) {
+                        updateBeeField(selectedBee.index, 'workOut', value)
+                      }
+                    }}
+                  >
+                    <option value="">pick…</option>
+                    {queueOptions.map((name) => (
+                      <option key={name} value={name}>
+                        {name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+              <div className="pt-2">
+                <button
+                  type="button"
+                  className="rounded bg-white/10 px-2 py-1 text-[11px] text-white/80 hover:bg-white/20"
+                  onClick={() => onOpenConfig(selectedBee.index)}
+                >
+                  Edit config via capabilities
+                </button>
+              </div>
+            </div>
+          )}
+          </div>
+          <div className="border border-dashed border-white/20 rounded bg-black/40 p-3 text-[11px] text-white/80">
+          <div className="font-semibold text-white/80 mb-1">Flow preview</div>
+          {bees.length === 0 ? (
+            <div className="text-white/60">No bees defined yet.</div>
+          ) : (
+            <>
+              {queueOptions.length > 0 && (
+                <div className="mb-2 text-[10px] text-white/60">
+                  Queues:{' '}
+                  {queueOptions.map((q) => (
+                    <span
+                      key={q}
+                      className="inline-flex items-center rounded-full border border-white/20 bg-black/60 px-1.5 py-0.5 mr-1 mb-1"
+                    >
+                      <span className="font-mono text-[10px] text-white/80">
+                        {q}
+                      </span>
+                    </span>
+                  ))}
+                </div>
+              )}
+              <div className="flex items-start gap-2 overflow-x-auto pt-1">
+                {bees.map((bee) => {
+                  const consumers =
+                    bee.workOut != null && bee.workOut !== ''
+                      ? bees.filter((other) => other.workIn === bee.workOut)
+                      : []
+                  const producers =
+                    bee.workIn != null && bee.workIn !== ''
+                      ? bees.filter((other) => other.workOut === bee.workIn)
+                      : []
+                  return (
+                    <div key={bee.index} className="flex flex-col items-start gap-1">
+                      <div
+                        className={`min-w-[140px] max-w-[180px] rounded border px-2 py-1 ${
+                          bee.index === selectedBeeIndex
+                            ? 'border-sky-400 bg-sky-500/20'
+                            : 'border-white/25 bg-black/70'
+                        }`}
+                      >
+                        <div className="text-[11px] font-semibold truncate">
+                          {bee.role || 'bee'}
+                        </div>
+                        <div className="text-[10px] text-white/60 truncate">
+                          in: {bee.workIn || '—'}
+                        </div>
+                        <div className="text-[10px] text-white/60 truncate">
+                          out: {bee.workOut || '—'}
+                        </div>
+                      </div>
+                      <div className="pl-1 text-[9px] text-white/60 space-y-0.5">
+                        {bee.workIn && (
+                          <div>
+                            ←{' '}
+                            {producers.length === 0
+                              ? '(no producer)'
+                              : producers
+                                  .map((p) => p.role || p.instanceId || `bee-${p.index + 1}`)
+                                  .join(', ')}
+                          </div>
+                        )}
+                        {bee.workOut && (
+                          <div>
+                            →{' '}
+                            {consumers.length === 0
+                              ? '(no consumer)'
+                              : consumers
+                                  .map((c) => c.role || c.instanceId || `bee-${c.index + 1}`)
+                                  .join(', ')}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </>
+          )}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export default function ScenariosPage() {
+  const [items, setItems] = useState<ScenarioSummary[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [selectedScenario, setSelectedScenario] = useState<ScenarioPayload | null>(null)
+  const [planExpanded, setPlanExpanded] = useState(false)
+  const [planDraft, setPlanDraft] = useState<ScenarioPlanView | null>(null)
+  const [templateDraft, setTemplateDraft] = useState<TemplateNode>(null)
+  const [planHistoryState, setPlanHistoryState] = useState<{
+    stack: ScenarioPlanView[]
+    index: number
+  }>({
+    stack: [],
+    index: -1,
+  })
+  const [viewMode, setViewMode] = useState<'plan' | 'yaml' | 'swarm'>('plan')
+
+  const [rawYaml, setRawYaml] = useState('')
+  const [savedYaml, setSavedYaml] = useState('')
+  const [rawError, setRawError] = useState<string | null>(null)
+  const [rawLoading, setRawLoading] = useState(false)
+  const [saving, setSaving] = useState(false)
+
+  const [creatingScenario, setCreatingScenario] = useState(false)
+  const [newScenarioId, setNewScenarioId] = useState('')
+  const [newScenarioName, setNewScenarioName] = useState('')
+
+  const uploadInputRef = useRef<HTMLInputElement | null>(null)
+  const replaceInputRef = useRef<HTMLInputElement | null>(null)
+  const yamlEditorRef = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null)
+
+  const setToast = useUIStore((s) => s.setToast)
+  const { ensureCapabilities, getManifestForImage, manifests } = useCapabilities()
+
+  type ConfigTarget =
+    | { kind: 'swarm'; beeIndex: null; stepIndex: number }
+    | { kind: 'bee'; beeIndex: number; stepIndex: number }
+    | { kind: 'template-bee'; beeIndex: number; stepIndex: 0 }
+
+  const [configModalTarget, setConfigModalTarget] = useState<ConfigTarget | null>(null)
+  const [configModalManifest, setConfigModalManifest] = useState<CapabilityManifest | null>(null)
+  const [configModalEntries, setConfigModalEntries] = useState<CapabilityConfigEntry[]>([])
+  const [configModalForm, setConfigModalForm] = useState<Record<string, ConfigFormValue>>({})
+  const [configModalError, setConfigModalError] = useState<string | null>(null)
+  const [configModalBaseConfig, setConfigModalBaseConfig] = useState<Record<string, unknown> | undefined>(undefined)
+  const [configModalEnabled, setConfigModalEnabled] = useState<Record<string, boolean>>({})
+
+  const resetPlanHistory = useCallback((initial: ScenarioPlanView | null) => {
+    if (!initial) {
+      setPlanHistoryState({ stack: [], index: -1 })
+      setPlanDraft(null)
+    } else {
+      setPlanHistoryState({ stack: [initial], index: 0 })
+      setPlanDraft(initial)
+    }
+  }, [])
+
+  const syncPlanToYaml = useCallback(
+    (next: ScenarioPlanView | null) => {
+      if (!next) {
+        return
+      }
+      setRawYaml((current) => {
+        if (!current) return current
+        try {
+          const doc = YAML.parse(current) || {}
+          const root =
+            doc && typeof doc === 'object' && !Array.isArray(doc)
+              ? (doc as Record<string, unknown>)
+              : {}
+          const mergedPlan = mergePlan(root['plan'], next)
+          const updated: Record<string, unknown> = { ...root, plan: mergedPlan }
+          return YAML.stringify(updated)
+        } catch {
+          // If YAML is invalid, do not attempt to rewrite it here.
+          return current
+        }
+      })
+    },
+    [],
+  )
+
+  const syncTemplateToYaml = useCallback((next: TemplateNode) => {
+    setRawYaml((current) => {
+      if (!current) return current
+      try {
+        const doc = YAML.parse(current) || {}
+        const root =
+          doc && typeof doc === 'object' && !Array.isArray(doc)
+            ? (doc as Record<string, unknown>)
+            : {}
+        if (next == null) {
+          if ('template' in root) {
+            // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+            delete (root as Record<string, unknown>).template
+          }
+        } else {
+          ;(root as Record<string, unknown>).template = next
+        }
+        return YAML.stringify(root)
+      } catch {
+        return current
+      }
+    })
+  }, [])
+
+  const applyPlanUpdate = useCallback(
+    (updater: (current: ScenarioPlanView | null) => ScenarioPlanView | null) => {
+      setPlanHistoryState((state) => {
+        const baseCurrent =
+          state.index >= 0 && state.index < state.stack.length
+            ? state.stack[state.index]
+            : null
+        const next = updater(baseCurrent)
+        if (!next) {
+          setPlanDraft(null)
+          return { stack: [], index: -1 }
+        }
+        const baseStack =
+          state.index >= 0 && state.index < state.stack.length
+            ? state.stack.slice(0, state.index + 1)
+            : state.stack
+        const last = baseStack[baseStack.length - 1]
+        const lastSerialized = last ? JSON.stringify(last) : null
+        const nextSerialized = JSON.stringify(next)
+        if (lastSerialized === nextSerialized) {
+          setPlanDraft(next)
+          syncPlanToYaml(next)
+          return {
+            stack: baseStack,
+            index: baseStack.length - 1,
+          }
+        }
+        const appended = [...baseStack, next]
+        const trimmed =
+          appended.length > 50 ? appended.slice(appended.length - 50) : appended
+        const index = trimmed.length - 1
+        setPlanDraft(next)
+        syncPlanToYaml(next)
+        return { stack: trimmed, index }
+      })
+    },
+    [syncPlanToYaml],
+  )
+
+  const canUndoPlan = planHistoryState.index > 0
+  const canRedoPlan =
+    planHistoryState.index >= 0 &&
+    planHistoryState.index < planHistoryState.stack.length - 1
+
+  const handleUndoPlan = useCallback(() => {
+    setPlanHistoryState((state) => {
+      if (state.index <= 0) {
+        return state
+      }
+      const index = state.index - 1
+      const plan = state.stack[index]
+      setPlanDraft(plan)
+      syncPlanToYaml(plan)
+      return { ...state, index }
+    })
+  }, [syncPlanToYaml])
+
+  const handleRedoPlan = useCallback(() => {
+    setPlanHistoryState((state) => {
+      if (state.index < 0 || state.index >= state.stack.length - 1) {
+        return state
+      }
+      const index = state.index + 1
+      const plan = state.stack[index]
+      setPlanDraft(plan)
+      syncPlanToYaml(plan)
+      return { ...state, index }
+    })
+  }, [syncPlanToYaml])
+
+  const applyTemplateUpdate = useCallback(
+    (updater: (current: TemplateNode) => TemplateNode) => {
+      setTemplateDraft((current) => {
+        const next = updater(current)
+        syncTemplateToYaml(next)
+        return next
+      })
+    },
+    [syncTemplateToYaml],
+  )
+
+  const handleGlobalUndo = useCallback(() => {
+    if (!selectedId) return
+    if (viewMode === 'yaml') {
+      const editor = yamlEditorRef.current
+      if (editor) {
+        editor.trigger('toolbar', 'undo', null)
+      }
+      return
+    }
+    if (viewMode === 'plan') {
+      handleUndoPlan()
+    }
+  }, [handleUndoPlan, selectedId, viewMode])
+
+  const handleGlobalRedo = useCallback(() => {
+    if (!selectedId) return
+    if (viewMode === 'yaml') {
+      const editor = yamlEditorRef.current
+      if (editor) {
+        editor.trigger('toolbar', 'redo', null)
+      }
+      return
+    }
+    if (viewMode === 'plan') {
+      handleRedoPlan()
+    }
+  }, [handleRedoPlan, selectedId, viewMode])
+
+  useEffect(() => {
+    void ensureCapabilities()
+  }, [ensureCapabilities])
+
+  const loadScenarios = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const list = await listScenarios()
+      setItems(list)
+      if (list.length > 0) {
+        setSelectedId((current) => current ?? list[0].id)
+      } else {
+        setSelectedId(null)
+        setSelectedScenario(null)
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to load scenarios')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    void loadScenarios()
+  }, [loadScenarios])
+
+  const rebuildFromYaml = useCallback(
+    (text: string) => {
+      try {
+        const doc = YAML.parse(text)
+        if (doc && typeof doc === 'object' && !Array.isArray(doc)) {
+          const root = doc as Record<string, unknown>
+          const planNode = root['plan']
+          const builtPlan = buildPlanView(planNode)
+          const normalised = normalisePlanTimes(builtPlan)
+          const initialPlan =
+            normalised ?? {
+              swarm: [],
+              bees: [],
+            }
+          resetPlanHistory(initialPlan)
+          const templateNode = root['template']
+          if (templateNode && typeof templateNode === 'object' && !Array.isArray(templateNode)) {
+            setTemplateDraft(templateNode as Record<string, unknown>)
+          } else {
+            setTemplateDraft(null)
+          }
+        } else {
+          resetPlanHistory({
+            swarm: [],
+            bees: [],
+          })
+          setTemplateDraft(null)
+        }
+      } catch {
+        // Leave existing plan/template when YAML is invalid.
+      }
+    },
+    [buildPlanView, normalisePlanTimes, resetPlanHistory],
+  )
+
+  useEffect(() => {
+    const id = selectedId
+    if (!id) {
+      setSelectedScenario(null)
+      setRawYaml('')
+      setSavedYaml('')
+      setRawError(null)
+      resetPlanHistory(null)
+      setTemplateDraft(null)
+      setViewMode('plan')
+      return
+    }
+    let cancelled = false
+    const load = async () => {
+      try {
+        const scenario = await getScenario(id)
+        if (!cancelled) {
+          setSelectedScenario(scenario)
+        }
+        setRawLoading(true)
+        setRawError(null)
+        try {
+          const text = await fetchScenarioRaw(id)
+          if (!cancelled) {
+            setRawYaml(text)
+            setSavedYaml(text)
+            rebuildFromYaml(text)
+          }
+        } catch (e) {
+          if (!cancelled) {
+            setRawError(e instanceof Error ? e.message : 'Failed to load scenario YAML')
+            setRawYaml('')
+            setSavedYaml('')
+            resetPlanHistory(null)
+            setTemplateDraft(null)
+          }
+        } finally {
+          if (!cancelled) {
+            setRawLoading(false)
+          }
+        }
+        if (!cancelled) {
+          setViewMode('plan')
+        }
+      } catch {
+        if (!cancelled) {
+          setSelectedScenario(null)
+          resetPlanHistory(null)
+          setTemplateDraft(null)
+        }
+      }
+    }
+    void load()
+    return () => {
+      cancelled = true
+    }
+  }, [selectedId, rebuildFromYaml, resetPlanHistory])
+
+  const handleDownload = async (id: string) => {
+    try {
+      const blob = await downloadScenarioBundle(id)
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `${id}-bundle.zip`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+      setToast(`Downloaded bundle for ${id}`)
+    } catch (e) {
+      setToast(
+        e instanceof Error ? `Download failed: ${e.message}` : 'Download failed (scenario bundle)',
+      )
+    }
+  }
+
+  const handleUpload = async (file: File | null) => {
+    if (!file) return
+    try {
+      const summary = await uploadScenarioBundle(file)
+      setToast(`Uploaded scenario bundle ${summary.id}`)
+      await loadScenarios()
+      setSelectedId(summary.id)
+    } catch (e) {
+      setToast(
+        e instanceof Error ? `Upload failed: ${e.message}` : 'Upload failed (scenario bundle)',
+      )
+    }
+  }
+
+  const handleReplace = async (file: File | null) => {
+    if (!file || !selectedId) return
+    try {
+      const summary = await replaceScenarioBundle(selectedId, file)
+      setToast(`Updated scenario bundle ${summary.id}`)
+      await loadScenarios()
+      setSelectedId(summary.id)
+    } catch (e) {
+      setToast(
+        e instanceof Error ? `Update failed: ${e.message}` : 'Update failed (scenario bundle)',
+      )
+    }
+  }
+
+  const handleCreateScenario = async () => {
+    const id = newScenarioId.trim()
+    const name = newScenarioName.trim() || id
+    if (!id) {
+      setToast('Scenario ID is required')
+      return
+    }
+    try {
+      const created = await createScenario({ id, name })
+      setToast(`Created scenario ${created.id}`)
+      setCreatingScenario(false)
+      setNewScenarioId('')
+      setNewScenarioName('')
+      await loadScenarios()
+      setSelectedId(created.id)
+    } catch (e) {
+      setToast(
+        e instanceof Error ? `Create failed: ${e.message}` : 'Failed to create scenario',
+      )
+    }
+  }
+
+  const handleSave = async () => {
+    if (!selectedId) return
+    if (rawYaml === savedYaml) {
+      return
+    }
+    setSaving(true)
+    setRawError(null)
+    try {
+      await saveScenarioRaw(selectedId, rawYaml)
+      await loadScenarios()
+      rebuildFromYaml(rawYaml)
+      setSavedYaml(rawYaml)
+      setToast(`Saved scenario ${selectedId}`)
+    } catch (e) {
+      setRawError(e instanceof Error ? e.message : 'Failed to save scenario')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const selectedSummary = useMemo(
+    () => items.find((s) => s.id === selectedId) ?? null,
+    [items, selectedId],
+  )
+
+  const hasUnsavedChanges = useMemo(
+    () => rawYaml !== savedYaml,
+    [rawYaml, savedYaml],
+  )
+
+  const roleOptions = useMemo(() => {
+    if (!selectedScenario?.templateRoles || selectedScenario.templateRoles.length === 0) {
+      return [] as string[]
+    }
+    return Array.from(new Set(selectedScenario.templateRoles)).sort()
+  }, [selectedScenario])
+
+  const getStepAtTarget = useCallback(
+    (
+      target: { kind: 'swarm' | 'bee'; beeIndex: number | null; stepIndex: number },
+    ): ScenarioPlanStep | null => {
+      if (!planDraft) return null
+      if (target.kind === 'swarm') {
+        return planDraft.swarm[target.stepIndex] ?? null
+      }
+      if (target.kind === 'bee' && target.beeIndex !== null) {
+        const bee = planDraft.bees[target.beeIndex]
+        if (!bee) return null
+        return bee.steps[target.stepIndex] ?? null
+      }
+      return null
+    },
+    [planDraft],
+  )
+
+  const resolveBeeImage = useCallback(
+    (beeIndex: number): string | null => {
+      if (!selectedScenario?.template || !planDraft) return null
+      const tpl = selectedScenario.template
+      const beePlan = planDraft.bees[beeIndex]
+      if (!beePlan) return null
+      const tplBees = tpl.bees ?? []
+      if (beePlan.instanceId) {
+        const matches = tplBees.filter(
+          (b) => b.instanceId && b.instanceId === beePlan.instanceId,
+        )
+        if (matches.length === 1 && matches[0]?.image) {
+          return matches[0].image ?? null
+        }
+        return null
+      }
+      if (beePlan.role) {
+        const matches = tplBees.filter(
+          (b) => b.role && b.role === beePlan.role,
+        )
+        if (matches.length === 1 && matches[0]?.image) {
+          return matches[0].image ?? null
+        }
+      }
+      return null
+    },
+    [planDraft, selectedScenario],
+  )
+
+  const resolveBeeTemplateConfig = useCallback(
+    (beeIndex: number): Record<string, unknown> | undefined => {
+      if (!selectedScenario?.template || !planDraft) return undefined
+      const tpl = selectedScenario.template
+      const beePlan = planDraft.bees[beeIndex]
+      if (!beePlan) return undefined
+      const tplBees = tpl.bees ?? []
+      if (beePlan.instanceId) {
+        const matches = tplBees.filter(
+          (b) => b.instanceId && b.instanceId === beePlan.instanceId,
+        )
+        if (
+          matches.length === 1 &&
+          matches[0]?.config &&
+          typeof matches[0].config === 'object'
+        ) {
+          return matches[0].config as Record<string, unknown>
+        }
+        return undefined
+      }
+      if (beePlan.role) {
+        const matches = tplBees.filter(
+          (b) => b.role && b.role === beePlan.role,
+        )
+        if (
+          matches.length === 1 &&
+          matches[0]?.config &&
+          typeof matches[0].config === 'object'
+        ) {
+          return matches[0].config as Record<string, unknown>
+        }
+      }
+      return undefined
+    },
+    [planDraft, selectedScenario],
+  )
+
+  const getValueForPath = useCallback(
+    (config: Record<string, unknown> | undefined, path: string): unknown => {
+      if (!config || !path) return undefined
+      const segments = path.split('.').filter((segment) => segment.length > 0)
+      let current: unknown = config
+      for (const segment of segments) {
+        if (typeof current !== 'object' || current === null || Array.isArray(current)) {
+          return undefined
+        }
+        current = (current as Record<string, unknown>)[segment]
+      }
+      return current
+    },
+    [],
+  )
+
+  const formatValueForInput = useCallback(
+    (entry: CapabilityConfigEntry, value: unknown): ConfigFormValue => {
+      const normalizedType = (entry.type || '').toLowerCase()
+      if (normalizedType === 'boolean' || normalizedType === 'bool') {
+        if (typeof value === 'boolean') return value
+        if (typeof value === 'number') return value !== 0
+        if (typeof value === 'string') {
+          const normalized = value.trim().toLowerCase()
+          if (normalized === 'true') return true
+          if (normalized === 'false') return false
+        }
+        return false
+      }
+      if (normalizedType === 'json') {
+        if (value === undefined || value === null) return ''
+        if (typeof value === 'string') {
+          const trimmed = value.trim()
+          if (!trimmed) return ''
+          try {
+            return JSON.stringify(JSON.parse(trimmed), null, 2)
+          } catch {
+            return value
+          }
+        }
+        try {
+          return JSON.stringify(value, null, 2)
+        } catch {
+          return ''
+        }
+      }
+      if (normalizedType === 'number' || normalizedType === 'int' || normalizedType === 'integer') {
+        if (typeof value === 'number') return Number.isFinite(value) ? String(value) : ''
+        if (typeof value === 'string') return value
+        return ''
+      }
+      if (value === null || value === undefined) return ''
+      if (typeof value === 'string') return value
+      if (typeof value === 'number' || typeof value === 'boolean') return String(value)
+      try {
+        return JSON.stringify(value, null, 2)
+      } catch {
+        return ''
+      }
+    },
+    [],
+  )
+
+  const convertConfigFormValue = useCallback(
+    (entry: CapabilityConfigEntry, rawValue: ConfigFormValue): { ok: true; apply: boolean; value: unknown } | { ok: false; message: string } => {
+      const normalizedType = (entry.type || '').toLowerCase()
+      if (normalizedType === 'boolean' || normalizedType === 'bool') {
+        return { ok: true, apply: true, value: rawValue === true }
+      }
+      if (normalizedType === 'json') {
+        const str = typeof rawValue === 'string' ? rawValue.trim() : ''
+        if (!str) {
+          return { ok: true, apply: false, value: undefined }
+        }
+        try {
+          return { ok: true, apply: true, value: JSON.parse(str) }
+        } catch {
+          return { ok: false, message: `Invalid JSON for ${entry.name}` }
+        }
+      }
+      if (normalizedType === 'number' || normalizedType === 'int' || normalizedType === 'integer') {
+        const str = typeof rawValue === 'string' ? rawValue.trim() : ''
+        if (!str) {
+          return { ok: true, apply: false, value: undefined }
+        }
+        const num = Number(str)
+        if (Number.isNaN(num)) {
+          return { ok: false, message: `${entry.name} must be a number` }
+        }
+        return { ok: true, apply: true, value: num }
+      }
+      if (typeof rawValue === 'string') {
+        const trimmed = rawValue.trim()
+        if (!trimmed) {
+          return { ok: true, apply: false, value: undefined }
+        }
+        return { ok: true, apply: true, value: rawValue }
+      }
+      return { ok: true, apply: false, value: undefined }
+    },
+    [],
+  )
+
+  const assignNestedValue = useCallback(
+    (target: Record<string, unknown>, path: string, value: unknown) => {
+      const segments = path.split('.').filter((segment) => segment.length > 0)
+      if (segments.length === 0) return
+      let cursor: Record<string, unknown> = target
+      for (let i = 0; i < segments.length - 1; i += 1) {
+        const key = segments[i]!
+        const next = cursor[key]
+        if (typeof next !== 'object' || next === null || Array.isArray(next)) {
+          const created: Record<string, unknown> = {}
+          cursor[key] = created
+          cursor = created
+        } else {
+          cursor = next as Record<string, unknown>
+        }
+      }
+      cursor[segments[segments.length - 1]!] = value
+    },
+    [],
+  )
+
+  const inferIoTypeFromConfig = useCallback(
+    (componentConfig: Record<string, unknown> | undefined): string | undefined => {
+      if (!componentConfig) return undefined
+      const inputsRaw = componentConfig['inputs']
+      if (!inputsRaw || typeof inputsRaw !== 'object' || Array.isArray(inputsRaw)) {
+        return undefined
+      }
+      const inputs = inputsRaw as Record<string, unknown>
+      const hasScheduler =
+        inputs.scheduler && typeof inputs.scheduler === 'object' && !Array.isArray(inputs.scheduler)
+      const hasRedis =
+        inputs.redis && typeof inputs.redis === 'object' && !Array.isArray(inputs.redis)
+      if (hasScheduler) {
+        return 'SCHEDULER'
+      }
+      if (hasRedis) {
+        return 'REDIS_DATASET'
+      }
+      return undefined
+    },
+    [],
+  )
+
+  const buildConfigEntriesForComponent = useCallback(
+    (
+      manifest: CapabilityManifest,
+      componentConfig: Record<string, unknown> | undefined,
+    ): CapabilityConfigEntry[] => {
+      const baseEntries = Array.isArray(manifest.config) ? manifest.config : []
+      const ioType = inferIoTypeFromConfig(componentConfig)
+      if (!ioType) {
+        return baseEntries
+      }
+      const allEntries: CapabilityConfigEntry[] = [...baseEntries]
+      for (const m of manifests) {
+        const ui = m.ui as Record<string, unknown> | undefined
+        const ioTypeRaw = ui && typeof ui.ioType === 'string' ? ui.ioType : undefined
+        const manifestIoType = ioTypeRaw ? ioTypeRaw.trim().toUpperCase() : undefined
+        if (manifestIoType && manifestIoType === ioType && Array.isArray(m.config)) {
+          allEntries.push(...m.config)
+        }
+      }
+      const byName = new Map<string, CapabilityConfigEntry>()
+      for (const entry of allEntries) {
+        if (!byName.has(entry.name)) {
+          byName.set(entry.name, entry)
+        }
+      }
+      return Array.from(byName.values())
+    },
+    [inferIoTypeFromConfig, manifests],
+  )
+
+  const openConfigModal = useCallback(
+    async (target: ConfigTarget) => {
+      if (!selectedScenario) {
+        return
+      }
+      let image: string | null = null
+      if (target.kind === 'swarm') {
+        image = selectedScenario.template?.image ?? null
+      } else if (target.kind === 'bee' && target.beeIndex !== null) {
+        if (!planDraft) return
+        image = resolveBeeImage(target.beeIndex)
+      } else if (target.kind === 'template-bee') {
+        const templateBees = templateDraft && !Array.isArray(templateDraft) && typeof templateDraft === 'object'
+          ? (templateDraft as Record<string, unknown>).bees
+          : undefined
+        if (Array.isArray(templateBees) && templateBees[target.beeIndex]) {
+          const bee = templateBees[target.beeIndex] as Record<string, unknown>
+          const tplImage = bee.image
+          image = typeof tplImage === 'string' ? tplImage : selectedScenario.template?.image ?? null
+        }
+      }
+      if (!image) {
+        setToast('No image mapping for this step; capabilities unavailable')
+        return
+      }
+      try {
+        await ensureCapabilities()
+      } catch {
+        // ignore; manifest lookup will handle missing data
+      }
+      const manifest = getManifestForImage(image)
+      if (!manifest) {
+        setToast('Capability manifest not available for this component')
+        return
+      }
+      let templateComponentConfig: Record<string, unknown> | undefined
+      let baseConfig: Record<string, unknown> | undefined
+      if (target.kind === 'bee' && target.beeIndex !== null) {
+        templateComponentConfig = resolveBeeTemplateConfig(target.beeIndex)
+        const beeIndex = target.beeIndex
+        const bee = planDraft!.bees[beeIndex]
+        const templateConfig = templateComponentConfig
+        let accumulated = templateConfig && isPlainObject(templateConfig) ? { ...templateConfig } : undefined
+        if (bee) {
+          bee.steps.forEach((step, index) => {
+            if (index >= target.stepIndex) return
+            if (step.type !== 'config-update') return
+            if (!step.config || !isPlainObject(step.config)) return
+            accumulated = mergeConfig(accumulated, step.config as Record<string, unknown>)
+          })
+        }
+        baseConfig = accumulated
+      } else if (target.kind === 'template-bee') {
+        const templateBees =
+          templateDraft && !Array.isArray(templateDraft) && typeof templateDraft === 'object'
+            ? (templateDraft as Record<string, unknown>).bees
+            : undefined
+        if (Array.isArray(templateBees) && templateBees[target.beeIndex]) {
+          const bee = templateBees[target.beeIndex] as Record<string, unknown>
+          const configValue = bee.config
+          if (configValue && typeof configValue === 'object' && !Array.isArray(configValue)) {
+            templateComponentConfig = configValue as Record<string, unknown>
+            baseConfig = templateComponentConfig
+          }
+        }
+      }
+
+      const entries = buildConfigEntriesForComponent(manifest, baseConfig ?? templateComponentConfig)
+      if (entries.length === 0) {
+        setToast('No configurable options defined for this component')
+        return
+      }
+      const step =
+        target.kind === 'swarm' || target.kind === 'bee' ? getStepAtTarget(target) : null
+      const stepConfig =
+        step && step.config && typeof step.config === 'object'
+          ? (step.config as Record<string, unknown>)
+          : target.kind === 'template-bee'
+            ? baseConfig
+            : undefined
+      const baseConfigForDisplay =
+        baseConfig ?? templateComponentConfig ?? undefined
+      const form: Record<string, ConfigFormValue> = {}
+      const enabled: Record<string, boolean> = {}
+      entries.forEach((entry) => {
+        const overrideValue = stepConfig
+          ? getValueForPath(stepConfig, entry.name)
+          : undefined
+        const currentValue =
+          baseConfigForDisplay && overrideValue === undefined
+            ? getValueForPath(baseConfigForDisplay, entry.name)
+            : undefined
+        if (overrideValue !== undefined) {
+          enabled[entry.name] = true
+          form[entry.name] = formatValueForInput(entry, overrideValue)
+        } else {
+          enabled[entry.name] = false
+          const displaySource =
+            currentValue !== undefined ? currentValue : entry.default
+          form[entry.name] = formatValueForInput(entry, displaySource)
+        }
+      })
+      setConfigModalManifest(manifest)
+      setConfigModalEntries(entries)
+      setConfigModalForm(form)
+      setConfigModalError(null)
+      setConfigModalBaseConfig(baseConfigForDisplay)
+      setConfigModalEnabled(enabled)
+      setConfigModalTarget(target)
+    },
+    [
+      planDraft,
+      selectedScenario,
+      resolveBeeImage,
+      resolveBeeTemplateConfig,
+      ensureCapabilities,
+      getManifestForImage,
+      getStepAtTarget,
+      buildConfigEntriesForComponent,
+      formatValueForInput,
+      getValueForPath,
+      setToast,
+    ],
+  )
+
+  const applyConfigModal = useCallback(() => {
+    if (!configModalTarget || !configModalEntries.length) {
+      setConfigModalTarget(null)
+      setConfigModalManifest(null)
+      setConfigModalEntries([])
+      setConfigModalForm({})
+      setConfigModalError(null)
+      return
+    }
+    const patch: Record<string, unknown> = {}
+    for (const entry of configModalEntries) {
+      const enabled = configModalEnabled[entry.name] === true
+      if (!enabled) {
+        continue
+      }
+      const raw = configModalForm[entry.name]
+      const result = convertConfigFormValue(entry, raw)
+      if (!result.ok) {
+        setConfigModalError(result.message)
+        return
+      }
+      if (result.apply) {
+        assignNestedValue(patch, entry.name, result.value)
+      }
+    }
+    const target = configModalTarget
+    const hasConfig = Object.keys(patch).length > 0
+
+    if (target.kind === 'template-bee') {
+      applyTemplateUpdate((current) => {
+        const base =
+          current && typeof current === 'object' && !Array.isArray(current)
+            ? { ...(current as Record<string, unknown>) }
+            : {}
+        const beesRaw = Array.isArray((base as Record<string, unknown>).bees)
+          ? ([...(base as Record<string, unknown>).bees as unknown[]] as unknown[])
+          : ([] as unknown[])
+        if (target.beeIndex < 0 || target.beeIndex >= beesRaw.length) {
+          return base
+        }
+        const existing =
+          beesRaw[target.beeIndex] &&
+          typeof beesRaw[target.beeIndex] === 'object' &&
+          !Array.isArray(beesRaw[target.beeIndex])
+            ? { ...(beesRaw[target.beeIndex] as Record<string, unknown>) }
+            : {}
+        existing.config = hasConfig ? patch : undefined
+        beesRaw[target.beeIndex] = existing
+        ;(base as Record<string, unknown>).bees = beesRaw
+        return base
+      })
+    } else {
+      applyPlanUpdate((current) => {
+        if (!current) return current
+        if (target.kind === 'swarm') {
+          const swarm = current.swarm.map((step, idx) =>
+            idx === target.stepIndex ? { ...step, config: hasConfig ? patch : undefined } : step,
+          )
+          return { ...current, swarm }
+        }
+        if (target.kind === 'bee' && target.beeIndex !== null) {
+          const bees = current.bees.map((bee, idx) => {
+            if (idx !== target.beeIndex) return bee
+            const steps = bee.steps.map((step, sIdx) =>
+              sIdx === target.stepIndex ? { ...step, config: hasConfig ? patch : undefined } : step,
+            )
+            return { ...bee, steps }
+          })
+          return { ...current, bees }
+        }
+        return current
+      })
+    }
+    setConfigModalTarget(null)
+    setConfigModalManifest(null)
+    setConfigModalEntries([])
+    setConfigModalForm({})
+    setConfigModalError(null)
+    setConfigModalBaseConfig(undefined)
+    setConfigModalEnabled({})
+  }, [
+    applyPlanUpdate,
+    assignNestedValue,
+    configModalEntries,
+    configModalForm,
+    configModalTarget,
+    configModalEnabled,
+    convertConfigFormValue,
+  ])
+
+  const timelineRows = useMemo(() => {
+    if (!planDraft) return []
+    const rows: TimelineRow[] = []
+
+    planDraft.swarm.forEach((step, idx) => {
+      const seconds = parseSeconds(step.time)
+      rows.push({
+        key: `swarm-${idx}`,
+        kind: 'swarm',
+        beeIndex: null,
+        stepIndex: idx,
+        seconds,
+        original: step.time ?? '',
+        target: 'swarm',
+        stepId: step.stepId ?? String(idx + 1),
+        name: step.name ?? null,
+        type: step.type ?? null,
+      })
+    })
+
+    planDraft.bees.forEach((bee, beeIndex) => {
+      const label =
+        bee.instanceId || bee.role
+          ? `${bee.instanceId ?? ''}${bee.role ? ` (${bee.role})` : ''}`
+          : `bee-${beeIndex + 1}`
+      bee.steps.forEach((step, idx) => {
+        const seconds = parseSeconds(step.time)
+        rows.push({
+          key: `bee-${beeIndex}-${idx}`,
+          kind: 'bee',
+          beeIndex,
+          stepIndex: idx,
+          seconds,
+          original: step.time ?? '',
+          target: label,
+          stepId: step.stepId ?? String(idx + 1),
+          name: step.name ?? null,
+          type: step.type ?? null,
+        })
+      })
+    })
+
+    return rows.sort((a, b) => {
+      const aSec = a.seconds ?? Number.POSITIVE_INFINITY
+      const bSec = b.seconds ?? Number.POSITIVE_INFINITY
+      if (aSec !== bSec) return aSec - bSec
+      return a.target.localeCompare(b.target) || a.stepId.localeCompare(b.stepId)
+    })
+  }, [planDraft])
+
+  const updateTimelineTime = useCallback(
+    (row: TimelineRowRef, seconds: number) => {
+      const clamped = Math.max(0, Math.round(seconds))
+      applyPlanUpdate((current) => {
+        if (!current) return current
+        const formatted = formatSeconds(clamped)
+        if (row.kind === 'swarm') {
+          if (!current.swarm[row.stepIndex]) return current
+          const updated = current.swarm.map((step, idx) =>
+            idx === row.stepIndex ? { ...step, time: formatted } : step,
+          )
+          const sorted = [...updated].sort((a, b) => {
+            const aSec = parseSeconds(a.time) ?? Number.POSITIVE_INFINITY
+            const bSec = parseSeconds(b.time) ?? Number.POSITIVE_INFINITY
+            if (aSec !== bSec) return aSec - bSec
+            const aId = a.stepId ?? ''
+            const bId = b.stepId ?? ''
+            return aId.localeCompare(bId)
+          })
+          return { ...current, swarm: sorted }
+        }
+        if (
+          row.kind === 'bee' &&
+          row.beeIndex !== null &&
+          current.bees[row.beeIndex]
+        ) {
+          const bees = current.bees.map((bee, idx) => {
+            if (idx !== row.beeIndex) return bee
+            const updatedSteps = bee.steps.map((step, sIdx) =>
+              sIdx === row.stepIndex ? { ...step, time: formatted } : step,
+            )
+            const sortedSteps = [...updatedSteps].sort((a, b) => {
+              const aSec = parseSeconds(a.time) ?? Number.POSITIVE_INFINITY
+              const bSec = parseSeconds(b.time) ?? Number.POSITIVE_INFINITY
+              if (aSec !== bSec) return aSec - bSec
+              const aId = a.stepId ?? ''
+              const bId = b.stepId ?? ''
+              return aId.localeCompare(bId)
+            })
+            return { ...bee, steps: sortedSteps }
+          })
+            return { ...current, bees }
+          }
+          return current
+      })
+    },
+    [applyPlanUpdate],
+  )
+
+  const updateSwarmStep = useCallback(
+    (index: number, patch: Partial<ScenarioPlanView['swarm'][number]>) => {
+      applyPlanUpdate((current) => {
+        if (!current) return current
+        const swarm = current.swarm.map((step, i) =>
+          i === index ? { ...step, ...patch } : step,
+        )
+        return { ...current, swarm }
+      })
+    },
+    [applyPlanUpdate],
+  )
+
+  const removeSwarmStep = useCallback((index: number) => {
+    applyPlanUpdate((current) => {
+      if (!current) return current
+      return { ...current, swarm: current.swarm.filter((_, i) => i !== index) }
+    })
+  }, [applyPlanUpdate])
+
+  const updateBee = useCallback(
+    (index: number, patch: { instanceId?: string | null; role?: string | null }) => {
+      applyPlanUpdate((current) => {
+        if (!current) return current
+        const bees = current.bees.map((bee, i) =>
+          i === index ? { ...bee, ...patch } : bee,
+        )
+        return { ...current, bees }
+      })
+    },
+    [applyPlanUpdate],
+  )
+
+  const addBeeStep = useCallback((beeIndex: number) => {
+    applyPlanUpdate((current) => {
+      if (!current) {
+        return {
+          swarm: [],
+          bees: [
+            {
+              instanceId: 'bee-1',
+              role: null,
+              steps: [
+                {
+                  stepId: null,
+                  name: null,
+                  time: '1s',
+                  type: 'config-update',
+                },
+              ],
+            },
+          ],
+        }
+      }
+      const bees = current.bees.map((bee, i) =>
+        i === beeIndex
+          ? {
+              ...bee,
+              steps: [
+                ...bee.steps,
+                {
+                  stepId: null,
+                  name: null,
+                  time: '1s',
+                  type: 'config-update',
+                },
+              ],
+            }
+          : bee,
+      )
+      return { ...current, bees }
+    })
+  }, [applyPlanUpdate])
+
+  const updateBeeStep = useCallback(
+    (
+      beeIndex: number,
+      stepIndex: number,
+      patch: Partial<ScenarioPlanView['swarm'][number]>,
+    ) => {
+      applyPlanUpdate((current) => {
+        if (!current) return current
+        const bees = current.bees.map((bee, i) => {
+          if (i !== beeIndex) return bee
+          const steps = bee.steps.map((step, j) =>
+            j === stepIndex ? { ...step, ...patch } : step,
+          )
+          return { ...bee, steps }
+        })
+        return { ...current, bees }
+      })
+    },
+    [applyPlanUpdate],
+  )
+
+  const removeBeeStep = useCallback((beeIndex: number, stepIndex: number) => {
+    applyPlanUpdate((current) => {
+      if (!current) return current
+      const bees = current.bees.map((bee, i) => {
+        if (i !== beeIndex) return bee
+        return { ...bee, steps: bee.steps.filter((_, j) => j !== stepIndex) }
+      })
+      return { ...current, bees }
+    })
+  }, [applyPlanUpdate])
+
+  const removeBee = useCallback((index: number) => {
+    applyPlanUpdate((current) => {
+      if (!current) return current
+      return { ...current, bees: current.bees.filter((_, i) => i !== index) }
+    })
+  }, [applyPlanUpdate])
+
+  return (
+    <div className="flex h-full min-h-0 bg-[#05070b] text-white">
+      <div className="w-72 border-r border-white/10 px-4 py-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <h1 className="text-sm font-semibold text-white/90">Scenarios</h1>
+          <Link
+            to="/hive"
+            className="text-xs text-sky-300 hover:text-sky-200 transition"
+          >
+            Back to Hive
+          </Link>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            className="rounded border border-white/15 bg-white/10 px-2 py-1 text-[11px] text-white/80 hover:bg-white/20"
+            onClick={() => uploadInputRef.current?.click()}
+          >
+            Upload bundle
+          </button>
+          <button
+            type="button"
+            className="rounded border border-white/15 bg-white/10 px-2 py-1 text-[11px] text-white/80 hover:bg-white/20"
+            onClick={() => {
+              setCreatingScenario(true)
+              setNewScenarioId('')
+              setNewScenarioName('')
+            }}
+          >
+            New scenario
+          </button>
+          <input
+            ref={uploadInputRef}
+            type="file"
+            accept=".zip"
+            className="hidden"
+            onChange={(e) => {
+              const [file] = Array.from(e.target.files ?? [])
+              void handleUpload(file ?? null)
+              e.target.value = ''
+            }}
+          />
+        </div>
+        {loading && (
+          <div className="text-xs text-white/60">Loading scenarios…</div>
+        )}
+        {error && (
+          <div className="text-xs text-red-400">Failed to load: {error}</div>
+        )}
+        {creatingScenario && (
+          <div className="space-y-1 rounded border border-white/20 bg-white/5 px-2 py-2 text-[11px] text-white/80">
+            <div className="font-semibold text-white/90 mb-1">New scenario</div>
+            <input
+              className="w-full rounded border border-white/20 bg-black/40 px-2 py-1 text-[11px] text-white/90"
+              placeholder="scenario-id"
+              value={newScenarioId}
+              onChange={(event) => setNewScenarioId(event.target.value)}
+            />
+            <input
+              className="w-full rounded border border-white/20 bg-black/40 px-2 py-1 text-[11px] text-white/90"
+              placeholder="Name (optional)"
+              value={newScenarioName}
+              onChange={(event) => setNewScenarioName(event.target.value)}
+            />
+            <div className="flex items-center justify-end gap-2 pt-1">
+              <button
+                type="button"
+                className="rounded px-2 py-1 text-[11px] text-white/70 hover:bg-white/10"
+                onClick={() => {
+                  setCreatingScenario(false)
+                  setNewScenarioId('')
+                  setNewScenarioName('')
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="rounded bg-sky-500/80 px-2 py-1 text-[11px] text-white hover:bg-sky-500"
+                onClick={() => void handleCreateScenario()}
+              >
+                Create
+              </button>
+            </div>
+          </div>
+        )}
+        <div className="space-y-1 overflow-y-auto max-h-[calc(100vh-7rem)] pr-1">
+          {items.map((scenario) => {
+            const isSelected = scenario.id === selectedId
+            return (
+              <button
+                key={scenario.id}
+                type="button"
+                onClick={() => setSelectedId(scenario.id)}
+                className={`w-full text-left rounded-md px-3 py-2 text-xs border ${
+                  isSelected
+                    ? 'border-sky-400 bg-sky-500/10'
+                    : 'border-white/10 bg-white/5 hover:bg-white/10'
+                }`}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-medium text-white/90">
+                    {scenario.name || scenario.id}
+                  </span>
+                </div>
+                <div className="mt-0.5 text-[10px] text-white/60">
+                  {scenario.id}
+                </div>
+              </button>
+            )
+          })}
+          {!loading && !error && items.length === 0 && (
+            <div className="text-xs text-white/60">No scenarios defined.</div>
+          )}
+        </div>
+      </div>
+      <div className="flex-1 px-6 py-4 overflow-y-auto">
+        {!selectedSummary && !loading && (
+          <div className="text-sm text-white/70">
+            Select a scenario on the left to view details.
+          </div>
+        )}
+        {selectedSummary && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <h2 className="text-base font-semibold text-white/90">
+                  {selectedSummary.name || selectedSummary.id}
+                </h2>
+                <div className="mt-1 text-xs text-white/60 space-x-2">
+                  <span>ID: {selectedSummary.id}</span>
+                  {selectedScenario?.description && (
+                    <span>{selectedScenario.description}</span>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  className="rounded bg-white/10 px-2 py-1 text-[11px] text-white/80 hover:bg-white/20"
+                  onClick={() => void handleDownload(selectedSummary.id)}
+                >
+                  Download bundle
+                </button>
+                <button
+                  type="button"
+                  className="rounded bg-white/10 px-2 py-1 text-[11px] text-white/80 hover:bg-white/20"
+                  onClick={() => replaceInputRef.current?.click()}
+                >
+                  Replace bundle
+                </button>
+                <input
+                  ref={replaceInputRef}
+                  type="file"
+                  accept=".zip"
+                  className="hidden"
+                  onChange={(e) => {
+                    const [file] = Array.from(e.target.files ?? [])
+                    void handleReplace(file ?? null)
+                    e.target.value = ''
+                  }}
+                />
+                <div className="ml-4 flex items-center gap-2">
+                  <button
+                    type="button"
+                    className="rounded bg-white/10 px-2 py-1 text-[11px] text-white/80 hover:bg-white/20 disabled:opacity-50"
+                    disabled={saving || rawLoading || !hasUnsavedChanges}
+                    onClick={() => void handleSave()}
+                  >
+                    {saving ? 'Saving…' : 'Save YAML'}
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded bg-white/5 px-2 py-1 text-[11px] text-white/80 hover:bg-white/15 disabled:opacity-40"
+                    disabled={
+                      !selectedId ||
+                      (viewMode === 'plan' && !canUndoPlan)
+                    }
+                    onClick={() => handleGlobalUndo()}
+                  >
+                    Undo
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded bg-white/5 px-2 py-1 text-[11px] text-white/80 hover:bg-white/15 disabled:opacity-40"
+                    disabled={
+                      !selectedId ||
+                      (viewMode === 'plan' && !canRedoPlan)
+                    }
+                    onClick={() => handleGlobalRedo()}
+                  >
+                    Redo
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 border-b border-white/10 pb-2 mb-3">
+              <button
+                type="button"
+                className={`rounded px-2 py-1 text-[11px] ${
+                  viewMode === 'plan'
+                    ? 'bg-white/20 text-white'
+                    : 'bg-white/5 text-white/70 hover:bg-white/10'
+                }`}
+                onClick={() => setViewMode('plan')}
+              >
+                Plan editor
+              </button>
+              <button
+                type="button"
+                className={`rounded px-2 py-1 text-[11px] ${
+                  viewMode === 'yaml'
+                    ? 'bg-white/20 text-white'
+                    : 'bg-white/5 text-white/70 hover:bg-white/10'
+                }`}
+                onClick={() => setViewMode('yaml')}
+              >
+                Scenario YAML
+              </button>
+              <button
+                type="button"
+                className={`rounded px-2 py-1 text-[11px] ${
+                  viewMode === 'swarm'
+                    ? 'bg-white/20 text-white'
+                    : 'bg-white/5 text-white/70 hover:bg-white/10'
+                }`}
+                onClick={() => setViewMode('swarm')}
+              >
+                Swarm template
+              </button>
+            </div>
+            {viewMode === 'plan' && planDraft && (
+              <div className="border border-white/15 rounded-md p-3 bg-white/5 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-semibold text-white/80">
+                    Plan overview
+                  </h3>
+                  <div className="flex items-center gap-2">
+                    <button
+                    type="button"
+                    className="rounded bg-white/10 px-2 py-1 text-[11px] text-white/80 hover:bg-white/20"
+                    onClick={() =>
+                      applyPlanUpdate((current) => {
+                        const base =
+                          current ??
+                          ({
+                            swarm: [],
+                            bees: [],
+                          } as ScenarioPlanView)
+                        return {
+                          swarm: base.swarm,
+                          bees: [
+                            ...base.bees,
+                            { instanceId: 'bee-1', role: null, steps: [] },
+                          ],
+                        }
+                      })
+                    }
+                  >
+                    Add bee timeline
+                    </button>
+                    <button
+                    type="button"
+                    className="rounded bg-white/10 px-2 py-1 text-[11px] text-white/80 hover:bg-white/20"
+                    onClick={() =>
+                      applyPlanUpdate((current) => {
+                        const base =
+                          current ??
+                          ({
+                            swarm: [],
+                            bees: [],
+                          } as ScenarioPlanView)
+                        return {
+                          swarm: [
+                            ...base.swarm,
+                            {
+                              stepId: 'swarm-step',
+                              name: null,
+                              time: '1s',
+                              type: 'config-update',
+                            },
+                          ],
+                          bees: base.bees,
+                        }
+                      })
+                    }
+                  >
+                    Add swarm step
+                    </button>
+                    <button
+                      type="button"
+                      className="text-[11px] text-sky-300 hover:text-sky-200"
+                      onClick={() => setPlanExpanded((prev) => !prev)}
+                    >
+                      {planExpanded ? 'Collapse' : 'Expand'}
+                    </button>
+                  </div>
+                </div>
+                {timelineRows.length > 0 && (
+                  <PlanTimelineLanes
+                    rows={timelineRows}
+                    onTimeChange={updateTimelineTime}
+                  />
+                )}
+                <div className="mt-2 space-y-2 text-xs text-white/80">
+                  {planDraft.swarm.length > 0 && (
+                    <div>
+                      <div className="font-semibold text-white/90 mb-1">
+                        Swarm steps
+                      </div>
+                      <ul className="space-y-1">
+                        {planDraft.swarm.map((step, idx) => (
+                          <li key={`${step.stepId ?? idx}`} className="flex gap-2 items-center">
+                            <input
+                              className="w-24 rounded border border-white/15 bg-black/40 px-1 py-0.5 text-[11px] text-white/90 font-mono"
+                              value={step.time ?? ''}
+                              placeholder="time"
+                              onChange={(e) =>
+                                updateSwarmStep(idx, {
+                                  time: e.target.value.trim() || null,
+                                })
+                              }
+                              onBlur={(e) => {
+                                const text = e.target.value.trim()
+                                if (!text) {
+                                  updateSwarmStep(idx, { time: null })
+                                  return
+                                }
+                                const seconds = parseSeconds(text)
+                                if (seconds === null || seconds < 0) {
+                                  setToast(
+                                    'Invalid time; use 5s, 2m, 1h or PT5S',
+                                  )
+                                  return
+                                }
+                                updateTimelineTime(
+                                  {
+                                    kind: 'swarm',
+                                    beeIndex: null,
+                                    stepIndex: idx,
+                                  },
+                                  seconds,
+                                )
+                              }}
+                            />
+                            <input
+                              className="w-32 rounded border border-white/15 bg-black/40 px-1 py-0.5 text-[11px] text-white/90"
+                              value={step.stepId ?? ''}
+                              placeholder="step-id"
+                              onChange={(e) =>
+                                updateSwarmStep(idx, {
+                                  stepId: e.target.value.trim() || null,
+                                })
+                              }
+                            />
+                            <input
+                              className="flex-1 rounded border border-white/15 bg-black/40 px-1 py-0.5 text-[11px] text-white/90"
+                              value={step.name ?? ''}
+                              placeholder="Step name"
+                              onChange={(e) =>
+                                updateSwarmStep(idx, {
+                                  name: e.target.value.trim() || null,
+                                })
+                              }
+                            />
+                            <select
+                              className="w-32 rounded border border-white/15 bg-black/40 px-1 py-1 text-[11px] text-white/90"
+                              value={step.type ?? ''}
+                              onChange={(e) =>
+                                updateSwarmStep(idx, {
+                                  type: e.target.value.trim() || null,
+                                })
+                              }
+                            >
+                              <option value="">type…</option>
+                              <option value="config-update">config-update</option>
+                              <option value="start">start</option>
+                              <option value="stop">stop</option>
+                            </select>
+                            {step.type === 'config-update' && (
+                              <button
+                                type="button"
+                                className="text-[11px] text-sky-300 hover:text-sky-200"
+                                onClick={() =>
+                                  void openConfigModal({
+                                    kind: 'swarm',
+                                    beeIndex: null,
+                                    stepIndex: idx,
+                                  })
+                                }
+                              >
+                                Edit config
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              className="text-[11px] text-red-300 hover:text-red-200"
+                              onClick={() => removeSwarmStep(idx)}
+                            >
+                              ✕
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {planDraft.bees.length > 0 && (
+                    <div>
+                      <div className="font-semibold text-white/90 mb-1">
+                        Bee steps
+                      </div>
+                      <div className="space-y-1">
+                        {planDraft.bees.map((bee, index) => (
+                          <div key={`${bee.instanceId ?? bee.role ?? index}`}>
+                            <div className="flex items-center gap-2 mb-0.5">
+                              <input
+                                className="w-32 rounded border border-white/15 bg-black/40 px-1 py-0.5 text-[11px] text-white/90"
+                                value={bee.instanceId ?? ''}
+                                placeholder="instanceId"
+                                onChange={(e) =>
+                                  updateBee(index, {
+                                    instanceId: e.target.value.trim() || null,
+                                  })
+                                }
+                              />
+                              <select
+                                className="w-32 rounded border border-white/15 bg-black/40 px-1 py-0.5 text-[11px] text-white/90"
+                                value={bee.role ?? ''}
+                                onChange={(e) =>
+                                  updateBee(index, {
+                                    role: e.target.value.trim() || null,
+                                  })
+                                }
+                              >
+                                <option value="">role…</option>
+                                {roleOptions.map((role) => (
+                                  <option key={role} value={role}>
+                                    {role}
+                                  </option>
+                                ))}
+                              </select>
+                              <button
+                                type="button"
+                                className="text-[11px] text-red-300 hover:text-red-200 ml-auto"
+                                onClick={() => removeBee(index)}
+                              >
+                                Remove bee
+                              </button>
+                              <button
+                                type="button"
+                                className="text-[11px] text-sky-300 hover:text-sky-200"
+                                onClick={() => addBeeStep(index)}
+                              >
+                                Add step
+                              </button>
+                            </div>
+                            <ul className="space-y-1">
+                              {bee.steps.map((step, idx) => (
+                                <li
+                                  key={`${step.stepId ?? idx}`}
+                                  className="flex gap-2 items-center"
+                                >
+                                  <input
+                                    className="w-24 rounded border border-white/15 bg-black/40 px-1 py-0.5 text-[11px] text-white/90 font-mono"
+                                    value={step.time ?? ''}
+                                    placeholder="time"
+                                    onChange={(e) =>
+                                      updateBeeStep(index, idx, {
+                                        time: e.target.value.trim() || null,
+                                      })
+                                    }
+                                    onBlur={(e) => {
+                                      const text = e.target.value.trim()
+                                      if (!text) {
+                                        updateBeeStep(index, idx, { time: null })
+                                        return
+                                      }
+                                      const seconds = parseSeconds(text)
+                                      if (seconds === null || seconds < 0) {
+                                        setToast(
+                                          'Invalid time; use 5s, 2m, 1h or PT5S',
+                                        )
+                                        return
+                                      }
+                                      updateTimelineTime(
+                                        {
+                                          kind: 'bee',
+                                          beeIndex: index,
+                                          stepIndex: idx,
+                                        },
+                                        seconds,
+                                      )
+                                    }}
+                                  />
+                                  <input
+                                    className="w-32 rounded border border-white/15 bg-black/40 px-1 py-0.5 text-[11px] text-white/90"
+                                    value={step.stepId ?? ''}
+                                    placeholder="step-id"
+                                    onChange={(e) =>
+                                      updateBeeStep(index, idx, {
+                                        stepId: e.target.value.trim() || null,
+                                      })
+                                    }
+                                  />
+                                  <input
+                                    className="flex-1 rounded border border-white/15 bg-black/40 px-1 py-0.5 text-[11px] text-white/90"
+                                    value={step.name ?? ''}
+                                    placeholder="Step name"
+                                    onChange={(e) =>
+                                      updateBeeStep(index, idx, {
+                                        name: e.target.value.trim() || null,
+                                      })
+                                    }
+                                  />
+                                  <select
+                                    className="w-32 rounded border border-white/15 bg-black/40 px-1 py-1 text-[11px] text-white/90"
+                                    value={step.type ?? ''}
+                                    onChange={(e) =>
+                                      updateBeeStep(index, idx, {
+                                        type: e.target.value.trim() || null,
+                                      })
+                                    }
+                                  >
+                                    <option value="">type…</option>
+                                    <option value="config-update">config-update</option>
+                                    <option value="start">start</option>
+                                    <option value="stop">stop</option>
+                                  </select>
+                                  {step.type === 'config-update' && (
+                                    <button
+                                      type="button"
+                                      className="text-[11px] text-sky-300 hover:text-sky-200"
+                                      onClick={() =>
+                                        void openConfigModal({
+                                          kind: 'bee',
+                                          beeIndex: index,
+                                          stepIndex: idx,
+                                        })
+                                      }
+                                    >
+                                      Edit config
+                                    </button>
+                                  )}
+                                  <button
+                                    type="button"
+                                    className="text-[11px] text-red-300 hover:text-red-200"
+                                    onClick={() => removeBeeStep(index, idx)}
+                                  >
+                                    ✕
+                                  </button>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {planExpanded && selectedScenario && selectedScenario.plan != null ? (
+                    <pre className="mt-2 max-h-60 overflow-auto rounded bg-black/60 p-2 text-[11px] text-sky-100 whitespace-pre-wrap">
+                      {JSON.stringify(selectedScenario.plan, null, 2)}
+                    </pre>
+                  ) : null}
+                </div>
+              </div>
+            )}
+            {viewMode === 'yaml' && (
+              <div className="flex flex-col gap-3 h-[60vh]">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-semibold text-white/80">
+                    Scenario YAML
+                    {hasUnsavedChanges && (
+                      <span className="text-[10px] text-amber-300 ml-1">(unsaved changes)</span>
+                    )}
+                  </h3>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      className="rounded bg-white/5 px-2 py-1 text-[11px] text-white/70 hover:bg-white/15"
+                      onClick={() => {
+                        const template = [
+                          '# Scenario template snippet',
+                          'id: example-scenario',
+                          'name: Example scenario',
+                          'description: Example scenario for PocketHive',
+                          'template:',
+                          '  image: pockethive-swarm-controller:latest',
+                          '  instanceId: marshal-bee',
+                          '  bees:',
+                          '    - role: generator',
+                          '      instanceId: gen-1',
+                          '      image: pockethive-generator:latest',
+                          '      work: { out: gen }',
+                          '    - role: processor',
+                          '      instanceId: proc-1',
+                          '      image: pockethive-processor:latest',
+                          '      work: { in: gen, out: final }',
+                          'plan:',
+                          '  swarm:',
+                          '    - stepId: swarm-start',
+                          '      name: Start swarm work',
+                          '      time: PT1S',
+                          '      type: start',
+                          '  bees:',
+                          '    - instanceId: gen-1',
+                          '      steps:',
+                          '        - stepId: gen-rate',
+                          '          name: Change generator rate',
+                          '          time: PT5S',
+                          '          type: config-update',
+                          '          config:',
+                          '            ratePerSec: "10"',
+                          '',
+                        ].join('\n')
+                        setRawYaml((current) => {
+                          const trimmed = current.trim()
+                          if (!trimmed) return template
+                          return `${current.replace(/\s*$/, '')}\n\n${template}`
+                        })
+                      }}
+                    >
+                      Insert template
+                    </button>
+                    {/* Save is now in the shared toolbar */}
+                  </div>
+                </div>
+                {rawLoading && (
+                  <div className="text-xs text-white/60">Loading YAML…</div>
+                )}
+                {rawError && (
+                  <div className="text-xs text-red-400">
+                    Failed to load/save: {rawError}
+                  </div>
+                )}
+                <div className="flex-1 min-h-0 border border-white/15 rounded overflow-hidden">
+                  <Editor
+                    height="100%"
+                    defaultLanguage="yaml"
+                    theme="vs-dark"
+                    onMount={(editorInstance) => {
+                      yamlEditorRef.current = editorInstance
+                    }}
+                    value={rawYaml}
+                    onChange={(value) => {
+                      const text = value ?? ''
+                      setRawYaml(text)
+                      rebuildFromYaml(text)
+                    }}
+                    options={{
+                      fontSize: 11,
+                      minimap: { enabled: false },
+                      scrollBeyondLastLine: false,
+                      wordWrap: 'on',
+                    }}
+                  />
+                </div>
+              </div>
+            )}
+            {viewMode === 'swarm' && (
+              <div className="border border-white/15 rounded-md p-3 bg-white/5 space-y-3">
+                <SwarmTemplateEditor
+                  template={templateDraft}
+                  onChange={applyTemplateUpdate}
+                  onOpenConfig={(beeIndex) =>
+                    openConfigModal({ kind: 'template-bee', beeIndex, stepIndex: 0 })
+                  }
+                />
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+      {configModalTarget && configModalManifest && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/70">
+          <div
+            role="dialog"
+            aria-modal="true"
+            className="w-full max-w-lg rounded-lg bg-[#05070b] border border-white/20 p-4 text-sm text-white"
+          >
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-xs font-semibold text-white/80">
+                Edit config-update patch
+              </h3>
+              <button
+                type="button"
+                className="text-white/60 hover:text-white"
+                onClick={() => {
+                  setConfigModalTarget(null)
+                  setConfigModalManifest(null)
+                  setConfigModalEntries([])
+                  setConfigModalForm({})
+                  setConfigModalError(null)
+                }}
+              >
+                ×
+              </button>
+            </div>
+            <div className="mb-2 text-[11px] text-white/60">
+              Image:{' '}
+              <span className="font-mono text-white/80">
+                {configModalManifest.image?.name ?? '(unknown)'}
+                {configModalManifest.image?.tag ? `:${configModalManifest.image.tag}` : ''}
+              </span>
+            </div>
+            <div className="max-h-64 overflow-y-auto space-y-2 mb-3">
+              {configModalEntries.map((entry) => {
+                const unit =
+                  entry.ui && typeof entry.ui === 'object'
+                    ? (() => {
+                        const value = (entry.ui as Record<string, unknown>).unit
+                        return typeof value === 'string' && value.trim().length > 0
+                          ? value.trim()
+                          : null
+                      })()
+                    : null
+                const labelSuffix = `${entry.type || 'string'}${unit ? ` • ${unit}` : ''}`
+                const rawValue = configModalForm[entry.name]
+                const normalizedType = (entry.type || '').toLowerCase()
+                const options = Array.isArray(entry.options) ? entry.options : undefined
+                const enabled = configModalEnabled[entry.name] === true
+                const currentSource =
+                  configModalBaseConfig && isPlainObject(configModalBaseConfig)
+                    ? getValueForPath(
+                        configModalBaseConfig as Record<string, unknown>,
+                        entry.name,
+                      )
+                    : undefined
+                const currentDisplay = currentSource !== undefined
+                  ? formatValueForInput(entry, currentSource)
+                  : ''
+                let field: React.ReactElement
+                if (options && options.length > 0) {
+                  const value =
+                    typeof rawValue === 'string'
+                      ? rawValue
+                      : (entry.default as string | undefined) ?? ''
+                  field = (
+                    <select
+                      className="w-full rounded bg-white/10 px-2 py-1 text-white text-xs"
+                      value={value}
+                      disabled={!enabled}
+                      onChange={(event) =>
+                        setConfigModalForm((prev) => ({
+                          ...prev,
+                          [entry.name]: event.target.value,
+                        }))
+                      }
+                    >
+                      {options.map((option, index) => {
+                        const label =
+                          option === null || option === undefined
+                            ? ''
+                            : typeof option === 'string'
+                              ? option
+                              : JSON.stringify(option)
+                        return (
+                          <option key={index} value={label}>
+                            {label}
+                          </option>
+                        )
+                      })}
+                    </select>
+                  )
+                } else if (normalizedType === 'boolean' || normalizedType === 'bool') {
+                  const checked = rawValue === true
+                  field = (
+                    <label className="inline-flex items-center gap-2 text-xs text-white/70">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 accent-blue-500"
+                        checked={checked}
+                        disabled={!enabled}
+                        onChange={(event) =>
+                          setConfigModalForm((prev) => ({
+                            ...prev,
+                            [entry.name]: event.target.checked,
+                          }))
+                        }
+                      />
+                      <span>Enabled</span>
+                    </label>
+                  )
+                } else if (
+                  entry.multiline ||
+                  normalizedType === 'text' ||
+                  normalizedType === 'json'
+                ) {
+                  const value = typeof rawValue === 'string' ? rawValue : ''
+                  field = (
+                    <textarea
+                      className="w-full rounded bg-white/10 px-2 py-1 text-white text-xs"
+                      rows={normalizedType === 'json' ? 4 : 3}
+                      value={value}
+                      disabled={!enabled}
+                      onChange={(event) =>
+                        setConfigModalForm((prev) => ({
+                          ...prev,
+                          [entry.name]: event.target.value,
+                        }))
+                      }
+                    />
+                  )
+                } else {
+                  const value = typeof rawValue === 'string' ? rawValue : ''
+                  field = (
+                    <input
+                      className="w-full rounded bg-white/10 px-2 py-1 text-white text-xs"
+                      type={
+                        normalizedType === 'number' ||
+                        normalizedType === 'int' ||
+                        normalizedType === 'integer'
+                          ? 'number'
+                          : 'text'
+                      }
+                      value={value}
+                      disabled={!enabled}
+                      onChange={(event) =>
+                        setConfigModalForm((prev) => ({
+                          ...prev,
+                          [entry.name]: event.target.value,
+                        }))
+                      }
+                    />
+                  )
+                }
+                return (
+                  <label key={entry.name} className="block space-y-1 text-xs">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="block text-white/70">
+                        {entry.name}
+                        <span className="text-white/40"> ({labelSuffix})</span>
+                      </span>
+                      <div className="flex items-center gap-3 text-[10px] text-white/60">
+                        <span className="font-mono">
+                          Current:{' '}
+                          {currentDisplay === '' ? '(none)' : String(currentDisplay)}
+                        </span>
+                        <label className="inline-flex items-center gap-1">
+                          <input
+                            type="checkbox"
+                            className="h-3 w-3 accent-blue-500"
+                            checked={enabled}
+                            onChange={(event) => {
+                              const nextEnabled = event.target.checked
+                              setConfigModalEnabled((prev) => ({
+                                ...prev,
+                                [entry.name]: nextEnabled,
+                              }))
+                              if (nextEnabled) {
+                                const baseValue =
+                                  configModalBaseConfig &&
+                                  getValueForPath(
+                                    configModalBaseConfig as Record<string, unknown>,
+                                    entry.name,
+                                  )
+                                setConfigModalForm((prev) => ({
+                                  ...prev,
+                                  [entry.name]: formatValueForInput(
+                                    entry,
+                                    baseValue !== undefined ? baseValue : entry.default,
+                                  ),
+                                }))
+                              }
+                            }}
+                          />
+                          <span>Override</span>
+                        </label>
+                      </div>
+                    </div>
+                    {field}
+                  </label>
+                )
+              })}
+            </div>
+            {configModalError && (
+              <div className="mb-2 text-[11px] text-red-400">{configModalError}</div>
+            )}
+            <div className="flex items-center justify-end gap-2">
+              <button
+                type="button"
+                className="rounded px-2 py-1 text-[11px] text-white/70 hover:bg-white/10"
+                onClick={() => {
+                  setConfigModalTarget(null)
+                  setConfigModalManifest(null)
+                  setConfigModalEntries([])
+                  setConfigModalForm({})
+                  setConfigModalError(null)
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="rounded bg-sky-500/80 px-3 py-1 text-[11px] text-white hover:bg-sky-500"
+                onClick={() => applyConfigModal()}
+              >
+                Apply
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}

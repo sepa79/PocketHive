@@ -334,7 +334,15 @@ public final class TimelineScenario implements Scenario {
           due.add(s);
         }
       }
-      // swarmSteps currently ignored; reserved for future swarm-level commands
+      for (StepInstance s : swarmSteps) {
+        if (!s.fired && s.dueMillis <= elapsedMillis) {
+          s.fired = true;
+          due.add(s);
+        }
+      }
+      if (due.size() > 1) {
+        due.sort(Comparator.comparingLong(si -> si.dueMillis));
+      }
       return due;
     }
 
@@ -566,7 +574,11 @@ public final class TimelineScenario implements Scenario {
       try {
         millis = Duration.parse(timeStr).toMillis();
       } catch (Exception ex) {
-        return null;
+        Long fallback = parseSimpleSeconds(timeStr);
+        if (fallback == null) {
+          return null;
+        }
+        millis = fallback * 1000L;
       }
       String type = map.getOrDefault("type", "config-update").toString();
       Map<String, Object> cfg = Map.of();
@@ -575,6 +587,42 @@ public final class TimelineScenario implements Scenario {
         cfg = (Map<String, Object>) cfgRaw;
       }
       return new StepInstance(stepId, name, type, cfg, instanceId, role, millis);
+    }
+
+    private static Long parseSimpleSeconds(String value) {
+      if (value == null) {
+        return null;
+      }
+      String text = value.trim();
+      if (text.isEmpty()) {
+        return null;
+      }
+      java.util.regex.Matcher m = java.util.regex.Pattern.compile("^(\\d+(?:\\.\\d+)?)([smh])$", java.util.regex.Pattern.CASE_INSENSITIVE)
+          .matcher(text);
+      if (!m.matches()) {
+        return null;
+      }
+      double amount;
+      try {
+        amount = Double.parseDouble(m.group(1));
+      } catch (NumberFormatException ex) {
+        return null;
+      }
+      String unit = m.group(2).toLowerCase(Locale.ROOT);
+      double seconds;
+      switch (unit) {
+        case "s" -> seconds = amount;
+        case "m" -> seconds = amount * 60d;
+        case "h" -> seconds = amount * 3600d;
+        default -> {
+          return null;
+        }
+      }
+      if (!Double.isFinite(seconds) || seconds < 0d) {
+        return null;
+      }
+      long rounded = Math.round(seconds);
+      return rounded >= 0L ? rounded : null;
     }
   }
 }

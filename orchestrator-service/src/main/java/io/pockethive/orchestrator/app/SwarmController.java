@@ -39,6 +39,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.LinkedHashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -169,6 +170,8 @@ public class SwarmController {
                 ScenarioPlan.Plan timeline = planDescriptor.plan();
                 String image = requireImage(template, templateId);
                 SwarmPlan originalPlan = planDescriptor.toSwarmPlan(swarmId);
+                String runtimeDir = prepareScenarioRuntime(templateId, swarmId);
+                String scenarioVolume = runtimeDir + ":/app/scenario:ro";
                 String sutId = normalize(req.sutId());
                 io.pockethive.swarm.model.SutEnvironment sutEnvironment = null;
                 if (sutId != null) {
@@ -197,6 +200,9 @@ public class SwarmController {
                                 }
                             }
                             java.util.Map<String, Object> config = bee.config();
+                            if (scenarioVolume != null && !scenarioVolume.isBlank()) {
+                                config = addScenarioVolume(config, scenarioVolume);
+                            }
                             if (finalSutEnvironment != null && config != null && !config.isEmpty()) {
                                 config = applySutConfigTemplates(config, finalSutEnvironment);
                             }
@@ -409,6 +415,21 @@ public class SwarmController {
         }
     }
 
+    private String prepareScenarioRuntime(String templateId, String swarmId) {
+        try {
+            String runtimeDir = scenarios.prepareScenarioRuntime(templateId, swarmId);
+            if (runtimeDir == null || runtimeDir.isBlank()) {
+                throw new IllegalStateException(
+                    "Scenario runtime for template %s and swarm %s returned empty path".formatted(templateId, swarmId));
+            }
+            return runtimeDir;
+        } catch (Exception e) {
+            log.warn("failed to prepare scenario runtime for template {} and swarm {}", templateId, swarmId, e);
+            throw new IllegalStateException(
+                "Failed to prepare scenario runtime for template %s".formatted(templateId), e);
+        }
+    }
+
     /**
      * Validate that the template specifies a swarm-controller image.
      * <p>
@@ -420,6 +441,48 @@ public class SwarmController {
             throw new IllegalStateException("Template %s missing swarm-controller image".formatted(templateId));
         }
         return image;
+    }
+
+    private static Map<String, Object> addScenarioVolume(Map<String, Object> config, String volumeSpec) {
+        if (volumeSpec == null || volumeSpec.isBlank()) {
+            return config;
+        }
+        Map<String, Object> result = (config == null || config.isEmpty())
+            ? new LinkedHashMap<>()
+            : new LinkedHashMap<>(config);
+
+        Object dockerObj = result.get("docker");
+        Map<String, Object> docker = new LinkedHashMap<>();
+        if (dockerObj instanceof Map<?, ?> dockerRaw) {
+            dockerRaw.forEach((key, value) -> {
+                if (key != null) {
+                    docker.put(key.toString(), value);
+                }
+            });
+        }
+
+        List<String> volumes = new java.util.ArrayList<>();
+        Object volumesObj = docker.get("volumes");
+        if (volumesObj instanceof List<?> raw) {
+            for (Object entry : raw) {
+                if (entry instanceof String s) {
+                    String trimmed = s.trim();
+                    if (!trimmed.isEmpty()) {
+                        volumes.add(trimmed);
+                    }
+                }
+            }
+        }
+
+        String trimmedSpec = volumeSpec.trim();
+        boolean alreadyPresent = volumes.stream().anyMatch(v -> v.equals(trimmedSpec));
+        if (!alreadyPresent) {
+            volumes.add(trimmedSpec);
+        }
+
+        docker.put("volumes", List.copyOf(volumes));
+        result.put("docker", Map.copyOf(docker));
+        return Map.copyOf(result);
     }
 
     public record ControlRequest(String idempotencyKey, String notes) {}

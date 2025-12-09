@@ -30,7 +30,7 @@ pockethive:
 
 Capability manifest (`scenario-manager-service/capabilities/http-builder.latest.yaml`) exposes:
 
-- `templateRoot`: root directory for HTTP templates (baked into the image, overridable via a Docker volume).
+- `templateRoot`: root directory for HTTP templates (mounted into the container, typically from a scenario bundle or a host directory).
 - `serviceId`: default logical service id used when the header is not present.
 
 ## Template files
@@ -166,16 +166,11 @@ When a template is found, the worker appends a new step whose payload is a JSON 
 
 The processor combines this `path` with its configured `baseUrl` to execute the HTTP call. If no `callId` is present or no matching template is found, the HTTP Builder logs a warning and leaves the `WorkItem` unchanged.
 
-## Overriding templates
+## Providing templates
 
-- The Docker image bakes default templates under `/app/http-templates`.
-- You can override or extend these by mounting a host directory at the same path, for example:
+- The Docker image does not bake in HTTP templates; you must provide them via a volume.
+- Recommended options:
+  - Package templates inside a scenario bundle and set `templateRoot: /app/scenario/http-templates`.
+  - Or mount a shared host directory at `/app/http-templates` and set `templateRoot` accordingly.
 
-  ```yaml
-  services:
-    http-builder:
-      volumes:
-        - ./my-http-templates:/app/http-templates:ro
-  ```
-
-- On startup the worker scans the effective `templateRoot` and fails fast if any template cannot be parsed. Callers can use the `scenario-templating-check` tool to list loaded `(serviceId, callId)` pairs and validate scenarios against the available templates.
+On startup the worker scans the effective `templateRoot` and fails fast if any template cannot be parsed. Callers can use the `scenario-templating-check` tool to list loaded `(serviceId, callId)` pairs and validate scenarios against the available templates.

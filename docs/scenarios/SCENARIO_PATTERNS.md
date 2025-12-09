@@ -5,7 +5,7 @@ Each example links back to the contract in `SCENARIO_CONTRACT.md`.
 
 ## 1. Simple local REST swarm
 
-Authoritative example: `scenario-manager-service/scenarios/e2e/local-rest.yaml`
+Authoritative example: `scenarios/bundles/local-rest/scenario.yaml`
 
 Highlights:
 
@@ -16,7 +16,7 @@ Highlights:
 
 ## 2. Redis dataset demo
 
-Authoritative example: `scenario-manager-service/scenarios/e2e/redis-dataset-demo.yaml`
+Authoritative example: `scenarios/bundles/redis-dataset-demo/scenario.yaml`
 
 Pattern:
 
@@ -41,7 +41,7 @@ Use this scenario as a reference when you need:
 
 ## 3. Guarded swarm (buffer guard)
 
-Source: `scenario-manager-service/scenarios/e2e/local-rest-two-moderators.yaml`
+Source: `scenarios/bundles/local-rest-two-moderators/scenario.yaml`
 and related examples.
 
 Pattern:
@@ -75,28 +75,26 @@ upstream producers in a safe operating window.
 
 ## 4. HTTP Builder with on‑disk templates
 
-Primary example: `scenario-manager-service/scenarios/e2e/redis-dataset-demo.yaml`
+Primary example: `scenarios/bundles/redis-dataset-demo/scenario.yaml`
 combined with the HTTP templates under
-`http-builder-service/http-templates/default`.
+`scenarios/bundles/redis-dataset-demo/http-templates/default`.
 
 Pattern:
 
 - Generators or Redis‑based providers emit JSON payloads and set
   `x-ph-service-id` / `x-ph-call-id` headers.
 - HTTP Builder worker transforms these into HTTP envelopes using
-  templates stored on disk.
-- For externalising templates (e.g. in `/opt/pockethive/http-templates`),
-  mount them via `config.docker.volumes` and point `templateRoot` at the
-  container path:
+  templates stored inside the scenario bundle under
+  `/app/scenario/http-templates`.
+- Scenario Manager materialises the bundle into a per-swarm runtime
+  directory and Swarm Controller mounts it into all bees, so you only
+  need to point `templateRoot` at the scenario path:
 
   ```yaml
   config:
-    docker:
-      volumes:
-        - /opt/pockethive/http-templates:/app/http-templates:ro
     worker:
       serviceId: default
-      templateRoot: /app/http-templates
+      templateRoot: /app/scenario/http-templates
       passThroughOnMissingTemplate: false
   ```
 

@@ -210,7 +210,8 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
 # all defaulted in application.yml, uncomment to override here
-#    environment:
+    environment:
+      POCKETHIVE_SCENARIOS_RUNTIME_ROOT: /opt/pockethive/scenarios-runtime
 #      <<: *metrics-env
 #      POCKETHIVE_CONTROL_PLANE_EXCHANGE: ph.control
 #      POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE: ph.control
@@ -227,6 +228,7 @@ services:
       <<: *metrics-env
       RABBITMQ_HOST: rabbitmq
       POCKETHIVE_LOGS_QUEUE: ph.logs.agg
+      POCKETHIVE_SCENARIOS_RUNTIME_ROOT: /opt/pockethive/scenarios-runtime
       MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_GROUPING_KEY_INSTANCE: scenario-manager
       MANAGEMENT_METRICS_TAGS_INSTANCE: scenario-manager
     healthcheck:
@@ -237,6 +239,9 @@ services:
       start_period: 30s
     ports:
       - "1081:8080"
+    volumes:
+      - ./scenarios:/app/scenarios
+      - /opt/pockethive/scenarios-runtime:/opt/pockethive/scenarios-runtime
     depends_on:
       log-aggregator:
         condition: service_healthy
