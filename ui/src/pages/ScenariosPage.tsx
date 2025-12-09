@@ -13,7 +13,6 @@ import {
   saveScenarioRaw,
   getScenario,
   buildPlanView,
-  saveScenarioPlan,
   mergePlan,
   createScenario,
   type ScenarioPayload,
@@ -46,6 +45,8 @@ interface PlanTimelineLanesProps {
 }
 
 type ConfigFormValue = string | boolean
+
+type TemplateNode = Record<string, unknown> | null
 
 const TIMELINE_DIVISION_PX = 80
 
@@ -428,6 +429,663 @@ function PlanTimelineLanes({ rows, onTimeChange }: PlanTimelineLanesProps) {
   )
 }
 
+interface SwarmTemplateEditorProps {
+  template: TemplateNode
+  onChange: (updater: (current: TemplateNode) => TemplateNode) => void
+  onOpenConfig: (beeIndex: number) => void
+}
+
+function SwarmTemplateEditor({ template, onChange, onOpenConfig }: SwarmTemplateEditorProps) {
+  const [selectedBeeIndex, setSelectedBeeIndex] = useState(0)
+  const { getManifestForImage } = useCapabilities()
+
+  const controllerImage =
+    template && typeof template.image === 'string' ? (template.image as string) : ''
+
+  const bees = useMemo(() => {
+    if (!template || typeof template !== 'object' || Array.isArray(template)) {
+      return []
+    }
+    const record = template as Record<string, unknown>
+    const beesRaw = Array.isArray(record['bees']) ? (record['bees'] as unknown[]) : []
+    return beesRaw
+      .map((entry, index) => {
+        if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+          return null
+        }
+        const bee = entry as Record<string, unknown>
+        const role = typeof bee['role'] === 'string' ? (bee['role'] as string) : ''
+        const instanceId =
+          typeof bee['instanceId'] === 'string' ? (bee['instanceId'] as string) : ''
+        const image = typeof bee['image'] === 'string' ? (bee['image'] as string) : ''
+        let workIn: string | null = null
+        let workOut: string | null = null
+        const work = bee['work']
+        if (work && typeof work === 'object' && !Array.isArray(work)) {
+          const workRec = work as Record<string, unknown>
+          workIn =
+            typeof workRec['in'] === 'string' ? (workRec['in'] as string) : null
+          workOut =
+            typeof workRec['out'] === 'string' ? (workRec['out'] as string) : null
+        }
+        let inputType: string | null = null
+        let hasSchedulerConfig = false
+        let hasRedisConfig = false
+        const config = bee['config']
+        if (config && typeof config === 'object' && !Array.isArray(config)) {
+          const cfg = config as Record<string, unknown>
+          const inputsRaw = cfg['inputs']
+          if (inputsRaw && typeof inputsRaw === 'object' && !Array.isArray(inputsRaw)) {
+            const inputs = inputsRaw as Record<string, unknown>
+            const typeVal = inputs['type']
+            if (typeof typeVal === 'string') {
+              inputType = typeVal
+            }
+            const schedulerRaw = inputs['scheduler']
+            if (
+              schedulerRaw &&
+              typeof schedulerRaw === 'object' &&
+              !Array.isArray(schedulerRaw) &&
+              Object.keys(schedulerRaw as Record<string, unknown>).length > 0
+            ) {
+              hasSchedulerConfig = true
+            }
+            const redisRaw = inputs['redis']
+            if (
+              redisRaw &&
+              typeof redisRaw === 'object' &&
+              !Array.isArray(redisRaw) &&
+              Object.keys(redisRaw as Record<string, unknown>).length > 0
+            ) {
+              hasRedisConfig = true
+            }
+          }
+        }
+        return {
+          index,
+          role,
+          instanceId,
+          image,
+          workIn,
+          workOut,
+          inputType,
+          hasSchedulerConfig,
+          hasRedisConfig,
+        }
+      })
+      .filter((entry) => entry !== null) as {
+      index: number
+      role: string
+      instanceId: string
+      image: string
+      workIn: string | null
+      workOut: string | null
+      inputType: string | null
+      hasSchedulerConfig: boolean
+      hasRedisConfig: boolean
+    }[]
+  }, [template])
+
+  const queueOptions = useMemo(() => {
+    const result = new Set<string>()
+    for (const bee of bees) {
+      if (bee.workIn) {
+        result.add(bee.workIn)
+      }
+      if (bee.workOut) {
+        result.add(bee.workOut)
+      }
+    }
+    return Array.from(result).sort((a, b) => a.localeCompare(b))
+  }, [bees])
+
+  useEffect(() => {
+    if (!bees.length) {
+      setSelectedBeeIndex(0)
+      return
+    }
+    if (selectedBeeIndex < 0 || selectedBeeIndex >= bees.length) {
+      setSelectedBeeIndex(0)
+    }
+  }, [bees, selectedBeeIndex])
+
+  const selectedBee =
+    bees.length > 0 && selectedBeeIndex >= 0 && selectedBeeIndex < bees.length
+      ? bees[selectedBeeIndex]
+      : null
+
+  const inputWarnings: string[] = []
+  if (selectedBee) {
+    if (selectedBee.inputType === 'SCHEDULER' && !selectedBee.hasSchedulerConfig) {
+      inputWarnings.push(
+        'Scheduler input selected, but inputs.scheduler.* is not configured for this bee.',
+      )
+    }
+    if (selectedBee.inputType === 'REDIS_DATASET' && !selectedBee.hasRedisConfig) {
+      inputWarnings.push(
+        'Redis dataset input selected, but inputs.redis.* is not configured for this bee.',
+      )
+    }
+    if (!selectedBee.inputType && (selectedBee.hasSchedulerConfig || selectedBee.hasRedisConfig)) {
+      inputWarnings.push(
+        'Input configuration is present, but inputs.type is not set; choose an explicit IO type.',
+      )
+    }
+  }
+
+  const selectedManifest = useMemo(() => {
+    if (!selectedBee || !selectedBee.image) return null
+    const manifest = getManifestForImage(selectedBee.image)
+    return manifest ?? null
+  }, [getManifestForImage, selectedBee])
+
+  const inputTypeOptions = useMemo(() => {
+    if (!selectedManifest || !Array.isArray(selectedManifest.config)) {
+      return [] as string[]
+    }
+    const entry = selectedManifest.config.find((cfg) => cfg.name === 'inputs.type')
+    if (!entry || !Array.isArray(entry.options)) {
+      return [] as string[]
+    }
+    const raw = entry.options as unknown[]
+    const values: string[] = []
+    raw.forEach((opt) => {
+      if (typeof opt === 'string' && opt.trim().length > 0) {
+        values.push(opt.trim())
+      }
+    })
+    return values
+  }, [selectedManifest])
+
+  const updateControllerImage = (next: string) => {
+    onChange((current) => {
+      const base =
+        current && typeof current === 'object' && !Array.isArray(current)
+          ? { ...(current as Record<string, unknown>) }
+          : {}
+      base.image = next.trim() || undefined
+      return base
+    })
+  }
+
+  const updateBeeField = (
+    beeIndex: number,
+    field: 'role' | 'instanceId' | 'image' | 'workIn' | 'workOut',
+    value: string,
+  ) => {
+    onChange((current) => {
+      const base =
+        current && typeof current === 'object' && !Array.isArray(current)
+          ? { ...(current as Record<string, unknown>) }
+          : {}
+      const beesRaw = Array.isArray(base.bees) ? [...(base.bees as unknown[])] : []
+      if (beeIndex < 0 || beeIndex >= beesRaw.length) {
+        return base
+      }
+      const existing =
+        beesRaw[beeIndex] && typeof beesRaw[beeIndex] === 'object' && !Array.isArray(beesRaw[beeIndex])
+          ? { ...(beesRaw[beeIndex] as Record<string, unknown>) }
+          : {}
+      if (field === 'role' || field === 'instanceId' || field === 'image') {
+        existing[field] = value.trim() || undefined
+      } else {
+        const work =
+          existing.work && typeof existing.work === 'object' && !Array.isArray(existing.work)
+            ? { ...(existing.work as Record<string, unknown>) }
+            : {}
+        if (field === 'workIn') {
+          work.in = value.trim() || undefined
+        }
+        if (field === 'workOut') {
+          work.out = value.trim() || undefined
+        }
+        existing.work = work
+      }
+      beesRaw[beeIndex] = existing
+      ;(base as Record<string, unknown>).bees = beesRaw
+      return base
+    })
+  }
+
+  const updateBeeIoType = (beeIndex: number, field: 'inputs.type' | 'outputs.type', rawValue: string) => {
+    const value = rawValue.trim()
+    if (!value) {
+      return
+    }
+    onChange((current) => {
+      const base =
+        current && typeof current === 'object' && !Array.isArray(current)
+          ? { ...(current as Record<string, unknown>) }
+          : {}
+      const beesRaw = Array.isArray((base as Record<string, unknown>).bees)
+        ? ([...(base as Record<string, unknown>).bees as unknown[]] as unknown[])
+        : ([] as unknown[])
+      if (beeIndex < 0 || beeIndex >= beesRaw.length) {
+        return base
+      }
+      const existing =
+        beesRaw[beeIndex] &&
+        typeof beesRaw[beeIndex] === 'object' &&
+        !Array.isArray(beesRaw[beeIndex])
+          ? { ...(beesRaw[beeIndex] as Record<string, unknown>) }
+          : {}
+      const configRaw = existing.config
+      const config =
+        configRaw && typeof configRaw === 'object' && !Array.isArray(configRaw)
+          ? { ...(configRaw as Record<string, unknown>) }
+          : {}
+      const [rootKey, leafKey] = field.split('.')
+      if (!rootKey || !leafKey) {
+        return base
+      }
+      const ioRaw = config[rootKey]
+      const io =
+        ioRaw && typeof ioRaw === 'object' && !Array.isArray(ioRaw)
+          ? { ...(ioRaw as Record<string, unknown>) }
+          : {}
+      io['type'] = value
+      config[rootKey] = io
+      existing.config = config
+      beesRaw[beeIndex] = existing
+      ;(base as Record<string, unknown>).bees = beesRaw
+      return base
+    })
+  }
+
+  const handleAddBee = () => {
+    const newIndex = bees.length
+    onChange((current) => {
+      const base =
+        current && typeof current === 'object' && !Array.isArray(current)
+          ? { ...(current as Record<string, unknown>) }
+          : {}
+      const beesRaw = Array.isArray((base as Record<string, unknown>).bees)
+        ? ([...(base as Record<string, unknown>).bees as unknown[]] as unknown[])
+        : ([] as unknown[])
+      const newBee: Record<string, unknown> = {
+        role: '',
+        image: '',
+        work: {},
+      }
+      beesRaw.push(newBee)
+      ;(base as Record<string, unknown>).bees = beesRaw
+      return base
+    })
+    setSelectedBeeIndex(newIndex)
+  }
+
+  const handleRemoveBee = (beeIndex: number) => {
+    if (beeIndex < 0) return
+    onChange((current) => {
+      const base =
+        current && typeof current === 'object' && !Array.isArray(current)
+          ? { ...(current as Record<string, unknown>) }
+          : {}
+      const beesRaw = Array.isArray((base as Record<string, unknown>).bees)
+        ? ([...(base as Record<string, unknown>).bees as unknown[]] as unknown[])
+        : ([] as unknown[])
+      if (beeIndex >= beesRaw.length) {
+        return base
+      }
+      beesRaw.splice(beeIndex, 1)
+      ;(base as Record<string, unknown>).bees = beesRaw
+      return base
+    })
+    setSelectedBeeIndex((currentIndex) => {
+      if (currentIndex > beeIndex) return currentIndex - 1
+      if (currentIndex === beeIndex) return Math.max(0, currentIndex - 1)
+      return currentIndex
+    })
+  }
+
+  const handleMoveBee = (beeIndex: number, direction: -1 | 1) => {
+    if (beeIndex < 0) return
+    const targetIndex = beeIndex + direction
+    if (targetIndex < 0 || targetIndex >= bees.length) return
+    onChange((current) => {
+      const base =
+        current && typeof current === 'object' && !Array.isArray(current)
+          ? { ...(current as Record<string, unknown>) }
+          : {}
+      const beesRaw = Array.isArray((base as Record<string, unknown>).bees)
+        ? ([...(base as Record<string, unknown>).bees as unknown[]] as unknown[])
+        : ([] as unknown[])
+      if (beeIndex < 0 || beeIndex >= beesRaw.length) {
+        return base
+      }
+      const [moved] = beesRaw.splice(beeIndex, 1)
+      beesRaw.splice(targetIndex, 0, moved)
+      ;(base as Record<string, unknown>).bees = beesRaw
+      return base
+    })
+    setSelectedBeeIndex(targetIndex)
+  }
+
+  if (!template || (typeof template !== 'object' && !Array.isArray(template))) {
+    return (
+      <div className="text-xs text-white/70">
+        This scenario YAML does not define a <code>template</code> section yet.
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <h3 className="text-xs font-semibold text-white/80">Swarm template</h3>
+      </div>
+      <div className="flex items-center gap-2 text-[11px] text-white/80">
+        <span className="text-white/70 w-28">Controller image</span>
+        <input
+          className="flex-1 rounded border border-white/20 bg-black/40 px-2 py-1 text-[11px] text-white/90"
+          value={controllerImage}
+          placeholder="swarm-controller:latest"
+          onChange={(e) => updateControllerImage(e.target.value)}
+        />
+      </div>
+      <div className="mt-3 grid grid-cols-[minmax(0,220px)_minmax(0,1fr)] gap-4 items-start">
+        <div className="border border-white/15 rounded bg-black/40">
+          <div className="px-3 py-2 border-b border-white/10 text-[11px] uppercase tracking-wide text-white/60 flex items-center justify-between">
+            <span>Bees</span>
+            <button
+              type="button"
+              className="rounded bg-white/10 px-1.5 py-0.5 text-[10px] text-white/80 hover:bg-white/20"
+              onClick={handleAddBee}
+            >
+              + Add
+            </button>
+          </div>
+          <div className="max-h-[420px] overflow-y-auto">
+            {bees.length === 0 ? (
+              <div className="px-3 py-3 text-[11px] text-white/60">
+                No bees defined in template.
+              </div>
+            ) : (
+              <ul className="text-[11px]">
+                {bees.map((bee) => {
+                  const isSelected = bee.index === selectedBeeIndex
+                  const label =
+                    bee.instanceId || bee.role
+                      ? `${bee.instanceId || ''}${bee.role ? ` (${bee.role})` : ''}`
+                      : `bee-${bee.index + 1}`
+                  return (
+                    <li key={bee.index}>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedBeeIndex(bee.index)}
+                        className={`w-full text-left px-3 py-1.5 border-b border-white/5 last:border-b-0 ${
+                          isSelected
+                            ? 'bg-white/20 text-white border-white/40'
+                            : 'bg-transparent text-white/80 hover:bg-white/10'
+                        }`}
+                      >
+                        <div className="font-medium truncate">{label}</div>
+                        <div className="text-[10px] text-white/60 truncate">
+                          in: {bee.workIn || '—'} • out: {bee.workOut || '—'}
+                        </div>
+                        <div className="mt-1 flex justify-end gap-1 text-[10px]">
+                          <button
+                            type="button"
+                            className="px-1 py-0.5 rounded bg-white/5 text-white/70 hover:bg-white/15 disabled:opacity-30"
+                            disabled={bee.index === 0}
+                            onClick={() => handleMoveBee(bee.index, -1)}
+                          >
+                            ↑
+                          </button>
+                          <button
+                            type="button"
+                            className="px-1 py-0.5 rounded bg-white/5 text-white/70 hover:bg-white/15 disabled:opacity-30"
+                            disabled={bee.index === bees.length - 1}
+                            onClick={() => handleMoveBee(bee.index, 1)}
+                          >
+                            ↓
+                          </button>
+                          <button
+                            type="button"
+                            className="px-1 py-0.5 rounded bg-red-500/40 text-red-50 hover:bg-red-500/60"
+                            onClick={() => handleRemoveBee(bee.index)}
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      </button>
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
+          </div>
+        </div>
+        <div className="space-y-3">
+          <div className="border border-white/15 rounded bg-black/30 p-3 text-[11px] text-white/80">
+          {!selectedBee && (
+            <div className="text-white/60">Select a bee to view details.</div>
+          )}
+          {selectedBee && (
+            <div className="space-y-2">
+              <div className="font-semibold text-white/90 mb-1">Bee details</div>
+              <div className="flex items-center gap-2">
+                <span className="w-28 text-white/70">Instance ID</span>
+                <input
+                  className="flex-1 rounded border border-white/20 bg-black/40 px-2 py-1 text-[11px] text-white/90"
+                  value={selectedBee.instanceId}
+                  placeholder="gen-1"
+                  onChange={(e) =>
+                    updateBeeField(selectedBee.index, 'instanceId', e.target.value)
+                  }
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="w-28 text-white/70">Role</span>
+                <input
+                  className="flex-1 rounded border border-white/20 bg-black/40 px-2 py-1 text-[11px] text-white/90"
+                  value={selectedBee.role}
+                  placeholder="generator"
+                  onChange={(e) =>
+                    updateBeeField(selectedBee.index, 'role', e.target.value)
+                  }
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="w-28 text-white/70">Image</span>
+                <input
+                  className="flex-1 rounded border border-white/20 bg-black/40 px-2 py-1 text-[11px] text-white/90"
+                  value={selectedBee.image}
+                  placeholder="generator:latest"
+                  onChange={(e) =>
+                    updateBeeField(selectedBee.index, 'image', e.target.value)
+                  }
+                />
+              </div>
+              {(inputTypeOptions.length > 0 || selectedBee.inputType) && (
+                <div className="flex items-center gap-2">
+                  <span className="w-28 text-white/70">Input type</span>
+                  {inputTypeOptions.length > 0 ? (
+                    <select
+                      className="w-40 rounded border border-white/20 bg-black/60 px-2 py-1 text-[11px] text-white/90"
+                      value={selectedBee.inputType ?? ''}
+                      onChange={(e) =>
+                        updateBeeIoType(selectedBee.index, 'inputs.type', e.target.value)
+                      }
+                    >
+                      <option value="">(not set)</option>
+                      {inputTypeOptions.map((option) => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <span className="text-white/70 text-[11px]">
+                      {selectedBee.inputType || '(not set)'}
+                    </span>
+                  )}
+                </div>
+              )}
+              {inputWarnings.length > 0 && (
+                <div className="pl-28 text-[10px] text-amber-300 space-y-0.5">
+                  {inputWarnings.map((warning) => (
+                    <div key={warning}>{warning}</div>
+                  ))}
+                </div>
+              )}
+              <div className="flex items-center gap-2">
+                <span className="w-28 text-white/70">Work in</span>
+                <input
+                  className="flex-1 rounded border border-white/20 bg-black/40 px-2 py-1 text-[11px] text-white/90"
+                  value={selectedBee.workIn ?? ''}
+                  placeholder="queue-in"
+                  onChange={(e) =>
+                    updateBeeField(selectedBee.index, 'workIn', e.target.value)
+                  }
+                />
+                {queueOptions.length > 0 && (
+                  <select
+                    className="w-28 rounded border border-white/20 bg-black/60 px-1 py-0.5 text-[10px] text-white/80"
+                    value=""
+                    onChange={(e) => {
+                      const value = e.target.value
+                      if (value) {
+                        updateBeeField(selectedBee.index, 'workIn', value)
+                      }
+                    }}
+                  >
+                    <option value="">pick…</option>
+                    {queueOptions.map((name) => (
+                      <option key={name} value={name}>
+                        {name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="w-28 text-white/70">Work out</span>
+                <input
+                  className="flex-1 rounded border border-white/20 bg-black/40 px-2 py-1 text-[11px] text-white/90"
+                  value={selectedBee.workOut ?? ''}
+                  placeholder="queue-out"
+                  onChange={(e) =>
+                    updateBeeField(selectedBee.index, 'workOut', e.target.value)
+                  }
+                />
+                {queueOptions.length > 0 && (
+                  <select
+                    className="w-28 rounded border border-white/20 bg-black/60 px-1 py-0.5 text-[10px] text-white/80"
+                    value=""
+                    onChange={(e) => {
+                      const value = e.target.value
+                      if (value) {
+                        updateBeeField(selectedBee.index, 'workOut', value)
+                      }
+                    }}
+                  >
+                    <option value="">pick…</option>
+                    {queueOptions.map((name) => (
+                      <option key={name} value={name}>
+                        {name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+              <div className="pt-2">
+                <button
+                  type="button"
+                  className="rounded bg-white/10 px-2 py-1 text-[11px] text-white/80 hover:bg-white/20"
+                  onClick={() => onOpenConfig(selectedBee.index)}
+                >
+                  Edit config via capabilities
+                </button>
+              </div>
+            </div>
+          )}
+          </div>
+          <div className="border border-dashed border-white/20 rounded bg-black/40 p-3 text-[11px] text-white/80">
+          <div className="font-semibold text-white/80 mb-1">Flow preview</div>
+          {bees.length === 0 ? (
+            <div className="text-white/60">No bees defined yet.</div>
+          ) : (
+            <>
+              {queueOptions.length > 0 && (
+                <div className="mb-2 text-[10px] text-white/60">
+                  Queues:{' '}
+                  {queueOptions.map((q) => (
+                    <span
+                      key={q}
+                      className="inline-flex items-center rounded-full border border-white/20 bg-black/60 px-1.5 py-0.5 mr-1 mb-1"
+                    >
+                      <span className="font-mono text-[10px] text-white/80">
+                        {q}
+                      </span>
+                    </span>
+                  ))}
+                </div>
+              )}
+              <div className="flex items-start gap-2 overflow-x-auto pt-1">
+                {bees.map((bee) => {
+                  const consumers =
+                    bee.workOut != null && bee.workOut !== ''
+                      ? bees.filter((other) => other.workIn === bee.workOut)
+                      : []
+                  const producers =
+                    bee.workIn != null && bee.workIn !== ''
+                      ? bees.filter((other) => other.workOut === bee.workIn)
+                      : []
+                  return (
+                    <div key={bee.index} className="flex flex-col items-start gap-1">
+                      <div
+                        className={`min-w-[140px] max-w-[180px] rounded border px-2 py-1 ${
+                          bee.index === selectedBeeIndex
+                            ? 'border-sky-400 bg-sky-500/20'
+                            : 'border-white/25 bg-black/70'
+                        }`}
+                      >
+                        <div className="text-[11px] font-semibold truncate">
+                          {bee.role || 'bee'}
+                        </div>
+                        <div className="text-[10px] text-white/60 truncate">
+                          in: {bee.workIn || '—'}
+                        </div>
+                        <div className="text-[10px] text-white/60 truncate">
+                          out: {bee.workOut || '—'}
+                        </div>
+                      </div>
+                      <div className="pl-1 text-[9px] text-white/60 space-y-0.5">
+                        {bee.workIn && (
+                          <div>
+                            ←{' '}
+                            {producers.length === 0
+                              ? '(no producer)'
+                              : producers
+                                  .map((p) => p.role || p.instanceId || `bee-${p.index + 1}`)
+                                  .join(', ')}
+                          </div>
+                        )}
+                        {bee.workOut && (
+                          <div>
+                            →{' '}
+                            {consumers.length === 0
+                              ? '(no consumer)'
+                              : consumers
+                                  .map((c) => c.role || c.instanceId || `bee-${c.index + 1}`)
+                                  .join(', ')}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </>
+          )}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function ScenariosPage() {
   const [items, setItems] = useState<ScenarioSummary[]>([])
   const [loading, setLoading] = useState(false)
@@ -436,6 +1094,7 @@ export default function ScenariosPage() {
   const [selectedScenario, setSelectedScenario] = useState<ScenarioPayload | null>(null)
   const [planExpanded, setPlanExpanded] = useState(false)
   const [planDraft, setPlanDraft] = useState<ScenarioPlanView | null>(null)
+  const [templateDraft, setTemplateDraft] = useState<TemplateNode>(null)
   const [planHistoryState, setPlanHistoryState] = useState<{
     stack: ScenarioPlanView[]
     index: number
@@ -443,7 +1102,7 @@ export default function ScenariosPage() {
     stack: [],
     index: -1,
   })
-  const [viewMode, setViewMode] = useState<'plan' | 'yaml'>('plan')
+  const [viewMode, setViewMode] = useState<'plan' | 'yaml' | 'swarm'>('plan')
 
   const [rawYaml, setRawYaml] = useState('')
   const [savedYaml, setSavedYaml] = useState('')
@@ -462,11 +1121,12 @@ export default function ScenariosPage() {
   const setToast = useUIStore((s) => s.setToast)
   const { ensureCapabilities, getManifestForImage, manifests } = useCapabilities()
 
-  const [configModalTarget, setConfigModalTarget] = useState<{
-    kind: 'swarm' | 'bee'
-    beeIndex: number | null
-    stepIndex: number
-  } | null>(null)
+  type ConfigTarget =
+    | { kind: 'swarm'; beeIndex: null; stepIndex: number }
+    | { kind: 'bee'; beeIndex: number; stepIndex: number }
+    | { kind: 'template-bee'; beeIndex: number; stepIndex: 0 }
+
+  const [configModalTarget, setConfigModalTarget] = useState<ConfigTarget | null>(null)
   const [configModalManifest, setConfigModalManifest] = useState<CapabilityManifest | null>(null)
   const [configModalEntries, setConfigModalEntries] = useState<CapabilityConfigEntry[]>([])
   const [configModalForm, setConfigModalForm] = useState<Record<string, ConfigFormValue>>({})
@@ -508,6 +1168,30 @@ export default function ScenariosPage() {
     },
     [],
   )
+
+  const syncTemplateToYaml = useCallback((next: TemplateNode) => {
+    setRawYaml((current) => {
+      if (!current) return current
+      try {
+        const doc = YAML.parse(current) || {}
+        const root =
+          doc && typeof doc === 'object' && !Array.isArray(doc)
+            ? (doc as Record<string, unknown>)
+            : {}
+        if (next == null) {
+          if ('template' in root) {
+            // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+            delete (root as Record<string, unknown>).template
+          }
+        } else {
+          ;(root as Record<string, unknown>).template = next
+        }
+        return YAML.stringify(root)
+      } catch {
+        return current
+      }
+    })
+  }, [])
 
   const applyPlanUpdate = useCallback(
     (updater: (current: ScenarioPlanView | null) => ScenarioPlanView | null) => {
@@ -579,6 +1263,17 @@ export default function ScenariosPage() {
     })
   }, [syncPlanToYaml])
 
+  const applyTemplateUpdate = useCallback(
+    (updater: (current: TemplateNode) => TemplateNode) => {
+      setTemplateDraft((current) => {
+        const next = updater(current)
+        syncTemplateToYaml(next)
+        return next
+      })
+    },
+    [syncTemplateToYaml],
+  )
+
   const handleGlobalUndo = useCallback(() => {
     if (!selectedId) return
     if (viewMode === 'yaml') {
@@ -634,6 +1329,41 @@ export default function ScenariosPage() {
     void loadScenarios()
   }, [loadScenarios])
 
+  const rebuildFromYaml = useCallback(
+    (text: string) => {
+      try {
+        const doc = YAML.parse(text)
+        if (doc && typeof doc === 'object' && !Array.isArray(doc)) {
+          const root = doc as Record<string, unknown>
+          const planNode = root['plan']
+          const builtPlan = buildPlanView(planNode)
+          const normalised = normalisePlanTimes(builtPlan)
+          const initialPlan =
+            normalised ?? {
+              swarm: [],
+              bees: [],
+            }
+          resetPlanHistory(initialPlan)
+          const templateNode = root['template']
+          if (templateNode && typeof templateNode === 'object' && !Array.isArray(templateNode)) {
+            setTemplateDraft(templateNode as Record<string, unknown>)
+          } else {
+            setTemplateDraft(null)
+          }
+        } else {
+          resetPlanHistory({
+            swarm: [],
+            bees: [],
+          })
+          setTemplateDraft(null)
+        }
+      } catch {
+        // Leave existing plan/template when YAML is invalid.
+      }
+    },
+    [buildPlanView, normalisePlanTimes, resetPlanHistory],
+  )
+
   useEffect(() => {
     const id = selectedId
     if (!id) {
@@ -642,6 +1372,7 @@ export default function ScenariosPage() {
       setSavedYaml('')
       setRawError(null)
       resetPlanHistory(null)
+      setTemplateDraft(null)
       setViewMode('plan')
       return
     }
@@ -659,12 +1390,15 @@ export default function ScenariosPage() {
           if (!cancelled) {
             setRawYaml(text)
             setSavedYaml(text)
+            rebuildFromYaml(text)
           }
         } catch (e) {
           if (!cancelled) {
             setRawError(e instanceof Error ? e.message : 'Failed to load scenario YAML')
             setRawYaml('')
             setSavedYaml('')
+            resetPlanHistory(null)
+            setTemplateDraft(null)
           }
         } finally {
           if (!cancelled) {
@@ -672,23 +1406,13 @@ export default function ScenariosPage() {
           }
         }
         if (!cancelled) {
-          const builtPlan =
-            scenario && typeof scenario.plan !== 'undefined'
-              ? buildPlanView(scenario.plan)
-              : null
-          const normalised = normalisePlanTimes(builtPlan)
-          const initialPlan =
-            normalised ?? {
-              swarm: [],
-              bees: [],
-            }
-          resetPlanHistory(initialPlan)
-          setViewMode(builtPlan ? 'plan' : 'yaml')
+          setViewMode('plan')
         }
       } catch {
         if (!cancelled) {
           setSelectedScenario(null)
           resetPlanHistory(null)
+          setTemplateDraft(null)
         }
       }
     }
@@ -696,7 +1420,7 @@ export default function ScenariosPage() {
     return () => {
       cancelled = true
     }
-  }, [selectedId, normalisePlanTimes, resetPlanHistory])
+  }, [selectedId, rebuildFromYaml, resetPlanHistory])
 
   const handleDownload = async (id: string) => {
     try {
@@ -777,58 +1501,13 @@ export default function ScenariosPage() {
     try {
       await saveScenarioRaw(selectedId, rawYaml)
       await loadScenarios()
-      try {
-        const scenario = await getScenario(selectedId)
-        if (scenario) {
-          setSelectedScenario(scenario)
-          const builtPlan =
-            typeof scenario.plan !== 'undefined'
-              ? buildPlanView(scenario.plan)
-              : null
-          const normalised = normalisePlanTimes(builtPlan)
-          const initialPlan =
-            normalised ?? {
-              swarm: [],
-              bees: [],
-            }
-          resetPlanHistory(initialPlan)
-        }
-      } catch {
-        // ignore plan refresh failures; YAML save already succeeded
-      }
+      rebuildFromYaml(rawYaml)
       setSavedYaml(rawYaml)
       setToast(`Saved scenario ${selectedId}`)
     } catch (e) {
       setRawError(e instanceof Error ? e.message : 'Failed to save scenario')
     } finally {
       setSaving(false)
-    }
-  }
-
-  const handleSavePlan = async () => {
-    if (!selectedId || !planDraft) return
-    try {
-      const merged = mergePlan(
-        selectedScenario?.plan,
-        planDraft,
-      )
-      await saveScenarioPlan(selectedId, merged)
-      setToast(`Saved plan for ${selectedId}`)
-      await loadScenarios()
-      try {
-        const text = await fetchScenarioRaw(selectedId)
-        setRawYaml(text)
-        setSavedYaml(text)
-      } catch {
-        // ignore YAML refresh failures; plan save already succeeded
-      }
-      setPlanExpanded(false)
-    } catch (e) {
-      setToast(
-        e instanceof Error
-          ? `Failed to save plan: ${e.message}`
-          : 'Failed to save plan',
-      )
     }
   }
 
@@ -840,11 +1519,6 @@ export default function ScenariosPage() {
   const hasUnsavedChanges = useMemo(
     () => rawYaml !== savedYaml,
     [rawYaml, savedYaml],
-  )
-
-  const canSavePlan = useMemo(
-    () => Boolean(selectedId && planDraft),
-    [selectedId, planDraft],
   )
 
   const roleOptions = useMemo(() => {
@@ -1116,15 +1790,25 @@ export default function ScenariosPage() {
   )
 
   const openConfigModal = useCallback(
-    async (target: { kind: 'swarm' | 'bee'; beeIndex: number | null; stepIndex: number }) => {
-      if (!planDraft || !selectedScenario) {
+    async (target: ConfigTarget) => {
+      if (!selectedScenario) {
         return
       }
       let image: string | null = null
       if (target.kind === 'swarm') {
         image = selectedScenario.template?.image ?? null
       } else if (target.kind === 'bee' && target.beeIndex !== null) {
+        if (!planDraft) return
         image = resolveBeeImage(target.beeIndex)
+      } else if (target.kind === 'template-bee') {
+        const templateBees = templateDraft && !Array.isArray(templateDraft) && typeof templateDraft === 'object'
+          ? (templateDraft as Record<string, unknown>).bees
+          : undefined
+        if (Array.isArray(templateBees) && templateBees[target.beeIndex]) {
+          const bee = templateBees[target.beeIndex] as Record<string, unknown>
+          const tplImage = bee.image
+          image = typeof tplImage === 'string' ? tplImage : selectedScenario.template?.image ?? null
+        }
       }
       if (!image) {
         setToast('No image mapping for this step; capabilities unavailable')
@@ -1141,13 +1825,11 @@ export default function ScenariosPage() {
         return
       }
       let templateComponentConfig: Record<string, unknown> | undefined
-      if (target.kind === 'bee' && target.beeIndex !== null) {
-        templateComponentConfig = resolveBeeTemplateConfig(target.beeIndex)
-      }
       let baseConfig: Record<string, unknown> | undefined
       if (target.kind === 'bee' && target.beeIndex !== null) {
+        templateComponentConfig = resolveBeeTemplateConfig(target.beeIndex)
         const beeIndex = target.beeIndex
-        const bee = planDraft.bees[beeIndex]
+        const bee = planDraft!.bees[beeIndex]
         const templateConfig = templateComponentConfig
         let accumulated = templateConfig && isPlainObject(templateConfig) ? { ...templateConfig } : undefined
         if (bee) {
@@ -1159,17 +1841,34 @@ export default function ScenariosPage() {
           })
         }
         baseConfig = accumulated
+      } else if (target.kind === 'template-bee') {
+        const templateBees =
+          templateDraft && !Array.isArray(templateDraft) && typeof templateDraft === 'object'
+            ? (templateDraft as Record<string, unknown>).bees
+            : undefined
+        if (Array.isArray(templateBees) && templateBees[target.beeIndex]) {
+          const bee = templateBees[target.beeIndex] as Record<string, unknown>
+          const configValue = bee.config
+          if (configValue && typeof configValue === 'object' && !Array.isArray(configValue)) {
+            templateComponentConfig = configValue as Record<string, unknown>
+            baseConfig = templateComponentConfig
+          }
+        }
       }
+
       const entries = buildConfigEntriesForComponent(manifest, baseConfig ?? templateComponentConfig)
       if (entries.length === 0) {
         setToast('No configurable options defined for this component')
         return
       }
-      const step = getStepAtTarget(target)
+      const step =
+        target.kind === 'swarm' || target.kind === 'bee' ? getStepAtTarget(target) : null
       const stepConfig =
         step && step.config && typeof step.config === 'object'
           ? (step.config as Record<string, unknown>)
-          : undefined
+          : target.kind === 'template-bee'
+            ? baseConfig
+            : undefined
       const baseConfigForDisplay =
         baseConfig ?? templateComponentConfig ?? undefined
       const form: Record<string, ConfigFormValue> = {}
@@ -1242,26 +1941,52 @@ export default function ScenariosPage() {
     }
     const target = configModalTarget
     const hasConfig = Object.keys(patch).length > 0
-    applyPlanUpdate((current) => {
-      if (!current) return current
-      if (target.kind === 'swarm') {
-        const swarm = current.swarm.map((step, idx) =>
-          idx === target.stepIndex ? { ...step, config: hasConfig ? patch : undefined } : step,
-        )
-        return { ...current, swarm }
-      }
-      if (target.kind === 'bee' && target.beeIndex !== null) {
-        const bees = current.bees.map((bee, idx) => {
-          if (idx !== target.beeIndex) return bee
-          const steps = bee.steps.map((step, sIdx) =>
-            sIdx === target.stepIndex ? { ...step, config: hasConfig ? patch : undefined } : step,
+
+    if (target.kind === 'template-bee') {
+      applyTemplateUpdate((current) => {
+        const base =
+          current && typeof current === 'object' && !Array.isArray(current)
+            ? { ...(current as Record<string, unknown>) }
+            : {}
+        const beesRaw = Array.isArray((base as Record<string, unknown>).bees)
+          ? ([...(base as Record<string, unknown>).bees as unknown[]] as unknown[])
+          : ([] as unknown[])
+        if (target.beeIndex < 0 || target.beeIndex >= beesRaw.length) {
+          return base
+        }
+        const existing =
+          beesRaw[target.beeIndex] &&
+          typeof beesRaw[target.beeIndex] === 'object' &&
+          !Array.isArray(beesRaw[target.beeIndex])
+            ? { ...(beesRaw[target.beeIndex] as Record<string, unknown>) }
+            : {}
+        existing.config = hasConfig ? patch : undefined
+        beesRaw[target.beeIndex] = existing
+        ;(base as Record<string, unknown>).bees = beesRaw
+        return base
+      })
+    } else {
+      applyPlanUpdate((current) => {
+        if (!current) return current
+        if (target.kind === 'swarm') {
+          const swarm = current.swarm.map((step, idx) =>
+            idx === target.stepIndex ? { ...step, config: hasConfig ? patch : undefined } : step,
           )
-          return { ...bee, steps }
-        })
-        return { ...current, bees }
-      }
-      return current
-    })
+          return { ...current, swarm }
+        }
+        if (target.kind === 'bee' && target.beeIndex !== null) {
+          const bees = current.bees.map((bee, idx) => {
+            if (idx !== target.beeIndex) return bee
+            const steps = bee.steps.map((step, sIdx) =>
+              sIdx === target.stepIndex ? { ...step, config: hasConfig ? patch : undefined } : step,
+            )
+            return { ...bee, steps }
+          })
+          return { ...current, bees }
+        }
+        return current
+      })
+    }
     setConfigModalTarget(null)
     setConfigModalManifest(null)
     setConfigModalEntries([])
@@ -1656,14 +2381,6 @@ export default function ScenariosPage() {
                 <div className="ml-4 flex items-center gap-2">
                   <button
                     type="button"
-                    className="rounded bg-sky-500/80 px-2 py-1 text-[11px] text-white hover:bg-sky-500 disabled:opacity-50"
-                    disabled={!canSavePlan}
-                    onClick={() => void handleSavePlan()}
-                  >
-                    Save plan
-                  </button>
-                  <button
-                    type="button"
                     className="rounded bg-white/10 px-2 py-1 text-[11px] text-white/80 hover:bg-white/20 disabled:opacity-50"
                     disabled={saving || rawLoading || !hasUnsavedChanges}
                     onClick={() => void handleSave()}
@@ -1717,6 +2434,17 @@ export default function ScenariosPage() {
                 onClick={() => setViewMode('yaml')}
               >
                 Scenario YAML
+              </button>
+              <button
+                type="button"
+                className={`rounded px-2 py-1 text-[11px] ${
+                  viewMode === 'swarm'
+                    ? 'bg-white/20 text-white'
+                    : 'bg-white/5 text-white/70 hover:bg-white/10'
+                }`}
+                onClick={() => setViewMode('swarm')}
+              >
+                Swarm template
               </button>
             </div>
             {viewMode === 'plan' && planDraft && (
@@ -2134,23 +2862,7 @@ export default function ScenariosPage() {
                     onChange={(value) => {
                       const text = value ?? ''
                       setRawYaml(text)
-                      try {
-                        const doc = YAML.parse(text)
-                        if (doc && typeof doc === 'object' && !Array.isArray(doc)) {
-                          const root = doc as Record<string, unknown>
-                          const planNode = root['plan']
-                          const builtPlan = buildPlanView(planNode)
-                          const normalised = normalisePlanTimes(builtPlan)
-                          const initialPlan =
-                            normalised ?? {
-                              swarm: [],
-                              bees: [],
-                            }
-                          resetPlanHistory(initialPlan)
-                        }
-                      } catch {
-                        // Ignore parse errors while typing; plan stays on last valid version.
-                      }
+                      rebuildFromYaml(text)
                     }}
                     options={{
                       fontSize: 11,
@@ -2160,6 +2872,17 @@ export default function ScenariosPage() {
                     }}
                   />
                 </div>
+              </div>
+            )}
+            {viewMode === 'swarm' && (
+              <div className="border border-white/15 rounded-md p-3 bg-white/5 space-y-3">
+                <SwarmTemplateEditor
+                  template={templateDraft}
+                  onChange={applyTemplateUpdate}
+                  onOpenConfig={(beeIndex) =>
+                    openConfigModal({ kind: 'template-bee', beeIndex, stepIndex: 0 })
+                  }
+                />
               </div>
             )}
           </div>

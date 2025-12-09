@@ -254,18 +254,6 @@ export async function getScenario(id: string): Promise<ScenarioPayload | null> {
   }
 }
 
-export async function saveScenarioPlan(id: string, plan: unknown): Promise<void> {
-  const response = await apiFetch(
-    `/scenario-manager/scenarios/${encodeURIComponent(id)}/plan`,
-    {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(plan ?? {}),
-    },
-  )
-  await ensureOk(response, 'Failed to save scenario plan')
-}
-
 export function mergePlan(
   original: unknown,
   view: ScenarioPlanView | null,
