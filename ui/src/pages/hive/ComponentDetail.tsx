@@ -18,7 +18,7 @@ interface Props {
 
 type ConfigFormValue = string | boolean | undefined
 
-const HTTP_WORKER_ROLES = new Set(['processor', 'http-builder'])
+const HTTP_WORKER_ROLES = new Set(['processor'])
 
 export default function ComponentDetail({ component, onClose }: Props) {
   const [toast, setToast] = useState<string | null>(null)

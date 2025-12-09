@@ -147,19 +147,23 @@ class ScenarioControllerTest {
         mvc.perform(post("/scenarios").contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isBadRequest());
     }
+
     private static void cleanDirectory(Path directory) throws IOException {
         if (!Files.exists(directory)) {
             Files.createDirectories(directory);
             return;
         }
         try (Stream<Path> paths = Files.list(directory)) {
-            paths.forEach(path -> {
+            for (Path path : (Iterable<Path>) paths::iterator) {
                 try {
+                    if (Files.isDirectory(path)) {
+                        cleanDirectory(path);
+                    }
                     Files.deleteIfExists(path);
                 } catch (IOException e) {
                     throw new RuntimeException(e);
                 }
-            });
+            }
         }
     }
 

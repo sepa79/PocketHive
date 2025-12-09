@@ -50,7 +50,7 @@ plan:
     steps:
     - stepId: "gen-rate-fast"
       name: "Increase generator rate to 50/s"
-      time: "5s"
+      time: "PT5S"
       type: "config-update"
       config:
         inputs:
@@ -58,18 +58,18 @@ plan:
             ratePerSec: 50
     - stepId: "gen-stop-1"
       name: "Stop generator"
-      time: "15s"
+      time: "PT15S"
       type: "stop"
     - stepId: "gen-start-2"
       name: "Restart generator"
-      time: "35s"
+      time: "PT35S"
       type: "start"
   swarm:
   - stepId: "swarm-start"
     name: "Enable swarm workloads"
-    time: "1s"
+    time: "PT1S"
     type: "start"
   - stepId: "swarm-stop"
     name: "Stop swarm workloads"
-    time: "40s"
+    time: "PT40S"
     type: "stop"

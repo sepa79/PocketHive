@@ -202,7 +202,7 @@ export default function TopologyView({ selectedId, onSelect, swarmId, onSwarmSel
   )
 }
 
-const HTTP_WORKER_ROLES = new Set(['processor', 'http-builder'])
+const HTTP_WORKER_ROLES = new Set(['processor'])
 
 function buildSutEdgesForSwarm(
   data: { nodes: GraphNode[]; links: { source: string; target: string; queue: string }[] },

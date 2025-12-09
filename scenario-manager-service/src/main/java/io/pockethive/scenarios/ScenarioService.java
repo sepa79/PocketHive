@@ -251,9 +251,22 @@ public class ScenarioService {
     }
 
     private void write(Scenario scenario, Format format) throws IOException {
+        String id = scenario.getId();
+        if (id == null || id.isBlank()) {
+            throw new IllegalArgumentException("Scenario id must not be null or blank");
+        }
+        // Persist as a bundle descriptor under scenarios.dir/bundles/<id>/scenario.(yaml|json),
+        // which is the single source of truth for raw/plan/runtime operations.
+        Path bundleDir = bundleDir(id);
+        Files.createDirectories(bundleDir);
+        String fileName = (format == Format.JSON) ? "scenario.json" : "scenario.yaml";
+        Path descriptor = bundleDir.resolve(fileName).normalize();
+        if (!descriptor.startsWith(bundleDir)) {
+            throw new IllegalArgumentException("Invalid scenario id");
+        }
         (format == Format.JSON ? jsonMapper : yamlMapper)
             .writerWithDefaultPrettyPrinter()
-            .writeValue(pathFor(scenario.getId(), format).toFile(), scenario);
+            .writeValue(descriptor.toFile(), scenario);
     }
 
     private ScenarioSummary toSummary(Scenario scenario) {

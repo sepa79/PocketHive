@@ -60,6 +60,52 @@ control‑plane contract; scenarios are the authoring‑time format.
   scenarios.
 - `SCENARIO_TEMPLATING.md` – how to use Pebble + SpEL helpers,
   HTTP Builder templates, and the scenario‑templating CLI tool.
+- `SCENARIO_PLAN_GUIDE.md` – user guide for the `plan` section and the
+  Scenario Plan editor in Hive.
 
 These docs are designed to be embedded into the UI as help pages.
 Callers should link here rather than re‑describing the contract.
+
+---
+
+## Scenario bundles and the Scenarios UI
+
+In the repo (and on disk in deployments) scenarios are stored as
+**bundles**:
+
+```text
+scenarios/
+  bundles/
+    local-rest-plan-demo/
+      scenario.yaml
+      http-templates/
+      sut/
+      datasets/
+      docs/
+```
+
+- `scenario.yaml` contains the **template** and optional **plan**.  
+- `http-templates/` holds HTTP Builder templates used by generator/processor
+  workers.  
+- `sut/` and `datasets/` are optional and may contain SUT configs or input
+  data; exact conventions are described in the in‑progress
+  `docs/inProgress/scenario-bundle-runtime-plan.md`.
+
+Hive exposes these bundles on the **Scenarios** page:
+
+- The left pane lists scenario bundles (loaded from Scenario Manager).  
+- The right pane has three views of the same YAML:
+  - **Plan** – visual, timeline‑based editor for the `plan` section.  
+  - **Swarm template** – editor for `template.image`, `template.bees[]`,
+    `work.in/out`, and basic IO type selection (`config.inputs.type`).  
+  - **Scenario YAML** – full text editor backed by Monaco.
+
+YAML remains the **single source of truth**:
+
+- Plan and swarm edits patch `scenario.yaml` in memory.  
+- Saving writes the updated YAML back to the bundle via Scenario Manager.  
+- Download/replace bundle operations operate on the same on‑disk structure.
+
+For details of what the plan can express and how the visual editor maps to
+YAML, see `SCENARIO_PLAN_GUIDE.md`. For IO and capabilities used by the
+config dialogs, see `docs/architecture/workerCapabilities.md`.
