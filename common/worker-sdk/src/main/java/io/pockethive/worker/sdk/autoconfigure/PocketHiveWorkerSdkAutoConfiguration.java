@@ -16,6 +16,7 @@ import io.pockethive.worker.sdk.config.PocketHiveWorkerProperties;
 import io.pockethive.worker.sdk.config.RabbitInputProperties;
 import io.pockethive.worker.sdk.config.RabbitOutputProperties;
 import io.pockethive.worker.sdk.config.RedisDataSetInputProperties;
+import io.pockethive.worker.sdk.input.csv.CsvDataSetInputProperties;
 import io.pockethive.worker.sdk.config.SchedulerInputProperties;
 import io.pockethive.worker.sdk.config.WorkInputConfig;
 import io.pockethive.worker.sdk.config.WorkInputConfigBinder;
@@ -26,6 +27,7 @@ import io.pockethive.worker.sdk.input.rabbit.RabbitWorkInputFactory;
 import io.pockethive.worker.sdk.input.rabbit.RabbitWorkInputListenerConfigurer;
 import io.pockethive.worker.sdk.input.SchedulerWorkInputFactory;
 import io.pockethive.worker.sdk.input.redis.RedisDataSetWorkInputFactory;
+import io.pockethive.worker.sdk.input.csv.CsvDataSetWorkInputFactory;
 import io.pockethive.worker.sdk.metrics.PrometheusPushGatewayProperties;
 import io.pockethive.worker.sdk.config.WorkOutputConfig;
 import io.pockethive.worker.sdk.config.WorkOutputConfigBinder;
@@ -367,6 +369,16 @@ public class PocketHiveWorkerSdkAutoConfiguration {
     }
 
     @Bean
+    @ConditionalOnBean({WorkerRuntime.class, WorkerControlPlaneRuntime.class})
+    io.pockethive.worker.sdk.input.WorkInputFactory csvDataSetWorkInputFactory(
+        WorkerRuntime workerRuntime,
+        WorkerControlPlaneRuntime controlPlaneRuntime,
+        @Qualifier("workerControlPlaneIdentity") ControlPlaneIdentity identity
+    ) {
+        return new CsvDataSetWorkInputFactory(workerRuntime, controlPlaneRuntime, identity);
+    }
+
+    @Bean
     @ConditionalOnBean({WorkerRegistry.class, WorkInputRegistry.class})
     RabbitListenerConfigurer rabbitWorkInputListenerConfigurer(
         WorkerRegistry workerRegistry,
@@ -516,6 +528,7 @@ public class PocketHiveWorkerSdkAutoConfiguration {
             case SCHEDULER -> SchedulerInputProperties.class;
             case RABBITMQ -> RabbitInputProperties.class;
             case REDIS_DATASET -> RedisDataSetInputProperties.class;
+            case CSV_DATASET -> CsvDataSetInputProperties.class;
             default -> WorkInputConfig.class;
         };
     }

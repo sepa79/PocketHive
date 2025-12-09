@@ -1,5 +1,6 @@
 package io.pockethive.worker.sdk.runtime;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.worker.sdk.api.WorkItem;
 import io.pockethive.worker.sdk.templating.TemplateRenderer;
 import java.util.HashMap;
@@ -13,7 +14,7 @@ import java.util.Objects;
  * The interceptor is configured with a {@link TemplateRenderer} and a {@link TemplateConfigResolver}
  * that resolves the template source for a given invocation. It builds a minimal context map with:
  * <ul>
- *   <li>{@code payload} – the current {@link WorkItem#payload()} value</li>
+ *   <li>{@code payload} – the current {@link WorkItem#payload()} parsed as Map when valid JSON, otherwise as String</li>
  *   <li>{@code headers} – the current {@link WorkItem#headers()} map</li>
  *   <li>{@code workItem} – the full immutable {@link WorkItem} for convenience</li>
  * </ul>
@@ -29,6 +30,8 @@ public final class TemplatingInterceptor implements WorkerInvocationInterceptor 
          */
         String resolveTemplate(WorkerInvocationContext context);
     }
+
+    private static final ObjectMapper MAPPER = new ObjectMapper().findAndRegisterModules();
 
     private final TemplateRenderer renderer;
     private final TemplateConfigResolver templateResolver;
@@ -47,7 +50,7 @@ public final class TemplatingInterceptor implements WorkerInvocationInterceptor 
 
         WorkItem current = context.message();
         Map<String, Object> templateContext = new HashMap<>();
-        templateContext.put("payload", current.payload());
+        templateContext.put("payload", parsePayload(current.payload()));
         templateContext.put("headers", current.headers());
         templateContext.put("workItem", current);
 
@@ -55,5 +58,16 @@ public final class TemplatingInterceptor implements WorkerInvocationInterceptor 
         WorkItem updated = current.addStepPayload(rendered);
         context.message(updated);
         return chain.proceed(context);
+    }
+
+    private static Object parsePayload(String payload) {
+        if (payload == null || payload.isBlank()) {
+            return payload;
+        }
+        try {
+            return MAPPER.readValue(payload, Map.class);
+        } catch (Exception e) {
+            return payload;
+        }
     }
 }
