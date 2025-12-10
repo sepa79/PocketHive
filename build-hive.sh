@@ -533,6 +533,7 @@ main() {
     print_timing_summary
     echo
     echo "PocketHive scenario sync complete."
+    echo "Finished at: $(date '+%Y-%m-%d %H:%M:%S')"
     exit 0
   fi
 
@@ -551,6 +552,7 @@ main() {
     print_timing_summary
     echo
     echo "PocketHive stack cleanup complete (no build requested)."
+    echo "Finished at: $(date '+%Y-%m-%d %H:%M:%S')"
     exit 0
   fi
 
@@ -605,6 +607,7 @@ main() {
   print_timing_summary
   echo
   echo "PocketHive local build complete."
+  echo "Finished at: $(date '+%Y-%m-%d %H:%M:%S')"
 }
 
 main "$@"

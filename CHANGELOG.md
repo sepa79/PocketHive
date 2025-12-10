@@ -3,9 +3,14 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
-Timestamp: 2025-11-28T00:00:00Z
+Timestamp: 2025-12-10T00:00:00Z
 
-_No unreleased changes yet._
+- Capacity modeler (Hive UI, experimental): introduced a new “Capacity modeler” page for building synthetic service/OUT/DB graphs, computing per-node throughput, latency and drop rate, visualising bottlenecks, and animating request paths with a bee overlay to make fan-out, DB calls, and parallel vs sequential dependencies easier to reason about.
+
+## [0.14.12] - 2025-12-10
+Timestamp: 2025-12-10T00:00:00Z
+
+- Version bump for the Capacity modeler work; see the Unreleased section for a high-level summary of the new UI and modeling capabilities.
 
 ## [0.14.11] - 2025-12-09
 Timestamp: 2025-12-09T00:00:00Z
