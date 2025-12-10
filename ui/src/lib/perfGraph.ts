@@ -34,6 +34,7 @@ export function computePerfGraph(
   const outgoingBySource = new Map<string, PerfGraphEdge[]>()
   const indegree = new Map<string, number>()
   const incomingTps = new Map<string, number>()
+  const serviceCapacityCache = new Map<string, number>()
 
   for (const node of nodes) {
     nodeById.set(node.id, node)
@@ -68,15 +69,48 @@ export function computePerfGraph(
     processed.add(id)
 
     const inTps = incomingTps.get(id) ?? 0
-    const result = computeNodeResult(node, inTps, outgoingBySource, nodeById)
+    const result = computeNodeResult(
+      node,
+      inTps,
+      outgoingBySource,
+      nodeById,
+      serviceCapacityCache,
+    )
     results[id] = result
 
     const outs = outgoingBySource.get(id) ?? []
     if (outs.length > 0) {
-      const share = outs.length > 0 ? result.outputTps / outs.length : 0
+      const normalEdges: PerfGraphEdge[] = []
+      const dbEdges: PerfGraphEdge[] = []
+
       for (const edge of outs) {
+        const target = nodeById.get(edge.target)
+        if (!target) continue
+        if (target.id.endsWith('-db')) {
+          dbEdges.push(edge)
+        } else {
+          normalEdges.push(edge)
+        }
+      }
+
+      const normalCount = normalEdges.length
+      const share = normalCount > 0 ? result.outputTps / normalCount : 0
+
+      for (const edge of normalEdges) {
         const prev = incomingTps.get(edge.target) ?? 0
         incomingTps.set(edge.target, prev + share)
+        const currentIn = indegree.get(edge.target)
+        if (currentIn === undefined) continue
+        const nextDeg = currentIn - 1
+        indegree.set(edge.target, nextDeg)
+        if (nextDeg === 0) {
+          queue.push(edge.target)
+        }
+      }
+
+      for (const edge of dbEdges) {
+        const prev = incomingTps.get(edge.target) ?? 0
+        incomingTps.set(edge.target, prev + result.outputTps)
         const currentIn = indegree.get(edge.target)
         if (currentIn === undefined) continue
         const nextDeg = currentIn - 1
@@ -91,7 +125,13 @@ export function computePerfGraph(
   for (const node of nodes) {
     if (processed.has(node.id)) continue
     const inTps = incomingTps.get(node.id) ?? 0
-    results[node.id] = computeNodeResult(node, inTps, outgoingBySource, nodeById)
+    results[node.id] = computeNodeResult(
+      node,
+      inTps,
+      outgoingBySource,
+      nodeById,
+      serviceCapacityCache,
+    )
   }
 
   return results
@@ -120,6 +160,7 @@ function computeNodeResult(
   incomingTps: number,
   outgoingBySource: Map<string, PerfGraphEdge[]>,
   nodeById: Map<string, PerfGraphNode>,
+  serviceCapacityCache: Map<string, number>,
 ): PerfGraphNodeResult {
   const base: PerfNodeData = { ...node.config }
   const normalizedIncoming = Math.max(0, incomingTps)
@@ -154,24 +195,13 @@ function computeNodeResult(
           outgoingBySource,
           nodeById,
         )
-        const depLatencyMs = computeServiceDepLatencyMs(
+        serviceCapacity = computeServiceChainCapacity(
           target,
           outgoingBySource,
           nodeById,
+          serviceCapacityCache,
+          new Set<string>(),
         )
-        const serviceConfig = applyServiceEffectiveConfig(target.config)
-        const serviceMetrics = computePerfMetrics({
-          ...serviceConfig,
-          inputMode: 'tps',
-          incomingTps: 0,
-          depLatencyMs,
-        })
-        const dbCapacity = computeDbCapacityForService(
-          target,
-          outgoingBySource,
-          nodeById,
-        )
-        serviceCapacity = Math.min(serviceMetrics.maxTpsOverall, dbCapacity)
         break
       }
     }
@@ -237,12 +267,30 @@ function computeNodeResult(
     depLatencyMs: totalDepLatencyMs,
   })
   const dbCapacity = computeDbCapacityForService(node, outgoingBySource, nodeById)
-  const cappedMaxOverall = Math.min(baseMetrics.maxTpsOverall, dbCapacity)
-  const effectiveTps = Math.min(normalizedIncoming, cappedMaxOverall)
+
+  let capacity = Math.min(baseMetrics.maxTpsOverall, dbCapacity)
+
+  const outs = outgoingBySource.get(node.id) ?? []
+  for (const edge of outs) {
+    const target = nodeById.get(edge.target)
+    if (!target || target.kind !== 'service') continue
+    const downstreamCapacity = computeServiceChainCapacity(
+      target,
+      outgoingBySource,
+      nodeById,
+      serviceCapacityCache,
+      new Set<string>(),
+    )
+    if (downstreamCapacity < capacity) {
+      capacity = downstreamCapacity
+    }
+  }
+
+  const effectiveTps = Math.min(normalizedIncoming, capacity)
 
   const metrics: PerfMetrics = {
     ...baseMetrics,
-    maxTpsOverall: cappedMaxOverall,
+    maxTpsOverall: capacity,
     effectiveTps,
   }
   return {
@@ -257,15 +305,72 @@ function computeServiceDepLatencyMs(
   outgoingBySource: Map<string, PerfGraphEdge[]>,
   nodeById: Map<string, PerfGraphNode>,
 ): number {
+  return computeServiceDepLatencyMsInner(
+    node,
+    outgoingBySource,
+    nodeById,
+    new Set<string>(),
+  )
+}
+
+function computeServiceDepLatencyMsInner(
+  node: PerfGraphNode,
+  outgoingBySource: Map<string, PerfGraphEdge[]>,
+  nodeById: Map<string, PerfGraphNode>,
+  visiting: Set<string>,
+): number {
   if (node.kind !== 'service') return 0
+
+  if (visiting.has(node.id)) {
+    return 0
+  }
+  visiting.add(node.id)
+
+  const includeOutDeps = node.config.includeOutDeps !== false
+
   const outs = outgoingBySource.get(node.id) ?? []
-  let total = 0
+  const branchLatencies: number[] = []
+  let dbLatencySum = 0
+
   for (const edge of outs) {
     const target = nodeById.get(edge.target)
-    if (!target || target.kind !== 'out') continue
-    total += Math.max(0, target.config.depLatencyMs)
+    if (!target) continue
+
+    if (target.kind === 'out') {
+      const latencyMs = Math.max(0, target.config.depLatencyMs)
+      if (latencyMs <= 0) continue
+
+      if (target.id.endsWith('-db')) {
+        dbLatencySum += latencyMs
+      } else {
+        if (!includeOutDeps) continue
+        branchLatencies.push(latencyMs)
+      }
+    } else if (target.kind === 'service') {
+      if (!includeOutDeps) continue
+      const pathLatency = estimateServicePathLatencyMsInner(
+        target,
+        outgoingBySource,
+        nodeById,
+        visiting,
+      )
+      if (pathLatency > 0) {
+        branchLatencies.push(pathLatency)
+      }
+    }
   }
-  return total
+
+  const depsParallel = node.config.depsParallel === true
+
+  let httpLatencyTotal = 0
+  if (branchLatencies.length > 0) {
+    httpLatencyTotal = depsParallel
+      ? Math.max(...branchLatencies)
+      : branchLatencies.reduce((acc, value) => acc + value, 0)
+  }
+
+  visiting.delete(node.id)
+  return dbLatencySum + httpLatencyTotal
 }
 
 function computeDbCapacityForService(
@@ -292,13 +397,95 @@ function computeDbCapacityForService(
   return capacity
 }
 
+function computeServiceChainCapacity(
+  serviceNode: PerfGraphNode,
+  outgoingBySource: Map<string, PerfGraphEdge[]>,
+  nodeById: Map<string, PerfGraphNode>,
+  cache: Map<string, number>,
+  visiting: Set<string>,
+): number {
+  const cached = cache.get(serviceNode.id)
+  if (cached !== undefined) {
+    return cached
+  }
+
+  if (visiting.has(serviceNode.id)) {
+    // Cycle detected; treat as unbounded to avoid over-constraining.
+    return Number.POSITIVE_INFINITY
+  }
+
+  visiting.add(serviceNode.id)
+
+  const depLatencyMs = computeServiceDepLatencyMs(
+    serviceNode,
+    outgoingBySource,
+    nodeById,
+  )
+  const effectiveConfig = applyServiceEffectiveConfig(serviceNode.config)
+  const baseMetrics = computePerfMetrics({
+    ...effectiveConfig,
+    inputMode: 'tps',
+    incomingTps: 0,
+    depLatencyMs,
+  })
+
+  let capacity = baseMetrics.maxTpsOverall
+  const dbCapacity = computeDbCapacityForService(
+    serviceNode,
+    outgoingBySource,
+    nodeById,
+  )
+  if (dbCapacity < capacity) {
+    capacity = dbCapacity
+  }
+
+  const outs = outgoingBySource.get(serviceNode.id) ?? []
+  for (const edge of outs) {
+    const target = nodeById.get(edge.target)
+    if (!target || target.kind !== 'service') continue
+    const downstreamCapacity = computeServiceChainCapacity(
+      target,
+      outgoingBySource,
+      nodeById,
+      cache,
+      visiting,
+    )
+    if (downstreamCapacity < capacity) {
+      capacity = downstreamCapacity
+    }
+  }
+
+  visiting.delete(serviceNode.id)
+  cache.set(serviceNode.id, capacity)
+  return capacity
+}
+
 function estimateServicePathLatencyMs(
   serviceNode: PerfGraphNode,
   outgoingBySource: Map<string, PerfGraphEdge[]>,
   nodeById: Map<string, PerfGraphNode>,
 ): number {
+  return estimateServicePathLatencyMsInner(
+    serviceNode,
+    outgoingBySource,
+    nodeById,
+    new Set<string>(),
+  )
+}
+
+function estimateServicePathLatencyMsInner(
+  serviceNode: PerfGraphNode,
+  outgoingBySource: Map<string, PerfGraphEdge[]>,
+  nodeById: Map<string, PerfGraphNode>,
+  visiting: Set<string>,
+): number {
   const baseInternal = Math.max(0, serviceNode.config.internalLatencyMs)
-  const depLatency = computeServiceDepLatencyMs(serviceNode, outgoingBySource, nodeById)
+  const depLatency = computeServiceDepLatencyMsInner(
+    serviceNode,
+    outgoingBySource,
+    nodeById,
+    visiting,
+  )
   const total = baseInternal + depLatency
   return total > 0 ? total : 1000
 }

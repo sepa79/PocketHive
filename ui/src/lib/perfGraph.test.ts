@@ -16,6 +16,7 @@ function makeConfig(overrides: Partial<PerfNodeData> = {}): PerfNodeData {
     depPool: 10,
     httpClient: 'httpclient',
     dbEnabled: false,
+    depsParallel: false,
     ...overrides,
   }
 }

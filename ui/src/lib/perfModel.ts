@@ -16,6 +16,8 @@ export interface PerfNodeData {
   depPool: number
   httpClient: HttpClientKind
   dbEnabled: boolean
+  depsParallel: boolean
+  includeOutDeps?: boolean
 }
 
 export type UtilisationStatus = 'ok' | 'high' | 'overloaded'
@@ -122,5 +124,7 @@ export function createDefaultPerfNodeData(name: string): PerfNodeData {
     depPool: 50,
     httpClient: 'httpclient',
     dbEnabled: false,
+    depsParallel: false,
+    includeOutDeps: true,
   }
 }
