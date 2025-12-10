@@ -27,6 +27,7 @@ import {
   type PerfNodeData,
 } from '../../lib/perfModel'
 import { computePerfGraph } from '../../lib/perfGraph'
+import YAML from 'yaml'
 
 type PerfFlowNode = Node<PerfNodeUIData>
 type PerfFlowEdge = Edge
@@ -40,6 +41,9 @@ export default function PerfModelerPage() {
   const [beeSpeed, setBeeSpeed] = useState(0.25)
   const [simTimeMs, setSimTimeMs] = useState(0)
   const simTimerRef = useRef<number | null>(null)
+  const [isModelModalOpen, setModelModalOpen] = useState(false)
+  const [modelText, setModelText] = useState('')
+  const [modelError, setModelError] = useState<string | null>(null)
 
   const handleNodeChange = useCallback(
     (id: string, patch: Partial<PerfNodeData>) => {
@@ -203,6 +207,177 @@ export default function PerfModelerPage() {
   const clearAll = () => {
     setNodes([])
     setEdges([])
+  }
+
+  const buildModelExport = useCallback(() => {
+    const exportNodes = nodes.map((node) => {
+      const data = node.data as any
+      const kind =
+        data.kind ?? (node.id === 'in' ? 'in' : node.id === 'out' ? 'out' : 'service')
+      const config: any = {
+        name: data.name,
+        inputMode: data.inputMode,
+        incomingTps: data.incomingTps,
+        clientConcurrency: data.clientConcurrency,
+        transport: data.transport,
+        maxConcurrentIn: data.maxConcurrentIn,
+        internalLatencyMs: data.internalLatencyMs,
+        depLatencyMs: data.depLatencyMs,
+        depPool: data.depPool,
+        httpClient: data.httpClient,
+        dbEnabled: data.dbEnabled,
+        depsParallel: data.depsParallel,
+      }
+      if (typeof data.includeOutDeps !== 'undefined') {
+        config.includeOutDeps = data.includeOutDeps
+      }
+      if (data.isDb) {
+        config.isDb = true
+      }
+      return {
+        id: node.id,
+        kind,
+        x: node.position.x,
+        y: node.position.y,
+        config,
+      }
+    })
+    const exportEdges = edges.map((edge) => ({
+      id: edge.id,
+      source: edge.source,
+      target: edge.target,
+    }))
+    return {
+      version: 1,
+      nodes: exportNodes,
+      edges: exportEdges,
+    }
+  }, [nodes, edges])
+
+  const openExportModel = () => {
+    const model = buildModelExport()
+    const text = YAML.stringify(model)
+    setModelText(text)
+    setModelError(null)
+    setModelModalOpen(true)
+  }
+
+  const applyImportedModel = () => {
+    setModelError(null)
+    let parsed: any
+    try {
+      parsed = YAML.parse(modelText)
+    } catch (error: any) {
+      setModelError(
+        `Parse error: ${
+          error && typeof error.message === 'string' ? error.message : String(error)
+        }`,
+      )
+      return
+    }
+
+    if (!parsed || !Array.isArray(parsed.nodes) || !Array.isArray(parsed.edges)) {
+      setModelError('Expected an object with "nodes" and "edges" arrays.')
+      return
+    }
+
+    const rawNodes = parsed.nodes as any[]
+    const rawEdges = parsed.edges as any[]
+
+    const newNodes: PerfFlowNode[] = []
+    const nodeIds = new Set<string>()
+
+    for (const raw of rawNodes) {
+      const id = String(raw.id)
+      const rawKind = raw.kind
+      const kind =
+        rawKind === 'in' || rawKind === 'out' || rawKind === 'service'
+          ? rawKind
+          : 'service'
+      const x = Number(raw.x)
+      const y = Number(raw.y)
+      const config = raw.config ?? {}
+
+      if (config.isDb) {
+        continue
+      }
+
+      const overrides: any = {
+        name: config.name ?? id,
+        inputMode: config.inputMode,
+        incomingTps: config.incomingTps,
+        clientConcurrency: config.clientConcurrency,
+        transport: config.transport,
+        maxConcurrentIn: config.maxConcurrentIn,
+        internalLatencyMs: config.internalLatencyMs,
+        depLatencyMs: config.depLatencyMs,
+        depPool: config.depPool,
+        httpClient: config.httpClient,
+        dbEnabled: config.dbEnabled,
+        depsParallel: config.depsParallel,
+        includeOutDeps: config.includeOutDeps,
+      }
+
+      const node = createPerfNode(
+        id,
+        kind,
+        {
+          x: Number.isFinite(x) ? x : 0,
+          y: Number.isFinite(y) ? y : 0,
+        },
+        handleNodeChange,
+        handleNodeRemove,
+        overrides,
+      )
+      newNodes.push(node)
+      nodeIds.add(id)
+    }
+
+    for (const raw of rawNodes) {
+      const config = raw.config ?? {}
+      if (!config.isDb) continue
+      const id = String(raw.id)
+      const x = Number(raw.x)
+      const y = Number(raw.y)
+      const name = config.name ?? 'DB'
+
+      const overrides: any = {
+        depLatencyMs: config.depLatencyMs,
+        depPool: config.depPool,
+      }
+
+      const dbNode: PerfFlowNode = {
+        id,
+        type: 'perfNode',
+        position: {
+          x: Number.isFinite(x) ? x : 0,
+          y: Number.isFinite(y) ? y : 0,
+        },
+        data: {
+          ...createDefaultPerfNodeData(name),
+          ...overrides,
+          kind: 'out',
+          isDb: true,
+          onChange: handleNodeChange,
+          onRemove: () => {},
+        },
+      }
+      newNodes.push(dbNode)
+      nodeIds.add(id)
+    }
+
+    const newEdges: PerfFlowEdge[] = []
+    for (const raw of rawEdges) {
+      const source = String(raw.source)
+      const target = String(raw.target)
+      if (!nodeIds.has(source) || !nodeIds.has(target)) continue
+      const id = raw.id ? String(raw.id) : `${source}->${target}`
+      newEdges.push(createPerfEdge(id, source, target))
+    }
+
+    setNodes(newNodes)
+    setEdges(newEdges)
+    setModelModalOpen(false)
   }
 
   const graph = useMemo(() => {
@@ -478,6 +653,21 @@ export default function PerfModelerPage() {
             )}
           </div>
         </div>
+        <div className="mt-3 border-t border-white/10 pt-3 space-y-2">
+          <h2 className="text-xs font-semibold text-white/80">
+            Export / import
+          </h2>
+          <p className="text-[11px] text-slate-300">
+            Export the current layout as YAML, or paste a saved definition to restore it later.
+          </p>
+          <button
+            type="button"
+            className="w-full rounded border border-slate-600 bg-slate-900/80 px-2 py-1 text-[11px] text-slate-200 hover:bg-slate-800"
+            onClick={openExportModel}
+          >
+            Export / import model
+          </button>
+        </div>
       </aside>
       <section className="flex-1 min-h-0">
         <ReactFlow
@@ -644,6 +834,70 @@ export default function PerfModelerPage() {
           </div>
         </div>
       )}
+      {isModelModalOpen && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/70">
+          <div
+            role="dialog"
+            aria-modal="true"
+            className="w-full max-w-2xl rounded-lg bg-[#05070b] border border-white/20 p-4 text-sm text-white shadow-2xl"
+          >
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <h3 className="text-sm font-semibold text-white/90">
+                  Export / import capacity model
+                </h3>
+                <p className="mt-0.5 text-[11px] text-slate-300">
+                  Copy the YAML for the current layout, or paste a saved definition and apply it to replace the graph.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="text-white/60 hover:text-white text-lg leading-none px-2"
+                onClick={() => setModelModalOpen(false)}
+              >
+                ×
+              </button>
+            </div>
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <span className="text-[11px] text-slate-300">YAML model:</span>
+              <button
+                type="button"
+                className="px-2 py-0.5 text-[11px] rounded border border-slate-600 bg-slate-900 text-slate-200 hover:bg-slate-800"
+                onClick={openExportModel}
+              >
+                Refresh from graph
+              </button>
+            </div>
+            <textarea
+              className="w-full h-64 rounded border border-slate-700 bg-slate-950/70 px-2 py-1 text-[11px] font-mono text-slate-100 resize-none"
+              placeholder="# Paste a saved capacity model here and click Apply to replace the graph."
+              value={modelText}
+              onChange={(event) => setModelText(event.target.value)}
+            />
+            {modelError && (
+              <p className="mt-1 text-[11px] text-red-400">
+                {modelError}
+              </p>
+            )}
+            <div className="mt-3 flex justify-end gap-2">
+              <button
+                type="button"
+                className="px-3 py-1 text-[11px] rounded border border-slate-600 bg-slate-900 text-slate-200 hover:bg-slate-800"
+                onClick={() => setModelModalOpen(false)}
+              >
+                Close
+              </button>
+              <button
+                type="button"
+                className="px-3 py-1 text-[11px] rounded border border-amber-400 bg-amber-500/20 text-amber-50 hover:bg-amber-500/30"
+                onClick={applyImportedModel}
+              >
+                Apply import
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   )
 }
@@ -716,33 +970,45 @@ function BeeSprite({ x, y, count }: BeeSpriteProps) {
   const clampedCount = Math.min(Math.max(count, 1), 9)
   return (
     <g transform={`translate(${x}, ${y})`}>
-      <ellipse
-        cx="0"
-        cy="0"
-        rx="6"
-        ry="4"
-        fill="url(#ph-bee-body)"
-        stroke="#020617"
-        strokeWidth="0.8"
+      {/* body */}
+      <rect
+        x="-6"
+        y="-6"
+        width="12"
+        height="12"
+        rx="3"
+        transform="rotate(45)"
+        fill="none"
+        stroke="#22d3ee"
+        strokeWidth="1.4"
       />
-      <rect x="-3" y="-3" width="1" height="6" fill="#020617" opacity="0.7" />
-      <rect x="1" y="-3" width="1" height="6" fill="#020617" opacity="0.7" />
+      {/* wings */}
       <ellipse
-        cx="-3"
-        cy="-5"
-        rx="2.2"
-        ry="1.6"
-        fill="#e5e7eb"
-        stroke="#94a3b8"
-        strokeWidth="0.5"
+        cx="-6"
+        cy="-6"
+        rx="4"
+        ry="2.5"
+        fill="none"
+        stroke="#22d3ee"
+        strokeWidth="1"
+        opacity="0.9"
       />
-      <circle cx="4" cy="-1" r="0.9" fill="#020617" />
+      <ellipse
+        cx="6"
+        cy="-6"
+        rx="4"
+        ry="2.5"
+        fill="none"
+        stroke="#22d3ee"
+        strokeWidth="1"
+        opacity="0.9"
+      />
       {clampedCount > 1 && (
         <text
           x="8"
-          y="-4"
+          y="-5"
           fontSize="6"
-          fill="#facc15"
+          fill="#22d3ee"
           fontFamily="monospace"
         >
           ×{clampedCount}
@@ -782,12 +1048,6 @@ function BeeOverlay({ nodes, beeModel, simTimeMs }: BeeOverlayProps) {
       className="pointer-events-none absolute inset-0 overflow-visible"
       style={{ zIndex: 20 }}
     >
-      <defs>
-        <linearGradient id="ph-bee-body" x1="0" x2="1" y1="0" y2="0">
-          <stop offset="0" stopColor="#fbbf24" />
-          <stop offset="1" stopColor="#f59e0b" />
-        </linearGradient>
-      </defs>
       {beeModel.bees.map((bee) => {
         const segments = bee.segments
         if (!segments.length) return null
