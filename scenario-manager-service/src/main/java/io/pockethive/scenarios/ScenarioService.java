@@ -494,6 +494,93 @@ public class ScenarioService {
         return record != null ? record.scenario() : scenario;
     }
 
+    public List<String> listSchemaFiles(String id) throws IOException {
+        Path bundle = bundleDir(id);
+        Path schemasDir = bundle.resolve("schemas").normalize();
+        if (!schemasDir.startsWith(bundle) || !Files.isDirectory(schemasDir)) {
+            return List.of();
+        }
+        List<String> files = new ArrayList<>();
+        try (Stream<Path> stream = Files.walk(schemasDir)) {
+            for (Path path : (Iterable<Path>) stream::iterator) {
+                if (!Files.isRegularFile(path)) {
+                    continue;
+                }
+                Path relative = bundle.relativize(path);
+                files.add(relative.toString().replace('\\', '/'));
+            }
+        }
+        files.sort(String::compareTo);
+        return files;
+    }
+
+    public void writeSchemaFile(String id, String relativePath, String content) throws IOException {
+        if (relativePath == null || relativePath.isBlank()) {
+            throw new IllegalArgumentException("Schema path must not be null or blank");
+        }
+        Path bundle = bundleDir(id);
+        Path file = bundle.resolve(relativePath).normalize();
+        if (!file.startsWith(bundle)) {
+            throw new IllegalArgumentException("Invalid schema path");
+        }
+        Path parent = file.getParent();
+        if (parent != null) {
+            Files.createDirectories(parent);
+        }
+        Files.writeString(file, content);
+    }
+
+    public String readBundleFile(String id, String relativePath) throws IOException {
+        if (relativePath == null || relativePath.isBlank()) {
+            throw new IllegalArgumentException("File path must not be null or blank");
+        }
+        Path bundle = bundleDir(id);
+        Path file = bundle.resolve(relativePath).normalize();
+        if (!file.startsWith(bundle)) {
+            throw new IllegalArgumentException("Invalid file path");
+        }
+        if (!Files.isRegularFile(file)) {
+            throw new IllegalArgumentException("File '%s' not found in bundle for scenario '%s'".formatted(relativePath, id));
+        }
+        return Files.readString(file);
+    }
+
+    public List<String> listHttpTemplateFiles(String id) throws IOException {
+        Path bundle = bundleDir(id);
+        Path templatesDir = bundle.resolve("http-templates").normalize();
+        if (!templatesDir.startsWith(bundle) || !Files.isDirectory(templatesDir)) {
+            return List.of();
+        }
+        List<String> files = new ArrayList<>();
+        try (Stream<Path> stream = Files.walk(templatesDir)) {
+            for (Path path : (Iterable<Path>) stream::iterator) {
+                if (!Files.isRegularFile(path)) {
+                    continue;
+                }
+                Path relative = bundle.relativize(path);
+                files.add(relative.toString().replace('\\', '/'));
+            }
+        }
+        files.sort(String::compareTo);
+        return files;
+    }
+
+    public void writeHttpTemplate(String id, String relativePath, String content) throws IOException {
+        if (relativePath == null || relativePath.isBlank()) {
+            throw new IllegalArgumentException("Template path must not be null or blank");
+        }
+        Path bundle = bundleDir(id);
+        Path file = bundle.resolve(relativePath).normalize();
+        if (!file.startsWith(bundle)) {
+            throw new IllegalArgumentException("Invalid template path");
+        }
+        if (!Files.isRegularFile(file)) {
+            throw new IllegalArgumentException(
+                "Template '%s' not found in bundle for scenario '%s'".formatted(relativePath, id));
+        }
+        Files.writeString(file, content);
+    }
+
     public Scenario createBundleFromZip(byte[] zipBytes) throws IOException {
         UploadedBundle uploaded = unpackBundle(zipBytes, null);
         try {

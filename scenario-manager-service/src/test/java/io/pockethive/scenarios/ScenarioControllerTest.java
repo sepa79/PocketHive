@@ -135,6 +135,121 @@ class ScenarioControllerTest {
     }
 
     @Test
+    void schemaListingAndReadAreScopedToBundle() throws Exception {
+        String body = """
+                {
+                  "id": "schema-demo",
+                  "name": "Schema demo",
+                  "template": {
+                    "image": "ctrl-image:latest",
+                    "bees": []
+                  }
+                }
+                """;
+        mvc.perform(post("/scenarios").contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isCreated());
+
+        // Create a schemas directory and a simple schema file inside the bundle.
+        Path bundleDir = ScenarioControllerTest.scenariosDir.resolve("bundles").resolve("schema-demo");
+        Files.createDirectories(bundleDir.resolve("schemas"));
+        Path schemaFile = bundleDir.resolve("schemas").resolve("body.schema.json");
+        Files.writeString(schemaFile, "{\"type\":\"object\"}");
+
+        mvc.perform(get("/scenarios/schema-demo/schemas").accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0]").value("schemas/body.schema.json"));
+
+        mvc.perform(get("/scenarios/schema-demo/schema")
+                        .param("path", "schemas/body.schema.json")
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(content().string("{\"type\":\"object\"}"));
+    }
+
+    @Test
+    void schemaWriteCreatesOrOverwritesFilesInsideBundle() throws Exception {
+        String body = """
+                {
+                  "id": "schema-write-demo",
+                  "name": "Schema write demo",
+                  "template": {
+                    "image": "ctrl-image:latest",
+                    "bees": []
+                  }
+                }
+                """;
+        mvc.perform(post("/scenarios").contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isCreated());
+
+        mvc.perform(put("/scenarios/schema-write-demo/schema")
+                        .param("path", "schemas/new-body.schema.json")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"type\":\"object\",\"title\":\"Created\"}"))
+                .andExpect(status().isNoContent());
+
+        mvc.perform(get("/scenarios/schema-write-demo/schema")
+                        .param("path", "schemas/new-body.schema.json")
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(content().string("{\"type\":\"object\",\"title\":\"Created\"}"));
+
+        mvc.perform(put("/scenarios/schema-write-demo/schema")
+                        .param("path", "schemas/new-body.schema.json")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"type\":\"object\",\"title\":\"Updated\"}"))
+                .andExpect(status().isNoContent());
+
+        mvc.perform(get("/scenarios/schema-write-demo/schema")
+                        .param("path", "schemas/new-body.schema.json")
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(content().string("{\"type\":\"object\",\"title\":\"Updated\"}"));
+    }
+
+    @Test
+    void httpTemplateListingAndUpdateAreScopedToBundle() throws Exception {
+        String body = """
+                {
+                  "id": "http-demo",
+                  "name": "HTTP demo",
+                  "template": {
+                    "image": "ctrl-image:latest",
+                    "bees": []
+                  }
+                }
+                """;
+        mvc.perform(post("/scenarios").contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isCreated());
+
+        Path bundleDir = ScenarioControllerTest.scenariosDir.resolve("bundles").resolve("http-demo");
+        Files.createDirectories(bundleDir.resolve("http-templates"));
+        Path templateFile = bundleDir.resolve("http-templates").resolve("example.yaml");
+        Files.writeString(templateFile, "serviceId: default\ncallId: demo\nbodyTemplate: \"{}\"\n");
+
+        mvc.perform(get("/scenarios/http-demo/http-templates").accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0]").value("http-templates/example.yaml"));
+
+        mvc.perform(get("/scenarios/http-demo/http-template")
+                        .param("path", "http-templates/example.yaml")
+                        .accept(MediaType.TEXT_PLAIN))
+                .andExpect(status().isOk())
+                .andExpect(content().string("serviceId: default\ncallId: demo\nbodyTemplate: \"{}\"\n"));
+
+        mvc.perform(put("/scenarios/http-demo/http-template")
+                        .param("path", "http-templates/example.yaml")
+                        .contentType(MediaType.TEXT_PLAIN)
+                        .content("serviceId: default\ncallId: demo\nbodyTemplate: \"{\\\"updated\\\":true}\"\n"))
+                .andExpect(status().isNoContent());
+
+        mvc.perform(get("/scenarios/http-demo/http-template")
+                        .param("path", "http-templates/example.yaml")
+                        .accept(MediaType.TEXT_PLAIN))
+                .andExpect(status().isOk())
+                .andExpect(content().string("serviceId: default\ncallId: demo\nbodyTemplate: \"{\\\"updated\\\":true}\"\n"));
+    }
+
+    @Test
     void validationFailure() throws Exception {
         mvc.perform(post("/scenarios").contentType(MediaType.APPLICATION_JSON)
                         .content("{\"id\":\"\",\"name\":\"\"}"))

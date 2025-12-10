@@ -309,3 +309,31 @@ template.
 - The **NFF** rule applies: avoid multiple keys for the same concept and
   do not rely on fallback chains. Use the config structure described
   here and in capability manifests.
+
+### Optional authoring helpers
+
+Scenarios may include **authoring‑time‑only** metadata to help the Hive
+UI render richer editors without changing worker behaviour.
+
+Example for generator HTTP bodies:
+
+```yaml
+config:
+  worker:
+    message:
+      bodyType: HTTP
+      schemaRef: "schemas/local-rest-body.schema.json#/body"
+      body: |
+        {
+          "event": "local-rest-schema-demo",
+          "message": "Hello from {{ swarmId }}",
+          "correlationId": "{{ correlationId }}"
+        }
+```
+
+- `schemaRef` is treated as an opaque string by Scenario Manager and
+  workers; it is only used by the UI to locate a schema file inside the
+  scenario bundle (for example under `schemas/`) and render a form for
+  the body.
+- The referenced schema remains **advisory** – workers only see and
+  use the templated `body` string when generating HTTP payloads.

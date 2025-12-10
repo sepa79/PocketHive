@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Redis dataset demo payload",
+  "type": "object",
+  "properties": {
+    "customerCode": {
+      "type": "string",
+      "description": "Customer identifier (custA/custB)"
+    },
+    "accountNumber": {
+      "type": "string",
+      "description": "Account number as a string of digits"
+    },
+    "cardNumber": {
+      "type": "string",
+      "description": "Credit card number as a string of digits"
+    },
+    "nonce": {
+      "type": "string",
+      "description": "Random UUID used as a nonce"
+    }
+  },
+  "required": ["customerCode", "accountNumber", "cardNumber", "nonce"],
+  "additionalProperties": false
+}
+
