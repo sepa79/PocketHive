@@ -131,6 +131,54 @@ export async function replaceScenarioBundle(id: string, file: File): Promise<Sce
   return summary
 }
 
+export async function listScenarioSchemas(id: string): Promise<string[]> {
+  const response = await apiFetch(
+    `/scenario-manager/scenarios/${encodeURIComponent(id)}/schemas`,
+    {
+      headers: { Accept: 'application/json' },
+    },
+  )
+  await ensureOk(response, 'Failed to load scenario schemas')
+  try {
+    const payload = (await response.json()) as unknown
+    if (!Array.isArray(payload)) return []
+    return payload
+      .map((entry) => (typeof entry === 'string' ? entry.trim() : ''))
+      .filter((entry) => entry.length > 0)
+  } catch {
+    return []
+  }
+}
+
+export async function fetchScenarioSchema(id: string, path: string): Promise<string> {
+  const params = new URLSearchParams({ path })
+  const response = await apiFetch(
+    `/scenario-manager/scenarios/${encodeURIComponent(id)}/schema?${params.toString()}`,
+    {
+      headers: { Accept: 'application/json' },
+    },
+  )
+  await ensureOk(response, 'Failed to load scenario schema')
+  return response.text()
+}
+
+export async function saveScenarioSchema(
+  id: string,
+  path: string,
+  body: string,
+): Promise<void> {
+  const params = new URLSearchParams({ path })
+  const response = await apiFetch(
+    `/scenario-manager/scenarios/${encodeURIComponent(id)}/schema?${params.toString()}`,
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json;charset=UTF-8' },
+      body,
+    },
+  )
+  await ensureOk(response, 'Failed to save scenario schema')
+}
+
 export async function fetchScenarioRaw(id: string): Promise<string> {
   const response = await apiFetch(
     `/scenario-manager/scenarios/${encodeURIComponent(id)}/raw`,
@@ -152,6 +200,50 @@ export async function saveScenarioRaw(id: string, body: string): Promise<void> {
     },
   )
   await ensureOk(response, 'Failed to save scenario')
+}
+
+export async function listHttpTemplates(id: string): Promise<string[]> {
+  const response = await apiFetch(
+    `/scenario-manager/scenarios/${encodeURIComponent(id)}/http-templates`,
+    {
+      headers: { Accept: 'application/json' },
+    },
+  )
+  await ensureOk(response, 'Failed to load HTTP templates')
+  try {
+    const payload = (await response.json()) as unknown
+    if (!Array.isArray(payload)) return []
+    return payload
+      .map((entry) => (typeof entry === 'string' ? entry.trim() : ''))
+      .filter((entry) => entry.length > 0)
+  } catch {
+    return []
+  }
+}
+
+export async function fetchHttpTemplate(id: string, path: string): Promise<string> {
+  const params = new URLSearchParams({ path })
+  const response = await apiFetch(
+    `/scenario-manager/scenarios/${encodeURIComponent(id)}/http-template?${params.toString()}`,
+    {
+      headers: { Accept: 'text/plain' },
+    },
+  )
+  await ensureOk(response, 'Failed to load HTTP template')
+  return response.text()
+}
+
+export async function saveHttpTemplate(id: string, path: string, body: string): Promise<void> {
+  const params = new URLSearchParams({ path })
+  const response = await apiFetch(
+    `/scenario-manager/scenarios/${encodeURIComponent(id)}/http-template?${params.toString()}`,
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+      body,
+    },
+  )
+  await ensureOk(response, 'Failed to save HTTP template')
 }
 
 export interface ScenarioPlanStep {
