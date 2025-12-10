@@ -90,7 +90,7 @@ export default function Layout() {
             }
           >
             <Activity strokeWidth={1.5} className="tab-icon text-white/80" />
-            Perf
+            Capacity
           </NavLink>
           <button
             className={`tab-btn flex items-center${buzzVisible ? ' tab-active' : ''}`}

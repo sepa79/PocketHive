@@ -55,6 +55,30 @@ export function PerfNode({ id, data }: NodeProps<PerfNodeUIData>) {
       ? (errorTps / offeredTps) * 100
       : 0
 
+  const hasFiniteCapacity =
+    Number.isFinite(metrics.maxTpsOverall) && metrics.maxTpsOverall > 0
+
+  const inboundIsBottleneck =
+    hasFiniteCapacity &&
+    Number.isFinite(metrics.maxTpsInbound) &&
+    metrics.maxTpsInbound > 0 &&
+    metrics.maxTpsInbound === metrics.maxTpsOverall &&
+    (metrics.inboundStatus === 'high' || metrics.inboundStatus === 'overloaded')
+
+  const depIsBottleneck =
+    hasFiniteCapacity &&
+    Number.isFinite(metrics.maxTpsDependency) &&
+    metrics.maxTpsDependency > 0 &&
+    metrics.maxTpsDependency === metrics.maxTpsOverall &&
+    (metrics.depStatus === 'high' || metrics.depStatus === 'overloaded')
+
+  let cardBorderColor = 'border-slate-600'
+  if (metrics.inboundStatus === 'overloaded' || metrics.depStatus === 'overloaded') {
+    cardBorderColor = 'border-red-500/70'
+  } else if (metrics.inboundStatus === 'high' || metrics.depStatus === 'high') {
+    cardBorderColor = 'border-amber-400/70'
+  }
+
   const handleTextChange =
     (field: keyof PerfNodeData) => (event: React.ChangeEvent<HTMLInputElement>) => {
       data.onChange?.(id, { [field]: event.target.value } as Partial<PerfNodeData>)
@@ -88,8 +112,13 @@ export function PerfNode({ id, data }: NodeProps<PerfNodeUIData>) {
       data.onChange?.(id, { [field]: event.target.checked } as Partial<PerfNodeData>)
     }
 
+  const includeOutDeps = data.includeOutDeps ?? true
+  const outboundDisabled = kind === 'service' && !includeOutDeps
+
   return (
-    <div className="rounded-md border border-slate-600 bg-slate-900/95 shadow-lg text-[10px] text-slate-100 min-w-[260px] max-w-[320px]">
+    <div
+      className={`rounded-md border ${cardBorderColor} bg-slate-900/95 shadow-lg text-[10px] text-slate-100 min-w-[260px] max-w-[320px]`}
+    >
       <div className="flex items-start justify-between gap-1 border-b border-slate-700 px-2 py-1.5">
         <div className="flex-1">
           <input
@@ -193,7 +222,17 @@ export function PerfNode({ id, data }: NodeProps<PerfNodeUIData>) {
                   Inbound HTTP pool
                 </span>
                 <label className="flex flex-col gap-0.5">
-                  <span className="text-[9px] text-slate-400">Max concurrent in</span>
+                  <span className="text-[9px] text-slate-400">
+                    Max concurrent in
+                    {inboundIsBottleneck && (
+                      <span
+                        className="ml-1 text-[9px] font-semibold text-red-400"
+                        title="Bottleneck: inbound threads are limiting capacity"
+                      >
+                        !
+                      </span>
+                    )}
+                  </span>
                   <input
                     type="number"
                     min={1}
@@ -214,14 +253,21 @@ export function PerfNode({ id, data }: NodeProps<PerfNodeUIData>) {
                 </label>
               </div>
               <div className="col-span-1 flex flex-col gap-0.5">
-                <span className="text-[9px] font-semibold text-slate-300">
+                <span
+                  className={`text-[9px] font-semibold ${
+                    outboundDisabled ? 'text-slate-500' : 'text-slate-300'
+                  }`}
+                >
                   Outbound HTTP pool
                 </span>
                 <label className="flex flex-col gap-0.5">
                   <span className="text-[9px] text-slate-400">HTTP client</span>
                   <select
-                    className="rounded bg-slate-950/70 px-1 py-0.5 border border-slate-700"
+                    className={`rounded bg-slate-950/70 px-1 py-0.5 border ${
+                      outboundDisabled ? 'border-slate-800 text-slate-500' : 'border-slate-700'
+                    }`}
                     value={data.httpClient}
+                    disabled={outboundDisabled}
                     onChange={(event) =>
                       data.onChange?.(id, {
                         httpClient:
@@ -236,14 +282,62 @@ export function PerfNode({ id, data }: NodeProps<PerfNodeUIData>) {
                   </select>
                 </label>
                 <label className="flex flex-col gap-0.5">
-                  <span className="text-[9px] text-slate-400">Dependency pool size</span>
+                  <span className="text-[9px] text-slate-400">
+                    Dependency pool size
+                    {depIsBottleneck && (
+                      <span
+                        className="ml-1 text-[9px] font-semibold text-red-400"
+                        title="Bottleneck: dependency pool is limiting capacity"
+                      >
+                        !
+                      </span>
+                    )}
+                  </span>
                   <input
                     type="number"
                     min={1}
-                    className="w-full rounded border border-slate-700 bg-slate-950/70 px-1 py-0.5 text-[10px]"
+                    className={`w-full rounded border bg-slate-950/70 px-1 py-0.5 text-[10px] ${
+                      outboundDisabled ? 'border-slate-800 text-slate-500' : 'border-slate-700'
+                    }`}
                     value={data.depPool}
                     onChange={handleNumberChange('depPool')}
+                    disabled={outboundDisabled}
                   />
+                </label>
+              </div>
+              <div className="col-span-2 mt-1 flex items-center gap-1.5">
+                <input
+                  id={`${id}-deps-parallel`}
+                  type="checkbox"
+                  className={`h-3 w-3 rounded bg-slate-900 text-amber-400 ${
+                    outboundDisabled ? 'border-slate-700' : 'border-slate-600'
+                  }`}
+                  checked={data.depsParallel}
+                  onChange={handleBooleanChange('depsParallel')}
+                  disabled={outboundDisabled}
+                />
+                <label
+                  htmlFor={`${id}-deps-parallel`}
+                  className={`text-[9px] cursor-pointer ${
+                    outboundDisabled ? 'text-slate-500' : 'text-slate-300'
+                  }`}
+                >
+                  Call OUT dependencies in parallel
+                </label>
+              </div>
+              <div className="col-span-2 flex items-center gap-1.5">
+                <input
+                  id={`${id}-include-out-deps`}
+                  type="checkbox"
+                  className="h-3 w-3 rounded border-slate-600 bg-slate-900 text-amber-400"
+                  checked={data.includeOutDeps ?? true}
+                  onChange={handleBooleanChange('includeOutDeps')}
+                />
+                <label
+                  htmlFor={`${id}-include-out-deps`}
+                  className="text-[9px] text-slate-300 cursor-pointer"
+                >
+                  Include OUT dependencies in service latency
                 </label>
               </div>
             </>
@@ -273,7 +367,17 @@ export function PerfNode({ id, data }: NodeProps<PerfNodeUIData>) {
                 />
               </label>
               <label className="flex flex-col gap-0.5">
-                <span className="text-[9px] text-slate-400">DB pool size</span>
+                <span className="text-[9px] text-slate-400">
+                  DB pool size
+                  {depIsBottleneck && (
+                    <span
+                      className="ml-1 text-[9px] font-semibold text-red-400"
+                      title="Bottleneck: DB pool is limiting capacity"
+                    >
+                      !
+                    </span>
+                  )}
+                </span>
                 <input
                   type="number"
                   min={1}
