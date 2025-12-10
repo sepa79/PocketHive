@@ -85,7 +85,7 @@ template:
       image: http-builder:latest
       config:
         worker:
-          templateRoot: /app/http-templates
+          templateRoot: /app/scenario/http-templates
           serviceId: default
       work:
         in: http-build
@@ -103,3 +103,4 @@ template:
       image: postprocessor:latest
       work:
         in: post
+

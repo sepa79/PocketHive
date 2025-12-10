@@ -23,6 +23,7 @@ import io.pockethive.scenarios.ScenarioManagerApplication;
 import io.pockethive.swarm.model.Bee;
 import io.pockethive.swarm.model.SwarmPlan;
 import io.pockethive.swarm.model.Work;
+import java.io.IOException;
 import java.net.ServerSocket;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -73,6 +74,7 @@ class SwarmCreationMock1E2ETest {
     private static ConfigurableApplicationContext scenarioManagerContext;
     private static int scenarioManagerPort;
     private static boolean dockerAvailable = true;
+    private static Path scenarioRuntimeRoot;
 
     @MockBean
     DockerContainerClient docker;
@@ -174,6 +176,9 @@ class SwarmCreationMock1E2ETest {
         registry.add(
             "pockethive.control-plane.orchestrator.scenario-manager.url",
             () -> "http://127.0.0.1:" + scenarioManagerPort);
+        registry.add(
+            "POCKETHIVE_SCENARIOS_RUNTIME_ROOT",
+            () -> scenarioRuntimeRoot != null ? scenarioRuntimeRoot.toString() : "");
     }
 
     @AfterAll
@@ -259,6 +264,14 @@ class SwarmCreationMock1E2ETest {
         assertThat(controlSignal.args()).isNotNull();
 
         SwarmPlan publishedPlan = objectMapper.convertValue(controlSignal.args(), SwarmPlan.class);
+        String runtimeVolume = locateScenariosDirectory()
+            .resolve("runtime")
+            .resolve(swarmId)
+            .toAbsolutePath()
+            .normalize()
+            .toString() + ":/app/scenario:ro";
+        Map<String, Object> dockerConfig = Map.of("volumes", java.util.List.of(runtimeVolume));
+
         assertThat(publishedPlan.id()).isEqualTo(swarmId);
         assertThat(publishedPlan.bees()).containsExactly(
             new Bee(
@@ -267,13 +280,19 @@ class SwarmCreationMock1E2ETest {
                 new Work(null, "gen"),
                 Map.of(),
                 Map.of(
+                    "docker", dockerConfig,
                     "ratePerSec", 50,
                     "message", Map.of("path", "/api/guarded", "body", "guarded-request")
                 )
             ),
-            new Bee("moderator", "moderator:latest", new Work("gen", "mod"), Map.of(), Map.of()),
-            new Bee("processor", "processor:latest", new Work("mod", "final"), Map.of(), Map.of("baseUrl", "http://sut:8080")),
-            new Bee("postprocessor", "postprocessor:latest", new Work("final", null), Map.of(), Map.of())
+            new Bee("moderator", "moderator:latest", new Work("gen", "mod"), Map.of(), Map.of("docker", dockerConfig)),
+            new Bee(
+                "processor",
+                "processor:latest",
+                new Work("mod", "final"),
+                Map.of(),
+                Map.of("docker", dockerConfig, "baseUrl", "http://sut:8080")),
+            new Bee("postprocessor", "postprocessor:latest", new Work("final", null), Map.of(), Map.of("docker", dockerConfig))
         );
 
         Message readyMessage = awaitMessage(captureName, Duration.ofSeconds(15));
@@ -386,15 +405,24 @@ class SwarmCreationMock1E2ETest {
         }
         int port = findFreePort();
         Path scenariosDir = locateScenariosDirectory();
+        Path runtimeRoot = scenariosDir.resolve("runtime");
+        try {
+            Files.createDirectories(runtimeRoot);
+        } catch (IOException e) {
+            throw new IllegalStateException("Unable to create runtime root directory at " + runtimeRoot, e);
+        }
         scenarioManagerContext = new SpringApplicationBuilder(ScenarioManagerApplication.class)
             .properties(Map.of(
                 "server.port", port,
                 "server.address", "127.0.0.1",
                 "scenarios.dir", scenariosDir.toString(),
+                "pockethive.scenarios.runtime-root", runtimeRoot.toString(),
+                "POCKETHIVE_SCENARIOS_RUNTIME_ROOT", runtimeRoot.toString(),
                 "logging.level.root", "WARN"
             ))
             .run();
         scenarioManagerPort = port;
+        scenarioRuntimeRoot = runtimeRoot;
     }
 
     private static Path locateScenariosDirectory() {

@@ -52,6 +52,30 @@ public class ScenarioManagerClient implements ScenarioClient {
     }
 
     @Override
+    public String prepareScenarioRuntime(String templateId, String swarmId) throws Exception {
+        String trimmedTemplate = templateId == null ? null : templateId.trim();
+        if (trimmedTemplate == null || trimmedTemplate.isEmpty()) {
+            throw new IllegalArgumentException("templateId must not be null or blank");
+        }
+        String trimmedSwarm = swarmId == null ? null : swarmId.trim();
+        if (trimmedSwarm == null || trimmedSwarm.isEmpty()) {
+            throw new IllegalArgumentException("swarmId must not be null or blank");
+        }
+        String url = baseUrl + "/scenarios/" + trimmedTemplate + "/runtime";
+        RuntimeRequest body = new RuntimeRequest(trimmedSwarm);
+        String jsonBody = json.writeValueAsString(body);
+        HttpResponse<String> resp = sendPost(url, "scenario-runtime " + trimmedTemplate + "/" + trimmedSwarm, jsonBody);
+        ScenarioRuntimeResponse descriptor = json.readValue(resp.body(), ScenarioRuntimeResponse.class);
+        String runtimeDir = descriptor.runtimeDir();
+        if (runtimeDir == null || runtimeDir.isBlank()) {
+            throw new IllegalStateException(
+                "Scenario runtime for template '%s' and swarm '%s' returned empty runtimeDir"
+                    .formatted(trimmedTemplate, trimmedSwarm));
+        }
+        return runtimeDir;
+    }
+
+    @Override
     public SutEnvironment fetchSutEnvironment(String environmentId) throws Exception {
         String trimmed = environmentId == null ? null : environmentId.trim();
         if (trimmed == null || trimmed.isEmpty()) {
@@ -78,6 +102,24 @@ public class ScenarioManagerClient implements ScenarioClient {
         return resp;
     }
 
+    private HttpResponse<String> sendPost(String url, String label, String body) throws Exception {
+        log.info("posting {} to {}", label, url);
+        HttpRequest req = HttpRequest.newBuilder()
+            .uri(URI.create(url))
+            .header("Accept", "application/json")
+            .header("Content-Type", "application/json")
+            .timeout(requestTimeout)
+            .POST(HttpRequest.BodyPublishers.ofString(body))
+            .build();
+        HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
+        log.info("{} response status {} length {}", label, resp.statusCode(),
+            resp.body() != null ? resp.body().length() : 0);
+        if (resp.statusCode() != 200) {
+            throw new IllegalStateException(label + " POST status " + resp.statusCode());
+        }
+        return resp;
+    }
+
     private static Duration resolveTimeout(Duration candidate, Duration fallback) {
         if (candidate == null || candidate.isZero() || candidate.isNegative()) {
             return fallback;
@@ -91,5 +133,11 @@ public class ScenarioManagerClient implements ScenarioClient {
                 "pockethive.control-plane.orchestrator.scenario-manager.url must not be null or blank");
         }
         return baseUrl;
+    }
+
+    public record RuntimeRequest(String swarmId) {
+    }
+
+    public record ScenarioRuntimeResponse(String scenarioId, String swarmId, String runtimeDir) {
     }
 }

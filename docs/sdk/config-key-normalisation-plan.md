@@ -26,7 +26,7 @@ Goal: converge on a single key style (camelCase) across worker configs, IO confi
   - [ ] For shared SDK configs (`SchedulerInputProperties`, `RedisDataSetInputProperties`, etc.), ensure examples and comments use camelCase.
 
 - [ ] Scenario & capability normalisation
-  - [ ] Scan `scenario-manager-service/scenarios` for snake/dashed keys and convert to camelCase where they map to worker config.
+  - [ ] Scan `scenarios` bundles for snake/dashed keys and convert to camelCase where they map to worker config.
   - [ ] Update `scenario-manager-service/capabilities/*.latest.yaml` config field names to camelCase so the UI presents a consistent shape.
   - [ ] Adjust any e2e tests that assert on raw config payloads or status snapshots to expect camelCase keys.
 

@@ -12,7 +12,7 @@ TemplateInterceptor, HTTP Builder, and other components.
 
 When a template is rendered, the context contains at least:
 
-- `payload` – current step payload as a string.
+- `payload` – current step payload. Parsed as Map when valid JSON, otherwise string.
 - `headers` – map of current step headers.
 - `workItem` – full `WorkItem` object (steps, headers, payloads).
 
@@ -75,29 +75,37 @@ headers:
 
 ## JSON field access
 
-To pull a field out of a JSON payload, use `#json_path`:
+When `payload` is valid JSON, it's automatically parsed as a Map. Use direct property access:
 
 ```yaml
 body: |
   {
-    "customerId": "{{ eval(\"#json_path(payload, '$.customerId')\") }}"
+    "customerId": "{{ payload.customerId }}",
+    "nested": "{{ payload.customer.code }}"
   }
 ```
 
-Common patterns:
+For complex cases or when you need the raw string, use `#json_path` with JSON Pointer syntax (RFC 6901):
 
-- Root object field: `$.customerId`
-- Nested field: `$.customer.code`
-- Array element: `$.items[0].id`
+```yaml
+body: |
+  {
+    "customerId": "{{ eval(\"#json_path(workItem.payload(), '/customerId')\") }}"
+  }
+```
 
-> In the future we may add a shorter helper such as `{{ jp('$.customerId') }}`
-> that wraps `json_path(payload, ...)`. For now, `eval` is the single
-> entry point for SpEL.
+Common JSON Pointer patterns:
+
+- Root object field: `/customerId`
+- Nested field: `/customer/code`
+- Array element: `/items/0/id`
+
+Note: `#json_path` expects a JSON **string** as first argument, so use `workItem.payload()` not `payload`.
 
 ## HTTP Builder templates
 
 HTTP Builder loads templates from YAML or JSON files under the configured
-`templateRoot` (for example `http-builder-service/http-templates/default/*.yaml`).
+`templateRoot` (for example `scenarios/bundles/redis-dataset-demo/http-templates/default/*.yaml`).
 Each template can contain Pebble expressions in `pathTemplate`, `method`,
 `bodyTemplate` and header values.
 
@@ -108,7 +116,7 @@ Example:
 ```yaml
 serviceId: default
 callId: redis-balance
-pathTemplate: "/soap/{{ eval(\"#json_path(payload, '$.customerCode')\") }}/balance"
+pathTemplate: "/soap/{{ payload.customerCode }}/balance"
 method: POST
 headersTemplate:
   content-type: application/xml
@@ -133,11 +141,11 @@ referenced HTTP templates exist, use the CLI tool:
 ```bash
 # From repo root
 tools/scenario-templating-check/run.sh \
-  --scenario scenario-manager-service/scenarios/e2e/redis-dataset-demo.yaml
+  --scenario scenarios/bundles/redis-dataset-demo/scenario.yaml
 
 tools/scenario-templating-check/run.sh \
   --check-http-templates \
-  --scenario scenario-manager-service/scenarios/e2e/redis-dataset-demo.yaml
+  --scenario scenarios/bundles/redis-dataset-demo/scenario.yaml
 ```
 
 Behaviour:

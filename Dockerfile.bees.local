@@ -11,7 +11,6 @@ COPY .local-jars/generator-service.jar /app/app.jar
 
 FROM bee-runtime AS http-builder
 COPY .local-jars/http-builder-service.jar /app/app.jar
-COPY http-builder-service/http-templates /app/http-templates
 
 FROM bee-runtime AS payload-generator
 COPY .local-jars/payload-generator-service.jar /app/app.jar

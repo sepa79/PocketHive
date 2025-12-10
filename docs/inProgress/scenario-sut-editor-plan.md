@@ -9,7 +9,7 @@ This plan introduces two complementary editors:
 - a **Scenario editor** to visualise and tweak swarm templates.
 
 Both are **views over YAML**, not new sources of truth. Scenario and SUT files remain
-in `scenario-manager-service/scenarios/**` and `sut-environments*.yaml` and are still
+in `scenarios/**` and `sut-environments*.yaml` and are still
 intended to be edited by humans and AI directly when needed.
 
 ---
@@ -17,7 +17,7 @@ intended to be edited by humans and AI directly when needed.
 ## 1. Design principles
 
 - **YAML as SSOT**  
-  All configuration continues to live in YAML files under `scenario-manager-service`.
+  All configuration continues to live in YAML files under the shared `scenarios` root and Scenario Manager.
   Editors always load → modify → write YAML; there is no extra DB or shadow model.
 
 - **Monaco for text, React Flow for graphs**  
@@ -148,4 +148,3 @@ intended to be edited by humans and AI directly when needed.
 - [ ] Implement schemas + VS Code wiring first (gives immediate value without UI work).  
 - [ ] Introduce Monaco‑based text editing in UI for SUTs and scenarios.  
 - [ ] Then layer React Flow‑based SUT and Scenario editors on top, starting with read‑only visualisation and moving to editing once the patching logic is well‑tested.
-

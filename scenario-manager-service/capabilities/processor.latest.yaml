@@ -38,6 +38,18 @@ ui:
   #         - httpMode, httpThreadCount, httpMaxConnections, transactions, successRatio,
   #           avgLatencyMs (average HTTP call latency).
 config:
+  - name: inputs.type
+    type: string
+    default: "RABBITMQ"
+    options:
+      - "RABBITMQ"
+      - "REDIS_DATASET"
+  - name: outputs.type
+    type: string
+    default: "RABBITMQ"
+    options:
+      - "RABBITMQ"
+      - "NOOP"
   - name: enabled
     type: boolean
     default: false

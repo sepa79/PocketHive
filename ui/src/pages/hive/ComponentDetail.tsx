@@ -18,7 +18,7 @@ interface Props {
 
 type ConfigFormValue = string | boolean | undefined
 
-const HTTP_WORKER_ROLES = new Set(['processor', 'http-builder'])
+const HTTP_WORKER_ROLES = new Set(['processor'])
 
 export default function ComponentDetail({ component, onClose }: Props) {
   const [toast, setToast] = useState<string | null>(null)
@@ -576,6 +576,62 @@ export default function ComponentDetail({ component, onClose }: Props) {
         entries.push({
           label: 'Last Redis error',
           value: lastErrorMessage,
+        })
+      }
+    }
+    // CSV dataset runtime diagnostics (if present in status data)
+    const csvDiag =
+      cfg && cfg.csvDataset && typeof cfg.csvDataset === 'object'
+        ? (cfg.csvDataset as Record<string, unknown>)
+        : undefined
+    if (csvDiag) {
+      const filePath = getString(csvDiag.filePath)
+      const rate = getNumber(csvDiag.ratePerSec)
+      const dispatched = getNumber(csvDiag.dispatched)
+      const remaining = getNumber(csvDiag.remaining)
+      const exhausted = getBoolean(csvDiag.exhausted)
+      const rotate = getBoolean(csvDiag.rotate)
+      const rowCount = getNumber(csvDiag.rowCount)
+      if (filePath) {
+        entries.push({
+          label: 'CSV file',
+          value: filePath,
+        })
+      }
+      if (rate !== undefined) {
+        entries.push({
+          label: 'CSV rate (msg/s)',
+          value: rate.toString(),
+        })
+      }
+      if (rowCount !== undefined) {
+        entries.push({
+          label: 'CSV rows',
+          value: rowCount.toString(),
+        })
+      }
+      if (dispatched !== undefined) {
+        entries.push({
+          label: 'CSV dispatched',
+          value: dispatched.toString(),
+        })
+      }
+      if (remaining !== undefined && remaining >= 0) {
+        entries.push({
+          label: 'CSV remaining',
+          value: remaining.toString(),
+        })
+      }
+      if (rotate !== undefined) {
+        entries.push({
+          label: 'CSV rotate',
+          value: rotate ? 'true' : 'false',
+        })
+      }
+      if (exhausted !== undefined) {
+        entries.push({
+          label: 'CSV exhausted',
+          value: exhausted ? 'true' : 'false',
         })
       }
     }
