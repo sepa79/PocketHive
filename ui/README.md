@@ -64,5 +64,34 @@ npm test
 - **Hive** – manage swarms, browse components, view the topology graph and inspect component details.
 - **Buzz** – stream IN/OUT/Other logs and view current configuration with adjustable message limits.
 - **Queen** – create new swarms from predefined templates.
-- **Nectar** – reserved for upcoming features.
+- **Nectar** – Prometheus-backed performance KPIs for swarms.
+- **Perf** – a standalone throughput modelling tool for experimenting with synthetic components.
 
+## Throughput Modeler (Perf)
+
+The **Perf** tab (`/perf`) hosts a self-contained React Flow UI for modelling theoretical throughput of HTTP-style components. It reuses the same single-component formulas as the standalone HTML calculator, but applies them across a small graph:
+
+- `serviceTimeMs = internalLatencyMs + depLatencyMs`
+- `serviceTimeSec = serviceTimeMs / 1000`
+- `maxTpsInbound = maxConcurrentIn / serviceTimeSec`
+- `depLatencySec = depLatencyMs / 1000`
+- `maxTpsDependency = depPool / depLatencySec`
+- `maxTpsOverall = min(maxTpsInbound, maxTpsDependency)`
+- For TPS mode: `effectiveTps = min(incomingTps, maxTpsOverall)`
+- For concurrency-driven IN nodes: `clientIdealTps = clientConcurrency / serviceTimeSec`, and `effectiveTps = min(clientIdealTps, maxTpsOverall)`
+
+Each node in the graph:
+
+- Lets you configure input mode (TPS vs concurrent clients), transport (Jetty vs Netty), inbound concurrency, internal latency, dependency latency and pool size.
+- Computes per-node metrics (service time, max TPS, effective TPS, inbound and dependency utilisation).
+- Renders utilisation badges:
+  - `< 70%` – OK
+  - `70–90%` – High
+  - `> 90%` – Overloaded
+
+Current limitations:
+
+- Edges have **semantic meaning**: effective TPS from an upstream node is propagated along outgoing edges (evenly split if fan-out) and becomes incoming TPS for downstream Service/OUT nodes.
+- **Only synthetic IN nodes accept explicit concurrency input.** Service and OUT nodes derive their incoming TPS entirely from graph connections.
+- No persistence; the graph is in-memory only.
+- Synthetic IN/OUT components are specialised nodes using the same underlying perf model: IN converts concurrency to TPS under its own capacity; OUT adds tail latency without further capacity limits.

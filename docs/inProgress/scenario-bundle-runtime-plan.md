@@ -141,39 +141,41 @@ No worker JSON contracts change; this is all file‑system wiring.
 
 ### 6.1 Scenario Manager APIs
 
-- [ ] **Bundle download**
-  - [ ] Add `GET /scenarios/{id}/bundle` that returns a zip of the bundle directory.
+- [x] **Bundle download**
+  - [x] Add `GET /scenarios/{id}/bundle` that returns a zip of the bundle directory.
 
-- [ ] **Bundle upload**
-  - [ ] Add `POST /scenarios/bundle` to create a new scenario from an uploaded zip.  
-  - [ ] Add `PUT /scenarios/{id}/bundle` to replace/update an existing scenario’s bundle.
-  - [ ] Validate:
-    - [ ] Zip structure matches expected bundle layout.  
-    - [ ] `scenario.yaml` parses into a valid `Scenario`.  
+- [x] **Bundle upload**
+  - [x] Add `POST /scenarios/bundles` to create a new scenario from an uploaded zip.  
+  - [x] Add `PUT /scenarios/{id}/bundle` to replace/update an existing scenario’s bundle.
+  - [x] Validate:
+    - [x] Zip structure matches expected bundle layout.  
+    - [x] `scenario.yaml` parses into a valid `Scenario`.  
     - [ ] Optional: run `scenario-templating-check` for HTTP templates/SUTs and fail fast
           on inconsistencies.
 
 ### 6.2 Hive UI
 
-- [ ] **Scenario list integration**
-  - [ ] Extend existing Scenario Manager UI (or add a new view) to list scenarios
+- [x] **Scenario list integration**
+  - [x] Extend existing Scenario Manager UI (or add a new view) to list scenarios
         with actions:
-        - [ ] “Download bundle” → save zip.  
-        - [ ] “Upload bundle” → open file picker, POST to Scenario Manager.
+        - [x] “Download bundle” → save zip.  
+        - [x] “Upload bundle” → open file picker, POST to Scenario Manager.
 
-- [ ] **Optional: inline editing**
-  - [ ] Allow opening `scenario.yaml` in the existing Monaco‑style editor.  
-  - [ ] When user saves:
-    - [ ] POST updated `scenario.yaml` back into the bundle and regenerate the runtime dir
-          for any attached swarms (or mark them as needing restart).
+- [x] **Optional: inline editing**
+  - [x] Allow opening `scenario.yaml` in the existing Monaco‑style editor.  
+  - [x] When user saves:
+    - [x] POST updated `scenario.yaml` back into the bundle via Scenario Manager.
+    - [ ] Optional: automatically regenerate the runtime dir or mark running swarms
+          as needing restart.
 
 ---
 
 ## 7. Docs & tooling
 
 - [ ] **Docs**
-  - [ ] Add a “Scenario bundles” section to `docs/scenarios/README.md` linking to this plan.  
-  - [ ] Describe bundle layout and recommended paths (`/app/scenario/...`) in
+- [x] **Docs**
+  - [x] Add a “Scenario bundles” section to `docs/scenarios/README.md` linking to this plan.  
+  - [x] Describe bundle layout and recommended paths (`/app/scenario/...`) in
         `SCENARIO_PATTERNS.md` and `SCENARIO_TEMPLATING.md`.
 
 - [ ] **Templating check tool**
@@ -187,14 +189,14 @@ No worker JSON contracts change; this is all file‑system wiring.
 ## 8. Implementation order
 
 1. **Config & docs**
-   - [ ] Introduce `pockethive.scenarios.runtime-root` and document it.
+   - [x] Introduce `pockethive.scenarios.runtime-root` and document it.
 2. **Scenario Manager runtime dirs**
-   - [ ] Implement runtime dir materialisation and SwarmPlan volume/config path enrichment.
+   - [x] Implement runtime dir materialisation and SwarmPlan volume/config path enrichment.
 3. **Volume verification**
-   - [ ] Add/adjust tests to prove volumes are correctly mounted for workers.
+   - [x] Add/adjust tests to prove volumes are correctly mounted for workers.
 4. **Download/upload APIs**
-   - [ ] Build Scenario Manager endpoints for bundle zips.
+   - [x] Build Scenario Manager endpoints for bundle zips.
 5. **Hive UI**
-   - [ ] Add bundle download/upload controls and wire them to the new APIs.
+   - [x] Add bundle download/upload controls and wire them to the new APIs.
 6. **Optional**
-   - [ ] Inline scenario editing in UI built on top of bundles.
+   - [x] Inline scenario editing in UI built on top of bundles.

@@ -440,7 +440,6 @@ interface SwarmTemplateEditorProps {
   onChange: (updater: (current: TemplateNode) => TemplateNode) => void
   onOpenConfig: (beeIndex: number) => void
   onOpenSchemaEditor?: (beeIndex: number) => void
-  onOpenHttpTemplateSchemaEditor?: () => void
 }
 
 function SwarmTemplateEditor({
@@ -448,7 +447,6 @@ function SwarmTemplateEditor({
   onChange,
   onOpenConfig,
   onOpenSchemaEditor,
-  onOpenHttpTemplateSchemaEditor,
 }: SwarmTemplateEditorProps) {
   const [selectedBeeIndex, setSelectedBeeIndex] = useState(0)
   const { getManifestForImage } = useCapabilities()
@@ -1036,15 +1034,6 @@ function SwarmTemplateEditor({
                       {selectedBee.schemaRef ? 'Edit HTTP body via schema' : 'Attach schema…'}
                     </button>
                   )}
-                  {onOpenHttpTemplateSchemaEditor && selectedBee.role === 'http-builder' && (
-                    <button
-                      type="button"
-                      className="rounded bg-sky-500/20 px-2 py-1 text-[11px] text-sky-100 hover:bg-sky-500/30"
-                      onClick={() => onOpenHttpTemplateSchemaEditor()}
-                    >
-                      Edit HTTP templates via schema
-                    </button>
-                  )}
                 </div>
               </div>
             </div>
@@ -1151,7 +1140,7 @@ export default function ScenariosPage() {
     stack: [],
     index: -1,
   })
-  const [viewMode, setViewMode] = useState<'plan' | 'yaml' | 'swarm'>('plan')
+  const [viewMode, setViewMode] = useState<'plan' | 'yaml' | 'swarm' | 'httpTemplates'>('plan')
 
   const [rawYaml, setRawYaml] = useState('')
   const [savedYaml, setSavedYaml] = useState('')
@@ -1166,6 +1155,13 @@ export default function ScenariosPage() {
   const uploadInputRef = useRef<HTMLInputElement | null>(null)
   const replaceInputRef = useRef<HTMLInputElement | null>(null)
   const yamlEditorRef = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null)
+
+  const [httpTemplatePaths, setHttpTemplatePaths] = useState<string[]>([])
+  const [httpTemplateSelectedPath, setHttpTemplateSelectedPath] = useState<string | null>(null)
+  const [httpTemplateRaw, setHttpTemplateRaw] = useState('')
+  const [httpTemplateLoading, setHttpTemplateLoading] = useState(false)
+  const [httpTemplateError, setHttpTemplateError] = useState<string | null>(null)
+  const [httpTemplateSaving, setHttpTemplateSaving] = useState(false)
 
   const setToast = useUIStore((s) => s.setToast)
   const { ensureCapabilities, getManifestForImage, manifests } = useCapabilities()
@@ -1898,7 +1894,7 @@ export default function ScenariosPage() {
     [fetchScenarioSchema, listScenarioSchemas, selectedId, setToast, templateDraft],
   )
 
-  const openHttpTemplateSchemaEditor = useCallback(async () => {
+  const openHttpTemplateSchemaEditor = useCallback(async (templatePathOverride?: string | null) => {
     if (!selectedId) {
       setToast('No scenario selected for HTTP template editing')
       return
@@ -1916,7 +1912,10 @@ export default function ScenariosPage() {
       setToast('No HTTP templates found in this scenario bundle (expected under http-templates/)')
       return
     }
-    const templatePath = templatePaths[0]
+    const templatePath =
+      templatePathOverride && templatePaths.includes(templatePathOverride)
+        ? templatePathOverride
+        : templatePaths[0]
     let templateText: string
     try {
       templateText = await fetchHttpTemplate(selectedId, templatePath)
@@ -2256,6 +2255,9 @@ export default function ScenariosPage() {
       }
       try {
         await saveHttpTemplate(selectedId, templatePath, updatedYaml)
+        if (viewMode === 'httpTemplates' && templatePath === httpTemplateSelectedPath) {
+          setHttpTemplateRaw(updatedYaml)
+        }
       } catch (error) {
         setSchemaAttachError(
           error instanceof Error ? `Failed to save HTTP template: ${error.message}` : 'Failed to save HTTP template',
@@ -2274,6 +2276,9 @@ export default function ScenariosPage() {
     schemaAttachBusy,
     schemaAttachState,
     selectedId,
+    httpTemplateSelectedPath,
+    setHttpTemplateRaw,
+    viewMode,
   ])
 
   const applySchemaEditor = useCallback(() => {
@@ -2386,6 +2391,12 @@ export default function ScenariosPage() {
         )
         return
       }
+      setHttpTemplateRaw((current) => {
+        if (viewMode === 'httpTemplates' && templatePath === httpTemplateSelectedPath) {
+          return updatedYaml
+        }
+        return current
+      })
       void saveHttpTemplate(selectedId, templatePath, updatedYaml).catch((error) => {
         setSchemaEditorError(
           error instanceof Error ? `Failed to save HTTP template: ${error.message}` : 'Failed to save HTTP template',
@@ -2573,6 +2584,110 @@ export default function ScenariosPage() {
     },
     [inferIoTypeFromConfig, manifests],
   )
+
+  useEffect(() => {
+    if (!selectedId || viewMode !== 'httpTemplates') {
+      setHttpTemplatePaths([])
+      setHttpTemplateSelectedPath(null)
+      setHttpTemplateRaw('')
+      setHttpTemplateError(null)
+      setHttpTemplateLoading(false)
+      setHttpTemplateSaving(false)
+      return
+    }
+    let cancelled = false
+    const load = async () => {
+      setHttpTemplateLoading(true)
+      setHttpTemplateError(null)
+      try {
+        const paths = await listHttpTemplates(selectedId)
+        if (cancelled) return
+        setHttpTemplatePaths(paths)
+        if (paths.length === 0) {
+          setHttpTemplateSelectedPath(null)
+          setHttpTemplateRaw('')
+          return
+        }
+        const first = paths[0]!
+        setHttpTemplateSelectedPath(first)
+        try {
+          const text = await fetchHttpTemplate(selectedId, first)
+          if (cancelled) return
+          setHttpTemplateRaw(text)
+        } catch (e) {
+          if (cancelled) return
+          setHttpTemplateError(
+            e instanceof Error ? `Failed to load HTTP template: ${e.message}` : 'Failed to load HTTP template',
+          )
+        }
+      } catch (e) {
+        if (cancelled) return
+        setHttpTemplateError(
+          e instanceof Error ? `Failed to list HTTP templates: ${e.message}` : 'Failed to list HTTP templates',
+        )
+      } finally {
+        if (!cancelled) {
+          setHttpTemplateLoading(false)
+        }
+      }
+    }
+    void load()
+    return () => {
+      cancelled = true
+    }
+  }, [fetchHttpTemplate, listHttpTemplates, selectedId, viewMode])
+
+  useEffect(() => {
+    if (!selectedId || viewMode !== 'httpTemplates') {
+      setHttpTemplatePaths([])
+      setHttpTemplateSelectedPath(null)
+      setHttpTemplateRaw('')
+      setHttpTemplateError(null)
+      setHttpTemplateLoading(false)
+      setHttpTemplateSaving(false)
+      return
+    }
+    let cancelled = false
+    const load = async () => {
+      setHttpTemplateLoading(true)
+      setHttpTemplateError(null)
+      try {
+        const paths = await listHttpTemplates(selectedId)
+        if (cancelled) return
+        setHttpTemplatePaths(paths)
+        if (paths.length === 0) {
+          setHttpTemplateSelectedPath(null)
+          setHttpTemplateRaw('')
+          return
+        }
+        const first = paths[0]!
+        setHttpTemplateSelectedPath(first)
+        try {
+          const text = await fetchHttpTemplate(selectedId, first)
+          if (cancelled) return
+          setHttpTemplateRaw(text)
+        } catch (e) {
+          if (cancelled) return
+          setHttpTemplateError(
+            e instanceof Error ? `Failed to load HTTP template: ${e.message}` : 'Failed to load HTTP template',
+          )
+        }
+      } catch (e) {
+        if (cancelled) return
+        setHttpTemplateError(
+          e instanceof Error ? `Failed to list HTTP templates: ${e.message}` : 'Failed to list HTTP templates',
+        )
+      } finally {
+        if (!cancelled) {
+          setHttpTemplateLoading(false)
+        }
+      }
+    }
+    void load()
+    return () => {
+      cancelled = true
+    }
+  }, [fetchHttpTemplate, listHttpTemplates, selectedId, viewMode])
 
   const openConfigModal = useCallback(
     async (target: ConfigTarget) => {
@@ -3231,6 +3346,17 @@ export default function ScenariosPage() {
               >
                 Swarm template
               </button>
+              <button
+                type="button"
+                className={`rounded px-2 py-1 text-[11px] ${
+                  viewMode === 'httpTemplates'
+                    ? 'bg-white/20 text-white'
+                    : 'bg-white/5 text-white/70 hover:bg-white/10'
+                }`}
+                onClick={() => setViewMode('httpTemplates')}
+              >
+                HTTP templates
+              </button>
             </div>
             {viewMode === 'plan' && planDraft && (
               <div className="border border-white/15 rounded-md p-3 bg-white/5 space-y-3">
@@ -3668,8 +3794,177 @@ export default function ScenariosPage() {
                     openConfigModal({ kind: 'template-bee', beeIndex, stepIndex: 0 })
                   }
                   onOpenSchemaEditor={(beeIndex) => void openSchemaEditor(beeIndex)}
-                  onOpenHttpTemplateSchemaEditor={() => void openHttpTemplateSchemaEditor()}
                 />
+              </div>
+            )}
+            {viewMode === 'httpTemplates' && (
+              <div className="border border-white/15 rounded-md p-3 bg-white/5 space-y-3">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-xs font-semibold text-white/80">
+                    HTTP templates
+                  </h3>
+                  <div className="flex items-center gap-2">
+                    {httpTemplateSelectedPath && (
+                      <button
+                        type="button"
+                        className="rounded bg-sky-500/20 px-2 py-1 text-[11px] text-sky-100 hover:bg-sky-500/30"
+                        onClick={() => void openHttpTemplateSchemaEditor(httpTemplateSelectedPath)}
+                      >
+                        Edit body via schema
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className="rounded bg-white/10 px-2 py-1 text-[11px] text-white/80 hover:bg-white/20 disabled:opacity-40"
+                      disabled={!selectedId || httpTemplateSaving}
+                      onClick={async () => {
+                        if (!selectedId) return
+                        const existing = new Set(httpTemplatePaths)
+                        let index = 1
+                        let path: string
+                        do {
+                          path = `http-templates/template-${index}.yaml`
+                          index += 1
+                        } while (existing.has(path))
+                        const initialYaml = [
+                          '# New HTTP template',
+                          'schemaRef: ""',
+                          'bodyTemplate: |',
+                          '  {',
+                          '    "example": "value"',
+                          '  }',
+                          '',
+                        ].join('\n')
+                        setHttpTemplateSaving(true)
+                        setHttpTemplateError(null)
+                        try {
+                          await saveHttpTemplate(selectedId, path, initialYaml)
+                          setHttpTemplatePaths((current) => {
+                            const next = [...current, path]
+                            next.sort((a, b) => a.localeCompare(b))
+                            return next
+                          })
+                          setHttpTemplateSelectedPath(path)
+                          setHttpTemplateRaw(initialYaml)
+                        } catch (e) {
+                          setHttpTemplateError(
+                            e instanceof Error
+                              ? `Failed to create HTTP template: ${e.message}`
+                              : 'Failed to create HTTP template',
+                          )
+                        } finally {
+                          setHttpTemplateSaving(false)
+                        }
+                      }}
+                    >
+                      Add template
+                    </button>
+                  </div>
+                </div>
+                {!selectedId && (
+                  <div className="text-[11px] text-white/60">
+                    Select a scenario to inspect HTTP templates.
+                  </div>
+                )}
+                {selectedId && (
+                  <div className="flex gap-3">
+                    <div className="w-64 border border-white/15 rounded bg-black/40 p-2 text-[11px] text-white/80">
+                      <div className="font-semibold mb-1 text-white/80">Template files</div>
+                      {httpTemplateLoading && (
+                        <div className="text-[10px] text-white/60">Loading templates…</div>
+                      )}
+                      {httpTemplateError && (
+                        <div className="text-[10px] text-red-400">{httpTemplateError}</div>
+                      )}
+                      {!httpTemplateLoading && !httpTemplateError && httpTemplatePaths.length === 0 && (
+                        <div className="text-[10px] text-white/60">
+                          No HTTP templates found (expected under <span className="font-mono">http-templates/</span>).
+                        </div>
+                      )}
+                      {httpTemplatePaths.length > 0 && (
+                        <ul className="mt-1 max-h-56 overflow-y-auto">
+                          {httpTemplatePaths.map((path) => {
+                            const isSelected = path === httpTemplateSelectedPath
+                            return (
+                              <li key={path}>
+                                <button
+                                  type="button"
+                                  className={`w-full text-left px-2 py-1 rounded text-[10px] ${
+                                    isSelected
+                                      ? 'bg-sky-500/40 text-white'
+                                      : 'bg-transparent text-white/80 hover:bg-white/10'
+                                  }`}
+                                  onClick={async () => {
+                                    if (!selectedId) return
+                                    setHttpTemplateSelectedPath(path)
+                                    setHttpTemplateError(null)
+                                    try {
+                                      const text = await fetchHttpTemplate(selectedId, path)
+                                      setHttpTemplateRaw(text)
+                                    } catch (e) {
+                                      setHttpTemplateError(
+                                        e instanceof Error
+                                          ? `Failed to load HTTP template: ${e.message}`
+                                          : 'Failed to load HTTP template',
+                                      )
+                                    }
+                                  }}
+                                >
+                                  {path}
+                                </button>
+                              </li>
+                            )
+                          })}
+                        </ul>
+                      )}
+                    </div>
+                    <div className="flex-1 flex flex-col min-h-[260px]">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-[11px] text-white/80">
+                          Template YAML
+                          {httpTemplateSelectedPath && (
+                            <span className="ml-1 font-mono text-white/70">
+                              ({httpTemplateSelectedPath})
+                            </span>
+                          )}
+                        </span>
+                        <button
+                          type="button"
+                          className="rounded bg-white/10 px-2 py-0.5 text-[10px] text-white/80 hover:bg-white/20 disabled:opacity-40"
+                          disabled={!httpTemplateSelectedPath || httpTemplateSaving}
+                          onClick={async () => {
+                            if (!selectedId || !httpTemplateSelectedPath) return
+                            setHttpTemplateSaving(true)
+                            setHttpTemplateError(null)
+                            try {
+                              await saveHttpTemplate(selectedId, httpTemplateSelectedPath, httpTemplateRaw)
+                            } catch (e) {
+                              setHttpTemplateError(
+                                e instanceof Error
+                                  ? `Failed to save HTTP template: ${e.message}`
+                                  : 'Failed to save HTTP template',
+                              )
+                            } finally {
+                              setHttpTemplateSaving(false)
+                            }
+                          }}
+                        >
+                          {httpTemplateSaving ? 'Saving…' : 'Save template'}
+                        </button>
+                      </div>
+                      <textarea
+                        className="flex-1 w-full rounded border border-white/20 bg-black/40 px-2 py-1 text-[11px] font-mono text-white/90 resize-none"
+                        value={httpTemplateRaw}
+                        onChange={(e) => setHttpTemplateRaw(e.target.value)}
+                        placeholder={
+                          httpTemplateSelectedPath
+                            ? '# HTTP template YAML'
+                            : '# Select a template from the list to view or edit its YAML'
+                        }
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>

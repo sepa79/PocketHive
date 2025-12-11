@@ -574,9 +574,9 @@ public class ScenarioService {
         if (!file.startsWith(bundle)) {
             throw new IllegalArgumentException("Invalid template path");
         }
-        if (!Files.isRegularFile(file)) {
-            throw new IllegalArgumentException(
-                "Template '%s' not found in bundle for scenario '%s'".formatted(relativePath, id));
+        Path parent = file.getParent();
+        if (parent != null) {
+            Files.createDirectories(parent);
         }
         Files.writeString(file, content);
     }
