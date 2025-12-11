@@ -148,6 +148,66 @@ public class ScenarioController {
         return updated;
     }
 
+    @GetMapping(value = "/{id}/schemas", produces = MediaType.APPLICATION_JSON_VALUE)
+    public List<String> listSchemas(@PathVariable("id") String id) throws IOException {
+        log.info("[REST] GET /scenarios/{}/schemas", id);
+        List<String> files = service.listSchemaFiles(id);
+        log.info("[REST] GET /scenarios/{}/schemas -> status=200 body={}", id, safeJson(files));
+        return files;
+    }
+
+    @GetMapping(value = "/{id}/schema", produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<String> readSchema(@PathVariable("id") String id,
+                                             @RequestParam("path") String path) throws IOException {
+        log.info("[REST] GET /scenarios/{}/schema path={}", id, path);
+        String text = service.readBundleFile(id, path);
+        log.info("[REST] GET /scenarios/{}/schema -> status=200 ({} chars)", id, text != null ? text.length() : 0);
+        return ResponseEntity.ok()
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(text);
+    }
+
+    @PutMapping(value = "/{id}/schema", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<Void> writeSchema(@PathVariable("id") String id,
+                                            @RequestParam("path") String path,
+                                            @RequestBody String body) throws IOException {
+        int size = body != null ? body.length() : 0;
+        log.info("[REST] PUT /scenarios/{}/schema path={} ({} chars)", id, path, size);
+        service.writeSchemaFile(id, path, body != null ? body : "");
+        log.info("[REST] PUT /scenarios/{}/schema -> status=204", id);
+        return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping(value = "/{id}/http-templates", produces = MediaType.APPLICATION_JSON_VALUE)
+    public List<String> listHttpTemplates(@PathVariable("id") String id) throws IOException {
+        log.info("[REST] GET /scenarios/{}/http-templates", id);
+        List<String> files = service.listHttpTemplateFiles(id);
+        log.info("[REST] GET /scenarios/{}/http-templates -> status=200 body={}", id, safeJson(files));
+        return files;
+    }
+
+    @GetMapping(value = "/{id}/http-template", produces = MediaType.TEXT_PLAIN_VALUE)
+    public ResponseEntity<String> readHttpTemplate(@PathVariable("id") String id,
+                                                   @RequestParam("path") String path) throws IOException {
+        log.info("[REST] GET /scenarios/{}/http-template path={}", id, path);
+        String text = service.readBundleFile(id, path);
+        log.info("[REST] GET /scenarios/{}/http-template -> status=200 ({} chars)", id, text != null ? text.length() : 0);
+        return ResponseEntity.ok()
+                .contentType(MediaType.TEXT_PLAIN)
+                .body(text);
+    }
+
+    @PutMapping(value = "/{id}/http-template", consumes = MediaType.TEXT_PLAIN_VALUE)
+    public ResponseEntity<Void> writeHttpTemplate(@PathVariable("id") String id,
+                                                  @RequestParam("path") String path,
+                                                  @RequestBody String body) throws IOException {
+        int size = body != null ? body.length() : 0;
+        log.info("[REST] PUT /scenarios/{}/http-template path={} ({} chars)", id, path, size);
+        service.writeHttpTemplate(id, path, body != null ? body : "");
+        log.info("[REST] PUT /scenarios/{}/http-template -> status=204", id);
+        return ResponseEntity.noContent().build();
+    }
+
     @GetMapping(value = "/{id}/bundle", produces = "application/zip")
     public ResponseEntity<byte[]> downloadBundle(@PathVariable("id") String id) throws IOException {
         log.info("[REST] GET /scenarios/{}/bundle", id);

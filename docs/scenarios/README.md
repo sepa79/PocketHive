@@ -62,6 +62,9 @@ control‑plane contract; scenarios are the authoring‑time format.
   HTTP Builder templates, and the scenario‑templating CLI tool.
 - `SCENARIO_PLAN_GUIDE.md` – user guide for the `plan` section and the
   Scenario Plan editor in Hive.
+  - `local-rest-schema-demo/` – example of a generator that uses a JSON Schema
+    (`schemas/local-rest-body.schema.json`) to help author HTTP bodies in the
+    scenario editor while still emitting a plain templated JSON string at runtime.
 
 These docs are designed to be embedded into the UI as help pages.
 Callers should link here rather than re‑describing the contract.

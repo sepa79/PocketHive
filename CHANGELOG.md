@@ -3,9 +3,16 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
-Timestamp: 2025-12-10T00:00:00Z
+Timestamp: 2025-12-11T00:00:00Z
 
-- Capacity modeler (Hive UI, experimental): introduced a new “Capacity modeler” page for building synthetic service/OUT/DB graphs, computing per-node throughput, latency and drop rate, visualising bottlenecks, and animating request paths with a bee overlay to make fan-out, DB calls, and parallel vs sequential dependencies easier to reason about.
+- No unreleased changes yet.
+
+## [0.14.13] - 2025-12-11
+Timestamp: 2025-12-11T00:00:00Z
+
+- Capacity modeler (Hive UI, experimental): introduced a new “Capacity” page for building synthetic service/OUT/DB graphs, computing per-node throughput, latency and drop rate, visualising bottlenecks, and animating request paths with a bee overlay so parallel vs sequential calls and DB hops are easy to see.
+- Scenario bundles & HTTP templates: extended Scenario Manager with bundle-level HTTP template/schema APIs and updated the Hive Scenarios page with a new `HTTP templates` view that lists bundle templates, supports adding new YAML files, and wires “Edit/Attach schema” flows via `schemaRef` into JSON Schema-backed body editors for generators and HTTP templates.
+- Docs & tooling alignment: documented `schemaRef` in `SCENARIO_CONTRACT.md`, refreshed scenario bundle/templating docs, updated the in-progress `scenario-bundle-runtime-plan` to match the current implementation, and added a completion timestamp to `build-hive.sh` so local builds clearly show when they finished.
 
 ## [0.14.12] - 2025-12-10
 Timestamp: 2025-12-10T00:00:00Z

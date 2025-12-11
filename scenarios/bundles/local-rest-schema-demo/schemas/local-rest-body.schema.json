@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Local REST schema demo body",
+  "type": "object",
+  "properties": {
+    "event": {
+      "type": "string",
+      "description": "Logical event identifier"
+    },
+    "message": {
+      "type": "string",
+      "description": "Human-readable message or template"
+    },
+    "correlationId": {
+      "type": "string",
+      "description": "Optional correlation id propagated through the pipeline"
+    }
+  },
+  "required": ["event"],
+  "additionalProperties": true
+}
+

@@ -15,6 +15,12 @@ import {
   buildPlanView,
   mergePlan,
   createScenario,
+  saveScenarioSchema,
+  listScenarioSchemas,
+  fetchScenarioSchema,
+  listHttpTemplates,
+  fetchHttpTemplate,
+  saveHttpTemplate,
   type ScenarioPayload,
   type ScenarioPlanView,
   type ScenarioPlanStep,
@@ -433,9 +439,15 @@ interface SwarmTemplateEditorProps {
   template: TemplateNode
   onChange: (updater: (current: TemplateNode) => TemplateNode) => void
   onOpenConfig: (beeIndex: number) => void
+  onOpenSchemaEditor?: (beeIndex: number) => void
 }
 
-function SwarmTemplateEditor({ template, onChange, onOpenConfig }: SwarmTemplateEditorProps) {
+function SwarmTemplateEditor({
+  template,
+  onChange,
+  onOpenConfig,
+  onOpenSchemaEditor,
+}: SwarmTemplateEditorProps) {
   const [selectedBeeIndex, setSelectedBeeIndex] = useState(0)
   const { getManifestForImage } = useCapabilities()
 
@@ -471,6 +483,7 @@ function SwarmTemplateEditor({ template, onChange, onOpenConfig }: SwarmTemplate
         let inputType: string | null = null
         let hasSchedulerConfig = false
         let hasRedisConfig = false
+        let schemaRef: string | null = null
         const config = bee['config']
         if (config && typeof config === 'object' && !Array.isArray(config)) {
           const cfg = config as Record<string, unknown>
@@ -500,6 +513,18 @@ function SwarmTemplateEditor({ template, onChange, onOpenConfig }: SwarmTemplate
               hasRedisConfig = true
             }
           }
+          const workerRaw = cfg['worker']
+          if (workerRaw && typeof workerRaw === 'object' && !Array.isArray(workerRaw)) {
+            const workerCfg = workerRaw as Record<string, unknown>
+            const messageRaw = workerCfg['message']
+            if (messageRaw && typeof messageRaw === 'object' && !Array.isArray(messageRaw)) {
+              const msgCfg = messageRaw as Record<string, unknown>
+              const refValue = msgCfg['schemaRef']
+              if (typeof refValue === 'string' && refValue.trim().length > 0) {
+                schemaRef = refValue.trim()
+              }
+            }
+          }
         }
         return {
           index,
@@ -511,6 +536,7 @@ function SwarmTemplateEditor({ template, onChange, onOpenConfig }: SwarmTemplate
           inputType,
           hasSchedulerConfig,
           hasRedisConfig,
+          schemaRef,
         }
       })
       .filter((entry) => entry !== null) as {
@@ -523,6 +549,7 @@ function SwarmTemplateEditor({ template, onChange, onOpenConfig }: SwarmTemplate
       inputType: string | null
       hasSchedulerConfig: boolean
       hasRedisConfig: boolean
+      schemaRef: string | null
     }[]
   }, [template])
 
@@ -990,13 +1017,24 @@ function SwarmTemplateEditor({ template, onChange, onOpenConfig }: SwarmTemplate
                 )}
               </div>
               <div className="pt-2">
-                <button
-                  type="button"
-                  className="rounded bg-white/10 px-2 py-1 text-[11px] text-white/80 hover:bg-white/20"
-                  onClick={() => onOpenConfig(selectedBee.index)}
-                >
-                  Edit config via capabilities
-                </button>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    className="rounded bg-white/10 px-2 py-1 text-[11px] text-white/80 hover:bg-white/20"
+                    onClick={() => onOpenConfig(selectedBee.index)}
+                  >
+                    Edit config via capabilities
+                  </button>
+                  {onOpenSchemaEditor && selectedBee.role === 'generator' && (
+                    <button
+                      type="button"
+                      className="rounded bg-sky-500/20 px-2 py-1 text-[11px] text-sky-100 hover:bg-sky-500/30"
+                      onClick={() => onOpenSchemaEditor(selectedBee.index)}
+                    >
+                      {selectedBee.schemaRef ? 'Edit HTTP body via schema' : 'Attach schema…'}
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           )}
@@ -1102,7 +1140,7 @@ export default function ScenariosPage() {
     stack: [],
     index: -1,
   })
-  const [viewMode, setViewMode] = useState<'plan' | 'yaml' | 'swarm'>('plan')
+  const [viewMode, setViewMode] = useState<'plan' | 'yaml' | 'swarm' | 'httpTemplates'>('plan')
 
   const [rawYaml, setRawYaml] = useState('')
   const [savedYaml, setSavedYaml] = useState('')
@@ -1117,6 +1155,13 @@ export default function ScenariosPage() {
   const uploadInputRef = useRef<HTMLInputElement | null>(null)
   const replaceInputRef = useRef<HTMLInputElement | null>(null)
   const yamlEditorRef = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null)
+
+  const [httpTemplatePaths, setHttpTemplatePaths] = useState<string[]>([])
+  const [httpTemplateSelectedPath, setHttpTemplateSelectedPath] = useState<string | null>(null)
+  const [httpTemplateRaw, setHttpTemplateRaw] = useState('')
+  const [httpTemplateLoading, setHttpTemplateLoading] = useState(false)
+  const [httpTemplateError, setHttpTemplateError] = useState<string | null>(null)
+  const [httpTemplateSaving, setHttpTemplateSaving] = useState(false)
 
   const setToast = useUIStore((s) => s.setToast)
   const { ensureCapabilities, getManifestForImage, manifests } = useCapabilities()
@@ -1133,6 +1178,41 @@ export default function ScenariosPage() {
   const [configModalError, setConfigModalError] = useState<string | null>(null)
   const [configModalBaseConfig, setConfigModalBaseConfig] = useState<Record<string, unknown> | undefined>(undefined)
   const [configModalEnabled, setConfigModalEnabled] = useState<Record<string, boolean>>({})
+
+  type SchemaEditorState = {
+    kind: 'generator' | 'http-template'
+    beeIndex: number | null
+    templatePath?: string
+    schemaPath: string
+    pointer: string | null
+    fields: { name: string; description: string | null }[]
+    initialValues: Record<string, string>
+    schemaOptions: string[]
+    rawSchema: string
+    templateRaw?: string
+  }
+
+  type SchemaAttachTarget = 'generator' | 'http-template'
+
+  type SchemaAttachState = {
+    target: SchemaAttachTarget
+    beeIndex: number | null
+    templatePath?: string
+    existingOptions: string[]
+    selectedExisting: string | null
+    mode: 'existing' | 'new'
+    newPath: string
+    newSchemaText: string
+  }
+
+  const [schemaEditorState, setSchemaEditorState] = useState<SchemaEditorState | null>(null)
+  const [schemaEditorValues, setSchemaEditorValues] = useState<Record<string, string>>({})
+  const [schemaEditorError, setSchemaEditorError] = useState<string | null>(null)
+  const [schemaEditorShowRaw, setSchemaEditorShowRaw] = useState(false)
+
+  const [schemaAttachState, setSchemaAttachState] = useState<SchemaAttachState | null>(null)
+  const [schemaAttachError, setSchemaAttachError] = useState<string | null>(null)
+  const [schemaAttachBusy, setSchemaAttachBusy] = useState(false)
 
   const resetPlanHistory = useCallback((initial: ScenarioPlanView | null) => {
     if (!initial) {
@@ -1612,6 +1692,722 @@ export default function ScenariosPage() {
     [planDraft, selectedScenario],
   )
 
+  const openSchemaEditor = useCallback(
+    async (beeIndex: number) => {
+      if (!selectedId || !templateDraft) {
+        setToast('No scenario/template selected for schema editing')
+        return
+      }
+      if (Array.isArray(templateDraft) || typeof templateDraft !== 'object') {
+        setToast('Swarm template is not available for schema editing')
+        return
+      }
+      const root = templateDraft as Record<string, unknown>
+      const beesValue = root['bees']
+      if (!Array.isArray(beesValue) || beeIndex < 0 || beeIndex >= beesValue.length) {
+        setToast('Swarm template does not contain this bee')
+        return
+      }
+      const beeEntry = beesValue[beeIndex]
+      if (!beeEntry || typeof beeEntry !== 'object' || Array.isArray(beeEntry)) {
+        setToast('Bee configuration is not editable as an object')
+        return
+      }
+      const bee = beeEntry as Record<string, unknown>
+      const configValue = bee['config']
+      const config =
+        configValue && typeof configValue === 'object' && !Array.isArray(configValue)
+          ? (configValue as Record<string, unknown>)
+          : undefined
+      const workerRaw = config && config['worker']
+      const worker =
+        workerRaw && typeof workerRaw === 'object' && !Array.isArray(workerRaw)
+          ? (workerRaw as Record<string, unknown>)
+          : undefined
+      const messageRaw = worker && worker['message']
+      const message =
+        messageRaw && typeof messageRaw === 'object' && !Array.isArray(messageRaw)
+          ? (messageRaw as Record<string, unknown>)
+          : undefined
+      const schemaRefValue =
+        message && typeof message.schemaRef === 'string' ? message.schemaRef.trim() : ''
+
+      let pointer: string | null = null
+      let schemaPathFromRef: string | null = null
+      if (schemaRefValue) {
+        const [schemaPathRaw, pointerRaw] = schemaRefValue.split('#', 2)
+        const trimmedPath = schemaPathRaw.trim()
+        if (trimmedPath.length > 0) {
+          schemaPathFromRef = trimmedPath
+        }
+        if (pointerRaw && pointerRaw.trim().length > 0) {
+          pointer = `#${pointerRaw.trim()}`
+        }
+      }
+
+      let schemaOptions: string[]
+      try {
+        schemaOptions = await listScenarioSchemas(selectedId)
+      } catch {
+        setToast('Failed to list schema files for this scenario')
+        return
+      }
+
+      if (!schemaRefValue) {
+        setSchemaAttachState({
+          target: 'generator',
+          beeIndex,
+          templatePath: undefined,
+          existingOptions: schemaOptions,
+          selectedExisting: schemaOptions.length > 0 ? schemaOptions[0] : null,
+          mode: schemaOptions.length > 0 ? 'existing' : 'new',
+          newPath: 'schemas/body.schema.json',
+          newSchemaText: '',
+        })
+        setSchemaAttachError(null)
+        setSchemaAttachBusy(false)
+        return
+      }
+
+      if (!schemaOptions || schemaOptions.length === 0) {
+        setToast('No schema files found in this scenario bundle (expected under schemas/)')
+        return
+      }
+      const schemaPath =
+        schemaPathFromRef && schemaOptions.includes(schemaPathFromRef)
+          ? schemaPathFromRef
+          : schemaOptions[0]
+
+      let schemaText: string
+      try {
+        schemaText = await fetchScenarioSchema(selectedId, schemaPath)
+      } catch (e) {
+        setToast(
+          e instanceof Error
+            ? `Failed to load schema: ${e.message}`
+            : 'Failed to load schema for this scenario',
+        )
+        return
+      }
+      let schemaRoot: unknown
+      try {
+        const parsed = JSON.parse(schemaText) as unknown
+        if (!pointer) {
+          schemaRoot = parsed
+        } else {
+          // Very small JSON Pointer resolver for object schemas.
+          const ptr = pointer.startsWith('#') ? pointer.slice(1) : pointer
+          const segments = ptr.split('/').filter((s) => s.length > 0)
+          let cursor: unknown = parsed
+          for (const segment of segments) {
+            if (typeof cursor !== 'object' || cursor === null || Array.isArray(cursor)) {
+              cursor = undefined
+              break
+            }
+            const key = segment.replace(/~1/g, '/').replace(/~0/g, '~')
+            cursor = (cursor as Record<string, unknown>)[key]
+          }
+          schemaRoot = cursor
+        }
+      } catch (e) {
+        setToast(
+          e instanceof Error ? `Failed to parse schema JSON: ${e.message}` : 'Schema JSON is invalid',
+        )
+        return
+      }
+      if (!schemaRoot || typeof schemaRoot !== 'object' || Array.isArray(schemaRoot)) {
+        setToast('Schema root for schemaRef must be an object with properties')
+        return
+      }
+      const schemaObj = schemaRoot as Record<string, unknown>
+      const propertiesRaw = schemaObj.properties
+      if (!propertiesRaw || typeof propertiesRaw !== 'object' || Array.isArray(propertiesRaw)) {
+        setToast('Schema root does not declare any properties to edit')
+        return
+      }
+      const props = propertiesRaw as Record<string, unknown>
+      const fields: { name: string; description: string | null }[] = []
+      Object.entries(props).forEach(([name, value]) => {
+        if (!name || !value || typeof value !== 'object' || Array.isArray(value)) {
+          return
+        }
+        const propSchema = value as Record<string, unknown>
+        const description =
+          typeof propSchema.description === 'string' && propSchema.description.trim().length > 0
+            ? propSchema.description.trim()
+            : null
+        fields.push({ name, description })
+      })
+      if (fields.length === 0) {
+        setToast('Schema has no simple properties to edit')
+        return
+      }
+
+      // Derive initial values from the existing message.body when it is valid JSON.
+      let initialValues: Record<string, string> = {}
+      const bodyValue = message && typeof message.body === 'string' ? message.body : ''
+      if (bodyValue && bodyValue.trim().length > 0) {
+        try {
+          const parsedBody = JSON.parse(bodyValue) as unknown
+          if (parsedBody && typeof parsedBody === 'object' && !Array.isArray(parsedBody)) {
+            const obj = parsedBody as Record<string, unknown>
+            const map: Record<string, string> = {}
+            fields.forEach((field) => {
+              const raw = obj[field.name]
+              if (raw === null || raw === undefined) {
+                return
+              }
+              if (typeof raw === 'string') {
+                map[field.name] = raw
+              } else if (typeof raw === 'number' || typeof raw === 'boolean') {
+                map[field.name] = String(raw)
+              } else {
+                try {
+                  map[field.name] = JSON.stringify(raw)
+                } catch {
+                  // ignore
+                }
+              }
+            })
+            initialValues = map
+          }
+        } catch {
+          // Ignore parse errors; start with empty values.
+        }
+      }
+
+      setSchemaEditorState({
+        kind: 'generator',
+        beeIndex,
+        templatePath: undefined,
+        schemaPath,
+        pointer,
+        fields,
+        initialValues,
+        schemaOptions,
+        rawSchema: schemaText,
+        templateRaw: undefined,
+      })
+      setSchemaEditorValues(initialValues)
+      setSchemaEditorError(null)
+    },
+    [fetchScenarioSchema, listScenarioSchemas, selectedId, setToast, templateDraft],
+  )
+
+  const openHttpTemplateSchemaEditor = useCallback(async (templatePathOverride?: string | null) => {
+    if (!selectedId) {
+      setToast('No scenario selected for HTTP template editing')
+      return
+    }
+    let templatePaths: string[]
+    try {
+      templatePaths = await listHttpTemplates(selectedId)
+    } catch (e) {
+      setToast(
+        e instanceof Error ? `Failed to list HTTP templates: ${e.message}` : 'Failed to list HTTP templates',
+      )
+      return
+    }
+    if (!templatePaths || templatePaths.length === 0) {
+      setToast('No HTTP templates found in this scenario bundle (expected under http-templates/)')
+      return
+    }
+    const templatePath =
+      templatePathOverride && templatePaths.includes(templatePathOverride)
+        ? templatePathOverride
+        : templatePaths[0]
+    let templateText: string
+    try {
+      templateText = await fetchHttpTemplate(selectedId, templatePath)
+    } catch (e) {
+      setToast(
+        e instanceof Error ? `Failed to load HTTP template: ${e.message}` : 'Failed to load HTTP template',
+      )
+      return
+    }
+    let templateDoc: unknown
+    try {
+      templateDoc = YAML.parse(templateText) ?? {}
+    } catch (e) {
+      setToast(
+        e instanceof Error ? `Failed to parse HTTP template YAML: ${e.message}` : 'Failed to parse HTTP template YAML',
+      )
+      return
+    }
+    if (!templateDoc || typeof templateDoc !== 'object' || Array.isArray(templateDoc)) {
+      setToast('HTTP template must be a YAML object')
+      return
+    }
+    const templateObj = templateDoc as Record<string, unknown>
+    const schemaRefValue =
+      typeof templateObj.schemaRef === 'string' ? (templateObj.schemaRef as string).trim() : ''
+
+    let pointer: string | null = null
+    let schemaPathFromRef: string | null = null
+    if (schemaRefValue) {
+      const [schemaPathRaw, pointerRaw] = schemaRefValue.split('#', 2)
+      const trimmedPath = schemaPathRaw.trim()
+      if (trimmedPath.length > 0) {
+        schemaPathFromRef = trimmedPath
+      }
+      if (pointerRaw && pointerRaw.trim().length > 0) {
+        pointer = `#${pointerRaw.trim()}`
+      }
+    }
+
+    let schemaOptions: string[]
+    try {
+      schemaOptions = await listScenarioSchemas(selectedId)
+    } catch (e) {
+      setToast(
+        e instanceof Error ? `Failed to list schema files: ${e.message}` : 'Failed to list schema files',
+      )
+      return
+    }
+
+    if (!schemaRefValue) {
+      setSchemaAttachState({
+        target: 'http-template',
+        beeIndex: null,
+        templatePath,
+        existingOptions: schemaOptions,
+        selectedExisting: schemaOptions.length > 0 ? schemaOptions[0] : null,
+        mode: schemaOptions.length > 0 ? 'existing' : 'new',
+        newPath: 'schemas/http-body.schema.json',
+        newSchemaText: '',
+      })
+      setSchemaAttachError(null)
+      setSchemaAttachBusy(false)
+      return
+    }
+
+    if (!schemaOptions || schemaOptions.length === 0) {
+      setToast('No schema files found for this scenario (expected under schemas/)')
+      return
+    }
+    const schemaPath =
+      schemaPathFromRef && schemaOptions.includes(schemaPathFromRef)
+        ? schemaPathFromRef
+        : schemaOptions[0]
+
+    let schemaText: string
+    try {
+      schemaText = await fetchScenarioSchema(selectedId, schemaPath)
+    } catch (e) {
+      setToast(
+        e instanceof Error ? `Failed to load schema: ${e.message}` : 'Failed to load schema for this scenario',
+      )
+      return
+    }
+
+    let schemaRoot: unknown
+    try {
+      const parsed = JSON.parse(schemaText) as unknown
+      if (!pointer) {
+        schemaRoot = parsed
+      } else {
+        const ptr = pointer.startsWith('#') ? pointer.slice(1) : pointer
+        const segments = ptr.split('/').filter((s) => s.length > 0)
+        let cursor: unknown = parsed
+        for (const segment of segments) {
+          if (typeof cursor !== 'object' || cursor === null || Array.isArray(cursor)) {
+            cursor = undefined
+            break
+          }
+          const key = segment.replace(/~1/g, '/').replace(/~0/g, '~')
+          cursor = (cursor as Record<string, unknown>)[key]
+        }
+        schemaRoot = cursor
+      }
+    } catch (e) {
+      setToast(
+        e instanceof Error ? `Failed to parse schema JSON: ${e.message}` : 'Schema JSON is invalid',
+      )
+      return
+    }
+    if (!schemaRoot || typeof schemaRoot !== 'object' || Array.isArray(schemaRoot)) {
+      setToast('Schema root for HTTP template must be an object with properties')
+      return
+    }
+    const schemaObj = schemaRoot as Record<string, unknown>
+    const propertiesRaw = schemaObj.properties
+    if (!propertiesRaw || typeof propertiesRaw !== 'object' || Array.isArray(propertiesRaw)) {
+      setToast('Schema root does not declare any properties to edit')
+      return
+    }
+    const props = propertiesRaw as Record<string, unknown>
+    const fields: { name: string; description: string | null }[] = []
+    Object.entries(props).forEach(([name, value]) => {
+      if (!name || !value || typeof value !== 'object' || Array.isArray(value)) {
+        return
+      }
+      const propSchema = value as Record<string, unknown>
+      const description =
+        typeof propSchema.description === 'string' && propSchema.description.trim().length > 0
+          ? propSchema.description.trim()
+          : null
+      fields.push({ name, description })
+    })
+    if (fields.length === 0) {
+      setToast('Schema has no simple properties to edit')
+      return
+    }
+
+    let initialValues: Record<string, string> = {}
+    const bodyTemplateValue =
+      typeof templateObj.bodyTemplate === 'string' ? (templateObj.bodyTemplate as string) : ''
+    if (bodyTemplateValue && bodyTemplateValue.trim().length > 0) {
+      try {
+        const parsedBody = JSON.parse(bodyTemplateValue) as unknown
+        if (parsedBody && typeof parsedBody === 'object' && !Array.isArray(parsedBody)) {
+          const obj = parsedBody as Record<string, unknown>
+          const map: Record<string, string> = {}
+          fields.forEach((field) => {
+            const raw = obj[field.name]
+            if (raw === null || raw === undefined) {
+              return
+            }
+            if (typeof raw === 'string') {
+              map[field.name] = raw
+            } else if (typeof raw === 'number' || typeof raw === 'boolean') {
+              map[field.name] = String(raw)
+            } else {
+              try {
+                map[field.name] = JSON.stringify(raw)
+              } catch {
+                // ignore
+              }
+            }
+          })
+          initialValues = map
+        }
+      } catch {
+        // ignore parse errors
+      }
+    }
+
+    setSchemaEditorState({
+      kind: 'http-template',
+      beeIndex: null,
+      templatePath,
+      schemaPath,
+      pointer,
+      fields,
+      initialValues,
+      schemaOptions,
+      rawSchema: schemaText,
+      templateRaw: templateText,
+    })
+    setSchemaEditorValues(initialValues)
+    setSchemaEditorError(null)
+    setSchemaEditorShowRaw(false)
+  }, [fetchHttpTemplate, fetchScenarioSchema, listHttpTemplates, listScenarioSchemas, selectedId, setToast])
+
+  const applySchemaAttach = useCallback(async () => {
+    if (!schemaAttachState || !selectedId) {
+      setSchemaAttachError('No scenario selected for schema attachment')
+      return
+    }
+    if (schemaAttachBusy) {
+      return
+    }
+    const { target, beeIndex, templatePath, mode, selectedExisting, newPath, newSchemaText } =
+      schemaAttachState
+
+    let schemaPath: string
+    if (mode === 'existing') {
+      const chosen = selectedExisting && selectedExisting.trim()
+      if (!chosen) {
+        setSchemaAttachError('Select a schema file to attach')
+        return
+      }
+      schemaPath = chosen
+    } else {
+      let relativePath = (newPath || '').trim()
+      if (!relativePath) {
+        setSchemaAttachError('Schema file path is required')
+        return
+      }
+      if (relativePath.startsWith('/') || relativePath.includes('..')) {
+        setSchemaAttachError(
+          'Schema file path must be relative to the bundle (for example schemas/body.schema.json)',
+        )
+        return
+      }
+      if (!relativePath.startsWith('schemas/')) {
+        relativePath = `schemas/${relativePath}`
+      }
+      const text = newSchemaText.trim()
+      if (!text) {
+        setSchemaAttachError('Schema JSON is required')
+        return
+      }
+      let normalized: string
+      try {
+        const parsed = JSON.parse(text) as unknown
+        normalized = JSON.stringify(parsed, null, 2)
+      } catch (e) {
+        setSchemaAttachError(
+          e instanceof Error ? `Schema JSON is invalid: ${e.message}` : 'Schema JSON is invalid',
+        )
+        return
+      }
+      setSchemaAttachBusy(true)
+      try {
+        await saveScenarioSchema(selectedId, relativePath, normalized)
+      } catch (error) {
+        setSchemaAttachBusy(false)
+        setSchemaAttachError(
+          error instanceof Error ? `Failed to save schema: ${error.message}` : 'Failed to save schema',
+        )
+        return
+      }
+      setSchemaAttachBusy(false)
+      schemaPath = relativePath
+    }
+
+    if (target === 'generator') {
+      if (beeIndex == null || beeIndex < 0) {
+        setSchemaAttachError('Internal error: missing bee index for generator schema attachment')
+        return
+      }
+      applyTemplateUpdate((current) => {
+        const base =
+          current && typeof current === 'object' && !Array.isArray(current)
+            ? { ...(current as Record<string, unknown>) }
+            : {}
+        const beesRaw = Array.isArray((base as Record<string, unknown>).bees)
+          ? ([...(base as Record<string, unknown>).bees as unknown[]] as unknown[])
+          : ([] as unknown[])
+        if (beeIndex < 0 || beeIndex >= beesRaw.length) {
+          return base
+        }
+        const existing =
+          beesRaw[beeIndex] &&
+          typeof beesRaw[beeIndex] === 'object' &&
+          !Array.isArray(beesRaw[beeIndex])
+            ? { ...(beesRaw[beeIndex] as Record<string, unknown>) }
+            : {}
+        const configRaw = existing.config
+        const config =
+          configRaw && typeof configRaw === 'object' && !Array.isArray(configRaw)
+            ? { ...(configRaw as Record<string, unknown>) }
+            : {}
+        const workerRaw = config.worker
+        const worker =
+          workerRaw && typeof workerRaw === 'object' && !Array.isArray(workerRaw)
+            ? { ...(workerRaw as Record<string, unknown>) }
+            : {}
+        const messageRaw = worker.message
+        const message =
+          messageRaw && typeof messageRaw === 'object' && !Array.isArray(messageRaw)
+            ? { ...(messageRaw as Record<string, unknown>) }
+            : {}
+        message.schemaRef = schemaPath
+        worker.message = message
+        config.worker = worker
+        existing.config = config
+        beesRaw[beeIndex] = existing
+        ;(base as Record<string, unknown>).bees = beesRaw
+        return base
+      })
+    } else if (target === 'http-template') {
+      if (!templatePath) {
+        setSchemaAttachError('Internal error: missing template path for HTTP template')
+        return
+      }
+      let raw: string
+      try {
+        raw = await fetchHttpTemplate(selectedId, templatePath)
+      } catch (error) {
+        setSchemaAttachError(
+          error instanceof Error
+            ? `Failed to load HTTP template: ${error.message}`
+            : 'Failed to load HTTP template',
+        )
+        return
+      }
+      let doc: unknown
+      try {
+        doc = YAML.parse(raw) ?? {}
+      } catch (e) {
+        setSchemaAttachError(
+          e instanceof Error ? `Failed to parse HTTP template YAML: ${e.message}` : 'Failed to parse HTTP template YAML',
+        )
+        return
+      }
+      if (!doc || typeof doc !== 'object' || Array.isArray(doc)) {
+        setSchemaAttachError('HTTP template must be a YAML object')
+        return
+      }
+      const obj = doc as Record<string, unknown>
+      obj.schemaRef = schemaPath
+      let updatedYaml: string
+      try {
+        updatedYaml = YAML.stringify(obj)
+      } catch (e) {
+        setSchemaAttachError(
+          e instanceof Error
+            ? `Failed to serialise HTTP template YAML: ${e.message}`
+            : 'Failed to serialise HTTP template YAML',
+        )
+        return
+      }
+      try {
+        await saveHttpTemplate(selectedId, templatePath, updatedYaml)
+        if (viewMode === 'httpTemplates' && templatePath === httpTemplateSelectedPath) {
+          setHttpTemplateRaw(updatedYaml)
+        }
+      } catch (error) {
+        setSchemaAttachError(
+          error instanceof Error ? `Failed to save HTTP template: ${error.message}` : 'Failed to save HTTP template',
+        )
+        return
+      }
+    }
+
+    setSchemaAttachState(null)
+    setSchemaAttachError(null)
+  }, [
+    applyTemplateUpdate,
+    fetchHttpTemplate,
+    saveHttpTemplate,
+    saveScenarioSchema,
+    schemaAttachBusy,
+    schemaAttachState,
+    selectedId,
+    httpTemplateSelectedPath,
+    setHttpTemplateRaw,
+    viewMode,
+  ])
+
+  const applySchemaEditor = useCallback(() => {
+    if (!schemaEditorState) {
+      setSchemaEditorError(null)
+      return
+    }
+    const { kind, beeIndex, fields, schemaPath, pointer, templatePath, templateRaw } = schemaEditorState
+    const bodyObject: Record<string, unknown> = {}
+      fields.forEach((field) => {
+        const raw = schemaEditorValues[field.name]
+        if (raw === undefined || raw === '') {
+          return
+        }
+      // Always store as string so templating markers like {{ var }} are preserved.
+      bodyObject[field.name] = raw
+    })
+    let bodyJson = '{}'
+    try {
+      bodyJson = JSON.stringify(bodyObject, null, 2)
+    } catch (e) {
+      setSchemaEditorError(
+        e instanceof Error ? `Failed to serialise body as JSON: ${e.message}` : 'Failed to serialise body as JSON',
+      )
+      return
+    }
+    if (kind === 'generator') {
+      if (beeIndex == null || beeIndex < 0) {
+        setSchemaEditorError('Internal error: missing bee index for generator schema editor')
+        return
+      }
+      applyTemplateUpdate((current) => {
+        const base =
+          current && typeof current === 'object' && !Array.isArray(current)
+            ? { ...(current as Record<string, unknown>) }
+            : {}
+        const beesRaw = Array.isArray((base as Record<string, unknown>).bees)
+          ? ([...(base as Record<string, unknown>).bees as unknown[]] as unknown[])
+          : ([] as unknown[])
+        if (beeIndex < 0 || beeIndex >= beesRaw.length) {
+          return base
+        }
+        const existing =
+          beesRaw[beeIndex] &&
+          typeof beesRaw[beeIndex] === 'object' &&
+          !Array.isArray(beesRaw[beeIndex])
+            ? { ...(beesRaw[beeIndex] as Record<string, unknown>) }
+            : {}
+        const configRaw = existing.config
+        const config =
+          configRaw && typeof configRaw === 'object' && !Array.isArray(configRaw)
+            ? { ...(configRaw as Record<string, unknown>) }
+            : {}
+        const workerRaw = config.worker
+        const worker =
+          workerRaw && typeof workerRaw === 'object' && !Array.isArray(workerRaw)
+            ? { ...(workerRaw as Record<string, unknown>) }
+            : {}
+        const messageRaw = worker.message
+        const message =
+          messageRaw && typeof messageRaw === 'object' && !Array.isArray(messageRaw)
+            ? { ...(messageRaw as Record<string, unknown>) }
+            : {}
+        const ref =
+          pointer && pointer.length > 0
+            ? `${schemaPath}${pointer}`
+            : schemaPath
+        message.schemaRef = ref
+        message.body = bodyJson
+        worker.message = message
+        config.worker = worker
+        existing.config = config
+        beesRaw[beeIndex] = existing
+        ;(base as Record<string, unknown>).bees = beesRaw
+        return base
+      })
+    } else if (kind === 'http-template') {
+      if (!selectedId || !templatePath) {
+        setSchemaEditorError('Internal error: missing template path for HTTP template editor')
+        return
+      }
+      const raw = templateRaw ?? ''
+      if (!raw) {
+        setSchemaEditorError('Internal error: missing template content for HTTP template editor')
+        return
+      }
+      let doc: unknown
+      try {
+        doc = YAML.parse(raw) ?? {}
+      } catch (e) {
+        setSchemaEditorError(
+          e instanceof Error ? `Failed to parse HTTP template YAML: ${e.message}` : 'Failed to parse HTTP template YAML',
+        )
+        return
+      }
+      if (!doc || typeof doc !== 'object' || Array.isArray(doc)) {
+        setSchemaEditorError('HTTP template must be a YAML object')
+        return
+      }
+      const obj = doc as Record<string, unknown>
+      const ref = pointer && pointer.length > 0 ? `${schemaPath}${pointer}` : schemaPath
+      obj.schemaRef = ref
+      obj.bodyTemplate = bodyJson
+      let updatedYaml: string
+      try {
+        updatedYaml = YAML.stringify(obj)
+      } catch (e) {
+        setSchemaEditorError(
+          e instanceof Error ? `Failed to serialise HTTP template YAML: ${e.message}` : 'Failed to serialise HTTP template YAML',
+        )
+        return
+      }
+      setHttpTemplateRaw((current) => {
+        if (viewMode === 'httpTemplates' && templatePath === httpTemplateSelectedPath) {
+          return updatedYaml
+        }
+        return current
+      })
+      void saveHttpTemplate(selectedId, templatePath, updatedYaml).catch((error) => {
+        setSchemaEditorError(
+          error instanceof Error ? `Failed to save HTTP template: ${error.message}` : 'Failed to save HTTP template',
+        )
+      })
+    }
+    setSchemaEditorState(null)
+    setSchemaEditorValues({})
+    setSchemaEditorError(null)
+  }, [applyTemplateUpdate, saveHttpTemplate, schemaEditorState, schemaEditorValues, selectedId])
+
   const getValueForPath = useCallback(
     (config: Record<string, unknown> | undefined, path: string): unknown => {
       if (!config || !path) return undefined
@@ -1788,6 +2584,110 @@ export default function ScenariosPage() {
     },
     [inferIoTypeFromConfig, manifests],
   )
+
+  useEffect(() => {
+    if (!selectedId || viewMode !== 'httpTemplates') {
+      setHttpTemplatePaths([])
+      setHttpTemplateSelectedPath(null)
+      setHttpTemplateRaw('')
+      setHttpTemplateError(null)
+      setHttpTemplateLoading(false)
+      setHttpTemplateSaving(false)
+      return
+    }
+    let cancelled = false
+    const load = async () => {
+      setHttpTemplateLoading(true)
+      setHttpTemplateError(null)
+      try {
+        const paths = await listHttpTemplates(selectedId)
+        if (cancelled) return
+        setHttpTemplatePaths(paths)
+        if (paths.length === 0) {
+          setHttpTemplateSelectedPath(null)
+          setHttpTemplateRaw('')
+          return
+        }
+        const first = paths[0]!
+        setHttpTemplateSelectedPath(first)
+        try {
+          const text = await fetchHttpTemplate(selectedId, first)
+          if (cancelled) return
+          setHttpTemplateRaw(text)
+        } catch (e) {
+          if (cancelled) return
+          setHttpTemplateError(
+            e instanceof Error ? `Failed to load HTTP template: ${e.message}` : 'Failed to load HTTP template',
+          )
+        }
+      } catch (e) {
+        if (cancelled) return
+        setHttpTemplateError(
+          e instanceof Error ? `Failed to list HTTP templates: ${e.message}` : 'Failed to list HTTP templates',
+        )
+      } finally {
+        if (!cancelled) {
+          setHttpTemplateLoading(false)
+        }
+      }
+    }
+    void load()
+    return () => {
+      cancelled = true
+    }
+  }, [fetchHttpTemplate, listHttpTemplates, selectedId, viewMode])
+
+  useEffect(() => {
+    if (!selectedId || viewMode !== 'httpTemplates') {
+      setHttpTemplatePaths([])
+      setHttpTemplateSelectedPath(null)
+      setHttpTemplateRaw('')
+      setHttpTemplateError(null)
+      setHttpTemplateLoading(false)
+      setHttpTemplateSaving(false)
+      return
+    }
+    let cancelled = false
+    const load = async () => {
+      setHttpTemplateLoading(true)
+      setHttpTemplateError(null)
+      try {
+        const paths = await listHttpTemplates(selectedId)
+        if (cancelled) return
+        setHttpTemplatePaths(paths)
+        if (paths.length === 0) {
+          setHttpTemplateSelectedPath(null)
+          setHttpTemplateRaw('')
+          return
+        }
+        const first = paths[0]!
+        setHttpTemplateSelectedPath(first)
+        try {
+          const text = await fetchHttpTemplate(selectedId, first)
+          if (cancelled) return
+          setHttpTemplateRaw(text)
+        } catch (e) {
+          if (cancelled) return
+          setHttpTemplateError(
+            e instanceof Error ? `Failed to load HTTP template: ${e.message}` : 'Failed to load HTTP template',
+          )
+        }
+      } catch (e) {
+        if (cancelled) return
+        setHttpTemplateError(
+          e instanceof Error ? `Failed to list HTTP templates: ${e.message}` : 'Failed to list HTTP templates',
+        )
+      } finally {
+        if (!cancelled) {
+          setHttpTemplateLoading(false)
+        }
+      }
+    }
+    void load()
+    return () => {
+      cancelled = true
+    }
+  }, [fetchHttpTemplate, listHttpTemplates, selectedId, viewMode])
 
   const openConfigModal = useCallback(
     async (target: ConfigTarget) => {
@@ -2446,6 +3346,17 @@ export default function ScenariosPage() {
               >
                 Swarm template
               </button>
+              <button
+                type="button"
+                className={`rounded px-2 py-1 text-[11px] ${
+                  viewMode === 'httpTemplates'
+                    ? 'bg-white/20 text-white'
+                    : 'bg-white/5 text-white/70 hover:bg-white/10'
+                }`}
+                onClick={() => setViewMode('httpTemplates')}
+              >
+                HTTP templates
+              </button>
             </div>
             {viewMode === 'plan' && planDraft && (
               <div className="border border-white/15 rounded-md p-3 bg-white/5 space-y-3">
@@ -2882,7 +3793,178 @@ export default function ScenariosPage() {
                   onOpenConfig={(beeIndex) =>
                     openConfigModal({ kind: 'template-bee', beeIndex, stepIndex: 0 })
                   }
+                  onOpenSchemaEditor={(beeIndex) => void openSchemaEditor(beeIndex)}
                 />
+              </div>
+            )}
+            {viewMode === 'httpTemplates' && (
+              <div className="border border-white/15 rounded-md p-3 bg-white/5 space-y-3">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-xs font-semibold text-white/80">
+                    HTTP templates
+                  </h3>
+                  <div className="flex items-center gap-2">
+                    {httpTemplateSelectedPath && (
+                      <button
+                        type="button"
+                        className="rounded bg-sky-500/20 px-2 py-1 text-[11px] text-sky-100 hover:bg-sky-500/30"
+                        onClick={() => void openHttpTemplateSchemaEditor(httpTemplateSelectedPath)}
+                      >
+                        Edit body via schema
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className="rounded bg-white/10 px-2 py-1 text-[11px] text-white/80 hover:bg-white/20 disabled:opacity-40"
+                      disabled={!selectedId || httpTemplateSaving}
+                      onClick={async () => {
+                        if (!selectedId) return
+                        const existing = new Set(httpTemplatePaths)
+                        let index = 1
+                        let path: string
+                        do {
+                          path = `http-templates/template-${index}.yaml`
+                          index += 1
+                        } while (existing.has(path))
+                        const initialYaml = [
+                          '# New HTTP template',
+                          'schemaRef: ""',
+                          'bodyTemplate: |',
+                          '  {',
+                          '    "example": "value"',
+                          '  }',
+                          '',
+                        ].join('\n')
+                        setHttpTemplateSaving(true)
+                        setHttpTemplateError(null)
+                        try {
+                          await saveHttpTemplate(selectedId, path, initialYaml)
+                          setHttpTemplatePaths((current) => {
+                            const next = [...current, path]
+                            next.sort((a, b) => a.localeCompare(b))
+                            return next
+                          })
+                          setHttpTemplateSelectedPath(path)
+                          setHttpTemplateRaw(initialYaml)
+                        } catch (e) {
+                          setHttpTemplateError(
+                            e instanceof Error
+                              ? `Failed to create HTTP template: ${e.message}`
+                              : 'Failed to create HTTP template',
+                          )
+                        } finally {
+                          setHttpTemplateSaving(false)
+                        }
+                      }}
+                    >
+                      Add template
+                    </button>
+                  </div>
+                </div>
+                {!selectedId && (
+                  <div className="text-[11px] text-white/60">
+                    Select a scenario to inspect HTTP templates.
+                  </div>
+                )}
+                {selectedId && (
+                  <div className="flex gap-3">
+                    <div className="w-64 border border-white/15 rounded bg-black/40 p-2 text-[11px] text-white/80">
+                      <div className="font-semibold mb-1 text-white/80">Template files</div>
+                      {httpTemplateLoading && (
+                        <div className="text-[10px] text-white/60">Loading templates…</div>
+                      )}
+                      {httpTemplateError && (
+                        <div className="text-[10px] text-red-400">{httpTemplateError}</div>
+                      )}
+                      {!httpTemplateLoading && !httpTemplateError && httpTemplatePaths.length === 0 && (
+                        <div className="text-[10px] text-white/60">
+                          No HTTP templates found (expected under <span className="font-mono">http-templates/</span>).
+                        </div>
+                      )}
+                      {httpTemplatePaths.length > 0 && (
+                        <ul className="mt-1 max-h-56 overflow-y-auto">
+                          {httpTemplatePaths.map((path) => {
+                            const isSelected = path === httpTemplateSelectedPath
+                            return (
+                              <li key={path}>
+                                <button
+                                  type="button"
+                                  className={`w-full text-left px-2 py-1 rounded text-[10px] ${
+                                    isSelected
+                                      ? 'bg-sky-500/40 text-white'
+                                      : 'bg-transparent text-white/80 hover:bg-white/10'
+                                  }`}
+                                  onClick={async () => {
+                                    if (!selectedId) return
+                                    setHttpTemplateSelectedPath(path)
+                                    setHttpTemplateError(null)
+                                    try {
+                                      const text = await fetchHttpTemplate(selectedId, path)
+                                      setHttpTemplateRaw(text)
+                                    } catch (e) {
+                                      setHttpTemplateError(
+                                        e instanceof Error
+                                          ? `Failed to load HTTP template: ${e.message}`
+                                          : 'Failed to load HTTP template',
+                                      )
+                                    }
+                                  }}
+                                >
+                                  {path}
+                                </button>
+                              </li>
+                            )
+                          })}
+                        </ul>
+                      )}
+                    </div>
+                    <div className="flex-1 flex flex-col min-h-[260px]">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-[11px] text-white/80">
+                          Template YAML
+                          {httpTemplateSelectedPath && (
+                            <span className="ml-1 font-mono text-white/70">
+                              ({httpTemplateSelectedPath})
+                            </span>
+                          )}
+                        </span>
+                        <button
+                          type="button"
+                          className="rounded bg-white/10 px-2 py-0.5 text-[10px] text-white/80 hover:bg-white/20 disabled:opacity-40"
+                          disabled={!httpTemplateSelectedPath || httpTemplateSaving}
+                          onClick={async () => {
+                            if (!selectedId || !httpTemplateSelectedPath) return
+                            setHttpTemplateSaving(true)
+                            setHttpTemplateError(null)
+                            try {
+                              await saveHttpTemplate(selectedId, httpTemplateSelectedPath, httpTemplateRaw)
+                            } catch (e) {
+                              setHttpTemplateError(
+                                e instanceof Error
+                                  ? `Failed to save HTTP template: ${e.message}`
+                                  : 'Failed to save HTTP template',
+                              )
+                            } finally {
+                              setHttpTemplateSaving(false)
+                            }
+                          }}
+                        >
+                          {httpTemplateSaving ? 'Saving…' : 'Save template'}
+                        </button>
+                      </div>
+                      <textarea
+                        className="flex-1 w-full rounded border border-white/20 bg-black/40 px-2 py-1 text-[11px] font-mono text-white/90 resize-none"
+                        value={httpTemplateRaw}
+                        onChange={(e) => setHttpTemplateRaw(e.target.value)}
+                        placeholder={
+                          httpTemplateSelectedPath
+                            ? '# HTTP template YAML'
+                            : '# Select a template from the list to view or edit its YAML'
+                        }
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -3111,6 +4193,432 @@ export default function ScenariosPage() {
                 type="button"
                 className="rounded bg-sky-500/80 px-3 py-1 text-[11px] text-white hover:bg-sky-500"
                 onClick={() => applyConfigModal()}
+              >
+                Apply
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {schemaAttachState && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/70">
+          <div
+            role="dialog"
+            aria-modal="true"
+            className="w-full max-w-lg rounded-lg bg-[#05070b] border border-white/20 p-4 text-sm text-white"
+          >
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-xs font-semibold text-white/80">
+                {schemaAttachState.target === 'http-template'
+                  ? 'Attach schema for HTTP template'
+                  : 'Attach schema for generator HTTP body'}
+              </h3>
+              <button
+                type="button"
+                className="text-white/60 hover:text-white"
+                onClick={() => {
+                  setSchemaAttachState(null)
+                  setSchemaAttachError(null)
+                  setSchemaAttachBusy(false)
+                }}
+              >
+                ×
+              </button>
+            </div>
+            <div className="space-y-3 mb-3 text-[11px] text-white/70">
+              {schemaAttachState.existingOptions.length > 0 && (
+                <div className="space-y-1">
+                  <label className="flex items-center gap-2 text-[11px]">
+                    <input
+                      type="radio"
+                      className="h-3 w-3 accent-blue-500"
+                      checked={schemaAttachState.mode === 'existing'}
+                      onChange={() =>
+                        setSchemaAttachState((current) =>
+                          current
+                            ? {
+                                ...current,
+                                mode: 'existing',
+                              }
+                            : current,
+                        )
+                      }
+                    />
+                    <span>Use existing schema file</span>
+                  </label>
+                  {schemaAttachState.mode === 'existing' && (
+                    <select
+                      className="mt-1 w-full rounded bg-white/10 px-2 py-1 text-white text-[11px]"
+                      value={schemaAttachState.selectedExisting ?? ''}
+                      onChange={(event) =>
+                        setSchemaAttachState((current) =>
+                          current
+                            ? {
+                                ...current,
+                                selectedExisting: event.target.value || null,
+                              }
+                            : current,
+                        )
+                      }
+                    >
+                      {schemaAttachState.existingOptions.map((option) => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+              )}
+              <div className="space-y-1">
+                <label className="flex items-center gap-2 text-[11px]">
+                  <input
+                    type="radio"
+                    className="h-3 w-3 accent-blue-500"
+                    checked={schemaAttachState.mode === 'new'}
+                    onChange={() =>
+                      setSchemaAttachState((current) =>
+                        current
+                          ? {
+                              ...current,
+                              mode: 'new',
+                            }
+                          : current,
+                      )
+                    }
+                  />
+                  <span>Create new schema file in bundle</span>
+                </label>
+                {schemaAttachState.mode === 'new' && (
+                  <div className="space-y-1 pl-4">
+                    <input
+                      className="w-full rounded bg-white/10 px-2 py-1 text-white text-[11px]"
+                      placeholder="schemas/body.schema.json"
+                      value={schemaAttachState.newPath}
+                      onChange={(event) =>
+                        setSchemaAttachState((current) =>
+                          current
+                            ? {
+                                ...current,
+                                newPath: event.target.value,
+                              }
+                            : current,
+                        )
+                      }
+                    />
+                    <textarea
+                      className="w-full h-32 rounded bg-white/10 px-2 py-1 text-white text-[11px] resize-none"
+                      placeholder='{"type":"object","properties":{}}'
+                      value={schemaAttachState.newSchemaText}
+                      onChange={(event) =>
+                        setSchemaAttachState((current) =>
+                          current
+                            ? {
+                                ...current,
+                                newSchemaText: event.target.value,
+                              }
+                            : current,
+                        )
+                      }
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+            {schemaAttachError && (
+              <div className="mb-2 text-[11px] text-red-400">{schemaAttachError}</div>
+            )}
+            <div className="flex items-center justify-end gap-2">
+              <button
+                type="button"
+                className="rounded px-2 py-1 text-[11px] text-white/70 hover:bg-white/10"
+                onClick={() => {
+                  setSchemaAttachState(null)
+                  setSchemaAttachError(null)
+                  setSchemaAttachBusy(false)
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="rounded bg-sky-500/80 px-3 py-1 text-[11px] text-white hover:bg-sky-500 disabled:opacity-60"
+                disabled={schemaAttachBusy}
+                onClick={() => {
+                  void applySchemaAttach()
+                }}
+              >
+                {schemaAttachBusy ? 'Attaching…' : 'Attach schema'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {schemaEditorState && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/70">
+          <div
+            role="dialog"
+            aria-modal="true"
+            className="w-full max-w-lg rounded-lg bg-[#05070b] border border-white/20 p-4 text-sm text-white"
+          >
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-xs font-semibold text-white/80">
+                {schemaEditorState.kind === 'http-template'
+                  ? 'Edit HTTP Builder body from schema'
+                  : 'Edit generator HTTP body from schema'}
+              </h3>
+              <button
+                type="button"
+                className="text-white/60 hover:text-white"
+                onClick={() => {
+                  setSchemaEditorState(null)
+                  setSchemaEditorValues({})
+                  setSchemaEditorError(null)
+                }}
+              >
+                ×
+              </button>
+            </div>
+            {schemaEditorState.kind === 'generator' && (
+              <div className="mb-2 text-[11px] text-white/60 flex items-center gap-2">
+                <span>Schema:</span>
+                <select
+                  className="flex-1 rounded bg-white/10 px-2 py-1 text-white text-[11px]"
+                  value={schemaEditorState.schemaPath}
+                  onChange={async (event) => {
+                  const nextPath = event.target.value
+                  if (!schemaEditorState || !selectedId || !templateDraft) return
+                  try {
+                    const text = await fetchScenarioSchema(selectedId, nextPath)
+                    let schemaRoot: unknown
+                    try {
+                      const parsed = JSON.parse(text) as unknown
+                      const ptr = schemaEditorState.pointer
+                      if (!ptr) {
+                        schemaRoot = parsed
+                      } else {
+                        const rawPtr = ptr.startsWith('#') ? ptr.slice(1) : ptr
+                        const segments = rawPtr.split('/').filter((s) => s.length > 0)
+                        let cursor: unknown = parsed
+                        for (const segment of segments) {
+                          if (
+                            typeof cursor !== 'object' ||
+                            cursor === null ||
+                            Array.isArray(cursor)
+                          ) {
+                            cursor = undefined
+                            break
+                          }
+                          const key = segment.replace(/~1/g, '/').replace(/~0/g, '~')
+                          cursor = (cursor as Record<string, unknown>)[key]
+                        }
+                        schemaRoot = cursor
+                      }
+                    } catch {
+                      setSchemaEditorError('Schema JSON is invalid for the selected file')
+                      return
+                    }
+                    if (
+                      !schemaRoot ||
+                      typeof schemaRoot !== 'object' ||
+                      Array.isArray(schemaRoot)
+                    ) {
+                      setSchemaEditorError(
+                        'Schema root for the selected file/pointer must be an object with properties',
+                      )
+                      return
+                    }
+                    const schemaObj = schemaRoot as Record<string, unknown>
+                    const propertiesRaw = schemaObj.properties
+                    if (
+                      !propertiesRaw ||
+                      typeof propertiesRaw !== 'object' ||
+                      Array.isArray(propertiesRaw)
+                    ) {
+                      setSchemaEditorError(
+                        'Schema root for the selected file does not declare any properties',
+                      )
+                      return
+                    }
+                    const props = propertiesRaw as Record<string, unknown>
+                    const fields: { name: string; description: string | null }[] = []
+                    Object.entries(props).forEach(([name, value]) => {
+                      if (!name || !value || typeof value !== 'object' || Array.isArray(value)) {
+                        return
+                      }
+                      const propSchema = value as Record<string, unknown>
+                      const description =
+                        typeof propSchema.description === 'string' &&
+                        propSchema.description.trim().length > 0
+                          ? propSchema.description.trim()
+                          : null
+                      fields.push({ name, description })
+                    })
+                    if (fields.length === 0) {
+                      setSchemaEditorError(
+                        'Schema for the selected file has no simple properties to edit',
+                      )
+                      return
+                    }
+
+                    // Recompute initial values from existing body for the new schema.
+                    if (
+                      schemaEditorState.kind !== 'generator' ||
+                      schemaEditorState.beeIndex == null
+                    ) {
+                      setSchemaEditorError(
+                        'Internal error: schema editor is not bound to a generator bee',
+                      )
+                      return
+                    }
+                    const config = resolveBeeTemplateConfig(schemaEditorState.beeIndex)
+                    const worker =
+                      config &&
+                      config.worker &&
+                      typeof config.worker === 'object' &&
+                      !Array.isArray(config.worker)
+                        ? (config.worker as Record<string, unknown>)
+                        : undefined
+                    const message =
+                      worker &&
+                      worker.message &&
+                      typeof worker.message === 'object' &&
+                      !Array.isArray(worker.message)
+                        ? (worker.message as Record<string, unknown>)
+                        : undefined
+                    const bodyValue =
+                      message && typeof message.body === 'string' ? message.body : ''
+                    let initialValues: Record<string, string> = {}
+                    if (bodyValue && bodyValue.trim().length > 0) {
+                      try {
+                        const parsedBody = JSON.parse(bodyValue) as unknown
+                        if (
+                          parsedBody &&
+                          typeof parsedBody === 'object' &&
+                          !Array.isArray(parsedBody)
+                        ) {
+                          const obj = parsedBody as Record<string, unknown>
+                          const map: Record<string, string> = {}
+                          fields.forEach((field) => {
+                            const raw = obj[field.name]
+                            if (raw === null || raw === undefined) {
+                              return
+                            }
+                            if (typeof raw === 'string') {
+                              map[field.name] = raw
+                            } else if (
+                              typeof raw === 'number' ||
+                              typeof raw === 'boolean'
+                            ) {
+                              map[field.name] = String(raw)
+                            } else {
+                              try {
+                                map[field.name] = JSON.stringify(raw)
+                              } catch {
+                                // ignore
+                              }
+                            }
+                          })
+                          initialValues = map
+                        }
+                      } catch {
+                        // ignore parse errors
+                      }
+                    }
+
+                    setSchemaEditorState((current) =>
+                      current
+                        ? {
+                            ...current,
+                            schemaPath: nextPath,
+                            fields,
+                            initialValues,
+                            rawSchema: text,
+                          }
+                        : null,
+                    )
+                    setSchemaEditorValues(initialValues)
+                    setSchemaEditorError(null)
+                  } catch (error) {
+                    setSchemaEditorError(
+                      error instanceof Error
+                        ? `Failed to load schema: ${error.message}`
+                        : 'Failed to load selected schema file',
+                    )
+                  }
+                }}
+                >
+                  {schemaEditorState.schemaOptions.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+            <div className="max-h-64 overflow-y-auto space-y-2 mb-3">
+              <button
+                type="button"
+                className="mb-2 rounded border border-white/25 bg-black/40 px-2 py-1 text-[10px] text-white/70 hover:bg-black/60"
+                onClick={() => setSchemaEditorShowRaw((prev) => !prev)}
+              >
+                {schemaEditorShowRaw ? 'Hide raw schema JSON' : 'Show raw schema JSON'}
+              </button>
+              {schemaEditorShowRaw && (
+                <pre className="mb-2 max-h-40 overflow-auto rounded bg-black/80 p-2 text-[10px] text-sky-100 whitespace-pre-wrap border border-white/15">
+                  {schemaEditorState.rawSchema}
+                </pre>
+              )}
+              {schemaEditorState.fields.map((field) => {
+                const value =
+                  schemaEditorValues[field.name] ??
+                  schemaEditorState.initialValues[field.name] ??
+                  ''
+                return (
+                  <label key={field.name} className="block space-y-1 text-xs">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="block text-white/70">
+                        {field.name}
+                        {field.description && (
+                          <span className="text-white/40"> — {field.description}</span>
+                        )}
+                      </span>
+                    </div>
+                    <input
+                      className="w-full rounded bg-white/10 px-2 py-1 text-white text-xs"
+                      type="text"
+                      value={value}
+                      onChange={(event) =>
+                        setSchemaEditorValues((prev) => ({
+                          ...prev,
+                          [field.name]: event.target.value,
+                        }))
+                      }
+                      placeholder="Enter literal or {{ template }} value"
+                    />
+                  </label>
+                )
+              })}
+            </div>
+            {schemaEditorError && (
+              <div className="mb-2 text-[11px] text-red-400">{schemaEditorError}</div>
+            )}
+            <div className="flex items-center justify-end gap-2">
+              <button
+                type="button"
+                className="rounded px-2 py-1 text-[11px] text-white/70 hover:bg-white/10"
+                onClick={() => {
+                  setSchemaEditorState(null)
+                  setSchemaEditorValues({})
+                  setSchemaEditorError(null)
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="rounded bg-sky-500/80 px-3 py-1 text-[11px] text-white hover:bg-sky-500"
+                onClick={() => applySchemaEditor()}
               >
                 Apply
               </button>

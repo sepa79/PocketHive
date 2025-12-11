@@ -1,3 +1,4 @@
+schemaRef: "schemas/redis-payload.schema.json"
 serviceId: default
 callId: redis-balance
 method: POST
@@ -6,4 +7,3 @@ bodyTemplate: "{{ payload }}"
 headersTemplate:
   content-type: application/json
   x-demo-call: balance
-
