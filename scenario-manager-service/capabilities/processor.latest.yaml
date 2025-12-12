@@ -108,5 +108,37 @@ config:
     ui:
       label: Connection reuse
       group: HTTP
+  - name: tcpTransport.type
+    type: string
+    default: "socket"
+    options:
+      - "socket"
+      - "nio"
+      - "netty"
+  - name: tcpTransport.connectionReuse
+    type: string
+    default: "PER_THREAD"
+    options:
+      - "GLOBAL"
+      - "PER_THREAD"
+      - "NONE"
+  - name: tcpTransport.ratePerSec
+    type: double
+    default: 0.0
+  - name: tcpTransport.maxRetries
+    type: int
+    default: 3
+  - name: tcpTransport.connectTimeoutMs
+    type: int
+    default: 5000
+  - name: tcpTransport.readTimeoutMs
+    type: int
+    default: 30000
+  - name: tcpTransport.ssl.enabled
+    type: boolean
+    default: false
+  - name: tcpTransport.ssl.verifyHostname
+    type: boolean
+    default: true
 actions: []
 panels: []

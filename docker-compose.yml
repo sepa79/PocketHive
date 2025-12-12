@@ -166,6 +166,15 @@ services:
       retries: 12
       start_period: 10s
 
+  tcp-mock:
+    image: node:18-alpine
+    working_dir: /app
+    command: ["node", "tcp-mock.js"]
+    ports:
+      - "8082:8080"
+    volumes:
+      - ./wiremock/tcp-mock.js:/app/tcp-mock.js:ro
+
   # promtail:
   #   # disabled: logs are shipped via RabbitMQ and aggregated to Loki
   #   image: grafana/promtail:2.9.1

@@ -24,7 +24,16 @@ pockethive:
       routingKey: ${POCKETHIVE_OUTPUT_RABBIT_ROUTING_KEY}
   worker:
     config:
-      base-url: http://wiremock:8080
+      baseUrl: http://wiremock:8080
+      tcpTransport:
+        type: socket
+        connectionReuse: PER_THREAD
+        maxRetries: 3
+        connectTimeoutMs: 5000
+        readTimeoutMs: 30000
+        ssl:
+          enabled: false
+          verifyHostname: true
   control-plane:
     exchange: ${POCKETHIVE_CONTROL_PLANE_EXCHANGE}
     swarm-id: ${POCKETHIVE_CONTROL_PLANE_SWARM_ID}

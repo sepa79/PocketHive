@@ -8,13 +8,13 @@ import org.springframework.stereotype.Component;
 
 @Component
 @PocketHiveWorkerConfigProperties
-class ProcessorWorkerProperties extends CanonicalWorkerProperties<ProcessorWorkerConfig> {
+public class ProcessorWorkerProperties extends CanonicalWorkerProperties<ProcessorWorkerConfig> {
 
-  ProcessorWorkerProperties(ObjectMapper mapper, WorkerControlPlaneProperties controlPlaneProperties) {
+  public ProcessorWorkerProperties(ObjectMapper mapper, WorkerControlPlaneProperties controlPlaneProperties) {
     super(() -> controlPlaneProperties.getWorker().getRole(), ProcessorWorkerConfig.class, mapper);
   }
 
-  ProcessorWorkerConfig defaultConfig() {
+  public ProcessorWorkerConfig defaultConfig() {
     return toConfig(objectMapper()).orElseThrow(() ->
         new IllegalStateException("Missing processor config under pockethive.worker.config"));
   }
