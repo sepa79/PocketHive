@@ -60,6 +60,7 @@ public class SwarmSignalListener {
   private final String role;
   private final String controlExchange;
   private final SwarmDiagnosticsAggregator diagnostics;
+  private final SwarmIoStateAggregator ioStates;
   private final SwarmJournal journal;
   private static final long STATUS_INTERVAL_MS = 5000L;
   private static final long MAX_STALENESS_MS = 15_000L;
@@ -84,6 +85,7 @@ public class SwarmSignalListener {
     this.role = properties.getRole();
     this.controlExchange = properties.getControlExchange();
     this.diagnostics = new SwarmDiagnosticsAggregator(this.mapper);
+    this.ioStates = new SwarmIoStateAggregator();
     this.journal = journal != null ? journal : SwarmJournal.noop();
     ControlPlanePublisher basePublisher = new AmqpControlPlanePublisher(rabbit, controlExchange);
     ControlPlanePublisher publisher = new JournalControlPlanePublisher(this.mapper, this.journal, basePublisher);
@@ -183,6 +185,7 @@ public class SwarmSignalListener {
       }
       lifecycle.updateHeartbeat(role, instance);
       diagnostics.updateFromWorkerStatus(role, instance, node.path("data"));
+      ioStates.updateFromWorkerStatus(role, instance, node.path("data"));
 
       boolean enabled = node.path("data").path("enabled").asBoolean(true);
       lifecycle.updateEnabled(role, instance, enabled);
@@ -748,6 +751,9 @@ public class SwarmSignalListener {
         .controlIn(controlQueue)
         .controlRoutes(SwarmControllerRoutes.controllerControlRoutes(swarmId, role, instanceId))
         .controlOut(rk);
+    SwarmIoStateAggregator.IoState ioState = ioStates.aggregateWork();
+    builder.ioWorkState(ioState.input(), ioState.output(), null);
+    builder.ioControlState("ok", "ok", null);
     appendTrafficPolicy(builder);
     String payload = builder.toJson();
     sendControl(rk, payload, "status");
@@ -782,6 +788,9 @@ public class SwarmSignalListener {
         .controlIn(controlQueue)
         .controlRoutes(SwarmControllerRoutes.controllerControlRoutes(swarmId, role, instanceId))
         .controlOut(rk);
+    SwarmIoStateAggregator.IoState ioState = ioStates.aggregateWork();
+    builder.ioWorkState(ioState.input(), ioState.output(), null);
+    builder.ioControlState("ok", "ok", null);
     appendTrafficPolicy(builder);
     String payload = builder.toJson();
     sendControl(rk, payload, "status");

@@ -385,6 +385,8 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
         .instance(instanceId)
         .origin(instanceId)
         .swarmId(swarmId)
+        .ioControlState("ok", "ok", null)
+        .ioWorkState("unknown", "unknown", null)
         .controlIn(controlQueue)
         .controlRoutes(io.pockethive.swarmcontroller.SwarmControllerRoutes.controllerControlRoutes(swarmId, role, instanceId))
         .controlOut(rk)

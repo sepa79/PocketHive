@@ -142,6 +142,32 @@
         "control": { "$ref": "#/$defs/MetricIoControl" }
       }
     },
+    "IoInputState": {
+      "type": "string",
+      "enum": ["ok", "out-of-data", "backpressure", "upstream-error", "unknown"]
+    },
+    "IoOutputState": {
+      "type": "string",
+      "enum": ["ok", "blocked", "throttled", "downstream-error", "unknown"]
+    },
+    "IoState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["input", "output"],
+      "properties": {
+        "input": { "$ref": "#/$defs/IoInputState" },
+        "output": { "$ref": "#/$defs/IoOutputState" },
+        "context": { "type": "object", "additionalProperties": true }
+      }
+    },
+    "MetricIoState": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "work": { "$ref": "#/$defs/IoState" },
+        "control": { "$ref": "#/$defs/IoState" }
+      }
+    },
     "StatusFullMetric": {
       "allOf": [
         { "$ref": "#/$defs/EnvelopeBase" },
@@ -159,6 +185,7 @@
                 "tps": { "type": "integer", "minimum": 0 },
                 "startedAt": { "type": "string", "format": "date-time" },
                 "io": { "$ref": "#/$defs/MetricIo" },
+                "ioState": { "$ref": "#/$defs/MetricIoState" },
                 "context": { "type": "object", "additionalProperties": true }
               }
             }
@@ -181,6 +208,7 @@
               "properties": {
                 "enabled": { "type": "boolean" },
                 "tps": { "type": "integer", "minimum": 0 },
+                "ioState": { "$ref": "#/$defs/MetricIoState" },
                 "context": { "type": "object", "additionalProperties": true }
               }
             }

@@ -214,14 +214,17 @@ Goal: introduce a single, consistent control‑plane envelope model used by sign
 
 ## 6. Status & IO Semantics
 
-- [ ] Define a minimal standard for IO state at control‑plane level:
+- [x] Define a minimal standard for IO state at control‑plane level:
   - Inputs: `ok | out-of-data | backpressure | upstream-error | unknown`.
   - Outputs: `ok | blocked | throttled | downstream-error | unknown`.
-- [ ] Wire IO semantics into:
+- [x] Wire IO semantics into:
   - Worker status snapshots (per worker).
   - Swarm‑level status aggregates (derived from worker metrics).
   - Relevant `event.alert.alert` instances when an error or readiness condition is directly tied to IO conditions (for example stop due to out‑of‑data).
-- [ ] Document how IO state should be interpreted in debugging (e.g. journal, Hive UI tooltips, docs).
+- [x] Document how IO state should be interpreted in debugging (e.g. journal, Hive UI tooltips, docs).
+  - `data.io` is a **topology/metrics snapshot** (queues/routes + optional per-queue depth), present only in `status-full`.
+  - `data.ioState` is a **coarse aggregate** intended for fast debugging and alerting, present in both `status-full` and `status-delta`.
+  - `out-of-data` is *not* inferred from queue depth; it is a logical “source exhausted” condition and should be emitted by inputs/generators via `ioState` + (optionally) an `event.alert.alert` with `code=io.out-of-data` and `data.context.dataset` when known.
 
 ---
 

@@ -11,6 +11,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Helper for building canonical control-plane status metric envelopes.
@@ -36,6 +37,24 @@ public class StatusEnvelopeBuilder {
     private final Map<String, Object> controlQueues = new LinkedHashMap<>();
     private final Map<String, Object> totals = new LinkedHashMap<>();
     private final Map<String, Object> queueStats = new LinkedHashMap<>();
+    private final Map<String, Object> workIoState = new LinkedHashMap<>();
+    private final Map<String, Object> controlIoState = new LinkedHashMap<>();
+
+    private static final Set<String> INPUT_STATES = Set.of(
+        "ok",
+        "out-of-data",
+        "backpressure",
+        "upstream-error",
+        "unknown"
+    );
+
+    private static final Set<String> OUTPUT_STATES = Set.of(
+        "ok",
+        "blocked",
+        "throttled",
+        "downstream-error",
+        "unknown"
+    );
 
     public StatusEnvelopeBuilder() {
         root.put("timestamp", Instant.now().toString());
@@ -180,6 +199,26 @@ public class StatusEnvelopeBuilder {
     }
 
     /**
+     * Aggregate IO state for the work (traffic) plane.
+     *
+     * <p>States follow {@code docs/spec} and are intended for coarse debugging:
+     * {@code input=ok|out-of-data|backpressure|upstream-error|unknown},
+     * {@code output=ok|blocked|throttled|downstream-error|unknown}.</p>
+     */
+    public StatusEnvelopeBuilder ioWorkState(String input, String output, Map<String, ?> context) {
+        setIoState(workIoState, input, output, context);
+        return this;
+    }
+
+    /**
+     * Aggregate IO state for the control plane.
+     */
+    public StatusEnvelopeBuilder ioControlState(String input, String output, Map<String, ?> context) {
+        setIoState(controlIoState, input, output, context);
+        return this;
+    }
+
+    /**
      * Topics used when publishing results downstream on the traffic
      * exchange.
      */
@@ -203,6 +242,34 @@ public class StatusEnvelopeBuilder {
     public StatusEnvelopeBuilder tps(long tps) {
         data.put("tps", tps);
         return this;
+    }
+
+    private static void setIoState(Map<String, Object> target, String input, String output, Map<String, ?> context) {
+        target.clear();
+        String in = normaliseIo(input, INPUT_STATES, "input");
+        String out = normaliseIo(output, OUTPUT_STATES, "output");
+        if (in == null && out == null) {
+            return;
+        }
+        target.put("input", in != null ? in : "unknown");
+        target.put("output", out != null ? out : "unknown");
+        if (context != null && !context.isEmpty()) {
+            target.put("context", Map.copyOf(context));
+        }
+    }
+
+    private static String normaliseIo(String value, Set<String> allowed, String field) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        if (trimmed.isEmpty()) {
+            return null;
+        }
+        if (!allowed.contains(trimmed)) {
+            throw new IllegalArgumentException("Invalid ioState." + field + ": " + trimmed);
+        }
+        return trimmed;
     }
 
     /**
@@ -242,6 +309,17 @@ public class StatusEnvelopeBuilder {
         } else {
             data.remove("startedAt");
             data.remove("io");
+        }
+
+        if (!workIoState.isEmpty() || !controlIoState.isEmpty()) {
+            Map<String, Object> ioState = new LinkedHashMap<>();
+            if (!workIoState.isEmpty()) {
+                ioState.put("work", Map.copyOf(workIoState));
+            }
+            if (!controlIoState.isEmpty()) {
+                ioState.put("control", Map.copyOf(controlIoState));
+            }
+            data.put("ioState", Map.copyOf(ioState));
         }
 
         if (!context.isEmpty()) {

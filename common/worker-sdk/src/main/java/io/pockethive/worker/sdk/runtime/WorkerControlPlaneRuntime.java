@@ -3,6 +3,7 @@ package io.pockethive.worker.sdk.runtime;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.control.ControlSignal;
 import io.pockethive.controlplane.ControlPlaneIdentity;
+import io.pockethive.controlplane.messaging.Alerts;
 import io.pockethive.controlplane.messaging.ControlPlaneEmitter;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.controlplane.topology.ControlPlaneRouteCatalog;
@@ -28,6 +29,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Consumer;
@@ -65,6 +67,24 @@ public final class WorkerControlPlaneRuntime {
     private volatile double lastComputedTps = 0.0;
     private volatile double lastIntervalSeconds = 0.0;
     private final Instant startedAt;
+
+    private static final List<String> IO_INPUT_PRECEDENCE = List.of(
+        "upstream-error",
+        "out-of-data",
+        "backpressure",
+        "ok",
+        "unknown"
+    );
+
+    private static final List<String> IO_OUTPUT_PRECEDENCE = List.of(
+        "downstream-error",
+        "blocked",
+        "throttled",
+        "ok",
+        "unknown"
+    );
+
+    private final AtomicReference<String> lastWorkInputState = new AtomicReference<>(null);
 
     public WorkerControlPlaneRuntime(
         WorkerControlPlane workerControlPlane,
@@ -538,6 +558,13 @@ public final class WorkerControlPlaneRuntime {
             return;
         }
         StatusSnapshot snapshotData = collectSnapshot(states, snapshot);
+        IoStateAggregate workerIo = ioStateFromWorkers(states);
+        IoStateAggregate ioStateForEnvelope = workerIo != null
+            ? new IoStateAggregate(
+                workerIo.workInput() != null ? workerIo.workInput() : "unknown",
+                workerIo.workOutput() != null ? workerIo.workOutput() : "unknown",
+                workerIo.workContext())
+            : new IoStateAggregate("unknown", "unknown", null);
         long nowMillis = System.currentTimeMillis();
         double intervalSeconds;
         double tps;
@@ -574,18 +601,140 @@ public final class WorkerControlPlaneRuntime {
             if (!snapshotData.workOut().isEmpty()) {
                 builder.workOut(snapshotData.workOut().toArray(String[]::new));
             }
+
+            builder.ioWorkState(ioStateForEnvelope.workInput(), ioStateForEnvelope.workOutput(), ioStateForEnvelope.workContext());
+            builder.ioControlState("ok", "ok", null);
+
             builder.tps(Math.round(tps));
             builder.data("intervalSeconds", intervalSeconds);
             builder.data("startedAt", startedAt);
             builder.data("workers", snapshotData.workers());
             builder.data("snapshot", snapshot);
         };
+
+        maybeEmitIoOutOfData(workerIo);
+
         ControlPlaneEmitter.StatusContext statusContext = ControlPlaneEmitter.StatusContext.of(customiser);
         if (snapshot) {
             emitter.emitStatusSnapshot(statusContext);
         } else {
             emitter.emitStatusDelta(statusContext);
         }
+    }
+
+    private IoStateAggregate ioStateFromWorkers(List<WorkerState> states) {
+        if (states == null || states.isEmpty()) {
+            return null;
+        }
+        String bestInput = null;
+        String bestOutput = null;
+        Map<String, Object> bestContext = null;
+        for (WorkerState state : states) {
+            Map<String, Object> status = state.statusData();
+            if (status == null || status.isEmpty()) {
+                continue;
+            }
+            Object ioState = status.get("ioState");
+            if (!(ioState instanceof Map<?, ?> ioMapRaw)) {
+                continue;
+            }
+            @SuppressWarnings("unchecked")
+            Map<String, Object> ioMap = (Map<String, Object>) ioMapRaw;
+            Object workObj = ioMap.getOrDefault("work", ioMap);
+            if (!(workObj instanceof Map<?, ?> workRaw)) {
+                continue;
+            }
+            @SuppressWarnings("unchecked")
+            Map<String, Object> work = (Map<String, Object>) workRaw;
+            String input = asIoState(work.get("input"), IO_INPUT_PRECEDENCE);
+            String output = asIoState(work.get("output"), IO_OUTPUT_PRECEDENCE);
+            if (input != null && isBetter(input, bestInput, IO_INPUT_PRECEDENCE)) {
+                bestInput = input;
+                bestContext = contextMap(work.get("context"));
+            }
+            if (output != null && isBetter(output, bestOutput, IO_OUTPUT_PRECEDENCE)) {
+                bestOutput = output;
+            }
+        }
+        if (bestInput == null && bestOutput == null) {
+            return null;
+        }
+        return new IoStateAggregate(bestInput, bestOutput, bestContext);
+    }
+
+    private void maybeEmitIoOutOfData(IoStateAggregate aggregate) {
+        if (aggregate == null) {
+            return;
+        }
+        String current = aggregate.workInput();
+        String previous = lastWorkInputState.getAndSet(current);
+        if ("out-of-data".equals(previous) || !"out-of-data".equals(current)) {
+            return;
+        }
+        String dataset = null;
+        String logRef = null;
+        Map<String, Object> context = aggregate.workContext();
+        if (context != null) {
+            Object rawDataset = context.get("dataset");
+            if (rawDataset instanceof String s && !s.isBlank()) {
+                dataset = s.trim();
+            }
+            Object rawLogRef = context.get("logRef");
+            if (rawLogRef instanceof String s && !s.isBlank()) {
+                logRef = s.trim();
+            }
+        }
+        emitter.publishAlert(Alerts.ioOutOfData(
+            identity.instanceId(),
+            io.pockethive.control.ControlScope.forInstance(identity.swarmId(), identity.role(), identity.instanceId()),
+            null,
+            null,
+            dataset,
+            null,
+            logRef,
+            context,
+            Instant.now()
+        ));
+    }
+
+    private static String asIoState(Object value, List<String> allowed) {
+        if (!(value instanceof String s)) {
+            return null;
+        }
+        String trimmed = s.trim();
+        if (trimmed.isEmpty()) {
+            return null;
+        }
+        return allowed.contains(trimmed) ? trimmed : null;
+    }
+
+    private static boolean isBetter(String candidate, String current, List<String> precedence) {
+        if (candidate == null) {
+            return false;
+        }
+        if (current == null) {
+            return true;
+        }
+        int candidateIdx = precedence.indexOf(candidate);
+        int currentIdx = precedence.indexOf(current);
+        if (candidateIdx < 0) {
+            return false;
+        }
+        if (currentIdx < 0) {
+            return true;
+        }
+        return candidateIdx < currentIdx;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> contextMap(Object value) {
+        if (!(value instanceof Map<?, ?> raw)) {
+            return null;
+        }
+        return (Map<String, Object>) raw;
+    }
+
+    private record IoStateAggregate(String workInput, String workOutput, Map<String, Object> workContext) {
     }
 
     private StatusSnapshot collectSnapshot(Collection<WorkerState> states, boolean snapshotMode) {
