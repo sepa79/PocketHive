@@ -143,7 +143,7 @@ const COMMANDS = [
   {
     name: "status-request",
     description:
-      "Send a control-plane status-request signal directly via AMQP: sig.status-request.<swarmId>.<role>.<instanceId>",
+      "Send a control-plane status-request signal directly via AMQP: signal.status-request.<swarmId>.<role>.<instanceId>",
     params: ["swarmId", "role", "instanceId"],
   },
   {
@@ -352,7 +352,7 @@ async function main() {
               swarmId,
               role,
               instanceId,
-              routingKey: `sig.status-request.${swarmId}.${role}.${instanceId}`,
+              routingKey: `signal.status-request.${swarmId}.${role}.${instanceId}`,
             },
             null,
             2
@@ -637,8 +637,10 @@ async function collectWorkerConfigs(swarmId) {
     });
     // Bind to status-full and status-delta events for this swarm.
     const keys = [
-      `ev.status-full.${trimmed}.#`,
-      `ev.status-delta.${trimmed}.#`,
+      `event.metric.status-full.${trimmed}.#`,
+      `event.metric.status-delta.${trimmed}.#`,
+      `event.status-full.${trimmed}.#`,
+      `event.status-delta.${trimmed}.#`,
     ];
     for (const key of keys) {
       await ch.bindQueue(q.queue, ex, key);
@@ -854,7 +856,7 @@ async function sendStatusRequest(swarmId, role, instanceId) {
   const ch = await conn.createChannel();
   try {
     const exchange = controlExchange();
-    const rk = `sig.status-request.${swarmId}.${role}.${instanceId}`;
+    const rk = `signal.status-request.${swarmId}.${role}.${instanceId}`;
     const payload = JSON.stringify({});
     await ch.assertExchange(exchange, "topic", { durable: true });
     ch.publish(exchange, rk, Buffer.from(payload, "utf8"), {

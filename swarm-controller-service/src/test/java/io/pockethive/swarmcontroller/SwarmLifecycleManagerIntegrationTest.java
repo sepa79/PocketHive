@@ -192,10 +192,10 @@ import static org.junit.jupiter.api.Assertions.*;
 
     Queue q = new Queue("test-status", false, false, true);
     amqp.declareQueue(q);
-    Binding b = BindingBuilder.bind(q)
-        .to(new TopicExchange(CONTROL_EXCHANGE))
-        .with("ev.status-delta." + TEST_SWARM_ID + ".swarm-controller." + instanceId);
-    amqp.declareBinding(b);
+		    Binding b = BindingBuilder.bind(q)
+		        .to(new TopicExchange(CONTROL_EXCHANGE))
+		        .with("event.metric.status-delta." + TEST_SWARM_ID + ".swarm-controller." + instanceId);
+		    amqp.declareBinding(b);
 
     manager.start(plan);
     assertNotNull(amqp.getQueueProperties(queue("gen")));

@@ -88,6 +88,7 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
   private final ComputeAdapter computeAdapter;
   private final SwarmQueueMetrics queueMetrics;
   private final io.pockethive.manager.runtime.ConfigFanout configFanout;
+  private final SwarmJournal journal;
   private final SwarmReadinessTracker readinessTracker;
   private final String instanceId;
   private final String role;
@@ -118,6 +119,7 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
                           ComputeAdapter computeAdapter,
                           SwarmQueueMetrics queueMetrics,
                           io.pockethive.manager.runtime.ConfigFanout configFanout,
+                          SwarmJournal journal,
                           String instanceId) {
     this.amqp = Objects.requireNonNull(amqp, "amqp");
     this.mapper = Objects.requireNonNull(mapper, "mapper");
@@ -131,6 +133,7 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
     this.computeAdapter = Objects.requireNonNull(computeAdapter, "computeAdapter");
     this.queueMetrics = Objects.requireNonNull(queueMetrics, "queueMetrics");
     this.configFanout = Objects.requireNonNull(configFanout, "configFanout");
+    this.journal = journal != null ? journal : SwarmJournal.noop();
     this.instanceId = Objects.requireNonNull(instanceId, "instanceId");
     this.role = properties.getRole();
     this.swarmId = properties.getSwarmId();
@@ -234,7 +237,7 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
             managerCore.getStatus(),
             managerCore.getMetrics(),
             java.util.Collections.emptyMap());
-    ScenarioContext scenarioContext = new ScenarioContext(scenarioManager, configFanout);
+    ScenarioContext scenarioContext = new ScenarioContext(swarmId, scenarioManager, configFanout);
     this.timelineScenario = new io.pockethive.swarmcontroller.scenario.TimelineScenario("default", mapper);
     this.scenarioEngine = new ScenarioEngine(
         java.util.List.of(timelineScenario),
@@ -373,10 +376,11 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
 
     String controlQueue = properties.controlQueueName(role, instanceId);
     String rk = ControlPlaneRouting.event(
+        "metric",
         "status-delta",
         ConfirmationScope.forInstance(swarmId, role, instanceId));
     String payload = new StatusEnvelopeBuilder()
-        .kind("status-delta")
+        .type("status-delta")
         .role(role)
         .instance(instanceId)
         .origin(instanceId)
@@ -384,8 +388,8 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
         .controlIn(controlQueue)
         .controlRoutes(io.pockethive.swarmcontroller.SwarmControllerRoutes.controllerControlRoutes(swarmId, role, instanceId))
         .controlOut(rk)
-        .enabled(true)
-        .data("startedAt", startedAt)
+        .enabled(false)
+        .tps(0)
         .data("swarmStatus", status.name())
         .toJson();
     log.debug("[CTRL] SEND rk={} inst={} payload={}", rk, instanceId, snippet(payload));

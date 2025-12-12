@@ -2,10 +2,11 @@ package io.pockethive.orchestrator.app;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.pockethive.control.CommandTarget;
 import io.pockethive.control.ControlSignal;
 import io.pockethive.control.ConfirmationScope;
+import io.pockethive.control.ControlScope;
 import io.pockethive.controlplane.ControlPlaneSignals;
+import io.pockethive.controlplane.messaging.ControlSignals;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.controlplane.spring.ControlPlaneProperties;
 import io.pockethive.orchestrator.domain.IdempotencyStore;
@@ -37,6 +38,7 @@ public class ComponentController {
     private final IdempotencyStore idempotency;
     private final ObjectMapper json;
     private final String controlExchange;
+    private final String originInstanceId;
 
     public ComponentController(
         AmqpTemplate rabbit,
@@ -47,6 +49,7 @@ public class ComponentController {
         this.idempotency = idempotency;
         this.json = json;
         this.controlExchange = requireExchange(controlPlaneProperties);
+        this.originInstanceId = requireOrigin(controlPlaneProperties);
     }
 
     @PostMapping("/{role}/{instance}/config")
@@ -67,9 +70,15 @@ public class ComponentController {
                 role, instance, correlation, request.idempotencyKey(), scope);
             response = accepted(correlation, request.idempotencyKey(), swarmSegment, role, instance);
         } else {
-            ControlSignal payload = ControlSignal.forInstance(ControlPlaneSignals.CONFIG_UPDATE, swarmId, role, instance,
-                newCorrelation, request.idempotencyKey(),
-                commandTargetFrom(request), argsFrom(request));
+            Map<String, Object> args = argsFrom(request);
+            @SuppressWarnings("unchecked")
+            Map<String, Object> patch = args == null ? null : (Map<String, Object>) args.get("data");
+            ControlSignal payload = ControlSignals.configUpdate(
+                originInstanceId,
+                ControlScope.forInstance(swarmId, role, instance),
+                newCorrelation,
+                request.idempotencyKey(),
+                patch);
             String jsonPayload = toJson(payload);
             try {
                 sendControl(routingKey(swarmSegment, role, instance), jsonPayload, ControlPlaneSignals.CONFIG_UPDATE);
@@ -103,8 +112,8 @@ public class ComponentController {
                                                       String instance) {
         ConfirmationScope scope = new ConfirmationScope(swarmSegment, role, instance);
         ControlResponse.Watch watch = new ControlResponse.Watch(
-            ControlPlaneRouting.event("ready.config-update", scope),
-            ControlPlaneRouting.event("error.config-update", scope)
+            ControlPlaneRouting.event("outcome", ControlPlaneSignals.CONFIG_UPDATE, scope),
+            ControlPlaneRouting.event("alert", "alert", scope)
         );
         ControlResponse response = new ControlResponse(correlationId, idempotencyKey, watch, CONFIG_UPDATE_TIMEOUT_MS);
         return ResponseEntity.accepted().body(response);
@@ -123,21 +132,10 @@ public class ComponentController {
         return args.isEmpty() ? null : args;
     }
 
-    private CommandTarget commandTargetFrom(ConfigUpdateRequest request) {
-        return request.commandTarget();
-    }
-
     public record ConfigUpdateRequest(String idempotencyKey,
                                       Map<String, Object> patch,
                                       String notes,
-                                      String swarmId,
-                                      CommandTarget commandTarget) {
-
-        public ConfigUpdateRequest {
-            if (commandTarget == null) {
-                commandTarget = CommandTarget.INSTANCE;
-            }
-        }
+                                      String swarmId) {
     }
 
     private String toJson(ControlSignal signal) {
@@ -145,7 +143,7 @@ public class ComponentController {
             return json.writeValueAsString(signal);
         } catch (JsonProcessingException e) {
             throw new IllegalStateException("Failed to serialize control signal %s for role %s".formatted(
-                signal.signal(), signal.role()), e);
+                signal.type(), signal.scope() != null ? signal.scope().role() : "n/a"), e);
         }
     }
 
@@ -161,6 +159,14 @@ public class ComponentController {
             throw new IllegalStateException("pockethive.control-plane.exchange must not be null or blank");
         }
         return exchange;
+    }
+
+    private static String requireOrigin(ControlPlaneProperties properties) {
+        String instanceId = properties.getInstanceId();
+        if (instanceId == null || instanceId.isBlank()) {
+            throw new IllegalStateException("pockethive.control-plane.identity.instance-id must not be null or blank");
+        }
+        return instanceId.trim();
     }
 
     private void logRestRequest(String method, String path, Object body) {

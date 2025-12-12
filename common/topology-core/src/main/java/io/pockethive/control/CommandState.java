@@ -1,8 +1,7 @@
 package io.pockethive.control;
 
-import static io.pockethive.control.ConfirmationSupport.immutableDetailsOrNull;
-import static io.pockethive.control.ConfirmationSupport.trimToNull;
-
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
@@ -22,5 +21,19 @@ public record CommandState(
     public static CommandState status(String status) {
         return new CommandState(status, null, null);
     }
-}
 
+    private static Map<String, Object> immutableDetailsOrNull(Map<String, Object> details) {
+        if (details == null || details.isEmpty()) {
+            return null;
+        }
+        return Collections.unmodifiableMap(new LinkedHashMap<>(details));
+    }
+
+    private static String trimToNull(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
+    }
+}

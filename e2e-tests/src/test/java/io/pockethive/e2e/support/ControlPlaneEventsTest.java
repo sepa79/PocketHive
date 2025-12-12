@@ -31,8 +31,8 @@ class ControlPlaneEventsTest {
   @Test
   void tracksLatestStatusesByIdentity() throws Exception {
     StatusEvent status = statusFixture();
-    events.recordStatus("ev.status-full.swarm-alpha.processor.processor-1", status, Instant.parse("2024-07-01T12:35:00Z"));
-    events.recordStatus("ev.status-delta.swarm-alpha.processor.processor-1", status, Instant.parse("2024-07-01T12:35:05Z"));
+    events.recordStatus("event.metric.status-full.swarm-alpha.processor.processor-1", status, Instant.parse("2024-07-01T12:35:00Z"));
+    events.recordStatus("event.metric.status-delta.swarm-alpha.processor.processor-1", status, Instant.parse("2024-07-01T12:35:05Z"));
 
     assertEquals(2, events.statusesForSwarm("swarm-alpha").size());
     StatusEvent latest = events.latestStatusEvent("swarm-alpha", "processor", "processor-1").orElseThrow();
@@ -46,18 +46,18 @@ class ControlPlaneEventsTest {
   void exposesLatestStatusDeltaEvent() throws Exception {
     StatusEvent status = statusFixture();
     StatusEvent delta = toDelta(status);
-    events.recordStatus("ev.status-full.swarm-alpha.processor.processor-1", status, Instant.parse("2024-07-01T12:34:00Z"));
-    events.recordStatus("ev.status-delta.swarm-alpha.processor.processor-1", delta, Instant.parse("2024-07-01T12:34:10Z"));
+    events.recordStatus("event.metric.status-full.swarm-alpha.processor.processor-1", status, Instant.parse("2024-07-01T12:34:00Z"));
+    events.recordStatus("event.metric.status-delta.swarm-alpha.processor.processor-1", delta, Instant.parse("2024-07-01T12:34:10Z"));
 
     StatusEvent latestDelta = events.latestStatusDeltaEvent("swarm-alpha", "processor", "processor-1").orElseThrow();
-    assertEquals("status-delta", latestDelta.kind());
+    assertEquals("status-delta", latestDelta.type());
     assertEquals("processor-1", latestDelta.instance());
   }
 
   @Test
   void assertsQueueLayouts() throws Exception {
     StatusEvent status = statusFixture();
-    events.recordStatus("ev.status-full.swarm-alpha.processor.processor-1", status, Instant.parse("2024-07-01T12:34:56Z"));
+    events.recordStatus("event.metric.status-full.swarm-alpha.processor.processor-1", status, Instant.parse("2024-07-01T12:34:56Z"));
 
     assertDoesNotThrow(() -> events.assertWorkQueues(
         "swarm-alpha",
@@ -73,8 +73,8 @@ class ControlPlaneEventsTest {
         "processor",
         "processor-1",
         List.of("control.input"),
-        List.of("ev.status-full.swarm-alpha"),
-        List.of("ev.status-delta.swarm-alpha")
+        List.of("event.metric.status-full.swarm-alpha"),
+        List.of("event.metric.status-delta.swarm-alpha")
     ));
 
     AssertionError mismatch = assertThrows(AssertionError.class, () -> events.assertWorkQueues(
@@ -93,7 +93,7 @@ class ControlPlaneEventsTest {
       assertNotNull(stream, "Fixture /fixtures/status-full.json is missing");
       byte[] body = stream.readAllBytes();
       ControlPlaneEventParser.ParsedEvent parsed = parser.parse(
-          "ev.status-full.swarm-alpha.processor.processor-1",
+          "event.metric.status-full.swarm-alpha.processor.processor-1",
           body
       );
       StatusEvent status = parsed.status();
@@ -104,26 +104,15 @@ class ControlPlaneEventsTest {
 
   private StatusEvent toDelta(StatusEvent source) {
     return new StatusEvent(
-        source.event(),
-        source.version(),
-        source.messageId(),
         source.timestamp(),
-        source.location(),
+        source.version(),
+        source.kind(),
         "status-delta",
-        source.role(),
-        source.instance(),
         source.origin(),
-        source.swarmId(),
-        source.enabled(),
-        source.state(),
-        source.watermark(),
-        source.maxStalenessSec(),
-        source.totals(),
-        source.queueStats(),
-        source.publishes(),
-        source.queues(),
-        source.data(),
-        source.traffic()
+        source.scope(),
+        source.correlationId(),
+        source.idempotencyKey(),
+        source.data()
     );
   }
 }

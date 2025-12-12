@@ -1,7 +1,6 @@
 package io.pockethive.worker.sdk.runtime;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.pockethive.control.CommandTarget;
 import io.pockethive.control.ControlSignal;
 import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.controlplane.messaging.ControlPlaneEmitter;
@@ -244,7 +243,7 @@ public final class WorkerControlPlaneRuntime {
 
         @Override
         public void onUnsupported(WorkerSignalContext context) {
-            log.debug("Ignoring unsupported control-plane signal: {}", context.envelope().signal().signal());
+            log.debug("Ignoring unsupported control-plane signal: {}", context.envelope().signal().type());
         }
     }
 
@@ -252,7 +251,9 @@ public final class WorkerControlPlaneRuntime {
         ControlSignal signal = command.signal();
         List<WorkerState> targets = resolveTargets(command);
         if (targets.isEmpty()) {
-            log.warn("No worker definitions matched config-update signal role={} instance={}", signal.role(), signal.instance());
+            log.warn("No worker definitions matched config-update signal role={} instance={}",
+                signal.scope() != null ? signal.scope().role() : null,
+                signal.scope() != null ? signal.scope().instance() : null);
             return;
         }
         Map<String, Object> sanitized = sanitiseConfig(command.data());
@@ -285,7 +286,7 @@ public final class WorkerControlPlaneRuntime {
                 } else {
                     log.debug(
                         "Skipping ready confirmation for signal {} due to missing correlation/idempotency",
-                        signal.signal()
+                        signal.type()
                     );
                 }
                 notifyStateListeners(state);
@@ -323,7 +324,7 @@ public final class WorkerControlPlaneRuntime {
                 } else {
                     log.debug(
                         "Skipping error confirmation for signal {} due to missing correlation/idempotency",
-                        signal.signal()
+                        signal.type()
                     );
                 }
                 notifyStateListeners(state);
@@ -335,8 +336,8 @@ public final class WorkerControlPlaneRuntime {
 
     private String resolveSignalName(WorkerStatusRequest request) {
         ControlSignal signal = request.signal();
-        if (signal != null && signal.signal() != null && !signal.signal().isBlank()) {
-            return signal.signal();
+        if (signal != null && signal.type() != null && !signal.type().isBlank()) {
+            return signal.type();
         }
         ControlPlaneRouting.RoutingKey routingKey = ControlPlaneRouting.parseSignal(request.envelope().routingKey());
         if (routingKey != null && routingKey.type() != null && !routingKey.type().isBlank()) {
@@ -369,15 +370,11 @@ public final class WorkerControlPlaneRuntime {
             return stateStore.find(requestedWorker).map(List::of).orElseGet(List::of);
         }
         ControlSignal signal = command.signal();
-        String role = normaliseRole(signal.role());
-        CommandTarget target = signal.commandTarget();
+        String role = normaliseRole(signal.scope() != null ? signal.scope().role() : null);
         List<WorkerState> matches = new ArrayList<>();
         for (WorkerState state : stateStore.all()) {
             WorkerDefinition definition = state.definition();
             if (!roleMatches(role, definition.role())) {
-                continue;
-            }
-            if (!commandTargetIncludes(target)) {
                 continue;
             }
             matches.add(state);
@@ -521,16 +518,6 @@ public final class WorkerControlPlaneRuntime {
             return true;
         }
         return signalRole.equalsIgnoreCase(workerRole);
-    }
-
-    private boolean commandTargetIncludes(CommandTarget target) {
-        if (target == null) {
-            return true;
-        }
-        return switch (target) {
-            case ALL, ROLE, SWARM -> true;
-            case INSTANCE -> true; // Routing already targeted to this instance by queue binding
-        };
     }
 
     private String normaliseRole(String role) {

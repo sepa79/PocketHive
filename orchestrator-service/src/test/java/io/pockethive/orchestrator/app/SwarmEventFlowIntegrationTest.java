@@ -111,47 +111,58 @@ class SwarmEventFlowIntegrationTest {
         registry.register(new Swarm(SWARM_ID, CONTROLLER_INSTANCE, "cid"));
         registry.updateStatus(SWARM_ID, SwarmStatus.CREATING);
 
-        signalListener.handle("{}", ControlPlaneRouting.event("ready.swarm-controller",
+        signalListener.handle("{\"data\":{\"status\":\"Ready\"}}", ControlPlaneRouting.event("outcome", "swarm-controller",
             new ConfirmationScope(SWARM_ID, "swarm-controller", CONTROLLER_INSTANCE)));
 
         verify(controlPlane).publishSignal(signalCaptor.capture());
         SignalMessage template = signalCaptor.getValue();
         assertThat(template.routingKey()).isEqualTo(ControlPlaneRouting.signal(
-            "swarm-template", SWARM_ID, "swarm-controller", "ALL"));
+            "swarm-template", SWARM_ID, "swarm-controller", CONTROLLER_INSTANCE));
         ControlSignal controlSignal = mapper.readValue(template.payload().toString(), ControlSignal.class);
-        assertThat(controlSignal.signal()).isEqualTo("swarm-template");
+        assertThat(controlSignal.type()).isEqualTo("swarm-template");
         assertThat(controlSignal.correlationId()).isEqualTo("corr");
         assertThat(controlSignal.idempotencyKey()).isEqualTo("idem");
 
         verify(publisher).publishEvent(eventCaptor.capture());
         EventMessage readyEvent = eventCaptor.getValue();
         assertThat(readyEvent.routingKey()).isEqualTo(ControlPlaneRouting.event(
-            "ready.swarm-create", new ConfirmationScope(SWARM_ID, "orchestrator", "ALL")));
+            "outcome", "swarm-create", new ConfirmationScope(SWARM_ID, "orchestrator", ORCHESTRATOR_INSTANCE)));
         JsonNode readyPayload = mapper.readTree(readyEvent.payload().toString());
-        assertThat(readyPayload.path("state").path("status").asText()).isEqualTo("Ready");
+        assertThat(readyPayload.path("data").path("status").asText()).isEqualTo("Ready");
 
-        signalListener.handle("{}", ControlPlaneRouting.event("ready.swarm-template",
+        signalListener.handle("{\"data\":{\"status\":\"Ready\"}}", ControlPlaneRouting.event("outcome", "swarm-template",
             new ConfirmationScope(SWARM_ID, "swarm-controller", CONTROLLER_INSTANCE)));
         assertThat(registry.find(SWARM_ID)).map(Swarm::getStatus).contains(SwarmStatus.READY);
 
         tracker.expectStart(SWARM_ID, "start-corr", "start-idem", java.time.Duration.ofSeconds(30));
-        signalListener.handle("{}", ControlPlaneRouting.event("ready.swarm-start",
+        signalListener.handle("{\"data\":{\"status\":\"Running\"}}", ControlPlaneRouting.event("outcome", "swarm-start",
             new ConfirmationScope(SWARM_ID, "swarm-controller", CONTROLLER_INSTANCE)));
         assertThat(registry.find(SWARM_ID)).map(Swarm::getStatus).contains(SwarmStatus.RUNNING);
 
-        statusListener.handle("{\"swarmId\":\"sw1\",\"data\":{\"swarmStatus\":\"RUNNING\",\"workloadsEnabled\":false,\"controllerEnabled\":true}}",
-            "ev.status-delta.sw1.swarm-controller." + CONTROLLER_INSTANCE);
+        statusListener.handle("""
+            {
+              "timestamp": "2024-01-01T00:00:00Z",
+              "version": "1",
+              "kind": "metric",
+              "type": "status-delta",
+              "origin": "%s",
+              "scope": {"swarmId":"sw1","role":"swarm-controller","instance":"%s"},
+              "correlationId": null,
+              "idempotencyKey": null,
+              "data": {"enabled": false, "tps": 0, "swarmStatus": "RUNNING"}
+            }
+            """.formatted(CONTROLLER_INSTANCE, CONTROLLER_INSTANCE),
+            "event.metric.status-delta.sw1.swarm-controller." + CONTROLLER_INSTANCE);
         Swarm swarm = registry.find(SWARM_ID).orElseThrow();
         assertEquals(SwarmHealth.RUNNING, swarm.getHealth());
         assertThat(swarm.isWorkEnabled()).isFalse();
-        assertThat(swarm.isControllerEnabled()).isTrue();
 
         tracker.expectStop(SWARM_ID, "stop-corr", "stop-idem", java.time.Duration.ofSeconds(30));
-        signalListener.handle("{}", ControlPlaneRouting.event("ready.swarm-stop",
+        signalListener.handle("{\"data\":{\"status\":\"Stopped\"}}", ControlPlaneRouting.event("outcome", "swarm-stop",
             new ConfirmationScope(SWARM_ID, "swarm-controller", CONTROLLER_INSTANCE)));
         verify(lifecycle).stopSwarm(SWARM_ID);
 
-        signalListener.handle("{}", ControlPlaneRouting.event("ready.swarm-remove",
+        signalListener.handle("{\"data\":{\"status\":\"Removed\"}}", ControlPlaneRouting.event("outcome", "swarm-remove",
             new ConfirmationScope(SWARM_ID, "swarm-controller", CONTROLLER_INSTANCE)));
         verify(lifecycle).removeSwarm(SWARM_ID);
     }

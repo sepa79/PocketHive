@@ -91,13 +91,12 @@ describe('orchestratorApi', () => {
     await expect(removeSwarm('sw1')).rejects.toThrow('Failed to remove swarm')
   })
 
-  it('posts swarm manager toggles with command target', async () => {
+  it('posts swarm manager toggles', async () => {
     await enableSwarmManagers()
     let call = (apiFetch as unknown as Mock).mock.calls.pop()!
     expect(call[0]).toBe('/orchestrator/swarm-managers/enabled')
     expect(call[1]?.method).toBe('POST')
     const enableBody = JSON.parse(call[1]?.body as string)
-    expect(enableBody.commandTarget).toBe('swarm')
     expect(enableBody.enabled).toBe(true)
     expect(typeof enableBody.idempotencyKey).toBe('string')
     expect(enableBody.target).toBeUndefined()
@@ -107,7 +106,6 @@ describe('orchestratorApi', () => {
     expect(call[0]).toBe('/orchestrator/swarm-managers/enabled')
     expect(call[1]?.method).toBe('POST')
     const disableBody = JSON.parse(call[1]?.body as string)
-    expect(disableBody.commandTarget).toBe('swarm')
     expect(disableBody.enabled).toBe(false)
     expect(typeof disableBody.idempotencyKey).toBe('string')
     expect(disableBody.target).toBeUndefined()

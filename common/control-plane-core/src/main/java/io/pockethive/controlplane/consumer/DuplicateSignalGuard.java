@@ -100,7 +100,7 @@ public final class DuplicateSignalGuard {
         if (id == null || id.isEmpty()) {
             return null;
         }
-        String type = signal.signal();
+        String type = signal.type();
         if (type == null || type.isBlank()) {
             return id;
         }

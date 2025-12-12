@@ -1,6 +1,11 @@
 import { Client, type StompSubscription } from '@stomp/stompjs'
 import type { Component, QueueInfo } from '../types/hive'
-import { isControlEvent, type ControlEvent } from '../types/control'
+import {
+  isAlertEventEnvelope,
+  isCommandOutcomeEnvelope,
+  isStatusMetricEnvelope,
+  type StatusMetricEnvelope,
+} from '../types/control'
 import { logIn, logError } from './logs'
 import { useUIStore } from '../store'
 
@@ -90,31 +95,13 @@ function getBoolean(value: unknown): boolean | undefined {
   return undefined
 }
 
-interface LifecycleConfirmation {
-  signal: string
-  scope?: Record<string, unknown>
-}
-
-function isLifecycleConfirmation(raw: unknown): raw is LifecycleConfirmation {
-  if (!isRecord(raw)) return false
-  const { signal, scope } = raw as {
-    signal?: unknown
-    scope?: unknown
-  }
-  if (typeof signal !== 'string') return false
-  if (scope !== undefined && !isRecord(scope)) return false
-  return true
-}
-
-function handleLifecycleConfirmation(raw: unknown): boolean {
-  if (!isLifecycleConfirmation(raw)) return false
-  if (raw.signal !== 'swarm-remove' && raw.signal !== 'swarm-create') return false
-  const scope = raw.scope
-  if (!scope) return false
-  const swarmId = getString(scope['swarmId'])
+function handleLifecycleOutcome(raw: unknown): boolean {
+  if (!isCommandOutcomeEnvelope(raw)) return false
+  if (raw.type !== 'swarm-remove' && raw.type !== 'swarm-create') return false
+  const swarmId = raw.scope.swarmId?.trim()
   if (!swarmId) return false
 
-  if (raw.signal === 'swarm-remove') {
+  if (raw.type === 'swarm-remove') {
     dropSwarmComponents(swarmId)
     notifyComponentListeners()
     emitTopology()
@@ -149,16 +136,53 @@ function applyQueueMetrics() {
   })
 }
 
-function updateQueueMetrics(stats: ControlEvent['queueStats']) {
+function updateQueueMetrics(stats: Record<string, unknown> | undefined) {
   if (!stats) return
   Object.entries(stats).forEach(([queue, entry]) => {
     if (!entry) return
-    const { depth, consumers, oldestAgeSec } = entry
+    if (!isRecord(entry)) return
+    const depth = entry['depth']
+    const consumers = entry['consumers']
+    const oldestAgeSec = entry['oldestAgeSec']
     if (typeof depth !== 'number' || typeof consumers !== 'number') return
     const metric: QueueMetrics = { depth, consumers }
     if (typeof oldestAgeSec === 'number') metric.oldestAgeSec = oldestAgeSec
     queueMetrics[queue] = metric
   })
+}
+
+function extractQueueStats(evt: StatusMetricEnvelope): Record<string, unknown> | undefined {
+  const io = evt.data['io']
+  if (!isRecord(io)) return undefined
+  const work = io['work']
+  if (!isRecord(work)) return undefined
+  const queueStats = work['queueStats']
+  return isRecord(queueStats) ? queueStats : undefined
+}
+
+function extractQueues(evt: StatusMetricEnvelope): {
+  workIn: string[]
+  workOut: string[]
+  controlIn: string[]
+  controlOut: string[]
+} | null {
+  const io = evt.data['io']
+  if (!isRecord(io)) return null
+
+  const readQueues = (section: unknown): { in: string[]; out: string[] } => {
+    if (!isRecord(section)) return { in: [], out: [] }
+    const queues = section['queues']
+    if (!isRecord(queues)) return { in: [], out: [] }
+    const inList = Array.isArray(queues['in']) ? (queues['in'] as unknown[]) : []
+    const outList = Array.isArray(queues['out']) ? (queues['out'] as unknown[]) : []
+    const toStrings = (arr: unknown[]) =>
+      arr.map((v) => getString(v)).filter((v): v is string => Boolean(v))
+    return { in: toStrings(inList), out: toStrings(outList) }
+  }
+
+  const work = readQueues(io['work'])
+  const control = readQueues(io['control'])
+  return { workIn: work.in, workOut: work.out, controlIn: control.in, controlOut: control.out }
 }
 
 function buildTopology(allComponents: Record<string, Component> = getMergedComponents()): Topology {
@@ -238,13 +262,22 @@ export function setClient(newClient: Client | null, destination = controlDestina
             const d = msg.headers.destination || dest
             const correlationId = msg.headers['x-correlation-id']
             logIn(d, msg.body, 'hive', 'stomp', correlationId)
-            if (/\/exchange\/ph\.control\/(?:ev|sig)\.(?:error\..*|.*\.error)/.test(d)) {
-              logError(d, msg.body, 'hive', 'stomp', correlationId)
+            if (/\/exchange\/ph\.control\/event\.alert\./.test(d)) {
               const { setToast } = useUIStore.getState()
-              const evt = d.split('/').pop() || ''
-              const name = evt.replace(/^(?:ev|sig)\./, '').replace(/\./g, ' ')
-              const suffix = msg.body ? `: ${msg.body}` : ''
-              setToast(`Error: ${name}${suffix}`)
+              try {
+                const parsed = JSON.parse(msg.body) as unknown
+                if (isAlertEventEnvelope(parsed)) {
+                  logError(d, parsed.data.message, 'hive', 'stomp', correlationId)
+                  const swarm = parsed.scope.swarmId ? ` ${parsed.scope.swarmId}` : ''
+                  setToast(`Error:${swarm} ${parsed.data.code}: ${parsed.data.message}`)
+                } else {
+                  logError(d, msg.body, 'hive', 'stomp', correlationId)
+                  setToast('Error: alert received')
+                }
+              } catch {
+                logError(d, msg.body, 'hive', 'stomp', correlationId)
+                setToast('Error: alert received')
+              }
             }
             callback(msg)
           },
@@ -256,41 +289,39 @@ export function setClient(newClient: Client | null, destination = controlDestina
 
     controlSub = client.subscribe(controlDestination, (msg) => {
       const destination = msg.headers.destination as string | undefined
-      if (destination && !/\/exchange\/ph\.control\/ev\./.test(destination)) return
+      if (destination && !/\/exchange\/ph\.control\/event\./.test(destination)) return
       try {
         const raw = JSON.parse(msg.body)
-        if (handleLifecycleConfirmation(raw)) return
-        if (!isControlEvent(raw)) return
-        const evt = raw as ControlEvent
-        const eventQueueStats = evt.queueStats
-        const id = evt.instance
-        const swarmId = evt.swarmId.trim()
+        if (handleLifecycleOutcome(raw)) return
+        if (!isStatusMetricEnvelope(raw)) return
+        const evt = raw
+        const eventQueueStats = extractQueueStats(evt)
+        const id = evt.scope.instance
+        const swarmId = evt.scope.swarmId?.trim() ?? ''
         if (!swarmId) return
+        if (!id) return
         const existing = components[id]
         const comp: Component =
           existing || {
             id,
             name: id,
-            role: evt.role,
+            role: evt.scope.role ?? 'unknown',
             swarmId,
             lastHeartbeat: 0,
             queues: [],
           }
         comp.name = id
-        comp.role = evt.role
+        comp.role = evt.scope.role ?? comp.role
         comp.swarmId = swarmId
         comp.version = evt.version
-        if (typeof evt.image === 'string' && evt.image.trim().length > 0) {
-          comp.image = evt.image.trim()
-        }
         comp.lastHeartbeat = new Date(evt.timestamp).getTime()
-        comp.status = evt.kind
+        comp.status = evt.type
         const cfg = { ...(comp.config || {}) }
         let workerEnabled: boolean | undefined
         const data = evt.data
         if (data && typeof data === 'object') {
           const swarmStatus = getString((data as Record<string, unknown>)['swarmStatus'])
-          const normalizedRole = evt.role?.toLowerCase?.()
+          const normalizedRole = (evt.scope.role ?? '').toLowerCase()
           if (
             normalizedRole === 'swarm-controller' &&
             swarmStatus &&
@@ -339,23 +370,18 @@ export function setClient(newClient: Client | null, destination = controlDestina
               }
             }
           }
-      Object.entries(rest).forEach(([key, value]) => {
-        if (key === 'enabled') {
-          return
-        }
-        if (key === 'scenario') {
-          cfg[key] = value
-          return
-        }
-        const existing = cfg[key]
-        // Do not allow scalar status fields to overwrite structured config objects.
-        // This preserves nested worker config such as { mode: { ... } } even when
-        // the status payload also exposes a scalar "mode" field.
-        if (existing && typeof existing === 'object') {
+          Object.entries(rest).forEach(([key, value]) => {
+            if (key === 'enabled' || key === 'tps' || key === 'io' || key === 'context') {
               return
             }
-            // Allow status payloads to refresh dynamic metadata (swarm counts, guard configs, etc.)
-            // by always writing the latest value instead of keeping the first snapshot.
+            if (key === 'scenario') {
+              cfg[key] = value
+              return
+            }
+            const existing = cfg[key]
+            if (existing && typeof existing === 'object') {
+              return
+            }
             cfg[key] = value
           })
           const startedAtIso = getString((data as Record<string, unknown>)['startedAt'])
@@ -369,17 +395,18 @@ export function setClient(newClient: Client | null, destination = controlDestina
         const aggregateEnabled =
           typeof workerEnabled === 'boolean'
             ? workerEnabled
-            : typeof evt.enabled === 'boolean'
-            ? evt.enabled
+            : typeof (data as Record<string, unknown>)['enabled'] === 'boolean'
+            ? ((data as Record<string, unknown>)['enabled'] as boolean)
             : undefined
         if (typeof aggregateEnabled === 'boolean') cfg.enabled = aggregateEnabled
         if (Object.keys(cfg).length > 0) comp.config = cfg
-        if (evt.queues) {
+        const extractedQueues = extractQueues(evt)
+        if (extractedQueues) {
           const q: QueueInfo[] = []
-          q.push(...(evt.queues.work?.in?.map((n) => ({ name: n, role: 'consumer' as const })) ?? []))
-          q.push(...(evt.queues.work?.out?.map((n) => ({ name: n, role: 'producer' as const })) ?? []))
-          q.push(...(evt.queues.control?.in?.map((n) => ({ name: n, role: 'consumer' as const })) ?? []))
-          q.push(...(evt.queues.control?.out?.map((n) => ({ name: n, role: 'producer' as const })) ?? []))
+          q.push(...extractedQueues.workIn.map((n) => ({ name: n, role: 'consumer' as const })))
+          q.push(...extractedQueues.workOut.map((n) => ({ name: n, role: 'producer' as const })))
+          q.push(...extractedQueues.controlIn.map((n) => ({ name: n, role: 'consumer' as const })))
+          q.push(...extractedQueues.controlOut.map((n) => ({ name: n, role: 'producer' as const })))
           comp.queues = q
         }
         components[id] = comp
@@ -434,4 +461,10 @@ export function removeSyntheticComponent(id: string) {
 export function updateNodePosition(id: string, x: number, y: number) {
   nodePositions[id] = { x, y }
   emitTopology()
+}
+
+export function getNodePosition(id: string): { x: number; y: number } | undefined {
+  const pos = nodePositions[id]
+  if (!pos) return undefined
+  return { x: pos.x, y: pos.y }
 }

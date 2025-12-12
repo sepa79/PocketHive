@@ -1,7 +1,6 @@
 package io.pockethive.controlplane;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.pockethive.control.CommandTarget;
 import io.pockethive.control.ControlSignal;
 import io.pockethive.controlplane.worker.WorkerConfigCommand;
 import io.pockethive.controlplane.worker.WorkerControlPlane;
@@ -17,7 +16,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class WorkerControlPlaneTest {
 
-    private final ObjectMapper mapper = new ObjectMapper();
+    private final ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
     private WorkerControlPlane plane;
 
     @BeforeEach
@@ -27,8 +26,9 @@ class WorkerControlPlaneTest {
 
     @Test
     void dispatchesConfigUpdatesWithParsedPayload() throws Exception {
-        ControlSignal signal = ControlSignal.forInstance("config-update", "sw1", "generator", "inst", null, null,
-            CommandTarget.INSTANCE, Map.of("data", Map.of("enabled", true, "ratePerSec", 5)));
+        ControlSignal signal = ControlSignal.forInstance(
+            "config-update", "sw1", "generator", "inst", "orchestrator-1", "corr", "idem",
+            Map.of("data", Map.of("enabled", true, "ratePerSec", 5)));
         AtomicReference<WorkerConfigCommand> ref = new AtomicReference<>();
 
         WorkerSignalListener listener = new WorkerSignalListener() {
@@ -38,23 +38,24 @@ class WorkerControlPlaneTest {
             }
         };
 
-        plane.consume(mapper.writeValueAsString(signal), "sig.config-update", listener);
+        plane.consume(mapper.writeValueAsString(signal), "signal.config-update.sw1.generator.inst", listener);
 
         WorkerConfigCommand command = ref.get();
         assertThat(command).isNotNull();
         assertThat(command.signal()).isEqualTo(signal);
-        assertThat(command.envelope().routingKey()).isEqualTo("sig.config-update");
+        assertThat(command.envelope().routingKey()).isEqualTo("signal.config-update.sw1.generator.inst");
         assertThat(command.data()).containsEntry("ratePerSec", 5);
         assertThat(command.enabled()).isTrue();
     }
 
     @Test
     void parsesStringEnabledFlag() throws Exception {
-        ControlSignal signal = ControlSignal.forInstance("config-update", "sw1", "generator", "inst", null, null,
-            CommandTarget.INSTANCE, Map.of("data", Map.of("enabled", "false")));
+        ControlSignal signal = ControlSignal.forInstance(
+            "config-update", "sw1", "generator", "inst", "orchestrator-1", "corr", "idem",
+            Map.of("data", Map.of("enabled", "false")));
         AtomicReference<WorkerConfigCommand> ref = new AtomicReference<>();
 
-        plane.consume(mapper.writeValueAsString(signal), "sig.config-update", new WorkerSignalListener() {
+        plane.consume(mapper.writeValueAsString(signal), "signal.config-update.sw1.generator.inst", new WorkerSignalListener() {
             @Override
             public void onConfigUpdate(WorkerConfigCommand command) {
                 ref.set(command);
@@ -67,7 +68,8 @@ class WorkerControlPlaneTest {
 
     @Test
     void dispatchesStatusRequest() throws Exception {
-        ControlSignal signal = ControlSignal.forInstance("status-request", "sw1", "generator", "inst", null, null);
+        ControlSignal signal = ControlSignal.forInstance(
+            "status-request", "sw1", "generator", "inst", "orchestrator-1", "corr", "idem", null);
         AtomicReference<WorkerStatusRequest> ref = new AtomicReference<>();
 
         WorkerSignalListener listener = new WorkerSignalListener() {
@@ -77,7 +79,7 @@ class WorkerControlPlaneTest {
             }
         };
 
-        plane.consume(mapper.writeValueAsString(signal), "sig.status-request", listener);
+        plane.consume(mapper.writeValueAsString(signal), "signal.status-request.sw1.generator.inst", listener);
 
         WorkerStatusRequest request = ref.get();
         assertThat(request).isNotNull();
@@ -86,8 +88,8 @@ class WorkerControlPlaneTest {
 
     @Test
     void forwardsUnsupportedSignals() throws Exception {
-        ControlSignal signal = new ControlSignal("unknown", null, null, null, null, null,
-            null, CommandTarget.ALL, Map.of());
+        ControlSignal signal = ControlSignal.forInstance(
+            "unknown", "sw1", "generator", "inst", "orchestrator-1", "corr", "idem", null);
         AtomicReference<WorkerSignalListener.WorkerSignalContext> ref = new AtomicReference<>();
 
         WorkerSignalListener listener = new WorkerSignalListener() {
@@ -97,7 +99,7 @@ class WorkerControlPlaneTest {
             }
         };
 
-        plane.consume(mapper.writeValueAsString(signal), "sig.unknown", listener);
+        plane.consume(mapper.writeValueAsString(signal), "signal.unknown", listener);
 
         WorkerSignalListener.WorkerSignalContext context = ref.get();
         assertThat(context).isNotNull();
@@ -105,4 +107,3 @@ class WorkerControlPlaneTest {
         assertThat(context.payload()).contains("\"unknown\"");
     }
 }
-

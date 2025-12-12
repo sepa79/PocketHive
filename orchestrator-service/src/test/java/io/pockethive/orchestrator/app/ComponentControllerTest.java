@@ -7,7 +7,6 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.pockethive.control.CommandTarget;
 import io.pockethive.control.ConfirmationScope;
 import io.pockethive.control.ControlSignal;
 import io.pockethive.controlplane.ControlPlaneSignals;
@@ -44,7 +43,7 @@ class ComponentControllerTest {
             mapper,
             controlPlaneProperties());
         ComponentController.ConfigUpdateRequest request =
-            new ComponentController.ConfigUpdateRequest("idem", Map.of("enabled", true), null, "sw1", CommandTarget.SWARM);
+            new ComponentController.ConfigUpdateRequest("idem", Map.of("enabled", true), null, "sw1");
 
         ResponseEntity<ControlResponse> response = controller.updateConfig("generator", "c1", request);
 
@@ -52,20 +51,19 @@ class ComponentControllerTest {
         verify(rabbit).convertAndSend(eq("ph.control"),
             eq(ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, "sw1", "generator", "c1")), captor.capture());
         ControlSignal signal = mapper.readValue(captor.getValue(), ControlSignal.class);
-        assertThat(signal.signal()).isEqualTo(ControlPlaneSignals.CONFIG_UPDATE);
-        assertThat(signal.role()).isEqualTo("generator");
-        assertThat(signal.instance()).isEqualTo("c1");
-        assertThat(signal.swarmId()).isEqualTo("sw1");
+        assertThat(signal.type()).isEqualTo(ControlPlaneSignals.CONFIG_UPDATE);
+        assertThat(signal.scope().role()).isEqualTo("generator");
+        assertThat(signal.scope().instance()).isEqualTo("c1");
+        assertThat(signal.scope().swarmId()).isEqualTo("sw1");
         assertThat(signal.idempotencyKey()).isEqualTo("idem");
-        assertThat(signal.args()).isNotNull();
-        assertThat(signal.args()).containsKey("data");
-        assertThat(signal.commandTarget()).isEqualTo(CommandTarget.SWARM);
+        assertThat(signal.data()).isNotNull();
+        assertThat(signal.data()).containsKey("data");
         @SuppressWarnings("unchecked")
-        Map<String, Object> data = (Map<String, Object>) signal.args().get("data");
+        Map<String, Object> data = (Map<String, Object>) signal.data().get("data");
         assertThat(data).containsEntry("enabled", true);
         assertThat(response.getBody()).isNotNull();
         assertThat(response.getBody().watch().successTopic())
-            .isEqualTo(ControlPlaneRouting.event("ready." + ControlPlaneSignals.CONFIG_UPDATE,
+            .isEqualTo(ControlPlaneRouting.event("outcome", ControlPlaneSignals.CONFIG_UPDATE,
                 new ConfirmationScope("sw1", "generator", "c1")));
     }
 
@@ -77,7 +75,7 @@ class ComponentControllerTest {
             mapper,
             controlPlaneProperties());
         ComponentController.ConfigUpdateRequest request =
-            new ComponentController.ConfigUpdateRequest("idem", Map.of(), null, null, CommandTarget.INSTANCE);
+            new ComponentController.ConfigUpdateRequest("idem", Map.of(), null, null);
 
         ResponseEntity<ControlResponse> first = controller.updateConfig("processor", "p1", request);
         ResponseEntity<ControlResponse> second = controller.updateConfig("processor", "p1", request);
@@ -97,7 +95,7 @@ class ComponentControllerTest {
             mapper,
             controlPlaneProperties());
         ComponentController.ConfigUpdateRequest request =
-            new ComponentController.ConfigUpdateRequest("idem", Map.of(), null, "sw1", CommandTarget.SWARM);
+            new ComponentController.ConfigUpdateRequest("idem", Map.of(), null, "sw1");
 
         CountDownLatch start = new CountDownLatch(1);
         ExecutorService executor = Executors.newFixedThreadPool(2);

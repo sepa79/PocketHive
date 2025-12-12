@@ -1,6 +1,5 @@
 package io.pockethive.controlplane;
 
-import io.pockethive.control.CommandTarget;
 import io.pockethive.control.ControlSignal;
 import io.pockethive.controlplane.consumer.DuplicateSignalGuard;
 import org.junit.jupiter.api.Test;
@@ -15,7 +14,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class DuplicateSignalGuardTest {
 
-    private final ControlSignal sample = new ControlSignal("config-update", "corr", "idemp", "swarm", "role", "inst", null, CommandTarget.INSTANCE, null);
+    private final ControlSignal sample = ControlSignal.forInstance(
+        "config-update", "swarm", "role", "inst", "origin", "corr", "idemp", null);
 
     @Test
     void allowsFirstDeliveryAndBlocksSecondWithinTtl() {

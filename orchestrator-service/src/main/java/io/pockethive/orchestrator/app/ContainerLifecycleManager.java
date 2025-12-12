@@ -22,6 +22,7 @@ import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.core.AmqpAdmin;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.amqp.RabbitProperties;
 import org.springframework.stereotype.Service;
 
@@ -36,6 +37,8 @@ public class ContainerLifecycleManager {
     private final OrchestratorProperties properties;
     private final ControlPlaneProperties controlPlaneProperties;
     private final RabbitProperties rabbitProperties;
+    @Value("${pockethive.scenarios.runtime-root:}")
+    private String scenariosRuntimeRoot;
     private volatile ComputeAdapterType resolvedAdapterType = ComputeAdapterType.DOCKER_SINGLE;
 
     public ContainerLifecycleManager(
@@ -103,6 +106,10 @@ public class ContainerLifecycleManager {
                 controlPlaneProperties,
                 controllerSettings,
                 rabbitProperties));
+        String runtimeRoot = normalizeRuntimeRoot(scenariosRuntimeRoot);
+        if (runtimeRoot != null) {
+            env.put("POCKETHIVE_SCENARIOS_RUNTIME_ROOT", runtimeRoot);
+        }
         String net = docker.resolveControlNetwork();
         if (net != null && !net.isBlank()) {
             env.put("CONTROL_NETWORK", net);
@@ -124,11 +131,16 @@ public class ContainerLifecycleManager {
         }
         log.info("launching controller for swarm {} as instance {} using image {}", resolvedSwarmId, resolvedInstance, resolvedImage);
         log.info("docker env: {}", env);
+        java.util.List<String> volumes = new java.util.ArrayList<>();
+        volumes.add(dockerSocket + ":" + dockerSocket);
+        if (runtimeRoot != null) {
+            volumes.add(runtimeRoot + ":" + runtimeRoot);
+        }
         ManagerSpec managerSpec = new ManagerSpec(
             resolvedInstance,
             resolvedImage,
             java.util.Map.copyOf(env),
-            java.util.List.of(dockerSocket + ":" + dockerSocket));
+            java.util.List.copyOf(volumes));
         String containerId = computeAdapter.startManager(managerSpec);
         log.info("controller container {} ({}) started for swarm {}", containerId, resolvedInstance, resolvedSwarmId);
         Swarm swarm = new Swarm(resolvedSwarmId, resolvedInstance, containerId);
@@ -138,6 +150,14 @@ public class ContainerLifecycleManager {
         registry.register(swarm);
         registry.updateStatus(resolvedSwarmId, SwarmStatus.CREATING);
         return swarm;
+    }
+
+    private static String normalizeRuntimeRoot(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
     }
 
     /**

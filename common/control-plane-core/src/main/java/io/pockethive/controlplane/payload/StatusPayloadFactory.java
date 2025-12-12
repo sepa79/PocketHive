@@ -33,7 +33,7 @@ public final class StatusPayloadFactory {
     private String build(String kind, Consumer<StatusEnvelopeBuilder> customiser) {
         Objects.requireNonNull(customiser, "customiser");
         StatusEnvelopeBuilder builder = Objects.requireNonNull(builderSupplier.get(), "builder");
-        builder.kind(kind)
+        builder.type(kind)
             .role(context.role())
             .instance(context.instanceId())
             .origin(context.instanceId())

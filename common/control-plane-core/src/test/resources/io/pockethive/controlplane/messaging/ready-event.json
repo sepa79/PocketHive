@@ -1,25 +1,24 @@
 {
-  "routingKey": "ev.ready.swarm-start.swarm-A.generator.gen-1",
+  "routingKey": "event.outcome.swarm-start.swarm-A.generator.gen-1",
   "payload": {
-    "ts": "2024-01-01T00:00:00Z",
-    "correlationId": "corr-1",
-    "idempotencyKey": "idem-1",
-    "signal": "swarm-start",
+    "timestamp": "2024-01-01T00:00:00Z",
+    "version": "1",
+    "kind": "outcome",
+    "type": "swarm-start",
+    "origin": "gen-1",
     "scope": {
       "swarmId": "swarm-A",
       "role": "generator",
       "instance": "gen-1"
     },
-    "result": "success",
-    "state": {
+    "correlationId": "corr-1",
+    "idempotencyKey": "idem-1",
+    "data": {
       "status": "Running",
-      "enabled": true,
-      "details": {
-        "tasks": 5
+      "context": {
+        "tasks": 5,
+        "durationMs": 120
       }
-    },
-    "details": {
-      "durationMs": 120
     }
   }
 }

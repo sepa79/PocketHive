@@ -1,11 +1,10 @@
 import { apiFetch } from './api'
 import { randomId } from './id'
 import type { Component } from '../types/hive'
-import type { SwarmSummary, BeeSummary } from '../types/orchestrator'
+import type { SwarmSummary, BeeSummary, SwarmJournalEntry } from '../types/orchestrator'
 
 interface SwarmManagersTogglePayload {
   idempotencyKey: string
-  commandTarget: 'swarm'
   enabled: boolean
 }
 
@@ -168,6 +167,44 @@ function normalizeSwarmSummary(input: unknown): SwarmSummary | null {
   }
 }
 
+function normalizeJournalEntry(input: unknown): SwarmJournalEntry | null {
+  if (!isRecord(input)) return null
+  const record = input as Record<string, unknown>
+  let timestamp = asString(record['timestamp'])
+  if (!timestamp) {
+    const rawTs = record['timestamp']
+    if (typeof rawTs === 'number' && Number.isFinite(rawTs)) {
+      // Backend may serialise Instants as epoch seconds; normalise to ISO string
+      const millis = rawTs * 1000
+      timestamp = new Date(millis).toISOString()
+    }
+  }
+  const swarmId = asString(record['swarmId'])
+  const actor = asString(record['actor'])
+  const kind = asString(record['kind'])
+  const severity = asString(record['severity'])
+  if (!timestamp || !swarmId || !actor || !kind || !severity) {
+    return null
+  }
+  const correlationId = asString(record['correlationId'])
+  const idempotencyKey = asString(record['idempotencyKey'])
+  const message = asString(record['message'])
+  const detailsValue = record['details']
+  const details =
+    detailsValue && typeof detailsValue === 'object' ? (detailsValue as Record<string, unknown>) : null
+  return {
+    timestamp,
+    swarmId,
+    actor,
+    kind,
+    severity,
+    correlationId,
+    idempotencyKey,
+    message,
+    details,
+  }
+}
+
 async function parseSwarmSummaries(response: Response): Promise<SwarmSummary[]> {
   try {
     const payload = await response.json()
@@ -210,10 +247,30 @@ export async function getSwarm(id: string): Promise<SwarmSummary | null> {
   return parseSwarmSummary(response)
 }
 
+export async function getSwarmJournal(id: string): Promise<SwarmJournalEntry[]> {
+  const response = await apiFetch(`/orchestrator/swarms/${id}/journal`, {
+    headers: { Accept: 'application/json' },
+  })
+  if (response.status === 404) {
+    return []
+  }
+  await ensureOk(response, 'Failed to load swarm journal')
+  try {
+    const payload = await response.json()
+    if (!Array.isArray(payload)) {
+      return []
+    }
+    return payload
+      .map((entry) => normalizeJournalEntry(entry))
+      .filter((entry): entry is SwarmJournalEntry => Boolean(entry))
+  } catch {
+    return []
+  }
+}
+
 async function setSwarmManagersEnabled(enabled: boolean) {
   const payload: SwarmManagersTogglePayload = {
     idempotencyKey: randomId(),
-    commandTarget: 'swarm',
     enabled,
   }
   await apiFetch('/orchestrator/swarm-managers/enabled', {

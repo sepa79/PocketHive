@@ -11,6 +11,7 @@ import { componentHealth } from '../../lib/health'
 import { mapStatusToVisualState, type HealthVisualState } from './visualState'
 import { useSwarmMetadata } from '../../contexts/SwarmMetadataContext'
 import SutDetailPanel from '../sut/SutDetailPanel'
+import SwarmJournalPanel from './SwarmJournalPanel'
 
 const UNASSIGNED_SWARM_ID = '__unassigned__'
 
@@ -28,7 +29,7 @@ export default function HivePage() {
   const { ensureSwarms, swarms } = useSwarmMetadata()
 
   useEffect(() => {
-    // We rely on the control-plane event stream (`ev.status-*`) to keep the
+    // We rely on the control-plane event stream (`event.metric.status-*`) to keep the
     // component list current, so no manual `requestStatusFull` calls remain.
     const unsub = subscribeComponents(setComponents)
     return () => unsub()
@@ -200,11 +201,14 @@ export default function HivePage() {
                       statusKey={health.pulseKey}
                     >
                       {isExpanded && (
-                        <ComponentList
-                          components={comps}
-                          onSelect={(c) => setSelected(c)}
-                          selectedId={selectedId}
-                        />
+                        <>
+                          <ComponentList
+                            components={comps}
+                            onSelect={(c) => setSelected(c)}
+                            selectedId={selectedId}
+                          />
+                          <SwarmJournalPanel swarmId={id} />
+                        </>
                       )}
                     </SwarmRow>
                   </div>

@@ -1,15 +1,15 @@
 {
   "signals": {
-    "scoped": "sig.status-request.swarmA.generator.gen-1",
-    "broadcast": "sig.config-update.ALL.generator.ALL"
+    "scoped": "signal.status-request.swarmA.generator.gen-1",
+    "broadcast": "signal.config-update.ALL.generator.ALL"
   },
   "events": {
-    "ready": "ev.ready.config-update.swarmA.generator.gen-1",
-    "status": "ev.status-delta.swarmA.generator.gen-1"
+    "outcome": "event.outcome.config-update.swarmA.generator.gen-1",
+    "status": "event.metric.status-delta.swarmA.generator.gen-1"
   },
   "parsed": {
     "signal": {
-      "prefix": "sig",
+      "prefix": "signal",
       "type": "config-update",
       "swarmId": "swarmA",
       "role": "generator",
@@ -22,8 +22,8 @@
       }
     },
     "event": {
-      "prefix": "ev",
-      "type": "ready.config-update",
+      "prefix": "event",
+      "type": "outcome.config-update",
       "swarmId": "swarmA",
       "role": "generator",
       "instance": "gen-1",

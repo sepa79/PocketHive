@@ -83,13 +83,13 @@ class SwarmControllerTest {
 
         ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
         verify(rabbit).convertAndSend(eq("ph.control"),
-            eq(ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_START, "sw1", "swarm-controller", "ALL")), captor.capture());
+            eq(ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_START, "sw1", "swarm-controller", "inst")), captor.capture());
         ControlSignal sig = mapper.readValue(captor.getValue(), ControlSignal.class);
-        assertThat(sig.signal()).isEqualTo(ControlPlaneSignals.SWARM_START);
-        assertThat(sig.swarmId()).isEqualTo("sw1");
+        assertThat(sig.type()).isEqualTo(ControlPlaneSignals.SWARM_START);
+        assertThat(sig.scope().swarmId()).isEqualTo("sw1");
         assertThat(sig.idempotencyKey()).isEqualTo("idem");
         assertThat(resp.getBody().watch().successTopic()).isEqualTo(
-            ControlPlaneRouting.event("ready." + ControlPlaneSignals.SWARM_START,
+            ControlPlaneRouting.event("outcome", ControlPlaneSignals.SWARM_START,
                 new ConfirmationScope("sw1", "swarm-controller", "inst")));
         assertThat(tracker.complete("sw1", Phase.START)).isPresent();
         assertThat(registry.find("sw1").get().getStatus()).isEqualTo(SwarmStatus.STARTING);
@@ -141,7 +141,7 @@ class SwarmControllerTest {
 
         ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
         verify(rabbit, times(1)).convertAndSend(eq("ph.control"),
-            eq(ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_START, "sw1", "swarm-controller", "ALL")), captor.capture());
+            eq(ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_START, "sw1", "swarm-controller", "controller-inst")), captor.capture());
         assertThat(r1.getBody().correlationId()).isEqualTo(r2.getBody().correlationId());
     }
 
@@ -297,7 +297,6 @@ class SwarmControllerTest {
         SwarmController.SwarmSummary body = resp.getBody();
         assertThat(body.id()).isEqualTo("sw1");
         assertThat(body.workEnabled()).isTrue();
-        assertThat(body.controllerEnabled()).isFalse();
         assertThat(body.templateId()).isEqualTo("tpl-1");
         assertThat(body.controllerImage()).isEqualTo("ctrl-image");
         assertThat(body.bees()).containsExactly(new SwarmController.BeeSummary("generator", "gen-image"));
@@ -420,8 +419,8 @@ class SwarmControllerTest {
         assertThat(body.correlationId()).isEqualTo("corr-123");
         assertThat(body.idempotencyKey()).isEqualTo("idem");
         assertThat(body.watch().successTopic()).isEqualTo(
-            ControlPlaneRouting.event("ready.swarm-create",
-                new ConfirmationScope("sw1", "orchestrator", "ALL")));
+            ControlPlaneRouting.event("outcome", "swarm-create",
+                new ConfirmationScope("sw1", "orchestrator", "orch-instance")));
         verifyNoInteractions(lifecycle);
         verifyNoInteractions(scenarioClient);
     }

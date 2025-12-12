@@ -48,6 +48,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
   private final SwarmRuntimeCore core;
   private final ObjectMapper mapper;
   private final io.pockethive.swarmcontroller.guard.BufferGuardCoordinator bufferGuard;
+  private final io.pockethive.swarmcontroller.runtime.SwarmJournal journal;
 
   @Autowired
   public SwarmLifecycleManager(AmqpAdmin amqp,
@@ -58,8 +59,10 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
                                RabbitProperties rabbitProperties,
                                @Qualifier("instanceId") String instanceId,
                                SwarmControllerProperties properties,
-                               MeterRegistry meterRegistry) {
+                               MeterRegistry meterRegistry,
+                               io.pockethive.swarmcontroller.runtime.SwarmJournal journal) {
     this(amqp, mapper, dockerClient, docker, rabbit, rabbitProperties, instanceId, properties, meterRegistry,
+        journal,
         deriveWorkerSettings(properties));
   }
 
@@ -72,9 +75,11 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
                         String instanceId,
                         SwarmControllerProperties properties,
                         MeterRegistry meterRegistry,
+                        io.pockethive.swarmcontroller.runtime.SwarmJournal journal,
                         WorkerSettings workerSettings) {
     Objects.requireNonNull(workerSettings, "workerSettings");
     this.mapper = mapper;
+    this.journal = journal != null ? journal : io.pockethive.swarmcontroller.runtime.SwarmJournal.noop();
     ControlPlanePublisher controlPublisher =
         new AmqpControlPlanePublisher(rabbit, properties.getControlExchange());
     SwarmWorkTopologyManager topology = new SwarmWorkTopologyManager(amqp, properties);
@@ -96,7 +101,6 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
         new ConfigFanout(mapper,
             new io.pockethive.swarmcontroller.runtime.SwarmControlPlanePortAdapter(controlPublisher),
             properties.getSwarmId(),
-            properties.getRole(),
             instanceId);
 
     this.core = new SwarmRuntimeCore(
@@ -112,13 +116,15 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
         computeAdapter,
         queueMetrics,
         configFanout,
+        this.journal,
         instanceId);
     this.bufferGuard = new io.pockethive.swarmcontroller.guard.BufferGuardCoordinator(
         properties,
         queueStatsPort,
         meterRegistry,
         controlPublisher,
-        mapper);
+        mapper,
+        instanceId);
   }
 
   private static WorkerSettings deriveWorkerSettings(SwarmControllerProperties properties) {

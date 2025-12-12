@@ -7,12 +7,11 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 
-import io.pockethive.control.Confirmation;
-import io.pockethive.control.ErrorConfirmation;
-import io.pockethive.control.ReadyConfirmation;
+import io.pockethive.control.AlertMessage;
+import io.pockethive.control.CommandOutcome;
 
 /**
- * Utility responsible for decoding control-plane confirmation payloads based on their routing keys.
+ * Utility responsible for decoding control-plane event payloads based on their routing keys.
  */
 public final class ControlPlaneEventParser {
 
@@ -30,15 +29,15 @@ public final class ControlPlaneEventParser {
     if (routingKey == null || body == null) {
       return ParsedEvent.ignored();
     }
-    if (routingKey.startsWith("ev.ready.")) {
-      Confirmation confirmation = objectMapper.readValue(body, ReadyConfirmation.class);
-      return ParsedEvent.confirmation(confirmation);
+    if (routingKey.startsWith("event.outcome.")) {
+      CommandOutcome outcome = objectMapper.readValue(body, CommandOutcome.class);
+      return ParsedEvent.outcome(outcome);
     }
-    if (routingKey.startsWith("ev.error.")) {
-      Confirmation confirmation = objectMapper.readValue(body, ErrorConfirmation.class);
-      return ParsedEvent.confirmation(confirmation);
+    if (routingKey.startsWith("event.alert.")) {
+      AlertMessage alert = objectMapper.readValue(body, AlertMessage.class);
+      return ParsedEvent.alert(alert);
     }
-    if (routingKey.startsWith("ev.status-")) {
+    if (routingKey.startsWith("event.metric.status-")) {
       StatusEvent status = objectMapper.readValue(body, StatusEvent.class);
       return ParsedEvent.status(status);
     }
@@ -52,22 +51,30 @@ public final class ControlPlaneEventParser {
     return mapper;
   }
 
-  public record ParsedEvent(Confirmation confirmation, StatusEvent status) {
+  public record ParsedEvent(CommandOutcome outcome, AlertMessage alert, StatusEvent status) {
 
-    public static ParsedEvent confirmation(Confirmation confirmation) {
-      return new ParsedEvent(confirmation, null);
+    public static ParsedEvent outcome(CommandOutcome outcome) {
+      return new ParsedEvent(outcome, null, null);
+    }
+
+    public static ParsedEvent alert(AlertMessage alert) {
+      return new ParsedEvent(null, alert, null);
     }
 
     public static ParsedEvent status(StatusEvent status) {
-      return new ParsedEvent(null, status);
+      return new ParsedEvent(null, null, status);
     }
 
     public static ParsedEvent ignored() {
-      return new ParsedEvent(null, null);
+      return new ParsedEvent(null, null, null);
     }
 
-    public boolean hasConfirmation() {
-      return confirmation != null;
+    public boolean hasOutcome() {
+      return outcome != null;
+    }
+
+    public boolean hasAlert() {
+      return alert != null;
     }
 
     public boolean hasStatus() {

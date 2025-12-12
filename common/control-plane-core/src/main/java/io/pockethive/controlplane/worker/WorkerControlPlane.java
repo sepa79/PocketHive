@@ -51,8 +51,8 @@ public final class WorkerControlPlane {
 
     private String resolveSignalName(io.pockethive.controlplane.consumer.ControlSignalEnvelope envelope) {
         ControlSignal signal = envelope.signal();
-        if (signal != null && hasText(signal.signal())) {
-            return signal.signal();
+        if (signal != null && hasText(signal.type())) {
+            return signal.type();
         }
         ControlPlaneRouting.RoutingKey routingKey = ControlPlaneRouting.parseSignal(envelope.routingKey());
         if (routingKey != null && hasText(routingKey.type())) {

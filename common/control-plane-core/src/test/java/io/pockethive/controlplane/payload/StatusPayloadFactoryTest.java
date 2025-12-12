@@ -4,6 +4,7 @@ import static io.pockethive.controlplane.payload.JsonFixtureAssertions.ANY_VALUE
 import static io.pockethive.controlplane.payload.JsonFixtureAssertions.assertMatchesFixture;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.io.IOException;
@@ -28,6 +29,7 @@ class StatusPayloadFactoryTest {
             .controlOut("rk.status")
             .enabled(true)
             .tps(42)
+            .data("startedAt", Instant.parse("2024-01-01T00:00:00Z"))
             .watermark(Instant.parse("2024-01-01T00:00:00Z"))
             .totals(3, 2, 2, 3)
             .data("baseUrl", "https://example"));
@@ -50,9 +52,14 @@ class StatusPayloadFactoryTest {
 
     private static String normalise(String json) throws IOException {
         ObjectNode node = (ObjectNode) MAPPER.readTree(json);
-        node.put("messageId", ANY_VALUE);
         node.put("timestamp", ANY_VALUE);
-        node.put("location", ANY_VALUE);
+        JsonNode data = node.path("data");
+        if (data.isObject()) {
+            JsonNode context = data.path("context");
+            if (context.isObject()) {
+                ((ObjectNode) context).put("location", ANY_VALUE);
+            }
+        }
         return MAPPER.writeValueAsString(node);
     }
 }

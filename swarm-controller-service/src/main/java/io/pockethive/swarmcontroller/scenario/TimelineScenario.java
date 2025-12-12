@@ -3,7 +3,7 @@ package io.pockethive.swarmcontroller.scenario;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import io.pockethive.control.CommandTarget;
+import io.pockethive.control.ControlScope;
 import io.pockethive.manager.runtime.ManagerStatus;
 import io.pockethive.manager.scenario.ManagerRuntimeView;
 import io.pockethive.manager.scenario.Scenario;
@@ -243,26 +243,22 @@ public final class TimelineScenario implements Scenario {
       }
     }
 
-    // Target resolution:
-    // - If an explicit instanceId is provided, use commandTarget=INSTANCE.
-    // - Otherwise, if only a role is provided, use commandTarget=ROLE so the
-    //   update fans out to all workers with that role.
-    // - If neither role nor instanceId is provided, leave commandTarget
-    //   unset so ConfigFanout defaults to SWARM.
+    ControlScope targetScope;
     if (step.instanceId != null && !step.instanceId.isBlank()) {
-      data.put("commandTarget", CommandTarget.INSTANCE.name());
-      if (step.role != null) {
-        data.put("role", step.role);
+      if (step.role == null || step.role.isBlank()) {
+        log.warn("Scenario step {} targets instance {} but has no role; skipping", step.stepId, step.instanceId);
+        return;
       }
-      data.put("instance", step.instanceId);
+      targetScope = ControlScope.forInstance(context.swarmId(), step.role, step.instanceId);
     } else if (step.role != null && !step.role.isBlank()) {
-      data.put("commandTarget", CommandTarget.ROLE.name());
-      data.put("role", step.role);
+      targetScope = ControlScope.forRole(context.swarmId(), step.role);
+    } else {
+      targetScope = ControlScope.forSwarm(context.swarmId());
     }
 
     log.info("Scenario step {} at {}ms -> role={} instance={} type={}",
         step.stepId, step.dueMillis, step.role, step.instanceId, type);
-    context.configFanout().publishConfigUpdate(data, "scenario");
+    context.configFanout().publishConfigUpdate(targetScope, data, "scenario");
   }
 
   private static final class Schedule {

@@ -14,68 +14,80 @@ import org.junit.jupiter.api.Test;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import io.pockethive.control.CommandState;
-import io.pockethive.control.ConfirmationScope;
-import io.pockethive.control.ErrorConfirmation;
-import io.pockethive.control.ReadyConfirmation;
+import io.pockethive.control.AlertMessage;
+import io.pockethive.control.CommandOutcome;
+import io.pockethive.control.ControlScope;
 
 class ControlPlaneEventParserTest {
 
   private final ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
 
   @Test
-  void parsesReadyConfirmations() throws Exception {
-    ReadyConfirmation confirmation = new ReadyConfirmation(
-        Instant.now(),
+  void parsesCommandOutcomes() throws Exception {
+    CommandOutcome outcome = new CommandOutcome(
+        Instant.parse("2024-07-01T12:00:00Z"),
+        "1",
+        "outcome",
+        "swarm-start",
+        "swarm-controller:alpha",
+        ControlScope.forInstance("swarm-test", "swarm-controller", "alpha"),
         "corr-1",
         "idem-1",
-        "swarm-start",
-        ConfirmationScope.forSwarm("swarm-test"),
-        new CommandState("Running", true, Map.of("workloads", Map.of("enabled", true)))
+        Map.of("status", "Running")
     );
-    byte[] body = mapper.writeValueAsBytes(confirmation);
+    byte[] body = mapper.writeValueAsBytes(outcome);
 
     ControlPlaneEventParser parser = new ControlPlaneEventParser(mapper);
     ControlPlaneEventParser.ParsedEvent parsed = parser.parse(
-        "ev.ready.swarm-start.swarm-test.swarm-controller.alpha",
+        "event.outcome.swarm-start.swarm-test.swarm-controller.alpha",
         body
     );
 
-    ReadyConfirmation ready = assertInstanceOf(ReadyConfirmation.class, parsed.confirmation());
+    assertNull(parsed.alert());
     assertNull(parsed.status());
-    assertEquals("corr-1", ready.correlationId());
-    assertEquals("swarm-start", ready.signal());
-    assertNotNull(ready.state());
+    CommandOutcome parsedOutcome = parsed.outcome();
+    assertNotNull(parsedOutcome);
+    assertEquals("corr-1", parsedOutcome.correlationId());
+    assertEquals("swarm-start", parsedOutcome.type());
+    assertEquals("Running", parsedOutcome.data().get("status"));
   }
 
   @Test
-  void parsesErrorConfirmations() throws Exception {
-    ErrorConfirmation confirmation = new ErrorConfirmation(
-        Instant.now(),
+  void parsesAlertMessages() throws Exception {
+    AlertMessage alert = new AlertMessage(
+        Instant.parse("2024-07-01T12:00:01Z"),
+        "1",
+        "event",
+        "alert",
+        "swarm-controller:alpha",
+        ControlScope.forInstance("swarm-test", "swarm-controller", "alpha"),
         "corr-2",
         "idem-2",
-        "swarm-stop",
-        ConfirmationScope.forSwarm("swarm-test"),
-        new CommandState("Stopped", false, null),
-        "stop",
-        "IllegalStateException",
-        "boom",
-        Boolean.FALSE,
-        null
+        new AlertMessage.AlertData(
+            "error",
+            "io.out-of-data",
+            "Out of data",
+            "RedisOutOfData",
+            "dataset=orders",
+            "logs://example",
+            Map.of("dataset", "orders")
+        )
     );
-    byte[] body = mapper.writeValueAsBytes(confirmation);
+    byte[] body = mapper.writeValueAsBytes(alert);
 
     ControlPlaneEventParser parser = new ControlPlaneEventParser(mapper);
     ControlPlaneEventParser.ParsedEvent parsed = parser.parse(
-        "ev.error.swarm-stop.swarm-test.swarm-controller.alpha",
+        "event.alert.alert.swarm-test.swarm-controller.alpha",
         body
     );
 
-    ErrorConfirmation error = assertInstanceOf(ErrorConfirmation.class, parsed.confirmation());
+    assertNull(parsed.outcome());
     assertNull(parsed.status());
-    assertEquals("corr-2", error.correlationId());
-    assertEquals("swarm-stop", error.signal());
-    assertEquals("boom", error.message());
+    AlertMessage parsedAlert = parsed.alert();
+    assertNotNull(parsedAlert);
+    assertEquals("corr-2", parsedAlert.correlationId());
+    assertEquals("alert", parsedAlert.type());
+    assertEquals("io.out-of-data", parsedAlert.data().code());
   }
 
   @Test
@@ -85,20 +97,22 @@ class ControlPlaneEventParserTest {
       assertNotNull(stream, "Fixture /fixtures/status-full.json is missing");
       byte[] body = stream.readAllBytes();
       ControlPlaneEventParser.ParsedEvent parsed = parser.parse(
-          "ev.status-full.swarm-alpha.processor.processor-1",
+          "event.metric.status-full.swarm-alpha.processor.processor-1",
           body
       );
 
       StatusEvent status = assertInstanceOf(StatusEvent.class, parsed.status());
-      assertNull(parsed.confirmation());
-      assertEquals("status-full", status.kind());
+      assertNull(parsed.outcome());
+      assertNull(parsed.alert());
+      assertEquals("metric", status.kind());
+      assertEquals("status-full", status.type());
       assertEquals("processor", status.role());
       assertEquals("processor-1", status.instance());
       assertEquals("swarm-alpha", status.swarmId());
       assertEquals(Instant.parse("2024-07-01T12:34:56Z"), status.timestamp());
-      assertEquals(Instant.parse("2024-07-01T12:34:50Z"), status.watermark());
-      assertEquals(123, status.data().get("tps"));
-      assertEquals(List.of("processor.input"), status.queues().work().in());
+      assertEquals(Instant.parse("2024-07-01T12:34:50Z").toString(), status.data().context().get("watermark"));
+      assertEquals(123L, status.data().tps());
+      assertEquals(List.of("processor.input"), status.data().io().work().queues().in());
     }
   }
 }

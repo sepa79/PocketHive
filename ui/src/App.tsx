@@ -2,6 +2,7 @@ import { Routes, Route } from 'react-router-dom'
 import Layout from './layout/Layout'
 import Home from './pages/Home'
 import HivePage from './pages/hive/HivePage'
+import SwarmJournalPage from './pages/hive/SwarmJournalPage'
 import Nectar from './pages/Nectar'
 import { CapabilitiesProvider } from './contexts/CapabilitiesContext'
 import { SwarmMetadataProvider } from './contexts/SwarmMetadataContext'
@@ -20,6 +21,16 @@ export default function App() {
             <SwarmMetadataProvider>
               <CapabilitiesProvider>
                 <HivePage />
+              </CapabilitiesProvider>
+            </SwarmMetadataProvider>
+          }
+        />
+        <Route
+          path="hive/journal/:swarmId"
+          element={
+            <SwarmMetadataProvider>
+              <CapabilitiesProvider>
+                <SwarmJournalPage />
               </CapabilitiesProvider>
             </SwarmMetadataProvider>
           }

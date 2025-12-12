@@ -14,7 +14,6 @@ public class Swarm {
     private Instant heartbeat;
     private final Instant createdAt;
     private boolean workEnabled;
-    private boolean controllerEnabled;
     private SwarmTemplateMetadata templateMetadata;
     private String sutId;
 
@@ -27,7 +26,6 @@ public class Swarm {
         this.heartbeat = Instant.now();
         this.createdAt = Instant.now();
         this.workEnabled = true;
-        this.controllerEnabled = false;
     }
 
     public String getId() {
@@ -72,14 +70,6 @@ public class Swarm {
 
     public void setWorkEnabled(boolean workEnabled) {
         this.workEnabled = workEnabled;
-    }
-
-    public boolean isControllerEnabled() {
-        return controllerEnabled;
-    }
-
-    public void setControllerEnabled(boolean controllerEnabled) {
-        this.controllerEnabled = controllerEnabled;
     }
 
     public void attachTemplate(SwarmTemplateMetadata metadata) {

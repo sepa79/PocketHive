@@ -1,45 +1,55 @@
 {
-  "event": "status",
-  "version": "1.0",
-  "messageId": "msg-123",
   "timestamp": "2024-07-01T12:34:56Z",
-  "location": "local",
-  "kind": "status-full",
-  "role": "processor",
-  "instance": "processor-1",
+  "version": "1",
+  "kind": "metric",
+  "type": "status-full",
   "origin": "worker-control",
-  "swarmId": "swarm-alpha",
-  "enabled": true,
-  "state": "Running",
-  "watermark": "2024-07-01T12:34:50Z",
-  "maxStalenessSec": 45,
-  "traffic": "traffic.exchange",
-  "totals": {
-    "desired": 3,
-    "healthy": 3,
-    "running": 3,
-    "enabled": 3
+  "scope": {
+    "swarmId": "swarm-alpha",
+    "role": "processor",
+    "instance": "processor-1"
   },
-  "queueStats": {
-    "processor.input": {
-      "depth": 0
-    }
-  },
-  "publishes": ["traffic.results"],
-  "queues": {
-    "work": {
-      "in": ["processor.input"],
-      "routes": ["rk.alpha"],
-      "out": ["rk.beta"]
-    },
-    "control": {
-      "in": ["control.input"],
-      "routes": ["ev.status-full.swarm-alpha"],
-      "out": ["ev.status-delta.swarm-alpha"]
-    }
-  },
+  "correlationId": null,
+  "idempotencyKey": null,
   "data": {
+    "enabled": true,
     "tps": 123,
+    "startedAt": "2024-07-01T12:00:00Z",
+    "io": {
+      "work": {
+        "queues": {
+          "in": ["processor.input"],
+          "routes": ["rk.alpha"],
+          "out": ["rk.beta"]
+        },
+        "queueStats": {
+          "processor.input": {
+            "depth": 0
+          }
+        }
+      },
+      "control": {
+        "queues": {
+          "in": ["control.input"],
+          "routes": ["event.metric.status-full.swarm-alpha"],
+          "out": ["event.metric.status-delta.swarm-alpha"]
+        }
+      }
+    },
+    "context": {
+      "location": "local",
+      "traffic": "traffic.exchange",
+      "state": "Running",
+      "watermark": "2024-07-01T12:34:50Z",
+      "maxStalenessSec": 45,
+      "totals": {
+        "desired": 3,
+        "healthy": 3,
+        "running": 3,
+        "enabled": 3
+      },
+      "publishes": ["traffic.results"]
+    },
     "extra": "value"
   }
 }

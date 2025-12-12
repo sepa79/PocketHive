@@ -209,6 +209,7 @@ services:
     image: ${DOCKER_REGISTRY:-}orchestrator:${POCKETHIVE_VERSION:-latest}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      - /opt/pockethive/scenarios-runtime:/opt/pockethive/scenarios-runtime
 # all defaulted in application.yml, uncomment to override here
     environment:
       POCKETHIVE_SCENARIOS_RUNTIME_ROOT: /opt/pockethive/scenarios-runtime

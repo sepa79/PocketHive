@@ -35,11 +35,12 @@ public final class SwarmControllerControlPlaneTopologyDescriptor implements Cont
         String id = requireInstanceId(instanceId);
         String queueName = buildControlQueueName(controlQueuePrefix, swarmId, ROLE, id);
         LinkedHashSet<String> signals = new LinkedHashSet<>();
-        signals.add(ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_START, swarmId, ROLE, "ALL"));
-        signals.add(ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_PLAN, swarmId, ROLE, "ALL"));
-        signals.add(ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_TEMPLATE, swarmId, ROLE, "ALL"));
-        signals.add(ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_STOP, swarmId, ROLE, "ALL"));
-        signals.add(ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_REMOVE, swarmId, ROLE, "ALL"));
+        // Lifecycle commands must target a concrete controller instance.
+        signals.add(ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_START, swarmId, ROLE, id));
+        signals.add(ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_PLAN, swarmId, ROLE, id));
+        signals.add(ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_TEMPLATE, swarmId, ROLE, id));
+        signals.add(ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_STOP, swarmId, ROLE, id));
+        signals.add(ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_REMOVE, swarmId, ROLE, id));
         signals.add(ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, swarmId, ROLE, "ALL"));
         signals.add(ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, swarmId, ROLE, id));
         signals.add(ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, swarmId, "ALL", "ALL"));
@@ -70,11 +71,11 @@ public final class SwarmControllerControlPlaneTopologyDescriptor implements Cont
             ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, swarmId, "ALL", "ALL")
         );
         Set<String> lifecycleRoutes = Set.of(
-            ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_START, swarmId, ROLE, "ALL"),
-            ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_PLAN, swarmId, ROLE, "ALL"),
-            ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_TEMPLATE, swarmId, ROLE, "ALL"),
-            ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_STOP, swarmId, ROLE, "ALL"),
-            ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_REMOVE, swarmId, ROLE, "ALL")
+            ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_START, swarmId, ROLE, ControlPlaneRouteCatalog.INSTANCE_TOKEN),
+            ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_PLAN, swarmId, ROLE, ControlPlaneRouteCatalog.INSTANCE_TOKEN),
+            ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_TEMPLATE, swarmId, ROLE, ControlPlaneRouteCatalog.INSTANCE_TOKEN),
+            ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_STOP, swarmId, ROLE, ControlPlaneRouteCatalog.INSTANCE_TOKEN),
+            ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_REMOVE, swarmId, ROLE, ControlPlaneRouteCatalog.INSTANCE_TOKEN)
         );
         Set<String> statusEvents = Set.of(
             statusEventPattern("status-full"),
@@ -84,7 +85,7 @@ public final class SwarmControllerControlPlaneTopologyDescriptor implements Cont
     }
 
     private String statusEventPattern(String type) {
-        String base = ControlPlaneRouting.event(type, ConfirmationScope.forSwarm(swarmId));
+        String base = ControlPlaneRouting.event("metric", type, ConfirmationScope.forSwarm(swarmId));
         return base.replace(".ALL.ALL", ".#");
     }
 

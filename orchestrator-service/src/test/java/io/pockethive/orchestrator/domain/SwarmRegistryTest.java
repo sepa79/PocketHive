@@ -22,10 +22,8 @@ class SwarmRegistryTest {
         registry.register(swarm);
 
         registry.updateWorkEnabled("s1", false);
-        registry.updateControllerEnabled("s1", false);
 
         assertFalse(swarm.isWorkEnabled());
-        assertFalse(swarm.isControllerEnabled());
     }
 
     @Test

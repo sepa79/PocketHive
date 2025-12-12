@@ -2,8 +2,8 @@ package io.pockethive.orchestrator.app;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import io.pockethive.control.CommandState;
-import io.pockethive.control.CommandTarget;
 import io.pockethive.control.ControlSignal;
+import io.pockethive.control.ControlScope;
 import io.pockethive.orchestrator.domain.ScenarioTimelineRegistry;
 import io.pockethive.orchestrator.domain.SwarmPlanRegistry;
 import io.pockethive.orchestrator.domain.SwarmRegistry;
@@ -32,6 +32,7 @@ import java.util.Set;
 
 import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.controlplane.manager.ManagerControlPlane;
+import io.pockethive.controlplane.messaging.ControlSignals;
 import io.pockethive.controlplane.messaging.ControlPlaneEmitter;
 import io.pockethive.controlplane.messaging.EventMessage;
 import io.pockethive.controlplane.messaging.SignalMessage;
@@ -53,8 +54,6 @@ public class SwarmSignalListener {
     private static final long STATUS_INTERVAL_MS = 5000L;
     private static final Duration TEMPLATE_TIMEOUT = Duration.ofMillis(120_000L);
     private static final Logger log = LoggerFactory.getLogger(SwarmSignalListener.class);
-
-    private static final String BROADCAST_INSTANCE = "ALL";
 
     private final SwarmPlanRegistry plans;
     private final ScenarioTimelineRegistry timelines;
@@ -109,12 +108,12 @@ public class SwarmSignalListener {
             log.warn("Received control-plane event with null or blank routing key; payload snippet={}", snippet(body));
             throw new IllegalArgumentException("Control-plane routing key must not be null or blank");
         }
-        if (!routingKey.startsWith("ev.")) {
+        if (!routingKey.startsWith("event.")) {
             log.warn("Received control-plane event with unexpected routing key prefix; rk={} payload snippet={}", routingKey, snippet(body));
-            throw new IllegalArgumentException("Control-plane routing key must start with 'ev.'");
+            throw new IllegalArgumentException("Control-plane routing key must start with 'event.'");
         }
         String snippet = snippet(body);
-        if (routingKey.startsWith("ev.status-")) {
+        if (routingKey.startsWith("event.metric.status-")) {
             log.debug("[CTRL] RECV rk={} inst={} payload={}", routingKey, instanceId, snippet);
             return;
         }
@@ -135,32 +134,50 @@ public class SwarmSignalListener {
             return;
         }
 
-        if (key.type().startsWith("ready.")) {
-            handleReadyEvent(key);
-        } else if (key.type().startsWith("error.")) {
-            handleErrorEvent(key);
+        if (key.type().startsWith("outcome.")) {
+            handleOutcomeEvent(key, body);
         }
     }
 
-    private void handleReadyEvent(RoutingKey key) {
-        switch (key.type()) {
-            case "ready.swarm-controller" -> onControllerReady(key);
-            case "ready.swarm-template" -> onSwarmTemplateReady(key);
-            case "ready.swarm-start" -> onSwarmStartReady(key);
-            case "ready.swarm-stop" -> onSwarmStopReady(key);
-            case "ready.swarm-remove" -> onSwarmRemoveReady(key);
-            default -> log.debug("[CTRL] Ignoring ready event type {}", key.type());
+    private void handleOutcomeEvent(RoutingKey key, String body) {
+        String command = key.type().substring("outcome.".length());
+        String status = readOutcomeStatus(body);
+        switch (command) {
+            case "swarm-controller" -> onControllerReady(key);
+            case "swarm-template" -> {
+                if (isStatus(status, "Ready")) onSwarmTemplateReady(key);
+                else onSwarmTemplateError(key);
+            }
+            case "swarm-start" -> {
+                if (isStatus(status, "Running")) onSwarmStartReady(key);
+                else onSwarmStartError(key);
+            }
+            case "swarm-stop" -> {
+                if (isStatus(status, "Stopped")) onSwarmStopReady(key);
+                else onSwarmStopError(key);
+            }
+            case "swarm-remove" -> {
+                if (isStatus(status, "Removed")) onSwarmRemoveReady(key);
+                else registry.updateStatus(key.swarmId(), SwarmStatus.FAILED);
+            }
+            default -> log.debug("[CTRL] Ignoring outcome type {}", key.type());
         }
     }
 
-    private void handleErrorEvent(RoutingKey key) {
-        switch (key.type()) {
-            case "error.swarm-controller" -> onControllerError(key);
-            case "error.swarm-template" -> onSwarmTemplateError(key);
-            case "error.swarm-start" -> onSwarmStartError(key);
-            case "error.swarm-stop" -> onSwarmStopError(key);
-            default -> log.debug("[CTRL] Ignoring error event type {}", key.type());
+    private String readOutcomeStatus(String body) {
+        try {
+            return json.readTree(body).path("data").path("status").asText(null);
+        } catch (Exception e) {
+            log.debug("Failed to parse outcome payload status; payload snippet={}", snippet(body), e);
+            return null;
         }
+    }
+
+    private static boolean isStatus(String actual, String expected) {
+        if (actual == null || expected == null) {
+            return false;
+        }
+        return expected.equalsIgnoreCase(actual.trim());
     }
 
     private void onControllerReady(RoutingKey key) {
@@ -177,11 +194,11 @@ public class SwarmSignalListener {
         Pending info = creates.remove(controllerInstance).orElse(null);
         if (plan != null) {
             try {
-                ControlSignal payload = templateSignal(plan, info);
+                ControlSignal payload = templateSignal(plan, info, controllerInstance);
                 String jsonPayload = json.writeValueAsString(payload);
-                String rk = ControlPlaneRouting.signal("swarm-template", plan.id(), "swarm-controller", "ALL");
+                String rk = ControlPlaneRouting.signal("swarm-template", plan.id(), "swarm-controller", controllerInstance);
                 log.info("sending swarm-template for {} via controller {}", plan.id(), controllerInstance);
-                sendControl(rk, jsonPayload, "sig.swarm-template");
+                sendControl(rk, jsonPayload, "signal.swarm-template");
             } catch (Exception e) {
                 log.warn("template send", e);
             }
@@ -203,21 +220,17 @@ public class SwarmSignalListener {
                 // swarm-template lifecycle signal.
                 String correlationId = java.util.UUID.randomUUID().toString();
                 String idempotencyKey = java.util.UUID.randomUUID().toString();
-                ControlSignal payload = new ControlSignal(
-                    signal,
+                ControlSignal payload = ControlSignals.swarmPlan(
+                    instanceId,
+                    ControlScope.forInstance(swarmId, "swarm-controller", controllerInstance),
                     correlationId,
                     idempotencyKey,
-                    swarmId,
-                    null,
-                    null,
-                    instanceId,
-                    CommandTarget.SWARM,
                     args);
                 String jsonPayload = json.writeValueAsString(payload);
-                String rk = ControlPlaneRouting.signal(signal, swarmId, "swarm-controller", "ALL");
+                String rk = ControlPlaneRouting.signal(signal, swarmId, "swarm-controller", controllerInstance);
                 log.info("sending swarm-plan for {} via controller {} (corr={}, idem={})",
                     swarmId, controllerInstance, correlationId, idempotencyKey);
-                sendControl(rk, jsonPayload, "sig.swarm-plan");
+                sendControl(rk, jsonPayload, "signal.swarm-plan");
             } catch (Exception e) {
                 log.warn("plan send", e);
             }
@@ -312,12 +325,20 @@ public class SwarmSignalListener {
         registry.updateStatus(swarmId, SwarmStatus.FAILED);
     }
 
-    private ControlSignal templateSignal(SwarmPlan plan, Pending info) {
+    private ControlSignal templateSignal(SwarmPlan plan, Pending info, String controllerInstance) {
         Map<String, Object> args = json.convertValue(plan, new TypeReference<Map<String, Object>>() {});
-        String correlationId = info != null ? info.correlationId() : null;
-        String idempotencyKey = info != null ? info.idempotencyKey() : null;
-        return new ControlSignal("swarm-template", correlationId, idempotencyKey, plan.id(), null, null,
-            instanceId, CommandTarget.SWARM, args);
+        String correlationId = info != null && info.correlationId() != null && !info.correlationId().isBlank()
+            ? info.correlationId()
+            : java.util.UUID.randomUUID().toString();
+        String idempotencyKey = info != null && info.idempotencyKey() != null && !info.idempotencyKey().isBlank()
+            ? info.idempotencyKey()
+            : java.util.UUID.randomUUID().toString();
+        return ControlSignals.swarmTemplate(
+            instanceId,
+            ControlScope.forInstance(plan.id(), "swarm-controller", controllerInstance),
+            correlationId,
+            idempotencyKey,
+            args);
     }
 
     private void emitCreateReady(Pending info) {
@@ -413,17 +434,17 @@ public class SwarmSignalListener {
     }
 
     private ControlPlaneEmitter emitterForSwarm(String swarmId) {
-        RoleContext role = new RoleContext(requireText(swarmId, "swarmId"), topology.role(), BROADCAST_INSTANCE);
+        RoleContext role = new RoleContext(requireText(swarmId, "swarmId"), topology.role(), identity.instanceId());
         return ControlPlaneEmitter.using(topology, role, controlPlane.publisher());
     }
 
     private void logReady(ControlPlaneEmitter.ReadyContext context) {
-        log.info("[CTRL] SEND ev.ready signal={} inst={} corr={} idem={}",
+        log.info("[CTRL] SEND event.outcome type={} inst={} corr={} idem={}",
             context.signal(), instanceId, context.correlationId(), context.idempotencyKey());
     }
 
     private void logError(ControlPlaneEmitter.ErrorContext context) {
-        log.info("[CTRL] SEND ev.error signal={} inst={} corr={} idem={} code={}",
+        log.info("[CTRL] SEND event.outcome+alert type={} inst={} corr={} idem={} code={}",
             context.signal(), instanceId, context.correlationId(), context.idempotencyKey(), context.code());
     }
 
@@ -472,6 +493,7 @@ public class SwarmSignalListener {
         ControlPlaneEmitter.StatusContext context = ControlPlaneEmitter.StatusContext.of(builder -> {
             var b = builder
                 .enabled(true)
+                .tps(0)
                 .controlIn(controlQueue)
                 .controlRoutes(controlRoutes.toArray(String[]::new))
                 .data("swarmCount", registry.count())
@@ -489,6 +511,7 @@ public class SwarmSignalListener {
         ControlPlaneEmitter.StatusContext context = ControlPlaneEmitter.StatusContext.of(builder -> {
             var b = builder
                 .enabled(true)
+                .tps(0)
                 .controlIn(controlQueue)
                 .controlRoutes(controlRoutes.toArray(String[]::new))
                 .data("swarmCount", registry.count())
@@ -534,7 +557,7 @@ public class SwarmSignalListener {
         } else {
             log.info("[CTRL] {} rk={} inst={} payload={}", label, routingKey, instanceId, snippet);
         }
-        if (routingKey != null && routingKey.startsWith("sig.")) {
+        if (routingKey != null && routingKey.startsWith("signal.")) {
             controlPlane.publishSignal(new SignalMessage(routingKey, payload));
         } else {
             controlPlane.publishEvent(new EventMessage(routingKey, payload));

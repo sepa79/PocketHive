@@ -11,7 +11,7 @@ import static org.mockito.Mockito.when;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.control.ControlSignal;
 import io.pockethive.control.ConfirmationScope;
-import io.pockethive.control.ReadyConfirmation;
+import io.pockethive.control.CommandOutcome;
 import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.controlplane.spring.ControlPlaneProperties;
 import io.pockethive.docker.DockerContainerClient;
@@ -238,32 +238,34 @@ class SwarmCreationMock1E2ETest {
         String captureName = admin.declareQueue(captureQueue);
         Binding templateBinding = BindingBuilder.bind(captureQueue)
             .to(controlExchange)
-            .with(ControlPlaneRouting.signal("swarm-template", swarmId, "swarm-controller", "ALL"));
+            .with(ControlPlaneRouting.signal("swarm-template", swarmId, "swarm-controller", instanceId));
         admin.declareBinding(templateBinding);
         Binding createBinding = BindingBuilder.bind(captureQueue)
             .to(controlExchange)
-            .with(ControlPlaneRouting.event("ready.swarm-create",
-                new ConfirmationScope(swarmId, "orchestrator", "ALL")));
+            .with(ControlPlaneRouting.event("outcome", "swarm-create",
+                new ConfirmationScope(swarmId, "orchestrator", managerIdentity.instanceId())));
         admin.declareBinding(createBinding);
 
         rabbitTemplate.convertAndSend(
             controlPlaneProperties.getExchange(),
-            ControlPlaneRouting.event("ready.swarm-controller",
+            ControlPlaneRouting.event("outcome", "swarm-controller",
                 new ConfirmationScope(swarmId, "swarm-controller", instanceId)),
-            "{}");
+            "{\"data\":{\"status\":\"Ready\"}}");
 
         Message templateMessage = awaitMessage(captureName, Duration.ofSeconds(15));
         assertThat(templateMessage).isNotNull();
         assertThat(templateMessage.getMessageProperties().getReceivedRoutingKey())
-            .isEqualTo(ControlPlaneRouting.signal("swarm-template", swarmId, "swarm-controller", "ALL"));
+            .isEqualTo(ControlPlaneRouting.signal("swarm-template", swarmId, "swarm-controller", instanceId));
         ControlSignal controlSignal = objectMapper.readValue(templateMessage.getBody(), ControlSignal.class);
-        assertThat(controlSignal.signal()).isEqualTo("swarm-template");
-        assertThat(controlSignal.swarmId()).isEqualTo(swarmId);
+        assertThat(controlSignal.type()).isEqualTo("swarm-template");
+        assertThat(controlSignal.scope().swarmId()).isEqualTo(swarmId);
+        assertThat(controlSignal.scope().role()).isEqualTo("swarm-controller");
+        assertThat(controlSignal.scope().instance()).isEqualTo(instanceId);
         assertThat(controlSignal.correlationId()).isEqualTo(correlationId);
         assertThat(controlSignal.idempotencyKey()).isEqualTo(idempotencyKey);
-        assertThat(controlSignal.args()).isNotNull();
+        assertThat(controlSignal.data()).isNotNull();
 
-        SwarmPlan publishedPlan = objectMapper.convertValue(controlSignal.args(), SwarmPlan.class);
+        SwarmPlan publishedPlan = objectMapper.convertValue(controlSignal.data(), SwarmPlan.class);
         String runtimeVolume = locateScenariosDirectory()
             .resolve("runtime")
             .resolve(swarmId)
@@ -298,24 +300,24 @@ class SwarmCreationMock1E2ETest {
         Message readyMessage = awaitMessage(captureName, Duration.ofSeconds(15));
         assertThat(readyMessage).isNotNull();
         assertThat(readyMessage.getMessageProperties().getReceivedRoutingKey())
-            .isEqualTo(ControlPlaneRouting.event("ready.swarm-create",
-                new ConfirmationScope(swarmId, "orchestrator", "ALL")));
-        ReadyConfirmation confirmation =
-            objectMapper.readValue(readyMessage.getBody(), ReadyConfirmation.class);
-        assertThat(confirmation.correlationId()).isEqualTo(correlationId);
-        assertThat(confirmation.idempotencyKey()).isEqualTo(idempotencyKey);
-        assertThat(confirmation.signal()).isEqualTo("swarm-create");
-        assertThat(confirmation.scope().swarmId()).isEqualTo(swarmId);
-        assertThat(confirmation.state()).isNotNull();
-        assertThat(confirmation.state().status()).isEqualTo("Ready");
+            .isEqualTo(ControlPlaneRouting.event("outcome", "swarm-create",
+                new ConfirmationScope(swarmId, "orchestrator", managerIdentity.instanceId())));
+        CommandOutcome outcome =
+            objectMapper.readValue(readyMessage.getBody(), CommandOutcome.class);
+        assertThat(outcome.correlationId()).isEqualTo(correlationId);
+        assertThat(outcome.idempotencyKey()).isEqualTo(idempotencyKey);
+        assertThat(outcome.type()).isEqualTo("swarm-create");
+        assertThat(outcome.scope().swarmId()).isEqualTo(swarmId);
+        assertThat(outcome.data()).isNotNull();
+        assertThat(outcome.data().get("status")).isEqualTo("Ready");
 
         assertThat(swarmPlanRegistry.find(instanceId)).isEmpty();
 
         rabbitTemplate.convertAndSend(
             controlPlaneProperties.getExchange(),
-            ControlPlaneRouting.event("ready.swarm-template",
+            ControlPlaneRouting.event("outcome", "swarm-template",
                 new ConfirmationScope(swarmId, "swarm-controller", instanceId)),
-            "{}");
+            "{\"data\":{\"status\":\"Ready\"}}");
         awaitStatus(swarmId, SwarmStatus.READY, Duration.ofSeconds(15));
 
         admin.deleteQueue(captureName);
@@ -324,12 +326,9 @@ class SwarmCreationMock1E2ETest {
     private void declareOrchestratorBindings(RabbitAdmin admin) {
         Queue controlQueue = QueueBuilder.durable(controlQueueName).build();
         Queue statusQueue = QueueBuilder.durable(controllerStatusQueueName).build();
-        Binding ready = BindingBuilder.bind(controlQueue)
+        Binding outcome = BindingBuilder.bind(controlQueue)
             .to(controlExchange)
-            .with(readyPattern());
-        Binding error = BindingBuilder.bind(controlQueue)
-            .to(controlExchange)
-            .with(errorPattern());
+            .with(outcomePattern());
         Binding statusFull = BindingBuilder.bind(statusQueue)
             .to(controlExchange)
             .with(statusPattern("status-full"));
@@ -340,28 +339,21 @@ class SwarmCreationMock1E2ETest {
         admin.declareExchange(controlExchange);
         admin.declareQueue(controlQueue);
         admin.declareQueue(statusQueue);
-        admin.declareBinding(ready);
-        admin.declareBinding(error);
+        admin.declareBinding(outcome);
         admin.declareBinding(statusFull);
         admin.declareBinding(statusDelta);
         admin.purgeQueue(controlQueueName, true);
         admin.purgeQueue(controllerStatusQueueName, true);
     }
 
-    private String readyPattern() {
-        return ControlPlaneRouting.event("ready", ConfirmationScope.EMPTY)
-            .replace(".ALL.ALL.ALL", ".#");
-    }
-
-    private String errorPattern() {
-        return ControlPlaneRouting.event("error", ConfirmationScope.EMPTY)
+    private String outcomePattern() {
+        return ControlPlaneRouting.event("outcome", ConfirmationScope.EMPTY)
             .replace(".ALL.ALL.ALL", ".#");
     }
 
     private String statusPattern(String type) {
-        ConfirmationScope scope = new ConfirmationScope(null, "swarm-controller", "*");
-        return ControlPlaneRouting.event(type, scope)
-            .replace(".ALL.swarm-controller", ".swarm-controller");
+        ConfirmationScope scope = new ConfirmationScope("*", "swarm-controller", "*");
+        return ControlPlaneRouting.event("metric", type, scope);
     }
 
     private HttpEntity<Map<String, String>> jsonRequest(Map<String, String> body) {

@@ -1,102 +1,105 @@
 package io.pockethive.control;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import java.time.Instant;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Objects;
 
 /**
- * Unified control-plane signal envelope shared by orchestrator and controller.
+ * Canonical control-plane command signal envelope (kind=signal).
+ * <p>
+ * Carries the standard envelope metadata plus a per-command {@code data}
+ * section. The {@code type} field is the canonical command identifier.
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public record ControlSignal(
-    String signal,
+    Instant timestamp,
+    String version,
+    String kind,
+    String type,
+    String origin,
+    ControlScope scope,
     String correlationId,
     String idempotencyKey,
-    String swarmId,
-    String role,
-    String instance,
-    String origin,
-    CommandTarget commandTarget,
-    Map<String, Object> args
+    Map<String, Object> data
 ) {
 
     public ControlSignal {
-        if (args != null) {
-            args = Collections.unmodifiableMap(new LinkedHashMap<>(args));
+        Objects.requireNonNull(timestamp, "timestamp");
+        version = requireNonBlank("version", version);
+        kind = requireNonBlank("kind", kind);
+        if (!"signal".equals(kind)) {
+            throw new IllegalArgumentException("kind must be 'signal' for ControlSignal");
         }
-        if (commandTarget == null) {
-            commandTarget = CommandTarget.infer(swarmId, role, instance, args);
-        }
-        if (origin != null) {
-            origin = origin.trim();
-            if (origin.isEmpty()) {
-                origin = null;
-            }
+        type = requireNonBlank("type", type);
+        origin = requireNonBlank("origin", origin);
+        scope = Objects.requireNonNull(scope, "scope");
+        correlationId = requireNonBlank("correlationId", correlationId);
+        idempotencyKey = trimToNull(idempotencyKey);
+        if (data != null && !data.isEmpty()) {
+            data = Collections.unmodifiableMap(new LinkedHashMap<>(data));
+        } else {
+            data = null;
         }
     }
 
-    public static ControlSignal forSwarm(String signal, String swarmId, String correlationId, String idempotencyKey) {
-        return forSwarm(signal, swarmId, correlationId, idempotencyKey, null);
+    /**
+     * Canonical factory for signals with explicit data payload.
+     */
+    public static ControlSignal signal(String type,
+                                       String origin,
+                                       ControlScope scope,
+                                       String correlationId,
+                                       String idempotencyKey,
+                                       Map<String, Object> data) {
+        return new ControlSignal(
+            Instant.now(),
+            ControlPlaneEnvelopeVersion.CURRENT,
+            "signal",
+            type,
+            origin,
+            Objects.requireNonNull(scope, "scope"),
+            correlationId,
+            idempotencyKey,
+            data
+        );
     }
 
-    public static ControlSignal forSwarm(String signal,
+    public static ControlSignal forSwarm(String type,
                                          String swarmId,
+                                         String origin,
                                          String correlationId,
                                          String idempotencyKey,
-                                         String origin) {
-        return new ControlSignal(signal, correlationId, idempotencyKey, swarmId, null, null,
-            origin, CommandTarget.SWARM, null);
+                                         Map<String, Object> data) {
+        return signal(type, origin, ControlScope.forSwarm(swarmId), correlationId, idempotencyKey, data);
     }
 
-    public static ControlSignal forInstance(String signal,
+    public static ControlSignal forInstance(String type,
                                             String swarmId,
                                             String role,
                                             String instance,
-                                            String correlationId,
-                                            String idempotencyKey) {
-        return forInstance(signal, swarmId, role, instance, correlationId, idempotencyKey, null, null);
-    }
-
-    public static ControlSignal forInstance(String signal,
-                                            String swarmId,
-                                            String role,
-                                            String instance,
-                                            String correlationId,
-                                            String idempotencyKey,
-                                            Map<String, Object> args) {
-        return forInstance(signal, swarmId, role, instance, correlationId, idempotencyKey, null,
-            CommandTarget.INSTANCE, args);
-    }
-
-    public static ControlSignal forInstance(String signal,
-                                            String swarmId,
-                                            String role,
-                                            String instance,
-                                            String correlationId,
-                                            String idempotencyKey,
-                                            CommandTarget commandTarget,
-                                            Map<String, Object> args) {
-        return forInstance(signal, swarmId, role, instance, correlationId, idempotencyKey, null,
-            commandTarget, args);
-    }
-
-    public static ControlSignal forInstance(String signal,
-                                            String swarmId,
-                                            String role,
-                                            String instance,
-                                            String correlationId,
-                                            String idempotencyKey,
                                             String origin,
-                                            CommandTarget commandTarget,
-                                            Map<String, Object> args) {
-        CommandTarget resolved = commandTarget == null ? CommandTarget.INSTANCE : commandTarget;
-        return new ControlSignal(signal, correlationId, idempotencyKey, swarmId, role, instance,
-            origin, resolved, args);
+                                            String correlationId,
+                                            String idempotencyKey,
+                                            Map<String, Object> data) {
+        return signal(type, origin, ControlScope.forInstance(swarmId, role, instance), correlationId, idempotencyKey, data);
     }
 
-    public ControlSignal withOrigin(String origin) {
-        return new ControlSignal(signal, correlationId, idempotencyKey, swarmId, role, instance,
-            origin, commandTarget, args);
+    private static String requireNonBlank(String field, String value) {
+        String trimmed = trimToNull(value);
+        if (trimmed == null) {
+            throw new IllegalArgumentException(field + " must not be blank");
+        }
+        return trimmed;
+    }
+
+    private static String trimToNull(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
     }
 }

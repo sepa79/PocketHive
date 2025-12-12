@@ -1,10 +1,11 @@
 asyncapi: 2.6.0
 info:
   title: PocketHive Control & Traffic API
-  version: 0.5.0
+  version: 0.6.0
   description: "AsyncAPI specification documenting PocketHive messaging contracts.\n\
-    - ph.control \u2014 swarm-aware control plane covering signals, confirmations, lifecycle, metrics, and alerts.\n\
-    - Control signals publish with routing keys `sig.<signal>.<swarm>.<role>.<instance>` and confirmations/events reply on `ev.<type>.<swarm>.<role>.<instance>`.\n\
+    - ph.control \u2014 swarm-aware control plane covering signals (commands) and event streams (outcomes, metrics, alerts).\n\
+    - Signals publish with routing keys `signal.<type>.<swarmId>.<role>.<instance>`.\n\
+    - All non-signal messages publish with routing keys `event.<category>.<name>.<swarmId>.<role>.<instance>` (for example `event.outcome.swarm-start.*`, `event.metric.status-full.*`, `event.alert.alert.*`).\n\
     - ph.{swarmId}.hive \u2014 traffic exchange for workload messages (generator \u2192 moderator \u2192 processor).\n"
 servers:
   control-ws:
@@ -24,38 +25,30 @@ servers:
         default: '5672'
 defaultContentType: application/json
 channels:
-  exchange/ph.control/sig.{signal}.{swarm}.{role}.{instance}:
+  exchange/ph.control/signal.{type}.{swarm}.{role}.{instance}:
     parameters:
-      signal:
-        description: Control signal identifier (kebab-case)
+      type:
+        description: Command name (kebab-case)
         schema:
           type: string
           enum:
           - swarm-template
+          - swarm-plan
           - swarm-start
           - swarm-stop
           - swarm-remove
           - config-update
           - status-request
       swarm:
-        description: Target swarm identifier or ALL for global broadcasts
+        description: Target swarm identifier (or ALL for wildcard fan-out)
         schema:
           type: string
       role:
-        description: Target role or ALL when broadcasting to every role within a swarm
+        description: "Target role (or ALL for wildcard fan-out). This field is intentionally not an enum: roles are flexible."
         schema:
           type: string
-          enum:
-          - ALL
-          - orchestrator
-          - swarm-controller
-          - generator
-          - moderator
-          - processor
-          - postprocessor
-          - trigger
       instance:
-        description: Target instance identifier or ALL for role-wide commands
+        description: Target instance identifier (or ALL for wildcard fan-out)
         schema:
           type: string
     publish:
@@ -69,16 +62,18 @@ channels:
           name: ph.control
           type: topic
           durable: true
-        routingKey: sig.{signal}.{swarm}.{role}.{instance}
-  exchange/ph.control/ev.ready.{event}.{swarm}.{role}.{instance}:
+        routingKey: signal.{type}.{swarm}.{role}.{instance}
+
+  exchange/ph.control/event.outcome.{type}.{swarm}.{role}.{instance}:
     parameters:
-      event:
-        description: Control action that completed successfully
+      type:
+        description: Command name that this outcome corresponds to
         schema:
           type: string
           enum:
           - swarm-create
           - swarm-template
+          - swarm-plan
           - swarm-start
           - swarm-stop
           - swarm-remove
@@ -86,30 +81,21 @@ channels:
           - status-request
           - swarm-controller
       swarm:
-        description: Swarm context for the confirmation or ALL for global actions
+        description: Swarm context for the outcome (or ALL for wildcard fan-out)
         schema:
           type: string
       role:
-        description: Role affected by the action (use ALL when reporting swarm-wide success)
+        description: "Role affected by the outcome (or ALL for wildcard fan-out). This field is intentionally not an enum: roles are flexible."
         schema:
           type: string
-          enum:
-          - ALL
-          - orchestrator
-          - swarm-controller
-          - generator
-          - moderator
-          - processor
-          - postprocessor
-          - trigger
       instance:
-        description: Specific instance that completed the command or ALL for fan-outs
+        description: Specific instance that produced the outcome (or ALL for wildcard fan-out)
         schema:
           type: string
     subscribe:
-      summary: Success confirmations emitted for control-plane commands
+      summary: Outcomes emitted for control-plane commands (success and error)
       message:
-        $ref: '#/components/messages/CommandReady'
+        $ref: '#/components/messages/CommandOutcome'
     bindings:
       amqp:
         is: routingKey
@@ -117,156 +103,35 @@ channels:
           name: ph.control
           type: topic
           durable: true
-        routingKey: ev.ready.{event}.{swarm}.{role}.{instance}
-  exchange/ph.control/ev.error.{event}.{swarm}.{role}.{instance}:
+        routingKey: event.outcome.{type}.{swarm}.{role}.{instance}
+
+  exchange/ph.control/event.metric.{type}.{swarm}.{role}.{instance}:
     parameters:
-      event:
-        description: Control action that failed
+      type:
+        description: Metric type
         schema:
           type: string
           enum:
-          - swarm-create
-          - swarm-template
-          - swarm-start
-          - swarm-stop
-          - swarm-remove
-          - config-update
-          - status-request
-          - swarm-controller
-      swarm:
-        description: Swarm context for the failure or ALL for global actions
-        schema:
-          type: string
-      role:
-        description: Role affected by the failure (use ALL when reporting swarm-wide failure)
-        schema:
-          type: string
-          enum:
-          - ALL
-          - orchestrator
-          - swarm-controller
-          - generator
-          - moderator
-          - processor
-          - postprocessor
-          - trigger
-      instance:
-        description: Specific instance that failed or ALL for fan-outs
-        schema:
-          type: string
-    subscribe:
-      summary: Error confirmations emitted for control-plane commands
-      message:
-        $ref: '#/components/messages/CommandError'
-    bindings:
-      amqp:
-        is: routingKey
-        exchange:
-          name: ph.control
-          type: topic
-          durable: true
-        routingKey: ev.error.{event}.{swarm}.{role}.{instance}
-  exchange/ph.control/ev.status-{kind}.{swarm}.{role}.{instance}:
-    parameters:
-      kind:
-        description: Status document variant
-        schema:
-          type: string
-          enum:
-          - full
-          - delta
-      swarm:
-        description: Swarm that produced the status payload
-        schema:
-          type: string
-      role:
-        description: Role emitting the status event
-        schema:
-          type: string
-          enum:
-          - orchestrator
-          - swarm-controller
-          - generator
-          - moderator
-          - processor
-          - postprocessor
-          - trigger
-      instance:
-        description: Instance emitting the status event
-        schema:
-          type: string
-    subscribe:
-      summary: PocketHive control-plane status events from controllers and workers
-      message:
-        oneOf:
-        - $ref: '#/components/messages/ControlStatusFull'
-        - $ref: '#/components/messages/ControlStatusDelta'
-    bindings:
-      amqp:
-        is: routingKey
-        exchange:
-          name: ph.control
-          type: topic
-          durable: true
-        routingKey: ev.status-{kind}.{swarm}.{role}.{instance}
-  exchange/ph.control/ev.lifecycle.{swarm}.{role}.{instance}:
-    parameters:
-      swarm:
-        description: Swarm associated with the lifecycle update
-        schema:
-          type: string
-      role:
-        description: Role emitting lifecycle milestones
-        schema:
-          type: string
-          enum:
-          - swarm-controller
-          - generator
-          - moderator
-          - processor
-          - postprocessor
-          - trigger
-      instance:
-        description: Instance emitting the lifecycle milestone
-        schema:
-          type: string
-    subscribe:
-      summary: Component and controller lifecycle milestones
-      message:
-        $ref: '#/components/messages/ControlLifecycle'
-    bindings:
-      amqp:
-        is: routingKey
-        exchange:
-          name: ph.control
-          type: topic
-          durable: true
-        routingKey: ev.lifecycle.{swarm}.{role}.{instance}
-  exchange/ph.control/ev.metric.{swarm}.{role}.{instance}:
-    parameters:
+          - status-full
+          - status-delta
       swarm:
         description: Swarm emitting the metric sample
         schema:
           type: string
       role:
-        description: Role emitting metric samples
+        description: "Role emitting the metric sample. This field is intentionally not an enum: roles are flexible."
         schema:
           type: string
-          enum:
-          - swarm-controller
-          - generator
-          - moderator
-          - processor
-          - postprocessor
-          - trigger
       instance:
-        description: Instance emitting metric samples
+        description: Instance emitting the metric sample
         schema:
           type: string
     subscribe:
       summary: Metric streams from controllers and workers
       message:
-        $ref: '#/components/messages/ControlMetric'
+        oneOf:
+        - $ref: '#/components/messages/ControlMetricStatusFull'
+        - $ref: '#/components/messages/ControlMetricStatusDelta'
     bindings:
       amqp:
         is: routingKey
@@ -274,33 +139,26 @@ channels:
           name: ph.control
           type: topic
           durable: true
-        routingKey: ev.metric.{swarm}.{role}.{instance}
-  exchange/ph.control/ev.alert.{swarm}.{role}.{instance}:
+        routingKey: event.metric.{type}.{swarm}.{role}.{instance}
+
+  exchange/ph.control/event.alert.alert.{swarm}.{role}.{instance}:
     parameters:
       swarm:
         description: Swarm emitting the alert
         schema:
           type: string
       role:
-        description: Role emitting alerts
+        description: "Role emitting the alert. This field is intentionally not an enum: roles are flexible."
         schema:
           type: string
-          enum:
-          - orchestrator
-          - swarm-controller
-          - generator
-          - moderator
-          - processor
-          - postprocessor
-          - trigger
       instance:
-        description: Instance emitting alerts
+        description: Instance emitting the alert
         schema:
           type: string
     subscribe:
       summary: Alert notifications emitted across the control plane
       message:
-        $ref: '#/components/messages/ControlAlert'
+        $ref: '#/components/messages/AlertMessage'
     bindings:
       amqp:
         is: routingKey
@@ -308,312 +166,307 @@ channels:
           name: ph.control
           type: topic
           durable: true
-        routingKey: ev.alert.{swarm}.{role}.{instance}
+        routingKey: event.alert.alert.{swarm}.{role}.{instance}
 components:
   messages:
-    ControlStatusFull:
-      name: ControlStatusFull
-      title: "Control \u2014 Status (full snapshot)"
-      contentType: application/json
-      payload:
-        $ref: '#/components/schemas/ControlStatusFullPayload'
-    ControlStatusDelta:
-      name: ControlStatusDelta
-      title: "Control \u2014 Status (delta)"
-      contentType: application/json
-      payload:
-        $ref: '#/components/schemas/ControlStatusDeltaPayload'
-    ControlLifecycle:
-      name: ControlLifecycle
-      title: "Control \u2014 Lifecycle"
-      contentType: application/json
-      payload:
-        $ref: '#/components/schemas/ControlLifecyclePayload'
-    ControlMetric:
-      name: ControlMetric
-      title: "Control \u2014 Metric"
-      contentType: application/json
-      payload:
-        $ref: '#/components/schemas/ControlMetricPayload'
-    ControlAlert:
-      name: ControlAlert
-      title: "Control \u2014 Alert"
-      contentType: application/json
-      payload:
-        $ref: '#/components/schemas/ControlAlertPayload'
     ControlSignal:
       name: ControlSignal
+      title: "Control \u2014 Signal"
       contentType: application/json
       payload:
         $ref: '#/components/schemas/ControlSignalPayload'
-    ErrorMessage:
-      name: ErrorMessage
-      title: Error description
-      contentType: text/plain
-      payload:
-        type: string
-        description: Brief error message
-    SwarmCreate:
-      name: SwarmCreate
-      title: Swarm creation request
-      payload:
-        type: object
-        required:
-        - templateId
-        properties:
-          templateId:
-            type: string
-    SwarmPlanMessage:
-      name: SwarmPlan
-      title: Resolved swarm plan
-      payload:
-        type: object
-        required:
-        - id
-        - bees
-        properties:
-          id:
-            type: string
-          bees:
-            type: array
-            items:
-              type: object
-              required:
-              - role
-              - image
-              properties:
-                role:
-                  type: string
-                image:
-                  type: string
-                enabled:
-                  type: boolean
-    SwarmStart:
-      name: SwarmStart
-      title: Swarm start signal
-      payload:
-        type: object
-        description: Empty object
-    CommandReady:
-      name: CommandReady
+    CommandOutcome:
+      name: CommandOutcome
+      title: "Control \u2014 Outcome"
       contentType: application/json
       payload:
-        $ref: '#/components/schemas/CommandReadyPayload'
-    CommandError:
-      name: CommandError
+        $ref: '#/components/schemas/CommandOutcomePayload'
+    ControlMetricStatusFull:
+      name: ControlMetricStatusFull
+      title: "Control \u2014 Metric (status-full)"
       contentType: application/json
       payload:
-        $ref: '#/components/schemas/CommandErrorPayload'
+        $ref: '#/components/schemas/ControlMetricStatusFullPayload'
+    ControlMetricStatusDelta:
+      name: ControlMetricStatusDelta
+      title: "Control \u2014 Metric (status-delta)"
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/ControlMetricStatusDeltaPayload'
+    AlertMessage:
+      name: AlertMessage
+      title: "Control \u2014 Alert"
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/AlertMessagePayload'
   schemas:
-    ControlBase:
+    NonEmptyString:
+      type: string
+      minLength: 1
+    NullableNonEmptyString:
+      oneOf:
+      - $ref: '#/components/schemas/NonEmptyString'
+      - type: 'null'
+    EnvelopeScope:
       type: object
       required:
-      - event
-      - kind
-      - version
+      - swarmId
       - role
       - instance
-      - messageId
-      - timestamp
+      additionalProperties: false
       properties:
-        event:
-          type: string
-          enum:
-          - status
-          - lifecycle
-          - metric
-          - alert
-          - link
-        kind:
-          type: string
-          description: Subtype (e.g.
-          status-full: null
-          status-delta: null
-          lifecycle.running): null
-        version:
-          type: string
-          description: Semver of event schema
+        swarmId:
+          type:
+          - string
+          - 'null'
         role:
-          type: string
-          enum:
-          - generator
-          - moderator
-          - processor
-          - postprocessor
-          - trigger
-          - swarm-controller
-          - orchestrator
+          type:
+          - string
+          - 'null'
         instance:
-          type: string
-        location:
-          type: string
-        messageId:
-          type: string
-          format: uuid
+          type:
+          - string
+          - 'null'
+    EnvelopeBase:
+      type: object
+      additionalProperties: false
+      required:
+      - timestamp
+      - version
+      - kind
+      - type
+      - origin
+      - scope
+      - correlationId
+      - idempotencyKey
+      - data
+      properties:
         timestamp:
           type: string
           format: date-time
-        enabled:
-          type: boolean
-        traffic:
+          description: RFC-3339 time when the message was emitted by its origin.
+        version:
+          $ref: '#/components/schemas/NonEmptyString'
+          description: Schema version for this envelope and its structured data section.
+        kind:
+          $ref: '#/components/schemas/NonEmptyString'
+          description: Coarse message category (signal, outcome, metric, event).
+        type:
+          $ref: '#/components/schemas/NonEmptyString'
+          description: Concrete name within the kind (command name, metric type, event type).
+        origin:
+          $ref: '#/components/schemas/NonEmptyString'
+          description: Logical emitter identity (instance id or UI client id).
+        scope:
+          $ref: '#/components/schemas/EnvelopeScope'
+        correlationId:
+          $ref: '#/components/schemas/NullableNonEmptyString'
+        idempotencyKey:
+          $ref: '#/components/schemas/NullableNonEmptyString'
+        data:
+          description: Structured payload whose schema is defined per (kind, type).
+          type:
+          - object
+          - 'null'
+          additionalProperties: true
+    ControlSignalPayload:
+      allOf:
+      - $ref: '#/components/schemas/EnvelopeBase'
+      - type: object
+        additionalProperties: false
+        properties:
+          kind:
+            const: signal
+          type:
+            $ref: '#/components/schemas/NonEmptyString'
+            description: Command name (swarm-start, config-update, swarm-stop, ...).
+          correlationId:
+            $ref: '#/components/schemas/NonEmptyString'
+            description: Correlation token for this command attempt.
+          data:
+            type: object
+            additionalProperties: true
+            description: Command-specific arguments.
+    CommandOutcomePayload:
+      type: object
+      additionalProperties: false
+      required:
+      - timestamp
+      - version
+      - kind
+      - type
+      - origin
+      - scope
+      - correlationId
+      - idempotencyKey
+      - data
+      properties:
+        timestamp:
           type: string
-        publishes:
+          format: date-time
+        version:
+          $ref: '#/components/schemas/NonEmptyString'
+        kind:
+          type: string
+          enum: [outcome]
+        type:
+          $ref: '#/components/schemas/NonEmptyString'
+          description: Command name that produced this outcome.
+        origin:
+          $ref: '#/components/schemas/NonEmptyString'
+          description: Concrete emitter instance id.
+        scope:
+          $ref: '#/components/schemas/EnvelopeScope'
+          description: Scope tuple describing the concrete subject that processed the command.
+        correlationId:
+          $ref: '#/components/schemas/NonEmptyString'
+        idempotencyKey:
+          $ref: '#/components/schemas/NullableNonEmptyString'
+        data:
+          type: object
+          additionalProperties: true
+          required:
+          - status
+          properties:
+            status:
+              $ref: '#/components/schemas/NonEmptyString'
+              description: High-level status after processing the command (Ready, Running, Stopped, ...).
+            enabled:
+              type: boolean
+              description: Optional enablement outcome (only meaningful for config-update).
+            retryable:
+              type: boolean
+              description: Optional retry hint for failures.
+            context:
+              type: object
+              additionalProperties: true
+              description: Optional structured context for journal/debug (must not contain stack traces).
+    QueueStatsEntry:
+      type: object
+      additionalProperties: false
+      required:
+      - depth
+      - consumers
+      properties:
+        depth:
+          type: integer
+          minimum: 0
+        consumers:
+          type: integer
+          minimum: 0
+        oldestAgeSec:
+          type: number
+          minimum: 0
+    MetricIoQueues:
+      type: object
+      additionalProperties: false
+      properties:
+        in:
           type: array
           items:
             type: string
+        out:
+          type: array
+          items:
+            type: string
+        routes:
+          type: array
+          items:
+            type: string
+    MetricIoWork:
+      type: object
+      additionalProperties: false
+      properties:
+        queues:
+          $ref: '#/components/schemas/MetricIoQueues'
         queueStats:
           type: object
           description: Runtime depth/consumer metrics keyed by queue name.
           additionalProperties:
-            type: object
-            required:
-            - depth
-            - consumers
-            properties:
-              depth:
-                type: integer
-                minimum: 0
-              consumers:
-                type: integer
-                minimum: 0
-              oldestAgeSec:
-                type: number
-                minimum: 0
+            $ref: '#/components/schemas/QueueStatsEntry'
+    MetricIoControl:
+      type: object
+      additionalProperties: false
+      properties:
         queues:
-          type: object
-          description: Topology metadata grouped by work/control exchanges. This supersedes the legacy inQueue field.
-          properties:
-            work:
-              type: object
-              description: Queues and routing keys bound to the worker traffic exchange.
-              properties:
-                in:
-                  type: array
-                  items:
-                    type: string
-                out:
-                  type: array
-                  items:
-                    type: string
-                routes:
-                  type: array
-                  items:
-                    type: string
-            control:
-              type: object
-              description: Queues and routing keys bound to the worker control exchange.
-              properties:
-                in:
-                  type: array
-                  items:
-                    type: string
-                out:
-                  type: array
-                  items:
-                    type: string
-                routes:
-                  type: array
-                  items:
-                    type: string
-        data:
-          type: object
-          additionalProperties: true
-    ControlStatusFullPayload:
+          $ref: '#/components/schemas/MetricIoQueues'
+    MetricIo:
+      type: object
+      additionalProperties: false
+      properties:
+        work:
+          $ref: '#/components/schemas/MetricIoWork'
+        control:
+          $ref: '#/components/schemas/MetricIoControl'
+    ControlMetricStatusFullPayload:
       allOf:
-      - $ref: '#/components/schemas/ControlBase'
+      - $ref: '#/components/schemas/EnvelopeBase'
       - type: object
+        additionalProperties: false
         properties:
-          event:
-            const: status
           kind:
+            const: metric
+          type:
             const: status-full
           data:
             type: object
+            additionalProperties: false
             required:
+            - enabled
             - tps
+            - startedAt
             properties:
+              enabled:
+                type: boolean
               tps:
                 type: integer
                 minimum: 0
-              workers:
-                type: array
-                description: >
-                  Per-worker status entries (bean name, role, IO bindings, config and
-                  worker-specific data). The exact shape of each entry is intentionally
-                  loosely typed; consumers should treat fields other than 'worker' and
-                  'role' as best-effort metadata.
-                items:
-                  type: object
-                  additionalProperties: true
-    ControlStatusDeltaPayload:
+              startedAt:
+                type: string
+                format: date-time
+              io:
+                $ref: '#/components/schemas/MetricIo'
+              context:
+                type: object
+                additionalProperties: true
+    ControlMetricStatusDeltaPayload:
       allOf:
-      - $ref: '#/components/schemas/ControlBase'
+      - $ref: '#/components/schemas/EnvelopeBase'
       - type: object
+        additionalProperties: false
         properties:
-          event:
-            const: status
           kind:
+            const: metric
+          type:
             const: status-delta
           data:
             type: object
+            additionalProperties: false
             required:
+            - enabled
             - tps
             properties:
+              enabled:
+                type: boolean
               tps:
                 type: integer
                 minimum: 0
-              workers:
-                type: array
-                description: >
-                  Per-worker status entries (bean name, role, IO bindings, config and
-                  worker-specific data) for the interval since the last status event.
-                  The exact shape of each entry is intentionally loosely typed.
-                items:
-                  type: object
-                  additionalProperties: true
-    ControlLifecyclePayload:
+              context:
+                type: object
+                additionalProperties: true
+    AlertMessagePayload:
       allOf:
-      - $ref: '#/components/schemas/ControlBase'
+      - $ref: '#/components/schemas/EnvelopeBase'
       - type: object
+        additionalProperties: false
         properties:
-          event:
-            const: lifecycle
-          data:
-            type: object
-            required:
-            - state
-            properties:
-              state:
-                type: string
-                enum:
-                - starting
-                - running
-                - degraded
-                - stopping
-                - stopped
-                - error
-              reason:
-                type: string
-    ControlMetricPayload:
-      allOf:
-      - $ref: '#/components/schemas/ControlBase'
-      - type: object
-        properties:
-          event:
-            const: metric
-          data:
-            type: object
-            additionalProperties:
-              type: number
-    ControlAlertPayload:
-      allOf:
-      - $ref: '#/components/schemas/ControlBase'
-      - type: object
-        properties:
-          event:
+          kind:
+            const: event
+          type:
             const: alert
           data:
             type: object
+            additionalProperties: false
             required:
             - level
             - code
@@ -626,146 +479,15 @@ components:
                 - warn
                 - error
               code:
-                type: string
+                $ref: '#/components/schemas/NonEmptyString'
               message:
-                type: string
-    ControlSignalPayload:
-      type: object
-      required:
-      - signal
-      - correlationId
-      - idempotencyKey
-      - swarmId
-      - role
-      - instance
-      - commandTarget
-      properties:
-        signal:
-          type: string
-          description: Command identifier (e.g., swarm-start, config-update)
-        correlationId:
-          type: string
-          description: Correlates confirmations with the initiating attempt
-        idempotencyKey:
-          type: string
-          description: Stable identifier reused across retries of the same action
-        swarmId:
-          type: string
-          description: Target swarm identifier; use ALL for cross-swarm broadcasts
-        role:
-          type: string
-          description: Target service role; use ALL when addressing every role within a swarm
-        instance:
-          type: string
-          description: Target instance identifier; use ALL for role-wide commands
-        origin:
-          type: string
-          description: Component instance identifier that emitted the signal
-        commandTarget:
-          type: string
-          description: High-level target classification that guides routing decisions
-          enum:
-          - all
-          - swarm
-          - role
-          - instance
-        args:
-          type: object
-          description: Additional arguments specific to the signal
-          additionalProperties: true
-    CommandReadyPayload:
-      type: object
-      properties:
-        ts:
-          type: string
-          format: date-time
-        correlationId:
-          type: string
-          format: uuid
-        idempotencyKey:
-          type: string
-          format: uuid
-        signal:
-          type: string
-        scope:
-          $ref: '#/components/schemas/ConfirmationScope'
-        result:
-          type: string
-          enum:
-          - success
-        state:
-          $ref: '#/components/schemas/CommandState'
-        notes:
-          type: string
-      required:
-      - ts
-      - correlationId
-      - idempotencyKey
-      - signal
-      - result
-    CommandErrorPayload:
-      type: object
-      properties:
-        ts:
-          type: string
-          format: date-time
-        correlationId:
-          type: string
-          format: uuid
-        idempotencyKey:
-          type: string
-          format: uuid
-        signal:
-          type: string
-        scope:
-          $ref: '#/components/schemas/ConfirmationScope'
-        result:
-          type: string
-          enum:
-          - error
-        phase:
-          type: string
-        code:
-          type: string
-        message:
-          type: string
-        state:
-          $ref: '#/components/schemas/CommandState'
-        retryable:
-          type: boolean
-        details:
-          type: object
-          additionalProperties: true
-      required:
-      - ts
-      - correlationId
-      - idempotencyKey
-      - signal
-      - result
-      - code
-      - message
-    ConfirmationScope:
-      type: object
-      description: Scope tuple describing the swarm, role, and instance affected by a command
-      additionalProperties: false
-      properties:
-        swarmId:
-          type: string
-        role:
-          type: string
-        instance:
-          type: string
-    CommandState:
-      type: object
-      additionalProperties: false
-      properties:
-        status:
-          type: string
-          description: Primary lifecycle status after processing the command
-        enabled:
-          type: boolean
-          description: Primary enablement flag for the target
-        details:
-          type: object
-          description: Optional structured state map (e.g., workloads.enabled, controller.enabled)
-          additionalProperties: true
+                $ref: '#/components/schemas/NonEmptyString'
+              errorType:
+                $ref: '#/components/schemas/NullableNonEmptyString'
+              errorDetail:
+                $ref: '#/components/schemas/NullableNonEmptyString'
+              logRef:
+                $ref: '#/components/schemas/NullableNonEmptyString'
+              context:
+                type: object
+                additionalProperties: true

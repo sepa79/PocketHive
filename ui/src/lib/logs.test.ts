@@ -13,14 +13,14 @@ describe('logs', () => {
       entries = l
     })
     logError(
-      '/exchange/ph.control/ev.error.swarm-create.sw1',
+      '/exchange/ph.control/event.alert.alert.sw1.swarm-controller.inst',
       'boom',
       'hive',
       'stomp',
     )
     unsubscribe()
     expect(entries).toHaveLength(1)
-    expect(entries[0].destination).toContain('ev.error.swarm-create.sw1')
+    expect(entries[0].destination).toContain('event.alert.alert.sw1')
     expect(entries[0].body).toBe('boom')
   })
 })

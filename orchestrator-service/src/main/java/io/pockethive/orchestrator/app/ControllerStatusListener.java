@@ -44,34 +44,24 @@ public class ControllerStatusListener {
             throw new IllegalArgumentException("Controller status payload must not be null or blank");
         }
         String payloadSnippet = snippet(body);
-        if (routingKey.startsWith("ev.status-")) {
+        if (routingKey.startsWith("event.metric.status-")) {
             log.debug("[CTRL] RECV rk={} payload={}", routingKey, payloadSnippet);
         } else {
             log.info("[CTRL] RECV rk={} payload={}", routingKey, payloadSnippet);
         }
         try {
             JsonNode node = mapper.readTree(body);
-            String swarmId = node.path("swarmId").asText(null);
+            String swarmId = node.path("scope").path("swarmId").asText(null);
             JsonNode data = node.path("data");
             String swarmStatusText = data.path("swarmStatus").asText(null);
             if (swarmId != null && swarmStatusText != null) {
                 registry.refresh(swarmId, map(swarmStatusText));
             }
             if (swarmId != null) {
-                // Workloads / controller enablement – top‑level fields are the
-                // single source of truth. We deliberately ignore any nested
-                // state.* structure to avoid ambiguous fallbacks.
-                boolean workloadsKnown = false;
-                boolean workloadsEnabled = false;
-                if (data.has("workloadsEnabled")) {
-                    workloadsEnabled = data.path("workloadsEnabled").asBoolean();
-                    workloadsKnown = true;
-                    registry.updateWorkEnabled(swarmId, workloadsEnabled);
-                }
-                if (data.has("controllerEnabled")) {
-                    boolean controllerEnabled = data.path("controllerEnabled").asBoolean();
-                    registry.updateControllerEnabled(swarmId, controllerEnabled);
-                }
+                // Workloads enablement is reported as data.enabled on status metrics.
+                boolean workloadsKnown = true;
+                boolean workloadsEnabled = data.path("enabled").asBoolean(false);
+                registry.updateWorkEnabled(swarmId, workloadsEnabled);
 
                 // Derive SwarmStatus from controller view so plan‑driven start/stop
                 // keeps the Orchestrator registry in sync even when no explicit

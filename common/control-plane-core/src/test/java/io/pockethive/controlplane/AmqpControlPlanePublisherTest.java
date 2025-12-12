@@ -1,6 +1,5 @@
 package io.pockethive.controlplane;
 
-import io.pockethive.control.CommandTarget;
 import io.pockethive.control.ControlSignal;
 import io.pockethive.controlplane.messaging.AmqpControlPlanePublisher;
 import io.pockethive.controlplane.messaging.EventMessage;
@@ -18,11 +17,12 @@ class AmqpControlPlanePublisherTest {
         AmqpTemplate template = mock(AmqpTemplate.class);
         AmqpControlPlanePublisher publisher = new AmqpControlPlanePublisher(template, "ph.control");
 
-        ControlSignal signal = new ControlSignal("config-update", "corr", "id", "swarm", "role", "inst", null, CommandTarget.INSTANCE, null);
-        publisher.publishSignal(new SignalMessage("sig.config-update.role.inst", signal));
-        publisher.publishEvent(new EventMessage("ev.ready.config-update.swarm.role.inst", "payload"));
+        ControlSignal signal = ControlSignal.forInstance(
+            "config-update", "swarm", "role", "inst", "origin", "corr", "id", null);
+        publisher.publishSignal(new SignalMessage("signal.config-update.role.inst", signal));
+        publisher.publishEvent(new EventMessage("event.outcome.config-update.swarm.role.inst", "payload"));
 
-        verify(template).convertAndSend("ph.control", "sig.config-update.role.inst", signal);
-        verify(template).convertAndSend("ph.control", "ev.ready.config-update.swarm.role.inst", "payload");
+        verify(template).convertAndSend("ph.control", "signal.config-update.role.inst", signal);
+        verify(template).convertAndSend("ph.control", "event.outcome.config-update.swarm.role.inst", "payload");
     }
 }

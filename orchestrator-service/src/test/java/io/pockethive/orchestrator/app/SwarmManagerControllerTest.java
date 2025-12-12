@@ -7,7 +7,6 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.pockethive.control.CommandTarget;
 import io.pockethive.control.ConfirmationScope;
 import io.pockethive.control.ControlSignal;
 import io.pockethive.controlplane.ControlPlaneSignals;
@@ -54,7 +53,7 @@ class SwarmManagerControllerTest {
             mapper,
             controlPlaneProperties());
         SwarmManagerController.ToggleRequest request =
-            new SwarmManagerController.ToggleRequest("idem-1", true, null, null);
+            new SwarmManagerController.ToggleRequest("idem-1", true, null);
 
         ResponseEntity<SwarmManagerController.FanoutControlResponse> response = controller.updateAll(request);
 
@@ -68,11 +67,10 @@ class SwarmManagerControllerTest {
         List<String> swarmIds = new java.util.ArrayList<>();
         for (String json : sentPayloads) {
             ControlSignal signal = mapper.readValue(json, ControlSignal.class);
-            swarmIds.add(signal.swarmId());
-            assertThat(signal.signal()).isEqualTo(ControlPlaneSignals.CONFIG_UPDATE);
-            assertThat(signal.commandTarget()).isEqualTo(CommandTarget.SWARM);
+            swarmIds.add(signal.scope().swarmId());
+            assertThat(signal.type()).isEqualTo(ControlPlaneSignals.CONFIG_UPDATE);
             @SuppressWarnings("unchecked")
-            Map<String, Object> data = (Map<String, Object>) signal.args().get("data");
+            Map<String, Object> data = (Map<String, Object>) signal.data().get("data");
             assertThat(data).containsEntry("enabled", true);
             assertThat(data).doesNotContainKey("target");
         }
@@ -95,7 +93,7 @@ class SwarmManagerControllerTest {
             mapper,
             controlPlaneProperties());
         SwarmManagerController.ToggleRequest request =
-            new SwarmManagerController.ToggleRequest("idem-2", false, null, CommandTarget.INSTANCE);
+            new SwarmManagerController.ToggleRequest("idem-2", false, null);
 
         ResponseEntity<SwarmManagerController.FanoutControlResponse> response = controller.updateOne("sw9", request);
 
@@ -103,9 +101,8 @@ class SwarmManagerControllerTest {
         verify(rabbit).convertAndSend(eq("ph.control"),
             eq(ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, "sw9", "swarm-controller", "ctrl-z")), payload.capture());
         ControlSignal signal = mapper.readValue(payload.getValue(), ControlSignal.class);
-        assertThat(signal.commandTarget()).isEqualTo(CommandTarget.INSTANCE);
         @SuppressWarnings("unchecked")
-        Map<String, Object> data = (Map<String, Object>) signal.args().get("data");
+        Map<String, Object> data = (Map<String, Object>) signal.data().get("data");
         assertThat(data).containsEntry("enabled", false);
         assertThat(data).doesNotContainKey("target");
         assertThat(response.getStatusCode().value()).isEqualTo(202);
@@ -114,11 +111,11 @@ class SwarmManagerControllerTest {
         SwarmManagerController.Dispatch dispatch = response.getBody().dispatches().getFirst();
         ConfirmationScope scope = new ConfirmationScope("sw9", "swarm-controller", "ctrl-z");
         assertThat(dispatch.response().watch().successTopic())
-            .isEqualTo(ControlPlaneRouting.event("ready." + ControlPlaneSignals.CONFIG_UPDATE, scope));
+            .isEqualTo(ControlPlaneRouting.event("outcome", ControlPlaneSignals.CONFIG_UPDATE, scope));
     }
 
     @Test
-    void deserializesLegacyToggleWithoutCommandTarget() throws Exception {
+    void deserializesToggle() throws Exception {
         String json = """
             {
                 "idempotencyKey": "idem-legacy",
@@ -128,7 +125,8 @@ class SwarmManagerControllerTest {
         SwarmManagerController.ToggleRequest request =
             mapper.readValue(json, SwarmManagerController.ToggleRequest.class);
 
-        assertThat(request.commandTarget()).isEqualTo(CommandTarget.SWARM);
+        assertThat(request.idempotencyKey()).isEqualTo("idem-legacy");
+        assertThat(request.enabled()).isTrue();
     }
 
     private static ControlPlaneProperties controlPlaneProperties() {

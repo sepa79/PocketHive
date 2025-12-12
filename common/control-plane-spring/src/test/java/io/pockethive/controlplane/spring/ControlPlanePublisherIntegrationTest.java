@@ -65,8 +65,10 @@ class ControlPlanePublisherIntegrationTest {
                 "swarm-A",
                 "generator",
                 "gen-1",
+                properties.getInstanceId(),
                 "corr-2",
-                "idem-2");
+                "idem-2",
+                null);
             String signalKey = ControlPlaneRouting.signal("config-update", "swarm-A", "generator", "gen-1");
             publisher.publishSignal(new SignalMessage(signalKey, signal));
 
@@ -76,7 +78,7 @@ class ControlPlanePublisherIntegrationTest {
 
             List<String> routes = routingCaptor.getAllValues();
             assertThat(routes).contains(signalKey,
-                ControlPlaneRouting.event("ready", "swarm-start", scope));
+                ControlPlaneRouting.event("outcome", "swarm-start", scope));
             assertThat(payloadCaptor.getAllValues()).allSatisfy(payload -> assertThat(payload).isNotNull());
         });
     }

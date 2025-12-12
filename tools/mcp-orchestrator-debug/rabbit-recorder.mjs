@@ -3,7 +3,7 @@
 /**
  * PocketHive RabbitMQ control-plane recorder.
  *
- * Connects to the control exchange (ph.control by default), binds sig.# and ev.#,
+ * Connects to the control exchange (ph.control by default), binds signal.# and event.#,
  * and writes every control-plane message to stdout and to a JSONL log file:
  *
  *   tools/mcp-orchestrator-debug/control-recording.jsonl
@@ -50,7 +50,7 @@ async function main() {
   await ch.assertExchange(CONTROL_EXCHANGE, "topic", { durable: true });
   const q = await ch.assertQueue("", { exclusive: true, autoDelete: true });
 
-  const keys = ["sig.#", "ev.#"];
+  const keys = ["signal.#", "event.#"];
   for (const key of keys) {
     await ch.bindQueue(q.queue, CONTROL_EXCHANGE, key);
   }
@@ -115,4 +115,3 @@ main().catch((err) => {
   console.error("Rabbit recorder error:", err);
   process.exit(1);
 });
-

@@ -3,6 +3,7 @@ import {
   subscribeTopology,
   subscribeComponents,
   type Topology,
+  getNodePosition,
 } from '../../lib/stompClient'
 import type { Component } from '../../types/hive'
 import { buildGraph, type GraphData } from './TopologyBuilder'
@@ -86,28 +87,38 @@ function augmentGraphWithSuts(
       const nodeId = `sut:${swarmKey}`
       if (existingIds.has(nodeId)) continue
 
-      // Position the SUT node just to the right of the swarm's components
-      // to reduce overlap on initial layout.
-      const swarmNodes = nodes.filter((n) => normalizeId(n.swarmId) === swarmKey)
-      const xs = swarmNodes
-        .map((n) => (typeof n.x === 'number' && Number.isFinite(n.x) ? n.x : undefined))
-        .filter((v): v is number => v !== undefined)
-      const ys = swarmNodes
-        .map((n) => (typeof n.y === 'number' && Number.isFinite(n.y) ? n.y : undefined))
-        .filter((v): v is number => v !== undefined)
-      const maxX = xs.length ? Math.max(...xs) : 0
-      const minY = ys.length ? Math.min(...ys) : -60
-      const maxY = ys.length ? Math.max(...ys) : 60
-      const centerY = (minY + maxY) / 2
-      const offsetX = 220
+      const saved = getNodePosition(nodeId)
+      let x: number
+      let y: number
+      if (saved) {
+        x = saved.x
+        y = saved.y
+      } else {
+        // Position the SUT node just to the right of the swarm's components
+        // to reduce overlap on initial layout.
+        const swarmNodes = nodes.filter((n) => normalizeId(n.swarmId) === swarmKey)
+        const xs = swarmNodes
+          .map((n) => (typeof n.x === 'number' && Number.isFinite(n.x) ? n.x : undefined))
+          .filter((v): v is number => v !== undefined)
+        const ys = swarmNodes
+          .map((n) => (typeof n.y === 'number' && Number.isFinite(n.y) ? n.y : undefined))
+          .filter((v): v is number => v !== undefined)
+        const maxX = xs.length ? Math.max(...xs) : 0
+        const minY = ys.length ? Math.min(...ys) : -60
+        const maxY = ys.length ? Math.max(...ys) : 60
+        const centerY = (minY + maxY) / 2
+        const offsetX = 220
+        x = maxX + offsetX
+        y = centerY
+      }
 
       nodes.push({
         id: nodeId,
         type: 'sut',
         enabled: true,
         swarmId: swarmKey,
-        x: maxX + offsetX,
-        y: centerY,
+        x,
+        y,
       })
       existingIds.add(nodeId)
     }
@@ -139,35 +150,45 @@ function augmentGraphWithSuts(
       envNodeId = `sut-env:${sutId}`
       envNodeIds.set(sutId, envNodeId)
       if (!existingIds.has(envNodeId)) {
-        // Place environment nodes near the controllers that reference them so
-        // they do not sit on top of unrelated swarms.
-        const controllerPositions = nodes
-          .filter((n) => {
-            const normalized = normalizeSwarmId(n.swarmId)
-            return normalized === swarmKey && n.type === 'swarm-controller'
-          })
-          .map((n) => ({
-            x: typeof n.x === 'number' && Number.isFinite(n.x) ? n.x : 0,
-            y: typeof n.y === 'number' && Number.isFinite(n.y) ? n.y : 0,
-          }))
-        const avgX =
-          controllerPositions.length > 0
-            ? controllerPositions.reduce((sum, p) => sum + p.x, 0) /
-              controllerPositions.length
-            : 0
-        const avgY =
-          controllerPositions.length > 0
-            ? controllerPositions.reduce((sum, p) => sum + p.y, 0) /
-              controllerPositions.length
-            : 0
-        const offsetY = -200
+        const saved = getNodePosition(envNodeId)
+        let x: number
+        let y: number
+        if (saved) {
+          x = saved.x
+          y = saved.y
+        } else {
+          // Place environment nodes near the controllers that reference them so
+          // they do not sit on top of unrelated swarms.
+          const controllerPositions = nodes
+            .filter((n) => {
+              const normalized = normalizeSwarmId(n.swarmId)
+              return normalized === swarmKey && n.type === 'swarm-controller'
+            })
+            .map((n) => ({
+              x: typeof n.x === 'number' && Number.isFinite(n.x) ? n.x : 0,
+              y: typeof n.y === 'number' && Number.isFinite(n.y) ? n.y : 0,
+            }))
+          const avgX =
+            controllerPositions.length > 0
+              ? controllerPositions.reduce((sum, p) => sum + p.x, 0) /
+                controllerPositions.length
+              : 0
+          const avgY =
+            controllerPositions.length > 0
+              ? controllerPositions.reduce((sum, p) => sum + p.y, 0) /
+                controllerPositions.length
+              : 0
+          const offsetY = -200
+          x = avgX
+          y = avgY + offsetY
+        }
 
         nodes.push({
           id: envNodeId,
           type: 'sut',
           enabled: true,
-          x: avgX,
-          y: avgY + offsetY,
+          x,
+          y,
         })
         existingIds.add(envNodeId)
       }

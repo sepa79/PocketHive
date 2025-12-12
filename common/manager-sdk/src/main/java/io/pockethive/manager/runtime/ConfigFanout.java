@@ -4,13 +4,12 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import io.pockethive.control.CommandTarget;
 import io.pockethive.control.ControlSignal;
+import io.pockethive.control.ControlScope;
 import io.pockethive.controlplane.ControlPlaneSignals;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.manager.ports.ControlPlanePort;
 import java.util.LinkedHashMap;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -40,7 +39,6 @@ public final class ConfigFanout {
   private final ObjectMapper mapper;
   private final ControlPlanePort controlPlane;
   private final String swarmId;
-  private final String controllerRole;
   private final String controllerInstanceId;
 
   private final ConcurrentMap<String, PendingConfig> pendingConfigUpdates = new ConcurrentHashMap<>();
@@ -48,12 +46,10 @@ public final class ConfigFanout {
   public ConfigFanout(ObjectMapper mapper,
                       ControlPlanePort controlPlane,
                       String swarmId,
-                      String controllerRole,
                       String controllerInstanceId) {
-    this.mapper = Objects.requireNonNull(mapper, "mapper");
+    this.mapper = Objects.requireNonNull(mapper, "mapper").findAndRegisterModules();
     this.controlPlane = Objects.requireNonNull(controlPlane, "controlPlane");
     this.swarmId = Objects.requireNonNull(swarmId, "swarmId");
-    this.controllerRole = Objects.requireNonNull(controllerRole, "controllerRole");
     this.controllerInstanceId = Objects.requireNonNull(controllerInstanceId, "controllerInstanceId");
   }
 
@@ -119,89 +115,40 @@ public final class ConfigFanout {
     } else {
       payload.set("config", configNode);
     }
-    payload.put("commandTarget", "INSTANCE");
-    payload.put("role", pending.role());
-    payload.put("instance", instance);
     log.info("Publishing bootstrap config for role={} instance={}{}",
         pending.role(), instance, force ? " (initial)" : " (retry)");
-    publishConfigUpdate(payload, "bootstrap-config");
+    publishConfigUpdate(ControlScope.forInstance(swarmId, pending.role(), instance), payload, "bootstrap-config");
     pending.markPublished(now);
   }
 
   public void publishConfigUpdate(ObjectNode data, String context) {
+    publishConfigUpdate(ControlScope.forSwarm(swarmId), data, context);
+  }
+
+  public void publishConfigUpdate(ControlScope target, ObjectNode data, String context) {
+    Objects.requireNonNull(target, "target");
+    String targetSwarmId = target.swarmId();
+    if (targetSwarmId == null || targetSwarmId.isBlank()) {
+      throw new IllegalArgumentException("target.swarmId must not be blank");
+    }
+    if (!swarmId.equals(targetSwarmId)) {
+      throw new IllegalArgumentException(
+          "ConfigFanout is bound to swarm " + swarmId + " but target.swarmId was " + targetSwarmId);
+    }
     Map<String, Object> dataMap = mapper.convertValue(data, MAP_TYPE);
-    Map<String, Object> args = new LinkedHashMap<>();
-    args.put("data", dataMap);
     String correlationId = UUID.randomUUID().toString();
     String idempotencyKey = UUID.randomUUID().toString();
 
-    String rawCommandTarget = asTextValue(dataMap.remove("commandTarget"));
-    String targetHint = asTextValue(dataMap.remove("target"));
-    String scopeHint = asTextValue(dataMap.remove("scope"));
-    String swarmHint = asTextValue(dataMap.remove("swarmId"));
-    String roleHint = asTextValue(dataMap.remove("role"));
-    String instanceHint = asTextValue(dataMap.remove("instance"));
-
-    CommandTarget commandTarget = parseCommandTarget(rawCommandTarget, context);
-    if (commandTarget == null) {
-      commandTarget = commandTargetFromScope(scopeHint);
-    }
-    if (commandTarget == null) {
-      commandTarget = commandTargetFromTarget(targetHint);
-    }
-    if (commandTarget == null) {
-      commandTarget = CommandTarget.SWARM;
-    }
-
-    String resolvedSwarmId = normaliseSwarmHint(swarmHint);
-    String role = roleHint;
-    String instance = instanceHint;
-
-    TargetSpec legacySpec = parseTargetSpec(targetHint);
-    if (commandTarget == CommandTarget.INSTANCE) {
-      if ((role == null || role.isBlank()) && legacySpec != null) {
-        role = legacySpec.role();
-      }
-      if ((instance == null || instance.isBlank()) && legacySpec != null) {
-        instance = legacySpec.instance();
-      }
-      if (role == null || role.isBlank()) {
-        role = controllerRole;
-      }
-      if (instance == null || instance.isBlank()) {
-        instance = controllerInstanceId;
-      }
-    } else if (commandTarget == CommandTarget.ROLE) {
-      if ((role == null || role.isBlank()) && legacySpec != null) {
-        role = legacySpec.role();
-      }
-      if (role == null || role.isBlank()) {
-        throw new IllegalArgumentException("commandTarget=role requires role field");
-      }
-      instance = null;
-    } else if (commandTarget == CommandTarget.SWARM || commandTarget == CommandTarget.ALL) {
-      role = null;
-      instance = null;
-    }
-
-    if (resolvedSwarmId == null) {
-      resolvedSwarmId = swarmId;
-    }
-
-    ControlSignal signal = new ControlSignal(
-        ControlPlaneSignals.CONFIG_UPDATE,
+    ControlSignal signal = io.pockethive.controlplane.messaging.ControlSignals.configUpdate(
+        controllerInstanceId,
+        target,
         correlationId,
         idempotencyKey,
-        resolvedSwarmId,
-        role,
-        instance,
-        controllerInstanceId,
-        commandTarget,
-        args);
+        dataMap);
     try {
       String payload = mapper.writeValueAsString(signal);
       String routingKey = ControlPlaneRouting.signal(
-          ControlPlaneSignals.CONFIG_UPDATE, resolvedSwarmId, role, instance);
+          ControlPlaneSignals.CONFIG_UPDATE, target.swarmId(), target.role(), target.instance());
       log.info("{} config-update rk={} correlation={} payload {}",
           context, routingKey, correlationId, payloadSnippet(payload));
       controlPlane.publishSignal(routingKey, payload);
@@ -220,70 +167,6 @@ public final class ConfigFanout {
     }
     return trimmed;
   }
-
-  private static CommandTarget parseCommandTarget(String value, String context) {
-    if (value == null || value.isBlank()) {
-      return null;
-    }
-    try {
-      return CommandTarget.from(value);
-    } catch (IllegalArgumentException ex) {
-      log.warn("Ignoring unknown commandTarget {} on {} config-update", value, context);
-      return null;
-    }
-  }
-
-  private static CommandTarget commandTargetFromScope(String scope) {
-    if (scope == null || scope.isBlank()) {
-      return null;
-    }
-    return switch (scope.trim().toLowerCase(Locale.ROOT)) {
-      case "swarm" -> CommandTarget.SWARM;
-      case "role" -> CommandTarget.ROLE;
-      case "controller", "instance" -> CommandTarget.INSTANCE;
-      case "all" -> CommandTarget.ALL;
-      default -> null;
-    };
-  }
-
-  private static CommandTarget commandTargetFromTarget(String target) {
-    if (target == null || target.isBlank()) {
-      return null;
-    }
-    String trimmed = target.trim();
-    String lower = trimmed.toLowerCase(Locale.ROOT);
-    if (lower.contains(".") || lower.contains(":")) {
-      return CommandTarget.INSTANCE;
-    }
-    return switch (lower) {
-      case "all" -> CommandTarget.ALL;
-      case "swarm" -> CommandTarget.SWARM;
-      case "controller", "instance" -> CommandTarget.INSTANCE;
-      case "role" -> CommandTarget.ROLE;
-      default -> null;
-    };
-  }
-
-  private static TargetSpec parseTargetSpec(String target) {
-    if (target == null || target.isBlank()) {
-      return null;
-    }
-    String trimmed = target.trim();
-    String[] parts;
-    if (trimmed.contains(".")) {
-      parts = trimmed.split("\\.", 2);
-    } else if (trimmed.contains(":")) {
-      parts = trimmed.split(":", 2);
-    } else {
-      return null;
-    }
-    if (parts.length != 2 || parts[0].isBlank() || parts[1].isBlank()) {
-      return null;
-    }
-    return new TargetSpec(parts[0], parts[1]);
-  }
-
-  private record TargetSpec(String role, String instance) {}
 
   private static final class PendingConfig {
     private final String role;
@@ -335,23 +218,4 @@ public final class ConfigFanout {
     return base + ": " + reason;
   }
 
-  private static String asTextValue(Object value) {
-    if (value instanceof String s) {
-      String trimmed = s.trim();
-      return trimmed.isEmpty() ? null : trimmed;
-    }
-    return null;
-  }
-
-  private static String normaliseSwarmHint(String swarmHint) {
-    if (swarmHint == null) {
-      return null;
-    }
-    String trimmed = swarmHint.trim();
-    if (trimmed.isEmpty()) {
-      return null;
-    }
-    return "ALL".equalsIgnoreCase(trimmed) ? null : trimmed;
-  }
 }
-
