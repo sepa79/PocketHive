@@ -1,7 +1,23 @@
 package io.pockethive.processor.transport;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import io.netty.bootstrap.ServerBootstrap;
+import io.netty.buffer.ByteBuf;
+import io.netty.channel.Channel;
+import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.ChannelInitializer;
+import io.netty.channel.ChannelPipeline;
+import io.netty.channel.ChannelInboundHandlerAdapter;
+import io.netty.channel.SimpleChannelInboundHandler;
+import io.netty.channel.nio.NioEventLoopGroup;
+import io.netty.channel.socket.SocketChannel;
+import io.netty.channel.socket.nio.NioServerSocketChannel;
+import io.netty.handler.ssl.SslContext;
+import io.netty.handler.ssl.SslContextBuilder;
+import io.netty.handler.ssl.util.SelfSignedCertificate;
+import java.net.InetSocketAddress;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.ServerSocket;
@@ -91,6 +107,59 @@ class NettyTransportTest {
       assertThat(result.status()).isEqualTo(200);
       assertThat(new String(result.body(), StandardCharsets.UTF_8)).isEqualTo(response);
       assertThat(server.await(Duration.ofSeconds(2))).isTrue();
+    }
+  }
+
+  @Test
+  void requestResponseWorksOverTlsWhenSslVerifyDisabled() throws Exception {
+    String endTag = "</Document>";
+    String response = "<Document>ok</Document>";
+
+    try (TlsTestServer server = TlsTestServer.requestResponse(endTag, response)) {
+      TcpTransport transport = new NettyTransport();
+      TcpRequest request = new TcpRequest(
+          "127.0.0.1",
+          server.port(),
+          "<Document>ping</Document>".getBytes(StandardCharsets.UTF_8),
+          Map.of(
+              "timeout", 2_000,
+              "maxBytes", 8_192,
+              "endTag", endTag,
+              "ssl", true,
+              "sslVerify", false
+          )
+      );
+
+      TcpResponse result = transport.execute(request, TcpBehavior.REQUEST_RESPONSE);
+
+      assertThat(result.status()).isEqualTo(200);
+      assertThat(new String(result.body(), StandardCharsets.UTF_8)).isEqualTo(response);
+      assertThat(server.await(Duration.ofSeconds(2))).isTrue();
+    }
+  }
+
+  @Test
+  void requestResponseFailsOverTlsWhenSslVerifyEnabled() throws Exception {
+    String endTag = "</Document>";
+    String response = "<Document>ok</Document>";
+
+    try (TlsTestServer server = TlsTestServer.requestResponse(endTag, response)) {
+      TcpTransport transport = new NettyTransport();
+      TcpRequest request = new TcpRequest(
+          "127.0.0.1",
+          server.port(),
+          "<Document>ping</Document>".getBytes(StandardCharsets.UTF_8),
+          Map.of(
+              "timeout", 2_000,
+              "maxBytes", 8_192,
+              "endTag", endTag,
+              "ssl", true,
+              "sslVerify", true
+          )
+      );
+
+      assertThatThrownBy(() -> transport.execute(request, TcpBehavior.REQUEST_RESPONSE))
+          .isInstanceOf(TcpException.class);
     }
   }
 
@@ -189,5 +258,95 @@ class NettyTransportTest {
       return truncated;
     }
   }
-}
 
+  private static final class TlsTestServer implements AutoCloseable {
+    private final SelfSignedCertificate certificate;
+    private final NioEventLoopGroup boss;
+    private final NioEventLoopGroup worker;
+    private final Channel channel;
+    private final CountDownLatch handled;
+
+    private TlsTestServer(SelfSignedCertificate certificate,
+                          NioEventLoopGroup boss,
+                          NioEventLoopGroup worker,
+                          Channel channel,
+                          CountDownLatch handled) {
+      this.certificate = certificate;
+      this.boss = boss;
+      this.worker = worker;
+      this.channel = channel;
+      this.handled = handled;
+    }
+
+    static TlsTestServer requestResponse(String endTag, String response) throws Exception {
+      SelfSignedCertificate certificate = new SelfSignedCertificate();
+      SslContext sslContext = SslContextBuilder.forServer(certificate.certificate(), certificate.privateKey()).build();
+      CountDownLatch handled = new CountDownLatch(1);
+
+      NioEventLoopGroup boss = new NioEventLoopGroup(1);
+      NioEventLoopGroup worker = new NioEventLoopGroup(1);
+
+      ServerBootstrap bootstrap = new ServerBootstrap()
+          .group(boss, worker)
+          .channel(NioServerSocketChannel.class)
+          .childHandler(new ChannelInitializer<SocketChannel>() {
+            @Override
+            protected void initChannel(SocketChannel ch) {
+              ChannelPipeline pipeline = ch.pipeline();
+              pipeline.addLast(sslContext.newHandler(ch.alloc()));
+              pipeline.addLast(new SimpleChannelInboundHandler<ByteBuf>() {
+                private final byte[] endTagBytes = endTag.getBytes(StandardCharsets.UTF_8);
+                private final byte[] responseBytes = response.getBytes(StandardCharsets.UTF_8);
+                private int matchIdx = 0;
+
+                @Override
+                protected void channelRead0(ChannelHandlerContext ctx, ByteBuf msg) {
+                  while (msg.isReadable()) {
+                    byte b = msg.readByte();
+                    if (b == endTagBytes[matchIdx]) {
+                      matchIdx++;
+                      if (matchIdx == endTagBytes.length) {
+                        ctx.writeAndFlush(ctx.alloc().buffer(responseBytes.length).writeBytes(responseBytes));
+                        handled.countDown();
+                        ctx.close();
+                        return;
+                      }
+                    } else {
+                      matchIdx = 0;
+                    }
+                  }
+                }
+              });
+              pipeline.addLast(new ChannelInboundHandlerAdapter() {
+                @Override
+                public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
+                  ctx.close();
+                }
+              });
+            }
+          });
+
+      Channel channel = bootstrap.bind(0).sync().channel();
+      return new TlsTestServer(certificate, boss, worker, channel, handled);
+    }
+
+    int port() {
+      return ((InetSocketAddress) channel.localAddress()).getPort();
+    }
+
+    boolean await(Duration timeout) throws InterruptedException {
+      return handled.await(timeout.toMillis(), TimeUnit.MILLISECONDS);
+    }
+
+    @Override
+    public void close() throws Exception {
+      try {
+        channel.close().sync();
+      } finally {
+        boss.shutdownGracefully().sync();
+        worker.shutdownGracefully().sync();
+        certificate.delete();
+      }
+    }
+  }
+}

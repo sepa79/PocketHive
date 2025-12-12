@@ -8,6 +8,10 @@ import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.codec.DelimiterBasedFrameDecoder;
+import io.netty.handler.ssl.SslContext;
+import io.netty.handler.ssl.SslContextBuilder;
+import io.netty.handler.ssl.SslHandler;
+import io.netty.handler.ssl.util.InsecureTrustManagerFactory;
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.CompletableFuture;
@@ -26,21 +30,28 @@ public class NettyTransport implements TcpTransport {
             int timeout = (Integer) request.options().getOrDefault("timeout", 30000);
             int maxBytes = (Integer) request.options().getOrDefault("maxBytes", 8192);
             String endTag = (String) request.options().getOrDefault("endTag", "</Document>");
+            boolean useSsl = Boolean.TRUE.equals(request.options().get("ssl"));
+            boolean sslVerify = Boolean.TRUE.equals(request.options().getOrDefault("sslVerify", false));
+            SslContext sslContext = useSsl ? buildClientSslContext(sslVerify) : null;
 
             Bootstrap bootstrap = new Bootstrap()
                 .group(group)
                 .channel(NioSocketChannel.class)
+                .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, timeout)
                 .handler(new ChannelInitializer<SocketChannel>() {
                     @Override
                     protected void initChannel(SocketChannel ch) {
                         ChannelPipeline pipeline = ch.pipeline();
 
+                        if (sslContext != null) {
+                            pipeline.addLast(sslContext.newHandler(ch.alloc(), request.host(), request.port()));
+                        }
                         if (behavior == TcpBehavior.REQUEST_RESPONSE) {
                             ByteBuf delimiter = Unpooled.copiedBuffer(endTag.getBytes(StandardCharsets.UTF_8));
                             pipeline.addLast(new DelimiterBasedFrameDecoder(maxBytes, delimiter));
                         }
 
-                        pipeline.addLast(new NettyClientHandler(behavior, request.payload(), endTag, maxBytes, responseFuture));
+                        pipeline.addLast(new NettyClientHandler(behavior, request.payload(), endTag, maxBytes, responseFuture, useSsl));
                     }
                 });
 
@@ -67,30 +78,59 @@ public class NettyTransport implements TcpTransport {
         }));
     }
 
+    private static SslContext buildClientSslContext(boolean sslVerify) throws Exception {
+        SslContextBuilder builder = SslContextBuilder.forClient();
+        if (!sslVerify) {
+            builder.trustManager(InsecureTrustManagerFactory.INSTANCE);
+        }
+        return builder.build();
+    }
+
     private static class NettyClientHandler extends SimpleChannelInboundHandler<ByteBuf> {
         private final TcpBehavior behavior;
         private final byte[] payload;
         private final byte[] endTagBytes;
         private final int maxBytes;
         private final CompletableFuture<byte[]> responseFuture;
+        private final boolean useSsl;
         private final ByteArrayOutputStream responseBuffer = new ByteArrayOutputStream();
 
         NettyClientHandler(TcpBehavior behavior,
                            byte[] payload,
                            String endTag,
                            int maxBytes,
-                           CompletableFuture<byte[]> responseFuture) {
+                           CompletableFuture<byte[]> responseFuture,
+                           boolean useSsl) {
             this.behavior = behavior;
             this.payload = payload;
             this.endTagBytes = endTag.getBytes(StandardCharsets.UTF_8);
             this.maxBytes = maxBytes;
             this.responseFuture = responseFuture;
+            this.useSsl = useSsl;
         }
 
         @Override
         public void channelActive(ChannelHandlerContext ctx) {
-            ctx.writeAndFlush(Unpooled.wrappedBuffer(payload));
+            if (useSsl) {
+                SslHandler sslHandler = ctx.pipeline().get(SslHandler.class);
+                if (sslHandler == null) {
+                    fail(ctx, new IllegalStateException("SSL requested but SslHandler missing"));
+                    return;
+                }
+                sslHandler.handshakeFuture().addListener(future -> {
+                    if (!future.isSuccess()) {
+                        fail(ctx, future.cause());
+                        return;
+                    }
+                    sendPayload(ctx);
+                });
+                return;
+            }
+            sendPayload(ctx);
+        }
 
+        private void sendPayload(ChannelHandlerContext ctx) {
+            ctx.writeAndFlush(Unpooled.wrappedBuffer(payload));
             if (behavior == TcpBehavior.FIRE_FORGET) {
                 responseFuture.complete(new byte[0]);
                 ctx.close();
@@ -160,6 +200,10 @@ public class NettyTransport implements TcpTransport {
 
         @Override
         public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
+            fail(ctx, cause);
+        }
+
+        private void fail(ChannelHandlerContext ctx, Throwable cause) {
             responseFuture.completeExceptionally(cause);
             ctx.close();
         }

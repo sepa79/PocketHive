@@ -34,6 +34,8 @@ ui:
   # - TCP connection reuse:
   #     - tcpTransport.keepAlive + tcpTransport.connectionReuse are currently honoured only
   #       by the `socket` transport. `nio` and `netty` open a new connection per request.
+  # - TCP TLS support:
+  #     - `tcps://` is supported by `socket` and `netty`. `nio` is plaintext only.
   # - Observability:
   #     - Each call records:
   #         - x-ph-processor-duration-ms: time spent in the HTTP call itself (no pacing delay).
