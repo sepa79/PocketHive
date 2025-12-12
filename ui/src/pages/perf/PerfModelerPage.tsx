@@ -32,6 +32,8 @@ import YAML from 'yaml'
 type PerfFlowNode = Node<PerfNodeUIData>
 type PerfFlowEdge = Edge
 
+const STORAGE_KEY = 'pockethive-capacity-model-v1'
+
 export default function PerfModelerPage() {
   const [nodes, setNodes, onNodesChange] = useNodesState<PerfFlowNode>([])
   const [edges, setEdges, onEdgesChange] = useEdgesState<PerfFlowEdge>([])
@@ -44,6 +46,7 @@ export default function PerfModelerPage() {
   const [isModelModalOpen, setModelModalOpen] = useState(false)
   const [modelText, setModelText] = useState('')
   const [modelError, setModelError] = useState<string | null>(null)
+  const [hasHydrated, setHasHydrated] = useState(false)
 
   const handleNodeChange = useCallback(
     (id: string, patch: Partial<PerfNodeData>) => {
@@ -120,7 +123,7 @@ export default function PerfModelerPage() {
     [setNodes, setEdges],
   )
 
-  useEffect(() => {
+  const resetToDefaultGraph = useCallback(() => {
     setNodes([
       createPerfNode('in', 'in', { x: 0, y: 80 }, handleNodeChange, handleNodeRemove, {
         name: 'Synthetic IN',
@@ -129,9 +132,16 @@ export default function PerfModelerPage() {
         incomingTps: 200,
         internalLatencyMs: 200,
       }),
-      createPerfNode('service', 'service', { x: 320, y: 0 }, handleNodeChange, handleNodeRemove, {
-        name: 'Service',
-      }),
+      createPerfNode(
+        'service',
+        'service',
+        { x: 320, y: 0 },
+        handleNodeChange,
+        handleNodeRemove,
+        {
+          name: 'Service',
+        },
+      ),
       createPerfNode('out', 'out', { x: 640, y: 80 }, handleNodeChange, handleNodeRemove, {
         name: 'Synthetic OUT',
         depLatencyMs: 30,
@@ -143,6 +153,138 @@ export default function PerfModelerPage() {
       createPerfEdge('service->out', 'service', 'out'),
     ])
   }, [setNodes, setEdges, handleNodeChange, handleNodeRemove])
+
+  const applyModelObject = useCallback(
+    (parsed: any) => {
+      if (!parsed || !Array.isArray(parsed.nodes) || !Array.isArray(parsed.edges)) {
+        return
+      }
+
+      const rawNodes = parsed.nodes as any[]
+      const rawEdges = parsed.edges as any[]
+
+      const newNodes: PerfFlowNode[] = []
+      const nodeIds = new Set<string>()
+
+      for (const raw of rawNodes) {
+        const id = String(raw.id)
+        const rawKind = raw.kind
+        const kind =
+          rawKind === 'in' || rawKind === 'out' || rawKind === 'service'
+            ? rawKind
+            : 'service'
+        const x = Number(raw.x)
+        const y = Number(raw.y)
+        const config = raw.config ?? {}
+
+        if (config.isDb) {
+          continue
+        }
+
+        const overrides: any = {
+          name: config.name ?? id,
+          inputMode: config.inputMode,
+          incomingTps: config.incomingTps,
+          clientConcurrency: config.clientConcurrency,
+          transport: config.transport,
+          maxConcurrentIn: config.maxConcurrentIn,
+          internalLatencyMs: config.internalLatencyMs,
+          depLatencyMs: config.depLatencyMs,
+          depPool: config.depPool,
+          httpClient: config.httpClient,
+          dbEnabled: config.dbEnabled,
+          depsParallel: config.depsParallel,
+          includeOutDeps: config.includeOutDeps,
+        }
+
+        const node = createPerfNode(
+          id,
+          kind,
+          {
+            x: Number.isFinite(x) ? x : 0,
+            y: Number.isFinite(y) ? y : 0,
+          },
+          handleNodeChange,
+          handleNodeRemove,
+          overrides,
+        )
+        newNodes.push(node)
+        nodeIds.add(id)
+      }
+
+      for (const raw of rawNodes) {
+        const config = raw.config ?? {}
+        if (!config.isDb) continue
+        const id = String(raw.id)
+        const x = Number(raw.x)
+        const y = Number(raw.y)
+        const name = config.name ?? 'DB'
+
+        const overrides: any = {
+          depLatencyMs: config.depLatencyMs,
+          depPool: config.depPool,
+        }
+
+        const dbNode: PerfFlowNode = {
+          id,
+          type: 'perfNode',
+          position: {
+            x: Number.isFinite(x) ? x : 0,
+            y: Number.isFinite(y) ? y : 0,
+          },
+          data: {
+            ...createDefaultPerfNodeData(name),
+            ...overrides,
+            kind: 'out',
+            isDb: true,
+            onChange: handleNodeChange,
+            onRemove: () => {},
+          },
+        }
+        newNodes.push(dbNode)
+        nodeIds.add(id)
+      }
+
+      const newEdges: PerfFlowEdge[] = []
+      for (const raw of rawEdges) {
+        const source = String(raw.source)
+        const target = String(raw.target)
+        if (!nodeIds.has(source) || !nodeIds.has(target)) continue
+        const id = raw.id ? String(raw.id) : `${source}->${target}`
+        newEdges.push(createPerfEdge(id, source, target))
+      }
+
+      setNodes(newNodes)
+      setEdges(newEdges)
+    },
+    [handleNodeChange, handleNodeRemove, setNodes, setEdges],
+  )
+
+  useEffect(() => {
+    if (hasHydrated) {
+      return
+    }
+
+    let loaded = false
+    try {
+      const raw = window.localStorage.getItem(STORAGE_KEY)
+      if (raw) {
+        const parsed = JSON.parse(raw)
+        if (parsed && typeof parsed === 'object') {
+          applyModelObject(parsed)
+          loaded = true
+        }
+      }
+    } catch {
+      // ignore and fall back to default
+    }
+
+    if (!loaded) {
+      resetToDefaultGraph()
+    }
+
+    setHasHydrated(true)
+  }, [applyModelObject, resetToDefaultGraph, hasHydrated])
 
   const nodeTypes = { perfNode: PerfNode }
 
@@ -209,6 +351,15 @@ export default function PerfModelerPage() {
     setEdges([])
   }
 
+  const handleResetView = () => {
+    resetToDefaultGraph()
+    setCapacityMode('baseline')
+    setCapacityModalOpen(false)
+    setBeePlaying(false)
+    setBeeSpeed(0.25)
+    setSimTimeMs(0)
+  }
+
   const buildModelExport = useCallback(() => {
     const exportNodes = nodes.map((node) => {
       const data = node.data as any
@@ -254,6 +405,18 @@ export default function PerfModelerPage() {
     }
   }, [nodes, edges])
 
+  useEffect(() => {
+    if (!hasHydrated) {
+      return
+    }
+    try {
+      const model = buildModelExport()
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(model))
+    } catch {
+      // ignore persistence errors
+    }
+  }, [hasHydrated, nodes, edges, buildModelExport])
+
   const openExportModel = () => {
     const model = buildModelExport()
     const text = YAML.stringify(model)
@@ -281,102 +444,7 @@ export default function PerfModelerPage() {
       return
     }
 
-    const rawNodes = parsed.nodes as any[]
-    const rawEdges = parsed.edges as any[]
-
-    const newNodes: PerfFlowNode[] = []
-    const nodeIds = new Set<string>()
-
-    for (const raw of rawNodes) {
-      const id = String(raw.id)
-      const rawKind = raw.kind
-      const kind =
-        rawKind === 'in' || rawKind === 'out' || rawKind === 'service'
-          ? rawKind
-          : 'service'
-      const x = Number(raw.x)
-      const y = Number(raw.y)
-      const config = raw.config ?? {}
-
-      if (config.isDb) {
-        continue
-      }
-
-      const overrides: any = {
-        name: config.name ?? id,
-        inputMode: config.inputMode,
-        incomingTps: config.incomingTps,
-        clientConcurrency: config.clientConcurrency,
-        transport: config.transport,
-        maxConcurrentIn: config.maxConcurrentIn,
-        internalLatencyMs: config.internalLatencyMs,
-        depLatencyMs: config.depLatencyMs,
-        depPool: config.depPool,
-        httpClient: config.httpClient,
-        dbEnabled: config.dbEnabled,
-        depsParallel: config.depsParallel,
-        includeOutDeps: config.includeOutDeps,
-      }
-
-      const node = createPerfNode(
-        id,
-        kind,
-        {
-          x: Number.isFinite(x) ? x : 0,
-          y: Number.isFinite(y) ? y : 0,
-        },
-        handleNodeChange,
-        handleNodeRemove,
-        overrides,
-      )
-      newNodes.push(node)
-      nodeIds.add(id)
-    }
-
-    for (const raw of rawNodes) {
-      const config = raw.config ?? {}
-      if (!config.isDb) continue
-      const id = String(raw.id)
-      const x = Number(raw.x)
-      const y = Number(raw.y)
-      const name = config.name ?? 'DB'
-
-      const overrides: any = {
-        depLatencyMs: config.depLatencyMs,
-        depPool: config.depPool,
-      }
-
-      const dbNode: PerfFlowNode = {
-        id,
-        type: 'perfNode',
-        position: {
-          x: Number.isFinite(x) ? x : 0,
-          y: Number.isFinite(y) ? y : 0,
-        },
-        data: {
-          ...createDefaultPerfNodeData(name),
-          ...overrides,
-          kind: 'out',
-          isDb: true,
-          onChange: handleNodeChange,
-          onRemove: () => {},
-        },
-      }
-      newNodes.push(dbNode)
-      nodeIds.add(id)
-    }
-
-    const newEdges: PerfFlowEdge[] = []
-    for (const raw of rawEdges) {
-      const source = String(raw.source)
-      const target = String(raw.target)
-      if (!nodeIds.has(source) || !nodeIds.has(target)) continue
-      const id = raw.id ? String(raw.id) : `${source}->${target}`
-      newEdges.push(createPerfEdge(id, source, target))
-    }
-
-    setNodes(newNodes)
-    setEdges(newEdges)
+    applyModelObject(parsed)
     setModelModalOpen(false)
   }
 
@@ -504,188 +572,203 @@ export default function PerfModelerPage() {
   return (
     <>
       <div className="flex h-full min-h-0 bg-[#020617] text-white">
-        <aside className="w-72 border-r border-white/10 bg-[#020617] px-4 py-4 space-y-3">
-        <div>
-          <h1 className="text-sm font-semibold text-white/90">
-            Capacity modeler
-          </h1>
-          <p className="mt-1 text-xs text-slate-300">
-            Build a synthetic platform view using components with threads
-            and latencies. Concurrency is defined at synthetic IN nodes and
-            propagated along connections; each component applies its own
-            capacity limits and dependency latency.
-          </p>
-        </div>
-        <div className="space-y-2">
-          <button
-            type="button"
-            className="w-full rounded border border-amber-400/60 bg-amber-500/20 px-3 py-1.5 text-xs font-medium text-amber-50 hover:bg-amber-500/30"
-            onClick={addComponent}
-          >
-            Add component
-          </button>
-          <button
-            type="button"
-            className="w-full rounded border border-slate-600 bg-slate-900/80 px-3 py-1.5 text-xs text-slate-200 hover:bg-slate-800"
-            onClick={addInNode}
-          >
-            Add IN
-          </button>
-          <button
-            type="button"
-            className="w-full rounded border border-slate-600 bg-slate-900/80 px-3 py-1.5 text-xs text-slate-200 hover:bg-slate-800"
-            onClick={addOutNode}
-          >
-            Add OUT
-          </button>
-          <button
-            type="button"
-            className="w-full rounded border border-slate-700 bg-slate-900/80 px-3 py-1.5 text-xs text-slate-200 hover:bg-slate-800"
-            onClick={clearAll}
-          >
-            Clear graph
-          </button>
-        </div>
-        <div className="mt-3 border-t border-white/10 pt-3 space-y-2">
-          <h2 className="text-xs font-semibold text-white/80">
-            Single-service capacity curve
-          </h2>
-          <p className="text-[11px] text-slate-300">
-            For the primary <span className="font-mono">Service</span> node,
-            this graph shows theoretical throughput as we sweep incoming TPS
-            from 10 to 1000 req/s using the same capacity model.
-          </p>
-          <div
-            className="bg-slate-900/60 rounded border border-slate-700/60 px-2 py-1.5 cursor-pointer hover:border-amber-400/70 hover:bg-slate-900/80 transition-colors"
-            onClick={() => setCapacityModalOpen(true)}
-          >
-            <VictoryChart
-              theme={VictoryTheme.material}
-              padding={{ top: 12, bottom: 36, left: 44, right: 12 }}
-              height={180}
-              domainPadding={8}
-            >
-              <VictoryAxis
-                label="Incoming TPS"
-                style={{
-                  axisLabel: { padding: 28, fill: '#e2e8f0', fontSize: 9 },
-                  tickLabels: { fill: '#cbd5f5', fontSize: 8 },
-                  axis: { stroke: 'rgba(148,163,184,0.5)' },
-                  grid: { stroke: 'rgba(148,163,184,0.2)' },
-                }}
-              />
-              <VictoryAxis
-                dependentAxis
-                label="Effective TPS"
-                style={{
-                  axisLabel: { padding: 32, fill: '#e2e8f0', fontSize: 9 },
-                  tickLabels: { fill: '#cbd5f5', fontSize: 8 },
-                  axis: { stroke: 'rgba(148,163,184,0.5)' },
-                  grid: { stroke: 'rgba(148,163,184,0.2)' },
-                }}
-              />
-              <VictoryLine
-                data={smallCapacityModel.points}
-                style={{
-                  data: { stroke: '#facc15', strokeWidth: 2 },
-                }}
-                interpolation="monotoneX"
-              />
-            </VictoryChart>
-          </div>
-        </div>
-        <div className="space-y-1.5 text-[11px] text-slate-300">
-          <p>Tips:</p>
-          <ul className="ml-4 list-disc space-y-0.5">
-            <li>Drag nodes around the canvas.</li>
-            <li>Drag from a node&apos;s handle to link dependencies.</li>
-            <li>Set client concurrency on Synthetic IN nodes.</li>
-            <li>Service and OUT nodes derive TPS from incoming edges.</li>
-          </ul>
-          <div className="mt-2 border-t border-slate-800 pt-2 space-y-1">
-            <p className="text-[11px] text-slate-300">Bee path animation:</p>
-            {beeModel.bees.length === 0 ? (
-              <p className="text-[10px] text-slate-500">
-                Connect a Synthetic IN to an OUT node to see the bee path.
+        <aside className="w-72 border-r border-white/10 bg-[#020617] flex flex-col min-h-0">
+          <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4 space-y-3">
+            <div>
+              <h1 className="text-sm font-semibold text-white/90">
+                Capacity modeler
+              </h1>
+              <p className="mt-1 text-xs text-slate-300">
+                Build a synthetic platform view using components with threads
+                and latencies. Concurrency is defined at synthetic IN nodes and
+                propagated along connections; each component applies its own
+                capacity limits and dependency latency.
               </p>
-            ) : (
-              <>
-                <div className="flex flex-wrap gap-1.5 mb-1">
-                  <button
-                    type="button"
-                    className={`rounded px-2 py-0.5 text-[10px] border ${
-                      beePlaying
-                        ? 'border-amber-400 bg-amber-500/20 text-amber-50'
-                        : 'border-slate-600 bg-slate-900 text-slate-200'
-                    }`}
-                    onClick={() => setBeePlaying((prev) => !prev)}
-                  >
-                    {beePlaying ? 'Pause bee' : 'Play bee'}
-                  </button>
-                  <button
-                    type="button"
-                    className="rounded px-2 py-0.5 text-[10px] border border-slate-600 bg-slate-900 text-slate-200"
-                    onClick={() => setSimTimeMs(0)}
-                    disabled={beeModel.bees.length === 0}
-                  >
-                    Reset
-                  </button>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] text-slate-400">Speed</span>
-                  <input
-                    type="range"
-                    min={0.01}
-                    max={4}
-                    step={0.01}
-                    value={beeSpeed}
-                    onChange={(event) => {
-                      const next = Number(event.target.value)
-                      setBeeSpeed(Number.isFinite(next) && next > 0 ? next : 1)
+            </div>
+            <div className="space-y-2">
+              <button
+                type="button"
+                className="w-full rounded border border-amber-400/60 bg-amber-500/20 px-3 py-1.5 text-xs font-medium text-amber-50 hover:bg-amber-500/30"
+                onClick={addComponent}
+              >
+                Add component
+              </button>
+              <button
+                type="button"
+                className="w-full rounded border border-slate-600 bg-slate-900/80 px-3 py-1.5 text-xs text-slate-200 hover:bg-slate-800"
+                onClick={addInNode}
+              >
+                Add IN
+              </button>
+              <button
+                type="button"
+                className="w-full rounded border border-slate-600 bg-slate-900/80 px-3 py-1.5 text-xs text-slate-200 hover:bg-slate-800"
+                onClick={addOutNode}
+              >
+                Add OUT
+              </button>
+              <button
+                type="button"
+                className="w-full rounded border border-slate-700 bg-slate-900/80 px-3 py-1.5 text-xs text-slate-200 hover:bg-slate-800"
+                onClick={clearAll}
+              >
+                Clear graph
+              </button>
+              <button
+                type="button"
+                className="w-full rounded border border-slate-700 bg-slate-900/80 px-3 py-1.5 text-xs text-slate-200 hover:bg-slate-800"
+                onClick={handleResetView}
+              >
+                Reset view
+              </button>
+            </div>
+            <div className="mt-3 border-t border-white/10 pt-3 space-y-2">
+              <h2 className="text-xs font-semibold text-white/80">
+                Single-service capacity curve
+              </h2>
+              <p className="text-[11px] text-slate-300">
+                For the primary <span className="font-mono">Service</span> node,
+                this graph shows theoretical throughput as we sweep incoming TPS
+                from 10 to 1000 req/s using the same capacity model.
+              </p>
+              <div
+                className="bg-slate-900/60 rounded border border-slate-700/60 px-2 py-1.5 cursor-pointer hover:border-amber-400/70 hover:bg-slate-900/80 transition-colors"
+                onClick={() => setCapacityModalOpen(true)}
+              >
+                <VictoryChart
+                  theme={VictoryTheme.material}
+                  padding={{ top: 12, bottom: 36, left: 44, right: 12 }}
+                  height={180}
+                  domainPadding={8}
+                >
+                  <VictoryAxis
+                    label="Incoming TPS"
+                    style={{
+                      axisLabel: { padding: 28, fill: '#e2e8f0', fontSize: 9 },
+                      tickLabels: { fill: '#cbd5f5', fontSize: 8 },
+                      axis: { stroke: 'rgba(148,163,184,0.5)' },
+                      grid: { stroke: 'rgba(148,163,184,0.2)' },
                     }}
-                    className="flex-1 accent-amber-400"
                   />
-                  <span className="text-[10px] font-mono text-slate-300 w-10 text-right">
-                    ×{beeSpeed.toFixed(2)}
-                  </span>
-                </div>
-              </>
-            )}
+                  <VictoryAxis
+                    dependentAxis
+                    label="Effective TPS"
+                    style={{
+                      axisLabel: { padding: 32, fill: '#e2e8f0', fontSize: 9 },
+                      tickLabels: { fill: '#cbd5f5', fontSize: 8 },
+                      axis: { stroke: 'rgba(148,163,184,0.5)' },
+                      grid: { stroke: 'rgba(148,163,184,0.2)' },
+                    }}
+                  />
+                  <VictoryLine
+                    data={smallCapacityModel.points}
+                    style={{
+                      data: { stroke: '#facc15', strokeWidth: 2 },
+                    }}
+                    interpolation="monotoneX"
+                  />
+                </VictoryChart>
+              </div>
+            </div>
+            <div className="space-y-1.5 text-[11px] text-slate-300">
+              <p>Tips:</p>
+              <ul className="ml-4 list-disc space-y-0.5">
+                <li>Drag nodes around the canvas.</li>
+                <li>Drag from a node&apos;s handle to link dependencies.</li>
+                <li>Set client concurrency on Synthetic IN nodes.</li>
+                <li>Service and OUT nodes derive TPS from incoming edges.</li>
+              </ul>
+              <div className="mt-2 border-t border-slate-800 pt-2 space-y-1">
+                <p className="text-[11px] text-slate-300">Bee path animation:</p>
+                {beeModel.bees.length === 0 ? (
+                  <p className="text-[10px] text-slate-500">
+                    Connect a Synthetic IN to an OUT node to see the bee path.
+                  </p>
+                ) : (
+                  <>
+                    <div className="flex flex-wrap gap-1.5 mb-1">
+                      <button
+                        type="button"
+                        className={`rounded px-2 py-0.5 text-[10px] border ${
+                          beePlaying
+                            ? 'border-amber-400 bg-amber-500/20 text-amber-50'
+                            : 'border-slate-600 bg-slate-900 text-slate-200'
+                        }`}
+                        onClick={() => setBeePlaying((prev) => !prev)}
+                      >
+                        {beePlaying ? 'Pause bee' : 'Play bee'}
+                      </button>
+                      <button
+                        type="button"
+                        className="rounded px-2 py-0.5 text-[10px] border border-slate-600 bg-slate-900 text-slate-200"
+                        onClick={() => setSimTimeMs(0)}
+                        disabled={beeModel.bees.length === 0}
+                      >
+                        Reset
+                      </button>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] text-slate-400">Speed</span>
+                      <input
+                        type="range"
+                        min={0.01}
+                        max={4}
+                        step={0.01}
+                        value={beeSpeed}
+                        onChange={(event) => {
+                          const next = Number(event.target.value)
+                          setBeeSpeed(
+                            Number.isFinite(next) && next > 0 ? next : 1,
+                          )
+                        }}
+                        className="flex-1 accent-amber-400"
+                      />
+                      <span className="text-[10px] font-mono text-slate-300 w-10 text-right">
+                        ×{beeSpeed.toFixed(2)}
+                      </span>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+            <div className="mt-3 border-t border-white/10 pt-3 space-y-2">
+              <h2 className="text-xs font-semibold text-white/80">
+                Export / import
+              </h2>
+              <p className="text-[11px] text-slate-300">
+                Export the current layout as YAML, or paste a saved definition to restore it later.
+              </p>
+              <button
+                type="button"
+                className="w-full rounded border border-slate-600 bg-slate-900/80 px-2 py-1 text-[11px] text-slate-200 hover:bg-slate-800"
+                onClick={openExportModel}
+              >
+                Export / import model
+              </button>
+            </div>
           </div>
-        </div>
-        <div className="mt-3 border-t border-white/10 pt-3 space-y-2">
-          <h2 className="text-xs font-semibold text-white/80">
-            Export / import
-          </h2>
-          <p className="text-[11px] text-slate-300">
-            Export the current layout as YAML, or paste a saved definition to restore it later.
-          </p>
-          <button
-            type="button"
-            className="w-full rounded border border-slate-600 bg-slate-900/80 px-2 py-1 text-[11px] text-slate-200 hover:bg-slate-800"
-            onClick={openExportModel}
+        </aside>
+        <section className="flex-1 min-h-0">
+          <ReactFlow
+            nodes={displayNodes}
+            edges={displayEdges}
+            onNodesChange={onNodesChange}
+            onEdgesChange={onEdgesChange}
+            nodeTypes={nodeTypes}
+            onConnect={onConnect}
+            fitView
+            fitViewOptions={{ padding: 0.2 }}
           >
-            Export / import model
-          </button>
-        </div>
-      </aside>
-      <section className="flex-1 min-h-0">
-        <ReactFlow
-          nodes={displayNodes}
-          edges={displayEdges}
-          onNodesChange={onNodesChange}
-          onEdgesChange={onEdgesChange}
-          nodeTypes={nodeTypes}
-          onConnect={onConnect}
-          fitView
-          fitViewOptions={{ padding: 0.2 }}
-        >
-          <Background />
-          <Controls />
-          <BeeOverlay nodes={displayNodes} beeModel={beeModel} simTimeMs={simTimeMs} />
-        </ReactFlow>
-      </section>
-    </div>
+            <Background />
+            <Controls />
+            <BeeOverlay
+              nodes={displayNodes}
+              beeModel={beeModel}
+              simTimeMs={simTimeMs}
+            />
+          </ReactFlow>
+        </section>
+      </div>
       {isCapacityModalOpen && (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/70">
           <div
