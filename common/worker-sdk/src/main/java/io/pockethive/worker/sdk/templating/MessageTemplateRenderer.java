@@ -1,5 +1,6 @@
 package io.pockethive.worker.sdk.templating;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.worker.sdk.api.WorkItem;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -11,6 +12,7 @@ import java.util.Objects;
  */
 public final class MessageTemplateRenderer {
 
+    private static final ObjectMapper MAPPER = new ObjectMapper().findAndRegisterModules();
     private final TemplateRenderer renderer;
 
     public MessageTemplateRenderer(TemplateRenderer renderer) {
@@ -21,7 +23,7 @@ public final class MessageTemplateRenderer {
         Objects.requireNonNull(template, "template");
         Objects.requireNonNull(seed, "seed");
         Map<String, Object> ctx = new HashMap<>();
-        ctx.put("payload", seed.payload());
+        ctx.put("payload", parsePayload(seed.payload()));
         ctx.put("headers", seed.headers());
         ctx.put("workItem", seed);
 
@@ -51,6 +53,17 @@ public final class MessageTemplateRenderer {
         Map<String, String> rendered = new LinkedHashMap<>(templates.size());
         templates.forEach((name, value) -> rendered.put(name, render(value, ctx)));
         return rendered;
+    }
+
+    private static Object parsePayload(String payload) {
+        if (payload == null || payload.isBlank()) {
+            return payload;
+        }
+        try {
+            return MAPPER.readValue(payload, Map.class);
+        } catch (Exception e) {
+            return payload;
+        }
     }
 
     public record RenderedMessage(

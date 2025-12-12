@@ -96,7 +96,7 @@ final class SpelTemplateEvaluator {
         ReflectionUtils.findMethod(SpelFunctions.class, "regexExtract", String.class, String.class, int.class),
         "regexExtract method missing");
     private static final Method JSON_PATH_METHOD = Objects.requireNonNull(
-        ReflectionUtils.findMethod(SpelFunctions.class, "jsonPath", String.class, String.class),
+        ReflectionUtils.findMethod(SpelFunctions.class, "jsonPath", Object.class, String.class),
         "jsonPath method missing");
     private static final Method DATE_FORMAT_METHOD = Objects.requireNonNull(
         ReflectionUtils.findMethod(SpelFunctions.class, "dateFormat", Object.class, String.class),
@@ -250,18 +250,23 @@ final class SpelTemplateEvaluator {
             return result == null ? "" : result;
         }
 
-        static String jsonPath(String payload, String path) {
+        static String jsonPath(Object payload, String path) {
             if (payload == null || path == null || path.isBlank()) {
                 return "";
             }
             try {
-                JsonNode node = MAPPER.readTree(payload);
+                JsonNode node;
+                if (payload instanceof String str) {
+                    node = MAPPER.readTree(str);
+                } else {
+                    node = MAPPER.valueToTree(payload);
+                }
                 JsonNode target = node.at(path);
                 if (target.isMissingNode() || target.isNull()) {
                     return "";
                 }
                 return target.isValueNode() ? target.asText("") : target.toString();
-            } catch (IOException e) {
+            } catch (Exception e) {
                 return "";
             }
         }

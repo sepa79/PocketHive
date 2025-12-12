@@ -65,9 +65,32 @@ public final class TemplatingInterceptor implements WorkerInvocationInterceptor 
             return payload;
         }
         try {
-            return MAPPER.readValue(payload, Map.class);
+            Map<String, Object> map = MAPPER.readValue(payload, Map.class);
+            return new PayloadWrapper(map);
         } catch (Exception e) {
             return payload;
         }
+    }
+
+    /**
+     * Wrapper that enables direct property access (e.g., payload.col0) in Pebble templates
+     * by implementing a custom getter that delegates to the underlying map.
+     */
+    public static final class PayloadWrapper extends java.util.HashMap<String, Object> {
+        public PayloadWrapper(Map<String, Object> data) {
+            super(data);
+        }
+
+        // Enable direct property access for Pebble templates
+        public Object getCol0() { return get("col0"); }
+        public Object getCol1() { return get("col1"); }
+        public Object getCol2() { return get("col2"); }
+        public Object getCol3() { return get("col3"); }
+        public Object getCol4() { return get("col4"); }
+        public Object getCol5() { return get("col5"); }
+        public Object getCol6() { return get("col6"); }
+        public Object getCol7() { return get("col7"); }
+        public Object getCol8() { return get("col8"); }
+        public Object getCol9() { return get("col9"); }
     }
 }
