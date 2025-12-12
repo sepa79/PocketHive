@@ -544,23 +544,25 @@ class SwarmSignalListenerTest {
   }
 
   @Test
-  void configUpdateProducesJournalRequestAndAppliedEvents() throws Exception {
-    when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
-    RecordingJournal journal = new RecordingJournal();
-    SwarmSignalListener listener = new SwarmSignalListener(
-        lifecycle,
+	  void configUpdateProducesJournalRequestAndAppliedEvents() throws Exception {
+	    when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
+	    RecordingJournal journal = new RecordingJournal();
+	    SwarmSignalListener listener = new SwarmSignalListener(
+	        lifecycle,
         rabbit,
         "inst",
         mapper,
         SwarmControllerTestProperties.defaults(),
         journal);
     String body = configUpdateSignal("inst", "i4", "c4", Map.of("enabled", true));
-
-    listener.handle(body, controllerInstanceSignal(ControlPlaneSignals.CONFIG_UPDATE, "inst"));
-
-    java.util.List<String> kinds = journal.entries.stream().map(e -> e.kind()).toList();
-    assertThat(kinds).contains("signal.config-update", "event.outcome.config-update");
-  }
+	
+	    listener.handle(body, controllerInstanceSignal(ControlPlaneSignals.CONFIG_UPDATE, "inst"));
+	
+	    java.util.List<String> entries = journal.entries.stream()
+	        .map(e -> e.kind() + "." + e.type())
+	        .toList();
+	    assertThat(entries).contains("signal.config-update", "outcome.config-update");
+	  }
 
   @Test
   void configUpdateAllProcessedOnce() throws Exception {

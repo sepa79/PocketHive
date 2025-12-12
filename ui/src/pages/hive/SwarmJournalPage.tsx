@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { getSwarmJournal } from '../../lib/orchestratorApi'
 import type { SwarmJournalEntry } from '../../types/orchestrator'
@@ -62,66 +62,26 @@ export default function SwarmJournalPage() {
     return `${protocol}//${hostname}:3333/grafana/`
   }, [])
 
-  const describeOrigin = useCallback((entry: SwarmJournalEntry): string => {
-    const asNonEmptyString = (value: unknown): string | null => {
-      if (typeof value !== 'string') return null
-      const trimmed = value.trim()
-      return trimmed.length > 0 ? trimmed : null
+  const describeSummary = (entry: SwarmJournalEntry): string => {
+    if (entry.kind === 'signal') {
+      return `signal ${entry.type}`
     }
-
-    const kind = entry.kind || ''
-    const details =
-      entry.details && typeof entry.details === 'object'
-        ? (entry.details as Record<string, unknown>)
-        : {}
-
-    // Worker-originated events (incoming from workers)
-    if (kind.startsWith('worker.')) {
-      const role = asNonEmptyString(details['workerRole'])
-      const instance = asNonEmptyString(details['workerInstance'])
-      if (role && instance) return `worker ${role}/${instance}`
-      if (role) return `worker ${role}`
-      return 'worker'
+    if (entry.kind === 'outcome') {
+      const status = typeof entry.data?.status === 'string' ? entry.data.status : null
+      return status ? `outcome ${entry.type} → ${status}` : `outcome ${entry.type}`
     }
-
-    // Incoming control signals (from orchestrator / callers)
-    if (kind.startsWith('signal.')) {
-      const explicitOrigin = asNonEmptyString(details['origin'])
-      if (explicitOrigin) {
-        return `in:${explicitOrigin}`
-      }
-      const controlSignal =
-        details['controlSignal'] && typeof details['controlSignal'] === 'object'
-          ? (details['controlSignal'] as Record<string, unknown>)
-          : null
-      const csOrigin = controlSignal ? asNonEmptyString(controlSignal['origin']) : null
-      if (csOrigin) {
-        return `in:${csOrigin}`
-      }
-      return 'in:orchestrator'
+    if (entry.kind === 'event' && entry.type === 'alert') {
+      const code = typeof entry.data?.code === 'string' ? entry.data.code : null
+      const message = typeof entry.data?.message === 'string' ? entry.data.message : null
+      if (code && message) return `alert ${code}: ${message}`
+      if (message) return `alert: ${message}`
+      return 'alert'
     }
-
-    // Outgoing control messages (to swarm / workers / orchestrator)
-    if (
-      kind.startsWith('control.out.') ||
-      kind.startsWith('confirmation.ready.') ||
-      kind.startsWith('confirmation.error.')
-    ) {
-      const rk = asNonEmptyString(details['routingKey'])
-      if (rk) {
-        return `out:${rk}`
-      }
-      return 'out'
+    if (entry.kind === 'local') {
+      return entry.type
     }
-
-    // Derived local health projections
-    if (kind.startsWith('swarm.health.')) {
-      return 'swarm-controller'
-    }
-
-    // Fallback for any other local entries
-    return 'swarm-controller'
-  }, [])
+    return `${entry.kind} ${entry.type}`
+  }
 
   const filtered = useMemo(() => {
     const text = search.trim().toLowerCase()
@@ -130,11 +90,16 @@ export default function SwarmJournalPage() {
       if (!text) return true
       const haystack = [
         entry.kind,
-        entry.message ?? '',
+        entry.type,
+        entry.origin,
+        entry.direction,
         entry.severity,
         entry.correlationId ?? '',
         entry.idempotencyKey ?? '',
-        JSON.stringify(entry.details ?? {}),
+        entry.routingKey ?? '',
+        JSON.stringify(entry.data ?? {}),
+        JSON.stringify(entry.extra ?? {}),
+        JSON.stringify(entry.raw ?? {}),
       ]
         .join(' ')
         .toLowerCase()
@@ -180,14 +145,14 @@ export default function SwarmJournalPage() {
         </div>
       </div>
 
-      <div className="mb-4 grid gap-3 text-xs md:grid-cols-[1fr_auto_auto]">
-        <input
-          type="text"
-          placeholder="Search kind, message, correlation, idempotency, details…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="w-full rounded-md border border-white/15 bg-slate-950/80 px-3 py-1.5 text-xs text-white/90 placeholder:text-white/40 focus:border-amber-400/60 focus:outline-none"
-        />
+	      <div className="mb-4 grid gap-3 text-xs md:grid-cols-[1fr_auto_auto]">
+	        <input
+	          type="text"
+	          placeholder="Search kind/type/origin/correlation/routing/data…"
+	          value={search}
+	          onChange={(e) => setSearch(e.target.value)}
+	          className="w-full rounded-md border border-white/15 bg-slate-950/80 px-3 py-1.5 text-xs text-white/90 placeholder:text-white/40 focus:border-amber-400/60 focus:outline-none"
+	        />
         <label className="flex items-center gap-2 text-white/70">
           <input
             type="checkbox"
@@ -214,88 +179,120 @@ export default function SwarmJournalPage() {
         </div>
       )}
 
-      <div className="flex-1 overflow-y-auto rounded-md border border-white/10 bg-slate-950/70">
-        <table className="min-w-full border-collapse text-xs">
-          <thead className="sticky top-0 z-10 bg-slate-950/95">
-            <tr className="border-b border-white/10 text-white/50">
-              <th className="px-3 py-2 text-left font-medium">Time</th>
-              <th className="px-3 py-2 text-left font-medium">Severity</th>
-              <th className="px-3 py-2 text-left font-medium">Origin</th>
-              <th className="px-3 py-2 text-left font-medium">Kind</th>
-              <th className="px-3 py-2 text-left font-medium">Message</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map((entry, index) => {
-              const ts = new Date(entry.timestamp).toLocaleTimeString()
-              const isExpanded = expandedIndex === index
-              const origin = describeOrigin(entry)
-              const severityClass =
-                entry.severity === 'ERROR'
-                  ? 'text-red-300'
-                  : entry.severity === 'WARN' || entry.severity === 'WARNING'
-                  ? 'text-amber-300'
-                  : 'text-emerald-300'
-              return (
-                <tr
-                  key={`${entry.timestamp}-${index}`}
-                  className={`border-b border-white/5 cursor-pointer hover:bg-white/5 ${
-                    isExpanded ? 'bg-white/5' : ''
-                  }`}
-                  onClick={() =>
-                    setExpandedIndex(isExpanded ? null : index)
-                  }
-                >
-                  <td className="whitespace-nowrap px-3 py-1.5 align-top text-white/70">
-                    {ts}
-                  </td>
-                  <td className={`whitespace-nowrap px-3 py-1.5 align-top ${severityClass}`}>
-                    {entry.severity}
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-1.5 align-top text-white/70">
-                    {origin}
-                  </td>
-                  <td className="max-w-[220px] px-3 py-1.5 align-top font-mono text-[11px] text-white/80">
-                    {entry.kind}
-                  </td>
-                  <td className="px-3 py-1.5 align-top text-white/90">
-                    <div className="line-clamp-2">
-                      {entry.message ||
-                        (entry.details
-                          ? JSON.stringify(entry.details)
-                          : '')}
-                    </div>
-                    {isExpanded && (
-                      <div className="mt-1 rounded bg-slate-900/80 p-2 text-[11px] text-white/80">
-                        <div className="mb-1 flex flex-wrap gap-3 text-white/60">
-                          {entry.correlationId && (
-                            <span className="font-mono">
-                              corr={entry.correlationId}
-                            </span>
-                          )}
-                          {entry.idempotencyKey && (
-                            <span className="font-mono">
-                              idem={entry.idempotencyKey}
-                            </span>
-                          )}
-                          <span className="font-mono">
-                            actor={entry.actor}
-                          </span>
-                        </div>
-                        {entry.details && Object.keys(entry.details).length > 0 && (
-                          <pre className="max-h-40 overflow-y-auto whitespace-pre-wrap break-words text-[11px]">
-                            {JSON.stringify(entry.details, null, 2)}
-                          </pre>
-                        )}
-                      </div>
-                    )}
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
-      </div>
+	      <div className="flex-1 overflow-y-auto rounded-md border border-white/10 bg-slate-950/70">
+	        <table className="min-w-full border-collapse text-xs">
+	          <thead className="sticky top-0 z-10 bg-slate-950/95">
+	            <tr className="border-b border-white/10 text-white/50">
+	              <th className="px-3 py-2 text-left font-medium">Time</th>
+	              <th className="px-3 py-2 text-left font-medium">Severity</th>
+	              <th className="px-3 py-2 text-left font-medium">Dir</th>
+	              <th className="px-3 py-2 text-left font-medium">Origin</th>
+	              <th className="px-3 py-2 text-left font-medium">Kind</th>
+	              <th className="px-3 py-2 text-left font-medium">Type</th>
+	              <th className="px-3 py-2 text-left font-medium">Summary</th>
+	            </tr>
+	          </thead>
+	          <tbody>
+	            {filtered.map((entry, index) => {
+	              const ts = new Date(entry.timestamp).toLocaleTimeString()
+	              const isExpanded = expandedIndex === index
+	              const severityClass =
+	                entry.severity === 'ERROR'
+	                  ? 'text-red-300'
+	                  : entry.severity === 'WARN' || entry.severity === 'WARNING'
+	                  ? 'text-amber-300'
+	                  : 'text-emerald-300'
+	              return (
+	                <tr
+	                  key={`${entry.timestamp}-${index}`}
+	                  className={`border-b border-white/5 cursor-pointer hover:bg-white/5 ${
+	                    isExpanded ? 'bg-white/5' : ''
+	                  }`}
+	                  onClick={() =>
+	                    setExpandedIndex(isExpanded ? null : index)
+	                  }
+	                >
+	                  <td className="whitespace-nowrap px-3 py-1.5 align-top text-white/70">
+	                    {ts}
+	                  </td>
+	                  <td className={`whitespace-nowrap px-3 py-1.5 align-top ${severityClass}`}>
+	                    {entry.severity}
+	                  </td>
+	                  <td className="whitespace-nowrap px-3 py-1.5 align-top font-mono text-[11px] text-white/60">
+	                    {entry.direction}
+	                  </td>
+	                  <td className="whitespace-nowrap px-3 py-1.5 align-top text-white/70">
+	                    {entry.origin}
+	                  </td>
+	                  <td className="max-w-[220px] px-3 py-1.5 align-top font-mono text-[11px] text-white/80">
+	                    {entry.kind}
+	                  </td>
+	                  <td className="max-w-[220px] px-3 py-1.5 align-top font-mono text-[11px] text-white/80">
+	                    {entry.type}
+	                  </td>
+	                  <td className="px-3 py-1.5 align-top text-white/90">
+	                    <div className="line-clamp-2">{describeSummary(entry)}</div>
+	                    {isExpanded && (
+	                      <div className="mt-1 rounded bg-slate-900/80 p-2 text-[11px] text-white/80">
+	                        <div className="mb-1 flex flex-wrap gap-3 text-white/60">
+	                          {entry.correlationId && (
+	                            <span className="font-mono">
+	                              corr={entry.correlationId}
+	                            </span>
+	                          )}
+	                          {entry.idempotencyKey && (
+	                            <span className="font-mono">
+	                              idem={entry.idempotencyKey}
+	                            </span>
+	                          )}
+	                          <span className="font-mono">
+	                            scope={entry.scope.role ?? 'ALL'}/{entry.scope.instance ?? 'ALL'}
+	                          </span>
+	                          {entry.routingKey && (
+	                            <span className="font-mono">rk={entry.routingKey}</span>
+	                          )}
+	                        </div>
+	                        {typeof entry.data?.logRef === 'string' && entry.data.logRef.trim().length > 0 && (
+	                          <div className="mb-2">
+	                            <a
+	                              href={entry.data.logRef}
+	                              target="_blank"
+	                              rel="noreferrer"
+	                              className="text-amber-200 hover:underline"
+	                            >
+	                              Open stacktrace/logRef
+	                            </a>
+	                          </div>
+	                        )}
+	                        <div className="grid gap-2 md:grid-cols-3">
+	                          <div>
+	                            <div className="mb-1 text-white/60">data</div>
+	                            <pre className="max-h-40 overflow-y-auto whitespace-pre-wrap break-words text-[11px]">
+	                              {JSON.stringify(entry.data, null, 2)}
+	                            </pre>
+	                          </div>
+	                          <div>
+	                            <div className="mb-1 text-white/60">extra</div>
+	                            <pre className="max-h-40 overflow-y-auto whitespace-pre-wrap break-words text-[11px]">
+	                              {JSON.stringify(entry.extra, null, 2)}
+	                            </pre>
+	                          </div>
+	                          <div>
+	                            <div className="mb-1 text-white/60">raw</div>
+	                            <pre className="max-h-40 overflow-y-auto whitespace-pre-wrap break-words text-[11px]">
+	                              {JSON.stringify(entry.raw, null, 2)}
+	                            </pre>
+	                          </div>
+	                        </div>
+	                      </div>
+	                    )}
+	                  </td>
+	                </tr>
+	              )
+	            })}
+	          </tbody>
+	        </table>
+	      </div>
     </div>
   )
 }

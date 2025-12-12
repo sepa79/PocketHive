@@ -1,5 +1,7 @@
 package io.pockethive.swarmcontroller.runtime;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
+import io.pockethive.control.ControlScope;
 import java.time.Instant;
 import java.util.Map;
 import java.util.Objects;
@@ -28,62 +30,101 @@ public interface SwarmJournal {
    * Minimal swarm-level journal entry.
    * <p>
    * This is intentionally generic so it can be projected from existing
-   * control-plane events and runtime actions without changing on-wire
-   * contracts. Fields are chosen to stay replay-friendly.
+   * control-plane envelopes (signals/outcomes/metrics/alerts) and a small
+   * number of local projections (e.g. health transitions) without changing
+   * on-wire contracts. Fields are chosen to stay replay-friendly.
    */
+  @JsonInclude(JsonInclude.Include.NON_NULL)
   record SwarmJournalEntry(
       Instant timestamp,
       String swarmId,
-      String actor,
-      String kind,
       String severity,
+      Direction direction,
+      String kind,
+      String type,
+      String origin,
+      ControlScope scope,
       String correlationId,
       String idempotencyKey,
-      String message,
-      Map<String, Object> details) {
+      String routingKey,
+      Map<String, Object> data,
+      Map<String, Object> raw,
+      Map<String, Object> extra) {
 
     public SwarmJournalEntry {
       Objects.requireNonNull(timestamp, "timestamp");
       Objects.requireNonNull(swarmId, "swarmId");
-      Objects.requireNonNull(actor, "actor");
-      Objects.requireNonNull(kind, "kind");
       Objects.requireNonNull(severity, "severity");
-      // correlationId, idempotencyKey and details are allowed to be null
+      Objects.requireNonNull(direction, "direction");
+      Objects.requireNonNull(kind, "kind");
+      Objects.requireNonNull(type, "type");
+      Objects.requireNonNull(origin, "origin");
+      Objects.requireNonNull(scope, "scope");
+      // correlationId, idempotencyKey, routingKey, data, raw and extra are allowed to be null
     }
 
     public static SwarmJournalEntry info(String swarmId,
-                                         String actor,
+                                         Direction direction,
                                          String kind,
-                                         String message,
-                                         Map<String, Object> details) {
+                                         String type,
+                                         String origin,
+                                         ControlScope scope,
+                                         String correlationId,
+                                         String idempotencyKey,
+                                         String routingKey,
+                                         Map<String, Object> data,
+                                         Map<String, Object> raw,
+                                         Map<String, Object> extra) {
       return new SwarmJournalEntry(
           Instant.now(),
           swarmId,
-          actor,
-          kind,
           "INFO",
-          null,
-          null,
-          message,
-          details);
+          direction,
+          kind,
+          type,
+          origin,
+          scope,
+          correlationId,
+          idempotencyKey,
+          routingKey,
+          data,
+          raw,
+          extra);
     }
 
     public static SwarmJournalEntry error(String swarmId,
-                                          String actor,
+                                          Direction direction,
                                           String kind,
-                                          String message,
-                                          Map<String, Object> details) {
+                                          String type,
+                                          String origin,
+                                          ControlScope scope,
+                                          String correlationId,
+                                          String idempotencyKey,
+                                          String routingKey,
+                                          Map<String, Object> data,
+                                          Map<String, Object> raw,
+                                          Map<String, Object> extra) {
       return new SwarmJournalEntry(
           Instant.now(),
           swarmId,
-          actor,
-          kind,
           "ERROR",
-          null,
-          null,
-          message,
-          details);
+          direction,
+          kind,
+          type,
+          origin,
+          scope,
+          correlationId,
+          idempotencyKey,
+          routingKey,
+          data,
+          raw,
+          extra);
     }
   }
-}
 
+  enum Direction {
+    IN,
+    OUT,
+    LOCAL
+  }
+}

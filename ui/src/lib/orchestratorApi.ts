@@ -180,28 +180,53 @@ function normalizeJournalEntry(input: unknown): SwarmJournalEntry | null {
     }
   }
   const swarmId = asString(record['swarmId'])
-  const actor = asString(record['actor'])
-  const kind = asString(record['kind'])
   const severity = asString(record['severity'])
-  if (!timestamp || !swarmId || !actor || !kind || !severity) {
+  const direction = asString(record['direction'])
+  const kind = asString(record['kind'])
+  const type = asString(record['type'])
+  const origin = asString(record['origin'])
+  const scopeValue = record['scope']
+  const scopeRecord = scopeValue && typeof scopeValue === 'object' ? (scopeValue as Record<string, unknown>) : null
+  const scopeSwarmId = scopeRecord ? asString(scopeRecord['swarmId']) : null
+  const scopeRole = scopeRecord ? asString(scopeRecord['role']) : null
+  const scopeInstance = scopeRecord ? asString(scopeRecord['instance']) : null
+
+  if (
+    !timestamp ||
+    !swarmId ||
+    !severity ||
+    (direction !== 'IN' && direction !== 'OUT' && direction !== 'LOCAL') ||
+    !kind ||
+    !type ||
+    !origin ||
+    !scopeSwarmId
+  ) {
     return null
   }
   const correlationId = asString(record['correlationId'])
   const idempotencyKey = asString(record['idempotencyKey'])
-  const message = asString(record['message'])
-  const detailsValue = record['details']
-  const details =
-    detailsValue && typeof detailsValue === 'object' ? (detailsValue as Record<string, unknown>) : null
+  const routingKey = asString(record['routingKey'])
+  const dataValue = record['data']
+  const rawValue = record['raw']
+  const extraValue = record['extra']
+  const data = dataValue && typeof dataValue === 'object' ? (dataValue as Record<string, unknown>) : null
+  const raw = rawValue && typeof rawValue === 'object' ? (rawValue as Record<string, unknown>) : null
+  const extra = extraValue && typeof extraValue === 'object' ? (extraValue as Record<string, unknown>) : null
   return {
     timestamp,
     swarmId,
-    actor,
-    kind,
     severity,
+    direction,
+    kind,
+    type,
+    origin,
+    scope: { swarmId: scopeSwarmId, role: scopeRole, instance: scopeInstance },
     correlationId,
     idempotencyKey,
-    message,
-    details,
+    routingKey,
+    data,
+    raw,
+    extra,
   }
 }
 

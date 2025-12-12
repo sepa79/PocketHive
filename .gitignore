@@ -38,3 +38,7 @@ dist/
 build/
 *.map
 tools/mcp-orchestrator-debug/control-recording.jsonl
+
+# --- PocketHive runtime ---
+scenarios-runtime/
+**/scenarios-runtime/

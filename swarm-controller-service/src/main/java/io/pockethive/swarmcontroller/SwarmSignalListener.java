@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.control.CommandState;
 import io.pockethive.control.AlertMessage;
 import io.pockethive.control.ConfirmationScope;
+import io.pockethive.control.ControlScope;
 import io.pockethive.control.ControlSignal;
 import io.pockethive.observability.StatusEnvelopeBuilder;
 import io.pockethive.controlplane.ControlPlaneIdentity;
@@ -12,6 +13,7 @@ import io.pockethive.controlplane.ControlPlaneSignals;
 import io.pockethive.controlplane.consumer.ControlSignalEnvelope;
 import io.pockethive.controlplane.manager.ManagerControlPlane;
 import io.pockethive.controlplane.messaging.AmqpControlPlanePublisher;
+import io.pockethive.controlplane.messaging.ControlPlanePublisher;
 import io.pockethive.controlplane.messaging.EventMessage;
 import io.pockethive.controlplane.messaging.SignalMessage;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
@@ -20,7 +22,9 @@ import io.pockethive.manager.guard.BufferGuardSettings;
 import io.pockethive.swarm.model.BufferGuardPolicy;
 import io.pockethive.swarm.model.TrafficPolicy;
 import io.pockethive.swarmcontroller.config.SwarmControllerProperties;
+import io.pockethive.swarmcontroller.runtime.JournalControlPlanePublisher;
 import io.pockethive.swarmcontroller.runtime.SwarmJournal;
+import io.pockethive.swarmcontroller.runtime.SwarmJournalEntries;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
@@ -81,7 +85,8 @@ public class SwarmSignalListener {
     this.controlExchange = properties.getControlExchange();
     this.diagnostics = new SwarmDiagnosticsAggregator(this.mapper);
     this.journal = journal != null ? journal : SwarmJournal.noop();
-    AmqpControlPlanePublisher publisher = new AmqpControlPlanePublisher(rabbit, controlExchange);
+    ControlPlanePublisher basePublisher = new AmqpControlPlanePublisher(rabbit, controlExchange);
+    ControlPlanePublisher publisher = new JournalControlPlanePublisher(this.mapper, this.journal, basePublisher);
     this.controlPlane = ManagerControlPlane.builder(publisher, this.mapper)
         .identity(new ControlPlaneIdentity(swarmId, role, instanceId))
         .duplicateCache(java.time.Duration.ofMinutes(1), 256)
@@ -205,6 +210,7 @@ public class SwarmSignalListener {
     }
     try {
       AlertMessage alert = mapper.readValue(body, AlertMessage.class);
+      journal.append(SwarmJournalEntries.inAlert(mapper, routingKey, alert));
       String phase = alert.data() != null && alert.data().context() != null
           ? textOrNull(mapper.valueToTree(alert.data().context()).path("phase"))
           : null;
@@ -214,21 +220,6 @@ public class SwarmSignalListener {
       String role = alert.scope() != null ? alert.scope().role() : null;
       String instance = alert.scope() != null ? alert.scope().instance() : null;
       String message = alert.data() != null ? alert.data().message() : null;
-      Map<String, Object> details = new LinkedHashMap<>();
-      details.put("workerRole", role);
-      details.put("workerInstance", instance);
-      details.put("correlationId", alert.correlationId());
-      details.put("idempotencyKey", alert.idempotencyKey());
-      details.put("phase", phase);
-      details.put("code", alert.data() != null ? alert.data().code() : null);
-      details.put("message", message);
-      journal.append(
-          SwarmJournal.SwarmJournalEntry.error(
-              swarmId,
-              this.role,
-              "worker.config-update.error",
-              "Worker config-update error",
-              Map.copyOf(details)));
       lifecycle.handleConfigUpdateError(role, instance, message)
           .ifPresent(this::failPendingLifecycle);
     } catch (Exception e) {
@@ -265,28 +256,6 @@ public class SwarmSignalListener {
     MDC.put("idempotency_key", cs.idempotencyKey());
     try {
       log.info("{} signal for swarm {}", label.substring(0, 1).toUpperCase() + label.substring(1), swarmId);
-      Map<String, Object> details = new LinkedHashMap<>();
-      details.put("swarmId", swarmId);
-      details.put("correlationId", cs.correlationId());
-      details.put("idempotencyKey", cs.idempotencyKey());
-      if (cs.origin() != null && !cs.origin().isBlank()) {
-        details.put("origin", cs.origin());
-      }
-      details.put("type", defaultSegment(resolvedSignal, cs.type()));
-      try {
-        @SuppressWarnings("unchecked")
-        Map<String, Object> control = mapper.convertValue(cs, Map.class);
-        details.put("controlSignal", control);
-      } catch (IllegalArgumentException ex) {
-        // Best-effort: if conversion fails, skip embedding the full control payload.
-      }
-      journal.append(
-          SwarmJournal.SwarmJournalEntry.info(
-              this.swarmId,
-              role,
-              "signal." + defaultSegment(resolvedSignal, cs.type()),
-              "Received " + label + " signal",
-              details.isEmpty() ? null : details));
       action.apply(serializeArgs(cs));
       if (ControlPlaneSignals.SWARM_TEMPLATE.equals(resolvedSignal)) {
         onTemplateSuccess(cs, resolvedSignal, swarmId);
@@ -382,31 +351,6 @@ public class SwarmSignalListener {
       JsonNode dataNode = node.path("data");
       Boolean enabledFlag = dataNode.has("enabled") ? dataNode.path("enabled").asBoolean() : null;
 
-      Map<String, Object> signalDetails = new LinkedHashMap<>();
-      signalDetails.put("routingKey", envelope.routingKey());
-      signalDetails.put("correlationId", cs.correlationId());
-      signalDetails.put("idempotencyKey", cs.idempotencyKey());
-      if (cs.origin() != null && !cs.origin().isBlank()) {
-        signalDetails.put("origin", cs.origin());
-      }
-      if (enabledFlag != null) {
-        signalDetails.put("enabled", enabledFlag);
-      }
-      try {
-        @SuppressWarnings("unchecked")
-        Map<String, Object> control = mapper.convertValue(cs, Map.class);
-        signalDetails.put("controlSignal", control);
-      } catch (IllegalArgumentException ex) {
-        // best-effort; ignore conversion issues
-      }
-      journal.append(
-          SwarmJournal.SwarmJournalEntry.info(
-              swarmId,
-              role,
-              "signal." + ControlPlaneSignals.CONFIG_UPDATE,
-              "Received config-update signal",
-              signalDetails.isEmpty() ? null : Map.copyOf(signalDetails)));
-
       Boolean stateEnabled = null;
       Map<String, Object> details = new LinkedHashMap<>();
       boolean scenarioChanged = false;
@@ -474,6 +418,9 @@ public class SwarmSignalListener {
       return;
     }
     String signal = resolveSignal(envelope);
+    if (signal != null && !ControlPlaneSignals.STATUS_REQUEST.equals(signal)) {
+      journal.append(SwarmJournalEntries.inSignal(mapper, envelope.routingKey(), cs));
+    }
     switch (signal) {
       case ControlPlaneSignals.SWARM_TEMPLATE -> {
         if (isForLocalSwarm(cs)) {
@@ -596,17 +543,6 @@ public class SwarmSignalListener {
             .timestamp(Instant.now())
             .build();
     emitter.emitReady(context);
-    Map<String, Object> details = new LinkedHashMap<>();
-    details.put("correlationId", cs.correlationId());
-    details.put("idempotencyKey", cs.idempotencyKey());
-    details.put("status", state.status());
-    journal.append(
-        SwarmJournal.SwarmJournalEntry.info(
-            this.swarmId,
-            role,
-            "event.outcome." + signal,
-            "Outcome sent for " + signal,
-            details.isEmpty() ? null : Map.copyOf(details)));
   }
 
   private void emitError(ControlSignal cs,
@@ -637,18 +573,6 @@ public class SwarmSignalListener {
             .retryable(Boolean.FALSE)
             .timestamp(Instant.now());
     emitter.emitError(builder.build());
-    Map<String, Object> details = new LinkedHashMap<>();
-    details.put("correlationId", cs.correlationId());
-    details.put("idempotencyKey", cs.idempotencyKey());
-    details.put("errorType", code);
-    details.put("message", message);
-    journal.append(
-        SwarmJournal.SwarmJournalEntry.error(
-            this.swarmId,
-            role,
-            "event.outcome." + signal,
-            "Error outcome sent for " + signal,
-            details.isEmpty() ? null : Map.copyOf(details)));
   }
 
   private CommandState stateForSuccess(String signal) {
@@ -1090,35 +1014,37 @@ public class SwarmSignalListener {
     boolean prevDegraded = "Degraded".equals(previous) || "Unknown".equals(previous);
     boolean currDegraded = "Degraded".equals(state) || "Unknown".equals(state);
     if (!prevDegraded && currDegraded) {
-      Map<String, Object> details = new LinkedHashMap<>();
-      details.put("previousState", previous);
-      details.put("currentState", state);
-      details.put("desiredWorkers", metrics.desired());
-      details.put("healthyWorkers", metrics.healthy());
-      details.put("runningWorkers", metrics.running());
-      details.put("enabledWorkers", metrics.enabled());
-      journal.append(
-          SwarmJournal.SwarmJournalEntry.error(
-              swarmId,
-              role,
-              "swarm.health.degraded",
-              "Worker health degraded",
-              Map.copyOf(details)));
+      Map<String, Object> data = new LinkedHashMap<>();
+      data.put("previousState", previous);
+      data.put("currentState", state);
+      data.put("desiredWorkers", metrics.desired());
+      data.put("healthyWorkers", metrics.healthy());
+      data.put("runningWorkers", metrics.running());
+      data.put("enabledWorkers", metrics.enabled());
+      journal.append(SwarmJournalEntries.local(
+          swarmId,
+          "ERROR",
+          "swarm-health-degraded",
+          instanceId,
+          ControlScope.forInstance(swarmId, role, instanceId),
+          Map.copyOf(data),
+          null));
     } else if (prevDegraded && !currDegraded) {
-      Map<String, Object> details = new LinkedHashMap<>();
-      details.put("previousState", previous);
-      details.put("currentState", state);
-      details.put("desiredWorkers", metrics.desired());
-      details.put("healthyWorkers", metrics.healthy());
-      details.put("runningWorkers", metrics.running());
-      details.put("enabledWorkers", metrics.enabled());
-      journal.append(
-          SwarmJournal.SwarmJournalEntry.info(
-              swarmId,
-              role,
-              "swarm.health.recovered",
-              "Worker health recovered",
-              Map.copyOf(details)));
+      Map<String, Object> data = new LinkedHashMap<>();
+      data.put("previousState", previous);
+      data.put("currentState", state);
+      data.put("desiredWorkers", metrics.desired());
+      data.put("healthyWorkers", metrics.healthy());
+      data.put("runningWorkers", metrics.running());
+      data.put("enabledWorkers", metrics.enabled());
+      journal.append(SwarmJournalEntries.local(
+          swarmId,
+          "INFO",
+          "swarm-health-recovered",
+          instanceId,
+          ControlScope.forInstance(swarmId, role, instanceId),
+          Map.copyOf(data),
+          null));
     }
   }
 
@@ -1134,49 +1060,6 @@ public class SwarmSignalListener {
       log.debug("[CTRL] {} rk={} inst={} payload={}", label, routingKey, instanceId, snippet);
     } else {
       log.info("[CTRL] {} rk={} inst={} payload={}", label, routingKey, instanceId, snippet);
-    }
-    if (!statusLog && routingKey != null && !routingKey.isBlank()) {
-      Map<String, Object> details = new LinkedHashMap<>();
-      details.put("routingKey", routingKey);
-      if (context != null && !context.isBlank()) {
-        details.put("context", context);
-      }
-      try {
-        JsonNode node = mapper.readTree(payload);
-        String signal = node.path("signal").asText(null);
-        if (signal != null && !signal.isBlank()) {
-          details.put("signal", signal);
-        }
-        String kind = node.path("kind").asText(null);
-        if (kind != null && !kind.isBlank()) {
-          details.put("eventKind", kind);
-        }
-        String corr = node.path("correlationId").asText(null);
-        if (corr != null && !corr.isBlank()) {
-          details.put("correlationId", corr);
-        }
-        String idem = node.path("idempotencyKey").asText(null);
-        if (idem != null && !idem.isBlank()) {
-          details.put("idempotencyKey", idem);
-        }
-      } catch (Exception ignored) {
-        // best-effort; ignore payload parsing issues
-      }
-      String kind;
-      if (routingKey.startsWith("signal.")) {
-        kind = "control.out.signal";
-      } else if (routingKey.startsWith("event.")) {
-        kind = "control.out.event";
-      } else {
-        kind = "control.out";
-      }
-      journal.append(
-          SwarmJournal.SwarmJournalEntry.info(
-              swarmId,
-              role,
-              kind,
-              "Control-plane message sent",
-              details.isEmpty() ? null : Map.copyOf(details)));
     }
     if (routingKey != null && routingKey.startsWith("signal.")) {
       controlPlane.publishSignal(new SignalMessage(routingKey, payload));

@@ -82,6 +82,25 @@ export default function SwarmJournalPanel({ swarmId }: SwarmJournalPanelProps) {
 
   const latest = entries.slice(-20)
 
+  const describeEntry = (entry: SwarmJournalEntry): string => {
+    const prefix = entry.direction === 'LOCAL' ? 'local' : entry.direction.toLowerCase()
+    if (entry.kind === 'signal') {
+      return `${prefix} signal ${entry.type}`
+    }
+    if (entry.kind === 'outcome') {
+      const status = typeof entry.data?.status === 'string' ? entry.data.status : null
+      return status ? `${prefix} outcome ${entry.type} → ${status}` : `${prefix} outcome ${entry.type}`
+    }
+    if (entry.kind === 'event' && entry.type === 'alert') {
+      const code = typeof entry.data?.code === 'string' ? entry.data.code : null
+      const message = typeof entry.data?.message === 'string' ? entry.data.message : null
+      if (code && message) return `${prefix} alert ${code}: ${message}`
+      if (message) return `${prefix} alert: ${message}`
+      return `${prefix} alert`
+    }
+    return `${prefix} ${entry.kind} ${entry.type}`
+  }
+
   return (
     <div className="mt-3 rounded-md border border-white/10 bg-slate-950/60 px-3 py-2">
       <div className="mb-2 flex items-center justify-between text-xs text-white/60">
@@ -103,7 +122,7 @@ export default function SwarmJournalPanel({ swarmId }: SwarmJournalPanelProps) {
             <li key={`${entry.timestamp}-${index}`} className="flex gap-2">
               <span className="shrink-0 text-white/40">{ts}</span>
               <span className="text-white/80 truncate">
-                {entry.message || JSON.stringify(entry.details ?? {}, undefined, 0)}
+                {describeEntry(entry)}
               </span>
             </li>
           )

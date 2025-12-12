@@ -21,11 +21,20 @@ export interface SwarmSummary {
 export interface SwarmJournalEntry {
   timestamp: string
   swarmId: string
-  actor: string
-  kind: string
   severity: string
+  direction: 'IN' | 'OUT' | 'LOCAL'
+  kind: string
+  type: string
+  origin: string
+  scope: {
+    swarmId: string
+    role: string | null
+    instance: string | null
+  }
   correlationId: string | null
   idempotencyKey: string | null
-  message: string | null
-  details?: Record<string, unknown> | null
+  routingKey: string | null
+  data: Record<string, unknown> | null
+  raw: Record<string, unknown> | null
+  extra: Record<string, unknown> | null
 }

@@ -193,16 +193,17 @@ Goal: introduce a single, consistent control‑plane envelope model used by sign
 
 ## 5. Journal & UI Simplification
 
-- [ ] Swarm journal projection (in swarm‑controller + orchestrator):
+- [x] Swarm journal projection (in swarm‑controller + orchestrator):
   - For **signals**: derive `JournalEvent` directly from `ControlSignal`:
     - `timestamp`, `kind`, `type`, `scope`, `origin`, `data`, plus direction (IN/OUT) from routing key.
   - For **outcomes**: derive from `CommandOutcome`:
     - Use the typed `data` fields for command status (for example `data.status`, `data.retryable`) as defined in the updated schemas.
-  - For **alerts** and **metrics**: project `event.alert.alert` and `metric/status-*` messages alongside outcomes so the journal can surface error codes/messages (`data.code`, `data.message`, `data.context`) and IO/health state from status metrics (`data.enabled`, `data.io`, `data.context`).
+  - For **alerts**: project `event.alert.alert` alongside outcomes so the journal can surface error codes/messages (`data.code`, `data.message`, `data.context`, `logRef`).
+  - For **metrics/status**: do not log every `status-*` tick; derive and record only state transitions (e.g. healthy → degraded → recovered) as local journal entries.
   - Avoid storing nested stringified payloads inside `details.payload`; store structured `data` instead.
-- [ ] Schema clean‑up:
+- [x] Schema clean‑up:
   - Treat `actor` as redundant (it can be derived from `origin` + `scope` + routing direction). It may stay in the on‑disk JSON for now but should not be required by UI or new tooling.
-- [ ] Hive UI:
+- [x] Hive UI:
   - Simplify `SwarmJournalPage` to rely on:
     - `origin` + routing key for “from → to”.
     - Outcome `data.status` for status display.
