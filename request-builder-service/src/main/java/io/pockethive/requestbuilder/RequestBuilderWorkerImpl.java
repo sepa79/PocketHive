@@ -1,0 +1,240 @@
+package io.pockethive.requestbuilder;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import io.pockethive.worker.sdk.api.PocketHiveWorkerFunction;
+import io.pockethive.worker.sdk.api.WorkItem;
+import io.pockethive.worker.sdk.api.WorkerContext;
+import io.pockethive.worker.sdk.config.PocketHiveWorker;
+import io.pockethive.worker.sdk.config.WorkerCapability;
+import io.pockethive.worker.sdk.config.WorkerInputType;
+import io.pockethive.worker.sdk.config.WorkerOutputType;
+import io.pockethive.worker.sdk.templating.MessageBodyType;
+import io.pockethive.worker.sdk.templating.MessageTemplate;
+import io.pockethive.worker.sdk.templating.MessageTemplateRenderer;
+import io.pockethive.worker.sdk.templating.TemplateRenderer;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
+import java.util.concurrent.atomic.LongAdder;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
+
+@Component("requestBuilderWorker")
+@PocketHiveWorker(
+    capabilities = {WorkerCapability.MESSAGE_DRIVEN},
+    config = RequestBuilderWorkerConfig.class
+)
+class RequestBuilderWorkerImpl implements PocketHiveWorkerFunction {
+
+  private static final ObjectMapper MAPPER = new ObjectMapper().findAndRegisterModules();
+
+  private final RequestBuilderWorkerProperties properties;
+  private final TemplateRenderer templateRenderer;
+  private final MessageTemplateRenderer messageTemplateRenderer;
+  private final TemplateLoader templateLoader;
+  private volatile Map<String, TemplateDefinition> templates;
+  private volatile String lastTemplateConfigKey;
+  private final LongAdder errorCount = new LongAdder();
+  private final Object statusLock = new Object();
+  private volatile long lastStatusAtMillis = System.currentTimeMillis();
+  private volatile long lastErrorCountSnapshot = 0L;
+
+  @Autowired
+  RequestBuilderWorkerImpl(RequestBuilderWorkerProperties properties, TemplateRenderer templateRenderer) {
+    this(properties, templateRenderer, new TemplateLoader());
+  }
+
+  RequestBuilderWorkerImpl(RequestBuilderWorkerProperties properties,
+                        TemplateRenderer templateRenderer,
+                        TemplateLoader templateLoader) {
+    this.properties = Objects.requireNonNull(properties, "properties");
+    this.templateRenderer = Objects.requireNonNull(templateRenderer, "templateRenderer");
+    this.templateLoader = Objects.requireNonNull(templateLoader, "templateLoader");
+    this.messageTemplateRenderer = new MessageTemplateRenderer(templateRenderer);
+    reloadTemplates();
+  }
+
+  @Override
+  public WorkItem onMessage(WorkItem seed, WorkerContext context) {
+    RequestBuilderWorkerConfig config =
+        context.configOrDefault(RequestBuilderWorkerConfig.class, properties::defaultConfig);
+
+    reloadTemplatesIfNeeded(config);
+
+    String serviceId = resolveServiceId(seed, config);
+    String callId = resolveCallId(seed);
+    if (callId == null || callId.isBlank()) {
+      context.logger().warn("No callId present on work item; {}", missingBehavior(config));
+      return handleMissing(config, seed, context);
+    }
+
+    TemplateDefinition definition =
+        templates.get(TemplateLoader.key(serviceId, callId));
+    if (definition == null) {
+      context.logger().warn("No HTTP template found for serviceId={} callId={}; {}", serviceId, callId, missingBehavior(config));
+      return handleMissing(config, seed, context);
+    }
+
+    try {
+      ObjectNode envelope = MAPPER.createObjectNode();
+      String protocol = definition.protocol() == null ? "HTTP" : definition.protocol().toUpperCase(Locale.ROOT);
+      
+      if ("TCP".equals(protocol) && definition instanceof TcpTemplateDefinition tcpDef) {
+        MessageTemplate template = MessageTemplate.builder()
+            .bodyType(MessageBodyType.SIMPLE)
+            .bodyTemplate(tcpDef.bodyTemplate())
+            .headerTemplates(tcpDef.headersTemplate() == null ? Map.of() : tcpDef.headersTemplate())
+            .build();
+        
+        MessageTemplateRenderer.RenderedMessage rendered =
+            messageTemplateRenderer.render(template, seed);
+        
+        envelope.put("protocol", "TCP");
+        envelope.put("method", "");
+        envelope.put("behavior", tcpDef.behavior());
+        String endTag = seed.headers().getOrDefault("x-ph-tcp-end-tag", "</Document>").toString();
+        envelope.put("endTag", endTag);
+        String maxBytes = seed.headers().getOrDefault("x-ph-max-bytes", "8192").toString();
+        envelope.put("maxBytes", Integer.parseInt(maxBytes));
+        envelope.put("body", rendered.body());
+      } else if (definition instanceof HttpTemplateDefinition httpDef) {
+        MessageTemplate template = MessageTemplate.builder()
+            .bodyType(MessageBodyType.HTTP)
+            .pathTemplate(httpDef.pathTemplate())
+            .methodTemplate(httpDef.method())
+            .bodyTemplate(httpDef.bodyTemplate())
+            .headerTemplates(httpDef.headersTemplate() == null ? Map.of() : httpDef.headersTemplate())
+            .build();
+        
+        MessageTemplateRenderer.RenderedMessage rendered =
+            messageTemplateRenderer.render(template, seed);
+        
+        String method = rendered.method() == null ? "GET" : rendered.method().toUpperCase(Locale.ROOT);
+        envelope.put("protocol", "HTTP");
+        envelope.put("path", rendered.path());
+        envelope.put("method", method);
+        envelope.set("headers", MAPPER.valueToTree(rendered.headers()));
+        String contentType = rendered.headers().getOrDefault("Content-Type", "").toLowerCase();
+        // Detect JSON to embed as compact node instead of escaped string
+        boolean isJson = contentType.contains("application/json") || 
+                        (contentType.isEmpty() && looksLikeJson(rendered.body()));
+        setBodyNode(envelope, rendered.body(), isJson);
+      } else {
+        throw new IllegalStateException("Unknown template type: " + definition.getClass());
+      }
+
+      WorkItem httpItem = WorkItem.json(envelope)
+          .header("content-type", "application/json")
+          .header("x-ph-service", context.info().role())
+          .build();
+
+      context.logger().debug("HTTP Builder envelope: {}", httpItem.asString());
+      WorkItem result = seed.addStep(httpItem.asString(), httpItem.headers());
+      publishStatus(context, config);
+      return result;
+    } catch (Exception ex) {
+      context.logger().error("HTTP Builder failed to render template for serviceId={} callId={}",
+          serviceId, callId, ex);
+      recordError();
+      publishStatus(context, config);
+      return config.passThroughOnMissingTemplate() ? seed : null;
+    }
+  }
+
+  private void reloadTemplates() {
+    reloadTemplates(properties.defaultConfig());
+  }
+
+  private void reloadTemplates(RequestBuilderWorkerConfig config) {
+    Map<String, TemplateDefinition> loaded =
+        templateLoader.load(config.templateRoot(), config.serviceId());
+    this.templates = loaded;
+    this.lastTemplateConfigKey = config.templateRoot() + "::" + config.serviceId();
+  }
+
+  private void reloadTemplatesIfNeeded(RequestBuilderWorkerConfig config) {
+    String key = config.templateRoot() + "::" + config.serviceId();
+    Map<String, TemplateDefinition> current = this.templates;
+    if (current == null || !key.equals(lastTemplateConfigKey)) {
+      reloadTemplates(config);
+    }
+  }
+
+  private WorkItem handleMissing(RequestBuilderWorkerConfig config, WorkItem seed, WorkerContext context) {
+    recordError();
+    publishStatus(context, config);
+    return config.passThroughOnMissingTemplate() ? seed : null;
+  }
+
+  private static String missingBehavior(RequestBuilderWorkerConfig config) {
+    return config.passThroughOnMissingTemplate()
+        ? "passing work item through unchanged"
+        : "dropping work item (no output)";
+  }
+
+  private static String resolveServiceId(WorkItem item, RequestBuilderWorkerConfig config) {
+    Object header = item.headers().get("x-ph-service-id");
+    if (header instanceof String s && !s.isBlank()) {
+      return s.trim();
+    }
+    return config.serviceId();
+  }
+
+  private static String resolveCallId(WorkItem item) {
+    Object header = item.headers().get("x-ph-call-id");
+    if (header instanceof String s && !s.isBlank()) {
+      return s.trim();
+    }
+    return null;
+  }
+
+  private void setBodyNode(ObjectNode envelope, String body, boolean isJson) {
+    if (body == null || body.isBlank()) {
+      envelope.put("body", "");
+      return;
+    }
+    if (isJson) {
+      try {
+        envelope.set("body", MAPPER.readTree(body));
+        return;
+      } catch (Exception ignored) {
+      }
+    }
+    envelope.put("body", body);
+  }
+
+  private static boolean looksLikeJson(String body) {
+    if (body == null || body.isBlank()) return false;
+    char first = body.trim().charAt(0);
+    return first == '{' || first == '[';
+  }
+
+  private void recordError() {
+    errorCount.increment();
+  }
+
+  private void publishStatus(WorkerContext context, RequestBuilderWorkerConfig config) {
+    long now = System.currentTimeMillis();
+    synchronized (statusLock) {
+      long totalErrors = errorCount.sum();
+      long deltaErrors = totalErrors - lastErrorCountSnapshot;
+      long deltaMillis = now - lastStatusAtMillis;
+      double errorTps = 0.0;
+      if (deltaMillis > 0L && deltaErrors > 0L) {
+        errorTps = (deltaErrors * 1000.0) / deltaMillis;
+      }
+      lastStatusAtMillis = now;
+      lastErrorCountSnapshot = totalErrors;
+      final double finalErrorTps = errorTps;
+      final long finalTotalErrors = totalErrors;
+      context.statusPublisher()
+          .update(status -> status
+              .data("templateRoot", config.templateRoot())
+              .data("serviceId", config.serviceId())
+              .data("passThroughOnMissingTemplate", config.passThroughOnMissingTemplate())
+              .data("errorCount", finalTotalErrors)
+              .data("errorTps", finalErrorTps));
+    }
+  }
+}

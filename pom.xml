@@ -29,6 +29,7 @@
     <module>trigger-service</module>
     <module>scenario-manager-service</module>
     <module>http-builder-service</module>
+    <module>request-builder-service</module>
     <module>e2e-tests</module>
     <module>tools/scenario-templating-check</module>
   </modules>
