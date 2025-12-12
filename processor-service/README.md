@@ -16,7 +16,8 @@ Calls the system under test and forwards responses downstream with support for H
 ### HTTP Processing
 ```yaml
 pockethive:
-  processor:
+  worker:
+    config:
     baseUrl: "https://api.example.com"
     mode: THREAD_COUNT
     threadCount: 10
@@ -32,8 +33,8 @@ pockethive:
       mode: RATE_PER_SEC
       ratePerSec: 100.0     # shared pacing across HTTP + TCP
     tcpTransport:
-      type: netty
-      connectionReuse: PER_THREAD
+      type: socket
+      connectionReuse: PER_THREAD # honoured only by `socket`
       maxRetries: 3
 ```
 
@@ -57,6 +58,8 @@ TCP transport is selected via configuration:
 - `socket` - Standard Java Socket (default); supports keep-alive reuse when `connectionReuse != NONE`
 - `nio` - Java NIO (new connection per request)
 - `netty` - Netty async framework (new connection per request)
+
+Note: `tcps://` (TLS) and TCP keep-alive reuse are currently implemented for the `socket` transport only.
 
 ## Examples
 
