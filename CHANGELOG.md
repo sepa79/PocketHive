@@ -3,9 +3,16 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
-Timestamp: 2025-12-11T00:00:00Z
+Timestamp: 2025-12-12T00:00:00Z
 
 - No unreleased changes yet.
+
+## [0.14.14] - 2025-12-12
+Timestamp: 2025-12-12T00:00:00Z
+
+- Hive Capacity view: renamed the “Perf” route to `/capacity` to match the Capacity tab, split the layout so the left configuration panel scrolls independently from the React Flow canvas, persisted the capacity model graph to browser storage (with a Reset view button to restore the default model), and tightened node connectors so Synthetic IN nodes expose only outputs while Synthetic OUT/DB nodes expose only inputs.
+- Capacity zoom controls: added explicit dark-mode styling for the React Flow zoom/controls widget so its buttons and icons remain visible against the dark background across browsers (including Firefox).
+- Hive SUT dropdowns: fixed SUT selection styling in the Hive swarm create modal so the control uses a dark background with light text, avoiding the white-on-white rendering seen in some Chrome configurations.
 
 ## [0.14.13] - 2025-12-11
 Timestamp: 2025-12-11T00:00:00Z

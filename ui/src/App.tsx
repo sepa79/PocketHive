@@ -42,7 +42,7 @@ export default function App() {
           }
         />
         <Route path="sut" element={<SutEnvironmentsPage />} />
-        <Route path="perf" element={<PerfModelerPage />} />
+        <Route path="capacity" element={<PerfModelerPage />} />
         <Route path="nectar" element={<Nectar />} />
       </Route>
     </Routes>
