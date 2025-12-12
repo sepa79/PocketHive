@@ -11,6 +11,23 @@ body{
 }
 button, input, select, textarea{ font: inherit; }
 
+/* Ensure embedded widget controls are visible on dark backgrounds */
+.react-flow__controls{
+  background-color: rgba(15,23,42,0.96) !important;
+  border-radius: 6px !important;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.35);
+}
+.react-flow__controls button{
+  background-color: transparent !important;
+  border-bottom: 1px solid rgba(148,163,184,0.3) !important;
+}
+.react-flow__controls button:last-child{
+  border-bottom: none !important;
+}
+.react-flow__controls button svg{
+  color: #e5e7eb !important;
+}
+
 /* Neon-themed select to match header controls */
 .themed-select{
   appearance:none;

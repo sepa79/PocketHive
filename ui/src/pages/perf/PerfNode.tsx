@@ -464,8 +464,12 @@ export function PerfNode({ id, data }: NodeProps<PerfNodeUIData>) {
           </div>
         )}
       </div>
-      <Handle type="target" position={Position.Left} style={{ top: '50%' }} />
-      <Handle type="source" position={Position.Right} style={{ top: '50%' }} />
+      {kind !== 'in' && (
+        <Handle type="target" position={Position.Left} style={{ top: '50%' }} />
+      )}
+      {kind !== 'out' && (
+        <Handle type="source" position={Position.Right} style={{ top: '50%' }} />
+      )}
     </div>
   )
 }

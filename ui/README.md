@@ -65,11 +65,11 @@ npm test
 - **Buzz** – stream IN/OUT/Other logs and view current configuration with adjustable message limits.
 - **Queen** – create new swarms from predefined templates.
 - **Nectar** – Prometheus-backed performance KPIs for swarms.
-- **Perf** – a standalone throughput modelling tool for experimenting with synthetic components.
+-- **Capacity** – a standalone throughput modelling tool for experimenting with synthetic components.
 
-## Throughput Modeler (Perf)
+## Throughput Modeler (Capacity)
 
-The **Perf** tab (`/perf`) hosts a self-contained React Flow UI for modelling theoretical throughput of HTTP-style components. It reuses the same single-component formulas as the standalone HTML calculator, but applies them across a small graph:
+The **Capacity** tab (`/capacity`) hosts a self-contained React Flow UI for modelling theoretical throughput of HTTP-style components. It reuses the same single-component formulas as the standalone HTML calculator, but applies them across a small graph:
 
 - `serviceTimeMs = internalLatencyMs + depLatencyMs`
 - `serviceTimeSec = serviceTimeMs / 1000`

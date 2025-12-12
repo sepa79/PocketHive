@@ -184,7 +184,7 @@ export default function SwarmCreateModal({ onClose, autoPullOnStart, onChangeAut
                 </label>
                 <select
                   id="sutEnv"
-                  className="rounded border border-white/20 bg-white/10 px-2 py-1 text-xs text-white"
+                  className="rounded border border-white/20 bg-[#020617] px-2 py-1 text-xs text-white"
                   value={sutId}
                   onChange={(e) => setSutId(e.target.value)}
                 >

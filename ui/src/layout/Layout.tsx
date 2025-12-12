@@ -84,7 +84,7 @@ export default function Layout() {
             SUTs
           </NavLink>
           <NavLink
-            to="/perf"
+            to="/capacity"
             className={({ isActive }) =>
               `tab-btn flex items-center${isActive ? ' tab-active' : ''}`
             }
