@@ -59,7 +59,7 @@ TCP transport is selected via configuration:
 - `nio` - Java NIO (new connection per request)
 - `netty` - Netty async framework (new connection per request)
 
-Note: `tcps://` (TLS) and TCP keep-alive reuse are currently implemented for the `socket` transport only.
+Note: `tcps://` (TLS) is supported by `socket` and `netty`. TCP keep-alive reuse is currently implemented for the `socket` transport only.
 
 ## Examples
 
