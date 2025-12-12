@@ -9,7 +9,6 @@ public record TcpTransportConfig(
     boolean tcpNoDelay,    // TCP_NODELAY option
     boolean sslVerify,     // SSL certificate verification
     ConnectionReuse connectionReuse,  // connection pooling strategy
-    double ratePerSec,     // rate limiting
     int maxRetries         // retry attempts
 ) {
 
@@ -27,7 +26,6 @@ public record TcpTransportConfig(
             true,
             false,
             ConnectionReuse.GLOBAL,
-            0.0,
             2
         );
     }

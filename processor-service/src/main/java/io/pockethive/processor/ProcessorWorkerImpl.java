@@ -83,7 +83,7 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
     boolean sslVerify = properties.defaultConfig().sslVerify();
     this.protocolHandlers = Map.of(
         "HTTP", new HttpProtocolHandler(clock, metricsRecorder, httpClient, noKeepAliveClient, perThreadClient, nextAllowedTimeNanos),
-        "TCP", new TcpProtocolHandler(clock, metricsRecorder, properties.defaultConfig().tcpTransport())
+        "TCP", new TcpProtocolHandler(clock, metricsRecorder, properties.defaultConfig().tcpTransport(), nextAllowedTimeNanos)
     );
   }
 

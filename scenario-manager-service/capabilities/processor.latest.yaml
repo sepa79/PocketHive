@@ -14,13 +14,13 @@ ui:
   #     - THREAD_COUNT: cap concurrency per instance to `threadCount` in-flight HTTP calls.
   #       The Rabbit worker adapter uses a bounded executor with no backlog so messages
   #       stay queued in Rabbit when all threads are busy.
-  #     - RATE_PER_SEC: pace calls to approximately `ratePerSec` HTTP requests per second
+  #     - RATE_PER_SEC: pace calls to approximately `ratePerSec` requests per second
   #       across the instance, still honouring `threadCount` as a hard max-in-flight cap.
   #       Pacing delay is not counted in the reported call latency.
   # - threadCount: desired concurrent HTTP calls per worker instance. When there is enough
   #   work available, the processor will maintain up to this many in-flight requests.
-  # - ratePerSec: target HTTP calls per second in RATE_PER_SEC mode. The worker spaces calls
-  #   using a shared token bucket so bursts are smoothed over time.
+  # - ratePerSec: target calls per second in RATE_PER_SEC mode. This is shared across HTTP and TCP
+  #   calls so control-plane guards can adjust a single knob regardless of protocol mix.
   # - keepAlive + connectionReuse:
   #     - keepAlive=true, connectionReuse=GLOBAL:
   #         - Shared Apache HttpClient connection pool with up to 200 total / 200 per route
@@ -30,6 +30,9 @@ ui:
   #           ~threadCount.
   #     - keepAlive=false or connectionReuse=NONE:
   #         - No keep-alive; each HTTP call uses a fresh connection and closes it afterwards.
+  # - TCP connection reuse:
+  #     - tcpTransport.keepAlive + tcpTransport.connectionReuse are currently honoured only
+  #       by the `socket` transport. `nio` and `netty` open a new connection per request.
   # - Observability:
   #     - Each call records:
   #         - x-ph-processor-duration-ms: time spent in the HTTP call itself (no pacing delay).
@@ -78,6 +81,12 @@ config:
       - "GLOBAL"
       - "PER_THREAD"
       - "NONE"
+  - name: timeoutMs
+    type: int
+    default: 30000
+  - name: sslVerify
+    type: boolean
+    default: false
   - name: tcpTransport.type
     type: string
     default: "socket"
@@ -85,30 +94,33 @@ config:
       - "socket"
       - "nio"
       - "netty"
+  - name: tcpTransport.timeout
+    type: int
+    default: 30000
+  - name: tcpTransport.maxBytes
+    type: int
+    default: 8192
+  - name: tcpTransport.keepAlive
+    type: boolean
+    default: true
+  - name: tcpTransport.workerThreads
+    type: int
+    default: 4
+  - name: tcpTransport.tcpNoDelay
+    type: boolean
+    default: true
+  - name: tcpTransport.sslVerify
+    type: boolean
+    default: false
   - name: tcpTransport.connectionReuse
     type: string
-    default: "PER_THREAD"
+    default: "GLOBAL"
     options:
       - "GLOBAL"
       - "PER_THREAD"
       - "NONE"
-  - name: tcpTransport.ratePerSec
-    type: double
-    default: 0.0
   - name: tcpTransport.maxRetries
     type: int
-    default: 3
-  - name: tcpTransport.connectTimeoutMs
-    type: int
-    default: 5000
-  - name: tcpTransport.readTimeoutMs
-    type: int
-    default: 30000
-  - name: tcpTransport.ssl.enabled
-    type: boolean
-    default: false
-  - name: tcpTransport.ssl.verifyHostname
-    type: boolean
-    default: true
+    default: 2
 actions: []
 panels: []

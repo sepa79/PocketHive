@@ -1,11 +1,11 @@
-# HTTP Builder Service (Experimental)
+# Request Builder Service (Experimental)
 
-The HTTP Builder worker takes a generic `WorkItem` from Rabbit, resolves a disk‑backed template based on `serviceId` and `callId`, and appends an HTTP request envelope step that the existing `processor-service` can send to the target system.
+The Request Builder worker takes a generic `WorkItem` from Rabbit, resolves a disk‑backed template based on `serviceId` and `callId`, and appends an HTTP or TCP request envelope step that the existing `processor-service` can send to the target system.
 
 ## Inputs and outputs
 
 - **Input**: `WorkerInputType.RABBITMQ` – a normal work queue, typically fed by Data Providers or other workers.
-- **Output**: `WorkerOutputType.RABBITMQ` – the queue that the HTTP `processor-service` consumes.
+- **Output**: `WorkerOutputType.RABBITMQ` – the queue that the `processor-service` consumes.
 - The worker looks for two headers on the current `WorkItem`:
   - `x-ph-service-id` (optional): logical service namespace.
   - `x-ph-call-id` (required): which HTTP call template to apply.
@@ -17,7 +17,7 @@ If `x-ph-service-id` is missing or blank, the worker uses `pockethive.worker.con
 
 ## Configuration
 
-Service config (`http-builder-service/src/main/resources/application.yml`):
+Service config (`request-builder-service/src/main/resources/application.yml`):
 
 ```yaml
 pockethive:
@@ -28,14 +28,16 @@ pockethive:
       passThroughOnMissingTemplate: true
 ```
 
-Capability manifest (`scenario-manager-service/capabilities/http-builder.latest.yaml`) exposes:
+To use the baked-in TCP templates instead, set `templateRoot: /app/tcp-templates`.
+
+Capability manifest (`scenario-manager-service/capabilities/request-builder.latest.yaml`) exposes:
 
 - `templateRoot`: root directory for HTTP templates (baked into the image, overridable via a Docker volume).
 - `serviceId`: default logical service id used when the header is not present.
 
 ## Template files
 
-Templates live under `templateRoot` in JSON or YAML files and are loaded once at startup into memory. Each file represents a single HTTP call:
+Templates live under `templateRoot` in JSON or YAML files and are loaded once at startup into memory. Each file represents a single HTTP or TCP call:
 
 ```json
 {
@@ -129,7 +131,7 @@ The worker resolves `payments::GetCustomer` or `cards::GetCustomer` respectively
 
 3. **Different defaults per swarm**
 
-If you run the same HTTP Builder image in multiple swarms, each swarm can set a different default `serviceId` in its config:
+If you run the same Request Builder image in multiple swarms, each swarm can set a different default `serviceId` in its config:
 
 - Swarm A:
 
@@ -164,7 +166,7 @@ When a template is found, the worker appends a new step whose payload is a JSON 
 }
 ```
 
-The processor combines this `path` with its configured `baseUrl` to execute the HTTP call. If no `callId` is present or no matching template is found, the HTTP Builder logs a warning and leaves the `WorkItem` unchanged.
+The processor combines this `path` with its configured `baseUrl` to execute the HTTP call. If no `callId` is present or no matching template is found, the Request Builder logs a warning and leaves the `WorkItem` unchanged.
 
 ## Overriding templates
 
@@ -173,7 +175,7 @@ The processor combines this `path` with its configured `baseUrl` to execute the 
 
   ```yaml
   services:
-    http-builder:
+    request-builder:
       volumes:
         - ./my-http-templates:/app/http-templates:ro
   ```

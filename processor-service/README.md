@@ -5,7 +5,7 @@ Calls the system under test and forwards responses downstream with support for H
 ## Features
 
 - **Multi-Protocol Support**: HTTP and TCP with pluggable transports
-- **Connection Management**: Pooling, keep-alive, per-thread isolation
+- **Connection Management**: HTTP pooling/keep-alive; TCP keep-alive only for socket transport
 - **Resilience**: Rate limiting, retry logic, circuit breaker patterns
 - **Security**: SSL/TLS support with configurable certificate verification
 - **Performance**: Multiple transport implementations (Socket, NIO, Netty)
@@ -26,12 +26,14 @@ pockethive:
 ### TCP Processing
 ```yaml
 pockethive:
-  processor:
-    baseUrl: "tcp://system.example.com:8080"
+  worker:
+    config:
+      baseUrl: "tcp://system.example.com:8080"
+      mode: RATE_PER_SEC
+      ratePerSec: 100.0     # shared pacing across HTTP + TCP
     tcpTransport:
       type: netty
       connectionReuse: PER_THREAD
-      ratePerSec: 100.0
       maxRetries: 3
 ```
 
@@ -52,9 +54,9 @@ Messages are routed to appropriate handlers based on the `protocol` field:
 
 ### Transport Selection
 TCP transport is selected via configuration:
-- `socket` - Standard Java Socket (default)
-- `nio` - Java NIO non-blocking
-- `netty` - Netty async framework
+- `socket` - Standard Java Socket (default); supports keep-alive reuse when `connectionReuse != NONE`
+- `nio` - Java NIO (new connection per request)
+- `netty` - Netty async framework (new connection per request)
 
 ## Examples
 

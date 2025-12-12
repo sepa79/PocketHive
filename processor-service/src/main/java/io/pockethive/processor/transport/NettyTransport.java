@@ -8,8 +8,7 @@ import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.codec.DelimiterBasedFrameDecoder;
-import io.netty.handler.codec.string.StringDecoder;
-import io.netty.handler.codec.string.StringEncoder;
+import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
@@ -17,14 +16,17 @@ import java.util.concurrent.TimeUnit;
 public class NettyTransport implements TcpTransport {
     private static final EventLoopGroup SHARED_GROUP = new NioEventLoopGroup(4);
     private final EventLoopGroup group = SHARED_GROUP;
-    
+
     @Override
     public TcpResponse execute(TcpRequest request, TcpBehavior behavior) throws TcpException {
         long start = System.currentTimeMillis();
-        
+
         try {
             CompletableFuture<byte[]> responseFuture = new CompletableFuture<>();
-            
+            int timeout = (Integer) request.options().getOrDefault("timeout", 30000);
+            int maxBytes = (Integer) request.options().getOrDefault("maxBytes", 8192);
+            String endTag = (String) request.options().getOrDefault("endTag", "</Document>");
+
             Bootstrap bootstrap = new Bootstrap()
                 .group(group)
                 .channel(NioSocketChannel.class)
@@ -32,89 +34,150 @@ public class NettyTransport implements TcpTransport {
                     @Override
                     protected void initChannel(SocketChannel ch) {
                         ChannelPipeline pipeline = ch.pipeline();
-                        
+
                         if (behavior == TcpBehavior.REQUEST_RESPONSE) {
-                            String endTag = (String) request.options().getOrDefault("endTag", "</Document>");
                             ByteBuf delimiter = Unpooled.copiedBuffer(endTag.getBytes(StandardCharsets.UTF_8));
-                            pipeline.addLast(new DelimiterBasedFrameDecoder(8192, delimiter));
-                            pipeline.addLast(new StringDecoder(StandardCharsets.UTF_8));
+                            pipeline.addLast(new DelimiterBasedFrameDecoder(maxBytes, delimiter));
                         }
-                        
-                        pipeline.addLast(new StringEncoder(StandardCharsets.UTF_8));
-                        pipeline.addLast(new NettyClientHandler(behavior, request.payload(), responseFuture));
+
+                        pipeline.addLast(new NettyClientHandler(behavior, request.payload(), endTag, maxBytes, responseFuture));
                     }
                 });
-            
+
             ChannelFuture connectFuture = bootstrap.connect(request.host(), request.port());
             connectFuture.sync();
-            
-            int timeout = (Integer) request.options().getOrDefault("timeout", 30000);
+
             byte[] response = responseFuture.get(timeout, TimeUnit.MILLISECONDS);
-            
+
             return new TcpResponse(200, response, System.currentTimeMillis() - start);
-            
+
         } catch (Exception e) {
             throw new TcpException("Netty operation failed", e);
         }
     }
-    
+
     @Override
     public void close() {
         // Don't shutdown shared group - managed by JVM shutdown hook
     }
-    
+
     static {
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             SHARED_GROUP.shutdownGracefully();
         }));
     }
-    
-    private static class NettyClientHandler extends SimpleChannelInboundHandler<String> {
+
+    private static class NettyClientHandler extends SimpleChannelInboundHandler<ByteBuf> {
         private final TcpBehavior behavior;
         private final byte[] payload;
+        private final byte[] endTagBytes;
+        private final int maxBytes;
         private final CompletableFuture<byte[]> responseFuture;
-        private final StringBuilder responseBuffer = new StringBuilder();
-        
-        NettyClientHandler(TcpBehavior behavior, byte[] payload, CompletableFuture<byte[]> responseFuture) {
+        private final ByteArrayOutputStream responseBuffer = new ByteArrayOutputStream();
+
+        NettyClientHandler(TcpBehavior behavior,
+                           byte[] payload,
+                           String endTag,
+                           int maxBytes,
+                           CompletableFuture<byte[]> responseFuture) {
             this.behavior = behavior;
             this.payload = payload;
+            this.endTagBytes = endTag.getBytes(StandardCharsets.UTF_8);
+            this.maxBytes = maxBytes;
             this.responseFuture = responseFuture;
         }
-        
+
         @Override
         public void channelActive(ChannelHandlerContext ctx) {
-            String message = new String(payload, StandardCharsets.UTF_8);
-            ctx.writeAndFlush(message);
-            
+            ctx.writeAndFlush(Unpooled.wrappedBuffer(payload));
+
             if (behavior == TcpBehavior.FIRE_FORGET) {
                 responseFuture.complete(new byte[0]);
                 ctx.close();
             }
         }
-        
+
         @Override
-        protected void channelRead0(ChannelHandlerContext ctx, String msg) {
+        protected void channelRead0(ChannelHandlerContext ctx, ByteBuf msg) throws Exception {
+            if (responseFuture.isDone()) {
+                return;
+            }
+
             if (behavior == TcpBehavior.ECHO) {
-                responseFuture.complete(msg.getBytes(StandardCharsets.UTF_8));
-                ctx.close();
-            } else if (behavior == TcpBehavior.STREAMING) {
-                responseBuffer.append(msg);
-                // Continue reading until maxBytes or timeout
-                if (responseBuffer.length() >= 8192) {
-                    responseFuture.complete(responseBuffer.toString().getBytes(StandardCharsets.UTF_8));
+                appendToBuffer(msg);
+                if (responseBuffer.size() >= payload.length) {
+                    responseFuture.complete(responseBuffer.toByteArray());
                     ctx.close();
                 }
-            } else {
-                responseBuffer.append(msg);
-                responseFuture.complete(responseBuffer.toString().getBytes(StandardCharsets.UTF_8));
-                ctx.close();
+                return;
+            }
+
+            if (behavior == TcpBehavior.STREAMING) {
+                appendToBuffer(msg);
+                if (responseBuffer.size() >= maxBytes) {
+                    byte[] bytes = responseBuffer.toByteArray();
+                    if (bytes.length > maxBytes) {
+                        byte[] trimmed = new byte[maxBytes];
+                        System.arraycopy(bytes, 0, trimmed, 0, maxBytes);
+                        bytes = trimmed;
+                    }
+                    responseFuture.complete(bytes);
+                    ctx.close();
+                }
+                return;
+            }
+
+            // REQUEST_RESPONSE behavior
+            appendToBuffer(msg);
+            byte[] bytes = responseBuffer.toByteArray();
+            // DelimiterBasedFrameDecoder typically strips the delimiter; ensure parity with Socket/NIO transports.
+            if (!endsWith(bytes, endTagBytes)) {
+                byte[] withDelimiter = new byte[bytes.length + endTagBytes.length];
+                System.arraycopy(bytes, 0, withDelimiter, 0, bytes.length);
+                System.arraycopy(endTagBytes, 0, withDelimiter, bytes.length, endTagBytes.length);
+                bytes = withDelimiter;
+            }
+            responseFuture.complete(bytes);
+            ctx.close();
+        }
+
+        private void appendToBuffer(ByteBuf msg) throws Exception {
+            int readable = msg.readableBytes();
+            if (readable <= 0) {
+                return;
+            }
+            byte[] chunk = new byte[readable];
+            msg.getBytes(msg.readerIndex(), chunk);
+            responseBuffer.write(chunk);
+        }
+
+        @Override
+        public void channelInactive(ChannelHandlerContext ctx) {
+            if (!responseFuture.isDone()) {
+                responseFuture.complete(responseBuffer.toByteArray());
             }
         }
-        
+
         @Override
         public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
             responseFuture.completeExceptionally(cause);
             ctx.close();
+        }
+
+        private static boolean endsWith(byte[] bytes, byte[] suffix) {
+            if (bytes == null || suffix == null) {
+                return false;
+            }
+            if (bytes.length < suffix.length) {
+                return false;
+            }
+            int offset = bytes.length - suffix.length;
+            for (int i = 0; i < suffix.length; i++) {
+                if (bytes[offset + i] != suffix[i]) {
+                    return false;
+                }
+            }
+            return true;
         }
     }
 }
