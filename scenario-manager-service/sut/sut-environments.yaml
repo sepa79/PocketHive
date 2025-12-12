@@ -8,6 +8,16 @@
   ui:
     panelId: wiremock
 
+- id: tcp-mock-local
+  name: TCP Mock (local)
+  type: sandbox
+  endpoints:
+    tcp-gateway:
+      kind: TCP
+      baseUrl: tcp://tcp-mock:8080
+  ui:
+    panelId: tcp-mock
+
 # Example HTTP SUT used for demos; can be wired to the same WireMock
 # instance or a different target.
 - id: demo-http-sut

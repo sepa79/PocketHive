@@ -150,6 +150,15 @@ services:
       - ./wiremock/mappings:/home/wiremock/mappings
       - ./wiremock/__files:/home/wiremock/__files
 
+  tcp-mock:
+    image: node:18-alpine
+    working_dir: /app
+    command: ["node", "tcp-mock.js"]
+    ports:
+      - "8082:8080"
+    volumes:
+      - ./wiremock/tcp-mock.js:/app/tcp-mock.js:ro
+
   # promtail:
   #   # disabled: logs are shipped via RabbitMQ and aggregated to Loki
   #   image: grafana/promtail:2.9.1
@@ -209,6 +218,8 @@ services:
     image: ${DOCKER_REGISTRY:-}orchestrator:${POCKETHIVE_VERSION:-latest}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      - ./csv-data:/shared/csv-data:ro
+      - ./gatling-simulations:/shared/gatling-simulations:ro
 # all defaulted in application.yml, uncomment to override here
     environment:
       POCKETHIVE_SCENARIOS_RUNTIME_ROOT: /opt/pockethive/scenarios-runtime

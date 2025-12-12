@@ -8,9 +8,15 @@ COPY .local-jars/swarm-controller-service.jar /app/app.jar
 
 FROM bee-runtime AS generator
 COPY .local-jars/generator-service.jar /app/app.jar
+COPY csv-data /app/csv-data
 
 FROM bee-runtime AS http-builder
 COPY .local-jars/http-builder-service.jar /app/app.jar
+
+FROM bee-runtime AS request-builder
+COPY .local-jars/request-builder-service.jar /app/app.jar
+COPY request-builder-service/http-templates /app/http-templates
+COPY request-builder-service/tcp-templates /app/tcp-templates
 
 FROM bee-runtime AS payload-generator
 COPY .local-jars/payload-generator-service.jar /app/app.jar

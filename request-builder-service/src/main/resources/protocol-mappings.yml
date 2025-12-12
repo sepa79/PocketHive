@@ -1,0 +1,25 @@
+protocols:
+  TCP:
+    secure: false
+  TCPS:
+    secure: true
+  HTTP:
+    secure: false
+  HTTPS:
+    secure: true
+
+messageFormats:
+  PCS:
+    versions: ["1.0", "2.0"]
+    contentType: "application/xml"
+  ISO8583:
+    versions: ["1987", "1993", "2003"]
+    contentType: "application/octet-stream"
+  SOAP:
+    versions: ["1.1", "1.2"]
+    transports: ["HTTP", "HTTPS"]
+    contentType: "text/xml"
+  REST:
+    versions: ["1.0"]
+    transports: ["HTTP", "HTTPS"]
+    contentType: "application/json"

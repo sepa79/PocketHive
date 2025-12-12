@@ -1,0 +1,60 @@
+id: tcp-protocol-example
+name: "TCP Protocol Example"
+description: "Example scenario demonstrating TCP transport capabilities"
+
+sut:
+  endpoints:
+    tcp-gateway:
+      baseUrl: "tcp://tcp-mock:8080"
+      description: "TCP mock server for testing"
+
+template:
+  image: swarm-controller:latest
+  bees:
+    - role: generator
+      image: generator:latest
+      config:
+        inputs:
+          type: SCHEDULER
+          scheduler:
+            ratePerSec: 5
+            maxMessages: 100
+        worker:
+          message:
+            bodyType: SIMPLE
+            body: '{"pan": "4111111111111111", "amount": "1000", "transactionType": "AUTH"}'
+            headers:
+              x-ph-call-id: tcp-echo
+              x-ph-tcp-end-tag: "\n"
+      work:
+        out: build-queue
+
+    - role: request-builder
+      image: request-builder:latest
+      config:
+        worker:
+          templateRoot: /app/templates
+          serviceId: default
+      work:
+        in: build-queue
+        out: proc-queue
+
+    - role: processor
+      image: processor:latest
+      config:
+        baseUrl: "{{ sut.endpoints['tcp-gateway'].baseUrl }}"
+        tcpTransport:
+          type: netty
+          connectionReuse: PER_THREAD
+          ratePerSec: 10.0
+          maxRetries: 3
+          connectTimeoutMs: 5000
+          readTimeoutMs: 30000
+      work:
+        in: proc-queue
+        out: post-queue
+
+    - role: postprocessor
+      image: postprocessor:latest
+      work:
+        in: post-queue
