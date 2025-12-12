@@ -1,6 +1,7 @@
 package io.pockethive.processor.transport;
 
 import java.io.IOException;
+import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -18,15 +19,22 @@ public class TcpConnectionPool {
     this.sslVerify = sslVerify;
   }
 
-  public synchronized Socket getOrCreate(String host, int port, boolean useSsl, int timeout) throws Exception {
+  public synchronized Socket getOrCreate(String host,
+                                         int port,
+                                         boolean useSsl,
+                                         int timeout,
+                                         boolean keepAlive,
+                                         boolean tcpNoDelay) throws Exception {
     String key = (useSsl ? "tcps://" : "tcp://") + host + ":" + port;
     Socket socket = connections.get(key);
 
     if (socket != null && !socket.isClosed() && socket.isConnected()) {
+      configure(socket, timeout, keepAlive, tcpNoDelay);
       return socket;
     }
 
     socket = useSsl ? createSslSocket(host, port, timeout) : createSocket(host, port, timeout);
+    configure(socket, timeout, keepAlive, tcpNoDelay);
     connections.put(key, socket);
     return socket;
   }
@@ -51,9 +59,8 @@ public class TcpConnectionPool {
   }
 
   private Socket createSocket(String host, int port, int timeout) throws IOException {
-    Socket socket = new Socket(host, port);
-    socket.setSoTimeout(timeout);
-    socket.setKeepAlive(true);
+    Socket socket = new Socket();
+    socket.connect(new InetSocketAddress(host, port), timeout);
     return socket;
   }
 
@@ -67,10 +74,15 @@ public class TcpConnectionPool {
         }
     };
     sslContext.init(null, trustManagers, new java.security.SecureRandom());
-    SSLSocket socket = (SSLSocket) sslContext.getSocketFactory().createSocket(host, port);
-    socket.setSoTimeout(timeout);
-    socket.setKeepAlive(true);
+    SSLSocket socket = (SSLSocket) sslContext.getSocketFactory().createSocket();
+    socket.connect(new InetSocketAddress(host, port), timeout);
     socket.startHandshake();
     return socket;
+  }
+
+  private static void configure(Socket socket, int timeout, boolean keepAlive, boolean tcpNoDelay) throws IOException {
+    socket.setSoTimeout(timeout);
+    socket.setKeepAlive(keepAlive);
+    socket.setTcpNoDelay(tcpNoDelay);
   }
 }

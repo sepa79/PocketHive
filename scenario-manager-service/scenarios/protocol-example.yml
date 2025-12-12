@@ -33,7 +33,7 @@ template:
       image: request-builder:latest
       config:
         worker:
-          templateRoot: /app/templates
+          templateRoot: /app/tcp-templates
           serviceId: default
       work:
         in: build-queue
@@ -43,13 +43,18 @@ template:
       image: processor:latest
       config:
         baseUrl: "{{ sut.endpoints['tcp-gateway'].baseUrl }}"
+        mode: RATE_PER_SEC
+        ratePerSec: 10.0
         tcpTransport:
           type: netty
           connectionReuse: PER_THREAD
-          ratePerSec: 10.0
           maxRetries: 3
-          connectTimeoutMs: 5000
-          readTimeoutMs: 30000
+          timeout: 30000
+          maxBytes: 8192
+          keepAlive: true
+          workerThreads: 4
+          tcpNoDelay: true
+          sslVerify: false
       work:
         in: proc-queue
         out: post-queue

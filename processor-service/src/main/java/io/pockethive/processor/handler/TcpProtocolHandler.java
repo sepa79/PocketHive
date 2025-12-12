@@ -2,7 +2,8 @@ package io.pockethive.processor.handler;
 
 import io.pockethive.processor.ProcessorWorkerConfig;
 import io.pockethive.processor.TcpTransportConfig;
-import io.pockethive.processor.metrics.*;
+import io.pockethive.processor.metrics.CallMetrics;
+import io.pockethive.processor.metrics.CallMetricsRecorder;
 import io.pockethive.processor.exception.ProcessorCallException;
 import io.pockethive.processor.response.ResponseBuilder;
 
@@ -16,40 +17,41 @@ import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.atomic.AtomicLong;
 
 public class TcpProtocolHandler implements ProtocolHandler {
   private static final ObjectMapper MAPPER = new ObjectMapper();
   private final Clock clock;
   private final CallMetricsRecorder metricsRecorder;
-  private final TcpTransport transport;
-  private final TcpTransportConfig config;
-  private final java.util.concurrent.atomic.AtomicLong nextAllowedTimeNanos = new java.util.concurrent.atomic.AtomicLong(0L);
-  private final ThreadLocal<TcpTransport> perThreadTransport;
+  private final TcpTransportConfig defaultConfig;
+  private final AtomicLong nextAllowedTimeNanos;
+  private final Object transportLock = new Object();
 
-  public TcpProtocolHandler(Clock clock, CallMetricsRecorder metricsRecorder, TcpTransportConfig config) {
+  private volatile TcpTransportConfig activeConfig;
+  private volatile TcpTransport globalTransport;
+  private volatile PerThreadTransportPool perThreadTransportPool;
+
+  public TcpProtocolHandler(Clock clock,
+                            CallMetricsRecorder metricsRecorder,
+                            TcpTransportConfig defaultConfig,
+                            AtomicLong nextAllowedTimeNanos) {
     this.clock = clock;
     this.metricsRecorder = metricsRecorder;
-    this.config = config;
-    this.transport = TcpTransportFactory.create(config.type());
-    this.perThreadTransport = ThreadLocal.withInitial(() -> TcpTransportFactory.create(config.type()));
+    this.defaultConfig = defaultConfig == null ? TcpTransportConfig.defaults() : defaultConfig;
+    this.nextAllowedTimeNanos = nextAllowedTimeNanos == null ? new AtomicLong(0L) : nextAllowedTimeNanos;
+    reloadTransports(this.defaultConfig);
   }
 
   @Override
   public WorkItem invoke(WorkItem message, JsonNode envelope, ProcessorWorkerConfig processorConfig, WorkerContext context) throws Exception {
+    TcpTransportConfig desired = processorConfig.tcpTransport() == null ? defaultConfig : processorConfig.tcpTransport();
+    ensureTransportConfig(desired);
 
-    // Rate limiting from worker config
-    if (processorConfig.ratePerSec() > 0.0) {
-      long intervalNanos = (long) (1_000_000_000.0 / processorConfig.ratePerSec());
-      long now = System.nanoTime();
-      long nextAllowed = nextAllowedTimeNanos.get();
-      if (now < nextAllowed) {
-        Thread.sleep((nextAllowed - now) / 1_000_000);
-      }
-      nextAllowedTimeNanos.set(now + intervalNanos);
-    }
     String baseUrl = processorConfig.baseUrl();
     if (baseUrl == null || baseUrl.isBlank()) {
-      throw new ProcessorCallException(CallMetrics.failure(0L, 0L, -1), new IllegalArgumentException("invalid TCP baseUrl"));
+      throw new ProcessorCallException(CallMetrics.failure(0L, 0L, -1),
+          new IllegalArgumentException("invalid TCP baseUrl"));
     }
 
     boolean useSsl = baseUrl.startsWith("tcps://");
@@ -59,55 +61,90 @@ public class TcpProtocolHandler implements ProtocolHandler {
 
     Optional<String> body = extractBody(envelope.path("body"));
     if (body.isEmpty()) {
-      throw new ProcessorCallException(CallMetrics.failure(0L, 0L, -1), new IllegalArgumentException("no TCP body"));
+      throw new ProcessorCallException(CallMetrics.failure(0L, 0L, -1),
+          new IllegalArgumentException("no TCP body"));
     }
 
     TcpBehavior behavior = TcpBehavior.valueOf(envelope.path("behavior").asText("REQUEST_RESPONSE"));
     String endTag = envelope.path("endTag").asText("</Document>");
 
-    TcpRequest request = new TcpRequest(host, port, body.get().getBytes(StandardCharsets.UTF_8),
-        Map.of("endTag", endTag, "timeout", config.timeout(), "maxBytes", config.maxBytes(), 
-               "ssl", useSsl, "sslVerify", config.sslVerify()));
-
     long start = clock.millis();
+    long pacingMillis = 0L;
+    TcpTransport transport = null;
+    boolean closeAfter = false;
+    try {
+      pacingMillis = applyExecutionMode(processorConfig);
 
-    // Connection reuse strategy
-    TcpTransport activeTransport = switch (config.connectionReuse()) {
-      case PER_THREAD -> perThreadTransport.get();
-      case GLOBAL -> transport;
-      case NONE -> TcpTransportFactory.create(config.type());
-    };
+      TcpTransportConfig config = activeConfig;
+      TcpRequest request = new TcpRequest(host, port, body.get().getBytes(StandardCharsets.UTF_8),
+          Map.of(
+              "endTag", endTag,
+              "timeout", config.timeout(),
+              "maxBytes", config.maxBytes(),
+              "ssl", useSsl,
+              "sslVerify", config.sslVerify()
+          ));
 
-    // Retry logic
-    TcpResponse response = null;
-    Exception lastException = null;
+      // Connection reuse strategy
+      transport = switch (config.connectionReuse()) {
+        case PER_THREAD -> perThreadTransportPool.get();
+        case GLOBAL -> globalTransport;
+        case NONE -> {
+          closeAfter = true;
+          yield TcpTransportFactory.create(config);
+        }
+      };
 
-    for (int attempt = 0; attempt <= config.maxRetries(); attempt++) {
-      try {
-        response = activeTransport.execute(request, behavior);
-        break;
-      } catch (Exception ex) {
-        lastException = ex;
-        if (attempt < config.maxRetries()) {
-          context.logger().warn("TCP attempt {} failed, retrying: {}", attempt + 1, ex.getMessage());
-          Thread.sleep(100 * (attempt + 1)); // Exponential backoff
+      // Retry logic
+      TcpResponse response = null;
+      Exception lastException = null;
+
+      for (int attempt = 0; attempt <= config.maxRetries(); attempt++) {
+        try {
+          response = transport.execute(request, behavior);
+          break;
+        } catch (Exception ex) {
+          lastException = ex;
+          if (attempt < config.maxRetries()) {
+            context.logger().warn("TCP attempt {} failed, retrying: {}", attempt + 1, ex.getMessage());
+            Thread.sleep(100 * (attempt + 1)); // Exponential backoff
+          }
+        }
+      }
+
+      if (response == null) {
+        throw lastException;
+      }
+
+      long now = clock.millis();
+      long totalDuration = Math.max(0L, now - start);
+      long callDuration = Math.max(0L, totalDuration - pacingMillis);
+      long connectionLatency = Math.max(0L, pacingMillis);
+      CallMetrics metrics = CallMetrics.success(callDuration, connectionLatency, response.status());
+      metricsRecorder.record(metrics);
+
+      ObjectNode result = MAPPER.createObjectNode();
+      result.put("status", response.status());
+      result.put("body", new String(response.body(), StandardCharsets.UTF_8));
+
+      WorkItem responseItem = ResponseBuilder.build(result, context.info().role(), metrics);
+      return message.addStep(responseItem.asString(), responseItem.headers());
+    } catch (Exception ex) {
+      long now = clock.millis();
+      long totalDuration = Math.max(0L, now - start);
+      long callDuration = Math.max(0L, totalDuration - pacingMillis);
+      long connectionLatency = Math.max(0L, pacingMillis);
+      CallMetrics metrics = CallMetrics.failure(callDuration, connectionLatency, -1);
+      metricsRecorder.record(metrics);
+      throw new ProcessorCallException(metrics, ex);
+    } finally {
+      if (closeAfter && transport != null) {
+        try {
+          transport.close();
+        } catch (Exception ignored) {
         }
       }
     }
-
-    if (response == null) {
-      throw lastException;
-    }
-
-    CallMetrics metrics = CallMetrics.success(response.durationMs(), 0L, response.status());
-    metricsRecorder.record(metrics);
-
-    ObjectNode result = MAPPER.createObjectNode();
-    result.put("status", response.status());
-    result.put("body", new String(response.body(), StandardCharsets.UTF_8));
-
-    WorkItem responseItem = ResponseBuilder.build(result, context.info().role(), metrics);
-    return message.addStep(responseItem.asString(), responseItem.headers());
   }
 
   private String[] parseUrl(String baseUrl) {
@@ -121,5 +158,94 @@ public class TcpProtocolHandler implements ProtocolHandler {
     return bodyNode == null || bodyNode.isMissingNode() || bodyNode.isNull() ? Optional.empty()
         : bodyNode.isTextual() ? Optional.of(bodyNode.asText())
         : Optional.of(MAPPER.writeValueAsString(bodyNode));
+  }
+
+  private void ensureTransportConfig(TcpTransportConfig desired) {
+    if (desired == null) {
+      desired = defaultConfig;
+    }
+    TcpTransportConfig current = activeConfig;
+    if (desired.equals(current)) {
+      return;
+    }
+    synchronized (transportLock) {
+      if (!desired.equals(activeConfig)) {
+        reloadTransports(desired);
+      }
+    }
+  }
+
+  private void reloadTransports(TcpTransportConfig config) {
+    TcpTransport previousGlobal = this.globalTransport;
+    PerThreadTransportPool previousPerThread = this.perThreadTransportPool;
+
+    this.activeConfig = config;
+    this.globalTransport = TcpTransportFactory.create(config);
+    this.perThreadTransportPool = new PerThreadTransportPool(config);
+
+    if (previousGlobal != null) {
+      try {
+        previousGlobal.close();
+      } catch (Exception ignored) {
+      }
+    }
+    if (previousPerThread != null) {
+      previousPerThread.closeAll();
+    }
+  }
+
+  private long applyExecutionMode(ProcessorWorkerConfig config) throws InterruptedException {
+    ProcessorWorkerConfig.Mode mode = config.mode();
+    if (mode == ProcessorWorkerConfig.Mode.RATE_PER_SEC) {
+      double rate = config.ratePerSec();
+      if (rate <= 0.0) {
+        return 0L;
+      }
+      long intervalNanos = (long) (1_000_000_000L / rate);
+      long now = System.nanoTime();
+      while (true) {
+        long prev = nextAllowedTimeNanos.get();
+        long base = Math.max(prev, now);
+        long scheduled = base + intervalNanos;
+        if (nextAllowedTimeNanos.compareAndSet(prev, scheduled)) {
+          long sleepNanos = scheduled - now;
+          if (sleepNanos > 0L) {
+            long millis = sleepNanos / 1_000_000L;
+            int nanos = (int) (sleepNanos % 1_000_000L);
+            Thread.sleep(millis, nanos);
+            return sleepNanos / 1_000_000L;
+          }
+          return 0L;
+        }
+      }
+    }
+    return 0L;
+  }
+
+  private static final class PerThreadTransportPool {
+    private final ConcurrentLinkedQueue<TcpTransport> created = new ConcurrentLinkedQueue<>();
+    private final ThreadLocal<TcpTransport> transport;
+
+    private PerThreadTransportPool(TcpTransportConfig config) {
+      this.transport = ThreadLocal.withInitial(() -> {
+        TcpTransport createdTransport = TcpTransportFactory.create(config);
+        created.add(createdTransport);
+        return createdTransport;
+      });
+    }
+
+    private TcpTransport get() {
+      return transport.get();
+    }
+
+    private void closeAll() {
+      for (TcpTransport transport : created) {
+        try {
+          transport.close();
+        } catch (Exception ignored) {
+        }
+      }
+      created.clear();
+    }
   }
 }

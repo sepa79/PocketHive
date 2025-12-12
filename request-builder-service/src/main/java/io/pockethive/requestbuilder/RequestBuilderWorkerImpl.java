@@ -129,12 +129,12 @@ class RequestBuilderWorkerImpl implements PocketHiveWorkerFunction {
           .header("x-ph-service", context.info().role())
           .build();
 
-      context.logger().debug("HTTP Builder envelope: {}", httpItem.asString());
+      context.logger().debug("Request Builder envelope: {}", httpItem.asString());
       WorkItem result = seed.addStep(httpItem.asString(), httpItem.headers());
       publishStatus(context, config);
       return result;
     } catch (Exception ex) {
-      context.logger().error("HTTP Builder failed to render template for serviceId={} callId={}",
+      context.logger().error("Request Builder failed to render template for serviceId={} callId={}",
           serviceId, callId, ex);
       recordError();
       publishStatus(context, config);

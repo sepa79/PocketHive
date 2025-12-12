@@ -72,4 +72,3 @@ class TemplateLoaderTest {
     assertThat(tcpDef.behavior()).isEqualTo("ECHO");
   }
 }
-
