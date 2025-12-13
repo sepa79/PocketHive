@@ -20,11 +20,14 @@ Goal: provide a first‑class, queryable journal for swarms (control‑plane sco
 - [x] Implement a file‑backed adapter behind the port that writes per‑swarm JSONL journals into the swarm’s runtime directory.
 - [x] Log all incoming control signals from Orchestrator (non‑status) as normalized `JournalEvent` entries.
 - [x] Log all outgoing control messages to Swarm and Workers (not just confirmations).
-- [x] Log all incoming from Workers (non‑status), in a way that’s easy to distinguish from orchestrator/control‑plane traffic.
+- [x] Log all incoming non‑status from Workers (currently alerts), in a way that’s easy to distinguish from orchestrator/control‑plane traffic.
 - [x] Add explicit journal events when worker health transitions between “healthy” and “lost / degraded”, derived from status/metrics, without logging every status tick.
 - [ ] Emit journal events for plan/step lifecycle (scheduled/started/completed/retried/failed/timeout) with reasons.
 - [ ] Emit journal events for worker lifecycle and message handling (dispatch, result accepted/rejected, user vs infra errors).
 - [ ] Add tests per `docs/ci/control-plane-testing.md` to validate event emission and storage for a sample swarm.
+  - [x] Unit coverage for journal entry shapes in swarm-controller (`SwarmSignalListenerTest`).
+  - [x] Orchestrator reads `journal.ndjson` and serves it to UI (`SwarmControllerTest`).
+  - [ ] Add integration coverage with RabbitMQ/Testcontainers for a real swarm flow and on-disk `journal.ndjson`.
 
 ## Phase 3 — Hive-Level Journal Backend
 
@@ -38,10 +41,13 @@ Goal: provide a first‑class, queryable journal for swarms (control‑plane sco
 ## Phase 4 — UI Integration (Swarms Table + Journal View)
 
 - [x] Extend the Swarms table to support row expansion with a “Journal & Debug” panel per swarm.
-- [ ] Add backend REST endpoints for fetching paginated Swarm and Hive journal entries by `swarmId`/`correlationId`.
-- [ ] Implement journal timeline UI (filters by severity, kind, time range; linked Swarm vs Hive tabs).
-- [ ] Add quick filters like “Errors only” and “Last N minutes” and surface “current health state” derived from recent events.
-- [ ] Wire journal events to deep links: from a run/step view, jump into filtered journal timeline.
+- [x] Add Swarm journal REST endpoint for Hive UI (`GET /api/swarms/{swarmId}/journal`).
+- [ ] Add backend REST endpoints for fetching **paginated** Swarm and Hive journal entries (and filtering by `correlationId`).
+- [x] Implement Swarm journal timeline UI (search + “Errors only” + detail expansion).
+- [ ] Add Hive-level timeline UI (Swarm vs Hive tabs) once Hive journal exists.
+- [ ] Add quick filters like “Last N minutes” and surface “current health state” derived from recent events.
+- [x] Wire a deep link from the Swarms table row expansion to the full journal page.
+- [ ] Wire journal deep links from run/step views once those pages exist.
 
 ## Phase 5 — Debug Taps & Central Logging Hooks
 

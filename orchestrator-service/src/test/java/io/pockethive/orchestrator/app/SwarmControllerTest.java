@@ -34,8 +34,12 @@ import io.pockethive.swarm.model.Bee;
 import io.pockethive.swarm.model.SwarmPlan;
 import io.pockethive.swarm.model.SwarmTemplate;
 import io.pockethive.swarm.model.Work;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -43,6 +47,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
@@ -54,6 +59,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.test.util.ReflectionTestUtils;
 
 @ExtendWith(MockitoExtension.class)
 class SwarmControllerTest {
@@ -68,6 +74,9 @@ class SwarmControllerTest {
     ScenarioClient scenarioClient;
 
     private final ObjectMapper mapper = new JacksonConfiguration().objectMapper();
+
+    @TempDir
+    Path tempDir;
 
     @Test
     void startPublishesControlSignal() throws Exception {
@@ -423,6 +432,55 @@ class SwarmControllerTest {
                 new ConfirmationScope("sw1", "orchestrator", "orch-instance")));
         verifyNoInteractions(lifecycle);
         verifyNoInteractions(scenarioClient);
+    }
+
+    @Test
+    void journalReadsSwarmJournalNdjsonFromRuntimeRoot() throws Exception {
+        SwarmController ctrl = controller(new SwarmCreateTracker(), new SwarmRegistry(), new SwarmPlanRegistry());
+        ReflectionTestUtils.setField(ctrl, "scenariosRuntimeRoot", tempDir.toString());
+
+        Path swarmDir = tempDir.resolve("sw1");
+        Files.createDirectories(swarmDir);
+        Path journal = swarmDir.resolve("journal.ndjson");
+
+        Map<String, Object> scope = Map.of(
+            "swarmId", "sw1",
+            "role", "swarm-controller",
+            "instance", "inst-1"
+        );
+        Map<String, Object> entry = new LinkedHashMap<>();
+        entry.put("timestamp", "2025-01-01T00:00:00Z");
+        entry.put("swarmId", "sw1");
+        entry.put("severity", "INFO");
+        entry.put("direction", "IN");
+        entry.put("kind", "signal");
+        entry.put("type", "swarm-start");
+        entry.put("origin", "orchestrator-1");
+        entry.put("scope", scope);
+        entry.put("correlationId", "c-1");
+        entry.put("idempotencyKey", "i-1");
+        entry.put("routingKey", "signal.swarm-start.sw1.swarm-controller.inst-1");
+        entry.put("data", Map.of());
+        entry.put("raw", Map.of("kind", "signal", "type", "swarm-start"));
+
+        Files.writeString(journal, mapper.writeValueAsString(entry) + "\n");
+
+        ResponseEntity<List<Map<String, Object>>> response = ctrl.journal("sw1");
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody()).hasSize(1);
+        Map<String, Object> parsed = response.getBody().get(0);
+        assertThat(parsed.get("swarmId")).isEqualTo("sw1");
+        assertThat(parsed.get("kind")).isEqualTo("signal");
+        assertThat(parsed.get("type")).isEqualTo("swarm-start");
+        assertThat(parsed.get("idempotencyKey")).isEqualTo("i-1");
+        assertThat(parsed.get("correlationId")).isEqualTo("c-1");
+        assertThat(parsed.get("scope")).isInstanceOf(Map.class);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> parsedScope = (Map<String, Object>) parsed.get("scope");
+        assertThat(parsedScope.get("swarmId")).isEqualTo("sw1");
+        assertThat(parsedScope.get("role")).isEqualTo("swarm-controller");
     }
 
     private SwarmController controller(

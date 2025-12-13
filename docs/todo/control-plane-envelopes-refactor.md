@@ -123,8 +123,8 @@ Goal: introduce a single, consistent control‑plane envelope model used by sign
     | `details`       | — (folded into `data.context`) | Catch‑all details on confirmations are removed. Any structured context that needs to survive goes into `data.context` on the outcome and/or the corresponding `event.alert.alert`.       |
 
   - Keep routing keys and channels in AsyncAPI as the single source of truth for where these envelopes flow, and update them to use the new `signal.*` / `event.*` patterns described above.
-- [ ] Optionally add a short overview section (or paragraph) under `docs/ARCHITECTURE.md` or a small `docs/control-plane/README.md` that points to the JSON Schema / AsyncAPI specs as the canonical definition of envelopes, with one or two concrete examples.
-- [ ] Update `docs/correlation-vs-idempotency.md` to reference where correlation and idempotency live in the updated payload schemas and how they flow signal → outcome → status/journal.
+- [x] Add a short overview under `docs/control-plane/README.md` that points to the JSON Schema / AsyncAPI specs as the canonical definition of envelopes, with concrete examples.
+- [x] Update `docs/correlation-vs-idempotency.md` to reference where correlation and idempotency live in the updated payload schemas and how they flow signal → outcome → status/journal.
 
 ---
 
@@ -239,7 +239,7 @@ Goal: introduce a single, consistent control‑plane envelope model used by sign
   - A successful config‑update round‑trip (signal → outcome → journal).
   - A worker config parse/validation error surfaced as `CommandOutcome` + `event.alert.alert`.
   - A swarm lifecycle timeout / controller error surfaced as `CommandOutcome` + `event.alert.alert`.
-- [ ] Verify that the journal JSON produced by SC and read by orchestrator matches the canonical envelope‑based projections and that Hive UI renders the simplified fields as expected.
+- [x] Verify that the journal JSON produced by SC and read by orchestrator matches the canonical envelope‑based projections and that Hive UI renders the simplified fields as expected (see `orchestrator-service/src/test/java/io/pockethive/orchestrator/app/SwarmControllerTest.java`).
 - [x] Maintain a short manual test plan (to be run before and after the refactor) that covers:
   - Swarm lifecycle happy path (create → template/plan → start → stop → remove) driven via Orchestrator REST, with confirmations and status events observed on the control exchange and in the swarm journal.
   - Idempotent retries for at least one lifecycle command (e.g. `swarm-start`) using the same `idempotencyKey`, verifying correlation and confirmation behaviour.
