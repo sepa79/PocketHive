@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import io.pockethive.control.AlertMessage;
 import io.pockethive.control.CommandState;
 import io.pockethive.control.ConfirmationScope;
 import io.pockethive.controlplane.ControlPlaneIdentity;
@@ -102,6 +103,16 @@ class ControlPlaneEmitterTest {
         JsonFixtureAssertions.assertMatchesFixture(
             "/io/pockethive/controlplane/messaging/error-event.json",
             json);
+
+        AlertMessage alert = MAPPER.readValue((String) alertMessage.payload(), AlertMessage.class);
+        assertThat(alert.kind()).isEqualTo("event");
+        assertThat(alert.type()).isEqualTo("alert");
+        assertThat(alert.correlationId()).isEqualTo("corr-2");
+        assertThat(alert.idempotencyKey()).isEqualTo("idem-2");
+        assertThat(alert.data().code()).isEqualTo("ERR-42");
+        assertThat(alert.data().message()).isEqualTo("Failure");
+        assertThat(alert.data().context()).containsEntry("phase", "shutdown");
+        assertThat(alert.data().context()).containsEntry("stack", "trace");
     }
 
     @Test

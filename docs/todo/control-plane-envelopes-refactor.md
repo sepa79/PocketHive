@@ -230,19 +230,42 @@ Goal: introduce a single, consistent control‑plane envelope model used by sign
 
 ## 7. Tests & Validation
 
-- [ ] Update unit tests in:
+- [x] Update unit tests in:
   - `common/topology-core` (model types).
   - `common/control-plane-core` (emitters, routing).
   - `common/worker-sdk`, `swarm-controller-service`, `orchestrator-service`.
   - E2E helpers (`e2e-tests` control‑plane utilities) to parse and assert the new envelopes.
-- [ ] Add targeted tests for:
+- [x] Add targeted tests for:
   - A successful config‑update round‑trip (signal → outcome → journal).
   - A worker config parse/validation error surfaced as `CommandOutcome` + `event.alert.alert`.
   - A swarm lifecycle timeout / controller error surfaced as `CommandOutcome` + `event.alert.alert`.
 - [ ] Verify that the journal JSON produced by SC and read by orchestrator matches the canonical envelope‑based projections and that Hive UI renders the simplified fields as expected.
-- [ ] Maintain a short manual test plan (to be run before and after the refactor) that covers:
+- [x] Maintain a short manual test plan (to be run before and after the refactor) that covers:
   - Swarm lifecycle happy path (create → template/plan → start → stop → remove) driven via Orchestrator REST, with confirmations and status events observed on the control exchange and in the swarm journal.
   - Idempotent retries for at least one lifecycle command (e.g. `swarm-start`) using the same `idempotencyKey`, verifying correlation and confirmation behaviour.
   - Controller and worker `config-update` success and failure, including how enablement changes and errors are surfaced in outcomes, status metrics and (after refactor) alerts.
   - Explicit `status-request` flows (`signal.status-request` → `event.metric.status-full`) exercised via REST, matching the documented topic patterns.
   - At least one runtime error and one IO exhaustion scenario, ensuring that today’s error surface is understood and can be mapped to `event.alert.alert` in the new model.
+
+### Manual test runbook (tight)
+
+- Start stack: use `./build-hive.sh` (see `docs/USAGE.md` for current flags).
+- Create a swarm in Hive UI and capture its `swarmId`.
+- Validate command routing + outcomes:
+  - Trigger `swarm-start` then `swarm-stop`.
+  - For at least one command, repeat it with the same `idempotencyKey` (via the debug CLI) and confirm only one effective change happens while outcomes still correlate correctly.
+- Validate status flows:
+  - Trigger `status-request` and confirm a `event.metric.status-full` appears for the expected scope.
+  - Confirm periodic `event.metric.status-delta` continues to update (TPS + enabled).
+- Validate config-update success/failure:
+  - Apply a known-good `config-update` to at least one worker; confirm an `event.outcome.config-update` is emitted and the worker status reflects the change.
+  - Apply a known-bad `config-update` (type mismatch / invalid schema) and confirm:
+    - `event.outcome.config-update` reports failure, and
+    - `event.alert.alert` is emitted with stable `data.code` and structured `data.context` (plus `logRef` when available).
+- Validate IO exhaustion surfacing:
+  - Run a generator/input that can reach “out of data” and confirm:
+    - worker emits `data.ioState.work.input=out-of-data` in status metrics, and
+    - a single `event.alert.alert` with `code=io.out-of-data` is emitted on transition (no repeated alerts per tick).
+- Validate journal/UI:
+  - Open the swarm’s Journal view and confirm entries show direction + origin + kind/type, and row details show the raw control message (no escaped JSON blobs).
+  - Confirm status tick spam is not present (only transitions and non-status signals/outcomes/alerts).

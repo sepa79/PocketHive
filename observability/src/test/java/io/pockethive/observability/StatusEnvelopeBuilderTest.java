@@ -70,4 +70,41 @@ class StatusEnvelopeBuilderTest {
         assertEquals(2, queueStats.get("ph.work.alpha.generator").get("consumers").asInt());
         assertEquals(12.5, queueStats.get("ph.work.alpha.generator").get("oldestAgeSec").asDouble());
     }
+
+    @Test
+    void serialisesIoStateWhenProvided() throws Exception {
+        String json = new StatusEnvelopeBuilder()
+                .type("status-full")
+                .role("generator")
+                .instance("gen-1")
+                .origin("gen-1")
+                .enabled(true)
+                .tps(0)
+                .data("startedAt", Instant.parse("2024-01-01T00:00:00Z"))
+                .ioWorkState("out-of-data", "ok", Map.of("dataset", "redis:users"))
+                .ioControlState("ok", "ok", null)
+                .toJson();
+
+        JsonNode node = new ObjectMapper().readTree(json);
+        JsonNode ioState = node.path("data").path("ioState");
+        assertEquals("out-of-data", ioState.path("work").path("input").asText());
+        assertEquals("ok", ioState.path("work").path("output").asText());
+        assertEquals("redis:users", ioState.path("work").path("context").path("dataset").asText());
+        assertEquals("ok", ioState.path("control").path("input").asText());
+        assertEquals("ok", ioState.path("control").path("output").asText());
+    }
+
+    @Test
+    void rejectsInvalidIoStates() {
+        StatusEnvelopeBuilder builder = new StatusEnvelopeBuilder()
+                .type("status-delta")
+                .role("generator")
+                .instance("gen-1")
+                .origin("gen-1")
+                .enabled(true)
+                .tps(0);
+
+        assertThrows(IllegalArgumentException.class, () -> builder.ioWorkState("nope", "ok", null));
+        assertThrows(IllegalArgumentException.class, () -> builder.ioControlState("ok", "nope", null));
+    }
 }

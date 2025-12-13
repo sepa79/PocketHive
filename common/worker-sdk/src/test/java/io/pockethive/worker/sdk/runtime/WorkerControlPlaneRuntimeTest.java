@@ -3,6 +3,7 @@ package io.pockethive.worker.sdk.runtime;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import io.pockethive.control.ControlSignal;
+import io.pockethive.control.AlertMessage;
 import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.controlplane.messaging.ControlPlaneEmitter;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
@@ -32,6 +33,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.verify;
 
@@ -142,6 +144,99 @@ class WorkerControlPlaneRuntimeTest {
         ArgumentCaptor<ControlPlaneEmitter.ReadyContext> captor = ArgumentCaptor.forClass(ControlPlaneEmitter.ReadyContext.class);
         verify(emitter).emitReady(captor.capture());
         assertThat(captor.getValue().signal()).isEqualTo("config-update");
+    }
+
+    @Test
+    void configUpdateValidationFailureEmitsErrorContext() throws Exception {
+        String correlationId = UUID.randomUUID().toString();
+        String idempotencyKey = UUID.randomUUID().toString();
+        Map<String, Object> args = Map.of(
+            "data", Map.of(
+                "enabled", true,
+                "ratePerSec", "not-a-number"
+            )
+        );
+        ControlSignal signal = ControlSignal.forInstance(
+            "config-update",
+            IDENTITY.swarmId(),
+            IDENTITY.role(),
+            IDENTITY.instanceId(),
+            ORIGIN,
+            correlationId,
+            idempotencyKey,
+            args
+        );
+        String payload = MAPPER.writeValueAsString(signal);
+        String routingKey = ControlPlaneRouting.signal("config-update", IDENTITY.swarmId(), IDENTITY.role(), IDENTITY.instanceId());
+
+        boolean handled = runtime.handle(payload, routingKey);
+
+        assertThat(handled).isTrue();
+        ArgumentCaptor<ControlPlaneEmitter.ErrorContext> captor = ArgumentCaptor.forClass(ControlPlaneEmitter.ErrorContext.class);
+        verify(emitter).emitError(captor.capture());
+        ControlPlaneEmitter.ErrorContext ctx = captor.getValue();
+        assertThat(ctx.signal()).isEqualTo("config-update");
+        assertThat(ctx.correlationId()).isEqualTo(correlationId);
+        assertThat(ctx.idempotencyKey()).isEqualTo(idempotencyKey);
+        assertThat(ctx.phase()).isEqualTo("apply");
+        assertThat(ctx.details()).containsEntry("worker", definition.beanName());
+    }
+
+    @Test
+    void statusSnapshotIncludesAggregatedIoState() throws Exception {
+        runtime.statusPublisher(definition.beanName()).update(status ->
+            status.data("ioState", Map.of(
+                "work", Map.of(
+                    "input", "out-of-data",
+                    "output", "ok",
+                    "context", Map.of("dataset", "redis:users")
+                )
+            )));
+
+        runtime.emitStatusSnapshot();
+
+        ArgumentCaptor<ControlPlaneEmitter.StatusContext> captor =
+            ArgumentCaptor.forClass(ControlPlaneEmitter.StatusContext.class);
+        verify(emitter).emitStatusSnapshot(captor.capture());
+
+        Map<String, Object> snapshot = buildSnapshot(captor.getValue());
+        @SuppressWarnings("unchecked")
+        Map<String, Object> data = (Map<String, Object>) snapshot.get("data");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> ioState = (Map<String, Object>) data.get("ioState");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> work = (Map<String, Object>) ioState.get("work");
+        assertThat(work).containsEntry("input", "out-of-data").containsEntry("output", "ok");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> ctx = (Map<String, Object>) work.get("context");
+        assertThat(ctx).containsEntry("dataset", "redis:users");
+    }
+
+    @Test
+    void emitsIoOutOfDataAlertOnTransitionOnly() {
+        runtime.statusPublisher(definition.beanName()).update(status ->
+            status.data("ioState", Map.of("work", Map.of("input", "ok", "output", "ok"))));
+
+        runtime.emitStatusDelta();
+
+        runtime.statusPublisher(definition.beanName()).update(status ->
+            status.data("ioState", Map.of(
+                "work", Map.of(
+                    "input", "out-of-data",
+                    "output", "ok",
+                    "context", Map.of("dataset", "csv:customers", "logRef", "loki://trace/123")
+                )
+            )));
+
+        runtime.emitStatusDelta();
+        runtime.emitStatusDelta();
+
+        ArgumentCaptor<AlertMessage> alertCaptor = ArgumentCaptor.forClass(AlertMessage.class);
+        verify(emitter, times(1)).publishAlert(alertCaptor.capture());
+        AlertMessage alert = alertCaptor.getValue();
+        assertThat(alert.data().code()).isEqualTo("io.out-of-data");
+        assertThat(alert.data().context()).containsEntry("dataset", "csv:customers");
+        assertThat(alert.data().logRef()).isEqualTo("loki://trace/123");
     }
 
     @Test
