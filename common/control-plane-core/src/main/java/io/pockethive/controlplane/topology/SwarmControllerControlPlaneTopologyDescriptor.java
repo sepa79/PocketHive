@@ -51,7 +51,8 @@ public final class SwarmControllerControlPlaneTopologyDescriptor implements Cont
         signals.add(ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, "ALL", ROLE, "ALL"));
         Set<String> events = Set.of(
             statusEventPattern("status-full"),
-            statusEventPattern("status-delta")
+            statusEventPattern("status-delta"),
+            alertEventPattern()
         );
         return Optional.of(new ControlQueueDescriptor(queueName, signals, events));
     }
@@ -81,11 +82,19 @@ public final class SwarmControllerControlPlaneTopologyDescriptor implements Cont
             statusEventPattern("status-full"),
             statusEventPattern("status-delta")
         );
-        return new ControlPlaneRouteCatalog(configRoutes, statusRoutes, lifecycleRoutes, statusEvents, Set.of(), Set.of());
+        Set<String> otherEvents = Set.of(
+            alertEventPattern()
+        );
+        return new ControlPlaneRouteCatalog(configRoutes, statusRoutes, lifecycleRoutes, statusEvents, Set.of(), otherEvents);
     }
 
     private String statusEventPattern(String type) {
         String base = ControlPlaneRouting.event("metric", type, ConfirmationScope.forSwarm(swarmId));
+        return base.replace(".ALL.ALL", ".#");
+    }
+
+    private String alertEventPattern() {
+        String base = ControlPlaneRouting.event("alert", "alert", ConfirmationScope.forSwarm(swarmId));
         return base.replace(".ALL.ALL", ".#");
     }
 

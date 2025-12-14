@@ -1,6 +1,7 @@
 package io.pockethive.worker.sdk.runtime;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.pockethive.control.ControlScope;
 import io.pockethive.control.ControlSignal;
 import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.controlplane.messaging.Alerts;
@@ -13,6 +14,7 @@ import io.pockethive.controlplane.worker.WorkerControlPlane;
 import io.pockethive.controlplane.worker.WorkerSignalListener;
 import io.pockethive.controlplane.worker.WorkerStatusRequest;
 import io.pockethive.worker.sdk.api.StatusPublisher;
+import io.pockethive.worker.sdk.api.WorkItem;
 import io.pockethive.worker.sdk.config.PocketHiveWorker;
 import io.pockethive.worker.sdk.config.WorkerCapability;
 import io.pockethive.worker.sdk.config.WorkerInputType;
@@ -168,6 +170,49 @@ public final class WorkerControlPlaneRuntime {
         return stateStore.find(workerBeanName)
             .map(state -> state.statusData().isEmpty() ? Map.<String, Object>of() : state.statusData())
             .orElse(Map.of());
+    }
+
+    /**
+     * Publish a control-plane alert (kind=event,type=alert) for an exception thrown while
+     * processing a work item.
+     * <p>
+     * Swarm journal projections will pick this up via the swarm-controller alert listener,
+     * making worker failures visible in Hive UI without introducing new contracts.
+     */
+    public void publishWorkError(String workerBeanName, WorkItem workItem, Throwable exception) {
+        Objects.requireNonNull(workerBeanName, "workerBeanName");
+        Objects.requireNonNull(workItem, "workItem");
+        Objects.requireNonNull(exception, "exception");
+
+        Map<String, Object> context = new LinkedHashMap<>();
+        context.put("worker", workerBeanName);
+
+        Object messageId = workItem.headers().get("message-id");
+        if (messageId != null) {
+            context.put("messageId", String.valueOf(messageId));
+        }
+        Object callId = workItem.headers().get("x-ph-call-id");
+        if (callId != null) {
+            context.put("callId", String.valueOf(callId));
+        }
+        workItem.observabilityContext().ifPresent(obs -> {
+            if (obs.getTraceId() != null && !obs.getTraceId().isBlank()) {
+                context.put("traceId", obs.getTraceId());
+            }
+        });
+
+        ControlScope scope = ControlScope.forInstance(identity.swarmId(), identity.role(), identity.instanceId());
+        emitter.publishAlert(Alerts.fromException(
+            identity.instanceId(),
+            scope,
+            null,
+            null,
+            "work",
+            exception,
+            null,
+            context,
+            Instant.now()
+        ));
     }
 
     /**

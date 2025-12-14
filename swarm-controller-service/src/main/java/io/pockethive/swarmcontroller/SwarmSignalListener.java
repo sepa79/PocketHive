@@ -43,6 +43,8 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicReference;
 
 @Component
@@ -68,6 +70,7 @@ public class SwarmSignalListener {
   private final AtomicReference<PendingStart> pendingStart = new AtomicReference<>();
   private final java.time.Instant startedAt;
   private volatile String lastHealthState;
+  private final ConcurrentMap<String, Long> lastWorkerErrorCounts = new ConcurrentHashMap<>();
 
   @Autowired
   public SwarmSignalListener(SwarmLifecycle lifecycle,
@@ -186,6 +189,7 @@ public class SwarmSignalListener {
       lifecycle.updateHeartbeat(role, instance);
       diagnostics.updateFromWorkerStatus(role, instance, node.path("data"));
       ioStates.updateFromWorkerStatus(role, instance, node.path("data"));
+      maybeJournalWorkerErrorIndicators(role, instance, node);
 
       boolean enabled = node.path("data").path("enabled").asBoolean(true);
       lifecycle.updateEnabled(role, instance, enabled);
@@ -201,6 +205,61 @@ public class SwarmSignalListener {
     }
   }
 
+  private void maybeJournalWorkerErrorIndicators(String workerRole, String workerInstance, JsonNode statusEnvelope) {
+    if (workerRole == null || workerRole.isBlank() || workerInstance == null || workerInstance.isBlank()) {
+      return;
+    }
+    if (statusEnvelope == null || !statusEnvelope.isObject()) {
+      return;
+    }
+    JsonNode data = statusEnvelope.path("data");
+    if (!data.isObject()) {
+      return;
+    }
+    JsonNode errorCountNode = data.get("errorCount");
+    if (errorCountNode == null || !errorCountNode.isNumber()) {
+      return;
+    }
+    long current = errorCountNode.asLong(0L);
+    if (current <= 0L) {
+      return;
+    }
+    String key = workerRole + ":" + workerInstance;
+    long previous = lastWorkerErrorCounts.getOrDefault(key, 0L);
+    if (current <= previous) {
+      lastWorkerErrorCounts.put(key, current);
+      return;
+    }
+    lastWorkerErrorCounts.put(key, current);
+
+    Map<String, Object> entry = new LinkedHashMap<>();
+    entry.put("role", workerRole);
+    entry.put("instance", workerInstance);
+    entry.put("errorCount", current);
+    entry.put("errorDelta", current - previous);
+    JsonNode errorTpsNode = data.get("errorTps");
+    if (errorTpsNode != null && errorTpsNode.isNumber()) {
+      entry.put("errorTps", errorTpsNode.numberValue());
+    }
+    JsonNode serviceIdNode = data.get("serviceId");
+    if (serviceIdNode != null && serviceIdNode.isTextual() && !serviceIdNode.asText().isBlank()) {
+      entry.put("serviceId", serviceIdNode.asText());
+    }
+    JsonNode templateRootNode = data.get("templateRoot");
+    if (templateRootNode != null && templateRootNode.isTextual() && !templateRootNode.asText().isBlank()) {
+      entry.put("templateRoot", templateRootNode.asText());
+    }
+
+    journal.append(SwarmJournalEntries.local(
+        swarmId,
+        "ERROR",
+        "worker-error",
+        instanceId,
+        io.pockethive.control.ControlScope.forInstance(swarmId, workerRole, workerInstance),
+        entry,
+        Map.of("source", "status-delta")));
+  }
+
   private void handleAlertEvent(String routingKey, String body) {
     RoutingKey eventKey = ControlPlaneRouting.parseEvent(routingKey);
     if (eventKey == null) {
@@ -213,6 +272,10 @@ public class SwarmSignalListener {
     }
     try {
       AlertMessage alert = mapper.readValue(body, AlertMessage.class);
+      if (alert != null && instanceId.equals(alert.origin())) {
+        // Avoid duplicating alerts that the controller itself emitted (they are already journaled as OUT).
+        return;
+      }
       journal.append(SwarmJournalEntries.inAlert(mapper, routingKey, alert));
       String phase = alert.data() != null && alert.data().context() != null
           ? textOrNull(mapper.valueToTree(alert.data().context()).path("phase"))

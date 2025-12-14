@@ -33,6 +33,10 @@ let topoListeners: TopologyListener[] = []
 let controlDestination = '/exchange/ph.control/#'
 const components: Record<string, Component> = {}
 const syntheticComponents: Record<string, Component> = {}
+const componentErrors: Record<
+  string,
+  { at: number; code?: string; message?: string; swarmId?: string; role?: string }
+> = {}
 let swarmMetadataRefreshHandler: ((swarmId: string) => void) | null = null
 interface QueueMetrics {
   depth: number
@@ -51,6 +55,7 @@ function dropSwarmComponents(swarmId: string) {
     const compSwarm = comp.swarmId?.trim()
     if (compSwarm && compSwarm === normalized) {
       delete components[key]
+      delete componentErrors[key]
     }
   })
 
@@ -58,8 +63,40 @@ function dropSwarmComponents(swarmId: string) {
     const compSwarm = comp.swarmId?.trim()
     if (compSwarm && compSwarm === normalized) {
       delete syntheticComponents[key]
+      delete componentErrors[key]
     }
   })
+}
+
+function applyComponentError(component: Component, error: { at: number; code?: string; message?: string }) {
+  component.lastErrorAt = error.at
+  if (typeof error.code === 'string' && error.code.trim().length > 0) {
+    component.lastErrorCode = error.code
+  }
+  if (typeof error.message === 'string' && error.message.trim().length > 0) {
+    component.lastErrorMessage = error.message
+  }
+}
+
+function recordAlertForComponent(parsed: unknown) {
+  if (!isAlertEventEnvelope(parsed)) return
+  const instance = parsed.scope.instance?.trim()
+  if (!instance) return
+  const at = Date.now()
+  const error = {
+    at,
+    code: parsed.data.code,
+    message: parsed.data.message,
+    swarmId: parsed.scope.swarmId?.trim(),
+    role: parsed.scope.role?.trim(),
+  }
+  componentErrors[instance] = error
+  const component = components[instance]
+  if (component) {
+    applyComponentError(component, error)
+    notifyComponentListeners()
+    emitTopology()
+  }
 }
 
 function getMergedComponents(): Record<string, Component> {
@@ -270,6 +307,7 @@ export function setClient(newClient: Client | null, destination = controlDestina
                   logError(d, parsed.data.message, 'hive', 'stomp', correlationId)
                   const swarm = parsed.scope.swarmId ? ` ${parsed.scope.swarmId}` : ''
                   setToast(`Error:${swarm} ${parsed.data.code}: ${parsed.data.message}`)
+                  recordAlertForComponent(parsed)
                 } else {
                   logError(d, msg.body, 'hive', 'stomp', correlationId)
                   setToast('Error: alert received')
@@ -316,6 +354,10 @@ export function setClient(newClient: Client | null, destination = controlDestina
         comp.version = evt.version
         comp.lastHeartbeat = new Date(evt.timestamp).getTime()
         comp.status = evt.type
+        const existingError = componentErrors[id]
+        if (existingError) {
+          applyComponentError(comp, existingError)
+        }
         const cfg = { ...(comp.config || {}) }
         let workerEnabled: boolean | undefined
         const data = evt.data

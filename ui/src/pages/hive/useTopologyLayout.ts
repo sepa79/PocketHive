@@ -63,6 +63,7 @@ export function useTopologyLayout(args: LayoutArgs): LayoutResult {
   const containerRef = useRef<HTMLDivElement>(null)
   const draggingIdsRef = useRef<Set<string>>(new Set())
   const pendingFitRef = useRef(false)
+  const errorFill = '#ef4444'
 
   const fitViewToNodes = useCallback(() => {
     const instance = flowRef.current
@@ -139,6 +140,13 @@ export function useTopologyLayout(args: LayoutArgs): LayoutResult {
           const component = componentsById[node.id]
           const role = getRoleLabel(component?.role, node.type)
           const label = component?.name?.trim() || component?.id?.trim() || node.id
+          const errored = Boolean(component?.lastErrorAt)
+          const fill =
+            node.enabled === false
+              ? getFill(node.type, node.enabled)
+              : errored
+              ? errorFill
+              : getFill(node.type, node.enabled)
 
           nodes.push({
             id: node.id,
@@ -153,7 +161,8 @@ export function useTopologyLayout(args: LayoutArgs): LayoutResult {
               status: component?.status,
               meta: component?.config,
               role,
-              fill: getFill(node.type, node.enabled),
+              hasError: errored,
+              fill,
             },
             type: 'shape',
             selected: selectedId === node.id,
@@ -198,6 +207,13 @@ export function useTopologyLayout(args: LayoutArgs): LayoutResult {
               components: members.map((member) => {
                 const componentData = componentsById[member.id]
                 const roleLabel = getRoleLabel(componentData?.role, member.type)
+                const errored = Boolean(componentData?.lastErrorAt)
+                const fill =
+                  member.enabled === false
+                    ? getFill(member.type, member.enabled)
+                    : errored
+                    ? errorFill
+                    : getFill(member.type, member.enabled)
                 const config =
                   componentData && typeof componentData.config === 'object'
                     ? (componentData.config as Record<string, unknown>)
@@ -215,7 +231,7 @@ export function useTopologyLayout(args: LayoutArgs): LayoutResult {
                   shape: getShape(member.type),
                   enabled: member.enabled,
                   componentType: member.type,
-                  fill: getFill(member.type, member.enabled),
+                  fill,
                   abbreviation: getRoleAbbreviation(member.type),
                   queueCount: componentData?.queues?.length ?? 0,
                   tps:
@@ -249,6 +265,13 @@ export function useTopologyLayout(args: LayoutArgs): LayoutResult {
         const component = componentsById[node.id]
         const role = getRoleLabel(component?.role, node.type)
         const label = component?.name?.trim() || component?.id?.trim() || node.id
+        const errored = Boolean(component?.lastErrorAt)
+        const fill =
+          node.enabled === false
+            ? getFill(node.type, node.enabled)
+            : errored
+            ? errorFill
+            : getFill(node.type, node.enabled)
         return {
           id: node.id,
           position,
@@ -262,7 +285,8 @@ export function useTopologyLayout(args: LayoutArgs): LayoutResult {
             status: component?.status,
             meta: component?.config,
             role,
-            fill: getFill(node.type, node.enabled),
+            hasError: errored,
+            fill,
           },
           type: 'shape',
           selected: selectedId === node.id,

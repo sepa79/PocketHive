@@ -20,4 +20,7 @@ export interface Component {
   status?: string
   queues: QueueInfo[]
   config?: Record<string, unknown>
+  lastErrorAt?: number
+  lastErrorCode?: string
+  lastErrorMessage?: string
 }

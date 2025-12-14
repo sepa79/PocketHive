@@ -8,7 +8,10 @@ import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.controlplane.messaging.ControlPlaneEmitter;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.controlplane.worker.WorkerControlPlane;
+import io.pockethive.observability.ObservabilityContext;
+import io.pockethive.observability.ObservabilityContextUtil;
 import io.pockethive.observability.StatusEnvelopeBuilder;
+import io.pockethive.worker.sdk.api.WorkItem;
 import io.pockethive.worker.sdk.config.WorkInputConfig;
 import io.pockethive.worker.sdk.config.WorkOutputConfig;
 import io.pockethive.worker.sdk.config.WorkerCapability;
@@ -237,6 +240,29 @@ class WorkerControlPlaneRuntimeTest {
         assertThat(alert.data().code()).isEqualTo("io.out-of-data");
         assertThat(alert.data().context()).containsEntry("dataset", "csv:customers");
         assertThat(alert.data().logRef()).isEqualTo("loki://trace/123");
+    }
+
+    @Test
+    void publishWorkErrorEmitsRuntimeExceptionAlertWithContext() {
+        ObservabilityContext trace = ObservabilityContextUtil.init("worker", IDENTITY.instanceId(), IDENTITY.swarmId());
+        WorkItem item = WorkItem.text("payload")
+            .header("message-id", "mid-1")
+            .header("x-ph-call-id", "redis-auth")
+            .observabilityContext(trace)
+            .build();
+        RuntimeException failure = new RuntimeException("boom");
+
+        runtime.publishWorkError(definition.beanName(), item, failure);
+
+        ArgumentCaptor<AlertMessage> alertCaptor = ArgumentCaptor.forClass(AlertMessage.class);
+        verify(emitter).publishAlert(alertCaptor.capture());
+        AlertMessage alert = alertCaptor.getValue();
+        assertThat(alert.data().code()).isEqualTo("runtime.exception");
+        assertThat(alert.data().context())
+            .containsEntry("worker", definition.beanName())
+            .containsEntry("messageId", "mid-1")
+            .containsEntry("callId", "redis-auth")
+            .containsEntry("traceId", trace.getTraceId());
     }
 
     @Test

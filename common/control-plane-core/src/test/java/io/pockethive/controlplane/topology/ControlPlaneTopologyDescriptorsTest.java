@@ -126,7 +126,10 @@ class ControlPlaneTopologyDescriptorsTest {
         assertThat(queue.signalBindings())
             .containsExactlyInAnyOrderElementsOf(expectedSwarmControllerSignals(INSTANCE));
         assertThat(queue.eventBindings())
-            .containsExactlyInAnyOrder("event.metric.status-full." + SWARM_ID + ".#", "event.metric.status-delta." + SWARM_ID + ".#");
+            .containsExactlyInAnyOrder(
+                "event.metric.status-full." + SWARM_ID + ".#",
+                "event.metric.status-delta." + SWARM_ID + ".#",
+                "event.alert.alert." + SWARM_ID + ".#");
 
         ControlPlaneRouteCatalog routes = descriptor.routes();
         assertThat(routes.configSignals())
@@ -142,6 +145,8 @@ class ControlPlaneTopologyDescriptorsTest {
                 ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_REMOVE, SWARM_ID, "swarm-controller", ControlPlaneRouteCatalog.INSTANCE_TOKEN));
         assertThat(routes.statusEvents())
             .containsExactlyInAnyOrder("event.metric.status-full." + SWARM_ID + ".#", "event.metric.status-delta." + SWARM_ID + ".#");
+        assertThat(routes.otherEvents())
+            .containsExactlyInAnyOrder("event.alert.alert." + SWARM_ID + ".#");
     }
 
     private static String expectedSwarmControllerQueueName(String baseQueue, String swarmId, String instanceSegment) {

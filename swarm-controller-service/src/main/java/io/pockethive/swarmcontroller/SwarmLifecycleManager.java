@@ -281,6 +281,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
     if (p.lastStepName != null) {
       m.put("lastStepName", p.lastStepName);
     }
+    m.put("firedStepIds", p.firedStepIds);
     m.put("elapsedMillis", p.elapsedMillis);
     if (p.nextStepId != null) {
       m.put("nextStepId", p.nextStepId);

@@ -621,6 +621,18 @@ public class SwarmLifecycleSteps {
           seenStepIds.add(stepId.trim());
         }
       }
+      Object firedSteps = scenarioMap.get("firedStepIds");
+      if (firedSteps instanceof List<?> firedList) {
+        for (Object stepObj : firedList) {
+          if (stepObj == null) {
+            continue;
+          }
+          String stepId = String.valueOf(stepObj);
+          if (!stepId.isBlank()) {
+            seenStepIds.add(stepId.trim());
+          }
+        }
+      }
     }
     List<String> expectedSteps = List.of(
         "swarm-start",

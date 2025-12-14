@@ -31,6 +31,7 @@ export default function ComponentList({ components, selectedId, onSelect }: Prop
         const normalizedRole = roleRaw.trim().toLowerCase()
         const canToggle = Boolean(c.role?.trim())
         const enabled = c.config?.enabled !== false
+        const errored = Boolean(c.lastErrorAt)
         const swarm = findSwarm(c.swarmId ?? null)
         const sutId = swarm?.sutId?.trim()
         const showSutBadge =
@@ -38,9 +39,9 @@ export default function ComponentList({ components, selectedId, onSelect }: Prop
         return (
           <li
             key={c.id}
-            className={`p-2 rounded cursor-pointer border border-transparent hover:border-white/20 ${
-              selectedId === c.id ? 'bg-white/10' : ''
-            }`}
+            className={`p-2 rounded cursor-pointer border hover:border-white/20 ${
+              errored ? 'border-red-500/40 bg-red-500/10' : 'border-transparent'
+            } ${selectedId === c.id ? 'bg-white/10' : ''}`}
             onClick={() => {
               onSelect(c)
               // status refresh no longer supported
@@ -49,7 +50,7 @@ export default function ComponentList({ components, selectedId, onSelect }: Prop
             <div className="flex items-center justify-between gap-2">
               <div>
                 <div className="font-medium flex items-center gap-2">
-                  <span>{c.id}</span>
+                  <span className={errored ? 'text-red-200' : ''}>{c.id}</span>
                   {showSutBadge && (
                     <span className="inline-flex items-center rounded-full bg-purple-500/20 border border-purple-400/40 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-purple-200">
                       SUT

@@ -392,6 +392,7 @@ public final class TimelineScenario implements Scenario {
   public static final class Progress {
     public final String lastStepId;
     public final String lastStepName;
+    public final List<String> firedStepIds;
     public final long elapsedMillis;
     public final String nextStepId;
     public final String nextStepName;
@@ -401,6 +402,7 @@ public final class TimelineScenario implements Scenario {
 
     private Progress(String lastStepId,
                      String lastStepName,
+                     List<String> firedStepIds,
                      long elapsedMillis,
                      String nextStepId,
                      String nextStepName,
@@ -409,6 +411,7 @@ public final class TimelineScenario implements Scenario {
                      Integer runsRemaining) {
       this.lastStepId = lastStepId;
       this.lastStepName = lastStepName;
+      this.firedStepIds = firedStepIds != null ? List.copyOf(firedStepIds) : List.of();
       this.elapsedMillis = elapsedMillis;
       this.nextStepId = nextStepId;
       this.nextStepName = nextStepName;
@@ -418,8 +421,8 @@ public final class TimelineScenario implements Scenario {
     }
 
     static Progress initial(Schedule schedule, Integer totalRuns, Integer runsRemaining) {
-      StepInstance next = earliest(schedule);
-      return new Progress(null, null, 0L,
+      StepInstance next = earliestPending(schedule);
+      return new Progress(null, null, List.of(), 0L,
           next != null ? next.stepId : null,
           next != null ? next.name : null,
           next != null ? next.dueMillis : null,
@@ -432,10 +435,11 @@ public final class TimelineScenario implements Scenario {
                            long elapsedMillis,
                            Integer totalRuns,
                            Integer runsRemaining) {
-      StepInstance next = earliestAfter(schedule, elapsedMillis);
+      StepInstance next = earliestPending(schedule);
       return new Progress(
           last != null ? last.stepId : null,
           last != null ? last.name : null,
+          firedStepIds(schedule),
           elapsedMillis,
           next != null ? next.stepId : null,
           next != null ? next.name : null,
@@ -449,17 +453,15 @@ public final class TimelineScenario implements Scenario {
                             Progress previous,
                             Integer totalRuns,
                             Integer runsRemaining) {
-      // If we have a previous progress instance whose elapsedMillis is ahead of
-      // the current snapshot, keep it to avoid moving backwards; otherwise
-      // recompute based on the elapsed time.
       if (previous != null && previous.elapsedMillis >= elapsedMillis) {
         return previous;
       }
-      StepInstance last = latestBefore(schedule, elapsedMillis);
-      StepInstance next = earliestAfter(schedule, elapsedMillis);
+      StepInstance last = latestFired(schedule);
+      StepInstance next = earliestPending(schedule);
       return new Progress(
           last != null ? last.stepId : null,
           last != null ? last.name : null,
+          firedStepIds(schedule),
           elapsedMillis,
           next != null ? next.stepId : null,
           next != null ? next.name : null,
@@ -468,25 +470,10 @@ public final class TimelineScenario implements Scenario {
           runsRemaining);
     }
 
-    private static StepInstance earliest(Schedule schedule) {
+    private static StepInstance earliestPending(Schedule schedule) {
       StepInstance candidate = null;
       for (StepInstance s : schedule.beeSteps) {
-        if (candidate == null || s.dueMillis < candidate.dueMillis) {
-          candidate = s;
-        }
-      }
-      for (StepInstance s : schedule.swarmSteps) {
-        if (candidate == null || s.dueMillis < candidate.dueMillis) {
-          candidate = s;
-        }
-      }
-      return candidate;
-    }
-
-    private static StepInstance earliestAfter(Schedule schedule, long elapsedMillis) {
-      StepInstance candidate = null;
-      for (StepInstance s : schedule.beeSteps) {
-        if (s.dueMillis <= elapsedMillis) {
+        if (s.fired) {
           continue;
         }
         if (candidate == null || s.dueMillis < candidate.dueMillis) {
@@ -494,7 +481,7 @@ public final class TimelineScenario implements Scenario {
         }
       }
       for (StepInstance s : schedule.swarmSteps) {
-        if (s.dueMillis <= elapsedMillis) {
+        if (s.fired) {
           continue;
         }
         if (candidate == null || s.dueMillis < candidate.dueMillis) {
@@ -504,10 +491,10 @@ public final class TimelineScenario implements Scenario {
       return candidate;
     }
 
-    private static StepInstance latestBefore(Schedule schedule, long elapsedMillis) {
+    private static StepInstance latestFired(Schedule schedule) {
       StepInstance candidate = null;
       for (StepInstance s : schedule.beeSteps) {
-        if (s.dueMillis > elapsedMillis) {
+        if (!s.fired) {
           continue;
         }
         if (candidate == null || s.dueMillis > candidate.dueMillis) {
@@ -515,7 +502,7 @@ public final class TimelineScenario implements Scenario {
         }
       }
       for (StepInstance s : schedule.swarmSteps) {
-        if (s.dueMillis > elapsedMillis) {
+        if (!s.fired) {
           continue;
         }
         if (candidate == null || s.dueMillis > candidate.dueMillis) {
@@ -523,6 +510,28 @@ public final class TimelineScenario implements Scenario {
         }
       }
       return candidate;
+    }
+
+    private static List<String> firedStepIds(Schedule schedule) {
+      List<StepInstance> fired = new ArrayList<>();
+      for (StepInstance s : schedule.beeSteps) {
+        if (s.fired) {
+          fired.add(s);
+        }
+      }
+      for (StepInstance s : schedule.swarmSteps) {
+        if (s.fired) {
+          fired.add(s);
+        }
+      }
+      fired.sort(Comparator.comparingLong(si -> si.dueMillis));
+      List<String> ids = new ArrayList<>(fired.size());
+      for (StepInstance s : fired) {
+        if (s.stepId != null && !s.stepId.isBlank()) {
+          ids.add(s.stepId);
+        }
+      }
+      return ids;
     }
   }
 
