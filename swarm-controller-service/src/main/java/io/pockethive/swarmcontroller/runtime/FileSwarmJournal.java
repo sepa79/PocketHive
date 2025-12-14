@@ -14,6 +14,7 @@ import java.util.concurrent.locks.ReentrantLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 /**
@@ -24,6 +25,7 @@ import org.springframework.stereotype.Component;
  * simple so it can later be reused for recording/replay.
  */
 @Component
+@ConditionalOnProperty(name = "pockethive.journal.sink", havingValue = "file", matchIfMissing = true)
 public class FileSwarmJournal implements SwarmJournal {
 
   private static final Logger log = LoggerFactory.getLogger(FileSwarmJournal.class);
@@ -111,4 +113,3 @@ public class FileSwarmJournal implements SwarmJournal {
     return cleaned;
   }
 }
-

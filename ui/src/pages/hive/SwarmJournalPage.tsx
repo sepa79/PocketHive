@@ -1,7 +1,15 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { getSwarmJournal } from '../../lib/orchestratorApi'
+import { getSwarmJournal, getSwarmJournalPage } from '../../lib/orchestratorApi'
 import type { SwarmJournalEntry } from '../../types/orchestrator'
+import type { JournalCursor } from '../../lib/orchestratorApi'
+
+type JournalRow = {
+  entry: SwarmJournalEntry
+  count: number
+  firstTimestamp: string
+  lastTimestamp: string
+}
 
 export default function SwarmJournalPage() {
   const { swarmId } = useParams<{ swarmId: string }>()
@@ -11,12 +19,16 @@ export default function SwarmJournalPage() {
   const [error, setError] = useState<string | null>(null)
   const [showErrorsOnly, setShowErrorsOnly] = useState(false)
   const [search, setSearch] = useState('')
+  const [correlationFilter, setCorrelationFilter] = useState('')
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null)
+  const [cursor, setCursor] = useState<JournalCursor | null>(null)
+  const [hasMore, setHasMore] = useState(false)
+  const [pagingSupported, setPagingSupported] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
 
   useEffect(() => {
     if (!swarmId) return
     let cancelled = false
-    let timer: number | undefined
 
     const load = async (withSpinner: boolean) => {
       if (cancelled) return
@@ -25,9 +37,45 @@ export default function SwarmJournalPage() {
         setError(null)
       }
       try {
-        const result = await getSwarmJournal(swarmId)
-        if (!cancelled) {
-          setEntries(result)
+        const correlationId = correlationFilter.trim() ? correlationFilter.trim() : null
+        try {
+          const page = await getSwarmJournalPage(swarmId, { limit: 200, correlationId })
+          if (!cancelled) {
+            setPagingSupported(true)
+            const nextItems = page?.items ?? []
+            setEntries((prev) => {
+              if (withSpinner || !prev.length) {
+                setHasMore(page?.hasMore ?? false)
+                setCursor(page?.nextCursor ?? null)
+                return nextItems
+              }
+              const seen = new Set<number>()
+              for (const entry of prev) {
+                if (typeof entry.eventId === 'number') {
+                  seen.add(entry.eventId)
+                }
+              }
+              const merged: SwarmJournalEntry[] = []
+              for (const entry of nextItems) {
+                if (typeof entry.eventId === 'number' && seen.has(entry.eventId)) continue
+                merged.push(entry)
+              }
+              return merged.length ? [...merged, ...prev] : prev
+            })
+          }
+        } catch (err) {
+          const status = err instanceof Error ? (err as Error & { status?: number }).status : undefined
+          if (status === 501) {
+            const result = await getSwarmJournal(swarmId)
+            if (!cancelled) {
+              setPagingSupported(false)
+              setEntries(result)
+              setHasMore(false)
+              setCursor(null)
+            }
+          } else {
+            throw err
+          }
         }
       } catch (err) {
         if (!cancelled) {
@@ -44,18 +92,19 @@ export default function SwarmJournalPage() {
       }
     }
 
+    setEntries([])
+    setCursor(null)
+    setHasMore(false)
     void load(true)
-    timer = window.setInterval(() => {
+    const timer = window.setInterval(() => {
       void load(false)
     }, 5000)
 
     return () => {
       cancelled = true
-      if (timer !== undefined) {
-        window.clearInterval(timer)
-      }
+      window.clearInterval(timer)
     }
-  }, [swarmId])
+  }, [swarmId, correlationFilter])
 
   const grafanaUrl = useMemo(() => {
     const { protocol, hostname } = window.location
@@ -107,6 +156,85 @@ export default function SwarmJournalPage() {
     })
   }, [entries, showErrorsOnly, search])
 
+  const grouped = useMemo((): JournalRow[] => {
+    const rows: JournalRow[] = []
+
+    const signatureFor = (entry: SwarmJournalEntry): string | null => {
+      if (entry.kind === 'event' && entry.type === 'alert') {
+        const code = typeof entry.data?.code === 'string' ? entry.data.code : ''
+        const message = typeof entry.data?.message === 'string' ? entry.data.message : ''
+        const context = entry.data?.context
+        const worker =
+          context && typeof context === 'object' && typeof (context as Record<string, unknown>).worker === 'string'
+            ? String((context as Record<string, unknown>).worker)
+            : ''
+        const phase =
+          context && typeof context === 'object' && typeof (context as Record<string, unknown>).phase === 'string'
+            ? String((context as Record<string, unknown>).phase)
+            : ''
+        return [
+          'alert',
+          entry.severity,
+          entry.origin,
+          entry.scope.role ?? '',
+          entry.scope.instance ?? '',
+          code,
+          message,
+          worker,
+          phase,
+        ].join('|')
+      }
+      if (entry.severity === 'ERROR') {
+        return [
+          'error',
+          entry.kind,
+          entry.type,
+          entry.origin,
+          entry.scope.role ?? '',
+          entry.scope.instance ?? '',
+        ].join('|')
+      }
+      return null
+    }
+
+    for (const entry of filtered) {
+      const signature = signatureFor(entry)
+      const last = rows.length ? rows[rows.length - 1] : null
+      const lastSignature = last ? signatureFor(last.entry) : null
+      if (signature && last && lastSignature === signature) {
+        last.count += 1
+        last.firstTimestamp = entry.timestamp
+        continue
+      }
+      rows.push({
+        entry,
+        count: 1,
+        firstTimestamp: entry.timestamp,
+        lastTimestamp: entry.timestamp,
+      })
+    }
+    return rows
+  }, [filtered])
+
+  const loadOlder = async () => {
+    if (!swarmId || !pagingSupported || !cursor || loadingMore) return
+    setLoadingMore(true)
+    try {
+      const correlationId = correlationFilter.trim() ? correlationFilter.trim() : null
+      const page = await getSwarmJournalPage(swarmId, { limit: 500, correlationId, before: cursor })
+      const nextItems = page?.items ?? []
+      setHasMore(page?.hasMore ?? false)
+      setCursor(page?.nextCursor ?? null)
+      setEntries((prev) => [...prev, ...nextItems])
+    } catch (err) {
+      const message =
+        err instanceof Error && err.message ? err.message : 'Failed to load older journal entries'
+      setError(message)
+    } finally {
+      setLoadingMore(false)
+    }
+  }
+
   if (!swarmId) {
     return (
       <div className="px-6 py-4 text-sm text-white/70">
@@ -145,7 +273,7 @@ export default function SwarmJournalPage() {
         </div>
       </div>
 
-	      <div className="mb-4 grid gap-3 text-xs md:grid-cols-[1fr_auto_auto]">
+	      <div className="mb-4 grid gap-3 text-xs md:grid-cols-[1fr_1fr_auto_auto]">
 	        <input
 	          type="text"
 	          placeholder="Search kind/type/origin/correlation/routing/data…"
@@ -153,6 +281,13 @@ export default function SwarmJournalPage() {
 	          onChange={(e) => setSearch(e.target.value)}
 	          className="w-full rounded-md border border-white/15 bg-slate-950/80 px-3 py-1.5 text-xs text-white/90 placeholder:text-white/40 focus:border-amber-400/60 focus:outline-none"
 	        />
+          <input
+            type="text"
+            placeholder="Filter correlationId (server-side)…"
+            value={correlationFilter}
+            onChange={(e) => setCorrelationFilter(e.target.value)}
+            className="w-full rounded-md border border-white/15 bg-slate-950/80 px-3 py-1.5 text-xs text-white/90 placeholder:text-white/40 focus:border-amber-400/60 focus:outline-none"
+          />
         <label className="flex items-center gap-2 text-white/70">
           <input
             type="checkbox"
@@ -163,7 +298,11 @@ export default function SwarmJournalPage() {
           Errors only
         </label>
         <div className="flex items-center justify-end text-white/50">
-          {loading ? 'Refreshing…' : `${filtered.length} entries`}
+          {loading
+            ? 'Refreshing…'
+            : grouped.length !== filtered.length
+              ? `${filtered.length} entries (${grouped.length} groups)`
+              : `${filtered.length} entries`}
         </div>
       </div>
 
@@ -193,7 +332,8 @@ export default function SwarmJournalPage() {
 	            </tr>
 	          </thead>
 	          <tbody>
-	            {filtered.map((entry, index) => {
+	            {grouped.map((row, index) => {
+	              const entry = row.entry
 	              const ts = new Date(entry.timestamp).toLocaleTimeString()
 	              const isExpanded = expandedIndex === index
 	              const severityClass =
@@ -204,7 +344,7 @@ export default function SwarmJournalPage() {
 	                  : 'text-emerald-300'
 	              return (
 	                <tr
-	                  key={`${entry.timestamp}-${index}`}
+	                  key={entry.eventId ?? `${entry.timestamp}-${index}`}
 	                  className={`border-b border-white/5 cursor-pointer hover:bg-white/5 ${
 	                    isExpanded ? 'bg-white/5' : ''
 	                  }`}
@@ -231,9 +371,25 @@ export default function SwarmJournalPage() {
 	                    {entry.type}
 	                  </td>
 	                  <td className="px-3 py-1.5 align-top text-white/90">
-	                    <div className="line-clamp-2">{describeSummary(entry)}</div>
+	                    <div className="line-clamp-2">
+                        {describeSummary(entry)}
+                        {row.count > 1 ? ` ×${row.count}` : ''}
+                      </div>
 	                    {isExpanded && (
 	                      <div className="mt-1 rounded bg-slate-900/80 p-2 text-[11px] text-white/80">
+                          {row.count > 1 && (
+                            <div className="mb-2 text-white/60">
+                              Grouped {row.count} entries (from{' '}
+                              <span className="font-mono">
+                                {new Date(row.firstTimestamp).toLocaleTimeString()}
+                              </span>{' '}
+                              to{' '}
+                              <span className="font-mono">
+                                {new Date(row.lastTimestamp).toLocaleTimeString()}
+                              </span>
+                              ).
+                            </div>
+                          )}
 	                        <div className="mb-1 flex flex-wrap gap-3 text-white/60">
 	                          {entry.correlationId && (
 	                            <span className="font-mono">
@@ -293,6 +449,22 @@ export default function SwarmJournalPage() {
 	          </tbody>
 	        </table>
 	      </div>
+
+        {pagingSupported && (
+          <div className="mt-3 flex items-center justify-between text-xs text-white/60">
+            <div>
+              {hasMore ? 'More entries available.' : 'End of journal.'}
+            </div>
+            <button
+              type="button"
+              onClick={() => void loadOlder()}
+              disabled={!hasMore || loadingMore || !cursor}
+              className="rounded-md border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-medium text-white/80 hover:bg-white/10 disabled:opacity-40"
+            >
+              {loadingMore ? 'Loading…' : 'Load older'}
+            </button>
+          </div>
+        )}
     </div>
   )
 }

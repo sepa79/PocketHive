@@ -33,6 +33,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.testcontainers.containers.PostgreSQLContainer;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -43,9 +44,14 @@ import static org.junit.jupiter.api.Assertions.*;
 })
   @RabbitAvailable
   class SwarmLifecycleManagerIntegrationTest {
-  private static final Map<String, String> ORIGINAL_PROPERTIES = new LinkedHashMap<>();
-  private static final ObjectMapper mapper = new ObjectMapper();
-  private static final String TEST_INSTANCE_ID = "test-swarm-controller-bee";
+	  private static final Map<String, String> ORIGINAL_PROPERTIES = new LinkedHashMap<>();
+	  private static final ObjectMapper mapper = new ObjectMapper();
+	  private static final String TEST_INSTANCE_ID = "test-swarm-controller-bee";
+	  private static final PostgreSQLContainer<?> POSTGRES =
+	      new PostgreSQLContainer<>("postgres:16-alpine")
+	          .withDatabaseName("pockethive")
+	          .withUsername("pockethive")
+	          .withPassword("pockethive");
 
   static {
     setRequiredSystemProperty("POCKETHIVE_CONTROL_PLANE_SWARM_ID", TEST_SWARM_ID);
@@ -75,10 +81,10 @@ import static org.junit.jupiter.api.Assertions.*;
     setRequiredSystemProperty("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_GROUPING_KEY_INSTANCE", TEST_INSTANCE_ID);
   }
 
-  @DynamicPropertySource
-  static void rabbitProperties(DynamicPropertyRegistry registry) {
-    var broker = RabbitAvailableCondition.getBrokerRunning();
-    String swarmId = TEST_SWARM_ID;
+	  @DynamicPropertySource
+	  static void rabbitProperties(DynamicPropertyRegistry registry) {
+	    var broker = RabbitAvailableCondition.getBrokerRunning();
+	    String swarmId = TEST_SWARM_ID;
 
     register(registry, "SPRING_RABBITMQ_HOST", "spring.rabbitmq.host", broker.getHostName());
     register(registry, "SPRING_RABBITMQ_PORT", "spring.rabbitmq.port", Integer.toString(broker.getPort()));
@@ -124,10 +130,17 @@ import static org.junit.jupiter.api.Assertions.*;
     register(registry, "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_JOB",
         "pockethive.control-plane.swarm-controller.metrics.pushgateway.job",
         "swarm-controller");
-    register(registry, "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_GROUPING_KEY_INSTANCE",
-        "pockethive.control-plane.swarm-controller.metrics.pushgateway.grouping-key.instance",
-        TEST_INSTANCE_ID);
-  }
+	    register(registry, "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_GROUPING_KEY_INSTANCE",
+	        "pockethive.control-plane.swarm-controller.metrics.pushgateway.grouping-key.instance",
+	        TEST_INSTANCE_ID);
+
+	    if (!POSTGRES.isRunning()) {
+	      POSTGRES.start();
+	    }
+	    registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
+	    registry.add("spring.datasource.username", POSTGRES::getUsername);
+	    registry.add("spring.datasource.password", POSTGRES::getPassword);
+	  }
 
   private static String queue(String suffix) {
     return TRAFFIC_PREFIX + "." + suffix;
@@ -230,12 +243,15 @@ import static org.junit.jupiter.api.Assertions.*;
     amqp.deleteQueue(q.getName());
   }
 
-  @AfterAll
-  static void restoreSystemProperties() {
-    ORIGINAL_PROPERTIES.forEach((key, value) -> {
-      if (value == null) {
-        System.clearProperty(key);
-      } else {
+	  @AfterAll
+	  static void restoreSystemProperties() {
+	    if (POSTGRES.isRunning()) {
+	      POSTGRES.stop();
+	    }
+	    ORIGINAL_PROPERTIES.forEach((key, value) -> {
+	      if (value == null) {
+	        System.clearProperty(key);
+	      } else {
         System.setProperty(key, value);
       }
     });

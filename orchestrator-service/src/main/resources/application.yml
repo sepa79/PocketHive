@@ -20,6 +20,8 @@ logging:
     level: "%5p [%X{traceId}]"
 
 pockethive:
+  journal:
+    sink: ${POCKETHIVE_JOURNAL_SINK:postgres}
   control-plane:
     exchange: ${POCKETHIVE_CONTROL_PLANE_EXCHANGE:ph.control}
     control-queue-prefix: ${POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE_PREFIX:ph.control}

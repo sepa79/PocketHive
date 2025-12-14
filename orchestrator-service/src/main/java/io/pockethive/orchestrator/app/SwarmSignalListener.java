@@ -11,6 +11,8 @@ import io.pockethive.orchestrator.domain.SwarmCreateTracker;
 import io.pockethive.orchestrator.domain.SwarmCreateTracker.Pending;
 import io.pockethive.orchestrator.domain.SwarmCreateTracker.Phase;
 import io.pockethive.orchestrator.domain.SwarmStatus;
+import io.pockethive.orchestrator.domain.HiveJournal;
+import io.pockethive.orchestrator.domain.HiveJournal.HiveJournalEntry;
 import io.pockethive.swarm.model.SwarmPlan;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
@@ -61,6 +63,7 @@ public class SwarmSignalListener {
     private final SwarmCreateTracker creates;
     private final ContainerLifecycleManager lifecycle;
     private final ObjectMapper json;
+    private final HiveJournal hiveJournal;
     private final ManagerControlPlane controlPlane;
     private final ControlPlaneEmitter controlEmitter;
     private final ControlPlaneTopologyDescriptor topology;
@@ -76,6 +79,7 @@ public class SwarmSignalListener {
                                SwarmRegistry registry,
                                ContainerLifecycleManager lifecycle,
                                ObjectMapper json,
+                               HiveJournal hiveJournal,
                                ManagerControlPlane controlPlane,
                                ControlPlaneEmitter controlEmitter,
                                ControlPlaneIdentity managerControlPlaneIdentity,
@@ -87,6 +91,7 @@ public class SwarmSignalListener {
         this.registry = registry;
         this.lifecycle = lifecycle;
         this.json = json.findAndRegisterModules();
+        this.hiveJournal = Objects.requireNonNull(hiveJournal, "hiveJournal");
         this.controlPlane = Objects.requireNonNull(controlPlane, "controlPlane");
         this.controlEmitter = Objects.requireNonNull(controlEmitter, "controlEmitter");
         this.topology = Objects.requireNonNull(descriptor, "descriptor");
@@ -135,13 +140,65 @@ public class SwarmSignalListener {
         }
 
         if (key.type().startsWith("outcome.")) {
-            handleOutcomeEvent(key, body);
+            handleOutcomeEvent(key, routingKey, body);
         }
     }
 
-    private void handleOutcomeEvent(RoutingKey key, String body) {
+    private void handleOutcomeEvent(RoutingKey key, String routingKey, String body) {
         String command = key.type().substring("outcome.".length());
-        String status = readOutcomeStatus(body);
+        String status = null;
+        String origin = null;
+        String correlationId = null;
+        String idempotencyKey = null;
+        try {
+            var root = json.readTree(body);
+            status = root.path("data").path("status").asText(null);
+            origin = root.path("origin").asText(null);
+            correlationId = root.path("correlationId").asText(null);
+            idempotencyKey = root.path("idempotencyKey").asText(null);
+        } catch (Exception e) {
+            log.debug("Failed to parse outcome payload; rk={} payload snippet={}", routingKey, snippet(body), e);
+        }
+
+        try {
+            String swarmId = key.swarmId();
+            if (swarmId != null && !swarmId.isBlank()) {
+                Boolean ok = classifyTrackedOutcome(command, status);
+                if (ok != null) {
+                    var data = new java.util.LinkedHashMap<String, Object>();
+                    data.put("status", status);
+                    hiveJournal.append(ok
+                        ? HiveJournalEntry.info(
+                            swarmId,
+                            HiveJournal.Direction.IN,
+                            "outcome",
+                            command,
+                            origin != null && !origin.isBlank() ? origin : "unknown",
+                            new ControlScope(swarmId, key.role(), key.instance()),
+                            correlationId,
+                            idempotencyKey,
+                            routingKey,
+                            data,
+                            null,
+                            null)
+                        : HiveJournalEntry.error(
+                            swarmId,
+                            HiveJournal.Direction.IN,
+                            "outcome",
+                            command,
+                            origin != null && !origin.isBlank() ? origin : "unknown",
+                            new ControlScope(swarmId, key.role(), key.instance()),
+                            correlationId,
+                            idempotencyKey,
+                            routingKey,
+                            data,
+                            null,
+                            null));
+                }
+            }
+        } catch (Exception ignore) {
+            // best-effort
+        }
         switch (command) {
             case "swarm-controller" -> onControllerReady(key);
             case "swarm-template" -> {
@@ -164,13 +221,16 @@ public class SwarmSignalListener {
         }
     }
 
-    private String readOutcomeStatus(String body) {
-        try {
-            return json.readTree(body).path("data").path("status").asText(null);
-        } catch (Exception e) {
-            log.debug("Failed to parse outcome payload status; payload snippet={}", snippet(body), e);
-            return null;
-        }
+    private static Boolean classifyTrackedOutcome(String command, String status) {
+        return switch (command) {
+            case "swarm-create" -> isStatus(status, "Ready");
+            case "swarm-controller" -> true;
+            case "swarm-template" -> isStatus(status, "Ready");
+            case "swarm-start" -> isStatus(status, "Running");
+            case "swarm-stop" -> isStatus(status, "Stopped");
+            case "swarm-remove" -> isStatus(status, "Removed");
+            default -> null;
+        };
     }
 
     private static boolean isStatus(String actual, String expected) {
@@ -199,6 +259,25 @@ public class SwarmSignalListener {
                 String rk = ControlPlaneRouting.signal("swarm-template", plan.id(), "swarm-controller", controllerInstance);
                 log.info("sending swarm-template for {} via controller {}", plan.id(), controllerInstance);
                 sendControl(rk, jsonPayload, "signal.swarm-template");
+                try {
+                    var data = new java.util.LinkedHashMap<String, Object>();
+                    data.put("controllerInstance", controllerInstance);
+                    hiveJournal.append(HiveJournalEntry.info(
+                        plan.id(),
+                        HiveJournal.Direction.OUT,
+                        "signal",
+                        "swarm-template",
+                        payload.origin(),
+                        payload.scope(),
+                        payload.correlationId(),
+                        payload.idempotencyKey(),
+                        rk,
+                        data,
+                        null,
+                        null));
+                } catch (Exception ignore) {
+                    // best-effort
+                }
             } catch (Exception e) {
                 log.warn("template send", e);
             }
@@ -231,6 +310,25 @@ public class SwarmSignalListener {
                 log.info("sending swarm-plan for {} via controller {} (corr={}, idem={})",
                     swarmId, controllerInstance, correlationId, idempotencyKey);
                 sendControl(rk, jsonPayload, "signal.swarm-plan");
+                try {
+                    var data = new java.util.LinkedHashMap<String, Object>();
+                    data.put("controllerInstance", controllerInstance);
+                    hiveJournal.append(HiveJournalEntry.info(
+                        swarmId,
+                        HiveJournal.Direction.OUT,
+                        "signal",
+                        signal,
+                        payload.origin(),
+                        payload.scope(),
+                        payload.correlationId(),
+                        payload.idempotencyKey(),
+                        rk,
+                        data,
+                        null,
+                        null));
+                } catch (Exception ignore) {
+                    // best-effort
+                }
             } catch (Exception e) {
                 log.warn("plan send", e);
             }

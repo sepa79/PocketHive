@@ -150,6 +150,23 @@ services:
       - ./wiremock/mappings:/home/wiremock/mappings
       - ./wiremock/__files:/home/wiremock/__files
 
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: pockethive
+      POSTGRES_USER: pockethive
+      POSTGRES_PASSWORD: pockethive
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pockethive -d pockethive -h 127.0.0.1 -p 5432"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
   # promtail:
   #   # disabled: logs are shipped via RabbitMQ and aggregated to Loki
   #   image: grafana/promtail:2.9.1
@@ -213,6 +230,10 @@ services:
 # all defaulted in application.yml, uncomment to override here
     environment:
       POCKETHIVE_SCENARIOS_RUNTIME_ROOT: /opt/pockethive/scenarios-runtime
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/pockethive
+      SPRING_DATASOURCE_USERNAME: pockethive
+      SPRING_DATASOURCE_PASSWORD: pockethive
+      POCKETHIVE_JOURNAL_SINK: postgres
 #      <<: *metrics-env
 #      POCKETHIVE_CONTROL_PLANE_EXCHANGE: ph.control
 #      POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE: ph.control
@@ -220,6 +241,8 @@ services:
       rabbitmq:
         condition: service_healthy
       log-aggregator:
+        condition: service_healthy
+      postgres:
         condition: service_healthy
 
 
@@ -256,3 +279,10 @@ volumes:
   grafana-data:
   loki-data:
   redis-data:
+  postgres-data:
+
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

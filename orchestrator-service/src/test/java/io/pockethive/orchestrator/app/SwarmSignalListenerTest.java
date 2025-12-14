@@ -22,6 +22,7 @@ import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmCreateTracker;
 import io.pockethive.orchestrator.domain.SwarmCreateTracker.Pending;
 import io.pockethive.orchestrator.domain.SwarmCreateTracker.Phase;
+import io.pockethive.orchestrator.domain.HiveJournal;
 import io.pockethive.orchestrator.domain.SwarmPlanRegistry;
 import io.pockethive.orchestrator.domain.SwarmRegistry;
 import io.pockethive.orchestrator.domain.SwarmStatus;
@@ -101,6 +102,7 @@ class SwarmSignalListenerTest {
         lenient().doNothing().when(controlEmitter).emitStatusSnapshot(any());
         lenient().doNothing().when(controlEmitter).emitStatusDelta(any());
         listener = new SwarmSignalListener(plans, timelines, tracker, registry, lifecycle, mapper,
+            HiveJournal.noop(),
             controlPlane, controlEmitter, identity, descriptor, controlQueueName);
         clearInvocations(controlPlane, controlEmitter, publisher, lifecycle);
     }
@@ -201,6 +203,7 @@ class SwarmSignalListenerTest {
     @Test
     void statusSnapshotIncludesControlRoutes() {
         SwarmSignalListener fresh = new SwarmSignalListener(plans, timelines, tracker, registry, lifecycle, mapper,
+            HiveJournal.noop(),
             controlPlane, controlEmitter, identity, descriptor, controlQueueName);
 
         verify(controlEmitter).emitStatusSnapshot(statusCaptor.capture());

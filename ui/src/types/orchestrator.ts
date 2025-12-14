@@ -19,6 +19,7 @@ export interface SwarmSummary {
 }
 
 export interface SwarmJournalEntry {
+  eventId?: number | null
   timestamp: string
   swarmId: string
   severity: string

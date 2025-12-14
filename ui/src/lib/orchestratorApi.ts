@@ -3,6 +3,17 @@ import { randomId } from './id'
 import type { Component } from '../types/hive'
 import type { SwarmSummary, BeeSummary, SwarmJournalEntry } from '../types/orchestrator'
 
+export interface JournalCursor {
+  ts: string
+  id: number
+}
+
+export interface JournalPageResponse {
+  items: SwarmJournalEntry[]
+  nextCursor: JournalCursor | null
+  hasMore: boolean
+}
+
 interface SwarmManagersTogglePayload {
   idempotencyKey: string
   enabled: boolean
@@ -170,6 +181,9 @@ function normalizeSwarmSummary(input: unknown): SwarmSummary | null {
 function normalizeJournalEntry(input: unknown): SwarmJournalEntry | null {
   if (!isRecord(input)) return null
   const record = input as Record<string, unknown>
+  const eventId = record['eventId']
+  const parsedEventId =
+    typeof eventId === 'number' && Number.isFinite(eventId) ? eventId : null
   let timestamp = asString(record['timestamp'])
   if (!timestamp) {
     const rawTs = record['timestamp']
@@ -213,6 +227,7 @@ function normalizeJournalEntry(input: unknown): SwarmJournalEntry | null {
   const raw = rawValue && typeof rawValue === 'object' ? (rawValue as Record<string, unknown>) : null
   const extra = extraValue && typeof extraValue === 'object' ? (extraValue as Record<string, unknown>) : null
   return {
+    eventId: parsedEventId,
     timestamp,
     swarmId,
     severity,
@@ -291,6 +306,71 @@ export async function getSwarmJournal(id: string): Promise<SwarmJournalEntry[]> 
   } catch {
     return []
   }
+}
+
+function buildQuery(params: Record<string, string | number | null | undefined>): string {
+  const parts: string[] = []
+  for (const [key, value] of Object.entries(params)) {
+    if (value === null || value === undefined) continue
+    const text = typeof value === 'number' ? String(value) : value
+    if (!text.trim()) continue
+    parts.push(`${encodeURIComponent(key)}=${encodeURIComponent(text)}`)
+  }
+  return parts.length ? `?${parts.join('&')}` : ''
+}
+
+export async function getSwarmJournalPage(
+  id: string,
+  options?: {
+    limit?: number
+    correlationId?: string | null
+    before?: JournalCursor | null
+  },
+): Promise<JournalPageResponse | null> {
+  const limit = options?.limit
+  const correlationId = options?.correlationId ?? null
+  const before = options?.before ?? null
+  const query = buildQuery({
+    limit,
+    correlationId: correlationId ?? undefined,
+    beforeTs: before?.ts ?? undefined,
+    beforeId: before?.id ?? undefined,
+  })
+  const response = await apiFetch(`/orchestrator/swarms/${id}/journal/page${query}`, {
+    headers: { Accept: 'application/json' },
+  })
+  if (response.status === 404) {
+    return null
+  }
+  await ensureOk(response, 'Failed to load swarm journal page')
+  let payload: unknown
+  try {
+    payload = await response.json()
+  } catch {
+    return { items: [], nextCursor: null, hasMore: false }
+  }
+  if (!isRecord(payload)) {
+    return { items: [], nextCursor: null, hasMore: false }
+  }
+  const record = payload as Record<string, unknown>
+  const itemsValue = Array.isArray(record['items']) ? (record['items'] as unknown[]) : []
+  const items = itemsValue
+    .map((entry) => normalizeJournalEntry(entry))
+    .filter((entry): entry is SwarmJournalEntry => Boolean(entry))
+
+  const cursorValue = record['nextCursor']
+  let nextCursor: JournalCursor | null = null
+  if (cursorValue && typeof cursorValue === 'object') {
+    const cursorRecord = cursorValue as Record<string, unknown>
+    const ts = asString(cursorRecord['ts'])
+    const idValue = cursorRecord['id']
+    const cursorId = typeof idValue === 'number' && Number.isFinite(idValue) ? idValue : null
+    if (ts && cursorId !== null) {
+      nextCursor = { ts, id: cursorId }
+    }
+  }
+  const hasMore = record['hasMore'] === true
+  return { items, nextCursor, hasMore }
 }
 
 async function setSwarmManagersEnabled(enabled: boolean) {

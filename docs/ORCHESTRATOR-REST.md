@@ -45,6 +45,61 @@ Client sends **`idempotencyKey`** (UUID v4) per new action (reuse on retry). Ser
 
 **Response (200)** — same shape as the list entry above. Returns `404` when the swarm id is unknown.
 
+### 2.3 Swarm journal (timeline)
+`GET /api/swarms/{swarmId}/journal`
+
+Returns the swarm-level journal entries as a JSON array (chronological order).
+
+**Response (200)**
+```json
+[
+  {
+    "timestamp": "2025-01-01T12:34:56Z",
+    "swarmId": "demo",
+    "severity": "INFO",
+    "direction": "IN",
+    "kind": "signal",
+    "type": "swarm-start",
+    "origin": "orchestrator",
+    "scope": { "swarmId": "demo", "role": "swarm-controller", "instance": "abc123" },
+    "correlationId": "uuid-v4",
+    "idempotencyKey": "uuid-v4",
+    "routingKey": "signal.swarm-start.demo.swarm-controller.abc123",
+    "data": {},
+    "raw": {},
+    "extra": {}
+  }
+]
+```
+
+### 2.4 Swarm journal (paginated, Postgres)
+`GET /api/swarms/{swarmId}/journal/page`
+
+**Query params**
+- `limit` (optional, default `200`, max `1000`)
+- `correlationId` (optional)
+- `beforeTs` + `beforeId` (optional cursor pair; use the `nextCursor` from the previous response)
+
+**Response (200)** — newest-first (descending by `(ts,id)`)
+```json
+{
+  "items": [ { "eventId": 123, "timestamp": "2025-01-01T12:34:56Z", "swarmId": "demo", "...": "..." } ],
+  "nextCursor": { "ts": "2025-01-01T12:00:00Z", "id": 42 },
+  "hasMore": true
+}
+```
+
+### 2.5 Hive journal (paginated, Postgres)
+`GET /api/journal/hive/page`
+
+**Query params**
+- `limit` (optional, default `200`, max `1000`)
+- `swarmId` (optional)
+- `correlationId` (optional)
+- `beforeTs` + `beforeId` (optional cursor pair)
+
+**Response (200)** — same page shape as swarm pagination.
+
 ## 3.0 Create swarm
 `POST /api/swarms/{swarmId}/create`
 

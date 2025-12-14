@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getSwarmJournal } from '../../lib/orchestratorApi'
+import { getSwarmJournal, getSwarmJournalPage } from '../../lib/orchestratorApi'
 import type { SwarmJournalEntry } from '../../types/orchestrator'
 
 export interface SwarmJournalPanelProps {
@@ -15,7 +15,6 @@ export default function SwarmJournalPanel({ swarmId }: SwarmJournalPanelProps) {
 
   useEffect(() => {
     let cancelled = false
-    let timer: number | undefined
 
     const load = async (showSpinner: boolean) => {
       if (cancelled) return
@@ -24,7 +23,18 @@ export default function SwarmJournalPanel({ swarmId }: SwarmJournalPanelProps) {
         setError(null)
       }
       try {
-        const result = await getSwarmJournal(swarmId)
+        let result: SwarmJournalEntry[] = []
+        try {
+          const page = await getSwarmJournalPage(swarmId, { limit: 50 })
+          result = page?.items ? [...page.items].reverse() : []
+        } catch (err) {
+          const status = err instanceof Error ? (err as Error & { status?: number }).status : undefined
+          if (status === 501) {
+            result = await getSwarmJournal(swarmId)
+          } else {
+            throw err
+          }
+        }
         if (!cancelled) {
           setEntries(result)
         }
@@ -44,15 +54,13 @@ export default function SwarmJournalPanel({ swarmId }: SwarmJournalPanelProps) {
     }
 
     void load(true)
-    timer = window.setInterval(() => {
+    const timer = window.setInterval(() => {
       void load(false)
     }, 5000)
 
     return () => {
       cancelled = true
-      if (timer !== undefined) {
-        window.clearInterval(timer)
-      }
+      window.clearInterval(timer)
     }
   }, [swarmId])
 
@@ -80,7 +88,46 @@ export default function SwarmJournalPanel({ swarmId }: SwarmJournalPanelProps) {
     )
   }
 
-  const latest = entries.slice(-20)
+  const signatureFor = (entry: SwarmJournalEntry): string | null => {
+    if (entry.kind === 'event' && entry.type === 'alert') {
+      const code = typeof entry.data?.code === 'string' ? entry.data.code : ''
+      const message = typeof entry.data?.message === 'string' ? entry.data.message : ''
+      return [
+        'alert',
+        entry.severity,
+        entry.origin,
+        entry.scope.role ?? '',
+        entry.scope.instance ?? '',
+        code,
+        message,
+      ].join('|')
+    }
+    if (entry.severity === 'ERROR') {
+      return [
+        'error',
+        entry.kind,
+        entry.type,
+        entry.origin,
+        entry.scope.role ?? '',
+        entry.scope.instance ?? '',
+      ].join('|')
+    }
+    return null
+  }
+
+  const grouped: Array<{ entry: SwarmJournalEntry; count: number }> = []
+  for (const entry of entries) {
+    const signature = signatureFor(entry)
+    const last = grouped.length ? grouped[grouped.length - 1] : null
+    const lastSignature = last ? signatureFor(last.entry) : null
+    if (signature && last && lastSignature === signature) {
+      last.count += 1
+      continue
+    }
+    grouped.push({ entry, count: 1 })
+  }
+
+  const latest = grouped.slice(-20)
 
   const describeEntry = (entry: SwarmJournalEntry): string => {
     const prefix = entry.direction === 'LOCAL' ? 'local' : entry.direction.toLowerCase()
@@ -116,13 +163,16 @@ export default function SwarmJournalPanel({ swarmId }: SwarmJournalPanelProps) {
         </button>
       </div>
       <ul className="space-y-1 max-h-48 overflow-y-auto text-xs">
-        {latest.map((entry, index) => {
+        {latest.map((row, index) => {
+          const entry = row.entry
           const ts = new Date(entry.timestamp).toLocaleTimeString()
+          const suffix = row.count > 1 ? ` ×${row.count}` : ''
           return (
-            <li key={`${entry.timestamp}-${index}`} className="flex gap-2">
+            <li key={entry.eventId ?? `${entry.timestamp}-${index}`} className="flex gap-2">
               <span className="shrink-0 text-white/40">{ts}</span>
               <span className="text-white/80 truncate">
                 {describeEntry(entry)}
+                {suffix}
               </span>
             </li>
           )

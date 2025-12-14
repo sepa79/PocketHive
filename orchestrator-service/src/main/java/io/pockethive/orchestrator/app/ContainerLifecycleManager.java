@@ -39,6 +39,14 @@ public class ContainerLifecycleManager {
     private final RabbitProperties rabbitProperties;
     @Value("${pockethive.scenarios.runtime-root:}")
     private String scenariosRuntimeRoot;
+    @Value("${pockethive.journal.sink:postgres}")
+    private String journalSink;
+    @Value("${spring.datasource.url:}")
+    private String datasourceUrl;
+    @Value("${spring.datasource.username:}")
+    private String datasourceUsername;
+    @Value("${spring.datasource.password:}")
+    private String datasourcePassword;
     private volatile ComputeAdapterType resolvedAdapterType = ComputeAdapterType.DOCKER_SINGLE;
 
     public ContainerLifecycleManager(
@@ -109,6 +117,22 @@ public class ContainerLifecycleManager {
         String runtimeRoot = normalizeRuntimeRoot(scenariosRuntimeRoot);
         if (runtimeRoot != null) {
             env.put("POCKETHIVE_SCENARIOS_RUNTIME_ROOT", runtimeRoot);
+        }
+        String resolvedSink = normalizeRuntimeRoot(journalSink);
+        if (resolvedSink != null) {
+            env.put("POCKETHIVE_JOURNAL_SINK", resolvedSink);
+        }
+        String resolvedDatasourceUrl = normalizeRuntimeRoot(datasourceUrl);
+        if (resolvedDatasourceUrl != null) {
+            env.put("SPRING_DATASOURCE_URL", resolvedDatasourceUrl);
+        }
+        String resolvedDatasourceUsername = normalizeRuntimeRoot(datasourceUsername);
+        if (resolvedDatasourceUsername != null) {
+            env.put("SPRING_DATASOURCE_USERNAME", resolvedDatasourceUsername);
+        }
+        String resolvedDatasourcePassword = normalizeRuntimeRoot(datasourcePassword);
+        if (resolvedDatasourcePassword != null) {
+            env.put("SPRING_DATASOURCE_PASSWORD", resolvedDatasourcePassword);
         }
         String net = docker.resolveControlNetwork();
         if (net != null && !net.isBlank()) {

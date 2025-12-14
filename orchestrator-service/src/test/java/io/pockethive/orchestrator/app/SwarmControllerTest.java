@@ -29,6 +29,7 @@ import io.pockethive.orchestrator.domain.SwarmPlanRegistry;
 import io.pockethive.orchestrator.domain.SwarmRegistry;
 import io.pockethive.orchestrator.domain.SwarmStatus;
 import io.pockethive.orchestrator.domain.SwarmTemplateMetadata;
+import io.pockethive.orchestrator.domain.HiveJournal;
 import io.pockethive.orchestrator.infra.InMemoryIdempotencyStore;
 import io.pockethive.swarm.model.Bee;
 import io.pockethive.swarm.model.SwarmPlan;
@@ -57,6 +58,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -72,6 +74,9 @@ class SwarmControllerTest {
 
     @Mock
     ScenarioClient scenarioClient;
+
+    @Mock
+    JdbcTemplate jdbc;
 
     private final ObjectMapper mapper = new JacksonConfiguration().objectMapper();
 
@@ -502,7 +507,9 @@ class SwarmControllerTest {
             store,
             registry,
             mapper,
+            jdbc,
             scenarioClient,
+            HiveJournal.noop(),
             plans,
             new ScenarioTimelineRegistry(),
             controlPlaneProperties());

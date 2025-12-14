@@ -19,6 +19,7 @@ import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmCreateTracker;
 import io.pockethive.orchestrator.domain.SwarmCreateTracker.Pending;
 import io.pockethive.orchestrator.domain.SwarmCreateTracker.Phase;
+import io.pockethive.orchestrator.domain.HiveJournal;
 import io.pockethive.orchestrator.domain.SwarmPlanRegistry;
 import io.pockethive.orchestrator.domain.SwarmRegistry;
 import io.pockethive.orchestrator.domain.SwarmStatus;
@@ -96,6 +97,7 @@ class SwarmEventFlowIntegrationTest {
         tracker = new SwarmCreateTracker();
         registry = new SwarmRegistry();
         signalListener = new SwarmSignalListener(plans, timelines, tracker, registry, lifecycle, mapper,
+            HiveJournal.noop(),
             controlPlane, controlEmitter, identity, descriptor, controlQueueName);
         statusListener = new ControllerStatusListener(registry, mapper);
         clearInvocations(controlPlane, controlEmitter, publisher, lifecycle);
