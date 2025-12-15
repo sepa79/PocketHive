@@ -40,6 +40,7 @@ class PostgresSwarmJournalTest {
           ts TIMESTAMPTZ NOT NULL,
           scope TEXT NOT NULL,
           swarm_id TEXT NOT NULL,
+          run_id TEXT NOT NULL,
           scope_role TEXT,
           scope_instance TEXT,
           severity TEXT NOT NULL,
@@ -55,7 +56,7 @@ class PostgresSwarmJournalTest {
           extra JSONB
         )
         """);
-    journal = new PostgresSwarmJournal(new ObjectMapper(), jdbc);
+    journal = new PostgresSwarmJournal(new ObjectMapper(), jdbc, "sw1", "run-1", 10, 10, 30_000L, 1_000L);
   }
 
   @Test
@@ -89,4 +90,3 @@ class PostgresSwarmJournalTest {
     assertThat(json).contains("hello").contains("world");
   }
 }
-

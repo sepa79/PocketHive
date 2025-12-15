@@ -50,28 +50,13 @@ public final class SwarmJournalEntries {
     Objects.requireNonNull(origin, "origin");
     Objects.requireNonNull(scope, "scope");
     String kind = "local";
-    if ("ERROR".equalsIgnoreCase(severity)) {
-      return new SwarmJournal.SwarmJournalEntry(
-          java.time.Instant.now(),
-          swarmId,
-          "ERROR",
-          SwarmJournal.Direction.LOCAL,
-          kind,
-          type,
-          origin,
-          scope,
-          null,
-          null,
-          null,
-          data,
-          null,
-          extra
-      );
-    }
+    String normalizedSeverity = severity != null && !severity.isBlank()
+        ? severity.trim().toUpperCase(java.util.Locale.ROOT)
+        : "INFO";
     return new SwarmJournal.SwarmJournalEntry(
         java.time.Instant.now(),
         swarmId,
-        "INFO",
+        normalizedSeverity,
         SwarmJournal.Direction.LOCAL,
         kind,
         type,

@@ -2,6 +2,7 @@ package io.pockethive.orchestrator.app;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.control.ControlScope;
+import io.pockethive.orchestrator.domain.SwarmRegistry;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -28,13 +29,15 @@ public class JournalController {
 
   private final JdbcTemplate jdbc;
   private final ObjectMapper json;
+  private final SwarmRegistry registry;
 
   @Value("${pockethive.journal.sink:postgres}")
   private String journalSink;
 
-  public JournalController(JdbcTemplate jdbc, ObjectMapper json) {
+  public JournalController(JdbcTemplate jdbc, ObjectMapper json, SwarmRegistry registry) {
     this.jdbc = Objects.requireNonNull(jdbc, "jdbc");
     this.json = Objects.requireNonNull(json, "json").findAndRegisterModules();
+    this.registry = Objects.requireNonNull(registry, "registry");
   }
 
   /**
@@ -46,6 +49,7 @@ public class JournalController {
   @GetMapping("/hive/page")
   public ResponseEntity<JournalPageResponse> hiveJournalPage(
       @RequestParam(required = false) String swarmId,
+      @RequestParam(required = false) String runId,
       @RequestParam(required = false) String correlationId,
       @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant beforeTs,
       @RequestParam(required = false) Long beforeId,
@@ -60,6 +64,16 @@ public class JournalController {
     }
     int pageSize = limit == null ? 200 : Math.max(1, Math.min(1000, limit));
     String cleanedSwarmId = swarmId == null ? null : sanitizeSegment(swarmId.trim());
+    String resolvedRunId = runId == null ? null : runId.trim();
+    if (resolvedRunId != null && resolvedRunId.isBlank()) {
+      resolvedRunId = null;
+    }
+    if (resolvedRunId == null && cleanedSwarmId != null) {
+      resolvedRunId = registry.find(cleanedSwarmId)
+          .map(io.pockethive.orchestrator.domain.Swarm::getRunId)
+          .filter(id -> id != null && !id.isBlank())
+          .orElse(null);
+    }
     String corr = correlationId == null ? null : correlationId.trim();
     if (corr != null && corr.isBlank()) {
       corr = null;
@@ -72,6 +86,7 @@ public class JournalController {
           id,
           ts,
           swarm_id,
+          run_id,
           scope_role,
           scope_instance,
           severity,
@@ -92,6 +107,10 @@ public class JournalController {
     if (cleanedSwarmId != null) {
       sql.append(" AND swarm_id = ?");
       args.add(cleanedSwarmId);
+    }
+    if (resolvedRunId != null) {
+      sql.append(" AND run_id = ?");
+      args.add(resolvedRunId);
     }
     if (corr != null) {
       sql.append(" AND correlation_id = ?");
@@ -114,6 +133,7 @@ public class JournalController {
       entry.put("timestamp", instant);
       String resolvedSwarmId = rs.getString("swarm_id");
       entry.put("swarmId", resolvedSwarmId);
+      entry.put("runId", rs.getString("run_id"));
       entry.put("severity", rs.getString("severity"));
       entry.put("direction", rs.getString("direction"));
       entry.put("kind", rs.getString("kind"));
@@ -167,4 +187,3 @@ public class JournalController {
     return cleaned;
   }
 }
-

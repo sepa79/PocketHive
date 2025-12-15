@@ -19,6 +19,7 @@
     <module>common/worker-sdk</module>
     <module>common/docker-client</module>
     <module>common/swarm-model</module>
+    <module>common/journal-postgres</module>
     <module>generator-service</module>
     <module>log-aggregator-service</module>
     <module>moderator-service</module>

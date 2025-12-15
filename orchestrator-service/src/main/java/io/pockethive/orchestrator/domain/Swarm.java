@@ -9,6 +9,7 @@ public class Swarm {
     private final String id;
     private final String instanceId;
     private final String containerId;
+    private final String runId;
     private SwarmStatus status;
     private SwarmHealth health;
     private Instant heartbeat;
@@ -17,10 +18,11 @@ public class Swarm {
     private SwarmTemplateMetadata templateMetadata;
     private String sutId;
 
-    public Swarm(String id, String instanceId, String containerId) {
+    public Swarm(String id, String instanceId, String containerId, String runId) {
         this.id = id;
         this.instanceId = instanceId;
         this.containerId = containerId;
+        this.runId = runId;
         this.status = SwarmStatus.NEW;
         this.health = SwarmHealth.UNKNOWN;
         this.heartbeat = Instant.now();
@@ -38,6 +40,10 @@ public class Swarm {
 
     public String getContainerId() {
         return containerId;
+    }
+
+    public String getRunId() {
+        return runId;
     }
 
     public SwarmStatus getStatus() {

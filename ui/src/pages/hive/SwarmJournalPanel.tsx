@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getSwarmJournal, getSwarmJournalPage } from '../../lib/orchestratorApi'
+import { getHiveJournalPage, getSwarmJournal, getSwarmJournalPage } from '../../lib/orchestratorApi'
 import type { SwarmJournalEntry } from '../../types/orchestrator'
 
 export interface SwarmJournalPanelProps {
@@ -12,6 +12,7 @@ export default function SwarmJournalPanel({ swarmId }: SwarmJournalPanelProps) {
   const [entries, setEntries] = useState<SwarmJournalEntry[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [scope, setScope] = useState<'swarm' | 'hive'>(() => (swarmId === 'hive' ? 'hive' : 'swarm'))
 
   useEffect(() => {
     let cancelled = false
@@ -24,15 +25,21 @@ export default function SwarmJournalPanel({ swarmId }: SwarmJournalPanelProps) {
       }
       try {
         let result: SwarmJournalEntry[] = []
-        try {
-          const page = await getSwarmJournalPage(swarmId, { limit: 50 })
+        if (scope === 'hive') {
+          const filteredSwarmId = swarmId === 'hive' ? null : swarmId
+          const page = await getHiveJournalPage({ swarmId: filteredSwarmId, limit: 50 })
           result = page?.items ? [...page.items].reverse() : []
-        } catch (err) {
-          const status = err instanceof Error ? (err as Error & { status?: number }).status : undefined
-          if (status === 501) {
-            result = await getSwarmJournal(swarmId)
-          } else {
-            throw err
+        } else {
+          try {
+            const page = await getSwarmJournalPage(swarmId, { limit: 50 })
+            result = page?.items ? [...page.items].reverse() : []
+          } catch (err) {
+            const status = err instanceof Error ? (err as Error & { status?: number }).status : undefined
+            if (status === 501) {
+              result = await getSwarmJournal(swarmId)
+            } else {
+              throw err
+            }
           }
         }
         if (!cancelled) {
@@ -43,6 +50,8 @@ export default function SwarmJournalPanel({ swarmId }: SwarmJournalPanelProps) {
           const message =
             err instanceof Error && err.message
               ? err.message
+              : scope === 'hive'
+              ? 'Failed to load hive journal'
               : 'Failed to load swarm journal'
           setError(message)
         }
@@ -62,7 +71,7 @@ export default function SwarmJournalPanel({ swarmId }: SwarmJournalPanelProps) {
       cancelled = true
       window.clearInterval(timer)
     }
-  }, [swarmId])
+  }, [swarmId, scope])
 
   if (loading && !entries.length && !error) {
     return (
@@ -151,12 +160,38 @@ export default function SwarmJournalPanel({ swarmId }: SwarmJournalPanelProps) {
   return (
     <div className="mt-3 rounded-md border border-white/10 bg-slate-950/60 px-3 py-2">
       <div className="mb-2 flex items-center justify-between text-xs text-white/60">
-        <span className="font-semibold uppercase tracking-wide">
-          Journal (last {latest.length})
-        </span>
+        <div className="flex items-center gap-2">
+          {swarmId !== 'hive' && (
+            <div className="inline-flex overflow-hidden rounded border border-white/15 bg-white/5">
+              <button
+                type="button"
+                className={`px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                  scope === 'swarm' ? 'bg-white/10 text-white' : 'text-white/70 hover:bg-white/10'
+                }`}
+                onClick={() => setScope('swarm')}
+              >
+                Swarm
+              </button>
+              <button
+                type="button"
+                className={`px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                  scope === 'hive' ? 'bg-white/10 text-white' : 'text-white/70 hover:bg-white/10'
+                }`}
+                onClick={() => setScope('hive')}
+              >
+                Hive
+              </button>
+            </div>
+          )}
+          <span className="font-semibold uppercase tracking-wide">
+            {scope === 'hive' ? 'Hive Journal' : 'Swarm Journal'} (last {latest.length})
+          </span>
+        </div>
         <button
           type="button"
-          onClick={() => navigate(`/hive/journal/${encodeURIComponent(swarmId)}`)}
+          onClick={() =>
+            navigate(`/hive/journal/${encodeURIComponent(swarmId)}?scope=${encodeURIComponent(scope)}`)
+          }
           className="rounded border border-white/20 bg-white/5 px-2 py-0.5 text-[10px] font-medium text-white/80 hover:bg-white/10"
         >
           Open full view

@@ -10,3 +10,15 @@ datasources:
     type: loki
     access: proxy
     url: http://loki:3100
+  - name: PocketHive Journal (Postgres)
+    type: postgres
+    access: proxy
+    url: postgres:5432
+    user: pockethive
+    database: pockethive
+    jsonData:
+      sslmode: disable
+      postgresVersion: 1600
+      timescaledb: false
+    secureJsonData:
+      password: pockethive

@@ -2,17 +2,14 @@ package io.pockethive.swarmcontroller.runtime;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.control.ControlScope;
+import io.pockethive.journal.postgres.BufferedPostgresJournalWriter;
+import io.pockethive.journal.postgres.PostgresJournalBackpressureEvents;
+import io.pockethive.journal.postgres.PostgresJournalRecord;
 import io.pockethive.swarmcontroller.runtime.SwarmJournal.SwarmJournalEntry;
-import java.sql.PreparedStatement;
-import java.sql.Timestamp;
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.Map;
 import java.util.Objects;
-import java.util.concurrent.ArrayBlockingQueue;
-import java.util.concurrent.atomic.AtomicLong;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -28,106 +25,100 @@ import org.springframework.stereotype.Component;
 @ConditionalOnProperty(name = "pockethive.journal.sink", havingValue = "postgres")
 public class PostgresSwarmJournal implements SwarmJournal {
 
-  private static final Logger log = LoggerFactory.getLogger(PostgresSwarmJournal.class);
   private static final int DEFAULT_CAPACITY = 50_000;
   private static final int DEFAULT_BATCH_SIZE = 1_000;
+  private static final long DEFAULT_DB_FAILURE_BACKOFF_MILLIS = 30_000;
+  private static final long DEFAULT_DROP_QUIET_PERIOD_MILLIS = 1_000;
 
   private final ObjectMapper mapper;
-  private final JdbcTemplate jdbc;
-  private final ArrayBlockingQueue<SwarmJournalEntry> buffer;
-  private final AtomicLong dropped = new AtomicLong();
-  private final AtomicLong written = new AtomicLong();
+  private final String swarmId;
+  private final String runId;
+  private final BufferedPostgresJournalWriter<SwarmJournalEntry> writer;
 
-  public PostgresSwarmJournal(ObjectMapper mapper, JdbcTemplate jdbc) {
+  public PostgresSwarmJournal(ObjectMapper mapper,
+                              JdbcTemplate jdbc,
+                              @Value("${pockethive.control-plane.swarm-id}") String swarmId,
+                              @Value("${pockethive.journal.run-id}") String runId,
+                              @Value("${pockethive.journal.postgres.buffer-capacity:" + DEFAULT_CAPACITY + "}")
+                              int capacity,
+                              @Value("${pockethive.journal.postgres.batch-size:" + DEFAULT_BATCH_SIZE + "}")
+                              int batchSize,
+                              @Value("${pockethive.journal.postgres.db-failure-backoff-ms:" + DEFAULT_DB_FAILURE_BACKOFF_MILLIS + "}")
+                              long dbFailureBackoffMillis,
+                              @Value("${pockethive.journal.postgres.drop-quiet-period-ms:" + DEFAULT_DROP_QUIET_PERIOD_MILLIS + "}")
+                              long dropQuietPeriodMillis) {
     this.mapper = Objects.requireNonNull(mapper, "mapper").findAndRegisterModules();
-    this.jdbc = Objects.requireNonNull(jdbc, "jdbc");
-    this.buffer = new ArrayBlockingQueue<>(DEFAULT_CAPACITY);
+    Objects.requireNonNull(jdbc, "jdbc");
+    this.swarmId = requireNonBlank(swarmId, "swarmId");
+    this.runId = requireNonBlank(runId, "runId");
+    this.writer = new BufferedPostgresJournalWriter<>(
+        "Swarm journal",
+        Objects.requireNonNull(jdbc.getDataSource(), "dataSource"),
+        capacity,
+        batchSize,
+        dbFailureBackoffMillis,
+        dropQuietPeriodMillis,
+        SwarmJournalEntry::severity,
+        this::toRecord,
+        new SwarmBackpressureEvents());
   }
 
   @Override
   public void append(SwarmJournalEntry entry) {
-    Objects.requireNonNull(entry, "entry");
-    // Best-effort: do not block callers.
-    if (!buffer.offer(entry)) {
-      dropped.incrementAndGet();
-    }
+    writer.append(entry);
   }
 
   @Scheduled(fixedDelay = 200L)
   public void flush() {
-    int maxBatch = Math.min(DEFAULT_BATCH_SIZE, buffer.size());
-    java.util.List<SwarmJournalEntry> batch = new ArrayList<>(maxBatch);
-    buffer.drainTo(batch, maxBatch);
-    int drained = batch.size();
-    if (drained == 0) {
-      long droppedCount = dropped.getAndSet(0);
-      if (droppedCount > 0) {
-        log.warn("Swarm journal dropped {} entries due to backpressure", droppedCount);
-      }
-      return;
-    }
+    writer.flush();
+  }
 
-    String sql = """
-        INSERT INTO journal_event (
-          ts,
-          scope,
-          swarm_id,
-          scope_role,
-          scope_instance,
-          severity,
-          direction,
-          kind,
-          type,
-          origin,
-          correlation_id,
-          idempotency_key,
-          routing_key,
-          data,
-          raw,
-          extra
-        ) VALUES (
-          ?,
-          'SWARM',
-          ?,
-          ?,
-          ?,
-          ?,
-          ?,
-          ?,
-          ?,
-          ?,
-          ?,
-          ?,
-          ?,
-          ?::jsonb,
-          ?::jsonb,
-          ?::jsonb
-        )
-        """;
-    try {
-      jdbc.batchUpdate(sql, batch, drained, (PreparedStatement ps, SwarmJournalEntry entry) -> {
-        Instant ts = entry.timestamp() != null ? entry.timestamp() : Instant.now();
-        ps.setTimestamp(1, Timestamp.from(ts));
-        ps.setString(2, entry.swarmId());
-        ControlScope scope = entry.scope();
-        ps.setString(3, scope != null ? scope.role() : null);
-        ps.setString(4, scope != null ? scope.instance() : null);
-        ps.setString(5, entry.severity());
-        ps.setString(6, entry.direction() != null ? entry.direction().name() : null);
-        ps.setString(7, entry.kind());
-        ps.setString(8, entry.type());
-        ps.setString(9, entry.origin());
-        ps.setString(10, entry.correlationId());
-        ps.setString(11, entry.idempotencyKey());
-        ps.setString(12, entry.routingKey());
-        ps.setString(13, toJson(entry.data()));
-        ps.setString(14, toJson(entry.raw()));
-        ps.setString(15, toJson(entry.extra()));
-      });
-      written.addAndGet(drained);
-    } catch (Exception e) {
-      log.warn("Swarm journal flush failed; dropping {} entries: {}", drained, e.getMessage());
+  private static String requireNonBlank(String value, String name) {
+    if (value == null || value.trim().isEmpty()) {
+      throw new IllegalArgumentException(name + " must not be blank");
     }
+    return value.trim();
+  }
+
+  private SwarmJournalEntry newDropEvent(String severity, String type, Map<String, Object> data) {
+    ControlScope scope = new ControlScope(swarmId, "swarm-controller", "journal");
+    return new SwarmJournalEntry(
+        Instant.now(),
+        swarmId,
+        severity,
+        Direction.LOCAL,
+        "infra",
+        type,
+        "swarm-controller",
+        scope,
+        null,
+        null,
+        null,
+        data,
+        null,
+        null);
+  }
+
+  private PostgresJournalRecord toRecord(SwarmJournalEntry entry) {
+    ControlScope scope = entry.scope();
+    return new PostgresJournalRecord(
+        entry.timestamp() != null ? entry.timestamp() : Instant.now(),
+        "SWARM",
+        entry.swarmId(),
+        runId,
+        scope != null ? scope.role() : null,
+        scope != null ? scope.instance() : null,
+        entry.severity(),
+        entry.direction() != null ? entry.direction().name() : null,
+        entry.kind(),
+        entry.type(),
+        entry.origin(),
+        entry.correlationId(),
+        entry.idempotencyKey(),
+        entry.routingKey(),
+        toJson(entry.data()),
+        toJson(entry.raw()),
+        toJson(entry.extra()));
   }
 
   private String toJson(Map<String, Object> value) {
@@ -138,6 +129,19 @@ public class PostgresSwarmJournal implements SwarmJournal {
       return mapper.writeValueAsString(value);
     } catch (Exception e) {
       return null;
+    }
+  }
+
+  private final class SwarmBackpressureEvents implements PostgresJournalBackpressureEvents<SwarmJournalEntry> {
+
+    @Override
+    public SwarmJournalEntry backpressureStart() {
+      return newDropEvent("WARN", "journal-backpressure-start", Map.of("policy", "dropping INFO"));
+    }
+
+    @Override
+    public SwarmJournalEntry backpressureStop(long droppedInfo) {
+      return newDropEvent("WARN", "journal-backpressure-stop", Map.of("droppedInfo", droppedInfo));
     }
   }
 }

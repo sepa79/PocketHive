@@ -56,6 +56,7 @@ import static org.junit.jupiter.api.Assertions.*;
   static {
     setRequiredSystemProperty("POCKETHIVE_CONTROL_PLANE_SWARM_ID", TEST_SWARM_ID);
     setRequiredSystemProperty("POCKETHIVE_CONTROL_PLANE_INSTANCE_ID", TEST_INSTANCE_ID);
+    setRequiredSystemProperty("POCKETHIVE_JOURNAL_RUN_ID", "run-it");
 
     var broker = RabbitAvailableCondition.getBrokerRunning();
     setRequiredSystemProperty("SPRING_RABBITMQ_HOST", broker.getHostName());

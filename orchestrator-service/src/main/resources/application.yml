@@ -22,6 +22,16 @@ logging:
 pockethive:
   journal:
     sink: ${POCKETHIVE_JOURNAL_SINK:postgres}
+    postgres:
+      retention-days: ${POCKETHIVE_JOURNAL_POSTGRES_RETENTION_DAYS:14}
+      partition:
+        create-days-back: ${POCKETHIVE_JOURNAL_POSTGRES_PARTITION_CREATE_DAYS_BACK:1}
+        create-days-ahead: ${POCKETHIVE_JOURNAL_POSTGRES_PARTITION_CREATE_DAYS_AHEAD:2}
+        default-move-batch-size: ${POCKETHIVE_JOURNAL_POSTGRES_PARTITION_DEFAULT_MOVE_BATCH_SIZE:5000}
+        default-max-future-days: ${POCKETHIVE_JOURNAL_POSTGRES_PARTITION_DEFAULT_MAX_FUTURE_DAYS:14}
+        reconcile:
+          initial-delay-ms: ${POCKETHIVE_JOURNAL_POSTGRES_PARTITION_RECONCILE_INITIAL_DELAY_MS:2000}
+          fixed-delay-ms: ${POCKETHIVE_JOURNAL_POSTGRES_PARTITION_RECONCILE_FIXED_DELAY_MS:60000}
   control-plane:
     exchange: ${POCKETHIVE_CONTROL_PLANE_EXCHANGE:ph.control}
     control-queue-prefix: ${POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE_PREFIX:ph.control}

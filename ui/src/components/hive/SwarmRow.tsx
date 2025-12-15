@@ -23,6 +23,7 @@ export type SwarmRowProps = PropsWithChildren<{
   expanded?: boolean
   isSelected?: boolean
   componentCount?: number
+  showLifecycleActions?: boolean
   onFocusChange?: (swarmId: string, nextActive: boolean) => void
   onSelect?: (swarmId: string) => void
   onRemove?: (swarmId: string) => void
@@ -39,6 +40,7 @@ export default function SwarmRow({
   expanded = false,
   isSelected = false,
   componentCount = 0,
+  showLifecycleActions = true,
   onRemove,
   onToggleExpand,
   dataTestId,
@@ -60,7 +62,6 @@ export default function SwarmRow({
     normalizedComponentCount === 1 ? '1 component' : `${normalizedComponentCount} components`
   const displayName = swarmId
   const sanitizedId = useMemo(() => normalizeForId(`${swarmId}-content`), [swarmId])
-  const showLifecycleActions = true
 
   const handleToggleExpand = (event: ReactMouseEvent<HTMLButtonElement>) => {
     event.stopPropagation()

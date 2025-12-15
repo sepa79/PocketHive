@@ -32,21 +32,24 @@ public class FileSwarmJournal implements SwarmJournal {
 
   private final ObjectMapper mapper;
   private final String swarmId;
+  private final String runId;
   private final Path journalFile;
   private final Lock lock = new ReentrantLock();
   private final boolean enabled;
 
   public FileSwarmJournal(ObjectMapper mapper,
                           io.pockethive.swarmcontroller.config.SwarmControllerProperties properties,
-                          @Value("${pockethive.scenarios.runtime-root:scenarios-runtime}") String runtimeRoot) {
+                          @Value("${pockethive.journal.run-id}") String runId,
+                          @Value("${pockethive.scenarios.runtime-root:}") String runtimeRoot) {
     this.mapper = Objects.requireNonNull(mapper, "mapper").findAndRegisterModules();
     Objects.requireNonNull(properties, "properties");
     this.swarmId = properties.getSwarmId();
+    this.runId = sanitizeSegment(requireNonBlank(runId, "runId"));
     Path file = null;
     boolean ok = false;
     try {
       Path root = resolveRuntimeRoot(runtimeRoot);
-      Path dir = root.resolve(sanitizeSegment(swarmId)).normalize();
+      Path dir = root.resolve(sanitizeSegment(swarmId)).resolve(runId).normalize();
       if (!dir.startsWith(root)) {
         throw new IllegalArgumentException("Invalid swarmId for runtime directory");
       }
@@ -94,12 +97,9 @@ public class FileSwarmJournal implements SwarmJournal {
 
   private static Path resolveRuntimeRoot(String runtimeRoot) {
     if (runtimeRoot == null || runtimeRoot.isBlank()) {
-      // Fallback to a local-relative runtime directory to keep behaviour sane
-      // in tests and minimal setups.
-      return Paths.get("scenarios-runtime").toAbsolutePath().normalize();
+      throw new IllegalArgumentException("pockethive.scenarios.runtime-root must not be blank");
     }
-    Path root = Paths.get(runtimeRoot).toAbsolutePath().normalize();
-    return root;
+    return Paths.get(runtimeRoot).toAbsolutePath().normalize();
   }
 
   private static String sanitizeSegment(String segment) {
@@ -111,5 +111,12 @@ public class FileSwarmJournal implements SwarmJournal {
       throw new IllegalArgumentException("Invalid swarmId");
     }
     return cleaned;
+  }
+
+  private static String requireNonBlank(String value, String name) {
+    if (value == null || value.trim().isEmpty()) {
+      throw new IllegalArgumentException(name + " must not be blank");
+    }
+    return value.trim();
   }
 }

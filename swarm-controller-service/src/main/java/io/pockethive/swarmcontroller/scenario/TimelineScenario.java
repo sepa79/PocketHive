@@ -38,16 +38,23 @@ public final class TimelineScenario implements Scenario {
 
   private final String id;
   private final ObjectMapper mapper;
+  private final TimelineScenarioObserver observer;
   private final AtomicReference<Schedule> scheduleRef = new AtomicReference<>();
   private final AtomicReference<Progress> progressRef = new AtomicReference<>();
 
   private volatile Instant startedAt;
   private volatile Integer runLimit;
   private volatile Integer runsRemaining;
+  private volatile boolean completionReported;
 
   public TimelineScenario(String id, ObjectMapper mapper) {
+    this(id, mapper, null);
+  }
+
+  public TimelineScenario(String id, ObjectMapper mapper, TimelineScenarioObserver observer) {
     this.id = Objects.requireNonNull(id, "id");
     this.mapper = Objects.requireNonNull(mapper, "mapper");
+    this.observer = observer;
   }
 
   @Override
@@ -65,6 +72,10 @@ public final class TimelineScenario implements Scenario {
       progressRef.set(null);
       runsRemaining = null;
       startedAt = null;
+      completionReported = false;
+      if (observer != null) {
+        observer.onPlanCleared();
+      }
       return;
     }
     try {
@@ -74,12 +85,20 @@ public final class TimelineScenario implements Scenario {
       log.info("Loaded scenario plan with {} bee step(s) and {} swarm step(s)",
           schedule.beeSteps.size(), schedule.swarmSteps.size());
       resetSchedule(schedule, true);
+      completionReported = false;
+      if (observer != null) {
+        observer.onPlanLoaded(schedule.beeSteps.size(), schedule.swarmSteps.size());
+      }
     } catch (Exception ex) {
       log.warn("Failed to parse scenario plan JSON; clearing schedule", ex);
       scheduleRef.set(null);
       progressRef.set(null);
       runsRemaining = null;
       startedAt = null;
+      completionReported = false;
+      if (observer != null) {
+        observer.onPlanParseFailed(ex.getMessage());
+      }
     }
   }
 
@@ -93,6 +112,10 @@ public final class TimelineScenario implements Scenario {
     }
     log.info("Resetting scenario plan; runsRemaining={}", runsRemaining);
     resetSchedule(schedule, true);
+    completionReported = false;
+    if (observer != null) {
+      observer.onPlanReset();
+    }
   }
 
   /**
@@ -144,15 +167,27 @@ public final class TimelineScenario implements Scenario {
       // depending on an explicit swarm-start signal.
       startedAt = Instant.now();
       log.info("Starting scenario timeline '{}' at {}", id, startedAt);
+      if (observer != null) {
+        observer.onTimelineStarted(startedAt);
+      }
     }
     long elapsedMillis = Duration.between(startedAt, Instant.now()).toMillis();
     List<StepInstance> due = schedule.dueSteps(elapsedMillis);
     StepInstance lastExecuted = null;
     for (StepInstance step : due) {
+      if (observer != null) {
+        observer.onStepStarted(step.stepId, step.name, step.dueMillis, step.type, step.role, step.instanceId, isSwarmLifecycleStep(step));
+      }
       try {
         emitStep(step, context);
+        if (observer != null) {
+          observer.onStepCompleted(step.stepId, step.name, step.dueMillis, step.type, step.role, step.instanceId, isSwarmLifecycleStep(step));
+        }
       } catch (Exception ex) {
         log.warn("Failed to execute scenario step {}", step.stepId, ex);
+        if (observer != null) {
+          observer.onStepFailed(step.stepId, step.name, step.dueMillis, step.type, step.role, step.instanceId, isSwarmLifecycleStep(step), ex.getMessage());
+        }
       }
       // Update progress after each successfully emitted step.
       lastExecuted = step;
@@ -168,6 +203,14 @@ public final class TimelineScenario implements Scenario {
     Integer remaining = runsRemaining;
     if (runLimit == null) {
       progressRef.set(Progress.update(schedule, lastStep, elapsedMillis, totalRuns, remaining));
+      if (!completionReported && observer != null) {
+        completionReported = true;
+        observer.onPlanCompleted(null, null);
+      }
+      return;
+    }
+    if (completionReported) {
+      progressRef.set(Progress.update(schedule, lastStep, elapsedMillis, totalRuns, remaining));
       return;
     }
     int effectiveRemaining = remaining != null ? remaining : runLimit;
@@ -176,10 +219,18 @@ public final class TimelineScenario implements Scenario {
     }
     runsRemaining = effectiveRemaining;
     if (effectiveRemaining > 0) {
+      if (observer != null) {
+        observer.onRunCompleted(runLimit, effectiveRemaining);
+      }
       resetSchedule(schedule, false);
       progressRef.set(Progress.initial(schedule, totalRuns, runsRemaining));
       return;
     }
+    if (observer != null) {
+      observer.onRunCompleted(runLimit, 0);
+      observer.onPlanCompleted(runLimit, 0);
+    }
+    completionReported = true;
     StepInstance last = lastStep != null ? lastStep : schedule.lastFired();
     progressRef.set(Progress.update(schedule, last, elapsedMillis, totalRuns, runsRemaining));
   }
@@ -206,7 +257,7 @@ public final class TimelineScenario implements Scenario {
   private void emitStep(StepInstance step, ScenarioContext context) {
     String type = step.type.toLowerCase(Locale.ROOT);
     ObjectNode data = mapper.createObjectNode();
-    boolean swarmLifecycleStep = step.instanceId == null && (step.role == null || step.role.isBlank());
+    boolean swarmLifecycleStep = isSwarmLifecycleStep(step);
     // Shape the payload that ConfigFanout expects under args.data.
     switch (type) {
       case "start" -> {
@@ -259,6 +310,12 @@ public final class TimelineScenario implements Scenario {
     log.info("Scenario step {} at {}ms -> role={} instance={} type={}",
         step.stepId, step.dueMillis, step.role, step.instanceId, type);
     context.configFanout().publishConfigUpdate(targetScope, data, "scenario");
+  }
+
+  private static boolean isSwarmLifecycleStep(StepInstance step) {
+    return step != null
+        && step.instanceId == null
+        && (step.role == null || step.role.isBlank());
   }
 
   private static final class Schedule {

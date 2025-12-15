@@ -14,6 +14,14 @@ export interface JournalPageResponse {
   hasMore: boolean
 }
 
+export interface JournalRunSummary {
+  runId: string
+  firstTs: string | null
+  lastTs: string | null
+  entries: number
+  pinned?: boolean
+}
+
 interface SwarmManagersTogglePayload {
   idempotencyKey: string
   enabled: boolean
@@ -194,6 +202,7 @@ function normalizeJournalEntry(input: unknown): SwarmJournalEntry | null {
     }
   }
   const swarmId = asString(record['swarmId'])
+  const runId = asString(record['runId'])
   const severity = asString(record['severity'])
   const direction = asString(record['direction'])
   const kind = asString(record['kind'])
@@ -230,6 +239,7 @@ function normalizeJournalEntry(input: unknown): SwarmJournalEntry | null {
     eventId: parsedEventId,
     timestamp,
     swarmId,
+    runId,
     severity,
     direction,
     kind,
@@ -287,8 +297,9 @@ export async function getSwarm(id: string): Promise<SwarmSummary | null> {
   return parseSwarmSummary(response)
 }
 
-export async function getSwarmJournal(id: string): Promise<SwarmJournalEntry[]> {
-  const response = await apiFetch(`/orchestrator/swarms/${id}/journal`, {
+export async function getSwarmJournal(id: string, options?: { runId?: string | null }): Promise<SwarmJournalEntry[]> {
+  const query = buildQuery({ runId: options?.runId ?? undefined })
+  const response = await apiFetch(`/orchestrator/swarms/${id}/journal${query}`, {
     headers: { Accept: 'application/json' },
   })
   if (response.status === 404) {
@@ -324,15 +335,18 @@ export async function getSwarmJournalPage(
   options?: {
     limit?: number
     correlationId?: string | null
+    runId?: string | null
     before?: JournalCursor | null
   },
 ): Promise<JournalPageResponse | null> {
   const limit = options?.limit
   const correlationId = options?.correlationId ?? null
+  const runId = options?.runId ?? null
   const before = options?.before ?? null
   const query = buildQuery({
     limit,
     correlationId: correlationId ?? undefined,
+    runId: runId ?? undefined,
     beforeTs: before?.ts ?? undefined,
     beforeId: before?.id ?? undefined,
   })
@@ -343,6 +357,131 @@ export async function getSwarmJournalPage(
     return null
   }
   await ensureOk(response, 'Failed to load swarm journal page')
+  let payload: unknown
+  try {
+    payload = await response.json()
+  } catch {
+    return { items: [], nextCursor: null, hasMore: false }
+  }
+  if (!isRecord(payload)) {
+    return { items: [], nextCursor: null, hasMore: false }
+  }
+  const record = payload as Record<string, unknown>
+  const itemsValue = Array.isArray(record['items']) ? (record['items'] as unknown[]) : []
+  const items = itemsValue
+    .map((entry) => normalizeJournalEntry(entry))
+    .filter((entry): entry is SwarmJournalEntry => Boolean(entry))
+
+  const cursorValue = record['nextCursor']
+  let nextCursor: JournalCursor | null = null
+  if (cursorValue && typeof cursorValue === 'object') {
+    const cursorRecord = cursorValue as Record<string, unknown>
+    const ts = asString(cursorRecord['ts'])
+    const idValue = cursorRecord['id']
+    const cursorId = typeof idValue === 'number' && Number.isFinite(idValue) ? idValue : null
+    if (ts && cursorId !== null) {
+      nextCursor = { ts, id: cursorId }
+    }
+  }
+  const hasMore = record['hasMore'] === true
+  return { items, nextCursor, hasMore }
+}
+
+function normalizeRunSummary(input: unknown): JournalRunSummary | null {
+  if (!isRecord(input)) return null
+  const record = input as Record<string, unknown>
+  const runId = asString(record['runId'])
+  if (!runId) return null
+  const firstTs = asString(record['firstTs'])
+  const lastTs = asString(record['lastTs'])
+  const entriesValue = record['entries']
+  const entries =
+    typeof entriesValue === 'number' && Number.isFinite(entriesValue) ? entriesValue : null
+  const pinned = record['pinned'] === true
+  return {
+    runId,
+    firstTs,
+    lastTs,
+    entries: entries !== null ? entries : 0,
+    pinned,
+  }
+}
+
+export async function getSwarmJournalRuns(id: string): Promise<JournalRunSummary[] | null> {
+  const response = await apiFetch(`/orchestrator/swarms/${id}/journal/runs`, {
+    headers: { Accept: 'application/json' },
+  })
+  if (response.status === 404) {
+    return []
+  }
+  if (response.status === 501) {
+    return null
+  }
+  await ensureOk(response, 'Failed to load journal runs')
+  try {
+    const payload = await response.json()
+    if (!Array.isArray(payload)) return []
+    return payload
+      .map((entry) => normalizeRunSummary(entry))
+      .filter((entry): entry is JournalRunSummary => Boolean(entry))
+  } catch {
+    return []
+  }
+}
+
+export async function pinSwarmJournalRun(
+  id: string,
+  options?: { runId?: string | null; mode?: 'FULL' | 'SLIM' | 'ERRORS_ONLY'; name?: string | null },
+): Promise<{ captureId: string | null; swarmId: string; runId: string; mode: string; inserted: number; entries: number } | null> {
+  const body = JSON.stringify({
+    runId: options?.runId ?? null,
+    mode: options?.mode ?? null,
+    name: options?.name ?? null,
+  })
+  const response = await apiFetch(`/orchestrator/swarms/${id}/journal/pin`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body,
+  })
+  await ensureOk(response, 'Failed to pin journal run')
+  try {
+    const payload = (await response.json()) as Record<string, unknown>
+    const captureId = asString(payload['captureId'])
+    const swarmId = asString(payload['swarmId']) ?? id
+    const runId = asString(payload['runId']) ?? ''
+    const mode = asString(payload['mode']) ?? ''
+    const insertedValue = payload['inserted']
+    const entriesValue = payload['entries']
+    const inserted = typeof insertedValue === 'number' && Number.isFinite(insertedValue) ? insertedValue : 0
+    const entries = typeof entriesValue === 'number' && Number.isFinite(entriesValue) ? entriesValue : 0
+    return { captureId, swarmId, runId, mode, inserted, entries }
+  } catch {
+    return null
+  }
+}
+
+export async function getHiveJournalPage(options?: {
+  swarmId?: string | null
+  runId?: string | null
+  correlationId?: string | null
+  limit?: number
+  before?: JournalCursor | null
+}): Promise<JournalPageResponse | null> {
+  const query = buildQuery({
+    swarmId: options?.swarmId ?? undefined,
+    runId: options?.runId ?? undefined,
+    correlationId: options?.correlationId ?? undefined,
+    limit: options?.limit ?? undefined,
+    beforeTs: options?.before?.ts ?? undefined,
+    beforeId: options?.before?.id ?? undefined,
+  })
+  const response = await apiFetch(`/orchestrator/journal/hive/page${query}`, {
+    headers: { Accept: 'application/json' },
+  })
+  if (response.status === 404) {
+    return null
+  }
+  await ensureOk(response, 'Failed to load hive journal page')
   let payload: unknown
   try {
     payload = await response.json()

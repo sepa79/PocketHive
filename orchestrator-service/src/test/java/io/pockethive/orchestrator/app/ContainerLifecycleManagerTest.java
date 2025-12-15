@@ -146,7 +146,7 @@ class ContainerLifecycleManagerTest {
     @Test
     void stopSwarmMarksStoppedWithoutRemovingResources() {
         SwarmRegistry registry = new SwarmRegistry();
-        Swarm swarm = new Swarm("sw1", "inst1", "cid");
+        Swarm swarm = new Swarm("sw1", "inst1", "cid", "run-1");
         registry.register(swarm);
         registry.updateStatus(swarm.getId(), SwarmStatus.CREATING);
         registry.updateStatus(swarm.getId(), SwarmStatus.READY);
@@ -166,7 +166,7 @@ class ContainerLifecycleManagerTest {
     @Test
     void stopSwarmIsIdempotent() {
         SwarmRegistry registry = new SwarmRegistry();
-        Swarm swarm = new Swarm("sw1", "inst1", "cid");
+        Swarm swarm = new Swarm("sw1", "inst1", "cid", "run-1");
         registry.register(swarm);
         registry.updateStatus(swarm.getId(), SwarmStatus.CREATING);
         registry.updateStatus(swarm.getId(), SwarmStatus.READY);
@@ -188,7 +188,7 @@ class ContainerLifecycleManagerTest {
     @Test
     void stopSwarmRecoversAfterFailure() {
         SwarmRegistry registry = new SwarmRegistry();
-        Swarm swarm = new Swarm("sw1", "inst1", "cid");
+        Swarm swarm = new Swarm("sw1", "inst1", "cid", "run-1");
         registry.register(swarm);
         registry.updateStatus(swarm.getId(), SwarmStatus.CREATING);
         registry.updateStatus(swarm.getId(), SwarmStatus.READY);
@@ -207,7 +207,7 @@ class ContainerLifecycleManagerTest {
     @Test
     void removeSwarmTearsDownContainerAndQueues() {
         SwarmRegistry registry = new SwarmRegistry();
-        Swarm swarm = new Swarm("sw1", "inst1", "cid");
+        Swarm swarm = new Swarm("sw1", "inst1", "cid", "run-1");
         swarm.attachTemplate(new SwarmTemplateMetadata(
             "tpl-1",
             "ctrl-image",
@@ -231,8 +231,8 @@ class ContainerLifecycleManagerTest {
     @Test
     void removeSwarmIsolatesQueuesPerSwarmId() {
         SwarmRegistry registry = new SwarmRegistry();
-        Swarm sw1 = new Swarm("sw1", "inst1", "c1");
-        Swarm sw2 = new Swarm("sw2", "inst2", "c2");
+        Swarm sw1 = new Swarm("sw1", "inst1", "c1", "run-1");
+        Swarm sw2 = new Swarm("sw2", "inst2", "c2", "run-2");
         registry.register(sw1);
         registry.register(sw2);
         OrchestratorProperties properties = defaultProperties();
@@ -253,7 +253,7 @@ class ContainerLifecycleManagerTest {
     @Test
     void preloadSwarmImagesPullsControllerAndBeeImages() {
         SwarmRegistry registry = new SwarmRegistry();
-        Swarm swarm = new Swarm("sw1", "inst1", "cid");
+        Swarm swarm = new Swarm("sw1", "inst1", "cid", "run-1");
         swarm.attachTemplate(new SwarmTemplateMetadata(
             "tpl-1",
             "swarm-controller:latest",

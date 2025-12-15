@@ -151,6 +151,36 @@ export default function HivePage() {
               onSelect={(component) => setSelected(component)}
               selectedId={selectedId}
             />
+            {(!activeSwarm || activeSwarm === 'hive') && (
+              <div key="hive-journal" className="space-y-2">
+                <SwarmRow
+                  swarmId="hive"
+                  isActive={activeSwarm === 'hive'}
+                  expanded={expandedSwarmId === 'hive'}
+                  isSelected={contextSwarmId === 'hive'}
+                  componentCount={0}
+                  showLifecycleActions={false}
+                  onFocusChange={(swarm, nextActive) =>
+                    setActiveSwarm((current) =>
+                      nextActive ? swarm : current === swarm ? null : current,
+                    )
+                  }
+                  onSelect={(swarm) => {
+                    setContextSwarmId(swarm)
+                    setSelected(null)
+                  }}
+                  onToggleExpand={(swarm) =>
+                    setExpandedSwarmId((current) => (current === swarm ? null : swarm))
+                  }
+                  dataTestId="swarm-group-hive"
+                  healthState="ok"
+                  healthTitle="Hive journal"
+                  statusKey={now}
+                >
+                  {expandedSwarmId === 'hive' && <SwarmJournalPanel swarmId="hive" />}
+                </SwarmRow>
+              </div>
+            )}
             {sortedAssignedEntries
               .filter(([id]) => !activeSwarm || id === activeSwarm)
               .map(([id, comps]) => {

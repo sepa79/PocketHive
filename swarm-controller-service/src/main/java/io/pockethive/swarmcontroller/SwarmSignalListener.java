@@ -70,6 +70,8 @@ public class SwarmSignalListener {
   private final AtomicReference<PendingStart> pendingStart = new AtomicReference<>();
   private final java.time.Instant startedAt;
   private volatile String lastHealthState;
+  private volatile Instant healthJournalSuppressUntil;
+  private volatile boolean healthWorkloadsEnabled;
   private final ConcurrentMap<String, Long> lastWorkerErrorCounts = new ConcurrentHashMap<>();
 
   @Autowired
@@ -106,6 +108,8 @@ public class SwarmSignalListener {
     );
     this.startedAt = java.time.Instant.now();
     this.lastHealthState = null;
+    this.healthJournalSuppressUntil = null;
+    this.healthWorkloadsEnabled = false;
     try {
       sendStatusFull();
     } catch (Exception e) {
@@ -177,6 +181,10 @@ public class SwarmSignalListener {
     if (instance == null || instance.isBlank()) {
       log.warn("Received status event with missing instance on routing key {}; payload snippet={}", routingKey, snippet(body));
       throw new IllegalArgumentException("Status event routing key must include an instance segment");
+    }
+    if (this.role.equalsIgnoreCase(role) && this.instanceId.equalsIgnoreCase(instance)) {
+      // Do not treat controller self-status as a worker heartbeat; it skews totals by +1.
+      return;
     }
     try {
       JsonNode node = mapper.readTree(body);
@@ -1078,6 +1086,22 @@ public class SwarmSignalListener {
   }
 
   private void maybeJournalHealthTransition(String state, SwarmMetrics metrics) {
+    SwarmStatus status = lifecycle.getStatus();
+    boolean enabled = workloadsEnabled(status);
+    if (enabled && !healthWorkloadsEnabled) {
+      healthWorkloadsEnabled = true;
+      suppressHealthJournal();
+    } else if (!enabled) {
+      healthWorkloadsEnabled = false;
+    }
+
+    Instant suppressUntil = this.healthJournalSuppressUntil;
+    if (suppressUntil != null) {
+      if (Instant.now().isBefore(suppressUntil)) {
+        return;
+      }
+      this.healthJournalSuppressUntil = null;
+    }
     String previous = this.lastHealthState;
     this.lastHealthState = state;
     if (previous != null && previous.equals(state)) {
@@ -1095,7 +1119,7 @@ public class SwarmSignalListener {
       data.put("enabledWorkers", metrics.enabled());
       journal.append(SwarmJournalEntries.local(
           swarmId,
-          "ERROR",
+          "WARN",
           "swarm-health-degraded",
           instanceId,
           ControlScope.forInstance(swarmId, role, instanceId),
@@ -1122,6 +1146,13 @@ public class SwarmSignalListener {
 
   private boolean workloadsEnabled(SwarmStatus status) {
     return status == SwarmStatus.RUNNING || status == SwarmStatus.STARTING;
+  }
+
+  private void suppressHealthJournal() {
+    // Avoid false-positive "degraded/unknown" transitions immediately after swarm start;
+    // at this point workers have not had time to report their first heartbeat yet.
+    this.healthJournalSuppressUntil = Instant.now().plusMillis(MAX_STALENESS_MS);
+    this.lastHealthState = null;
   }
 
   private void sendControl(String routingKey, String payload, String context) {

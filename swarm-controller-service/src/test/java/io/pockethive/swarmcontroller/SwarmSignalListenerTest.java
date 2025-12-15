@@ -217,6 +217,19 @@ class SwarmSignalListenerTest {
   }
 
   @Test
+  void ignoresControllerSelfStatusInWorkerTotals() {
+    SwarmSignalListener listener = newListener(lifecycle, rabbit, "inst", mapper);
+    reset(lifecycle);
+    stubLifecycleDefaults();
+
+    listener.handle(status(TEST_SWARM_ID, "swarm-controller", "inst", true), statusEvent("status-delta", "swarm-controller", "inst"));
+
+    verify(lifecycle, never()).updateHeartbeat(eq("swarm-controller"), eq("inst"));
+    verify(lifecycle, never()).updateEnabled(eq("swarm-controller"), eq("inst"), anyBoolean());
+    verify(lifecycle, never()).markReady(eq("swarm-controller"), eq("inst"));
+  }
+
+  @Test
   void handleRejectsBlankRoutingKey() {
     SwarmSignalListener listener = newListener(lifecycle, rabbit, "inst", mapper);
 

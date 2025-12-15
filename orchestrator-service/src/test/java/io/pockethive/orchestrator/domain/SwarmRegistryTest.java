@@ -8,7 +8,7 @@ class SwarmRegistryTest {
     @Test
     void registerAndFind() {
         SwarmRegistry registry = new SwarmRegistry();
-        Swarm swarm = new Swarm("s1", "inst1", "container");
+        Swarm swarm = new Swarm("s1", "inst1", "container", "run-1");
         registry.register(swarm);
 
         assertTrue(registry.find("s1").isPresent());
@@ -18,7 +18,7 @@ class SwarmRegistryTest {
     @Test
     void updatesEnableFlags() {
         SwarmRegistry registry = new SwarmRegistry();
-        Swarm swarm = new Swarm("s1", "inst1", "container");
+        Swarm swarm = new Swarm("s1", "inst1", "container", "run-1");
         registry.register(swarm);
 
         registry.updateWorkEnabled("s1", false);
@@ -29,7 +29,7 @@ class SwarmRegistryTest {
     @Test
     void updateStatus() {
         SwarmRegistry registry = new SwarmRegistry();
-        Swarm swarm = new Swarm("s1", "inst1", "container");
+        Swarm swarm = new Swarm("s1", "inst1", "container", "run-1");
         registry.register(swarm);
 
         assertEquals(SwarmStatus.NEW, swarm.getStatus());
@@ -45,7 +45,7 @@ class SwarmRegistryTest {
     @Test
     void fullLifecycleTransitions() {
         SwarmRegistry registry = new SwarmRegistry();
-        Swarm swarm = new Swarm("s1", "inst1", "container");
+        Swarm swarm = new Swarm("s1", "inst1", "container", "run-1");
         registry.register(swarm);
 
         registry.updateStatus(swarm.getId(), SwarmStatus.CREATING);
@@ -63,7 +63,7 @@ class SwarmRegistryTest {
     @Test
     void allowsStopAndRemovalAfterFailure() {
         SwarmRegistry registry = new SwarmRegistry();
-        Swarm swarm = new Swarm("s1", "inst1", "container");
+        Swarm swarm = new Swarm("s1", "inst1", "container", "run-1");
         registry.register(swarm);
 
         registry.updateStatus(swarm.getId(), SwarmStatus.CREATING);
@@ -80,15 +80,15 @@ class SwarmRegistryTest {
     @Test
     void countSwarms() {
         SwarmRegistry registry = new SwarmRegistry();
-        registry.register(new Swarm("s1", "i1", "c1"));
-        registry.register(new Swarm("s2", "i2", "c2"));
+        registry.register(new Swarm("s1", "i1", "c1", "run-1"));
+        registry.register(new Swarm("s2", "i2", "c2", "run-2"));
         assertEquals(2, registry.count());
     }
 
     @Test
     void marksStaleSwarms() {
         SwarmRegistry registry = new SwarmRegistry();
-        Swarm swarm = new Swarm("s1", "inst1", "container");
+        Swarm swarm = new Swarm("s1", "inst1", "container", "run-1");
         registry.register(swarm);
         registry.refresh("s1", SwarmHealth.RUNNING);
 
@@ -104,8 +104,8 @@ class SwarmRegistryTest {
     @Test
     void bringOutYourDeadRemovesFailedSwarms() {
         SwarmRegistry registry = new SwarmRegistry();
-        Swarm healthy = new Swarm("s1", "inst1", "container1");
-        Swarm failed = new Swarm("s2", "inst2", "container2");
+        Swarm healthy = new Swarm("s1", "inst1", "container1", "run-1");
+        Swarm failed = new Swarm("s2", "inst2", "container2", "run-2");
         registry.register(healthy);
         registry.register(failed);
 

@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
-import { getSwarmJournal, getSwarmJournalPage } from '../../lib/orchestratorApi'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
+import { getHiveJournalPage, getSwarmJournal, getSwarmJournalPage, getSwarmJournalRuns, pinSwarmJournalRun } from '../../lib/orchestratorApi'
 import type { SwarmJournalEntry } from '../../types/orchestrator'
-import type { JournalCursor } from '../../lib/orchestratorApi'
+import type { JournalCursor, JournalRunSummary } from '../../lib/orchestratorApi'
+import { useUIStore } from '../../store'
 
 type JournalRow = {
   entry: SwarmJournalEntry
@@ -14,17 +15,66 @@ type JournalRow = {
 export default function SwarmJournalPage() {
   const { swarmId } = useParams<{ swarmId: string }>()
   const navigate = useNavigate()
+  const location = useLocation()
   const [entries, setEntries] = useState<SwarmJournalEntry[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showErrorsOnly, setShowErrorsOnly] = useState(false)
   const [search, setSearch] = useState('')
   const [correlationFilter, setCorrelationFilter] = useState('')
+  const [scope, setScope] = useState<'swarm' | 'hive'>(() => (swarmId === 'hive' ? 'hive' : 'swarm'))
+  const [runId, setRunId] = useState<string>('')
+  const [runs, setRuns] = useState<JournalRunSummary[] | null>(null)
+  const [pinMode, setPinMode] = useState<'SLIM' | 'FULL' | 'ERRORS_ONLY'>('SLIM')
+  const [pinBusy, setPinBusy] = useState(false)
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null)
   const [cursor, setCursor] = useState<JournalCursor | null>(null)
   const [hasMore, setHasMore] = useState(false)
   const [pagingSupported, setPagingSupported] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
+  const setToast = useUIStore((state) => state.setToast)
+
+  useEffect(() => {
+    if (!swarmId) return
+    const params = new URLSearchParams(location.search)
+    const nextScope = params.get('scope')
+    const resolvedScope =
+      nextScope === 'hive' || nextScope === 'swarm'
+        ? nextScope
+        : swarmId === 'hive'
+        ? 'hive'
+        : 'swarm'
+    setScope(resolvedScope)
+    const nextRunId = params.get('runId')
+    setRunId(nextRunId ? nextRunId : '')
+  }, [location.search, swarmId])
+
+  useEffect(() => {
+    if (!swarmId) return
+    if (scope !== 'swarm' || swarmId === 'hive') {
+      setRuns(null)
+      return
+    }
+    let cancelled = false
+    const loadRuns = async () => {
+      try {
+        const res = await getSwarmJournalRuns(swarmId)
+        if (!cancelled) {
+          setRuns(res)
+        }
+      } catch {
+        if (!cancelled) {
+          setRuns(null)
+        }
+      }
+    }
+    void loadRuns()
+    const timer = window.setInterval(() => void loadRuns(), 30_000)
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [swarmId, scope])
 
   useEffect(() => {
     if (!swarmId) return
@@ -38,43 +88,60 @@ export default function SwarmJournalPage() {
       }
       try {
         const correlationId = correlationFilter.trim() ? correlationFilter.trim() : null
-        try {
-          const page = await getSwarmJournalPage(swarmId, { limit: 200, correlationId })
+        const resolvedRunId = runId.trim() ? runId.trim() : null
+        if (scope === 'hive') {
+          const page = await getHiveJournalPage({
+            swarmId: swarmId === 'hive' ? null : swarmId,
+            runId: resolvedRunId,
+            correlationId,
+            limit: 200,
+          })
           if (!cancelled) {
             setPagingSupported(true)
             const nextItems = page?.items ?? []
-            setEntries((prev) => {
-              if (withSpinner || !prev.length) {
-                setHasMore(page?.hasMore ?? false)
-                setCursor(page?.nextCursor ?? null)
-                return nextItems
-              }
-              const seen = new Set<number>()
-              for (const entry of prev) {
-                if (typeof entry.eventId === 'number') {
-                  seen.add(entry.eventId)
-                }
-              }
-              const merged: SwarmJournalEntry[] = []
-              for (const entry of nextItems) {
-                if (typeof entry.eventId === 'number' && seen.has(entry.eventId)) continue
-                merged.push(entry)
-              }
-              return merged.length ? [...merged, ...prev] : prev
-            })
+            setHasMore(page?.hasMore ?? false)
+            setCursor(page?.nextCursor ?? null)
+            setEntries(nextItems)
           }
-        } catch (err) {
-          const status = err instanceof Error ? (err as Error & { status?: number }).status : undefined
-          if (status === 501) {
-            const result = await getSwarmJournal(swarmId)
+        } else {
+          try {
+            const page = await getSwarmJournalPage(swarmId, { limit: 200, correlationId, runId: resolvedRunId })
             if (!cancelled) {
-              setPagingSupported(false)
-              setEntries(result)
-              setHasMore(false)
-              setCursor(null)
+              setPagingSupported(true)
+              const nextItems = page?.items ?? []
+              setEntries((prev) => {
+                if (withSpinner || !prev.length) {
+                  setHasMore(page?.hasMore ?? false)
+                  setCursor(page?.nextCursor ?? null)
+                  return nextItems
+                }
+                const seen = new Set<number>()
+                for (const entry of prev) {
+                  if (typeof entry.eventId === 'number') {
+                    seen.add(entry.eventId)
+                  }
+                }
+                const merged: SwarmJournalEntry[] = []
+                for (const entry of nextItems) {
+                  if (typeof entry.eventId === 'number' && seen.has(entry.eventId)) continue
+                  merged.push(entry)
+                }
+                return merged.length ? [...merged, ...prev] : prev
+              })
             }
-          } else {
-            throw err
+          } catch (err) {
+            const status = err instanceof Error ? (err as Error & { status?: number }).status : undefined
+            if (status === 501) {
+              const result = await getSwarmJournal(swarmId, { runId: resolvedRunId })
+              if (!cancelled) {
+                setPagingSupported(false)
+                setEntries(result)
+                setHasMore(false)
+                setCursor(null)
+              }
+            } else {
+              throw err
+            }
           }
         }
       } catch (err) {
@@ -82,6 +149,8 @@ export default function SwarmJournalPage() {
           const message =
             err instanceof Error && err.message
               ? err.message
+              : scope === 'hive'
+              ? 'Failed to load hive journal'
               : 'Failed to load swarm journal'
           setError(message)
         }
@@ -104,12 +173,26 @@ export default function SwarmJournalPage() {
       cancelled = true
       window.clearInterval(timer)
     }
-  }, [swarmId, correlationFilter])
+  }, [swarmId, correlationFilter, scope, runId])
 
   const grafanaUrl = useMemo(() => {
     const { protocol, hostname } = window.location
-    return `${protocol}//${hostname}:3333/grafana/`
-  }, [])
+    const base = `${protocol}//${hostname}:3333/grafana/`
+    const params = new URLSearchParams()
+    params.set('var-scope', scope === 'hive' ? 'HIVE' : 'SWARM')
+    if (swarmId && swarmId !== 'hive') {
+      params.set('var-swarmId', swarmId)
+    }
+    const resolvedRunId = runId.trim()
+    if (resolvedRunId) {
+      params.set('var-runId', resolvedRunId)
+    }
+    const corr = correlationFilter.trim()
+    if (corr) {
+      params.set('var-correlationId', corr)
+    }
+    return `${base}d/pockethive-journal/pockethive-journal?${params.toString()}`
+  }, [correlationFilter, runId, scope, swarmId])
 
   const describeSummary = (entry: SwarmJournalEntry): string => {
     if (entry.kind === 'signal') {
@@ -221,7 +304,22 @@ export default function SwarmJournalPage() {
     setLoadingMore(true)
     try {
       const correlationId = correlationFilter.trim() ? correlationFilter.trim() : null
-      const page = await getSwarmJournalPage(swarmId, { limit: 500, correlationId, before: cursor })
+      const resolvedRunId = runId.trim() ? runId.trim() : null
+      const page =
+        scope === 'hive'
+          ? await getHiveJournalPage({
+              swarmId: swarmId === 'hive' ? null : swarmId,
+              runId: resolvedRunId,
+              correlationId,
+              limit: 500,
+              before: cursor,
+            })
+          : await getSwarmJournalPage(swarmId, {
+              limit: 500,
+              correlationId,
+              runId: resolvedRunId,
+              before: cursor,
+            })
       const nextItems = page?.items ?? []
       setHasMore(page?.hasMore ?? false)
       setCursor(page?.nextCursor ?? null)
@@ -248,7 +346,7 @@ export default function SwarmJournalPage() {
       <div className="mb-4 flex items-center justify-between gap-4">
         <div className="min-w-0">
           <div className="text-xs uppercase tracking-wide text-white/40">
-            Swarm Journal
+            {scope === 'hive' ? 'Hive Journal' : 'Swarm Journal'}
           </div>
           <div className="mt-1 truncate text-lg font-semibold text-white/90">
             {swarmId}
@@ -268,12 +366,117 @@ export default function SwarmJournalPage() {
             rel="noreferrer"
             className="rounded-md border border-amber-400/30 bg-amber-400/10 px-3 py-1.5 text-xs font-medium text-amber-100 hover:bg-amber-400/20"
           >
-            Open logs in Grafana
+            Open journal in Grafana
           </a>
         </div>
       </div>
 
 	      <div className="mb-4 grid gap-3 text-xs md:grid-cols-[1fr_1fr_auto_auto]">
+          {swarmId !== 'hive' && (
+            <div className="md:col-span-2 flex items-center gap-2">
+              <span className="text-white/50">Scope:</span>
+              <div className="inline-flex overflow-hidden rounded border border-white/15 bg-white/5">
+                <button
+                  type="button"
+                  className={`px-3 py-2 text-xs font-semibold ${
+                    scope === 'swarm' ? 'bg-white/10 text-white' : 'text-white/70 hover:bg-white/10'
+                  }`}
+                  onClick={() => navigate(`/hive/journal/${encodeURIComponent(swarmId)}?scope=swarm${runId ? `&runId=${encodeURIComponent(runId)}` : ''}`)}
+                >
+                  Swarm
+                </button>
+                <button
+                  type="button"
+                  className={`px-3 py-2 text-xs font-semibold ${
+                    scope === 'hive' ? 'bg-white/10 text-white' : 'text-white/70 hover:bg-white/10'
+                  }`}
+                  onClick={() => navigate(`/hive/journal/${encodeURIComponent(swarmId)}?scope=hive${runId ? `&runId=${encodeURIComponent(runId)}` : ''}`)}
+                >
+                  Hive
+                </button>
+              </div>
+            </div>
+          )}
+          {scope === 'swarm' && swarmId !== 'hive' && Array.isArray(runs) && runs.length > 0 && (
+            <div className="md:col-span-2 flex items-center gap-2">
+              <label className="text-white/50" htmlFor="journal-run">
+                Run:
+              </label>
+              <select
+                id="journal-run"
+                value={runId}
+                onChange={(e) => {
+                  const next = e.target.value
+                  const params = new URLSearchParams(location.search)
+                  params.set('scope', scope)
+                  if (next) {
+                    params.set('runId', next)
+                  } else {
+                    params.delete('runId')
+                  }
+                  navigate(`/hive/journal/${encodeURIComponent(swarmId)}?${params.toString()}`)
+                }}
+                className="flex-1 rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-xs text-white/80 focus:outline-none focus:ring-2 focus:ring-sky-300/50"
+              >
+                <option value="">(auto / latest)</option>
+                {runs.map((r) => (
+                  <option key={r.runId} value={r.runId}>
+                    {r.pinned ? '[PINNED] ' : ''}
+                    {r.runId} ({r.entries})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+          {scope === 'swarm' && swarmId !== 'hive' && (
+            <div className="md:col-span-2 flex items-center gap-2">
+              <label className="text-white/50" htmlFor="journal-pin-mode">
+                Pin:
+              </label>
+              <select
+                id="journal-pin-mode"
+                value={pinMode}
+                onChange={(e) => setPinMode(e.target.value as typeof pinMode)}
+                className="rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-xs text-white/80 focus:outline-none focus:ring-2 focus:ring-sky-300/50"
+              >
+                <option value="SLIM">SLIM (drop raw/extra)</option>
+                <option value="FULL">FULL</option>
+                <option value="ERRORS_ONLY">ERRORS_ONLY</option>
+              </select>
+              <button
+                type="button"
+                className="rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-xs font-semibold text-white/80 hover:bg-white/10 disabled:opacity-50"
+                disabled={pinBusy}
+                onClick={async () => {
+                  if (!swarmId) return
+                  setPinBusy(true)
+                  try {
+                    const res = await pinSwarmJournalRun(swarmId, {
+                      runId: runId.trim() ? runId.trim() : null,
+                      mode: pinMode,
+                    })
+                    if (res && res.runId) {
+                      const params = new URLSearchParams(location.search)
+                      params.set('scope', scope)
+                      params.set('runId', res.runId)
+                      navigate(`/hive/journal/${encodeURIComponent(swarmId)}?${params.toString()}`)
+                    }
+                    setToast(`Pinned journal run (${pinMode})`)
+                  } catch (err) {
+                    const message =
+                      err instanceof Error && err.message
+                        ? `Failed to pin journal run: ${err.message}`
+                        : 'Failed to pin journal run'
+                    setToast(message)
+                  } finally {
+                    setPinBusy(false)
+                  }
+                }}
+              >
+                {pinBusy ? 'Pinning…' : 'Pin run'}
+              </button>
+            </div>
+          )}
 	        <input
 	          type="text"
 	          placeholder="Search kind/type/origin/correlation/routing/data…"

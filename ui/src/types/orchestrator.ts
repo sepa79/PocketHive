@@ -22,6 +22,7 @@ export interface SwarmJournalEntry {
   eventId?: number | null
   timestamp: string
   swarmId: string
+  runId?: string | null
   severity: string
   direction: 'IN' | 'OUT' | 'LOCAL'
   kind: string

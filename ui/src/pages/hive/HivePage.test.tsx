@@ -28,6 +28,10 @@ vi.mock('../../lib/orchestratorApi', () => ({
   removeSwarm: vi.fn(),
   enableSwarmManagers: vi.fn(),
   disableSwarmManagers: vi.fn(),
+  getSwarmJournalPage: vi.fn().mockResolvedValue({ items: [], nextCursor: null, hasMore: false }),
+  getSwarmJournal: vi.fn().mockResolvedValue([]),
+  getHiveJournalPage: vi.fn().mockResolvedValue({ items: [], nextCursor: null, hasMore: false }),
+  getSwarmJournalRuns: vi.fn().mockResolvedValue([]),
 }))
 
 const baseComponents: Component[] = [

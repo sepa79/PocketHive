@@ -39,12 +39,12 @@ Goal: provide a first‑class, queryable journal for swarms (control‑plane sco
 - [ ] Choose the table layout (pick one, no cascading defaults):
   - [x] **Option A (recommended):** single `journal_event` table with `scope = 'SWARM'|'HIVE'`.
   - [ ] Option B: separate `swarm_journal_event` + `hive_journal_event` tables.
-- [ ] Partition by time (daily partitions recommended) so retention is `DROP PARTITION`, not slow deletes.
+- [x] Partition by time (daily partitions recommended) so retention is `DROP PARTITION`, not slow deletes.
 - [ ] Define required indexes for keyset pagination + filters:
   - [x] `(ts DESC, id DESC)` (global timeline)
   - [x] `(scope, swarm_id, ts DESC, id DESC)` (per-swarm timeline)
   - [x] `(correlation_id, ts DESC, id DESC)` (attempt drilldown)
-  - [ ] Optional: partial index for errors-only queries (`WHERE severity IN ('WARN','ERROR')`)
+  - [x] Optional: partial index for errors-only queries (`WHERE severity IN ('WARN','ERROR')`)
 - [ ] Decide how much JSON to persist:
   - [ ] `details_jsonb` for structured details (bounded size).
   - [ ] `raw_jsonb` only if required for replay/debug; otherwise store a pointer/hash.
@@ -53,19 +53,24 @@ Goal: provide a first‑class, queryable journal for swarms (control‑plane sco
 
 - [x] Add DB migrations (Flyway) in `orchestrator-service` to create journal tables + indexes (no partitions yet).
 - [x] Implement a Postgres journal sink adapter in orchestrator behind the journal port.
-- [ ] Use batched inserts (JDBC batch / `COPY`-style) and an in-process bounded buffer so journal writes never block control-plane traffic.
-- [ ] Define overload policy (explicit):
-  - [ ] Drop/compact `INFO` first under backpressure, preserve `WARN/ERROR`.
-  - [ ] Emit a single “journal dropped events” entry when dropping starts/stops.
-- [ ] Define failure mode (explicit): DB down must not prevent orchestrator startup; journaling degrades to no-op with periodic health warnings.
+- [x] Use batched inserts (JDBC batch / `COPY`-style) and an in-process bounded buffer so journal writes never block control-plane traffic.
+- [x] Define overload policy (explicit):
+  - [x] Drop/compact `INFO` first under backpressure, preserve `WARN/ERROR`.
+  - [x] Emit a single “journal dropped events” entry when dropping starts/stops.
+- [x] Define failure mode (explicit): DB down must not prevent orchestrator startup; journaling degrades to no-op with periodic health warnings.
 
 ### 3.5.3 Retention + “pin this run forever”
 
-- [ ] Implement default retention via partition pruning (e.g., keep N days).
-- [ ] Add “pinned capture” support for focused tests (keep a 4h window forever):
-  - [ ] Introduce a `journal_capture` concept (e.g., `capture_id`, `name`, `created_at`, `pinned`, optional `swarm_id`, optional labels like `customer`, `path`).
-  - [ ] Events reference `capture_id` when capture mode is enabled.
-  - [ ] Store pinned events in an archive table or partitions with no TTL (explicit choice).
+- [x] Implement default retention via partition pruning (e.g., keep N days).
+- [x] Add “pinned capture” support for focused tests (keep a 4h window forever):
+  - [x] Introduce a `journal_capture` concept (metadata) and attach it to `(swarmId, runId)` for discovery in UI “Runs”.
+  - [x] Add an archive table (no TTL) and a “pin run” operation that copies events from `journal_event` into the archive before time-based retention drops partitions.
+  - [x] Support pin modes to keep storage reasonable:
+    - [x] `FULL` (copy 1:1),
+    - [x] `SLIM` (drop `raw`/`extra`),
+    - [x] `ERRORS_ONLY` (keep `WARN/ERROR` + selected lifecycle).
+  - [x] Query API: when reading a pinned run, read from archive; otherwise read from `journal_event`.
+  - [x] UI: mark pinned runs, and allow browsing pinned runs even after time retention.
 
 ### 3.5.4 Query API (paginated + filters)
 
@@ -76,12 +81,12 @@ Goal: provide a first‑class, queryable journal for swarms (control‑plane sco
 
 ### 3.5.5 Grafana integration (annotations + drilldown)
 
-- [ ] Add a Grafana datasource for Postgres Journal (provisioned in Grafana, not manual steps).
+- [x] Add a Grafana datasource for Postgres Journal (provisioned in Grafana, not manual steps).
 - [ ] Define canonical annotation queries (SQL) for:
   - [ ] swarm lifecycle transitions
   - [ ] guard kicks / backpressure / queue overfill signals
   - [ ] data exhaustion / data-path failures
-  - [ ] `WARN/ERROR` only overlays
+  - [x] `WARN/ERROR` only overlays
 - [ ] Add stable deep links from Hive UI to Grafana dashboards with pre-filled filters (`swarmId`, `correlationId`, `captureId`).
 
 ### 3.5.6 Tests + CI
@@ -108,7 +113,7 @@ Goal: provide a first‑class, queryable journal for swarms (control‑plane sco
 - [x] Add Swarm journal REST endpoint for Hive UI (`GET /api/swarms/{swarmId}/journal`).
 - [x] Add backend REST endpoints for fetching **paginated** Swarm and Hive journal entries (and filtering by `correlationId`) backed by Phase 3.5 storage.
 - [x] Implement Swarm journal timeline UI (search + “Errors only” + detail expansion).
-- [ ] Add Hive-level timeline UI (Swarm vs Hive tabs) once Hive journal exists.
+- [x] Add Hive-level timeline UI (Swarm vs Hive tabs) once Hive journal exists.
 - [ ] Add quick filters like “Last N minutes” and surface “current health state” derived from recent events.
 - [x] Wire a deep link from the Swarms table row expansion to the full journal page.
 - [ ] Wire journal deep links from run/step views once those pages exist.

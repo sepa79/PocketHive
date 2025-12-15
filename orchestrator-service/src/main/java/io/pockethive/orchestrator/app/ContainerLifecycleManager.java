@@ -153,7 +153,10 @@ public class ContainerLifecycleManager {
             log.info("autoPullImages=true, pulling controller image {} before start", resolvedImage);
             docker.pullImage(resolvedImage);
         }
-        log.info("launching controller for swarm {} as instance {} using image {}", resolvedSwarmId, resolvedInstance, resolvedImage);
+        String runId = java.util.UUID.randomUUID().toString();
+        env.put("POCKETHIVE_JOURNAL_RUN_ID", runId);
+        log.info("launching controller for swarm {} as instance {} using image {} (runId={})",
+            resolvedSwarmId, resolvedInstance, resolvedImage, runId);
         log.info("docker env: {}", env);
         java.util.List<String> volumes = new java.util.ArrayList<>();
         volumes.add(dockerSocket + ":" + dockerSocket);
@@ -167,7 +170,7 @@ public class ContainerLifecycleManager {
             java.util.List.copyOf(volumes));
         String containerId = computeAdapter.startManager(managerSpec);
         log.info("controller container {} ({}) started for swarm {}", containerId, resolvedInstance, resolvedSwarmId);
-        Swarm swarm = new Swarm(resolvedSwarmId, resolvedInstance, containerId);
+        Swarm swarm = new Swarm(resolvedSwarmId, resolvedInstance, containerId, runId);
         if (templateMetadata != null) {
             swarm.attachTemplate(templateMetadata);
         }

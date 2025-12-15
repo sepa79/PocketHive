@@ -142,7 +142,7 @@ class SwarmSignalListenerTest {
         Pending pending = new Pending(SWARM_ID, CONTROLLER_INSTANCE, "corr", "idem",
             Phase.CONTROLLER, Instant.now().plusSeconds(60));
         tracker.register(CONTROLLER_INSTANCE, pending);
-        registry.register(new Swarm(SWARM_ID, CONTROLLER_INSTANCE, "cid"));
+        registry.register(new Swarm(SWARM_ID, CONTROLLER_INSTANCE, "cid", "run-1"));
         registry.updateStatus(SWARM_ID, SwarmStatus.CREATING);
 
         listener.handle("{\"data\":{\"status\":\"Ready\"}}", ControlPlaneRouting.event("outcome", "swarm-controller",
@@ -175,7 +175,7 @@ class SwarmSignalListenerTest {
         Pending pending = new Pending(SWARM_ID, CONTROLLER_INSTANCE, "corr", "idem",
             Phase.CONTROLLER, Instant.now().minusSeconds(1));
         tracker.register(CONTROLLER_INSTANCE, pending);
-        registry.register(new Swarm(SWARM_ID, CONTROLLER_INSTANCE, "cid"));
+        registry.register(new Swarm(SWARM_ID, CONTROLLER_INSTANCE, "cid", "run-1"));
 
         listener.checkTimeouts();
 
@@ -223,8 +223,8 @@ class SwarmSignalListenerTest {
 
     @Test
     void statusDeltaPublishesSwarmCount() {
-        registry.register(new Swarm("s1", CONTROLLER_INSTANCE, "cid"));
-        registry.register(new Swarm("s2", CONTROLLER_INSTANCE, "cid2"));
+        registry.register(new Swarm("s1", CONTROLLER_INSTANCE, "cid", "run-1"));
+        registry.register(new Swarm("s2", CONTROLLER_INSTANCE, "cid2", "run-2"));
 
         listener.status();
 

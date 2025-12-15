@@ -1,0 +1,125 @@
+{
+  "uid": "pockethive-journal",
+  "title": "PocketHive Journal",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "10s",
+  "style": "dark",
+  "tags": ["pockethive", "journal"],
+  "time": { "from": "now-6h", "to": "now" },
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": "-- Grafana --",
+        "enable": true,
+        "hide": false,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      },
+      {
+        "datasource": "PocketHive Journal (Postgres)",
+        "enable": true,
+        "hide": false,
+        "iconColor": "rgba(255, 120, 10, 1)",
+        "name": "Journal WARN/ERROR",
+        "rawQuery": true,
+        "type": "tags",
+        "query": "SELECT ts AS time, CONCAT(COALESCE(scope,''),' ',COALESCE(swarm_id,''),' ',COALESCE(kind,''),' ',COALESCE(type,'')) AS text, severity AS tags\nFROM journal_event\nWHERE $__timeFilter(ts)\n  AND severity IN ('WARN','ERROR')\n  AND ('${scope}' = 'ALL' OR scope = '${scope}')\n  AND ('${swarmId}' = '' OR swarm_id = '${swarmId}')\n  AND ('${runId}' = '' OR run_id = '${runId}')\n  AND ('${correlationId}' = '' OR correlation_id = '${correlationId}')\nORDER BY ts DESC, id DESC\nLIMIT 500"
+      }
+    ]
+  },
+  "templating": {
+    "list": [
+      {
+        "type": "custom",
+        "name": "scope",
+        "label": "Scope",
+        "query": "ALL,SWARM,HIVE",
+        "current": { "text": "ALL", "value": "ALL", "selected": true },
+        "options": [],
+        "hide": 0,
+        "includeAll": false,
+        "multi": false
+      },
+      {
+        "type": "textbox",
+        "name": "swarmId",
+        "label": "Swarm ID",
+        "current": { "text": "", "value": "", "selected": true },
+        "hide": 0
+      },
+      {
+        "type": "textbox",
+        "name": "runId",
+        "label": "Run ID",
+        "current": { "text": "", "value": "", "selected": true },
+        "hide": 0
+      },
+      {
+        "type": "textbox",
+        "name": "correlationId",
+        "label": "Correlation ID",
+        "current": { "text": "", "value": "", "selected": true },
+        "hide": 0
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "Journal events per minute",
+      "datasource": "PocketHive Journal (Postgres)",
+      "id": 1,
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "time_series",
+          "rawQuery": true,
+          "datasource": "PocketHive Journal (Postgres)",
+          "rawSql": "SELECT $__timeGroupAlias(ts, '1m'), severity, COUNT(*) AS value\nFROM journal_event\nWHERE $__timeFilter(ts)\n  AND ('${scope}' = 'ALL' OR scope = '${scope}')\n  AND ('${swarmId}' = '' OR swarm_id = '${swarmId}')\n  AND ('${runId}' = '' OR run_id = '${runId}')\n  AND ('${correlationId}' = '' OR correlation_id = '${correlationId}')\nGROUP BY 1, severity\nORDER BY 1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom" },
+        "tooltip": { "mode": "single" }
+      }
+    },
+    {
+      "type": "table",
+      "title": "Journal (newest first)",
+      "datasource": "PocketHive Journal (Postgres)",
+      "id": 2,
+      "gridPos": { "h": 16, "w": 24, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "datasource": "PocketHive Journal (Postgres)",
+          "rawSql": "SELECT\n  ts AS \"time\",\n  id,\n  scope,\n  swarm_id,\n  run_id,\n  severity,\n  direction,\n  kind,\n  type,\n  origin,\n  correlation_id,\n  idempotency_key,\n  routing_key\nFROM journal_event\nWHERE $__timeFilter(ts)\n  AND ('${scope}' = 'ALL' OR scope = '${scope}')\n  AND ('${swarmId}' = '' OR swarm_id = '${swarmId}')\n  AND ('${runId}' = '' OR run_id = '${runId}')\n  AND ('${correlationId}' = '' OR correlation_id = '${correlationId}')\nORDER BY ts DESC, id DESC\nLIMIT 1000"
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "sortBy": [
+          { "displayName": "time", "desc": true }
+        ]
+      }
+    }
+  ]
+}
+

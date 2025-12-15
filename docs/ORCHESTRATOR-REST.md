@@ -78,6 +78,7 @@ Returns the swarm-level journal entries as a JSON array (chronological order).
 **Query params**
 - `limit` (optional, default `200`, max `1000`)
 - `correlationId` (optional)
+- `runId` (optional; when omitted, uses the active runId for the swarm if available, else latest recorded run)
 - `beforeTs` + `beforeId` (optional cursor pair; use the `nextCursor` from the previous response)
 
 **Response (200)** — newest-first (descending by `(ts,id)`)
@@ -95,10 +96,42 @@ Returns the swarm-level journal entries as a JSON array (chronological order).
 **Query params**
 - `limit` (optional, default `200`, max `1000`)
 - `swarmId` (optional)
+- `runId` (optional; useful when `swarmId` is reused across runs)
 - `correlationId` (optional)
 - `beforeTs` + `beforeId` (optional cursor pair)
 
 **Response (200)** — same page shape as swarm pagination.
+
+### 2.6 Swarm journal runs (Postgres)
+`GET /api/swarms/{swarmId}/journal/runs`
+
+Lists known journal runs for a swarm id (new swarm with same id = new run).
+
+### 2.7 Swarm journal pin (archive, Postgres)
+`POST /api/swarms/{swarmId}/journal/pin`
+
+Pins a swarm journal run into an archive so it can be kept beyond time-based retention.
+
+**Request**
+```json
+{
+  "runId": "optional; when omitted, pins the active/latest run",
+  "mode": "FULL|SLIM|ERRORS_ONLY",
+  "name": "optional label"
+}
+```
+
+**Response (200)**
+```json
+{
+  "captureId": "uuid",
+  "swarmId": "demo",
+  "runId": "run-1",
+  "mode": "SLIM",
+  "inserted": 1234,
+  "entries": 1234
+}
+```
 
 ## 3.0 Create swarm
 `POST /api/swarms/{swarmId}/create`
