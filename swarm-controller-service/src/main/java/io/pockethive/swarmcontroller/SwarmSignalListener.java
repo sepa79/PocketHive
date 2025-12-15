@@ -1086,15 +1086,28 @@ public class SwarmSignalListener {
   }
 
   private void maybeJournalHealthTransition(String state, SwarmMetrics metrics) {
+    // Journal health transitions only once the swarm is actually in a "workloads enabled" phase.
+    //
+    // Why: during initial boot / template apply, the controller knows the desired worker count
+    // (desired>0) but workers have not yet had time to publish their first status heartbeat.
+    // That makes the computed state look like Unknown/Degraded, which is expected and should not
+    // spam the journal with false-positive "health degraded" entries.
     SwarmStatus status = lifecycle.getStatus();
     boolean enabled = workloadsEnabled(status);
     if (enabled && !healthWorkloadsEnabled) {
       healthWorkloadsEnabled = true;
+      // On the edge of enabling workloads we expect a short period of 0 heartbeats / partial heartbeats.
+      // Suppress journaling for a short window (aligned with MAX_STALENESS_MS) so operators don't see
+      // a scary "Degraded" entry at the very start of a run.
       suppressHealthJournal();
     } else if (!enabled) {
+      // Once disabled, we stop treating degraded states as actionable. Next time workloads are enabled
+      // we'll re-arm the suppression window above.
       healthWorkloadsEnabled = false;
     }
 
+    // Best-effort suppression window: keep status payloads flowing (state may still show Unknown/Degraded),
+    // but avoid writing health-transition journal entries until the window elapses.
     Instant suppressUntil = this.healthJournalSuppressUntil;
     if (suppressUntil != null) {
       if (Instant.now().isBefore(suppressUntil)) {
@@ -1119,6 +1132,7 @@ public class SwarmSignalListener {
       data.put("enabledWorkers", metrics.enabled());
       journal.append(SwarmJournalEntries.local(
           swarmId,
+          // WARN (not ERROR): health transitions are operator-facing signals, not necessarily application errors.
           "WARN",
           "swarm-health-degraded",
           instanceId,
@@ -1149,7 +1163,7 @@ public class SwarmSignalListener {
   }
 
   private void suppressHealthJournal() {
-    // Avoid false-positive "degraded/unknown" transitions immediately after swarm start;
+    // Avoid false-positive "degraded/unknown" transitions immediately after workloads are enabled;
     // at this point workers have not had time to report their first heartbeat yet.
     this.healthJournalSuppressUntil = Instant.now().plusMillis(MAX_STALENESS_MS);
     this.lastHealthState = null;

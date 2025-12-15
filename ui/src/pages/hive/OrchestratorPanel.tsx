@@ -10,6 +10,7 @@ import type { Component } from '../../types/hive'
 import { heartbeatHealth } from '../../lib/health'
 import { mapStatusToVisualState, type HealthVisualState } from './visualState'
 import { disableSwarmManagers, enableSwarmManagers } from '../../lib/orchestratorApi'
+import HiveJournalPanel from './HiveJournalPanel'
 
 interface Props {
   orchestrator?: Component | null
@@ -178,6 +179,7 @@ export default function OrchestratorPanel({ orchestrator, onSelect, selectedId }
           />
         </div>
       </div>
+      <HiveJournalPanel />
       {actionCopy && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"

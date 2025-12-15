@@ -2,7 +2,9 @@ import { Routes, Route } from 'react-router-dom'
 import Layout from './layout/Layout'
 import Home from './pages/Home'
 import HivePage from './pages/hive/HivePage'
-import SwarmJournalPage from './pages/hive/SwarmJournalPage'
+import RunsDetailPage from './pages/runs/RunsDetailPage'
+import RunsIndexPage from './pages/runs/RunsIndexPage'
+import HiveJournalPage from './pages/journal/HiveJournalPage'
 import Nectar from './pages/Nectar'
 import { CapabilitiesProvider } from './contexts/CapabilitiesContext'
 import { SwarmMetadataProvider } from './contexts/SwarmMetadataContext'
@@ -31,11 +33,30 @@ export default function App() {
           element={
             <SwarmMetadataProvider>
               <CapabilitiesProvider>
-                <SwarmJournalPage />
+                <RunsDetailPage />
               </CapabilitiesProvider>
             </SwarmMetadataProvider>
           }
         />
+        <Route
+          path="runs"
+          element={
+            <SwarmMetadataProvider>
+              <RunsIndexPage />
+            </SwarmMetadataProvider>
+          }
+        />
+        <Route
+          path="runs/:swarmId"
+          element={
+            <SwarmMetadataProvider>
+              <CapabilitiesProvider>
+                <RunsDetailPage />
+              </CapabilitiesProvider>
+            </SwarmMetadataProvider>
+          }
+        />
+        <Route path="orchestrator/journal" element={<HiveJournalPage />} />
         <Route
           path="swarms"
           element={
