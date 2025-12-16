@@ -1,0 +1,201 @@
+import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { getHiveJournalPage } from '../../lib/orchestratorApi'
+import type { SwarmJournalEntry } from '../../types/orchestrator'
+
+export default function HiveJournalPanel() {
+  const navigate = useNavigate()
+  const [entries, setEntries] = useState<SwarmJournalEntry[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [expanded, setExpanded] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+
+    const load = async (showSpinner: boolean) => {
+      if (cancelled) return
+      if (showSpinner) {
+        setLoading(true)
+        setError(null)
+      }
+      try {
+        const page = await getHiveJournalPage({ limit: 50 })
+        const result = page?.items ? [...page.items] : []
+        if (!cancelled) {
+          setEntries(result)
+        }
+      } catch (err) {
+        if (!cancelled) {
+          const message = err instanceof Error && err.message ? err.message : 'Failed to load hive journal'
+          setError(message)
+        }
+      } finally {
+        if (!cancelled && showSpinner) {
+          setLoading(false)
+        }
+      }
+    }
+
+    void load(true)
+    const timer = window.setInterval(() => {
+      void load(false)
+    }, 5000)
+
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [])
+
+  const header = (
+    <div className="mt-3 flex items-center justify-between gap-2 text-xs text-white/60">
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation()
+          setExpanded((v) => !v)
+        }}
+        className="inline-flex items-center gap-2 rounded border border-white/15 bg-white/5 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-white/80 hover:bg-white/10"
+        aria-expanded={expanded}
+      >
+        Hive Journal
+        <span className="text-white/50">{expanded ? '▾' : '▸'}</span>
+      </button>
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation()
+          navigate('/journal/hive')
+        }}
+        className="rounded border border-white/20 bg-white/5 px-2 py-1 text-[10px] font-medium text-white/80 hover:bg-white/10"
+      >
+        Open full view
+      </button>
+    </div>
+  )
+
+  if (!expanded) {
+    return header
+  }
+
+  if (loading && !entries.length && !error) {
+    return (
+      <>
+        {header}
+        <div className="mt-2 rounded-md border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/70">
+          Loading journal…
+        </div>
+      </>
+    )
+  }
+
+  if (error) {
+    return (
+      <>
+        {header}
+        <div className="mt-2 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-200">
+          {error}
+        </div>
+      </>
+    )
+  }
+
+  if (!entries.length) {
+    return (
+      <>
+        {header}
+        <div className="mt-2 rounded-md border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/60">
+          Hive journal is empty so far.
+        </div>
+      </>
+    )
+  }
+
+  const signatureFor = (entry: SwarmJournalEntry): string | null => {
+    if (entry.kind === 'event' && entry.type === 'alert') {
+      const code = typeof entry.data?.code === 'string' ? entry.data.code : ''
+      const message = typeof entry.data?.message === 'string' ? entry.data.message : ''
+      return [
+        'alert',
+        entry.severity,
+        entry.origin,
+        entry.scope.role ?? '',
+        entry.scope.instance ?? '',
+        code,
+        message,
+      ].join('|')
+    }
+    if (entry.severity === 'ERROR') {
+      return [
+        'error',
+        entry.kind,
+        entry.type,
+        entry.origin,
+        entry.scope.role ?? '',
+        entry.scope.instance ?? '',
+      ].join('|')
+    }
+    return null
+  }
+
+  const grouped: Array<{ entry: SwarmJournalEntry; count: number }> = []
+  for (const entry of entries) {
+    const signature = signatureFor(entry)
+    const last = grouped.length ? grouped[grouped.length - 1] : null
+    const lastSignature = last ? signatureFor(last.entry) : null
+    if (signature && last && lastSignature === signature) {
+      last.count += 1
+      continue
+    }
+    grouped.push({ entry, count: 1 })
+  }
+
+  const latest = grouped.slice(0, 20)
+
+  const describeEntry = (entry: SwarmJournalEntry): string => {
+    const prefix = entry.direction === 'LOCAL' ? 'local' : entry.direction.toLowerCase()
+    if (entry.kind === 'signal') {
+      return `${prefix} signal ${entry.type}`
+    }
+    if (entry.kind === 'outcome') {
+      const status = typeof entry.data?.status === 'string' ? entry.data.status : null
+      return status ? `${prefix} outcome ${entry.type} → ${status}` : `${prefix} outcome ${entry.type}`
+    }
+    if (entry.kind === 'event' && entry.type === 'alert') {
+      const code = typeof entry.data?.code === 'string' ? entry.data.code : null
+      const message = typeof entry.data?.message === 'string' ? entry.data.message : null
+      if (code && message) return `${prefix} alert ${code}: ${message}`
+      if (message) return `${prefix} alert: ${message}`
+      return `${prefix} alert`
+    }
+    return `${prefix} ${entry.kind} ${entry.type}`
+  }
+
+  return (
+    <>
+      {header}
+      <div className="mt-2 rounded-md border border-white/10 bg-slate-950/60 px-3 py-2">
+        <div className="mb-2 text-xs text-white/60">
+          <span className="font-semibold uppercase tracking-wide">Last {latest.length}</span>
+        </div>
+        <ul className="space-y-1 max-h-48 overflow-y-auto text-xs">
+          {latest.map((row, index) => {
+            const entry = row.entry
+            const ts = new Date(entry.timestamp).toLocaleTimeString()
+            const suffix = row.count > 1 ? ` ×${row.count}` : ''
+            return (
+              <li key={entry.eventId ?? `${entry.timestamp}-${index}`} className="flex gap-2">
+                <span className="shrink-0 text-white/40">{ts}</span>
+                <span className="text-white/80 truncate">
+                  {describeEntry(entry)}
+                  {suffix}
+                </span>
+              </li>
+            )
+          })}
+        </ul>
+      </div>
+    </>
+  )
+}

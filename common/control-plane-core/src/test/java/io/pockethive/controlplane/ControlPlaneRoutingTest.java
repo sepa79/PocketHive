@@ -18,27 +18,27 @@ class ControlPlaneRoutingTest {
     @Test
     void signalRoutingUsesAllPlaceholder() {
         String rk = ControlPlaneRouting.signal("config-update", null, "generator", null);
-        assertThat(rk).isEqualTo("sig.config-update.ALL.generator.ALL");
+        assertThat(rk).isEqualTo("signal.config-update.ALL.generator.ALL");
     }
 
     @Test
     void eventRoutingIncludesScope() {
         ConfirmationScope scope = new ConfirmationScope("swarmA", "generator", "gen-1");
-        String rk = ControlPlaneRouting.event("ready", "config-update", scope);
-        assertThat(rk).isEqualTo("ev.ready.config-update.swarmA.generator.gen-1");
+        String rk = ControlPlaneRouting.event("outcome", "config-update", scope);
+        assertThat(rk).isEqualTo("event.outcome.config-update.swarmA.generator.gen-1");
     }
 
     @Test
     void eventRoutingWithCombinedType() {
         ConfirmationScope scope = new ConfirmationScope("swarmA", "generator", "gen-1");
-        String rk = ControlPlaneRouting.event("status-delta", scope);
-        assertThat(rk).isEqualTo("ev.status-delta.swarmA.generator.gen-1");
+        String rk = ControlPlaneRouting.event("metric", "status-delta", scope);
+        assertThat(rk).isEqualTo("event.metric.status-delta.swarmA.generator.gen-1");
     }
 
     @Test
     void parseSignalExtractsSegments() {
-        ControlPlaneRouting.RoutingKey key = ControlPlaneRouting.parseSignal("sig.config-update.swarmA.generator.gen-1");
-        assertThat(key.prefix()).isEqualTo("sig");
+        ControlPlaneRouting.RoutingKey key = ControlPlaneRouting.parseSignal("signal.config-update.swarmA.generator.gen-1");
+        assertThat(key.prefix()).isEqualTo("signal");
         assertThat(key.type()).isEqualTo("config-update");
         assertThat(key.swarmId()).isEqualTo("swarmA");
         assertThat(key.role()).isEqualTo("generator");
@@ -47,9 +47,9 @@ class ControlPlaneRoutingTest {
 
     @Test
     void parseEventSupportsCompositeTypes() {
-        ControlPlaneRouting.RoutingKey key = ControlPlaneRouting.parseEvent("ev.ready.config-update.swarmA.generator.gen-1");
-        assertThat(key.type()).isEqualTo("ready.config-update");
-        assertThat(key.matchesType("ready.config-update")).isTrue();
+        ControlPlaneRouting.RoutingKey key = ControlPlaneRouting.parseEvent("event.outcome.config-update.swarmA.generator.gen-1");
+        assertThat(key.type()).isEqualTo("outcome.config-update");
+        assertThat(key.matchesType("outcome.config-update")).isTrue();
         assertThat(key.matchesSwarm("swarmA")).isTrue();
         assertThat(key.matchesRole("generator")).isTrue();
         assertThat(key.matchesInstance("gen-1")).isTrue();
@@ -64,12 +64,12 @@ class ControlPlaneRoutingTest {
             "scoped", ControlPlaneRouting.signal("status-request", "swarmA", "generator", "gen-1")
         ));
         document.put("events", Map.of(
-            "ready", ControlPlaneRouting.event("ready", "config-update", scope),
-            "status", ControlPlaneRouting.event("status-delta", scope)
+            "outcome", ControlPlaneRouting.event("outcome", "config-update", scope),
+            "status", ControlPlaneRouting.event("metric", "status-delta", scope)
         ));
         document.put("parsed", Map.of(
-            "signal", describe(ControlPlaneRouting.parseSignal("sig.config-update.swarmA.generator.gen-1")),
-            "event", describe(ControlPlaneRouting.parseEvent("ev.ready.config-update.swarmA.generator.gen-1"))
+            "signal", describe(ControlPlaneRouting.parseSignal("signal.config-update.swarmA.generator.gen-1")),
+            "event", describe(ControlPlaneRouting.parseEvent("event.outcome.config-update.swarmA.generator.gen-1"))
         ));
 
         String json = MAPPER.writeValueAsString(document);

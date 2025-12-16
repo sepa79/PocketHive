@@ -18,6 +18,7 @@ import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmRegistry;
 import io.pockethive.orchestrator.domain.SwarmStatus;
 import io.pockethive.orchestrator.domain.SwarmTemplateMetadata;
+import io.pockethive.orchestrator.infra.JournalRunMetadataWriter;
 import io.pockethive.swarm.model.Bee;
 import io.pockethive.swarm.model.Work;
 import java.time.Duration;
@@ -43,6 +44,9 @@ class ContainerLifecycleManagerTest {
     @Mock
     AmqpAdmin amqp;
 
+    @Mock
+    JournalRunMetadataWriter runMetadataWriter;
+
     @Test
     void startSwarmCreatesAndRegisters() {
         SwarmRegistry registry = new SwarmRegistry();
@@ -50,7 +54,7 @@ class ContainerLifecycleManagerTest {
         ControlPlaneProperties controlPlane = controlPlaneProperties();
         when(computeAdapter.startManager(any(ManagerSpec.class))).thenReturn("cid");
         ContainerLifecycleManager manager = new ContainerLifecycleManager(
-            docker, computeAdapter, registry, amqp, properties, controlPlane, rabbitProperties());
+            docker, computeAdapter, registry, amqp, properties, controlPlane, rabbitProperties(), runMetadataWriter);
 
         Swarm swarm = manager.startSwarm("sw1", "img", "inst1");
 
@@ -108,7 +112,7 @@ class ContainerLifecycleManagerTest {
         ControlPlaneProperties controlPlane = controlPlaneProperties();
         when(computeAdapter.startManager(any(ManagerSpec.class))).thenReturn("cid");
         ContainerLifecycleManager manager = new ContainerLifecycleManager(
-            docker, computeAdapter, registry, amqp, properties, controlPlane, rabbitProperties());
+            docker, computeAdapter, registry, amqp, properties, controlPlane, rabbitProperties(), runMetadataWriter);
 
         Swarm swarm = manager.startSwarm("sw1", "swarm-controller:latest", "inst1");
 
@@ -127,7 +131,7 @@ class ContainerLifecycleManagerTest {
         ControlPlaneProperties controlPlane = controlPlaneProperties();
         when(computeAdapter.startManager(any(ManagerSpec.class))).thenReturn("cid");
         ContainerLifecycleManager manager = new ContainerLifecycleManager(
-            docker, computeAdapter, registry, amqp, properties, controlPlane, rabbitProperties());
+            docker, computeAdapter, registry, amqp, properties, controlPlane, rabbitProperties(), runMetadataWriter);
 
         manager.startSwarm("sw1", "img", "inst1");
 
@@ -146,7 +150,7 @@ class ContainerLifecycleManagerTest {
     @Test
     void stopSwarmMarksStoppedWithoutRemovingResources() {
         SwarmRegistry registry = new SwarmRegistry();
-        Swarm swarm = new Swarm("sw1", "inst1", "cid");
+        Swarm swarm = new Swarm("sw1", "inst1", "cid", "run-1");
         registry.register(swarm);
         registry.updateStatus(swarm.getId(), SwarmStatus.CREATING);
         registry.updateStatus(swarm.getId(), SwarmStatus.READY);
@@ -155,7 +159,7 @@ class ContainerLifecycleManagerTest {
         OrchestratorProperties properties = defaultProperties();
         ControlPlaneProperties controlPlane = controlPlaneProperties();
         ContainerLifecycleManager manager = new ContainerLifecycleManager(
-            docker, computeAdapter, registry, amqp, properties, controlPlane, rabbitProperties());
+            docker, computeAdapter, registry, amqp, properties, controlPlane, rabbitProperties(), runMetadataWriter);
 
         manager.stopSwarm(swarm.getId());
 
@@ -166,7 +170,7 @@ class ContainerLifecycleManagerTest {
     @Test
     void stopSwarmIsIdempotent() {
         SwarmRegistry registry = new SwarmRegistry();
-        Swarm swarm = new Swarm("sw1", "inst1", "cid");
+        Swarm swarm = new Swarm("sw1", "inst1", "cid", "run-1");
         registry.register(swarm);
         registry.updateStatus(swarm.getId(), SwarmStatus.CREATING);
         registry.updateStatus(swarm.getId(), SwarmStatus.READY);
@@ -175,7 +179,7 @@ class ContainerLifecycleManagerTest {
         OrchestratorProperties properties = defaultProperties();
         ControlPlaneProperties controlPlane = controlPlaneProperties();
         ContainerLifecycleManager manager = new ContainerLifecycleManager(
-            docker, computeAdapter, registry, amqp, properties, controlPlane, rabbitProperties());
+            docker, computeAdapter, registry, amqp, properties, controlPlane, rabbitProperties(), runMetadataWriter);
 
         assertDoesNotThrow(() -> {
             manager.stopSwarm(swarm.getId());
@@ -188,7 +192,7 @@ class ContainerLifecycleManagerTest {
     @Test
     void stopSwarmRecoversAfterFailure() {
         SwarmRegistry registry = new SwarmRegistry();
-        Swarm swarm = new Swarm("sw1", "inst1", "cid");
+        Swarm swarm = new Swarm("sw1", "inst1", "cid", "run-1");
         registry.register(swarm);
         registry.updateStatus(swarm.getId(), SwarmStatus.CREATING);
         registry.updateStatus(swarm.getId(), SwarmStatus.READY);
@@ -198,7 +202,7 @@ class ContainerLifecycleManagerTest {
         OrchestratorProperties properties = defaultProperties();
         ControlPlaneProperties controlPlane = controlPlaneProperties();
         ContainerLifecycleManager manager = new ContainerLifecycleManager(
-            docker, computeAdapter, registry, amqp, properties, controlPlane, rabbitProperties());
+            docker, computeAdapter, registry, amqp, properties, controlPlane, rabbitProperties(), runMetadataWriter);
 
         assertDoesNotThrow(() -> manager.stopSwarm(swarm.getId()));
         assertEquals(SwarmStatus.STOPPED, swarm.getStatus());
@@ -207,7 +211,7 @@ class ContainerLifecycleManagerTest {
     @Test
     void removeSwarmTearsDownContainerAndQueues() {
         SwarmRegistry registry = new SwarmRegistry();
-        Swarm swarm = new Swarm("sw1", "inst1", "cid");
+        Swarm swarm = new Swarm("sw1", "inst1", "cid", "run-1");
         swarm.attachTemplate(new SwarmTemplateMetadata(
             "tpl-1",
             "ctrl-image",
@@ -216,7 +220,7 @@ class ContainerLifecycleManagerTest {
         OrchestratorProperties properties = defaultProperties();
         ControlPlaneProperties controlPlane = controlPlaneProperties();
         ContainerLifecycleManager manager = new ContainerLifecycleManager(
-            docker, computeAdapter, registry, amqp, properties, controlPlane, rabbitProperties());
+            docker, computeAdapter, registry, amqp, properties, controlPlane, rabbitProperties(), runMetadataWriter);
 
         manager.removeSwarm(swarm.getId());
 
@@ -231,14 +235,14 @@ class ContainerLifecycleManagerTest {
     @Test
     void removeSwarmIsolatesQueuesPerSwarmId() {
         SwarmRegistry registry = new SwarmRegistry();
-        Swarm sw1 = new Swarm("sw1", "inst1", "c1");
-        Swarm sw2 = new Swarm("sw2", "inst2", "c2");
+        Swarm sw1 = new Swarm("sw1", "inst1", "c1", "run-1");
+        Swarm sw2 = new Swarm("sw2", "inst2", "c2", "run-2");
         registry.register(sw1);
         registry.register(sw2);
         OrchestratorProperties properties = defaultProperties();
         ControlPlaneProperties controlPlane = controlPlaneProperties();
         ContainerLifecycleManager manager = new ContainerLifecycleManager(
-            docker, computeAdapter, registry, amqp, properties, controlPlane, rabbitProperties());
+            docker, computeAdapter, registry, amqp, properties, controlPlane, rabbitProperties(), runMetadataWriter);
 
         manager.removeSwarm(sw1.getId());
 
@@ -253,7 +257,7 @@ class ContainerLifecycleManagerTest {
     @Test
     void preloadSwarmImagesPullsControllerAndBeeImages() {
         SwarmRegistry registry = new SwarmRegistry();
-        Swarm swarm = new Swarm("sw1", "inst1", "cid");
+        Swarm swarm = new Swarm("sw1", "inst1", "cid", "run-1");
         swarm.attachTemplate(new SwarmTemplateMetadata(
             "tpl-1",
             "swarm-controller:latest",
@@ -264,7 +268,7 @@ class ContainerLifecycleManagerTest {
         OrchestratorProperties properties = withRepositoryPrefix("ghcr.io/acme/pockethive");
         ControlPlaneProperties controlPlane = controlPlaneProperties();
         ContainerLifecycleManager manager = new ContainerLifecycleManager(
-            docker, computeAdapter, registry, amqp, properties, controlPlane, rabbitProperties());
+            docker, computeAdapter, registry, amqp, properties, controlPlane, rabbitProperties(), runMetadataWriter);
 
         manager.preloadSwarmImages("sw1");
 

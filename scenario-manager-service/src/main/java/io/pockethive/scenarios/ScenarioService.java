@@ -578,6 +578,10 @@ public class ScenarioService {
         if (parent != null) {
             Files.createDirectories(parent);
         }
+        if (Files.exists(file) && !Files.isRegularFile(file)) {
+            throw new IllegalArgumentException(
+                "Template '%s' is not a file in bundle for scenario '%s'".formatted(relativePath, id));
+        }
         Files.writeString(file, content);
     }
 

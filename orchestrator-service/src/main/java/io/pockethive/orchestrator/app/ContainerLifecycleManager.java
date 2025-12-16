@@ -16,12 +16,14 @@ import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmRegistry;
 import io.pockethive.orchestrator.domain.SwarmStatus;
 import io.pockethive.orchestrator.domain.SwarmTemplateMetadata;
+import io.pockethive.orchestrator.infra.JournalRunMetadataWriter;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.core.AmqpAdmin;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.amqp.RabbitProperties;
 import org.springframework.stereotype.Service;
 
@@ -36,6 +38,17 @@ public class ContainerLifecycleManager {
     private final OrchestratorProperties properties;
     private final ControlPlaneProperties controlPlaneProperties;
     private final RabbitProperties rabbitProperties;
+    private final JournalRunMetadataWriter runMetadataWriter;
+    @Value("${pockethive.scenarios.runtime-root:}")
+    private String scenariosRuntimeRoot;
+    @Value("${pockethive.journal.sink:postgres}")
+    private String journalSink;
+    @Value("${spring.datasource.url:}")
+    private String datasourceUrl;
+    @Value("${spring.datasource.username:}")
+    private String datasourceUsername;
+    @Value("${spring.datasource.password:}")
+    private String datasourcePassword;
     private volatile ComputeAdapterType resolvedAdapterType = ComputeAdapterType.DOCKER_SINGLE;
 
     public ContainerLifecycleManager(
@@ -45,7 +58,8 @@ public class ContainerLifecycleManager {
         AmqpAdmin amqp,
         OrchestratorProperties properties,
         ControlPlaneProperties controlPlaneProperties,
-        RabbitProperties rabbitProperties) {
+        RabbitProperties rabbitProperties,
+        JournalRunMetadataWriter runMetadataWriter) {
         this.docker = Objects.requireNonNull(docker, "docker");
         this.computeAdapter = Objects.requireNonNull(computeAdapter, "computeAdapter");
         this.registry = Objects.requireNonNull(registry, "registry");
@@ -53,6 +67,7 @@ public class ContainerLifecycleManager {
         this.properties = Objects.requireNonNull(properties, "properties");
         this.controlPlaneProperties = Objects.requireNonNull(controlPlaneProperties, "controlPlaneProperties");
         this.rabbitProperties = Objects.requireNonNull(rabbitProperties, "rabbitProperties");
+        this.runMetadataWriter = Objects.requireNonNull(runMetadataWriter, "runMetadataWriter");
         // Initialise the resolved adapter type based on the injected adapter so that
         // status-full events emitted before the first swarm start report the correct mode.
         if (computeAdapter instanceof DockerSwarmServiceComputeAdapter) {
@@ -103,6 +118,26 @@ public class ContainerLifecycleManager {
                 controlPlaneProperties,
                 controllerSettings,
                 rabbitProperties));
+        String runtimeRoot = normalizeRuntimeRoot(scenariosRuntimeRoot);
+        if (runtimeRoot != null) {
+            env.put("POCKETHIVE_SCENARIOS_RUNTIME_ROOT", runtimeRoot);
+        }
+        String resolvedSink = normalizeRuntimeRoot(journalSink);
+        if (resolvedSink != null) {
+            env.put("POCKETHIVE_JOURNAL_SINK", resolvedSink);
+        }
+        String resolvedDatasourceUrl = normalizeRuntimeRoot(datasourceUrl);
+        if (resolvedDatasourceUrl != null) {
+            env.put("SPRING_DATASOURCE_URL", resolvedDatasourceUrl);
+        }
+        String resolvedDatasourceUsername = normalizeRuntimeRoot(datasourceUsername);
+        if (resolvedDatasourceUsername != null) {
+            env.put("SPRING_DATASOURCE_USERNAME", resolvedDatasourceUsername);
+        }
+        String resolvedDatasourcePassword = normalizeRuntimeRoot(datasourcePassword);
+        if (resolvedDatasourcePassword != null) {
+            env.put("SPRING_DATASOURCE_PASSWORD", resolvedDatasourcePassword);
+        }
         String net = docker.resolveControlNetwork();
         if (net != null && !net.isBlank()) {
             env.put("CONTROL_NETWORK", net);
@@ -122,22 +157,39 @@ public class ContainerLifecycleManager {
             log.info("autoPullImages=true, pulling controller image {} before start", resolvedImage);
             docker.pullImage(resolvedImage);
         }
-        log.info("launching controller for swarm {} as instance {} using image {}", resolvedSwarmId, resolvedInstance, resolvedImage);
+        String runId = java.util.UUID.randomUUID().toString();
+        env.put("POCKETHIVE_JOURNAL_RUN_ID", runId);
+        runMetadataWriter.upsertOnSwarmStart(resolvedSwarmId, runId, templateMetadata);
+        log.info("launching controller for swarm {} as instance {} using image {} (runId={})",
+            resolvedSwarmId, resolvedInstance, resolvedImage, runId);
         log.info("docker env: {}", env);
+        java.util.List<String> volumes = new java.util.ArrayList<>();
+        volumes.add(dockerSocket + ":" + dockerSocket);
+        if (runtimeRoot != null) {
+            volumes.add(runtimeRoot + ":" + runtimeRoot);
+        }
         ManagerSpec managerSpec = new ManagerSpec(
             resolvedInstance,
             resolvedImage,
             java.util.Map.copyOf(env),
-            java.util.List.of(dockerSocket + ":" + dockerSocket));
+            java.util.List.copyOf(volumes));
         String containerId = computeAdapter.startManager(managerSpec);
         log.info("controller container {} ({}) started for swarm {}", containerId, resolvedInstance, resolvedSwarmId);
-        Swarm swarm = new Swarm(resolvedSwarmId, resolvedInstance, containerId);
+        Swarm swarm = new Swarm(resolvedSwarmId, resolvedInstance, containerId, runId);
         if (templateMetadata != null) {
             swarm.attachTemplate(templateMetadata);
         }
         registry.register(swarm);
         registry.updateStatus(resolvedSwarmId, SwarmStatus.CREATING);
         return swarm;
+    }
+
+    private static String normalizeRuntimeRoot(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
     }
 
     /**

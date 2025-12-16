@@ -18,17 +18,17 @@ public class RabbitConfig {
     }
 
     @Bean
-    Binding bindReady(
+    Binding bindOutcomes(
         @Qualifier("controlQueue") Queue controlQueue,
         @Qualifier("controlPlaneExchange") TopicExchange controlExchange) {
-        return BindingBuilder.bind(controlQueue).to(controlExchange).with("ev.ready.#");
+        return BindingBuilder.bind(controlQueue).to(controlExchange).with("event.outcome.#");
     }
 
     @Bean
-    Binding bindError(
+    Binding bindAlerts(
         @Qualifier("controlQueue") Queue controlQueue,
         @Qualifier("controlPlaneExchange") TopicExchange controlExchange) {
-        return BindingBuilder.bind(controlQueue).to(controlExchange).with("ev.error.#");
+        return BindingBuilder.bind(controlQueue).to(controlExchange).with("event.alert.#");
     }
 
     @Bean
@@ -42,10 +42,10 @@ public class RabbitConfig {
         @Qualifier("controlPlaneExchange") TopicExchange controlExchange) {
         return BindingBuilder.bind(statusQueue)
             .to(controlExchange)
-            // Swarm controllers emit status events using the routing key
-            // pattern: ev.status-full.<swarmId>.swarm-controller.<instanceId>
+            // Swarm controllers emit status metrics using the routing key
+            // pattern: event.metric.status-full.<swarmId>.swarm-controller.<instanceId>
             // so we bind with a wildcard swarm segment.
-            .with("ev.status-full.*.swarm-controller.*");
+            .with("event.metric.status-full.*.swarm-controller.*");
     }
 
     @Bean
@@ -54,9 +54,9 @@ public class RabbitConfig {
         @Qualifier("controlPlaneExchange") TopicExchange controlExchange) {
         return BindingBuilder.bind(statusQueue)
             .to(controlExchange)
-            // Swarm controllers emit status events using the routing key
-            // pattern: ev.status-delta.<swarmId>.swarm-controller.<instanceId>
+            // Swarm controllers emit status metrics using the routing key
+            // pattern: event.metric.status-delta.<swarmId>.swarm-controller.<instanceId>
             // so we bind with a wildcard swarm segment.
-            .with("ev.status-delta.*.swarm-controller.*");
+            .with("event.metric.status-delta.*.swarm-controller.*");
     }
 }

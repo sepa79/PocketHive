@@ -29,13 +29,18 @@ import io.pockethive.orchestrator.domain.SwarmPlanRegistry;
 import io.pockethive.orchestrator.domain.SwarmRegistry;
 import io.pockethive.orchestrator.domain.SwarmStatus;
 import io.pockethive.orchestrator.domain.SwarmTemplateMetadata;
+import io.pockethive.orchestrator.domain.HiveJournal;
 import io.pockethive.orchestrator.infra.InMemoryIdempotencyStore;
 import io.pockethive.swarm.model.Bee;
 import io.pockethive.swarm.model.SwarmPlan;
 import io.pockethive.swarm.model.SwarmTemplate;
 import io.pockethive.swarm.model.Work;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -43,6 +48,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
@@ -52,8 +58,10 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.test.util.ReflectionTestUtils;
 
 @ExtendWith(MockitoExtension.class)
 class SwarmControllerTest {
@@ -67,13 +75,19 @@ class SwarmControllerTest {
     @Mock
     ScenarioClient scenarioClient;
 
+    @Mock
+    JdbcTemplate jdbc;
+
     private final ObjectMapper mapper = new JacksonConfiguration().objectMapper();
+
+    @TempDir
+    Path tempDir;
 
     @Test
     void startPublishesControlSignal() throws Exception {
         SwarmCreateTracker tracker = new SwarmCreateTracker();
         SwarmRegistry registry = new SwarmRegistry();
-        registry.register(new Swarm("sw1", "inst", "c"));
+        registry.register(new Swarm("sw1", "inst", "c", "run-1"));
         registry.updateStatus("sw1", SwarmStatus.CREATING);
         registry.updateStatus("sw1", SwarmStatus.READY);
         SwarmController ctrl = controller(tracker, registry, new SwarmPlanRegistry());
@@ -83,13 +97,13 @@ class SwarmControllerTest {
 
         ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
         verify(rabbit).convertAndSend(eq("ph.control"),
-            eq(ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_START, "sw1", "swarm-controller", "ALL")), captor.capture());
+            eq(ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_START, "sw1", "swarm-controller", "inst")), captor.capture());
         ControlSignal sig = mapper.readValue(captor.getValue(), ControlSignal.class);
-        assertThat(sig.signal()).isEqualTo(ControlPlaneSignals.SWARM_START);
-        assertThat(sig.swarmId()).isEqualTo("sw1");
+        assertThat(sig.type()).isEqualTo(ControlPlaneSignals.SWARM_START);
+        assertThat(sig.scope().swarmId()).isEqualTo("sw1");
         assertThat(sig.idempotencyKey()).isEqualTo("idem");
         assertThat(resp.getBody().watch().successTopic()).isEqualTo(
-            ControlPlaneRouting.event("ready." + ControlPlaneSignals.SWARM_START,
+            ControlPlaneRouting.event("outcome", ControlPlaneSignals.SWARM_START,
                 new ConfirmationScope("sw1", "swarm-controller", "inst")));
         assertThat(tracker.complete("sw1", Phase.START)).isPresent();
         assertThat(registry.find("sw1").get().getStatus()).isEqualTo(SwarmStatus.STARTING);
@@ -113,7 +127,7 @@ class SwarmControllerTest {
             eq(false))).thenAnswer(inv -> {
             String instanceId = inv.getArgument(2);
             capturedInstance.set(instanceId);
-            return new Swarm("sw1", instanceId, "c1");
+            return new Swarm("sw1", instanceId, "c1", "run-1");
         });
         SwarmController ctrl = controller(tracker, new SwarmRegistry(), plans);
         SwarmCreateRequest req = new SwarmCreateRequest("tpl-1", "idem", null);
@@ -132,7 +146,7 @@ class SwarmControllerTest {
     @Test
     void startIsIdempotent() {
         SwarmRegistry registry = new SwarmRegistry();
-        registry.register(new Swarm("sw1", "controller-inst", "ctrl"));
+        registry.register(new Swarm("sw1", "controller-inst", "ctrl", "run-1"));
         SwarmController ctrl = controller(new SwarmCreateTracker(), registry, new SwarmPlanRegistry());
         SwarmController.ControlRequest req = new SwarmController.ControlRequest("idem", null);
 
@@ -141,7 +155,7 @@ class SwarmControllerTest {
 
         ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
         verify(rabbit, times(1)).convertAndSend(eq("ph.control"),
-            eq(ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_START, "sw1", "swarm-controller", "ALL")), captor.capture());
+            eq(ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_START, "sw1", "swarm-controller", "controller-inst")), captor.capture());
         assertThat(r1.getBody().correlationId()).isEqualTo(r2.getBody().correlationId());
     }
 
@@ -161,7 +175,7 @@ class SwarmControllerTest {
             anyString(),
             any(SwarmTemplateMetadata.class),
             eq(false)))
-            .thenAnswer(invocation -> new Swarm("sw1", invocation.getArgument(2), "corr"));
+            .thenAnswer(invocation -> new Swarm("sw1", invocation.getArgument(2), "corr", "run-1"));
         IdempotencyStore store = new InMemoryIdempotencyStore();
         SwarmController ctrl = controller(tracker, registry, plans, store);
         SwarmCreateRequest request = new SwarmCreateRequest("tpl-1", "idem", null);
@@ -212,7 +226,7 @@ class SwarmControllerTest {
             anyString(),
             any(SwarmTemplateMetadata.class),
             eq(false)))
-            .thenAnswer(invocation -> new Swarm("sw1", invocation.getArgument(2), "corr"));
+            .thenAnswer(invocation -> new Swarm("sw1", invocation.getArgument(2), "corr", "run-1"));
         InMemoryIdempotencyStore store = new InMemoryIdempotencyStore();
         SwarmController ctrl = controller(tracker, registry, plans, store);
         SwarmCreateRequest leaderRequest = new SwarmCreateRequest("tpl-1", "idem-1", null);
@@ -285,7 +299,7 @@ class SwarmControllerTest {
     @Test
     void exposesSwarmSummaryWithTemplateMetadata() {
         SwarmRegistry registry = new SwarmRegistry();
-        Swarm swarm = new Swarm("sw1", "inst", "c");
+        Swarm swarm = new Swarm("sw1", "inst", "c", "run-1");
         swarm.attachTemplate(new SwarmTemplateMetadata(
             "tpl-1",
             "ctrl-image",
@@ -297,7 +311,6 @@ class SwarmControllerTest {
         SwarmController.SwarmSummary body = resp.getBody();
         assertThat(body.id()).isEqualTo("sw1");
         assertThat(body.workEnabled()).isTrue();
-        assertThat(body.controllerEnabled()).isFalse();
         assertThat(body.templateId()).isEqualTo("tpl-1");
         assertThat(body.controllerImage()).isEqualTo("ctrl-image");
         assertThat(body.bees()).containsExactly(new SwarmController.BeeSummary("generator", "gen-image"));
@@ -306,12 +319,12 @@ class SwarmControllerTest {
     @Test
     void listReturnsSortedSwarmsWithMetadata() {
         SwarmRegistry registry = new SwarmRegistry();
-        Swarm alpha = new Swarm("alpha", "inst-a", "c1");
+        Swarm alpha = new Swarm("alpha", "inst-a", "c1", "run-a");
         alpha.attachTemplate(new SwarmTemplateMetadata(
             "tpl-alpha",
             "ctrl-alpha",
             List.of(new Bee("generator", "gen-alpha", new Work(null, "out"), java.util.Map.of()))));
-        Swarm bravo = new Swarm("bravo", "inst-b", "c2");
+        Swarm bravo = new Swarm("bravo", "inst-b", "c2", "run-b");
         bravo.attachTemplate(new SwarmTemplateMetadata(
             "tpl-bravo",
             "ctrl-bravo",
@@ -385,7 +398,7 @@ class SwarmControllerTest {
     @Test
     void createRejectsDuplicateSwarm() throws Exception {
         SwarmRegistry registry = new SwarmRegistry();
-        registry.register(new Swarm("sw1", "inst", "c"));
+        registry.register(new Swarm("sw1", "inst", "c", "run-1"));
         SwarmController ctrl = controller(new SwarmCreateTracker(), registry, new SwarmPlanRegistry());
 
         MockMvc mvc = MockMvcBuilders.standaloneSetup(ctrl)
@@ -406,7 +419,7 @@ class SwarmControllerTest {
     @Test
     void createReturnsExistingCorrelationWhenSwarmAlreadyExists() {
         SwarmRegistry registry = new SwarmRegistry();
-        registry.register(new Swarm("sw1", "inst", "c"));
+        registry.register(new Swarm("sw1", "inst", "c", "run-1"));
         InMemoryIdempotencyStore store = new InMemoryIdempotencyStore();
         store.record("sw1", "swarm-create", "idem", "corr-123");
         SwarmController ctrl = controller(new SwarmCreateTracker(), registry, new SwarmPlanRegistry(), store);
@@ -420,10 +433,59 @@ class SwarmControllerTest {
         assertThat(body.correlationId()).isEqualTo("corr-123");
         assertThat(body.idempotencyKey()).isEqualTo("idem");
         assertThat(body.watch().successTopic()).isEqualTo(
-            ControlPlaneRouting.event("ready.swarm-create",
-                new ConfirmationScope("sw1", "orchestrator", "ALL")));
+            ControlPlaneRouting.event("outcome", "swarm-create",
+                new ConfirmationScope("sw1", "orchestrator", "orch-instance")));
         verifyNoInteractions(lifecycle);
         verifyNoInteractions(scenarioClient);
+    }
+
+    @Test
+    void journalReadsSwarmJournalNdjsonFromRuntimeRoot() throws Exception {
+        SwarmJournalController ctrl = journalController(new SwarmRegistry());
+        ReflectionTestUtils.setField(ctrl, "scenariosRuntimeRoot", tempDir.toString());
+
+        Path swarmDir = tempDir.resolve("sw1").resolve("run-1");
+        Files.createDirectories(swarmDir);
+        Path journal = swarmDir.resolve("journal.ndjson");
+
+        Map<String, Object> scope = Map.of(
+            "swarmId", "sw1",
+            "role", "swarm-controller",
+            "instance", "inst-1"
+        );
+        Map<String, Object> entry = new LinkedHashMap<>();
+        entry.put("timestamp", "2025-01-01T00:00:00Z");
+        entry.put("swarmId", "sw1");
+        entry.put("severity", "INFO");
+        entry.put("direction", "IN");
+        entry.put("kind", "signal");
+        entry.put("type", "swarm-start");
+        entry.put("origin", "orchestrator-1");
+        entry.put("scope", scope);
+        entry.put("correlationId", "c-1");
+        entry.put("idempotencyKey", "i-1");
+        entry.put("routingKey", "signal.swarm-start.sw1.swarm-controller.inst-1");
+        entry.put("data", Map.of());
+        entry.put("raw", Map.of("kind", "signal", "type", "swarm-start"));
+
+        Files.writeString(journal, mapper.writeValueAsString(entry) + "\n");
+
+        ResponseEntity<List<Map<String, Object>>> response = ctrl.journal("sw1", "run-1");
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody()).hasSize(1);
+        Map<String, Object> parsed = response.getBody().get(0);
+        assertThat(parsed.get("swarmId")).isEqualTo("sw1");
+        assertThat(parsed.get("kind")).isEqualTo("signal");
+        assertThat(parsed.get("type")).isEqualTo("swarm-start");
+        assertThat(parsed.get("idempotencyKey")).isEqualTo("i-1");
+        assertThat(parsed.get("correlationId")).isEqualTo("c-1");
+        assertThat(parsed.get("scope")).isInstanceOf(Map.class);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> parsedScope = (Map<String, Object>) parsed.get("scope");
+        assertThat(parsedScope.get("swarmId")).isEqualTo("sw1");
+        assertThat(parsedScope.get("role")).isEqualTo("swarm-controller");
     }
 
     private SwarmController controller(
@@ -446,9 +508,14 @@ class SwarmControllerTest {
             registry,
             mapper,
             scenarioClient,
+            HiveJournal.noop(),
             plans,
             new ScenarioTimelineRegistry(),
             controlPlaneProperties());
+    }
+
+    private SwarmJournalController journalController(SwarmRegistry registry) {
+        return new SwarmJournalController(mapper, jdbc, registry);
     }
 
     private static ControlPlaneProperties controlPlaneProperties() {

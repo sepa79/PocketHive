@@ -1,8 +1,8 @@
 package io.pockethive.controlplane.consumer;
 
-import io.pockethive.control.CommandTarget;
 import io.pockethive.control.ControlSignal;
 import io.pockethive.controlplane.ControlPlaneIdentity;
+import io.pockethive.controlplane.routing.ControlPlaneRouting;
 
 import java.time.Instant;
 import java.util.Objects;
@@ -23,16 +23,13 @@ public record ControlSignalEnvelope(ControlSignal signal, String routingKey, Str
         if (identity == null) {
             return false;
         }
-        CommandTarget target = signal.commandTarget();
-        if (target == null) {
+        ControlPlaneRouting.RoutingKey key = ControlPlaneRouting.parseSignal(routingKey);
+        if (key == null) {
             return false;
         }
-        return switch (target) {
-            case INSTANCE -> identity.matchesInstance(signal.role(), signal.instance());
-            case ROLE -> identity.matchesRole(signal.role());
-            case SWARM -> Objects.equals(identity.swarmId(), normalise(signal.swarmId()));
-            case ALL -> true;
-        };
+        return key.matchesSwarm(identity.swarmId())
+            && key.matchesRole(identity.role())
+            && key.matchesInstance(identity.instanceId());
     }
 
     public boolean originatedFrom(ControlPlaneIdentity identity) {

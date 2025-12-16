@@ -1,13 +1,17 @@
 package io.pockethive.worker.sdk.runtime;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.pockethive.control.CommandTarget;
+import com.fasterxml.jackson.databind.SerializationFeature;
 import io.pockethive.control.ControlSignal;
+import io.pockethive.control.AlertMessage;
 import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.controlplane.messaging.ControlPlaneEmitter;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.controlplane.worker.WorkerControlPlane;
+import io.pockethive.observability.ObservabilityContext;
+import io.pockethive.observability.ObservabilityContextUtil;
 import io.pockethive.observability.StatusEnvelopeBuilder;
+import io.pockethive.worker.sdk.api.WorkItem;
 import io.pockethive.worker.sdk.config.WorkInputConfig;
 import io.pockethive.worker.sdk.config.WorkOutputConfig;
 import io.pockethive.worker.sdk.config.WorkerCapability;
@@ -16,6 +20,7 @@ import io.pockethive.worker.sdk.config.WorkerOutputType;
 import io.pockethive.worker.sdk.runtime.WorkIoBindings;
 import io.pockethive.worker.sdk.testing.ControlPlaneTestFixtures;
 import io.pockethive.controlplane.spring.WorkerControlPlaneProperties;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -31,20 +36,24 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
 class WorkerControlPlaneRuntimeTest {
-
-    private static final ObjectMapper MAPPER = new ObjectMapper();
-    private static final String SWARM_ID = "default";
-    private static final ControlPlaneIdentity IDENTITY = new ControlPlaneIdentity(SWARM_ID, "generator", "inst-1");
-    private static final WorkerControlPlaneProperties PROPERTIES =
-        ControlPlaneTestFixtures.workerProperties(SWARM_ID, "generator", "inst-1");
-
-    private WorkerStateStore stateStore;
-    private WorkerDefinition definition;
+	
+	    private static final ObjectMapper MAPPER = new ObjectMapper()
+	        .findAndRegisterModules()
+	        .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+	    private static final String SWARM_ID = "default";
+	    private static final ControlPlaneIdentity IDENTITY = new ControlPlaneIdentity(SWARM_ID, "generator", "inst-1");
+	    private static final String ORIGIN = "orchestrator-1";
+	    private static final WorkerControlPlaneProperties PROPERTIES =
+	        ControlPlaneTestFixtures.workerProperties(SWARM_ID, "generator", "inst-1");
+	
+	    private WorkerStateStore stateStore;
+	    private WorkerDefinition definition;
     private WorkerControlPlane controlPlane;
     private WorkerControlPlaneRuntime runtime;
 
@@ -105,27 +114,27 @@ class WorkerControlPlaneRuntimeTest {
     }
 
     @Test
-    void workerConfigAccessibleAfterUpdate() throws Exception {
-        String correlationId = UUID.randomUUID().toString();
-        String idempotencyKey = UUID.randomUUID().toString();
-        Map<String, Object> args = Map.of(
-            "data", Map.of(
+	    void workerConfigAccessibleAfterUpdate() throws Exception {
+	        String correlationId = UUID.randomUUID().toString();
+	        String idempotencyKey = UUID.randomUUID().toString();
+	        Map<String, Object> args = Map.of(
+	            "data", Map.of(
                 "enabled", true,
                 "ratePerSec", 12.5
             )
-        );
-        ControlSignal signal = ControlSignal.forInstance(
-            "config-update",
-            IDENTITY.swarmId(),
-            IDENTITY.role(),
-            IDENTITY.instanceId(),
-            correlationId,
-            idempotencyKey,
-            CommandTarget.INSTANCE,
-            args
-        );
-        String payload = MAPPER.writeValueAsString(signal);
-        String routingKey = ControlPlaneRouting.signal("config-update", IDENTITY.swarmId(), IDENTITY.role(), IDENTITY.instanceId());
+	        );
+	        ControlSignal signal = ControlSignal.forInstance(
+	            "config-update",
+	            IDENTITY.swarmId(),
+	            IDENTITY.role(),
+	            IDENTITY.instanceId(),
+	            ORIGIN,
+	            correlationId,
+	            idempotencyKey,
+	            args
+	        );
+	        String payload = MAPPER.writeValueAsString(signal);
+	        String routingKey = ControlPlaneRouting.signal("config-update", IDENTITY.swarmId(), IDENTITY.role(), IDENTITY.instanceId());
 
         boolean handled = runtime.handle(payload, routingKey);
 
@@ -141,41 +150,157 @@ class WorkerControlPlaneRuntimeTest {
     }
 
     @Test
-    void configUpdateWithoutEnabledPreservesExistingState() throws Exception {
-        Map<String, Object> initialArgs = Map.of(
-            "data", Map.of("enabled", true)
+    void configUpdateValidationFailureEmitsErrorContext() throws Exception {
+        String correlationId = UUID.randomUUID().toString();
+        String idempotencyKey = UUID.randomUUID().toString();
+        Map<String, Object> args = Map.of(
+            "data", Map.of(
+                "enabled", true,
+                "ratePerSec", "not-a-number"
+            )
         );
-        ControlSignal initialSignal = ControlSignal.forInstance(
+        ControlSignal signal = ControlSignal.forInstance(
             "config-update",
             IDENTITY.swarmId(),
             IDENTITY.role(),
             IDENTITY.instanceId(),
-            UUID.randomUUID().toString(),
-            UUID.randomUUID().toString(),
-            CommandTarget.INSTANCE,
-            initialArgs
+            ORIGIN,
+            correlationId,
+            idempotencyKey,
+            args
         );
-        String initialPayload = MAPPER.writeValueAsString(initialSignal);
+        String payload = MAPPER.writeValueAsString(signal);
         String routingKey = ControlPlaneRouting.signal("config-update", IDENTITY.swarmId(), IDENTITY.role(), IDENTITY.instanceId());
+
+        boolean handled = runtime.handle(payload, routingKey);
+
+        assertThat(handled).isTrue();
+        ArgumentCaptor<ControlPlaneEmitter.ErrorContext> captor = ArgumentCaptor.forClass(ControlPlaneEmitter.ErrorContext.class);
+        verify(emitter).emitError(captor.capture());
+        ControlPlaneEmitter.ErrorContext ctx = captor.getValue();
+        assertThat(ctx.signal()).isEqualTo("config-update");
+        assertThat(ctx.correlationId()).isEqualTo(correlationId);
+        assertThat(ctx.idempotencyKey()).isEqualTo(idempotencyKey);
+        assertThat(ctx.phase()).isEqualTo("apply");
+        assertThat(ctx.details()).containsEntry("worker", definition.beanName());
+    }
+
+    @Test
+    void statusSnapshotIncludesAggregatedIoState() throws Exception {
+        runtime.statusPublisher(definition.beanName()).update(status ->
+            status.data("ioState", Map.of(
+                "work", Map.of(
+                    "input", "out-of-data",
+                    "output", "ok",
+                    "context", Map.of("dataset", "redis:users")
+                )
+            )));
+
+        runtime.emitStatusSnapshot();
+
+        ArgumentCaptor<ControlPlaneEmitter.StatusContext> captor =
+            ArgumentCaptor.forClass(ControlPlaneEmitter.StatusContext.class);
+        verify(emitter).emitStatusSnapshot(captor.capture());
+
+        Map<String, Object> snapshot = buildSnapshot(captor.getValue());
+        @SuppressWarnings("unchecked")
+        Map<String, Object> data = (Map<String, Object>) snapshot.get("data");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> ioState = (Map<String, Object>) data.get("ioState");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> work = (Map<String, Object>) ioState.get("work");
+        assertThat(work).containsEntry("input", "out-of-data").containsEntry("output", "ok");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> ctx = (Map<String, Object>) work.get("context");
+        assertThat(ctx).containsEntry("dataset", "redis:users");
+    }
+
+    @Test
+    void emitsIoOutOfDataAlertOnTransitionOnly() {
+        runtime.statusPublisher(definition.beanName()).update(status ->
+            status.data("ioState", Map.of("work", Map.of("input", "ok", "output", "ok"))));
+
+        runtime.emitStatusDelta();
+
+        runtime.statusPublisher(definition.beanName()).update(status ->
+            status.data("ioState", Map.of(
+                "work", Map.of(
+                    "input", "out-of-data",
+                    "output", "ok",
+                    "context", Map.of("dataset", "csv:customers", "logRef", "loki://trace/123")
+                )
+            )));
+
+        runtime.emitStatusDelta();
+        runtime.emitStatusDelta();
+
+        ArgumentCaptor<AlertMessage> alertCaptor = ArgumentCaptor.forClass(AlertMessage.class);
+        verify(emitter, times(1)).publishAlert(alertCaptor.capture());
+        AlertMessage alert = alertCaptor.getValue();
+        assertThat(alert.data().code()).isEqualTo("io.out-of-data");
+        assertThat(alert.data().context()).containsEntry("dataset", "csv:customers");
+        assertThat(alert.data().logRef()).isEqualTo("loki://trace/123");
+    }
+
+    @Test
+    void publishWorkErrorEmitsRuntimeExceptionAlertWithContext() {
+        ObservabilityContext trace = ObservabilityContextUtil.init("worker", IDENTITY.instanceId(), IDENTITY.swarmId());
+        WorkItem item = WorkItem.text("payload")
+            .header("message-id", "mid-1")
+            .header("x-ph-call-id", "redis-auth")
+            .observabilityContext(trace)
+            .build();
+        RuntimeException failure = new RuntimeException("boom");
+
+        runtime.publishWorkError(definition.beanName(), item, failure);
+
+        ArgumentCaptor<AlertMessage> alertCaptor = ArgumentCaptor.forClass(AlertMessage.class);
+        verify(emitter).publishAlert(alertCaptor.capture());
+        AlertMessage alert = alertCaptor.getValue();
+        assertThat(alert.data().code()).isEqualTo("runtime.exception");
+        assertThat(alert.data().context())
+            .containsEntry("worker", definition.beanName())
+            .containsEntry("messageId", "mid-1")
+            .containsEntry("callId", "redis-auth")
+            .containsEntry("traceId", trace.getTraceId());
+    }
+
+    @Test
+	    void configUpdateWithoutEnabledPreservesExistingState() throws Exception {
+	        Map<String, Object> initialArgs = Map.of(
+	            "data", Map.of("enabled", true)
+	        );
+	        ControlSignal initialSignal = ControlSignal.forInstance(
+            "config-update",
+	            IDENTITY.swarmId(),
+	            IDENTITY.role(),
+	            IDENTITY.instanceId(),
+	            ORIGIN,
+	            UUID.randomUUID().toString(),
+	            UUID.randomUUID().toString(),
+	            initialArgs
+	        );
+	        String initialPayload = MAPPER.writeValueAsString(initialSignal);
+	        String routingKey = ControlPlaneRouting.signal("config-update", IDENTITY.swarmId(), IDENTITY.role(), IDENTITY.instanceId());
 
         runtime.handle(initialPayload, routingKey);
 
         assertThat(runtime.workerEnabled(definition.beanName())).isTrue();
 
-        Map<String, Object> updateArgs = Map.of(
-            "data", Map.of("ratePerSec", 20.0)
-        );
-        ControlSignal updateSignal = ControlSignal.forInstance(
+	        Map<String, Object> updateArgs = Map.of(
+	            "data", Map.of("ratePerSec", 20.0)
+	        );
+	        ControlSignal updateSignal = ControlSignal.forInstance(
             "config-update",
-            IDENTITY.swarmId(),
-            IDENTITY.role(),
-            IDENTITY.instanceId(),
-            UUID.randomUUID().toString(),
-            UUID.randomUUID().toString(),
-            CommandTarget.INSTANCE,
-            updateArgs
-        );
-        String updatePayload = MAPPER.writeValueAsString(updateSignal);
+	            IDENTITY.swarmId(),
+	            IDENTITY.role(),
+	            IDENTITY.instanceId(),
+	            ORIGIN,
+	            UUID.randomUUID().toString(),
+	            UUID.randomUUID().toString(),
+	            updateArgs
+	        );
+	        String updatePayload = MAPPER.writeValueAsString(updateSignal);
 
         runtime.handle(updatePayload, routingKey);
 
@@ -185,41 +310,41 @@ class WorkerControlPlaneRuntimeTest {
     }
 
     @Test
-    void explicitEmptyPayloadResetsWorkerConfig() throws Exception {
-        Map<String, Object> initialArgs = Map.of(
-            "data", Map.of(
-                "enabled", true,
+	    void explicitEmptyPayloadResetsWorkerConfig() throws Exception {
+	        Map<String, Object> initialArgs = Map.of(
+	            "data", Map.of(
+	                "enabled", true,
                 "ratePerSec", 15.0
             )
-        );
-        ControlSignal initialSignal = ControlSignal.forInstance(
-            "config-update",
-            IDENTITY.swarmId(),
-            IDENTITY.role(),
-            IDENTITY.instanceId(),
-            UUID.randomUUID().toString(),
-            UUID.randomUUID().toString(),
-            CommandTarget.INSTANCE,
-            initialArgs
-        );
-        String routingKey = ControlPlaneRouting.signal("config-update", IDENTITY.swarmId(), IDENTITY.role(), IDENTITY.instanceId());
-        runtime.handle(MAPPER.writeValueAsString(initialSignal), routingKey);
+	        );
+	        ControlSignal initialSignal = ControlSignal.forInstance(
+	            "config-update",
+	            IDENTITY.swarmId(),
+	            IDENTITY.role(),
+	            IDENTITY.instanceId(),
+	            ORIGIN,
+	            UUID.randomUUID().toString(),
+	            UUID.randomUUID().toString(),
+	            initialArgs
+	        );
+	        String routingKey = ControlPlaneRouting.signal("config-update", IDENTITY.swarmId(), IDENTITY.role(), IDENTITY.instanceId());
+	        runtime.handle(MAPPER.writeValueAsString(initialSignal), routingKey);
 
         Map<String, Object> resetArgs = Map.of(
             "data", Map.of(
                 "workers", Map.of(definition.beanName(), Map.of())
             )
-        );
-        ControlSignal resetSignal = ControlSignal.forInstance(
-            "config-update",
-            IDENTITY.swarmId(),
-            IDENTITY.role(),
-            IDENTITY.instanceId(),
-            UUID.randomUUID().toString(),
-            UUID.randomUUID().toString(),
-            CommandTarget.INSTANCE,
-            resetArgs
-        );
+	        );
+	        ControlSignal resetSignal = ControlSignal.forInstance(
+	            "config-update",
+	            IDENTITY.swarmId(),
+	            IDENTITY.role(),
+	            IDENTITY.instanceId(),
+	            ORIGIN,
+	            UUID.randomUUID().toString(),
+	            UUID.randomUUID().toString(),
+	            resetArgs
+	        );
 
         runtime.handle(MAPPER.writeValueAsString(resetSignal), routingKey);
 
@@ -228,7 +353,7 @@ class WorkerControlPlaneRuntimeTest {
     }
 
     @Test
-    void partiallyTargetedWorkersMapDoesNotResetUntouchedWorkers() throws Exception {
+	    void partiallyTargetedWorkersMapDoesNotResetUntouchedWorkers() throws Exception {
         WorkerDefinition otherDefinition = new WorkerDefinition(
             "secondaryWorker",
             TestWorker.class,
@@ -248,34 +373,34 @@ class WorkerControlPlaneRuntimeTest {
         Map<String, Object> firstWorkerArgs = Map.of(
             "worker", definition.beanName(),
             "data", Map.of("ratePerSec", 17.5)
-        );
-        ControlSignal firstWorkerSignal = ControlSignal.forInstance(
-            "config-update",
-            IDENTITY.swarmId(),
-            IDENTITY.role(),
-            IDENTITY.instanceId(),
-            UUID.randomUUID().toString(),
-            UUID.randomUUID().toString(),
-            CommandTarget.INSTANCE,
-            firstWorkerArgs
-        );
-        runtime.handle(MAPPER.writeValueAsString(firstWorkerSignal), routingKey);
+	        );
+	        ControlSignal firstWorkerSignal = ControlSignal.forInstance(
+	            "config-update",
+	            IDENTITY.swarmId(),
+	            IDENTITY.role(),
+	            IDENTITY.instanceId(),
+	            ORIGIN,
+	            UUID.randomUUID().toString(),
+	            UUID.randomUUID().toString(),
+	            firstWorkerArgs
+	        );
+	        runtime.handle(MAPPER.writeValueAsString(firstWorkerSignal), routingKey);
 
         Map<String, Object> secondWorkerArgs = Map.of(
             "worker", otherDefinition.beanName(),
             "data", Map.of("ratePerSec", 42.0)
-        );
-        ControlSignal secondWorkerSignal = ControlSignal.forInstance(
-            "config-update",
-            IDENTITY.swarmId(),
-            IDENTITY.role(),
-            IDENTITY.instanceId(),
-            UUID.randomUUID().toString(),
-            UUID.randomUUID().toString(),
-            CommandTarget.INSTANCE,
-            secondWorkerArgs
-        );
-        runtime.handle(MAPPER.writeValueAsString(secondWorkerSignal), routingKey);
+	        );
+	        ControlSignal secondWorkerSignal = ControlSignal.forInstance(
+	            "config-update",
+	            IDENTITY.swarmId(),
+	            IDENTITY.role(),
+	            IDENTITY.instanceId(),
+	            ORIGIN,
+	            UUID.randomUUID().toString(),
+	            UUID.randomUUID().toString(),
+	            secondWorkerArgs
+	        );
+	        runtime.handle(MAPPER.writeValueAsString(secondWorkerSignal), routingKey);
 
         Map<String, Object> broadcastArgs = Map.of(
             "data", Map.of(
@@ -283,18 +408,18 @@ class WorkerControlPlaneRuntimeTest {
                     definition.beanName(), Map.of("ratePerSec", 99.0)
                 )
             )
-        );
-        ControlSignal broadcastSignal = ControlSignal.forInstance(
-            "config-update",
-            IDENTITY.swarmId(),
-            IDENTITY.role(),
-            IDENTITY.instanceId(),
-            UUID.randomUUID().toString(),
-            UUID.randomUUID().toString(),
-            CommandTarget.ROLE,
-            broadcastArgs
-        );
-        runtime.handle(MAPPER.writeValueAsString(broadcastSignal), routingKey);
+	        );
+	        ControlSignal broadcastSignal = ControlSignal.forInstance(
+	            "config-update",
+	            IDENTITY.swarmId(),
+	            IDENTITY.role(),
+	            IDENTITY.instanceId(),
+	            ORIGIN,
+	            UUID.randomUUID().toString(),
+	            UUID.randomUUID().toString(),
+	            broadcastArgs
+	        );
+	        runtime.handle(MAPPER.writeValueAsString(broadcastSignal), routingKey);
 
         assertThat(runtime.workerRawConfig(definition.beanName()))
             .containsEntry("ratePerSec", 99.0);
@@ -305,36 +430,36 @@ class WorkerControlPlaneRuntimeTest {
     }
 
     @Test
-    void configUpdateWithoutPayloadDoesNotClearExistingOverride() throws Exception {
+	    void configUpdateWithoutPayloadDoesNotClearExistingOverride() throws Exception {
         Map<String, Object> initialArgs = Map.of(
             "data", Map.of("ratePerSec", 18.0)
-        );
-        ControlSignal initialSignal = ControlSignal.forInstance(
-            "config-update",
-            IDENTITY.swarmId(),
-            IDENTITY.role(),
-            IDENTITY.instanceId(),
-            UUID.randomUUID().toString(),
-            UUID.randomUUID().toString(),
-            CommandTarget.INSTANCE,
-            initialArgs
-        );
+	        );
+	        ControlSignal initialSignal = ControlSignal.forInstance(
+	            "config-update",
+	            IDENTITY.swarmId(),
+	            IDENTITY.role(),
+	            IDENTITY.instanceId(),
+	            ORIGIN,
+	            UUID.randomUUID().toString(),
+	            UUID.randomUUID().toString(),
+	            initialArgs
+	        );
         String routingKey = ControlPlaneRouting.signal("config-update", IDENTITY.swarmId(), IDENTITY.role(), IDENTITY.instanceId());
         runtime.handle(MAPPER.writeValueAsString(initialSignal), routingKey);
 
         Map<String, Object> noopArgs = Map.of(
             "worker", definition.beanName()
-        );
-        ControlSignal noopSignal = ControlSignal.forInstance(
-            "config-update",
-            IDENTITY.swarmId(),
-            IDENTITY.role(),
-            IDENTITY.instanceId(),
-            UUID.randomUUID().toString(),
-            UUID.randomUUID().toString(),
-            CommandTarget.INSTANCE,
-            noopArgs
-        );
+	        );
+	        ControlSignal noopSignal = ControlSignal.forInstance(
+	            "config-update",
+	            IDENTITY.swarmId(),
+	            IDENTITY.role(),
+	            IDENTITY.instanceId(),
+	            ORIGIN,
+	            UUID.randomUUID().toString(),
+	            UUID.randomUUID().toString(),
+	            noopArgs
+	        );
 
         runtime.handle(MAPPER.writeValueAsString(noopSignal), routingKey);
 
@@ -346,39 +471,39 @@ class WorkerControlPlaneRuntimeTest {
     }
 
     @Test
-    void enablementToggleWithoutConfigRetainsExistingOverrides() throws Exception {
+	    void enablementToggleWithoutConfigRetainsExistingOverrides() throws Exception {
         Map<String, Object> initialArgs = Map.of(
             "data", Map.of(
                 "enabled", true,
                 "ratePerSec", 9.5
             )
-        );
-        ControlSignal initialSignal = ControlSignal.forInstance(
-            "config-update",
-            IDENTITY.swarmId(),
-            IDENTITY.role(),
-            IDENTITY.instanceId(),
-            UUID.randomUUID().toString(),
-            UUID.randomUUID().toString(),
-            CommandTarget.INSTANCE,
-            initialArgs
-        );
+	        );
+	        ControlSignal initialSignal = ControlSignal.forInstance(
+	            "config-update",
+	            IDENTITY.swarmId(),
+	            IDENTITY.role(),
+	            IDENTITY.instanceId(),
+	            ORIGIN,
+	            UUID.randomUUID().toString(),
+	            UUID.randomUUID().toString(),
+	            initialArgs
+	        );
         String routingKey = ControlPlaneRouting.signal("config-update", IDENTITY.swarmId(), IDENTITY.role(), IDENTITY.instanceId());
         runtime.handle(MAPPER.writeValueAsString(initialSignal), routingKey);
 
         Map<String, Object> toggleArgs = Map.of(
             "enabled", false
-        );
-        ControlSignal toggleSignal = ControlSignal.forInstance(
-            "config-update",
-            IDENTITY.swarmId(),
-            IDENTITY.role(),
-            IDENTITY.instanceId(),
-            UUID.randomUUID().toString(),
-            UUID.randomUUID().toString(),
-            CommandTarget.INSTANCE,
-            toggleArgs
-        );
+	        );
+	        ControlSignal toggleSignal = ControlSignal.forInstance(
+	            "config-update",
+	            IDENTITY.swarmId(),
+	            IDENTITY.role(),
+	            IDENTITY.instanceId(),
+	            ORIGIN,
+	            UUID.randomUUID().toString(),
+	            UUID.randomUUID().toString(),
+	            toggleArgs
+	        );
 
         runtime.handle(MAPPER.writeValueAsString(toggleSignal), routingKey);
 
@@ -392,24 +517,24 @@ class WorkerControlPlaneRuntimeTest {
     }
 
     @Test
-    void partialConfigUpdateRetainsSeededDefaults() throws Exception {
+	    void partialConfigUpdateRetainsSeededDefaults() throws Exception {
         TestConfig defaults = new TestConfig(true, 7.5);
         runtime.registerDefaultConfig(definition.beanName(), defaults);
         reset(emitter);
 
         Map<String, Object> args = Map.of(
             "data", Map.of("ratePerSec", 20.0)
-        );
-        ControlSignal signal = ControlSignal.forInstance(
-            "config-update",
-            IDENTITY.swarmId(),
-            IDENTITY.role(),
-            IDENTITY.instanceId(),
-            UUID.randomUUID().toString(),
-            UUID.randomUUID().toString(),
-            CommandTarget.INSTANCE,
-            args
-        );
+	        );
+	        ControlSignal signal = ControlSignal.forInstance(
+	            "config-update",
+	            IDENTITY.swarmId(),
+	            IDENTITY.role(),
+	            IDENTITY.instanceId(),
+	            ORIGIN,
+	            UUID.randomUUID().toString(),
+	            UUID.randomUUID().toString(),
+	            args
+	        );
         String payload = MAPPER.writeValueAsString(signal);
         String routingKey = ControlPlaneRouting.signal("config-update", IDENTITY.swarmId(), IDENTITY.role(), IDENTITY.instanceId());
 
@@ -430,17 +555,17 @@ class WorkerControlPlaneRuntimeTest {
 
         Map<String, Object> data = new java.util.LinkedHashMap<>();
         data.put("ratePerSec", null);
-        Map<String, Object> args = Map.of("data", data);
-        ControlSignal signal = ControlSignal.forInstance(
-            "config-update",
-            IDENTITY.swarmId(),
-            IDENTITY.role(),
-            IDENTITY.instanceId(),
-            UUID.randomUUID().toString(),
-            UUID.randomUUID().toString(),
-            CommandTarget.INSTANCE,
-            args
-        );
+	        Map<String, Object> args = Map.of("data", data);
+	        ControlSignal signal = ControlSignal.forInstance(
+	            "config-update",
+	            IDENTITY.swarmId(),
+	            IDENTITY.role(),
+	            IDENTITY.instanceId(),
+	            ORIGIN,
+	            UUID.randomUUID().toString(),
+	            UUID.randomUUID().toString(),
+	            args
+	        );
         String payload = MAPPER.writeValueAsString(signal);
         String routingKey = ControlPlaneRouting.signal("config-update", IDENTITY.swarmId(), IDENTITY.role(), IDENTITY.instanceId());
 
@@ -468,19 +593,19 @@ class WorkerControlPlaneRuntimeTest {
         assertThat(initial.outboundQueue()).contains(definition.io().outboundQueue());
         assertThat(initial.exchange()).contains(definition.io().outboundExchange());
 
-        Map<String, Object> args = Map.of(
-            "data", Map.of("enabled", true)
-        );
-        ControlSignal signal = ControlSignal.forInstance(
-            "config-update",
-            IDENTITY.swarmId(),
-            IDENTITY.role(),
-            IDENTITY.instanceId(),
-            UUID.randomUUID().toString(),
-            UUID.randomUUID().toString(),
-            CommandTarget.INSTANCE,
-            args
-        );
+	        Map<String, Object> args = Map.of(
+	            "data", Map.of("enabled", true)
+	        );
+	        ControlSignal signal = ControlSignal.forInstance(
+	            "config-update",
+	            IDENTITY.swarmId(),
+	            IDENTITY.role(),
+	            IDENTITY.instanceId(),
+	            ORIGIN,
+	            UUID.randomUUID().toString(),
+	            UUID.randomUUID().toString(),
+	            args
+	        );
         String payload = MAPPER.writeValueAsString(signal);
         String routingKey = ControlPlaneRouting.signal("config-update", IDENTITY.swarmId(), IDENTITY.role(), IDENTITY.instanceId());
 
@@ -492,40 +617,39 @@ class WorkerControlPlaneRuntimeTest {
     }
 
     @Test
-    void statusSnapshotsReflectWorkerEnablement() throws Exception {
-        runtime.emitStatusSnapshot();
+	    void statusSnapshotsReflectWorkerEnablement() throws Exception {
+	        runtime.emitStatusSnapshot();
 
         ArgumentCaptor<ControlPlaneEmitter.StatusContext> statusCaptor =
             ArgumentCaptor.forClass(ControlPlaneEmitter.StatusContext.class);
         verify(emitter).emitStatusSnapshot(statusCaptor.capture());
 
-        Map<String, Object> initialSnapshot = buildSnapshot(statusCaptor.getValue());
-        assertThat(initialSnapshot.get("enabled")).isEqualTo(false);
-
-        @SuppressWarnings("unchecked")
-        Map<String, Object> initialData = (Map<String, Object>) initialSnapshot.get("data");
-        assertThat(initialData).isNotNull();
-        @SuppressWarnings("unchecked")
-        java.util.List<Map<String, Object>> initialWorkers =
-            (java.util.List<Map<String, Object>>) initialData.get("workers");
+	        Map<String, Object> initialSnapshot = buildSnapshot(statusCaptor.getValue());
+	        @SuppressWarnings("unchecked")
+	        Map<String, Object> initialData = (Map<String, Object>) initialSnapshot.get("data");
+	        assertThat(initialData.get("enabled")).isEqualTo(false);
+	        assertThat(initialData).isNotNull();
+	        @SuppressWarnings("unchecked")
+	        java.util.List<Map<String, Object>> initialWorkers =
+	            (java.util.List<Map<String, Object>>) initialData.get("workers");
         assertThat(initialWorkers).hasSize(1);
         assertThat(initialWorkers.get(0).get("enabled")).isEqualTo(false);
 
         reset(emitter);
 
-        Map<String, Object> args = Map.of(
-            "data", Map.of("enabled", true)
-        );
-        ControlSignal signal = ControlSignal.forInstance(
-            "config-update",
-            IDENTITY.swarmId(),
-            IDENTITY.role(),
-            IDENTITY.instanceId(),
-            UUID.randomUUID().toString(),
-            UUID.randomUUID().toString(),
-            CommandTarget.INSTANCE,
-            args
-        );
+	        Map<String, Object> args = Map.of(
+	            "data", Map.of("enabled", true)
+	        );
+	        ControlSignal signal = ControlSignal.forInstance(
+	            "config-update",
+	            IDENTITY.swarmId(),
+	            IDENTITY.role(),
+	            IDENTITY.instanceId(),
+	            ORIGIN,
+	            UUID.randomUUID().toString(),
+	            UUID.randomUUID().toString(),
+	            args
+	        );
         String payload = MAPPER.writeValueAsString(signal);
         String routingKey = ControlPlaneRouting.signal("config-update", IDENTITY.swarmId(), IDENTITY.role(), IDENTITY.instanceId());
 
@@ -538,15 +662,14 @@ class WorkerControlPlaneRuntimeTest {
             ArgumentCaptor.forClass(ControlPlaneEmitter.StatusContext.class);
         verify(emitter).emitStatusSnapshot(updatedCaptor.capture());
 
-        Map<String, Object> updatedSnapshot = buildSnapshot(updatedCaptor.getValue());
-        assertThat(updatedSnapshot.get("enabled")).isEqualTo(true);
-
-        @SuppressWarnings("unchecked")
-        Map<String, Object> updatedData = (Map<String, Object>) updatedSnapshot.get("data");
-        assertThat(updatedData).isNotNull();
-        @SuppressWarnings("unchecked")
-        java.util.List<Map<String, Object>> updatedWorkers =
-            (java.util.List<Map<String, Object>>) updatedData.get("workers");
+	        Map<String, Object> updatedSnapshot = buildSnapshot(updatedCaptor.getValue());
+	        @SuppressWarnings("unchecked")
+	        Map<String, Object> updatedData = (Map<String, Object>) updatedSnapshot.get("data");
+	        assertThat(updatedData.get("enabled")).isEqualTo(true);
+	        assertThat(updatedData).isNotNull();
+	        @SuppressWarnings("unchecked")
+	        java.util.List<Map<String, Object>> updatedWorkers =
+	            (java.util.List<Map<String, Object>>) updatedData.get("workers");
         assertThat(updatedWorkers).hasSize(1);
         assertThat(updatedWorkers.get(0).get("enabled")).isEqualTo(true);
     }
@@ -578,18 +701,27 @@ class WorkerControlPlaneRuntimeTest {
         assertThat(capabilities).containsExactly("SCHEDULER");
     }
 
-    @Test
-    void statusRequestWithoutPayloadEmitsSnapshot() {
-        runtime.registerDefaultConfig(definition.beanName(), new TestConfig(true, 5.0));
-        reset(emitter);
+	    @Test
+	    void statusRequestWithoutPayloadEmitsSnapshot() throws Exception {
+	        runtime.registerDefaultConfig(definition.beanName(), new TestConfig(true, 5.0));
+	        reset(emitter);
 
-        String routingKey = ControlPlaneRouting.signal("status-request", IDENTITY.swarmId(), IDENTITY.role(), IDENTITY.instanceId());
+	        String routingKey = ControlPlaneRouting.signal("status-request", IDENTITY.swarmId(), IDENTITY.role(), IDENTITY.instanceId());
+	        ControlSignal signal = ControlSignal.forInstance(
+	            "status-request",
+	            IDENTITY.swarmId(),
+	            IDENTITY.role(),
+	            IDENTITY.instanceId(),
+	            ORIGIN,
+	            UUID.randomUUID().toString(),
+	            null,
+	            null);
 
-        boolean handled = runtime.handle("{}", routingKey);
+	        boolean handled = runtime.handle(MAPPER.writeValueAsString(signal), routingKey);
 
-        assertThat(handled).isTrue();
-        verify(emitter).emitStatusSnapshot(any());
-    }
+	        assertThat(handled).isTrue();
+	        verify(emitter).emitStatusSnapshot(any());
+	    }
 
     @Test
     void controlPlaneConfigOverridesSeededDefaults() throws Exception {
@@ -601,17 +733,17 @@ class WorkerControlPlaneRuntimeTest {
                 "enabled", true,
                 "ratePerSec", 11.0
             )
-        );
-        ControlSignal signal = ControlSignal.forInstance(
-            "config-update",
-            IDENTITY.swarmId(),
-            IDENTITY.role(),
-            IDENTITY.instanceId(),
-            UUID.randomUUID().toString(),
-            UUID.randomUUID().toString(),
-            CommandTarget.INSTANCE,
-            args
-        );
+	        );
+	        ControlSignal signal = ControlSignal.forInstance(
+	            "config-update",
+	            IDENTITY.swarmId(),
+	            IDENTITY.role(),
+	            IDENTITY.instanceId(),
+	            ORIGIN,
+	            UUID.randomUUID().toString(),
+	            UUID.randomUUID().toString(),
+	            args
+	        );
         String payload = MAPPER.writeValueAsString(signal);
         String routingKey = ControlPlaneRouting.signal("config-update", IDENTITY.swarmId(), IDENTITY.role(), IDENTITY.instanceId());
 
@@ -625,13 +757,15 @@ class WorkerControlPlaneRuntimeTest {
         assertThat(rawConfig).containsEntry("ratePerSec", 11.0);
     }
 
-    private Map<String, Object> buildSnapshot(ControlPlaneEmitter.StatusContext context) throws Exception {
-        StatusEnvelopeBuilder builder = new StatusEnvelopeBuilder();
-        context.customiser().accept(builder);
-        @SuppressWarnings("unchecked")
-        Map<String, Object> snapshot = MAPPER.readValue(builder.toJson(), Map.class);
-        return snapshot;
-    }
+	    private Map<String, Object> buildSnapshot(ControlPlaneEmitter.StatusContext context) throws Exception {
+	        StatusEnvelopeBuilder builder = new StatusEnvelopeBuilder();
+	        builder.type("status-full");
+	        builder.origin(IDENTITY.instanceId());
+	        context.customiser().accept(builder);
+	        @SuppressWarnings("unchecked")
+	        Map<String, Object> snapshot = MAPPER.readValue(builder.toJson(), Map.class);
+	        return snapshot;
+	    }
 
     private static final class TestWorker {
         // marker class for definition

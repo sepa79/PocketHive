@@ -30,11 +30,8 @@ public final class OrchestratorControlPlaneTopologyDescriptor implements Control
     public Optional<ControlQueueDescriptor> controlQueue(String instanceId) {
         String id = requireInstanceId(instanceId);
         String queueName = controlQueuePrefix + "." + ROLE + "." + id;
-        Set<String> readyErrorEvents = Set.of(
-            lifecycleEventPattern("ready"),
-            lifecycleEventPattern("error")
-        );
-        return Optional.of(new ControlQueueDescriptor(queueName, Set.of(), readyErrorEvents));
+        Set<String> outcomeEvents = Set.of(lifecycleEventPattern("outcome"));
+        return Optional.of(new ControlQueueDescriptor(queueName, Set.of(), outcomeEvents));
     }
 
     @Override
@@ -50,10 +47,7 @@ public final class OrchestratorControlPlaneTopologyDescriptor implements Control
 
     @Override
     public ControlPlaneRouteCatalog routes() {
-        Set<String> lifecycleEvents = Set.of(
-            lifecycleEventPattern("ready"),
-            lifecycleEventPattern("error")
-        );
+        Set<String> lifecycleEvents = Set.of(lifecycleEventPattern("outcome"));
         Set<String> statusEvents = Set.of(
             controllerStatusPattern("status-full"),
             controllerStatusPattern("status-delta")
@@ -67,9 +61,8 @@ public final class OrchestratorControlPlaneTopologyDescriptor implements Control
     }
 
     private static String controllerStatusPattern(String type) {
-        ConfirmationScope scope = new ConfirmationScope(null, "swarm-controller", "*");
-        String base = ControlPlaneRouting.event(type, scope);
-        return base.replace(".ALL.swarm-controller", ".swarm-controller");
+        ConfirmationScope scope = new ConfirmationScope("*", "swarm-controller", "*");
+        return ControlPlaneRouting.event("metric", type, scope);
     }
 
     private static String requireInstanceId(String instanceId) {

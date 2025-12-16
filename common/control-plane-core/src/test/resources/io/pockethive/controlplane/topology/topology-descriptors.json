@@ -4,42 +4,42 @@
     "controlQueue": {
       "name": "ph.control.swarm-alpha.processor.inst",
       "signalBindings": [
-        "sig.config-update.ALL.processor.ALL",
-        "sig.config-update.swarm-alpha.ALL.ALL",
-        "sig.config-update.swarm-alpha.processor.ALL",
-        "sig.config-update.swarm-alpha.processor.inst",
-        "sig.status-request.ALL.processor.ALL",
-        "sig.status-request.swarm-alpha.ALL.ALL",
-        "sig.status-request.swarm-alpha.processor.ALL",
-        "sig.status-request.swarm-alpha.processor.inst"
+        "signal.config-update.ALL.processor.ALL",
+        "signal.config-update.swarm-alpha.ALL.ALL",
+        "signal.config-update.swarm-alpha.processor.ALL",
+        "signal.config-update.swarm-alpha.processor.inst",
+        "signal.status-request.ALL.processor.ALL",
+        "signal.status-request.swarm-alpha.ALL.ALL",
+        "signal.status-request.swarm-alpha.processor.ALL",
+        "signal.status-request.swarm-alpha.processor.inst"
       ],
       "eventBindings": [],
       "allBindings": [
-        "sig.config-update.ALL.processor.ALL",
-        "sig.config-update.swarm-alpha.ALL.ALL",
-        "sig.config-update.swarm-alpha.processor.ALL",
-        "sig.config-update.swarm-alpha.processor.inst",
-        "sig.status-request.ALL.processor.ALL",
-        "sig.status-request.swarm-alpha.ALL.ALL",
-        "sig.status-request.swarm-alpha.processor.ALL",
-        "sig.status-request.swarm-alpha.processor.inst"
+        "signal.config-update.ALL.processor.ALL",
+        "signal.config-update.swarm-alpha.ALL.ALL",
+        "signal.config-update.swarm-alpha.processor.ALL",
+        "signal.config-update.swarm-alpha.processor.inst",
+        "signal.status-request.ALL.processor.ALL",
+        "signal.status-request.swarm-alpha.ALL.ALL",
+        "signal.status-request.swarm-alpha.processor.ALL",
+        "signal.status-request.swarm-alpha.processor.inst"
       ]
     },
     "additionalQueues": [],
     "routes": {
       "configSignals": [
-        "sig.config-update.ALL.processor.ALL",
-        "sig.config-update.swarm-alpha.ALL.ALL",
-        "sig.config-update.swarm-alpha.processor.ALL",
-        "sig.config-update.swarm-alpha.processor.{instance}"
+        "signal.config-update.ALL.processor.ALL",
+        "signal.config-update.swarm-alpha.ALL.ALL",
+        "signal.config-update.swarm-alpha.processor.ALL",
+        "signal.config-update.swarm-alpha.processor.{instance}"
       ],
       "otherEvents": [],
       "statusEvents": [],
       "statusSignals": [
-        "sig.status-request.ALL.processor.ALL",
-        "sig.status-request.swarm-alpha.ALL.ALL",
-        "sig.status-request.swarm-alpha.processor.ALL",
-        "sig.status-request.swarm-alpha.processor.{instance}"
+        "signal.status-request.ALL.processor.ALL",
+        "signal.status-request.swarm-alpha.ALL.ALL",
+        "signal.status-request.swarm-alpha.processor.ALL",
+        "signal.status-request.swarm-alpha.processor.{instance}"
       ],
       "lifecycleSignals": [],
       "lifecycleEvents": []
@@ -50,42 +50,42 @@
     "controlQueue": {
       "name": "ph.control.swarm-alpha.generator.inst",
       "signalBindings": [
-        "sig.config-update.ALL.generator.ALL",
-        "sig.config-update.swarm-alpha.ALL.ALL",
-        "sig.config-update.swarm-alpha.generator.ALL",
-        "sig.config-update.swarm-alpha.generator.inst",
-        "sig.status-request.ALL.generator.ALL",
-        "sig.status-request.swarm-alpha.ALL.ALL",
-        "sig.status-request.swarm-alpha.generator.ALL",
-        "sig.status-request.swarm-alpha.generator.inst"
+        "signal.config-update.ALL.generator.ALL",
+        "signal.config-update.swarm-alpha.ALL.ALL",
+        "signal.config-update.swarm-alpha.generator.ALL",
+        "signal.config-update.swarm-alpha.generator.inst",
+        "signal.status-request.ALL.generator.ALL",
+        "signal.status-request.swarm-alpha.ALL.ALL",
+        "signal.status-request.swarm-alpha.generator.ALL",
+        "signal.status-request.swarm-alpha.generator.inst"
       ],
       "eventBindings": [],
       "allBindings": [
-        "sig.config-update.ALL.generator.ALL",
-        "sig.config-update.swarm-alpha.ALL.ALL",
-        "sig.config-update.swarm-alpha.generator.ALL",
-        "sig.config-update.swarm-alpha.generator.inst",
-        "sig.status-request.ALL.generator.ALL",
-        "sig.status-request.swarm-alpha.ALL.ALL",
-        "sig.status-request.swarm-alpha.generator.ALL",
-        "sig.status-request.swarm-alpha.generator.inst"
+        "signal.config-update.ALL.generator.ALL",
+        "signal.config-update.swarm-alpha.ALL.ALL",
+        "signal.config-update.swarm-alpha.generator.ALL",
+        "signal.config-update.swarm-alpha.generator.inst",
+        "signal.status-request.ALL.generator.ALL",
+        "signal.status-request.swarm-alpha.ALL.ALL",
+        "signal.status-request.swarm-alpha.generator.ALL",
+        "signal.status-request.swarm-alpha.generator.inst"
       ]
     },
     "additionalQueues": [],
     "routes": {
       "configSignals": [
-        "sig.config-update.ALL.generator.ALL",
-        "sig.config-update.swarm-alpha.ALL.ALL",
-        "sig.config-update.swarm-alpha.generator.ALL",
-        "sig.config-update.swarm-alpha.generator.{instance}"
+        "signal.config-update.ALL.generator.ALL",
+        "signal.config-update.swarm-alpha.ALL.ALL",
+        "signal.config-update.swarm-alpha.generator.ALL",
+        "signal.config-update.swarm-alpha.generator.{instance}"
       ],
       "otherEvents": [],
       "statusEvents": [],
       "statusSignals": [
-        "sig.status-request.ALL.generator.ALL",
-        "sig.status-request.swarm-alpha.ALL.ALL",
-        "sig.status-request.swarm-alpha.generator.ALL",
-        "sig.status-request.swarm-alpha.generator.{instance}"
+        "signal.status-request.ALL.generator.ALL",
+        "signal.status-request.swarm-alpha.ALL.ALL",
+        "signal.status-request.swarm-alpha.generator.ALL",
+        "signal.status-request.swarm-alpha.generator.{instance}"
       ],
       "lifecycleSignals": [],
       "lifecycleEvents": []
@@ -96,42 +96,42 @@
     "controlQueue": {
       "name": "ph.control.swarm-alpha.trigger.inst",
       "signalBindings": [
-        "sig.config-update.ALL.trigger.ALL",
-        "sig.config-update.swarm-alpha.ALL.ALL",
-        "sig.config-update.swarm-alpha.trigger.ALL",
-        "sig.config-update.swarm-alpha.trigger.inst",
-        "sig.status-request.ALL.trigger.ALL",
-        "sig.status-request.swarm-alpha.ALL.ALL",
-        "sig.status-request.swarm-alpha.trigger.ALL",
-        "sig.status-request.swarm-alpha.trigger.inst"
+        "signal.config-update.ALL.trigger.ALL",
+        "signal.config-update.swarm-alpha.ALL.ALL",
+        "signal.config-update.swarm-alpha.trigger.ALL",
+        "signal.config-update.swarm-alpha.trigger.inst",
+        "signal.status-request.ALL.trigger.ALL",
+        "signal.status-request.swarm-alpha.ALL.ALL",
+        "signal.status-request.swarm-alpha.trigger.ALL",
+        "signal.status-request.swarm-alpha.trigger.inst"
       ],
       "eventBindings": [],
       "allBindings": [
-        "sig.config-update.ALL.trigger.ALL",
-        "sig.config-update.swarm-alpha.ALL.ALL",
-        "sig.config-update.swarm-alpha.trigger.ALL",
-        "sig.config-update.swarm-alpha.trigger.inst",
-        "sig.status-request.ALL.trigger.ALL",
-        "sig.status-request.swarm-alpha.ALL.ALL",
-        "sig.status-request.swarm-alpha.trigger.ALL",
-        "sig.status-request.swarm-alpha.trigger.inst"
+        "signal.config-update.ALL.trigger.ALL",
+        "signal.config-update.swarm-alpha.ALL.ALL",
+        "signal.config-update.swarm-alpha.trigger.ALL",
+        "signal.config-update.swarm-alpha.trigger.inst",
+        "signal.status-request.ALL.trigger.ALL",
+        "signal.status-request.swarm-alpha.ALL.ALL",
+        "signal.status-request.swarm-alpha.trigger.ALL",
+        "signal.status-request.swarm-alpha.trigger.inst"
       ]
     },
     "additionalQueues": [],
     "routes": {
       "configSignals": [
-        "sig.config-update.ALL.trigger.ALL",
-        "sig.config-update.swarm-alpha.ALL.ALL",
-        "sig.config-update.swarm-alpha.trigger.ALL",
-        "sig.config-update.swarm-alpha.trigger.{instance}"
+        "signal.config-update.ALL.trigger.ALL",
+        "signal.config-update.swarm-alpha.ALL.ALL",
+        "signal.config-update.swarm-alpha.trigger.ALL",
+        "signal.config-update.swarm-alpha.trigger.{instance}"
       ],
       "otherEvents": [],
       "statusEvents": [],
       "statusSignals": [
-        "sig.status-request.ALL.trigger.ALL",
-        "sig.status-request.swarm-alpha.ALL.ALL",
-        "sig.status-request.swarm-alpha.trigger.ALL",
-        "sig.status-request.swarm-alpha.trigger.{instance}"
+        "signal.status-request.ALL.trigger.ALL",
+        "signal.status-request.swarm-alpha.ALL.ALL",
+        "signal.status-request.swarm-alpha.trigger.ALL",
+        "signal.status-request.swarm-alpha.trigger.{instance}"
       ],
       "lifecycleSignals": [],
       "lifecycleEvents": []
@@ -142,42 +142,42 @@
     "controlQueue": {
       "name": "ph.control.swarm-alpha.moderator.inst",
       "signalBindings": [
-        "sig.config-update.ALL.moderator.ALL",
-        "sig.config-update.swarm-alpha.ALL.ALL",
-        "sig.config-update.swarm-alpha.moderator.ALL",
-        "sig.config-update.swarm-alpha.moderator.inst",
-        "sig.status-request.ALL.moderator.ALL",
-        "sig.status-request.swarm-alpha.ALL.ALL",
-        "sig.status-request.swarm-alpha.moderator.ALL",
-        "sig.status-request.swarm-alpha.moderator.inst"
+        "signal.config-update.ALL.moderator.ALL",
+        "signal.config-update.swarm-alpha.ALL.ALL",
+        "signal.config-update.swarm-alpha.moderator.ALL",
+        "signal.config-update.swarm-alpha.moderator.inst",
+        "signal.status-request.ALL.moderator.ALL",
+        "signal.status-request.swarm-alpha.ALL.ALL",
+        "signal.status-request.swarm-alpha.moderator.ALL",
+        "signal.status-request.swarm-alpha.moderator.inst"
       ],
       "eventBindings": [],
       "allBindings": [
-        "sig.config-update.ALL.moderator.ALL",
-        "sig.config-update.swarm-alpha.ALL.ALL",
-        "sig.config-update.swarm-alpha.moderator.ALL",
-        "sig.config-update.swarm-alpha.moderator.inst",
-        "sig.status-request.ALL.moderator.ALL",
-        "sig.status-request.swarm-alpha.ALL.ALL",
-        "sig.status-request.swarm-alpha.moderator.ALL",
-        "sig.status-request.swarm-alpha.moderator.inst"
+        "signal.config-update.ALL.moderator.ALL",
+        "signal.config-update.swarm-alpha.ALL.ALL",
+        "signal.config-update.swarm-alpha.moderator.ALL",
+        "signal.config-update.swarm-alpha.moderator.inst",
+        "signal.status-request.ALL.moderator.ALL",
+        "signal.status-request.swarm-alpha.ALL.ALL",
+        "signal.status-request.swarm-alpha.moderator.ALL",
+        "signal.status-request.swarm-alpha.moderator.inst"
       ]
     },
     "additionalQueues": [],
     "routes": {
       "configSignals": [
-        "sig.config-update.ALL.moderator.ALL",
-        "sig.config-update.swarm-alpha.ALL.ALL",
-        "sig.config-update.swarm-alpha.moderator.ALL",
-        "sig.config-update.swarm-alpha.moderator.{instance}"
+        "signal.config-update.ALL.moderator.ALL",
+        "signal.config-update.swarm-alpha.ALL.ALL",
+        "signal.config-update.swarm-alpha.moderator.ALL",
+        "signal.config-update.swarm-alpha.moderator.{instance}"
       ],
       "otherEvents": [],
       "statusEvents": [],
       "statusSignals": [
-        "sig.status-request.ALL.moderator.ALL",
-        "sig.status-request.swarm-alpha.ALL.ALL",
-        "sig.status-request.swarm-alpha.moderator.ALL",
-        "sig.status-request.swarm-alpha.moderator.{instance}"
+        "signal.status-request.ALL.moderator.ALL",
+        "signal.status-request.swarm-alpha.ALL.ALL",
+        "signal.status-request.swarm-alpha.moderator.ALL",
+        "signal.status-request.swarm-alpha.moderator.{instance}"
       ],
       "lifecycleSignals": [],
       "lifecycleEvents": []
@@ -188,42 +188,42 @@
     "controlQueue": {
       "name": "ph.control.swarm-alpha.postprocessor.inst",
       "signalBindings": [
-        "sig.config-update.ALL.postprocessor.ALL",
-        "sig.config-update.swarm-alpha.ALL.ALL",
-        "sig.config-update.swarm-alpha.postprocessor.ALL",
-        "sig.config-update.swarm-alpha.postprocessor.inst",
-        "sig.status-request.ALL.postprocessor.ALL",
-        "sig.status-request.swarm-alpha.ALL.ALL",
-        "sig.status-request.swarm-alpha.postprocessor.ALL",
-        "sig.status-request.swarm-alpha.postprocessor.inst"
+        "signal.config-update.ALL.postprocessor.ALL",
+        "signal.config-update.swarm-alpha.ALL.ALL",
+        "signal.config-update.swarm-alpha.postprocessor.ALL",
+        "signal.config-update.swarm-alpha.postprocessor.inst",
+        "signal.status-request.ALL.postprocessor.ALL",
+        "signal.status-request.swarm-alpha.ALL.ALL",
+        "signal.status-request.swarm-alpha.postprocessor.ALL",
+        "signal.status-request.swarm-alpha.postprocessor.inst"
       ],
       "eventBindings": [],
       "allBindings": [
-        "sig.config-update.ALL.postprocessor.ALL",
-        "sig.config-update.swarm-alpha.ALL.ALL",
-        "sig.config-update.swarm-alpha.postprocessor.ALL",
-        "sig.config-update.swarm-alpha.postprocessor.inst",
-        "sig.status-request.ALL.postprocessor.ALL",
-        "sig.status-request.swarm-alpha.ALL.ALL",
-        "sig.status-request.swarm-alpha.postprocessor.ALL",
-        "sig.status-request.swarm-alpha.postprocessor.inst"
+        "signal.config-update.ALL.postprocessor.ALL",
+        "signal.config-update.swarm-alpha.ALL.ALL",
+        "signal.config-update.swarm-alpha.postprocessor.ALL",
+        "signal.config-update.swarm-alpha.postprocessor.inst",
+        "signal.status-request.ALL.postprocessor.ALL",
+        "signal.status-request.swarm-alpha.ALL.ALL",
+        "signal.status-request.swarm-alpha.postprocessor.ALL",
+        "signal.status-request.swarm-alpha.postprocessor.inst"
       ]
     },
     "additionalQueues": [],
     "routes": {
       "configSignals": [
-        "sig.config-update.ALL.postprocessor.ALL",
-        "sig.config-update.swarm-alpha.ALL.ALL",
-        "sig.config-update.swarm-alpha.postprocessor.ALL",
-        "sig.config-update.swarm-alpha.postprocessor.{instance}"
+        "signal.config-update.ALL.postprocessor.ALL",
+        "signal.config-update.swarm-alpha.ALL.ALL",
+        "signal.config-update.swarm-alpha.postprocessor.ALL",
+        "signal.config-update.swarm-alpha.postprocessor.{instance}"
       ],
       "otherEvents": [],
       "statusEvents": [],
       "statusSignals": [
-        "sig.status-request.ALL.postprocessor.ALL",
-        "sig.status-request.swarm-alpha.ALL.ALL",
-        "sig.status-request.swarm-alpha.postprocessor.ALL",
-        "sig.status-request.swarm-alpha.postprocessor.{instance}"
+        "signal.status-request.ALL.postprocessor.ALL",
+        "signal.status-request.swarm-alpha.ALL.ALL",
+        "signal.status-request.swarm-alpha.postprocessor.ALL",
+        "signal.status-request.swarm-alpha.postprocessor.{instance}"
       ],
       "lifecycleSignals": [],
       "lifecycleEvents": []
@@ -234,67 +234,71 @@
     "controlQueue": {
       "name": "ph.control.swarm-alpha.swarm-controller.inst",
       "signalBindings": [
-        "sig.config-update.ALL.swarm-controller.ALL",
-        "sig.config-update.swarm-alpha.ALL.ALL",
-        "sig.config-update.swarm-alpha.swarm-controller.ALL",
-        "sig.config-update.swarm-alpha.swarm-controller.inst",
-        "sig.status-request.ALL.swarm-controller.ALL",
-        "sig.status-request.swarm-alpha.ALL.ALL",
-        "sig.status-request.swarm-alpha.swarm-controller.ALL",
-        "sig.status-request.swarm-alpha.swarm-controller.inst",
-        "sig.swarm-plan.swarm-alpha.swarm-controller.ALL",
-        "sig.swarm-remove.swarm-alpha.swarm-controller.ALL",
-        "sig.swarm-start.swarm-alpha.swarm-controller.ALL",
-        "sig.swarm-stop.swarm-alpha.swarm-controller.ALL",
-        "sig.swarm-template.swarm-alpha.swarm-controller.ALL"
+        "signal.config-update.ALL.swarm-controller.ALL",
+        "signal.config-update.swarm-alpha.ALL.ALL",
+        "signal.config-update.swarm-alpha.swarm-controller.ALL",
+        "signal.config-update.swarm-alpha.swarm-controller.inst",
+        "signal.status-request.ALL.swarm-controller.ALL",
+        "signal.status-request.swarm-alpha.ALL.ALL",
+        "signal.status-request.swarm-alpha.swarm-controller.ALL",
+        "signal.status-request.swarm-alpha.swarm-controller.inst",
+        "signal.swarm-plan.swarm-alpha.swarm-controller.inst",
+        "signal.swarm-remove.swarm-alpha.swarm-controller.inst",
+        "signal.swarm-start.swarm-alpha.swarm-controller.inst",
+        "signal.swarm-stop.swarm-alpha.swarm-controller.inst",
+        "signal.swarm-template.swarm-alpha.swarm-controller.inst"
       ],
       "eventBindings": [
-        "ev.status-delta.swarm-alpha.#",
-        "ev.status-full.swarm-alpha.#"
+        "event.alert.alert.swarm-alpha.#",
+        "event.metric.status-delta.swarm-alpha.#",
+        "event.metric.status-full.swarm-alpha.#"
       ],
       "allBindings": [
-        "ev.status-delta.swarm-alpha.#",
-        "ev.status-full.swarm-alpha.#",
-        "sig.config-update.ALL.swarm-controller.ALL",
-        "sig.config-update.swarm-alpha.ALL.ALL",
-        "sig.config-update.swarm-alpha.swarm-controller.ALL",
-        "sig.config-update.swarm-alpha.swarm-controller.inst",
-        "sig.status-request.ALL.swarm-controller.ALL",
-        "sig.status-request.swarm-alpha.ALL.ALL",
-        "sig.status-request.swarm-alpha.swarm-controller.ALL",
-        "sig.status-request.swarm-alpha.swarm-controller.inst",
-        "sig.swarm-plan.swarm-alpha.swarm-controller.ALL",
-        "sig.swarm-remove.swarm-alpha.swarm-controller.ALL",
-        "sig.swarm-start.swarm-alpha.swarm-controller.ALL",
-        "sig.swarm-stop.swarm-alpha.swarm-controller.ALL",
-        "sig.swarm-template.swarm-alpha.swarm-controller.ALL"
+        "event.alert.alert.swarm-alpha.#",
+        "event.metric.status-delta.swarm-alpha.#",
+        "event.metric.status-full.swarm-alpha.#",
+        "signal.config-update.ALL.swarm-controller.ALL",
+        "signal.config-update.swarm-alpha.ALL.ALL",
+        "signal.config-update.swarm-alpha.swarm-controller.ALL",
+        "signal.config-update.swarm-alpha.swarm-controller.inst",
+        "signal.status-request.ALL.swarm-controller.ALL",
+        "signal.status-request.swarm-alpha.ALL.ALL",
+        "signal.status-request.swarm-alpha.swarm-controller.ALL",
+        "signal.status-request.swarm-alpha.swarm-controller.inst",
+        "signal.swarm-plan.swarm-alpha.swarm-controller.inst",
+        "signal.swarm-remove.swarm-alpha.swarm-controller.inst",
+        "signal.swarm-start.swarm-alpha.swarm-controller.inst",
+        "signal.swarm-stop.swarm-alpha.swarm-controller.inst",
+        "signal.swarm-template.swarm-alpha.swarm-controller.inst"
       ]
     },
     "additionalQueues": [],
     "routes": {
       "configSignals": [
-        "sig.config-update.ALL.swarm-controller.ALL",
-        "sig.config-update.swarm-alpha.ALL.ALL",
-        "sig.config-update.swarm-alpha.swarm-controller.ALL",
-        "sig.config-update.swarm-alpha.swarm-controller.{instance}"
+        "signal.config-update.ALL.swarm-controller.ALL",
+        "signal.config-update.swarm-alpha.ALL.ALL",
+        "signal.config-update.swarm-alpha.swarm-controller.ALL",
+        "signal.config-update.swarm-alpha.swarm-controller.{instance}"
       ],
-      "otherEvents": [],
+      "otherEvents": [
+        "event.alert.alert.swarm-alpha.#"
+      ],
       "statusEvents": [
-        "ev.status-delta.swarm-alpha.#",
-        "ev.status-full.swarm-alpha.#"
+        "event.metric.status-delta.swarm-alpha.#",
+        "event.metric.status-full.swarm-alpha.#"
       ],
       "statusSignals": [
-        "sig.status-request.ALL.swarm-controller.ALL",
-        "sig.status-request.swarm-alpha.ALL.ALL",
-        "sig.status-request.swarm-alpha.swarm-controller.ALL",
-        "sig.status-request.swarm-alpha.swarm-controller.{instance}"
+        "signal.status-request.ALL.swarm-controller.ALL",
+        "signal.status-request.swarm-alpha.ALL.ALL",
+        "signal.status-request.swarm-alpha.swarm-controller.ALL",
+        "signal.status-request.swarm-alpha.swarm-controller.{instance}"
       ],
       "lifecycleSignals": [
-        "sig.swarm-plan.swarm-alpha.swarm-controller.ALL",
-        "sig.swarm-remove.swarm-alpha.swarm-controller.ALL",
-        "sig.swarm-start.swarm-alpha.swarm-controller.ALL",
-        "sig.swarm-stop.swarm-alpha.swarm-controller.ALL",
-        "sig.swarm-template.swarm-alpha.swarm-controller.ALL"
+        "signal.swarm-plan.swarm-alpha.swarm-controller.{instance}",
+        "signal.swarm-remove.swarm-alpha.swarm-controller.{instance}",
+        "signal.swarm-start.swarm-alpha.swarm-controller.{instance}",
+        "signal.swarm-stop.swarm-alpha.swarm-controller.{instance}",
+        "signal.swarm-template.swarm-alpha.swarm-controller.{instance}"
       ],
       "lifecycleEvents": []
     }
@@ -305,20 +309,18 @@
       "name": "ph.control.orchestrator.inst",
       "signalBindings": [],
       "eventBindings": [
-        "ev.error.#",
-        "ev.ready.#"
+        "event.outcome.#"
       ],
       "allBindings": [
-        "ev.error.#",
-        "ev.ready.#"
+        "event.outcome.#"
       ]
     },
     "additionalQueues": [
       {
         "name": "ph.control.orchestrator-status.inst",
         "bindings": [
-          "ev.status-delta.swarm-controller.*",
-          "ev.status-full.swarm-controller.*"
+          "event.metric.status-delta.*.swarm-controller.*",
+          "event.metric.status-full.*.swarm-controller.*"
         ]
       }
     ],
@@ -326,14 +328,13 @@
       "configSignals": [],
       "otherEvents": [],
       "statusEvents": [
-        "ev.status-delta.swarm-controller.*",
-        "ev.status-full.swarm-controller.*"
+        "event.metric.status-delta.*.swarm-controller.*",
+        "event.metric.status-full.*.swarm-controller.*"
       ],
       "statusSignals": [],
       "lifecycleSignals": [],
       "lifecycleEvents": [
-        "ev.error.#",
-        "ev.ready.#"
+        "event.outcome.#"
       ]
     }
   },

@@ -56,6 +56,10 @@ function printUsage() {
       "  node tools/mcp-orchestrator-debug/client.mjs check-queues <queueName> [<queueName>...]\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs tap-queue <exchange> <routingKey> [queueName]\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs list-queues\n" +
+      "  node tools/mcp-orchestrator-debug/client.mjs swarm-journal <swarmId> [--runId <runId>] [--correlationId <id>] [--limit <n>] [--pages <n>|--all]\n" +
+      "  node tools/mcp-orchestrator-debug/client.mjs swarm-journal-runs <swarmId>\n" +
+      "  node tools/mcp-orchestrator-debug/client.mjs swarm-journal-pin <swarmId> [--runId <runId>] [--mode FULL|SLIM|ERRORS_ONLY] [--name <name>]\n" +
+      "  node tools/mcp-orchestrator-debug/client.mjs hive-journal [--swarmId <swarmId>] [--runId <runId>] [--correlationId <id>] [--limit <n>] [--pages <n>|--all]\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs commands\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs get-recorded\n" +
       "  (append --record to create/start/stop/remove to capture control-plane messages)\n\n" +
@@ -71,6 +75,11 @@ function printUsage() {
       "  node tools/mcp-orchestrator-debug/client.mjs check-queues ph.foo.gen ph.foo.mod ph.foo.final\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs tap-queue ph.foo.hive ph.foo.final\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs list-queues\n" +
+      "  node tools/mcp-orchestrator-debug/client.mjs swarm-journal-runs foo\n" +
+      "  node tools/mcp-orchestrator-debug/client.mjs swarm-journal foo --all\n" +
+      "  node tools/mcp-orchestrator-debug/client.mjs swarm-journal foo --runId <runId> --pages 2\n" +
+      "  node tools/mcp-orchestrator-debug/client.mjs swarm-journal-pin foo --runId <runId> --mode SLIM\n" +
+      "  node tools/mcp-orchestrator-debug/client.mjs hive-journal --swarmId foo --runId <runId>\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs commands\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs get-recorded\n"
   );
@@ -143,7 +152,7 @@ const COMMANDS = [
   {
     name: "status-request",
     description:
-      "Send a control-plane status-request signal directly via AMQP: sig.status-request.<swarmId>.<role>.<instanceId>",
+      "Send a control-plane status-request signal directly via AMQP: signal.status-request.<swarmId>.<role>.<instanceId>",
     params: ["swarmId", "role", "instanceId"],
   },
   {
@@ -161,6 +170,30 @@ const COMMANDS = [
     name: "list-queues",
     description:
       "List all queues from RabbitMQ HTTP management API (RABBITMQ_MANAGEMENT_BASE_URL)",
+  },
+  {
+    name: "swarm-journal",
+    description:
+      "Fetch swarm journal via orchestrator paging API: GET /api/swarms/{swarmId}/journal/page",
+    params: ["swarmId", "[--runId <runId>]", "[--correlationId <id>]", "[--limit <n>]", "[--pages <n>|--all]"],
+  },
+  {
+    name: "swarm-journal-runs",
+    description:
+      "List known journal runs for a swarm id: GET /api/swarms/{swarmId}/journal/runs",
+    params: ["swarmId"],
+  },
+  {
+    name: "swarm-journal-pin",
+    description:
+      "Pin a swarm journal run into archive: POST /api/swarms/{swarmId}/journal/pin",
+    params: ["swarmId", "[--runId <runId>]", "[--mode FULL|SLIM|ERRORS_ONLY]", "[--name <name>]"],
+  },
+  {
+    name: "hive-journal",
+    description:
+      "Fetch hive journal via orchestrator paging API: GET /api/journal/hive/page",
+    params: ["[--swarmId <swarmId>]", "[--runId <runId>]", "[--correlationId <id>]", "[--limit <n>]", "[--pages <n>|--all]"],
   },
   {
     name: "get-recorded",
@@ -230,6 +263,78 @@ async function main() {
       }
       const configs = await collectWorkerConfigs(swarmId);
       console.log(JSON.stringify(configs, null, 2));
+      return;
+    }
+
+    if (subcommand === "swarm-journal-runs") {
+      const swarmId = args[1];
+      if (!swarmId) {
+        console.error("swarm-journal-runs requires <swarmId>");
+        process.exit(1);
+      }
+      const runs = await httpJson(`/api/swarms/${encodeURIComponent(swarmId)}/journal/runs`);
+      console.log(JSON.stringify(runs ?? [], null, 2));
+      return;
+    }
+
+    if (subcommand === "swarm-journal-pin") {
+      const swarmId = args[1];
+      if (!swarmId) {
+        console.error("swarm-journal-pin requires <swarmId>");
+        process.exit(1);
+      }
+      const flags = parseFlags(args.slice(2));
+      const runId = flags.runId || null;
+      const mode = flags.mode || null;
+      const name = flags.name || null;
+      const result = await httpJson(`/api/swarms/${encodeURIComponent(swarmId)}/journal/pin`, {
+        method: "POST",
+        body: { runId, mode, name },
+      });
+      console.log(JSON.stringify(result ?? null, null, 2));
+      return;
+    }
+
+    if (subcommand === "swarm-journal") {
+      const swarmId = args[1];
+      if (!swarmId) {
+        console.error("swarm-journal requires <swarmId>");
+        process.exit(1);
+      }
+      const flags = parseFlags(args.slice(2));
+      const limit = flags.limit ? Number(flags.limit) : 200;
+      const runId = flags.runId || null;
+      const correlationId = flags.correlationId || null;
+      const pages = flags.all ? Number.POSITIVE_INFINITY : flags.pages ? Number(flags.pages) : 1;
+
+      const items = await collectPagedJournal({
+        path: `/api/swarms/${encodeURIComponent(swarmId)}/journal/page`,
+        limit,
+        runId,
+        correlationId,
+        pages,
+      });
+      console.log(JSON.stringify(items, null, 2));
+      return;
+    }
+
+    if (subcommand === "hive-journal") {
+      const flags = parseFlags(args.slice(1));
+      const limit = flags.limit ? Number(flags.limit) : 200;
+      const swarmId = flags.swarmId || null;
+      const runId = flags.runId || null;
+      const correlationId = flags.correlationId || null;
+      const pages = flags.all ? Number.POSITIVE_INFINITY : flags.pages ? Number(flags.pages) : 1;
+
+      const items = await collectPagedJournal({
+        path: "/api/journal/hive/page",
+        limit,
+        swarmId,
+        runId,
+        correlationId,
+        pages,
+      });
+      console.log(JSON.stringify(items, null, 2));
       return;
     }
 
@@ -352,7 +457,7 @@ async function main() {
               swarmId,
               role,
               instanceId,
-              routingKey: `sig.status-request.${swarmId}.${role}.${instanceId}`,
+              routingKey: `signal.status-request.${swarmId}.${role}.${instanceId}`,
             },
             null,
             2
@@ -406,6 +511,68 @@ async function main() {
     console.error("Debug client error:", err);
     process.exitCode = 1;
   }
+}
+
+function parseFlags(argv) {
+  const flags = {};
+  for (let i = 0; i < argv.length; i += 1) {
+    const arg = argv[i];
+    if (!arg || !arg.startsWith("--")) {
+      continue;
+    }
+    const name = arg.slice(2);
+    if (name === "all") {
+      flags.all = true;
+      continue;
+    }
+    const value = argv[i + 1];
+    if (value && !value.startsWith("--")) {
+      flags[name] = value;
+      i += 1;
+    } else {
+      flags[name] = true;
+    }
+  }
+  return flags;
+}
+
+function buildQuery(params) {
+  const parts = [];
+  for (const [key, value] of Object.entries(params)) {
+    if (value === null || value === undefined) continue;
+    const text = String(value);
+    if (!text.trim()) continue;
+    parts.push(`${encodeURIComponent(key)}=${encodeURIComponent(text)}`);
+  }
+  return parts.length ? `?${parts.join("&")}` : "";
+}
+
+async function collectPagedJournal({ path, limit, swarmId, runId, correlationId, pages }) {
+  const all = [];
+  let beforeTs = null;
+  let beforeId = null;
+  let remaining = pages;
+
+  while (remaining > 0) {
+    const query = buildQuery({
+      limit,
+      swarmId: swarmId || undefined,
+      runId: runId || undefined,
+      correlationId: correlationId || undefined,
+      beforeTs,
+      beforeId,
+    });
+    const page = await httpJson(`${path}${query}`);
+    const items = Array.isArray(page?.items) ? page.items : [];
+    all.push(...items);
+    if (!page?.hasMore || !page?.nextCursor) {
+      break;
+    }
+    beforeTs = page.nextCursor.ts;
+    beforeId = page.nextCursor.id;
+    remaining -= 1;
+  }
+  return all;
 }
 
 async function httpJson(path, options = {}) {
@@ -637,8 +804,10 @@ async function collectWorkerConfigs(swarmId) {
     });
     // Bind to status-full and status-delta events for this swarm.
     const keys = [
-      `ev.status-full.${trimmed}.#`,
-      `ev.status-delta.${trimmed}.#`,
+      `event.metric.status-full.${trimmed}.#`,
+      `event.metric.status-delta.${trimmed}.#`,
+      `event.status-full.${trimmed}.#`,
+      `event.status-delta.${trimmed}.#`,
     ];
     for (const key of keys) {
       await ch.bindQueue(q.queue, ex, key);
@@ -854,7 +1023,7 @@ async function sendStatusRequest(swarmId, role, instanceId) {
   const ch = await conn.createChannel();
   try {
     const exchange = controlExchange();
-    const rk = `sig.status-request.${swarmId}.${role}.${instanceId}`;
+    const rk = `signal.status-request.${swarmId}.${role}.${instanceId}`;
     const payload = JSON.stringify({});
     await ch.assertExchange(exchange, "topic", { durable: true });
     ch.publish(exchange, rk, Buffer.from(payload, "utf8"), {

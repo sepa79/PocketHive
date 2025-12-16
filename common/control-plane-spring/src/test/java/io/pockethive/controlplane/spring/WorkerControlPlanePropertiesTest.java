@@ -15,9 +15,9 @@ class WorkerControlPlanePropertiesTest {
         assertThat(controlPlane.getControlQueueName())
             .isEqualTo("ph.control.swarm-alpha.generator.worker-1");
         assertThat(controlPlane.getRoutes().configSignals())
-            .contains("sig.config-update.swarm-alpha.generator.{instance}");
+            .contains("signal.config-update.swarm-alpha.generator.{instance}");
         assertThat(controlPlane.getRoutes().statusSignals())
-            .contains("sig.status-request.swarm-alpha.generator.{instance}");
+            .contains("signal.status-request.swarm-alpha.generator.{instance}");
     }
 
     private static WorkerControlPlaneProperties buildProperties() {

@@ -2,6 +2,7 @@ package io.pockethive.tools;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
+import io.pockethive.httpbuilder.HttpTemplateDefinition;
 import io.pockethive.worker.sdk.api.WorkItem;
 import io.pockethive.worker.sdk.templating.PebbleTemplateRenderer;
 import io.pockethive.worker.sdk.templating.MessageBodyType;
@@ -130,7 +131,7 @@ public final class ScenarioTemplateValidator {
 
         System.out.println("HTTP templates under " + templateRoot + ":");
         templates.forEach((key, loaded) -> {
-            HttpTemplateDef def = loaded.definition();
+            HttpTemplateDefinition def = loaded.definition();
             System.out.printf(
                 "  serviceId=%s, callId=%s, method=%s, path=%s, source=%s%n",
                 def.serviceId(),
@@ -155,7 +156,7 @@ public final class ScenarioTemplateValidator {
         // 1) Collect defined callIds.
         Set<String> definedCallIds = new HashSet<>();
         for (LoadedTemplate loaded : templates.values()) {
-            HttpTemplateDef def = loaded.definition();
+            HttpTemplateDefinition def = loaded.definition();
             if (def.callId() != null && !def.callId().isBlank()) {
                 definedCallIds.add(def.callId().trim());
             }
@@ -182,7 +183,7 @@ public final class ScenarioTemplateValidator {
         Map<String, String> renderFailures = new HashMap<>();
 
         templates.forEach((key, loaded) -> {
-            HttpTemplateDef def = loaded.definition();
+            HttpTemplateDefinition def = loaded.definition();
             MessageTemplate template = MessageTemplate.builder()
                 .bodyType(MessageBodyType.HTTP)
                 .pathTemplate(def.pathTemplate())
@@ -340,7 +341,7 @@ public final class ScenarioTemplateValidator {
                     return name.endsWith(".json") || name.endsWith(".yaml") || name.endsWith(".yml");
                 })
                 .forEach(path -> {
-                    HttpTemplateDef def = parseHttpTemplate(path, defaultServiceId);
+                    HttpTemplateDefinition def = parseHttpTemplate(path, defaultServiceId);
                     if (def.callId() != null && !def.callId().isBlank()) {
                         String key = (def.serviceId() == null ? "" : def.serviceId().trim())
                             + "::"
@@ -354,40 +355,31 @@ public final class ScenarioTemplateValidator {
         }
     }
 
-    private static HttpTemplateDef parseHttpTemplate(Path path, String defaultServiceId) {
+    private static HttpTemplateDefinition parseHttpTemplate(Path path, String defaultServiceId) {
         try {
             String name = path.getFileName().toString().toLowerCase();
             ObjectMapper mapper = (name.endsWith(".yaml") || name.endsWith(".yml"))
                 ? YAML_MAPPER
                 : JSON_MAPPER;
-            HttpTemplateDef raw = mapper.readValue(path.toFile(), HttpTemplateDef.class);
+            HttpTemplateDefinition raw = mapper.readValue(path.toFile(), HttpTemplateDefinition.class);
             String serviceId = (raw.serviceId() == null || raw.serviceId().isBlank())
                 ? defaultServiceId
                 : raw.serviceId().trim();
-            return new HttpTemplateDef(
+            return new HttpTemplateDefinition(
                 serviceId,
                 raw.callId(),
                 raw.method(),
                 raw.pathTemplate(),
                 raw.bodyTemplate(),
-                raw.headersTemplate()
+                raw.headersTemplate(),
+                raw.schemaRef()
             );
         } catch (Exception ex) {
             throw new IllegalStateException("Failed to parse HTTP template " + path, ex);
         }
     }
 
-    private record HttpTemplateDef(
-        String serviceId,
-        String callId,
-        String method,
-        String pathTemplate,
-        String bodyTemplate,
-        Map<String, String> headersTemplate
-    ) {
-    }
-
-    private record LoadedTemplate(HttpTemplateDef definition, Path sourcePath) {
+    private record LoadedTemplate(HttpTemplateDefinition definition, Path sourcePath) {
     }
 
     private enum Mode {

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { subscribeComponents } from '../lib/stompClient'
 import type { Component } from '../types/hive'
 import { useSwarmMetadata } from '../contexts/SwarmMetadataContext'
@@ -155,6 +156,7 @@ function aggregate(components: Component[], now: number, meta: ReturnType<typeof
 }
 
 export default function SwarmListPage() {
+  const navigate = useNavigate()
   const [components, setComponents] = useState<Component[]>([])
   const [search, setSearch] = useState('')
   const [now, setNow] = useState(() => Date.now())
@@ -431,6 +433,19 @@ export default function SwarmListPage() {
                 </td>
                 <td className="px-3 py-2 text-white/80">
                   <div className="flex flex-wrap gap-2">
+	                    <button
+	                      className="rounded bg-slate-700 px-2 py-1 text-xs hover:bg-slate-600"
+	                      onClick={(e) => {
+	                        e.stopPropagation()
+	                        if (row.id === 'hive') {
+	                          navigate('/journal/hive')
+	                          return
+	                        }
+	                        navigate(`/journal/swarms/${encodeURIComponent(row.id)}`)
+	                      }}
+	                    >
+	                      Journal
+	                    </button>
                     <button
                       className="rounded bg-blue-600 px-2 py-1 text-xs disabled:opacity-50"
                       onClick={(e) => {

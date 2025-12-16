@@ -2,16 +2,24 @@ package io.pockethive.orchestrator.app;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.pockethive.control.ControlScope;
 import io.pockethive.control.ControlSignal;
+import io.pockethive.control.ConfirmationScope;
+import io.pockethive.controlplane.messaging.ControlSignals;
+import io.pockethive.controlplane.routing.ControlPlaneRouting;
+import io.pockethive.controlplane.spring.ControlPlaneProperties;
+import io.pockethive.manager.runtime.ComputeAdapterType;
+import io.pockethive.orchestrator.domain.IdempotencyStore;
 import io.pockethive.orchestrator.domain.ScenarioPlan;
+import io.pockethive.orchestrator.domain.ScenarioTimelineRegistry;
 import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmCreateRequest;
 import io.pockethive.orchestrator.domain.SwarmCreateTracker;
 import io.pockethive.orchestrator.domain.SwarmCreateTracker.Pending;
 import io.pockethive.orchestrator.domain.SwarmCreateTracker.Phase;
-import io.pockethive.orchestrator.domain.IdempotencyStore;
+import io.pockethive.orchestrator.domain.HiveJournal;
+import io.pockethive.orchestrator.domain.HiveJournal.HiveJournalEntry;
 import io.pockethive.orchestrator.domain.SwarmHealth;
-import io.pockethive.orchestrator.domain.ScenarioTimelineRegistry;
 import io.pockethive.orchestrator.domain.SwarmPlanRegistry;
 import io.pockethive.orchestrator.domain.SwarmRegistry;
 import io.pockethive.orchestrator.domain.SwarmStatus;
@@ -19,33 +27,33 @@ import io.pockethive.orchestrator.domain.SwarmTemplateMetadata;
 import io.pockethive.swarm.model.Bee;
 import io.pockethive.swarm.model.SwarmPlan;
 import io.pockethive.swarm.model.SwarmTemplate;
-import io.pockethive.swarm.model.TrafficPolicy;
 import io.pockethive.swarm.model.SutEndpoint;
 import io.pockethive.swarm.model.SutEnvironment;
-import io.pockethive.controlplane.spring.ControlPlaneProperties;
-import io.pockethive.manager.runtime.ComputeAdapterType;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.amqp.core.AmqpTemplate;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
-
+import io.pockethive.swarm.model.TrafficPolicy;
+import io.pockethive.util.BeeNameGenerator;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.LinkedHashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-
-import io.pockethive.util.BeeNameGenerator;
-import io.pockethive.controlplane.routing.ControlPlaneRouting;
-import io.pockethive.control.ConfirmationScope;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.amqp.core.AmqpTemplate;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 
 /**
  * REST controller that exposes the swarm lifecycle API consumed by UI operators and automation.
@@ -67,8 +75,10 @@ public class SwarmController {
     private final SwarmPlanRegistry plans;
     private final ScenarioTimelineRegistry timelines;
     private final ScenarioClient scenarios;
+    private final HiveJournal hiveJournal;
     private final ObjectMapper json;
     private final String controlExchange;
+    private final String originInstanceId;
     private static final String CREATE_LOCK_KEY = "__create-lock__";
     private static final Pattern BASE_URL_TEMPLATE =
         Pattern.compile("\\{\\{\\s*sut\\.endpoints\\['([^']+)'\\]\\.baseUrl\\s*}}(.*)");
@@ -80,6 +90,7 @@ public class SwarmController {
                            SwarmRegistry registry,
                            ObjectMapper json,
                            ScenarioClient scenarios,
+                           HiveJournal hiveJournal,
                            SwarmPlanRegistry plans,
                            ScenarioTimelineRegistry timelines,
                            ControlPlaneProperties controlPlaneProperties) {
@@ -90,9 +101,11 @@ public class SwarmController {
         this.registry = registry;
         this.json = json;
         this.scenarios = scenarios;
+        this.hiveJournal = Objects.requireNonNull(hiveJournal, "hiveJournal");
         this.plans = plans;
         this.timelines = timelines;
         this.controlExchange = requireExchange(controlPlaneProperties);
+        this.originInstanceId = requireOrigin(controlPlaneProperties);
     }
 
     /**
@@ -237,6 +250,29 @@ public class SwarmController {
                     instanceId,
                     new SwarmTemplateMetadata(templateId, image, plan.bees()),
                     autoPull);
+                try {
+                    var data = new LinkedHashMap<String, Object>();
+                    data.put("templateId", req.templateId());
+                    data.put("sutId", sutId);
+                    data.put("autoPullImages", autoPull);
+                    data.put("controllerInstance", instanceId);
+                    data.put("runId", swarm.getRunId());
+                    hiveJournal.append(HiveJournalEntry.info(
+                        swarmId,
+                        HiveJournal.Direction.LOCAL,
+                        "command",
+                        "swarm-create",
+                        "orchestrator",
+                        ControlScope.forSwarm(swarmId),
+                        corr,
+                        req.idempotencyKey(),
+                        null,
+                        data,
+                        null,
+                        null));
+                } catch (Exception ignore) {
+                    // best-effort
+                }
                 if (sutId != null) {
                     swarm.setSutId(sutId);
                 }
@@ -264,7 +300,7 @@ public class SwarmController {
      * The body accepts {@link ControlRequest}, typically {@code {"idempotencyKey":"cli-42"}}. We invoke
      * {@link #sendSignal(String, String, String, long)} with the {@code swarm-start} signal so the swarm
      * controller replays its {@code config-update(enabled=true)} flow. The response echoes the correlation
-     * id and watch keys (e.g. {@code ev.ready.swarm-start.swarm-controller.instance}) for observability.
+     * id and watch keys (e.g. {@code event.outcome.swarm-start.<swarmId>.swarm-controller.<instance>}) for observability.
      */
     @PostMapping("/{swarmId}/start")
     public ResponseEntity<ControlResponse> start(@PathVariable String swarmId, @RequestBody ControlRequest req) {
@@ -315,15 +351,47 @@ public class SwarmController {
      * {@link SwarmRegistry}/{@link SwarmCreateTracker} so downstream watchers know which confirmations to
      * expect. The timeout is expressed in milliseconds for convenient alignment with API docs.
      */
-    private ResponseEntity<ControlResponse> sendSignal(String signal, String swarmId, String idempotencyKey, long timeoutMs) {
-        Duration timeout = Duration.ofMillis(timeoutMs);
-        return idempotentSend(signal, swarmId, idempotencyKey, timeoutMs, corr -> {
-            ControlSignal payload = ControlSignal.forSwarm(signal, swarmId, corr, idempotencyKey);
-            String jsonPayload = toJson(payload);
-            String routingKey = ControlPlaneRouting.signal(signal, swarmId, "swarm-controller", "ALL");
-            sendControl(routingKey, jsonPayload, signal);
-            if ("swarm-start".equals(signal)) {
-                registry.markStartIssued(swarmId);
+	    private ResponseEntity<ControlResponse> sendSignal(String signal, String swarmId, String idempotencyKey, long timeoutMs) {
+	        Duration timeout = Duration.ofMillis(timeoutMs);
+	        return idempotentSend(signal, swarmId, idempotencyKey, timeoutMs, corr -> {
+	            String controllerInstance = registry.find(swarmId)
+	                .map(Swarm::getInstanceId)
+	                .orElse(null);
+	            if (controllerInstance == null || controllerInstance.isBlank()) {
+	                throw new IllegalStateException("Swarm " + swarmId + " is not registered with a controller instance");
+	            }
+	            ControlScope target = ControlScope.forInstance(swarmId, "swarm-controller", controllerInstance);
+	            ControlSignal payload = switch (signal) {
+	                case "swarm-start" -> ControlSignals.swarmStart(originInstanceId, target, corr, idempotencyKey);
+	                case "swarm-stop" -> ControlSignals.swarmStop(originInstanceId, target, corr, idempotencyKey);
+	                case "swarm-remove" -> ControlSignals.swarmRemove(originInstanceId, target, corr, idempotencyKey);
+	                default -> throw new IllegalArgumentException("Unsupported lifecycle signal: " + signal);
+	            };
+	            String jsonPayload = toJson(payload);
+	            String routingKey = ControlPlaneRouting.signal(signal, swarmId, "swarm-controller", controllerInstance);
+	            sendControl(routingKey, jsonPayload, signal);
+                try {
+                    var data = new LinkedHashMap<String, Object>();
+                    data.put("controllerInstance", controllerInstance);
+                    data.put("timeoutMs", timeoutMs);
+                    hiveJournal.append(HiveJournalEntry.info(
+                        swarmId,
+                        HiveJournal.Direction.OUT,
+                        "signal",
+                        signal,
+                        "orchestrator",
+                        target,
+                        corr,
+                        idempotencyKey,
+                        routingKey,
+                        data,
+                        null,
+                        null));
+                } catch (Exception ignore) {
+                    // best-effort
+                }
+	            if ("swarm-start".equals(signal)) {
+	                registry.markStartIssued(swarmId);
                 creates.expectStart(swarmId, corr, idempotencyKey, timeout);
             } else if ("swarm-stop".equals(signal)) {
                 creates.expectStop(swarmId, corr, idempotencyKey, timeout);
@@ -374,15 +442,15 @@ public class SwarmController {
      * Resolve the AMQP routing keys a client should watch for completion/error signals.
      * <p>
      * For {@code swarm-create} we watch the orchestrator's own events; subsequent lifecycle actions watch
-     * the specific swarm-controller instance (e.g. {@code ev.ready.swarm-start.swarm-controller.instance}).
+     * the specific swarm-controller instance (e.g. {@code event.outcome.swarm-start.<swarmId>.swarm-controller.<instance>}).
      * These values are documented in {@code docs/ORCHESTRATOR-REST.md#control-response}.
      */
     private ControlResponse.Watch watchFor(String signal, String swarmId) {
         if ("swarm-create".equals(signal)) {
-            ConfirmationScope scope = new ConfirmationScope(swarmId, "orchestrator", "ALL");
+            ConfirmationScope scope = new ConfirmationScope(swarmId, "orchestrator", originInstanceId);
             return new ControlResponse.Watch(
-                ControlPlaneRouting.event("ready.swarm-create", scope),
-                ControlPlaneRouting.event("error.swarm-create", scope));
+                ControlPlaneRouting.event("outcome", "swarm-create", scope),
+                ControlPlaneRouting.event("alert", "alert", scope));
         }
         String controllerInstance = registry.find(swarmId)
             .map(Swarm::getInstanceId)
@@ -392,8 +460,8 @@ public class SwarmController {
         }
         ConfirmationScope scope = new ConfirmationScope(swarmId, "swarm-controller", controllerInstance);
         return new ControlResponse.Watch(
-            ControlPlaneRouting.event("ready." + signal, scope),
-            ControlPlaneRouting.event("error." + signal, scope));
+            ControlPlaneRouting.event("outcome", signal, scope),
+            ControlPlaneRouting.event("alert", "alert", scope));
     }
 
     /**
@@ -551,7 +619,6 @@ public class SwarmController {
             swarm.getHealth(),
             swarm.getHeartbeat(),
             swarm.isWorkEnabled(),
-            swarm.isControllerEnabled(),
             swarm.templateId().orElse(null),
             swarm.controllerImage().orElse(null),
             swarm.getSutId(),
@@ -564,7 +631,6 @@ public class SwarmController {
                                SwarmHealth health,
                                java.time.Instant heartbeat,
                                boolean workEnabled,
-                               boolean controllerEnabled,
                                String templateId,
                                String controllerImage,
                                String sutId,
@@ -588,14 +654,14 @@ public class SwarmController {
             return json.writeValueAsString(signal);
         } catch (JsonProcessingException e) {
             throw new IllegalStateException("Failed to serialize control signal %s for swarm %s".formatted(
-                signal.signal(), signal.swarmId()), e);
+                signal.type(), signal.scope() != null ? signal.scope().swarmId() : "n/a"), e);
         }
     }
 
     /**
      * Emit a control-plane message and log the human-readable context.
      * <p>
-     * Example log line: {@code [CTRL] SEND swarm-start rk=sig.swarm-start.demo payload={...}}. Having the
+     * Example log line: {@code [CTRL] SEND swarm-start rk=signal.swarm-start.demo payload={...}}. Having the
      * snippet in logs helps engineers correlate REST calls to RabbitMQ traffic when debugging.
      */
     private void sendControl(String routingKey, String payload, String context) {
@@ -611,6 +677,14 @@ public class SwarmController {
             throw new IllegalStateException("pockethive.control-plane.exchange must not be null or blank");
         }
         return exchange;
+    }
+
+    private static String requireOrigin(ControlPlaneProperties properties) {
+        String instanceId = properties.getInstanceId();
+        if (instanceId == null || instanceId.isBlank()) {
+            throw new IllegalStateException("pockethive.control-plane.identity.instance-id must not be null or blank");
+        }
+        return instanceId.trim();
     }
 
     /**

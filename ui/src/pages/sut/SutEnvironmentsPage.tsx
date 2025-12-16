@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useSearchParams, Link } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import Editor from '@monaco-editor/react'
 import { apiFetch } from '../../lib/api'
 import WiremockPanel from '../hive/WiremockPanel'
@@ -11,6 +11,7 @@ import {
 } from '../../lib/sutEnvironments'
 
 export default function SutEnvironmentsPage() {
+  const navigate = useNavigate()
   const [envs, setEnvs] = useState<SutEnvironment[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -158,12 +159,13 @@ export default function SutEnvironmentsPage() {
             >
               {editing ? 'Close editor' : 'Edit YAML'}
             </button>
-            <Link
-              to="/hive"
+            <button
+              type="button"
               className="text-xs text-sky-300 hover:text-sky-200 transition"
+              onClick={() => navigate(-1)}
             >
-              Back to Hive
-            </Link>
+              Back
+            </button>
           </div>
         </div>
         {loading && (

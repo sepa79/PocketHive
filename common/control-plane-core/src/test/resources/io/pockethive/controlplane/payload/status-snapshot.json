@@ -1,49 +1,59 @@
 {
-  "event": "status",
-  "version": "1.0",
-  "messageId": "<<ANY>>",
   "timestamp": "<<ANY>>",
-  "location": "<<ANY>>",
-  "kind": "status-full",
-  "role": "processor",
-  "instance": "instance-7",
+  "version": "1",
+  "kind": "metric",
+  "type": "status-full",
   "origin": "instance-7",
-  "swarmId": "swarm-1",
-  "traffic": "ph.traffic",
-  "watermark": "2024-01-01T00:00:00Z",
-  "enabled": true,
-  "totals": {
-    "desired": 3,
-    "healthy": 2,
-    "running": 2,
-    "enabled": 3
+  "scope": {
+    "swarmId": "swarm-1",
+    "role": "processor",
+    "instance": "instance-7"
   },
-  "queues": {
-    "work": {
-      "in": [
-        "work.in"
-      ],
-      "routes": [
-        "rk.work"
-      ],
-      "out": [
-        "rk.out"
-      ]
-    },
-    "control": {
-      "in": [
-        "ctrl.queue"
-      ],
-      "routes": [
-        "rk.ctrl"
-      ],
-      "out": [
-        "rk.status"
-      ]
-    }
-  },
+  "correlationId": null,
+  "idempotencyKey": null,
   "data": {
+    "enabled": true,
     "tps": 42,
-    "baseUrl": "https://example"
+    "startedAt": "2024-01-01T00:00:00Z",
+    "baseUrl": "https://example",
+    "io": {
+      "work": {
+        "queues": {
+          "in": [
+            "work.in"
+          ],
+          "routes": [
+            "rk.work"
+          ],
+          "out": [
+            "rk.out"
+          ]
+        }
+      },
+      "control": {
+        "queues": {
+          "in": [
+            "ctrl.queue"
+          ],
+          "routes": [
+            "rk.ctrl"
+          ],
+          "out": [
+            "rk.status"
+          ]
+        }
+      }
+    },
+    "context": {
+      "location": "<<ANY>>",
+      "traffic": "ph.traffic",
+      "watermark": "2024-01-01T00:00:00Z",
+      "totals": {
+        "desired": 3,
+        "healthy": 2,
+        "running": 2,
+        "enabled": 3
+      }
+    }
   }
 }

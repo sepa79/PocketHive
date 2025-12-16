@@ -1,198 +1,246 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://pockethive.dev/docs/spec/control-events.schema.json",
-  "title": "PocketHive Control Event",
+  "title": "PocketHive Control-Plane Envelope",
   "type": "object",
-  "required": [
-    "event",
-    "kind",
-    "version",
-    "role",
-    "instance",
-    "messageId",
-    "timestamp"
+  "oneOf": [
+    { "$ref": "#/$defs/ControlSignal" },
+    { "$ref": "#/$defs/CommandOutcome" },
+    { "$ref": "#/$defs/StatusFullMetric" },
+    { "$ref": "#/$defs/StatusDeltaMetric" },
+    { "$ref": "#/$defs/AlertEvent" }
   ],
-  "properties": {
-    "event": {
+  "$defs": {
+    "NonEmptyString": {
       "type": "string",
-      "enum": [
-        "status",
-        "lifecycle",
-        "metric",
-        "alert",
-        "link"
-      ],
-      "examples": [
-        "ev.ready.swarm-create.<swarmId>",
-        "ev.ready.swarm-remove.<swarmId>"
+      "minLength": 1
+    },
+    "NullableNonEmptyString": {
+      "oneOf": [
+        { "$ref": "#/$defs/NonEmptyString" },
+        { "type": "null" }
       ]
     },
-    "kind": {
-      "type": "string"
-    },
-    "version": {
-      "type": "string"
-    },
-    "role": {
-      "type": "string",
-      "enum": [
-        "generator",
-        "moderator",
-        "processor",
-        "postprocessor",
-        "trigger",
-        "swarm-controller",
-        "orchestrator"
-      ]
-    },
-    "instance": {
-      "type": "string"
-    },
-    "location": {
-      "type": "string"
-    },
-    "messageId": {
-      "type": "string",
-      "format": "uuid"
-    },
-    "timestamp": {
-      "type": "string",
-      "format": "date-time"
-    },
-    "enabled": {
-      "type": "boolean"
-    },
-    "traffic": {
-      "type": "string"
-    },
-    "publishes": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      }
-    },
-    "queueStats": {
+    "Scope": {
       "type": "object",
-      "description": "Runtime depth/consumer metrics keyed by queue name.",
-      "additionalProperties": {
-        "type": "object",
-        "required": [
-          "depth",
-          "consumers"
-        ],
-        "properties": {
-          "depth": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "consumers": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "oldestAgeSec": {
-            "type": "number",
-            "minimum": 0
-          }
-        }
-      }
-    },
-    "queues": {
-      "type": "object",
-      "description": "Topology metadata grouped by work/control exchanges. Producers and consumers must use these sections instead of the legacy inQueue field.",
+      "additionalProperties": false,
+      "required": ["swarmId", "role", "instance"],
       "properties": {
-        "work": {
-          "type": "object",
-          "description": "Queues and routing keys bound to the worker traffic exchange.",
-          "properties": {
-            "in": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            },
-            "out": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            },
-            "routes": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            }
-          }
-        },
-        "control": {
-          "type": "object",
-          "description": "Queues and routing keys bound to the control exchange for this worker.",
-          "properties": {
-            "in": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            },
-            "out": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            },
-            "routes": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            }
-          }
-        }
-      }
+        "swarmId": { "type": ["string", "null"] },
+        "role": { "type": ["string", "null"] },
+        "instance": { "type": ["string", "null"] }
+      },
+      "description": "Scope tuple (swarmId/role/instance) that mirrors the routing-key target segments. Values may be null when the routing key uses ALL wildcards."
     },
-    "data": {
+    "EnvelopeBase": {
       "type": "object",
-      "additionalProperties": true
-    }
-  },
-  "allOf": [
-    {
-      "if": {
-        "properties": {
-          "kind": {
-            "const": "status-full"
-          }
-        }
-      },
-      "then": {
-        "properties": {
-          "data": {
-            "type": "object",
-            "required": [
-              "tps"
-            ]
-          }
+      "additionalProperties": false,
+      "required": [
+        "timestamp",
+        "version",
+        "kind",
+        "type",
+        "origin",
+        "scope",
+        "correlationId",
+        "idempotencyKey",
+        "data"
+      ],
+      "properties": {
+        "timestamp": { "type": "string", "format": "date-time" },
+        "version": { "$ref": "#/$defs/NonEmptyString" },
+        "kind": { "$ref": "#/$defs/NonEmptyString" },
+        "type": { "$ref": "#/$defs/NonEmptyString" },
+        "origin": { "$ref": "#/$defs/NonEmptyString" },
+        "scope": { "$ref": "#/$defs/Scope" },
+        "correlationId": { "$ref": "#/$defs/NullableNonEmptyString" },
+        "idempotencyKey": { "$ref": "#/$defs/NullableNonEmptyString" },
+        "data": {
+          "type": ["object", "null"],
+          "additionalProperties": true
         }
       }
     },
-    {
-      "if": {
-        "properties": {
-          "kind": {
-            "const": "status-delta"
+    "ControlSignal": {
+      "allOf": [
+        { "$ref": "#/$defs/EnvelopeBase" },
+        {
+          "type": "object",
+          "properties": {
+            "kind": { "const": "signal" },
+            "correlationId": { "$ref": "#/$defs/NonEmptyString" },
+            "data": { "type": "object", "additionalProperties": true }
           }
         }
-      },
-      "then": {
-        "properties": {
-          "data": {
-            "type": "object",
-            "required": [
-              "tps"
-            ]
+      ]
+    },
+    "CommandOutcome": {
+      "allOf": [
+        { "$ref": "#/$defs/EnvelopeBase" },
+        {
+          "type": "object",
+          "properties": {
+            "kind": { "const": "outcome" },
+            "correlationId": { "$ref": "#/$defs/NonEmptyString" },
+            "data": {
+              "type": "object",
+              "additionalProperties": true,
+              "required": ["status"],
+              "properties": {
+                "status": { "$ref": "#/$defs/NonEmptyString" },
+                "enabled": { "type": "boolean" },
+                "retryable": { "type": "boolean" },
+                "context": { "type": "object", "additionalProperties": true }
+              }
+            }
           }
+        }
+      ]
+    },
+    "QueueStatsEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["depth", "consumers"],
+      "properties": {
+        "depth": { "type": "integer", "minimum": 0 },
+        "consumers": { "type": "integer", "minimum": 0 },
+        "oldestAgeSec": { "type": "number", "minimum": 0 }
+      }
+    },
+    "MetricIoQueues": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "in": { "type": "array", "items": { "type": "string" } },
+        "out": { "type": "array", "items": { "type": "string" } },
+        "routes": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "MetricIoWork": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "queues": { "$ref": "#/$defs/MetricIoQueues" },
+        "queueStats": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/QueueStatsEntry" }
         }
       }
+    },
+    "MetricIoControl": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "queues": { "$ref": "#/$defs/MetricIoQueues" }
+      }
+    },
+    "MetricIo": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "work": { "$ref": "#/$defs/MetricIoWork" },
+        "control": { "$ref": "#/$defs/MetricIoControl" }
+      }
+    },
+    "IoInputState": {
+      "type": "string",
+      "enum": ["ok", "out-of-data", "backpressure", "upstream-error", "unknown"]
+    },
+    "IoOutputState": {
+      "type": "string",
+      "enum": ["ok", "blocked", "throttled", "downstream-error", "unknown"]
+    },
+    "IoState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["input", "output"],
+      "properties": {
+        "input": { "$ref": "#/$defs/IoInputState" },
+        "output": { "$ref": "#/$defs/IoOutputState" },
+        "context": { "type": "object", "additionalProperties": true }
+      }
+    },
+    "MetricIoState": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "work": { "$ref": "#/$defs/IoState" },
+        "control": { "$ref": "#/$defs/IoState" }
+      }
+    },
+    "StatusFullMetric": {
+      "allOf": [
+        { "$ref": "#/$defs/EnvelopeBase" },
+        {
+          "type": "object",
+          "properties": {
+            "kind": { "const": "metric" },
+            "type": { "const": "status-full" },
+            "data": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["enabled", "tps", "startedAt"],
+              "properties": {
+                "enabled": { "type": "boolean" },
+                "tps": { "type": "integer", "minimum": 0 },
+                "startedAt": { "type": "string", "format": "date-time" },
+                "io": { "$ref": "#/$defs/MetricIo" },
+                "ioState": { "$ref": "#/$defs/MetricIoState" },
+                "context": { "type": "object", "additionalProperties": true }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "StatusDeltaMetric": {
+      "allOf": [
+        { "$ref": "#/$defs/EnvelopeBase" },
+        {
+          "type": "object",
+          "properties": {
+            "kind": { "const": "metric" },
+            "type": { "const": "status-delta" },
+            "data": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["enabled", "tps"],
+              "properties": {
+                "enabled": { "type": "boolean" },
+                "tps": { "type": "integer", "minimum": 0 },
+                "ioState": { "$ref": "#/$defs/MetricIoState" },
+                "context": { "type": "object", "additionalProperties": true }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "AlertEvent": {
+      "allOf": [
+        { "$ref": "#/$defs/EnvelopeBase" },
+        {
+          "type": "object",
+          "properties": {
+            "kind": { "const": "event" },
+            "type": { "const": "alert" },
+            "data": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["level", "code", "message"],
+              "properties": {
+                "level": { "type": "string", "enum": ["info", "warn", "error"] },
+                "code": { "$ref": "#/$defs/NonEmptyString" },
+                "message": { "$ref": "#/$defs/NonEmptyString" },
+                "errorType": { "$ref": "#/$defs/NullableNonEmptyString" },
+                "errorDetail": { "$ref": "#/$defs/NullableNonEmptyString" },
+                "logRef": { "$ref": "#/$defs/NullableNonEmptyString" },
+                "context": { "type": "object", "additionalProperties": true }
+              }
+            }
+          }
+        }
+      ]
     }
-  ]
+  }
 }

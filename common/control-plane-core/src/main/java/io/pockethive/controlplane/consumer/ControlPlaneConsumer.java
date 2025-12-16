@@ -45,14 +45,14 @@ public final class ControlPlaneConsumer {
         if (!selfFilter.shouldProcess(identity, envelope)) {
             log.info(
                 "Skipping control-plane signal '{}' via '{}' for identity {} due to self-filter",
-                safe(signal.signal()), routingKey, describeIdentity(identity)
+                safe(resolveSignalName(envelope)), routingKey, describeIdentity(identity)
             );
             return false;
         }
         if (!duplicateGuard.markIfNew(signal)) {
             log.info(
                 "Skipping duplicate control-plane signal '{}' via '{}' (correlationId='{}', idempotencyKey='{}')",
-                safe(signal.signal()), routingKey, safe(signal.correlationId()), safe(signal.idempotencyKey())
+                safe(resolveSignalName(envelope)), routingKey, safe(signal.correlationId()), safe(signal.idempotencyKey())
             );
             return false;
         }
@@ -86,14 +86,11 @@ public final class ControlPlaneConsumer {
         }
         ControlSignal signal = envelope.signal();
         log.info(
-            "Received control-plane signal '{}' via '{}' for identity {} (target='{}', swarm='{}', role='{}', instance='{}', origin='{}', correlationId='{}', idempotencyKey='{}')",
-            resolveSignalName(envelope),
+            "Received control-plane signal '{}' via '{}' for identity {} (scope='{}', origin='{}', correlationId='{}', idempotencyKey='{}')",
+            safe(resolveSignalName(envelope)),
             envelope.routingKey(),
             describeIdentity(identity),
-            safe(signal.commandTarget()),
-            safe(signal.swarmId()),
-            safe(signal.role()),
-            safe(signal.instance()),
+            safe(signal.scope()),
             safe(signal.origin()),
             safe(signal.correlationId()),
             safe(signal.idempotencyKey())
@@ -102,8 +99,8 @@ public final class ControlPlaneConsumer {
 
     private String resolveSignalName(ControlSignalEnvelope envelope) {
         ControlSignal signal = envelope.signal();
-        if (signal != null && hasText(signal.signal())) {
-            return signal.signal();
+        if (signal != null && hasText(signal.type())) {
+            return signal.type();
         }
         ControlPlaneRouting.RoutingKey routingKey = ControlPlaneRouting.parseSignal(envelope.routingKey());
         if (routingKey != null && hasText(routingKey.type())) {

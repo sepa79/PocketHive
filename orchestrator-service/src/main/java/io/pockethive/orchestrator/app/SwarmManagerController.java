@@ -2,10 +2,11 @@ package io.pockethive.orchestrator.app;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.pockethive.control.CommandTarget;
+import io.pockethive.control.ControlScope;
 import io.pockethive.control.ControlSignal;
 import io.pockethive.control.ConfirmationScope;
 import io.pockethive.controlplane.ControlPlaneSignals;
+import io.pockethive.controlplane.messaging.ControlSignals;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.controlplane.spring.ControlPlaneProperties;
 import io.pockethive.orchestrator.domain.IdempotencyStore;
@@ -22,7 +23,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -47,6 +47,7 @@ public class SwarmManagerController {
     private final IdempotencyStore idempotency;
     private final ObjectMapper json;
     private final String controlExchange;
+    private final String originInstanceId;
 
     public SwarmManagerController(SwarmRegistry registry,
                                   AmqpTemplate rabbit,
@@ -58,6 +59,7 @@ public class SwarmManagerController {
         this.idempotency = idempotency;
         this.json = json;
         this.controlExchange = requireExchange(controlPlaneProperties);
+        this.originInstanceId = requireOrigin(controlPlaneProperties);
     }
 
     /**
@@ -68,12 +70,11 @@ public class SwarmManagerController {
      * {
      *   "idempotencyKey": "ops-555",
      *   "enabled": false,
-     *   "notes": "pause all swarms",
-     *   "commandTarget": {"scope": "SWARM"}
+     *   "notes": "pause all swarms"
      * }
      * }</pre>
      * The response body describes which swarms received new signals versus which reused existing
-     * correlations so dashboards know whether to expect {@code ready.config-update} events.
+     * correlations so dashboards know whether to expect {@code event.outcome.config-update.*} events.
      */
     @PostMapping("/enabled")
     public ResponseEntity<FanoutControlResponse> updateAll(@RequestBody ToggleRequest request) {
@@ -108,8 +109,8 @@ public class SwarmManagerController {
      * Iterate through the provided swarms, publishing idempotent {@code config-update} signals.
      * <p>
      * For each swarm we check {@link IdempotencyStore}; if a correlation exists we return it immediately.
-     * Otherwise we construct {@link ControlSignal#forInstance(String, String, String, String, String, String, CommandTarget, Map)}
-     * with routing keys derived from {@link #routingKey(String, String)} and record the new correlation so
+     * Otherwise we construct {@link ControlSignals#configUpdate(String, ControlScope, String, String, Map)} with routing
+     * keys derived from {@link #routingKey(String, String)} and record the new correlation so
      * retries remain deterministic. The resulting {@link FanoutControlResponse} lists each dispatch with a
      * {@code reused} flag for observability.
      */
@@ -129,17 +130,15 @@ public class SwarmManagerController {
                     accepted(existing.get(), request.idempotencyKey(), swarmSegment, swarm.getInstanceId()), true));
                 continue;
             }
-            ControlSignal payload = ControlSignal.forInstance(
-                ControlPlaneSignals.CONFIG_UPDATE,
-                swarmId,
-                "swarm-controller",
-                swarm.getInstanceId(),
+            ControlScope target = ControlScope.forInstance(swarmId, "swarm-controller", swarm.getInstanceId());
+            ControlSignal payload = ControlSignals.configUpdate(
+                originInstanceId,
+                target,
                 newCorrelation,
                 request.idempotencyKey(),
-                request.commandTarget(),
-                argsFor(request));
+                Map.of("enabled", request.enabled()));
             try {
-                sendControl(routingKey(swarmSegment, swarm.getInstanceId()), toJson(payload), request.commandTarget());
+                sendControl(routingKey(swarmSegment, swarm.getInstanceId()), toJson(payload));
             } catch (RuntimeException e) {
                 idempotency.rollback(scope, ControlPlaneSignals.CONFIG_UPDATE, request.idempotencyKey(), newCorrelation);
                 throw e;
@@ -154,24 +153,10 @@ public class SwarmManagerController {
      * Compute the control-plane routing key for a given swarm segment and controller instance.
      * <p>
      * Example: {@code routingKey("demo", "swarm-controller-demo-1")} yields
-     * {@code sig.config-update.demo.swarm-controller.swarm-controller-demo-1}.
+     * {@code signal.config-update.demo.swarm-controller.swarm-controller-demo-1}.
      */
     private static String routingKey(String swarmSegment, String instanceId) {
         return ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, swarmSegment, "swarm-controller", instanceId);
-    }
-
-    /**
-     * Convert the toggle request into the structured {@code args} block expected by worker runtimes.
-     * <p>
-     * Currently we only forward the {@code enabled} flag, but this method centralises the mapping so
-     * future extensions (e.g. role-specific limits) remain consistent across fan-out calls.
-     */
-    private Map<String, Object> argsFor(ToggleRequest request) {
-        Map<String, Object> args = new LinkedHashMap<>();
-        Map<String, Object> data = new LinkedHashMap<>();
-        data.put("enabled", request.enabled());
-        args.put("data", data);
-        return args;
     }
 
     /**
@@ -187,21 +172,17 @@ public class SwarmManagerController {
                                      String instanceId) {
         ConfirmationScope scope = new ConfirmationScope(swarmSegment, "swarm-controller", instanceId);
         ControlResponse.Watch watch = new ControlResponse.Watch(
-            ControlPlaneRouting.event("ready.config-update", scope),
-            ControlPlaneRouting.event("error.config-update", scope)
+            ControlPlaneRouting.event("outcome", ControlPlaneSignals.CONFIG_UPDATE, scope),
+            ControlPlaneRouting.event("alert", "alert", scope)
         );
         return new ControlResponse(correlationId, idempotencyKey, watch, CONFIG_UPDATE_TIMEOUT_MS);
     }
 
     /**
-     * Publish a control message while logging the selected {@link CommandTarget} for debugging.
-     * <p>
-     * Example log when targeting a single instance:
-     * {@code [CTRL] SEND {"scope":"INSTANCE"} rk=sig.config-update.demo.swarm-controller.instance payload={...}}
+     * Publish a control message.
      */
-    private void sendControl(String routingKey, String payload, CommandTarget context) {
-        String label = context == null ? "SEND" : "SEND " + context.json();
-        log.info("[CTRL] {} rk={} payload={}", label, routingKey, snippet(payload));
+    private void sendControl(String routingKey, String payload) {
+        log.info("[CTRL] SEND rk={} payload={}", routingKey, snippet(payload));
         rabbit.convertAndSend(controlExchange, routingKey, payload);
     }
 
@@ -222,8 +203,16 @@ public class SwarmManagerController {
             return json.writeValueAsString(signal);
         } catch (JsonProcessingException e) {
             throw new IllegalStateException("Failed to serialize control signal %s for swarm %s".formatted(
-                signal.signal(), signal.swarmId()), e);
+                signal.type(), signal.scope() != null ? signal.scope().swarmId() : "n/a"), e);
         }
+    }
+
+    private static String requireOrigin(ControlPlaneProperties properties) {
+        String instanceId = properties.getInstanceId();
+        if (instanceId == null || instanceId.isBlank()) {
+            throw new IllegalStateException("pockethive.control-plane.identity.instance-id must not be null or blank");
+        }
+        return instanceId.trim();
     }
 
     /**
@@ -275,25 +264,17 @@ public class SwarmManagerController {
      * Request payload for toggle endpoints.
      * <p>
      * Validation occurs in the canonical constructor so API consumers get immediate feedback if they
-     * forget required fields. {@code commandTarget} defaults to {@link CommandTarget#SWARM} but can be set
-     * to {@code INSTANCE} when targeting a single controller.
+     * forget required fields.
      */
     public record ToggleRequest(String idempotencyKey,
                                  Boolean enabled,
-                                 String notes,
-                                 CommandTarget commandTarget) {
+                                 String notes) {
         public ToggleRequest {
             if (idempotencyKey == null || idempotencyKey.isBlank()) {
                 throw new IllegalArgumentException("idempotencyKey is required");
             }
             if (enabled == null) {
                 throw new IllegalArgumentException("enabled flag is required");
-            }
-            if (commandTarget == null) {
-                commandTarget = CommandTarget.SWARM;
-            }
-            if (commandTarget != CommandTarget.SWARM && commandTarget != CommandTarget.INSTANCE) {
-                throw new IllegalArgumentException("commandTarget must be swarm or instance");
             }
         }
     }

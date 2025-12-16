@@ -11,8 +11,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 
-import io.pockethive.control.CommandTarget;
-
 /**
  * Thin wrapper around {@link WebClient} to access the Orchestrator REST API.
  */
@@ -63,9 +61,8 @@ public final class OrchestratorClient {
     Objects.requireNonNull(role, "role");
     Objects.requireNonNull(instance, "instance");
     Objects.requireNonNull(request, "request");
-    ComponentConfigRequest targeted = request.withCommandTarget(CommandTarget.INSTANCE);
     return postControlRequest(componentPath("/api/components/{role}/{instance}/config", role, instance),
-        targeted, ControlResponse.class);
+        request, ControlResponse.class);
   }
 
   public Optional<SwarmView> findSwarm(String swarmId) {
@@ -143,20 +140,10 @@ public final class OrchestratorClient {
   public record ComponentConfigRequest(String idempotencyKey,
                                        Map<String, Object> patch,
                                        String notes,
-                                       String swarmId,
-                                       CommandTarget commandTarget) {
+                                       String swarmId) {
 
     public ComponentConfigRequest {
       patch = patch == null || patch.isEmpty() ? Map.of() : Map.copyOf(patch);
-      commandTarget = commandTarget == null ? CommandTarget.INSTANCE : commandTarget;
-    }
-
-    public ComponentConfigRequest withCommandTarget(CommandTarget target) {
-      Objects.requireNonNull(target, "target");
-      if (target == commandTarget) {
-        return this;
-      }
-      return new ComponentConfigRequest(idempotencyKey, patch, notes, swarmId, target);
     }
 
     public ComponentConfigRequest withPatch(Map<String, Object> newPatch) {
@@ -166,14 +153,14 @@ public final class OrchestratorClient {
       if (safePatch.equals(patch)) {
         return this;
       }
-      return new ComponentConfigRequest(idempotencyKey, safePatch, notes, swarmId, commandTarget);
+      return new ComponentConfigRequest(idempotencyKey, safePatch, notes, swarmId);
     }
 
     public ComponentConfigRequest withSwarmId(String newSwarmId) {
       if (Objects.equals(swarmId, newSwarmId)) {
         return this;
       }
-      return new ComponentConfigRequest(idempotencyKey, patch, notes, newSwarmId, commandTarget);
+      return new ComponentConfigRequest(idempotencyKey, patch, notes, newSwarmId);
     }
   }
 }

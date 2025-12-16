@@ -28,9 +28,9 @@ class ControlPlaneTestFixturesTest {
         WorkerControlPlaneProperties.ControlPlane controlPlane = properties.getControlPlane();
         assertThat(controlPlane.getControlQueueName()).isEqualTo("ph.control.swarm-1.generator.worker-a");
         assertThat(controlPlane.getRoutes().configSignals())
-            .contains("sig.config-update.swarm-1.generator.{instance}");
+            .contains("signal.config-update.swarm-1.generator.{instance}");
         assertThat(controlPlane.getRoutes().statusSignals())
-            .contains("sig.status-request.swarm-1.generator.{instance}");
+            .contains("signal.status-request.swarm-1.generator.{instance}");
     }
 
     @Test

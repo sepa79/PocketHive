@@ -57,9 +57,9 @@ final class ControlPlaneNotifier {
         log.info(
             "Applied config update for worker {} (signal={} role={} instance={}):\n  enabled: {}\n  changes:\n{}\n  finalConfig:\n{}",
             state.definition().beanName(),
-            signal.signal(),
-            signal.role(),
-            signal.instance(),
+            signal.type(),
+            signal.scope() != null ? signal.scope().role() : null,
+            signal.scope() != null ? signal.scope().instance() : null,
             formatEnabledChange(previousEnabled, finalEnabled),
             prettyChanges,
             prettyFinal
@@ -91,7 +91,7 @@ final class ControlPlaneNotifier {
             confirmationDetails.put("config", rawConfig);
         }
         ControlPlaneEmitter.ReadyContext.Builder ready = ControlPlaneEmitter.ReadyContext.builder(
-            signal.signal(),
+            signal.type(),
             signal.correlationId(),
             signal.idempotencyKey(),
             commandState
@@ -114,7 +114,7 @@ final class ControlPlaneNotifier {
             details.put("data", statusData);
         }
         ControlPlaneEmitter.ErrorContext.Builder builder = ControlPlaneEmitter.ErrorContext.builder(
-            signal.signal(),
+            signal.type(),
             signal.correlationId(),
             signal.idempotencyKey(),
             commandState,

@@ -88,8 +88,7 @@ services:
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
       - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
       - grafana-data:/var/lib/grafana
-    ports:
-      - "3333:3000"
+    # Expose Grafana via the UI reverse-proxy at http://localhost:8088/grafana
     depends_on:
       - prometheus
       - loki
@@ -150,6 +149,23 @@ services:
       - ./wiremock/mappings:/home/wiremock/mappings
       - ./wiremock/__files:/home/wiremock/__files
 
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: pockethive
+      POSTGRES_USER: pockethive
+      POSTGRES_PASSWORD: pockethive
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pockethive -d pockethive -h 127.0.0.1 -p 5432"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
   # promtail:
   #   # disabled: logs are shipped via RabbitMQ and aggregated to Loki
   #   image: grafana/promtail:2.9.1
@@ -209,9 +225,16 @@ services:
     image: ${DOCKER_REGISTRY:-}orchestrator:${POCKETHIVE_VERSION:-latest}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      - /opt/pockethive/scenarios-runtime:/opt/pockethive/scenarios-runtime
 # all defaulted in application.yml, uncomment to override here
     environment:
       POCKETHIVE_SCENARIOS_RUNTIME_ROOT: /opt/pockethive/scenarios-runtime
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/pockethive
+      SPRING_DATASOURCE_USERNAME: pockethive
+      SPRING_DATASOURCE_PASSWORD: pockethive
+      POCKETHIVE_JOURNAL_SINK: postgres
+      POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_RABBIT_LOGGING_ENABLED: "true"
+      POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_RABBIT_LOGS_EXCHANGE: ph.logs
 #      <<: *metrics-env
 #      POCKETHIVE_CONTROL_PLANE_EXCHANGE: ph.control
 #      POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE: ph.control
@@ -220,6 +243,8 @@ services:
         condition: service_healthy
       log-aggregator:
         condition: service_healthy
+      postgres:
+        condition: service_healthy
 
 
   scenario-manager:
@@ -227,6 +252,11 @@ services:
     environment:
       <<: *metrics-env
       RABBITMQ_HOST: rabbitmq
+      RABBITMQ_LOGGING_ENABLED: "true"
+      POCKETHIVE_LOGS_EXCHANGE: ph.logs
+      POCKETHIVE_CONTROL_PLANE_SWARM_ID: hive
+      POCKETHIVE_CONTROL_PLANE_INSTANCE_ID: scenario-manager
+      POCKETHIVE_CONTROL_PLANE_MANAGER_ROLE: scenario-manager
       POCKETHIVE_LOGS_QUEUE: ph.logs.agg
       POCKETHIVE_SCENARIOS_RUNTIME_ROOT: /opt/pockethive/scenarios-runtime
       MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_GROUPING_KEY_INSTANCE: scenario-manager
@@ -255,3 +285,10 @@ volumes:
   grafana-data:
   loki-data:
   redis-data:
+  postgres-data:
+
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.pockethive.control.ConfirmationScope;
+import io.pockethive.control.ControlScope;
 import io.pockethive.controlplane.ControlPlaneSignals;
 import io.pockethive.controlplane.messaging.ControlPlanePublisher;
 import io.pockethive.controlplane.messaging.EventMessage;
@@ -35,6 +36,7 @@ import io.pockethive.swarmcontroller.infra.docker.WorkloadProvisioner;
 import io.pockethive.swarmcontroller.QueueStats;
 import io.pockethive.swarmcontroller.QueuePropertyCoercion;
 import io.pockethive.swarmcontroller.SwarmLifecycleManager;
+import io.pockethive.swarmcontroller.scenario.TimelineScenarioObserver;
 import io.pockethive.controlplane.spring.ControlPlaneContainerEnvironmentFactory;
 import io.pockethive.controlplane.spring.ControlPlaneContainerEnvironmentFactory.PushgatewaySettings;
 import io.pockethive.controlplane.spring.ControlPlaneContainerEnvironmentFactory.WorkerSettings;
@@ -58,6 +60,7 @@ import java.util.UUID;
 import java.util.function.Function;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.amqp.core.AmqpAdmin;
 import org.springframework.amqp.core.TopicExchange;
 import org.springframework.amqp.rabbit.core.RabbitAdmin;
@@ -88,6 +91,7 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
   private final ComputeAdapter computeAdapter;
   private final SwarmQueueMetrics queueMetrics;
   private final io.pockethive.manager.runtime.ConfigFanout configFanout;
+  private final SwarmJournal journal;
   private final SwarmReadinessTracker readinessTracker;
   private final String instanceId;
   private final String role;
@@ -118,6 +122,7 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
                           ComputeAdapter computeAdapter,
                           SwarmQueueMetrics queueMetrics,
                           io.pockethive.manager.runtime.ConfigFanout configFanout,
+                          SwarmJournal journal,
                           String instanceId) {
     this.amqp = Objects.requireNonNull(amqp, "amqp");
     this.mapper = Objects.requireNonNull(mapper, "mapper");
@@ -131,6 +136,7 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
     this.computeAdapter = Objects.requireNonNull(computeAdapter, "computeAdapter");
     this.queueMetrics = Objects.requireNonNull(queueMetrics, "queueMetrics");
     this.configFanout = Objects.requireNonNull(configFanout, "configFanout");
+    this.journal = journal != null ? journal : SwarmJournal.noop();
     this.instanceId = Objects.requireNonNull(instanceId, "instanceId");
     this.role = properties.getRole();
     this.swarmId = properties.getSwarmId();
@@ -234,8 +240,11 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
             managerCore.getStatus(),
             managerCore.getMetrics(),
             java.util.Collections.emptyMap());
-    ScenarioContext scenarioContext = new ScenarioContext(scenarioManager, configFanout);
-    this.timelineScenario = new io.pockethive.swarmcontroller.scenario.TimelineScenario("default", mapper);
+    ScenarioContext scenarioContext = new ScenarioContext(swarmId, scenarioManager, configFanout);
+    this.timelineScenario = new io.pockethive.swarmcontroller.scenario.TimelineScenario(
+        "default",
+        mapper,
+        new JournalTimelineScenarioObserver());
     this.scenarioEngine = new ScenarioEngine(
         java.util.List.of(timelineScenario),
         viewSupplier,
@@ -312,8 +321,10 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
 
       java.util.List<io.pockethive.manager.runtime.WorkerSpec> workerSpecs = new java.util.ArrayList<>();
       SutEnvironment sutEnv = plan.sutEnvironment();
+      Set<String> roles = new LinkedHashSet<>();
       for (Bee bee : runnableBees) {
         String beeName = BeeNameGenerator.generate(bee.role(), swarmId);
+        roles.add(bee.role());
         Map<String, String> env = new LinkedHashMap<>(
             ControlPlaneContainerEnvironmentFactory.workerEnvironment(beeName, bee.role(), workerSettings, rabbitProperties));
         applyWorkIoEnvironment(bee, env);
@@ -337,9 +348,30 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
           configFanout.registerBootstrapConfig(beeName, bee.role(), effectiveConfig);
         }
       }
+      journal.append(localEntry(
+          "worker",
+          "INFO",
+          "workers-planned",
+          Map.of("workers", workerSpecs.size(), "roles", List.copyOf(roles)),
+          mdcCorrelationId(),
+          mdcIdempotencyKey()));
       computeAdapter.applyWorkers(swarmId, workerSpecs);
+      journal.append(localEntry(
+          "worker",
+          "INFO",
+          "workers-provisioned",
+          Map.of("workers", workerSpecs.size()),
+          mdcCorrelationId(),
+          mdcIdempotencyKey()));
     } catch (JsonProcessingException e) {
       log.warn("Invalid template payload", e);
+      journal.append(localEntry(
+          "plan",
+          "ERROR",
+          "template-invalid",
+          Map.of("message", safeMessage(e)),
+          mdcCorrelationId(),
+          mdcIdempotencyKey()));
     }
   }
 
@@ -373,19 +405,22 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
 
     String controlQueue = properties.controlQueueName(role, instanceId);
     String rk = ControlPlaneRouting.event(
+        "metric",
         "status-delta",
         ConfirmationScope.forInstance(swarmId, role, instanceId));
     String payload = new StatusEnvelopeBuilder()
-        .kind("status-delta")
+        .type("status-delta")
         .role(role)
         .instance(instanceId)
         .origin(instanceId)
         .swarmId(swarmId)
+        .ioControlState("ok", "ok", null)
+        .ioWorkState("unknown", "unknown", null)
         .controlIn(controlQueue)
         .controlRoutes(io.pockethive.swarmcontroller.SwarmControllerRoutes.controllerControlRoutes(swarmId, role, instanceId))
         .controlOut(rk)
-        .enabled(true)
-        .data("startedAt", startedAt)
+        .enabled(false)
+        .tps(0)
         .data("swarmStatus", status.name())
         .toJson();
     log.debug("[CTRL] SEND rk={} inst={} payload={}", rk, instanceId, snippet(payload));
@@ -715,6 +750,205 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
     }
 
     return Map.copyOf(enriched);
+  }
+
+  private SwarmJournal.SwarmJournalEntry localEntry(String kind,
+                                                    String severity,
+                                                    String type,
+                                                    Map<String, Object> data,
+                                                    String correlationId,
+                                                    String idempotencyKey) {
+    return new SwarmJournal.SwarmJournalEntry(
+        Instant.now(),
+        swarmId,
+        severity != null ? severity : "INFO",
+        SwarmJournal.Direction.LOCAL,
+        kind != null && !kind.isBlank() ? kind : "local",
+        type,
+        "swarm-controller",
+        ControlScope.forInstance(swarmId, role, instanceId),
+        correlationId,
+        idempotencyKey,
+        null,
+        data,
+        null,
+        null);
+  }
+
+  private static String safeMessage(Throwable t) {
+    if (t == null) {
+      return null;
+    }
+    String msg = t.getMessage();
+    if (msg == null || msg.isBlank()) {
+      return t.getClass().getSimpleName();
+    }
+    return msg.length() > 200 ? msg.substring(0, 200) + "…" : msg;
+  }
+
+  private static String mdcCorrelationId() {
+    String value = MDC.get("correlation_id");
+    return value != null && !value.isBlank() ? value : null;
+  }
+
+  private static String mdcIdempotencyKey() {
+    String value = MDC.get("idempotency_key");
+    return value != null && !value.isBlank() ? value : null;
+  }
+
+  private final class JournalTimelineScenarioObserver implements TimelineScenarioObserver {
+
+    @Override
+    public void onPlanCleared() {
+      journal.append(localEntry("plan", "INFO", "scenario-plan-cleared", null, mdcCorrelationId(), mdcIdempotencyKey()));
+    }
+
+    @Override
+    public void onPlanLoaded(int beeSteps, int swarmSteps) {
+      journal.append(localEntry(
+          "plan",
+          "INFO",
+          "scenario-plan-loaded",
+          new LinkedHashMap<>(Map.of("beeSteps", beeSteps, "swarmSteps", swarmSteps)),
+          mdcCorrelationId(),
+          mdcIdempotencyKey()));
+    }
+
+    @Override
+    public void onPlanParseFailed(String message) {
+      Map<String, Object> data = new LinkedHashMap<>();
+      data.put("message", message != null ? message : "");
+      journal.append(localEntry(
+          "plan",
+          "ERROR",
+          "scenario-plan-parse-failed",
+          data,
+          mdcCorrelationId(),
+          mdcIdempotencyKey()));
+    }
+
+    @Override
+    public void onPlanReset() {
+      journal.append(localEntry("plan", "INFO", "scenario-plan-reset", null, mdcCorrelationId(), mdcIdempotencyKey()));
+    }
+
+    @Override
+    public void onTimelineStarted(Instant startedAt) {
+      Map<String, Object> data = new LinkedHashMap<>();
+      data.put("startedAt", startedAt != null ? startedAt.toString() : null);
+      journal.append(localEntry(
+          "plan",
+          "INFO",
+          "scenario-timeline-started",
+          data,
+          null,
+          null));
+    }
+
+    @Override
+    public void onStepStarted(String stepId,
+                              String name,
+                              long dueMillis,
+                              String type,
+                              String role,
+                              String instanceId,
+                              boolean swarmLifecycleStep) {
+      Map<String, Object> data = new LinkedHashMap<>();
+      data.put("stepId", stepId);
+      data.put("name", name);
+      data.put("dueMillis", dueMillis);
+      data.put("stepType", type);
+      data.put("targetRole", role);
+      data.put("targetInstance", instanceId);
+      data.put("swarmLifecycleStep", swarmLifecycleStep);
+      journal.append(localEntry(
+          "plan",
+          "INFO",
+          "scenario-step-started",
+          data,
+          null,
+          null));
+    }
+
+    @Override
+    public void onStepCompleted(String stepId,
+                                String name,
+                                long dueMillis,
+                                String type,
+                                String role,
+                                String instanceId,
+                                boolean swarmLifecycleStep) {
+      Map<String, Object> data = new LinkedHashMap<>();
+      data.put("stepId", stepId);
+      data.put("name", name);
+      data.put("dueMillis", dueMillis);
+      data.put("stepType", type);
+      data.put("targetRole", role);
+      data.put("targetInstance", instanceId);
+      data.put("swarmLifecycleStep", swarmLifecycleStep);
+      journal.append(localEntry(
+          "plan",
+          "INFO",
+          "scenario-step-completed",
+          data,
+          null,
+          null));
+    }
+
+    @Override
+    public void onStepFailed(String stepId,
+                             String name,
+                             long dueMillis,
+                             String type,
+                             String role,
+                             String instanceId,
+                             boolean swarmLifecycleStep,
+                             String message) {
+      Map<String, Object> data = new LinkedHashMap<>();
+      data.put("stepId", stepId);
+      data.put("name", name);
+      data.put("dueMillis", dueMillis);
+      data.put("stepType", type);
+      data.put("targetRole", role);
+      data.put("targetInstance", instanceId);
+      data.put("swarmLifecycleStep", swarmLifecycleStep);
+      data.put("message", message != null ? message : "");
+      journal.append(localEntry(
+          "plan",
+          "ERROR",
+          "scenario-step-failed",
+          data,
+          null,
+          null));
+    }
+
+    @Override
+    public void onRunCompleted(Integer totalRuns, Integer runsRemaining) {
+      Map<String, Object> data = new LinkedHashMap<>();
+      data.put("totalRuns", totalRuns);
+      data.put("runsRemaining", runsRemaining);
+      journal.append(localEntry(
+          "plan",
+          "INFO",
+          "scenario-run-completed",
+          data,
+          null,
+          null));
+    }
+
+    @Override
+    public void onPlanCompleted(Integer totalRuns, Integer runsRemaining) {
+      Map<String, Object> data = new LinkedHashMap<>();
+      data.put("totalRuns", totalRuns);
+      data.put("runsRemaining", runsRemaining);
+      journal.append(localEntry(
+          "plan",
+          "INFO",
+          "scenario-plan-completed",
+          data,
+          null,
+          null));
+    }
   }
 
   private List<String> computeStartOrder(SwarmPlan plan) {

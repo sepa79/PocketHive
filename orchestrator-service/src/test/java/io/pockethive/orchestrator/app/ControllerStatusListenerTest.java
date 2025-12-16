@@ -26,11 +26,22 @@ class ControllerStatusListenerTest {
     @Test
     void updatesRegistry() {
         ControllerStatusListener listener = new ControllerStatusListener(registry, new ObjectMapper());
-        String json = "{\"swarmId\":\"sw1\",\"data\":{\"swarmStatus\":\"RUNNING\",\"workloadsEnabled\":true,\"controllerEnabled\":false}}";
-        listener.handle(json, "ev.status-delta.sw1.swarm-controller.inst1");
+        String json = """
+            {
+              "timestamp": "2024-01-01T00:00:00Z",
+              "version": "1",
+              "kind": "metric",
+              "type": "status-delta",
+              "origin": "inst1",
+              "scope": {"swarmId":"sw1","role":"swarm-controller","instance":"inst1"},
+              "correlationId": null,
+              "idempotencyKey": null,
+              "data": {"enabled": true, "tps": 0, "swarmStatus": "RUNNING"}
+            }
+            """;
+        listener.handle(json, "event.metric.status-delta.sw1.swarm-controller.inst1");
         verify(registry).refresh("sw1", SwarmHealth.RUNNING);
         verify(registry).updateWorkEnabled("sw1", true);
-        verify(registry).updateControllerEnabled("sw1", false);
         // RUNNING + workloadsEnabled=true should drive the registry into RUNNING
         // using the normal lifecycle helper.
         verify(registry).markStartConfirmed("sw1");
@@ -39,11 +50,22 @@ class ControllerStatusListenerTest {
     @Test
     void updatesRegistryFromTopLevelFlags() {
         ControllerStatusListener listener = new ControllerStatusListener(registry, new ObjectMapper());
-        String json = "{\"swarmId\":\"sw1\",\"data\":{\"swarmStatus\":\"STOPPED\",\"workloadsEnabled\":false,\"controllerEnabled\":true}}";
-        listener.handle(json, "ev.status-delta.sw1.swarm-controller.inst1");
+        String json = """
+            {
+              "timestamp": "2024-01-01T00:00:00Z",
+              "version": "1",
+              "kind": "metric",
+              "type": "status-delta",
+              "origin": "inst1",
+              "scope": {"swarmId":"sw1","role":"swarm-controller","instance":"inst1"},
+              "correlationId": null,
+              "idempotencyKey": null,
+              "data": {"enabled": false, "tps": 0, "swarmStatus": "STOPPED"}
+            }
+            """;
+        listener.handle(json, "event.metric.status-delta.sw1.swarm-controller.inst1");
         verify(registry).refresh("sw1", SwarmHealth.DEGRADED);
         verify(registry).updateWorkEnabled("sw1", false);
-        verify(registry).updateControllerEnabled("sw1", true);
         // STOPPED + workloadsEnabled=false should map to STOPPING -> STOPPED
         verify(registry).updateStatus("sw1", SwarmStatus.STOPPING);
         verify(registry).updateStatus("sw1", SwarmStatus.STOPPED);
@@ -56,8 +78,8 @@ class ControllerStatusListenerTest {
         Level previous = logger.getLevel();
         logger.setLevel(Level.INFO);
         try {
-            listener.handle("{}", "ev.status-delta.sw1.swarm-controller.inst1");
-            assertThat(output).doesNotContain("[CTRL] RECV rk=ev.status-delta.sw1.swarm-controller.inst1");
+            listener.handle("{}", "event.metric.status-delta.sw1.swarm-controller.inst1");
+            assertThat(output).doesNotContain("[CTRL] RECV rk=event.metric.status-delta.sw1.swarm-controller.inst1");
         } finally {
             logger.setLevel(previous);
         }
@@ -85,7 +107,7 @@ class ControllerStatusListenerTest {
     void handleRejectsBlankPayload() {
         ControllerStatusListener listener = new ControllerStatusListener(registry, new ObjectMapper());
 
-        assertThatThrownBy(() -> listener.handle(" ", "ev.status-delta.sw1.swarm-controller.inst1"))
+        assertThatThrownBy(() -> listener.handle(" ", "event.metric.status-delta.sw1.swarm-controller.inst1"))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("payload");
     }

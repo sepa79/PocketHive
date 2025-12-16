@@ -5,11 +5,13 @@ import {
   type KeyboardEvent,
   type MouseEvent,
 } from 'react'
-import { Play, Square } from 'lucide-react'
+import { Play, Square, ScrollText } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import type { Component } from '../../types/hive'
 import { heartbeatHealth } from '../../lib/health'
 import { mapStatusToVisualState, type HealthVisualState } from './visualState'
 import { disableSwarmManagers, enableSwarmManagers } from '../../lib/orchestratorApi'
+import HiveJournalPanel from './HiveJournalPanel'
 
 interface Props {
   orchestrator?: Component | null
@@ -27,6 +29,7 @@ function displayNameFor(orchestrator?: Component | null) {
 }
 
 export default function OrchestratorPanel({ orchestrator, onSelect, selectedId }: Props) {
+  const navigate = useNavigate()
   const [heartbeatKey, setHeartbeatKey] = useState(0)
   const [now, setNow] = useState(() => Date.now())
   const [pendingAction, setPendingAction] = useState<OrchestratorAction | null>(null)
@@ -141,6 +144,18 @@ export default function OrchestratorPanel({ orchestrator, onSelect, selectedId }
           <div className="flex items-center gap-1" role="group" aria-label="Orchestrator controls">
             <button
               type="button"
+              className="flex h-8 w-8 items-center justify-center rounded border border-white/15 bg-white/5 text-white/80 transition hover:border-sky-300/40 hover:bg-white/10"
+              onClick={(event: MouseEvent<HTMLButtonElement>) => {
+                event.stopPropagation()
+                navigate('/journal/hive')
+              }}
+              aria-label="Open hive journal"
+              title="Open hive journal"
+            >
+              <ScrollText className="h-3.5 w-3.5" aria-hidden="true" />
+            </button>
+            <button
+              type="button"
               className="flex h-8 w-8 items-center justify-center rounded border border-white/15 bg-white/5 text-white/80 transition hover:border-emerald-300/40 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
               disabled={!isDetected || Boolean(pendingAction)}
               onClick={(event: MouseEvent<HTMLButtonElement>) => {
@@ -178,6 +193,7 @@ export default function OrchestratorPanel({ orchestrator, onSelect, selectedId }
           />
         </div>
       </div>
+      <HiveJournalPanel />
       {actionCopy && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"

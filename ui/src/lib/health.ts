@@ -29,6 +29,9 @@ export function queueHealth(q: QueueInfo): HealthStatus {
 }
 
 export function componentHealth(c: Component, now = Date.now()): HealthStatus {
+  if (typeof c.lastErrorAt === 'number' && c.lastErrorAt > 0) {
+    return 'ALERT'
+  }
   let h: HealthStatus = heartbeatHealth(c.lastHeartbeat, now)
   for (const q of c.queues) {
     h = combine(h, queueHealth(q))
@@ -53,4 +56,3 @@ function combine(a: HealthStatus, b: HealthStatus): HealthStatus {
   if (a === 'WARN' || b === 'WARN') return 'WARN'
   return 'OK'
 }
-

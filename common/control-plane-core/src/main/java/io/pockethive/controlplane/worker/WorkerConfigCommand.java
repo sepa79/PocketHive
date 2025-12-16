@@ -42,7 +42,7 @@ public final class WorkerConfigCommand {
 
     public static WorkerConfigCommand from(ControlSignalEnvelope envelope, String payload, ObjectMapper mapper) {
         Objects.requireNonNull(mapper, "mapper");
-        Map<String, Object> args = normalise(mapper, envelope.signal().args());
+        Map<String, Object> args = normalise(mapper, envelope.signal().data());
         Object dataValue = args.get("data");
         Object enabled = extractEnabled(args, dataValue);
         return new WorkerConfigCommand(envelope, payload, args, dataValue, enabled, mapper);
@@ -129,4 +129,3 @@ public final class WorkerConfigCommand {
         return candidate;
     }
 }
-

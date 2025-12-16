@@ -32,9 +32,6 @@ import io.cucumber.java.en.And;
 import io.cucumber.java.en.Given;
 import io.cucumber.java.en.Then;
 import io.cucumber.java.en.When;
-import io.pockethive.control.CommandTarget;
-import io.pockethive.control.ErrorConfirmation;
-import io.pockethive.control.ReadyConfirmation;
 import io.pockethive.e2e.clients.OrchestratorClient;
 import io.pockethive.e2e.clients.OrchestratorClient.ComponentConfigRequest;
 import io.pockethive.e2e.clients.OrchestratorClient.ControlRequest;
@@ -281,8 +278,7 @@ public class SwarmLifecycleSteps {
         idKey("generator-single"),
         patch,
         "e2e generator single request",
-        swarmId,
-        CommandTarget.INSTANCE
+        swarmId
     );
 
     generatorConfigResponse = orchestratorClient.updateComponentConfig(generatorRoleName, generatorInstance, request);
@@ -296,8 +292,8 @@ public class SwarmLifecycleSteps {
     SwarmAssertions.await("generator status delta", () -> {
       StatusEvent delta = controlPlaneEvents.latestStatusDeltaEvent(swarmId, generatorRoleName, generatorInstance)
           .orElseThrow(() -> new AssertionError("No status-delta captured for generator"));
-      assertTrue("status-delta".equalsIgnoreCase(delta.kind()),
-          () -> "Expected status-delta kind for generator but was " + delta.kind());
+      assertTrue("status-delta".equalsIgnoreCase(delta.type()),
+          () -> "Expected status-delta type for generator but was " + delta.type());
       Map<String, Object> snapshot = workerSnapshot(delta, generatorKey != null ? generatorKey : GENERATOR_ROLE);
       assertFalse(snapshot.isEmpty(), "Generator snapshot should include worker details");
       assertTrue(isTruthy(snapshot.get("enabled")), "Generator snapshot should report enabled=true");
@@ -567,8 +563,8 @@ public class SwarmLifecycleSteps {
     String displayRole = actualRoleName(roleKey);
     StatusEvent status = workerStatusByRole.get(roleKey);
     assertNotNull(status, () -> "No status recorded for role " + displayRole);
-    Map<String, Object> data = status.data();
-    LOGGER.info("Postprocessor status data for history-policy-demo: {}", data);
+    LOGGER.info("Postprocessor status data for history-policy-demo: enabled={} tps={} context={} extra={}",
+        status.data().enabled(), status.data().tps(), status.data().context(), status.data().extra());
   }
 
   @And("the plan demo scenario plan drives the swarm lifecycle")
@@ -612,8 +608,7 @@ public class SwarmLifecycleSteps {
 
     LinkedHashSet<String> seenStepIds = new LinkedHashSet<>();
     for (ControlPlaneEvents.StatusEnvelope env : controllerEvents) {
-      Map<String, Object> data = env.status().data();
-      Object scenarioObj = data.get("scenario");
+      Object scenarioObj = env.status().data().extra().get("scenario");
       if (!(scenarioObj instanceof Map<?, ?> scenarioMapRaw)) {
         continue;
       }
@@ -624,6 +619,18 @@ public class SwarmLifecycleSteps {
         String stepId = String.valueOf(lastStep);
         if (!stepId.isBlank()) {
           seenStepIds.add(stepId.trim());
+        }
+      }
+      Object firedSteps = scenarioMap.get("firedStepIds");
+      if (firedSteps instanceof List<?> firedList) {
+        for (Object stepObj : firedList) {
+          if (stepObj == null) {
+            continue;
+          }
+          String stepId = String.valueOf(stepObj);
+          if (!stepId.isBlank()) {
+            seenStepIds.add(stepId.trim());
+          }
         }
       }
     }
@@ -885,12 +892,13 @@ public class SwarmLifecycleSteps {
       assertEquals("STOPPED", view.get().status(), "Swarm status should be STOPPED after stop");
     });
 
-    Optional<ReadyConfirmation> readyOpt = controlPlaneEvents.readyConfirmation("swarm-stop", stopResponse.correlationId());
-    assertTrue(readyOpt.isPresent(),
-        () -> "Missing ready confirmation for swarm-stop correlation=" + stopResponse.correlationId());
-    ReadyConfirmation ready = readyOpt.get();
-    assertNotNull(ready.state(), "Stop ready confirmation should include command state");
-    assertEquals("Stopped", ready.state().status(), "Stop ready confirmation should report a Stopped state");
+    var outcomeOpt = controlPlaneEvents.outcome("swarm-stop", stopResponse.correlationId());
+    assertTrue(outcomeOpt.isPresent(),
+        () -> "Missing outcome for swarm-stop correlation=" + stopResponse.correlationId());
+    Object status = outcomeOpt.get().data() == null ? null : outcomeOpt.get().data().get("status");
+    assertNotNull(status, "Stop outcome should include data.status");
+    assertEquals("stopped", status.toString().trim().toLowerCase(Locale.ROOT),
+        "Stop outcome should report status Stopped");
   }
 
   @When("I remove the swarm")
@@ -916,14 +924,14 @@ public class SwarmLifecycleSteps {
       assertTrue(view.isEmpty(), "Swarm should no longer be present after removal");
     });
 
-    assertEquals(1, controlPlaneEvents.readyCount("swarm-create"), "Expected exactly one swarm-create ready event");
-    assertEquals(1, controlPlaneEvents.readyCount("swarm-template"), "Expected exactly one swarm-template ready event");
-    assertEquals(1, controlPlaneEvents.readyCount("swarm-start"), "Expected exactly one swarm-start ready event");
-    assertEquals(1, controlPlaneEvents.readyCount("swarm-stop"), "Expected exactly one swarm-stop ready event");
-    long removeReadyCount = controlPlaneEvents.readyCount("swarm-remove");
-    assertTrue(removeReadyCount >= 1,
-        () -> "Expected at least one swarm-remove ready event but saw " + removeReadyCount);
-    assertTrue(controlPlaneEvents.errors().isEmpty(), "No error confirmations should be emitted during the golden path");
+    assertEquals(1, controlPlaneEvents.outcomeCount("swarm-create"), "Expected exactly one swarm-create outcome");
+    assertEquals(1, controlPlaneEvents.outcomeCount("swarm-template"), "Expected exactly one swarm-template outcome");
+    assertEquals(1, controlPlaneEvents.outcomeCount("swarm-start"), "Expected exactly one swarm-start outcome");
+    assertEquals(1, controlPlaneEvents.outcomeCount("swarm-stop"), "Expected exactly one swarm-stop outcome");
+    long removeOutcomeCount = controlPlaneEvents.outcomeCount("swarm-remove");
+    assertTrue(removeOutcomeCount >= 1,
+        () -> "Expected at least one swarm-remove outcome but saw " + removeOutcomeCount);
+    assertTrue(controlPlaneEvents.alerts().isEmpty(), "No alerts should be emitted during the golden path");
   }
 
   @After
@@ -985,10 +993,17 @@ public class SwarmLifecycleSteps {
     Map<String, StatusEvent> latestStatuses = new LinkedHashMap<>();
     Map<String, String> latestInstances = new LinkedHashMap<>();
     for (String role : roles) {
-      ControlPlaneEvents.StatusEnvelope envelope = statuses.stream()
+      List<ControlPlaneEvents.StatusEnvelope> roleStatuses = statuses.stream()
           .filter(env -> isStatusForRole(env.status(), role))
-          .max(Comparator.comparing(ControlPlaneEvents.StatusEnvelope::receivedAt))
-          .orElseThrow(() -> new AssertionError("No status event captured for role " + role));
+          .sorted(Comparator.comparing(ControlPlaneEvents.StatusEnvelope::receivedAt))
+          .toList();
+      ControlPlaneEvents.StatusEnvelope envelope = roleStatuses.stream()
+          .filter(env -> "status-full".equalsIgnoreCase(env.status().type()))
+          .reduce((left, right) -> right)
+          .orElseGet(() -> roleStatuses.isEmpty() ? null : roleStatuses.get(roleStatuses.size() - 1));
+      if (envelope == null) {
+        throw new AssertionError("No status event captured for role " + role);
+      }
       StatusEvent status = envelope.status();
       latestStatuses.put(role, status);
       String instance = status.instance();
@@ -1016,7 +1031,7 @@ public class SwarmLifecycleSteps {
     LOGGER.info("Latest status summary role={} instance={} details={}",
         displayRole, instance, details);
 
-    boolean aggregateEnabled = Boolean.TRUE.equals(status.enabled());
+    boolean aggregateEnabled = Boolean.TRUE.equals(status.data().enabled());
     boolean snapshotHasEnabled = snapshot.containsKey("enabled");
     boolean workerEnabled = isTruthy(snapshot.get("enabled"));
 
@@ -1048,22 +1063,22 @@ public class SwarmLifecycleSteps {
         ? "<no snapshot>"
         : snapshot.containsKey("enabled") ? String.valueOf(workerEnabledValue) : "<missing>";
     Map<String, Object> processed = snapshotProcessed(snapshot);
-    return "state=" + status.state()
-        + ", aggregateEnabled=" + status.enabled()
+    Map<String, Object> context = status.data().context();
+    Object state = context.get("state");
+    Object totals = context.get("totals");
+    return "state=" + (state == null ? "<n/a>" : state)
+        + ", aggregateEnabled=" + status.data().enabled()
         + ", workerEnabled=" + workerEnabled
         + ", processed=" + describeProcessed(processed)
-        + ", totals=" + describeTotals(status.totals())
+        + ", totals=" + describeTotals(totals)
         + ", instance=" + status.instance();
   }
 
-  private String describeTotals(StatusEvent.Totals totals) {
+  private String describeTotals(Object totals) {
     if (totals == null) {
-      return "<null totals>";
+      return "<none>";
     }
-    return "{desired=" + totals.desired()
-        + ", running=" + totals.running()
-        + ", healthy=" + totals.healthy()
-        + ", enabled=" + totals.enabled() + "}";
+    return String.valueOf(totals);
   }
 
   private String describeProcessed(Map<String, Object> processed) {
@@ -1077,11 +1092,7 @@ public class SwarmLifecycleSteps {
     if (status == null) {
       return Map.of();
     }
-    Map<String, Object> data = status.data();
-    if (data == null || data.isEmpty()) {
-      return Map.of();
-    }
-    Object workers = data.get("workers");
+    Object workers = status.data().extra().get("workers");
     if (!(workers instanceof List<?> list)) {
       return Map.of();
     }
@@ -1378,14 +1389,13 @@ public class SwarmLifecycleSteps {
     ControlQueueDescriptor controlQueueDescriptor = descriptor.controlQueue(instance)
         .orElseThrow(() -> new AssertionError("No control queue descriptor for role " + role));
 
-    StatusEvent.QueueEndpoints workQueues = status.queues().work();
+    StatusEvent.Queues workQueues = status.data().io().work().queues();
     List<String> actualWorkIn = workQueues == null ? List.of() : workQueues.in();
     List<String> actualWorkOut = workQueues == null ? List.of() : workQueues.out();
     assertListEquals("queues.work.in for role " + displayRole, expectedWorkIn(role), actualWorkIn);
     assertListEquals("queues.work.out for role " + displayRole, expectedWorkOut(role), actualWorkOut);
 
-    StatusEvent.QueueEndpoints controlQueues = status.queues().control();
-    assertNotNull(controlQueues, () -> "Expected control queue metadata for role " + role);
+    StatusEvent.Queues controlQueues = status.data().io().control().queues();
     String expectedControlQueue = resolveTopologyValue(controlQueueDescriptor.name());
     assertListEquals("queues.control.in for role " + role,
         queueList(expectedControlQueue), controlQueues.in());
@@ -1732,15 +1742,15 @@ public class SwarmLifecycleSteps {
 
   private void awaitReady(String signal, ControlResponse response) {
     String correlationId = response.correlationId();
-    SwarmAssertions.await(signal + " confirmation", () -> {
-      Optional<ReadyConfirmation> ready = controlPlaneEvents.readyConfirmation(signal, correlationId);
-      assertTrue(ready.isPresent(), () -> "Missing ready confirmation for " + signal + " correlation=" + correlationId);
+    SwarmAssertions.await(signal + " outcome", () -> {
+      Optional<io.pockethive.control.CommandOutcome> outcome = controlPlaneEvents.outcome(signal, correlationId);
+      assertTrue(outcome.isPresent(), () -> "Missing outcome for " + signal + " correlation=" + correlationId);
     });
   }
 
   private void assertNoErrors(String correlationId, String context) {
-    List<ErrorConfirmation> errors = controlPlaneEvents.errorsForCorrelation(correlationId);
-    assertTrue(errors.isEmpty(), () -> "Unexpected error confirmations for " + context + ": " + errors);
+    List<io.pockethive.control.AlertMessage> alerts = controlPlaneEvents.alertsForCorrelation(correlationId);
+    assertTrue(alerts.isEmpty(), () -> "Unexpected alerts for " + context + " correlation=" + correlationId + ": " + alerts);
   }
 
   private void assertWatchMatched(ControlResponse response) {
@@ -1748,31 +1758,30 @@ public class SwarmLifecycleSteps {
     if (signal.isEmpty()) {
       return;
     }
-    controlPlaneEvents.findReady(signal, response.correlationId())
-        .ifPresent(env -> {
-          String expected = response.watch().successTopic();
-          if (expected != null && !expected.isBlank()) {
-            assertEquals(expected, env.routingKey(), "Watch success topic should match emitted event");
-          }
-        });
+    controlPlaneEvents.findOutcome(signal, response.correlationId()).ifPresent(env -> {
+      String expected = response.watch().successTopic();
+      if (expected != null && !expected.isBlank()) {
+        assertEquals(expected, env.routingKey(), "Watch success topic should match emitted event");
+      }
+    });
     String errorTopic = response.watch().errorTopic();
     if (errorTopic != null && !errorTopic.isBlank()) {
-      assertFalse(controlPlaneEvents.hasEventOnRoutingKey(errorTopic),
+      assertFalse(controlPlaneEvents.hasMessageOnRoutingKey(errorTopic),
           () -> "Unexpected error event detected on " + errorTopic);
     }
   }
 
-  private String signalFromWatch(ControlResponse response) {
-    // success topic format: ev.ready.<signal>.<swarm>... -> extract <signal>
-    String topic = response.watch().successTopic();
+	  private String signalFromWatch(ControlResponse response) {
+	    // success topic format: event.outcome.<signal>.<swarm>... -> extract <signal>
+	    String topic = response.watch().successTopic();
     if (topic == null || topic.isBlank()) {
       return "";
     }
     String[] parts = topic.split("\\.");
-    if (parts.length < 3) {
+    if (parts.length < 4) {
       return "";
     }
-    String raw = parts[2];
+    String raw = parts[3];
     return raw.toLowerCase(Locale.ROOT);
   }
 

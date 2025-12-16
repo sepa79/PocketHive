@@ -50,6 +50,7 @@ public final class BufferGuardCoordinator {
 
   private final SwarmControllerProperties properties;
   private final String swarmId;
+  private final String instanceId;
   private final ControlPlanePublisher controlPublisher;
   private final ObjectMapper mapper;
 
@@ -62,11 +63,13 @@ public final class BufferGuardCoordinator {
                                 QueueStatsPort queueStatsPort,
                                 MeterRegistry meterRegistry,
                                 ControlPlanePublisher controlPublisher,
-                                ObjectMapper mapper) {
+                                ObjectMapper mapper,
+                                String instanceId) {
     this.properties = Objects.requireNonNull(properties, "properties");
     this.swarmId = properties.getSwarmId();
     this.controlPublisher = Objects.requireNonNull(controlPublisher, "controlPublisher");
     this.mapper = Objects.requireNonNull(mapper, "mapper");
+    this.instanceId = Objects.requireNonNull(instanceId, "instanceId");
     this.coordinator = new io.pockethive.manager.guard.BufferGuardCoordinator(
         Objects.requireNonNull(queueStatsPort, "queueStatsPort"),
         settings -> {
@@ -133,10 +136,8 @@ public final class BufferGuardCoordinator {
       log.warn("Buffer guard attempted to update rate for role {} but no input mapping is configured; ignoring", targetRole);
       return;
     }
-    var data = mapper.createObjectNode();
-    data.put("commandTarget", "ROLE");
-    data.put("role", targetRole);
-    var inputs = data.putObject("inputs");
+    var patch = mapper.createObjectNode();
+    var inputs = patch.putObject("inputs");
     switch (kind) {
       case SCHEDULER -> {
         var scheduler = inputs.putObject("scheduler");
@@ -152,17 +153,14 @@ public final class BufferGuardCoordinator {
       }
     }
     try {
-      Map<String, Object> args = Map.of("data", mapper.convertValue(data, Map.class));
-      var signal = new io.pockethive.control.ControlSignal(
-          ControlPlaneSignals.CONFIG_UPDATE,
+      var targetScope = io.pockethive.control.ControlScope.forRole(swarmId, targetRole);
+      var patchData = mapper.convertValue(patch, Map.class);
+      var signal = io.pockethive.controlplane.messaging.ControlSignals.configUpdate(
+          instanceId,
+          targetScope,
           java.util.UUID.randomUUID().toString(),
           java.util.UUID.randomUUID().toString(),
-          swarmId,
-          targetRole,
-          null,
-          null,
-          io.pockethive.control.CommandTarget.ROLE,
-          args);
+          patchData);
       String payload = mapper.writeValueAsString(signal);
       String rk = ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, swarmId, targetRole, null);
       log.info("buffer-guard config-update rk={} payload {}", rk, payload);

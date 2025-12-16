@@ -10,12 +10,21 @@ import java.util.Objects;
  */
 public final class ScenarioContext {
 
+  private final String swarmId;
   private final ManagerLifecycle manager;
   private final ConfigFanout configFanout;
 
-  public ScenarioContext(ManagerLifecycle manager, ConfigFanout configFanout) {
+  public ScenarioContext(String swarmId, ManagerLifecycle manager, ConfigFanout configFanout) {
+    if (swarmId == null || swarmId.isBlank()) {
+      throw new IllegalArgumentException("swarmId must not be null or blank");
+    }
+    this.swarmId = swarmId.trim();
     this.manager = Objects.requireNonNull(manager, "manager");
     this.configFanout = Objects.requireNonNull(configFanout, "configFanout");
+  }
+
+  public String swarmId() {
+    return swarmId;
   }
 
   /**
@@ -33,4 +42,3 @@ public final class ScenarioContext {
     return configFanout;
   }
 }
-

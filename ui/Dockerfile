@@ -22,5 +22,11 @@ COPY ui/nginx.conf /etc/nginx/conf.d/default.conf
 # Static site
 COPY --from=build /app/dist/ /usr/share/nginx/html/
 # Include project metadata and docs
-COPY CHANGELOG.md VERSION README.md /usr/share/nginx/html/
+COPY CHANGELOG.md README.md pom.xml /usr/share/nginx/html/
 COPY docs/ /usr/share/nginx/html/docs/
+
+# Generate /VERSION from pom.xml revision to avoid a separate source of truth.
+RUN set -eu; \
+  VERSION="$(sed -n 's/.*<revision>\\(.*\\)<\\/revision>.*/\\1/p' /usr/share/nginx/html/pom.xml | head -n 1 | tr -d '\\n')"; \
+  if [ -z "$VERSION" ]; then echo "Failed to extract <revision> from pom.xml" >&2; exit 1; fi; \
+  echo "$VERSION" > /usr/share/nginx/html/VERSION

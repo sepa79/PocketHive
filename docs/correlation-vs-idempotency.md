@@ -10,6 +10,12 @@
 
 Use **both** on every control signal.
 
+**Where these fields live**
+
+- Envelope definitions: `docs/spec/asyncapi.yaml` and `docs/spec/control-events.schema.json`
+- Both fields are top-level envelope fields on `kind=signal` and `kind=outcome`.
+- Metrics/alerts may have `correlationId`/`idempotencyKey` set to `null` unless explicitly tied to a command attempt.
+
 ---
 
 ## Why both?
@@ -33,8 +39,8 @@ Use **both** on every control signal.
 
 ### Server or Controller behavior
 - Deduplicate on **(swarmId, signal, idempotencyKey)** within a retention window.
-- On duplicate: perform a **no‑op** and **replay** the previous outcome, or emit an identical confirmation.
-- All confirmations **echo both** fields so UIs and services can stitch responses to the initiating attempt and safely ignore late duplicates.
+- On duplicate: perform a **no‑op** and **replay** the previous outcome, or emit an identical outcome.
+- All outcomes **echo both** fields so UIs and services can stitch responses to the initiating attempt and safely ignore late duplicates.
 
 ### Delivery model
 - Expect **at‑least‑once** delivery with AMQP. Do not rely on “exactly‑once”. Idempotency is the safety net.
@@ -43,42 +49,55 @@ Use **both** on every control signal.
 
 ## Example
 
-**Signal**
+**Signal** (`kind=signal`, `type=swarm-start`)
 ```json
 {
-  "signal": "swarm-start",
-  "swarmId": "swarm-42",
+  "timestamp": "2025-09-12T12:30:08Z",
+  "version": "1",
+  "kind": "signal",
+  "type": "swarm-start",
+  "origin": "orchestrator-1",
+  "scope": { "swarmId": "swarm-42", "role": "swarm-controller", "instance": "swarm-42-marshal-1" },
   "correlationId": "attempt-001-aaaa-bbbb",
-  "idempotencyKey": "a1c3-1111-2222-9f"
+  "idempotencyKey": "a1c3-1111-2222-9f",
+  "data": {}
 }
 ```
 
-**Confirmation (success)**
+**Outcome (success)** (`kind=outcome`, `type=swarm-start`)
 ```json
 {
-  "result": "success",
-  "signal": "swarm-start",
-  "swarmId": "swarm-42",
-  "state": "Running",
-  "idempotencyKey": "a1c3-1111-2222-9f",
+  "timestamp": "2025-09-12T12:30:10Z",
+  "version": "1",
+  "kind": "outcome",
+  "type": "swarm-start",
+  "origin": "swarm-controller:swarm-42-marshal-1",
+  "scope": { "swarmId": "swarm-42", "role": "swarm-controller", "instance": "swarm-42-marshal-1" },
   "correlationId": "attempt-001-aaaa-bbbb",
-  "ts": "2025-09-12T12:30:08Z"
+  "idempotencyKey": "a1c3-1111-2222-9f",
+  "data": { "status": "Running", "retryable": false }
 }
 ```
 
 **Retry** (user clicks Retry)
 ```json
 {
-  "signal": "swarm-start",
-  "swarmId": "swarm-42",
-  "idempotencyKey": "a1c3-1111-2222-9f",   // same
-  "correlationId": "attempt-002-cccc-dddd"  // new
+  "timestamp": "2025-09-12T12:30:20Z",
+  "version": "1",
+  "kind": "signal",
+  "type": "swarm-start",
+  "origin": "orchestrator-1",
+  "scope": { "swarmId": "swarm-42", "role": "swarm-controller", "instance": "swarm-42-marshal-1" },
+  "idempotencyKey": "a1c3-1111-2222-9f",
+  "correlationId": "attempt-002-cccc-dddd",
+  "data": {}
 }
 ```
 
-**Duplicate handling (server)**
-- The Swarm Controller no longer caches outcomes; it executes every attempt and emits a fresh confirmation.
-- Use `idempotencyKey` to detect unintended retries in upstream services if replay would be harmful.
+**Duplicate handling (reality check)**
+
+- Orchestrator REST endpoints are idempotent by `(swarmId, commandType, idempotencyKey)` and reuse the same `correlationId` when you retry with the same key.
+- The Swarm Controller requires `idempotencyKey` to emit outcomes, but may still execute each signal attempt; treat idempotency as a *caller contract* unless a specific receiver documents deduplication.
 
 ---
 
@@ -86,14 +105,14 @@ Use **both** on every control signal.
 
 - **Key scope:** if you implement caller-side deduplication, include the **signal name** in the key. Starting and stopping with the same idempotency key are **different** commands.
 - **Retention:** caller-side caches should live for at least the maximum user retry window plus network jitter.
-- **UI pattern:** send both fields, subscribe to `ev.ready.*` and `ev.error.*`, and reconcile confirmations by `correlationId`. Use `idempotencyKey` to notice accidental double-submits even though the controller will apply them.
+- **UI pattern:** send both fields, subscribe to `event.outcome.*` and `event.alert.*` (and `event.metric.*` when debugging), and reconcile outcomes by `correlationId`. Use `idempotencyKey` to spot accidental double-submits across retries.
 - **If you collapse to one field:** only do so if clients truly reuse it on retries; otherwise you lose per-attempt tracing.
 
 ---
 
 ## Quick checklist
 
-- [ ] Every control signal carries **both** fields.  
-- [ ] Controller emits a confirmation for **every attempt** (no dedup cache).
-- [ ] Confirmations echo **both** fields.  
-- [ ] Logs and metrics index by **correlationId** for attempts and by **idempotencyKey** for user actions.  
+- [ ] Every control signal carries **both** fields.
+- [ ] Outcomes echo **both** fields.
+- [ ] Clients reuse the same `idempotencyKey` across retries of the same action.
+- [ ] Logs index by `correlationId` (attempts) and by `idempotencyKey` (user actions).

@@ -3,8 +3,11 @@ package io.pockethive.controlplane.messaging;
 import static io.pockethive.controlplane.payload.JsonFixtureAssertions.ANY_VALUE;
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import io.pockethive.control.AlertMessage;
 import io.pockethive.control.CommandState;
 import io.pockethive.control.ConfirmationScope;
 import io.pockethive.controlplane.ControlPlaneIdentity;
@@ -14,6 +17,8 @@ import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.controlplane.topology.ControlPlaneTopologySettings;
 import java.time.Instant;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
 import org.junit.jupiter.api.BeforeEach;
@@ -21,7 +26,9 @@ import org.junit.jupiter.api.Test;
 
 class ControlPlaneEmitterTest {
 
-    private static final ObjectMapper MAPPER = new ObjectMapper().findAndRegisterModules();
+    private static final ObjectMapper MAPPER = new ObjectMapper()
+        .findAndRegisterModules()
+        .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
     private CapturingPublisher publisher;
     private ControlPlaneIdentity identity;
@@ -53,7 +60,7 @@ class ControlPlaneEmitterTest {
 
         EventMessage message = publisher.lastEvent;
         assertThat(message).isNotNull();
-        String expectedRoute = ControlPlaneRouting.event("ready", "swarm-start",
+        String expectedRoute = ControlPlaneRouting.event("outcome", "swarm-start",
             RoleContext.fromIdentity(identity).toScope());
         assertThat(message.routingKey()).isEqualTo(expectedRoute);
 
@@ -82,16 +89,30 @@ class ControlPlaneEmitterTest {
 
         emitter.emitError(context);
 
-        EventMessage message = publisher.lastEvent;
-        assertThat(message).isNotNull();
-        String expectedRoute = ControlPlaneRouting.event("error", "swarm-stop",
+        assertThat(publisher.events).hasSize(2);
+        EventMessage outcomeMessage = publisher.events.getFirst();
+        EventMessage alertMessage = publisher.events.get(1);
+        String expectedRoute = ControlPlaneRouting.event("outcome", "swarm-stop",
             new ConfirmationScope("swarm-A", "generator", "gen-1"));
-        assertThat(message.routingKey()).isEqualTo(expectedRoute);
+        assertThat(outcomeMessage.routingKey()).isEqualTo(expectedRoute);
+        assertThat(alertMessage.routingKey()).isEqualTo(
+            ControlPlaneRouting.event("alert", "alert",
+                new ConfirmationScope("swarm-A", "generator", "gen-1")));
 
-        String json = describeEvent(message, payload -> { });
+        String json = describeEvent(outcomeMessage, payload -> { });
         JsonFixtureAssertions.assertMatchesFixture(
             "/io/pockethive/controlplane/messaging/error-event.json",
             json);
+
+        AlertMessage alert = MAPPER.readValue((String) alertMessage.payload(), AlertMessage.class);
+        assertThat(alert.kind()).isEqualTo("event");
+        assertThat(alert.type()).isEqualTo("alert");
+        assertThat(alert.correlationId()).isEqualTo("corr-2");
+        assertThat(alert.idempotencyKey()).isEqualTo("idem-2");
+        assertThat(alert.data().code()).isEqualTo("ERR-42");
+        assertThat(alert.data().message()).isEqualTo("Failure");
+        assertThat(alert.data().context()).containsEntry("phase", "shutdown");
+        assertThat(alert.data().context()).containsEntry("stack", "trace");
     }
 
     @Test
@@ -107,18 +128,14 @@ class ControlPlaneEmitterTest {
 
         EventMessage message = publisher.lastEvent;
         assertThat(message).isNotNull();
-        String expectedRoute = ControlPlaneRouting.event("status-delta",
+        String expectedRoute = ControlPlaneRouting.event("metric", "status-delta",
             new ConfirmationScope("swarm-A", "generator", "gen-1"));
         assertThat(message.routingKey()).isEqualTo(expectedRoute);
 
         ObjectNode payloadNode = (ObjectNode) MAPPER.readTree((String) message.payload());
         assertThat(payloadNode.get("origin").asText()).isEqualTo("gen-1");
 
-        String json = describeEvent(message, documentPayload -> {
-            documentPayload.put("messageId", ANY_VALUE);
-            documentPayload.put("timestamp", ANY_VALUE);
-            documentPayload.put("location", ANY_VALUE);
-        });
+        String json = describeEvent(message, payload -> { });
         JsonFixtureAssertions.assertMatchesFixture(
             "/io/pockethive/controlplane/messaging/status-delta-event.json",
             json);
@@ -129,7 +146,10 @@ class ControlPlaneEmitterTest {
         ControlPlaneIdentity custom = new ControlPlaneIdentity("swarm-A", "custom-role", "worker-1");
         ControlPlaneEmitter customEmitter = ControlPlaneEmitter.worker(custom, publisher, settings);
 
-        ControlPlaneEmitter.StatusContext context = ControlPlaneEmitter.StatusContext.of(builder -> builder.enabled(true));
+        ControlPlaneEmitter.StatusContext context = ControlPlaneEmitter.StatusContext.of(builder -> builder
+            .enabled(true)
+            .tps(0)
+            .data("startedAt", Instant.parse("2024-01-01T00:00:00Z").toString()));
         customEmitter.emitStatusSnapshot(context);
 
         EventMessage message = publisher.lastEvent;
@@ -137,7 +157,14 @@ class ControlPlaneEmitterTest {
     }
 
     private static String describeEvent(EventMessage message, Consumer<ObjectNode> payloadCustomiser) throws IOException {
-        ObjectNode payload = (ObjectNode) MAPPER.readTree((String) message.payload());
+        Object payloadValue = message.payload();
+        ObjectNode payload;
+        if (payloadValue instanceof String s) {
+            payload = (ObjectNode) MAPPER.readTree(s);
+        } else {
+            JsonNode node = MAPPER.valueToTree(payloadValue);
+            payload = (ObjectNode) node;
+        }
         if (payloadCustomiser != null) {
             payloadCustomiser.accept(payload);
         }
@@ -149,6 +176,7 @@ class ControlPlaneEmitterTest {
 
     private static final class CapturingPublisher implements ControlPlanePublisher {
 
+        private final List<EventMessage> events = new ArrayList<>();
         private EventMessage lastEvent;
 
         @Override
@@ -159,6 +187,7 @@ class ControlPlaneEmitterTest {
         @Override
         public void publishEvent(EventMessage message) {
             this.lastEvent = message;
+            this.events.add(message);
         }
     }
 }

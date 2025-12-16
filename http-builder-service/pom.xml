@@ -44,6 +44,10 @@
       <artifactId>jackson-databind</artifactId>
     </dependency>
     <dependency>
+      <groupId>com.fasterxml.jackson.dataformat</groupId>
+      <artifactId>jackson-dataformat-yaml</artifactId>
+    </dependency>
+    <dependency>
       <groupId>io.pockethive</groupId>
       <artifactId>observability</artifactId>
       <version>${project.version}</version>
@@ -102,4 +106,3 @@
     </plugins>
   </build>
 </project>
-

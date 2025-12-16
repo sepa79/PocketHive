@@ -60,13 +60,6 @@ public class SwarmRegistry {
         }
     }
 
-    public void updateControllerEnabled(String id, boolean enabled) {
-        Swarm swarm = swarms.get(id);
-        if (swarm != null) {
-            swarm.setControllerEnabled(enabled);
-        }
-    }
-
     public void refresh(String id, SwarmHealth health) {
         Swarm swarm = swarms.get(id);
         if (swarm != null) {

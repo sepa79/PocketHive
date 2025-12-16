@@ -160,7 +160,34 @@ class RabbitMessageWorkerAdapterTest {
         adapter.onWork(inbound);
 
         verify(errorHandler).accept(failure);
+        verify(controlPlaneRuntime).publishWorkError(eq(workerDefinition.beanName()), any(WorkItem.class), eq(failure));
         verifyNoInteractions(rabbitTemplate);
+    }
+
+    @Test
+    void onWorkDecoderErrorsPublishAlertAndDelegateToErrorHandler() {
+        RabbitMessageWorkerAdapter adapter = builder().build();
+        Message inbound = new Message("not-a-json-envelope".getBytes(StandardCharsets.UTF_8), new org.springframework.amqp.core.MessageProperties());
+
+        adapter.onWork(inbound);
+
+        verify(controlPlaneRuntime).publishWorkError(eq(workerDefinition.beanName()), any(WorkItem.class), any(Throwable.class));
+        verify(errorHandler).accept(any(Exception.class));
+        verifyNoInteractions(rabbitTemplate);
+    }
+
+    @Test
+    void onWorkPublishesAlertWhenDispatcherThrowsAndNoCustomHandlerConfigured() throws Exception {
+        RabbitMessageWorkerAdapter adapter = baseBuilderWithoutErrorHandler().rabbitTemplate(rabbitTemplate).build();
+        RabbitWorkItemConverter converter = new RabbitWorkItemConverter();
+        Message inbound = converter.toMessage(WorkItem.text("payload").header("message-id", "mid-1").build());
+        RuntimeException failure = new RuntimeException("boom");
+        doThrow(failure).when(dispatcher).dispatch(any(WorkItem.class));
+
+        adapter.onWork(inbound);
+
+        verify(controlPlaneRuntime).publishWorkError(eq(workerDefinition.beanName()), any(WorkItem.class), eq(failure));
+        verify(rabbitTemplate, never()).send(anyString(), anyString(), any(Message.class));
     }
 
     @Test
@@ -346,6 +373,21 @@ class RabbitMessageWorkerAdapterTest {
             .desiredStateResolver(WorkerControlPlaneRuntime.WorkerStateSnapshot::enabled)
             .dispatcher(dispatcher)
             .dispatchErrorHandler(errorHandler);
+    }
+
+    private RabbitMessageWorkerAdapter.Builder baseBuilderWithoutErrorHandler() {
+        return RabbitMessageWorkerAdapter.builder()
+            .logger(LOGGER)
+            .listenerId("listener")
+            .displayName("Processor")
+            .workerDefinition(workerDefinition)
+            .controlPlaneRuntime(controlPlaneRuntime)
+            .listenerRegistry(listenerRegistry)
+            .identity(identity)
+            .defaultEnabledSupplier(() -> false)
+            .defaultConfigSupplier(() -> defaults)
+            .desiredStateResolver(WorkerControlPlaneRuntime.WorkerStateSnapshot::enabled)
+            .dispatcher(dispatcher);
     }
 
     private RabbitMessageWorkerAdapter.Builder builder() {

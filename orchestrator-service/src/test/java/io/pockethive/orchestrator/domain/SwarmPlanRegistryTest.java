@@ -17,7 +17,7 @@ class SwarmPlanRegistryTest {
         SwarmRegistry swarms = new SwarmRegistry();
         List<Bee> bees = List.of(new Bee("generator", "bee-image", new Work("in", "out"), Map.of()));
         SwarmTemplateMetadata metadata = new SwarmTemplateMetadata("template-1", "controller-image", bees);
-        Swarm swarm = new Swarm("swarm-1", "controller-1", "container-1");
+        Swarm swarm = new Swarm("swarm-1", "controller-1", "container-1", "run-1");
         swarm.attachTemplate(metadata);
         swarms.register(swarm);
 
@@ -39,4 +39,3 @@ class SwarmPlanRegistryTest {
         assertTrue(swarms.find("swarm-1").isEmpty());
     }
 }
-

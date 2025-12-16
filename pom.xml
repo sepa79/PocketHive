@@ -7,7 +7,7 @@
   <packaging>pom</packaging>
   <properties>
     <!-- Flatten plugin resolves this CI-friendly revision into published POMs; see build plugins below. -->
-    <revision>0.14.14</revision>
+    <revision>0.14.15</revision>
     <logstash.logback.version>8.1</logstash.logback.version>
   </properties>
   <modules>
@@ -19,6 +19,7 @@
     <module>common/worker-sdk</module>
     <module>common/docker-client</module>
     <module>common/swarm-model</module>
+    <module>common/journal-postgres</module>
     <module>generator-service</module>
     <module>log-aggregator-service</module>
     <module>moderator-service</module>

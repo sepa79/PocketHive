@@ -4,7 +4,7 @@ This is a small [Model Context Protocol](https://modelcontextprotocol.io) (MCP) 
 talk directly to:
 
 - the PocketHive Orchestrator REST API, and
-- the RabbitMQ control‑plane exchange (control messages `sig.*` / `ev.*` on `ph.control`).
+- the RabbitMQ control‑plane exchange (control messages `signal.*` / `event.*` on `ph.control`).
 
 It is designed for **debugging** and **inspection**, not for production use.
 
@@ -107,7 +107,7 @@ Once connected, the server exposes these MCP tools:
     - `routingKeyPattern?: string` — simple `*`/`#` style glob applied to the routing key (defaults to all).
   - Connects to RabbitMQ using `RABBITMQ_*` and `POCKETHIVE_CONTROL_PLANE_EXCHANGE`.
   - Asserts the control exchange and an exclusive auto‑delete queue.
-  - Binds `sig.#` and `ev.#` to the queue and starts consuming.
+  - Binds `signal.#` and `event.#` to the queue and starts consuming.
   - Each message is recorded as:
     - `routingKey`, `body` (UTF‑8 text), `headers` and `timestamp`.
 
@@ -128,4 +128,3 @@ You can use these tools to answer questions like:
 - “What exactly was in the `ready.swarm-remove` confirmation payload?”
 
 Because everything is in memory, restart the server (or call `control.start-recording` again) to clear the buffer. 
-

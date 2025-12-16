@@ -5,6 +5,7 @@ import { render, screen, waitFor, within, cleanup } from '@testing-library/react
 import userEvent from '@testing-library/user-event'
 import '@testing-library/jest-dom/vitest'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
+import { MemoryRouter } from 'react-router-dom'
 import HivePage from './HivePage'
 import type { Component } from '../../types/hive'
 import { subscribeComponents } from '../../lib/stompClient'
@@ -27,6 +28,10 @@ vi.mock('../../lib/orchestratorApi', () => ({
   removeSwarm: vi.fn(),
   enableSwarmManagers: vi.fn(),
   disableSwarmManagers: vi.fn(),
+  getSwarmJournalPage: vi.fn().mockResolvedValue({ items: [], nextCursor: null, hasMore: false }),
+  getSwarmJournal: vi.fn().mockResolvedValue([]),
+  getHiveJournalPage: vi.fn().mockResolvedValue({ items: [], nextCursor: null, hasMore: false }),
+  getSwarmJournalRuns: vi.fn().mockResolvedValue([]),
 }))
 
 const baseComponents: Component[] = [
@@ -93,7 +98,11 @@ afterEach(() => {
 })
 
 test('renders orchestrator panel with controls disabled when missing', () => {
-  render(<HivePage />)
+  render(
+    <MemoryRouter>
+      <HivePage />
+    </MemoryRouter>,
+  )
   const panels = screen.getAllByTestId('orchestrator-panel')
   const panel = panels[panels.length - 1]!
   const startButton = within(panel).getByRole('button', {
@@ -124,7 +133,11 @@ test('confirming orchestrator start and stop commands calls orchestration APIs',
     config: { enabled: true, swarmCount: 2 },
   })
   const user = userEvent.setup()
-  render(<HivePage />)
+  render(
+    <MemoryRouter>
+      <HivePage />
+    </MemoryRouter>,
+  )
   const panels = await screen.findAllByTestId('orchestrator-panel')
   const panel = panels[panels.length - 1]!
   await within(panel).findByText('HAL')
@@ -160,7 +173,11 @@ test('confirming orchestrator start and stop commands calls orchestration APIs',
 
 test('swarm actions support dropdown toggling and API commands with toasts', async () => {
   const user = userEvent.setup()
-  render(<HivePage />)
+  render(
+    <MemoryRouter>
+      <HivePage />
+    </MemoryRouter>,
+  )
   const swarmLabels = await screen.findAllByText((_, node) => node?.textContent?.trim() === 'sw1')
   const swarmLabel = swarmLabels[swarmLabels.length - 1]
   if (!swarmLabel) {
@@ -193,7 +210,11 @@ test('swarm actions support dropdown toggling and API commands with toasts', asy
 
 test('selecting a swarm card reveals its components in the context panel without expanding the row', async () => {
   const user = userEvent.setup()
-  render(<HivePage />)
+  render(
+    <MemoryRouter>
+      <HivePage />
+    </MemoryRouter>,
+  )
 
   const swarmGroup = await screen.findByTestId('swarm-group-sw1')
   const toggle = within(swarmGroup).getByRole('button', { name: /swarm details/i })
@@ -214,7 +235,11 @@ test('selecting a swarm card reveals its components in the context panel without
 })
 
 test('renders unassigned components in a dedicated bucket', async () => {
-  render(<HivePage />)
+  render(
+    <MemoryRouter>
+      <HivePage />
+    </MemoryRouter>,
+  )
 
   await waitFor(() => {
     const defaultGroup = document.querySelector('[data-testid="swarm-group-default"]')

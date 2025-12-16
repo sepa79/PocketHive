@@ -11,6 +11,59 @@
 
 When the stack starts only the Orchestrator (Queen) is running. New swarms are created and started from the Hive view as needed.
 
+## Journal (Swarm vs Hive)
+
+PocketHive exposes two related timelines:
+
+- **Swarm journal**: events tied to a single swarm run.
+- **Hive journal**: a Hive-level timeline (Orchestrator) that can be filtered by `swarmId`/`runId`.
+
+### Storage backends (`POCKETHIVE_JOURNAL_SINK`)
+
+The journal backend is selected via `pockethive.journal.sink` (env: `POCKETHIVE_JOURNAL_SINK`) on the **orchestrator** container. The Orchestrator propagates this value to the swarm-controller containers it launches.
+
+- `postgres` (recommended; default in `docker-compose.yml`)
+  - Enables paginated APIs + runs + pin + Hive journal.
+  - Requires Postgres connection (`SPRING_DATASOURCE_*`) to be configured.
+- `file` (fallback / lightweight mode)
+  - Disables Postgres-only APIs (they return `501 Not Implemented`).
+  - Swarm journal is read from `journal.ndjson` under the runtime root (see below).
+
+### Runtime root (`POCKETHIVE_SCENARIOS_RUNTIME_ROOT`)
+
+File-backed swarm journals live under:
+
+`$POCKETHIVE_SCENARIOS_RUNTIME_ROOT/<swarmId>/<runId>/journal.ndjson`
+
+In the default stack this is a bind mount:
+
+- Host: `/opt/pockethive/scenarios-runtime`
+- Containers: `/opt/pockethive/scenarios-runtime`
+
+The Orchestrator creates the runtime root directory on startup when configured.
+
+### How to enable file mode locally
+
+In `docker-compose.yml` under `orchestrator.environment`, set:
+
+- `POCKETHIVE_JOURNAL_SINK: file`
+
+Then restart the stack via `./build-hive.sh` (or `docker compose down && docker compose up -d`).
+
+### UI behavior
+
+- The Hive UI’s mini-journal on a swarm card can switch between:
+  - **Swarm**: per-swarm journal entries
+  - **Hive**: Hive journal filtered by `swarmId`
+- When Postgres paging endpoints are unavailable (`501`), the UI falls back to the non-paginated swarm timeline endpoint.
+
+## Grafana (metrics + journal annotations)
+
+- Grafana UI: `http://localhost:3333/grafana/` (user/pass: `pockethive` / `pockethive`).
+- Dashboards:
+  - `PocketHive Journal` (`uid=pockethive-journal`) — Postgres-backed timeline + annotations (WARN/ERROR, lifecycle outcomes, journal backpressure).
+  - `Pipeline observability` (`uid=pockethive-pipeline`) — Prometheus panels with Journal annotations overlaid.
+
 ## Scenario Manager API
 - nginx proxies `/scenario-manager/*` to the Scenario Manager service.
 - The service also exposes port `1081` on the host for direct API access.
@@ -122,3 +175,4 @@ Manual checks:
 - **WebSocket errors**: ensure UI health is `ok`, RabbitMQ is running and Web-STOMP is enabled; check browser network logs for `/ws`.
 - **Authentication**: RabbitMQ blocks remote logins for the built-in `guest` user; use the proxy or create a non-guest user.
 - **UI access**: ensure port `8088` is free or adjust mapping in `docker-compose.yml`.
+- **WSL2/Docker restarts**: if services suddenly time out talking to each other after a Docker restart (e.g. `log-aggregator` can’t reach `rabbitmq:15672`), rebuild the compose network: `docker compose down --remove-orphans && docker compose up -d`.

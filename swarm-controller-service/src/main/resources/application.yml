@@ -11,6 +11,9 @@ logging:
   pattern.level: ${LOGGING_PATTERN_LEVEL:"%5p [%X{traceId}]"}
 
 pockethive:
+  journal:
+    sink: ${POCKETHIVE_JOURNAL_SINK:postgres}
+    run-id: ${POCKETHIVE_JOURNAL_RUN_ID}
   control-plane:
     exchange: ${POCKETHIVE_CONTROL_PLANE_EXCHANGE}
     control-queue-prefix: ${POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE_PREFIX}

@@ -17,3 +17,26 @@ export interface SwarmSummary {
   stackName: string | null
   bees: BeeSummary[]
 }
+
+export interface SwarmJournalEntry {
+  eventId?: number | null
+  timestamp: string
+  swarmId: string
+  runId?: string | null
+  severity: string
+  direction: 'IN' | 'OUT' | 'LOCAL'
+  kind: string
+  type: string
+  origin: string
+  scope: {
+    swarmId: string
+    role: string | null
+    instance: string | null
+  }
+  correlationId: string | null
+  idempotencyKey: string | null
+  routingKey: string | null
+  data: Record<string, unknown> | null
+  raw: Record<string, unknown> | null
+  extra: Record<string, unknown> | null
+}

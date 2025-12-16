@@ -1,27 +1,24 @@
 {
-  "routingKey": "ev.error.swarm-stop.swarm-A.generator.gen-1",
+  "routingKey": "event.outcome.swarm-stop.swarm-A.generator.gen-1",
   "payload": {
-    "ts": "2024-01-02T00:00:00Z",
-    "correlationId": "corr-2",
-    "idempotencyKey": "idem-2",
-    "signal": "swarm-stop",
+    "timestamp": "2024-01-02T00:00:00Z",
+    "version": "1",
+    "kind": "outcome",
+    "type": "swarm-stop",
+    "origin": "gen-1",
     "scope": {
       "swarmId": "swarm-A",
       "role": "generator",
       "instance": "gen-1"
     },
-    "result": "error",
-    "state": {
+    "correlationId": "corr-2",
+    "idempotencyKey": "idem-2",
+    "data": {
       "status": "Failed",
-      "enabled": null,
-      "details": null
-    },
-    "phase": "shutdown",
-    "code": "ERR-42",
-    "message": "Failure",
-    "retryable": false,
-    "details": {
-      "stack": "trace"
+      "retryable": false,
+      "context": {
+        "stack": "trace"
+      }
     }
   }
 }

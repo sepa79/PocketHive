@@ -14,7 +14,7 @@ public final class ControlPlaneRouting {
     }
 
     public static String signal(String signal, String swarmId, String role, String instanceId) {
-        return join("sig", signal, segmentOrAll(swarmId), segmentOrAll(role), segmentOrAll(instanceId));
+        return join("signal", signal, segmentOrAll(swarmId), segmentOrAll(role), segmentOrAll(instanceId));
     }
 
     public static String event(String category, String signal, ConfirmationScope scope) {
@@ -23,7 +23,7 @@ public final class ControlPlaneRouting {
 
     public static String event(String type, ConfirmationScope scope) {
         Objects.requireNonNull(scope, "scope");
-        return join("ev",
+        return join("event",
             normaliseType(type),
             segmentOrAll(scope.swarmId()),
             segmentOrAll(scope.role()),
@@ -71,11 +71,11 @@ public final class ControlPlaneRouting {
     }
 
     public static RoutingKey parseSignal(String routingKey) {
-        return parsePrefixed(routingKey, "sig");
+        return parsePrefixed(routingKey, "signal");
     }
 
     public static RoutingKey parseEvent(String routingKey) {
-        return parsePrefixed(routingKey, "ev");
+        return parsePrefixed(routingKey, "event");
     }
 
     private static RoutingKey parsePrefixed(String routingKey, String expectedPrefix) {

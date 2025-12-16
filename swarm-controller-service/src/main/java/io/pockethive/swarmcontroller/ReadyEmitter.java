@@ -2,12 +2,14 @@ package io.pockethive.swarmcontroller;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.pockethive.control.CommandState;
+import io.pockethive.control.CommandOutcome;
 import io.pockethive.control.ConfirmationScope;
-import io.pockethive.control.ReadyConfirmation;
+import io.pockethive.control.ControlScope;
+import io.pockethive.controlplane.messaging.CommandOutcomes;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.swarmcontroller.config.SwarmControllerProperties;
 import java.time.Instant;
+import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.AmqpException;
@@ -45,17 +47,20 @@ public class ReadyEmitter {
         String swarmId = properties.getSwarmId();
         String role = properties.getRole();
         ConfirmationScope scope = ConfirmationScope.forInstance(swarmId, role, instanceId);
-        ReadyConfirmation confirmation = new ReadyConfirmation(
-            Instant.now(),
-            null,
-            null,
+        CommandOutcome outcome = CommandOutcomes.success(
             role,
-            scope,
-            CommandState.status("Ready")
+            instanceId,
+            new ControlScope(swarmId, role, instanceId),
+            null,
+            null,
+            "Ready",
+            null,
+            null,
+            Instant.now()
         );
-        String routingKey = ControlPlaneRouting.event("ready." + role, scope);
+        String routingKey = ControlPlaneRouting.event("outcome", role, scope);
         try {
-            String payload = mapper.writeValueAsString(confirmation);
+            String payload = mapper.writeValueAsString(outcome);
             log.info("[CTRL] SEND rk={} inst={} payload={}", routingKey, instanceId, snippet(payload));
             rabbit.convertAndSend(properties.getControlExchange(), routingKey, payload);
         } catch (JsonProcessingException e) {

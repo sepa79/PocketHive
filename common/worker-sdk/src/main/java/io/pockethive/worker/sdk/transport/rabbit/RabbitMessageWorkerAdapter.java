@@ -72,6 +72,7 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
     private final String outboundQueue;
     private final String outboundExchange;
     private final Consumer<Exception> dispatchErrorHandler;
+    private final boolean emitWorkErrorAlerts;
     private final AtomicBoolean initialised = new AtomicBoolean(false);
     private final RabbitWorkItemConverter messageConverter = new RabbitWorkItemConverter();
     /**
@@ -107,6 +108,7 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
         this.outboundQueue = builder.outboundQueue;
         this.outboundExchange = builder.outboundExchange;
         this.dispatchErrorHandler = builder.dispatchErrorHandler;
+        this.emitWorkErrorAlerts = builder.emitWorkErrorAlerts;
     }
 
     /**
@@ -169,7 +171,13 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
      * @param message inbound message delivered by Spring AMQP
      */
     public void onWork(Message message) {
-        WorkItem workItem = messageConverter.fromMessage(message);
+        WorkItem workItem;
+        try {
+            workItem = messageConverter.fromMessage(message);
+        } catch (Exception ex) {
+            handleWorkDecodeFailure(message, ex);
+            return;
+        }
         ThreadPoolExecutor executor = workExecutor;
         int currentMax = maxInFlight.get();
         if (executor == null || currentMax <= 1) {
@@ -185,6 +193,58 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
         }
     }
 
+    private void handleWorkDecodeFailure(Message message, Exception ex) {
+        if (emitWorkErrorAlerts) {
+            try {
+                WorkItem fallback = messageConverterFallback(message);
+                controlPlaneRuntime.publishWorkError(workerDefinition.beanName(), fallback, ex);
+            } catch (Exception publishFailure) {
+                log.warn("{} failed to publish decode error alert", displayName, publishFailure);
+            }
+        }
+        dispatchErrorHandler.accept(ex);
+    }
+
+    /**
+     * Best-effort conversion of an inbound AMQP {@link Message} into a {@link WorkItem} when the canonical
+     * {@link RabbitWorkItemConverter#fromMessage(Message)} decoding fails.
+     * <p>
+     * This exists so decode failures can still be surfaced as control-plane alerts (and therefore appear
+     * in swarm journals / Hive UI) with a minimal amount of correlation context instead of being silently
+     * dropped.
+     * <p>
+     * The fallback:
+     * <ul>
+     *   <li>Uses the raw message body interpreted as UTF-8 text (empty string on failure).</li>
+     *   <li>Copies AMQP headers from {@link org.springframework.amqp.core.MessageProperties#getHeaders()}.</li>
+     *   <li>Normalises the AMQP {@code messageId} property into a {@code "message-id"} header, because the
+     *       PocketHive work envelope uses {@code "message-id"} as the canonical header key. In particular,
+     *       {@link WorkerControlPlaneRuntime#publishWorkError(String, WorkItem, Throwable)} reads it to attach
+     *       a {@code messageId} field to emitted alert context.</li>
+     * </ul>
+     */
+    private static WorkItem messageConverterFallback(Message message) {
+        if (message == null) {
+            return WorkItem.text("").build();
+        }
+        byte[] body = message.getBody() != null ? message.getBody() : new byte[0];
+        String payload;
+        try {
+            payload = new String(body, java.nio.charset.StandardCharsets.UTF_8);
+        } catch (Exception ignored) {
+            payload = "";
+        }
+        WorkItem.Builder builder = WorkItem.text(payload);
+        if (message.getMessageProperties() != null && message.getMessageProperties().getHeaders() != null) {
+            builder.headers(message.getMessageProperties().getHeaders());
+        }
+        if (message.getMessageProperties() != null && message.getMessageProperties().getMessageId() != null) {
+            // Mirror the AMQP "messageId" property into PocketHive's canonical WorkItem header key.
+            builder.header("message-id", message.getMessageProperties().getMessageId());
+        }
+        return builder.build();
+    }
+
     private void dispatchSynchronously(WorkItem workItem) {
         try {
             WorkItem result = dispatcher.dispatch(workItem);
@@ -193,6 +253,13 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
                 messageResultPublisher.publish(result, outbound);
             }
         } catch (Exception ex) {
+            if (emitWorkErrorAlerts) {
+                try {
+                    controlPlaneRuntime.publishWorkError(workerDefinition.beanName(), workItem, ex);
+                } catch (Exception publishFailure) {
+                    log.warn("{} failed to publish work error alert", displayName, publishFailure);
+                }
+            }
             dispatchErrorHandler.accept(ex);
         }
     }
@@ -345,6 +412,7 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
         private String outboundQueue;
         private String outboundExchange;
         private Consumer<Exception> dispatchErrorHandler;
+        private boolean emitWorkErrorAlerts = true;
 
         private Builder() {
         }
@@ -567,6 +635,15 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
          */
         public Builder dispatchErrorHandler(Consumer<Exception> dispatchErrorHandler) {
             this.dispatchErrorHandler = Objects.requireNonNull(dispatchErrorHandler, "dispatchErrorHandler");
+            return this;
+        }
+
+        /**
+         * Controls whether dispatcher/decoding exceptions are also surfaced as control-plane alert events.
+         * Defaults to {@code true}.
+         */
+        public Builder emitWorkErrorAlerts(boolean enabled) {
+            this.emitWorkErrorAlerts = enabled;
             return this;
         }
 

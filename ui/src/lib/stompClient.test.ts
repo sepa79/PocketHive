@@ -15,6 +15,56 @@ import type { Component } from '../types/hive'
  * @vitest-environment jsdom
  */
 
+function statusMetricEnvelope(input: {
+  swarmId: string
+  role: string
+  instance: string
+  type?: 'status-full' | 'status-delta'
+  data?: Record<string, unknown>
+}) {
+  const now = new Date().toISOString()
+  const metricType = input.type ?? 'status-full'
+  const baseData: Record<string, unknown> = {
+    enabled: true,
+    tps: 0,
+    context: {},
+    ...(metricType === 'status-full' ? { startedAt: now } : {}),
+  }
+  return {
+    timestamp: now,
+    version: '1',
+    kind: 'metric',
+    type: metricType,
+    origin: input.instance,
+    scope: { swarmId: input.swarmId, role: input.role, instance: input.instance },
+    correlationId: null,
+    idempotencyKey: null,
+    data: { ...baseData, ...(input.data ?? {}) },
+  }
+}
+
+function outcomeEnvelope(input: {
+  swarmId: string
+  role: string
+  instance: string
+  type: string
+  correlationId?: string
+  data?: Record<string, unknown>
+}) {
+  const now = new Date().toISOString()
+  return {
+    timestamp: now,
+    version: '1',
+    kind: 'outcome',
+    type: input.type,
+    origin: 'swarm-controller',
+    scope: { swarmId: input.swarmId, role: input.role, instance: input.instance },
+    correlationId: input.correlationId ?? 'corr-1',
+    idempotencyKey: null,
+    data: input.data ?? { status: 'success' },
+  }
+}
+
 
 describe('swarm lifecycle', () => {
   it('logs error events and sets toast', () => {
@@ -34,12 +84,22 @@ describe('swarm lifecycle', () => {
       entries = l.filter((e) => e.type === 'error')
     })
     cb({
-      body: 'boom',
-      headers: { destination: '/exchange/ph.control/ev.error.swarm-create.sw1', 'x-correlation-id': 'e1' },
+      body: JSON.stringify({
+        timestamp: new Date().toISOString(),
+        version: '1',
+        kind: 'event',
+        type: 'alert',
+        origin: 'orchestrator-1',
+        scope: { swarmId: 'sw1', role: 'orchestrator', instance: 'orchestrator-1' },
+        correlationId: 'e1',
+        idempotencyKey: null,
+        data: { level: 'error', code: 'boom', message: 'boom' },
+      }),
+      headers: { destination: '/exchange/ph.control/event.alert.alert.sw1.orchestrator.orchestrator-1', 'x-correlation-id': 'e1' },
     })
-    expect(entries[0].destination).toContain('ev.error.swarm-create.sw1')
+    expect(entries[0].destination).toContain('event.alert.alert.sw1')
     expect(entries[0].body).toBe('boom')
-    expect(useUIStore.getState().toast).toBe('Error: error swarm-create sw1: boom')
+    expect(useUIStore.getState().toast).toBe('Error: sw1 boom: boom')
     setClient(null)
   })
 
@@ -64,45 +124,42 @@ describe('swarm lifecycle', () => {
       )
     })
 
-    const baseHeaders = { destination: '/exchange/ph.control/ev.status.swarm-sw1' }
     cb({
-      headers: baseHeaders,
-      body: JSON.stringify({
-        event: 'status',
-        kind: 'status',
-        version: '1',
-        role: 'processor',
-        instance: 'processor-sw1',
-        swarmId: 'sw1',
-        messageId: 'm-1',
-        timestamp: new Date().toISOString(),
-        queues: {
-          work: {
-            out: ['ph.sw1.jobs'],
+      headers: { destination: '/exchange/ph.control/event.metric.status-full.sw1.processor.processor-sw1' },
+      body: JSON.stringify(
+        statusMetricEnvelope({
+          swarmId: 'sw1',
+          role: 'processor',
+          instance: 'processor-sw1',
+          data: {
+            io: { work: { queues: { out: ['ph.sw1.jobs'] } } },
           },
-        },
-      }),
+        }),
+      ),
     })
 
     cb({
-      headers: baseHeaders,
-      body: JSON.stringify({
-        event: 'status',
-        kind: 'status',
-        version: '1',
-        role: 'swarm-controller',
-        instance: 'controller-sw1',
-        swarmId: 'sw1',
-        messageId: 'm-2',
-        timestamp: new Date().toISOString(),
-        queueStats: {
-          'ph.sw1.jobs': {
-            depth: 3,
-            consumers: 2,
-            oldestAgeSec: 12,
+      headers: { destination: '/exchange/ph.control/event.metric.status-full.sw1.swarm-controller.controller-sw1' },
+      body: JSON.stringify(
+        statusMetricEnvelope({
+          swarmId: 'sw1',
+          role: 'swarm-controller',
+          instance: 'controller-sw1',
+          data: {
+            io: {
+              work: {
+                queueStats: {
+                  'ph.sw1.jobs': {
+                    depth: 3,
+                    consumers: 2,
+                    oldestAgeSec: 12,
+                  },
+                },
+              },
+            },
           },
-        },
-      }),
+        }),
+      ),
     })
 
     const latest = updates.at(-1)
@@ -141,37 +198,32 @@ describe('swarm lifecycle', () => {
       }))
     })
 
-    const baseHeaders = { destination: '/exchange/ph.control/ev.status.swarm-sw1' }
     cb({
-      headers: baseHeaders,
-      body: JSON.stringify({
-        event: 'status',
-        kind: 'status',
-        version: '1',
-        role: 'generator',
-        instance: 'generator-sw1',
-        swarmId: 'sw1',
-        messageId: 'm-1',
-        timestamp: new Date().toISOString(),
-        enabled: true,
-        data: {
-          processedTotal: 321,
-          workers: [
-            {
-              role: 'moderator',
-              enabled: true,
-              config: { ratePerSec: 2 },
-              data: { processedDelta: 7 },
-            },
-            {
-              role: 'generator',
-              enabled: false,
-              config: { ratePerSec: 5, path: '/demo' },
-              data: { processedDelta: 42 },
-            },
-          ],
-        },
-      }),
+      headers: { destination: '/exchange/ph.control/event.metric.status-full.sw1.generator.generator-sw1' },
+      body: JSON.stringify(
+        statusMetricEnvelope({
+          swarmId: 'sw1',
+          role: 'generator',
+          instance: 'generator-sw1',
+          data: {
+            processedTotal: 321,
+            workers: [
+              {
+                role: 'moderator',
+                enabled: true,
+                config: { ratePerSec: 2 },
+                data: { processedDelta: 7 },
+              },
+              {
+                role: 'generator',
+                enabled: false,
+                config: { ratePerSec: 5, path: '/demo' },
+                data: { processedDelta: 42 },
+              },
+            ],
+          },
+        }),
+      ),
     })
 
     const generator = latest.find((comp) => comp.id === 'generator-sw1')
@@ -188,28 +240,25 @@ describe('swarm lifecycle', () => {
     })
 
     cb({
-      headers: baseHeaders,
-      body: JSON.stringify({
-        event: 'status',
-        kind: 'status',
-        version: '1',
-        role: 'swarm-controller',
-        instance: 'swarm-controller-sw1',
-        swarmId: 'sw1',
-        messageId: 'm-2',
-        timestamp: new Date().toISOString(),
-        enabled: false,
-        data: {
-          heartbeatIntervalSec: 15,
-          workers: [
-            {
-              role: 'processor',
-              enabled: true,
-              config: { batchSize: 10 },
-            },
-          ],
-        },
-      }),
+      headers: { destination: '/exchange/ph.control/event.metric.status-full.sw1.swarm-controller.swarm-controller-sw1' },
+      body: JSON.stringify(
+        statusMetricEnvelope({
+          swarmId: 'sw1',
+          role: 'swarm-controller',
+          instance: 'swarm-controller-sw1',
+          data: {
+            enabled: false,
+            heartbeatIntervalSec: 15,
+            workers: [
+              {
+                role: 'processor',
+                enabled: true,
+                config: { batchSize: 10 },
+              },
+            ],
+          },
+        }),
+      ),
     })
 
     const controller = latest.find((comp) => comp.id === 'swarm-controller-sw1')
@@ -245,36 +294,33 @@ describe('swarm lifecycle', () => {
     })
 
     cb({
-      headers: { destination: '/exchange/ph.control/ev.status.swarm-sw1' },
-      body: JSON.stringify({
-        event: 'status',
-        kind: 'status',
-        version: '1',
-        role: 'moderator',
-        instance: 'moderator-sw1',
-        swarmId: 'sw1',
-        messageId: 'm-1',
-        timestamp: new Date().toISOString(),
-        data: {
-          mode: 'rate-per-sec',
-          workers: [
-            {
-              role: 'moderator',
-              enabled: true,
-              config: {
-                mode: {
-                  type: 'ratePerSec',
-                  ratePerSec: 5,
-                  sine: { min: 1, max: 10, periodSec: 60 },
+      headers: { destination: '/exchange/ph.control/event.metric.status-full.sw1.moderator.moderator-sw1' },
+      body: JSON.stringify(
+        statusMetricEnvelope({
+          swarmId: 'sw1',
+          role: 'moderator',
+          instance: 'moderator-sw1',
+          data: {
+            mode: 'rate-per-sec',
+            workers: [
+              {
+                role: 'moderator',
+                enabled: true,
+                config: {
+                  mode: {
+                    type: 'ratePerSec',
+                    ratePerSec: 5,
+                    sine: { min: 1, max: 10, periodSec: 60 },
+                  },
+                },
+                data: {
+                  mode: 'rate-per-sec',
                 },
               },
-              data: {
-                mode: 'rate-per-sec',
-              },
-            },
-          ],
-        },
-      }),
+            ],
+          },
+        }),
+      ),
     })
 
     const moderator = latest.find((comp) => comp.id === 'moderator-sw1')
@@ -307,35 +353,31 @@ describe('swarm lifecycle', () => {
       }))
     })
 
-    const headers = { destination: '/exchange/ph.control/ev.status.orchestrator' }
+    const headers = { destination: '/exchange/ph.control/event.metric.status-delta.hive.orchestrator.orch' }
     cb({
       headers,
-      body: JSON.stringify({
-        event: 'status',
-        kind: 'status',
-        version: '1',
-        role: 'orchestrator',
-        instance: 'orch',
-        swarmId: 'hive',
-        messageId: 'm0',
-        timestamp: new Date().toISOString(),
-        data: { swarmCount: 0 },
-      }),
+      body: JSON.stringify(
+        statusMetricEnvelope({
+          swarmId: 'hive',
+          role: 'orchestrator',
+          instance: 'orch',
+          type: 'status-delta',
+          data: { swarmCount: 0 },
+        }),
+      ),
     })
 
     cb({
       headers,
-      body: JSON.stringify({
-        event: 'status',
-        kind: 'status',
-        version: '1',
-        role: 'orchestrator',
-        instance: 'orch',
-        swarmId: 'hive',
-        messageId: 'm1',
-        timestamp: new Date().toISOString(),
-        data: { swarmCount: 4 },
-      }),
+      body: JSON.stringify(
+        statusMetricEnvelope({
+          swarmId: 'hive',
+          role: 'orchestrator',
+          instance: 'orch',
+          type: 'status-delta',
+          data: { swarmCount: 4 },
+        }),
+      ),
     })
 
     const orchestrator = latest.find((comp) => comp.id === 'orch')
@@ -386,36 +428,28 @@ describe('swarm lifecycle', () => {
     })
 
     cb({
-      headers: { destination: '/exchange/ph.control/ev.status.swarm-hive' },
-      body: JSON.stringify({
-        event: 'status',
-        kind: 'status',
-        version: '1',
-        role: 'orchestrator',
-        instance: 'hive-orchestrator',
-        swarmId: 'hive',
-        messageId: 'orch-1',
-        timestamp: new Date().toISOString(),
-        queues: {
-          control: {
-            out: ['ph.swarm.configure'],
+      headers: { destination: '/exchange/ph.control/event.metric.status-full.hive.orchestrator.hive-orchestrator' },
+      body: JSON.stringify(
+        statusMetricEnvelope({
+          swarmId: 'hive',
+          role: 'orchestrator',
+          instance: 'hive-orchestrator',
+          data: {
+            io: { control: { queues: { out: ['ph.swarm.configure'] } } },
           },
-        },
-      }),
+        }),
+      ),
     })
 
     cb({
-      headers: { destination: '/exchange/ph.control/ev.status.swarm-sw1' },
-      body: JSON.stringify({
-        event: 'status',
-        kind: 'status',
-        version: '1',
-        role: 'swarm-controller',
-        instance: 'sw1-swarm-controller',
-        swarmId: 'sw1',
-        messageId: 'sw1-1',
-        timestamp: new Date().toISOString(),
-      }),
+      headers: { destination: '/exchange/ph.control/event.metric.status-full.sw1.swarm-controller.sw1-swarm-controller' },
+      body: JSON.stringify(
+        statusMetricEnvelope({
+          swarmId: 'sw1',
+          role: 'swarm-controller',
+          instance: 'sw1-swarm-controller',
+        }),
+      ),
     })
 
     const latest = topologies.at(-1)
@@ -429,7 +463,7 @@ describe('swarm lifecycle', () => {
     setClient(null)
   })
 
-  it('drops swarm components when a swarm-remove ready confirmation arrives', () => {
+  it('drops swarm components when a swarm-remove outcome arrives', () => {
     const publish = vi.fn()
     let cb: (msg: { body: string; headers: Record<string, string> }) => void = () => {}
     const subscribe = vi
@@ -445,50 +479,40 @@ describe('swarm lifecycle', () => {
       updates.push(list.map((component) => ({ ...component })))
     })
 
-    const statusHeadersSw1 = { destination: '/exchange/ph.control/ev.status.swarm-sw1' }
-    const statusHeadersSw2 = { destination: '/exchange/ph.control/ev.status.swarm-sw2' }
-    const now = new Date().toISOString()
+    const statusHeadersSw1 = { destination: '/exchange/ph.control/event.metric.status-full.sw1.generator.sw1-generator' }
+    const statusHeadersSw2 = { destination: '/exchange/ph.control/event.metric.status-full.sw2.processor.sw2-processor' }
 
     cb({
       headers: statusHeadersSw1,
-      body: JSON.stringify({
-        event: 'status',
-        kind: 'status',
-        version: '1',
-        role: 'generator',
-        instance: 'sw1-generator',
-        swarmId: 'sw1',
-        messageId: 'm-1',
-        timestamp: now,
-      }),
+      body: JSON.stringify(
+        statusMetricEnvelope({
+          swarmId: 'sw1',
+          role: 'generator',
+          instance: 'sw1-generator',
+        }),
+      ),
     })
 
     cb({
-      headers: statusHeadersSw1,
-      body: JSON.stringify({
-        event: 'status',
-        kind: 'status',
-        version: '1',
-        role: 'processor',
-        instance: 'sw1-processor',
-        swarmId: 'sw1',
-        messageId: 'm-2',
-        timestamp: now,
-      }),
+      headers: { destination: '/exchange/ph.control/event.metric.status-full.sw1.processor.sw1-processor' },
+      body: JSON.stringify(
+        statusMetricEnvelope({
+          swarmId: 'sw1',
+          role: 'processor',
+          instance: 'sw1-processor',
+        }),
+      ),
     })
 
     cb({
       headers: statusHeadersSw2,
-      body: JSON.stringify({
-        event: 'status',
-        kind: 'status',
-        version: '1',
-        role: 'processor',
-        instance: 'sw2-processor',
-        swarmId: 'sw2',
-        messageId: 'm-3',
-        timestamp: now,
-      }),
+      body: JSON.stringify(
+        statusMetricEnvelope({
+          swarmId: 'sw2',
+          role: 'processor',
+          instance: 'sw2-processor',
+        }),
+      ),
     })
 
     const beforeRemoval = updates.at(-1)
@@ -496,13 +520,17 @@ describe('swarm lifecycle', () => {
 
     cb({
       headers: {
-        destination: '/exchange/ph.control/ev.ready.swarm-remove.sw1.swarm-controller.inst',
+        destination: '/exchange/ph.control/event.outcome.swarm-remove.sw1.swarm-controller.inst',
       },
-      body: JSON.stringify({
-        result: 'success',
-        signal: 'swarm-remove',
-        scope: { swarmId: 'sw1', role: 'swarm-controller', instance: 'inst' },
-      }),
+      body: JSON.stringify(
+        outcomeEnvelope({
+          swarmId: 'sw1',
+          role: 'swarm-controller',
+          instance: 'inst',
+          type: 'swarm-remove',
+          correlationId: 'e1',
+        }),
+      ),
     })
 
     const afterRemoval = updates.at(-1)
@@ -513,9 +541,17 @@ describe('swarm lifecycle', () => {
 
     cb({
       headers: {
-        destination: '/exchange/ph.control/ev.ready.swarm-remove.sw2.swarm-controller.inst',
+        destination: '/exchange/ph.control/event.outcome.swarm-remove.sw2.swarm-controller.inst',
       },
-      body: JSON.stringify({ signal: 'swarm-remove', scope: { swarmId: 'sw2' } }),
+      body: JSON.stringify(
+        outcomeEnvelope({
+          swarmId: 'sw2',
+          role: 'swarm-controller',
+          instance: 'inst',
+          type: 'swarm-remove',
+          correlationId: 'e2',
+        }),
+      ),
     })
 
     setClient(null)
@@ -537,49 +573,38 @@ describe('swarm lifecycle', () => {
       updates.push(list.map((component) => ({ ...component })))
     })
 
-    const now = new Date().toISOString()
-
     cb({
-      headers: { destination: '/exchange/ph.control/ev.status.swarm-sw1' },
-      body: JSON.stringify({
-        event: 'status',
-        kind: 'status',
-        version: '1',
-        role: 'generator',
-        instance: 'sw1-generator',
-        swarmId: 'sw1',
-        messageId: 'm-gen',
-        timestamp: now,
-      }),
+      headers: { destination: '/exchange/ph.control/event.metric.status-full.sw1.generator.sw1-generator' },
+      body: JSON.stringify(
+        statusMetricEnvelope({
+          swarmId: 'sw1',
+          role: 'generator',
+          instance: 'sw1-generator',
+        }),
+      ),
     })
 
     cb({
-      headers: { destination: '/exchange/ph.control/ev.status.swarm-sw1' },
-      body: JSON.stringify({
-        event: 'status',
-        kind: 'status',
-        version: '1',
-        role: 'swarm-controller',
-        instance: 'sw1-controller',
-        swarmId: 'sw1',
-        messageId: 'm-ctrl',
-        timestamp: now,
-        data: { swarmStatus: 'RUNNING' },
-      }),
+      headers: { destination: '/exchange/ph.control/event.metric.status-full.sw1.swarm-controller.sw1-controller' },
+      body: JSON.stringify(
+        statusMetricEnvelope({
+          swarmId: 'sw1',
+          role: 'swarm-controller',
+          instance: 'sw1-controller',
+          data: { swarmStatus: 'RUNNING' },
+        }),
+      ),
     })
 
     cb({
-      headers: { destination: '/exchange/ph.control/ev.status.swarm-sw2' },
-      body: JSON.stringify({
-        event: 'status',
-        kind: 'status',
-        version: '1',
-        role: 'processor',
-        instance: 'sw2-processor',
-        swarmId: 'sw2',
-        messageId: 'm-proc',
-        timestamp: now,
-      }),
+      headers: { destination: '/exchange/ph.control/event.metric.status-full.sw2.processor.sw2-processor' },
+      body: JSON.stringify(
+        statusMetricEnvelope({
+          swarmId: 'sw2',
+          role: 'processor',
+          instance: 'sw2-processor',
+        }),
+      ),
     })
 
     const beforeRemoval = updates.at(-1)
@@ -587,18 +612,16 @@ describe('swarm lifecycle', () => {
     expect(beforeRemoval?.some((component) => component.swarmId === 'sw2')).toBe(true)
 
     cb({
-      headers: { destination: '/exchange/ph.control/ev.status.swarm-sw1' },
-      body: JSON.stringify({
-        event: 'status',
-        kind: 'status-delta',
-        version: '1',
-        role: 'swarm-controller',
-        instance: 'sw1-controller',
-        swarmId: 'sw1',
-        messageId: 'm-ctrl-removed',
-        timestamp: now,
-        data: { swarmStatus: 'REMOVED' },
-      }),
+      headers: { destination: '/exchange/ph.control/event.metric.status-delta.sw1.swarm-controller.sw1-controller' },
+      body: JSON.stringify(
+        statusMetricEnvelope({
+          swarmId: 'sw1',
+          role: 'swarm-controller',
+          instance: 'sw1-controller',
+          type: 'status-delta',
+          data: { swarmStatus: 'REMOVED' },
+        }),
+      ),
     })
 
     const afterRemoval = updates.at(-1)

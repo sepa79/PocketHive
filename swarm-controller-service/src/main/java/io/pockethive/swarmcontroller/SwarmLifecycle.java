@@ -101,7 +101,7 @@ public interface SwarmLifecycle {
    * Record that a worker instance has completed its readiness handshake.
    * <p>
    * <strong>When it runs:</strong> invoked when the controller receives a {@code ready.swarm-start}
-   * event from a worker (for example, routing key {@code ev.ready.generator.generator-1}).
+	   * event from a worker (for example, routing key {@code event.ready.generator.generator-1}).
    * <p>
    * <strong>Return value:</strong> {@code true} when all expected workers are ready and healthy,
    * signalling the orchestrator can emit a ready confirmation.

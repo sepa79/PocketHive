@@ -63,13 +63,12 @@ class SwarmRuntimeCoreScenarioEngineTest {
         mock(io.pockethive.manager.ports.ComputeAdapter.class);
     io.pockethive.swarmcontroller.infra.amqp.SwarmQueueMetrics queueMetrics =
         new io.pockethive.swarmcontroller.infra.amqp.SwarmQueueMetrics("test-swarm", meterRegistry);
-    io.pockethive.manager.runtime.ConfigFanout configFanout =
-        new io.pockethive.manager.runtime.ConfigFanout(
-            mapper,
-            new io.pockethive.swarmcontroller.runtime.SwarmControlPlanePortAdapter(controlPublisher),
-            props.getSwarmId(),
-            props.getRole(),
-            "inst");
+	    io.pockethive.manager.runtime.ConfigFanout configFanout =
+	        new io.pockethive.manager.runtime.ConfigFanout(
+	            mapper,
+	            new io.pockethive.swarmcontroller.runtime.SwarmControlPlanePortAdapter(controlPublisher),
+	            props.getSwarmId(),
+	            "inst");
 
     SwarmRuntimeCore core = new SwarmRuntimeCore(
         amqp,
@@ -84,6 +83,7 @@ class SwarmRuntimeCoreScenarioEngineTest {
         computeAdapter,
         queueMetrics,
         configFanout,
+        SwarmJournal.noop(),
         "inst");
 
     // Replace the internal ScenarioEngine with a spy so we can observe ticks.

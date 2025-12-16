@@ -78,7 +78,8 @@ public final class HttpTemplateLoader {
           def.method(),
           def.pathTemplate(),
           def.bodyTemplate(),
-          def.headersTemplate()
+          def.headersTemplate(),
+          def.schemaRef()
       );
     } catch (Exception ex) {
       throw new IllegalStateException("Failed to parse HTTP template " + path, ex);
