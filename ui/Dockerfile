@@ -27,6 +27,6 @@ COPY docs/ /usr/share/nginx/html/docs/
 
 # Generate /VERSION from pom.xml revision to avoid a separate source of truth.
 RUN set -eu; \
-  VERSION="$(sed -n 's/.*<revision>\\(.*\\)<\\/revision>.*/\\1/p' /usr/share/nginx/html/pom.xml | head -n 1 | tr -d '\\n')"; \
+  VERSION="$(grep '<revision>' /usr/share/nginx/html/pom.xml | head -n 1 | sed 's/.*<revision>\(.*\)<\/revision>.*/\1/' | tr -d ' \t\n')"; \
   if [ -z "$VERSION" ]; then echo "Failed to extract <revision> from pom.xml" >&2; exit 1; fi; \
   echo "$VERSION" > /usr/share/nginx/html/VERSION
