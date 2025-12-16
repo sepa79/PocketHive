@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "${SCRIPT_DIR}"
 
-VERSION=$(cat VERSION | tr -d '\n')
+VERSION=$(mvn help:evaluate -Dexpression=revision -q -DforceStdout)
 PACKAGE_NAME="pockethive-deployment-${VERSION}.tar.gz"
 
 echo "=== Packaging PocketHive Deployment ==="

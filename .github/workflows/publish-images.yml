@@ -35,12 +35,19 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
       - name: Extract version
         id: version
         run: |
-          VERSION=$(sed -n 's/.*<revision>\\(.*\\)<\\/revision>.*/\\1/p' pom.xml | head -n 1 | tr -d '\n')
+          VERSION=$(mvn help:evaluate -Dexpression=revision -q -DforceStdout)
           if [[ -z "$VERSION" ]]; then
-            echo "Failed to extract <revision> from pom.xml" >&2
+            echo "Failed to extract revision from pom.xml" >&2
             exit 1
           fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"

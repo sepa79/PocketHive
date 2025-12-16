@@ -4,7 +4,7 @@ setlocal enabledelayedexpansion
 echo === Packaging PocketHive Deployment ===
 echo.
 
-set /p VERSION=<VERSION
+for /f "tokens=*" %%i in ('mvn help:evaluate -Dexpression=revision -q -DforceStdout') do set VERSION=%%i
 set PACKAGE_NAME=pockethive-deployment-%VERSION%.zip
 
 echo Version: %VERSION%
