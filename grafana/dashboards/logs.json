@@ -1,0 +1,86 @@
+{
+  "uid": "pockethive-logs",
+  "title": "PocketHive Logs",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "10s",
+  "style": "dark",
+  "tags": ["pockethive", "logs", "loki"],
+  "time": { "from": "now-7d", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "type": "query",
+        "name": "swarmId",
+        "label": "Swarm",
+        "datasource": "Loki",
+        "definition": "label_values({role=~\".+\"}, swarmId)",
+        "query": "label_values({role=~\".+\"}, swarmId)",
+        "refresh": 2,
+        "includeAll": true,
+        "allValue": ".+",
+        "multi": true,
+        "current": { "text": "All", "value": "$__all", "selected": true },
+        "hide": 0
+      },
+      {
+        "type": "query",
+        "name": "role",
+        "label": "Role",
+        "datasource": "Loki",
+        "definition": "label_values({role=~\".+\"}, role)",
+        "query": "label_values({role=~\".+\"}, role)",
+        "refresh": 2,
+        "includeAll": true,
+        "allValue": ".+",
+        "multi": true,
+        "current": { "text": "All", "value": "$__all", "selected": true },
+        "hide": 0
+      },
+      {
+        "type": "query",
+        "name": "instanceId",
+        "label": "Instance",
+        "datasource": "Loki",
+        "definition": "label_values({swarmId=~\"${swarmId:regex}\", role=~\"${role:regex}\"}, instanceId)",
+        "query": "label_values({swarmId=~\"${swarmId:regex}\", role=~\"${role:regex}\"}, instanceId)",
+        "refresh": 2,
+        "includeAll": true,
+        "allValue": ".+",
+        "multi": true,
+        "current": { "text": "All", "value": "$__all", "selected": true },
+        "hide": 0
+      },
+      {
+        "type": "textbox",
+        "name": "search",
+        "label": "Search (contains)",
+        "current": { "text": "", "value": "", "selected": true },
+        "hide": 0
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "logs",
+      "title": "Logs",
+      "datasource": "Loki",
+      "id": 1,
+      "gridPos": { "h": 20, "w": 24, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "{swarmId=~\"${swarmId:regex}\", role=~\"${role:regex}\", instanceId=~\"${instanceId:regex}\"} |= \"${search}\""
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "showLabels": true,
+        "showCommonLabels": true,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending",
+        "dedupStrategy": "none"
+      }
+    }
+  ]
+}

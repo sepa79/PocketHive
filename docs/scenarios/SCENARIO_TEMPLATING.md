@@ -121,6 +121,7 @@ method: POST
 headersTemplate:
   content-type: application/xml
   x-nonce: "{{ eval(\"#uuid()\") }}"
+schemaRef: "schemas/redis-balance.schema.json#/body"
 bodyTemplate: |
   <soapEnvelope>
     <!-- templated XML body -->
@@ -132,6 +133,10 @@ When HTTP Builder runs:
 - It resolves `serviceId`/`callId` to a template file.
 - Renders the templates using the WorkItem context from upstream
   (often supplied by a Generator or Redis dataset provider).
+
+`schemaRef` is an optional, authoring-only hint used by the Hive UI to render
+a JSON Schema-backed editor for `bodyTemplate`. It is treated as an opaque string
+and ignored by runtime workers.
 
 ## Scenario templating check tool
 

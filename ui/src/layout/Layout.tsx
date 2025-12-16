@@ -66,13 +66,13 @@ export default function Layout() {
             Swarms
           </NavLink>
           <NavLink
-            to="/runs"
+            to="/journal"
             className={({ isActive }) =>
               `tab-btn flex items-center${isActive ? ' tab-active' : ''}`
             }
           >
             <List strokeWidth={1.5} className="tab-icon text-white/80" />
-            Runs
+            Journal
           </NavLink>
           <NavLink
             to="/scenarios"

@@ -1,4 +1,3 @@
-schemaRef: "schemas/redis-payload.schema.json"
 serviceId: default
 callId: redis-balance
 method: POST

@@ -6,4 +6,3 @@ bodyTemplate: "{{ payload }}"
 headersTemplate:
   content-type: application/json
   x-demo-call: auth
-

@@ -26,7 +26,27 @@
         "name": "Journal WARN/ERROR",
         "rawQuery": true,
         "type": "tags",
-        "query": "SELECT ts AS time, CONCAT(COALESCE(scope,''),' ',COALESCE(swarm_id,''),' ',COALESCE(kind,''),' ',COALESCE(type,'')) AS text, severity AS tags\nFROM journal_event\nWHERE $__timeFilter(ts)\n  AND severity IN ('WARN','ERROR')\n  AND ('${scope}' = 'ALL' OR scope = '${scope}')\n  AND ('${swarmId}' = '' OR swarm_id = '${swarmId}')\n  AND ('${runId}' = '' OR run_id = '${runId}')\n  AND ('${correlationId}' = '' OR correlation_id = '${correlationId}')\nORDER BY ts DESC, id DESC\nLIMIT 500"
+        "query": "SELECT extract(epoch from ts) * 1000 AS time, CONCAT(COALESCE(scope,''),' ',COALESCE(swarm_id,''),' ',COALESCE(kind,''),' ',COALESCE(type,'')) AS text, severity AS tags\nFROM journal_event\nWHERE $__timeFilter(ts)\n  AND severity IN ('WARN','ERROR')\n  AND ('${scope}' = 'ALL' OR scope = '${scope}')\n  AND ('${swarmId}' = '' OR swarm_id = '${swarmId}')\n  AND ('${runId}' = '' OR run_id = '${runId}')\n  AND ('${correlationId}' = '' OR correlation_id = '${correlationId}')\nORDER BY ts DESC, id DESC\nLIMIT 500"
+      },
+      {
+        "datasource": "PocketHive Journal (Postgres)",
+        "enable": true,
+        "hide": false,
+        "iconColor": "rgba(76, 175, 80, 1)",
+        "name": "Swarm lifecycle outcomes",
+        "rawQuery": true,
+        "type": "tags",
+        "query": "SELECT extract(epoch from ts) * 1000 AS time, CONCAT(COALESCE(scope,''),' ',COALESCE(swarm_id,''),' ',COALESCE(type,''),' ',COALESCE(data->>'status','')) AS text, CONCAT('lifecycle,',severity,',',type) AS tags\nFROM journal_event\nWHERE $__timeFilter(ts)\n  AND kind = 'outcome'\n  AND type IN ('swarm-create','swarm-template','swarm-start','swarm-stop','swarm-remove')\n  AND ('${scope}' = 'ALL' OR scope = '${scope}')\n  AND ('${swarmId}' = '' OR swarm_id = '${swarmId}')\n  AND ('${runId}' = '' OR run_id = '${runId}')\n  AND ('${correlationId}' = '' OR correlation_id = '${correlationId}')\nORDER BY ts DESC, id DESC\nLIMIT 500"
+      },
+      {
+        "datasource": "PocketHive Journal (Postgres)",
+        "enable": true,
+        "hide": false,
+        "iconColor": "rgba(244, 67, 54, 1)",
+        "name": "Journal backpressure",
+        "rawQuery": true,
+        "type": "tags",
+        "query": "SELECT extract(epoch from ts) * 1000 AS time, CONCAT(COALESCE(scope,''),' ',COALESCE(swarm_id,''),' ',COALESCE(type,'')) AS text, CONCAT('backpressure,',severity,',',type) AS tags\nFROM journal_event\nWHERE $__timeFilter(ts)\n  AND type IN ('journal-backpressure-start','journal-backpressure-stop')\n  AND ('${scope}' = 'ALL' OR scope = '${scope}')\n  AND ('${swarmId}' = '' OR swarm_id = '${swarmId}')\n  AND ('${runId}' = '' OR run_id = '${runId}')\n  AND ('${correlationId}' = '' OR correlation_id = '${correlationId}')\nORDER BY ts DESC, id DESC\nLIMIT 500"
       }
     ]
   },
@@ -79,7 +99,7 @@
           "format": "time_series",
           "rawQuery": true,
           "datasource": "PocketHive Journal (Postgres)",
-          "rawSql": "SELECT $__timeGroupAlias(ts, '1m'), severity, COUNT(*) AS value\nFROM journal_event\nWHERE $__timeFilter(ts)\n  AND ('${scope}' = 'ALL' OR scope = '${scope}')\n  AND ('${swarmId}' = '' OR swarm_id = '${swarmId}')\n  AND ('${runId}' = '' OR run_id = '${runId}')\n  AND ('${correlationId}' = '' OR correlation_id = '${correlationId}')\nGROUP BY 1, severity\nORDER BY 1"
+          "rawSql": "SELECT $__timeGroupAlias(ts, '1m'), severity AS metric, COUNT(*) AS value\nFROM journal_event\nWHERE $__timeFilter(ts)\n  AND ('${scope}' = 'ALL' OR scope = '${scope}')\n  AND ('${swarmId}' = '' OR swarm_id = '${swarmId}')\n  AND ('${runId}' = '' OR run_id = '${runId}')\n  AND ('${correlationId}' = '' OR correlation_id = '${correlationId}')\nGROUP BY 1, metric\nORDER BY 1"
         }
       ],
       "fieldConfig": {
@@ -122,4 +142,3 @@
     }
   ]
 }
-

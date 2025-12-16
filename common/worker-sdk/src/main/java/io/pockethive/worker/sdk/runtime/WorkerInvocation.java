@@ -34,7 +34,9 @@ final class WorkerInvocation {
 
     WorkItem invoke(WorkItem message) throws Exception {
         if (!workerState.enabled()) {
-            throw new IllegalStateException("Worker '" + workerDefinition.beanName() + "' is disabled by control-plane configuration");
+            // A disabled worker is a normal control-plane state (e.g., swarm stop / pause).
+            // Do not treat this as a runtime failure and do not emit runtime.exception alerts.
+            return null;
         }
         WorkerContext context = contextFactory.createContext(workerDefinition, workerState, message);
         WorkerInvocationContext invocationContext = new WorkerInvocationContext(workerDefinition, workerState, context, message);

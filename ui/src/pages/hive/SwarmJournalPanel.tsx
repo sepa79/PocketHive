@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getHiveJournalPage, getSwarmJournal, getSwarmJournalPage } from '../../lib/orchestratorApi'
+import { getSwarmJournal, getSwarmJournalPage } from '../../lib/orchestratorApi'
 import type { SwarmJournalEntry } from '../../types/orchestrator'
 
 export interface SwarmJournalPanelProps {
@@ -12,7 +12,6 @@ export default function SwarmJournalPanel({ swarmId }: SwarmJournalPanelProps) {
   const [entries, setEntries] = useState<SwarmJournalEntry[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [scope, setScope] = useState<'swarm' | 'hive'>('swarm')
 
   useEffect(() => {
     let cancelled = false
@@ -25,20 +24,16 @@ export default function SwarmJournalPanel({ swarmId }: SwarmJournalPanelProps) {
       }
       try {
         let result: SwarmJournalEntry[] = []
-        if (scope === 'hive') {
-          const page = await getHiveJournalPage({ swarmId, limit: 50 })
-          result = page?.items ? [...page.items].reverse() : []
-        } else {
-          try {
-            const page = await getSwarmJournalPage(swarmId, { limit: 50 })
-            result = page?.items ? [...page.items].reverse() : []
-          } catch (err) {
-            const status = err instanceof Error ? (err as Error & { status?: number }).status : undefined
-            if (status === 501) {
-              result = await getSwarmJournal(swarmId)
-            } else {
-              throw err
-            }
+        try {
+          const page = await getSwarmJournalPage(swarmId, { limit: 50 })
+          result = page?.items ? [...page.items] : []
+        } catch (err) {
+          const status = err instanceof Error ? (err as Error & { status?: number }).status : undefined
+          if (status === 501) {
+            const timeline = await getSwarmJournal(swarmId)
+            result = [...timeline].reverse()
+          } else {
+            throw err
           }
         }
         if (!cancelled) {
@@ -49,8 +44,6 @@ export default function SwarmJournalPanel({ swarmId }: SwarmJournalPanelProps) {
           const message =
             err instanceof Error && err.message
               ? err.message
-              : scope === 'hive'
-              ? 'Failed to load hive journal'
               : 'Failed to load swarm journal'
           setError(message)
         }
@@ -70,7 +63,7 @@ export default function SwarmJournalPanel({ swarmId }: SwarmJournalPanelProps) {
       cancelled = true
       window.clearInterval(timer)
     }
-  }, [swarmId, scope])
+  }, [swarmId])
 
   if (loading && !entries.length && !error) {
     return (
@@ -135,8 +128,7 @@ export default function SwarmJournalPanel({ swarmId }: SwarmJournalPanelProps) {
     grouped.push({ entry, count: 1 })
   }
 
-  const latest = grouped.slice(-20)
-  const latestRunId = latest.length ? latest[latest.length - 1]!.entry.runId : null
+  const latest = grouped.slice(0, 20)
 
   const describeEntry = (entry: SwarmJournalEntry): string => {
     const prefix = entry.direction === 'LOCAL' ? 'local' : entry.direction.toLowerCase()
@@ -160,48 +152,12 @@ export default function SwarmJournalPanel({ swarmId }: SwarmJournalPanelProps) {
   return (
     <div className="mt-3 rounded-md border border-white/10 bg-slate-950/60 px-3 py-2">
       <div className="mb-2 flex items-center justify-between text-xs text-white/60">
-        <div className="flex items-center gap-2">
-          {swarmId !== 'hive' && (
-            <div className="inline-flex overflow-hidden rounded border border-white/15 bg-white/5">
-              <button
-                type="button"
-                className={`px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
-                  scope === 'swarm' ? 'bg-white/10 text-white' : 'text-white/70 hover:bg-white/10'
-                }`}
-                onClick={() => setScope('swarm')}
-              >
-                Swarm
-              </button>
-              <button
-                type="button"
-                className={`px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
-                  scope === 'hive' ? 'bg-white/10 text-white' : 'text-white/70 hover:bg-white/10'
-                }`}
-                onClick={() => setScope('hive')}
-              >
-                Hive
-              </button>
-            </div>
-          )}
-          <span className="font-semibold uppercase tracking-wide">
-            {scope === 'hive' ? 'Hive Journal' : 'Swarm Journal'} (last {latest.length})
-          </span>
-        </div>
+        <span className="font-semibold uppercase tracking-wide">Swarm Journal (last {latest.length})</span>
         <button
           type="button"
           onClick={(e) => {
             e.stopPropagation()
-            const query = latestRunId ? `?runId=${encodeURIComponent(latestRunId)}` : ''
-            if (scope === 'hive') {
-              const params = new URLSearchParams()
-              params.set('swarmId', swarmId)
-              if (latestRunId) {
-                params.set('runId', latestRunId)
-              }
-              navigate(`/orchestrator/journal?${params.toString()}`)
-            } else {
-              navigate(`/runs/${encodeURIComponent(swarmId)}${query}`)
-            }
+            navigate(`/journal/swarms/${encodeURIComponent(swarmId)}`)
           }}
           className="rounded border border-white/20 bg-white/5 px-2 py-0.5 text-[10px] font-medium text-white/80 hover:bg-white/10"
         >

@@ -17,6 +17,7 @@ datasources:
     user: pockethive
     database: pockethive
     jsonData:
+      database: pockethive
       sslmode: disable
       postgresVersion: 1600
       timescaledb: false

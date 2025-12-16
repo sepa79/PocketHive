@@ -13,7 +13,11 @@ public record HttpTemplateDefinition(
     String method,
     String pathTemplate,
     String bodyTemplate,
-    Map<String, String> headersTemplate
+    Map<String, String> headersTemplate,
+    /**
+     * Authoring-only metadata used by the Hive UI to locate a JSON Schema (within the scenario bundle)
+     * for rendering a richer editor. Runtime workers must ignore it.
+     */
+    String schemaRef
 ) {
 }
-

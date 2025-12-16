@@ -363,6 +363,7 @@ class SwarmCreationMock1E2ETest {
 	              ts,
 	              scope,
 	              swarm_id,
+	              run_id,
 	              scope_role,
 	              scope_instance,
 	              severity,
@@ -390,6 +391,7 @@ class SwarmCreationMock1E2ETest {
 	              ?,
 	              ?,
 	              ?,
+	              ?,
 	              ?::jsonb,
 	              ?::jsonb,
 	              ?::jsonb
@@ -397,6 +399,7 @@ class SwarmCreationMock1E2ETest {
 	            """,
 	            java.sql.Timestamp.from(Instant.now()),
 	            "journal-swarm",
+	            "run-1",
 	            "swarm-controller",
 	            "swarm-controller-1",
 	            "INFO",

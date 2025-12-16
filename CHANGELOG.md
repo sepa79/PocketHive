@@ -3,9 +3,17 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
-Timestamp: 2025-12-12T00:00:00Z
+Timestamp: 2025-12-16T00:00:00Z
 
 - No unreleased changes yet.
+
+## [0.14.15] - 2025-12-16
+Timestamp: 2025-12-16T00:00:00Z
+
+- Journals (Postgres): added durable journal storage with retention + pin/archive support, plus paginated query endpoints for Hive and swarm runs.
+- Journals (UI): introduced a Journals entry point with run-centric navigation (runId-first), metadata editing (scenario/test plan/tags), and corrected Hive vs Swarm journal routing.
+- Grafana/Loki: provisioned Postgres datasource + added Journal/Logs dashboards and enabled local log shipping so log drill-down works.
+- Scenario authoring: fixed `schemaRef` drift by introducing a single SSOT HTTP template definition shared by http-builder and the templating validator, and documented `schemaRef` for HTTP templates.
 
 ## [0.14.14] - 2025-12-12
 Timestamp: 2025-12-12T00:00:00Z

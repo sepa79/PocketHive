@@ -1,6 +1,36 @@
 {
   "annotations": {
-    "list": []
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": "-- Grafana --",
+        "enable": true,
+        "hide": false,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      },
+      {
+        "datasource": "PocketHive Journal (Postgres)",
+        "enable": true,
+        "hide": false,
+        "iconColor": "rgba(255, 120, 10, 1)",
+        "name": "Journal WARN/ERROR",
+        "rawQuery": true,
+        "type": "tags",
+        "query": "SELECT extract(epoch from ts) * 1000 AS time, CONCAT(COALESCE(scope,''),' ',COALESCE(swarm_id,''),' ',COALESCE(kind,''),' ',COALESCE(type,'')) AS text, severity AS tags\nFROM journal_event\nWHERE $__timeFilter(ts)\n  AND scope = 'SWARM'\n  AND severity IN ('WARN','ERROR')\n  AND swarm_id ~ '${swarm:regex}'\nORDER BY ts DESC, id DESC\nLIMIT 500"
+      },
+      {
+        "datasource": "PocketHive Journal (Postgres)",
+        "enable": true,
+        "hide": false,
+        "iconColor": "rgba(76, 175, 80, 1)",
+        "name": "Swarm lifecycle outcomes",
+        "rawQuery": true,
+        "type": "tags",
+        "query": "SELECT extract(epoch from ts) * 1000 AS time, CONCAT(COALESCE(swarm_id,''),' ',COALESCE(type,''),' ',COALESCE(data->>'status','')) AS text, CONCAT('lifecycle,',severity,',',type) AS tags\nFROM journal_event\nWHERE $__timeFilter(ts)\n  AND scope = 'SWARM'\n  AND kind = 'outcome'\n  AND type IN ('swarm-create','swarm-template','swarm-start','swarm-stop','swarm-remove')\n  AND swarm_id ~ '${swarm:regex}'\nORDER BY ts DESC, id DESC\nLIMIT 500"
+      }
+    ]
   },
   "refresh": "10s",
   "schemaVersion": 39,

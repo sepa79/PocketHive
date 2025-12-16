@@ -50,6 +50,11 @@ Client sends **`idempotencyKey`** (UUID v4) per new action (reuse on retry). Ser
 
 Returns the swarm-level journal entries as a JSON array (chronological order).
 
+Notes:
+- This is a non-paginated “timeline” endpoint intended for UI/debug use.
+- When `pockethive.journal.sink=postgres`, entries are read from Postgres.
+- When `pockethive.journal.sink=file`, entries are read from `${pockethive.scenarios.runtime-root}/{swarmId}/{runId}/journal.ndjson`.
+
 **Response (200)**
 ```json
 [
@@ -75,6 +80,8 @@ Returns the swarm-level journal entries as a JSON array (chronological order).
 ### 2.4 Swarm journal (paginated, Postgres)
 `GET /api/swarms/{swarmId}/journal/page`
 
+Availability: requires `pockethive.journal.sink=postgres`. Otherwise returns `501 Not Implemented`.
+
 **Query params**
 - `limit` (optional, default `200`, max `1000`)
 - `correlationId` (optional)
@@ -93,6 +100,8 @@ Returns the swarm-level journal entries as a JSON array (chronological order).
 ### 2.5 Hive journal (paginated, Postgres)
 `GET /api/journal/hive/page`
 
+Availability: requires `pockethive.journal.sink=postgres`. Otherwise returns `501 Not Implemented`.
+
 **Query params**
 - `limit` (optional, default `200`, max `1000`)
 - `swarmId` (optional)
@@ -105,10 +114,61 @@ Returns the swarm-level journal entries as a JSON array (chronological order).
 ### 2.6 Swarm journal runs (Postgres)
 `GET /api/swarms/{swarmId}/journal/runs`
 
+Availability: requires `pockethive.journal.sink=postgres`. Otherwise returns `501 Not Implemented`.
+
 Lists known journal runs for a swarm id (new swarm with same id = new run).
+
+### 2.6.1 Swarm journal runs (global, Postgres)
+`GET /api/journal/swarm/runs`
+
+Availability: requires `pockethive.journal.sink=postgres`. Otherwise returns `501 Not Implemented`.
+
+Lists known swarm journal runs across all swarms (newest-first).
+
+**Query params**
+- `limit` (optional, default `500`, max `5000`)
+- `pinned` (optional; when `true`, returns only pinned runs)
+
+**Response (200)**
+```json
+[
+  {
+    "swarmId": "demo",
+    "runId": "uuid-v4",
+    "firstTs": "2025-01-01T12:00:00Z",
+    "lastTs": "2025-01-01T12:34:56Z",
+    "entries": 1234,
+    "pinned": false,
+    "scenarioId": "baseline-demo",
+    "testPlan": "release-14",
+    "tags": ["quick-test", "good"],
+    "description": "Notes about this run"
+  }
+]
+```
+
+### 2.6.2 Swarm run metadata update (Postgres)
+`POST /api/journal/swarm/runs/{runId}/meta`
+
+Availability: requires `pockethive.journal.sink=postgres`. Otherwise returns `501 Not Implemented`.
+
+Sets/clears metadata used by the Journals index grouping and filtering (post-factum labeling without SQL).
+
+**Request**
+```json
+{
+  "testPlan": "optional; null/blank clears",
+  "description": "optional; null/blank clears",
+  "tags": ["optional", "labels"]
+}
+```
+
+**Response (200)** — returns the updated run summary for convenience.
 
 ### 2.7 Swarm journal pin (archive, Postgres)
 `POST /api/swarms/{swarmId}/journal/pin`
+
+Availability: requires `pockethive.journal.sink=postgres`. Otherwise returns `501 Not Implemented`.
 
 Pins a swarm journal run into an archive so it can be kept beyond time-based retention.
 

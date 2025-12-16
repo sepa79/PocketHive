@@ -36,11 +36,11 @@ Goal: provide a first‑class, queryable journal for swarms (control‑plane sco
 ### 3.5.1 Storage model (schema + indexes)
 
 - [x] Define an initial DB-backed `JournalEvent` storage shape (ids, timestamps, kind/type, severity, origin, scope, correlation/idempotency, JSON payloads).
-- [ ] Choose the table layout (pick one, no cascading defaults):
+- [x] Choose the table layout (pick one, no cascading defaults):
   - [x] **Option A (recommended):** single `journal_event` table with `scope = 'SWARM'|'HIVE'`.
   - [ ] Option B: separate `swarm_journal_event` + `hive_journal_event` tables.
 - [x] Partition by time (daily partitions recommended) so retention is `DROP PARTITION`, not slow deletes.
-- [ ] Define required indexes for keyset pagination + filters:
+- [x] Define required indexes for keyset pagination + filters:
   - [x] `(ts DESC, id DESC)` (global timeline)
   - [x] `(scope, swarm_id, ts DESC, id DESC)` (per-swarm timeline)
   - [x] `(correlation_id, ts DESC, id DESC)` (attempt drilldown)
@@ -83,8 +83,9 @@ Goal: provide a first‑class, queryable journal for swarms (control‑plane sco
 
 - [x] Add a Grafana datasource for Postgres Journal (provisioned in Grafana, not manual steps).
 - [ ] Define canonical annotation queries (SQL) for:
-  - [ ] swarm lifecycle transitions
-  - [ ] guard kicks / backpressure / queue overfill signals
+  - [x] swarm lifecycle transitions
+  - [x] journal backpressure signals (writer overload)
+  - [ ] guard kicks / queue overfill signals
   - [ ] data exhaustion / data-path failures
   - [x] `WARN/ERROR` only overlays
 - [ ] Add stable deep links from Hive UI to Grafana dashboards with pre-filled filters (`swarmId`, `correlationId`, `captureId`).
@@ -113,10 +114,54 @@ Goal: provide a first‑class, queryable journal for swarms (control‑plane sco
 - [x] Add Swarm journal REST endpoint for Hive UI (`GET /api/swarms/{swarmId}/journal`).
 - [x] Add backend REST endpoints for fetching **paginated** Swarm and Hive journal entries (and filtering by `correlationId`) backed by Phase 3.5 storage.
 - [x] Implement Swarm journal timeline UI (search + “Errors only” + detail expansion).
-- [x] Add Hive-level timeline UI (Swarm vs Hive tabs) once Hive journal exists.
+- [x] Implement Hive-level timeline UI (Orchestrator/Hive journal).
 - [ ] Add quick filters like “Last N minutes” and surface “current health state” derived from recent events.
 - [x] Wire a deep link from the Swarms table row expansion to the full journal page.
 - [ ] Wire journal deep links from run/step views once those pages exist.
+
+## Phase 4 — Journals UX (Entry Point + Run-Centric Navigation)
+
+> Goal: make Journals the primary operator entry point: Hive journal is always available at the top, and all swarm journals are browsable by **runId** (swarmId is metadata, not identity).
+
+### 4.1 Journals index (Postgres)
+
+- [x] Add a global “swarm journal runs” endpoint (Postgres-only) to list all `(swarmId, runId)` pairs with timestamps, entry counts, and pinned status (for the Journals index view).
+- [x] Build a Journals index page as a top-level UI entry point:
+  - Hive journal entry always at the top (unfiltered view).
+  - List all Swarm runs (runId-first display, with swarmId as secondary/tooltip).
+  - Toggle: `Latest` vs `Pinned`.
+  - Click a run → open the dedicated journal detail view for that run.
+
+### 4.2 Navigation rules (operator UX)
+
+- [x] Hive view: clicking the Orchestrator opens Hive journal with **no filters** (show everything).
+- [x] Hive/Swarms views: “Journal” for a swarm opens the swarm journal for the **current run** (default/active run).
+- [x] Remove/avoid sentinel filters like `swarmId=hive` in Hive journal URLs; Hive journal is a single continuous timeline.
+
+### 4.3 Run metadata (Scenario/TestPlan/Tags)
+
+> Goal: support operator-friendly grouping and labeling without treating `swarmId` (stack name) as identity.
+
+- [x] Introduce a `journal_run` metadata table keyed by `(swarm_id, run_id)`:
+  - `scenario_id` (primary grouping), `test_plan` (higher-level grouping), `tags` (labels), `description` (run notes).
+  - Add `created_at`/`updated_at` and basic indexes (by `scenario_id`, `test_plan`, `tags`).
+- [x] On swarm start, upsert `journal_run` metadata at least with `scenario_id` (from templateId when available).
+- [x] Add a Postgres-only REST API to update run metadata post-factum (set/clear `test_plan`, `tags`, `description`) without writing SQL manually.
+- [x] Update Journals index UI:
+  - Default grouping by `scenario_id`.
+  - Show `test_plan` and `tags` (when present) and include them in search.
+  - Keep `swarmId` as a secondary/tooltip field (technical stack id).
+
+## Phase 4.5 — Multi-tenant Foundations (Namespace + Actor) — planned, not implemented here
+
+> Goal: prepare Journals and Scenarios for future hard multi-tenancy (org/BU/team/user + custom levels) without implementing auth/RBAC in this branch.
+
+- [ ] Define a canonical `NamespacePath` concept for ownership/routing (list of segments, default levels: org/BU/team/user; supports extension/redefinition).
+- [ ] Capture `actor` (who triggered actions) and `namespacePath` on:
+  - swarm runs (metadata)
+  - pinned captures/archives
+  - relevant journal events (where appropriate)
+- [ ] Ensure scenario selection and swarm launching can later be constrained by namespace without reworking the journal data model.
 
 ## Phase 5 — Debug Taps & Central Logging Hooks
 

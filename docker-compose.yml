@@ -88,8 +88,7 @@ services:
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
       - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
       - grafana-data:/var/lib/grafana
-    ports:
-      - "3333:3000"
+    # Expose Grafana via the UI reverse-proxy at http://localhost:8088/grafana
     depends_on:
       - prometheus
       - loki
@@ -234,6 +233,8 @@ services:
       SPRING_DATASOURCE_USERNAME: pockethive
       SPRING_DATASOURCE_PASSWORD: pockethive
       POCKETHIVE_JOURNAL_SINK: postgres
+      POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_RABBIT_LOGGING_ENABLED: "true"
+      POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_RABBIT_LOGS_EXCHANGE: ph.logs
 #      <<: *metrics-env
 #      POCKETHIVE_CONTROL_PLANE_EXCHANGE: ph.control
 #      POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE: ph.control
@@ -251,6 +252,11 @@ services:
     environment:
       <<: *metrics-env
       RABBITMQ_HOST: rabbitmq
+      RABBITMQ_LOGGING_ENABLED: "true"
+      POCKETHIVE_LOGS_EXCHANGE: ph.logs
+      POCKETHIVE_CONTROL_PLANE_SWARM_ID: hive
+      POCKETHIVE_CONTROL_PLANE_INSTANCE_ID: scenario-manager
+      POCKETHIVE_CONTROL_PLANE_MANAGER_ROLE: scenario-manager
       POCKETHIVE_LOGS_QUEUE: ph.logs.agg
       POCKETHIVE_SCENARIOS_RUNTIME_ROOT: /opt/pockethive/scenarios-runtime
       MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_GROUPING_KEY_INSTANCE: scenario-manager

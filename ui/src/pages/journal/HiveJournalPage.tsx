@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { getHiveJournalPage } from '../../lib/orchestratorApi'
 import type { JournalCursor } from '../../lib/orchestratorApi'
 import type { SwarmJournalEntry } from '../../types/orchestrator'
+import { useConfig } from '../../lib/config'
 
 type JournalRow = {
   entry: SwarmJournalEntry
@@ -19,6 +20,7 @@ function normalizeQueryParam(value: string | null): string {
 export default function HiveJournalPage() {
   const navigate = useNavigate()
   const location = useLocation()
+  const cfg = useConfig()
   const [entries, setEntries] = useState<SwarmJournalEntry[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -58,7 +60,7 @@ export default function HiveJournalPage() {
     } else {
       params.delete('runId')
     }
-    navigate(`/orchestrator/journal?${params.toString()}`)
+    navigate(`/journal/hive?${params.toString()}`)
   }
 
   useEffect(() => {
@@ -112,6 +114,12 @@ export default function HiveJournalPage() {
     }
   }, [correlationFilter, runId, swarmId])
 
+  const grafanaBaseUrl = useMemo(() => {
+    const raw = cfg.grafana?.trim() ? cfg.grafana.trim() : '/grafana'
+    const withSlash = raw.endsWith('/') ? raw : `${raw}/`
+    return new URL(withSlash, window.location.origin).toString()
+  }, [cfg.grafana])
+
   const loadOlder = async () => {
     if (!cursor || loadingMore) return
     setLoadingMore(true)
@@ -140,8 +148,6 @@ export default function HiveJournalPage() {
   }
 
   const grafanaUrl = useMemo(() => {
-    const { protocol, hostname } = window.location
-    const base = `${protocol}//${hostname}:3333/grafana/`
     const params = new URLSearchParams()
     params.set('var-scope', 'HIVE')
     if (swarmId.trim()) {
@@ -155,8 +161,14 @@ export default function HiveJournalPage() {
     if (corr) {
       params.set('var-correlationId', corr)
     }
-    return `${base}d/pockethive-journal/pockethive-journal?${params.toString()}`
-  }, [correlationFilter, runId, swarmId])
+    return `${grafanaBaseUrl}d/pockethive-journal/pockethive-journal?${params.toString()}`
+  }, [correlationFilter, grafanaBaseUrl, runId, swarmId])
+
+  const grafanaLogsUrl = useMemo(() => {
+    const params = new URLSearchParams()
+    params.set('var-swarmId', swarmId.trim() ? swarmId.trim() : '$__all')
+    return `${grafanaBaseUrl}d/pockethive-logs/pockethive-logs?${params.toString()}`
+  }, [grafanaBaseUrl, swarmId])
 
   const filtered = useMemo(() => {
     const text = search.trim().toLowerCase()
@@ -273,10 +285,10 @@ export default function HiveJournalPage() {
         <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={() => navigate('/hive')}
+            onClick={() => navigate(-1)}
             className="rounded-md border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-medium text-white/80 hover:bg-white/10"
           >
-            Back to Hive
+            Back
           </button>
           <a
             href={grafanaUrl}
@@ -285,6 +297,14 @@ export default function HiveJournalPage() {
             className="rounded-md border border-amber-400/30 bg-amber-400/10 px-3 py-1.5 text-xs font-medium text-amber-100 hover:bg-amber-400/20"
           >
             Open in Grafana
+          </a>
+          <a
+            href={grafanaLogsUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="rounded-md border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-medium text-white/80 hover:bg-white/10"
+          >
+            Open logs
           </a>
         </div>
       </div>
@@ -378,6 +398,7 @@ export default function HiveJournalPage() {
           <thead className="sticky top-0 z-10 bg-slate-950/95">
             <tr className="border-b border-white/10 text-white/50">
               <th className="px-3 py-2 text-left font-medium">Time</th>
+              <th className="px-3 py-2 text-left font-medium">Swarm</th>
               <th className="px-3 py-2 text-left font-medium">Severity</th>
               <th className="px-3 py-2 text-left font-medium">Dir</th>
               <th className="px-3 py-2 text-left font-medium">Origin</th>
@@ -397,6 +418,8 @@ export default function HiveJournalPage() {
                   : entry.severity === 'WARN' || entry.severity === 'WARNING'
                     ? 'text-amber-300'
                     : 'text-emerald-300'
+              const swarmIdText = entry.swarmId ?? '—'
+              const runIdText = entry.runId ?? ''
               return (
                 <tr
                   key={entry.eventId ?? `${entry.timestamp}-${index}`}
@@ -406,6 +429,30 @@ export default function HiveJournalPage() {
                   onClick={() => setExpandedIndex(isExpanded ? null : index)}
                 >
                   <td className="whitespace-nowrap px-3 py-1.5 align-top text-white/70">{ts}</td>
+                  <td
+                    className="whitespace-nowrap px-3 py-1.5 align-top font-mono text-[11px] text-white/80"
+                    title={runIdText ? `runId=${runIdText}` : undefined}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      if (!entry.swarmId) return
+                      const query = entry.runId ? `?runId=${encodeURIComponent(entry.runId)}` : ''
+                      navigate(`/journal/swarms/${encodeURIComponent(entry.swarmId)}${query}`)
+                    }}
+                    role={entry.swarmId ? 'button' : undefined}
+                    tabIndex={entry.swarmId ? 0 : -1}
+                    onKeyDown={(e) => {
+                      if (!entry.swarmId) return
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        const query = entry.runId ? `?runId=${encodeURIComponent(entry.runId)}` : ''
+                        navigate(`/journal/swarms/${encodeURIComponent(entry.swarmId)}${query}`)
+                      }
+                    }}
+                  >
+                    <span className={entry.swarmId ? 'underline decoration-white/30 hover:decoration-white/70' : ''}>
+                      {swarmIdText}
+                    </span>
+                  </td>
                   <td className={`whitespace-nowrap px-3 py-1.5 align-top ${severityClass}`}>
                     {entry.severity}
                   </td>
@@ -505,4 +552,3 @@ export default function HiveJournalPage() {
     </div>
   )
 }
-

@@ -149,6 +149,18 @@ function asString(value: unknown): string | null {
   return trimmed.length > 0 ? trimmed : null
 }
 
+function asStringArray(value: unknown): string[] | null {
+  if (!Array.isArray(value)) return null
+  const out: string[] = []
+  for (const entry of value) {
+    if (typeof entry !== 'string') continue
+    const trimmed = entry.trim()
+    if (trimmed.length === 0) continue
+    if (!out.includes(trimmed)) out.push(trimmed)
+  }
+  return out.length > 0 ? out : null
+}
+
 function normalizeBee(input: unknown): BeeSummary | null {
   if (!isRecord(input)) return null
   const record = input as Record<string, unknown>
@@ -424,6 +436,78 @@ export async function getSwarmJournalRuns(id: string): Promise<JournalRunSummary
     return payload
       .map((entry) => normalizeRunSummary(entry))
       .filter((entry): entry is JournalRunSummary => Boolean(entry))
+  } catch {
+    return []
+  }
+}
+
+export type SwarmRunSummary = {
+  swarmId: string
+  runId: string
+  firstTs?: string | null
+  lastTs?: string | null
+  entries: number
+  pinned: boolean
+  scenarioId?: string | null
+  testPlan?: string | null
+  tags?: string[] | null
+  description?: string | null
+}
+
+function normalizeSwarmRunSummary(input: unknown): SwarmRunSummary | null {
+  if (!isRecord(input)) return null
+  const record = input as Record<string, unknown>
+  const swarmId = asString(record['swarmId'])
+  const runId = asString(record['runId'])
+  if (!swarmId || !runId) return null
+  const firstTs = asString(record['firstTs'])
+  const lastTs = asString(record['lastTs'])
+  const entriesValue = record['entries']
+  const entries =
+    typeof entriesValue === 'number' && Number.isFinite(entriesValue) ? entriesValue : null
+  const pinned = record['pinned'] === true
+  const scenarioId = asString(record['scenarioId'])
+  const testPlan = asString(record['testPlan'])
+  const tags = asStringArray(record['tags'])
+  const description = asString(record['description'])
+  return {
+    swarmId,
+    runId,
+    firstTs,
+    lastTs,
+    entries: entries !== null ? entries : 0,
+    pinned,
+    scenarioId,
+    testPlan,
+    tags,
+    description,
+  }
+}
+
+export async function getAllSwarmJournalRuns(options?: {
+  limit?: number
+  pinned?: boolean
+}): Promise<SwarmRunSummary[] | null> {
+  const query = buildQuery({
+    limit: options?.limit ?? undefined,
+    pinned: options?.pinned === true ? 'true' : undefined,
+  })
+  const response = await apiFetch(`/orchestrator/journal/swarm/runs${query}`, {
+    headers: { Accept: 'application/json' },
+  })
+  if (response.status === 404) {
+    return []
+  }
+  if (response.status === 501) {
+    return null
+  }
+  await ensureOk(response, 'Failed to load journal runs')
+  try {
+    const payload = await response.json()
+    if (!Array.isArray(payload)) return []
+    return payload
+      .map((entry) => normalizeSwarmRunSummary(entry))
+      .filter((entry): entry is SwarmRunSummary => Boolean(entry))
   } catch {
     return []
   }

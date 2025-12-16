@@ -433,24 +433,19 @@ export default function SwarmListPage() {
                 </td>
                 <td className="px-3 py-2 text-white/80">
                   <div className="flex flex-wrap gap-2">
-                    <button
-                      className="rounded bg-slate-700 px-2 py-1 text-xs hover:bg-slate-600"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        navigate(`/runs/${encodeURIComponent(row.id)}`)
-                      }}
-                    >
-                      Runs
-                    </button>
-                    <button
-                      className="rounded bg-white/10 px-2 py-1 text-xs hover:bg-white/20"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        navigate(`/orchestrator/journal?swarmId=${encodeURIComponent(row.id)}`)
-                      }}
-                    >
-                      Hive journal
-                    </button>
+	                    <button
+	                      className="rounded bg-slate-700 px-2 py-1 text-xs hover:bg-slate-600"
+	                      onClick={(e) => {
+	                        e.stopPropagation()
+	                        if (row.id === 'hive') {
+	                          navigate('/journal/hive')
+	                          return
+	                        }
+	                        navigate(`/journal/swarms/${encodeURIComponent(row.id)}`)
+	                      }}
+	                    >
+	                      Journal
+	                    </button>
                     <button
                       className="rounded bg-blue-600 px-2 py-1 text-xs disabled:opacity-50"
                       onClick={(e) => {

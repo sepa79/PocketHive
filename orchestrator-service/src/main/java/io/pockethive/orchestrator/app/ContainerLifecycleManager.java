@@ -16,6 +16,7 @@ import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmRegistry;
 import io.pockethive.orchestrator.domain.SwarmStatus;
 import io.pockethive.orchestrator.domain.SwarmTemplateMetadata;
+import io.pockethive.orchestrator.infra.JournalRunMetadataWriter;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -37,6 +38,7 @@ public class ContainerLifecycleManager {
     private final OrchestratorProperties properties;
     private final ControlPlaneProperties controlPlaneProperties;
     private final RabbitProperties rabbitProperties;
+    private final JournalRunMetadataWriter runMetadataWriter;
     @Value("${pockethive.scenarios.runtime-root:}")
     private String scenariosRuntimeRoot;
     @Value("${pockethive.journal.sink:postgres}")
@@ -56,7 +58,8 @@ public class ContainerLifecycleManager {
         AmqpAdmin amqp,
         OrchestratorProperties properties,
         ControlPlaneProperties controlPlaneProperties,
-        RabbitProperties rabbitProperties) {
+        RabbitProperties rabbitProperties,
+        JournalRunMetadataWriter runMetadataWriter) {
         this.docker = Objects.requireNonNull(docker, "docker");
         this.computeAdapter = Objects.requireNonNull(computeAdapter, "computeAdapter");
         this.registry = Objects.requireNonNull(registry, "registry");
@@ -64,6 +67,7 @@ public class ContainerLifecycleManager {
         this.properties = Objects.requireNonNull(properties, "properties");
         this.controlPlaneProperties = Objects.requireNonNull(controlPlaneProperties, "controlPlaneProperties");
         this.rabbitProperties = Objects.requireNonNull(rabbitProperties, "rabbitProperties");
+        this.runMetadataWriter = Objects.requireNonNull(runMetadataWriter, "runMetadataWriter");
         // Initialise the resolved adapter type based on the injected adapter so that
         // status-full events emitted before the first swarm start report the correct mode.
         if (computeAdapter instanceof DockerSwarmServiceComputeAdapter) {
@@ -155,6 +159,7 @@ public class ContainerLifecycleManager {
         }
         String runId = java.util.UUID.randomUUID().toString();
         env.put("POCKETHIVE_JOURNAL_RUN_ID", runId);
+        runMetadataWriter.upsertOnSwarmStart(resolvedSwarmId, runId, templateMetadata);
         log.info("launching controller for swarm {} as instance {} using image {} (runId={})",
             resolvedSwarmId, resolvedInstance, resolvedImage, runId);
         log.info("docker env: {}", env);

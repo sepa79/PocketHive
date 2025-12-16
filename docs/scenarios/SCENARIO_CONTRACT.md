@@ -331,9 +331,11 @@ config:
         }
 ```
 
+- The same `schemaRef` hint is also supported in **HTTP Builder templates** (for example next to `bodyTemplate`).
+
 - `schemaRef` is treated as an opaque string by Scenario Manager and
   workers; it is only used by the UI to locate a schema file inside the
   scenario bundle (for example under `schemas/`) and render a form for
-  the body.
+  the body / bodyTemplate.
 - The referenced schema remains **advisory** – workers only see and
-  use the templated `body` string when generating HTTP payloads.
+  use the templated `body` / `bodyTemplate` strings when generating HTTP payloads.

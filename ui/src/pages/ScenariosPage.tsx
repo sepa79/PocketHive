@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type * as React from 'react'
 import type { editor as MonacoEditor } from 'monaco-editor'
 import Editor from '@monaco-editor/react'
-import { Link } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import YAML from 'yaml'
 import {
   listScenarios,
@@ -1136,6 +1136,7 @@ function SwarmTemplateEditor({
 }
 
 export default function ScenariosPage() {
+  const navigate = useNavigate()
   const [items, setItems] = useState<ScenarioSummary[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -3006,12 +3007,13 @@ export default function ScenariosPage() {
       <div className="w-72 border-r border-white/10 px-4 py-4 space-y-3">
         <div className="flex items-center justify-between">
           <h1 className="text-sm font-semibold text-white/90">Scenarios</h1>
-          <Link
-            to="/hive"
+          <button
+            type="button"
             className="text-xs text-sky-300 hover:text-sky-200 transition"
+            onClick={() => navigate(-1)}
           >
-            Back to Hive
-          </Link>
+            Back
+          </button>
         </div>
         <div className="flex items-center gap-2">
           <button

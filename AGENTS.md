@@ -33,6 +33,7 @@ This file is a **navigation and guardrails** page for both human and AI contribu
 
 - **No cascading defaults, no implicit back-compat:** When configuring services or libraries, never layer fallback property chains. Assume breaking changes are acceptable unless the task explicitly calls for backward compatibility.
 - **No implicit Optionals:** Do not use `Optional` for core state like enablement/configuration flags unless a rule explicitly allows it. Every case where Optional is to be used must be consulted with humans.
+- **SSOT (Single Source of Truth) for contracts:** Never maintain multiple independent “definitions” / validators / parsers for the same on-wire or on-disk format. Put the contract in one place (doc + shared DTO/schema) and make all code reuse it.
 - **KISS:** Bias toward the simplest viable solution. Avoid clever or convoluted code paths when a straightforward approach works; complexity must be justified explicitly.
 
 ### 2.1 Java & libraries

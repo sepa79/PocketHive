@@ -29,17 +29,7 @@ export default function App() {
           }
         />
         <Route
-          path="hive/journal/:swarmId"
-          element={
-            <SwarmMetadataProvider>
-              <CapabilitiesProvider>
-                <RunsDetailPage />
-              </CapabilitiesProvider>
-            </SwarmMetadataProvider>
-          }
-        />
-        <Route
-          path="runs"
+          path="journal"
           element={
             <SwarmMetadataProvider>
               <RunsIndexPage />
@@ -47,7 +37,7 @@ export default function App() {
           }
         />
         <Route
-          path="runs/:swarmId"
+          path="journal/swarms/:swarmId"
           element={
             <SwarmMetadataProvider>
               <CapabilitiesProvider>
@@ -56,7 +46,7 @@ export default function App() {
             </SwarmMetadataProvider>
           }
         />
-        <Route path="orchestrator/journal" element={<HiveJournalPage />} />
+        <Route path="journal/hive" element={<HiveJournalPage />} />
         <Route
           path="swarms"
           element={

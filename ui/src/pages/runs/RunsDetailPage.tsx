@@ -9,6 +9,7 @@ import {
 import type { JournalCursor, JournalRunSummary } from '../../lib/orchestratorApi'
 import type { SwarmJournalEntry } from '../../types/orchestrator'
 import { useUIStore } from '../../store'
+import { useConfig } from '../../lib/config'
 
 type JournalRow = {
   entry: SwarmJournalEntry
@@ -31,6 +32,7 @@ export default function RunsDetailPage() {
   const { swarmId } = useParams<{ swarmId: string }>()
   const navigate = useNavigate()
   const location = useLocation()
+  const cfg = useConfig()
   const [entries, setEntries] = useState<SwarmJournalEntry[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -47,6 +49,13 @@ export default function RunsDetailPage() {
   const [pagingSupported, setPagingSupported] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const setToast = useUIStore((state) => state.setToast)
+  const isHistoryView = useMemo(() => Boolean(runId.trim()), [runId])
+  const resolvedRunId = useMemo(() => {
+    const explicit = runId.trim()
+    if (explicit) return explicit
+    const fromEntries = entries.length ? entries[0]?.runId : null
+    return fromEntries ?? ''
+  }, [entries, runId])
 
   useEffect(() => {
     if (!swarmId) return
@@ -57,6 +66,10 @@ export default function RunsDetailPage() {
 
   useEffect(() => {
     if (!swarmId) return
+    if (!isHistoryView) {
+      setRuns(null)
+      return
+    }
     let cancelled = false
     const loadRuns = async () => {
       try {
@@ -76,7 +89,7 @@ export default function RunsDetailPage() {
       cancelled = true
       window.clearInterval(timer)
     }
-  }, [swarmId])
+  }, [isHistoryView, swarmId])
 
   useEffect(() => {
     if (!swarmId) return
@@ -122,7 +135,7 @@ export default function RunsDetailPage() {
             const result = await getSwarmJournal(swarmId, { runId: resolvedRunId })
             if (!cancelled) {
               setPagingSupported(false)
-              setEntries(result)
+              setEntries([...result].reverse())
               setHasMore(false)
               setCursor(null)
             }
@@ -156,9 +169,13 @@ export default function RunsDetailPage() {
     }
   }, [swarmId, correlationFilter, runId])
 
+  const grafanaBaseUrl = useMemo(() => {
+    const raw = cfg.grafana?.trim() ? cfg.grafana.trim() : '/grafana'
+    const withSlash = raw.endsWith('/') ? raw : `${raw}/`
+    return new URL(withSlash, window.location.origin).toString()
+  }, [cfg.grafana])
+
   const grafanaUrl = useMemo(() => {
-    const { protocol, hostname } = window.location
-    const base = `${protocol}//${hostname}:3333/grafana/`
     const params = new URLSearchParams()
     params.set('var-scope', 'SWARM')
     if (swarmId) {
@@ -172,8 +189,18 @@ export default function RunsDetailPage() {
     if (corr) {
       params.set('var-correlationId', corr)
     }
-    return `${base}d/pockethive-journal/pockethive-journal?${params.toString()}`
-  }, [correlationFilter, runId, swarmId])
+    return `${grafanaBaseUrl}d/pockethive-journal/pockethive-journal?${params.toString()}`
+  }, [correlationFilter, grafanaBaseUrl, runId, swarmId])
+
+  const grafanaLogsUrl = useMemo(() => {
+    const params = new URLSearchParams()
+    if (swarmId) {
+      params.set('var-swarmId', swarmId)
+    } else {
+      params.set('var-swarmId', '$__all')
+    }
+    return `${grafanaBaseUrl}d/pockethive-logs/pockethive-logs?${params.toString()}`
+  }, [grafanaBaseUrl, swarmId])
 
   const describeSummary = (entry: SwarmJournalEntry): string => {
     if (entry.kind === 'signal') {
@@ -309,33 +336,30 @@ export default function RunsDetailPage() {
     return <div className="px-6 py-4 text-sm text-white/70">Missing swarm id in route.</div>
   }
 
-  const hiveJournalUrl = `/orchestrator/journal${buildQuery({
+  const hiveJournalUrl = `/journal/hive${buildQuery({
     swarmId,
-    runId: runId.trim() ? runId.trim() : null,
+    runId: resolvedRunId ? resolvedRunId : null,
     correlationId: correlationFilter.trim() ? correlationFilter.trim() : null,
   })}`
+  const selfBaseUrl = `/journal/swarms/${encodeURIComponent(swarmId)}`
 
   return (
     <div className="flex h-full flex-col px-6 py-4">
       <div className="mb-4 flex items-center justify-between gap-4">
         <div className="min-w-0">
-          <div className="text-xs uppercase tracking-wide text-white/40">Runs</div>
-          <div className="mt-1 truncate text-lg font-semibold text-white/90">{swarmId}</div>
+          <div className="text-xs uppercase tracking-wide text-white/40">Swarm Journal</div>
+          <div className="mt-1 truncate text-lg font-semibold text-white/90">
+            {resolvedRunId ? resolvedRunId : '(latest)'}
+          </div>
+          <div className="mt-1 truncate text-xs text-white/60">{swarmId}</div>
         </div>
         <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={() => navigate('/swarms')}
+            onClick={() => navigate(-1)}
             className="rounded-md border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-medium text-white/80 hover:bg-white/10"
           >
-            Back to Swarms
-          </button>
-          <button
-            type="button"
-            onClick={() => navigate('/hive')}
-            className="rounded-md border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-medium text-white/80 hover:bg-white/10"
-          >
-            Back to Hive
+            Back
           </button>
           <button
             type="button"
@@ -352,11 +376,19 @@ export default function RunsDetailPage() {
           >
             Open in Grafana
           </a>
+          <a
+            href={grafanaLogsUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="rounded-md border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-medium text-white/80 hover:bg-white/10"
+          >
+            Open logs
+          </a>
         </div>
       </div>
 
       <div className="mb-4 grid gap-3 text-xs md:grid-cols-[1fr_1fr_auto_auto]">
-        {Array.isArray(runs) && runs.length > 0 && (
+        {isHistoryView && Array.isArray(runs) && runs.length > 0 && (
           <div className="md:col-span-2 flex items-center gap-2">
             <label className="text-white/50" htmlFor="journal-run">
               Run:
@@ -372,7 +404,7 @@ export default function RunsDetailPage() {
                 } else {
                   params.delete('runId')
                 }
-                navigate(`/runs/${encodeURIComponent(swarmId)}?${params.toString()}`)
+                navigate(`${selfBaseUrl}?${params.toString()}`)
               }}
               className="flex-1 rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-xs text-white/80 focus:outline-none focus:ring-2 focus:ring-sky-300/50"
             >
@@ -413,12 +445,12 @@ export default function RunsDetailPage() {
                   mode: pinMode,
                 })
                 if (res && res.runId) {
-                  const params = new URLSearchParams(location.search)
-                  params.set('runId', res.runId)
-                  navigate(`/runs/${encodeURIComponent(swarmId)}?${params.toString()}`)
-                }
-                setToast(`Pinned journal run (${pinMode})`)
-              } catch (err) {
+                      const params = new URLSearchParams(location.search)
+                      params.set('runId', res.runId)
+                      navigate(`${selfBaseUrl}?${params.toString()}`)
+                    }
+                    setToast(`Pinned journal run (${pinMode})`)
+                  } catch (err) {
                 const message =
                   err instanceof Error && err.message
                     ? `Failed to pin journal run: ${err.message}`
@@ -610,4 +642,3 @@ export default function RunsDetailPage() {
     </div>
   )
 }
-

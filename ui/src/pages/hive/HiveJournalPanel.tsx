@@ -8,6 +8,7 @@ export default function HiveJournalPanel() {
   const [entries, setEntries] = useState<SwarmJournalEntry[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [expanded, setExpanded] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -20,7 +21,7 @@ export default function HiveJournalPanel() {
       }
       try {
         const page = await getHiveJournalPage({ limit: 50 })
-        const result = page?.items ? [...page.items].reverse() : []
+        const result = page?.items ? [...page.items] : []
         if (!cancelled) {
           setEntries(result)
         }
@@ -47,27 +48,67 @@ export default function HiveJournalPanel() {
     }
   }, [])
 
+  const header = (
+    <div className="mt-3 flex items-center justify-between gap-2 text-xs text-white/60">
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation()
+          setExpanded((v) => !v)
+        }}
+        className="inline-flex items-center gap-2 rounded border border-white/15 bg-white/5 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-white/80 hover:bg-white/10"
+        aria-expanded={expanded}
+      >
+        Hive Journal
+        <span className="text-white/50">{expanded ? '▾' : '▸'}</span>
+      </button>
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation()
+          navigate('/journal/hive')
+        }}
+        className="rounded border border-white/20 bg-white/5 px-2 py-1 text-[10px] font-medium text-white/80 hover:bg-white/10"
+      >
+        Open full view
+      </button>
+    </div>
+  )
+
+  if (!expanded) {
+    return header
+  }
+
   if (loading && !entries.length && !error) {
     return (
-      <div className="mt-3 rounded-md border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/70">
-        Loading journal…
-      </div>
+      <>
+        {header}
+        <div className="mt-2 rounded-md border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/70">
+          Loading journal…
+        </div>
+      </>
     )
   }
 
   if (error) {
     return (
-      <div className="mt-3 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-200">
-        {error}
-      </div>
+      <>
+        {header}
+        <div className="mt-2 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-200">
+          {error}
+        </div>
+      </>
     )
   }
 
   if (!entries.length) {
     return (
-      <div className="mt-3 rounded-md border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/60">
-        Hive journal is empty so far.
-      </div>
+      <>
+        {header}
+        <div className="mt-2 rounded-md border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/60">
+          Hive journal is empty so far.
+        </div>
+      </>
     )
   }
 
@@ -110,7 +151,7 @@ export default function HiveJournalPanel() {
     grouped.push({ entry, count: 1 })
   }
 
-  const latest = grouped.slice(-20)
+  const latest = grouped.slice(0, 20)
 
   const describeEntry = (entry: SwarmJournalEntry): string => {
     const prefix = entry.direction === 'LOCAL' ? 'local' : entry.direction.toLowerCase()
@@ -132,37 +173,29 @@ export default function HiveJournalPanel() {
   }
 
   return (
-    <div className="mt-3 rounded-md border border-white/10 bg-slate-950/60 px-3 py-2">
-      <div className="mb-2 flex items-center justify-between text-xs text-white/60">
-        <span className="font-semibold uppercase tracking-wide">Hive Journal (last {latest.length})</span>
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation()
-            navigate('/orchestrator/journal')
-          }}
-          className="rounded border border-white/20 bg-white/5 px-2 py-0.5 text-[10px] font-medium text-white/80 hover:bg-white/10"
-        >
-          Open full view
-        </button>
+    <>
+      {header}
+      <div className="mt-2 rounded-md border border-white/10 bg-slate-950/60 px-3 py-2">
+        <div className="mb-2 text-xs text-white/60">
+          <span className="font-semibold uppercase tracking-wide">Last {latest.length}</span>
+        </div>
+        <ul className="space-y-1 max-h-48 overflow-y-auto text-xs">
+          {latest.map((row, index) => {
+            const entry = row.entry
+            const ts = new Date(entry.timestamp).toLocaleTimeString()
+            const suffix = row.count > 1 ? ` ×${row.count}` : ''
+            return (
+              <li key={entry.eventId ?? `${entry.timestamp}-${index}`} className="flex gap-2">
+                <span className="shrink-0 text-white/40">{ts}</span>
+                <span className="text-white/80 truncate">
+                  {describeEntry(entry)}
+                  {suffix}
+                </span>
+              </li>
+            )
+          })}
+        </ul>
       </div>
-      <ul className="space-y-1 max-h-48 overflow-y-auto text-xs">
-        {latest.map((row, index) => {
-          const entry = row.entry
-          const ts = new Date(entry.timestamp).toLocaleTimeString()
-          const suffix = row.count > 1 ? ` ×${row.count}` : ''
-          return (
-            <li key={entry.eventId ?? `${entry.timestamp}-${index}`} className="flex gap-2">
-              <span className="shrink-0 text-white/40">{ts}</span>
-              <span className="text-white/80 truncate">
-                {describeEntry(entry)}
-                {suffix}
-              </span>
-            </li>
-          )
-        })}
-      </ul>
-    </div>
+    </>
   )
 }
-
