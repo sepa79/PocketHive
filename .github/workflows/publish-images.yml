@@ -38,10 +38,19 @@ jobs:
       - name: Extract version
         id: version
         run: |
-          VERSION=$(tr -d '\n' < VERSION)
+          VERSION=$(sed -n 's/.*<revision>\\(.*\\)<\\/revision>.*/\\1/p' pom.xml | head -n 1 | tr -d '\n')
+          if [[ -z "$VERSION" ]]; then
+            echo "Failed to extract <revision> from pom.xml" >&2
+            exit 1
+          fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
-            echo "tag=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
+            TAG="${GITHUB_REF#refs/tags/v}"
+            if [[ "$TAG" != "$VERSION" ]]; then
+              echo "Git tag v$TAG does not match pom.xml revision $VERSION" >&2
+              exit 1
+            fi
+            echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           else
             echo "tag=latest" >> "$GITHUB_OUTPUT"
           fi
@@ -165,4 +174,3 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.service.name }}:${{ needs.build-base.outputs.version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-

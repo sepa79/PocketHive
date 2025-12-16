@@ -5,7 +5,7 @@ This guide explains how to use PocketHive images from GitHub Container Registry 
 ## Automatic Publishing
 
 Images are automatically built and published to GHCR on:
-- Every push to `main` branch (tagged as `latest` and version from `VERSION` file)
+- Every push to `main` branch (tagged as `latest` and version from `pom.xml` `<revision>`)
 - Every version tag push (e.g., `v0.13.3`)
 - Manual workflow dispatch
 
