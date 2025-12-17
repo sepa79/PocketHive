@@ -26,7 +26,7 @@ public class ScenarioService {
     public enum Format { JSON, YAML }
 
     private static final Logger logger = LoggerFactory.getLogger(ScenarioService.class);
-    private static final String SCENARIOS_RUNTIME_ROOT = "/app/scenarios-runtime";
+    private static final String SCENARIOS_RUNTIME_ROOT = "scenarios-runtime";
 
     private final Path storageDir;
     private final Path testStorageDir;

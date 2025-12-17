@@ -29,7 +29,7 @@ import org.springframework.stereotype.Component;
 public class FileSwarmJournal implements SwarmJournal {
 
   private static final Logger log = LoggerFactory.getLogger(FileSwarmJournal.class);
-  private static final String SCENARIOS_RUNTIME_ROOT = "/app/scenarios-runtime";
+  private static final String SCENARIOS_RUNTIME_ROOT = "scenarios-runtime";
 
   private final ObjectMapper mapper;
   private final String swarmId;

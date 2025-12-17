@@ -33,7 +33,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/swarms")
 public class SwarmJournalController {
     private static final Logger log = LoggerFactory.getLogger(SwarmJournalController.class);
-    private static final String SCENARIOS_RUNTIME_ROOT = "/app/scenarios-runtime";
+    private static final String SCENARIOS_RUNTIME_ROOT = "scenarios-runtime";
 
     private final ObjectMapper json;
     private final JdbcTemplate jdbc;

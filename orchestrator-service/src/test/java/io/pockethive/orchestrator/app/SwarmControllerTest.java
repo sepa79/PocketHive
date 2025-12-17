@@ -442,7 +442,7 @@ class SwarmControllerTest {
     @Test
     void journalReadsSwarmJournalNdjsonFromRuntimeRoot() throws Exception {
         SwarmJournalController ctrl = journalController(new SwarmRegistry());
-        Path root = Path.of("/app/scenarios-runtime").toAbsolutePath().normalize();
+        Path root = Path.of("scenarios-runtime").toAbsolutePath().normalize();
         Path swarmDir = root.resolve("sw1").resolve("run-1");
         Files.createDirectories(swarmDir);
         Path journal = swarmDir.resolve("journal.ndjson");

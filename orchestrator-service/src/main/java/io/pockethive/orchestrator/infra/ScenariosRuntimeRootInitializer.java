@@ -12,7 +12,7 @@ import org.springframework.stereotype.Component;
 public class ScenariosRuntimeRootInitializer {
 
   private static final Logger log = LoggerFactory.getLogger(ScenariosRuntimeRootInitializer.class);
-  private static final String SCENARIOS_RUNTIME_ROOT = "/app/scenarios-runtime";
+  private static final String SCENARIOS_RUNTIME_ROOT = "scenarios-runtime";
 
   @PostConstruct
   public void ensureRuntimeRootExists() {
