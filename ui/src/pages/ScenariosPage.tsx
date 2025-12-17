@@ -34,6 +34,7 @@ import {
 } from '../lib/capabilities'
 import { useUIStore } from '../store'
 import { useCapabilities } from '../contexts/CapabilitiesContext'
+import { parseWeightedTemplate, WeightedChoiceEditor } from '../components/WeightedChoiceEditor'
 
 type TimelineRow = {
   key: string
@@ -4214,6 +4215,8 @@ export default function ScenariosPage() {
                         const effectiveValue = rawValue !== undefined ? rawValue : baseDisplay
                         const isLargeEditable =
                           entry.multiline || normalizedType === 'text' || normalizedType === 'json'
+                        const weightedTemplateModel =
+                          typeof effectiveValue === 'string' ? parseWeightedTemplate(effectiveValue) : null
 
                         const updateValue = (value: ConfigFormValue) => {
                           setConfigModalEnabled((prev) => ({ ...prev, [entry.name]: true }))
@@ -4278,6 +4281,15 @@ export default function ScenariosPage() {
                               />
                               <span>Enabled</span>
                             </label>
+                          )
+                        } else if (weightedTemplateModel) {
+                          const current = typeof effectiveValue === 'string' ? effectiveValue : ''
+                          field = (
+                            <WeightedChoiceEditor
+                              value={current}
+                              model={weightedTemplateModel}
+                              onChange={(next) => updateValue(next)}
+                            />
                           )
                         } else if (isLargeEditable) {
                           const value = typeof effectiveValue === 'string' ? effectiveValue : ''
