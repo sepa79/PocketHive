@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type * as React from 'react'
 import type { editor as MonacoEditor } from 'monaco-editor'
 import Editor from '@monaco-editor/react'
+import { createPortal } from 'react-dom'
 import type { CapabilityConfigEntry } from '../types/capabilities'
 import {
   capabilityEntryUiString,
@@ -180,7 +181,7 @@ export function ConfigUpdatePatchModal({
   const [activeGroup, setActiveGroup] = useState<string>('General')
   const [search, setSearch] = useState<string>('')
   const [onlyOverridden, setOnlyOverridden] = useState(false)
-  const [fullscreen, setFullscreen] = useState(false)
+  const [fullscreen, setFullscreen] = useState(true)
   const [valueEditorState, setValueEditorState] = useState<ValueEditorState | null>(null)
   const [valueEditorError, setValueEditorError] = useState<string | null>(null)
   const valueEditorRef = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null)
@@ -208,7 +209,7 @@ export function ConfigUpdatePatchModal({
     setActiveGroup('General')
     setSearch('')
     setOnlyOverridden(false)
-    setFullscreen(false)
+    setFullscreen(true)
     setValueEditorState(null)
     setValueEditorError(null)
   }, [open, entries, baseConfig, existingPatch])
@@ -284,16 +285,17 @@ export function ConfigUpdatePatchModal({
   }
 
   if (!open) return null
+  if (typeof document === 'undefined') return null
 
-  return (
+  return createPortal(
     <>
-      <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/70">
+      <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70">
         <div
           role="dialog"
           aria-modal="true"
           className={
             fullscreen
-              ? 'w-[96vw] h-[92vh] rounded-lg bg-[#05070b] border border-white/20 p-4 text-sm text-white flex flex-col'
+              ? 'w-screen h-screen rounded-none bg-[#05070b] border border-white/20 p-4 text-sm text-white flex flex-col'
               : 'w-full max-w-3xl h-[85vh] rounded-lg bg-[#05070b] border border-white/20 p-4 text-sm text-white flex flex-col'
           }
         >
@@ -624,7 +626,7 @@ export function ConfigUpdatePatchModal({
       </div>
 
       {valueEditorState && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/70">
           <div
             role="dialog"
             aria-modal="true"
@@ -687,5 +689,5 @@ export function ConfigUpdatePatchModal({
         </div>
       )}
     </>
-  )
+  , document.body)
 }
