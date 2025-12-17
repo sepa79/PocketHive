@@ -7,6 +7,7 @@ import WiremockPanel from './WiremockPanel'
 import { useCapabilities } from '../../contexts/CapabilitiesContext'
 import { Link } from 'react-router-dom'
 import type { CapabilityConfigEntry } from '../../types/capabilities'
+import { ConfigUpdatePatchModal } from '../../components/ConfigUpdatePatchModal'
 import {
   capabilityEntryUiString,
   formatCapabilityValue,
@@ -28,8 +29,7 @@ const HTTP_WORKER_ROLES = new Set(['processor'])
 
 export default function ComponentDetail({ component, onClose }: Props) {
   const [toast, setToast] = useState<string | null>(null)
-  const [isEditing, setIsEditing] = useState(false)
-  const [form, setForm] = useState<Record<string, ConfigFormValue>>({})
+  const [configPatchModalOpen, setConfigPatchModalOpen] = useState(false)
   const [showRefreshTooltip, setShowRefreshTooltip] = useState(false)
   const [sutLookup, setSutLookup] = useState<Record<string, { name: string; type: string | null }>>({})
   const [scenarioRunsInput, setScenarioRunsInput] = useState('')
@@ -73,7 +73,6 @@ export default function ComponentDetail({ component, onClose }: Props) {
     () => getManifestForImage(resolvedImage),
     [resolvedImage, getManifestForImage],
   )
-  const previousComponentIdRef = useRef(component.id)
   const refreshTooltipTimer = useRef<number | null>(null)
 
   useEffect(() => {
@@ -160,27 +159,15 @@ export default function ComponentDetail({ component, onClose }: Props) {
     setShowRefreshTooltip(false)
   }
 
-  const handleSubmit = async () => {
-    if (!manifest) {
-      displayToast(setToast, 'Capability manifest not available for this component')
+  const handleSendConfigPatch = async (patch: Record<string, unknown> | undefined) => {
+    setConfigPatchModalOpen(false)
+    if (!patch || Object.keys(patch).length === 0) {
+      displayToast(setToast, 'No changes to apply')
       return
     }
-    const cfg: Record<string, unknown> = {}
-    // Use merged worker + IO entries so IO changes (e.g. ratePerSec) are sent as part of the patch.
-    for (const entry of effectiveConfigEntries) {
-      const result = convertFormValue(entry, form[entry.name])
-      if (!result.ok) {
-        displayToast(setToast, result.message)
-        return
-      }
-      if (result.apply) {
-        assignNestedValue(cfg, entry.name, result.value)
-      }
-    }
     try {
-      await sendConfigUpdate(component, cfg)
+      await sendConfigUpdate(component, patch)
       displayToast(setToast, 'Config update sent')
-      setIsEditing(false)
     } catch {
       displayToast(setToast, 'Config update failed')
     }
@@ -691,13 +678,22 @@ export default function ComponentDetail({ component, onClose }: Props) {
     return Array.from(byName.values())
   }, [manifest, manifests, componentConfig])
 
+  const displayForm = useMemo(() => {
+    const cfg = isRecord(componentConfig) ? componentConfig : undefined
+    const next: Record<string, ConfigFormValue> = {}
+    effectiveConfigEntries.forEach((entry) => {
+      next[entry.name] = computeInitialValue(entry, cfg)
+    })
+    return next
+  }, [componentConfig, effectiveConfigEntries])
+
   const visibleConfigEntries = useMemo(() => {
     const cfg = isRecord(componentConfig) ? componentConfig : undefined
     const manifestUi = manifest?.ui as Record<string, unknown> | undefined
     const hideIo = manifestUi?.hideIo === true
     const resolveWhenValue = (path: string): unknown => {
-      if (path in form) {
-        return form[path]
+      if (path in displayForm) {
+        return displayForm[path]
       }
       return getValueForPath(cfg, path)
     }
@@ -709,28 +705,7 @@ export default function ComponentDetail({ component, onClose }: Props) {
         }
         return entry.name !== 'inputs.type' && entry.name !== 'outputs.type'
       })
-  }, [effectiveConfigEntries, componentConfig, form])
-
-  useEffect(() => {
-    const previousId = previousComponentIdRef.current
-    const idChanged = component.id !== previousId
-    if (isEditing && !idChanged) {
-      return
-    }
-    previousComponentIdRef.current = component.id
-    if (!manifest) {
-      setForm({})
-      return
-    }
-    const cfg = isRecord(component.config) ? component.config : undefined
-    const next: Record<string, ConfigFormValue> = {}
-    // Use the merged worker + IO config entries when initialising the form,
-    // so IO fields (like ratePerSec) pick up existing values from config.
-    effectiveConfigEntries.forEach((entry) => {
-      next[entry.name] = computeInitialValue(entry, cfg)
-    })
-    setForm(next)
-  }, [component.id, component.config, manifest, isEditing, effectiveConfigEntries])
+  }, [effectiveConfigEntries, componentConfig, displayForm, manifest])
 
   const groupedConfigEntries = useMemo(
     () => groupCapabilityConfigEntries(visibleConfigEntries),
@@ -783,14 +758,9 @@ export default function ComponentDetail({ component, onClose }: Props) {
                   <ConfigEntryRow
                     key={entry.name}
                     entry={entry}
-                    value={form[entry.name]}
-                    disabled={!isEditing}
-                    onChange={(value) =>
-                      setForm((prev) => ({
-                        ...prev,
-                        [entry.name]: value,
-                      }))
-                    }
+                    value={displayForm[entry.name]}
+                    disabled
+                    onChange={() => undefined}
                   />
                 ))}
               </div>
@@ -810,7 +780,7 @@ export default function ComponentDetail({ component, onClose }: Props) {
       <button
         className="absolute top-2 right-2"
         onClick={() => {
-          setIsEditing(false)
+          setConfigPatchModalOpen(false)
           onClose()
         }}
       >
@@ -927,31 +897,39 @@ export default function ComponentDetail({ component, onClose }: Props) {
       {!isWiremock && effectiveConfigEntries.length > 0 && (
         <div className="mb-2 flex items-center justify-between text-xs text-white/60">
           <span className="uppercase tracking-wide text-white/50">Configuration</span>
-          <label className="flex items-center gap-3 cursor-pointer select-none">
-            <span className="text-white/70">{isEditing ? 'Unlocked' : 'Locked'}</span>
-            <span className="relative inline-flex h-5 w-9 items-center">
-              <input
-                type="checkbox"
-                className="peer sr-only"
-                checked={isEditing}
-                aria-label={isEditing ? 'Disable editing' : 'Enable editing'}
-                onChange={(event) => setIsEditing(event.target.checked)}
-              />
-              <span className="h-5 w-9 rounded-full bg-white/25 transition-colors peer-checked:bg-blue-500" />
-              <span className="absolute left-1 top-1 h-3 w-3 rounded-full bg-white transition-transform duration-200 peer-checked:translate-x-4" />
-            </span>
-          </label>
+          <button
+            type="button"
+            className="rounded border border-white/20 bg-white/5 px-2 py-1 text-xs text-white/80 hover:bg-white/10"
+            onClick={() => {
+              if (!manifest) {
+                displayToast(setToast, 'Capability manifest not available for this component')
+                return
+              }
+              setConfigPatchModalOpen(true)
+            }}
+          >
+            Edit patch…
+          </button>
         </div>
       )}
       <div className={containerClass}>{renderedContent}</div>
-      {!isWiremock && effectiveConfigEntries.length > 0 && (
-        <button
-          className="mb-4 rounded bg-blue-600 px-3 py-1 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-          onClick={handleSubmit}
-          disabled={!isEditing}
-        >
-          Confirm
-        </button>
+      {configPatchModalOpen && manifest && (
+        <ConfigUpdatePatchModal
+          open
+          imageLabel={resolvedImage ?? component.image ?? '(unknown)'}
+          entries={effectiveConfigEntries.filter((entry) => {
+            const manifestUi = manifest.ui as Record<string, unknown> | undefined
+            const hideIo = manifestUi?.hideIo === true
+            if (!hideIo) return true
+            return entry.name !== 'inputs.type' && entry.name !== 'outputs.type'
+          })}
+          baseConfig={componentConfig}
+          existingPatch={undefined}
+          onClose={() => setConfigPatchModalOpen(false)}
+          onApply={(patch) => {
+            void handleSendConfigPatch(patch)
+          }}
+        />
       )}
       {toast && (
         <div className="fixed bottom-4 right-4 bg-black/80 text-white px-4 py-2 rounded">
@@ -1221,65 +1199,6 @@ function getBoolean(value: unknown): boolean | undefined {
     if (normalized === 'false') return false
   }
   return undefined
-}
-
-type ConversionResult =
-  | { ok: true; apply: boolean; value: unknown }
-  | { ok: false; message: string }
-
-function convertFormValue(entry: CapabilityConfigEntry, rawValue: ConfigFormValue): ConversionResult {
-  const normalizedType = (entry.type || '').toLowerCase()
-  if (normalizedType === 'boolean' || normalizedType === 'bool') {
-    return { ok: true, apply: true, value: rawValue === true }
-  }
-  if (normalizedType === 'json') {
-    const str = typeof rawValue === 'string' ? rawValue.trim() : ''
-    if (!str) {
-      return { ok: true, apply: false, value: undefined }
-    }
-    try {
-      return { ok: true, apply: true, value: JSON.parse(str) }
-    } catch {
-      return { ok: false, message: `Invalid JSON for ${entry.name}` }
-    }
-  }
-  if (normalizedType === 'number' || normalizedType === 'int' || normalizedType === 'integer') {
-    const str = typeof rawValue === 'string' ? rawValue.trim() : ''
-    if (!str) {
-      return { ok: true, apply: false, value: undefined }
-    }
-    const num = Number(str)
-    if (Number.isNaN(num)) {
-      return { ok: false, message: `${entry.name} must be a number` }
-    }
-    return { ok: true, apply: true, value: num }
-  }
-  if (typeof rawValue === 'string') {
-    const trimmed = rawValue.trim()
-    if (!trimmed) {
-      return { ok: true, apply: false, value: undefined }
-    }
-    return { ok: true, apply: true, value: rawValue }
-  }
-  return { ok: true, apply: false, value: undefined }
-}
-
-function assignNestedValue(target: Record<string, unknown>, path: string, value: unknown) {
-  const segments = path.split('.').filter((segment) => segment.length > 0)
-  if (segments.length === 0) return
-  let cursor: Record<string, unknown> = target
-  for (let i = 0; i < segments.length - 1; i++) {
-    const key = segments[i]!
-    const next = cursor[key]
-    if (!isRecord(next)) {
-      const created: Record<string, unknown> = {}
-      cursor[key] = created
-      cursor = created
-    } else {
-      cursor = next
-    }
-  }
-  cursor[segments[segments.length - 1]!] = value
 }
 
 function displayToast(setter: (value: string | null) => void, message: string) {

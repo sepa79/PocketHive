@@ -205,28 +205,27 @@ describe('ComponentDetail dynamic config', () => {
     await waitFor(() => expect(providerValue.ensureCapabilities).toHaveBeenCalled())
     await waitFor(() => expect(swarmValue.ensureSwarms).toHaveBeenCalled())
 
-    const editToggle = screen.getByRole('checkbox', { name: /Enable editing/i })
-    await user.click(editToggle)
+    await user.click(screen.getByRole('button', { name: 'Edit patch…' }))
+    const modal = await screen.findByRole('dialog')
 
-    const rateInput = (await screen.findByDisplayValue('5')) as HTMLInputElement
+    const rateInput = (await within(modal).findByDisplayValue('5')) as HTMLInputElement
     await user.click(rateInput)
     await user.keyboard('{Control>}a{/Control}{Backspace}')
     await user.type(rateInput, '10')
 
-    const pathInput = screen.getByDisplayValue('/foo') as HTMLInputElement
+    const pathInput = within(modal).getByDisplayValue('/foo') as HTMLInputElement
     await user.click(pathInput)
     await user.keyboard('{Control>}a{/Control}{Backspace}')
     await user.type(pathInput, '/new')
 
-    await user.click(screen.getByRole('button', { name: 'Confirm' }))
+    await user.click(within(modal).getByRole('button', { name: 'Apply' }))
 
     await waitFor(() => {
       expect(sendConfigUpdateMock).toHaveBeenCalledWith(
         expect.objectContaining({ id: 'gen-1' }),
         expect.objectContaining({
-          enabled: true,
           ratePerSec: 10,
-          message: expect.objectContaining({ path: '/new', method: 'GET' }),
+          message: expect.objectContaining({ path: '/new' }),
         }),
       )
     })
