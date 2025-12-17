@@ -18,5 +18,13 @@ public interface TemplateRenderer {
      * @throws TemplateRenderingException when rendering fails
      */
     String render(String template, Map<String, Object> context);
-}
 
+    /**
+     * Clears any internal state related to deterministic templating helpers (for example
+     * seeded weighted selection streams). Implementations that do not maintain such state
+     * should treat this as a no-op.
+     */
+    default void resetSeededSelections() {
+        // no-op
+    }
+}

@@ -18,13 +18,23 @@ import java.util.Objects;
 public final class PebbleTemplateRenderer implements TemplateRenderer {
 
     private final PebbleEngine engine;
+    private final PebbleWeightedSelectionExtension.SeededSelector seededSelector;
 
     public PebbleTemplateRenderer() {
-        this(defaultEngine());
+        this(new PebbleWeightedSelectionExtension.SeededSelector());
+    }
+
+    private PebbleTemplateRenderer(PebbleWeightedSelectionExtension.SeededSelector seededSelector) {
+        this(defaultEngine(seededSelector), seededSelector);
     }
 
     public PebbleTemplateRenderer(PebbleEngine engine) {
+        this(engine, new PebbleWeightedSelectionExtension.SeededSelector());
+    }
+
+    private PebbleTemplateRenderer(PebbleEngine engine, PebbleWeightedSelectionExtension.SeededSelector seededSelector) {
         this.engine = Objects.requireNonNull(engine, "engine");
+        this.seededSelector = Objects.requireNonNull(seededSelector, "seededSelector");
     }
 
     @Override
@@ -42,10 +52,16 @@ public final class PebbleTemplateRenderer implements TemplateRenderer {
         }
     }
 
-    private static PebbleEngine defaultEngine() {
+    @Override
+    public void resetSeededSelections() {
+        seededSelector.reset();
+    }
+
+    private static PebbleEngine defaultEngine(PebbleWeightedSelectionExtension.SeededSelector seededSelector) {
         SpelTemplateEvaluator evaluator = new SpelTemplateEvaluator();
         return new PebbleEngine.Builder()
             .extension(new PebbleEvalExtension(evaluator))
+            .extension(new PebbleWeightedSelectionExtension(seededSelector))
             .autoEscaping(false)
             .cacheActive(true)
             .build();

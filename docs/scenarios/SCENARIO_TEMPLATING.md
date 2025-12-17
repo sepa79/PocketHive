@@ -113,11 +113,7 @@ To explicitly clear all seeded streams inside a worker instance:
 
 ```json
 {
-  "worker": {
-    "templating": {
-      "reseed": true
-    }
-  }
+  "templating": { "reseed": true }
 }
 ```
 

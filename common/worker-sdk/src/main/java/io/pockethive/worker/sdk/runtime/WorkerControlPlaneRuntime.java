@@ -19,6 +19,7 @@ import io.pockethive.worker.sdk.config.PocketHiveWorker;
 import io.pockethive.worker.sdk.config.WorkerCapability;
 import io.pockethive.worker.sdk.config.WorkerInputType;
 import io.pockethive.worker.sdk.config.WorkerOutputType;
+import io.pockethive.worker.sdk.templating.TemplateRenderer;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -60,6 +61,7 @@ public final class WorkerControlPlaneRuntime {
     private final Map<String, List<Consumer<WorkerStateSnapshot>>> stateListeners = new ConcurrentHashMap<>();
     private final List<Consumer<WorkerStateSnapshot>> globalStateListeners = new CopyOnWriteArrayList<>();
     private final ControlPlaneNotifier notifier;
+    private final TemplateRenderer templateRenderer;
 
     /**
      * Tracks the most recent status-delta emission so we can derive a per-second throughput
@@ -96,12 +98,25 @@ public final class WorkerControlPlaneRuntime {
         ControlPlaneIdentity identity,
         WorkerControlPlaneProperties.ControlPlane controlPlane
     ) {
+        this(workerControlPlane, stateStore, objectMapper, emitter, identity, controlPlane, null);
+    }
+
+    public WorkerControlPlaneRuntime(
+        WorkerControlPlane workerControlPlane,
+        WorkerStateStore stateStore,
+        ObjectMapper objectMapper,
+        ControlPlaneEmitter emitter,
+        ControlPlaneIdentity identity,
+        WorkerControlPlaneProperties.ControlPlane controlPlane,
+        TemplateRenderer templateRenderer
+    ) {
         this.workerControlPlane = Objects.requireNonNull(workerControlPlane, "workerControlPlane");
         this.stateStore = Objects.requireNonNull(stateStore, "stateStore");
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper");
         this.emitter = Objects.requireNonNull(emitter, "emitter");
         this.identity = Objects.requireNonNull(identity, "identity");
         this.configMerger = new ConfigMerger(this.objectMapper);
+        this.templateRenderer = templateRenderer;
         WorkerControlPlaneProperties.ControlPlane resolvedControlPlane =
             Objects.requireNonNull(controlPlane, "controlPlane");
         this.controlQueueName = resolvedControlPlane.getControlQueueName();
@@ -325,7 +340,11 @@ public final class WorkerControlPlaneRuntime {
         for (WorkerState state : targets) {
             ensureStatusPublisher(state);
             WorkerConfigPatch patch = workerConfigFor(state, sanitized);
-            Map<String, Object> filteredUpdate = withoutNullValues(patch.values());
+            FilteredConfigUpdate filtered = preprocessConfigUpdate(patch.values());
+            if (filtered.reseedRequested() && templateRenderer != null) {
+                templateRenderer.resetSeededSelections();
+            }
+            Map<String, Object> filteredUpdate = filtered.values();
             boolean previousEnabled = state.enabled();
             try {
                 ConfigMerger.ConfigMergeResult mergeResult = configMerger.merge(
@@ -398,6 +417,56 @@ public final class WorkerControlPlaneRuntime {
         }
         emitStatusSnapshot();
     }
+
+    private FilteredConfigUpdate preprocessConfigUpdate(Map<String, Object> source) {
+        if (source == null || source.isEmpty()) {
+            return new FilteredConfigUpdate(Map.of(), false);
+        }
+        Map<String, Object> filtered = new LinkedHashMap<>();
+        source.forEach((key, value) -> {
+            if (key != null && value != null) {
+                filtered.put(key, value);
+            }
+        });
+        boolean reseedRequested = false;
+        Object templating = filtered.get("templating");
+        if (templating instanceof Map<?, ?> map) {
+            Object reseedValue = map.get("reseed");
+            reseedRequested = isTruthy(reseedValue);
+            if (reseedRequested) {
+                Map<String, Object> nested = new LinkedHashMap<>(toStringMap(map));
+                nested.remove("reseed");
+                if (nested.isEmpty()) {
+                    filtered.remove("templating");
+                } else {
+                    filtered.put("templating", Map.copyOf(nested));
+                }
+            }
+        }
+        if (filtered.isEmpty()) {
+            return new FilteredConfigUpdate(Map.of(), reseedRequested);
+        }
+        return new FilteredConfigUpdate(Map.copyOf(filtered), reseedRequested);
+    }
+
+    private static boolean isTruthy(Object value) {
+        if (value == null) {
+            return false;
+        }
+        if (value instanceof Boolean b) {
+            return b;
+        }
+        if (value instanceof String s) {
+            String trimmed = s.trim();
+            if (trimmed.isEmpty()) {
+                return false;
+            }
+            return "true".equalsIgnoreCase(trimmed);
+        }
+        return false;
+    }
+
+    private record FilteredConfigUpdate(Map<String, Object> values, boolean reseedRequested) { }
 
     private String resolveSignalName(WorkerStatusRequest request) {
         ControlSignal signal = request.signal();
