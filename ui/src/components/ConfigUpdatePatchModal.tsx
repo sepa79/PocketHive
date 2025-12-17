@@ -181,7 +181,7 @@ export function ConfigUpdatePatchModal({
   const [activeGroup, setActiveGroup] = useState<string>('General')
   const [search, setSearch] = useState<string>('')
   const [onlyOverridden, setOnlyOverridden] = useState(false)
-  const [fullscreen, setFullscreen] = useState(true)
+  const [fullscreen, setFullscreen] = useState(false)
   const [valueEditorState, setValueEditorState] = useState<ValueEditorState | null>(null)
   const [valueEditorError, setValueEditorError] = useState<string | null>(null)
   const valueEditorRef = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null)
@@ -209,7 +209,7 @@ export function ConfigUpdatePatchModal({
     setActiveGroup('General')
     setSearch('')
     setOnlyOverridden(false)
-    setFullscreen(true)
+    setFullscreen(false)
     setValueEditorState(null)
     setValueEditorError(null)
   }, [open, entries, baseConfig, existingPatch])
@@ -295,7 +295,7 @@ export function ConfigUpdatePatchModal({
           aria-modal="true"
           className={
             fullscreen
-              ? 'w-screen h-screen rounded-none bg-[#05070b] border border-white/20 p-4 text-sm text-white flex flex-col'
+              ? 'w-[96vw] h-[92vh] rounded-lg bg-[#05070b] border border-white/20 p-4 text-sm text-white flex flex-col'
               : 'w-full max-w-3xl h-[85vh] rounded-lg bg-[#05070b] border border-white/20 p-4 text-sm text-white flex flex-col'
           }
         >
