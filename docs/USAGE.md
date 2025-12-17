@@ -38,7 +38,7 @@ File-backed swarm journals live under:
 In the default stack this is a bind mount:
 
 - Host: `/opt/pockethive/scenarios-runtime`
-- Containers: `/opt/pockethive/scenarios-runtime`
+- Containers: `/app/scenarios-runtime`
 
 The Orchestrator creates the runtime root directory on startup when configured.
 

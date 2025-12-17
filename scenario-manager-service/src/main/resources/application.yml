@@ -24,5 +24,3 @@ pockethive:
   logs:
     queue: ${POCKETHIVE_LOGS_QUEUE:ph.logs.agg}
     exchange: ${POCKETHIVE_LOGS_EXCHANGE:ph.logs}
-  scenarios:
-    runtime-root: ${POCKETHIVE_SCENARIOS_RUNTIME_ROOT}

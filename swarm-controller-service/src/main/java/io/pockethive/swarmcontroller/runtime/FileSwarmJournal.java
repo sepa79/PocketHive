@@ -29,6 +29,7 @@ import org.springframework.stereotype.Component;
 public class FileSwarmJournal implements SwarmJournal {
 
   private static final Logger log = LoggerFactory.getLogger(FileSwarmJournal.class);
+  private static final String SCENARIOS_RUNTIME_ROOT = "/app/scenarios-runtime";
 
   private final ObjectMapper mapper;
   private final String swarmId;
@@ -39,8 +40,7 @@ public class FileSwarmJournal implements SwarmJournal {
 
   public FileSwarmJournal(ObjectMapper mapper,
                           io.pockethive.swarmcontroller.config.SwarmControllerProperties properties,
-                          @Value("${pockethive.journal.run-id}") String runId,
-                          @Value("${pockethive.scenarios.runtime-root:}") String runtimeRoot) {
+                          @Value("${pockethive.journal.run-id}") String runId) {
     this.mapper = Objects.requireNonNull(mapper, "mapper").findAndRegisterModules();
     Objects.requireNonNull(properties, "properties");
     this.swarmId = properties.getSwarmId();
@@ -48,7 +48,7 @@ public class FileSwarmJournal implements SwarmJournal {
     Path file = null;
     boolean ok = false;
     try {
-      Path root = resolveRuntimeRoot(runtimeRoot);
+      Path root = resolveRuntimeRoot();
       Path dir = root.resolve(sanitizeSegment(swarmId)).resolve(runId).normalize();
       if (!dir.startsWith(root)) {
         throw new IllegalArgumentException("Invalid swarmId for runtime directory");
@@ -95,11 +95,8 @@ public class FileSwarmJournal implements SwarmJournal {
     }
   }
 
-  private static Path resolveRuntimeRoot(String runtimeRoot) {
-    if (runtimeRoot == null || runtimeRoot.isBlank()) {
-      throw new IllegalArgumentException("pockethive.scenarios.runtime-root must not be blank");
-    }
-    return Paths.get(runtimeRoot).toAbsolutePath().normalize();
+  private static Path resolveRuntimeRoot() {
+    return Paths.get(SCENARIOS_RUNTIME_ROOT).toAbsolutePath().normalize();
   }
 
   private static String sanitizeSegment(String segment) {

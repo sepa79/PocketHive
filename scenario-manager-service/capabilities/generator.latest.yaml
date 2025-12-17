@@ -1,5 +1,5 @@
 schemaVersion: "1.0"
-capabilitiesVersion: "1.1"
+capabilitiesVersion: "1.2"
 role: generator
 image:
   name: generator
@@ -9,6 +9,7 @@ ui:
   color: "#22d3ee"
   shape: "triangle"
   abbreviation: "GE"
+  hideIo: true
 config:
   - name: inputs.type
     type: string
@@ -16,18 +17,30 @@ config:
     options:
       - "SCHEDULER"
       - "REDIS_DATASET"
+    ui:
+      label: Input type
+      group: IO
   - name: enabled
     type: boolean
     default: false
+    ui:
+      label: Enabled
+      group: General
   - name: message.bodyType
     type: string
     default: "HTTP"
     options:
       - "HTTP"
       - "SIMPLE"
+    ui:
+      label: Body type
+      group: Message
   - name: message.path
     type: string
     default: "/"
+    ui:
+      label: Path
+      group: Message
   - name: message.method
     type: string
     default: "GET"
@@ -39,13 +52,22 @@ config:
       - "PATCH"
       - "HEAD"
       - "OPTIONS"
+    ui:
+      label: Method
+      group: Message
   - name: message.body
     type: text
     default: ""
     multiline: true
+    ui:
+      label: Body
+      group: Message
   - name: message.headers
     type: json
     default: {}
     multiline: true
+    ui:
+      label: Headers
+      group: Message
 actions: []
 panels: []

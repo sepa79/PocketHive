@@ -442,9 +442,8 @@ class SwarmControllerTest {
     @Test
     void journalReadsSwarmJournalNdjsonFromRuntimeRoot() throws Exception {
         SwarmJournalController ctrl = journalController(new SwarmRegistry());
-        ReflectionTestUtils.setField(ctrl, "scenariosRuntimeRoot", tempDir.toString());
-
-        Path swarmDir = tempDir.resolve("sw1").resolve("run-1");
+        Path root = Path.of("/app/scenarios-runtime").toAbsolutePath().normalize();
+        Path swarmDir = root.resolve("sw1").resolve("run-1");
         Files.createDirectories(swarmDir);
         Path journal = swarmDir.resolve("journal.ndjson");
 
@@ -500,7 +499,7 @@ class SwarmControllerTest {
         SwarmRegistry registry,
         SwarmPlanRegistry plans,
         IdempotencyStore store) {
-        return new SwarmController(
+        SwarmController controller = new SwarmController(
             rabbit,
             lifecycle,
             tracker,
@@ -512,6 +511,8 @@ class SwarmControllerTest {
             plans,
             new ScenarioTimelineRegistry(),
             controlPlaneProperties());
+        ReflectionTestUtils.setField(controller, "scenariosRuntimeRootSource", tempDir.toString());
+        return controller;
     }
 
     private SwarmJournalController journalController(SwarmRegistry registry) {

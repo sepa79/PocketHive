@@ -31,6 +31,7 @@ import org.springframework.stereotype.Service;
 public class ContainerLifecycleManager {
     private static final Logger log = LoggerFactory.getLogger(ContainerLifecycleManager.class);
     private static final String SWARM_CONTROLLER_ROLE = "swarm-controller";
+    private static final String SCENARIOS_RUNTIME_DESTINATION = "/app/scenarios-runtime";
     private final DockerContainerClient docker;
     private final ComputeAdapter computeAdapter;
     private final SwarmRegistry registry;
@@ -39,8 +40,8 @@ public class ContainerLifecycleManager {
     private final ControlPlaneProperties controlPlaneProperties;
     private final RabbitProperties rabbitProperties;
     private final JournalRunMetadataWriter runMetadataWriter;
-    @Value("${pockethive.scenarios.runtime-root:}")
-    private String scenariosRuntimeRoot;
+    @Value("${POCKETHIVE_SCENARIOS_RUNTIME_ROOT:}")
+    private String scenariosRuntimeRootSource;
     @Value("${pockethive.journal.sink:postgres}")
     private String journalSink;
     @Value("${spring.datasource.url:}")
@@ -118,9 +119,9 @@ public class ContainerLifecycleManager {
                 controlPlaneProperties,
                 controllerSettings,
                 rabbitProperties));
-        String runtimeRoot = normalizeRuntimeRoot(scenariosRuntimeRoot);
-        if (runtimeRoot != null) {
-            env.put("POCKETHIVE_SCENARIOS_RUNTIME_ROOT", runtimeRoot);
+        String runtimeRootSource = scenariosRuntimeRootSource;
+        if (runtimeRootSource != null && !runtimeRootSource.isBlank()) {
+            env.put("POCKETHIVE_SCENARIOS_RUNTIME_ROOT", runtimeRootSource);
         }
         String resolvedSink = normalizeRuntimeRoot(journalSink);
         if (resolvedSink != null) {
@@ -165,8 +166,8 @@ public class ContainerLifecycleManager {
         log.info("docker env: {}", env);
         java.util.List<String> volumes = new java.util.ArrayList<>();
         volumes.add(dockerSocket + ":" + dockerSocket);
-        if (runtimeRoot != null) {
-            volumes.add(runtimeRoot + ":" + runtimeRoot);
+        if (runtimeRootSource != null && !runtimeRootSource.isBlank()) {
+            volumes.add(runtimeRootSource + ":" + SCENARIOS_RUNTIME_DESTINATION);
         }
         ManagerSpec managerSpec = new ManagerSpec(
             resolvedInstance,

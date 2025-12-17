@@ -514,13 +514,12 @@ class SwarmCreationMock1E2ETest {
 		                "spring.autoconfigure.exclude",
 		                "org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration,"
 		                    + "org.springframework.boot.autoconfigure.flyway.FlywayAutoConfiguration",
-	                "server.port", port,
-	                "server.address", "127.0.0.1",
-	                "scenarios.dir", scenariosDir.toString(),
-	                "pockethive.scenarios.runtime-root", runtimeRoot.toString(),
-	                "POCKETHIVE_SCENARIOS_RUNTIME_ROOT", runtimeRoot.toString(),
-                "logging.level.root", "WARN"
-            ))
+		                "server.port", port,
+		                "server.address", "127.0.0.1",
+		                "scenarios.dir", scenariosDir.toString(),
+		                "POCKETHIVE_SCENARIOS_RUNTIME_ROOT", runtimeRoot.toString(),
+	                "logging.level.root", "WARN"
+	            ))
             .run();
         scenarioManagerPort = port;
         scenarioRuntimeRoot = runtimeRoot;

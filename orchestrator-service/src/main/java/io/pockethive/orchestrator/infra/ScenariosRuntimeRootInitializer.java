@@ -6,26 +6,17 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 @Component
 public class ScenariosRuntimeRootInitializer {
 
   private static final Logger log = LoggerFactory.getLogger(ScenariosRuntimeRootInitializer.class);
-
-  private final String runtimeRoot;
-
-  public ScenariosRuntimeRootInitializer(@Value("${pockethive.scenarios.runtime-root:}") String runtimeRoot) {
-    this.runtimeRoot = runtimeRoot;
-  }
+  private static final String SCENARIOS_RUNTIME_ROOT = "/app/scenarios-runtime";
 
   @PostConstruct
   public void ensureRuntimeRootExists() {
-    if (runtimeRoot == null || runtimeRoot.isBlank()) {
-      return;
-    }
-    Path root = Paths.get(runtimeRoot).toAbsolutePath().normalize();
+    Path root = Paths.get(SCENARIOS_RUNTIME_ROOT).toAbsolutePath().normalize();
     try {
       Files.createDirectories(root);
       log.info("Scenarios runtime root: {}", root);
@@ -34,4 +25,3 @@ public class ScenariosRuntimeRootInitializer {
     }
   }
 }
-

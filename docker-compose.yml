@@ -225,7 +225,7 @@ services:
     image: ${DOCKER_REGISTRY:-}orchestrator:${POCKETHIVE_VERSION:-latest}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - /opt/pockethive/scenarios-runtime:/opt/pockethive/scenarios-runtime
+      - ${POCKETHIVE_SCENARIOS_RUNTIME_ROOT:-/opt/pockethive/scenarios-runtime}:/app/scenarios-runtime
 # all defaulted in application.yml, uncomment to override here
     environment:
       POCKETHIVE_SCENARIOS_RUNTIME_ROOT: /opt/pockethive/scenarios-runtime
@@ -258,7 +258,6 @@ services:
       POCKETHIVE_CONTROL_PLANE_INSTANCE_ID: scenario-manager
       POCKETHIVE_CONTROL_PLANE_MANAGER_ROLE: scenario-manager
       POCKETHIVE_LOGS_QUEUE: ph.logs.agg
-      POCKETHIVE_SCENARIOS_RUNTIME_ROOT: /opt/pockethive/scenarios-runtime
       MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_GROUPING_KEY_INSTANCE: scenario-manager
       MANAGEMENT_METRICS_TAGS_INSTANCE: scenario-manager
     healthcheck:
@@ -271,7 +270,7 @@ services:
       - "1081:8080"
     volumes:
       - ./scenarios:/app/scenarios
-      - /opt/pockethive/scenarios-runtime:/opt/pockethive/scenarios-runtime
+      - ${POCKETHIVE_SCENARIOS_RUNTIME_ROOT:-/opt/pockethive/scenarios-runtime}:/app/scenarios-runtime
     depends_on:
       log-aggregator:
         condition: service_healthy

@@ -281,10 +281,95 @@ export function formatCapabilityValue(value: unknown): string {
 
 export function inferCapabilityInputType(type: string | undefined): 'number' | 'text' {
   const normalized = type?.trim().toLowerCase() ?? ''
-  if (normalized === 'int' || normalized === 'integer' || normalized === 'number') {
+  if (
+    normalized === 'int' ||
+    normalized === 'integer' ||
+    normalized === 'number' ||
+    normalized === 'double' ||
+    normalized === 'float'
+  ) {
     return 'number'
   }
   return 'text'
+}
+
+export function matchesCapabilityWhen(
+  when: Record<string, unknown> | undefined,
+  resolveValue: (path: string) => unknown,
+): boolean {
+  if (!when || typeof when !== 'object') {
+    return true
+  }
+  for (const [path, expected] of Object.entries(when)) {
+    const actual = resolveValue(path)
+    if (!matchesExpected(actual, expected)) {
+      return false
+    }
+  }
+  return true
+}
+
+function matchesExpected(actual: unknown, expected: unknown): boolean {
+  if (Array.isArray(expected)) {
+    return expected.some((value) => matchesExpected(actual, value))
+  }
+  if (actual === undefined || actual === null) {
+    return false
+  }
+  if (typeof expected === 'string') {
+    const expectedText = expected.trim()
+    if (!expectedText) {
+      return false
+    }
+    if (typeof actual === 'string') {
+      return actual.trim().toLowerCase() === expectedText.toLowerCase()
+    }
+    return String(actual).trim().toLowerCase() === expectedText.toLowerCase()
+  }
+  if (typeof expected === 'boolean') {
+    if (typeof actual === 'boolean') return actual === expected
+    if (typeof actual === 'string') {
+      const normalized = actual.trim().toLowerCase()
+      if (normalized === 'true') return expected === true
+      if (normalized === 'false') return expected === false
+    }
+    return false
+  }
+  if (typeof expected === 'number') {
+    if (typeof actual === 'number') return actual === expected
+    if (typeof actual === 'string') {
+      const parsed = Number(actual)
+      return Number.isFinite(parsed) && parsed === expected
+    }
+    return false
+  }
+  return Object.is(actual, expected)
+}
+
+export function capabilityEntryUiString(entry: CapabilityConfigEntry, key: string): string | undefined {
+  const ui = entry.ui
+  if (!ui || typeof ui !== 'object') return undefined
+  const value = (ui as Record<string, unknown>)[key]
+  if (typeof value !== 'string') return undefined
+  const trimmed = value.trim()
+  return trimmed ? trimmed : undefined
+}
+
+export type CapabilityConfigGroup = { id: string; label: string; entries: CapabilityConfigEntry[] }
+
+export function groupCapabilityConfigEntries(entries: CapabilityConfigEntry[]): CapabilityConfigGroup[] {
+  const groups = new Map<string, CapabilityConfigGroup>()
+  for (const entry of entries) {
+    const group = capabilityEntryUiString(entry, 'group') ?? 'General'
+    const id = group.trim() || 'General'
+    const existing = groups.get(id)
+    if (existing) {
+      existing.entries.push(entry)
+    } else {
+      groups.set(id, { id, label: id, entries: [entry] })
+    }
+  }
+  return Array.from(groups.values())
 }
 
 export function buildRoleAppearanceMap(manifests: CapabilityManifest[]): RoleAppearanceMap {

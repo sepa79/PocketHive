@@ -1,5 +1,5 @@
 schemaVersion: "1.0"
-capabilitiesVersion: "1.1"
+capabilitiesVersion: "1.3"
 role: moderator
 image:
   name: moderator
@@ -13,6 +13,9 @@ config:
   - name: enabled
     type: boolean
     default: false
+    ui:
+      label: Enabled
+      group: General
   - name: mode.type
     type: string
     default: "pass-through"
@@ -20,12 +23,19 @@ config:
       - "pass-through"
       - "rate-per-sec"
       - "sine"
+    ui:
+      label: Mode
+      group: Mode
   - name: mode.ratePerSec
     type: number
     default: 0
     min: 0
     max: 100000
+    when:
+      mode.type: "rate-per-sec"
     ui:
+      label: Rate
+      group: Mode
       step: 0.1
       unit: msg/s
   - name: mode.sine.minRatePerSec
@@ -33,7 +43,11 @@ config:
     default: 0
     min: 0
     max: 100000
+    when:
+      mode.type: "sine"
     ui:
+      label: Min rate
+      group: Mode
       step: 0.1
       unit: msg/s
   - name: mode.sine.maxRatePerSec
@@ -41,20 +55,32 @@ config:
     default: 0
     min: 0
     max: 100000
+    when:
+      mode.type: "sine"
     ui:
+      label: Max rate
+      group: Mode
       step: 0.1
       unit: msg/s
   - name: mode.sine.periodSeconds
     type: number
     default: 60
     min: 1
+    when:
+      mode.type: "sine"
     ui:
+      label: Period
+      group: Mode
       step: 1
       unit: s
   - name: mode.sine.phaseOffsetSeconds
     type: number
     default: 0
+    when:
+      mode.type: "sine"
     ui:
+      label: Phase offset
+      group: Mode
       step: 1
       unit: s
 actions: []

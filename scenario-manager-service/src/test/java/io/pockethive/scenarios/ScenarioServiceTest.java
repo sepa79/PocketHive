@@ -32,8 +32,7 @@ class ScenarioServiceTest {
         scenariosDir = Files.createDirectories(tempDir.resolve("scenarios"));
         capabilitiesDir = Files.createDirectories(tempDir.resolve("capabilities"));
         capabilities = new CapabilityCatalogueService(capabilitiesDir.toString());
-        Path runtimeDir = Files.createDirectories(tempDir.resolve("runtime"));
-        service = new ScenarioService(scenariosDir.toString(), runtimeDir.toString(), capabilities);
+        service = new ScenarioService(scenariosDir.toString(), capabilities);
     }
 
     @Test

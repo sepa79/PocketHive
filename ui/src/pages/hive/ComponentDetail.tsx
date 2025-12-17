@@ -7,7 +7,13 @@ import WiremockPanel from './WiremockPanel'
 import { useCapabilities } from '../../contexts/CapabilitiesContext'
 import { Link } from 'react-router-dom'
 import type { CapabilityConfigEntry } from '../../types/capabilities'
-import { formatCapabilityValue, inferCapabilityInputType } from '../../lib/capabilities'
+import {
+  capabilityEntryUiString,
+  formatCapabilityValue,
+  groupCapabilityConfigEntries,
+  inferCapabilityInputType,
+  matchesCapabilityWhen,
+} from '../../lib/capabilities'
 import { useSwarmMetadata } from '../../contexts/SwarmMetadataContext'
 import { apiFetch } from '../../lib/api'
 
@@ -647,8 +653,16 @@ export default function ComponentDetail({ component, onClose }: Props) {
       cfg && cfg.inputs && typeof cfg.inputs === 'object'
         ? (cfg.inputs as Record<string, unknown>)
         : undefined
-    const inputType =
-      typeof inputs?.type === 'string' ? inputs.type.trim().toUpperCase() : undefined
+    const inputTypeRaw = typeof inputs?.type === 'string' ? inputs.type.trim().toUpperCase() : undefined
+    const inferredIoType =
+      inputs && !inputTypeRaw
+        ? inputs.scheduler && typeof inputs.scheduler === 'object'
+          ? 'SCHEDULER'
+          : inputs.redis && typeof inputs.redis === 'object'
+            ? 'REDIS_DATASET'
+            : undefined
+        : undefined
+    const inputType = inputTypeRaw ?? inferredIoType
 
     const allEntries: CapabilityConfigEntry[] = [...baseEntries]
 
@@ -674,26 +688,28 @@ export default function ComponentDetail({ component, onClose }: Props) {
       }
     }
 
-    // Apply simple conditional support based on entry.when (if present)
-    const merged = Array.from(byName.values())
-    if (!cfg) return merged
-
-    return merged.filter((entry) => {
-      const when = entry.when
-      if (!when || typeof when !== 'object') {
-        return true
-      }
-      const requiredInputTypeRaw = when['inputs.type']
-      const requiredInputType =
-        typeof requiredInputTypeRaw === 'string'
-          ? requiredInputTypeRaw.trim().toUpperCase()
-          : undefined
-      if (requiredInputType && inputType && requiredInputType !== inputType) {
-        return false
-      }
-      return true
-    })
+    return Array.from(byName.values())
   }, [manifest, manifests, componentConfig])
+
+  const visibleConfigEntries = useMemo(() => {
+    const cfg = isRecord(componentConfig) ? componentConfig : undefined
+    const manifestUi = manifest?.ui as Record<string, unknown> | undefined
+    const hideIo = manifestUi?.hideIo === true
+    const resolveWhenValue = (path: string): unknown => {
+      if (path in form) {
+        return form[path]
+      }
+      return getValueForPath(cfg, path)
+    }
+    return effectiveConfigEntries
+      .filter((entry) => matchesCapabilityWhen(entry.when, resolveWhenValue))
+      .filter((entry) => {
+        if (!hideIo) {
+          return true
+        }
+        return entry.name !== 'inputs.type' && entry.name !== 'outputs.type'
+      })
+  }, [effectiveConfigEntries, componentConfig, form])
 
   useEffect(() => {
     const previousId = previousComponentIdRef.current
@@ -716,27 +732,70 @@ export default function ComponentDetail({ component, onClose }: Props) {
     setForm(next)
   }, [component.id, component.config, manifest, isEditing, effectiveConfigEntries])
 
+  const groupedConfigEntries = useMemo(
+    () => groupCapabilityConfigEntries(visibleConfigEntries),
+    [visibleConfigEntries],
+  )
+  const [activeConfigGroup, setActiveConfigGroup] = useState<string>('General')
+  useEffect(() => {
+    if (groupedConfigEntries.length === 0) {
+      return
+    }
+    if (!groupedConfigEntries.some((group) => group.id === activeConfigGroup)) {
+      setActiveConfigGroup(groupedConfigEntries[0]!.id)
+    }
+  }, [groupedConfigEntries, activeConfigGroup])
+
   const renderedContent = isWiremock ? (
     <WiremockPanel component={component} />
   ) : manifest ? (
     <div className="space-y-2">
-      {effectiveConfigEntries.length === 0 ? (
+      {visibleConfigEntries.length === 0 ? (
         <div className="text-white/50">No configurable options</div>
       ) : (
-        effectiveConfigEntries.map((entry) => (
-          <ConfigEntryRow
-            key={entry.name}
-            entry={entry}
-            value={form[entry.name]}
-            disabled={!isEditing}
-            onChange={(value) =>
-              setForm((prev) => ({
-                ...prev,
-                [entry.name]: value,
-              }))
-            }
-          />
-        ))
+        <>
+          {groupedConfigEntries.length > 1 && (
+            <div className="flex flex-wrap gap-2 pb-2">
+              {groupedConfigEntries.map((group) => (
+                <button
+                  key={group.id}
+                  type="button"
+                  className={
+                    group.id === activeConfigGroup
+                      ? 'rounded border border-white/30 bg-white/10 px-2 py-1 text-xs text-white'
+                      : 'rounded border border-white/10 px-2 py-1 text-xs text-white/70 hover:bg-white/5'
+                  }
+                  onClick={() => setActiveConfigGroup(group.id)}
+                >
+                  {group.label}
+                </button>
+              ))}
+            </div>
+          )}
+          {groupedConfigEntries
+            .filter((group) => groupedConfigEntries.length === 1 || group.id === activeConfigGroup)
+            .map((group) => (
+              <div key={group.id} className="space-y-2">
+                {groupedConfigEntries.length === 1 && group.label !== 'General' && (
+                  <div className="text-xs text-white/70">{group.label}</div>
+                )}
+                {group.entries.map((entry) => (
+                  <ConfigEntryRow
+                    key={entry.name}
+                    entry={entry}
+                    value={form[entry.name]}
+                    disabled={!isEditing}
+                    onChange={(value) =>
+                      setForm((prev) => ({
+                        ...prev,
+                        [entry.name]: value,
+                      }))
+                    }
+                  />
+                ))}
+              </div>
+            ))}
+        </>
       )}
     </div>
   ) : (
@@ -918,14 +977,22 @@ interface ConfigEntryRowProps {
 
 function ConfigEntryRow({ entry, value, disabled, onChange }: ConfigEntryRowProps) {
   const unit = extractUnit(entry)
-  const labelSuffix = `${entry.type || 'string'}${unit ? ` • ${unit}` : ''}`
+  const typeLabel = entry.type || 'string'
+  const labelSuffix = `${typeLabel}${unit ? ` • ${unit}` : ''}`
+  const label = capabilityEntryUiString(entry, 'label') ?? entry.name
+  const help = capabilityEntryUiString(entry, 'help')
+  const showPath = label !== entry.name
   const content = renderConfigInput(entry, value, disabled, onChange)
   return (
-    <label className="block space-y-1">
-      <span className="block text-white/70">
-        {entry.name}
-        <span className="text-white/40"> ({labelSuffix})</span>
-      </span>
+    <label className="block space-y-1 rounded border border-white/10 bg-white/5 px-3 py-2">
+      <div className="space-y-0.5">
+        <div className="flex items-baseline justify-between gap-3">
+          <span className="text-white/85 font-medium">{label}</span>
+          <span className="text-[11px] text-white/45">{labelSuffix}</span>
+        </div>
+        {showPath && <div className="text-[11px] text-white/40">{entry.name}</div>}
+        {help && <div className="text-[11px] text-white/50">{help}</div>}
+      </div>
       {content}
       {typeof entry.min === 'number' || typeof entry.max === 'number' ? (
         <span className="block text-[11px] text-white/40">
