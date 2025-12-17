@@ -167,6 +167,8 @@ export default function SwarmListPage() {
   const [busyAction, setBusyAction] = useState<string | null>(null)
   const [sortKey, setSortKey] = useState<'swarm' | 'status' | 'heartbeat' | 'queues'>('swarm')
   const [sortDir, setSortDir] = useState<1 | -1>(1)
+  const [drawerWidth, setDrawerWidth] = useState(420)
+  const [dockDrawer, setDockDrawer] = useState(false)
   const meta = useSwarmMetadata()
 
   useEffect(() => {
@@ -260,12 +262,27 @@ export default function SwarmListPage() {
     }
   }
 
-  const drawerWidth = 420
+  useEffect(() => {
+    const updateWidth = () => {
+      setDrawerWidth(Math.min(420, Math.max(280, Math.floor(window.innerWidth * 0.92))))
+    }
+    updateWidth()
+    window.addEventListener('resize', updateWidth)
+    return () => window.removeEventListener('resize', updateWidth)
+  }, [])
+
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 1400px)')
+    const update = () => setDockDrawer(mq.matches)
+    update()
+    mq.addEventListener('change', update)
+    return () => mq.removeEventListener('change', update)
+  }, [])
 
   return (
     <div
       className="p-4 space-y-4"
-      style={selectedComponent ? { marginRight: drawerWidth } : undefined}
+      style={selectedComponent && dockDrawer ? { marginRight: drawerWidth } : undefined}
     >
       <div className="flex items-center justify-between gap-4">
         <div className="space-y-1">

@@ -25,6 +25,17 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
+function tryParseJsonObject(value: string): Record<string, unknown> | null {
+  const trimmed = value.trim()
+  if (!trimmed) return null
+  try {
+    const parsed: unknown = JSON.parse(trimmed)
+    return isPlainObject(parsed) ? parsed : null
+  } catch {
+    return null
+  }
+}
+
 function getValueForPath(
   config: Record<string, unknown> | undefined,
   path: string,
@@ -465,6 +476,99 @@ export function ConfigUpdatePatchModal({
                             onChange={(next) => updateValue(next)}
                           />
                         )
+                      } else if (normalizedType === 'json') {
+                        const asString = typeof effectiveValue === 'string' ? effectiveValue : ''
+                        const parsed = tryParseJsonObject(asString)
+                        const weightedKeys =
+                          parsed == null
+                            ? []
+                            : Object.entries(parsed)
+                                .map(([key, value]) => {
+                                  if (typeof value !== 'string') return null
+                                  const model = parseWeightedTemplate(value)
+                                  if (!model) return null
+                                  return { key, value, model }
+                                })
+                                .filter((item): item is NonNullable<typeof item> => item !== null)
+
+                        if (weightedKeys.length > 0 && parsed) {
+                          field = (
+                            <div className="space-y-2">
+                              <div className="rounded border border-white/10 bg-white/5 p-2">
+                                <div className="text-[11px] font-semibold text-white/70 mb-2">
+                                  Weighted shortcuts
+                                </div>
+                                <div className="space-y-3">
+                                  {weightedKeys.map((item) => (
+                                    <div key={item.key} className="space-y-1">
+                                      <div className="flex items-center justify-between gap-2">
+                                        <div className="font-mono text-[11px] text-white/80">{item.key}</div>
+                                      </div>
+                                      <WeightedChoiceEditor
+                                        value={item.value}
+                                        model={item.model}
+                                        onChange={(next) => {
+                                          const updated = { ...parsed }
+                                          updated[item.key] = next
+                                          updateValue(JSON.stringify(updated, null, 2))
+                                        }}
+                                      />
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                              <div className="space-y-1">
+                                <textarea
+                                  className={
+                                    isEnabled
+                                      ? 'w-full rounded bg-white/10 px-2 py-1 text-white text-xs font-mono'
+                                      : 'w-full rounded bg-white/5 px-2 py-1 text-white/80 text-xs font-mono'
+                                  }
+                                  rows={4}
+                                  value={asString}
+                                  onChange={(event) => updateValue(event.target.value)}
+                                />
+                                <div className="flex items-center justify-between">
+                                  <div className="text-[11px] text-white/40">
+                                    Keep this JSON valid (it is applied as an object).
+                                  </div>
+                                  <button
+                                    type="button"
+                                    className="rounded border border-white/10 bg-white/5 px-2 py-0.5 text-[11px] text-white/70 hover:bg-white/10"
+                                    onClick={() => openValueEditor()}
+                                  >
+                                    Open editor
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          )
+                        } else {
+                          const value = typeof effectiveValue === 'string' ? effectiveValue : ''
+                          field = (
+                            <div className="space-y-1">
+                              <textarea
+                                className={
+                                  isEnabled
+                                    ? 'w-full rounded bg-white/10 px-2 py-1 text-white text-xs font-mono'
+                                    : 'w-full rounded bg-white/5 px-2 py-1 text-white/80 text-xs font-mono'
+                                }
+                                rows={4}
+                                value={value}
+                                onChange={(event) => updateValue(event.target.value)}
+                              />
+                              <div className="flex items-center justify-end">
+                                <button
+                                  type="button"
+                                  className="rounded border border-white/10 bg-white/5 px-2 py-0.5 text-[11px] text-white/70 hover:bg-white/10"
+                                  onClick={() => openValueEditor()}
+                                >
+                                  Open editor
+                                </button>
+                              </div>
+                            </div>
+                          )
+                        }
                       } else if (
                         inferCapabilityInputType(entry.type) === 'number' &&
                         typeof entry.min === 'number' &&

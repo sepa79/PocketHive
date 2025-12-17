@@ -44,17 +44,17 @@ export default function Layout() {
 
   return (
     <div className="flex h-screen flex-col overflow-hidden text-white">
-      <header className="flex items-center gap-4 p-4 sticky top-0 z-10 backdrop-blur border-b border-white/10 bg-[#080a0e]/75">
+      <header className="flex items-center gap-2 sm:gap-4 px-3 sm:px-4 py-2 sm:py-3 sticky top-0 z-10 backdrop-blur border-b border-white/10 bg-[#080a0e]/75">
         <img className="logo" src="/logo.svg" alt="PocketHive Logo" />
-        <nav className="nav-tabs">
+        <nav className="nav-tabs flex-1 min-w-0 overflow-x-auto">
           <NavLink
             to="/hive"
             className={({ isActive }) =>
               `tab-btn flex items-center${isActive ? ' tab-active' : ''}`
             }
           >
-            <Hexagon strokeWidth={1.5} className="tab-icon text-white/80" />
-            Hive
+            <Hexagon strokeWidth={1.5} className="tab-icon mr-0 sm:mr-1 text-white/80" />
+            <span className="hidden sm:inline">Hive</span>
           </NavLink>
           <NavLink
             to="/swarms"
@@ -62,8 +62,8 @@ export default function Layout() {
               `tab-btn flex items-center${isActive ? ' tab-active' : ''}`
             }
           >
-            <List strokeWidth={1.5} className="tab-icon text-white/80" />
-            Swarms
+            <List strokeWidth={1.5} className="tab-icon mr-0 sm:mr-1 text-white/80" />
+            <span className="hidden sm:inline">Swarms</span>
           </NavLink>
           <NavLink
             to="/journal"
@@ -71,8 +71,8 @@ export default function Layout() {
               `tab-btn flex items-center${isActive ? ' tab-active' : ''}`
             }
           >
-            <List strokeWidth={1.5} className="tab-icon text-white/80" />
-            Journal
+            <List strokeWidth={1.5} className="tab-icon mr-0 sm:mr-1 text-white/80" />
+            <span className="hidden sm:inline">Journal</span>
           </NavLink>
           <NavLink
             to="/scenarios"
@@ -80,8 +80,8 @@ export default function Layout() {
               `tab-btn flex items-center${isActive ? ' tab-active' : ''}`
             }
           >
-            <List strokeWidth={1.5} className="tab-icon text-white/80" />
-            Scenarios
+            <List strokeWidth={1.5} className="tab-icon mr-0 sm:mr-1 text-white/80" />
+            <span className="hidden sm:inline">Scenarios</span>
           </NavLink>
           <NavLink
             to="/sut"
@@ -89,8 +89,8 @@ export default function Layout() {
               `tab-btn flex items-center${isActive ? ' tab-active' : ''}`
             }
           >
-            <Database strokeWidth={1.5} className="tab-icon text-white/80" />
-            SUTs
+            <Database strokeWidth={1.5} className="tab-icon mr-0 sm:mr-1 text-white/80" />
+            <span className="hidden sm:inline">SUTs</span>
           </NavLink>
           <NavLink
             to="/capacity"
@@ -98,15 +98,15 @@ export default function Layout() {
               `tab-btn flex items-center${isActive ? ' tab-active' : ''}`
             }
           >
-            <Activity strokeWidth={1.5} className="tab-icon text-white/80" />
-            Capacity
+            <Activity strokeWidth={1.5} className="tab-icon mr-0 sm:mr-1 text-white/80" />
+            <span className="hidden sm:inline">Capacity</span>
           </NavLink>
           <button
             className={`tab-btn flex items-center${buzzVisible ? ' tab-active' : ''}`}
             onClick={toggleBuzz}
           >
-            <Radio strokeWidth={1.5} className="tab-icon text-white/80" />
-            Buzz
+            <Radio strokeWidth={1.5} className="tab-icon mr-0 sm:mr-1 text-white/80" />
+            <span className="hidden sm:inline">Buzz</span>
           </button>
           <NavLink
             to="/nectar"
@@ -114,12 +114,12 @@ export default function Layout() {
               `tab-btn flex items-center${isActive ? ' tab-active' : ''}`
             }
           >
-            <Droplet strokeWidth={1.5} className="tab-icon text-white/80" />
-            Nectar
+            <Droplet strokeWidth={1.5} className="tab-icon mr-0 sm:mr-1 text-white/80" />
+            <span className="hidden sm:inline">Nectar</span>
           </NavLink>
         </nav>
         <div className="header-right">
-          <div className="service-links">
+          <div className="service-links hidden lg:flex">
             <a id="link-rabbitmq" href={services.rabbitmq} target="_blank" rel="noopener" aria-label="RabbitMQ"><img src="/icons/rabbitmq.svg" alt="RabbitMQ" /></a>
             <a id="link-prometheus" href={services.prometheus} target="_blank" rel="noopener" aria-label="Prometheus"><img src="/icons/prometheus.svg" alt="Prometheus" /></a>
             <a id="link-grafana" href={services.grafana} target="_blank" rel="noopener" aria-label="Grafana"><img src="/icons/grafana.svg" alt="Grafana" /></a>
@@ -149,7 +149,7 @@ export default function Layout() {
           </div>
         </div>
       </header>
-      <main className="flex flex-1 min-h-0 overflow-hidden">
+      <main className="m-0 p-0 flex flex-1 min-h-0 overflow-hidden">
         {buzzVisible ? (
           buzzDock === 'bottom' ? (
             <PanelGroup

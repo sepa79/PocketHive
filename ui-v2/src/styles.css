@@ -1,0 +1,58 @@
+:root {
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+  background: #05070b;
+  color: #fff;
+  font-family: Inter, system-ui, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+}
+
+a {
+  color: inherit;
+}
+
+.shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(8, 10, 14, 0.75);
+  position: sticky;
+  top: 0;
+  backdrop-filter: blur(6px);
+}
+
+.topbar a {
+  text-decoration: none;
+  padding: 6px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.topbar a.active {
+  border-color: rgba(51, 225, 255, 0.55);
+  background: rgba(51, 225, 255, 0.18);
+}
+
+.content {
+  flex: 1;
+  padding: 14px 12px;
+}
+
+.card {
+  max-width: 900px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 14px;
+  padding: 14px 16px;
+}

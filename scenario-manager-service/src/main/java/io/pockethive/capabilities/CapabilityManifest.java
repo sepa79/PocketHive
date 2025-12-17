@@ -34,6 +34,7 @@ public record CapabilityManifest(
             Number min,
             Number max,
             Boolean multiline,
+            JsonNode when,
             JsonNode ui,
             JsonNode options
     ) { }

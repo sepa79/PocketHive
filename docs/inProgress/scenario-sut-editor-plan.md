@@ -1,5 +1,9 @@
 # Scenario & SUT Editors — Plan
 
+> **Scenario editor: superseded**  
+> The Scenario editor portion of this plan is superseded by `docs/scenarios/SCENARIO_EDITOR_STATUS.md`.
+> This file remains as an in-progress plan for the **SUT editor** and for historical context.
+
 > Status: in progress  
 > Scope: UI, Scenario Manager, docs (no changes to workers or control‑plane contracts)
 

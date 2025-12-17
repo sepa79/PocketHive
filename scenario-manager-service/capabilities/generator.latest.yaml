@@ -26,7 +26,7 @@ config:
     ui:
       label: Enabled
       group: General
-  - name: message.bodyType
+  - name: worker.message.bodyType
     type: string
     default: "HTTP"
     options:
@@ -35,13 +35,15 @@ config:
     ui:
       label: Body type
       group: Message
-  - name: message.path
+  - name: worker.message.path
     type: string
     default: "/"
+    when:
+      worker.message.bodyType: "HTTP"
     ui:
       label: Path
       group: Message
-  - name: message.method
+  - name: worker.message.method
     type: string
     default: "GET"
     options:
@@ -52,17 +54,19 @@ config:
       - "PATCH"
       - "HEAD"
       - "OPTIONS"
+    when:
+      worker.message.bodyType: "HTTP"
     ui:
       label: Method
       group: Message
-  - name: message.body
+  - name: worker.message.body
     type: text
     default: ""
     multiline: true
     ui:
       label: Body
       group: Message
-  - name: message.headers
+  - name: worker.message.headers
     type: json
     default: {}
     multiline: true

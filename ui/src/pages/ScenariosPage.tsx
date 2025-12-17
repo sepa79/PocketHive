@@ -448,6 +448,9 @@ function SwarmTemplateEditor({
   onOpenSchemaEditor,
 }: SwarmTemplateEditorProps) {
   const [selectedBeeIndex, setSelectedBeeIndex] = useState(0)
+  const [interceptorsEditorBeeIndex, setInterceptorsEditorBeeIndex] = useState<number | null>(null)
+  const [interceptorsEditorText, setInterceptorsEditorText] = useState('')
+  const [interceptorsEditorError, setInterceptorsEditorError] = useState<string | null>(null)
   const { getManifestForImage } = useCapabilities()
 
   const controllerImage =
@@ -579,6 +582,106 @@ function SwarmTemplateEditor({
     bees.length > 0 && selectedBeeIndex >= 0 && selectedBeeIndex < bees.length
       ? bees[selectedBeeIndex]
       : null
+
+  const readBeeInterceptors = useCallback(
+    (beeIndex: number): unknown => {
+      if (!template || typeof template !== 'object' || Array.isArray(template)) return undefined
+      const record = template as Record<string, unknown>
+      const beesRaw = Array.isArray(record['bees']) ? (record['bees'] as unknown[]) : []
+      const entry = beesRaw[beeIndex]
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return undefined
+      const bee = entry as Record<string, unknown>
+      const config = bee['config']
+      if (!isPlainObject(config)) return undefined
+      return (config as Record<string, unknown>)['interceptors']
+    },
+    [template],
+  )
+
+  const setBeeInterceptors = useCallback(
+    (beeIndex: number, interceptors: Record<string, unknown> | undefined) => {
+      onChange((current) => {
+        const base = isPlainObject(current) ? { ...(current as Record<string, unknown>) } : {}
+        const beesRaw = Array.isArray(base.bees) ? [...(base.bees as unknown[])] : []
+        if (beeIndex < 0 || beeIndex >= beesRaw.length) return base
+        const existingBee = isPlainObject(beesRaw[beeIndex])
+          ? { ...(beesRaw[beeIndex] as Record<string, unknown>) }
+          : {}
+        const configRaw = existingBee.config
+        const config = isPlainObject(configRaw) ? { ...(configRaw as Record<string, unknown>) } : {}
+        if (interceptors && Object.keys(interceptors).length > 0) {
+          config.interceptors = interceptors
+        } else {
+          delete config.interceptors
+        }
+        existingBee.config = Object.keys(config).length > 0 ? config : undefined
+        beesRaw[beeIndex] = existingBee
+        base.bees = beesRaw
+        return base
+      })
+    },
+    [onChange],
+  )
+
+  const interceptorsMeta = useMemo(() => {
+    if (!selectedBee) {
+      return { keys: [] as string[], count: 0 }
+    }
+    const raw = readBeeInterceptors(selectedBee.index)
+    if (!isPlainObject(raw)) {
+      return { keys: [] as string[], count: 0 }
+    }
+    const keys = Object.keys(raw).sort((a, b) => a.localeCompare(b))
+    return { keys, count: keys.length }
+  }, [readBeeInterceptors, selectedBee])
+
+  const openInterceptorsEditor = useCallback(
+    (beeIndex: number) => {
+      const raw = readBeeInterceptors(beeIndex)
+      const text = isPlainObject(raw) ? YAML.stringify(raw) : ''
+      setInterceptorsEditorBeeIndex(beeIndex)
+      setInterceptorsEditorText(text)
+      setInterceptorsEditorError(null)
+    },
+    [readBeeInterceptors],
+  )
+
+  const closeInterceptorsEditor = useCallback(() => {
+    setInterceptorsEditorBeeIndex(null)
+    setInterceptorsEditorText('')
+    setInterceptorsEditorError(null)
+  }, [])
+
+  const applyInterceptorsEditor = useCallback(() => {
+    if (interceptorsEditorBeeIndex === null) return
+    const text = interceptorsEditorText.trim()
+    if (!text) {
+      setBeeInterceptors(interceptorsEditorBeeIndex, undefined)
+      closeInterceptorsEditor()
+      return
+    }
+    try {
+      const parsed = YAML.parse(text)
+      if (parsed === null || parsed === undefined || parsed === '') {
+        setBeeInterceptors(interceptorsEditorBeeIndex, undefined)
+        closeInterceptorsEditor()
+        return
+      }
+      if (!isPlainObject(parsed)) {
+        setInterceptorsEditorError('Interceptors must be a YAML mapping (object).')
+        return
+      }
+      setBeeInterceptors(interceptorsEditorBeeIndex, parsed)
+      closeInterceptorsEditor()
+    } catch (err) {
+      setInterceptorsEditorError(err instanceof Error ? err.message : 'Invalid YAML.')
+    }
+  }, [
+    closeInterceptorsEditor,
+    interceptorsEditorBeeIndex,
+    interceptorsEditorText,
+    setBeeInterceptors,
+  ])
 
   const inputWarnings: string[] = []
   if (selectedBee) {
@@ -1012,14 +1115,57 @@ function SwarmTemplateEditor({
                         {name}
                       </option>
                     ))}
-                  </select>
-                )}
-              </div>
-              <div className="pt-2">
-                <div className="flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    className="rounded bg-white/10 px-2 py-1 text-[11px] text-white/80 hover:bg-white/20"
+	                  </select>
+	                )}
+	              </div>
+	              <div className="flex items-start gap-2">
+	                <span className="w-28 text-white/70 pt-1">Interceptors</span>
+	                <div className="flex-1 min-w-0">
+	                  {interceptorsMeta.count === 0 ? (
+	                    <div className="text-[11px] text-white/50">(none)</div>
+	                  ) : (
+	                    <div className="flex flex-wrap gap-1">
+	                      {interceptorsMeta.keys.slice(0, 3).map((key) => (
+	                        <span
+	                          key={key}
+	                          className="inline-flex items-center rounded-full border border-white/20 bg-black/60 px-1.5 py-0.5 text-[10px] text-white/80"
+	                        >
+	                          {key}
+	                        </span>
+	                      ))}
+	                      {interceptorsMeta.count > 3 && (
+	                        <span className="text-[10px] text-white/50 pt-0.5">
+	                          +{interceptorsMeta.count - 3} more
+	                        </span>
+	                      )}
+	                    </div>
+	                  )}
+	                </div>
+	                <div className="flex items-center gap-1">
+	                  <button
+	                    type="button"
+	                    className="px-2 py-1 rounded bg-white/10 text-[11px] text-white/80 hover:bg-white/20"
+	                    onClick={() => openInterceptorsEditor(selectedBee.index)}
+	                  >
+	                    Edit
+	                  </button>
+	                  {interceptorsMeta.count > 0 && (
+	                    <button
+	                      type="button"
+	                      className="px-2 py-1 rounded bg-white/5 text-[11px] text-white/70 hover:bg-white/15"
+	                      onClick={() => setBeeInterceptors(selectedBee.index, undefined)}
+	                      title="Remove interceptors"
+	                    >
+	                      Clear
+	                    </button>
+	                  )}
+	                </div>
+	              </div>
+	              <div className="pt-2">
+	                <div className="flex flex-wrap items-center gap-2">
+	                  <button
+	                    type="button"
+	                    className="rounded bg-white/10 px-2 py-1 text-[11px] text-white/80 hover:bg-white/20"
                     onClick={() => onOpenConfig(selectedBee.index)}
                   >
                     Edit config via capabilities
@@ -1040,10 +1186,10 @@ function SwarmTemplateEditor({
           </div>
           <div className="border border-dashed border-white/20 rounded bg-black/40 p-3 text-[11px] text-white/80">
           <div className="font-semibold text-white/80 mb-1">Flow preview</div>
-          {bees.length === 0 ? (
-            <div className="text-white/60">No bees defined yet.</div>
-          ) : (
-            <>
+	          {bees.length === 0 ? (
+	            <div className="text-white/60">No bees defined yet.</div>
+	          ) : (
+	            <>
               {queueOptions.length > 0 && (
                 <div className="mb-2 text-[10px] text-white/60">
                   Queues:{' '}
@@ -1115,12 +1261,71 @@ function SwarmTemplateEditor({
                 })}
               </div>
             </>
-          )}
-          </div>
-        </div>
-      </div>
-    </div>
-  )
+	          )}
+	          </div>
+	        </div>
+	      </div>
+
+	      {interceptorsEditorBeeIndex !== null && (
+	        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
+	          <div
+	            role="dialog"
+	            aria-modal="true"
+	            className="w-[96vw] max-w-3xl h-[80vh] rounded-lg bg-[#05070b] border border-white/20 p-4 text-sm text-white flex flex-col"
+	          >
+	            <div className="flex items-center justify-between gap-3 mb-2">
+	              <div className="min-w-0">
+	                <h3 className="text-xs font-semibold text-white/80 truncate">Edit interceptors</h3>
+	                <div className="text-[11px] text-white/50 font-mono truncate">
+	                  template.bees[{interceptorsEditorBeeIndex}].config.interceptors
+	                </div>
+	              </div>
+	              <button type="button" className="text-white/60 hover:text-white" onClick={closeInterceptorsEditor}>
+	                ×
+	              </button>
+	            </div>
+
+	            {interceptorsEditorError && (
+	              <div className="mb-2 text-[11px] text-red-400">{interceptorsEditorError}</div>
+	            )}
+
+	            <div className="flex-1 min-h-0 border border-white/15 rounded overflow-hidden">
+	              <Editor
+	                height="100%"
+	                defaultLanguage="yaml"
+	                theme="vs-dark"
+	                value={interceptorsEditorText}
+	                onChange={(value) => setInterceptorsEditorText(value ?? '')}
+	                options={{
+	                  fontSize: 11,
+	                  minimap: { enabled: false },
+	                  scrollBeyondLastLine: false,
+	                  wordWrap: 'on',
+	                }}
+	              />
+	            </div>
+
+	            <div className="mt-3 pt-2 border-t border-white/10 flex items-center justify-end gap-2">
+	              <button
+	                type="button"
+	                className="rounded px-2 py-1 text-[11px] text-white/70 hover:bg-white/10"
+	                onClick={closeInterceptorsEditor}
+	              >
+	                Cancel
+	              </button>
+	              <button
+	                type="button"
+	                className="rounded bg-sky-500/80 px-3 py-1 text-[11px] text-white hover:bg-sky-500"
+	                onClick={applyInterceptorsEditor}
+	              >
+	                Apply
+	              </button>
+	            </div>
+	          </div>
+	        </div>
+	      )}
+	    </div>
+	  )
 }
 
 export default function ScenariosPage() {
@@ -2965,8 +3170,8 @@ export default function ScenariosPage() {
   }, [applyPlanUpdate])
 
   return (
-    <div className="flex h-full min-h-0 bg-[#05070b] text-white">
-      <div className="w-72 border-r border-white/10 px-4 py-4 space-y-3">
+    <div className="flex flex-col md:flex-row h-full min-h-0 bg-[#05070b] text-white">
+      <div className="w-full md:w-72 border-b md:border-b-0 md:border-r border-white/10 px-4 py-4 space-y-3">
         <div className="flex items-center justify-between">
           <h1 className="text-sm font-semibold text-white/90">Scenarios</h1>
           <button
@@ -3081,7 +3286,7 @@ export default function ScenariosPage() {
           )}
         </div>
       </div>
-      <div className="flex-1 px-6 py-4 overflow-y-auto">
+      <div className="flex-1 px-3 sm:px-6 py-3 sm:py-4 overflow-y-auto">
         {!selectedSummary && !loading && (
           <div className="text-sm text-white/70">
             Select a scenario on the left to view details.

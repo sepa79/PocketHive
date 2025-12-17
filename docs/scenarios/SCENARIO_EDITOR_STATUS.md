@@ -117,14 +117,14 @@ Expected:
 
 ## 4) Gaps / missing features (high impact)
 
-### 4.1 Interceptors are not editable in structured UI
+### 4.1 Interceptors are not editable in capability-driven UI
 The scenario contract supports `config.interceptors`, and scenarios rely on it
 (for example Redis uploader).
 
 Current state:
 - Capability manifests do not expose `config.interceptors.*`.
-- The UI therefore provides no structured way to view/edit interceptors.
-- YAML edit is the only option.
+- The capability-driven modal does not provide a structured way to view/edit interceptors.
+- Hive UI provides an interceptors editor in the Swarm template bee details, but it is still a raw YAML fragment editor.
 
 Desired:
 - A dedicated “Interceptors” section (even if it starts as a generic map editor),
@@ -168,9 +168,13 @@ treated as **inputs**, not as “current behaviour”:
 - `docs/inProgress/scenario-sut-editor-plan.md`
   - Contains a React Flow + side-panel editor plan. Some ideas exist in the
     current editor, but the plan is not implemented as written.
-- `docs/pockethive_scenario_builder_mvp/ui_scenario_builder_mvp_plan/*`
-  - A micro-frontend “Scenario Builder” plan (tracks/blocks) that does not match
-    the current `plan` editor implementation.
+- `docs/pockethive_scenario_builder_mvp/*`
+  - A consolidated MVP archive (contract + plans). It is useful for historical
+    context, but is not aligned with the current Scenarios editor (the old
+    micro-frontend UI plan subfolder was removed to avoid confusion).
+- `docs/archive/MVP_ROADMAP.md`
+  - Historical roadmap that includes a “Scenario Editor UI” phase; superseded by
+    this document for editor status.
 - `docs/inProgress/scenario-bundle-runtime-plan.md`
   - Tracks bundle upload/download + optional validation-on-upload; parts are done,
     but the optional validation and some bundle conventions remain open.
@@ -203,4 +207,3 @@ treated as **inputs**, not as “current behaviour”:
 - [ ] Env + volumes supported.
 - [ ] Map editor for headers/properties exists (unblocks weighted UI visibility).
 - [ ] Plan time formatting does not rewrite user YAML unless requested.
-
