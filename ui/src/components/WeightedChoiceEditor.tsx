@@ -423,7 +423,11 @@ export function WeightedChoiceEditor({
           className="w-full rounded bg-white/10 px-2 py-1 text-white text-xs font-mono"
           rows={3}
           value={value}
-          onChange={(event) => onChange(event.target.value)}
+          onChange={(event) => {
+            const next = event.target.value
+            lastSeenValueRef.current = next
+            onChange(next)
+          }}
           disabled={disabled}
         />
       ) : (
