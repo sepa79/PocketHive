@@ -235,22 +235,24 @@ public class PocketHiveWorkerSdkAutoConfiguration {
     @Bean
     @ConditionalOnBean(value = WorkerControlPlane.class, name = "workerControlPlaneEmitter")
     @ConditionalOnMissingBean
-    WorkerControlPlaneRuntime workerControlPlaneRuntime(
-        WorkerControlPlane workerControlPlane,
-        WorkerStateStore workerStateStore,
-        @Qualifier("workerControlPlaneIdentity") ControlPlaneIdentity identity,
-        @Qualifier("workerControlPlaneEmitter") ControlPlaneEmitter controlPlaneEmitter,
-        WorkerControlPlaneProperties workerControlPlaneProperties,
-        ObjectProvider<ObjectMapper> objectMapperProvider
-    ) {
-        ObjectMapper mapper = objectMapperProvider.getIfAvailable(() -> new ObjectMapper().findAndRegisterModules());
-        WorkerControlPlaneProperties.ControlPlane controlPlane = Objects
-            .requireNonNull(workerControlPlaneProperties, "workerControlPlaneProperties must not be null")
-            .getControlPlane();
-        Objects.requireNonNull(controlPlane, "workerControlPlaneProperties.controlPlane must not be null");
-        return new WorkerControlPlaneRuntime(workerControlPlane, workerStateStore, mapper, controlPlaneEmitter, identity,
-            controlPlane);
-    }
+	    WorkerControlPlaneRuntime workerControlPlaneRuntime(
+	        WorkerControlPlane workerControlPlane,
+	        WorkerStateStore workerStateStore,
+	        @Qualifier("workerControlPlaneIdentity") ControlPlaneIdentity identity,
+	        @Qualifier("workerControlPlaneEmitter") ControlPlaneEmitter controlPlaneEmitter,
+	        WorkerControlPlaneProperties workerControlPlaneProperties,
+	        ObjectProvider<io.pockethive.worker.sdk.templating.TemplateRenderer> templateRendererProvider,
+	        ObjectProvider<ObjectMapper> objectMapperProvider
+	    ) {
+	        ObjectMapper mapper = objectMapperProvider.getIfAvailable(() -> new ObjectMapper().findAndRegisterModules());
+	        WorkerControlPlaneProperties.ControlPlane controlPlane = Objects
+	            .requireNonNull(workerControlPlaneProperties, "workerControlPlaneProperties must not be null")
+	            .getControlPlane();
+	        Objects.requireNonNull(controlPlane, "workerControlPlaneProperties.controlPlane must not be null");
+	        io.pockethive.worker.sdk.templating.TemplateRenderer renderer = templateRendererProvider.getIfAvailable();
+	        return new WorkerControlPlaneRuntime(workerControlPlane, workerStateStore, mapper, controlPlaneEmitter, identity,
+	            controlPlane, renderer);
+	    }
 
     @Bean
     @ConditionalOnBean(WorkerControlPlaneRuntime.class)

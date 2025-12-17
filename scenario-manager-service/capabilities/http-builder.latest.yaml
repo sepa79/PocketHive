@@ -10,13 +10,13 @@ ui:
   shape: "triangle"
   abbreviation: "HB"
 config:
-  - name: templateRoot
+  - name: worker.templateRoot
     type: string
     default: "/app/http-templates"
-  - name: serviceId
+  - name: worker.serviceId
     type: string
     default: "default"
-  - name: passThroughOnMissingTemplate
+  - name: worker.passThroughOnMissingTemplate
     type: boolean
     default: true
 actions: []

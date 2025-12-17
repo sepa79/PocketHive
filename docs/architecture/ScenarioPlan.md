@@ -20,7 +20,7 @@
 ## Scope & Principles
 - A single **Scenario Plan** drives the **Swarm Manager**, which schedules and sends **`config-update`** messages to targeted bees.
 - **All-or-nothing readiness**: the scenario starts only when **all declared bees** are ready; otherwise fail fast.
-- **No payload validation** here (deferred to Scenario Editor).
+- **No payload validation** here (deferred to authoring tools like Hive UI / Scenario Manager).
 - **Step types**: keep `type` (default `config-update`) to allow `await` later; in v1 only `config-update` is executed.
 - **Two config forms**: environment variables for boot defaults; `config-update` messages for runtime overrides.
 - **Strictness**: **no guessing** and **no synthesized fields**. If any required field is missing or malformed, the scenario **fails immediately**.

@@ -7,6 +7,13 @@ Timestamp: 2025-12-17T00:00:00Z
 
 - No unreleased changes yet.
 
+## [0.14.17] - 2025-12-17
+Timestamp: 2025-12-17T00:00:00Z
+
+- Scenario authoring (UI): fixed generator/http-builder capability paths to `config.worker.*`, so message body/headers render correctly and switching body type toggles HTTP-only fields.
+- Capabilities API: Scenario Manager now exposes `when` conditions from manifests to the UI (dropdowns can hide/show dependent fields).
+- Scenario authoring (UI): render weighted shortcuts inside JSON objects (e.g. `worker.message.headers`) using the weighted editor controls.
+
 ## [0.14.16] - 2025-12-17
 Timestamp: 2025-12-17T00:00:00Z
 

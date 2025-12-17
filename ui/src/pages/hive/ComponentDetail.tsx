@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type JSX } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Component } from '../../types/hive'
 import { sendConfigUpdate } from '../../lib/orchestratorApi'
 import QueuesPanel from './QueuesPanel'
@@ -7,11 +7,11 @@ import WiremockPanel from './WiremockPanel'
 import { useCapabilities } from '../../contexts/CapabilitiesContext'
 import { Link } from 'react-router-dom'
 import type { CapabilityConfigEntry } from '../../types/capabilities'
+import { ConfigUpdatePatchModal } from '../../components/ConfigUpdatePatchModal'
 import {
   capabilityEntryUiString,
   formatCapabilityValue,
   groupCapabilityConfigEntries,
-  inferCapabilityInputType,
   matchesCapabilityWhen,
 } from '../../lib/capabilities'
 import { useSwarmMetadata } from '../../contexts/SwarmMetadataContext'
@@ -28,8 +28,7 @@ const HTTP_WORKER_ROLES = new Set(['processor'])
 
 export default function ComponentDetail({ component, onClose }: Props) {
   const [toast, setToast] = useState<string | null>(null)
-  const [isEditing, setIsEditing] = useState(false)
-  const [form, setForm] = useState<Record<string, ConfigFormValue>>({})
+  const [configPatchModalOpen, setConfigPatchModalOpen] = useState(false)
   const [showRefreshTooltip, setShowRefreshTooltip] = useState(false)
   const [sutLookup, setSutLookup] = useState<Record<string, { name: string; type: string | null }>>({})
   const [scenarioRunsInput, setScenarioRunsInput] = useState('')
@@ -73,7 +72,6 @@ export default function ComponentDetail({ component, onClose }: Props) {
     () => getManifestForImage(resolvedImage),
     [resolvedImage, getManifestForImage],
   )
-  const previousComponentIdRef = useRef(component.id)
   const refreshTooltipTimer = useRef<number | null>(null)
 
   useEffect(() => {
@@ -160,27 +158,15 @@ export default function ComponentDetail({ component, onClose }: Props) {
     setShowRefreshTooltip(false)
   }
 
-  const handleSubmit = async () => {
-    if (!manifest) {
-      displayToast(setToast, 'Capability manifest not available for this component')
+  const handleSendConfigPatch = async (patch: Record<string, unknown> | undefined) => {
+    setConfigPatchModalOpen(false)
+    if (!patch || Object.keys(patch).length === 0) {
+      displayToast(setToast, 'No changes to apply')
       return
     }
-    const cfg: Record<string, unknown> = {}
-    // Use merged worker + IO entries so IO changes (e.g. ratePerSec) are sent as part of the patch.
-    for (const entry of effectiveConfigEntries) {
-      const result = convertFormValue(entry, form[entry.name])
-      if (!result.ok) {
-        displayToast(setToast, result.message)
-        return
-      }
-      if (result.apply) {
-        assignNestedValue(cfg, entry.name, result.value)
-      }
-    }
     try {
-      await sendConfigUpdate(component, cfg)
+      await sendConfigUpdate(component, patch)
       displayToast(setToast, 'Config update sent')
-      setIsEditing(false)
     } catch {
       displayToast(setToast, 'Config update failed')
     }
@@ -691,13 +677,22 @@ export default function ComponentDetail({ component, onClose }: Props) {
     return Array.from(byName.values())
   }, [manifest, manifests, componentConfig])
 
+  const displayForm = useMemo(() => {
+    const cfg = isRecord(componentConfig) ? componentConfig : undefined
+    const next: Record<string, ConfigFormValue> = {}
+    effectiveConfigEntries.forEach((entry) => {
+      next[entry.name] = computeInitialValue(entry, cfg)
+    })
+    return next
+  }, [componentConfig, effectiveConfigEntries])
+
   const visibleConfigEntries = useMemo(() => {
     const cfg = isRecord(componentConfig) ? componentConfig : undefined
     const manifestUi = manifest?.ui as Record<string, unknown> | undefined
     const hideIo = manifestUi?.hideIo === true
     const resolveWhenValue = (path: string): unknown => {
-      if (path in form) {
-        return form[path]
+      if (path in displayForm) {
+        return displayForm[path]
       }
       return getValueForPath(cfg, path)
     }
@@ -709,28 +704,7 @@ export default function ComponentDetail({ component, onClose }: Props) {
         }
         return entry.name !== 'inputs.type' && entry.name !== 'outputs.type'
       })
-  }, [effectiveConfigEntries, componentConfig, form])
-
-  useEffect(() => {
-    const previousId = previousComponentIdRef.current
-    const idChanged = component.id !== previousId
-    if (isEditing && !idChanged) {
-      return
-    }
-    previousComponentIdRef.current = component.id
-    if (!manifest) {
-      setForm({})
-      return
-    }
-    const cfg = isRecord(component.config) ? component.config : undefined
-    const next: Record<string, ConfigFormValue> = {}
-    // Use the merged worker + IO config entries when initialising the form,
-    // so IO fields (like ratePerSec) pick up existing values from config.
-    effectiveConfigEntries.forEach((entry) => {
-      next[entry.name] = computeInitialValue(entry, cfg)
-    })
-    setForm(next)
-  }, [component.id, component.config, manifest, isEditing, effectiveConfigEntries])
+  }, [effectiveConfigEntries, componentConfig, displayForm, manifest])
 
   const groupedConfigEntries = useMemo(
     () => groupCapabilityConfigEntries(visibleConfigEntries),
@@ -780,17 +754,10 @@ export default function ComponentDetail({ component, onClose }: Props) {
                   <div className="text-xs text-white/70">{group.label}</div>
                 )}
                 {group.entries.map((entry) => (
-                  <ConfigEntryRow
+                  <ReadOnlyConfigEntryRow
                     key={entry.name}
                     entry={entry}
-                    value={form[entry.name]}
-                    disabled={!isEditing}
-                    onChange={(value) =>
-                      setForm((prev) => ({
-                        ...prev,
-                        [entry.name]: value,
-                      }))
-                    }
+                    value={displayForm[entry.name]}
                   />
                 ))}
               </div>
@@ -810,7 +777,7 @@ export default function ComponentDetail({ component, onClose }: Props) {
       <button
         className="absolute top-2 right-2"
         onClick={() => {
-          setIsEditing(false)
+          setConfigPatchModalOpen(false)
           onClose()
         }}
       >
@@ -927,31 +894,39 @@ export default function ComponentDetail({ component, onClose }: Props) {
       {!isWiremock && effectiveConfigEntries.length > 0 && (
         <div className="mb-2 flex items-center justify-between text-xs text-white/60">
           <span className="uppercase tracking-wide text-white/50">Configuration</span>
-          <label className="flex items-center gap-3 cursor-pointer select-none">
-            <span className="text-white/70">{isEditing ? 'Unlocked' : 'Locked'}</span>
-            <span className="relative inline-flex h-5 w-9 items-center">
-              <input
-                type="checkbox"
-                className="peer sr-only"
-                checked={isEditing}
-                aria-label={isEditing ? 'Disable editing' : 'Enable editing'}
-                onChange={(event) => setIsEditing(event.target.checked)}
-              />
-              <span className="h-5 w-9 rounded-full bg-white/25 transition-colors peer-checked:bg-blue-500" />
-              <span className="absolute left-1 top-1 h-3 w-3 rounded-full bg-white transition-transform duration-200 peer-checked:translate-x-4" />
-            </span>
-          </label>
+          <button
+            type="button"
+            className="rounded border border-white/20 bg-white/5 px-2 py-1 text-xs text-white/80 hover:bg-white/10"
+            onClick={() => {
+              if (!manifest) {
+                displayToast(setToast, 'Capability manifest not available for this component')
+                return
+              }
+              setConfigPatchModalOpen(true)
+            }}
+          >
+            Edit patch…
+          </button>
         </div>
       )}
       <div className={containerClass}>{renderedContent}</div>
-      {!isWiremock && effectiveConfigEntries.length > 0 && (
-        <button
-          className="mb-4 rounded bg-blue-600 px-3 py-1 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-          onClick={handleSubmit}
-          disabled={!isEditing}
-        >
-          Confirm
-        </button>
+      {configPatchModalOpen && manifest && (
+        <ConfigUpdatePatchModal
+          open
+          imageLabel={resolvedImage ?? component.image ?? '(unknown)'}
+          entries={effectiveConfigEntries.filter((entry) => {
+            const manifestUi = manifest.ui as Record<string, unknown> | undefined
+            const hideIo = manifestUi?.hideIo === true
+            if (!hideIo) return true
+            return entry.name !== 'inputs.type' && entry.name !== 'outputs.type'
+          })}
+          baseConfig={componentConfig}
+          existingPatch={undefined}
+          onClose={() => setConfigPatchModalOpen(false)}
+          onApply={(patch) => {
+            void handleSendConfigPatch(patch)
+          }}
+        />
       )}
       {toast && (
         <div className="fixed bottom-4 right-4 bg-black/80 text-white px-4 py-2 rounded">
@@ -971,20 +946,27 @@ export default function ComponentDetail({ component, onClose }: Props) {
 interface ConfigEntryRowProps {
   entry: CapabilityConfigEntry
   value: ConfigFormValue
-  disabled: boolean
-  onChange: (value: string | boolean) => void
 }
 
-function ConfigEntryRow({ entry, value, disabled, onChange }: ConfigEntryRowProps) {
+function formatReadOnlyValue(value: ConfigFormValue): string {
+  if (value === undefined || value === null) return '—'
+  if (typeof value === 'boolean') return value ? 'true' : 'false'
+  if (value.trim() === '') return '—'
+  return value
+}
+
+function ReadOnlyConfigEntryRow({ entry, value }: ConfigEntryRowProps) {
   const unit = extractUnit(entry)
   const typeLabel = entry.type || 'string'
   const labelSuffix = `${typeLabel}${unit ? ` • ${unit}` : ''}`
   const label = capabilityEntryUiString(entry, 'label') ?? entry.name
   const help = capabilityEntryUiString(entry, 'help')
   const showPath = label !== entry.name
-  const content = renderConfigInput(entry, value, disabled, onChange)
+  const normalizedType = (entry.type || '').toLowerCase()
+  const isMultiLine = entry.multiline || normalizedType === 'text' || normalizedType === 'json'
+  const displayValue = formatReadOnlyValue(value)
   return (
-    <label className="block space-y-1 rounded border border-white/10 bg-white/5 px-3 py-2">
+    <div className="block space-y-1 rounded border border-white/10 bg-white/5 px-3 py-2">
       <div className="space-y-0.5">
         <div className="flex items-baseline justify-between gap-3">
           <span className="text-white/85 font-medium">{label}</span>
@@ -993,7 +975,15 @@ function ConfigEntryRow({ entry, value, disabled, onChange }: ConfigEntryRowProp
         {showPath && <div className="text-[11px] text-white/40">{entry.name}</div>}
         {help && <div className="text-[11px] text-white/50">{help}</div>}
       </div>
-      {content}
+      <div
+        className={
+          isMultiLine
+            ? 'w-full rounded bg-black/30 px-2 py-1 text-[11px] text-white/90 font-mono whitespace-pre-wrap break-words max-h-32 overflow-auto'
+            : 'w-full rounded bg-black/30 px-2 py-1 text-[11px] text-white/90 font-mono whitespace-pre-wrap break-words'
+        }
+      >
+        {displayValue}
+      </div>
       {typeof entry.min === 'number' || typeof entry.max === 'number' ? (
         <span className="block text-[11px] text-white/40">
           {typeof entry.min === 'number' ? `min ${entry.min}` : ''}
@@ -1008,121 +998,7 @@ function ConfigEntryRow({ entry, value, disabled, onChange }: ConfigEntryRowProp
             : 'Multiline input supported.')}
         </span>
       )}
-    </label>
-  )
-}
-
-function renderConfigInput(
-  entry: CapabilityConfigEntry,
-  rawValue: ConfigFormValue,
-  disabled: boolean,
-  onChange: (value: string | boolean) => void,
-): JSX.Element {
-  const normalizedType = (entry.type || '').toLowerCase()
-  const options = Array.isArray(entry.options) ? entry.options : undefined
-
-  if (options && options.length > 0) {
-    const value = typeof rawValue === 'string' ? rawValue : formatCapabilityValue(entry.default)
-    return (
-      <select
-        className="w-full rounded bg-white/10 px-2 py-1 text-white"
-        value={value}
-        disabled={disabled}
-        onChange={(event) => onChange(event.target.value)}
-      >
-        {options.map((option, index) => {
-          const label = formatCapabilityValue(option)
-          return (
-            <option key={index} value={label}>
-              {label}
-            </option>
-          )
-        })}
-      </select>
-    )
-  }
-
-  if (normalizedType === 'boolean' || normalizedType === 'bool') {
-    const checked = rawValue === true
-    return (
-      <div className="flex items-center gap-2">
-        <input
-          type="checkbox"
-          className="h-4 w-4 accent-blue-500"
-          checked={checked}
-          disabled={disabled}
-          onChange={(event) => onChange(event.target.checked)}
-        />
-        <span className="text-white/60 text-xs">Enabled</span>
-      </div>
-    )
-  }
-
-  const value = typeof rawValue === 'string' ? rawValue : ''
-  if (entry.multiline || normalizedType === 'text' || normalizedType === 'json') {
-    return (
-      <textarea
-        className="w-full rounded bg-white/10 px-2 py-1 text-white"
-        value={value}
-        rows={normalizedType === 'json' ? 4 : 3}
-        disabled={disabled}
-        onChange={(event) => onChange(event.target.value)}
-      />
-    )
-  }
-
-  const inputType = inferCapabilityInputType(entry.type)
-  const step = extractStep(entry)
-  const useSlider = inputType === 'number' && typeof entry.min === 'number' && typeof entry.max === 'number'
-
-  if (useSlider) {
-    const numericValue =
-      value === '' ? (typeof entry.default === 'number' ? entry.default : entry.min ?? 0) : Number(value)
-    const displayValue = Number.isFinite(numericValue) ? String(numericValue) : ''
-    return (
-      <div className="space-y-1">
-        <input
-          className="w-full"
-          type="range"
-          value={Number.isFinite(numericValue) ? numericValue : 0}
-          disabled={disabled}
-          min={typeof entry.min === 'number' ? entry.min : undefined}
-          max={typeof entry.max === 'number' ? entry.max : undefined}
-          step={step}
-          onChange={(event) => onChange(event.target.value)}
-        />
-        <div className="flex items-center justify-between gap-2 text-xs text-white/70">
-          <span>
-            {typeof entry.min === 'number' ? entry.min : ''}
-            {typeof entry.min === 'number' && typeof entry.max === 'number' ? ' – ' : ''}
-            {typeof entry.max === 'number' ? entry.max : ''}
-          </span>
-          <input
-            className="w-20 rounded bg-white/10 px-2 py-0.5 text-right text-xs text-white"
-            type="number"
-            value={displayValue}
-            disabled={disabled}
-            min={typeof entry.min === 'number' ? entry.min : undefined}
-            max={typeof entry.max === 'number' ? entry.max : undefined}
-            step={step}
-            onChange={(event) => onChange(event.target.value)}
-          />
-        </div>
-      </div>
-    )
-  }
-
-  return (
-    <input
-      className="w-full rounded bg-white/10 px-2 py-1 text-white"
-      type={inputType}
-      value={value}
-      disabled={disabled}
-      onChange={(event) => onChange(event.target.value)}
-      min={typeof entry.min === 'number' ? entry.min : undefined}
-      max={typeof entry.max === 'number' ? entry.max : undefined}
-      step={step}
-    />
+    </div>
   )
 }
 
@@ -1223,65 +1099,6 @@ function getBoolean(value: unknown): boolean | undefined {
   return undefined
 }
 
-type ConversionResult =
-  | { ok: true; apply: boolean; value: unknown }
-  | { ok: false; message: string }
-
-function convertFormValue(entry: CapabilityConfigEntry, rawValue: ConfigFormValue): ConversionResult {
-  const normalizedType = (entry.type || '').toLowerCase()
-  if (normalizedType === 'boolean' || normalizedType === 'bool') {
-    return { ok: true, apply: true, value: rawValue === true }
-  }
-  if (normalizedType === 'json') {
-    const str = typeof rawValue === 'string' ? rawValue.trim() : ''
-    if (!str) {
-      return { ok: true, apply: false, value: undefined }
-    }
-    try {
-      return { ok: true, apply: true, value: JSON.parse(str) }
-    } catch {
-      return { ok: false, message: `Invalid JSON for ${entry.name}` }
-    }
-  }
-  if (normalizedType === 'number' || normalizedType === 'int' || normalizedType === 'integer') {
-    const str = typeof rawValue === 'string' ? rawValue.trim() : ''
-    if (!str) {
-      return { ok: true, apply: false, value: undefined }
-    }
-    const num = Number(str)
-    if (Number.isNaN(num)) {
-      return { ok: false, message: `${entry.name} must be a number` }
-    }
-    return { ok: true, apply: true, value: num }
-  }
-  if (typeof rawValue === 'string') {
-    const trimmed = rawValue.trim()
-    if (!trimmed) {
-      return { ok: true, apply: false, value: undefined }
-    }
-    return { ok: true, apply: true, value: rawValue }
-  }
-  return { ok: true, apply: false, value: undefined }
-}
-
-function assignNestedValue(target: Record<string, unknown>, path: string, value: unknown) {
-  const segments = path.split('.').filter((segment) => segment.length > 0)
-  if (segments.length === 0) return
-  let cursor: Record<string, unknown> = target
-  for (let i = 0; i < segments.length - 1; i++) {
-    const key = segments[i]!
-    const next = cursor[key]
-    if (!isRecord(next)) {
-      const created: Record<string, unknown> = {}
-      cursor[key] = created
-      cursor = created
-    } else {
-      cursor = next
-    }
-  }
-  cursor[segments[segments.length - 1]!] = value
-}
-
 function displayToast(setter: (value: string | null) => void, message: string) {
   setter(message)
   window.setTimeout(() => setter(null), 3000)
@@ -1293,12 +1110,6 @@ function extractUnit(entry: CapabilityConfigEntry): string | null {
   if (typeof value !== 'string') return null
   const trimmed = value.trim()
   return trimmed.length > 0 ? trimmed : null
-}
-
-function extractStep(entry: CapabilityConfigEntry): number | undefined {
-  if (!entry.ui || typeof entry.ui !== 'object') return undefined
-  const value = (entry.ui as Record<string, unknown>).step
-  return typeof value === 'number' ? value : undefined
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

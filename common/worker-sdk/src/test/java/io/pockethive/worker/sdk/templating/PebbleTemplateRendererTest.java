@@ -65,4 +65,42 @@ class PebbleTemplateRendererTest {
         assertThat(parts[11]).isEqualTo("4000000000000000");
         assertThat(parts[12]).isEqualTo("7");
     }
+
+    @Test
+    void pickWeightedIgnoresZeroWeights() {
+        String template = "{{ pickWeighted('a', 0, 'b', 5) }}";
+        for (int i = 0; i < 20; i++) {
+            assertThat(renderer.render(template, Map.of())).isEqualTo("b");
+        }
+    }
+
+    @Test
+    void pickWeightedSeededRepeatsSequenceAcrossRestarts() {
+        String template = "{{ pickWeightedSeeded('callId', 'seed-001', 'a', 50, 'b', 30, 'c', 20) }}";
+        java.util.List<String> seq1 = new java.util.ArrayList<>();
+        for (int i = 0; i < 12; i++) {
+            seq1.add(renderer.render(template, Map.of()));
+        }
+        TemplateRenderer second = new PebbleTemplateRenderer();
+        java.util.List<String> seq2 = new java.util.ArrayList<>();
+        for (int i = 0; i < 12; i++) {
+            seq2.add(second.render(template, Map.of()));
+        }
+        assertThat(seq2).isEqualTo(seq1);
+    }
+
+    @Test
+    void resetSeededSelectionsRestartsSequence() {
+        String template = "{{ pickWeightedSeeded('callId', 'seed-xyz', 'a', 50, 'b', 30, 'c', 20) }}";
+        java.util.List<String> seq1 = new java.util.ArrayList<>();
+        for (int i = 0; i < 10; i++) {
+            seq1.add(renderer.render(template, Map.of()));
+        }
+        renderer.resetSeededSelections();
+        java.util.List<String> seq2 = new java.util.ArrayList<>();
+        for (int i = 0; i < 10; i++) {
+            seq2.add(renderer.render(template, Map.of()));
+        }
+        assertThat(seq2).isEqualTo(seq1);
+    }
 }

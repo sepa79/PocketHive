@@ -129,7 +129,7 @@ export default function HivePage() {
 
   return (
     <div className="flex h-full min-h-0 overflow-hidden">
-      <div className="w-full lg:w-[360px] xl:w-[420px] border-r border-white/10 px-5 py-4 flex flex-col gap-4">
+      <div className="w-full md:w-[320px] lg:w-[360px] 2xl:w-[420px] border-r border-white/10 px-4 lg:px-5 py-4 flex flex-col gap-4">
         <div className="flex items-center gap-3">
           <input
             className="flex-1 rounded-lg bg-white/5 px-3 py-2 text-white placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-sky-300/50"
@@ -259,7 +259,7 @@ export default function HivePage() {
           onSwarmSelect={(id) => setActiveSwarm(id)}
         />
       </div>
-      <div className="hidden lg:flex w-[360px] xl:w-[420px] border-l border-white/10 bg-slate-950/40 backdrop-blur-sm">
+      <div className="hidden 2xl:flex w-[420px] border-l border-white/10 bg-slate-950/40 backdrop-blur-sm">
         {selected ? (
           <ComponentDetail component={selected} onClose={() => setSelected(null)} />
         ) : selectedSutId ? (

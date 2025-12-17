@@ -19,6 +19,7 @@ import io.pockethive.worker.sdk.config.WorkerInputType;
 import io.pockethive.worker.sdk.config.WorkerOutputType;
 import io.pockethive.worker.sdk.runtime.WorkIoBindings;
 import io.pockethive.worker.sdk.testing.ControlPlaneTestFixtures;
+import io.pockethive.worker.sdk.templating.TemplateRenderer;
 import io.pockethive.controlplane.spring.WorkerControlPlaneProperties;
 import java.time.Instant;
 import java.util.List;
@@ -36,6 +37,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.verify;
@@ -145,14 +147,54 @@ class WorkerControlPlaneRuntimeTest {
         Map<String, Object> rawConfig = runtime.workerRawConfig(definition.beanName());
         assertThat(rawConfig).containsEntry("ratePerSec", 12.5);
         ArgumentCaptor<ControlPlaneEmitter.ReadyContext> captor = ArgumentCaptor.forClass(ControlPlaneEmitter.ReadyContext.class);
-        verify(emitter).emitReady(captor.capture());
-        assertThat(captor.getValue().signal()).isEqualTo("config-update");
-    }
+	        verify(emitter).emitReady(captor.capture());
+	        assertThat(captor.getValue().signal()).isEqualTo("config-update");
+	    }
 
-    @Test
-    void configUpdateValidationFailureEmitsErrorContext() throws Exception {
-        String correlationId = UUID.randomUUID().toString();
-        String idempotencyKey = UUID.randomUUID().toString();
+	    @Test
+	    void configUpdateReseedClearsSeededSelectionsWithoutPersistingDirective() throws Exception {
+	        TemplateRenderer renderer = mock(TemplateRenderer.class);
+	        WorkerControlPlaneRuntime seededRuntime = new WorkerControlPlaneRuntime(
+	            controlPlane,
+	            stateStore,
+	            MAPPER,
+	            emitter,
+	            IDENTITY,
+	            PROPERTIES.getControlPlane(),
+	            renderer
+	        );
+
+	        String correlationId = UUID.randomUUID().toString();
+	        String idempotencyKey = UUID.randomUUID().toString();
+	        Map<String, Object> args = Map.of(
+	            "data", Map.of(
+	                "templating", Map.of("reseed", true)
+	            )
+	        );
+	        ControlSignal signal = ControlSignal.forInstance(
+	            "config-update",
+	            IDENTITY.swarmId(),
+	            IDENTITY.role(),
+	            IDENTITY.instanceId(),
+	            ORIGIN,
+	            correlationId,
+	            idempotencyKey,
+	            args
+	        );
+	        String payload = MAPPER.writeValueAsString(signal);
+	        String routingKey = ControlPlaneRouting.signal("config-update", IDENTITY.swarmId(), IDENTITY.role(), IDENTITY.instanceId());
+
+	        boolean handled = seededRuntime.handle(payload, routingKey);
+
+	        assertThat(handled).isTrue();
+	        verify(renderer).resetSeededSelections();
+	        assertThat(seededRuntime.workerRawConfig(definition.beanName())).doesNotContainKey("templating");
+	    }
+
+	    @Test
+	    void configUpdateValidationFailureEmitsErrorContext() throws Exception {
+	        String correlationId = UUID.randomUUID().toString();
+	        String idempotencyKey = UUID.randomUUID().toString();
         Map<String, Object> args = Map.of(
             "data", Map.of(
                 "enabled", true,

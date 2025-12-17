@@ -73,6 +73,52 @@ headers:
     {{ eval("#randInt(0,99) < 40 ? 'redis-balance' : (#randInt(0,99) < 80 ? 'redis-topup' : 'redis-auth')") }}
 ```
 
+## Proposed: weighted selection helpers (Pebble)
+
+This section proposes a shorthand for weighted random selection that avoids
+multiple independent `#randInt(...)` calls.
+
+### `pickWeighted(...)`
+
+Returns one of the provided values based on weights:
+
+```yaml
+headers:
+  x-ph-call-id: "{{ pickWeighted('redis-auth', 50, 'redis-balance', 30, 'redis-topup', 20) }}"
+```
+
+Rules:
+- Arguments are `(value, weight)` pairs (varargs).
+- `weight` is an integer `>= 0`; `0` disables an option without removing it (useful for `config-update` toggles).
+- If the argument count is odd, any weight is negative, or the sum of weights is `0`, rendering fails.
+- Selection is intentionally non-deterministic across worker restarts (no stable seed).
+
+### `pickWeightedSeeded(label, seed, ...)`
+
+Like `pickWeighted(...)`, but uses a deterministic pseudo-random sequence that repeats after restart:
+
+```yaml
+headers:
+  x-ph-call-id: "{{ pickWeightedSeeded('callId', 'demo-seed-001', 'redis-auth', 50, 'redis-balance', 30, 'redis-topup', 20) }}"
+```
+
+Rules:
+- `label` groups independent streams inside one worker (use different labels to avoid unrelated choices affecting each other).
+- `seed` is only applied on the first invocation for a given `label` in a given worker instance; subsequent calls use the existing stream.
+- To restart the sequence without restarting the container, send a `config-update` that triggers `reseed` (see below).
+
+#### `reseed` via `config-update` (proposal)
+
+To explicitly clear all seeded streams inside a worker instance:
+
+```json
+{
+  "templating": { "reseed": true }
+}
+```
+
+This resets all `pickWeightedSeeded(...)` streams in that worker so the next invocation re-applies its `seed`.
+
 ## JSON field access
 
 When `payload` is valid JSON, it's automatically parsed as a Map. Use direct property access:

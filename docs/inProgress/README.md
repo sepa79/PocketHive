@@ -15,7 +15,7 @@ Notable in‑progress plans:
 - `docs/sdk/worker-configurable-io-plan.md` – Configurable worker IO types and factories.
 - `docs/sdk/config-key-normalisation-plan.md` – Normalising config key shapes.
 - `docs/inProgress/scenario-bundle-runtime-plan.md` – Directory-based scenario bundles and per-swarm runtimes.
-- `docs/inProgress/scenario-sut-editor-plan.md` – Scenario + SUT editors, including visual swarm editing.
+- `docs/inProgress/scenario-sut-editor-plan.md` – Scenario + SUT editors (Scenario editor notes superseded by `docs/scenarios/SCENARIO_EDITOR_STATUS.md`).
 
 Each of those files carries a `Status: in progress` header so it’s clear
 they are live design documents rather than historical notes.

@@ -27,13 +27,9 @@ import {
 } from '../lib/scenarioManagerApi'
 import type { ScenarioSummary } from '../types/scenarios'
 import type { CapabilityConfigEntry, CapabilityManifest } from '../types/capabilities'
-import {
-  capabilityEntryUiString,
-  groupCapabilityConfigEntries,
-  matchesCapabilityWhen,
-} from '../lib/capabilities'
 import { useUIStore } from '../store'
 import { useCapabilities } from '../contexts/CapabilitiesContext'
+import { ConfigUpdatePatchModal } from '../components/ConfigUpdatePatchModal'
 
 type TimelineRow = {
   key: string
@@ -54,8 +50,6 @@ interface PlanTimelineLanesProps {
   rows: TimelineRow[]
   onTimeChange: (row: TimelineRowRef, seconds: number) => void
 }
-
-type ConfigFormValue = string | boolean
 
 type TemplateNode = Record<string, unknown> | null
 
@@ -454,6 +448,9 @@ function SwarmTemplateEditor({
   onOpenSchemaEditor,
 }: SwarmTemplateEditorProps) {
   const [selectedBeeIndex, setSelectedBeeIndex] = useState(0)
+  const [interceptorsEditorBeeIndex, setInterceptorsEditorBeeIndex] = useState<number | null>(null)
+  const [interceptorsEditorText, setInterceptorsEditorText] = useState('')
+  const [interceptorsEditorError, setInterceptorsEditorError] = useState<string | null>(null)
   const { getManifestForImage } = useCapabilities()
 
   const controllerImage =
@@ -585,6 +582,106 @@ function SwarmTemplateEditor({
     bees.length > 0 && selectedBeeIndex >= 0 && selectedBeeIndex < bees.length
       ? bees[selectedBeeIndex]
       : null
+
+  const readBeeInterceptors = useCallback(
+    (beeIndex: number): unknown => {
+      if (!template || typeof template !== 'object' || Array.isArray(template)) return undefined
+      const record = template as Record<string, unknown>
+      const beesRaw = Array.isArray(record['bees']) ? (record['bees'] as unknown[]) : []
+      const entry = beesRaw[beeIndex]
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return undefined
+      const bee = entry as Record<string, unknown>
+      const config = bee['config']
+      if (!isPlainObject(config)) return undefined
+      return (config as Record<string, unknown>)['interceptors']
+    },
+    [template],
+  )
+
+  const setBeeInterceptors = useCallback(
+    (beeIndex: number, interceptors: Record<string, unknown> | undefined) => {
+      onChange((current) => {
+        const base = isPlainObject(current) ? { ...(current as Record<string, unknown>) } : {}
+        const beesRaw = Array.isArray(base.bees) ? [...(base.bees as unknown[])] : []
+        if (beeIndex < 0 || beeIndex >= beesRaw.length) return base
+        const existingBee = isPlainObject(beesRaw[beeIndex])
+          ? { ...(beesRaw[beeIndex] as Record<string, unknown>) }
+          : {}
+        const configRaw = existingBee.config
+        const config = isPlainObject(configRaw) ? { ...(configRaw as Record<string, unknown>) } : {}
+        if (interceptors && Object.keys(interceptors).length > 0) {
+          config.interceptors = interceptors
+        } else {
+          delete config.interceptors
+        }
+        existingBee.config = Object.keys(config).length > 0 ? config : undefined
+        beesRaw[beeIndex] = existingBee
+        base.bees = beesRaw
+        return base
+      })
+    },
+    [onChange],
+  )
+
+  const interceptorsMeta = useMemo(() => {
+    if (!selectedBee) {
+      return { keys: [] as string[], count: 0 }
+    }
+    const raw = readBeeInterceptors(selectedBee.index)
+    if (!isPlainObject(raw)) {
+      return { keys: [] as string[], count: 0 }
+    }
+    const keys = Object.keys(raw).sort((a, b) => a.localeCompare(b))
+    return { keys, count: keys.length }
+  }, [readBeeInterceptors, selectedBee])
+
+  const openInterceptorsEditor = useCallback(
+    (beeIndex: number) => {
+      const raw = readBeeInterceptors(beeIndex)
+      const text = isPlainObject(raw) ? YAML.stringify(raw) : ''
+      setInterceptorsEditorBeeIndex(beeIndex)
+      setInterceptorsEditorText(text)
+      setInterceptorsEditorError(null)
+    },
+    [readBeeInterceptors],
+  )
+
+  const closeInterceptorsEditor = useCallback(() => {
+    setInterceptorsEditorBeeIndex(null)
+    setInterceptorsEditorText('')
+    setInterceptorsEditorError(null)
+  }, [])
+
+  const applyInterceptorsEditor = useCallback(() => {
+    if (interceptorsEditorBeeIndex === null) return
+    const text = interceptorsEditorText.trim()
+    if (!text) {
+      setBeeInterceptors(interceptorsEditorBeeIndex, undefined)
+      closeInterceptorsEditor()
+      return
+    }
+    try {
+      const parsed = YAML.parse(text)
+      if (parsed === null || parsed === undefined || parsed === '') {
+        setBeeInterceptors(interceptorsEditorBeeIndex, undefined)
+        closeInterceptorsEditor()
+        return
+      }
+      if (!isPlainObject(parsed)) {
+        setInterceptorsEditorError('Interceptors must be a YAML mapping (object).')
+        return
+      }
+      setBeeInterceptors(interceptorsEditorBeeIndex, parsed)
+      closeInterceptorsEditor()
+    } catch (err) {
+      setInterceptorsEditorError(err instanceof Error ? err.message : 'Invalid YAML.')
+    }
+  }, [
+    closeInterceptorsEditor,
+    interceptorsEditorBeeIndex,
+    interceptorsEditorText,
+    setBeeInterceptors,
+  ])
 
   const inputWarnings: string[] = []
   if (selectedBee) {
@@ -1018,14 +1115,57 @@ function SwarmTemplateEditor({
                         {name}
                       </option>
                     ))}
-                  </select>
-                )}
-              </div>
-              <div className="pt-2">
-                <div className="flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    className="rounded bg-white/10 px-2 py-1 text-[11px] text-white/80 hover:bg-white/20"
+	                  </select>
+	                )}
+	              </div>
+	              <div className="flex items-start gap-2">
+	                <span className="w-28 text-white/70 pt-1">Interceptors</span>
+	                <div className="flex-1 min-w-0">
+	                  {interceptorsMeta.count === 0 ? (
+	                    <div className="text-[11px] text-white/50">(none)</div>
+	                  ) : (
+	                    <div className="flex flex-wrap gap-1">
+	                      {interceptorsMeta.keys.slice(0, 3).map((key) => (
+	                        <span
+	                          key={key}
+	                          className="inline-flex items-center rounded-full border border-white/20 bg-black/60 px-1.5 py-0.5 text-[10px] text-white/80"
+	                        >
+	                          {key}
+	                        </span>
+	                      ))}
+	                      {interceptorsMeta.count > 3 && (
+	                        <span className="text-[10px] text-white/50 pt-0.5">
+	                          +{interceptorsMeta.count - 3} more
+	                        </span>
+	                      )}
+	                    </div>
+	                  )}
+	                </div>
+	                <div className="flex items-center gap-1">
+	                  <button
+	                    type="button"
+	                    className="px-2 py-1 rounded bg-white/10 text-[11px] text-white/80 hover:bg-white/20"
+	                    onClick={() => openInterceptorsEditor(selectedBee.index)}
+	                  >
+	                    Edit
+	                  </button>
+	                  {interceptorsMeta.count > 0 && (
+	                    <button
+	                      type="button"
+	                      className="px-2 py-1 rounded bg-white/5 text-[11px] text-white/70 hover:bg-white/15"
+	                      onClick={() => setBeeInterceptors(selectedBee.index, undefined)}
+	                      title="Remove interceptors"
+	                    >
+	                      Clear
+	                    </button>
+	                  )}
+	                </div>
+	              </div>
+	              <div className="pt-2">
+	                <div className="flex flex-wrap items-center gap-2">
+	                  <button
+	                    type="button"
+	                    className="rounded bg-white/10 px-2 py-1 text-[11px] text-white/80 hover:bg-white/20"
                     onClick={() => onOpenConfig(selectedBee.index)}
                   >
                     Edit config via capabilities
@@ -1046,10 +1186,10 @@ function SwarmTemplateEditor({
           </div>
           <div className="border border-dashed border-white/20 rounded bg-black/40 p-3 text-[11px] text-white/80">
           <div className="font-semibold text-white/80 mb-1">Flow preview</div>
-          {bees.length === 0 ? (
-            <div className="text-white/60">No bees defined yet.</div>
-          ) : (
-            <>
+	          {bees.length === 0 ? (
+	            <div className="text-white/60">No bees defined yet.</div>
+	          ) : (
+	            <>
               {queueOptions.length > 0 && (
                 <div className="mb-2 text-[10px] text-white/60">
                   Queues:{' '}
@@ -1121,12 +1261,71 @@ function SwarmTemplateEditor({
                 })}
               </div>
             </>
-          )}
-          </div>
-        </div>
-      </div>
-    </div>
-  )
+	          )}
+	          </div>
+	        </div>
+	      </div>
+
+	      {interceptorsEditorBeeIndex !== null && (
+	        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
+	          <div
+	            role="dialog"
+	            aria-modal="true"
+	            className="w-[96vw] max-w-3xl h-[80vh] rounded-lg bg-[#05070b] border border-white/20 p-4 text-sm text-white flex flex-col"
+	          >
+	            <div className="flex items-center justify-between gap-3 mb-2">
+	              <div className="min-w-0">
+	                <h3 className="text-xs font-semibold text-white/80 truncate">Edit interceptors</h3>
+	                <div className="text-[11px] text-white/50 font-mono truncate">
+	                  template.bees[{interceptorsEditorBeeIndex}].config.interceptors
+	                </div>
+	              </div>
+	              <button type="button" className="text-white/60 hover:text-white" onClick={closeInterceptorsEditor}>
+	                ×
+	              </button>
+	            </div>
+
+	            {interceptorsEditorError && (
+	              <div className="mb-2 text-[11px] text-red-400">{interceptorsEditorError}</div>
+	            )}
+
+	            <div className="flex-1 min-h-0 border border-white/15 rounded overflow-hidden">
+	              <Editor
+	                height="100%"
+	                defaultLanguage="yaml"
+	                theme="vs-dark"
+	                value={interceptorsEditorText}
+	                onChange={(value) => setInterceptorsEditorText(value ?? '')}
+	                options={{
+	                  fontSize: 11,
+	                  minimap: { enabled: false },
+	                  scrollBeyondLastLine: false,
+	                  wordWrap: 'on',
+	                }}
+	              />
+	            </div>
+
+	            <div className="mt-3 pt-2 border-t border-white/10 flex items-center justify-end gap-2">
+	              <button
+	                type="button"
+	                className="rounded px-2 py-1 text-[11px] text-white/70 hover:bg-white/10"
+	                onClick={closeInterceptorsEditor}
+	              >
+	                Cancel
+	              </button>
+	              <button
+	                type="button"
+	                className="rounded bg-sky-500/80 px-3 py-1 text-[11px] text-white hover:bg-sky-500"
+	                onClick={applyInterceptorsEditor}
+	              >
+	                Apply
+	              </button>
+	            </div>
+	          </div>
+	        </div>
+	      )}
+	    </div>
+	  )
 }
 
 export default function ScenariosPage() {
@@ -1177,27 +1376,15 @@ export default function ScenariosPage() {
     | { kind: 'bee'; beeIndex: number; stepIndex: number }
     | { kind: 'template-bee'; beeIndex: number; stepIndex: 0 }
 
-  const [configModalTarget, setConfigModalTarget] = useState<ConfigTarget | null>(null)
-  const [configModalManifest, setConfigModalManifest] = useState<CapabilityManifest | null>(null)
-  const [configModalEntries, setConfigModalEntries] = useState<CapabilityConfigEntry[]>([])
-  const [configModalForm, setConfigModalForm] = useState<Record<string, ConfigFormValue>>({})
-  const [configModalError, setConfigModalError] = useState<string | null>(null)
-  const [configModalBaseConfig, setConfigModalBaseConfig] = useState<Record<string, unknown> | undefined>(undefined)
-  const [configModalEnabled, setConfigModalEnabled] = useState<Record<string, boolean>>({})
-  const [configModalActiveGroup, setConfigModalActiveGroup] = useState<string>('General')
-  const [configModalSearch, setConfigModalSearch] = useState<string>('')
-  const [configModalOnlyOverridden, setConfigModalOnlyOverridden] = useState<boolean>(false)
-  const [configModalFullscreen, setConfigModalFullscreen] = useState<boolean>(false)
-
-  type ConfigValueEditorState = {
-    entry: CapabilityConfigEntry
-    label: string
-    value: string
-    language: 'json' | 'yaml' | 'plaintext'
+  type ConfigPatchModalState = {
+    target: ConfigTarget
+    imageLabel: string
+    entries: CapabilityConfigEntry[]
+    baseConfig: Record<string, unknown> | undefined
+    existingPatch: Record<string, unknown> | undefined
   }
 
-  const [configValueEditorState, setConfigValueEditorState] = useState<ConfigValueEditorState | null>(null)
-  const [configValueEditorError, setConfigValueEditorError] = useState<string | null>(null)
+  const [configPatchModalState, setConfigPatchModalState] = useState<ConfigPatchModalState | null>(null)
 
   type SchemaEditorState = {
     kind: 'generator' | 'http-template'
@@ -2444,162 +2631,6 @@ export default function ScenariosPage() {
     [],
   )
 
-  const configModalVisibleEntries = useMemo(() => {
-    const base =
-      configModalBaseConfig && isPlainObject(configModalBaseConfig) ? configModalBaseConfig : undefined
-    const resolveWhenValue = (path: string): unknown => {
-      if (path in configModalForm) {
-        return configModalForm[path]
-      }
-      return getValueForPath(base, path)
-    }
-    return configModalEntries.filter((entry) => matchesCapabilityWhen(entry.when, resolveWhenValue))
-  }, [configModalBaseConfig, configModalEntries, configModalForm, getValueForPath])
-
-  const configModalFilteredEntries = useMemo(() => {
-    const search = configModalSearch.trim().toLowerCase()
-    return configModalVisibleEntries.filter((entry) => {
-      if (configModalOnlyOverridden && configModalEnabled[entry.name] !== true) {
-        return false
-      }
-      if (!search) {
-        return true
-      }
-      const label = capabilityEntryUiString(entry, 'label') ?? ''
-      const group = capabilityEntryUiString(entry, 'group') ?? ''
-      return (
-        entry.name.toLowerCase().includes(search) ||
-        label.toLowerCase().includes(search) ||
-        group.toLowerCase().includes(search)
-      )
-    })
-  }, [configModalVisibleEntries, configModalSearch, configModalOnlyOverridden, configModalEnabled])
-
-  const configModalGroups = useMemo(
-    () => groupCapabilityConfigEntries(configModalFilteredEntries),
-    [configModalFilteredEntries],
-  )
-
-  useEffect(() => {
-    if (!configModalTarget) {
-      return
-    }
-    if (configModalGroups.length === 0) {
-      return
-    }
-    if (!configModalGroups.some((group) => group.id === configModalActiveGroup)) {
-      setConfigModalActiveGroup(configModalGroups[0]!.id)
-    }
-  }, [configModalTarget, configModalGroups, configModalActiveGroup])
-
-  const formatValueForInput = useCallback(
-    (entry: CapabilityConfigEntry, value: unknown): ConfigFormValue => {
-      const normalizedType = (entry.type || '').toLowerCase()
-      if (normalizedType === 'boolean' || normalizedType === 'bool') {
-        if (typeof value === 'boolean') return value
-        if (typeof value === 'number') return value !== 0
-        if (typeof value === 'string') {
-          const normalized = value.trim().toLowerCase()
-          if (normalized === 'true') return true
-          if (normalized === 'false') return false
-        }
-        return false
-      }
-      if (normalizedType === 'json') {
-        if (value === undefined || value === null) return ''
-        if (typeof value === 'string') {
-          const trimmed = value.trim()
-          if (!trimmed) return ''
-          try {
-            return JSON.stringify(JSON.parse(trimmed), null, 2)
-          } catch {
-            return value
-          }
-        }
-        try {
-          return JSON.stringify(value, null, 2)
-        } catch {
-          return ''
-        }
-      }
-      if (normalizedType === 'number' || normalizedType === 'int' || normalizedType === 'integer') {
-        if (typeof value === 'number') return Number.isFinite(value) ? String(value) : ''
-        if (typeof value === 'string') return value
-        return ''
-      }
-      if (value === null || value === undefined) return ''
-      if (typeof value === 'string') return value
-      if (typeof value === 'number' || typeof value === 'boolean') return String(value)
-      try {
-        return JSON.stringify(value, null, 2)
-      } catch {
-        return ''
-      }
-    },
-    [],
-  )
-
-  const convertConfigFormValue = useCallback(
-    (entry: CapabilityConfigEntry, rawValue: ConfigFormValue): { ok: true; apply: boolean; value: unknown } | { ok: false; message: string } => {
-      const normalizedType = (entry.type || '').toLowerCase()
-      if (normalizedType === 'boolean' || normalizedType === 'bool') {
-        return { ok: true, apply: true, value: rawValue === true }
-      }
-      if (normalizedType === 'json') {
-        const str = typeof rawValue === 'string' ? rawValue.trim() : ''
-        if (!str) {
-          return { ok: true, apply: false, value: undefined }
-        }
-        try {
-          return { ok: true, apply: true, value: JSON.parse(str) }
-        } catch {
-          return { ok: false, message: `Invalid JSON for ${entry.name}` }
-        }
-      }
-      if (normalizedType === 'number' || normalizedType === 'int' || normalizedType === 'integer') {
-        const str = typeof rawValue === 'string' ? rawValue.trim() : ''
-        if (!str) {
-          return { ok: true, apply: false, value: undefined }
-        }
-        const num = Number(str)
-        if (Number.isNaN(num)) {
-          return { ok: false, message: `${entry.name} must be a number` }
-        }
-        return { ok: true, apply: true, value: num }
-      }
-      if (typeof rawValue === 'string') {
-        const trimmed = rawValue.trim()
-        if (!trimmed) {
-          return { ok: true, apply: false, value: undefined }
-        }
-        return { ok: true, apply: true, value: rawValue }
-      }
-      return { ok: true, apply: false, value: undefined }
-    },
-    [],
-  )
-
-  const assignNestedValue = useCallback(
-    (target: Record<string, unknown>, path: string, value: unknown) => {
-      const segments = path.split('.').filter((segment) => segment.length > 0)
-      if (segments.length === 0) return
-      let cursor: Record<string, unknown> = target
-      for (let i = 0; i < segments.length - 1; i += 1) {
-        const key = segments[i]!
-        const next = cursor[key]
-        if (typeof next !== 'object' || next === null || Array.isArray(next)) {
-          const created: Record<string, unknown> = {}
-          cursor[key] = created
-          cursor = created
-        } else {
-          cursor = next as Record<string, unknown>
-        }
-      }
-      cursor[segments[segments.length - 1]!] = value
-    },
-    [],
-  )
-
   const inferIoTypeFromConfig = useCallback(
     (componentConfig: Record<string, unknown> | undefined): string | undefined => {
       if (!componentConfig) return undefined
@@ -2845,39 +2876,13 @@ export default function ScenariosPage() {
             : undefined
       const baseConfigForDisplay =
         baseConfig ?? templateComponentConfig ?? undefined
-      const form: Record<string, ConfigFormValue> = {}
-      const enabled: Record<string, boolean> = {}
-      entries.forEach((entry) => {
-        const overrideValue = stepConfig
-          ? getValueForPath(stepConfig, entry.name)
-          : undefined
-        const currentValue =
-          baseConfigForDisplay && overrideValue === undefined
-            ? getValueForPath(baseConfigForDisplay, entry.name)
-            : undefined
-        if (overrideValue !== undefined) {
-          enabled[entry.name] = true
-          form[entry.name] = formatValueForInput(entry, overrideValue)
-        } else {
-          enabled[entry.name] = false
-          const displaySource =
-            currentValue !== undefined ? currentValue : entry.default
-          form[entry.name] = formatValueForInput(entry, displaySource)
-        }
+      setConfigPatchModalState({
+        target,
+        imageLabel: image,
+        entries,
+        baseConfig: baseConfigForDisplay,
+        existingPatch: stepConfig,
       })
-      setConfigModalManifest(manifest)
-      setConfigModalEntries(entries)
-      setConfigModalForm(form)
-      setConfigModalError(null)
-      setConfigModalBaseConfig(baseConfigForDisplay)
-      setConfigModalEnabled(enabled)
-      setConfigModalActiveGroup('General')
-      setConfigModalSearch('')
-      setConfigModalOnlyOverridden(false)
-      setConfigModalFullscreen(false)
-      setConfigValueEditorState(null)
-      setConfigValueEditorError(null)
-      setConfigModalTarget(target)
     },
     [
       planDraft,
@@ -2888,129 +2893,69 @@ export default function ScenariosPage() {
       getManifestForImage,
       getStepAtTarget,
       buildConfigEntriesForComponent,
-      formatValueForInput,
       getValueForPath,
       setToast,
     ],
   )
 
-  const applyConfigModal = useCallback(() => {
-    if (!configModalTarget || !configModalEntries.length) {
-      setConfigModalTarget(null)
-      setConfigModalManifest(null)
-      setConfigModalEntries([])
-      setConfigModalForm({})
-      setConfigModalError(null)
-      return
-    }
-    const patch: Record<string, unknown> = {}
-    const base =
-      configModalBaseConfig && isPlainObject(configModalBaseConfig) ? configModalBaseConfig : undefined
-    const resolveWhenValue = (path: string): unknown => {
-      if (path in configModalForm) {
-        return configModalForm[path]
-      }
-      return getValueForPath(base, path)
-    }
-    for (const entry of configModalEntries) {
-      if (!matchesCapabilityWhen(entry.when, resolveWhenValue)) {
-        continue
-      }
-      const enabled = configModalEnabled[entry.name] === true
-      if (!enabled) {
-        continue
-      }
-      const raw = configModalForm[entry.name]
-      const result = convertConfigFormValue(entry, raw)
-      if (!result.ok) {
-        setConfigModalError(result.message)
+  const applyConfigPatchModal = useCallback(
+    (patch: Record<string, unknown> | undefined) => {
+      if (!configPatchModalState) {
+        setConfigPatchModalState(null)
         return
       }
-      if (result.apply) {
-        assignNestedValue(patch, entry.name, result.value)
-      }
-    }
-    const target = configModalTarget
-    const hasConfig = Object.keys(patch).length > 0
+      const target = configPatchModalState.target
+      const hasConfig = patch && Object.keys(patch).length > 0
 
-    if (target.kind === 'template-bee') {
-      applyTemplateUpdate((current) => {
-        const base =
-          current && typeof current === 'object' && !Array.isArray(current)
-            ? { ...(current as Record<string, unknown>) }
-            : {}
-        const beesRaw = Array.isArray((base as Record<string, unknown>).bees)
-          ? ([...(base as Record<string, unknown>).bees as unknown[]] as unknown[])
-          : ([] as unknown[])
-        if (target.beeIndex < 0 || target.beeIndex >= beesRaw.length) {
+      if (target.kind === 'template-bee') {
+        applyTemplateUpdate((current) => {
+          const base =
+            current && typeof current === 'object' && !Array.isArray(current)
+              ? { ...(current as Record<string, unknown>) }
+              : {}
+          const beesRaw = Array.isArray((base as Record<string, unknown>).bees)
+            ? ([...(base as Record<string, unknown>).bees as unknown[]] as unknown[])
+            : ([] as unknown[])
+          if (target.beeIndex < 0 || target.beeIndex >= beesRaw.length) {
+            return base
+          }
+          const existing =
+            beesRaw[target.beeIndex] &&
+            typeof beesRaw[target.beeIndex] === 'object' &&
+            !Array.isArray(beesRaw[target.beeIndex])
+              ? { ...(beesRaw[target.beeIndex] as Record<string, unknown>) }
+              : {}
+          existing.config = hasConfig ? patch : undefined
+          beesRaw[target.beeIndex] = existing
+          ;(base as Record<string, unknown>).bees = beesRaw
           return base
-        }
-        const existing =
-          beesRaw[target.beeIndex] &&
-          typeof beesRaw[target.beeIndex] === 'object' &&
-          !Array.isArray(beesRaw[target.beeIndex])
-            ? { ...(beesRaw[target.beeIndex] as Record<string, unknown>) }
-            : {}
-        existing.config = hasConfig ? patch : undefined
-        beesRaw[target.beeIndex] = existing
-        ;(base as Record<string, unknown>).bees = beesRaw
-        return base
-      })
-    } else {
-      applyPlanUpdate((current) => {
-        if (!current) return current
-        if (target.kind === 'swarm') {
-          const swarm = current.swarm.map((step, idx) =>
-            idx === target.stepIndex ? { ...step, config: hasConfig ? patch : undefined } : step,
-          )
-          return { ...current, swarm }
-        }
-        if (target.kind === 'bee' && target.beeIndex !== null) {
-          const bees = current.bees.map((bee, idx) => {
-            if (idx !== target.beeIndex) return bee
-            const steps = bee.steps.map((step, sIdx) =>
-              sIdx === target.stepIndex ? { ...step, config: hasConfig ? patch : undefined } : step,
+        })
+      } else {
+        applyPlanUpdate((current) => {
+          if (!current) return current
+          if (target.kind === 'swarm') {
+            const swarm = current.swarm.map((step, idx) =>
+              idx === target.stepIndex ? { ...step, config: hasConfig ? patch : undefined } : step,
             )
-            return { ...bee, steps }
-          })
-          return { ...current, bees }
-        }
-        return current
-      })
-    }
-    setConfigModalTarget(null)
-    setConfigModalManifest(null)
-    setConfigModalEntries([])
-    setConfigModalForm({})
-    setConfigModalError(null)
-    setConfigModalBaseConfig(undefined)
-    setConfigModalEnabled({})
-    setConfigModalActiveGroup('General')
-    setConfigModalSearch('')
-    setConfigModalOnlyOverridden(false)
-    setConfigModalFullscreen(false)
-    setConfigValueEditorState(null)
-    setConfigValueEditorError(null)
-  }, [
-    applyPlanUpdate,
-    assignNestedValue,
-    configModalBaseConfig,
-    configModalEntries,
-    configModalForm,
-    configModalTarget,
-    configModalEnabled,
-    convertConfigFormValue,
-    getValueForPath,
-  ])
-
-  const applyConfigValueEditor = useCallback(() => {
-    if (!configValueEditorState) return
-    const { entry, value } = configValueEditorState
-    setConfigModalEnabled((prev) => ({ ...prev, [entry.name]: true }))
-    setConfigModalForm((prev) => ({ ...prev, [entry.name]: value }))
-    setConfigValueEditorState(null)
-    setConfigValueEditorError(null)
-  }, [configValueEditorState])
+            return { ...current, swarm }
+          }
+          if (target.kind === 'bee' && target.beeIndex !== null) {
+            const bees = current.bees.map((bee, idx) => {
+              if (idx !== target.beeIndex) return bee
+              const steps = bee.steps.map((step, sIdx) =>
+                sIdx === target.stepIndex ? { ...step, config: hasConfig ? patch : undefined } : step,
+              )
+              return { ...bee, steps }
+            })
+            return { ...current, bees }
+          }
+          return current
+        })
+      }
+      setConfigPatchModalState(null)
+    },
+    [applyPlanUpdate, applyTemplateUpdate, configPatchModalState],
+  )
 
   const timelineRows = useMemo(() => {
     if (!planDraft) return []
@@ -3225,8 +3170,8 @@ export default function ScenariosPage() {
   }, [applyPlanUpdate])
 
   return (
-    <div className="flex h-full min-h-0 bg-[#05070b] text-white">
-      <div className="w-72 border-r border-white/10 px-4 py-4 space-y-3">
+    <div className="flex flex-col md:flex-row h-full min-h-0 bg-[#05070b] text-white">
+      <div className="w-full md:w-72 border-b md:border-b-0 md:border-r border-white/10 px-4 py-4 space-y-3">
         <div className="flex items-center justify-between">
           <h1 className="text-sm font-semibold text-white/90">Scenarios</h1>
           <button
@@ -3341,7 +3286,7 @@ export default function ScenariosPage() {
           )}
         </div>
       </div>
-      <div className="flex-1 px-6 py-4 overflow-y-auto">
+      <div className="flex-1 px-3 sm:px-6 py-3 sm:py-4 overflow-y-auto">
         {!selectedSummary && !loading && (
           <div className="text-sm text-white/70">
             Select a scenario on the left to view details.
@@ -4079,421 +4024,16 @@ export default function ScenariosPage() {
           </div>
         )}
       </div>
-	      {configModalTarget && configModalManifest && (
-	        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/70">
-	          <div
-	            role="dialog"
-	            aria-modal="true"
-            className={
-              configModalFullscreen
-                ? 'w-[96vw] h-[92vh] rounded-lg bg-[#05070b] border border-white/20 p-4 text-sm text-white flex flex-col'
-                : 'w-full max-w-3xl h-[85vh] rounded-lg bg-[#05070b] border border-white/20 p-4 text-sm text-white flex flex-col'
-            }
-          >
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="text-xs font-semibold text-white/80">
-                Edit config-update patch
-              </h3>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  className="rounded border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-white/80 hover:bg-white/10"
-                  onClick={() => setConfigModalFullscreen((prev) => !prev)}
-                >
-                  {configModalFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
-                </button>
-                <button
-                  type="button"
-                  className="text-white/60 hover:text-white"
-	                  onClick={() => {
-	                    setConfigModalTarget(null)
-	                    setConfigModalManifest(null)
-	                    setConfigModalEntries([])
-	                    setConfigModalForm({})
-	                    setConfigModalError(null)
-	                    setConfigModalBaseConfig(undefined)
-	                    setConfigModalEnabled({})
-	                    setConfigModalActiveGroup('General')
-	                    setConfigModalSearch('')
-	                    setConfigModalOnlyOverridden(false)
-	                    setConfigModalFullscreen(false)
-	                    setConfigValueEditorState(null)
-	                    setConfigValueEditorError(null)
-	                  }}
-	                >
-	                  ×
-	                </button>
-              </div>
-            </div>
-            <div className="mb-2 text-[11px] text-white/60">
-              Image:{' '}
-              <span className="font-mono text-white/80">
-                {configModalManifest.image?.name ?? '(unknown)'}
-                {configModalManifest.image?.tag ? `:${configModalManifest.image.tag}` : ''}
-              </span>
-            </div>
-            <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-              <input
-                className="min-w-[220px] flex-1 rounded border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-white/90 placeholder:text-white/40"
-                placeholder="Search (label / path / group)…"
-                value={configModalSearch}
-                onChange={(e) => setConfigModalSearch(e.target.value)}
-              />
-              <label className="inline-flex items-center gap-2 text-[11px] text-white/70">
-                <input
-                  type="checkbox"
-                  className="h-3 w-3 accent-blue-500"
-                  checked={configModalOnlyOverridden}
-                  onChange={(e) => setConfigModalOnlyOverridden(e.target.checked)}
-                />
-                Only overridden
-              </label>
-              {configModalSearch.trim() !== '' && (
-                <button
-                  type="button"
-                  className="rounded border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-white/70 hover:bg-white/10"
-                  onClick={() => setConfigModalSearch('')}
-                >
-                  Clear
-                </button>
-              )}
-            </div>
-            {configModalGroups.length > 1 && (
-              <div className="flex flex-wrap gap-2 mb-2">
-                {configModalGroups.map((group) => (
-                  <button
-                    key={group.id}
-                    type="button"
-                    className={
-                      group.id === configModalActiveGroup
-                        ? 'rounded border border-white/30 bg-white/10 px-2 py-1 text-[11px] text-white'
-                        : 'rounded border border-white/10 px-2 py-1 text-[11px] text-white/70 hover:bg-white/5'
-                    }
-                    onClick={() => setConfigModalActiveGroup(group.id)}
-                  >
-                    {group.label}
-                  </button>
-                ))}
-              </div>
-            )}
-            <div className="flex-1 overflow-y-auto space-y-2 mb-3">
-              {configModalGroups.length === 0 ? (
-                <div className="text-[11px] text-white/50">No matching fields</div>
-              ) : (
-                configModalGroups
-                  .filter((group) => configModalGroups.length === 1 || group.id === configModalActiveGroup)
-                  .map((group) => (
-                    <div key={group.id} className="space-y-2">
-                      {group.entries.map((entry) => {
-                        const unit =
-                          entry.ui && typeof entry.ui === 'object'
-                            ? (() => {
-                                const value = (entry.ui as Record<string, unknown>).unit
-                                return typeof value === 'string' && value.trim().length > 0
-                                  ? value.trim()
-                                  : null
-                              })()
-                            : null
-                        const labelSuffix = `${entry.type || 'string'}${unit ? ` • ${unit}` : ''}`
-                        const label = capabilityEntryUiString(entry, 'label') ?? entry.name
-                        const help = capabilityEntryUiString(entry, 'help')
-                        const showPath = label !== entry.name
-                        const normalizedType = (entry.type || '').toLowerCase()
-                        const options = Array.isArray(entry.options) ? entry.options : undefined
-                        const enabled = configModalEnabled[entry.name] === true
-                        const currentSource =
-                          configModalBaseConfig && isPlainObject(configModalBaseConfig)
-                            ? getValueForPath(
-                                configModalBaseConfig as Record<string, unknown>,
-                                entry.name,
-                              )
-                            : undefined
-                        const baseValue = currentSource !== undefined ? currentSource : entry.default
-                        const baseDisplay = formatValueForInput(entry, baseValue)
-                        const rawValue = configModalForm[entry.name]
-                        const effectiveValue = rawValue !== undefined ? rawValue : baseDisplay
-                        const isLargeEditable =
-                          entry.multiline || normalizedType === 'text' || normalizedType === 'json'
-
-                        const updateValue = (value: ConfigFormValue) => {
-                          setConfigModalEnabled((prev) => ({ ...prev, [entry.name]: true }))
-                          setConfigModalForm((prev) => ({ ...prev, [entry.name]: value }))
-                        }
-
-                        const openValueEditor = () => {
-                          const value = typeof effectiveValue === 'string' ? effectiveValue : ''
-                          const language: ConfigValueEditorState['language'] =
-                            normalizedType === 'json'
-                              ? 'json'
-                              : normalizedType === 'yaml'
-                                ? 'yaml'
-                                : 'plaintext'
-                          setConfigValueEditorState({ entry, label, value, language })
-                          setConfigValueEditorError(null)
-                        }
-
-                        let field: React.ReactElement
-                        if (options && options.length > 0) {
-                          const value = typeof effectiveValue === 'string' ? effectiveValue : ''
-                          field = (
-                            <select
-                              className={
-                                enabled
-                                  ? 'w-full rounded bg-white/10 px-2 py-1 text-white text-xs'
-                                  : 'w-full rounded bg-white/5 px-2 py-1 text-white/80 text-xs'
-                              }
-                              value={value}
-                              onChange={(event) => updateValue(event.target.value)}
-                            >
-                              {options.map((option, index) => {
-                                const label =
-                                  option === null || option === undefined
-                                    ? ''
-                                    : typeof option === 'string'
-                                      ? option
-                                      : JSON.stringify(option)
-                                return (
-                                  <option key={index} value={label}>
-                                    {label}
-                                  </option>
-                                )
-                              })}
-                            </select>
-                          )
-                        } else if (normalizedType === 'boolean' || normalizedType === 'bool') {
-                          const checked = effectiveValue === true
-                          field = (
-                            <label
-                              className={
-                                enabled
-                                  ? 'inline-flex items-center gap-2 text-xs text-white/80'
-                                  : 'inline-flex items-center gap-2 text-xs text-white/60'
-                              }
-                            >
-                              <input
-                                type="checkbox"
-                                className="h-4 w-4 accent-blue-500"
-                                checked={checked}
-                                onChange={(event) => updateValue(event.target.checked)}
-                              />
-                              <span>Enabled</span>
-                            </label>
-                          )
-                        } else if (isLargeEditable) {
-                          const value = typeof effectiveValue === 'string' ? effectiveValue : ''
-                          field = (
-                            <div className="space-y-1">
-                              <textarea
-                                className={
-                                  enabled
-                                    ? 'w-full rounded bg-white/10 px-2 py-1 text-white text-xs'
-                                    : 'w-full rounded bg-white/5 px-2 py-1 text-white/80 text-xs'
-                                }
-                                rows={normalizedType === 'json' ? 4 : 3}
-                                value={value}
-                                onChange={(event) => updateValue(event.target.value)}
-                              />
-                              <div className="flex justify-end">
-                                <button
-                                  type="button"
-                                  className="rounded border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-white/70 hover:bg-white/10"
-                                  onClick={openValueEditor}
-                                >
-                                  Open editor
-                                </button>
-                              </div>
-                            </div>
-                          )
-                        } else {
-                          const value = typeof effectiveValue === 'string' ? effectiveValue : ''
-                          field = (
-                            <input
-                              className={
-                                enabled
-                                  ? 'w-full rounded bg-white/10 px-2 py-1 text-white text-xs'
-                                  : 'w-full rounded bg-white/5 px-2 py-1 text-white/80 text-xs'
-                              }
-                              type={
-                                normalizedType === 'number' ||
-                                normalizedType === 'int' ||
-                                normalizedType === 'integer'
-                                  ? 'number'
-                                  : 'text'
-                              }
-                              value={value}
-                              onChange={(event) => updateValue(event.target.value)}
-                            />
-                          )
-                        }
-
-                        return (
-                          <div
-                            key={entry.name}
-                            className="rounded border border-white/10 bg-white/5 px-3 py-2"
-                          >
-                            <div className="grid grid-cols-1 gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,360px)] md:items-start">
-                              <div className="space-y-1 min-w-0">
-	                                <div className="flex items-baseline justify-between gap-3">
-	                                  <div className="min-w-0">
-	                                    <span className="text-white/85 font-medium">{label}</span>
-	                                  </div>
-	                                  <span className="text-[11px] text-white/45">{labelSuffix}</span>
-	                                </div>
-	                                {showPath && (
-	                                  <div className="text-[11px] text-white/40">{entry.name}</div>
-	                                )}
-	                                {help && <div className="text-[11px] text-white/50">{help}</div>}
-	                              </div>
-	                              <div className={enabled ? '' : 'opacity-80'}>
-	                                <div className="flex items-start gap-2">
-	                                  <div className="flex-1 min-w-0">{field}</div>
-	                                  <label
-	                                    className="inline-flex items-center"
-	                                    title="Override"
-	                                  >
-	                                    <input
-	                                      type="checkbox"
-	                                      className="h-3.5 w-3.5 accent-blue-500"
-	                                      aria-label="Override"
-	                                      checked={enabled}
-	                                      onChange={(event) => {
-	                                        const nextEnabled = event.target.checked
-	                                        setConfigModalEnabled((prev) => ({
-	                                          ...prev,
-	                                          [entry.name]: nextEnabled,
-	                                        }))
-	                                        if (!nextEnabled) {
-	                                          setConfigModalForm((prev) => ({
-	                                            ...prev,
-	                                            [entry.name]: baseDisplay,
-	                                          }))
-	                                        }
-	                                      }}
-	                                    />
-	                                  </label>
-	                                  <button
-	                                    type="button"
-	                                    title="Reset"
-	                                    className={
-	                                      enabled
-	                                        ? 'shrink-0 rounded border border-white/10 bg-white/5 px-1.5 py-0.5 text-[10px] text-white/70 hover:bg-white/10'
-	                                        : 'shrink-0 rounded border border-white/10 bg-white/5 px-1.5 py-0.5 text-[10px] text-white/70 opacity-0 pointer-events-none'
-	                                    }
-	                                    onClick={() => {
-	                                      setConfigModalEnabled((prev) => ({ ...prev, [entry.name]: false }))
-	                                      setConfigModalForm((prev) => ({
-	                                        ...prev,
-	                                        [entry.name]: baseDisplay,
-	                                      }))
-	                                    }}
-	                                  >
-	                                    Reset
-	                                  </button>
-	                                </div>
-	                              </div>
-	                            </div>
-	                          </div>
-	                        )
-                    })}
-                  </div>
-                ))
-              )}
-            </div>
-            {configModalError && (
-              <div className="mb-2 text-[11px] text-red-400">{configModalError}</div>
-            )}
-            <div className="mt-2 pt-2 border-t border-white/10 flex items-center justify-end gap-2">
-              <button
-                type="button"
-                className="rounded px-2 py-1 text-[11px] text-white/70 hover:bg-white/10"
-	                onClick={() => {
-	                  setConfigModalTarget(null)
-	                  setConfigModalManifest(null)
-	                  setConfigModalEntries([])
-	                  setConfigModalForm({})
-	                  setConfigModalError(null)
-	                  setConfigModalBaseConfig(undefined)
-	                  setConfigModalEnabled({})
-	                  setConfigModalActiveGroup('General')
-	                  setConfigModalSearch('')
-	                  setConfigModalOnlyOverridden(false)
-	                  setConfigModalFullscreen(false)
-	                  setConfigValueEditorState(null)
-	                  setConfigValueEditorError(null)
-	                }}
-	              >
-	                Cancel
-	              </button>
-              <button
-                type="button"
-                className="rounded bg-sky-500/80 px-3 py-1 text-[11px] text-white hover:bg-sky-500"
-                onClick={() => applyConfigModal()}
-              >
-                Apply
-              </button>
-            </div>
-	          </div>
-	        </div>
-	      )}
-	      {configValueEditorState && (
-	        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
-	          <div
-	            role="dialog"
-	            aria-modal="true"
-	            className="w-[96vw] max-w-5xl h-[85vh] rounded-lg bg-[#05070b] border border-white/20 p-4 text-sm text-white flex flex-col"
-	          >
-	            <div className="flex items-center justify-between gap-3 mb-2">
-	              <div className="min-w-0">
-	                <h3 className="text-xs font-semibold text-white/80 truncate">
-	                  {configValueEditorState.label}
-	                </h3>
-	                <div className="text-[11px] text-white/50 font-mono truncate">
-	                  {configValueEditorState.entry.name}
-	                </div>
-	              </div>
-	              <div className="flex items-center gap-2">
-	                <button
-	                  type="button"
-	                  className="rounded border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-white/80 hover:bg-white/10"
-	                  onClick={() => {
-	                    setConfigValueEditorState(null)
-	                    setConfigValueEditorError(null)
-	                  }}
-	                >
-	                  Cancel
-	                </button>
-	                <button
-	                  type="button"
-	                  className="rounded bg-sky-500/80 px-3 py-1 text-[11px] text-white hover:bg-sky-500"
-	                  onClick={() => applyConfigValueEditor()}
-	                >
-	                  Apply
-	                </button>
-	              </div>
-	            </div>
-	            {configValueEditorError && (
-	              <div className="mb-2 text-[11px] text-red-400">{configValueEditorError}</div>
-	            )}
-	            <div className="flex-1 min-h-0 border border-white/15 rounded overflow-hidden">
-	              <Editor
-	                height="100%"
-	                defaultLanguage={configValueEditorState.language}
-	                theme="vs-dark"
-	                value={configValueEditorState.value}
-	                onChange={(value) => {
-	                  const text = value ?? ''
-	                  setConfigValueEditorState((prev) => (prev ? { ...prev, value: text } : prev))
-	                }}
-	                options={{
-	                  fontSize: 11,
-	                  minimap: { enabled: false },
-	                  scrollBeyondLastLine: false,
-	                  wordWrap: 'on',
-	                }}
-	              />
-	            </div>
-	          </div>
-	        </div>
+	      {configPatchModalState && (
+	        <ConfigUpdatePatchModal
+	          open
+	          imageLabel={configPatchModalState.imageLabel}
+	          entries={configPatchModalState.entries}
+	          baseConfig={configPatchModalState.baseConfig}
+	          existingPatch={configPatchModalState.existingPatch}
+	          onClose={() => setConfigPatchModalState(null)}
+	          onApply={(patch) => applyConfigPatchModal(patch)}
+	        />
 	      )}
 	      {schemaAttachState && (
 	        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/70">

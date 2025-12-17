@@ -5,7 +5,7 @@
       border-bottom: 1px solid rgba(255,255,255,0.08);
       backdrop-filter: blur(6px);
       }
-      header img.logo { height: 96px; width:auto; display:block; }
+      header img.logo { height: 52px; width:auto; display:block; }
       .header-right{ margin-left:auto; display:flex; align-items:center; gap:10px; }
       .service-links{ display:flex; align-items:center; gap:6px; }
       .service-links a{ display:inline-flex; }
@@ -83,13 +83,14 @@
       color: #fff;
       font-size: 18px;
     }
-    .nav-tabs{ display:flex; gap:8px; align-items:center; margin-left:14px; }
+    .nav-tabs{ display:flex; gap:8px; align-items:center; margin-left:14px; min-width: 0; }
     .tab-btn{
       appearance:none; border:none; cursor:pointer; color:#0ff; font-weight:700;
       padding:8px 12px; border-radius:12px; text-transform:uppercase; letter-spacing:0.04em;
       background: radial-gradient(120% 120% at 10% 10%, rgba(51,225,255,0.25), rgba(51,225,255,0.06) 40%, rgba(255,255,255,0.05) 70%, rgba(0,0,0,0.0) 100%);
       border:1px solid rgba(51,225,255,0.35);
       box-shadow: 0 0 20px rgba(51,225,255,0.15) inset, 0 0 16px rgba(51,225,255,0.18);
+      white-space: nowrap;
     }
     .tab-btn:hover{ box-shadow: 0 0 26px rgba(51,225,255,0.22) inset, 0 0 20px rgba(51,225,255,0.28); background: radial-gradient(120% 120% at 10% 10%, rgba(51,225,255,0.35), rgba(51,225,255,0.1) 50%, rgba(255,255,255,0.07) 75%, rgba(0,0,0,0.0) 100%); }
     .tab-active{ background:#33E1FF !important; color:#111 !important; font-weight:800 !important; border-color:transparent !important; }
@@ -107,6 +108,17 @@
     .controls > button:hover, #topic-sub:hover, #topic-unsub:hover, #hive-clear:hover{ box-shadow: 0 0 26px rgba(51,225,255,0.22) inset, 0 0 20px rgba(51,225,255,0.28); background: radial-gradient(120% 120% at 10% 10%, rgba(51,225,255,0.35), rgba(51,225,255,0.1) 50%, rgba(255,255,255,0.07) 75%, rgba(0,0,0,0.0) 100%); }
     .controls > button:active, #topic-sub:active, #topic-unsub:active, #hive-clear:active{ transform: translateY(1px); filter: brightness(1.1); }
     .tab-icon{ width:16px; height:16px; margin-right:6px; vertical-align:middle; }
+
+    @media (max-width: 1100px){
+      header img.logo { height: 44px; }
+      .nav-tabs{ gap:6px; margin-left: 10px; }
+      .tab-btn{ padding:6px 8px; border-radius:10px; letter-spacing:0.03em; }
+      .service-links img{ width:20px; height:20px; }
+    }
+
+    @media (min-width: 1800px){
+      header img.logo { height: 64px; }
+    }
     /* Hive component info styling */
     .info{
       margin-top:8px;

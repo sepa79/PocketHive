@@ -17,7 +17,7 @@ template:
           message:
             bodyType: SIMPLE
             body: |
-              {% set cust = eval("#randInt(0,1)==0 ? 'custA' : 'custB'") %}
+              {% set cust = pickWeighted('custA', 1, 'custB', 1) %}
               {% set card = eval("#randLong('4000000000000000','4999999999999999')") %}
               {"customerCode":"{{ cust }}",
               "accountNumber":"{{ eval('#randInt(10000000,99999999)') }}",
@@ -55,8 +55,7 @@ template:
             body: "{{ payload }}"
             headers:
               content-type: application/json
-              x-ph-call-id: >
-                {{ eval("#randInt(0,99) < 50 ? 'redis-auth' : (#randInt(0,99) < 80 ? 'redis-balance' : 'redis-topup')") }}
+              x-ph-call-id: "{{ pickWeighted('redis-auth', 50, 'redis-balance', 30, 'redis-topup', 20) }}"
       work:
         out: http-build
 
@@ -76,8 +75,7 @@ template:
             body: "{{ payload }}"
             headers:
               content-type: application/json
-              x-ph-call-id: >
-                {{ eval("#randInt(0,99) < 40 ? 'redis-balance' : (#randInt(0,99) < 80 ? 'redis-topup' : 'redis-auth')") }}
+              x-ph-call-id: "{{ pickWeighted('redis-balance', 40, 'redis-topup', 40, 'redis-auth', 20) }}"
       work:
         out: http-build
 
@@ -103,4 +101,3 @@ template:
       image: postprocessor:latest
       work:
         in: post
-

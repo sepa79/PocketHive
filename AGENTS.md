@@ -24,6 +24,8 @@ This file is a **navigation and guardrails** page for both human and AI contribu
   - AI guidelines: `docs/ai/AI_GUIDELINES.md`
   - Review checklist (PR gate): `docs/ai/REVIEW_CHECKLIST.md`
   - Task template for agent work: `docs/ai/TASK_TEMPLATE.md`
+  - UI/React guidelines: `docs/ai/UI_REACT_GUIDELINES.md`
+  - Java guidelines: `docs/ai/JAVA_GUIDELINES.md`
 
 > If anything here conflicts with those files, **the linked docs win**.
 

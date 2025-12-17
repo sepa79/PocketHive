@@ -197,6 +197,18 @@ services:
       retries: 6
       start_period: 5s
 
+  ui-v2:
+    image: ${DOCKER_REGISTRY:-}ui-v2:${POCKETHIVE_VERSION:-latest}
+    depends_on:
+      ui:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8089/healthz | grep -q ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 5s
+
   log-aggregator:
     image: ${DOCKER_REGISTRY:-}log-aggregator:${POCKETHIVE_VERSION:-latest}
     environment:

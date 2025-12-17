@@ -28,6 +28,7 @@ describe('computePerfGraph', () => {
         id: 'in',
         kind: 'in',
         config: makeConfig({
+          inputMode: 'concurrency',
           clientConcurrency: 100,
           internalLatencyMs: 50,
           maxConcurrentIn: 20,
