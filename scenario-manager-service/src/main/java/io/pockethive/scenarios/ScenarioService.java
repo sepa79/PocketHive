@@ -26,6 +26,7 @@ public class ScenarioService {
     public enum Format { JSON, YAML }
 
     private static final Logger logger = LoggerFactory.getLogger(ScenarioService.class);
+    private static final String SCENARIOS_RUNTIME_ROOT = "scenarios-runtime";
 
     private final Path storageDir;
     private final Path testStorageDir;
@@ -40,15 +41,13 @@ public class ScenarioService {
     @Autowired
     public ScenarioService(@Value("${scenarios.dir:scenarios}") String dir,
                            @Value("${scenarios.show-test:true}") boolean showTestScenarios,
-                           @Value("${pockethive.scenarios.runtime-root}") String runtimeRoot,
                            CapabilityCatalogueService capabilities) throws IOException {
-        this(Paths.get(dir), Paths.get(runtimeRoot), showTestScenarios, capabilities);
+        this(Paths.get(dir), Paths.get(SCENARIOS_RUNTIME_ROOT), showTestScenarios, capabilities);
     }
 
     ScenarioService(String dir,
-                    String runtimeRoot,
                     CapabilityCatalogueService capabilities) throws IOException {
-        this(Paths.get(dir), Paths.get(runtimeRoot), true, capabilities);
+        this(Paths.get(dir), Paths.get(SCENARIOS_RUNTIME_ROOT), true, capabilities);
     }
 
     private ScenarioService(Path dir,

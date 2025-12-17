@@ -1,5 +1,5 @@
 schemaVersion: "1.0"
-capabilitiesVersion: "1.1"
+capabilitiesVersion: "1.2"
 role: swarm-controller
 image:
   name: swarm-controller
@@ -13,56 +13,110 @@ config:
   - name: trafficPolicy.bufferGuard.enabled
     type: boolean
     default: false
+    ui:
+      label: Buffer guard enabled
+      group: Buffer guard
   - name: trafficPolicy.bufferGuard.queueAlias
     type: string
     default: ""
+    ui:
+      label: Queue alias
+      group: Buffer guard
   - name: trafficPolicy.bufferGuard.targetDepth
     type: number
     default: 0
+    ui:
+      label: Target depth
+      group: Buffer guard
   - name: trafficPolicy.bufferGuard.minDepth
     type: number
     default: 0
+    ui:
+      label: Min depth
+      group: Buffer guard
   - name: trafficPolicy.bufferGuard.maxDepth
     type: number
     default: 0
+    ui:
+      label: Max depth
+      group: Buffer guard
   - name: trafficPolicy.bufferGuard.samplePeriod
     type: string
     default: ""
+    ui:
+      label: Sample period
+      group: Buffer guard
   - name: trafficPolicy.bufferGuard.movingAverageWindow
     type: number
     default: 0
+    ui:
+      label: Moving average window
+      group: Buffer guard
   - name: trafficPolicy.bufferGuard.adjust.maxIncreasePct
     type: number
     default: 0
+    ui:
+      label: Max increase
+      group: Adjust
   - name: trafficPolicy.bufferGuard.adjust.maxDecreasePct
     type: number
     default: 0
+    ui:
+      label: Max decrease
+      group: Adjust
   - name: trafficPolicy.bufferGuard.adjust.minRatePerSec
     type: number
     default: 0
+    ui:
+      label: Min rate
+      group: Adjust
   - name: trafficPolicy.bufferGuard.adjust.maxRatePerSec
     type: number
     default: 0
+    ui:
+      label: Max rate
+      group: Adjust
   - name: trafficPolicy.bufferGuard.prefill.enabled
     type: boolean
     default: false
+    ui:
+      label: Prefill enabled
+      group: Prefill
   - name: trafficPolicy.bufferGuard.prefill.lookahead
     type: string
     default: ""
+    ui:
+      label: Lookahead
+      group: Prefill
   - name: trafficPolicy.bufferGuard.prefill.liftPct
     type: number
     default: 0
+    ui:
+      label: Lift
+      group: Prefill
   - name: trafficPolicy.bufferGuard.backpressure.queueAlias
     type: string
     default: ""
+    ui:
+      label: Queue alias
+      group: Backpressure
   - name: trafficPolicy.bufferGuard.backpressure.highDepth
     type: number
     default: 0
+    ui:
+      label: High depth
+      group: Backpressure
   - name: trafficPolicy.bufferGuard.backpressure.recoveryDepth
     type: number
     default: 0
+    ui:
+      label: Recovery depth
+      group: Backpressure
   - name: trafficPolicy.bufferGuard.backpressure.moderatorReductionPct
     type: number
     default: 0
+    ui:
+      label: Moderator reduction
+      group: Backpressure
 actions: []
 panels: []

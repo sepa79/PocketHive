@@ -3,9 +3,16 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
-Timestamp: 2025-12-16T00:00:00Z
+Timestamp: 2025-12-17T00:00:00Z
 
 - No unreleased changes yet.
+
+## [0.14.16] - 2025-12-17
+Timestamp: 2025-12-17T00:00:00Z
+
+- Scenario authoring (UI): improved config-update capability editing with group tabs, search + “only overridden” filtering, stable modal sizing, auto-override on edit, and a full-screen Monaco editor for large text/JSON fields.
+- Capabilities rendering: added support for `when`-gated fields plus UI metadata (`ui.group`, `ui.label`, `ui.help`), and hid IO transport selectors in runtime views while keeping tunable IO parameters.
+- Scenarios runtime root: hardcoded container destination to `/app/scenarios-runtime` and treated `POCKETHIVE_SCENARIOS_RUNTIME_ROOT` as the host bind-mount source when starting containers.
 
 ## [0.14.15] - 2025-12-16
 Timestamp: 2025-12-16T00:00:00Z

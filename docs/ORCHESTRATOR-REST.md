@@ -53,7 +53,7 @@ Returns the swarm-level journal entries as a JSON array (chronological order).
 Notes:
 - This is a non-paginated “timeline” endpoint intended for UI/debug use.
 - When `pockethive.journal.sink=postgres`, entries are read from Postgres.
-- When `pockethive.journal.sink=file`, entries are read from `${pockethive.scenarios.runtime-root}/{swarmId}/{runId}/journal.ndjson`.
+- When `pockethive.journal.sink=file`, entries are read from `/app/scenarios-runtime/{swarmId}/{runId}/journal.ndjson` (this path is expected to be bind-mounted from the host runtime root).
 
 **Response (200)**
 ```json

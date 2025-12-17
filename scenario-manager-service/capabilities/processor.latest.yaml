@@ -1,5 +1,5 @@
 schemaVersion: "1.0"
-capabilitiesVersion: "1.1"
+capabilitiesVersion: "1.4"
 role: processor
 image:
   name: processor
@@ -9,6 +9,7 @@ ui:
   color: "#a855f7"
   shape: "diamond"
   abbreviation: "PR"
+  hideIo: true
   # HTTP processor configuration model:
   # - mode:
   #     - THREAD_COUNT: cap concurrency per instance to `threadCount` in-flight HTTP calls.
@@ -44,33 +45,59 @@ config:
     options:
       - "RABBITMQ"
       - "REDIS_DATASET"
+    ui:
+      label: Input type
+      group: IO
   - name: outputs.type
     type: string
     default: "RABBITMQ"
     options:
       - "RABBITMQ"
       - "NOOP"
+    ui:
+      label: Output type
+      group: IO
   - name: enabled
     type: boolean
     default: false
+    ui:
+      label: Enabled
+      group: General
   - name: baseUrl
     type: string
     default: ""
+    ui:
+      label: Base URL
+      group: HTTP
   - name: mode
     type: string
     default: "THREAD_COUNT"
     options:
       - "THREAD_COUNT"
       - "RATE_PER_SEC"
+    ui:
+      label: Mode
+      group: HTTP
   - name: threadCount
     type: int
     default: 1
+    ui:
+      label: Thread count
+      group: HTTP
   - name: ratePerSec
-    type: double
+    type: number
     default: 1.0
+    when:
+      mode: "RATE_PER_SEC"
+    ui:
+      label: Rate
+      group: HTTP
   - name: keepAlive
     type: boolean
     default: true
+    ui:
+      label: Keep-alive
+      group: HTTP
   - name: connectionReuse
     type: string
     default: "GLOBAL"
@@ -78,5 +105,8 @@ config:
       - "GLOBAL"
       - "PER_THREAD"
       - "NONE"
+    ui:
+      label: Connection reuse
+      group: HTTP
 actions: []
 panels: []

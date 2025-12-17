@@ -33,13 +33,11 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/swarms")
 public class SwarmJournalController {
     private static final Logger log = LoggerFactory.getLogger(SwarmJournalController.class);
+    private static final String SCENARIOS_RUNTIME_ROOT = "scenarios-runtime";
 
     private final ObjectMapper json;
     private final JdbcTemplate jdbc;
     private final SwarmRegistry registry;
-
-    @Value("${pockethive.scenarios.runtime-root:}")
-    private String scenariosRuntimeRoot;
 
     @Value("${pockethive.journal.sink:postgres}")
     private String journalSink;
@@ -339,11 +337,7 @@ public class SwarmJournalController {
         if ("postgres".equalsIgnoreCase(journalSink)) {
             return readJournalEntriesFromPostgres(swarmId, requestedRunId);
         }
-        String rootText = scenariosRuntimeRoot;
-        if (rootText == null || rootText.isBlank()) {
-            return null;
-        }
-        Path root = Paths.get(rootText).toAbsolutePath().normalize();
+        Path root = Paths.get(SCENARIOS_RUNTIME_ROOT).toAbsolutePath().normalize();
         String cleanedId = sanitizeSegment(swarmId);
         if (cleanedId == null) {
             return null;

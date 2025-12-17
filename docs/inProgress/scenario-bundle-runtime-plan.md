@@ -69,11 +69,13 @@ Notes:
 
 Introduce a shared **runtime root** on the host:
 
-- Config key (Scenario Manager + Swarm Controller):  
-  `pockethive.scenarios.runtime-root` (e.g. `/opt/pockethive/scenarios-runtime`).
+- Host path (provided via env):  
+  `POCKETHIVE_SCENARIOS_RUNTIME_ROOT` (e.g. `/opt/pockethive/scenarios-runtime`).
+- Container destination (fixed):  
+  `/app/scenarios-runtime`.
 - Mounted into:
-  - Scenario Manager (read/write).  
-  - Swarm Controller (read).  
+  - Scenario Manager (read/write at `/app/scenarios-runtime`).  
+  - Swarm Controller (read at `/app/scenarios-runtime`).  
   - Bees via `config.docker.volumes` when a scenario demands it.
 
 When starting a swarm from a scenario:
@@ -89,8 +91,7 @@ When starting a swarm from a scenario:
 ## 4. Scenario Manager changes
 
 - [x] **Runtime root configuration**
-  - [x] Add `pockethive.scenarios.runtime-root` property and validate that it is
-        an absolute, writable directory at startup (fail fast if misconfigured).
+  - [x] Runtime root destination is hardcoded to `/app/scenarios-runtime`; the host bind-mount source is provided via `POCKETHIVE_SCENARIOS_RUNTIME_ROOT`.
 
 - [x] **Bundle location & registration**
   - [x] Define where bundles live on disk (`scenarios/bundles/**` at repo root;

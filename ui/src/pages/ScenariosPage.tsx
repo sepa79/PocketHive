@@ -27,6 +27,11 @@ import {
 } from '../lib/scenarioManagerApi'
 import type { ScenarioSummary } from '../types/scenarios'
 import type { CapabilityConfigEntry, CapabilityManifest } from '../types/capabilities'
+import {
+  capabilityEntryUiString,
+  groupCapabilityConfigEntries,
+  matchesCapabilityWhen,
+} from '../lib/capabilities'
 import { useUIStore } from '../store'
 import { useCapabilities } from '../contexts/CapabilitiesContext'
 
@@ -1179,6 +1184,20 @@ export default function ScenariosPage() {
   const [configModalError, setConfigModalError] = useState<string | null>(null)
   const [configModalBaseConfig, setConfigModalBaseConfig] = useState<Record<string, unknown> | undefined>(undefined)
   const [configModalEnabled, setConfigModalEnabled] = useState<Record<string, boolean>>({})
+  const [configModalActiveGroup, setConfigModalActiveGroup] = useState<string>('General')
+  const [configModalSearch, setConfigModalSearch] = useState<string>('')
+  const [configModalOnlyOverridden, setConfigModalOnlyOverridden] = useState<boolean>(false)
+  const [configModalFullscreen, setConfigModalFullscreen] = useState<boolean>(false)
+
+  type ConfigValueEditorState = {
+    entry: CapabilityConfigEntry
+    label: string
+    value: string
+    language: 'json' | 'yaml' | 'plaintext'
+  }
+
+  const [configValueEditorState, setConfigValueEditorState] = useState<ConfigValueEditorState | null>(null)
+  const [configValueEditorError, setConfigValueEditorError] = useState<string | null>(null)
 
   type SchemaEditorState = {
     kind: 'generator' | 'http-template'
@@ -2425,6 +2444,54 @@ export default function ScenariosPage() {
     [],
   )
 
+  const configModalVisibleEntries = useMemo(() => {
+    const base =
+      configModalBaseConfig && isPlainObject(configModalBaseConfig) ? configModalBaseConfig : undefined
+    const resolveWhenValue = (path: string): unknown => {
+      if (path in configModalForm) {
+        return configModalForm[path]
+      }
+      return getValueForPath(base, path)
+    }
+    return configModalEntries.filter((entry) => matchesCapabilityWhen(entry.when, resolveWhenValue))
+  }, [configModalBaseConfig, configModalEntries, configModalForm, getValueForPath])
+
+  const configModalFilteredEntries = useMemo(() => {
+    const search = configModalSearch.trim().toLowerCase()
+    return configModalVisibleEntries.filter((entry) => {
+      if (configModalOnlyOverridden && configModalEnabled[entry.name] !== true) {
+        return false
+      }
+      if (!search) {
+        return true
+      }
+      const label = capabilityEntryUiString(entry, 'label') ?? ''
+      const group = capabilityEntryUiString(entry, 'group') ?? ''
+      return (
+        entry.name.toLowerCase().includes(search) ||
+        label.toLowerCase().includes(search) ||
+        group.toLowerCase().includes(search)
+      )
+    })
+  }, [configModalVisibleEntries, configModalSearch, configModalOnlyOverridden, configModalEnabled])
+
+  const configModalGroups = useMemo(
+    () => groupCapabilityConfigEntries(configModalFilteredEntries),
+    [configModalFilteredEntries],
+  )
+
+  useEffect(() => {
+    if (!configModalTarget) {
+      return
+    }
+    if (configModalGroups.length === 0) {
+      return
+    }
+    if (!configModalGroups.some((group) => group.id === configModalActiveGroup)) {
+      setConfigModalActiveGroup(configModalGroups[0]!.id)
+    }
+  }, [configModalTarget, configModalGroups, configModalActiveGroup])
+
   const formatValueForInput = useCallback(
     (entry: CapabilityConfigEntry, value: unknown): ConfigFormValue => {
       const normalizedType = (entry.type || '').toLowerCase()
@@ -2541,6 +2608,12 @@ export default function ScenariosPage() {
         return undefined
       }
       const inputs = inputsRaw as Record<string, unknown>
+      const inputTypeRaw = inputs['type']
+      const inputType =
+        typeof inputTypeRaw === 'string' ? inputTypeRaw.trim().toUpperCase() : undefined
+      if (inputType === 'SCHEDULER' || inputType === 'REDIS_DATASET') {
+        return inputType
+      }
       const hasScheduler =
         inputs.scheduler && typeof inputs.scheduler === 'object' && !Array.isArray(inputs.scheduler)
       const hasRedis =
@@ -2798,6 +2871,12 @@ export default function ScenariosPage() {
       setConfigModalError(null)
       setConfigModalBaseConfig(baseConfigForDisplay)
       setConfigModalEnabled(enabled)
+      setConfigModalActiveGroup('General')
+      setConfigModalSearch('')
+      setConfigModalOnlyOverridden(false)
+      setConfigModalFullscreen(false)
+      setConfigValueEditorState(null)
+      setConfigValueEditorError(null)
       setConfigModalTarget(target)
     },
     [
@@ -2825,7 +2904,18 @@ export default function ScenariosPage() {
       return
     }
     const patch: Record<string, unknown> = {}
+    const base =
+      configModalBaseConfig && isPlainObject(configModalBaseConfig) ? configModalBaseConfig : undefined
+    const resolveWhenValue = (path: string): unknown => {
+      if (path in configModalForm) {
+        return configModalForm[path]
+      }
+      return getValueForPath(base, path)
+    }
     for (const entry of configModalEntries) {
+      if (!matchesCapabilityWhen(entry.when, resolveWhenValue)) {
+        continue
+      }
       const enabled = configModalEnabled[entry.name] === true
       if (!enabled) {
         continue
@@ -2895,15 +2985,32 @@ export default function ScenariosPage() {
     setConfigModalError(null)
     setConfigModalBaseConfig(undefined)
     setConfigModalEnabled({})
+    setConfigModalActiveGroup('General')
+    setConfigModalSearch('')
+    setConfigModalOnlyOverridden(false)
+    setConfigModalFullscreen(false)
+    setConfigValueEditorState(null)
+    setConfigValueEditorError(null)
   }, [
     applyPlanUpdate,
     assignNestedValue,
+    configModalBaseConfig,
     configModalEntries,
     configModalForm,
     configModalTarget,
     configModalEnabled,
     convertConfigFormValue,
+    getValueForPath,
   ])
+
+  const applyConfigValueEditor = useCallback(() => {
+    if (!configValueEditorState) return
+    const { entry, value } = configValueEditorState
+    setConfigModalEnabled((prev) => ({ ...prev, [entry.name]: true }))
+    setConfigModalForm((prev) => ({ ...prev, [entry.name]: value }))
+    setConfigValueEditorState(null)
+    setConfigValueEditorError(null)
+  }, [configValueEditorState])
 
   const timelineRows = useMemo(() => {
     if (!planDraft) return []
@@ -3972,30 +4079,51 @@ export default function ScenariosPage() {
           </div>
         )}
       </div>
-      {configModalTarget && configModalManifest && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/70">
-          <div
-            role="dialog"
-            aria-modal="true"
-            className="w-full max-w-lg rounded-lg bg-[#05070b] border border-white/20 p-4 text-sm text-white"
+	      {configModalTarget && configModalManifest && (
+	        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/70">
+	          <div
+	            role="dialog"
+	            aria-modal="true"
+            className={
+              configModalFullscreen
+                ? 'w-[96vw] h-[92vh] rounded-lg bg-[#05070b] border border-white/20 p-4 text-sm text-white flex flex-col'
+                : 'w-full max-w-3xl h-[85vh] rounded-lg bg-[#05070b] border border-white/20 p-4 text-sm text-white flex flex-col'
+            }
           >
             <div className="flex items-center justify-between mb-2">
               <h3 className="text-xs font-semibold text-white/80">
                 Edit config-update patch
               </h3>
-              <button
-                type="button"
-                className="text-white/60 hover:text-white"
-                onClick={() => {
-                  setConfigModalTarget(null)
-                  setConfigModalManifest(null)
-                  setConfigModalEntries([])
-                  setConfigModalForm({})
-                  setConfigModalError(null)
-                }}
-              >
-                ×
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  className="rounded border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-white/80 hover:bg-white/10"
+                  onClick={() => setConfigModalFullscreen((prev) => !prev)}
+                >
+                  {configModalFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+                </button>
+                <button
+                  type="button"
+                  className="text-white/60 hover:text-white"
+	                  onClick={() => {
+	                    setConfigModalTarget(null)
+	                    setConfigModalManifest(null)
+	                    setConfigModalEntries([])
+	                    setConfigModalForm({})
+	                    setConfigModalError(null)
+	                    setConfigModalBaseConfig(undefined)
+	                    setConfigModalEnabled({})
+	                    setConfigModalActiveGroup('General')
+	                    setConfigModalSearch('')
+	                    setConfigModalOnlyOverridden(false)
+	                    setConfigModalFullscreen(false)
+	                    setConfigValueEditorState(null)
+	                    setConfigValueEditorError(null)
+	                  }}
+	                >
+	                  ×
+	                </button>
+              </div>
             </div>
             <div className="mb-2 text-[11px] text-white/60">
               Image:{' '}
@@ -4004,193 +4132,298 @@ export default function ScenariosPage() {
                 {configModalManifest.image?.tag ? `:${configModalManifest.image.tag}` : ''}
               </span>
             </div>
-            <div className="max-h-64 overflow-y-auto space-y-2 mb-3">
-              {configModalEntries.map((entry) => {
-                const unit =
-                  entry.ui && typeof entry.ui === 'object'
-                    ? (() => {
-                        const value = (entry.ui as Record<string, unknown>).unit
-                        return typeof value === 'string' && value.trim().length > 0
-                          ? value.trim()
-                          : null
-                      })()
-                    : null
-                const labelSuffix = `${entry.type || 'string'}${unit ? ` • ${unit}` : ''}`
-                const rawValue = configModalForm[entry.name]
-                const normalizedType = (entry.type || '').toLowerCase()
-                const options = Array.isArray(entry.options) ? entry.options : undefined
-                const enabled = configModalEnabled[entry.name] === true
-                const currentSource =
-                  configModalBaseConfig && isPlainObject(configModalBaseConfig)
-                    ? getValueForPath(
-                        configModalBaseConfig as Record<string, unknown>,
-                        entry.name,
-                      )
-                    : undefined
-                const currentDisplay = currentSource !== undefined
-                  ? formatValueForInput(entry, currentSource)
-                  : ''
-                let field: React.ReactElement
-                if (options && options.length > 0) {
-                  const value =
-                    typeof rawValue === 'string'
-                      ? rawValue
-                      : (entry.default as string | undefined) ?? ''
-                  field = (
-                    <select
-                      className="w-full rounded bg-white/10 px-2 py-1 text-white text-xs"
-                      value={value}
-                      disabled={!enabled}
-                      onChange={(event) =>
-                        setConfigModalForm((prev) => ({
-                          ...prev,
-                          [entry.name]: event.target.value,
-                        }))
-                      }
-                    >
-                      {options.map((option, index) => {
-                        const label =
-                          option === null || option === undefined
-                            ? ''
-                            : typeof option === 'string'
-                              ? option
-                              : JSON.stringify(option)
-                        return (
-                          <option key={index} value={label}>
-                            {label}
-                          </option>
-                        )
-                      })}
-                    </select>
-                  )
-                } else if (normalizedType === 'boolean' || normalizedType === 'bool') {
-                  const checked = rawValue === true
-                  field = (
-                    <label className="inline-flex items-center gap-2 text-xs text-white/70">
-                      <input
-                        type="checkbox"
-                        className="h-4 w-4 accent-blue-500"
-                        checked={checked}
-                        disabled={!enabled}
-                        onChange={(event) =>
-                          setConfigModalForm((prev) => ({
-                            ...prev,
-                            [entry.name]: event.target.checked,
-                          }))
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+              <input
+                className="min-w-[220px] flex-1 rounded border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-white/90 placeholder:text-white/40"
+                placeholder="Search (label / path / group)…"
+                value={configModalSearch}
+                onChange={(e) => setConfigModalSearch(e.target.value)}
+              />
+              <label className="inline-flex items-center gap-2 text-[11px] text-white/70">
+                <input
+                  type="checkbox"
+                  className="h-3 w-3 accent-blue-500"
+                  checked={configModalOnlyOverridden}
+                  onChange={(e) => setConfigModalOnlyOverridden(e.target.checked)}
+                />
+                Only overridden
+              </label>
+              {configModalSearch.trim() !== '' && (
+                <button
+                  type="button"
+                  className="rounded border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-white/70 hover:bg-white/10"
+                  onClick={() => setConfigModalSearch('')}
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+            {configModalGroups.length > 1 && (
+              <div className="flex flex-wrap gap-2 mb-2">
+                {configModalGroups.map((group) => (
+                  <button
+                    key={group.id}
+                    type="button"
+                    className={
+                      group.id === configModalActiveGroup
+                        ? 'rounded border border-white/30 bg-white/10 px-2 py-1 text-[11px] text-white'
+                        : 'rounded border border-white/10 px-2 py-1 text-[11px] text-white/70 hover:bg-white/5'
+                    }
+                    onClick={() => setConfigModalActiveGroup(group.id)}
+                  >
+                    {group.label}
+                  </button>
+                ))}
+              </div>
+            )}
+            <div className="flex-1 overflow-y-auto space-y-2 mb-3">
+              {configModalGroups.length === 0 ? (
+                <div className="text-[11px] text-white/50">No matching fields</div>
+              ) : (
+                configModalGroups
+                  .filter((group) => configModalGroups.length === 1 || group.id === configModalActiveGroup)
+                  .map((group) => (
+                    <div key={group.id} className="space-y-2">
+                      {group.entries.map((entry) => {
+                        const unit =
+                          entry.ui && typeof entry.ui === 'object'
+                            ? (() => {
+                                const value = (entry.ui as Record<string, unknown>).unit
+                                return typeof value === 'string' && value.trim().length > 0
+                                  ? value.trim()
+                                  : null
+                              })()
+                            : null
+                        const labelSuffix = `${entry.type || 'string'}${unit ? ` • ${unit}` : ''}`
+                        const label = capabilityEntryUiString(entry, 'label') ?? entry.name
+                        const help = capabilityEntryUiString(entry, 'help')
+                        const showPath = label !== entry.name
+                        const normalizedType = (entry.type || '').toLowerCase()
+                        const options = Array.isArray(entry.options) ? entry.options : undefined
+                        const enabled = configModalEnabled[entry.name] === true
+                        const currentSource =
+                          configModalBaseConfig && isPlainObject(configModalBaseConfig)
+                            ? getValueForPath(
+                                configModalBaseConfig as Record<string, unknown>,
+                                entry.name,
+                              )
+                            : undefined
+                        const baseValue = currentSource !== undefined ? currentSource : entry.default
+                        const baseDisplay = formatValueForInput(entry, baseValue)
+                        const rawValue = configModalForm[entry.name]
+                        const effectiveValue = rawValue !== undefined ? rawValue : baseDisplay
+                        const isLargeEditable =
+                          entry.multiline || normalizedType === 'text' || normalizedType === 'json'
+
+                        const updateValue = (value: ConfigFormValue) => {
+                          setConfigModalEnabled((prev) => ({ ...prev, [entry.name]: true }))
+                          setConfigModalForm((prev) => ({ ...prev, [entry.name]: value }))
                         }
-                      />
-                      <span>Enabled</span>
-                    </label>
-                  )
-                } else if (
-                  entry.multiline ||
-                  normalizedType === 'text' ||
-                  normalizedType === 'json'
-                ) {
-                  const value = typeof rawValue === 'string' ? rawValue : ''
-                  field = (
-                    <textarea
-                      className="w-full rounded bg-white/10 px-2 py-1 text-white text-xs"
-                      rows={normalizedType === 'json' ? 4 : 3}
-                      value={value}
-                      disabled={!enabled}
-                      onChange={(event) =>
-                        setConfigModalForm((prev) => ({
-                          ...prev,
-                          [entry.name]: event.target.value,
-                        }))
-                      }
-                    />
-                  )
-                } else {
-                  const value = typeof rawValue === 'string' ? rawValue : ''
-                  field = (
-                    <input
-                      className="w-full rounded bg-white/10 px-2 py-1 text-white text-xs"
-                      type={
-                        normalizedType === 'number' ||
-                        normalizedType === 'int' ||
-                        normalizedType === 'integer'
-                          ? 'number'
-                          : 'text'
-                      }
-                      value={value}
-                      disabled={!enabled}
-                      onChange={(event) =>
-                        setConfigModalForm((prev) => ({
-                          ...prev,
-                          [entry.name]: event.target.value,
-                        }))
-                      }
-                    />
-                  )
-                }
-                return (
-                  <label key={entry.name} className="block space-y-1 text-xs">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="block text-white/70">
-                        {entry.name}
-                        <span className="text-white/40"> ({labelSuffix})</span>
-                      </span>
-                      <div className="flex items-center gap-3 text-[10px] text-white/60">
-                        <span className="font-mono">
-                          Current:{' '}
-                          {currentDisplay === '' ? '(none)' : String(currentDisplay)}
-                        </span>
-                        <label className="inline-flex items-center gap-1">
-                          <input
-                            type="checkbox"
-                            className="h-3 w-3 accent-blue-500"
-                            checked={enabled}
-                            onChange={(event) => {
-                              const nextEnabled = event.target.checked
-                              setConfigModalEnabled((prev) => ({
-                                ...prev,
-                                [entry.name]: nextEnabled,
-                              }))
-                              if (nextEnabled) {
-                                const baseValue =
-                                  configModalBaseConfig &&
-                                  getValueForPath(
-                                    configModalBaseConfig as Record<string, unknown>,
-                                    entry.name,
-                                  )
-                                setConfigModalForm((prev) => ({
-                                  ...prev,
-                                  [entry.name]: formatValueForInput(
-                                    entry,
-                                    baseValue !== undefined ? baseValue : entry.default,
-                                  ),
-                                }))
+
+                        const openValueEditor = () => {
+                          const value = typeof effectiveValue === 'string' ? effectiveValue : ''
+                          const language: ConfigValueEditorState['language'] =
+                            normalizedType === 'json'
+                              ? 'json'
+                              : normalizedType === 'yaml'
+                                ? 'yaml'
+                                : 'plaintext'
+                          setConfigValueEditorState({ entry, label, value, language })
+                          setConfigValueEditorError(null)
+                        }
+
+                        let field: React.ReactElement
+                        if (options && options.length > 0) {
+                          const value = typeof effectiveValue === 'string' ? effectiveValue : ''
+                          field = (
+                            <select
+                              className={
+                                enabled
+                                  ? 'w-full rounded bg-white/10 px-2 py-1 text-white text-xs'
+                                  : 'w-full rounded bg-white/5 px-2 py-1 text-white/80 text-xs'
                               }
-                            }}
-                          />
-                          <span>Override</span>
-                        </label>
-                      </div>
-                    </div>
-                    {field}
-                  </label>
-                )
-              })}
+                              value={value}
+                              onChange={(event) => updateValue(event.target.value)}
+                            >
+                              {options.map((option, index) => {
+                                const label =
+                                  option === null || option === undefined
+                                    ? ''
+                                    : typeof option === 'string'
+                                      ? option
+                                      : JSON.stringify(option)
+                                return (
+                                  <option key={index} value={label}>
+                                    {label}
+                                  </option>
+                                )
+                              })}
+                            </select>
+                          )
+                        } else if (normalizedType === 'boolean' || normalizedType === 'bool') {
+                          const checked = effectiveValue === true
+                          field = (
+                            <label
+                              className={
+                                enabled
+                                  ? 'inline-flex items-center gap-2 text-xs text-white/80'
+                                  : 'inline-flex items-center gap-2 text-xs text-white/60'
+                              }
+                            >
+                              <input
+                                type="checkbox"
+                                className="h-4 w-4 accent-blue-500"
+                                checked={checked}
+                                onChange={(event) => updateValue(event.target.checked)}
+                              />
+                              <span>Enabled</span>
+                            </label>
+                          )
+                        } else if (isLargeEditable) {
+                          const value = typeof effectiveValue === 'string' ? effectiveValue : ''
+                          field = (
+                            <div className="space-y-1">
+                              <textarea
+                                className={
+                                  enabled
+                                    ? 'w-full rounded bg-white/10 px-2 py-1 text-white text-xs'
+                                    : 'w-full rounded bg-white/5 px-2 py-1 text-white/80 text-xs'
+                                }
+                                rows={normalizedType === 'json' ? 4 : 3}
+                                value={value}
+                                onChange={(event) => updateValue(event.target.value)}
+                              />
+                              <div className="flex justify-end">
+                                <button
+                                  type="button"
+                                  className="rounded border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-white/70 hover:bg-white/10"
+                                  onClick={openValueEditor}
+                                >
+                                  Open editor
+                                </button>
+                              </div>
+                            </div>
+                          )
+                        } else {
+                          const value = typeof effectiveValue === 'string' ? effectiveValue : ''
+                          field = (
+                            <input
+                              className={
+                                enabled
+                                  ? 'w-full rounded bg-white/10 px-2 py-1 text-white text-xs'
+                                  : 'w-full rounded bg-white/5 px-2 py-1 text-white/80 text-xs'
+                              }
+                              type={
+                                normalizedType === 'number' ||
+                                normalizedType === 'int' ||
+                                normalizedType === 'integer'
+                                  ? 'number'
+                                  : 'text'
+                              }
+                              value={value}
+                              onChange={(event) => updateValue(event.target.value)}
+                            />
+                          )
+                        }
+
+                        return (
+                          <div
+                            key={entry.name}
+                            className="rounded border border-white/10 bg-white/5 px-3 py-2"
+                          >
+                            <div className="grid grid-cols-1 gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,360px)] md:items-start">
+                              <div className="space-y-1 min-w-0">
+	                                <div className="flex items-baseline justify-between gap-3">
+	                                  <div className="min-w-0">
+	                                    <span className="text-white/85 font-medium">{label}</span>
+	                                  </div>
+	                                  <span className="text-[11px] text-white/45">{labelSuffix}</span>
+	                                </div>
+	                                {showPath && (
+	                                  <div className="text-[11px] text-white/40">{entry.name}</div>
+	                                )}
+	                                {help && <div className="text-[11px] text-white/50">{help}</div>}
+	                              </div>
+	                              <div className={enabled ? '' : 'opacity-80'}>
+	                                <div className="flex items-start gap-2">
+	                                  <div className="flex-1 min-w-0">{field}</div>
+	                                  <label
+	                                    className="inline-flex items-center"
+	                                    title="Override"
+	                                  >
+	                                    <input
+	                                      type="checkbox"
+	                                      className="h-3.5 w-3.5 accent-blue-500"
+	                                      aria-label="Override"
+	                                      checked={enabled}
+	                                      onChange={(event) => {
+	                                        const nextEnabled = event.target.checked
+	                                        setConfigModalEnabled((prev) => ({
+	                                          ...prev,
+	                                          [entry.name]: nextEnabled,
+	                                        }))
+	                                        if (!nextEnabled) {
+	                                          setConfigModalForm((prev) => ({
+	                                            ...prev,
+	                                            [entry.name]: baseDisplay,
+	                                          }))
+	                                        }
+	                                      }}
+	                                    />
+	                                  </label>
+	                                  <button
+	                                    type="button"
+	                                    title="Reset"
+	                                    className={
+	                                      enabled
+	                                        ? 'shrink-0 rounded border border-white/10 bg-white/5 px-1.5 py-0.5 text-[10px] text-white/70 hover:bg-white/10'
+	                                        : 'shrink-0 rounded border border-white/10 bg-white/5 px-1.5 py-0.5 text-[10px] text-white/70 opacity-0 pointer-events-none'
+	                                    }
+	                                    onClick={() => {
+	                                      setConfigModalEnabled((prev) => ({ ...prev, [entry.name]: false }))
+	                                      setConfigModalForm((prev) => ({
+	                                        ...prev,
+	                                        [entry.name]: baseDisplay,
+	                                      }))
+	                                    }}
+	                                  >
+	                                    Reset
+	                                  </button>
+	                                </div>
+	                              </div>
+	                            </div>
+	                          </div>
+	                        )
+                    })}
+                  </div>
+                ))
+              )}
             </div>
             {configModalError && (
               <div className="mb-2 text-[11px] text-red-400">{configModalError}</div>
             )}
-            <div className="flex items-center justify-end gap-2">
+            <div className="mt-2 pt-2 border-t border-white/10 flex items-center justify-end gap-2">
               <button
                 type="button"
                 className="rounded px-2 py-1 text-[11px] text-white/70 hover:bg-white/10"
-                onClick={() => {
-                  setConfigModalTarget(null)
-                  setConfigModalManifest(null)
-                  setConfigModalEntries([])
-                  setConfigModalForm({})
-                  setConfigModalError(null)
-                }}
-              >
-                Cancel
-              </button>
+	                onClick={() => {
+	                  setConfigModalTarget(null)
+	                  setConfigModalManifest(null)
+	                  setConfigModalEntries([])
+	                  setConfigModalForm({})
+	                  setConfigModalError(null)
+	                  setConfigModalBaseConfig(undefined)
+	                  setConfigModalEnabled({})
+	                  setConfigModalActiveGroup('General')
+	                  setConfigModalSearch('')
+	                  setConfigModalOnlyOverridden(false)
+	                  setConfigModalFullscreen(false)
+	                  setConfigValueEditorState(null)
+	                  setConfigValueEditorError(null)
+	                }}
+	              >
+	                Cancel
+	              </button>
               <button
                 type="button"
                 className="rounded bg-sky-500/80 px-3 py-1 text-[11px] text-white hover:bg-sky-500"
@@ -4199,14 +4432,74 @@ export default function ScenariosPage() {
                 Apply
               </button>
             </div>
-          </div>
-        </div>
-      )}
-      {schemaAttachState && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/70">
-          <div
-            role="dialog"
-            aria-modal="true"
+	          </div>
+	        </div>
+	      )}
+	      {configValueEditorState && (
+	        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
+	          <div
+	            role="dialog"
+	            aria-modal="true"
+	            className="w-[96vw] max-w-5xl h-[85vh] rounded-lg bg-[#05070b] border border-white/20 p-4 text-sm text-white flex flex-col"
+	          >
+	            <div className="flex items-center justify-between gap-3 mb-2">
+	              <div className="min-w-0">
+	                <h3 className="text-xs font-semibold text-white/80 truncate">
+	                  {configValueEditorState.label}
+	                </h3>
+	                <div className="text-[11px] text-white/50 font-mono truncate">
+	                  {configValueEditorState.entry.name}
+	                </div>
+	              </div>
+	              <div className="flex items-center gap-2">
+	                <button
+	                  type="button"
+	                  className="rounded border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-white/80 hover:bg-white/10"
+	                  onClick={() => {
+	                    setConfigValueEditorState(null)
+	                    setConfigValueEditorError(null)
+	                  }}
+	                >
+	                  Cancel
+	                </button>
+	                <button
+	                  type="button"
+	                  className="rounded bg-sky-500/80 px-3 py-1 text-[11px] text-white hover:bg-sky-500"
+	                  onClick={() => applyConfigValueEditor()}
+	                >
+	                  Apply
+	                </button>
+	              </div>
+	            </div>
+	            {configValueEditorError && (
+	              <div className="mb-2 text-[11px] text-red-400">{configValueEditorError}</div>
+	            )}
+	            <div className="flex-1 min-h-0 border border-white/15 rounded overflow-hidden">
+	              <Editor
+	                height="100%"
+	                defaultLanguage={configValueEditorState.language}
+	                theme="vs-dark"
+	                value={configValueEditorState.value}
+	                onChange={(value) => {
+	                  const text = value ?? ''
+	                  setConfigValueEditorState((prev) => (prev ? { ...prev, value: text } : prev))
+	                }}
+	                options={{
+	                  fontSize: 11,
+	                  minimap: { enabled: false },
+	                  scrollBeyondLastLine: false,
+	                  wordWrap: 'on',
+	                }}
+	              />
+	            </div>
+	          </div>
+	        </div>
+	      )}
+	      {schemaAttachState && (
+	        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/70">
+	          <div
+	            role="dialog"
+	            aria-modal="true"
             className="w-full max-w-lg rounded-lg bg-[#05070b] border border-white/20 p-4 text-sm text-white"
           >
             <div className="flex items-center justify-between mb-2">

@@ -46,6 +46,7 @@ import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.core.AmqpTemplate;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -79,6 +80,8 @@ public class SwarmController {
     private final ObjectMapper json;
     private final String controlExchange;
     private final String originInstanceId;
+    @Value("${POCKETHIVE_SCENARIOS_RUNTIME_ROOT:}")
+    private String scenariosRuntimeRootSource;
     private static final String CREATE_LOCK_KEY = "__create-lock__";
     private static final Pattern BASE_URL_TEMPLATE =
         Pattern.compile("\\{\\{\\s*sut\\.endpoints\\['([^']+)'\\]\\.baseUrl\\s*}}(.*)");
@@ -183,8 +186,12 @@ public class SwarmController {
                 ScenarioPlan.Plan timeline = planDescriptor.plan();
                 String image = requireImage(template, templateId);
                 SwarmPlan originalPlan = planDescriptor.toSwarmPlan(swarmId);
-                String runtimeDir = prepareScenarioRuntime(templateId, swarmId);
-                String scenarioVolume = runtimeDir + ":/app/scenario:ro";
+                prepareScenarioRuntime(templateId, swarmId);
+                String runtimeRootSource = scenariosRuntimeRootSource;
+                if (runtimeRootSource == null || runtimeRootSource.isBlank()) {
+                    throw new IllegalStateException("POCKETHIVE_SCENARIOS_RUNTIME_ROOT must not be blank");
+                }
+                String scenarioVolume = runtimeRootSource + "/" + swarmId + ":/app/scenario:ro";
                 String sutId = normalize(req.sutId());
                 io.pockethive.swarm.model.SutEnvironment sutEnvironment = null;
                 if (sutId != null) {

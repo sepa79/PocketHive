@@ -32,7 +32,6 @@ class ScenarioControllerSmokeTest {
     static void properties(DynamicPropertyRegistry registry) {
         registry.add("scenarios.dir", () -> TEMP_DIR.toString());
         registry.add("capabilities.dir", () -> TEMP_DIR.resolve("capabilities").toString());
-        registry.add("pockethive.scenarios.runtime-root", () -> TEMP_DIR.resolve("runtime").toString());
         registry.add("server.port", () -> PORT);
     }
 

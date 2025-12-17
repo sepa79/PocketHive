@@ -18,7 +18,6 @@ class ScenarioManagerApplicationTest {
     static void properties(DynamicPropertyRegistry registry) {
         registry.add("scenarios.dir", () -> tempDir.toString());
         registry.add("capabilities.dir", () -> tempDir.resolve("capabilities").toString());
-        registry.add("pockethive.scenarios.runtime-root", () -> tempDir.resolve("runtime").toString());
         registry.add("rabbitmq.logging.enabled", () -> "false");
     }
 
