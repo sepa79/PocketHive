@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type JSX } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Component } from '../../types/hive'
 import { sendConfigUpdate } from '../../lib/orchestratorApi'
 import QueuesPanel from './QueuesPanel'
@@ -12,7 +12,6 @@ import {
   capabilityEntryUiString,
   formatCapabilityValue,
   groupCapabilityConfigEntries,
-  inferCapabilityInputType,
   matchesCapabilityWhen,
 } from '../../lib/capabilities'
 import { useSwarmMetadata } from '../../contexts/SwarmMetadataContext'
@@ -755,12 +754,10 @@ export default function ComponentDetail({ component, onClose }: Props) {
                   <div className="text-xs text-white/70">{group.label}</div>
                 )}
                 {group.entries.map((entry) => (
-                  <ConfigEntryRow
+                  <ReadOnlyConfigEntryRow
                     key={entry.name}
                     entry={entry}
                     value={displayForm[entry.name]}
-                    disabled
-                    onChange={() => undefined}
                   />
                 ))}
               </div>
@@ -949,20 +946,27 @@ export default function ComponentDetail({ component, onClose }: Props) {
 interface ConfigEntryRowProps {
   entry: CapabilityConfigEntry
   value: ConfigFormValue
-  disabled: boolean
-  onChange: (value: string | boolean) => void
 }
 
-function ConfigEntryRow({ entry, value, disabled, onChange }: ConfigEntryRowProps) {
+function formatReadOnlyValue(value: ConfigFormValue): string {
+  if (value === undefined || value === null) return '—'
+  if (typeof value === 'boolean') return value ? 'true' : 'false'
+  if (value.trim() === '') return '—'
+  return value
+}
+
+function ReadOnlyConfigEntryRow({ entry, value }: ConfigEntryRowProps) {
   const unit = extractUnit(entry)
   const typeLabel = entry.type || 'string'
   const labelSuffix = `${typeLabel}${unit ? ` • ${unit}` : ''}`
   const label = capabilityEntryUiString(entry, 'label') ?? entry.name
   const help = capabilityEntryUiString(entry, 'help')
   const showPath = label !== entry.name
-  const content = renderConfigInput(entry, value, disabled, onChange)
+  const normalizedType = (entry.type || '').toLowerCase()
+  const isMultiLine = entry.multiline || normalizedType === 'text' || normalizedType === 'json'
+  const displayValue = formatReadOnlyValue(value)
   return (
-    <label className="block space-y-1 rounded border border-white/10 bg-white/5 px-3 py-2">
+    <div className="block space-y-1 rounded border border-white/10 bg-white/5 px-3 py-2">
       <div className="space-y-0.5">
         <div className="flex items-baseline justify-between gap-3">
           <span className="text-white/85 font-medium">{label}</span>
@@ -971,7 +975,15 @@ function ConfigEntryRow({ entry, value, disabled, onChange }: ConfigEntryRowProp
         {showPath && <div className="text-[11px] text-white/40">{entry.name}</div>}
         {help && <div className="text-[11px] text-white/50">{help}</div>}
       </div>
-      {content}
+      <div
+        className={
+          isMultiLine
+            ? 'w-full rounded bg-black/30 px-2 py-1 text-[11px] text-white/90 font-mono whitespace-pre-wrap break-words max-h-32 overflow-auto'
+            : 'w-full rounded bg-black/30 px-2 py-1 text-[11px] text-white/90 font-mono whitespace-pre-wrap break-words'
+        }
+      >
+        {displayValue}
+      </div>
       {typeof entry.min === 'number' || typeof entry.max === 'number' ? (
         <span className="block text-[11px] text-white/40">
           {typeof entry.min === 'number' ? `min ${entry.min}` : ''}
@@ -986,121 +998,7 @@ function ConfigEntryRow({ entry, value, disabled, onChange }: ConfigEntryRowProp
             : 'Multiline input supported.')}
         </span>
       )}
-    </label>
-  )
-}
-
-function renderConfigInput(
-  entry: CapabilityConfigEntry,
-  rawValue: ConfigFormValue,
-  disabled: boolean,
-  onChange: (value: string | boolean) => void,
-): JSX.Element {
-  const normalizedType = (entry.type || '').toLowerCase()
-  const options = Array.isArray(entry.options) ? entry.options : undefined
-
-  if (options && options.length > 0) {
-    const value = typeof rawValue === 'string' ? rawValue : formatCapabilityValue(entry.default)
-    return (
-      <select
-        className="w-full rounded bg-white/10 px-2 py-1 text-white"
-        value={value}
-        disabled={disabled}
-        onChange={(event) => onChange(event.target.value)}
-      >
-        {options.map((option, index) => {
-          const label = formatCapabilityValue(option)
-          return (
-            <option key={index} value={label}>
-              {label}
-            </option>
-          )
-        })}
-      </select>
-    )
-  }
-
-  if (normalizedType === 'boolean' || normalizedType === 'bool') {
-    const checked = rawValue === true
-    return (
-      <div className="flex items-center gap-2">
-        <input
-          type="checkbox"
-          className="h-4 w-4 accent-blue-500"
-          checked={checked}
-          disabled={disabled}
-          onChange={(event) => onChange(event.target.checked)}
-        />
-        <span className="text-white/60 text-xs">Enabled</span>
-      </div>
-    )
-  }
-
-  const value = typeof rawValue === 'string' ? rawValue : ''
-  if (entry.multiline || normalizedType === 'text' || normalizedType === 'json') {
-    return (
-      <textarea
-        className="w-full rounded bg-white/10 px-2 py-1 text-white"
-        value={value}
-        rows={normalizedType === 'json' ? 4 : 3}
-        disabled={disabled}
-        onChange={(event) => onChange(event.target.value)}
-      />
-    )
-  }
-
-  const inputType = inferCapabilityInputType(entry.type)
-  const step = extractStep(entry)
-  const useSlider = inputType === 'number' && typeof entry.min === 'number' && typeof entry.max === 'number'
-
-  if (useSlider) {
-    const numericValue =
-      value === '' ? (typeof entry.default === 'number' ? entry.default : entry.min ?? 0) : Number(value)
-    const displayValue = Number.isFinite(numericValue) ? String(numericValue) : ''
-    return (
-      <div className="space-y-1">
-        <input
-          className="w-full"
-          type="range"
-          value={Number.isFinite(numericValue) ? numericValue : 0}
-          disabled={disabled}
-          min={typeof entry.min === 'number' ? entry.min : undefined}
-          max={typeof entry.max === 'number' ? entry.max : undefined}
-          step={step}
-          onChange={(event) => onChange(event.target.value)}
-        />
-        <div className="flex items-center justify-between gap-2 text-xs text-white/70">
-          <span>
-            {typeof entry.min === 'number' ? entry.min : ''}
-            {typeof entry.min === 'number' && typeof entry.max === 'number' ? ' – ' : ''}
-            {typeof entry.max === 'number' ? entry.max : ''}
-          </span>
-          <input
-            className="w-20 rounded bg-white/10 px-2 py-0.5 text-right text-xs text-white"
-            type="number"
-            value={displayValue}
-            disabled={disabled}
-            min={typeof entry.min === 'number' ? entry.min : undefined}
-            max={typeof entry.max === 'number' ? entry.max : undefined}
-            step={step}
-            onChange={(event) => onChange(event.target.value)}
-          />
-        </div>
-      </div>
-    )
-  }
-
-  return (
-    <input
-      className="w-full rounded bg-white/10 px-2 py-1 text-white"
-      type={inputType}
-      value={value}
-      disabled={disabled}
-      onChange={(event) => onChange(event.target.value)}
-      min={typeof entry.min === 'number' ? entry.min : undefined}
-      max={typeof entry.max === 'number' ? entry.max : undefined}
-      step={step}
-    />
+    </div>
   )
 }
 
@@ -1212,12 +1110,6 @@ function extractUnit(entry: CapabilityConfigEntry): string | null {
   if (typeof value !== 'string') return null
   const trimmed = value.trim()
   return trimmed.length > 0 ? trimmed : null
-}
-
-function extractStep(entry: CapabilityConfigEntry): number | undefined {
-  if (!entry.ui || typeof entry.ui !== 'object') return undefined
-  const value = (entry.ui as Record<string, unknown>).step
-  return typeof value === 'number' ? value : undefined
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
