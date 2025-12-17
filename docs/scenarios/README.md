@@ -69,6 +69,9 @@ control‑plane contract; scenarios are the authoring‑time format.
 These docs are designed to be embedded into the UI as help pages.
 Callers should link here rather than re‑describing the contract.
 
+Status tracking:
+- `SCENARIO_EDITOR_STATUS.md` – what the Scenarios editor does today vs what is missing/buggy.
+
 ---
 
 ## Scenario bundles and the Scenarios UI
