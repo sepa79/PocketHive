@@ -146,11 +146,11 @@ export function parseWeightedTemplate(value: string): WeightedTemplateModel | nu
     if (tokens.length < 4 || (tokens.length - 2) % 2 !== 0) return null
     const label = parseStringLiteral(tokens[0])
     const seed = parseStringLiteral(tokens[1])
-    if (!label || !seed) return null
+    if (label === null || seed === null) return null
     const options: WeightedTemplateModel['options'] = []
     for (let i = 2; i < tokens.length; i += 2) {
       const v = parseStringLiteral(tokens[i])
-      if (!v) return null
+      if (v === null) return null
       const weightToken = tokens[i + 1]
       if (!/^-?\d+$/.test(weightToken.trim())) return null
       const weight = Number.parseInt(weightToken.trim(), 10)
@@ -167,7 +167,7 @@ export function parseWeightedTemplate(value: string): WeightedTemplateModel | nu
   const options: WeightedTemplateModel['options'] = []
   for (let i = 0; i < tokens.length; i += 2) {
     const v = parseStringLiteral(tokens[i])
-    if (!v) return null
+    if (v === null) return null
     const weightToken = tokens[i + 1]
     if (!/^-?\d+$/.test(weightToken.trim())) return null
     const weight = Number.parseInt(weightToken.trim(), 10)
@@ -369,7 +369,14 @@ export function WeightedChoiceEditor({
   }
 
   const addOption = () => {
-    const nextOptions = [...options, { value: '', weight: 0, locked: false }]
+    const base = 'OptionName'
+    let candidate = base
+    let suffix = 2
+    while (options.some((opt) => opt.value === candidate)) {
+      candidate = `${base}${suffix}`
+      suffix += 1
+    }
+    const nextOptions = [...options, { value: candidate, weight: 0, locked: false }]
     pushDraft(nextOptions)
   }
 
