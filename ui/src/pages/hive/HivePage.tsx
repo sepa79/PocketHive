@@ -26,6 +26,7 @@ export default function HivePage() {
   const [contextSwarmId, setContextSwarmId] = useState<string | null>(null)
   const [now, setNow] = useState(() => Date.now())
   const [selectedSutId, setSelectedSutId] = useState<string | null>(null)
+  const [sutPanelNonce, setSutPanelNonce] = useState(0)
   const { ensureSwarms, swarms } = useSwarmMetadata()
 
   useEffect(() => {
@@ -238,6 +239,9 @@ export default function HivePage() {
             if (id.startsWith('sut-env:')) {
               const sutId = id.slice('sut-env:'.length)
               setSelected(null)
+              if (selectedSutId === sutId) {
+                setSutPanelNonce((current) => current + 1)
+              }
               setSelectedSutId(sutId || null)
               return
             }
@@ -246,6 +250,9 @@ export default function HivePage() {
               const swarm = swarms.find((s) => s.id === swarmKey)
               const sutId = swarm?.sutId?.trim() || null
               setSelected(null)
+              if (selectedSutId === sutId) {
+                setSutPanelNonce((current) => current + 1)
+              }
               setSelectedSutId(sutId)
               return
             }
@@ -263,7 +270,11 @@ export default function HivePage() {
         {selected ? (
           <ComponentDetail component={selected} onClose={() => setSelected(null)} />
         ) : selectedSutId ? (
-          <SutDetailPanel sutId={selectedSutId} onClose={() => setSelectedSutId(null)} />
+          <SutDetailPanel
+            key={`${selectedSutId}:${sutPanelNonce}`}
+            sutId={selectedSutId}
+            onClose={() => setSelectedSutId(null)}
+          />
         ) : shouldShowSwarmList ? (
           <div className="flex-1 overflow-y-auto px-6 py-5" data-testid="swarm-context-panel">
             <div className="flex items-center justify-between gap-4 border-b border-white/10 pb-4">
