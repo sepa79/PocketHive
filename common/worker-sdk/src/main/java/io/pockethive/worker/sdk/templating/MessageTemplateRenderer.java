@@ -23,7 +23,8 @@ public final class MessageTemplateRenderer {
         Objects.requireNonNull(template, "template");
         Objects.requireNonNull(seed, "seed");
         Map<String, Object> ctx = new HashMap<>();
-        ctx.put("payload", parsePayload(seed.payload()));
+        ctx.put("payloadAsJson", parsePayloadAsJson(seed.payload()));
+        ctx.put("payload", seed.payload());
         ctx.put("headers", seed.headers());
         ctx.put("workItem", seed);
 
@@ -55,14 +56,14 @@ public final class MessageTemplateRenderer {
         return rendered;
     }
 
-    private static Object parsePayload(String payload) {
+    private static Object parsePayloadAsJson(String payload) {
         if (payload == null || payload.isBlank()) {
-            return payload;
+            return null;
         }
         try {
-            return MAPPER.readValue(payload, Map.class);
+            return MAPPER.readValue(payload, Object.class);
         } catch (Exception e) {
-            return payload;
+            return null;
         }
     }
 
