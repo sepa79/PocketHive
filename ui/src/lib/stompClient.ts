@@ -416,12 +416,8 @@ export function setClient(newClient: Client | null, destination = controlDestina
             if (key === 'enabled' || key === 'tps' || key === 'io' || key === 'context') {
               return
             }
-            if (key === 'scenario') {
-              cfg[key] = value
-              return
-            }
             const existing = cfg[key]
-            if (existing && typeof existing === 'object') {
+            if (isRecord(existing) && !isRecord(value)) {
               return
             }
             cfg[key] = value
