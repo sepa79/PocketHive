@@ -48,6 +48,10 @@ Rule: when adding new UI functionality, prefer implementing it in `ui-v2/` unles
 
 - Prefer **React Query** for server state (fetch/cache/retry).
 - Prefer **Zustand** (`ui/src/store.ts`) for cross-page UI state (panels, toasts, docking).
+- Routing (`ui-v2/`):
+  - Prefer **path-based routes** (`/v2/scenarios/:id/edit`) over query params (`?id=...`) for app navigation state.
+  - `Back` must always work (use browser history semantics; don’t require “special” state to return to a usable screen).
+  - Every screen must be fully linkable/shareable via its URL (no “empty screen unless state is present”).
 - Avoid “derived state stored as state”; compute via `useMemo` when possible.
 - Effects must be deterministic:
   - Clean up subscriptions/timeouts on unmount.

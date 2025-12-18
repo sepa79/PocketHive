@@ -1,42 +1,33 @@
-import { NavLink, Route, Routes } from 'react-router-dom'
-
-function Home() {
-  return (
-    <div className="card">
-      <h1 style={{ margin: '0 0 8px' }}>PocketHive UI v2</h1>
-      <div style={{ color: 'rgba(255,255,255,0.65)', fontSize: 14 }}>
-        New editor work-in-progress. Served under <code>/v2</code>.
-      </div>
-    </div>
-  )
-}
-
-function ScenarioEditorV2() {
-  return (
-    <div className="card">
-      <h2 style={{ margin: '0 0 8px' }}>Scenario Editor v2 (beta)</h2>
-      <div style={{ color: 'rgba(255,255,255,0.65)', fontSize: 14 }}>
-        Placeholder. Next step: implement new scenario editor here.
-      </div>
-    </div>
-  )
-}
+import { Navigate, Route, Routes } from 'react-router-dom'
+import { AppShell } from './components/AppShell'
+import { HelpPage } from './pages/HelpPage'
+import { HealthPage } from './pages/HealthPage'
+import { HivePage } from './pages/HivePage'
+import { HomePage } from './pages/HomePage'
+import { JournalPage } from './pages/JournalPage'
+import { LoginPage } from './pages/LoginPage'
+import { OtherPage } from './pages/OtherPage'
+import { ScenariosPage } from './pages/ScenariosPage'
 
 export default function App() {
   return (
-    <div className="shell">
-      <div className="topbar">
-        <NavLink to="/" end>
-          Home
-        </NavLink>
-        <NavLink to="/scenarios">Scenarios</NavLink>
-      </div>
-      <div className="content">
-        <Routes>
-          <Route path="/" element={<Home />} />
-          <Route path="/scenarios" element={<ScenarioEditorV2 />} />
-        </Routes>
-      </div>
-    </div>
+    <Routes>
+      <Route element={<AppShell />}>
+        <Route path="/" element={<HomePage />} />
+        <Route path="/home" element={<Navigate to="/" replace />} />
+
+        <Route path="/scenarios/*" element={<ScenariosPage />} />
+        <Route path="/hive/*" element={<HivePage />} />
+        <Route path="/journal/*" element={<JournalPage />} />
+        <Route path="/other/*" element={<OtherPage />} />
+
+        <Route path="/health" element={<HealthPage />} />
+        <Route path="/help" element={<HelpPage />} />
+        <Route path="/login" element={<LoginPage />} />
+
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Route>
+    </Routes>
   )
 }
+
