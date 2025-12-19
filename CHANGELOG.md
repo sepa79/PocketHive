@@ -3,9 +3,18 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
-Timestamp: 2025-12-17T00:00:00Z
+Timestamp: 2025-12-19T00:00:00Z
 
 - No unreleased changes yet.
+
+## [0.14.18] - 2025-12-19
+Timestamp: 2025-12-19T00:00:00Z
+
+- Journals (UI): added run list range/limit controls (default: last 1 day) to keep the runs view responsive with large Postgres histories.
+- Journals (API): added `afterTs` filtering to `/api/journal/swarm/runs` so clients can query recent runs without scanning the full retention window.
+- Hive UI: fixed SUT details panel to auto-refresh every 5s (including Wiremock panels) instead of only updating on click.
+- E2E: updated lifecycle assertions to read canonical status fields from `data.context` (scenario progress + worker snapshots).
+- Docs (todo): added critical work items for control-plane contract enforcement and a SwarmRuntimeCore refactor.
 
 ## [0.14.17] - 2025-12-17
 Timestamp: 2025-12-17T00:00:00Z

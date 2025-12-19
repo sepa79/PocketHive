@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { apiFetch } from '../../lib/api'
 import WiremockPanel from '../hive/WiremockPanel'
@@ -14,6 +14,8 @@ interface Props {
   onClose?: () => void
 }
 
+const POLL_INTERVAL_MS = 5000
+
 export default function SutDetailPanel({ sutId, onClose }: Props) {
   const [envs, setEnvs] = useState<SutEnvironment[]>([])
   const [loading, setLoading] = useState(false)
@@ -21,14 +23,25 @@ export default function SutDetailPanel({ sutId, onClose }: Props) {
   const [wiremockComponent, setWiremockComponent] = useState<Component | null>(null)
   const [wiremockError, setWiremockError] = useState<string | null>(null)
   const [wiremockLoading, setWiremockLoading] = useState(false)
+  const envsLoadedOnce = useRef(false)
+  const wiremockLoadedOnce = useRef(false)
 
   useEffect(() => {
     let cancelled = false
-    const load = async () => {
-      setLoading(true)
-      setError(null)
+    let controller: AbortController | null = null
+    let inFlight = false
+    const load = async (showSpinner: boolean) => {
+      if (inFlight) return
+      inFlight = true
+      controller = new AbortController()
+      if (showSpinner) {
+        setLoading(true)
+        setError(null)
+      }
       try {
-        const response = await apiFetch('/scenario-manager/sut-environments')
+        const response = await apiFetch('/scenario-manager/sut-environments', {
+          signal: controller.signal,
+        })
         if (!response.ok) {
           throw new Error(`HTTP ${response.status} from scenario-manager`)
         }
@@ -41,19 +54,31 @@ export default function SutDetailPanel({ sutId, onClose }: Props) {
         if (cancelled) return
         const normalized = normalizeSutList(raw)
         setEnvs(normalized)
+        envsLoadedOnce.current = true
       } catch (e) {
+        if (e instanceof Error && e.name === 'AbortError') {
+          return
+        }
         if (!cancelled) {
           setError(e instanceof Error ? e.message : 'Failed to load environments')
         }
       } finally {
+        inFlight = false
         if (!cancelled) {
-          setLoading(false)
+          if (showSpinner) {
+            setLoading(false)
+          }
         }
       }
     }
-    void load()
+    void load(!envsLoadedOnce.current)
+    const timer = window.setInterval(() => {
+      void load(false)
+    }, POLL_INTERVAL_MS)
     return () => {
       cancelled = true
+      window.clearInterval(timer)
+      controller?.abort()
     }
   }, [])
 
@@ -77,14 +102,22 @@ export default function SutDetailPanel({ sutId, onClose }: Props) {
       return
     }
     let cancelled = false
+    let timer: number | null = null
+    let inFlight = false
     const loadWiremock = async () => {
-      setWiremockLoading(true)
-      setWiremockError(null)
+      if (inFlight) return
+      inFlight = true
+      const showSpinner = !wiremockLoadedOnce.current
+      if (showSpinner) {
+        setWiremockLoading(true)
+        setWiremockError(null)
+      }
       try {
         const latest = await fetchWiremockComponent()
         if (cancelled) return
         if (latest) {
           setWiremockComponent(latest)
+          wiremockLoadedOnce.current = true
         } else {
           setWiremockComponent(null)
           setWiremockError('WireMock snapshot unavailable.')
@@ -95,14 +128,23 @@ export default function SutDetailPanel({ sutId, onClose }: Props) {
           setWiremockError('Unable to load WireMock metrics.')
         }
       } finally {
+        inFlight = false
         if (!cancelled) {
-          setWiremockLoading(false)
+          if (showSpinner) {
+            setWiremockLoading(false)
+          }
         }
       }
     }
     void loadWiremock()
+    timer = window.setInterval(() => {
+      void loadWiremock()
+    }, POLL_INTERVAL_MS)
     return () => {
       cancelled = true
+      if (timer != null) {
+        window.clearInterval(timer)
+      }
     }
   }, [selected])
 

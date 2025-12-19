@@ -487,10 +487,12 @@ function normalizeSwarmRunSummary(input: unknown): SwarmRunSummary | null {
 export async function getAllSwarmJournalRuns(options?: {
   limit?: number
   pinned?: boolean
+  afterTs?: string | null
 }): Promise<SwarmRunSummary[] | null> {
   const query = buildQuery({
     limit: options?.limit ?? undefined,
     pinned: options?.pinned === true ? 'true' : undefined,
+    afterTs: options?.afterTs ?? undefined,
   })
   const response = await apiFetch(`/orchestrator/journal/swarm/runs${query}`, {
     headers: { Accept: 'application/json' },

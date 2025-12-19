@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { Component } from '../../types/hive'
 import {
   fetchWiremockComponent,
@@ -55,6 +55,14 @@ export default function WiremockPanel({ component }: Props) {
   )
   const [refreshing, setRefreshing] = useState(false)
   const [refreshError, setRefreshError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (isWiremockConfig(component.config)) {
+      setConfig(component.config)
+    } else {
+      setConfig(null)
+    }
+  }, [component.config])
 
   const handleRefresh = async () => {
     setRefreshing(true)

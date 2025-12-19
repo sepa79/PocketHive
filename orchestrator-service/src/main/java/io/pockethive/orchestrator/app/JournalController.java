@@ -176,7 +176,10 @@ public class JournalController {
    */
   @GetMapping("/swarm/runs")
   public ResponseEntity<List<SwarmRunSummary>> swarmJournalRuns(@RequestParam(required = false) Integer limit,
-                                                                @RequestParam(required = false) Boolean pinned) {
+                                                                @RequestParam(required = false) Boolean pinned,
+                                                                @RequestParam(required = false)
+                                                                @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
+                                                                Instant afterTs) {
     String path = "/api/journal/swarm/runs";
     log.info("[REST] GET {}", path);
     if (!"postgres".equalsIgnoreCase(journalSink)) {
@@ -236,7 +239,25 @@ public class JournalController {
         return ResponseEntity.ok(runs);
       }
 
-      String mainSql = """
+      String mainSql = afterTs != null ? """
+          SELECT
+            e.swarm_id,
+            e.run_id,
+            MIN(e.ts) AS first_ts,
+            MAX(e.ts) AS last_ts,
+            COUNT(*) AS entries,
+            r.scenario_id,
+            r.test_plan,
+            r.description,
+            r.tags::text AS tags
+          FROM journal_event e
+          LEFT JOIN journal_run r
+            ON r.swarm_id = e.swarm_id AND r.run_id = e.run_id
+          WHERE e.scope = 'SWARM' AND e.ts >= ?
+          GROUP BY e.swarm_id, e.run_id, r.scenario_id, r.test_plan, r.description, r.tags
+          ORDER BY last_ts DESC
+          LIMIT ?
+          """ : """
           SELECT
             e.swarm_id,
             e.run_id,
@@ -255,7 +276,14 @@ public class JournalController {
           ORDER BY last_ts DESC
           LIMIT ?
           """;
-      List<SwarmRunSummary> mainRuns = jdbc.query(mainSql, ps -> ps.setInt(1, pageSize), (rs, rowNum) -> {
+      List<SwarmRunSummary> mainRuns = jdbc.query(mainSql, ps -> {
+        if (afterTs != null) {
+          ps.setTimestamp(1, java.sql.Timestamp.from(afterTs));
+          ps.setInt(2, pageSize);
+        } else {
+          ps.setInt(1, pageSize);
+        }
+      }, (rs, rowNum) -> {
         String swarmId = rs.getString("swarm_id");
         String runId = rs.getString("run_id");
         java.sql.Timestamp first = rs.getTimestamp("first_ts");

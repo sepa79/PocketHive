@@ -196,15 +196,38 @@ export function ConfigUpdatePatchModal({
   const [valueEditorState, setValueEditorState] = useState<ValueEditorState | null>(null)
   const [valueEditorError, setValueEditorError] = useState<string | null>(null)
   const valueEditorRef = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null)
+  const initDoneRef = useRef(false)
+  const latestInputsRef = useRef({
+    entries,
+    baseConfig,
+    existingPatch,
+  })
 
   useEffect(() => {
-    if (!open) return
+    latestInputsRef.current = { entries, baseConfig, existingPatch }
+  }, [entries, baseConfig, existingPatch])
+
+  useEffect(() => {
+    if (!open) {
+      initDoneRef.current = false
+      return
+    }
+    if (initDoneRef.current) return
+    initDoneRef.current = true
+
+    const { entries: initEntries, baseConfig: initBaseConfig, existingPatch: initExistingPatch } =
+      latestInputsRef.current
+
     const nextForm: Record<string, ConfigFormValue> = {}
     const nextEnabled: Record<string, boolean> = {}
-    for (const entry of entries) {
-      const overrideValue = existingPatch ? getValueForPath(existingPatch, entry.name) : undefined
+    for (const entry of initEntries) {
+      const overrideValue = initExistingPatch
+        ? getValueForPath(initExistingPatch, entry.name)
+        : undefined
       const currentValue =
-        baseConfig && overrideValue === undefined ? getValueForPath(baseConfig, entry.name) : undefined
+        initBaseConfig && overrideValue === undefined
+          ? getValueForPath(initBaseConfig, entry.name)
+          : undefined
       if (overrideValue !== undefined) {
         nextEnabled[entry.name] = true
         nextForm[entry.name] = formatValueForInput(entry, overrideValue)
@@ -223,7 +246,7 @@ export function ConfigUpdatePatchModal({
     setFullscreen(false)
     setValueEditorState(null)
     setValueEditorError(null)
-  }, [open, entries, baseConfig, existingPatch])
+  }, [open])
 
   const visibleEntries = useMemo(() => {
     const base = baseConfig && isPlainObject(baseConfig) ? baseConfig : undefined
