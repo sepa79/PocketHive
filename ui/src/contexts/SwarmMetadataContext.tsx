@@ -166,13 +166,11 @@ export function SwarmMetadataProvider({ children }: Props) {
   useEffect(() => {
     setSwarmMetadataRefreshHandler((swarmId) => {
       const normalized = normalizeSwarmId(swarmId)
-      if (normalized) {
-        setSwarms((current) => current.filter((swarm) => normalizeSwarmId(swarm.id) !== normalized))
-      }
-      void refreshSwarms()
+      if (!normalized) return
+      setSwarms((current) => current.filter((swarm) => normalizeSwarmId(swarm.id) !== normalized))
     })
     return () => setSwarmMetadataRefreshHandler(null)
-  }, [refreshSwarms])
+  }, [])
 
   const value = useMemo<SwarmMetadataContextValue>(
     () => ({

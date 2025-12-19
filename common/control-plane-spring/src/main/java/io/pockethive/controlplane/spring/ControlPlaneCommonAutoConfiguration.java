@@ -5,6 +5,7 @@ import io.pockethive.controlplane.messaging.ControlPlanePublisher;
 import org.springframework.amqp.core.ExchangeBuilder;
 import org.springframework.amqp.core.TopicExchange;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.amqp.rabbit.config.SimpleRabbitListenerContainerFactory;
 import org.springframework.boot.autoconfigure.AutoConfigureAfter;
 import org.springframework.boot.autoconfigure.amqp.RabbitAutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
@@ -13,6 +14,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.config.BeanPostProcessor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -62,6 +64,17 @@ public class ControlPlaneCommonAutoConfiguration {
             return worker.getExchange();
         }
         throw new IllegalArgumentException("pockethive.control-plane.exchange must not be null or blank");
+    }
+
+    @Bean
+    @ConditionalOnClass(SimpleRabbitListenerContainerFactory.class)
+    @ConditionalOnProperty(
+        prefix = "pockethive.control-plane.rabbit.poison-messages",
+        name = "enabled",
+        havingValue = "true",
+        matchIfMissing = true)
+    static BeanPostProcessor controlPlaneRabbitPoisonMessageCustomizer() {
+        return new ControlPlaneRabbitPoisonMessageCustomizer();
     }
 
 }

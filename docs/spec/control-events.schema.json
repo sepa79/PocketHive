@@ -179,9 +179,14 @@
             "data": {
               "type": "object",
               "additionalProperties": false,
-              "required": ["enabled", "tps", "startedAt"],
+              "required": ["enabled", "config", "tps", "startedAt", "io", "ioState"],
               "properties": {
                 "enabled": { "type": "boolean" },
+                "config": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "description": "Snapshot of the effective configuration for this scope (role/instance). Must not include secrets."
+                },
                 "tps": { "type": "integer", "minimum": 0 },
                 "startedAt": { "type": "string", "format": "date-time" },
                 "io": { "$ref": "#/$defs/MetricIo" },
@@ -204,7 +209,7 @@
             "data": {
               "type": "object",
               "additionalProperties": false,
-              "required": ["enabled", "tps"],
+              "required": ["enabled", "tps", "ioState"],
               "properties": {
                 "enabled": { "type": "boolean" },
                 "tps": { "type": "integer", "minimum": 0 },

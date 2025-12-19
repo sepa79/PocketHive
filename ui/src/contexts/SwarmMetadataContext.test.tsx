@@ -34,7 +34,7 @@ beforeEach(() => {
   setRefreshMock.mockClear()
 })
 
-  it('loads swarm metadata, resolves images, and refreshes via lifecycle handler', async () => {
+  it('loads swarm metadata, resolves images, and removes entries via lifecycle handler', async () => {
     const initialPayload = [
       {
         id: 'sw1',
@@ -53,25 +53,7 @@ beforeEach(() => {
       },
     ]
 
-    const refreshedPayload = [
-      ...initialPayload,
-      {
-        id: 'sw2',
-        status: 'RUNNING',
-        health: 'HEALTHY',
-        heartbeat: '2024-01-01T00:01:00Z',
-        workEnabled: true,
-        controllerEnabled: true,
-        templateId: 'tpl-2',
-        controllerImage: 'ctrl:2',
-        stackName: null,
-        bees: [{ role: 'moderator', image: 'mod:2' }],
-      },
-    ]
-
     listSwarmsMock.mockResolvedValueOnce(initialPayload)
-    listSwarmsMock.mockResolvedValueOnce(refreshedPayload)
-    listSwarmsMock.mockResolvedValue(refreshedPayload)
 
     let context: SwarmMetadataContextValue | null = null
 
@@ -102,13 +84,12 @@ beforeEach(() => {
     expect(handler).toBeTypeOf('function')
 
     await act(async () => {
-      handler?.(' sw2 ')
+      handler?.(' sw1 ')
       await Promise.resolve()
     })
 
-    expect(listSwarmsMock).toHaveBeenCalledTimes(2)
-    expect(context!.swarms).toEqual(refreshedPayload)
-    expect(context!.getControllerImage('sw2')).toBe('ctrl:2')
+    expect(listSwarmsMock).toHaveBeenCalledTimes(1)
+    expect(context!.swarms).toEqual([])
     const ids = context!.swarms.map((swarm) => swarm.id)
     expect(new Set(ids).size).toBe(ids.length)
   })

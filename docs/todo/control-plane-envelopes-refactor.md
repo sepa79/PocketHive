@@ -61,11 +61,14 @@ Goal: introduce a single, consistent control‑plane envelope model used by sign
     | `status-full`  | `enabled`          | Yes      | Boolean. Indicates whether this component is currently allowed to run workloads for its scope. |
     |                | `startedAt`        | Yes      | RFC‑3339 timestamp when this component started processing workloads for its scope (or when the current process was started). |
     |                | `tps`              | Yes      | Integer ≥ 0. Global throughput sample for the reporting interval.                              |
-    |                | `io`               | No       | Object describing IO bindings and queue health for this component. Canonical shape: `{ work: { queues, queueStats }, control: { queues } }`, where `queues` mirrors the per-exchange IO bindings (`in` / `out` / `routes`) and `queueStats` is a map keyed by queue name (`depth`, `consumers`, `oldestAgeSec?`). Only emitted in `status-full`. |
+    |                | `config`           | Yes      | Snapshot of the effective configuration for this scope (role/instance). Must not include secrets. |
+    |                | `io`               | Yes      | Object describing IO bindings and queue health for this component. Canonical shape: `{ work: { queues, queueStats }, control: { queues } }`, where `queues` mirrors the per-exchange IO bindings (`in` / `out` / `routes`) and `queueStats` is a map keyed by queue name (`depth`, `consumers`, `oldestAgeSec?`). Present only in `status-full`. |
+    |                | `ioState`          | Yes      | Coarse IO health summary for work/control inputs/outputs (see §6).                             |
     |                | `context`          | No       | Freeform object carrying role‑specific status context. For swarm‑controller, `context` should carry worker/traffic details such as `swarmStatus`, `swarmDiagnostics`, `scenario`, and any aggregated counts (`desired`, `healthy`, `running`, `enabled`). For orchestrator, `context` should carry at least `swarmCount` and `computeAdapter`. |
     | `status-delta` | `enabled`          | Yes      | Boolean. Same semantics as in `status-full`; used to signal enablement changes without resending full status snapshots. |
     |                | `tps`              | Yes      | Integer ≥ 0. Throughput sample for the interval since the last status event.                   |
-    |                | `context`          | No       | Same semantics as in `status-full`, but only for fields that change frequently (for example recent `swarmStatus`, rolling diagnostics). `data.io` and `data.startedAt` must be omitted from deltas. |
+    |                | `ioState`          | Yes      | Coarse IO health summary for work/control inputs/outputs (see §6).                             |
+    |                | `context`          | No       | Same semantics as in `status-full`, but only for fields that change frequently (for example recent `swarmStatus`, rolling diagnostics). `data.config`, `data.io`, and `data.startedAt` must be omitted from deltas. |
 
     **Control events (`kind = event`)**
 
@@ -222,8 +225,12 @@ Goal: introduce a single, consistent control‑plane envelope model used by sign
   - Swarm‑level status aggregates (derived from worker metrics).
   - Relevant `event.alert.alert` instances when an error or readiness condition is directly tied to IO conditions (for example stop due to out‑of‑data).
 - [x] Document how IO state should be interpreted in debugging (e.g. journal, Hive UI tooltips, docs).
-  - `data.io` is a **topology/metrics snapshot** (queues/routes + optional per-queue depth), present only in `status-full`.
-  - `data.ioState` is a **coarse aggregate** intended for fast debugging and alerting, present in both `status-full` and `status-delta`.
+  - `data.io` is a **topology/metrics snapshot** (queues/routes + optional per-queue depth), required and present only in `status-full`.
+  - `data.config` is a **configuration snapshot** (effective config for the scope), required and present only in `status-full`.
+  - `data.ioState` is a **coarse aggregate** intended for fast debugging and alerting, required in both `status-full` and `status-delta`.
+  - For `role=swarm-controller`, `data.context` is the canonical place for **swarm aggregates**:
+    - `status-delta`: small aggregate + progress (no worker list).
+    - `status-full`: full aggregate snapshot including per-worker list (e.g. `data.context.workers`).
   - `out-of-data` is *not* inferred from queue depth; it is a logical “source exhausted” condition and should be emitted by inputs/generators via `ioState` + (optionally) an `event.alert.alert` with `code=io.out-of-data` and `data.context.dataset` when known.
 
 ---

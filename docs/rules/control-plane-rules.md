@@ -12,6 +12,7 @@
 - **Deterministic queue naming**: Control queues MUST follow `ph.control.<swarmId>.<role>.<instance>`; workload queues hang off the swarm work exchange as `ph.work.<swarmId>.<queueName>`.
 - **Command → Confirmation**: Every control action yields **exactly one** `ev.ready.*` (success) or `ev.error.*` (error), correlated by IDs.
 - **Aggregate-first**: Orchestrator consumes **swarm aggregates**; per-component status is for Controller and observability.
+- **UI-v2: controller aggregate only**: UI consumers should prefer **Swarm Controller** aggregates over per-worker status streams to avoid fan-out amplification (many workers × many UI instances).
 - **Always-on control**: Config & status always handled, even when workload is disabled.
 - **Controller-level toggles**: Downstream services MUST inspect top-level `commandTarget` plus the `swarmId`/`role`/`instance` tuple on `sig.config-update.<swarm>.swarm-controller.<instance|ALL>`. `commandTarget=swarm` with the controller's swarm ID pauses/resumes all workloads it manages, while `commandTarget=instance` with `role=swarm-controller` and the controller instance ID pauses/resumes only the controller runtime. In both cases the control plane stays responsive.
 - **Non-destructive default**: Stop ≠ Remove. Removal is explicit and terminal.
@@ -99,8 +100,10 @@
 - Error MUST include `code`, `message`; MAY include `phase`, `retryable`, `details`
 
 ### 4.3 Status & bootstrap
-- SHOULD include `messageId` and `timestamp`
-- MAY include `correlationId` when directly answering `sig.status-request`
+- Canonical contract is `docs/spec/asyncapi.yaml` + `docs/spec/control-events.schema.json`.
+- `status-full` MUST be a full snapshot and MUST include `data.config` (effective config), `data.io` (IO snapshot), and `data.ioState` (coarse IO health).
+- `status-delta` MUST be a delta and MUST NOT resend full snapshots (`data.config`, `data.io`, `data.startedAt`).
+- `correlationId` MAY be set when directly answering `signal.status-request`.
 
 ---
 
@@ -117,7 +120,10 @@
 
 ## 6) Heartbeats & freshness
 
-- **Controller aggregates:** `status-delta` on change + at least every **10s** (watermark), optional periodic `status-full`.
+- **Controller aggregates:** `status-delta` on change + at least every **10s** (watermark), and `status-full` as a full snapshot.
+- **Aggregate content (Swarm Controller):**
+  - `event.metric.status-delta.<swarmId>.swarm-controller.<instance>` MUST carry a **small aggregate** in `data.context` (for example counts, swarm status, staleness summary, guard/scenario progress), plus required `data.ioState`.
+  - `event.metric.status-full.<swarmId>.swarm-controller.<instance>` MUST carry a **full aggregate snapshot** in `data.context` including a per-worker list (for example `data.context.workers: [{ role, instance, enabled, ioState?, health? }]`), plus required `data.config`, `data.io`, and `data.ioState`.
 - **Components:** `status-full` on startup and upon `status-request`; `status-delta` on change.
 - If a component is **stale** beyond TTL, Controller **requests status** before asserting Ready/Running.
 

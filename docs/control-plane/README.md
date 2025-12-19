@@ -63,3 +63,8 @@ Signals/outcomes/alerts/metrics share the same top-level envelope fields (see th
   "data": { "status": "Running", "retryable": false }
 }
 ```
+
+## Status semantics (metric)
+
+- `event.metric.status-full.*` is a **full snapshot** and MUST include `data.config` (effective config), `data.io` (IO topology/queue snapshot), and `data.ioState` (coarse IO health).
+- `event.metric.status-delta.*` is a **delta** and MUST NOT resend full snapshots (`data.config`, `data.io`, `data.startedAt`).
