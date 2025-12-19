@@ -584,6 +584,58 @@ public class ScenarioService {
         Files.writeString(file, content);
     }
 
+    public void renameHttpTemplate(String id, String fromPath, String toPath) throws IOException {
+        if (fromPath == null || fromPath.isBlank() || toPath == null || toPath.isBlank()) {
+            throw new IllegalArgumentException("Template paths must not be null or blank");
+        }
+        Path bundle = bundleDir(id);
+        Path templatesDir = bundle.resolve("http-templates").normalize();
+        Path source = bundle.resolve(fromPath).normalize();
+        Path target = bundle.resolve(toPath).normalize();
+        if (!source.startsWith(bundle) || !target.startsWith(bundle)) {
+            throw new IllegalArgumentException("Invalid template path");
+        }
+        if (!source.startsWith(templatesDir) || !target.startsWith(templatesDir)) {
+            throw new IllegalArgumentException("Template paths must live under http-templates/");
+        }
+        if (source.equals(target)) {
+            throw new IllegalArgumentException("Template paths must differ");
+        }
+        if (!Files.isRegularFile(source)) {
+            throw new IllegalArgumentException(
+                "Template '%s' not found in bundle for scenario '%s'".formatted(fromPath, id));
+        }
+        if (Files.exists(target)) {
+            throw new IllegalArgumentException(
+                "Template '%s' already exists in bundle for scenario '%s'".formatted(toPath, id));
+        }
+        Path parent = target.getParent();
+        if (parent != null) {
+            Files.createDirectories(parent);
+        }
+        Files.move(source, target);
+    }
+
+    public void deleteHttpTemplate(String id, String relativePath) throws IOException {
+        if (relativePath == null || relativePath.isBlank()) {
+            throw new IllegalArgumentException("Template path must not be null or blank");
+        }
+        Path bundle = bundleDir(id);
+        Path templatesDir = bundle.resolve("http-templates").normalize();
+        Path file = bundle.resolve(relativePath).normalize();
+        if (!file.startsWith(bundle)) {
+            throw new IllegalArgumentException("Invalid template path");
+        }
+        if (!file.startsWith(templatesDir)) {
+            throw new IllegalArgumentException("Template paths must live under http-templates/");
+        }
+        if (!Files.isRegularFile(file)) {
+            throw new IllegalArgumentException(
+                "Template '%s' not found in bundle for scenario '%s'".formatted(relativePath, id));
+        }
+        Files.delete(file);
+    }
+
     public Scenario createBundleFromZip(byte[] zipBytes) throws IOException {
         UploadedBundle uploaded = unpackBundle(zipBytes, null);
         try {

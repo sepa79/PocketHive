@@ -208,6 +208,25 @@ public class ScenarioController {
         return ResponseEntity.noContent().build();
     }
 
+    @PostMapping(value = "/{id}/http-template/rename")
+    public ResponseEntity<Void> renameHttpTemplate(@PathVariable("id") String id,
+                                                   @RequestParam("from") String fromPath,
+                                                   @RequestParam("to") String toPath) throws IOException {
+        log.info("[REST] POST /scenarios/{}/http-template/rename from={} to={}", id, fromPath, toPath);
+        service.renameHttpTemplate(id, fromPath, toPath);
+        log.info("[REST] POST /scenarios/{}/http-template/rename -> status=204", id);
+        return ResponseEntity.noContent().build();
+    }
+
+    @DeleteMapping(value = "/{id}/http-template")
+    public ResponseEntity<Void> deleteHttpTemplate(@PathVariable("id") String id,
+                                                   @RequestParam("path") String path) throws IOException {
+        log.info("[REST] DELETE /scenarios/{}/http-template path={}", id, path);
+        service.deleteHttpTemplate(id, path);
+        log.info("[REST] DELETE /scenarios/{}/http-template -> status=204", id);
+        return ResponseEntity.noContent().build();
+    }
+
     @GetMapping(value = "/{id}/bundle", produces = "application/zip")
     public ResponseEntity<byte[]> downloadBundle(@PathVariable("id") String id) throws IOException {
         log.info("[REST] GET /scenarios/{}/bundle", id);

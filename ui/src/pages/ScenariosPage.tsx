@@ -21,6 +21,8 @@ import {
   listHttpTemplates,
   fetchHttpTemplate,
   saveHttpTemplate,
+  renameHttpTemplate,
+  deleteHttpTemplate,
   type ScenarioPayload,
   type ScenarioPlanView,
   type ScenarioPlanStep,
@@ -3867,6 +3869,102 @@ export default function ScenariosPage() {
                         Edit body via schema
                       </button>
                     )}
+                    <button
+                      type="button"
+                      className="rounded bg-white/10 px-2 py-1 text-[11px] text-white/80 hover:bg-white/20 disabled:opacity-40"
+                      disabled={!selectedId || !httpTemplateSelectedPath || httpTemplateSaving}
+                      onClick={async () => {
+                        if (!selectedId || !httpTemplateSelectedPath) return
+                        const nextRaw = window.prompt(
+                          'Rename HTTP template (path under http-templates/)',
+                          httpTemplateSelectedPath,
+                        )
+                        if (nextRaw == null) return
+                        const trimmed = nextRaw.trim()
+                        if (!trimmed) {
+                          setToast('Template path cannot be empty')
+                          return
+                        }
+                        const cleaned = trimmed.replace(/^\/+/, '')
+                        const nextPath = cleaned.startsWith('http-templates/')
+                          ? cleaned
+                          : `http-templates/${cleaned}`
+                        if (nextPath === httpTemplateSelectedPath) {
+                          setToast('Template path unchanged')
+                          return
+                        }
+                        setHttpTemplateSaving(true)
+                        setHttpTemplateError(null)
+                        try {
+                          await renameHttpTemplate(selectedId, httpTemplateSelectedPath, nextPath)
+                          setHttpTemplatePaths((current) => {
+                            const updated = current.map((entry) =>
+                              entry === httpTemplateSelectedPath ? nextPath : entry,
+                            )
+                            updated.sort((a, b) => a.localeCompare(b))
+                            return updated
+                          })
+                          setHttpTemplateSelectedPath(nextPath)
+                        } catch (e) {
+                          setHttpTemplateError(
+                            e instanceof Error
+                              ? `Failed to rename HTTP template: ${e.message}`
+                              : 'Failed to rename HTTP template',
+                          )
+                        } finally {
+                          setHttpTemplateSaving(false)
+                        }
+                      }}
+                    >
+                      Rename template
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded bg-rose-500/20 px-2 py-1 text-[11px] text-rose-100 hover:bg-rose-500/30 disabled:opacity-40"
+                      disabled={!selectedId || !httpTemplateSelectedPath || httpTemplateSaving}
+                      onClick={async () => {
+                        if (!selectedId || !httpTemplateSelectedPath) return
+                        const confirmed = window.confirm(
+                          `Delete HTTP template "${httpTemplateSelectedPath}"?`,
+                        )
+                        if (!confirmed) return
+                        setHttpTemplateSaving(true)
+                        setHttpTemplateError(null)
+                        try {
+                          await deleteHttpTemplate(selectedId, httpTemplateSelectedPath)
+                          const updated = httpTemplatePaths
+                            .filter((entry) => entry !== httpTemplateSelectedPath)
+                            .sort((a, b) => a.localeCompare(b))
+                          setHttpTemplatePaths(updated)
+                          const nextPath = updated[0] ?? null
+                          setHttpTemplateSelectedPath(nextPath)
+                          if (!nextPath) {
+                            setHttpTemplateRaw('')
+                            return
+                          }
+                          try {
+                            const text = await fetchHttpTemplate(selectedId, nextPath)
+                            setHttpTemplateRaw(text)
+                          } catch (e) {
+                            setHttpTemplateError(
+                              e instanceof Error
+                                ? `Failed to load HTTP template: ${e.message}`
+                                : 'Failed to load HTTP template',
+                            )
+                          }
+                        } catch (e) {
+                          setHttpTemplateError(
+                            e instanceof Error
+                              ? `Failed to delete HTTP template: ${e.message}`
+                              : 'Failed to delete HTTP template',
+                          )
+                        } finally {
+                          setHttpTemplateSaving(false)
+                        }
+                      }}
+                    >
+                      Delete template
+                    </button>
                     <button
                       type="button"
                       className="rounded bg-white/10 px-2 py-1 text-[11px] text-white/80 hover:bg-white/20 disabled:opacity-40"

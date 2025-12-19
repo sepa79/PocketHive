@@ -246,6 +246,28 @@ export async function saveHttpTemplate(id: string, path: string, body: string): 
   await ensureOk(response, 'Failed to save HTTP template')
 }
 
+export async function renameHttpTemplate(id: string, fromPath: string, toPath: string): Promise<void> {
+  const params = new URLSearchParams({ from: fromPath, to: toPath })
+  const response = await apiFetch(
+    `/scenario-manager/scenarios/${encodeURIComponent(id)}/http-template/rename?${params.toString()}`,
+    {
+      method: 'POST',
+    },
+  )
+  await ensureOk(response, 'Failed to rename HTTP template')
+}
+
+export async function deleteHttpTemplate(id: string, path: string): Promise<void> {
+  const params = new URLSearchParams({ path })
+  const response = await apiFetch(
+    `/scenario-manager/scenarios/${encodeURIComponent(id)}/http-template?${params.toString()}`,
+    {
+      method: 'DELETE',
+    },
+  )
+  await ensureOk(response, 'Failed to delete HTTP template')
+}
+
 export interface ScenarioPlanStep {
   stepId: string | null
   name: string | null

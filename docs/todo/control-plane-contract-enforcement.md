@@ -53,7 +53,19 @@ Keep runtime parsing tolerant, but enforce expectations via tests:
 - Feed consumers valid envelopes (from fixtures) and verify correct projection/state updates.
 - Feed invalid envelopes and verify behavior (ignore/log/reject), depending on component requirements.
 
-### 4) CI gate
+### 4) E2E capture audit (blocking)
+
+Add a control-plane traffic capture step that runs across the full E2E suite:
+
+- Start a RabbitMQ listener (CP only: `signal.#` / `event.#` on `ph.control`) before E2E runs.
+- Capture all emitted control-plane payloads (routing key + headers + body).
+- Validate every captured payload against `docs/spec/control-events.schema.json`.
+- Fail on any non-conforming payload; no field-value checks beyond schema conformance.
+- Enforce “status-delta minimalism” in the schema itself (tighten schema as needed).
+
+Implementation preference: Java-based validator inside the E2E harness (blocking in CI).
+
+### 5) CI gate
 
 In CI, add a mandatory stage that runs:
 
@@ -70,4 +82,3 @@ Optionally:
 - **Validator implementation**: Java-based (recommended for Maven modules) vs Node-based (fast, but adds tooling coupling).
 - **Fixture location**: keep under module tests vs central `docs/spec/fixtures/` folder.
 - **“Delta minimalism”**: formalize what “delta” is allowed to contain (likely needs explicit doc + tests).
-

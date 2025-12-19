@@ -239,11 +239,28 @@ class ScenarioControllerTest {
                         .content("serviceId: default\ncallId: demo\nbodyTemplate: \"{\\\"updated\\\":true}\"\n"))
                 .andExpect(status().isNoContent());
 
+        mvc.perform(post("/scenarios/http-demo/http-template/rename")
+                        .param("from", "http-templates/example.yaml")
+                        .param("to", "http-templates/renamed.yaml"))
+                .andExpect(status().isNoContent());
+
+        mvc.perform(get("/scenarios/http-demo/http-templates").accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0]").value("http-templates/renamed.yaml"));
+
         mvc.perform(get("/scenarios/http-demo/http-template")
-                        .param("path", "http-templates/example.yaml")
+                        .param("path", "http-templates/renamed.yaml")
                         .accept(MediaType.TEXT_PLAIN))
                 .andExpect(status().isOk())
                 .andExpect(content().string("serviceId: default\ncallId: demo\nbodyTemplate: \"{\\\"updated\\\":true}\"\n"));
+
+        mvc.perform(delete("/scenarios/http-demo/http-template")
+                        .param("path", "http-templates/renamed.yaml"))
+                .andExpect(status().isNoContent());
+
+        mvc.perform(get("/scenarios/http-demo/http-templates").accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isEmpty());
     }
 
     @Test
