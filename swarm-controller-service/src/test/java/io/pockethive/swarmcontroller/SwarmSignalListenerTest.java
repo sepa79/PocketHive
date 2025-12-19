@@ -70,7 +70,8 @@ class SwarmSignalListenerTest {
         instanceId,
         mapper,
         SwarmControllerTestProperties.defaults(),
-        io.pockethive.swarmcontroller.runtime.SwarmJournal.noop());
+        io.pockethive.swarmcontroller.runtime.SwarmJournal.noop(),
+        "");
   }
 
   private static final Map<String, QueueStats> DEFAULT_QUEUE_STATS =
@@ -557,17 +558,18 @@ class SwarmSignalListenerTest {
   }
 
   @Test
-	  void configUpdateProducesJournalRequestAndAppliedEvents() throws Exception {
-	    when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
-	    RecordingJournal journal = new RecordingJournal();
-	    SwarmSignalListener listener = new SwarmSignalListener(
-	        lifecycle,
-        rabbit,
-        "inst",
-        mapper,
-        SwarmControllerTestProperties.defaults(),
-        journal);
-    String body = configUpdateSignal("inst", "i4", "c4", Map.of("enabled", true));
+		  void configUpdateProducesJournalRequestAndAppliedEvents() throws Exception {
+		    when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
+		    RecordingJournal journal = new RecordingJournal();
+		    SwarmSignalListener listener = new SwarmSignalListener(
+		        lifecycle,
+	        rabbit,
+	        "inst",
+	        mapper,
+	        SwarmControllerTestProperties.defaults(),
+	        journal,
+          "");
+	    String body = configUpdateSignal("inst", "i4", "c4", Map.of("enabled", true));
 	
 	    listener.handle(body, controllerInstanceSignal(ControlPlaneSignals.CONFIG_UPDATE, "inst"));
 	
@@ -620,7 +622,7 @@ class SwarmSignalListenerTest {
     JsonNode node = mapper.readTree(statusPayload.getValue());
     assertThat(node.path("data").path("enabled").asBoolean()).isFalse();
     assertThat(node.path("data").path("tps").asInt()).isEqualTo(0);
-    assertThat(node.path("data").path("swarmStatus").asText()).isEqualTo("STOPPED");
+    assertThat(node.path("data").path("context").path("swarmStatus").asText()).isEqualTo("STOPPED");
   }
 
   @Test
@@ -645,7 +647,7 @@ class SwarmSignalListenerTest {
     verify(rabbit).convertAndSend(eq(CONTROL_EXCHANGE),
         eq(statusEvent("status-full", "swarm-controller", "inst")), payload.capture());
     JsonNode node = mapper.readTree(payload.getValue());
-    JsonNode bufferGuard = node.path("data").path("trafficPolicy").path("bufferGuard");
+    JsonNode bufferGuard = node.path("data").path("config").path("trafficPolicy").path("bufferGuard");
     assertThat(bufferGuard.isMissingNode()).isFalse();
     assertThat(bufferGuard.path("queueAlias").asText()).isEqualTo("gen-out");
     assertThat(bufferGuard.path("targetDepth").asInt()).isEqualTo(200);
@@ -843,7 +845,7 @@ class SwarmSignalListenerTest {
           && "status-full".equals(node.path("type").asText())
           && data.path("enabled").asBoolean()
           && data.path("tps").asInt() == 0
-          && "RUNNING".equals(data.path("swarmStatus").asText())
+          && "RUNNING".equals(data.path("context").path("swarmStatus").asText())
           && stats.path("depth").asLong() == 7L
           && stats.path("consumers").asInt() == 3
           && stats.path("oldestAgeSec").asLong() == 42L;

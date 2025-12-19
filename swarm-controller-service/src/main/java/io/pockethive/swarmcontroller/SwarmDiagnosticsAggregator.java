@@ -28,11 +28,11 @@ final class SwarmDiagnosticsAggregator {
     this.mapper = Objects.requireNonNull(mapper, "mapper");
   }
 
-  void updateFromWorkerStatus(String role, String instance, JsonNode dataNode) {
+ void updateFromWorkerStatus(String role, String instance, JsonNode dataNode) {
     if (role == null || role.isBlank() || dataNode == null || dataNode.isMissingNode() || dataNode.isNull()) {
       return;
     }
-    JsonNode diagnostics = dataNode.path("diagnostics");
+    JsonNode diagnostics = dataNode.path("context").path("diagnostics");
     if (!diagnostics.isObject() || diagnostics.isEmpty()) {
       return;
     }
@@ -52,4 +52,3 @@ final class SwarmDiagnosticsAggregator {
     return Collections.unmodifiableMap(copy);
   }
 }
-

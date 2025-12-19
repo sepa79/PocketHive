@@ -228,7 +228,7 @@ import static org.junit.jupiter.api.Assertions.*;
     } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
       throw new RuntimeException(e);
     }
-    assertEquals("STOPPED", json.path("data").path("swarmStatus").asText());
+    assertEquals("STOPPED", json.path("data").path("context").path("swarmStatus").asText());
 
     manager.remove();
 
