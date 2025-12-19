@@ -671,14 +671,18 @@ public final class WorkerControlPlaneRuntime {
             log.debug("Skipping status emission; no worker states registered");
             return;
         }
+
         StatusSnapshot snapshotData = collectSnapshot(states, snapshot);
+        Map<String, Object> configSnapshot = snapshot ? statusConfigSnapshot(states) : Map.of();
+
         IoStateAggregate workerIo = ioStateFromWorkers(states);
         IoStateAggregate ioStateForEnvelope = workerIo != null
             ? new IoStateAggregate(
-                workerIo.workInput() != null ? workerIo.workInput() : "unknown",
-                workerIo.workOutput() != null ? workerIo.workOutput() : "unknown",
+                Objects.requireNonNullElse(workerIo.workInput(), "unknown"),
+                Objects.requireNonNullElse(workerIo.workOutput(), "unknown"),
                 workerIo.workContext())
             : new IoStateAggregate("unknown", "unknown", null);
+
         long nowMillis = System.currentTimeMillis();
         double intervalSeconds;
         double tps;
@@ -698,11 +702,13 @@ public final class WorkerControlPlaneRuntime {
             lastComputedTps = tps;
             lastIntervalSeconds = intervalSeconds;
         }
+
         Consumer<io.pockethive.observability.StatusEnvelopeBuilder> customiser = builder -> {
             builder.role(identity.role())
                 .instance(identity.instanceId())
                 .swarmId(identity.swarmId())
                 .enabled(snapshotData.enabled());
+
             if (controlQueueName != null) {
                 builder.controlIn(controlQueueName);
             }
@@ -721,9 +727,10 @@ public final class WorkerControlPlaneRuntime {
 
             builder.tps(Math.round(tps));
             builder.data("intervalSeconds", intervalSeconds);
-            builder.data("startedAt", startedAt);
-            builder.data("workers", snapshotData.workers());
-            builder.data("snapshot", snapshot);
+            if (snapshot) {
+                builder.data("startedAt", startedAt);
+                builder.config(configSnapshot);
+            }
         };
 
         maybeEmitIoOutOfData(workerIo);
@@ -849,6 +856,34 @@ public final class WorkerControlPlaneRuntime {
     }
 
     private record IoStateAggregate(String workInput, String workOutput, Map<String, Object> workContext) {
+    }
+
+    private Map<String, Object> statusConfigSnapshot(List<WorkerState> states) {
+        if (states == null || states.isEmpty()) {
+            return Map.of();
+        }
+        if (states.size() == 1) {
+            Map<String, Object> cfg = snapshotRawConfig(states.getFirst());
+            return cfg != null ? cfg : Map.of();
+        }
+        Map<String, Object> perWorker = new LinkedHashMap<>();
+        for (WorkerState state : states) {
+            if (state == null || state.definition() == null) {
+                continue;
+            }
+            String beanName = state.definition().beanName();
+            if (beanName == null || beanName.isBlank()) {
+                continue;
+            }
+            Map<String, Object> cfg = snapshotRawConfig(state);
+            if (cfg != null && !cfg.isEmpty()) {
+                perWorker.put(beanName, cfg);
+            }
+        }
+        if (perWorker.isEmpty()) {
+            return Map.of();
+        }
+        return Map.of("workers", Map.copyOf(perWorker));
     }
 
     private StatusSnapshot collectSnapshot(Collection<WorkerState> states, boolean snapshotMode) {

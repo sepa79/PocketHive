@@ -16,10 +16,14 @@
     "data": {
       "enabled": true,
       "tps": 7,
-      "custom": "value",
+      "ioState": {
+        "work": { "input": "unknown", "output": "unknown" },
+        "control": { "input": "unknown", "output": "unknown" }
+      },
       "context": {
         "location": "<<ANY>>",
-        "traffic": "exchange.main"
+        "traffic": "exchange.main",
+        "custom": "value"
       }
     }
   }
