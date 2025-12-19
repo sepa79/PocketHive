@@ -41,18 +41,18 @@ References:
 
 ### 1) Worker SDK (per-worker status)
 
-- [ ] Remove any swarm-level fields (no `workers[]`) from worker `status-delta`
-- [ ] Ensure worker `status-delta` always includes `enabled/tps/ioState` (default `unknown` where needed)
-- [ ] Ensure worker `status-full` always includes `config/io/ioState/startedAt/enabled/tps`
-- [ ] Add/adjust unit tests to validate worker status envelopes against schema
+- [x] Remove any swarm-level fields (no `workers[]`) from worker `status-delta`
+- [x] Ensure worker `status-delta` always includes `enabled/tps/ioState` (default `unknown` where needed)
+- [x] Ensure worker `status-full` always includes `config/io/ioState/startedAt/enabled/tps`
+- [x] Add/adjust unit tests to validate worker status envelopes against schema
 
 ### 2) Swarm Controller status aggregates
 
-- [ ] Make SC `status-delta` an aggregate-only payload in `data.context` (no per-worker list)
-- [ ] Make SC `status-full` a full aggregate snapshot in `data.context` including `context.workers[]`
-- [ ] Include scenario progress consistently in SC status (current/next step, runs)
-- [ ] Include journal `runId` in SC status (source: `pockethive.journal.run-id`, emit under `data.context.journal.runId`)
-- [ ] Add/adjust tests validating SC status envelopes against schema + “no heavy fields in delta”
+- [x] Make SC `status-delta` an aggregate-only payload in `data.context` (no per-worker list)
+- [x] Make SC `status-full` a full aggregate snapshot in `data.context` including `context.workers[]`
+- [x] Include scenario progress consistently in SC status (current/next step, runs)
+- [x] Include journal `runId` in SC status (source: `pockethive.journal.run-id`, emit under `data.context.journal.runId`)
+- [x] Add/adjust tests validating SC status envelopes against schema + “no heavy fields in delta”
 
 ### 3) Orchestrator projections / registry
 
@@ -71,7 +71,7 @@ References:
 
 ### 5) Contract enforcement
 
-- [ ] Add schema-driven tests that validate generated status payloads against `docs/spec/control-events.schema.json`
+- [x] Add schema-driven tests that validate generated status payloads against `docs/spec/control-events.schema.json`
 - [ ] Add E2E capture audit (blocking in CI): capture `ph.control` traffic during E2E and validate all payloads against schema
 - [ ] Add semantic guards in tests (schema cannot express these well):
   - [ ] no heavy fields in `status-delta`
@@ -82,4 +82,3 @@ References:
 - [ ] Start a swarm; verify SC emits `status-delta` watermark and `status-full` on request
 - [ ] Inject broken control message; verify it is rejected without requeue (no storm)
 - [ ] UI-v2 open with multiple instances; verify no per-worker subscription fan-out and stable behavior
-
