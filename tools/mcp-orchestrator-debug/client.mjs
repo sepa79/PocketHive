@@ -1024,7 +1024,18 @@ async function sendStatusRequest(swarmId, role, instanceId) {
   try {
     const exchange = controlExchange();
     const rk = `signal.status-request.${swarmId}.${role}.${instanceId}`;
-    const payload = JSON.stringify({});
+    const correlationId = randomCorrelationId();
+    const payload = JSON.stringify({
+      timestamp: new Date().toISOString(),
+      version: "1",
+      kind: "signal",
+      type: "status-request",
+      origin: "mcp-orchestrator-debug-client",
+      scope: { swarmId, role, instance: instanceId },
+      correlationId,
+      idempotencyKey: null,
+      data: null,
+    });
     await ch.assertExchange(exchange, "topic", { durable: true });
     ch.publish(exchange, rk, Buffer.from(payload, "utf8"), {
       contentType: "application/json",
@@ -1041,6 +1052,18 @@ async function sendStatusRequest(swarmId, role, instanceId) {
       // ignore
     }
   }
+}
+
+function randomCorrelationId() {
+  if (typeof crypto !== "undefined" && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return (
+    "corr-" +
+    Date.now().toString(36) +
+    "-" +
+    Math.floor(Math.random() * 1e9).toString(36)
+  );
 }
 
 main().catch((err) => {

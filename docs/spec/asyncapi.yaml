@@ -451,11 +451,18 @@ components:
             additionalProperties: false
             required:
             - enabled
+            - config
             - tps
             - startedAt
+            - io
+            - ioState
             properties:
               enabled:
                 type: boolean
+              config:
+                type: object
+                additionalProperties: true
+                description: "Snapshot of the effective configuration for this scope (role/instance). Must not include secrets."
               tps:
                 type: integer
                 minimum: 0
@@ -485,6 +492,7 @@ components:
             required:
             - enabled
             - tps
+            - ioState
             properties:
               enabled:
                 type: boolean
