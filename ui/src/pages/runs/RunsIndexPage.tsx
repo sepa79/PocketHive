@@ -10,6 +10,8 @@ export default function RunsIndexPage() {
   const [search, setSearch] = useState('')
   const [pinnedOnly, setPinnedOnly] = useState(false)
   const [groupByScenario, setGroupByScenario] = useState(true)
+  const [range, setRange] = useState<'1d' | '7d' | '30d' | 'all'>('1d')
+  const [limit, setLimit] = useState<number>(500)
 
   useEffect(() => {
     let cancelled = false
@@ -19,7 +21,13 @@ export default function RunsIndexPage() {
       }
       setError(null)
       try {
-        const res = await getAllSwarmJournalRuns({ limit: 2000, pinned: pinnedOnly })
+        const afterTs =
+          range === 'all'
+            ? null
+            : new Date(
+                Date.now() - (range === '1d' ? 24 : range === '7d' ? 7 * 24 : 30 * 24) * 60 * 60 * 1000,
+              ).toISOString()
+        const res = await getAllSwarmJournalRuns({ limit, pinned: pinnedOnly, afterTs })
         if (!cancelled) {
           setRuns(res)
         }
@@ -38,7 +46,7 @@ export default function RunsIndexPage() {
     return () => {
       cancelled = true
     }
-  }, [pinnedOnly])
+  }, [limit, pinnedOnly, range])
 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase()
@@ -96,6 +104,73 @@ export default function RunsIndexPage() {
         >
           Open Hive journal
         </button>
+        <div className="inline-flex overflow-hidden rounded border border-white/15 bg-white/5">
+          <button
+            type="button"
+            className={`px-3 py-2 text-xs font-semibold ${
+              range === '1d' ? 'bg-white/10 text-white' : 'text-white/70 hover:bg-white/10'
+            }`}
+            onClick={() => setRange('1d')}
+          >
+            1d
+          </button>
+          <button
+            type="button"
+            className={`px-3 py-2 text-xs font-semibold ${
+              range === '7d' ? 'bg-white/10 text-white' : 'text-white/70 hover:bg-white/10'
+            }`}
+            onClick={() => setRange('7d')}
+          >
+            7d
+          </button>
+          <button
+            type="button"
+            className={`px-3 py-2 text-xs font-semibold ${
+              range === '30d' ? 'bg-white/10 text-white' : 'text-white/70 hover:bg-white/10'
+            }`}
+            onClick={() => setRange('30d')}
+          >
+            30d
+          </button>
+          <button
+            type="button"
+            className={`px-3 py-2 text-xs font-semibold ${
+              range === 'all' ? 'bg-white/10 text-white' : 'text-white/70 hover:bg-white/10'
+            }`}
+            onClick={() => setRange('all')}
+          >
+            All
+          </button>
+        </div>
+        <div className="inline-flex overflow-hidden rounded border border-white/15 bg-white/5">
+          <button
+            type="button"
+            className={`px-3 py-2 text-xs font-semibold ${
+              limit === 200 ? 'bg-white/10 text-white' : 'text-white/70 hover:bg-white/10'
+            }`}
+            onClick={() => setLimit(200)}
+          >
+            200
+          </button>
+          <button
+            type="button"
+            className={`px-3 py-2 text-xs font-semibold ${
+              limit === 500 ? 'bg-white/10 text-white' : 'text-white/70 hover:bg-white/10'
+            }`}
+            onClick={() => setLimit(500)}
+          >
+            500
+          </button>
+          <button
+            type="button"
+            className={`px-3 py-2 text-xs font-semibold ${
+              limit === 2000 ? 'bg-white/10 text-white' : 'text-white/70 hover:bg-white/10'
+            }`}
+            onClick={() => setLimit(2000)}
+          >
+            2000
+          </button>
+        </div>
         <input
           className="rounded bg-white/10 px-3 py-2 text-white w-64"
           placeholder="Filter runId / scenario / tags / swarm…"

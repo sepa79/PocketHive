@@ -608,7 +608,7 @@ public class SwarmLifecycleSteps {
 
     LinkedHashSet<String> seenStepIds = new LinkedHashSet<>();
     for (ControlPlaneEvents.StatusEnvelope env : controllerEvents) {
-      Object scenarioObj = env.status().data().extra().get("scenario");
+      Object scenarioObj = env.status().data().context().get("scenario");
       if (!(scenarioObj instanceof Map<?, ?> scenarioMapRaw)) {
         continue;
       }
@@ -1092,7 +1092,7 @@ public class SwarmLifecycleSteps {
     if (status == null) {
       return Map.of();
     }
-    Object workers = status.data().extra().get("workers");
+    Object workers = status.data().context().get("workers");
     if (!(workers instanceof List<?> list)) {
       return Map.of();
     }

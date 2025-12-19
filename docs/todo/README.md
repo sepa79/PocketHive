@@ -5,6 +5,8 @@ implemented. They act as a backlog of larger architectural changes.
 
 Notable “todo” plans:
 
+- `docs/todo/control-plane-contract-enforcement.md` – enforce AsyncAPI/JSON Schema contracts with dedicated contract tests + CI gates.
+- `docs/todo/swarm-runtime-core-refactor.md` – break up SwarmRuntimeCore (1000+ LOC) into smaller units and add focused tests.
 - `docs/sdk/control-plane-io-plan.md` – IO v2 where the control plane owns IO config.
 - `docs/sdk/http-request-processor-plan.md` – richer HTTP processor worker and response routing.
 - `docs/sdk/worker-plugin-plan.md` – plugin-based workers.
@@ -13,4 +15,3 @@ Notable “todo” plans:
 
 Each plan file has a `Status: future / design` header to distinguish it
 from implemented work.
-
