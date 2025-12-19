@@ -237,7 +237,7 @@ class SwarmSignalListenerTest {
             .instance(identity.instanceId());
         statusCaptor.getValue().customiser().accept(builder);
         JsonNode node = read(builder.toJson());
-        assertThat(node.path("data").path("swarmCount").asInt()).isEqualTo(2);
+        assertThat(node.path("data").path("context").path("swarmCount").asInt()).isEqualTo(2);
     }
 
     private JsonNode read(String json) {
