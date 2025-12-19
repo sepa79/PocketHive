@@ -160,7 +160,7 @@ class SwarmLifecycleManagerTest {
         startsWith("event.metric.status-delta." + TEST_SWARM_ID + ".swarm-controller.inst"),
         statusPayload.capture());
     JsonNode statusNode = mapper.readTree(statusPayload.getValue());
-    assertThat(statusNode.path("data").path("swarmStatus").asText()).isEqualTo("STOPPED");
+    assertThat(statusNode.path("data").path("context").path("swarmStatus").asText()).isEqualTo("STOPPED");
     verifyNoInteractions(docker);
     verifyNoInteractions(amqp);
     assertEquals(SwarmStatus.STOPPED, manager.getStatus());

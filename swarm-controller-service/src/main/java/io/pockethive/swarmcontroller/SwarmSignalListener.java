@@ -33,6 +33,7 @@ import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.amqp.support.AmqpHeaders;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -63,7 +64,9 @@ public class SwarmSignalListener {
   private final String controlExchange;
   private final SwarmDiagnosticsAggregator diagnostics;
   private final SwarmIoStateAggregator ioStates;
+  private final SwarmWorkersAggregator workers;
   private final SwarmJournal journal;
+  private final String journalRunId;
   private static final long STATUS_INTERVAL_MS = 5000L;
   private static final long MAX_STALENESS_MS = 15_000L;
   private final AtomicReference<PendingTemplate> pendingTemplate = new AtomicReference<>();
@@ -80,7 +83,8 @@ public class SwarmSignalListener {
                              @Qualifier("instanceId") String instanceId,
                              ObjectMapper mapper,
                              SwarmControllerProperties properties,
-                             SwarmJournal journal) {
+                             SwarmJournal journal,
+                             @Value("${pockethive.journal.run-id:}") String journalRunId) {
     this.lifecycle = lifecycle;
     this.rabbit = rabbit;
     this.instanceId = instanceId;
@@ -91,7 +95,9 @@ public class SwarmSignalListener {
     this.controlExchange = properties.getControlExchange();
     this.diagnostics = new SwarmDiagnosticsAggregator(this.mapper);
     this.ioStates = new SwarmIoStateAggregator();
+    this.workers = new SwarmWorkersAggregator(MAX_STALENESS_MS);
     this.journal = journal != null ? journal : SwarmJournal.noop();
+    this.journalRunId = journalRunId != null && !journalRunId.isBlank() ? journalRunId.trim() : null;
     ControlPlanePublisher basePublisher = new AmqpControlPlanePublisher(rabbit, controlExchange);
     ControlPlanePublisher publisher = new JournalControlPlanePublisher(this.mapper, this.journal, basePublisher);
     this.controlPlane = ManagerControlPlane.builder(publisher, this.mapper)
@@ -197,6 +203,7 @@ public class SwarmSignalListener {
       lifecycle.updateHeartbeat(role, instance);
       diagnostics.updateFromWorkerStatus(role, instance, node.path("data"));
       ioStates.updateFromWorkerStatus(role, instance, node.path("data"));
+      workers.updateFromWorkerStatus(role, instance, node.path("data"));
       maybeJournalWorkerErrorIndicators(role, instance, node);
 
       boolean enabled = node.path("data").path("enabled").asBoolean(true);
@@ -224,7 +231,11 @@ public class SwarmSignalListener {
     if (!data.isObject()) {
       return;
     }
-    JsonNode errorCountNode = data.get("errorCount");
+    JsonNode context = data.path("context");
+    if (!context.isObject()) {
+      return;
+    }
+    JsonNode errorCountNode = context.get("errorCount");
     if (errorCountNode == null || !errorCountNode.isNumber()) {
       return;
     }
@@ -245,15 +256,15 @@ public class SwarmSignalListener {
     entry.put("instance", workerInstance);
     entry.put("errorCount", current);
     entry.put("errorDelta", current - previous);
-    JsonNode errorTpsNode = data.get("errorTps");
+    JsonNode errorTpsNode = context.get("errorTps");
     if (errorTpsNode != null && errorTpsNode.isNumber()) {
       entry.put("errorTps", errorTpsNode.numberValue());
     }
-    JsonNode serviceIdNode = data.get("serviceId");
+    JsonNode serviceIdNode = context.get("serviceId");
     if (serviceIdNode != null && serviceIdNode.isTextual() && !serviceIdNode.asText().isBlank()) {
       entry.put("serviceId", serviceIdNode.asText());
     }
-    JsonNode templateRootNode = data.get("templateRoot");
+    JsonNode templateRootNode = context.get("templateRoot");
     if (templateRootNode != null && templateRootNode.isTextual() && !templateRootNode.asText().isBlank()) {
       entry.put("templateRoot", templateRootNode.asText());
     }
@@ -798,8 +809,6 @@ public class SwarmSignalListener {
     maybeJournalHealthTransition(state, m);
     SwarmStatus status = lifecycle.getStatus();
     boolean workloadsEnabled = workloadsEnabled(status);
-    Map<String, QueueStats> queueSnapshot = lifecycle.snapshotQueueStats();
-    String controlQueue = properties.controlQueueName(role, instanceId);
     ConfirmationScope scope = ConfirmationScope.forInstance(swarmId, role, instanceId);
     String rk = ControlPlaneRouting.event("metric", "status-full", scope);
     StatusEnvelopeBuilder builder = new StatusEnvelopeBuilder()
@@ -816,16 +825,23 @@ public class SwarmSignalListener {
         .totals(m.desired(), m.healthy(), m.running(), m.enabled())
         .data("swarmStatus", status.name())
         .data("startedAt", startedAt)
+        .config(statusConfigSnapshot())
+        .data("workers", workers.snapshot())
         .data("swarmDiagnostics", diagnostics.snapshot())
-        .data("scenario", scenarioProgress())
-        .queueStats(toQueueStatsPayload(queueSnapshot))
+        .data("scenario", scenarioProgress());
+    if (journalRunId != null) {
+      builder.data("journal", Map.of("runId", journalRunId));
+    }
+    Map<String, QueueStats> queueSnapshot = lifecycle.snapshotQueueStats();
+    String controlQueue = properties.controlQueueName(role, instanceId);
+    builder.queueStats(toQueueStatsPayload(queueSnapshot))
         .controlIn(controlQueue)
         .controlRoutes(SwarmControllerRoutes.controllerControlRoutes(swarmId, role, instanceId))
         .controlOut(rk);
     SwarmIoStateAggregator.IoState ioState = ioStates.aggregateWork();
     builder.ioWorkState(ioState.input(), ioState.output(), null);
     builder.ioControlState("ok", "ok", null);
-    appendTrafficPolicy(builder);
+    appendTrafficDiagnostics(builder);
     String payload = builder.toJson();
     sendControl(rk, payload, "status");
   }
@@ -836,8 +852,6 @@ public class SwarmSignalListener {
     maybeJournalHealthTransition(state, m);
     SwarmStatus status = lifecycle.getStatus();
     boolean workloadsEnabled = workloadsEnabled(status);
-    Map<String, QueueStats> queueSnapshot = lifecycle.snapshotQueueStats();
-    String controlQueue = properties.controlQueueName(role, instanceId);
     ConfirmationScope scope = ConfirmationScope.forInstance(swarmId, role, instanceId);
     String rk = ControlPlaneRouting.event("metric", "status-delta", scope);
     StatusEnvelopeBuilder builder = new StatusEnvelopeBuilder()
@@ -853,16 +867,11 @@ public class SwarmSignalListener {
         .tps(0)
         .totals(m.desired(), m.healthy(), m.running(), m.enabled())
         .data("swarmStatus", status.name())
-        .data("swarmDiagnostics", diagnostics.snapshot())
-        .data("scenario", scenarioProgress())
-        .queueStats(toQueueStatsPayload(queueSnapshot))
-        .controlIn(controlQueue)
-        .controlRoutes(SwarmControllerRoutes.controllerControlRoutes(swarmId, role, instanceId))
-        .controlOut(rk);
+        .data("scenario", scenarioProgress());
     SwarmIoStateAggregator.IoState ioState = ioStates.aggregateWork();
     builder.ioWorkState(ioState.input(), ioState.output(), null);
     builder.ioControlState("ok", "ok", null);
-    appendTrafficPolicy(builder);
+    appendTrafficDiagnostics(builder);
     String payload = builder.toJson();
     sendControl(rk, payload, "status");
   }
@@ -925,13 +934,9 @@ public class SwarmSignalListener {
     }
   }
 
-  private void appendTrafficPolicy(StatusEnvelopeBuilder builder) {
+  private void appendTrafficDiagnostics(StatusEnvelopeBuilder builder) {
     if (builder == null) {
       return;
-    }
-    TrafficPolicy policy = effectiveTrafficPolicy();
-    if (policy != null) {
-      builder.data("trafficPolicy", policy);
     }
     boolean guardActive = lifecycle.bufferGuardActive();
     String guardProblem = lifecycle.bufferGuardProblem();
@@ -943,6 +948,19 @@ public class SwarmSignalListener {
       }
       builder.data("bufferGuard", guardDiag);
     }
+  }
+
+  private Map<String, Object> statusConfigSnapshot() {
+    Map<String, Object> config = new LinkedHashMap<>();
+    TrafficPolicy policy = effectiveTrafficPolicy();
+    if (policy != null) {
+      config.put("trafficPolicy", policy);
+    }
+    List<BufferGuardSettings> guards = lifecycle.bufferGuards();
+    if (guards != null && !guards.isEmpty()) {
+      config.put("bufferGuards", List.copyOf(guards));
+    }
+    return Map.copyOf(config);
   }
 
   private TrafficPolicy effectiveTrafficPolicy() {
