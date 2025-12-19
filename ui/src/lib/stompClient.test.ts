@@ -27,8 +27,12 @@ function statusMetricEnvelope(input: {
   const baseData: Record<string, unknown> = {
     enabled: true,
     tps: 0,
+    ioState: {
+      work: { input: 'unknown', output: 'unknown' },
+      control: { input: 'unknown', output: 'unknown' },
+    },
     context: {},
-    ...(metricType === 'status-full' ? { startedAt: now } : {}),
+    ...(metricType === 'status-full' ? { startedAt: now, config: {}, io: {} } : {}),
   }
   return {
     timestamp: now,
@@ -206,21 +210,9 @@ describe('swarm lifecycle', () => {
           role: 'generator',
           instance: 'generator-sw1',
           data: {
-            processedTotal: 321,
-            workers: [
-              {
-                role: 'moderator',
-                enabled: true,
-                config: { ratePerSec: 2 },
-                data: { processedDelta: 7 },
-              },
-              {
-                role: 'generator',
-                enabled: false,
-                config: { ratePerSec: 5, path: '/demo' },
-                data: { processedDelta: 42 },
-              },
-            ],
+            enabled: false,
+            config: { ratePerSec: 5, path: '/demo' },
+            context: { processedDelta: 42, processedTotal: 321 },
           },
         }),
       ),
@@ -230,7 +222,8 @@ describe('swarm lifecycle', () => {
     expect(generator).toBeTruthy()
     expect(generator?.swarmId).toBe('sw1')
     expect(generator?.config).toBeTruthy()
-    expect(generator?.config).not.toHaveProperty('workers')
+    expect(generator?.config).not.toHaveProperty('config')
+    expect(generator?.config).not.toHaveProperty('context')
     expect(generator?.config).toMatchObject({
       ratePerSec: 5,
       path: '/demo',
@@ -248,14 +241,7 @@ describe('swarm lifecycle', () => {
           instance: 'swarm-controller-sw1',
           data: {
             enabled: false,
-            heartbeatIntervalSec: 15,
-            workers: [
-              {
-                role: 'processor',
-                enabled: true,
-                config: { batchSize: 10 },
-              },
-            ],
+            context: { heartbeatIntervalSec: 15 },
           },
         }),
       ),
@@ -301,23 +287,16 @@ describe('swarm lifecycle', () => {
           role: 'moderator',
           instance: 'moderator-sw1',
           data: {
-            mode: 'rate-per-sec',
-            workers: [
-              {
-                role: 'moderator',
-                enabled: true,
-                config: {
-                  mode: {
-                    type: 'ratePerSec',
-                    ratePerSec: 5,
-                    sine: { min: 1, max: 10, periodSec: 60 },
-                  },
-                },
-                data: {
-                  mode: 'rate-per-sec',
-                },
+            config: {
+              mode: {
+                type: 'ratePerSec',
+                ratePerSec: 5,
+                sine: { min: 1, max: 10, periodSec: 60 },
               },
-            ],
+            },
+            context: {
+              mode: 'rate-per-sec',
+            },
           },
         }),
       ),
@@ -362,7 +341,7 @@ describe('swarm lifecycle', () => {
           role: 'orchestrator',
           instance: 'orch',
           type: 'status-delta',
-          data: { swarmCount: 0 },
+          data: { context: { swarmCount: 0 } },
         }),
       ),
     })
@@ -375,7 +354,7 @@ describe('swarm lifecycle', () => {
           role: 'orchestrator',
           instance: 'orch',
           type: 'status-delta',
-          data: { swarmCount: 4 },
+          data: { context: { swarmCount: 4 } },
         }),
       ),
     })
@@ -591,7 +570,7 @@ describe('swarm lifecycle', () => {
           swarmId: 'sw1',
           role: 'swarm-controller',
           instance: 'sw1-controller',
-          data: { swarmStatus: 'RUNNING' },
+          data: { context: { swarmStatus: 'RUNNING' } },
         }),
       ),
     })
@@ -619,7 +598,7 @@ describe('swarm lifecycle', () => {
           role: 'swarm-controller',
           instance: 'sw1-controller',
           type: 'status-delta',
-          data: { swarmStatus: 'REMOVED' },
+          data: { context: { swarmStatus: 'REMOVED' } },
         }),
       ),
     })
