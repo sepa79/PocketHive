@@ -19,6 +19,7 @@ import io.pockethive.worker.sdk.config.WorkerInputType;
 import io.pockethive.worker.sdk.config.WorkerOutputType;
 import io.pockethive.worker.sdk.runtime.WorkIoBindings;
 import io.pockethive.worker.sdk.testing.ControlPlaneTestFixtures;
+import io.pockethive.worker.sdk.testing.ControlEventsSchemaValidator;
 import io.pockethive.worker.sdk.templating.TemplateRenderer;
 import io.pockethive.controlplane.spring.WorkerControlPlaneProperties;
 import java.time.Instant;
@@ -256,6 +257,25 @@ class WorkerControlPlaneRuntimeTest {
         @SuppressWarnings("unchecked")
         Map<String, Object> ctx = (Map<String, Object>) work.get("context");
         assertThat(ctx).containsEntry("dataset", "redis:users");
+    }
+
+    @Test
+    void statusEnvelopesValidateAgainstSchema() throws Exception {
+        runtime.emitStatusSnapshot();
+        ArgumentCaptor<ControlPlaneEmitter.StatusContext> snapshotCaptor =
+            ArgumentCaptor.forClass(ControlPlaneEmitter.StatusContext.class);
+        verify(emitter).emitStatusSnapshot(snapshotCaptor.capture());
+        String snapshotJson = buildEnvelopeJson(snapshotCaptor.getValue(), "status-full");
+        ControlEventsSchemaValidator.assertValid(snapshotJson);
+
+        reset(emitter);
+
+        runtime.emitStatusDelta();
+        ArgumentCaptor<ControlPlaneEmitter.StatusContext> deltaCaptor =
+            ArgumentCaptor.forClass(ControlPlaneEmitter.StatusContext.class);
+        verify(emitter).emitStatusDelta(deltaCaptor.capture());
+        String deltaJson = buildEnvelopeJson(deltaCaptor.getValue(), "status-delta");
+        ControlEventsSchemaValidator.assertValid(deltaJson);
     }
 
     @Test
@@ -780,15 +800,19 @@ class WorkerControlPlaneRuntimeTest {
         assertThat(rawConfig).containsEntry("ratePerSec", 11.0);
     }
 
-	    private Map<String, Object> buildSnapshot(ControlPlaneEmitter.StatusContext context) throws Exception {
-	        StatusEnvelopeBuilder builder = new StatusEnvelopeBuilder();
-	        builder.type("status-full");
-	        builder.origin(IDENTITY.instanceId());
-	        context.customiser().accept(builder);
-	        @SuppressWarnings("unchecked")
-	        Map<String, Object> snapshot = MAPPER.readValue(builder.toJson(), Map.class);
-	        return snapshot;
-	    }
+        private String buildEnvelopeJson(ControlPlaneEmitter.StatusContext context, String type) {
+            StatusEnvelopeBuilder builder = new StatusEnvelopeBuilder()
+                .type(type)
+                .origin(IDENTITY.instanceId());
+            context.customiser().accept(builder);
+            return builder.toJson();
+        }
+
+        private Map<String, Object> buildSnapshot(ControlPlaneEmitter.StatusContext context) throws Exception {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> snapshot = MAPPER.readValue(buildEnvelopeJson(context, "status-full"), Map.class);
+            return snapshot;
+        }
 
     private static final class TestWorker {
         // marker class for definition
