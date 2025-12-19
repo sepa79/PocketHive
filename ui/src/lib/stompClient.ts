@@ -122,13 +122,14 @@ function getString(value: unknown): string | undefined {
   return trimmed.length > 0 ? trimmed : undefined
 }
 
-function getBoolean(value: unknown): boolean | undefined {
-  if (typeof value === 'boolean') return value
-  if (typeof value === 'string') {
-    const normalized = value.trim().toLowerCase()
-    if (normalized === 'true') return true
-    if (normalized === 'false') return false
-  }
+function parseIsoTimestamp(value: unknown): number | undefined {
+  const iso = getString(value)
+  if (!iso) return undefined
+  const parsed = Date.parse(iso)
+  if (!Number.isNaN(parsed)) return parsed
+  const trimmed = iso.replace(/(\.\d{3})\d+(Z|[+-]\d{2}:\d{2})$/, '$1$2')
+  const parsedTrimmed = Date.parse(trimmed)
+  if (!Number.isNaN(parsedTrimmed)) return parsedTrimmed
   return undefined
 }
 
@@ -352,18 +353,21 @@ export function setClient(newClient: Client | null, destination = controlDestina
         comp.role = evt.scope.role ?? comp.role
         comp.swarmId = swarmId
         comp.version = evt.version
-        comp.lastHeartbeat = new Date(evt.timestamp).getTime()
+        comp.lastHeartbeat = parseIsoTimestamp(evt.timestamp) ?? Date.now()
         comp.status = evt.type
         const existingError = componentErrors[id]
         if (existingError) {
           applyComponentError(comp, existingError)
         }
         const cfg = { ...(comp.config || {}) }
-        let workerEnabled: boolean | undefined
         const data = evt.data
         if (data && typeof data === 'object') {
-          const swarmStatus = getString((data as Record<string, unknown>)['swarmStatus'])
+          const dataRecord = data as Record<string, unknown>
           const normalizedRole = (evt.scope.role ?? '').toLowerCase()
+          const ctx = isRecord(dataRecord['context'])
+            ? (dataRecord['context'] as Record<string, unknown>)
+            : undefined
+          const swarmStatus = ctx ? getString(ctx['swarmStatus']) : undefined
           if (
             normalizedRole === 'swarm-controller' &&
             swarmStatus &&
@@ -377,43 +381,40 @@ export function setClient(newClient: Client | null, destination = controlDestina
             }
             return
           }
-          const { workers, ...rest } = data as Record<string, unknown> & {
-            workers?: unknown
+
+          const configSnapshot = isRecord(dataRecord['config'])
+            ? (dataRecord['config'] as Record<string, unknown>)
+            : undefined
+          if (configSnapshot) {
+            Object.entries(configSnapshot).forEach(([key, value]) => {
+              const existing = cfg[key]
+              if (isRecord(existing) && !isRecord(value)) {
+                return
+              }
+              cfg[key] = value
+            })
           }
-          if (Array.isArray(workers)) {
-            const workerEntries = workers.filter(isRecord)
-            const selected =
-              normalizedRole && normalizedRole.length > 0
-                ? workerEntries.find((entry) => {
-                    const roleValue = getString(entry['role'])
-                    return roleValue !== undefined && roleValue.toLowerCase() === normalizedRole
-                  })
-                : undefined
-            if (selected) {
-              const configSection = selected['config']
-              if (isRecord(configSection)) {
-                Object.entries(configSection).forEach(([key, value]) => {
-                  cfg[key] = value
-                })
+
+          if (ctx) {
+            Object.entries(ctx).forEach(([key, value]) => {
+              const existing = cfg[key]
+              if (isRecord(existing) && !isRecord(value)) {
+                return
               }
-              const dataSection = selected['data']
-              if (isRecord(dataSection)) {
-                const configKeys = isRecord(configSection)
-                  ? new Set(Object.keys(configSection as Record<string, unknown>))
-                  : new Set<string>()
-                Object.entries(dataSection).forEach(([key, value]) => {
-                  if (configKeys.has(key)) return
-                  cfg[key] = value
-                })
-              }
-              const workerEnabledCandidate = getBoolean(selected['enabled'])
-              if (typeof workerEnabledCandidate === 'boolean') {
-                workerEnabled = workerEnabledCandidate
-              }
-            }
+              cfg[key] = value
+            })
           }
-          Object.entries(rest).forEach(([key, value]) => {
-            if (key === 'enabled' || key === 'tps' || key === 'io' || key === 'context') {
+
+          Object.entries(dataRecord).forEach(([key, value]) => {
+            if (
+              key === 'enabled' ||
+              key === 'tps' ||
+              key === 'io' ||
+              key === 'ioState' ||
+              key === 'context' ||
+              key === 'config' ||
+              key === 'startedAt'
+            ) {
               return
             }
             const existing = cfg[key]
@@ -422,21 +423,14 @@ export function setClient(newClient: Client | null, destination = controlDestina
             }
             cfg[key] = value
           })
-          const startedAtIso = getString((data as Record<string, unknown>)['startedAt'])
-          if (startedAtIso) {
-            const ts = Date.parse(startedAtIso)
-            if (!Number.isNaN(ts)) {
-              comp.startedAt = ts
-            }
+
+          const startedAtMillis = parseIsoTimestamp(dataRecord['startedAt'])
+          if (startedAtMillis !== undefined) {
+            comp.startedAt = startedAtMillis
           }
         }
-        const aggregateEnabled =
-          typeof workerEnabled === 'boolean'
-            ? workerEnabled
-            : typeof (data as Record<string, unknown>)['enabled'] === 'boolean'
-            ? ((data as Record<string, unknown>)['enabled'] as boolean)
-            : undefined
-        if (typeof aggregateEnabled === 'boolean') cfg.enabled = aggregateEnabled
+        const enabledFlag = (data as Record<string, unknown>)['enabled']
+        if (typeof enabledFlag === 'boolean') cfg.enabled = enabledFlag
         if (Object.keys(cfg).length > 0) comp.config = cfg
         const extractedQueues = extractQueues(evt)
         if (extractedQueues) {
