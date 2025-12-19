@@ -14,8 +14,12 @@
   "data": {
     "enabled": true,
     "tps": 42,
+    "ioState": {
+      "work": { "input": "unknown", "output": "unknown" },
+      "control": { "input": "unknown", "output": "unknown" }
+    },
+    "config": {},
     "startedAt": "2024-01-01T00:00:00Z",
-    "baseUrl": "https://example",
     "io": {
       "work": {
         "queues": {
@@ -48,6 +52,7 @@
       "location": "<<ANY>>",
       "traffic": "ph.traffic",
       "watermark": "2024-01-01T00:00:00Z",
+      "baseUrl": "https://example",
       "totals": {
         "desired": 3,
         "healthy": 2,

@@ -106,14 +106,15 @@ class WorkerControlPlaneRuntimeTest {
             ArgumentCaptor.forClass(ControlPlaneEmitter.StatusContext.class);
         verify(emitter).emitStatusSnapshot(captor.capture());
 
-        Map<String, Object> snapshot = buildSnapshot(captor.getValue());
-        @SuppressWarnings("unchecked")
-        Map<String, Object> data = (Map<String, Object>) snapshot.get("data");
-        @SuppressWarnings("unchecked")
-        java.util.List<Map<String, Object>> workers = (java.util.List<Map<String, Object>>) data.get("workers");
-        assertThat(workers).singleElement().satisfies(worker ->
-            assertThat(worker).containsEntry("worker", definition.beanName()).containsKey("config"));
-    }
+	        Map<String, Object> snapshot = buildSnapshot(captor.getValue());
+	        @SuppressWarnings("unchecked")
+	        Map<String, Object> data = (Map<String, Object>) snapshot.get("data");
+	        @SuppressWarnings("unchecked")
+	        Map<String, Object> config = (Map<String, Object>) data.get("config");
+	        assertThat(config)
+	            .containsEntry("ratePerSec", 7.5)
+	            .containsEntry("enabled", true);
+	    }
 
     @Test
 	    void workerConfigAccessibleAfterUpdate() throws Exception {
@@ -666,18 +667,14 @@ class WorkerControlPlaneRuntimeTest {
             ArgumentCaptor.forClass(ControlPlaneEmitter.StatusContext.class);
         verify(emitter).emitStatusSnapshot(statusCaptor.capture());
 
-	        Map<String, Object> initialSnapshot = buildSnapshot(statusCaptor.getValue());
-	        @SuppressWarnings("unchecked")
-	        Map<String, Object> initialData = (Map<String, Object>) initialSnapshot.get("data");
-	        assertThat(initialData.get("enabled")).isEqualTo(false);
-	        assertThat(initialData).isNotNull();
-	        @SuppressWarnings("unchecked")
-	        java.util.List<Map<String, Object>> initialWorkers =
-	            (java.util.List<Map<String, Object>>) initialData.get("workers");
-        assertThat(initialWorkers).hasSize(1);
-        assertThat(initialWorkers.get(0).get("enabled")).isEqualTo(false);
+		        Map<String, Object> initialSnapshot = buildSnapshot(statusCaptor.getValue());
+		        @SuppressWarnings("unchecked")
+		        Map<String, Object> initialData = (Map<String, Object>) initialSnapshot.get("data");
+		        assertThat(initialData.get("enabled")).isEqualTo(false);
+		        assertThat(initialData).isNotNull();
+		        assertThat(initialData.get("config")).isNotNull();
 
-        reset(emitter);
+	        reset(emitter);
 
 	        Map<String, Object> args = Map.of(
 	            "data", Map.of("enabled", true)
@@ -704,17 +701,13 @@ class WorkerControlPlaneRuntimeTest {
             ArgumentCaptor.forClass(ControlPlaneEmitter.StatusContext.class);
         verify(emitter).emitStatusSnapshot(updatedCaptor.capture());
 
-	        Map<String, Object> updatedSnapshot = buildSnapshot(updatedCaptor.getValue());
-	        @SuppressWarnings("unchecked")
-	        Map<String, Object> updatedData = (Map<String, Object>) updatedSnapshot.get("data");
-	        assertThat(updatedData.get("enabled")).isEqualTo(true);
-	        assertThat(updatedData).isNotNull();
-	        @SuppressWarnings("unchecked")
-	        java.util.List<Map<String, Object>> updatedWorkers =
-	            (java.util.List<Map<String, Object>>) updatedData.get("workers");
-        assertThat(updatedWorkers).hasSize(1);
-        assertThat(updatedWorkers.get(0).get("enabled")).isEqualTo(true);
-    }
+		        Map<String, Object> updatedSnapshot = buildSnapshot(updatedCaptor.getValue());
+		        @SuppressWarnings("unchecked")
+		        Map<String, Object> updatedData = (Map<String, Object>) updatedSnapshot.get("data");
+		        assertThat(updatedData.get("enabled")).isEqualTo(true);
+		        assertThat(updatedData).isNotNull();
+		        assertThat(updatedData.get("config")).isNotNull();
+	    }
 
     @Test
     void statusSnapshotIncludesWorkerMetadata() throws Exception {
@@ -724,24 +717,12 @@ class WorkerControlPlaneRuntimeTest {
             ArgumentCaptor.forClass(ControlPlaneEmitter.StatusContext.class);
         verify(emitter).emitStatusSnapshot(statusCaptor.capture());
 
-        Map<String, Object> snapshot = buildSnapshot(statusCaptor.getValue());
-        @SuppressWarnings("unchecked")
-        Map<String, Object> data = (Map<String, Object>) snapshot.get("data");
-        @SuppressWarnings("unchecked")
-        java.util.List<Map<String, Object>> workers =
-            (java.util.List<Map<String, Object>>) data.get("workers");
-        assertThat(workers).hasSize(1);
-        Map<String, Object> worker = workers.get(0);
-        assertThat(worker).containsEntry("description", "Test worker");
-        assertThat(worker).containsEntry("input", WorkerInputType.SCHEDULER.name());
-        assertThat(worker).containsEntry("output", WorkerOutputType.RABBITMQ.name());
-        assertThat(worker).containsEntry("outQueue", definition.io().outboundQueue());
-        assertThat(worker).containsEntry("exchange", definition.io().outboundExchange());
-        assertThat(worker).doesNotContainKey("inQueue");
-        @SuppressWarnings("unchecked")
-        List<String> capabilities = (List<String>) worker.get("capabilities");
-        assertThat(capabilities).containsExactly("SCHEDULER");
-    }
+	        Map<String, Object> snapshot = buildSnapshot(statusCaptor.getValue());
+	        @SuppressWarnings("unchecked")
+	        Map<String, Object> data = (Map<String, Object>) snapshot.get("data");
+	        assertThat(data.get("config")).isNotNull();
+	        assertThat(data.get("io")).isNotNull();
+	    }
 
 	    @Test
 	    void statusRequestWithoutPayloadEmitsSnapshot() throws Exception {

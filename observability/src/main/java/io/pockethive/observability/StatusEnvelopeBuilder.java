@@ -11,6 +11,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -26,6 +27,15 @@ public class StatusEnvelopeBuilder {
         .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
     private static final String ENVELOPE_VERSION = "1";
+    private static final Set<String> RESERVED_DATA_FIELDS = Set.of(
+        "enabled",
+        "tps",
+        "startedAt",
+        "config",
+        "io",
+        "ioState",
+        "context"
+    );
 
     private final Map<String, Object> root = new LinkedHashMap<>();
     private final Map<String, Object> scope = new LinkedHashMap<>();
@@ -231,11 +241,52 @@ public class StatusEnvelopeBuilder {
 
     /**
      * Attach an arbitrary key/value pair to the {@code data} section of the
-     * envelope. This is used for exposing component configuration parameters
-     * such as tuning knobs in {@code status-full} events.
+     * envelope.
+     *
+     * <p>To keep status metrics contract-compliant, this method routes:
+     * <ul>
+     *   <li>known envelope fields (for example {@code startedAt}, {@code config}) into top-level {@code data}</li>
+     *   <li>all other keys into {@code data.context}</li>
+     * </ul>
+     * This prevents ad-hoc fields from leaking into the schema-restricted top-level {@code data} object.</p>
      */
     public StatusEnvelopeBuilder data(String key, Object value) {
-        data.put(key, value);
+        if (key == null) {
+            return this;
+        }
+        String trimmed = key.trim();
+        if (trimmed.isEmpty()) {
+            return this;
+        }
+        if ("startedAt".equals(trimmed)) {
+            data.put("startedAt", value);
+            return this;
+        }
+        if ("config".equals(trimmed)) {
+            if (value == null) {
+                data.put("config", Collections.emptyMap());
+                return this;
+            }
+            if (!(value instanceof Map<?, ?>)) {
+                throw new IllegalArgumentException("data.config must be an object");
+            }
+            data.put("config", value);
+            return this;
+        }
+        if (RESERVED_DATA_FIELDS.contains(trimmed)) {
+            data.put(trimmed, value);
+            return this;
+        }
+        context.put(trimmed, value);
+        return this;
+    }
+
+    public StatusEnvelopeBuilder config(Map<String, ?> config) {
+        if (config == null || config.isEmpty()) {
+            data.put("config", Collections.emptyMap());
+            return this;
+        }
+        data.put("config", Map.copyOf(config));
         return this;
     }
 
@@ -286,44 +337,37 @@ public class StatusEnvelopeBuilder {
             context.put("publishes", List.copyOf(publishes));
         }
 
+        Map<String, Object> io = new LinkedHashMap<>();
+        if (!workQueues.isEmpty() || !queueStats.isEmpty()) {
+            Map<String, Object> work = new LinkedHashMap<>();
+            if (!workQueues.isEmpty()) {
+                work.put("queues", workQueues);
+            }
+            if (!queueStats.isEmpty()) {
+                work.put("queueStats", queueStats);
+            }
+            io.put("work", work);
+        }
+        if (!controlQueues.isEmpty()) {
+            Map<String, Object> control = new LinkedHashMap<>();
+            control.put("queues", controlQueues);
+            io.put("control", control);
+        }
         if (isFull) {
-            Map<String, Object> io = new LinkedHashMap<>();
-            if (!workQueues.isEmpty() || !queueStats.isEmpty()) {
-                Map<String, Object> work = new LinkedHashMap<>();
-                if (!workQueues.isEmpty()) {
-                    work.put("queues", workQueues);
-                }
-                if (!queueStats.isEmpty()) {
-                    work.put("queueStats", queueStats);
-                }
-                io.put("work", work);
-            }
-            if (!controlQueues.isEmpty()) {
-                Map<String, Object> control = new LinkedHashMap<>();
-                control.put("queues", controlQueues);
-                io.put("control", control);
-            }
-            if (!io.isEmpty()) {
-                data.put("io", io);
-            }
-        } else {
-            data.remove("startedAt");
-            data.remove("io");
+            data.put("io", Map.copyOf(io));
         }
 
-        if (!workIoState.isEmpty() || !controlIoState.isEmpty()) {
-            Map<String, Object> ioState = new LinkedHashMap<>();
-            if (!workIoState.isEmpty()) {
-                ioState.put("work", Map.copyOf(workIoState));
-            }
-            if (!controlIoState.isEmpty()) {
-                ioState.put("control", Map.copyOf(controlIoState));
-            }
-            data.put("ioState", Map.copyOf(ioState));
-        }
+        Map<String, Object> ioState = new LinkedHashMap<>();
+        ioState.put("work", Map.copyOf(workIoState.isEmpty()
+            ? Map.of("input", "unknown", "output", "unknown")
+            : workIoState));
+        ioState.put("control", Map.copyOf(controlIoState.isEmpty()
+            ? Map.of("input", "unknown", "output", "unknown")
+            : controlIoState));
+        data.put("ioState", Map.copyOf(ioState));
 
         if (!context.isEmpty()) {
-            data.putIfAbsent("context", context);
+            data.putIfAbsent("context", Map.copyOf(context));
         }
 
         if (!data.containsKey("enabled")) {
@@ -335,8 +379,31 @@ public class StatusEnvelopeBuilder {
         if (isFull && !data.containsKey("startedAt")) {
             throw new IllegalStateException("status-full metrics must include data.startedAt");
         }
+        if (isFull && !data.containsKey("config")) {
+            data.put("config", Collections.emptyMap());
+        }
 
-        root.put("data", data.isEmpty() ? Collections.emptyMap() : data);
+        if (!isFull) {
+            data.remove("startedAt");
+            data.remove("config");
+            data.remove("io");
+        }
+
+        Map<String, Object> canonicalData = new LinkedHashMap<>();
+        canonicalData.put("enabled", data.get("enabled"));
+        canonicalData.put("tps", data.get("tps"));
+        canonicalData.put("ioState", data.get("ioState"));
+        Object ctx = data.get("context");
+        if (ctx != null) {
+            canonicalData.put("context", ctx);
+        }
+        if (isFull) {
+            canonicalData.put("config", Objects.requireNonNullElse(data.get("config"), Collections.emptyMap()));
+            canonicalData.put("startedAt", data.get("startedAt"));
+            canonicalData.put("io", Objects.requireNonNullElse(data.get("io"), Collections.emptyMap()));
+        }
+
+        root.put("data", canonicalData);
         try {
             return MAPPER.writeValueAsString(root);
         } catch (JsonProcessingException e) {

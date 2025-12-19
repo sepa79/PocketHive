@@ -14,6 +14,10 @@
   "data": {
     "enabled": false,
     "tps": 7,
+    "ioState": {
+      "work": { "input": "unknown", "output": "unknown" },
+      "control": { "input": "unknown", "output": "unknown" }
+    },
     "context": {
       "location": "<<ANY>>"
     }
